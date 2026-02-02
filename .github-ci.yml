@@ -1,0 +1,6 @@
+image: maven:3.9.11-amazoncorretto-25
+
+build:
+  script:
+    - yum install -y libXxf86vm libXrender libXtst libXi glib2 gtk3 alsa-lib
+    - mvn -B -ntp clean verify
