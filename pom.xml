@@ -3,31 +3,35 @@
 	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
 	xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
 	<modelVersion>4.0.0</modelVersion>
+    <parent>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-parent</artifactId>
+        <version>3.4.2</version> <relativePath/>
+    </parent>
 	
 	<groupId>meowny</groupId>
-	<artifactId>root</artifactId>
+	<artifactId>meowNY</artifactId>
 	<version>0.0.1-SNAPSHOT</version>
-	<name>meowNY</name>
-	<description>meowNY - expense tracker appliaction</description>
+	<name>meowNY - parent</name>
+	<description>meowNY - expense tracker application</description>
 	<packaging>pom</packaging>
-	<url/>
-	<licenses>
-		<license/>
-	</licenses>
-	<developers>
-		<developer/>
-	</developers>
-	<scm>
-		<connection/>
-		<developerConnection/>
-		<tag/>
-		<url/>
-	</scm>
 
 	<modules>
 		<module>commons</module>
 		<module>client</module>
 		<module>server</module>
 	</modules>
+
+	<dependencyManagement>
+    	<dependencies>
+        	<dependency>
+            	<groupId>org.springframework.boot</groupId>
+            	<artifactId>spring-boot-dependencies</artifactId>
+            	<version>3.4.2</version>
+            	<type>pom</type>
+            	<scope>import</scope>
+        	</dependency>
+    	</dependencies>
+	</dependencyManagement>
 
 </project>

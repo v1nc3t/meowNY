@@ -5,15 +5,15 @@
 	xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
 	<modelVersion>4.0.0</modelVersion>
 	<parent>
-		<groupId>org.springframework.boot</groupId>
-		<artifactId>spring-boot-starter-parent</artifactId>
-		<version>4.0.2</version>
-		<relativePath/> <!-- lookup parent from repository -->
+		<groupId>meowny</groupId>
+		<artifactId>meowNY</artifactId>
+		<version>0.0.1-SNAPSHOT</version>
+		<relativePath>../pom.xml</relativePath>
 	</parent>
 	<groupId>meowny</groupId>
 	<artifactId>client</artifactId>
 	<version>0.0.1-SNAPSHOT</version>
-	<name>client</name>
+	<name>meowny - client</name>
 	<description>Client module for application</description>
 
 	<properties>
@@ -124,7 +124,7 @@
 	</dependencies>
 
 	<build>
-		<finalName>foodpal-client</finalName>
+		<finalName>meowny-client</finalName>
 		<plugins>
 			<plugin>
 				<groupId>org.apache.maven.plugins</groupId>
