@@ -1,0 +1,28 @@
+name: Java CI with Maven
+
+on:
+  push:
+    branches:
+      - '**'
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    
+    container:
+      image: maven:3.9.11-amazoncorretto-25
+
+    steps:
+      - name: Install tar for checkout
+        run: yum install -y tar gzip
+
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          yum install -y libXxf86vm libXrender libXtst libXi glib2 gtk3 alsa-lib
+
+      - name: Build with Maven
+        run: mvn -B -ntp clean verify
