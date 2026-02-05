@@ -89,8 +89,6 @@
 				<configuration>
 					<configLocation>../checkstyle.xml</configLocation>
 					<sourceDirectories>${project.basedir}</sourceDirectories>
-                    <suppressionsLocation>../checkstyle-suppressions.xml</suppressionsLocation>
-                    <suppressionsFileExpression>checkstyle.suppressions.file</suppressionsFileExpression>
 					<includes>src/**/*.java,**/*.xml,**/*.yml</includes>
 					<excludes>**/target/**</excludes>
 				</configuration>
