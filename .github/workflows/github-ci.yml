@@ -14,6 +14,9 @@ jobs:
       image: maven:3.9.11-amazoncorretto-25
 
     steps:
+      - name: Install tar for checkout
+        run: yum install -y tar gzip
+
       - name: Checkout code
         uses: actions/checkout@v4
 
