@@ -26,7 +26,7 @@ public class MyFXML {
         URL location = MyFXML.class.getClassLoader().getResource(path);
 
         if (location == null) {
-           throw new RuntimeException("FXML file not found at: " + path);
+            throw new RuntimeException("FXML file not found at: " + path);
         }
 
         FXMLLoader loader = new FXMLLoader();
@@ -52,12 +52,7 @@ public class MyFXML {
         @Override
         @SuppressWarnings("rawtypes")
         public Builder<?> getBuilder(Class<?> type) {
-            return new Builder() {
-                @Override
-                public Object build() {
-                    return injector.getInstance(type);
-                }
-            };
+            return (Builder) () -> injector.getInstance(type);
         }
 
         @Override
