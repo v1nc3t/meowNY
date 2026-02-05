@@ -10,8 +10,6 @@
         <property name="fileNamePattern" value=".*TestClass\.java$"/>
     </module>
 
-    <module name="SuppressionFilter"/>
-
     <module name="LineLength">
         <property name="severity" value="warning"/>
         <property name="max" value="150"/>
