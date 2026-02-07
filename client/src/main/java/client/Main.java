@@ -20,7 +20,6 @@ public class Main extends Application {
         launch();
     }
 
-    @SuppressWarnings("checkstyle:MagicNumber")
     @Override
     public void start(Stage primaryStage) throws Exception {
 

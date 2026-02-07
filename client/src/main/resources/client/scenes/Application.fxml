@@ -1,7 +1,33 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
+<?import javafx.scene.control.*?>
+<?import javafx.scene.layout.*?>
+<BorderPane prefHeight="400.0" prefWidth="600.0" xmlns="http://javafx.com/javafx/17.0.12">
+   <left>
+       <VBox prefWidth="150.0" BorderPane.alignment="CENTER">
+           <ListView VBox.vgrow="ALWAYS" />
+           <ToolBar VBox.vgrow="NEVER">
+               <Button mnemonicParsing="false" text=" + " />
+               <Button mnemonicParsing="false" text=" - " />
+               <Button mnemonicParsing="false" text="Print" />
+           </ToolBar>
+       </VBox>
+   </left>
+   <center>
+      <FlowPane prefHeight="200.0" prefWidth="200.0" BorderPane.alignment="CENTER" />
+   </center>
+   <top>
+       <ToolBar prefHeight="40.0" prefWidth="200.0">
+           <Pane layoutX="292.0" layoutY="10.0" prefWidth="143.0">
+               <TextField prefHeight="25.0" prefWidth="140.0" promptText="Search    "/>
+           </Pane>
+           <Button mnemonicParsing="false" text="Categories" />
+           <Button mnemonicParsing="false" text="Wishlist" />
 
-<?import javafx.scene.layout.AnchorPane?>
-<AnchorPane minHeight="-Infinity" minWidth="-Infinity" prefHeight="400.0" prefWidth="600.0" xmlns="http://javafx.com/javafx/17.0.12" xmlns:fx="http://javafx.com/fxml/1" fx:controller="client.scenes.ApplicationCtrl">
+           <Pane HBox.hgrow="ALWAYS" />
 
-</AnchorPane>
+           <Button mnemonicParsing="false" text="User" />
+           <Button mnemonicParsing="false" text="Settings" />
+       </ToolBar>
+   </top>
+</BorderPane>
