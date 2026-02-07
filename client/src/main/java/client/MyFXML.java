@@ -1,17 +1,17 @@
 package client;
 
-import java.io.IOException;
-import java.net.URL;
-import java.nio.file.Path;
-
 import com.google.inject.Injector;
-
 import javafx.fxml.FXMLLoader;
 import javafx.scene.Parent;
 import javafx.util.Builder;
 import javafx.util.BuilderFactory;
 import javafx.util.Callback;
 import javafx.util.Pair;
+
+import java.io.IOException;
+import java.net.URL;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Path;
 
 public class MyFXML {
 
@@ -22,23 +22,13 @@ public class MyFXML {
     }
 
     public <T> Pair<T, Parent> load(Class<T> c, String... parts) {
-        String path = String.join("/", parts);
-        URL location = MyFXML.class.getClassLoader().getResource(path);
-
-        if (location == null) {
-            throw new RuntimeException("FXML file not found at: " + path);
-        }
-
-        FXMLLoader loader = new FXMLLoader();
-        loader.setLocation(location);
-        loader.setControllerFactory(injector::getInstance);
-
         try {
+            var loader = new FXMLLoader(getLocation(parts), null, null, new MyFactory(), StandardCharsets.UTF_8);
             Parent parent = loader.load();
             T ctrl = loader.getController();
             return new Pair<>(ctrl, parent);
         } catch (IOException e) {
-            throw new RuntimeException("Failed to load FXML: " + path, e);
+            throw new RuntimeException("Failed to load FXML: " + getLocation(parts), e);
         }
     }
 
