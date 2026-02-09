@@ -13,15 +13,20 @@ import static com.google.inject.Guice.createInjector;
 
 public class Main extends Application {
 
-    private static final Injector INJECTOR = createInjector(new MyModule());
-    private static final MyFXML FXML = new MyFXML(INJECTOR);
+    private Injector injector;
+    private MyFXML fxml;
 
     public static void main(String[] args) throws URISyntaxException, IOException {
-        launch();
+        launch(args);
     }
 
     @Override
     public void start(Stage primaryStage) throws Exception {
+        String configPath = getParameters().getNamed().get("cfg");
+
+        this.injector = createInjector(new MyModule(configPath));
+
+        this.fxml = injector.getInstance(MyFXML.class);
 
         /*var serverUtils = INJECTOR.getInstance(ServerUtils.class);
         if (!serverUtils.isServerAvailable()) {
@@ -30,9 +35,9 @@ public class Main extends Application {
             return;
         }*/
 
-        var applicationOverview = FXML.load(ApplicationCtrl.class, "client", "scenes", "Application.fxml");
+        var applicationOverview = fxml.load(ApplicationCtrl.class, "client", "scenes", "Application.fxml");
 
-        var mainCtrl = INJECTOR.getInstance(MainCtrl.class);
+        var mainCtrl = injector.getInstance(MainCtrl.class);
         mainCtrl.initialize(primaryStage, applicationOverview);
     }
 }
