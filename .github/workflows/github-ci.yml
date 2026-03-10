@@ -10,23 +10,25 @@ jobs:
   build:
     runs-on: ubuntu-latest
 
+    container:
+      image: maven:3.9.11-amazoncorretto-25
+
     steps:
+      - name: Install System Dependencies
+        run: |
+          yum install -y tar gzip libXxf86vm libXrender libXtst libXi glib2 gtk3 alsa-lib
+
       - name: Checkout code
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
-      - name: Set up JDK and cache
-        uses: actions/setup-java@v4
+      - name: Cache Maven packages
+        if: ${{ !env.ACT }}
+        uses: actions/cache@v4
         with:
-          java-version: '25'
-          distribution: 'corretto'
-          cache: 'maven'
-
-      - name: Install Missing Libs
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libxxf86vm1 libxrender1 libxtst6 libxi6 libglib2.0-0 libgtk-3-0 libasound2
+          path: ~/.m2/repository
+          key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
+          restore-keys: |
+            ${{ runner.os }}-maven-
 
       - name: Build with Maven
-        run: mvn -B -ntp install -T 1C -DskipTests -o
+        run: mvn -B -ntp clean install -T 1C -DskipTests -o
