@@ -14,21 +14,19 @@ jobs:
       image: maven:3.9.11-amazoncorretto-25
 
     steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK and cache
+        uses: actions/setup-java@v4
+        with:
+          java-version: '25'
+          distribution: 'corretto'
+          cache: 'maven'
+
       - name: Install System Dependencies
         run: |
           yum install -y tar gzip libXxf86vm libXrender libXtst libXi glib2 gtk3 alsa-lib
 
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Cache Maven packages
-        if: ${{ !env.ACT }}
-        uses: actions/cache@v4
-        with:
-          path: ~/.m2/repository
-          key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
-          restore-keys: |
-            ${{ runner.os }}-maven-
-
       - name: Build with Maven
-        run: mvn -B -ntp clean install -T 1C -DskipTests
+        run: mvn -B -ntp install -T 1C -DskipTests -o
