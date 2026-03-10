@@ -16,6 +16,12 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install System Dependencies
+        run: |
+          yum install -y tar gzip libXxf86vm libXrender libXtst libXi glib2 gtk3 alsa-lib
 
       - name: Set up JDK and cache
         uses: actions/setup-java@v4
@@ -23,10 +29,6 @@ jobs:
           java-version: '25'
           distribution: 'corretto'
           cache: 'maven'
-
-      - name: Install System Dependencies
-        run: |
-          yum install -y tar gzip libXxf86vm libXrender libXtst libXi glib2 gtk3 alsa-lib
 
       - name: Build with Maven
         run: mvn -B -ntp install -T 1C -DskipTests -o
