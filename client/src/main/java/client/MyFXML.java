@@ -1,5 +1,6 @@
 package client;
 
+import com.google.inject.Inject;
 import com.google.inject.Injector;
 import javafx.fxml.FXMLLoader;
 import javafx.scene.Parent;
@@ -17,6 +18,7 @@ public class MyFXML {
 
     private final Injector injector;
 
+    @Inject
     public MyFXML(Injector injector) {
         this.injector = injector;
     }

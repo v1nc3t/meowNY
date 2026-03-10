@@ -1,5 +1,7 @@
 package client.scenes;
 
+import client.config.Config;
+import com.google.inject.Inject;
 import javafx.geometry.Rectangle2D;
 import javafx.scene.Parent;
 import javafx.scene.Scene;
@@ -9,13 +11,16 @@ import javafx.util.Pair;
 
 public class MainCtrl {
 
+    @Inject
+    private Config config;
+
     private Stage primaryStage;
 
     private ApplicationCtrl applicationCtrl;
     private Scene applicationScene;
 
-    public static final double MIN_RATIO = 0.40;
-    public static final double DEFAULT_RATIO = 0.60;
+    //public static final double MIN_RATIO = 0.40;
+    // public static final double DEFAULT_RATIO = 0.60;
 
     public void initialize(Stage primaryStage, Pair<ApplicationCtrl, Parent> applicationOverview) {
         this.primaryStage = primaryStage;
@@ -35,8 +40,8 @@ public class MainCtrl {
         Rectangle2D screenBounds = Screen.getPrimary().getVisualBounds();
         double screenW = screenBounds.getWidth();
         double screenH = screenBounds.getHeight();
-        primaryStage.setWidth(screenW * DEFAULT_RATIO);
-        primaryStage.setHeight(screenH * DEFAULT_RATIO);
+        primaryStage.setWidth(screenW * config.getDefaultRatio());
+        primaryStage.setHeight(screenH * config.getDefaultRatio());
     }
 
     private void setupResizing() {
@@ -57,8 +62,8 @@ public class MainCtrl {
 
         if (!screens.isEmpty()) {
             Rectangle2D bounds = screens.getFirst().getVisualBounds();
-            primaryStage.setMinWidth(bounds.getWidth() * MIN_RATIO);
-            primaryStage.setMinHeight(bounds.getHeight() * MIN_RATIO);
+            primaryStage.setMinWidth(bounds.getWidth() * config.getMinRatio());
+            primaryStage.setMinHeight(bounds.getHeight() * config.getMinRatio());
         }
     }
 

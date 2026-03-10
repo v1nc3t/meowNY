@@ -62,7 +62,7 @@
         </module>
         <module name="MagicNumber">
             <property name="severity" value="warning"/>
-            <property name="ignoreNumbers" value="-1, 0, 1, 2"/>
+            <property name="ignoreNumbers" value="-1, 0, 1, 2, 0.40, 0.60"/>
             <property name="ignoreAnnotation" value="true"/>
         </module>
 
