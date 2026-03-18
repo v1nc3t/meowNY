@@ -50,7 +50,6 @@ public class BudgetTest {
 
     @Test
     void setUserTest() {
-        User testUser = new User();
         testBudget1.setUser(testUser);
         assertEquals(testUser, testBudget1.getUser());
     }
@@ -65,9 +64,7 @@ public class BudgetTest {
     @Test
     void setInvalidLimitAmountTest() {
         double limit = -100.0;
-        assertThrows(IllegalArgumentException.class, () -> {
-            testBudget1.setLimitAmount(limit);
-        });
+        assertThrows(IllegalArgumentException.class, () -> testBudget1.setLimitAmount(limit));
     }
 
     @Test
@@ -80,9 +77,7 @@ public class BudgetTest {
     @Test
     void setInvalidMonthTest() {
         int month = 13;
-        assertThrows(IllegalArgumentException.class, () -> {
-            testBudget1.setMonth(month);
-        });
+        assertThrows(IllegalArgumentException.class, () -> testBudget1.setMonth(month));
     }
 
     @Test
@@ -95,9 +90,7 @@ public class BudgetTest {
     @Test
     void setInvalidYearTest() {
         int year = 1900;
-        assertThrows(IllegalArgumentException.class, () -> {
-            testBudget1.setYear(year);
-        });
+        assertThrows(IllegalArgumentException.class, () -> testBudget1.setYear(year));
     }
 
     @Test
@@ -136,7 +129,7 @@ public class BudgetTest {
 
     @Test
     void testToString() {
-        String expected = "Budget{id=null, limitAmount=100.0, month=4, year=2010, category=" + testCategory.toString() + "}";
+        String expected = "Budget{id=null, limitAmount=100.0, month=4, year=2010, category=" + testCategory + "}";
         assertEquals(expected, testBudget2.toString());
     }
 }
