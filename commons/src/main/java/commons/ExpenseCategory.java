@@ -5,6 +5,7 @@ import jakarta.persistence.*;
 import java.util.Objects;
 
 @Entity
+@Table(name = "expense_categories")
 public class ExpenseCategory {
 
     @Id
@@ -50,17 +51,18 @@ public class ExpenseCategory {
     public boolean equals(Object o) {
         if (o == null || getClass() != o.getClass()) return false;
         ExpenseCategory that = (ExpenseCategory) o;
-        return Objects.equals(categoryName, that.categoryName);
+        return Objects.equals(id, that.id)
+                && Objects.equals(categoryName, that.categoryName);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hashCode(categoryName);
+        return Objects.hash(id, categoryName);
     }
 
     @Override
     public String toString() {
-        return "commons.ExpenseCategory{" +
+        return "ExpenseCategory{" +
                 "id=" + id +
                 ", categoryName='" + categoryName + '\'' +
                 '}';
