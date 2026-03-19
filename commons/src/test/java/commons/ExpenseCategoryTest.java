@@ -32,14 +32,14 @@ public class ExpenseCategoryTest {
     }
 
     @Test
-    void setValidCategoryName() {
+    void setValidCategoryNameTest() {
         String newCategory = "water";
         testExpenseCategory1.setCategoryName(newCategory);
         assertEquals(newCategory, testExpenseCategory1.getCategoryName());
     }
 
     @Test
-    void setInvalidCategoryName() {
+    void setInvalidCategoryNameTest() {
         assertThrows(IllegalArgumentException.class, () -> {
             testExpenseCategory1.setCategoryName(null);
         }, "invalid category name");
@@ -59,8 +59,10 @@ public class ExpenseCategoryTest {
     void hashCodeDiffTest() {
         assertNotEquals(testExpenseCategory1.hashCode(), testExpenseCategory2.hashCode());
     }
+
     @Test
     void hashCodeSameTest() {
         assertEquals(testExpenseCategory3.hashCode(), testExpenseCategory2.hashCode());
     }
+
 }

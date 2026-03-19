@@ -3,6 +3,8 @@ package commons;
 import org.junit.jupiter.api.*;
 
 import java.time.LocalDate;
+import java.util.ArrayList;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -33,43 +35,43 @@ public class RecurringExpenseTest {
     @Test
     void invalidConstructorTest() {
         assertThrows(IllegalArgumentException.class, () -> {
-            RecurringExpense testRecurringExpense = new RecurringExpense(
+            testRecurringExpense1 = new RecurringExpense(
                     null, 600.0, testDate, testFrequency, testUser, testCategory
             );
         }, "name null");
 
         assertThrows(IllegalArgumentException.class, () -> {
-            RecurringExpense testRecurringExpense = new RecurringExpense(
+            testRecurringExpense1 = new RecurringExpense(
                     "rent", null, testDate, testFrequency, testUser, testCategory
             );
         }, "amount null");
 
         assertThrows(IllegalArgumentException.class, () -> {
-            RecurringExpense testRecurringExpense = new RecurringExpense(
+            testRecurringExpense1 = new RecurringExpense(
                     "rent", -600.0, testDate, testFrequency, testUser, testCategory
             );
         }, "amount negative");
 
         assertThrows(IllegalArgumentException.class, () -> {
-            RecurringExpense testRecurringExpense = new RecurringExpense(
+            testRecurringExpense1 = new RecurringExpense(
                     "rent", 600.0, null, testFrequency, testUser, testCategory
             );
         }, "next due date null");
 
         assertThrows(IllegalArgumentException.class, () -> {
-            RecurringExpense testRecurringExpense = new RecurringExpense(
+            testRecurringExpense1 = new RecurringExpense(
                     "rent", 600.0, testDate, null, testUser, testCategory
             );
         }, "frequency null");
 
         assertThrows(IllegalArgumentException.class, () -> {
-            RecurringExpense testRecurringExpense = new RecurringExpense(
+            testRecurringExpense1 = new RecurringExpense(
                     "rent", 600.0, testDate, testFrequency, null, testCategory
             );
         }, "user null");
 
         assertThrows(IllegalArgumentException.class, () -> {
-            RecurringExpense testRecurringExpense = new RecurringExpense(
+            testRecurringExpense1 = new RecurringExpense(
                     "rent", 600.0, testDate, testFrequency, testUser, null
             );
         }, "category null");
@@ -91,9 +93,7 @@ public class RecurringExpenseTest {
 
     @Test
     void setInvalidNameTest() {
-        assertThrows(IllegalArgumentException.class, () -> {
-            testRecurringExpense1.setName(null);
-        });
+        assertThrows(IllegalArgumentException.class, () -> testRecurringExpense1.setName(null));
     }
 
     @Test
@@ -105,16 +105,12 @@ public class RecurringExpenseTest {
 
     @Test
     void setNullAmountTest() {
-        assertThrows(IllegalArgumentException.class, () -> {
-            testRecurringExpense1.setAmount(null);
-        });
+        assertThrows(IllegalArgumentException.class, () -> testRecurringExpense1.setAmount(null));
     }
 
     @Test
     void setNegativeAmountTest() {
-        assertThrows(IllegalArgumentException.class, () -> {
-            testRecurringExpense1.setAmount(-2.0);
-        });
+        assertThrows(IllegalArgumentException.class, () -> testRecurringExpense1.setAmount(-2.0));
     }
 
     @Test
@@ -126,17 +122,13 @@ public class RecurringExpenseTest {
 
     @Test
     void setNullDueDateTest() {
-        assertThrows(IllegalArgumentException.class, () -> {
-            testRecurringExpense1.setNextDueDate(null);
-        });
+        assertThrows(IllegalArgumentException.class, () -> testRecurringExpense1.setNextDueDate(null));
     }
 
     @Test
     void setBeforeDueDateTest() {
         LocalDate date = LocalDate.of(2000, 5, 5);
-        assertThrows(IllegalArgumentException.class, () -> {
-            testRecurringExpense1.setNextDueDate(date);
-        });
+        assertThrows(IllegalArgumentException.class, () -> testRecurringExpense1.setNextDueDate(date));
     }
 
     @Test
@@ -148,9 +140,7 @@ public class RecurringExpenseTest {
 
     @Test
     void setInvalidFrequencyTest() {
-        assertThrows(IllegalArgumentException.class, () -> {
-            testRecurringExpense1.setFrequency(null);
-        });
+        assertThrows(IllegalArgumentException.class, () -> testRecurringExpense1.setFrequency(null));
     }
 
     @Test
@@ -162,9 +152,7 @@ public class RecurringExpenseTest {
 
     @Test
     void setInvalidUserTest() {
-        assertThrows(IllegalArgumentException.class, () -> {
-            testRecurringExpense1.setUser(null);
-        });
+        assertThrows(IllegalArgumentException.class, () -> testRecurringExpense1.setUser(null));
     }
 
     @Test
@@ -176,9 +164,14 @@ public class RecurringExpenseTest {
 
     @Test
     void setInvalidTest() {
-        assertThrows(IllegalArgumentException.class, () -> {
-            testRecurringExpense1.setCategory(null);
-        });
+        assertThrows(IllegalArgumentException.class, () -> testRecurringExpense1.setCategory(null));
+    }
+
+    @Test
+    void paymentHistoryTest() {
+        List<Expense> paymentHistory = new ArrayList<>();
+        testRecurringExpense1.setPaymentHistory(paymentHistory);
+        assertEquals(paymentHistory, testRecurringExpense1.getPaymentHistory());
     }
 
     @Test

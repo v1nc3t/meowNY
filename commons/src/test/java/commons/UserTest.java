@@ -36,9 +36,7 @@ public class UserTest {
 
     @Test
     void setInvalidFirstNameTest() {
-        assertThrows(IllegalArgumentException.class, () -> {
-            testUser1.setFirstName(null);
-        });
+        assertThrows(IllegalArgumentException.class, () -> testUser1.setFirstName(null));
     }
 
     @Test
@@ -50,9 +48,7 @@ public class UserTest {
 
     @Test
     void setInvalidLastNameTest() {
-        assertThrows(IllegalArgumentException.class, () -> {
-            testUser1.setLastName(null);
-        });
+        assertThrows(IllegalArgumentException.class, () -> testUser1.setLastName(null));
     }
 
     @Test
@@ -82,9 +78,7 @@ public class UserTest {
 
     @Test
     void setInvalidUsernameTest() {
-        assertThrows(IllegalArgumentException.class, () -> {
-            testUser1.setUsername(null);
-        });
+        assertThrows(IllegalArgumentException.class, () -> testUser1.setUsername(null));
     }
 
     @Test
@@ -96,9 +90,7 @@ public class UserTest {
 
     @Test
     void setInvalidPasswordTest() {
-        assertThrows(IllegalArgumentException.class, () -> {
-            testUser1.setPassword(null);
-        });
+        assertThrows(IllegalArgumentException.class, () -> testUser1.setPassword(null));
     }
 
     @Test

@@ -35,37 +35,37 @@ public class ExpenseTest {
     @Test
     void invalidConstructorTest() {
         assertThrows(IllegalArgumentException.class, () -> {
-            Expense testExpense1 = new Expense(
+            testExpense1 = new Expense(
                     null, 1.0, testDate, "stale", testCategory, testUser
             );
         }, "name null");
 
         assertThrows(IllegalArgumentException.class, () -> {
-            Expense testExpense1 = new Expense(
+            testExpense1 = new Expense(
                     "bread", null, testDate, "stale", testCategory, testUser
             );
         }, "amount null");
 
         assertThrows(IllegalArgumentException.class, () -> {
-            Expense testExpense1 = new Expense(
+            testExpense1 = new Expense(
                     "bread", -1.0, testDate, "stale", testCategory, testUser
             );
         }, "amount negative");
 
         assertThrows(IllegalArgumentException.class, () -> {
-            Expense testExpense1 = new Expense(
+            testExpense1 = new Expense(
                     "bread", 1.0, null, "stale", testCategory, testUser
             );
         }, "pay date null");
 
         assertThrows(IllegalArgumentException.class, () -> {
-            Expense testExpense1 = new Expense(
+            testExpense1 = new Expense(
                     "bread", 1.0, testDate, "stale", null, testUser
             );
         }, "category null");
 
         assertThrows(IllegalArgumentException.class, () -> {
-            Expense testExpense1 = new Expense(
+            testExpense1 = new Expense(
                     "bread", 1.0, testDate, "stale", testCategory, null
             );
         }, "user null");
@@ -87,9 +87,7 @@ public class ExpenseTest {
 
     @Test
     void setInvalidUserTest() {
-        assertThrows(IllegalArgumentException.class, () -> {
-            testExpense1.setUser(null);
-        });
+        assertThrows(IllegalArgumentException.class, () -> testExpense1.setUser(null));
     }
 
     @Test
@@ -101,9 +99,7 @@ public class ExpenseTest {
 
     @Test
     void setInvalidNameTest() {
-        assertThrows(IllegalArgumentException.class, () -> {
-            testExpense1.setName(null);
-        });
+        assertThrows(IllegalArgumentException.class, () -> testExpense1.setName(null));
     }
 
     @Test
@@ -115,16 +111,12 @@ public class ExpenseTest {
 
     @Test
     void setNullAmountTest() {
-        assertThrows(IllegalArgumentException.class, () -> {
-            testExpense1.setAmount(null);
-        });
+        assertThrows(IllegalArgumentException.class, () -> testExpense1.setAmount(null));
     }
 
     @Test
     void setNegativeAmountTest() {
-        assertThrows(IllegalArgumentException.class, () -> {
-            testExpense1.setAmount(-10.0);
-        });
+        assertThrows(IllegalArgumentException.class, () -> testExpense1.setAmount(-10.0));
     }
 
     @Test
@@ -136,9 +128,7 @@ public class ExpenseTest {
 
     @Test
     void setInvalidPaymentTest() {
-        assertThrows(IllegalArgumentException.class, () -> {
-            testExpense1.setPaymentDate(null);
-        });
+        assertThrows(IllegalArgumentException.class, () -> testExpense1.setPaymentDate(null));
     }
 
     @Test
@@ -163,9 +153,7 @@ public class ExpenseTest {
 
     @Test
     void setInvalidCategoryTest() {
-        assertThrows(IllegalArgumentException.class, () -> {
-            testExpense1.setCategory(null);
-        });
+        assertThrows(IllegalArgumentException.class, () -> testExpense1.setCategory(null));
     }
 
     @Test
@@ -186,6 +174,8 @@ public class ExpenseTest {
         RecurringExpense sourceTemplate = new RecurringExpense(
                 "rent", 10.0, testDate, testFrequency, testUser, testCategory
         );
+        testExpense1.setSourceTemplate(sourceTemplate);
+        assertEquals(sourceTemplate, testExpense1.getSourceTemplate());
     }
 
     @Test
