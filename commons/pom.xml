@@ -11,7 +11,6 @@
 		<relativePath>../pom.xml</relativePath>
 	</parent>
 	<artifactId>commons</artifactId>
-	<version>0.0.1-SNAPSHOT</version>
 	<name>meowny - commons</name>
 	<description>Shared between client and server</description>
 
@@ -21,6 +20,18 @@
 		<version.mockito>5.8.0</version.mockito>
         <version.jersey>3.1.10</version.jersey>
 	</properties>
+
+	<dependencyManagement>
+		<dependencies>
+			<dependency>
+				<groupId>org.junit</groupId>
+				<artifactId>junit-bom</artifactId>
+				<version>${version.junit}</version>
+				<type>pom</type>
+				<scope>import</scope>
+			</dependency>
+		</dependencies>
+	</dependencyManagement>
 
 	<dependencies>
 		<dependency>
@@ -67,6 +78,14 @@
 			<artifactId>mockito-core</artifactId>
 			<version>${version.mockito}</version>
 			<scope>test</scope>
+		</dependency>
+		<dependency>
+			<groupId>com.jayway.jsonpath</groupId>
+			<artifactId>json-path</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>jakarta.validation</groupId>
+			<artifactId>jakarta.validation-api</artifactId>
 		</dependency>
 	</dependencies>
 

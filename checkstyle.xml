@@ -11,11 +11,6 @@
     </module>
 
     <module name="LineLength">
-        <property name="severity" value="warning"/>
-        <property name="max" value="150"/>
-        <property name="ignorePattern" value="^package.*|^import.*|a href|href|http://|https://|ftp://"/>
-    </module>
-    <module name="LineLength">
         <property name="severity" value="error"/>
         <property name="max" value="200"/>
         <property name="ignorePattern" value="^package.*|^import.*|a href|href|http://|https://|ftp://"/>
@@ -26,50 +21,23 @@
             <property name="checks" value="VisibilityModifier"/>
             <property name="files" value=".*[\\/]commons[\\/].*"/>
         </module>
-        <module name="MethodLength">
-            <property name="severity" value="error"/>
-            <property name="max" value="75"/>
-        </module>
-        <module name="ParameterNumber">
-            <property name="severity" value="error"/>
-            <property name="max" value="10"/>
-        </module>
-        <module name="CyclomaticComplexity">
-            <property name="severity" value="error"/>
-            <property name="max" value="12"/>
-        </module>
-        <module name="EqualsHashCode">
-            <property name="severity" value="error"/>
-        </module>
-        <module name="MissingSwitchDefault">
-            <property name="severity" value="error"/>
-        </module>
-        <module name="NeedBraces">
-            <property name="severity" value="error"/>
-        </module>
 
-        <module name="MethodLength">
-            <property name="severity" value="warning"/>
-            <property name="max" value="50"/>
-        </module>
-        <module name="ParameterNumber">
-            <property name="severity" value="warning"/>
-            <property name="max" value="8"/>
-        </module>
-        <module name="CyclomaticComplexity">
-            <property name="severity" value="warning"/>
-            <property name="max" value="6"/>
-        </module>
-        <module name="MagicNumber">
-            <property name="severity" value="warning"/>
-            <property name="ignoreNumbers" value="-1, 0, 1, 2, 0.40, 0.60"/>
-            <property name="ignoreAnnotation" value="true"/>
-        </module>
+        <module name="MethodLength"><property name="max" value="75"/></module>
+        <module name="ParameterNumber"><property name="max" value="10"/></module>
+        <module name="CyclomaticComplexity"><property name="max" value="12"/></module>
 
-        <module name="UnusedImports"><property name="severity" value="warning"/></module>
-        <module name="Indentation"><property name="severity" value="warning"/></module>
+        <module name="EqualsHashCode"/>
+        <module name="MissingSwitchDefault"/>
+        <module name="UnusedImports"/>
+        <module name="Indentation">
+            <property name="severity" value="warning"/>
+            <property name="basicOffset" value="4"/>
+            <property name="braceAdjustment" value="0"/>
+            <property name="caseIndent" value="4"/>
+            <property name="throwsIndent" value="4"/>
+            <property name="arrayInitIndent" value="4"/> <property name="lineWrappingIndentation" value="4"/>
+        </module>
         <module name="VisibilityModifier">
-            <property name="severity" value="warning"/>
             <property name="protectedAllowed" value="true"/>
         </module>
 
@@ -85,7 +53,6 @@
         </module>
 
         <module name="JavadocMethod">
-            <property name="severity" value="warning"/>
             <property name="accessModifiers" value="private"/>
             <property name="allowedAnnotations" value="Override"/>
         </module>
@@ -93,7 +60,6 @@
             <property name="checkEmptyJavadoc" value="true"/>
         </module>
         <module name="NonEmptyAtclauseDescription"/>
-
         <module name="SuppressWarnings"/>
         <module name="OuterTypeFilename"/>
     </module>

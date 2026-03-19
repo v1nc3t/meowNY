@@ -1,0 +1,68 @@
+package commons;
+
+import jakarta.persistence.*;
+
+import java.util.Objects;
+
+@Entity
+public class IncomeCategory {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    @Column(length = 30, nullable = false)
+    private String categoryName;
+
+    /**
+     * Empty constructor for object mapper.
+     */
+    public IncomeCategory() {
+    }
+
+    public IncomeCategory(String categoryName) {
+        if (categoryName == null) {
+            throw new IllegalArgumentException("Category name mustn't be null.");
+        }
+        this.categoryName = categoryName;
+    }
+
+    public Long getId() {
+        return id;
+    }
+
+    public void setId(Long id) {
+        this.id = id;
+    }
+
+    public String getCategoryName() {
+        return categoryName;
+    }
+
+    public void setCategoryName(String categoryName) {
+        if (categoryName == null) {
+            throw new IllegalArgumentException("Category name mustn't be null.");
+        }
+        this.categoryName = categoryName;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (o == null || getClass() != o.getClass()) return false;
+        IncomeCategory that = (IncomeCategory) o;
+        return Objects.equals(id, that.id) && Objects.equals(categoryName, that.categoryName);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(id, categoryName);
+    }
+
+    @Override
+    public String toString() {
+        return "commons.IncomeCategory{" +
+                "id=" + id +
+                ", categoryName='" + categoryName + '\'' +
+                '}';
+    }
+}
