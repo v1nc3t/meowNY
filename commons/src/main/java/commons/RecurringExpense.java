@@ -9,12 +9,14 @@ import java.util.List;
 import java.util.Objects;
 
 @Entity
-@Table(name = "recurring_expense", uniqueConstraints = {
-        @UniqueConstraint(
+@Table(name = "recurring_expense",
+        uniqueConstraints = {
+            @UniqueConstraint(
                 name = "unique_user_recurring_details",
                 columnNames = {"user_id", "name", "amount", "frequency"}
-        )
-})
+            )
+        }
+)
 public class RecurringExpense {
 
     @Id
@@ -47,7 +49,7 @@ public class RecurringExpense {
     private List<Expense> paymentHistory = new ArrayList<>();
 
     /**
-     * Empty constructor for object mapper
+     * Empty constructor for object mapper.
      */
     public RecurringExpense() {
     }

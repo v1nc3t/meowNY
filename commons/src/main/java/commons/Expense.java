@@ -42,7 +42,7 @@ public class Expense {
 
 
     /**
-     * Empty constructor for object mapper
+     * Empty constructor for object mapper.
      */
     public Expense() {
     }

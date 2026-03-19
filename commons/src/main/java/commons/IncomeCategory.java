@@ -15,7 +15,7 @@ public class IncomeCategory {
     private String categoryName;
 
     /**
-     * Empty constructor for object mapper
+     * Empty constructor for object mapper.
      */
     public IncomeCategory() {
     }

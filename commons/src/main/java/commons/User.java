@@ -38,7 +38,7 @@ public class User {
     private List<Budget> budgets = new ArrayList<>();
 
     /**
-     * Empty constructor for object mapper
+     * Empty constructor for object mapper.
      */
     public User() {
     }

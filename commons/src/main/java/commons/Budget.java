@@ -7,10 +7,10 @@ import java.util.Objects;
 
 @Entity
 @Table(name = "budgets", uniqueConstraints = {
-        @UniqueConstraint(
-                name =  "unique_user_category_period",
-                columnNames = {"user_id", "expense_category_id", "month", "year"}
-        )
+    @UniqueConstraint(
+            name =  "unique_user_category_period",
+            columnNames = {"user_id", "expense_category_id", "month", "year"}
+    )
 })
 public class Budget {
 
@@ -41,7 +41,7 @@ public class Budget {
     private ExpenseCategory category;
 
     /**
-     * Empty constructor for object mapper
+     * Empty constructor for object mapper.
      */
     public Budget() {
     }
@@ -140,7 +140,9 @@ public class Budget {
 
     @Override
     public boolean equals(Object o) {
-        if (o == null || getClass() != o.getClass()) return false;
+        if (o == null || getClass() != o.getClass()) {
+            return false;
+        }
         Budget budget = (Budget) o;
         return Objects.equals(id, budget.id)
                 && Objects.equals(user, budget.user)

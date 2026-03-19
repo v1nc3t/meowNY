@@ -27,7 +27,7 @@ public class Income {
     private IncomeCategory category;
 
     /**
-     * Empty constructor for object mapper
+     * Empty constructor for object mapper.
      */
     public Income() {
     }
