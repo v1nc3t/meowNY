@@ -22,25 +22,30 @@ public class IncomeTest {
 
     @Test
     void invalidConstructorTest() {
-        assertThrows(IllegalArgumentException.class, () -> {
-           Income testIncome = new Income(null, 200.0, testCategory, testUser);
-        }, "name null");
+        assertThrows(IllegalArgumentException.class, () ->
+                testIncome1 = new Income(null, 200.0, testCategory, testUser),
+                "name null"
+        );
 
-        assertThrows(IllegalArgumentException.class, () -> {
-           Income testIncome = new Income("rent", null, testCategory, testUser);
-        }, "amount null");
+        assertThrows(IllegalArgumentException.class, () ->
+                testIncome1 = new Income("rent", null, testCategory, testUser),
+                "amount null"
+        );
 
-        assertThrows(IllegalArgumentException.class, () -> {
-           Income testIncome = new Income("rent", -1.0, testCategory, testUser);
-        }, "amount not positive");
+        assertThrows(IllegalArgumentException.class, () ->
+                testIncome1 = new Income("rent", -1.0, testCategory, testUser),
+                "amount not positive"
+        );
 
-        assertThrows(IllegalArgumentException.class, () -> {
-           Income testIncome = new Income("rent", 200.0, null, testUser);
-        }, "category null");
+        assertThrows(IllegalArgumentException.class, () ->
+                testIncome1 = new Income("rent", 200.0, null, testUser),
+                "category null"
+        );
 
-        assertThrows(IllegalArgumentException.class, () -> {
-           Income testIncome = new Income("rent", 200.0, testCategory, null);
-        }, "user null");
+        assertThrows(IllegalArgumentException.class, () ->
+                testIncome1 = new Income("rent", 200.0, testCategory, null),
+                "user null"
+        );
     }
 
     @Test
@@ -52,9 +57,9 @@ public class IncomeTest {
 
     @Test
     void setInvalidNameTest() {
-        assertThrows(IllegalArgumentException.class, () -> {
-            testIncome1.setName(null);
-        });
+        assertThrows(IllegalArgumentException.class, () ->
+                testIncome1.setName(null)
+        );
     }
 
     @Test
@@ -66,9 +71,9 @@ public class IncomeTest {
 
     @Test
     void setInvalidUserTest() {
-        assertThrows(IllegalArgumentException.class, () -> {
-            testIncome1.setUser(null);
-        });
+        assertThrows(IllegalArgumentException.class, () ->
+                testIncome1.setUser(null)
+        );
     }
 
     @Test
@@ -80,16 +85,16 @@ public class IncomeTest {
 
     @Test
     void setNullAmountTest() {
-        assertThrows(IllegalArgumentException.class, () -> {
-            testIncome1.setAmount(null);
-        });
+        assertThrows(IllegalArgumentException.class, () ->
+                testIncome1.setAmount(null)
+        );
     }
 
     @Test
     void setNegativeAmountTest() {
-        assertThrows(IllegalArgumentException.class, () -> {
-            testIncome1.setAmount(-2.0);
-        });
+        assertThrows(IllegalArgumentException.class, () ->
+                testIncome1.setAmount(-2.0)
+        );
     }
 
     @Test
@@ -101,9 +106,9 @@ public class IncomeTest {
 
     @Test
     void setInvalidCategoryTest() {
-        assertThrows(IllegalArgumentException.class, () -> {
-            testIncome1.setCategory(null);
-        });
+        assertThrows(IllegalArgumentException.class, () ->
+                testIncome1.setCategory(null)
+        );
     }
 
     @Test

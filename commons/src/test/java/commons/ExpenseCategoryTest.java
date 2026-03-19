@@ -19,9 +19,10 @@ public class ExpenseCategoryTest {
 
     @Test
     void invalidConstructorTest() {
-        assertThrows(IllegalArgumentException.class, () -> {
-            ExpenseCategory invalidTestExpenseCategory = new ExpenseCategory(null);
-        }, "invalid category name");
+        assertThrows(IllegalArgumentException.class, () ->
+                testExpenseCategory1 = new ExpenseCategory(null),
+                "invalid category name"
+        );
     }
 
     @Test
@@ -40,9 +41,10 @@ public class ExpenseCategoryTest {
 
     @Test
     void setInvalidCategoryNameTest() {
-        assertThrows(IllegalArgumentException.class, () -> {
-            testExpenseCategory1.setCategoryName(null);
-        }, "invalid category name");
+        assertThrows(IllegalArgumentException.class, () ->
+                testExpenseCategory1.setCategoryName(null),
+                "invalid category name"
+        );
     }
 
     @Test

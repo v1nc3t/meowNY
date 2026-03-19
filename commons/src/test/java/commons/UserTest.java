@@ -21,6 +21,29 @@ public class UserTest {
     }
 
     @Test
+    void invalidConstructorTest() {
+        assertThrows(IllegalArgumentException.class, () ->
+                testUser1 = new User(null, "Born", "wb@gmail.com", "wlbr", "test"),
+                "First name null"
+        );
+
+        assertThrows(IllegalArgumentException.class, () ->
+                testUser1 = new User("Will", null, "wb@gmail.com", "wlbr", "test"),
+                "Last name null"
+        );
+
+        assertThrows(IllegalArgumentException.class, () ->
+                testUser1 = new User("Will", "Born", "wb@gmail.com", null, "test")
+                , "Username name null"
+        );
+
+        assertThrows(IllegalArgumentException.class, () ->
+                testUser1 = new User("Will", "Born", "wb@gmail.com", "wlbr", null),
+                "Password name null"
+        );
+    }
+
+    @Test
     void setIdTest() {
         Long id = 1L;
         testUser1.setId(id);
@@ -36,7 +59,9 @@ public class UserTest {
 
     @Test
     void setInvalidFirstNameTest() {
-        assertThrows(IllegalArgumentException.class, () -> testUser1.setFirstName(null));
+        assertThrows(IllegalArgumentException.class, () ->
+                testUser1.setFirstName(null)
+        );
     }
 
     @Test
@@ -48,7 +73,9 @@ public class UserTest {
 
     @Test
     void setInvalidLastNameTest() {
-        assertThrows(IllegalArgumentException.class, () -> testUser1.setLastName(null));
+        assertThrows(IllegalArgumentException.class, () ->
+                testUser1.setLastName(null)
+        );
     }
 
     @Test
@@ -78,7 +105,9 @@ public class UserTest {
 
     @Test
     void setInvalidUsernameTest() {
-        assertThrows(IllegalArgumentException.class, () -> testUser1.setUsername(null));
+        assertThrows(IllegalArgumentException.class, () ->
+                testUser1.setUsername(null)
+        );
     }
 
     @Test
@@ -90,7 +119,9 @@ public class UserTest {
 
     @Test
     void setInvalidPasswordTest() {
-        assertThrows(IllegalArgumentException.class, () -> testUser1.setPassword(null));
+        assertThrows(IllegalArgumentException.class, () ->
+                testUser1.setPassword(null)
+        );
     }
 
     @Test

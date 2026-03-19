@@ -22,25 +22,30 @@ public class BudgetTest {
 
     @Test
     void invalidConstructorTest() {
-        assertThrows(IllegalArgumentException.class, () -> {
-           Budget invalidBudget = new Budget(-1.0, 10, 2000, testCategory, testUser);
-        }, "invalid limit");
+        assertThrows(IllegalArgumentException.class, () ->
+                testBudget1 = new Budget(-1.0, 10, 2000, testCategory, testUser),
+                "invalid limit"
+        );
 
-        assertThrows(IllegalArgumentException.class, () -> {
-           Budget invalidBudget = new Budget(1.0, 13, 2000, testCategory, testUser);
-        }, "invalid month");
+        assertThrows(IllegalArgumentException.class, () ->
+                testBudget1 = new Budget(1.0, 13, 2000, testCategory, testUser),
+                "invalid month"
+        );
 
-        assertThrows(IllegalArgumentException.class, () -> {
-           Budget invalidBudget = new Budget(1.0, 10, 10000, testCategory, testUser);
-        }, "invalid year");
+        assertThrows(IllegalArgumentException.class, () ->
+                testBudget1 = new Budget(1.0, 10, 10000, testCategory, testUser),
+                "invalid year"
+        );
 
-        assertThrows(IllegalArgumentException.class, () -> {
-           Budget invalidBudget = new Budget(1.0, 10, 2000, null, testUser);
-        }, "null category");
+        assertThrows(IllegalArgumentException.class, () ->
+                testBudget1 = new Budget(1.0, 10, 2000, null, testUser),
+                "null category"
+        );
 
-        assertThrows(IllegalArgumentException.class, () -> {
-           Budget invalidBudget = new Budget(1.0, 10, 2000, testCategory, null);
-        }, "null user");
+        assertThrows(IllegalArgumentException.class, () ->
+                testBudget1 = new Budget(1.0, 10, 2000, testCategory, null),
+                "null user"
+        );
     }
 
     @Test
@@ -58,7 +63,9 @@ public class BudgetTest {
 
     @Test
     void setInvalidUserTest() {
-        assertThrows(IllegalArgumentException.class, () -> testBudget1.setUser(null));
+        assertThrows(IllegalArgumentException.class, () ->
+                testBudget1.setUser(null)
+        );
     }
 
     @Test
@@ -71,7 +78,9 @@ public class BudgetTest {
     @Test
     void setInvalidLimitAmountTest() {
         double limit = -100.0;
-        assertThrows(IllegalArgumentException.class, () -> testBudget1.setLimitAmount(limit));
+        assertThrows(IllegalArgumentException.class, () ->
+                testBudget1.setLimitAmount(limit)
+        );
     }
 
     @Test
@@ -84,7 +93,9 @@ public class BudgetTest {
     @Test
     void setInvalidMonthTest() {
         int month = 13;
-        assertThrows(IllegalArgumentException.class, () -> testBudget1.setMonth(month));
+        assertThrows(IllegalArgumentException.class, () ->
+                testBudget1.setMonth(month)
+        );
     }
 
     @Test
@@ -97,7 +108,9 @@ public class BudgetTest {
     @Test
     void setInvalidYearTest() {
         int year = 1900;
-        assertThrows(IllegalArgumentException.class, () -> testBudget1.setYear(year));
+        assertThrows(IllegalArgumentException.class, () ->
+                testBudget1.setYear(year)
+        );
     }
 
     @Test
@@ -109,7 +122,9 @@ public class BudgetTest {
 
     @Test
     void setNotNullCategory() {
-        assertThrows(IllegalArgumentException.class, () -> testBudget1.setCategory(null));
+        assertThrows(IllegalArgumentException.class, () ->
+                testBudget1.setCategory(null)
+        );
     }
 
     @Test
