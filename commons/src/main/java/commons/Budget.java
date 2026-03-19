@@ -50,7 +50,8 @@ public class Budget {
             Double limitAmount,
             Integer month,
             Integer year,
-            ExpenseCategory category
+            ExpenseCategory category,
+            User user
     ) {
         if (limitAmount == null || limitAmount < 0) {
             throw new IllegalArgumentException("Limit amount must be positive.");
@@ -64,10 +65,14 @@ public class Budget {
         if (category == null) {
             throw new IllegalArgumentException("Category must exist to create budget.");
         }
+        if (user == null) {
+            throw new IllegalArgumentException("Budget must be assigned to a user.");
+        }
         this.limitAmount = limitAmount;
         this.month = month;
         this.year = year;
         this.category = category;
+        this.user = user;
     }
 
     public Long getId() {
@@ -83,6 +88,9 @@ public class Budget {
     }
 
     public void setUser(User user) {
+        if (user == null) {
+            throw new IllegalArgumentException("Budget must be assigned to a user.");
+        }
         this.user = user;
     }
 
@@ -134,7 +142,8 @@ public class Budget {
     public boolean equals(Object o) {
         if (o == null || getClass() != o.getClass()) return false;
         Budget budget = (Budget) o;
-        return Objects.equals(user, budget.user)
+        return Objects.equals(id, budget.id)
+                && Objects.equals(user, budget.user)
                 && Objects.equals(limitAmount, budget.limitAmount)
                 && Objects.equals(month, budget.month)
                 && Objects.equals(year, budget.year)
@@ -143,13 +152,14 @@ public class Budget {
 
     @Override
     public int hashCode() {
-        return Objects.hash(user, limitAmount, month, year, category);
+        return Objects.hash(id, user, limitAmount, month, year, category);
     }
 
     @Override
     public String toString() {
         return "Budget{" +
                 "id=" + id +
+                ", user=" + user +
                 ", limitAmount=" + limitAmount +
                 ", month=" + month +
                 ", year=" + year +

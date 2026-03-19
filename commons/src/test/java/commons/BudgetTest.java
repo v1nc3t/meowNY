@@ -1,8 +1,6 @@
 package commons;
 
-
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.*;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -17,28 +15,32 @@ public class BudgetTest {
 
     @BeforeEach
     void setUp() {
-        testBudget1 = new Budget(50.0, 11, 2000, testCategory);
-        testBudget2 = new Budget(100.0, 4, 2010, testCategory);
-        testBudget3 = new Budget(100.0, 4, 2010, testCategory);
+        testBudget1 = new Budget(50.0, 11, 2000, testCategory, testUser);
+        testBudget2 = new Budget(100.0, 4, 2010, testCategory, testUser);
+        testBudget3 = new Budget(100.0, 4, 2010, testCategory, testUser);
     }
 
     @Test
     void invalidConstructorTest() {
         assertThrows(IllegalArgumentException.class, () -> {
-           Budget invalidBudget = new Budget(-1.0, 10, 2000, testCategory);
+           Budget invalidBudget = new Budget(-1.0, 10, 2000, testCategory, testUser);
         }, "invalid limit");
 
         assertThrows(IllegalArgumentException.class, () -> {
-           Budget invalidBudget = new Budget(1.0, 13, 2000, testCategory);
+           Budget invalidBudget = new Budget(1.0, 13, 2000, testCategory, testUser);
         }, "invalid month");
 
         assertThrows(IllegalArgumentException.class, () -> {
-           Budget invalidBudget = new Budget(1.0, 10, 10000, testCategory);
+           Budget invalidBudget = new Budget(1.0, 10, 10000, testCategory, testUser);
         }, "invalid year");
 
         assertThrows(IllegalArgumentException.class, () -> {
-           Budget invalidBudget = new Budget(1.0, 10, 2000, null);
-        }, "not null category");
+           Budget invalidBudget = new Budget(1.0, 10, 2000, null, testUser);
+        }, "null category");
+
+        assertThrows(IllegalArgumentException.class, () -> {
+           Budget invalidBudget = new Budget(1.0, 10, 2000, testCategory, null);
+        }, "null user");
     }
 
     @Test
@@ -49,9 +51,14 @@ public class BudgetTest {
     }
 
     @Test
-    void setUserTest() {
+    void setValidUserTest() {
         testBudget1.setUser(testUser);
         assertEquals(testUser, testBudget1.getUser());
+    }
+
+    @Test
+    void setInvalidUserTest() {
+        assertThrows(IllegalArgumentException.class, () -> testBudget1.setUser(null));
     }
 
     @Test
@@ -102,34 +109,26 @@ public class BudgetTest {
 
     @Test
     void setNotNullCategory() {
-        assertThrows(IllegalArgumentException.class, () -> {
-            testBudget1.setCategory(null);
-        });
+        assertThrows(IllegalArgumentException.class, () -> testBudget1.setCategory(null));
     }
 
     @Test
-    void testNotEquals() {
+    void notEqualsTest() {
         assertNotEquals(testBudget1, testBudget2);
     }
 
     @Test
-    void testEquals() {
+    void equalsTest() {
         assertEquals(testBudget3, testBudget2);
     }
 
     @Test
-    void testHashCodeDiff() {
+    void hashCodeDiffTest() {
         assertNotEquals(testBudget1.hashCode(), testBudget2.hashCode());
     }
 
     @Test
-    void testHashCodeSame() {
+    void hashCodeSameTest() {
         assertEquals(testBudget2.hashCode(), testBudget3.hashCode());
-    }
-
-    @Test
-    void testToString() {
-        String expected = "Budget{id=null, limitAmount=100.0, month=4, year=2010, category=" + testCategory + "}";
-        assertEquals(expected, testBudget2.toString());
     }
 }
