@@ -10,12 +10,10 @@ public class ConfigTest {
 
     private Config config;
 
-    double defaultRatio;
-
     @BeforeEach
     public void setUp() {
         config = new Config();
-        defaultRatio = 0.6;
+        double defaultRatio = 0.6;
         config.setDefaultRatio(defaultRatio);
     }
 
