@@ -1,14 +1,16 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<project xmlns="http://maven.apache.org/POM/4.0.0" 
-	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-	xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+		 xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+		 xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
 	<modelVersion>4.0.0</modelVersion>
-    <parent>
-        <groupId>org.springframework.boot</groupId>
-        <artifactId>spring-boot-starter-parent</artifactId>
-        <version>3.5.0</version> <relativePath/>
-    </parent>
-	
+
+	<parent>
+		<groupId>org.springframework.boot</groupId>
+		<artifactId>spring-boot-starter-parent</artifactId>
+		<version>3.4.4</version>
+		<relativePath/>
+	</parent>
+
 	<groupId>meowny</groupId>
 	<artifactId>meowNY</artifactId>
 	<version>0.0.1-SNAPSHOT</version>
@@ -22,16 +24,44 @@
 		<module>server</module>
 	</modules>
 
-	<dependencyManagement>
-    	<dependencies>
-        	<dependency>
-            	<groupId>org.springframework.boot</groupId>
-            	<artifactId>spring-boot-dependencies</artifactId>
-            	<version>3.5.0</version>
-            	<type>pom</type>
-            	<scope>import</scope>
-        	</dependency>
-    	</dependencies>
-	</dependencyManagement>
+	<properties>
+		<java.version>25</java.version>
+		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+		<project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
+		<version.jersey>3.1.9</version.jersey>
+	</properties>
+
+
+	<build>
+		<pluginManagement>
+			<plugins>
+				<plugin>
+					<groupId>org.apache.maven.plugins</groupId>
+					<artifactId>maven-checkstyle-plugin</artifactId>
+					<version>3.4.0</version> <!-- updated from 3.3.0 -->
+					<configuration>
+						<configLocation>../checkstyle.xml</configLocation>
+						<sourceDirectories>${project.basedir}</sourceDirectories>
+						<includes>src/**/*.java,**/*.xml,**/*.yml</includes>
+						<excludes>**/target/**</excludes>
+					</configuration>
+					<executions>
+						<execution>
+							<id>validate</id>
+							<phase>validate</phase>
+							<goals>
+								<goal>check</goal>
+							</goals>
+						</execution>
+					</executions>
+				</plugin>
+				<plugin>
+					<groupId>org.openjfx</groupId>
+					<artifactId>javafx-maven-plugin</artifactId>
+					<version>0.0.8</version>
+				</plugin>
+			</plugins>
+		</pluginManagement>
+	</build>
 
 </project>
