@@ -6,20 +6,27 @@ import jakarta.validation.constraints.*;
 import java.util.Objects;
 
 @Entity
-@Table(name = "budgets", uniqueConstraints = {
-    @UniqueConstraint(
-            name =  "unique_user_category_period",
-            columnNames = {"user_id", "expense_category_id", "month", "year"}
-    )
-})
+@Table(
+        name = "budgets",
+        uniqueConstraints = {
+                @UniqueConstraint(
+                        name = "unique_user_category_period",
+                        columnNames = {"user_id", "expense_category_id", "month", "year"}
+                )
+        },
+        indexes = {
+                @Index(name = "idx_budget_user_period", columnList = "user_id, year, month"),
+                @Index(name = "idx_budget_user_category", columnList = "user_id, expense_category_id")
+        }
+)
 public class Budget {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @ManyToOne
-    @JoinColumn(name = "user_id")
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "user_id", nullable = false)
     private User user;
 
     @Column(nullable = false)
@@ -73,6 +80,7 @@ public class Budget {
         this.year = year;
         this.category = category;
         this.user = user;
+        validateCategoryBelongsToUser(this.category, this.user);
     }
 
     public Long getId() {
@@ -92,6 +100,7 @@ public class Budget {
             throw new IllegalArgumentException("Budget must be assigned to a user.");
         }
         this.user = user;
+        validateCategoryBelongsToUser(this.category, user);
     }
 
     public Double getLimitAmount() {
@@ -135,26 +144,35 @@ public class Budget {
         if (category == null) {
             throw new IllegalArgumentException("Category must exist to create budget.");
         }
+        validateCategoryBelongsToUser(category, this.user);
         this.category = category;
+    }
+
+    private void validateCategoryBelongsToUser(ExpenseCategory category, User user) {
+        if (category == null || user == null) {
+            return;
+        }
+        User categoryUser = category.getUser();
+        if (categoryUser != null && !Objects.equals(categoryUser.getId(), user.getId())) {
+            throw new IllegalArgumentException("Category must belong to the same user as the budget.");
+        }
     }
 
     @Override
     public boolean equals(Object o) {
+        if (this == o) {
+            return true;
+        }
         if (o == null || getClass() != o.getClass()) {
             return false;
         }
         Budget budget = (Budget) o;
-        return Objects.equals(id, budget.id)
-                && Objects.equals(user, budget.user)
-                && Objects.equals(limitAmount, budget.limitAmount)
-                && Objects.equals(month, budget.month)
-                && Objects.equals(year, budget.year)
-                && Objects.equals(category, budget.category);
+        return id != null && Objects.equals(id, budget.id);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(id, user, limitAmount, month, year, category);
+        return Objects.hashCode(id);
     }
 
     @Override
