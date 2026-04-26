@@ -12,7 +12,8 @@ import java.util.Objects;
         name = "expenses",
         indexes = {
                 @Index(name = "idx_expense_user_date", columnList = "user_id, payment_date"),
-                @Index(name = "idx_expense_user_category", columnList = "user_id, expense_category_id")
+                @Index(name = "idx_expense_user_category", columnList = "user_id, expense_category_id"),
+                @Index(name = "idx_expense_recurring_template", columnList = "recurring_expense_id")
         }
 )
 public class Expense {

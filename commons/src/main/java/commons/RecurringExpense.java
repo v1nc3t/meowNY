@@ -1,7 +1,8 @@
 package commons;
 
 import jakarta.persistence.*;
-import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.PositiveOrZero;
 
 import java.time.LocalDate;
 import java.util.ArrayList;
@@ -15,6 +16,11 @@ import java.util.Objects;
                 name = "unique_user_recurring_details",
                 columnNames = {"user_id", "name", "amount", "frequency"}
             )
+        },
+        indexes = {
+            @Index(name = "idx_recurring_user_due_date", columnList = "user_id, next_due_date"),
+            @Index(name = "idx_recurring_user_frequency_due", columnList = "user_id, frequency, next_due_date"),
+            @Index(name = "idx_recurring_user_category", columnList = "user_id, expense_category_id")
         }
 )
 public class RecurringExpense {
@@ -27,14 +33,15 @@ public class RecurringExpense {
     @JoinColumn(name = "user_id", nullable = false)
     private User user;
 
+    @NotBlank
     @Column(length = 30, nullable = false)
     private String name;
 
+    @PositiveOrZero
     @Column(nullable = false)
-    @Min(0)
     private Double amount;
 
-    @Column(nullable = false)
+    @Column(name = "next_due_date", nullable = false)
     private LocalDate nextDueDate;
 
     @Enumerated(EnumType.STRING)
@@ -42,7 +49,7 @@ public class RecurringExpense {
     private Frequency frequency;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "expense_category_id")
+    @JoinColumn(name = "expense_category_id", nullable = false)
     private ExpenseCategory category;
 
     @OneToMany(mappedBy = "sourceTemplate", cascade = CascadeType.ALL, orphanRemoval = true)
@@ -89,6 +96,7 @@ public class RecurringExpense {
         this.frequency = frequency;
         this.user = user;
         this.category = category;
+        validateCategoryBelongsToUser(this.category, this.user);
     }
 
     public Long getId() {
@@ -155,6 +163,7 @@ public class RecurringExpense {
             throw new IllegalArgumentException("User mustn't be null.");
         }
         this.user = user;
+        validateCategoryBelongsToUser(this.category, user);
     }
 
     public ExpenseCategory getCategory() {
@@ -165,6 +174,7 @@ public class RecurringExpense {
         if (category == null) {
             throw new IllegalArgumentException("Category mustn't be null.");
         }
+        validateCategoryBelongsToUser(category, this.user);
         this.category = category;
     }
 
@@ -173,36 +183,54 @@ public class RecurringExpense {
     }
 
     public void setPaymentHistory(List<Expense> paymentHistory) {
-        this.paymentHistory = paymentHistory;
+        this.paymentHistory.clear();
+        if (paymentHistory == null) {
+            return;
+        }
+        for (Expense expense : paymentHistory) {
+            addPayment(expense);
+        }
     }
 
     public void addPayment(Expense expense) {
+        if (expense == null) {
+            throw new IllegalArgumentException("Expense payment mustn't be null.");
+        }
         this.paymentHistory.add(expense);
         expense.setSourceTemplate(this);
     }
 
+    public void removePayment(Expense expense) {
+        if (expense == null) {
+            return;
+        }
+        this.paymentHistory.remove(expense);
+        if (expense.getSourceTemplate() == this) {
+            expense.setSourceTemplate(null);
+        }
+    }
+
+    private void validateCategoryBelongsToUser(ExpenseCategory category, User user) {
+        if (category == null || user == null) {
+            return;
+        }
+        User categoryUser = category.getUser();
+        if (categoryUser != null && !Objects.equals(categoryUser.getId(), user.getId())) {
+            throw new IllegalArgumentException("Category must belong to the same user as the recurring expense.");
+        }
+    }
+
     @Override
     public boolean equals(Object o) {
+        if (this == o) return true;
         if (o == null || getClass() != o.getClass()) return false;
         RecurringExpense that = (RecurringExpense) o;
-        return Objects.equals(id, that.id)
-                && Objects.equals(user, that.user)
-                && Objects.equals(name, that.name)
-                && Objects.equals(amount, that.amount)
-                && Objects.equals(nextDueDate, that.nextDueDate)
-                && frequency == that.frequency;
+        return id != null && Objects.equals(id, that.id);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(
-                id,
-                user,
-                name,
-                amount,
-                nextDueDate,
-                frequency
-        );
+        return Objects.hashCode(id);
     }
 
     @Override
