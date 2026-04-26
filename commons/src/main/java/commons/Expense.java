@@ -1,12 +1,20 @@
 package commons;
 
 import jakarta.persistence.*;
-import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Positive;
 
 import java.time.LocalDate;
 import java.util.Objects;
 
 @Entity
+@Table(
+        name = "expenses",
+        indexes = {
+                @Index(name = "idx_expense_user_date", columnList = "user_id, payment_date"),
+                @Index(name = "idx_expense_user_category", columnList = "user_id, expense_category_id")
+        }
+)
 public class Expense {
 
     @Id
@@ -17,14 +25,15 @@ public class Expense {
     @JoinColumn(name = "user_id", nullable = false)
     private User user;
 
+    @NotBlank
     @Column(length = 30, nullable = false)
     private String name;
 
     @Column(nullable = false)
-    @Min(0)
+    @Positive
     private Double amount;
 
-    @Column(nullable = false)
+    @Column(name = "payment_date", nullable = false)
     private LocalDate paymentDate;
 
     private LocalDate referenceDueDate;
@@ -78,6 +87,7 @@ public class Expense {
         this.description = description;
         this.category = category;
         this.user = user;
+        validateCategoryBelongsToUser(this.category, this.user);
     }
 
     public Expense(
@@ -108,6 +118,7 @@ public class Expense {
             throw new IllegalArgumentException("User cannot be null.");
         }
         this.user = user;
+        validateCategoryBelongsToUser(this.category, user);
     }
 
     public String getName() {
@@ -175,37 +186,31 @@ public class Expense {
         if (category == null) {
             throw new IllegalArgumentException("Category can not be null.");
         }
+        validateCategoryBelongsToUser(category, this.user);
         this.category = category;
+    }
+
+    private void validateCategoryBelongsToUser(ExpenseCategory category, User user) {
+        if (category == null || user == null) {
+            return;
+        }
+        User categoryUser = category.getUser();
+        if (categoryUser != null && !Objects.equals(categoryUser.getId(), user.getId())) {
+            throw new IllegalArgumentException("Category must belong to the same user as the expense.");
+        }
     }
 
     @Override
     public boolean equals(Object o) {
+        if (this == o) return true;
         if (o == null || getClass() != o.getClass()) return false;
         Expense expense = (Expense) o;
-        return Objects.equals(id, expense.id)
-                && Objects.equals(user, expense.user)
-                && Objects.equals(name, expense.name)
-                && Objects.equals(amount, expense.amount)
-                && Objects.equals(paymentDate, expense.paymentDate)
-                && Objects.equals(referenceDueDate, expense.referenceDueDate)
-                && Objects.equals(description, expense.description)
-                && Objects.equals(sourceTemplate, expense.sourceTemplate)
-                && Objects.equals(category, expense.category);
+        return id != null && Objects.equals(id, expense.id);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(
-                id,
-                user,
-                name,
-                amount,
-                paymentDate,
-                referenceDueDate,
-                description,
-                sourceTemplate,
-                category
-        );
+        return Objects.hashCode(id);
     }
 
     @Override
