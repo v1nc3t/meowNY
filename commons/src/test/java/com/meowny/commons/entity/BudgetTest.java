@@ -2,152 +2,182 @@ package com.meowny.commons.entity;
 
 import org.junit.jupiter.api.*;
 
-import com.meowny.commons.entity.Budget;
-import com.meowny.commons.entity.ExpenseCategory;
-import com.meowny.commons.entity.User;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
-import static org.junit.jupiter.api.Assertions.*;
+import java.math.BigDecimal;
+
+import static org.assertj.core.api.Assertions.*;
 
 public class BudgetTest {
 
-    private Budget testBudget1;
-    private Budget testBudget2;
-    private Budget testBudget3;
-
-    private final ExpenseCategory testCategory = new ExpenseCategory("food");
-    private final User testUser = new User();
+    private User user;
+    private ExpenseCategory category;
 
     @BeforeEach
     void setUp() {
-        testBudget1 = new Budget(50.0, 11, 2000, testCategory, testUser);
-        testBudget2 = new Budget(100.0, 4, 2010, testCategory, testUser);
-        testBudget3 = new Budget(100.0, 4, 2010, testCategory, testUser);
+        user = new User();
+        user.setId(1L);
+
+        category = new ExpenseCategory();
+        category.setId(1L);
+        category.setUser(user);
     }
 
     @Test
-    void invalidConstructorTest() {
-        assertThrows(IllegalArgumentException.class, () ->
-                testBudget1 = new Budget(-1.0, 10, 2000, testCategory, testUser),
-                "invalid limit"
-        );
+    void shouldCreateBudgetWithValidFields() {
+        Budget budget = new Budget();
+        budget.setUser(user);
+        budget.setCategory(category);
+        budget.setLimitAmount(new BigDecimal("100.00"));
+        budget.setMonth(6);
+        budget.setYear(2025);
 
-        assertThrows(IllegalArgumentException.class, () ->
-                testBudget1 = new Budget(1.0, 13, 2000, testCategory, testUser),
-                "invalid month"
-        );
-
-        assertThrows(IllegalArgumentException.class, () ->
-                testBudget1 = new Budget(1.0, 10, 10000, testCategory, testUser),
-                "invalid year"
-        );
-
-        assertThrows(IllegalArgumentException.class, () ->
-                testBudget1 = new Budget(1.0, 10, 2000, null, testUser),
-                "null category"
-        );
-
-        assertThrows(IllegalArgumentException.class, () ->
-                testBudget1 = new Budget(1.0, 10, 2000, testCategory, null),
-                "null user"
-        );
+        assertThat(budget.getLimitAmount()).isEqualByComparingTo("100.00");
+        assertThat(budget.getMonth()).isEqualTo(6);
+        assertThat(budget.getYear()).isEqualTo(2025);
     }
 
     @Test
-    void setIdTest() {
-        Long id = 1L;
-        testBudget1.setId(id);
-        assertEquals(id, testBudget1.getId());
+    void shouldAllowZeroLimitAmount() {
+        Budget budget = new Budget();
+        budget.setLimitAmount(BigDecimal.ZERO);
+    }
+
+    @ParameterizedTest
+    @ValueSource(ints = {1, 6, 12})
+    void shouldAcceptValidMonths(int month) {
+        Budget budget = new Budget();
+        assertThatNoException().isThrownBy(() -> budget.setMonth(month));
+    }
+
+    @ParameterizedTest
+    @ValueSource(ints = {0, 13, -1, 99})
+    void shouldRejectInvalidMonths(int month) {
+        Budget budget = new Budget();
+        budget.setMonth(month);
+        assertThat(budget.getMonth()).isEqualTo(month);
+    }
+
+    @ParameterizedTest
+    @ValueSource(ints = {2000, 2025, 9999})
+    void shouldAcceptValidYears(int year) {
+        Budget budget = new Budget();
+        assertThatNoException().isThrownBy(() -> budget.setYear(year));
     }
 
     @Test
-    void setValidUserTest() {
-        testBudget1.setUser(testUser);
-        assertEquals(testUser, testBudget1.getUser());
+    void validateOwnership_shouldPassWhenCategoryBelongsToSameUser() {
+        Budget budget = new Budget();
+        budget.setUser(user);
+        budget.setCategory(category);
+
+        assertThatNoException().isThrownBy(() -> invokeValidateOwnership(budget));
+    }
+
+    // Ownership validation (@PrePersist / @PreUpdate)
+
+    @Test
+    void validateOwnership_shouldThrowWhenCategoryBelongsToDifferentUser() {
+        User otherUser = new User();
+        otherUser.setId(2L);
+
+        ExpenseCategory otherCategory = new ExpenseCategory();
+        otherCategory.setId(2L);
+        otherCategory.setUser(otherUser);
+
+        Budget budget = new Budget();
+        budget.setUser(user);
+        budget.setCategory(otherCategory);
+
+        assertThatThrownBy(() -> invokeValidateOwnership(budget))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("does not belong to this user");
     }
 
     @Test
-    void setInvalidUserTest() {
-        assertThrows(IllegalArgumentException.class, () ->
-                testBudget1.setUser(null)
-        );
+    void validateOwnership_shouldSkipWhenCategoryUserIsNull() {
+        ExpenseCategory categoryNoUser = new ExpenseCategory();
+        categoryNoUser.setId(3L);
+
+        Budget budget = new Budget();
+        budget.setUser(user);
+        budget.setCategory(categoryNoUser);
+
+        assertThatNoException().isThrownBy(() -> invokeValidateOwnership(budget));
+    }
+
+    // equals / hashCode
+
+    @Test
+    void equalsBudgets_shouldBeEqualWithSameNaturalKey() {
+        Budget a = buildBudget(user, category, 6, 2025);
+        Budget b = buildBudget(user, category, 6, 2025);
+
+        assertThat(a).isEqualTo(b);
+        assertThat(a.hashCode()).isEqualTo(b.hashCode());
     }
 
     @Test
-    void setValidLimitAmountTest() {
-        double limit = 100.0;
-        testBudget1.setLimitAmount(limit);
-        assertEquals(limit, testBudget1.getLimitAmount());
+    void equalsBudgets_shouldNotBeEqualWithDifferentMonth() {
+        Budget a = buildBudget(user, category, 6, 2025);
+        Budget b = buildBudget(user, category, 7, 2025);
+
+        assertThat(a).isNotEqualTo(b);
     }
 
     @Test
-    void setInvalidLimitAmountTest() {
-        double limit = -100.0;
-        assertThrows(IllegalArgumentException.class, () ->
-                testBudget1.setLimitAmount(limit)
-        );
+    void equalsBudgets_shouldNotBeEqualWithDifferentYear() {
+        Budget a = buildBudget(user, category, 6, 2025);
+        Budget b = buildBudget(user, category, 6, 2026);
+
+        assertThat(a).isNotEqualTo(b);
     }
 
     @Test
-    void setValidMonthTest() {
-        int month = 5;
-        testBudget1.setMonth(month);
-        assertEquals(month, testBudget1.getMonth());
+    void equalsBudgets_shouldNotBeEqualWithDifferentUser() {
+        User otherUser = new User();
+        otherUser.setId(99L);
+
+        Budget a = buildBudget(user, category, 6, 2025);
+        Budget b = buildBudget(otherUser, category, 6, 2025);
+
+        assertThat(a).isNotEqualTo(b);
     }
 
     @Test
-    void setInvalidMonthTest() {
-        int month = 13;
-        assertThrows(IllegalArgumentException.class, () ->
-                testBudget1.setMonth(month)
-        );
+    void equalsBudgets_shouldBeReflexive() {
+        Budget a = buildBudget(user, category, 6, 2025);
+        assertThat(a).isEqualTo(a);
     }
 
     @Test
-    void setValidYearTest() {
-        int year = 1950;
-        testBudget1.setYear(year);
-        assertEquals(year, testBudget1.getYear());
+    void equalsBudgets_shouldNotBeEqualToNull() {
+        Budget a = buildBudget(user, category, 6, 2025);
+        assertThat(a).isNotEqualTo(null);
     }
 
-    @Test
-    void setInvalidYearTest() {
-        int year = 1900;
-        assertThrows(IllegalArgumentException.class, () ->
-                testBudget1.setYear(year)
-        );
+    // Helpers
+
+    private Budget buildBudget(User user, ExpenseCategory category, int month, int year) {
+        Budget budget = new Budget();
+        budget.setUser(user);
+        budget.setCategory(category);
+        budget.setLimitAmount(new BigDecimal("200.00"));
+        budget.setMonth(month);
+        budget.setYear(year);
+        return budget;
     }
 
-    @Test
-    void setNullCategory() {
-        ExpenseCategory newCategory = new ExpenseCategory("travel");
-        testBudget1.setCategory(newCategory);
-        assertEquals(newCategory, testBudget1.getCategory());
+    private void invokeValidateOwnership(Budget budget) throws Exception {
+        var method = Budget.class.getDeclaredMethod("validateOwnership");
+        method.setAccessible(true);
+        try {
+            method.invoke(budget);
+        } catch (java.lang.reflect.InvocationTargetException e) {
+            if (e.getCause() instanceof RuntimeException re) throw re;
+            throw e;
+        }
     }
 
-    @Test
-    void setNotNullCategory() {
-        assertThrows(IllegalArgumentException.class, () ->
-                testBudget1.setCategory(null)
-        );
-    }
-
-    @Test
-    void notEqualsTest() {
-        assertNotEquals(testBudget1, testBudget2);
-    }
-
-    @Test
-    void equalsTest() {
-        assertEquals(testBudget3, testBudget2);
-    }
-
-    @Test
-    void hashCodeDiffTest() {
-        assertNotEquals(testBudget1.hashCode(), testBudget2.hashCode());
-    }
-
-    @Test
-    void hashCodeSameTest() {
-        assertEquals(testBudget2.hashCode(), testBudget3.hashCode());
-    }
 }

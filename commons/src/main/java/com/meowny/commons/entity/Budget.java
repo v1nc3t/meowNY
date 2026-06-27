@@ -3,6 +3,7 @@ package com.meowny.commons.entity;
 import jakarta.persistence.*;
 import jakarta.validation.constraints.*;
 
+import java.math.BigDecimal;
 import java.util.Objects;
 
 @Entity
@@ -27,24 +28,30 @@ public class Budget {
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "user_id", nullable = false)
+    @NotNull(message = "Budget must be assigned to a user")
     private User user;
 
-    @Column(nullable = false)
-    @PositiveOrZero
-    private Double limitAmount;
+    @Column(nullable = false, precision = 19, scale = 4)
+    @NotNull(message = "Limit amount is required")
+    @PositiveOrZero(message = "Limit amount must be zero or positive")
+    @Digits(integer = 15, fraction = 4)
+    private BigDecimal limitAmount;
 
     @Column(nullable = false)
-    @Min(1)
-    @Max(12)
+    @NotNull(message = "Month is required")
+    @Min(value = 1, message = "Month must be at least 1")
+    @Max(value = 12, message = "Month must be at most 12")
     private Integer month;
 
     @Column(nullable = false)
-    @Min(1923)
-    @Max(9999)
+    @NotNull(message = "Year is required")
+    @Min(value = 2000, message = "Year must be 2000 or later")
+    @Max(value = 9999, message = "Year must be 9999 or earlier")
     private Integer year;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "expense_category_id", nullable = false)
+    @NotNull(message = "Category is required")
     private ExpenseCategory category;
 
     /**
@@ -53,40 +60,9 @@ public class Budget {
     public Budget() {
     }
 
-    public Budget(
-            Double limitAmount,
-            Integer month,
-            Integer year,
-            ExpenseCategory category,
-            User user
-    ) {
-        if (limitAmount == null || limitAmount < 0) {
-            throw new IllegalArgumentException("Limit amount must be positive.");
-        }
-        if (month == null || month < 1 || month > 12) {
-            throw new IllegalArgumentException("Month must be between 1 and 12.");
-        }
-        if (year == null || year < 1923 || year > 9999) {
-            throw  new IllegalArgumentException("Year must be between 1923 and 9999.");
-        }
-        if (category == null) {
-            throw new IllegalArgumentException("Category must exist to create budget.");
-        }
-        if (user == null) {
-            throw new IllegalArgumentException("Budget must be assigned to a user.");
-        }
-        this.limitAmount = limitAmount;
-        this.month = month;
-        this.year = year;
-        this.category = category;
-        this.user = user;
-        validateCategoryBelongsToUser(this.category, this.user);
-    }
-
     public Long getId() {
         return id;
     }
-
     public void setId(Long id) {
         this.id = id;
     }
@@ -94,67 +70,45 @@ public class Budget {
     public User getUser() {
         return user;
     }
-
     public void setUser(User user) {
-        if (user == null) {
-            throw new IllegalArgumentException("Budget must be assigned to a user.");
-        }
         this.user = user;
-        validateCategoryBelongsToUser(this.category, user);
     }
 
-    public Double getLimitAmount() {
+    public BigDecimal getLimitAmount() {
         return limitAmount;
     }
-
-    public void setLimitAmount(Double limitAmount) {
-        if (limitAmount == null || limitAmount < 0) {
-            throw new IllegalArgumentException("Limit amount must be positive.");
-        }
+    public void setLimitAmount(BigDecimal limitAmount) {
         this.limitAmount = limitAmount;
     }
 
     public Integer getMonth() {
         return month;
     }
-
     public void setMonth(Integer month) {
-        if (month == null || month < 1 || month > 12) {
-            throw new IllegalArgumentException("Month must be between 1 and 12.");
-        }
         this.month = month;
     }
 
     public Integer getYear() {
         return year;
     }
-
     public void setYear(Integer year) {
-        if (year == null || year < 1923 || year > 9999) {
-            throw  new IllegalArgumentException("Year must be between 1923 and 9999.");
-        }
         this.year = year;
     }
 
     public ExpenseCategory getCategory() {
         return category;
     }
-
     public void setCategory(ExpenseCategory category) {
-        if (category == null) {
-            throw new IllegalArgumentException("Category must exist to create budget.");
-        }
-        validateCategoryBelongsToUser(category, this.user);
         this.category = category;
     }
 
-    private void validateCategoryBelongsToUser(ExpenseCategory category, User user) {
-        if (category == null || user == null) {
-            return;
-        }
-        User categoryUser = category.getUser();
-        if (categoryUser != null && !Objects.equals(categoryUser.getId(), user.getId())) {
-            throw new IllegalArgumentException("Category must belong to the same user as the budget.");
+    @PrePersist
+    @PreUpdate
+    private void validateOwnership() {
+        if (category != null && category.getUser() != null) {
+            if (!Objects.equals(category.getUser().getId(), user.getId())) {
+                throw new IllegalStateException("Category does not belong to this user.");
+            }
         }
     }
 
@@ -167,23 +121,19 @@ public class Budget {
             return false;
         }
         Budget budget = (Budget) o;
-        return id != null && Objects.equals(id, budget.id);
+        return Objects.equals(user, budget.user)
+                && Objects.equals(category, budget.category)
+                && Objects.equals(month, budget.month)
+                && Objects.equals(year, budget.year);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hashCode(id);
+        return Objects.hash(user, category, month, year);
     }
 
     @Override
     public String toString() {
-        return "Budget{" +
-                "id=" + id +
-                ", user=" + user +
-                ", limitAmount=" + limitAmount +
-                ", month=" + month +
-                ", year=" + year +
-                ", category=" + category +
-                '}';
+        return "Budget{id=" + id + ", month=" + month + ", year=" + year + ", limitAmount=" + limitAmount + '}';
     }
 }
