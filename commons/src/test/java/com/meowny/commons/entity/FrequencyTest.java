@@ -1,6 +1,8 @@
-package commons;
+package com.meowny.commons.entity;
 
 import org.junit.jupiter.api.*;
+
+import com.meowny.commons.entity.Frequency;
 
 import static org.junit.jupiter.api.Assertions.*;
 

@@ -1,4 +1,4 @@
-package commons;
+package com.meowny.commons.entity;
 
 import java.time.LocalDate;
 
