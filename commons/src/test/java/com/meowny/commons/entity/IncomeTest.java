@@ -2,138 +2,81 @@ package com.meowny.commons.entity;
 
 import org.junit.jupiter.api.*;
 
-import com.meowny.commons.entity.Income;
-import com.meowny.commons.entity.IncomeCategory;
-import com.meowny.commons.entity.User;
+import java.math.BigDecimal;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.assertj.core.api.Assertions.*;
 
 public class IncomeTest {
 
-    private Income testIncome1;
-    private Income testIncome2;
-    private Income testIncome3;
+    private User user;
+    private IncomeCategory incomeCategory;
 
-    private final IncomeCategory testCategory = new IncomeCategory();
-    private final User testUser = new User();
+    private Income income;
 
     @BeforeEach
-    void setUp() {
-        testIncome1 = new Income("rent", 200.0, testCategory, testUser);
-        testIncome2 = new Income("caps", 100.0, testCategory, testUser);
-        testIncome3 = new Income("caps", 100.0, testCategory, testUser);
+    void setup() {
+        user = new User();
+        user.setId(1L);
+
+        incomeCategory = new IncomeCategory();
+        incomeCategory.setId(1L);
+
+        income = new Income();
     }
 
     @Test
-    void invalidConstructorTest() {
-        assertThrows(IllegalArgumentException.class, () ->
-                testIncome1 = new Income(null, 200.0, testCategory, testUser),
-                "name null"
-        );
+    void shouldCreateWithValidFields() {
+        income.setUser(user);
+        income.setName("Test");
+        income.setAmount(new BigDecimal("1.00"));
+        income.setCategory(incomeCategory);
 
-        assertThrows(IllegalArgumentException.class, () ->
-                testIncome1 = new Income("rent", null, testCategory, testUser),
-                "amount null"
-        );
+        assertThat(income.getUser()).isEqualTo(user);
+        assertThat(income.getName()).isEqualTo("Test");
+        assertThat(income.getAmount()).isEqualByComparingTo("1");
+        assertThat(income.getCategory()).isEqualTo(incomeCategory);
+    }
 
-        assertThrows(IllegalArgumentException.class, () ->
-                testIncome1 = new Income("rent", -1.0, testCategory, testUser),
-                "amount not positive"
-        );
+    // equals / hashcode
 
-        assertThrows(IllegalArgumentException.class, () ->
-                testIncome1 = new Income("rent", 200.0, null, testUser),
-                "category null"
-        );
+    @Test
+    void shouldEqualSame() {
+        Income a = new Income();
+        a.setId(1L);
 
-        assertThrows(IllegalArgumentException.class, () ->
-                testIncome1 = new Income("rent", 200.0, testCategory, null),
-                "user null"
-        );
+        assertThat(a).isEqualTo(a);
+        assertThat(a.hashCode()).isEqualTo(a.hashCode());
     }
 
     @Test
-    void setValidNameTest() {
-        String name = "pats";
-        testIncome1.setName(name);
-        assertEquals(name, testIncome1.getName());
+    void shouldBeEqualWithSameId() {
+        Income a = new Income();
+        a.setId(1L);
+        Income b = new Income();
+        b.setId(1L);
+
+        assertThat(a).isEqualTo(b);
+        assertThat(a.hashCode()).isEqualTo(b.hashCode());
     }
 
     @Test
-    void setInvalidNameTest() {
-        assertThrows(IllegalArgumentException.class, () ->
-                testIncome1.setName(null)
-        );
+    void shouldNotBeEqualNull() {
+        Income a = new Income();
+        a.setId(1L);
+        Income b = null;
+
+        assertThat(a).isNotEqualTo(b);
     }
 
     @Test
-    void setValidUserTest() {
-        User user = new User();
-        testIncome1.setUser(user);
-        assertEquals(user, testIncome1.getUser());
-    }
+    void shouldNotBeEqualWithDifferentId() {
+        Income a = new Income();
+        a.setId(1L);
+        Income b = new Income();
+        b.setId(2L);
 
-    @Test
-    void setInvalidUserTest() {
-        assertThrows(IllegalArgumentException.class, () ->
-                testIncome1.setUser(null)
-        );
+        assertThat(a).isNotEqualTo(b);
+        assertThat(a.hashCode()).isEqualTo(b.hashCode());
     }
-
-    @Test
-    void setValidAmountTest() {
-        Double amount = 20.0;
-        testIncome1.setAmount(amount);
-        assertEquals(amount, testIncome1.getAmount());
-    }
-
-    @Test
-    void setNullAmountTest() {
-        assertThrows(IllegalArgumentException.class, () ->
-                testIncome1.setAmount(null)
-        );
-    }
-
-    @Test
-    void setNegativeAmountTest() {
-        assertThrows(IllegalArgumentException.class, () ->
-                testIncome1.setAmount(-2.0)
-        );
-    }
-
-    @Test
-    void setValidCategoryTest() {
-        IncomeCategory testIncomeCategory = new IncomeCategory("car");
-        testIncome1.setCategory(testIncomeCategory);
-        assertEquals(testIncomeCategory, testIncome1.getCategory());
-    }
-
-    @Test
-    void setInvalidCategoryTest() {
-        assertThrows(IllegalArgumentException.class, () ->
-                testIncome1.setCategory(null)
-        );
-    }
-
-    @Test
-    void notEqualsTest() {
-        assertNotEquals(testIncome1, testIncome2);
-    }
-
-    @Test
-    void equalsTest() {
-        assertEquals(testIncome3, testIncome2);
-    }
-
-    @Test
-    void hashCodeDiffTest() {
-        assertNotEquals(testIncome1.hashCode(), testIncome2.hashCode());
-    }
-
-    @Test
-    void hashCodeSameTest() {
-        assertEquals(testIncome3.hashCode(), testIncome2.hashCode());
-    }
-
 }
 

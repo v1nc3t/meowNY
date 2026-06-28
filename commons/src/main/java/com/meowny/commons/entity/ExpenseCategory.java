@@ -2,6 +2,8 @@ package com.meowny.commons.entity;
 
 import jakarta.persistence.*;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Size;
 
 import java.util.Objects;
 
@@ -11,79 +13,54 @@ import java.util.Objects;
         uniqueConstraints = {
                 @UniqueConstraint(
                         name = "unique_user_expense_category_name",
-                        columnNames = {"user_id", "category_name"}
+                        columnNames = {"user_id", "name"}
+                ),
+                @UniqueConstraint(
+                        name = "unique_user_expense_category_id",
+                        columnNames = {"user_id", "id"}
                 )
         },
         indexes = {
                 @Index(name = "idx_expense_category_user", columnList = "user_id")
         }
 )
-public class ExpenseCategory {
+public class ExpenseCategory extends BaseAuditEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @NotBlank
-    @Column(name = "category_name", length = 30, nullable = false)
-    private String categoryName;
-
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "user_id", nullable = false)
+    @JoinColumn(name = "user_id", nullable = true)
     private User user;
 
-    /**
-     * Empty constructor for object mapper.
-     */
+    @Column(name = "name", length = 50, nullable = false)
+    @NotBlank(message = "Category name is required")
+    @Size(max = 50, message = "Category name must be 50 characters or fewer ")
+    private String categoryName;
+
     public ExpenseCategory() {
-    }
-
-    public ExpenseCategory(String categoryName, User user) {
-        if (categoryName == null) {
-            throw new IllegalArgumentException("Category name mustn't be null.");
-        }
-        if (user == null) {
-            throw new IllegalArgumentException("Category must belong to a user.");
-        }
-        this.categoryName = categoryName;
-        this.user = user;
-    }
-
-    public ExpenseCategory(String categoryName) {
-        if (categoryName == null) {
-            throw new IllegalArgumentException("Category name mustn't be null.");
-        }
-        this.categoryName = categoryName;
     }
 
     public Long getId() {
         return id;
     }
-
     public void setId(Long id) {
         this.id = id;
-    }
-
-    public String getCategoryName() {
-        return categoryName;
-    }
-
-    public void setCategoryName(String categoryName) {
-        if (categoryName == null) {
-            throw new IllegalArgumentException("Category name mustn't be null.");
-        }
-        this.categoryName = categoryName;
     }
 
     public User getUser() {
         return user;
     }
-
     public void setUser(User user) {
-        if (user == null) {
-            throw new IllegalArgumentException("Category must belong to a user.");
-        }
         this.user = user;
+    }
+
+    public String getCategoryName() {
+        return categoryName;
+    }
+    public void setCategoryName(String categoryName) {
+        this.categoryName = categoryName;
     }
 
     @Override
@@ -96,7 +73,7 @@ public class ExpenseCategory {
 
     @Override
     public int hashCode() {
-        return Objects.hashCode(id);
+        return getClass().hashCode();
     }
 
     @Override

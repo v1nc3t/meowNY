@@ -1,9 +1,9 @@
 package com.meowny.commons.entity;
 
 import jakarta.persistence.*;
-import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.Positive;
+import jakarta.validation.constraints.*;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.Objects;
 
@@ -12,11 +12,11 @@ import java.util.Objects;
         name = "expenses",
         indexes = {
                 @Index(name = "idx_expense_user_date", columnList = "user_id, payment_date"),
-                @Index(name = "idx_expense_user_category", columnList = "user_id, expense_category_id"),
+                @Index(name = "idx_expense_category_user", columnList = "expense_category_id, user_id"),
                 @Index(name = "idx_expense_recurring_template", columnList = "recurring_expense_id")
         }
 )
-public class Expense {
+public class Expense extends BaseAuditEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -24,22 +24,27 @@ public class Expense {
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "user_id", nullable = false)
+    @NotNull(message =  "Expense must be assigned to a user")
     private User user;
 
-    @NotBlank
-    @Column(length = 30, nullable = false)
+    @Column(length = 50, nullable = false)
+    @NotBlank(message = "Name is required")
+    @Size(max = 50, message = "Name must be 50 characters or fewer")
     private String name;
 
-    @Column(nullable = false)
-    @Positive
-    private Double amount;
+    @NotNull(message = "Amount is required")
+    @Column(nullable = false, precision = 12, scale = 2)
+    @PositiveOrZero(message = "Amount must be zero or positive")
+    @Digits(integer = 12, fraction = 2)
+    private BigDecimal amount;
 
     @Column(name = "payment_date", nullable = false)
+    @NotNull(message = "Payment date is required")
+    @PastOrPresent(message = "Payment date cannot be in the future")
     private LocalDate paymentDate;
 
-    private LocalDate referenceDueDate;
-
-    @Column(length = 50)
+    @Column(length = 100)
+    @Size(max = 100, message = "Description must be 100 characters or fewer")
     private String description;
 
     @ManyToOne(fetch = FetchType.LAZY)
@@ -47,65 +52,19 @@ public class Expense {
     private RecurringExpense sourceTemplate;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "expense_category_id", nullable = false)
+    @JoinColumns({
+            @JoinColumn(name = "expense_category_id", referencedColumnName = "id", nullable = false),
+            @JoinColumn(name = "user_id", referencedColumnName = "user_id", nullable = false, insertable = false, updatable = false)
+    })
+    @NotNull(message = "Expensee category is required")
     private ExpenseCategory category;
-
-
-    /**
-     * Empty constructor for object mapper.
-     */
+    
     public Expense() {
-    }
-
-    public Expense (
-            String name,
-            Double amount,
-            LocalDate paymentDate,
-            LocalDate referenceDueDate,
-            String description,
-            ExpenseCategory category,
-            User user
-    ) {
-        if (name == null) {
-            throw new IllegalArgumentException("Name can not be null.");
-        }
-        if (amount == null || amount <= 0.0) {
-            throw new IllegalArgumentException("Amount must be positive.");
-        }
-        if (paymentDate == null) {
-            throw new IllegalArgumentException("Payment date cannot be null.");
-        }
-        if (category == null) {
-            throw new IllegalArgumentException("Category can not be null.");
-        }
-        if (user == null) {
-            throw new IllegalArgumentException("User cannot be null.");
-        }
-        this.name = name;
-        this.amount = amount;
-        this.paymentDate = paymentDate;
-        this.referenceDueDate = referenceDueDate;
-        this.description = description;
-        this.category = category;
-        this.user = user;
-        validateCategoryBelongsToUser(this.category, this.user);
-    }
-
-    public Expense(
-            String name,
-            Double amount,
-            LocalDate paymentDate,
-            String description,
-            ExpenseCategory category,
-            User user
-    ) {
-        this(name, amount, paymentDate, null, description, category, user);
     }
 
     public Long getId() {
         return id;
     }
-
     public void setId(Long id) {
         this.id = id;
     }
@@ -113,60 +72,34 @@ public class Expense {
     public User getUser() {
         return user;
     }
-
     public void setUser(User user) {
-        if (user == null) {
-            throw new IllegalArgumentException("User cannot be null.");
-        }
         this.user = user;
-        validateCategoryBelongsToUser(this.category, user);
     }
 
     public String getName() {
         return name;
     }
-
     public void setName(String name) {
-        if (name == null) {
-            throw new IllegalArgumentException("Name can not be null.");
-        }
         this.name = name;
     }
 
-    public Double getAmount() {
+    public BigDecimal getAmount() {
         return amount;
     }
-
-    public void setAmount(Double amount) {
-        if (amount == null || amount <= 0.0) {
-            throw new IllegalArgumentException("Amount must be positive.");
-        }
+    public void setAmount(BigDecimal amount) {
         this.amount = amount;
     }
 
     public LocalDate getPaymentDate() {
         return paymentDate;
     }
-
     public void setPaymentDate(LocalDate paymentDate) {
-        if (paymentDate == null) {
-            throw new IllegalArgumentException("Payment date cannot be null.");
-        }
         this.paymentDate = paymentDate;
-    }
-
-    public LocalDate getReferenceDueDate() {
-        return referenceDueDate;
-    }
-
-    public void setReferenceDueDate(LocalDate referenceDueDate) {
-        this.referenceDueDate = referenceDueDate;
     }
 
     public String getDescription() {
         return description;
     }
-
     public void setDescription(String description) {
         this.description = description;
     }
@@ -174,7 +107,6 @@ public class Expense {
     public RecurringExpense getSourceTemplate() {
         return sourceTemplate;
     }
-
     public void setSourceTemplate(RecurringExpense sourceTemplate) {
         this.sourceTemplate = sourceTemplate;
     }
@@ -182,23 +114,8 @@ public class Expense {
     public ExpenseCategory getCategory() {
         return category;
     }
-
     public void setCategory(ExpenseCategory category) {
-        if (category == null) {
-            throw new IllegalArgumentException("Category can not be null.");
-        }
-        validateCategoryBelongsToUser(category, this.user);
         this.category = category;
-    }
-
-    private void validateCategoryBelongsToUser(ExpenseCategory category, User user) {
-        if (category == null || user == null) {
-            return;
-        }
-        User categoryUser = category.getUser();
-        if (categoryUser != null && !Objects.equals(categoryUser.getId(), user.getId())) {
-            throw new IllegalArgumentException("Category must belong to the same user as the expense.");
-        }
     }
 
     @Override
@@ -211,21 +128,17 @@ public class Expense {
 
     @Override
     public int hashCode() {
-        return Objects.hashCode(id);
+        return getClass().hashCode();
     }
 
     @Override
     public String toString() {
         return "Expense{" +
                 "id=" + id +
-                ", user=" + user +
                 ", name='" + name + '\'' +
                 ", amount=" + amount +
                 ", paymentDate=" + paymentDate +
-                ", referenceDueDate=" + referenceDueDate +
                 ", description='" + description + '\'' +
-                ", sourceTemplate=" + sourceTemplate +
-                ", category=" + category +
                 '}';
     }
 }

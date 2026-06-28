@@ -10,28 +10,23 @@ import java.util.List;
 import java.util.Objects;
 
 @Entity
-@Table(name = "recurring_expense",
-        uniqueConstraints = {
-            @UniqueConstraint(
-                name = "unique_user_recurring_details",
-                columnNames = {"user_id", "name", "amount", "frequency"}
-            )
-        },
+@Table(
+        name = "recurring_income",
         indexes = {
-            @Index(name = "idx_recurring_user_due_date", columnList = "user_id, next_due_date"),
-            @Index(name = "idx_recurring_user_frequency_due", columnList = "user_id, frequency, next_due_date"),
-            @Index(name = "idx_recurring_user_category", columnList = "user_id, expense_category_id")
+                @Index(name = "idx_recurring_income_user", columnList = "user_id"),
+                @Index(name = "idx_recurring_income_status_deposit", columnList = "is_active, next_deposit_date"), // Fixed
+                @Index(name = "idx_recurring_income_category_user", columnList = "income_category_id, user_id")
         }
 )
-public class RecurringExpense extends BaseAuditEntity {
+public class RecurringIncome extends BaseAuditEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "user_id", nullable = false)
-    @NotNull(message = "Recurring expense must be assigend to a user")
+    @JoinColumn(name = "user_id")
+    @NotNull(message = "Income must be assigned to a user")
     private User user;
 
     @Column(length = 50, nullable = false)
@@ -39,17 +34,16 @@ public class RecurringExpense extends BaseAuditEntity {
     @Size(max = 50, message = "Name must be 50 characters or fewer")
     private String name;
 
-
     @Column(nullable = false, precision = 12, scale = 2)
     @NotNull(message = "Amount is required")
     @PositiveOrZero(message = "Amount must be zero or positive")
     @Digits(integer = 12, fraction = 2)
     private BigDecimal amount;
 
-    @Column(name = "next_due_date", nullable = false)
-    @NotNull(message = "Next due daate is required")
+    @Column(name = "next_deposit_date", nullable = false)
+    @NotNull(message = "Next deposit daate is required")
     @FutureOrPresent
-    private LocalDate nextDueDate;
+    private LocalDate nextDepositDate;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
@@ -61,16 +55,16 @@ public class RecurringExpense extends BaseAuditEntity {
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumns({
-            @JoinColumn(name = "expense_category_id", referencedColumnName = "id", nullable = false),
+            @JoinColumn(name = "income_category_id", referencedColumnName = "id", nullable = false),
             @JoinColumn(name = "user_id", referencedColumnName = "user_id", nullable = false, insertable = false, updatable = false)
     })
-    @NotNull(message = "Expense category is required")
-    private ExpenseCategory category;
+    @NotNull(message = "Income category is required")
+    private IncomeCategory category;
 
     @OneToMany(mappedBy = "sourceTemplate")
-    private List<Expense> paymentHistory = new ArrayList<>();
+    private List<Income> incomeHistory = new ArrayList<>();
 
-    public RecurringExpense() {
+    public RecurringIncome() {
     }
 
     public Long getId() {
@@ -101,11 +95,11 @@ public class RecurringExpense extends BaseAuditEntity {
         this.amount = amount;
     }
 
-    public LocalDate getNextDueDate() {
-        return nextDueDate;
+    public LocalDate getNextDepositDate() {
+        return nextDepositDate;
     }
-    public void setNextDueDate(LocalDate nextDueDate) {
-        this.nextDueDate = nextDueDate;
+    public void setNextDepositDate(LocalDate nextDepositDate) {
+        this.nextDepositDate = nextDepositDate;
     }
 
     public Frequency getFrequency() {
@@ -115,46 +109,49 @@ public class RecurringExpense extends BaseAuditEntity {
         this.frequency = frequency;
     }
 
-    public boolean isActive() { return isActive; }
-    public void setActive(boolean active) { isActive = active; }
+    public boolean isActive() {
+        return isActive;
+    }
+    public void setActive(boolean active) {
+        isActive = active;
+    }
 
-    public ExpenseCategory getCategory() {
+    public IncomeCategory getCategory() {
         return category;
     }
-    public void setCategory(ExpenseCategory category) {
+    public void setCategory(IncomeCategory category) {
         this.category = category;
     }
 
-    public List<Expense> getPaymentHistory() {
-        return paymentHistory;
+    public List<Income> getIncomeHistory() {
+        return incomeHistory;
     }
-    public void setPaymentHistory(List<Expense> paymentHistory) {
-        this.paymentHistory.clear();
-        if (paymentHistory != null) {
-            paymentHistory.forEach(this::addPayment);
+    public void setIncomeHistory(List<Income> incomeHistory) {
+        this.incomeHistory.clear();
+        if (incomeHistory != null) {
+            incomeHistory.forEach(this::addPayment);
         }
     }
 
-    public void addPayment(Expense expense) {
-        if (expense == null) {
-            throw new IllegalArgumentException("Expense payment mustn't be null.");
+    public void addPayment(Income income) {
+        if (income == null) {
+            throw new IllegalArgumentException("Income payment mustn't be null.");
         }
-        this.paymentHistory.add(expense);
-        expense.setSourceTemplate(this);
+        this.incomeHistory.add(income);
+        income.setSourceTemplate(this);
     }
-    public void removePayment(Expense expense) {
-        if (expense == null) return;
-        this.paymentHistory.remove(expense);
-        if (expense.getSourceTemplate() == this) {
-            expense.setSourceTemplate(null);
+    public void removePayment(Income income) {
+        if (income == null) return;
+        this.incomeHistory.remove(income);
+        if (income.getSourceTemplate() == this) {
+            income.setSourceTemplate(null);
         }
     }
 
     @Override
     public boolean equals(Object o) {
-        if (this == o) return true;
         if (o == null || getClass() != o.getClass()) return false;
-        RecurringExpense that = (RecurringExpense) o;
+        RecurringIncome that = (RecurringIncome) o;
         return id != null && Objects.equals(id, that.id);
     }
 
@@ -165,11 +162,11 @@ public class RecurringExpense extends BaseAuditEntity {
 
     @Override
     public String toString() {
-        return "RecurringExpense{" +
+        return "RecurringIncome{" +
                 "id=" + id +
                 ", name='" + name + '\'' +
                 ", amount=" + amount +
-                ", nextDueDate=" + nextDueDate +
+                ", nextDueDate=" + nextDepositDate +
                 ", frequency=" + frequency +
                 ", isActive=" + isActive +
                 '}';

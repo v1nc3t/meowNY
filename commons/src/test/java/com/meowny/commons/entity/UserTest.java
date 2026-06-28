@@ -2,172 +2,134 @@ package com.meowny.commons.entity;
 
 import org.junit.jupiter.api.*;
 
-import com.meowny.commons.entity.Budget;
-import com.meowny.commons.entity.Expense;
-import com.meowny.commons.entity.Income;
-import com.meowny.commons.entity.User;
-
-import java.util.ArrayList;
 import java.util.List;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.assertj.core.api.Assertions.*;
 
 public class UserTest {
 
-    private User testUser1;
-    private User testUser2;
-    private User testUser3;
+    private User user;
 
     @BeforeEach
-    void setUp() {
-        testUser1 = new User("Will", "Born", "wb@gmail.com", "wlbr", "test");
-        testUser2 = new User("Max", "Smith", "ms@gmail.com", "mxSm", "test");
-        testUser3 = new User("Max", "Smith", "ms@gmail.com", "mxSm", "test");
+    void setup() {
+         user = new User();
+         user.setId(1L);
     }
 
     @Test
-    void invalidConstructorTest() {
-        assertThrows(IllegalArgumentException.class, () ->
-                testUser1 = new User(null, "Born", "wb@gmail.com", "wlbr", "test"),
-                "First name null"
-        );
+    void shouldCreateWithValidFields() {
+        user.setFirstName("Test");
+        user.setLastName("Names");
+        user.setEmail("g@mail.c");
+        user.setUsername("TesNa");
+        user.setPassword("Passs");
 
-        assertThrows(IllegalArgumentException.class, () ->
-                testUser1 = new User("Will", null, "wb@gmail.com", "wlbr", "test"),
-                "Last name null"
-        );
-
-        assertThrows(IllegalArgumentException.class, () ->
-                testUser1 = new User("Will", "Born", "wb@gmail.com", null, "test")
-                , "Username name null"
-        );
-
-        assertThrows(IllegalArgumentException.class, () ->
-                testUser1 = new User("Will", "Born", "wb@gmail.com", "wlbr", null),
-                "Password name null"
-        );
+        assertThat(user.getFirstName()).isEqualTo("Test");
+        assertThat(user.getLastName()).isEqualTo("Names");
+        assertThat(user.getFullName()).isEqualTo("Test" + " " + "Names");
+        assertThat(user.getEmail()).isEqualTo("g@mail.c");
+        assertThat(user.getUsername()).isEqualTo("TesNa");
+        assertThat(user.getPassword()).isEqualTo("Passs");
     }
 
     @Test
-    void setIdTest() {
-        Long id = 1L;
-        testUser1.setId(id);
-        assertEquals(id, testUser1.getId());
+    void shouldAddRemoveIncomes() {
+        Income income = new Income();
+        income.setId(1L);
+
+        user.addIncome(income);
+        assertThat(user.getIncomes()).containsExactlyElementsOf(List.of(income));
+
+        assertThatThrownBy(() -> user.addIncome(null))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("mustn't be null");
+
+        user.removeIncome(null);
+        assertThat(user.getIncomes()).containsExactlyElementsOf(List.of(income));
+
+        user.removeIncome(income);
+        assertThat(user.getIncomes()).containsExactlyElementsOf(List.of());
     }
 
     @Test
-    void setValidFirstNameTest() {
-        String firstName = "Feb";
-        testUser1.setFirstName(firstName);
-        assertEquals(firstName, testUser1.getFirstName());
+    void shouldAddRemoveExpenses() {
+        Expense expense = new Expense();
+        expense.setId(1L);
+
+        user.addExpense(expense);
+        assertThat(user.getExpenses()).containsExactlyElementsOf(List.of(expense));
+
+        assertThatThrownBy(() -> user.addExpense(null))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("mustn't be null");
+
+        user.removeExpense(null);
+        assertThat(user.getExpenses()).containsExactlyElementsOf(List.of(expense));
+
+        user.removeExpense(expense);
+        assertThat(user.getExpenses()).containsExactlyElementsOf(List.of());
     }
 
     @Test
-    void setInvalidFirstNameTest() {
-        assertThrows(IllegalArgumentException.class, () ->
-                testUser1.setFirstName(null)
-        );
+    void sholdAddRemoveBudgets() {
+        Budget budget = new Budget();
+        budget.setId(1L);
+
+        user.addBudget(budget);
+        assertThat(user.getBudgets()).containsExactlyElementsOf(List.of(budget));
+
+        assertThatThrownBy(() -> user.addBudget(null))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("mustn't be null");
+
+        user.removeBudget(null);
+        assertThat(user.getBudgets()).containsExactlyElementsOf(List.of(budget));
+
+        user.removeBudget(budget);
+        assertThat(user.getBudgets()).containsExactlyElementsOf(List.of());
+    }
+
+    // equals / hashcode
+
+    @Test
+    void shouldEqualSame() {
+        User a = new User();
+        a.setId(1L);
+
+        assertThat(a).isEqualTo(a);
+        assertThat(a.hashCode()).isEqualTo(a.hashCode());
+    }
+
+
+    @Test
+    void shouldBeEqualWithSameId() {
+        User a = new User();
+        a.setId(1L);
+        User b = new User();
+        b.setId(1L);
+
+        assertThat(a).isEqualTo(b);
+        assertThat(a.hashCode()).isEqualTo(b.hashCode());
     }
 
     @Test
-    void setValidLastNameTest() {
-        String lastName = "Feb";
-        testUser1.setLastName(lastName);
-        assertEquals(lastName, testUser1.getLastName());
+    void shouldNotBeEqualNull() {
+        User a = new User();
+        a.setId(1L);
+        User b = null;
+
+        assertThat(a).isNotEqualTo(b);
     }
 
     @Test
-    void setInvalidLastNameTest() {
-        assertThrows(IllegalArgumentException.class, () ->
-                testUser1.setLastName(null)
-        );
-    }
+    void shouldNotBeEqualWithDifferentId() {
+        User a = new User();
+        a.setId(1L);
+        User b = new User();
+        b.setId(2L);
 
-    @Test
-    void getFullNameTest() {
-        assertEquals("Max Smith", testUser2.getFullName());
-    }
-
-    @Test
-    void setEmailTest() {
-        String email = "test@gmail.com";
-        testUser1.setEmail(email);
-        assertEquals(email, testUser1.getEmail());
-    }
-
-    @Test
-    void setNullEmailTest() {
-        testUser1.setEmail(null);
-        assertNull(testUser1.getEmail());
-    }
-
-    @Test
-    void setValidUsernameTest() {
-        String username = "testusr";
-        testUser1.setUsername(username);
-        assertEquals(username, testUser1.getUsername());
-    }
-
-    @Test
-    void setInvalidUsernameTest() {
-        assertThrows(IllegalArgumentException.class, () ->
-                testUser1.setUsername(null)
-        );
-    }
-
-    @Test
-    void setValidPasswordTest() {
-        String password = "incorrect";
-        testUser1.setPassword(password);
-        assertEquals(password, testUser1.getPassword());
-    }
-
-    @Test
-    void setInvalidPasswordTest() {
-        assertThrows(IllegalArgumentException.class, () ->
-                testUser1.setPassword(null)
-        );
-    }
-
-    @Test
-    void incomesListTest() {
-        List<Income> incomes = new ArrayList<>();
-        testUser1.setIncomes(incomes);
-        assertEquals(incomes, testUser1.getIncomes());
-    }
-
-    @Test
-    void expenseListTest() {
-        List<Expense> expenses = new ArrayList<>();
-        testUser1.setExpenses(expenses);
-        assertEquals(expenses, testUser1.getExpenses());
-    }
-
-    @Test
-    void budgetsListTest() {
-        List<Budget> budgets = new ArrayList<>();
-        testUser1.setBudgets(budgets);
-        assertEquals(budgets, testUser1.getBudgets());
-    }
-
-    @Test
-    void notEqualsTest() {
-        assertNotEquals(testUser1, testUser2);
-    }
-
-    @Test
-    void equalsTest() {
-        assertEquals(testUser3, testUser2);
-    }
-
-    @Test
-    void hashCodeDiffTest() {
-        assertNotEquals(testUser1.hashCode(), testUser2.hashCode());
-    }
-
-    @Test
-    void hashCodeSameTest() {
-        assertEquals(testUser3.hashCode(), testUser2.hashCode());
+        assertThat(a).isNotEqualTo(b);
+        assertThat(a.hashCode()).isEqualTo(b.hashCode());
     }
 
 }

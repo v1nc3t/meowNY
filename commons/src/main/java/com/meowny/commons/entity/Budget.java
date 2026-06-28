@@ -20,7 +20,7 @@ import java.util.Objects;
                 @Index(name = "idx_budget_user_category", columnList = "user_id, expense_category_id")
         }
 )
-public class Budget {
+public class Budget extends BaseAuditEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -31,10 +31,10 @@ public class Budget {
     @NotNull(message = "Budget must be assigned to a user")
     private User user;
 
-    @Column(nullable = false, precision = 19, scale = 4)
+    @Column(name = "amount_limit", nullable = false, precision = 12, scale = 2)
     @NotNull(message = "Limit amount is required")
     @PositiveOrZero(message = "Limit amount must be zero or positive")
-    @Digits(integer = 15, fraction = 4)
+    @Digits(integer = 12, fraction = 2)
     private BigDecimal limitAmount;
 
     @Column(nullable = false)
@@ -50,13 +50,13 @@ public class Budget {
     private Integer year;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "expense_category_id", nullable = false)
+    @JoinColumns({
+            @JoinColumn(name = "expense_category_id", referencedColumnName = "id", nullable = false),
+            @JoinColumn(name = "user_id", referencedColumnName = "user_id", nullable = false, insertable = false, updatable = false)
+    })
     @NotNull(message = "Category is required")
     private ExpenseCategory category;
 
-    /**
-     * Empty constructor for object mapper.
-     */
     public Budget() {
     }
 
@@ -102,16 +102,6 @@ public class Budget {
         this.category = category;
     }
 
-    @PrePersist
-    @PreUpdate
-    private void validateOwnership() {
-        if (category != null && category.getUser() != null) {
-            if (!Objects.equals(category.getUser().getId(), user.getId())) {
-                throw new IllegalStateException("Category does not belong to this user.");
-            }
-        }
-    }
-
     @Override
     public boolean equals(Object o) {
         if (this == o) {
@@ -121,15 +111,12 @@ public class Budget {
             return false;
         }
         Budget budget = (Budget) o;
-        return Objects.equals(user, budget.user)
-                && Objects.equals(category, budget.category)
-                && Objects.equals(month, budget.month)
-                && Objects.equals(year, budget.year);
+        return id != null && Objects.equals(id, budget.id);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(user, category, month, year);
+        return getClass().hashCode();
     }
 
     @Override

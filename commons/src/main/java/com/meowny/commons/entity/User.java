@@ -1,31 +1,47 @@
 package com.meowny.commons.entity;
 
 import jakarta.persistence.*;
+import jakarta.validation.constraints.Email;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Size;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 
 @Entity
-public class User {
+@Table(name = "users")
+public class User extends BaseAuditEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(length = 30, nullable = false)
+    @Column(name = "firstname", length = 50, nullable = false)
+    @NotBlank(message = "First name is required")
+    @Size(max = 50, message = "First name must be 50 characters or fewer")
     private String firstName;
 
-    @Column(length = 30, nullable = false)
+    @Column(name = "lastname", length = 30, nullable = false)
+    @NotBlank(message = "Last nmae is required")
+    @Size(max = 30, message = "Last name must be 30 characters or fewer")
     private String lastName;
 
-    @Column(length = 30, nullable = false)
+    @Email(message = "Must be a valid email format")
+    @Column(length = 254, nullable = false, unique = true)
+    @NotBlank(message = "Email is required")
+    @Size(max = 254, message = "Email must be 254 characters or fewer")
     private String email;
 
     @Column(length = 30, nullable = false)
+    @NotBlank(message = "Username is required")
+    @Size(max = 30, message = "Usename must be 30 characters or fewer")
     private String username;
 
     @Column(length = 100, nullable = false)
+    @NotBlank(message = "Password is required")
+    @Size(max = 100, message = "Password must be 100 characters or fewer")
     private String password;
 
     @OneToMany(mappedBy = "user", cascade = CascadeType.ALL, orphanRemoval = true)
@@ -43,36 +59,9 @@ public class User {
     public User() {
     }
 
-    public User(
-            String firstName,
-            String lastName,
-            String email,
-            String username,
-            String password
-    ) {
-        if (firstName == null) {
-            throw new IllegalArgumentException("First name can not be null.");
-        }
-        if (lastName == null) {
-            throw new IllegalArgumentException("Last name can not null.");
-        }
-        if (username == null) {
-            throw new IllegalArgumentException("Username can not be null.");
-        }
-        if (password == null) {
-            throw new IllegalArgumentException("Password can not be null.");
-        }
-        this.firstName = firstName;
-        this.lastName = lastName;
-        this.email = email;
-        this.username = username;
-        this.password = password;
-    }
-
     public Long getId() {
         return id;
     }
-
     public void setId(Long id) {
         this.id = id;
     }
@@ -80,22 +69,14 @@ public class User {
     public String getFirstName() {
         return firstName;
     }
-
     public void setFirstName(String firstName) {
-        if (firstName == null) {
-            throw new IllegalArgumentException("First name can not be null.");
-        }
         this.firstName = firstName;
     }
 
     public String getLastName() {
         return lastName;
     }
-
     public void setLastName(String lastName) {
-        if (lastName == null) {
-            throw new IllegalArgumentException("Last name can not null.");
-        }
         this.lastName = lastName;
     }
 
@@ -106,7 +87,6 @@ public class User {
     public String getEmail() {
         return email;
     }
-
     public void setEmail(String email) {
         this.email = email;
     }
@@ -114,81 +94,91 @@ public class User {
     public String getUsername() {
         return username;
     }
-
     public void setUsername(String username) {
-        if (username == null) {
-            throw new IllegalArgumentException("Username can not be null.");
-        }
         this.username = username;
     }
 
     public String getPassword() {
         return password;
     }
-
     public void setPassword(String password) {
-        if (password == null) {
-            throw new IllegalArgumentException("Password can not be null.");
-        }
         this.password = password;
     }
 
     public List<Income> getIncomes() {
         return incomes;
     }
-
     public void setIncomes(List<Income> incomes) {
         this.incomes = incomes;
     }
 
     public void addIncome(Income income) {
+        if (income == null) {
+            throw new IllegalArgumentException("Income mustn't be null.");
+        }
         this.incomes.add(income);
         income.setUser(this);
+    }
+    public void removeIncome(Income income) {
+        if (income == null) {
+            return;
+        }
+        this.incomes.remove(income);
     }
 
     public List<Expense> getExpenses() {
         return expenses;
     }
-
     public void setExpenses(List<Expense> expenses) {
         this.expenses = expenses;
     }
 
     public void addExpense(Expense expense) {
+        if (expense == null) {
+            throw new IllegalArgumentException("Expense mustn't be null.");
+        }
         this.expenses.add(expense);
         expense.setUser(this);
     }
+    public void removeExpense(Expense expense) {
+        if (expense == null) {
+            return;
+        }
+        this.expenses.remove(expense);
+    }
+
 
     public List<Budget> getBudgets() {
         return budgets;
     }
-
     public void setBudgets(List<Budget> budgets) {
         this.budgets = budgets;
     }
 
     public void addBudget(Budget budget) {
+        if(budget == null) {
+            throw new IllegalArgumentException("Income mustn't be null.");
+        }
         this.budgets.add(budget);
         budget.setUser(this);
+    }
+    public void removeBudget(Budget budget) {
+        if (budget == null) {
+            return;
+        }
+        this.budgets.remove(budget);
     }
 
     @Override
     public boolean equals(Object o) {
         if (o == null || getClass() != o.getClass()) return false;
         User user = (User) o;
-        return Objects.equals(id, user.id)
-                && Objects.equals(firstName, user.firstName)
-                && Objects.equals(lastName, user.lastName)
-                && Objects.equals(email, user.email)
-                && Objects.equals(username, user.username)
-                && Objects.equals(password, user.password);
+        return id != null && Objects.equals(id, user.id);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(
-                id, firstName, lastName, email, username, password
-        );
+        return getClass().hashCode();
     }
 
     @Override

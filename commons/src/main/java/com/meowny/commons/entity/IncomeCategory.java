@@ -1,48 +1,65 @@
 package com.meowny.commons.entity;
 
 import jakarta.persistence.*;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Size;
 
 import java.util.Objects;
 
 @Entity
-public class IncomeCategory {
+@Table(
+        name = "income_categories",
+        uniqueConstraints = {
+                @UniqueConstraint(
+                        name = "unique_user_income_category_name",
+                        columnNames = {"user_id", "name"}
+                ),
+                @UniqueConstraint(
+                        name = "unique_user_income_category_id",
+                        columnNames = {"user_id", "id"}
+                )
+        },
+        indexes = {
+                @Index(name = "idx_income_category_user", columnList = "user_id")
+        }
+)
+public class IncomeCategory extends BaseAuditEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(length = 30, nullable = false)
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "user_id", nullable = true)
+    private User user;
+
+    @Column(name = "name", length = 50, nullable = false)
+    @NotBlank(message = "Name is required")
+    @Size(max = 50, message = "Category name must be 50 characters or fewer")
     private String categoryName;
 
-    /**
-     * Empty constructor for object mapper.
-     */
     public IncomeCategory() {
-    }
-
-    public IncomeCategory(String categoryName) {
-        if (categoryName == null) {
-            throw new IllegalArgumentException("Category name mustn't be null.");
-        }
-        this.categoryName = categoryName;
     }
 
     public Long getId() {
         return id;
     }
-
     public void setId(Long id) {
         this.id = id;
+    }
+
+    public User getUser() {
+        return user;
+    }
+    public void setUser(User user) {
+        this.user = user;
     }
 
     public String getCategoryName() {
         return categoryName;
     }
-
     public void setCategoryName(String categoryName) {
-        if (categoryName == null) {
-            throw new IllegalArgumentException("Category name mustn't be null.");
-        }
         this.categoryName = categoryName;
     }
 
@@ -50,12 +67,12 @@ public class IncomeCategory {
     public boolean equals(Object o) {
         if (o == null || getClass() != o.getClass()) return false;
         IncomeCategory that = (IncomeCategory) o;
-        return Objects.equals(id, that.id) && Objects.equals(categoryName, that.categoryName);
+        return id != null && Objects.equals(id, that.id);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(id, categoryName);
+        return getClass().hashCode();
     }
 
     @Override

@@ -2,71 +2,70 @@ package com.meowny.commons.entity;
 
 import org.junit.jupiter.api.*;
 
-import com.meowny.commons.entity.IncomeCategory;
-
-import static org.junit.jupiter.api.Assertions.*;
+import static org.assertj.core.api.Assertions.*;
 
 public class IncomeCategoryTest {
 
-    private IncomeCategory testIncomeCategory1;
-    private IncomeCategory testIncomeCategory2;
-    private IncomeCategory testIncomeCategory3;
+    private User user;
+
+    private IncomeCategory incomeCategory;
 
     @BeforeEach
-    void setUp() {
-        testIncomeCategory1 = new IncomeCategory("rent");
-        testIncomeCategory2 = new IncomeCategory("car");
-        testIncomeCategory3 = new IncomeCategory("car");
+    void setup() {
+        user = new User();
+        user.setId(1L);
+
+        incomeCategory = new IncomeCategory();
     }
 
     @Test
-    void invalidConstructorTest() {
-        assertThrows(IllegalArgumentException.class, () ->
-                testIncomeCategory1 = new IncomeCategory(null),
-                "invalid category name"
-        );
+    void shouldCreateWithValidFields() {
+        incomeCategory.setUser(user);
+        incomeCategory.setCategoryName("Test");
+
+        assertThat(incomeCategory.getUser()).isEqualTo(user);
+        assertThat(incomeCategory.getCategoryName()).isEqualTo("Test");
+    }
+
+    // equals / hashcode
+
+    @Test
+    void shouldEqualSame() {
+        IncomeCategory a = new IncomeCategory();
+        a.setId(1L);
+
+        assertThat(a).isEqualTo(a);
+        assertThat(a.hashCode()).isEqualTo(a.hashCode());
     }
 
     @Test
-    void setIdTest() {
-        Long id = 1L;
-        testIncomeCategory1.setId(id);
-        assertEquals(id, testIncomeCategory1.getId());
+    void shouldBeEqualWithSameId() {
+        IncomeCategory a = new IncomeCategory();
+        a.setId(1L);
+        IncomeCategory b = new IncomeCategory();
+        b.setId(1L);
+
+        assertThat(a).isEqualTo(b);
+        assertThat(a.hashCode()).isEqualTo(b.hashCode());
     }
 
     @Test
-    void setValidCategoryNameTest() {
-        String newCategory = "hustle";
-        testIncomeCategory1.setCategoryName(newCategory);
-        assertEquals(newCategory, testIncomeCategory1.getCategoryName());
+    void shouldNotBeEqualNull() {
+        IncomeCategory a = new IncomeCategory();
+        a.setId(1L);
+        IncomeCategory b = null;
+
+        assertThat(a).isNotEqualTo(b);
     }
 
     @Test
-    void setInvalidCategoryNameTest() {
-        assertThrows(IllegalArgumentException.class, () ->
-                testIncomeCategory1.setCategoryName(null),
-                "invalid category name"
-        );
-    }
+    void shouldNotBeEqualWithDifferentId() {
+        IncomeCategory a = new IncomeCategory();
+        a.setId(1L);
+        IncomeCategory b = new IncomeCategory();
+        b.setId(2L);
 
-    @Test
-    void notEqualsTest() {
-        assertNotEquals(testIncomeCategory1, testIncomeCategory2);
+        assertThat(a).isNotEqualTo(b);
+        assertThat(a.hashCode()).isEqualTo(b.hashCode());
     }
-
-    @Test
-    void equalsTest() {
-        assertEquals(testIncomeCategory3, testIncomeCategory2);
-    }
-
-    @Test
-    void hashCodeDiffTest() {
-        assertNotEquals(testIncomeCategory1.hashCode(), testIncomeCategory2.hashCode());
-    }
-
-    @Test
-    void hashCodeSameTest() {
-        assertEquals(testIncomeCategory3.hashCode(), testIncomeCategory2.hashCode());
-    }
-
 }

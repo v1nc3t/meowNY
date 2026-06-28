@@ -2,212 +2,100 @@ package com.meowny.commons.entity;
 
 import org.junit.jupiter.api.*;
 
-import com.meowny.commons.entity.Expense;
-import com.meowny.commons.entity.ExpenseCategory;
-import com.meowny.commons.entity.Frequency;
-import com.meowny.commons.entity.RecurringExpense;
-import com.meowny.commons.entity.User;
-
+import java.math.BigDecimal;
 import java.time.LocalDate;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.assertj.core.api.Assertions.*;
 
 public class ExpenseTest {
 
-    private Expense testExpense1;
-    private Expense testExpense2;
-    private Expense testExpense3;
+    private User user;
+    private ExpenseCategory category;
+    private RecurringExpense recurringExpense;
+    private Expense expense;
 
-    private final LocalDate testDate = LocalDate.of(10000, 1, 1);
-    private final User testUser = new User();
-    private final ExpenseCategory testCategory = new ExpenseCategory("food");
-    private final Frequency testFrequency = Frequency.WEEKLY;
+    private LocalDate testDate = LocalDate.of(2026, 6, 27);
 
     @BeforeEach
     void setUp() {
-        testExpense1 = new Expense(
-                "bread", 1.0, testDate, "stale", testCategory, testUser
-        );
+        user = new User();
+        user.setId(1L);
 
-        testExpense2 = new Expense(
-                "burger", 5.0, testDate, "yum", testCategory, testUser
-        );
+        category = new ExpenseCategory();
+        category.setId(1L);
+        category.setUser(user);
 
-        testExpense3 = new Expense(
-                "burger", 5.0, testDate, "yum", testCategory, testUser
-        );
+        recurringExpense = new RecurringExpense();
+        recurringExpense.setId(1L);
+        recurringExpense.setUser(user);
+
+        expense = new Expense();
     }
 
     @Test
-    void invalidConstructorTest() {
-        assertThrows(IllegalArgumentException.class, () -> testExpense1 = new Expense(
-                null, 1.0, testDate, "stale", testCategory, testUser
-        ), "name null");
+    void shouldCreateWithValidFields() {
+        expense.setUser(user);
+        expense.setName("Dinner");
+        expense.setAmount(new BigDecimal("20.00"));
+        expense.setPaymentDate(testDate);
+        expense.setDescription("Hungry");
+        expense.setSourceTemplate(recurringExpense);
+        expense.setCategory(category);
 
-        assertThrows(IllegalArgumentException.class, () -> testExpense1 = new Expense(
-                "bread", null, testDate, "stale", testCategory, testUser
-        ), "amount null");
+        assertThat(expense.getName()).isEqualTo("Dinner");
+        assertThat(expense.getAmount()).isEqualByComparingTo("20.00");
+        assertThat(expense.getPaymentDate()).isEqualTo(testDate);
+        assertThat(expense.getDescription()).isEqualTo("Hungry");
 
-        assertThrows(IllegalArgumentException.class, () -> testExpense1 = new Expense(
-                "bread", -1.0, testDate, "stale", testCategory, testUser
-        ), "amount negative");
-
-        assertThrows(IllegalArgumentException.class, () -> testExpense1 = new Expense(
-                "bread", 1.0, null, "stale", testCategory, testUser
-        ), "pay date null");
-
-        assertThrows(IllegalArgumentException.class, () -> testExpense1 = new Expense(
-                "bread", 1.0, testDate, "stale", null, testUser
-        ), "category null");
-
-        assertThrows(IllegalArgumentException.class, () -> testExpense1 = new Expense(
-                "bread", 1.0, testDate, "stale", testCategory, null
-        ), "user null");
+        assertThat(expense.getUser()).isEqualTo(user);
+        assertThat(expense.getCategory()).isEqualTo(category);
+        assertThat(expense.getSourceTemplate()).isEqualTo(recurringExpense);
     }
 
     @Test
-    void setIdTest() {
-        Long id = 1L;
-        testExpense1.setId(id);
-        assertEquals(id, testExpense1.getId());
+    void shouldAllowZeroLimitAmount() {
+        assertThatNoException().isThrownBy(() -> expense.setAmount(BigDecimal.ZERO));
+    }
+
+    // equals / hashCode
+
+    @Test
+    void shouldEqualSame() {
+        Expense a = new Expense();
+        a.setId(1L);
+
+        assertThat(a).isEqualTo(a);
+        assertThat(a.hashCode()).isEqualTo(a.hashCode());
     }
 
     @Test
-    void setValidUserTest() {
-        User user = new User();
-        testExpense1.setUser(user);
-        assertEquals(user, testExpense1.getUser());
+    void shouldBeEqualWithSameId() {
+        Expense a = new Expense();
+        a.setId(1L);
+        Expense b = new Expense();
+        b.setId(1L);
+
+        assertThat(a).isEqualTo(b);
+        assertThat(a.hashCode()).isEqualTo(b.hashCode());
     }
 
     @Test
-    void setInvalidUserTest() {
-        assertThrows(IllegalArgumentException.class, () ->
-                testExpense1.setUser(null)
-        );
+    void shouldNotBeEqualNull() {
+        Expense a = new Expense();
+        a.setId(1L);
+        Expense b = null;
+
+        assertThat(a).isNotEqualTo(b);
     }
 
     @Test
-    void setValidNameTest() {
-        String name = "train";
-        testExpense1.setName(name);
-        assertEquals(name, testExpense1.getName());
-    }
+    void shouldBeEqualWithDifferentId() {
+        Expense a = new Expense();
+        a.setId(1L);
+        Expense b = new Expense();
+        b.setId(2L);
 
-    @Test
-    void setInvalidNameTest() {
-        assertThrows(IllegalArgumentException.class, () ->
-                testExpense1.setName(null)
-        );
+        assertThat(a).isNotEqualTo(b);
+        assertThat(a.hashCode()).isEqualTo(b.hashCode());
     }
-
-    @Test
-    void setValidAmountTest() {
-        Double amount = 1.0;
-        testExpense1.setAmount(amount);
-        assertEquals(amount, testExpense1.getAmount());
-    }
-
-    @Test
-    void setNullAmountTest() {
-        assertThrows(IllegalArgumentException.class, () ->
-                testExpense1.setAmount(null)
-        );
-    }
-
-    @Test
-    void setNegativeAmountTest() {
-        assertThrows(IllegalArgumentException.class, () ->
-                testExpense1.setAmount(-10.0)
-        );
-    }
-
-    @Test
-    void setValidPaymentTest() {
-        LocalDate date = LocalDate.of(2000, 1, 1);
-        testExpense1.setPaymentDate(date);
-        assertEquals(date, testExpense1.getPaymentDate());
-    }
-
-    @Test
-    void setInvalidPaymentTest() {
-        assertThrows(IllegalArgumentException.class, () ->
-                testExpense1.setPaymentDate(null)
-        );
-    }
-
-    @Test
-    void setDescriptionTest() {
-        String description = "Some stuff";
-        testExpense1.setDescription(description);
-        assertEquals(description, testExpense1.getDescription());
-    }
-
-    @Test
-    void setNullDescriptionTest() {
-        testExpense1.setDescription(null);
-        assertNull(testExpense1.getDescription());
-    }
-
-    @Test
-    void setValidCategoryTest() {
-        ExpenseCategory category = new ExpenseCategory("hats");
-        testExpense1.setCategory(category);
-        assertEquals(category, testExpense1.getCategory());
-    }
-
-    @Test
-    void setInvalidCategoryTest() {
-        assertThrows(IllegalArgumentException.class, () ->
-                testExpense1.setCategory(null)
-        );
-    }
-
-    @Test
-    void setReferenceDueDateTest() {
-        LocalDate date = LocalDate.of(2000, 1, 1);
-        testExpense1.setReferenceDueDate(date);
-        assertEquals(date, testExpense1.getReferenceDueDate());
-    }
-
-    @Test
-    void setNullReferenceDueDateTest() {
-        testExpense1.setReferenceDueDate(null);
-        assertNull(testExpense1.getReferenceDueDate());
-    }
-
-    @Test
-    void setSourceTemplateTest() {
-        RecurringExpense sourceTemplate = new RecurringExpense(
-                "rent", 10.0, testDate, testFrequency, testUser, testCategory
-        );
-        testExpense1.setSourceTemplate(sourceTemplate);
-        assertEquals(sourceTemplate, testExpense1.getSourceTemplate());
-    }
-
-    @Test
-    void setNullSourceTemplateTest() {
-        testExpense1.setSourceTemplate(null);
-        assertNull(testExpense1.getSourceTemplate());
-    }
-
-    @Test
-    void notEqualsTest() {
-        assertNotEquals(testExpense1, testExpense2);
-    }
-
-    @Test
-    void equalsTest() {
-        assertEquals(testExpense3, testExpense2);
-    }
-
-    @Test
-    void hashCodeDiffTest() {
-        assertNotEquals(testExpense1.hashCode(), testExpense2.hashCode());
-    }
-
-    @Test
-    void hashCodeSameTest() {
-        assertEquals(testExpense3.hashCode(), testExpense2.hashCode());
-    }
-
 }
