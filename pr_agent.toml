@@ -1,0 +1,50 @@
+[config]
+# Use the best available model for deeper analysis
+model = "gemini/gemini-2.5-flash"
+
+[pr_reviewer]
+require_tests_review = false        # solo dev, no need to enforce tests
+require_security_review = true      # always good to catch security issues
+num_code_suggestions = 5            # get more suggestions per review
+
+extra_instructions = """
+## Commit Messages
+- Commits should follow conventional commits: type(scope): description
+- Valid types: feat, fix, docs, style, refactor, perf, test, chore
+- Flag commits that clearly don't follow this but don't be strict about minor formatting
+
+## Bug Detection (priority)
+- Look for logic errors, off-by-one errors, null/undefined handling issues
+- Flag any potential runtime exceptions or crashes
+- Catch common async/concurrency mistakes
+- Identify missing error handling or silent failures
+- Flag any obvious security issues (SQL injection, XSS, exposed secrets, etc.)
+
+## Code Conventions (flag but don't block)
+- camelCase for variables and functions, PascalCase for classes
+- Public methods should have a short doc comment explaining what they do
+- Avoid deeply nested code (more than 3 levels is a smell)
+- Functions should do one thing — flag if a function seems to do too much
+
+## Ideas & Improvements (be proactive)
+- Suggest simpler or more readable ways to write complex logic
+- Point out if a utility/library already exists for something being reimplemented
+- Mention if a pattern could be extracted into a reusable function
+- Suggest better data structures if the current choice seems inefficient
+- If something works but could cause performance issues at scale, mention it
+"""
+
+[pr_description]
+publish_description_as_comment = false  # writes directly into the PR description
+extra_instructions = """
+Structure the PR description as:
+## What changed
+(brief summary of the changes)
+
+## Why
+(reason or motivation behind the change)
+"""
+
+[pr_code_suggestions]
+commitable_code_suggestions = true  # suggestions come as committable code, not just comments
+num_code_suggestions = 4
