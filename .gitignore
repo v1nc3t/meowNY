@@ -8,6 +8,8 @@ build/
 
 */.gitignore
 
+.env
+
 **/target/*
 **/*.mv.db
 /coverage/*
