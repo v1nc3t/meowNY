@@ -1,0 +1,31 @@
+[config]
+model = "gemini/gemini-2.5-flash"
+
+[pr_reviewer]
+require_tests_review = false
+require_security_review = true
+num_code_suggestions = 5
+
+extra_instructions = """
+Keep the review short and to the point. No emojis, no diagrams, no lengthy explanations.
+One to three sentences per issue maximum. Be direct.
+
+Priorities in order:
+1. Bugs — logic errors, null handling, missing error handling, crashes, security issues
+2. Code conventions — camelCase for variables/functions, PascalCase for classes, no deeply nested code, functions should do one thing
+3. Ideas — simpler alternatives, reusable patterns, better data structures, performance concerns
+
+Commit messages should follow conventional commits (type(scope): description). Flag obvious violations only.
+"""
+
+[pr_description]
+publish_description_as_comment = false
+extra_instructions = """
+Two sections only, keep each to 1-2 sentences (can use lists):
+## What changed
+## Why
+"""
+
+[pr_code_suggestions]
+commitable_code_suggestions = true
+num_code_suggestions = 4
