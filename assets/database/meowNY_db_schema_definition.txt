@@ -11,7 +11,7 @@ Table users {
 
 Table expense_category {
   id integer [primary key]
-  user_id integer [not null, note: "0 represents system-wide global categories"]
+  user_id integer [not null]
   name varchar [not null]
   created_at timestamp [default: `now()`]
   updated_at timestamp [default: `now()`]
@@ -79,7 +79,7 @@ Table budget {
 
 Table income_category {
   id integer [primary key]
-  user_id integer [not null, note: "0 represents system-wide global categories"]
+  user_id integer [not null]
   name varchar [not null]
   created_at timestamp [default: `now()`]
   updated_at timestamp [default: `now()`]
