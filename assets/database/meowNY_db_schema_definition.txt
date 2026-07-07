@@ -1,157 +1,111 @@
+// --- Enumerations ---
+
+Enum transaction_type {
+  INCOME
+  EXPENSE
+}
+
+Enum frequency_type {
+  DAILY
+  WEEKLY
+  BIWEEKLY
+  TRIWEEKLY
+  MONTHLY
+  BIMONTHLY
+  QUARTERLY
+  YEARLY
+}
+
+// --- Tables ---
+
 Table users {
-  id integer [primary key]
-  username varchar [unique, not null]
-  password varchar [not null]
-  firstname varchar
-  lastname varchar
-  email varchar [unique, not null]
-  created_at timestamp [default: `now()`]
-  updated_at timestamp [default: `now()`]
+  id bigint [pk, increment]
+  firstname varchar(50) [not null]
+  lastname varchar(30) [not null]
+  email varchar(254) [unique, not null]
+  username varchar(30) [not null]
+  password varchar(100) [not null]
+  created_at timestamp [not null]
+  updated_at timestamp [not null]
 }
 
-Table expense_category {
-  id integer [primary key]
-  user_id integer [not null]
-  name varchar [not null]
-  created_at timestamp [default: `now()`]
-  updated_at timestamp [default: `now()`]
+Table categories {
+  id bigint [pk, increment]
+  user_id bigint [not null]
+  type transaction_type [not null]
+  name varchar(50) [not null]
+  created_at timestamp [not null]
+  updated_at timestamp [not null]
 
-  indexes {
-    user_id
-    (user_id, name) [unique]
-    (id, user_id) [unique, note: "Required for composite multi-tenant FK enforcement"]
+  Indexes {
+    user_id [name: "idx_category_user"]
+    (user_id, type, name) [unique, name: "unique_user_category_type_name"]
   }
 }
 
-Table expense {
-  id integer [primary key]  
-  user_id integer [not null]
-  category_id integer [not null]
-  recurring_expense_id integer [null]
-  name varchar [not null]
-  amount decimal(12, 2) [not null]
-  payment_date date [not null]
-  description varchar [null]
-  created_at timestamp [default: `now()`]
-  updated_at timestamp [default: `now()`]
-
-  indexes {
-    (category_id, user_id)
-    recurring_expense_id
-    (user_id, payment_date)
-  }
-}
-
-Table recurring_expense {
-  id integer [primary key]
-  user_id integer [not null]
-  category_id integer [not null]
-  name varchar [not null]
-  amount decimal(12, 2) [not null]
-  frequency frequency [not null]
-  next_due_date date [not null]
-  is_active boolean [default: true]
-  created_at timestamp [default: `now()`]
-  updated_at timestamp [default: `now()`]
-
-  indexes {
-    (category_id, user_id)
-    user_id
-    (is_active, next_due_date)
-  }
-}
-
-Table budget {
-  id integer [primary key]
-  user_id integer [not null]
-  category_id integer [not null]
-  amount_limit decimal(12, 2) [not null]
+Table budgets {
+  id bigint [pk, increment]
+  user_id bigint [not null]
+  category_id bigint [not null]
+  amount_limit numeric(12,2) [not null]
   month integer [not null]
   year integer [not null]
-  created_at timestamp [default: `now()`]
-  updated_at timestamp [default: `now()`]
+  created_at timestamp [not null]
+  updated_at timestamp [not null]
 
-  indexes {
-    (category_id, user_id)
-    (user_id, category_id, year, month) [unique]
+  Indexes {
+    (user_id, year, month) [name: "idx_budget_user_period"]
+    (user_id, category_id) [name: "idx_budget_user_category"]
+    (user_id, category_id, month, year) [unique, name: "unique_user_category_period"]
   }
 }
 
-Table income_category {
-  id integer [primary key]
-  user_id integer [not null]
-  name varchar [not null]
-  created_at timestamp [default: `now()`]
-  updated_at timestamp [default: `now()`]
+Table recurring_transactions {
+  id bigint [pk, increment]
+  user_id bigint [not null]
+  category_id bigint [not null]
+  type transaction_type [not null]
+  name varchar(50) [not null]
+  amount numeric(12,2) [not null]
+  next_due_date date [not null]
+  frequency frequency_type [not null]
+  is_active boolean [not null, default: true]
+  created_at timestamp [not null]
+  updated_at timestamp [not null]
 
-  indexes {
-    user_id
-    (user_id, name) [unique]
-    (id, user_id) [unique, note: "Required for composite multi-tenant FK enforcement"]
+  Indexes {
+    (is_active, next_due_date) [name: "idx_recurring_tx_worker"]
+    user_id [name: "idx_recurring_tx_user"]
   }
 }
 
-Table income {
-  id integer [primary key]
-  user_id integer [not null]
-  income_category_id integer [not null]
-  recurring_income_id integer [null]
-  name varchar [not null]
-  amount decimal(12, 2) [not null]
+Table transactions {
+  id bigint [pk, increment]
+  user_id bigint [not null]
+  category_id bigint [not null]
+  recurring_transaction_id bigint [null]
+  type transaction_type [not null]
+  name varchar(50) [not null]
+  amount numeric(12,2) [not null]
   payment_date date [not null]
-  created_at timestamp [default: `now()`]
-  updated_at timestamp [default: `now()`]
+  description varchar(100) [null]
+  created_at timestamp [not null]
+  updated_at timestamp [not null]
 
-  indexes {
-    (income_category_id, user_id)
-    (user_id, payment_date)
+  Indexes {
+    (user_id, type, payment_date) [name: "idx_tx_user_type_date"]
+    category_id [name: "idx_tx_category"]
+    recurring_transaction_id [name: "idx_tx_template"]
   }
 }
 
-Table recurring_income {
-  id integer [primary key]
-  user_id integer [not null]
-  income_category_id integer [not null]
-  name varchar [not null]
-  amount decimal(12, 2) [not null]
-  frequency frequency [not null]
-  next_deposit_date date [not null]
-  is_active boolean [default: true]
-  created_at timestamp [default: `now()`]
-  updated_at timestamp [default: `now()`]
+// --- Relationships & Foreign Keys ---
 
-  indexes {
-    (income_category_id, user_id)
-    user_id
-    (is_active, next_deposit_date)
-  }
-}
-
-enum frequency {
-  daily
-  weekly
-  biweekly
-  triweekly
-  monthly
-  bimonthly
-  quarterly
-  yearly
-}
-
-// User Ownership Relationships
-Ref: expense_category.user_id > users.id [delete: cascade]
-Ref: income_category.user_id > users.id [delete: cascade]
-Ref: recurring_expense.user_id > users.id [delete: cascade]
-Ref: recurring_income.user_id > users.id [delete: cascade]
-
-// Composite Multi-Tenant Relationships
-// This implicitly enforces user ownership on the child tables natively!
-Ref: expense.(category_id, user_id) > expense_category.(id, user_id) [delete: restrict]
-Ref: recurring_expense.(category_id, user_id) > expense_category.(id, user_id) [delete: restrict]
-Ref: budget.(category_id, user_id) > expense_category.(id, user_id) [delete: cascade]
-Ref: income.(income_category_id, user_id) > income_category.(id, user_id) [delete: restrict]
-Ref: recurring_income.(income_category_id, user_id) > income_category.(id, user_id) [delete: restrict]
-
-// Historical Ledger Linkages 
-Ref: expense.recurring_expense_id > recurring_expense.id [delete: set null]
-Ref: income.recurring_income_id > recurring_income.id [delete: set null]
+Ref: categories.user_id > users.id [delete: cascade]
+Ref: budgets.user_id > users.id [delete: cascade]
+Ref: budgets.category_id > categories.id [delete: cascade]
+Ref: recurring_transactions.user_id > users.id [delete: cascade]
+Ref: recurring_transactions.category_id > categories.id [delete: restrict]
+Ref: transactions.user_id > users.id [delete: cascade]
+Ref: transactions.category_id > categories.id [delete: restrict]
+Ref: transactions.recurring_transaction_id > recurring_transactions.id [delete: set null]
