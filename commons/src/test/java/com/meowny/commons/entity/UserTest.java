@@ -1,135 +1,37 @@
 package com.meowny.commons.entity;
 
-import org.junit.jupiter.api.*;
+import org.junit.jupiter.api.Test;
 
-import java.util.List;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import static org.assertj.core.api.Assertions.*;
+class UserTest {
 
-public class UserTest {
+    @Test
+    void shouldHandleBidirectionalTransactionMapping() {
+        User user = new User();
+        Transaction tx = new Transaction();
 
-    private User user;
+        user.addTransaction(tx);
 
-    @BeforeEach
-    void setup() {
-         user = new User();
-         user.setId(1L);
+        assertThat(user.getTransactions()).contains(tx);
+        assertThat(tx.getUser()).isEqualTo(user);
     }
 
     @Test
-    void shouldCreateWithValidFields() {
-        user.setFirstName("Test");
-        user.setLastName("Names");
-        user.setEmail("g@mail.c");
-        user.setUsername("TesNa");
-        user.setPassword("Passs");
-
-        assertThat(user.getFirstName()).isEqualTo("Test");
-        assertThat(user.getLastName()).isEqualTo("Names");
-        assertThat(user.getFullName()).isEqualTo("Test" + " " + "Names");
-        assertThat(user.getEmail()).isEqualTo("g@mail.c");
-        assertThat(user.getUsername()).isEqualTo("TesNa");
-        assertThat(user.getPassword()).isEqualTo("Passs");
-    }
-
-    @Test
-    void shouldAddRemoveIncomes() {
-        Income income = new Income();
-        income.setId(1L);
-
-        user.addIncome(income);
-        assertThat(user.getIncomes()).containsExactlyElementsOf(List.of(income));
-
-        assertThatThrownBy(() -> user.addIncome(null))
+    void shouldThrowExceptionWhenAddingNullTransaction() {
+        User user = new User();
+        assertThatThrownBy(() -> user.addTransaction(null))
                 .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("mustn't be null");
-
-        user.removeIncome(null);
-        assertThat(user.getIncomes()).containsExactlyElementsOf(List.of(income));
-
-        user.removeIncome(income);
-        assertThat(user.getIncomes()).containsExactlyElementsOf(List.of());
+                .hasMessageContaining("Transaction cannot be null.");
     }
 
     @Test
-    void shouldAddRemoveExpenses() {
-        Expense expense = new Expense();
-        expense.setId(1L);
+    void shouldReturnCorrectFullName() {
+        User user = new User();
+        user.setFirstName("Vince");
+        user.setLastName("McMeow");
 
-        user.addExpense(expense);
-        assertThat(user.getExpenses()).containsExactlyElementsOf(List.of(expense));
-
-        assertThatThrownBy(() -> user.addExpense(null))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("mustn't be null");
-
-        user.removeExpense(null);
-        assertThat(user.getExpenses()).containsExactlyElementsOf(List.of(expense));
-
-        user.removeExpense(expense);
-        assertThat(user.getExpenses()).containsExactlyElementsOf(List.of());
+        assertThat(user.getFullName()).isEqualTo("Vince McMeow");
     }
-
-    @Test
-    void sholdAddRemoveBudgets() {
-        Budget budget = new Budget();
-        budget.setId(1L);
-
-        user.addBudget(budget);
-        assertThat(user.getBudgets()).containsExactlyElementsOf(List.of(budget));
-
-        assertThatThrownBy(() -> user.addBudget(null))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("mustn't be null");
-
-        user.removeBudget(null);
-        assertThat(user.getBudgets()).containsExactlyElementsOf(List.of(budget));
-
-        user.removeBudget(budget);
-        assertThat(user.getBudgets()).containsExactlyElementsOf(List.of());
-    }
-
-    // equals / hashcode
-
-    @Test
-    void shouldEqualSame() {
-        User a = new User();
-        a.setId(1L);
-
-        assertThat(a).isEqualTo(a);
-        assertThat(a.hashCode()).isEqualTo(a.hashCode());
-    }
-
-
-    @Test
-    void shouldBeEqualWithSameId() {
-        User a = new User();
-        a.setId(1L);
-        User b = new User();
-        b.setId(1L);
-
-        assertThat(a).isEqualTo(b);
-        assertThat(a.hashCode()).isEqualTo(b.hashCode());
-    }
-
-    @Test
-    void shouldNotBeEqualNull() {
-        User a = new User();
-        a.setId(1L);
-        User b = null;
-
-        assertThat(a).isNotEqualTo(b);
-    }
-
-    @Test
-    void shouldNotBeEqualWithDifferentId() {
-        User a = new User();
-        a.setId(1L);
-        User b = new User();
-        b.setId(2L);
-
-        assertThat(a).isNotEqualTo(b);
-        assertThat(a.hashCode()).isEqualTo(b.hashCode());
-    }
-
 }

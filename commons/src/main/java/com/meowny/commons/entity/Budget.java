@@ -12,12 +12,12 @@ import java.util.Objects;
         uniqueConstraints = {
                 @UniqueConstraint(
                         name = "unique_user_category_period",
-                        columnNames = {"user_id", "expense_category_id", "month", "year"}
+                        columnNames = {"user_id", "category_id", "month", "year"}
                 )
         },
         indexes = {
                 @Index(name = "idx_budget_user_period", columnList = "user_id, year, month"),
-                @Index(name = "idx_budget_user_category", columnList = "user_id, expense_category_id")
+                @Index(name = "idx_budget_user_category", columnList = "user_id, category_id")
         }
 )
 public class Budget extends BaseAuditEntity {
@@ -50,74 +50,41 @@ public class Budget extends BaseAuditEntity {
     private Integer year;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumns({
-            @JoinColumn(name = "expense_category_id", referencedColumnName = "id", nullable = false),
-            @JoinColumn(name = "user_id", referencedColumnName = "user_id", nullable = false, insertable = false, updatable = false)
-    })
+    @JoinColumn(name = "category_id", nullable = false)
     @NotNull(message = "Category is required")
-    private ExpenseCategory category;
+    private Category category;
 
     public Budget() {
     }
 
-    public Long getId() {
-        return id;
-    }
-    public void setId(Long id) {
-        this.id = id;
-    }
+    public Long getId() { return id; }
+    public void setId(Long id) { this.id = id; }
 
-    public User getUser() {
-        return user;
-    }
-    public void setUser(User user) {
-        this.user = user;
-    }
+    public User getUser() { return user; }
+    public void setUser(User user) { this.user = user; }
 
-    public BigDecimal getLimitAmount() {
-        return limitAmount;
-    }
-    public void setLimitAmount(BigDecimal limitAmount) {
-        this.limitAmount = limitAmount;
-    }
+    public BigDecimal getLimitAmount() { return limitAmount; }
+    public void setLimitAmount(BigDecimal limitAmount) { this.limitAmount = limitAmount; }
 
-    public Integer getMonth() {
-        return month;
-    }
-    public void setMonth(Integer month) {
-        this.month = month;
-    }
+    public Integer getMonth() { return month; }
+    public void setMonth(Integer month) { this.month = month; }
 
-    public Integer getYear() {
-        return year;
-    }
-    public void setYear(Integer year) {
-        this.year = year;
-    }
+    public Integer getYear() { return year; }
+    public void setYear(Integer year) { this.year = year; }
 
-    public ExpenseCategory getCategory() {
-        return category;
-    }
-    public void setCategory(ExpenseCategory category) {
-        this.category = category;
-    }
+    public Category getCategory() { return category; }
+    public void setCategory(Category category) { this.category = category; }
 
     @Override
     public boolean equals(Object o) {
-        if (this == o) {
-            return true;
-        }
-        if (o == null || getClass() != o.getClass()) {
-            return false;
-        }
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
         Budget budget = (Budget) o;
         return id != null && Objects.equals(id, budget.id);
     }
 
     @Override
-    public int hashCode() {
-        return getClass().hashCode();
-    }
+    public int hashCode() { return getClass().hashCode(); }
 
     @Override
     public String toString() {

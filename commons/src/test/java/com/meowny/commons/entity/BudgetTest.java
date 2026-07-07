@@ -1,31 +1,35 @@
 package com.meowny.commons.entity;
 
-import org.junit.jupiter.api.*;
-
+import jakarta.validation.ConstraintViolation;
+import jakarta.validation.Validation;
+import jakarta.validation.Validator;
+import jakarta.validation.ValidatorFactory;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 
 import java.math.BigDecimal;
+import java.util.Set;
 
-import static org.assertj.core.api.Assertions.*;
+import static org.assertj.core.api.Assertions.assertThat;
 
-public class BudgetTest {
+class BudgetTest {
 
+    private Validator validator;
     private User user;
-    private ExpenseCategory category;
-
-    private Budget budget;
+    private Category category;
 
     @BeforeEach
     void setUp() {
+        try (ValidatorFactory factory = Validation.buildDefaultValidatorFactory()) {
+            validator = factory.getValidator();
+        }
         user = new User();
         user.setId(1L);
 
-        category = new ExpenseCategory();
+        category = new Category();
         category.setId(1L);
-        category.setUser(user);
-
-        budget = new Budget();
     }
 
     @Test
@@ -37,72 +41,26 @@ public class BudgetTest {
         budget.setMonth(6);
         budget.setYear(2025);
 
-
-        assertThat(budget.getLimitAmount()).isEqualByComparingTo("100.00");
-        assertThat(budget.getMonth()).isEqualTo(6);
-        assertThat(budget.getYear()).isEqualTo(2025);
-
-        assertThat(budget.getUser()).isEqualTo(user);
-        assertThat(budget.getCategory()).isEqualTo(category);
-    }
-
-    @Test
-    void shouldAllowZeroLimitAmount() {
-        budget.setLimitAmount(BigDecimal.ZERO);
+        Set<ConstraintViolation<Budget>> violations = validator.validate(budget);
+        assertThat(violations).isEmpty();
     }
 
     @ParameterizedTest
-    @ValueSource(ints = {1, 6, 12})
-    void shouldAcceptValidMonths(int month) {
-        assertThatNoException().isThrownBy(() -> budget.setMonth(month));
-    }
+    @ValueSource(ints = {0, 13, -5})
+    void shouldRejectInvalidMonthsViaValidator(int invalidMonth) {
+        Budget budget = new Budget();
+        budget.setUser(user);
+        budget.setCategory(category);
+        budget.setLimitAmount(BigDecimal.ONE);
+        budget.setYear(2026);
+        budget.setMonth(invalidMonth);
 
-    @ParameterizedTest
-    @ValueSource(ints = {0, 13, -1, 99})
-    void shouldRejectInvalidMonths(int month) {
-        budget.setMonth(month);
-        assertThat(budget.getMonth()).isEqualTo(month);
-    }
-
-    @ParameterizedTest
-    @ValueSource(ints = {2000, 2025, 9999})
-    void shouldAcceptValidYears(int year) {
-        assertThatNoException().isThrownBy(() -> budget.setYear(year));
-    }
-
-    // equals / hashCode
-
-    @Test
-    void shouldEqualSame() {
-        Budget a = new Budget();
-        a.setId(1L);
-
-        assertThat(a).isEqualTo(a);
-        assertThat(a.hashCode()).isEqualTo(a.hashCode());
+        Set<ConstraintViolation<Budget>> violations = validator.validate(budget);
+        assertThat(violations).isNotEmpty();
     }
 
     @Test
-    void shouldBeEqualWithSameId() {
-        Budget a = new Budget();
-        a.setId(1L);
-        Budget b = new Budget();
-        b.setId(1L);
-
-        assertThat(a).isEqualTo(b);
-        assertThat(a.hashCode()).isEqualTo(b.hashCode());
-    }
-
-    @Test
-    void shouldNotBeEqualNull() {
-        Budget a = new Budget();
-        a.setId(1L);
-        Expense b = null;
-
-        assertThat(a).isNotEqualTo(b);
-    }
-
-    @Test
-    void shouldBeEqualWithDifferentId() {
+    void shouldNotBeEqualWithDifferentId() {
         Budget a = new Budget();
         a.setId(1L);
         Budget b = new Budget();

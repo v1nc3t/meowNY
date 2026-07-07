@@ -3,7 +3,6 @@ package com.meowny.commons.entity;
 import jakarta.persistence.*;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 
 import java.util.ArrayList;
@@ -24,7 +23,7 @@ public class User extends BaseAuditEntity {
     private String firstName;
 
     @Column(name = "lastname", length = 30, nullable = false)
-    @NotBlank(message = "Last nmae is required")
+    @NotBlank(message = "Last name is required")
     @Size(max = 30, message = "Last name must be 30 characters or fewer")
     private String lastName;
 
@@ -36,7 +35,7 @@ public class User extends BaseAuditEntity {
 
     @Column(length = 30, nullable = false)
     @NotBlank(message = "Username is required")
-    @Size(max = 30, message = "Usename must be 30 characters or fewer")
+    @Size(max = 30, message = "Username must be 30 characters or fewer")
     private String username;
 
     @Column(length = 100, nullable = false)
@@ -45,141 +44,84 @@ public class User extends BaseAuditEntity {
     private String password;
 
     @OneToMany(mappedBy = "user", cascade = CascadeType.ALL, orphanRemoval = true)
-    private List<Income> incomes = new ArrayList<>();
-
-    @OneToMany(mappedBy = "user", cascade = CascadeType.ALL, orphanRemoval = true)
-    private List<Expense> expenses = new ArrayList<>();
+    private List<Transaction> transactions = new ArrayList<>();
 
     @OneToMany(mappedBy = "user", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<Budget> budgets = new ArrayList<>();
 
-    /**
-     * Empty constructor for object mapper.
-     */
     public User() {
     }
 
-    public Long getId() {
-        return id;
-    }
-    public void setId(Long id) {
-        this.id = id;
-    }
+    public Long getId() { return id; }
+    public void setId(Long id) { this.id = id; }
 
-    public String getFirstName() {
-        return firstName;
-    }
-    public void setFirstName(String firstName) {
-        this.firstName = firstName;
-    }
+    public String getFirstName() { return firstName; }
+    public void setFirstName(String firstName) { this.firstName = firstName; }
 
-    public String getLastName() {
-        return lastName;
-    }
-    public void setLastName(String lastName) {
-        this.lastName = lastName;
-    }
+    public String getLastName() { return lastName; }
+    public void setLastName(String lastName) { this.lastName = lastName; }
 
     public String getFullName() {
         return this.firstName + " " + this.lastName;
     }
 
-    public String getEmail() {
-        return email;
-    }
-    public void setEmail(String email) {
-        this.email = email;
-    }
+    public String getEmail() { return email; }
+    public void setEmail(String email) { this.email = email; }
 
-    public String getUsername() {
-        return username;
-    }
-    public void setUsername(String username) {
-        this.username = username;
-    }
+    public String getUsername() { return username; }
+    public void setUsername(String username) { this.username = username; }
 
-    public String getPassword() {
-        return password;
-    }
-    public void setPassword(String password) {
-        this.password = password;
-    }
+    public String getPassword() { return password; }
+    public void setPassword(String password) { this.password = password; }
 
-    public List<Income> getIncomes() {
-        return incomes;
-    }
-    public void setIncomes(List<Income> incomes) {
-        this.incomes = incomes;
-    }
+    public List<Transaction> getTransactions() { return transactions; }
+    public void setTransactions(List<Transaction> transactions) { this.transactions = transactions; }
 
-    public void addIncome(Income income) {
-        if (income == null) {
-            throw new IllegalArgumentException("Income mustn't be null.");
+    public void addTransaction(Transaction transaction) {
+        if (transaction == null) {
+            throw new IllegalArgumentException("Transaction cannot be null.");
         }
-        this.incomes.add(income);
-        income.setUser(this);
+        this.transactions.add(transaction);
+        transaction.setUser(this);
     }
-    public void removeIncome(Income income) {
-        if (income == null) {
-            return;
+
+    public void removeTransaction(Transaction transaction) {
+        if (transaction == null) return;
+        this.transactions.remove(transaction);
+        if (transaction.getUser() == this) {
+            transaction.setUser(null);
         }
-        this.incomes.remove(income);
     }
 
-    public List<Expense> getExpenses() {
-        return expenses;
-    }
-    public void setExpenses(List<Expense> expenses) {
-        this.expenses = expenses;
-    }
-
-    public void addExpense(Expense expense) {
-        if (expense == null) {
-            throw new IllegalArgumentException("Expense mustn't be null.");
-        }
-        this.expenses.add(expense);
-        expense.setUser(this);
-    }
-    public void removeExpense(Expense expense) {
-        if (expense == null) {
-            return;
-        }
-        this.expenses.remove(expense);
-    }
-
-
-    public List<Budget> getBudgets() {
-        return budgets;
-    }
-    public void setBudgets(List<Budget> budgets) {
-        this.budgets = budgets;
-    }
+    public List<Budget> getBudgets() { return budgets; }
+    public void setBudgets(List<Budget> budgets) { this.budgets = budgets; }
 
     public void addBudget(Budget budget) {
-        if(budget == null) {
-            throw new IllegalArgumentException("Income mustn't be null.");
+        if (budget == null) {
+            throw new IllegalArgumentException("Budget cannot be null.");
         }
         this.budgets.add(budget);
         budget.setUser(this);
     }
+
     public void removeBudget(Budget budget) {
-        if (budget == null) {
-            return;
-        }
+        if (budget == null) return;
         this.budgets.remove(budget);
+        if (budget.getUser() == this) {
+            budget.setUser(null);
+        }
     }
 
     @Override
     public boolean equals(Object o) {
+        if (this == o) return true;
         if (o == null || getClass() != o.getClass()) return false;
         User user = (User) o;
         return id != null && Objects.equals(id, user.id);
     }
 
     @Override
-    public int hashCode() {
-        return getClass().hashCode();
-    }
+    public int hashCode() { return getClass().hashCode(); }
 
     @Override
     public String toString() {
