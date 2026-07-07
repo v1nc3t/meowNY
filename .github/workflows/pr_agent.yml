@@ -21,3 +21,20 @@ jobs:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           config__ai_provider: "google"
           config__model: "gemini/gemini-2.5-flash"
+
+          # --- Disable default description blocks ---
+          pr_description__publish_labels: false
+          pr_description__enable_image_walkthrough: false
+          pr_description__enable_slice_and_dice_walkthrough: false
+          pr_description__generate_ai_type_of_pr: false
+
+          # --- Strict Formatting Instructions ---
+          pr_description__extra_instructions: |
+            CRITICAL: Ignore any default template layouts or sections.
+            Output EXACTLY two markdown headers and nothing else. No 'PR Type', no tables, no lists of files.
+            
+            ## What changed
+            [Provide a 1-2 sentence high-level summary of the structural changes]
+            
+            ## Why
+            [Provide a 1-2 sentence explanation of the purpose or business logic behind the change]

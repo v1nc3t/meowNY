@@ -1,0 +1,157 @@
+Table users {
+  id integer [primary key]
+  username varchar [unique, not null]
+  password varchar [not null]
+  firstname varchar
+  lastname varchar
+  email varchar [unique, not null]
+  created_at timestamp [default: `now()`]
+  updated_at timestamp [default: `now()`]
+}
+
+Table expense_category {
+  id integer [primary key]
+  user_id integer [not null]
+  name varchar [not null]
+  created_at timestamp [default: `now()`]
+  updated_at timestamp [default: `now()`]
+
+  indexes {
+    user_id
+    (user_id, name) [unique]
+    (id, user_id) [unique, note: "Required for composite multi-tenant FK enforcement"]
+  }
+}
+
+Table expense {
+  id integer [primary key]  
+  user_id integer [not null]
+  category_id integer [not null]
+  recurring_expense_id integer [null]
+  name varchar [not null]
+  amount decimal(12, 2) [not null]
+  payment_date date [not null]
+  description varchar [null]
+  created_at timestamp [default: `now()`]
+  updated_at timestamp [default: `now()`]
+
+  indexes {
+    (category_id, user_id)
+    recurring_expense_id
+    (user_id, payment_date)
+  }
+}
+
+Table recurring_expense {
+  id integer [primary key]
+  user_id integer [not null]
+  category_id integer [not null]
+  name varchar [not null]
+  amount decimal(12, 2) [not null]
+  frequency frequency [not null]
+  next_due_date date [not null]
+  is_active boolean [default: true]
+  created_at timestamp [default: `now()`]
+  updated_at timestamp [default: `now()`]
+
+  indexes {
+    (category_id, user_id)
+    user_id
+    (is_active, next_due_date)
+  }
+}
+
+Table budget {
+  id integer [primary key]
+  user_id integer [not null]
+  category_id integer [not null]
+  amount_limit decimal(12, 2) [not null]
+  month integer [not null]
+  year integer [not null]
+  created_at timestamp [default: `now()`]
+  updated_at timestamp [default: `now()`]
+
+  indexes {
+    (category_id, user_id)
+    (user_id, category_id, year, month) [unique]
+  }
+}
+
+Table income_category {
+  id integer [primary key]
+  user_id integer [not null]
+  name varchar [not null]
+  created_at timestamp [default: `now()`]
+  updated_at timestamp [default: `now()`]
+
+  indexes {
+    user_id
+    (user_id, name) [unique]
+    (id, user_id) [unique, note: "Required for composite multi-tenant FK enforcement"]
+  }
+}
+
+Table income {
+  id integer [primary key]
+  user_id integer [not null]
+  income_category_id integer [not null]
+  recurring_income_id integer [null]
+  name varchar [not null]
+  amount decimal(12, 2) [not null]
+  payment_date date [not null]
+  created_at timestamp [default: `now()`]
+  updated_at timestamp [default: `now()`]
+
+  indexes {
+    (income_category_id, user_id)
+    (user_id, payment_date)
+  }
+}
+
+Table recurring_income {
+  id integer [primary key]
+  user_id integer [not null]
+  income_category_id integer [not null]
+  name varchar [not null]
+  amount decimal(12, 2) [not null]
+  frequency frequency [not null]
+  next_deposit_date date [not null]
+  is_active boolean [default: true]
+  created_at timestamp [default: `now()`]
+  updated_at timestamp [default: `now()`]
+
+  indexes {
+    (income_category_id, user_id)
+    user_id
+    (is_active, next_deposit_date)
+  }
+}
+
+enum frequency {
+  daily
+  weekly
+  biweekly
+  triweekly
+  monthly
+  bimonthly
+  quarterly
+  yearly
+}
+
+// User Ownership Relationships
+Ref: expense_category.user_id > users.id [delete: cascade]
+Ref: income_category.user_id > users.id [delete: cascade]
+Ref: recurring_expense.user_id > users.id [delete: cascade]
+Ref: recurring_income.user_id > users.id [delete: cascade]
+
+// Composite Multi-Tenant Relationships
+// This implicitly enforces user ownership on the child tables natively!
+Ref: expense.(category_id, user_id) > expense_category.(id, user_id) [delete: restrict]
+Ref: recurring_expense.(category_id, user_id) > expense_category.(id, user_id) [delete: restrict]
+Ref: budget.(category_id, user_id) > expense_category.(id, user_id) [delete: cascade]
+Ref: income.(income_category_id, user_id) > income_category.(id, user_id) [delete: restrict]
+Ref: recurring_income.(income_category_id, user_id) > income_category.(id, user_id) [delete: restrict]
+
+// Historical Ledger Linkages 
+Ref: expense.recurring_expense_id > recurring_expense.id [delete: set null]
+Ref: income.recurring_income_id > recurring_income.id [delete: set null]
