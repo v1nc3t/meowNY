@@ -6,14 +6,14 @@ import com.meowny.server.dto.user.UpdateUserRequest;
 import com.meowny.server.dto.user.UserResponse;
 import com.meowny.server.exception.ResourceConflictException;
 import com.meowny.server.repository.UserRepository;
-import jakarta.transaction.Transactional;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class UserService {
 
-    private UserRepository userRepository;
+    private final UserRepository userRepository;
     private final BCryptPasswordEncoder passwordEncoder;
 
     public UserService(UserRepository userRepository, BCryptPasswordEncoder passwordEncoder) {
@@ -21,7 +21,7 @@ public class UserService {
         this.passwordEncoder = passwordEncoder;
     }
 
-    @Transactional
+    @Transactional(readOnly = true)
     public UserResponse getUserById(Long id) {
         User user = userRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("User not fouund with ID:" + id));

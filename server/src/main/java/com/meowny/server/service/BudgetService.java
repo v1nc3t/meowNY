@@ -10,7 +10,7 @@ import com.meowny.server.exception.ResourceConflictException;
 import com.meowny.server.repository.BudgetRepository;
 import com.meowny.server.repository.CategoryRepository;
 import com.meowny.server.repository.UserRepository;
-import jakarta.transaction.Transactional;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.stream.Collectors;
@@ -30,14 +30,14 @@ public class BudgetService {
         this.categoryRepository = categoryRepository;
     }
 
-    @Transactional
+    @Transactional(readOnly = true)
     public BudgetResponse getBudgetById(Long id) {
         Budget budget = budgetRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("Budget not found with ID:" + id));
         return mapToResponse(budget);
     }
 
-    @Transactional
+    @Transactional(readOnly = true)
     public List<BudgetResponse> getBudgetsByPeriod(Long userId, Integer year, Integer month) {
         return budgetRepository.findByUserIdAndYearAndMonth(userId, year, month)
                 .stream()

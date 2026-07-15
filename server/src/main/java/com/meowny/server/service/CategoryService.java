@@ -10,7 +10,7 @@ import com.meowny.server.repository.BudgetRepository;
 import com.meowny.server.repository.CategoryRepository;
 import com.meowny.server.repository.TransactionRepository;
 import com.meowny.server.repository.UserRepository;
-import jakarta.transaction.Transactional;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.stream.Collectors;
@@ -32,7 +32,7 @@ public class CategoryService {
         this.budgetRepository = budgetRepository;
     }
 
-    @Transactional
+    @Transactional(readOnly = true)
     public List<CategoryResponse> getCategoriesByUserId(Long userId) {
         return categoryRepository.findByUserId(userId)
                 .stream()
