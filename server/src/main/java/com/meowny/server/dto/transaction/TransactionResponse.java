@@ -1,5 +1,7 @@
 package com.meowny.server.dto.transaction;
 
+import com.meowny.commons.entity.TransactionType;
+
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -13,6 +15,7 @@ public record TransactionResponse(
         Long recurringTransactionId,
         String recurringTransactionName,
 
+        TransactionType type,
         String name,
         BigDecimal amount,
         LocalDate paymentDate,
