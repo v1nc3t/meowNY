@@ -1,6 +1,7 @@
 package com.meowny.server.dto.recurringtransaction;
 
 import com.meowny.commons.entity.Frequency;
+import com.meowny.commons.entity.TransactionType;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -11,6 +12,7 @@ public record RecurringTransactionResponse(
         Long userId,
         Long categoryId,
         String categoryName,
+        TransactionType type,
         String name,
         BigDecimal amount,
         LocalDate nextDueDate,
