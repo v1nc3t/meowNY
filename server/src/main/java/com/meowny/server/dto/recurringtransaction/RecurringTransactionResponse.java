@@ -1,4 +1,4 @@
-package com.meowny.server.dto.recurringTransaction;
+package com.meowny.server.dto.recurringtransaction;
 
 import com.meowny.commons.entity.Frequency;
 
