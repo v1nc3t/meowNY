@@ -10,11 +10,13 @@ import com.meowny.server.exception.ResourceConflictException;
 import com.meowny.server.repository.BudgetRepository;
 import com.meowny.server.repository.CategoryRepository;
 import com.meowny.server.repository.UserRepository;
+import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.stream.Collectors;
 
+@Service
 public class BudgetService {
 
     private final BudgetRepository budgetRepository;

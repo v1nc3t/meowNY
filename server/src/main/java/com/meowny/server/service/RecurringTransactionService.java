@@ -11,11 +11,13 @@ import com.meowny.server.repository.CategoryRepository;
 import com.meowny.server.repository.RecurringTransactionRepository;
 import com.meowny.server.repository.TransactionRepository;
 import com.meowny.server.repository.UserRepository;
+import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.stream.Collectors;
 
+@Service
 public class RecurringTransactionService {
 
     private final RecurringTransactionRepository recurringTransactionRepository;
