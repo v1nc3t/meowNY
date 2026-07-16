@@ -9,7 +9,7 @@ public interface TransactionRepository extends JpaRepository<Transaction, Long> 
 
     boolean existsByCategoryId(Long categoryId);
 
-    boolean existsByRecurringTransactionId(Long recurringTransactionId);
+    boolean existsBySourceTemplate_Id(Long recurringTransactionId);
 
     Page<Transaction> findByUserId(Long userId, Pageable pageable);
 
