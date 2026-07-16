@@ -57,6 +57,10 @@ public class BudgetService {
             throw new IllegalArgumentException("Category must belong to the specified user.");
         }
 
+        if (category.getType() != TransactionType.EXPENSE) {
+            throw new IllegalArgumentException("Budgets can only be created for EXPENSE categories.");
+        }
+
         budgetRepository.findByUserIdAndCategoryIdAndMonthAndYear(
                         request.userId(), request.categoryId(), request.month(), request.year())
                 .ifPresent(existing -> {
