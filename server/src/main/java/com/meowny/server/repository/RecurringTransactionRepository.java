@@ -19,6 +19,8 @@ public interface RecurringTransactionRepository extends JpaRepository<RecurringT
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT r FROM RecurringTransaction r WHERE r.isActive = true AND r.nextDueDate <= :currentDate")
     List<RecurringTransaction> findOverdueTemplatesForUpdate(@Param("currentDate") LocalDate currentDate);
+
+    boolean existsByCategoryId(Long id);
 }
 
 

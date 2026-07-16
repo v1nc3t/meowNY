@@ -6,10 +6,7 @@ import com.meowny.server.dto.category.CategoryResponse;
 import com.meowny.server.dto.category.CreateCategoryRequest;
 import com.meowny.server.dto.category.UpdateCategoryRequest;
 import com.meowny.server.exception.ResourceConflictException;
-import com.meowny.server.repository.BudgetRepository;
-import com.meowny.server.repository.CategoryRepository;
-import com.meowny.server.repository.TransactionRepository;
-import com.meowny.server.repository.UserRepository;
+import com.meowny.server.repository.*;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -23,15 +20,18 @@ public class CategoryService {
     private final UserRepository userRepository;
     private final TransactionRepository transactionRepository;
     private final BudgetRepository budgetRepository;
+    private final RecurringTransactionRepository recurringTransactionRepository;
 
     public CategoryService(CategoryRepository categoryRepository,
                            UserRepository userRepository,
                            TransactionRepository transactionRepository,
-                           BudgetRepository budgetRepository) {
+                           BudgetRepository budgetRepository,
+                           RecurringTransactionRepository recurringTransactionRepository) {
         this.categoryRepository = categoryRepository;
         this.userRepository = userRepository;
         this.transactionRepository = transactionRepository;
         this.budgetRepository = budgetRepository;
+        this.recurringTransactionRepository = recurringTransactionRepository;
     }
 
     @Transactional(readOnly = true)
