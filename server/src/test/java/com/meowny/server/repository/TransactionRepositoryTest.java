@@ -35,8 +35,6 @@ public class TransactionRepositoryTest extends AbstractIntegrationTest {
 
     @BeforeEach
     void setUp() {
-        transactionRepository.deleteAll();
-
         User user = new User();
         user.setFirstName("Vincent");
         user.setLastName("Meowny");

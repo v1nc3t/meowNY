@@ -31,8 +31,6 @@ public class CategoryRepositoryTest extends AbstractIntegrationTest {
 
     @BeforeEach
     void setUp() {
-        categoryRepository.deleteAll();
-
         User user = new User();
         user.setFirstName("Jane");
         user.setLastName("Doe");

@@ -28,8 +28,6 @@ public class UserRepositoryTest extends AbstractIntegrationTest {
 
     @BeforeEach
     void setUp() {
-        userRepository.deleteAll();
-
         defaultUser = createUser("Vincent", "Meowny", "vincent_m", "vincent@meowny.com", "securePass123");
         entityManager.persistAndFlush(defaultUser);
     }

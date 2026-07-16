@@ -31,8 +31,6 @@ public class RecurringTransactionRepositoryTest extends AbstractIntegrationTest 
 
     @BeforeEach
     void setUp() {
-        recurringTransactionRepository.deleteAll();
-
         User user = new User();
         user.setFirstName("Alice");
         user.setLastName("Smith");

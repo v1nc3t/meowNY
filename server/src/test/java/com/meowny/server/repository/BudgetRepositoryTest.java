@@ -34,8 +34,6 @@ class BudgetRepositoryTest extends AbstractIntegrationTest {
 
     @BeforeEach
     void setUp() {
-        budgetRepository.deleteAll();
-
         User user = new User();
         user.setFirstName("John");
         user.setLastName("Doe");
