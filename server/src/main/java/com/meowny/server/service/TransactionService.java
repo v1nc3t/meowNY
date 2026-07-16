@@ -80,6 +80,12 @@ public class TransactionService {
             if (!template.getUser().getId().equals(request.userId())) {
                 throw new IllegalArgumentException("Recurring template must belong to the specified user.");
             }
+            if (template.getType() != request.type()) {
+                throw new IllegalArgumentException("Transaction type must match the recurring template type.");
+            }
+            if (!template.getCategory().getId().equals(request.categoryId())) {
+                throw new IllegalArgumentException("Transaction category must match the recurring template category.");
+            }
             tx.setSourceTemplate(template);
         }
 
