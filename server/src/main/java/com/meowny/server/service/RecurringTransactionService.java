@@ -119,7 +119,7 @@ public class RecurringTransactionService {
             throw new IllegalArgumentException("Recurring template not found with ID: " + id);
         }
 
-        boolean isLinkedToTransactions = transactionRepository.existsByRecurringTransactionId(id);
+        boolean isLinkedToTransactions = transactionRepository.existsBySourceTemplate_Id(id);
         if (isLinkedToTransactions) {
             throw new ResourceConflictException("Cannot delete this template because it has generated past transaction records. Disable it instead.");
         }
