@@ -91,6 +91,11 @@ public class CategoryService {
             throw new ResourceConflictException("Cannot delete category because it is assigned to an active budget.");
         }
 
+        boolean hasRecurringTransactions = recurringTransactionRepository.existsByCategoryId(id);
+        if (hasRecurringTransactions) {
+            throw new ResourceConflictException("Cannot delete category because it is linked to active recurring transactions.");
+        }
+
         categoryRepository.delete(category);
     }
 
