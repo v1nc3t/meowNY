@@ -70,7 +70,7 @@ class BudgetServiceTest {
 
         assertThatThrownBy(() -> budgetService.getBudgetById(budgetId))
                 .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("Budget not found with ID: " + budgetId);
+                .hasMessageContaining("Budget not found with ID:" + budgetId);
     }
 
     // ==========================================
