@@ -61,10 +61,11 @@ class UserServiceTest {
         when(userRepository.findById(userId)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> userService.getUserById(userId))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> userService.getUserById(userId))
                 .isInstanceOf(IllegalArgumentException.class)
-                assertThatThrownBy(() -> userService.getUserById(userId))
-                        .isInstanceOf(IllegalArgumentException.class)
-                        .hasMessageContaining("User not found with ID: " + userId);
+                .hasMessageContaining("User not found with ID:" + userId);
+    }
     // ==========================================
     // createUser BRANCHES
     // ==========================================

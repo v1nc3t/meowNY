@@ -24,7 +24,7 @@ public class UserService {
     @Transactional(readOnly = true)
     public UserResponse getUserById(Long id) {
         User user = userRepository.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("User not fouund with ID:" + id));
+                .orElseThrow(() -> new IllegalArgumentException("User not found with ID:" + id));
         return mapToResponse(user);
     }
 
