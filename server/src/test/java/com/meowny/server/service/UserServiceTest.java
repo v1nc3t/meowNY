@@ -62,9 +62,9 @@ class UserServiceTest {
 
         assertThatThrownBy(() -> userService.getUserById(userId))
                 .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("User not fouund with ID:" + userId);
-    }
-
+                assertThatThrownBy(() -> userService.getUserById(userId))
+                        .isInstanceOf(IllegalArgumentException.class)
+                        .hasMessageContaining("User not found with ID: " + userId);
     // ==========================================
     // createUser BRANCHES
     // ==========================================
