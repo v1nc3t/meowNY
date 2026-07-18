@@ -1,4 +1,4 @@
-package com.meowny.commons.entity;
+package com.meowny.server.entity;
 
 import jakarta.persistence.*;
 import jakarta.validation.constraints.Email;
