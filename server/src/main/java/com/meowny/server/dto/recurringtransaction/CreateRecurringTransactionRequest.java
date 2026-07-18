@@ -1,7 +1,9 @@
 package com.meowny.server.dto.recurringtransaction;
 
+import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
 import com.meowny.commons.entity.Frequency;
 import com.meowny.commons.entity.TransactionType;
+import com.meowny.server.config.HtmlSanitizationDeserializer;
 import jakarta.validation.constraints.*;
 
 import java.math.BigDecimal;
@@ -19,6 +21,7 @@ public record CreateRecurringTransactionRequest(
 
         @NotBlank(message = "Transaction name is required")
         @Size(max = 50, message = "Transaction name must be 50 characters or fewer")
+        @JsonDeserialize(using = HtmlSanitizationDeserializer.class)
         String name,
 
         @NotNull(message = "Amount is required")

@@ -124,6 +124,18 @@ public class TransactionService {
         return mapToResponse(updatedTx);
     }
 
+    @Transactional
+    public void deleteTransaction(Long id) {
+        Transaction tx = transactionRepository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("Transaction not found with ID: " + id));
+
+        if (tx.getSourceTemplate() != null) {
+            tx.setSourceTemplate(null);
+        }
+
+        transactionRepository.delete(tx);
+    }
+
     private TransactionResponse mapToResponse(Transaction tx) {
         Long templateId = null;
         String templateName = null;
