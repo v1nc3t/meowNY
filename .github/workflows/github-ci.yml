@@ -12,7 +12,7 @@ jobs:
 
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v7
+        uses: actions/checkout@v4
 
       - name: Set up JDK 21
         uses: actions/setup-java@v5
@@ -21,10 +21,16 @@ jobs:
           distribution: 'corretto'
           cache: 'maven'
 
+      - name: Cache Maven build cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.m2/build-cache
+          key: maven-build-cache-${{ runner.os }}
+
       - name: Install Graphical Dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y libxxf86vm1 libxrender1 libxtst6 libxi6 libglib2.0-0 libgtk-3-0 libasound2
+          sudo apt-get install -y libxxf86vm1 libxrender1 libxtst6 libxi6 libglib2.0-0 libgtk-3-0 libasound2t64
 
       - name: Build and Test with Maven
-        run: mvn -B -ntp clean verify -T 1C
+        run: mvn -B -ntp clean verify -T 1C -f server/pom.xml
