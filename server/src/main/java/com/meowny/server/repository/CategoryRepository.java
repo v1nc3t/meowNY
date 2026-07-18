@@ -1,7 +1,7 @@
 package com.meowny.server.repository;
 
-import com.meowny.commons.entity.Category;
-import com.meowny.commons.entity.TransactionType;
+import com.meowny.server.entity.Category;
+import com.meowny.server.entity.TransactionType;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.util.List;
