@@ -10,12 +10,14 @@ import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
 @RestController
 @RequestMapping("/api/v1/budgets")
+@Validated
 public class BudgetController {
 
     private final BudgetService budgetService;
@@ -25,7 +27,7 @@ public class BudgetController {
     }
 
     @GetMapping("/{id}")
-    public ResponseEntity<BudgetResponse> getBudgetById(Long id) {
+    public ResponseEntity<BudgetResponse> getBudgetById(@PathVariable Long id) {
         BudgetResponse response = budgetService.getBudgetById(id);
         return ResponseEntity.ok(response);
     }
