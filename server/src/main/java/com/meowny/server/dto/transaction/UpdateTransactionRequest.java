@@ -1,5 +1,7 @@
 package com.meowny.server.dto.transaction;
 
+import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
+import com.meowny.server.config.HtmlSanitizationDeserializer;
 import jakarta.validation.constraints.*;
 
 import java.math.BigDecimal;
@@ -11,6 +13,7 @@ public record UpdateTransactionRequest(
 
         @NotBlank(message = "Transaction name is required")
         @Size(max = 50, message = "Transaction name must be 50 characters or fewer")
+        @JsonDeserialize(using = HtmlSanitizationDeserializer.class)
         String name,
 
         @NotNull(message = "Amount is required")
@@ -23,6 +26,7 @@ public record UpdateTransactionRequest(
         LocalDate paymentDate,
 
         @Size(max = 100, message = "Description must be 100 characters or fewer")
+        @JsonDeserialize(using = HtmlSanitizationDeserializer.class)
         String description
 ) {
 }

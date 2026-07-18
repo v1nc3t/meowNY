@@ -6,11 +6,9 @@ import com.fasterxml.jackson.databind.JsonDeserializer;
 import org.jsoup.Jsoup;
 import org.jsoup.parser.Parser;
 import org.jsoup.safety.Safelist;
-import org.springframework.boot.jackson.JsonComponent;
 
 import java.io.IOException;
 
-@JsonComponent
 public class HtmlSanitizationDeserializer extends JsonDeserializer<String> {
 
     @Override
