@@ -1,7 +1,7 @@
 package com.meowny.server.dto.transaction;
 
 import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
-import com.meowny.commons.entity.TransactionType;
+import com.meowny.server.entity.TransactionType;
 import com.meowny.server.config.HtmlSanitizationDeserializer;
 import jakarta.validation.constraints.*;
 

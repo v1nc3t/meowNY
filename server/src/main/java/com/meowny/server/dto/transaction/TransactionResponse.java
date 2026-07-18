@@ -1,6 +1,6 @@
 package com.meowny.server.dto.transaction;
 
-import com.meowny.commons.entity.TransactionType;
+import com.meowny.server.entity.TransactionType;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;

@@ -1,6 +1,6 @@
 package com.meowny.server.dto.category;
 
-import com.meowny.commons.entity.TransactionType;
+import com.meowny.server.entity.TransactionType;
 
 import java.time.LocalDateTime;
 

@@ -1,7 +1,7 @@
 package com.meowny.server.dto.recurringtransaction;
 
 import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
-import com.meowny.commons.entity.Frequency;
+import com.meowny.server.entity.Frequency;
 import com.meowny.server.config.HtmlSanitizationDeserializer;
 import jakarta.validation.constraints.*;
 
