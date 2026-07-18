@@ -1,6 +1,6 @@
 package com.meowny.server.repository;
 
-import com.meowny.commons.entity.RecurringTransaction;
+import com.meowny.server.entity.RecurringTransaction;
 import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;

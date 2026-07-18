@@ -1,6 +1,6 @@
 package com.meowny.server.repository;
 
-import com.meowny.commons.entity.Budget;
+import com.meowny.server.entity.Budget;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.util.List;
