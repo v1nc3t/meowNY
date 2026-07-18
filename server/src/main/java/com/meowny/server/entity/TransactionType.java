@@ -1,4 +1,4 @@
-package com.meowny.commons.entity;
+package com.meowny.server.entity;
 
 public enum TransactionType {
     INCOME, EXPENSE

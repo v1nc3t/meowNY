@@ -1,6 +1,6 @@
 package com.meowny.server.repository;
 
-import com.meowny.commons.entity.Transaction;
+import com.meowny.server.entity.Transaction;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;

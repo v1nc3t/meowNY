@@ -1,6 +1,6 @@
 package com.meowny.server.repository;
 
-import com.meowny.commons.entity.User;
+import com.meowny.server.entity.User;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.util.Optional;

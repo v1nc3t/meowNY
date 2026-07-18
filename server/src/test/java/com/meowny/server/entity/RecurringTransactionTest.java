@@ -1,4 +1,4 @@
-package com.meowny.commons.entity;
+package com.meowny.server.entity;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;

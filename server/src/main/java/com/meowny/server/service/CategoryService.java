@@ -1,7 +1,7 @@
 package com.meowny.server.service;
 
-import com.meowny.commons.entity.Category;
-import com.meowny.commons.entity.User;
+import com.meowny.server.entity.Category;
+import com.meowny.server.entity.User;
 import com.meowny.server.dto.category.CategoryResponse;
 import com.meowny.server.dto.category.CreateCategoryRequest;
 import com.meowny.server.dto.category.UpdateCategoryRequest;

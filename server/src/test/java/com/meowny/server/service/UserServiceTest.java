@@ -1,6 +1,6 @@
 package com.meowny.server.service;
 
-import com.meowny.commons.entity.User;
+import com.meowny.server.entity.User;
 import com.meowny.server.dto.user.CreateUserRequest;
 import com.meowny.server.dto.user.UpdateUserRequest;
 import com.meowny.server.dto.user.UserResponse;

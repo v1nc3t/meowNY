@@ -1,6 +1,6 @@
 package com.meowny.server.repository;
 
-import com.meowny.commons.entity.User;
+import com.meowny.server.entity.User;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
