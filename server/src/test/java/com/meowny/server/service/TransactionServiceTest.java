@@ -374,6 +374,57 @@ class TransactionServiceTest {
     }
 
     // ==========================================
+    // deleteTransaction BRANCHES
+    // ==========================================
+
+    @Test
+    @DisplayName("deleteTransaction: Should successfully remove transaction when it has no relationships")
+    void deleteTransaction_PlainTransaction_DeletesSuccessfully() {
+        Long txId = 42L;
+        Transaction tx = new Transaction();
+        tx.setId(txId);
+        tx.setSourceTemplate(null);
+
+        when(transactionRepository.findById(txId)).thenReturn(Optional.of(tx));
+
+        transactionService.deleteTransaction(txId);
+
+        verify(transactionRepository).delete(tx);
+    }
+
+    @Test
+    @DisplayName("deleteTransaction: Should safely unbind relationship before dropping if linked to a template")
+    void deleteTransaction_LinkedToTemplate_UnbindsAndDeletes() {
+        Long txId = 42L;
+        Transaction tx = new Transaction();
+        tx.setId(txId);
+
+        RecurringTransaction template = new RecurringTransaction();
+        template.setId(100L);
+        tx.setSourceTemplate(template);
+
+        when(transactionRepository.findById(txId)).thenReturn(Optional.of(tx));
+
+        transactionService.deleteTransaction(txId);
+
+        assertThat(tx.getSourceTemplate()).isNull();
+        verify(transactionRepository).delete(tx);
+    }
+
+    @Test
+    @DisplayName("deleteTransaction: Should throw IllegalArgumentException when transaction target is absent")
+    void deleteTransaction_NotFound_ThrowsException() {
+        Long txId = 42L;
+        when(transactionRepository.findById(txId)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> transactionService.deleteTransaction(txId))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("Transaction not found with ID: " + txId);
+
+        verify(transactionRepository, never()).delete(any(Transaction.class));
+    }
+
+    // ==========================================
     // PRIVATE HELPER METHODS
     // ==========================================
 
