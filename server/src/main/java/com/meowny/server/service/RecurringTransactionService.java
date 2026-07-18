@@ -1,8 +1,8 @@
 package com.meowny.server.service;
 
-import com.meowny.commons.entity.Category;
-import com.meowny.commons.entity.RecurringTransaction;
-import com.meowny.commons.entity.User;
+import com.meowny.server.entity.Category;
+import com.meowny.server.entity.RecurringTransaction;
+import com.meowny.server.entity.User;
 import com.meowny.server.dto.recurringtransaction.CreateRecurringTransactionRequest;
 import com.meowny.server.dto.recurringtransaction.RecurringTransactionResponse;
 import com.meowny.server.dto.recurringtransaction.UpdateRecurringTransactionRequest;

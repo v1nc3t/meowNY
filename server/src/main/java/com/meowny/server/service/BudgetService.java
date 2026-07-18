@@ -1,9 +1,9 @@
 package com.meowny.server.service;
 
-import com.meowny.commons.entity.Budget;
-import com.meowny.commons.entity.Category;
-import com.meowny.commons.entity.TransactionType;
-import com.meowny.commons.entity.User;
+import com.meowny.server.entity.Budget;
+import com.meowny.server.entity.Category;
+import com.meowny.server.entity.TransactionType;
+import com.meowny.server.entity.User;
 import com.meowny.server.dto.budget.BudgetResponse;
 import com.meowny.server.dto.budget.CreateBudgetRequest;
 import com.meowny.server.dto.budget.UpdateBudgetRequest;
