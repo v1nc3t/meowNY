@@ -1,8 +1,8 @@
 package com.meowny.server.repository;
 
-import com.meowny.commons.entity.Category;
-import com.meowny.commons.entity.User;
-import com.meowny.commons.entity.TransactionType; // Adjust package path if necessary
+import com.meowny.server.entity.Category;
+import com.meowny.server.entity.User;
+import com.meowny.server.entity.TransactionType; // Adjust package path if necessary
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
