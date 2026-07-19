@@ -27,7 +27,7 @@ public class SecurityConfig {
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
                 // 1. Hook up the custom CORS configuration source
-                .cors(cors -> cors.configurationSource(corsConfigurationSource()))
+                .cors(Customizer.withDefaults())
 
                 // 2. Disable CSRF for REST APIs if using JWT tokens/stateless auth
                 .csrf(AbstractHttpConfigurer::disable)
