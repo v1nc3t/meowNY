@@ -1,47 +1,22 @@
-HELP.md
-.gradle
-.m2
-build/
-!gradle/wrapper/gradle-wrapper.jar
-!**/src/main/**/build/
-!**/src/test/**/build/
+# OS system files
+.DS_Store
+Thumbs.db
+*.log
 
-*/.gitignore
-
-.env
-
-**/target/*
-**/*.mv.db
-/coverage/*
-**/*.swp
-
-### STS ###
-.apt_generated
-**/.classpath
-.factorypath
-**/.project
-**/.settings/*
-.springBeans
-.sts4-cache
-bin/
-!**/src/main/**/bin/
-!**/src/test/**/bin/
-
-### IntelliJ IDEA ###
-**/.idea/*
+# IDE Settings (Keep workspaces local to your machine)
+.idea/
+.vscode/
 *.iws
 *.iml
 *.ipr
-out/
-!**/src/main/**/out/
-!**/src/test/**/out/
 
-### NetBeans ###
-/nbproject/private/
-/nbbuild/
-/dist/
-/nbdist/
-/.nb-gradle/
+# Global Environment Variables / Secrets
+.env
+.env.local
+.env.development.local
 
-### VS Code ###
-.vscode/
+# Docker Infrastructure Local Databases
+# (Prevents raw DB volumes from being pushed to remote repos)
+postgres_data/
+mysql_data/
+.containers/

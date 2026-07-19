@@ -1,0 +1,34 @@
+# Build Outputs
+target/
+build/
+bin/
+out/
+.gradle/
+.m2/
+
+# Diagnostic Files
+*.log
+*.gz
+heapDump.hprof
+/coverage/*
+
+# Embedded H2 Database files (if used for local testing)
+**/*.mv.db
+**/*.trace.db
+
+# Documentation / Setup info
+HELP.md
+
+# Legacy IDE artifacts (STS & NetBeans protection)
+.apt_generated
+**/.classpath
+.factorypath
+**/.project
+**/.settings/*
+.springBeans
+.sts4-cache
+/nbproject/private/
+/nbbuild/
+/dist/
+/nbdist/
+/.nb-gradle/
