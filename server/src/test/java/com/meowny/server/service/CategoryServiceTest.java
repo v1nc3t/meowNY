@@ -8,6 +8,7 @@ import com.meowny.server.entity.CategoryGroup;
 import com.meowny.server.entity.TransactionType;
 import com.meowny.server.entity.User;
 import com.meowny.server.exception.ResourceConflictException;
+import com.meowny.server.repository.BudgetRepository;
 import com.meowny.server.repository.CategoryGroupRepository;
 import com.meowny.server.repository.CategoryRepository;
 import com.meowny.server.repository.RecurringTransactionRepository;
@@ -42,6 +43,9 @@ class CategoryServiceTest {
 
     @Mock
     private RecurringTransactionRepository recurringTransactionRepository;
+
+    @Mock
+    private BudgetRepository budgetRepository;
 
     @InjectMocks
     private CategoryService categoryService;
@@ -280,6 +284,7 @@ class CategoryServiceTest {
                 .hasMessageContaining("Cannot delete category because it is linked to active recurring transactions.");
 
         verify(categoryRepository, never()).save(any());
+        verifyNoInteractions(budgetRepository);
     }
 
     @Test
@@ -295,6 +300,7 @@ class CategoryServiceTest {
 
         assertThat(category.getDeletedAt()).isNotNull();
         assertThat(category.isDeleted()).isTrue();
+        verify(budgetRepository).deleteByUserIdAndCategoryId(1L, categoryId);
         verify(categoryRepository).save(category);
         verify(categoryRepository, never()).delete(any());
     }

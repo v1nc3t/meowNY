@@ -22,15 +22,18 @@ public class CategoryService {
     private final CategoryGroupRepository categoryGroupRepository;
     private final UserRepository userRepository;
     private final RecurringTransactionRepository recurringTransactionRepository;
+    private final BudgetRepository budgetRepository;
 
     public CategoryService(CategoryRepository categoryRepository,
                            CategoryGroupRepository categoryGroupRepository,
                            UserRepository userRepository,
-                           RecurringTransactionRepository recurringTransactionRepository) {
+                           RecurringTransactionRepository recurringTransactionRepository,
+                           BudgetRepository budgetRepository) {
         this.categoryRepository = categoryRepository;
         this.categoryGroupRepository = categoryGroupRepository;
         this.userRepository = userRepository;
         this.recurringTransactionRepository = recurringTransactionRepository;
+        this.budgetRepository = budgetRepository;
     }
 
     @Transactional(readOnly = true)
@@ -87,6 +90,8 @@ public class CategoryService {
         if (hasRecurringTransactions) {
             throw new ResourceConflictException("Cannot delete category because it is linked to active recurring transactions.");
         }
+
+        budgetRepository.deleteByUserIdAndCategoryId(category.getUser().getId(), id);
 
         category.setDeletedAt(LocalDateTime.now());
         categoryRepository.save(category);
