@@ -2,6 +2,9 @@ package com.meowny.server.entity;
 
 import jakarta.persistence.*;
 import jakarta.validation.constraints.*;
+import org.hibernate.annotations.OnDelete;
+import org.hibernate.annotations.OnDeleteAction;
+
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.ArrayList;
@@ -12,7 +15,7 @@ import java.util.Objects;
 @Table(name = "recurring_transactions",
         indexes = {
                 @Index(name = "idx_recurring_tx_worker", columnList = "is_active, next_due_date"),
-                @Index(name = "idx_recurring_tx_user", columnList = "user_id")
+                @Index(name = "idx_recurring_tx_user", columnList = "user_id, is_active")
         }
 )
 public class RecurringTransaction extends BaseAuditEntity {
@@ -23,13 +26,9 @@ public class RecurringTransaction extends BaseAuditEntity {
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "user_id", nullable = false)
+    @OnDelete(action = OnDeleteAction.CASCADE)
     @NotNull(message = "Template must be assigned to a user")
     private User user;
-
-    @Enumerated(EnumType.STRING)
-    @Column(nullable = false, length = 10)
-    @NotNull(message = "Type is required")
-    private TransactionType type;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "category_id", nullable = false)
@@ -59,18 +58,15 @@ public class RecurringTransaction extends BaseAuditEntity {
     @Column(name = "is_active", nullable = false)
     private boolean isActive = true;
 
-    @OneToMany(mappedBy = "sourceTemplate", cascade = CascadeType.ALL)
+    @OneToMany(mappedBy = "sourceTemplate")
     private List<Transaction> history = new ArrayList<>();
 
     public RecurringTransaction() {}
 
-    // Getters and Setters...
     public Long getId() { return id; }
     public void setId(Long id) { this.id = id; }
     public User getUser() { return user; }
     public void setUser(User user) { this.user = user; }
-    public TransactionType getType() { return type; }
-    public void setType(TransactionType type) { this.type = type; }
     public Category getCategory() { return category; }
     public void setCategory(Category category) { this.category = category; }
     public String getName() { return name; }

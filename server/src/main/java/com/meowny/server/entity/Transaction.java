@@ -2,6 +2,9 @@ package com.meowny.server.entity;
 
 import jakarta.persistence.*;
 import jakarta.validation.constraints.*;
+import org.hibernate.annotations.OnDelete;
+import org.hibernate.annotations.OnDeleteAction;
+
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.Objects;
@@ -10,9 +13,9 @@ import java.util.Objects;
 @Table(
         name = "transactions",
         indexes = {
-                @Index(name = "idx_tx_user_type_date", columnList = "user_id, type, payment_date"),
-                @Index(name = "idx_tx_category", columnList = "category_id"),
-                @Index(name = "idx_tx_template", columnList = "recurring_transaction_id")
+                @Index(name = "idx_tx_user_date", columnList = "user_id, payment_date DESC"),
+                @Index(name = "idx_tx_user_category_date", columnList = "user_id, category_id, payment_date DESC"),
+                @Index(name = "idx_tx_recurring", columnList = "recurring_transaction_id")
         }
 )
 public class Transaction extends BaseAuditEntity {
@@ -23,13 +26,9 @@ public class Transaction extends BaseAuditEntity {
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "user_id", nullable = false)
+    @OnDelete(action = OnDeleteAction.CASCADE)
     @NotNull(message = "Transaction must be assigned to a user")
     private User user;
-
-    @Enumerated(EnumType.STRING)
-    @Column(nullable = false, length = 10)
-    @NotNull(message = "Transaction type is required")
-    private TransactionType type;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "category_id", nullable = false)
@@ -38,6 +37,7 @@ public class Transaction extends BaseAuditEntity {
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "recurring_transaction_id")
+    @OnDelete(action = OnDeleteAction.SET_NULL)
     private RecurringTransaction sourceTemplate;
 
     @Column(length = 50, nullable = false)
@@ -56,8 +56,8 @@ public class Transaction extends BaseAuditEntity {
     @PastOrPresent(message = "Payment date cannot be in the future")
     private LocalDate paymentDate;
 
-    @Column(length = 100)
-    @Size(max = 100, message = "Description must be 100 characters or fewer")
+    @Column(length = 255)
+    @Size(max = 255, message = "Description must be 255 characters or fewer")
     private String description;
 
     public Transaction() {}
@@ -67,9 +67,6 @@ public class Transaction extends BaseAuditEntity {
 
     public User getUser() { return user; }
     public void setUser(User user) { this.user = user; }
-
-    public TransactionType getType() { return type; }
-    public void setType(TransactionType type) { this.type = type; }
 
     public Category getCategory() { return category; }
     public void setCategory(Category category) { this.category = category; }
