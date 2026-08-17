@@ -13,7 +13,7 @@ public record UpdateUserRequest (
         String firstName,
 
         @NotBlank(message = "Last name is required")
-        @Size(max = 30, message = "Last name must be 30 characters or fewer")
+        @Size(max = 50, message = "Last name must be 50 characters or fewer")
         @JsonDeserialize(using = HtmlSanitizationDeserializer.class)
         String lastName,
 

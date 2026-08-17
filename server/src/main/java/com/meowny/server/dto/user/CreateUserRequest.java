@@ -13,7 +13,7 @@ public record CreateUserRequest (
         String firstName,
 
         @NotBlank(message = "Last name is required")
-        @Size(max = 30, message = "Last name must be 30 characters or fewer")
+        @Size(max = 50, message = "Last name must be 50 characters or fewer")
         @JsonDeserialize(using = HtmlSanitizationDeserializer.class)
         String lastName,
 
@@ -23,7 +23,7 @@ public record CreateUserRequest (
         String email,
 
         @NotBlank(message = "Username is required")
-        @Size(max = 30, message = "Username must be 30 characters or fewer")
+        @Size(max = 50, message = "Username must be 50 characters or fewer")
         @JsonDeserialize(using = HtmlSanitizationDeserializer.class)
         String username,
 

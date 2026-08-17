@@ -1,7 +1,6 @@
 package com.meowny.server.dto.transaction;
 
 import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
-import com.meowny.server.entity.TransactionType;
 import com.meowny.server.config.HtmlSanitizationDeserializer;
 import jakarta.validation.constraints.*;
 
@@ -18,9 +17,6 @@ public record CreateTransactionRequest (
         // Optional field: null if manually logged, populated if spawned from a template
         Long recurringTransactionId,
 
-        @NotNull(message = "Transaction type is required")
-        TransactionType type,
-
         @NotBlank(message = "Transaction name is required")
         @Size(max = 50, message = "Transaction name must be 50 characters or fewer")
         @JsonDeserialize(using = HtmlSanitizationDeserializer.class)
@@ -35,7 +31,7 @@ public record CreateTransactionRequest (
         @PastOrPresent(message = "Payment date cannot be in the future")
         LocalDate paymentDate,
 
-        @Size(max = 100, message = "Description must be 100 characters or fewer")
+        @Size(max = 255, message = "Description must be 255 characters or fewer")
         @JsonDeserialize(using = HtmlSanitizationDeserializer.class)
         String description
 ) {
