@@ -70,7 +70,6 @@ public class TransactionRepositoryTest extends AbstractIntegrationTest {
         RecurringTransaction template = new RecurringTransaction();
         template.setUser(savedUser);
         template.setCategory(savedCategory);
-        template.setType(TransactionType.EXPENSE);
         template.setName("Netflix Subscription");
         template.setAmount(new BigDecimal("15.99"));
         template.setNextDueDate(LocalDate.now().plusDays(5));
@@ -140,7 +139,6 @@ public class TransactionRepositoryTest extends AbstractIntegrationTest {
         Transaction tx = new Transaction();
         tx.setUser(user);
         tx.setCategory(category);
-        tx.setType(category.getType());
         tx.setName(name);
         tx.setAmount(new BigDecimal(amount));
         tx.setPaymentDate(paymentDate);
