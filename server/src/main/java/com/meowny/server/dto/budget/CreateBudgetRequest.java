@@ -1,13 +1,10 @@
 package com.meowny.server.dto.budget;
 
+import com.meowny.server.entity.BudgetScope;
+import jakarta.validation.constraints.*;
+
 import java.math.BigDecimal;
 import java.time.LocalDate;
-
-import com.meowny.server.entity.BudgetScope;
-
-import jakarta.validation.constraints.Digits;
-import jakarta.validation.constraints.NotNull;
-import jakarta.validation.constraints.PositiveOrZero;
 
 public record CreateBudgetRequest(
         @NotNull(message = "User ID is required")
@@ -26,9 +23,4 @@ public record CreateBudgetRequest(
         @NotNull(message = "Effective from date is required")
         LocalDate effectiveFrom
 ) {
-        public CreateBudgetRequest {
-                if (scope == BudgetScope.CATEGORY && categoryId == null) {
-                        throw new IllegalArgumentException("Category ID is required for CATEGORY scope");
-                }
-        }
 }
