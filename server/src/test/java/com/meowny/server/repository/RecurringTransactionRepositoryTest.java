@@ -132,7 +132,6 @@ public class RecurringTransactionRepositoryTest extends AbstractIntegrationTest 
         RecurringTransaction rt = new RecurringTransaction();
         rt.setUser(savedUser);
         rt.setCategory(savedCategory);
-        rt.setType(savedCategory.getType());
         rt.setName(name);
         rt.setAmount(new BigDecimal(amount));
         rt.setNextDueDate(nextDueDate);

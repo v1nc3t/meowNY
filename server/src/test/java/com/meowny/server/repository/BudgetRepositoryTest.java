@@ -1,6 +1,7 @@
 package com.meowny.server.repository;
 
 import com.meowny.server.entity.Budget;
+import com.meowny.server.entity.BudgetScope;
 import com.meowny.server.entity.Category;
 import com.meowny.server.entity.TransactionType;
 import com.meowny.server.entity.User;
@@ -14,6 +15,7 @@ import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
 import org.springframework.boot.test.autoconfigure.orm.jpa.TestEntityManager;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
 
@@ -55,16 +57,16 @@ class BudgetRepositoryTest extends AbstractIntegrationTest {
     }
 
     @Test
-    @DisplayName("Should find budget by user ID, category ID, month, and year")
-    void shouldFindByUserIdAndCategoryIdAndMonthAndYear() {
-        Budget budget = createBudget(savedUser, savedCategory, 5, 2026, "150.00");
+    @DisplayName("Should find budget by user ID, category ID, and effective from date")
+    void shouldFindByUserIdAndCategoryIdAndEffectiveFrom() {
+        LocalDate effectiveFrom = LocalDate.of(2026, 5, 1);
+        Budget budget = createCategoryBudget(savedUser, savedCategory, effectiveFrom, "150.00");
         entityManager.persistAndFlush(budget);
 
-        Optional<Budget> found = budgetRepository.findByUserIdAndCategoryIdAndMonthAndYear(
+        Optional<Budget> found = budgetRepository.findByUserIdAndCategoryIdAndEffectiveFrom(
                 savedUser.getId(),
                 savedCategory.getId(),
-                5,
-                2026
+                effectiveFrom
         );
 
         assertThat(found).isPresent();
@@ -74,35 +76,37 @@ class BudgetRepositoryTest extends AbstractIntegrationTest {
     @Test
     @DisplayName("Should return empty optional when no budget matches search criteria")
     void shouldReturnEmptyWhenBudgetNotFound() {
-        Optional<Budget> found = budgetRepository.findByUserIdAndCategoryIdAndMonthAndYear(
+        Optional<Budget> found = budgetRepository.findByUserIdAndCategoryIdAndEffectiveFrom(
                 savedUser.getId(),
                 savedCategory.getId(),
-                12,
-                2026
+                LocalDate.of(2026, 12, 1)
         );
 
         assertThat(found).isEmpty();
     }
 
     @Test
-    @DisplayName("Should find all budgets for a user in a specific year and month")
-    void shouldFindByUserIdAndYearAndMonth() {
+    @DisplayName("Should find all budgets for a user on a specific effective from date")
+    void shouldFindByUserIdAndEffectiveFrom() {
         Category otherCategory = new Category();
         otherCategory.setName("Groceries");
         otherCategory.setType(TransactionType.EXPENSE);
         otherCategory.setUser(savedUser);
         Category savedOtherCategory = entityManager.persistAndFlush(otherCategory);
 
-        Budget budget1 = createBudget(savedUser, savedCategory, 7, 2026, "200.00");
-        Budget budget2 = createBudget(savedUser, savedOtherCategory, 7, 2026, "350.00");
-        Budget budgetOtherMonth = createBudget(savedUser, savedCategory, 8, 2026, "100.00");
+        LocalDate july = LocalDate.of(2026, 7, 1);
+        LocalDate august = LocalDate.of(2026, 8, 1);
+
+        Budget budget1 = createCategoryBudget(savedUser, savedCategory, july, "200.00");
+        Budget budget2 = createCategoryBudget(savedUser, savedOtherCategory, july, "350.00");
+        Budget budgetOtherMonth = createCategoryBudget(savedUser, savedCategory, august, "100.00");
 
         entityManager.persist(budget1);
         entityManager.persist(budget2);
         entityManager.persist(budgetOtherMonth);
         entityManager.flush();
 
-        List<Budget> budgets = budgetRepository.findByUserIdAndYearAndMonth(savedUser.getId(), 2026, 7);
+        List<Budget> budgets = budgetRepository.findByUserIdAndEffectiveFrom(savedUser.getId(), july);
 
         assertThat(budgets).hasSize(2);
 
@@ -112,20 +116,35 @@ class BudgetRepositoryTest extends AbstractIntegrationTest {
     }
 
     @Test
+    @DisplayName("Should find a global budget by user ID and effective from date")
+    void shouldFindGlobalByUserIdAndEffectiveFrom() {
+        LocalDate effectiveFrom = LocalDate.of(2026, 6, 1);
+        Budget globalBudget = createGlobalBudget(savedUser, effectiveFrom, "2000.00");
+        entityManager.persistAndFlush(globalBudget);
+
+        Optional<Budget> found = budgetRepository.findGlobalByUserIdAndEffectiveFrom(savedUser.getId(), effectiveFrom);
+
+        assertThat(found).isPresent();
+        assertThat(found.get().getScope()).isEqualTo(BudgetScope.GLOBAL);
+        assertThat(found.get().getCategory()).isNull();
+        assertThat(found.get().getLimitAmount()).isEqualByComparingTo("2000.00");
+    }
+
+    @Test
     @DisplayName("Should delete budget using user ID and category ID")
     void shouldDeleteByUserIdAndCategoryId() {
-        Budget budget = createBudget(savedUser, savedCategory, 6, 2026, "500.00");
+        LocalDate effectiveFrom = LocalDate.of(2026, 6, 1);
+        Budget budget = createCategoryBudget(savedUser, savedCategory, effectiveFrom, "500.00");
         entityManager.persistAndFlush(budget);
 
         budgetRepository.deleteByUserIdAndCategoryId(savedUser.getId(), savedCategory.getId());
         entityManager.flush();
         entityManager.clear();
 
-        Optional<Budget> remaining = budgetRepository.findByUserIdAndCategoryIdAndMonthAndYear(
+        Optional<Budget> remaining = budgetRepository.findByUserIdAndCategoryIdAndEffectiveFrom(
                 savedUser.getId(),
                 savedCategory.getId(),
-                6,
-                2026
+                effectiveFrom
         );
         assertThat(remaining).isEmpty();
     }
@@ -133,7 +152,7 @@ class BudgetRepositoryTest extends AbstractIntegrationTest {
     @Test
     @DisplayName("Should return true when a budget with the category ID exists")
     void shouldReturnTrueWhenCategoryExistsInBudgets() {
-        Budget budget = createBudget(savedUser, savedCategory, 1, 2026, "50.00");
+        Budget budget = createCategoryBudget(savedUser, savedCategory, LocalDate.of(2026, 1, 1), "50.00");
         entityManager.persistAndFlush(budget);
 
         boolean exists = budgetRepository.existsByCategoryId(savedCategory.getId());
@@ -149,12 +168,22 @@ class BudgetRepositoryTest extends AbstractIntegrationTest {
         assertThat(exists).isFalse();
     }
 
-    private Budget createBudget(User user, Category category, Integer month, Integer year, String limitAmount) {
+    private Budget createCategoryBudget(User user, Category category, LocalDate effectiveFrom, String limitAmount) {
         Budget budget = new Budget();
         budget.setUser(user);
+        budget.setScope(BudgetScope.CATEGORY);
         budget.setCategory(category);
-        budget.setMonth(month);
-        budget.setYear(year);
+        budget.setEffectiveFrom(effectiveFrom);
+        budget.setLimitAmount(new BigDecimal(limitAmount));
+        return budget;
+    }
+
+    private Budget createGlobalBudget(User user, LocalDate effectiveFrom, String limitAmount) {
+        Budget budget = new Budget();
+        budget.setUser(user);
+        budget.setScope(BudgetScope.GLOBAL);
+        budget.setCategory(null);
+        budget.setEffectiveFrom(effectiveFrom);
         budget.setLimitAmount(new BigDecimal(limitAmount));
         return budget;
     }

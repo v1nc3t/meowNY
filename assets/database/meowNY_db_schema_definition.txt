@@ -16,47 +16,64 @@ Enum frequency_type {
   YEARLY
 }
 
+Enum budget_scope {
+  GLOBAL
+  CATEGORY
+}
+
 // --- Tables ---
 
 Table users {
   id bigint [pk, increment]
   firstname varchar(50) [not null]
-  lastname varchar(30) [not null]
+  lastname varchar(50) [not null]
   email varchar(254) [unique, not null]
-  username varchar(30) [not null]
-  password varchar(100) [not null]
-  created_at timestamp [not null]
-  updated_at timestamp [not null]
+  username varchar(50) [unique, not null]
+  password varchar(255) [not null] // Expanded for standard bcrypt/Argon2id hashes
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`]
+}
+
+Table category_groups {
+  id bigint [pk, increment]
+  user_id bigint [not null]
+  name varchar(50) [not null]
+  created_at timestamptz [not null, default: `now()`]
+
+  Indexes {
+    (user_id, name) [unique, name: "unique_user_group_name"]
+  }
 }
 
 Table categories {
   id bigint [pk, increment]
   user_id bigint [not null]
+  category_group_id bigint [null]
   type transaction_type [not null]
   name varchar(50) [not null]
-  created_at timestamp [not null]
-  updated_at timestamp [not null]
+  deleted_at timestamptz [null] // Soft delete to prevent historical reporting loss
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`]
 
   Indexes {
-    user_id [name: "idx_category_user"]
-    (user_id, type, name) [unique, name: "unique_user_category_type_name"]
+    (user_id, name) [unique, name: "unique_user_category_name"]
+    category_group_id [name: "idx_category_group"]
   }
 }
 
 Table budgets {
   id bigint [pk, increment]
   user_id bigint [not null]
-  category_id bigint [not null]
+  scope budget_scope [not null]
+  category_id bigint [null] // NULL for GLOBAL, populated for CATEGORY
   amount_limit numeric(12,2) [not null]
-  month integer [not null]
-  year integer [not null]
-  created_at timestamp [not null]
-  updated_at timestamp [not null]
+  effective_from date [not null] // Start date ('YYYY-MM-01') of this budget limit rule
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`]
 
   Indexes {
-    (user_id, year, month) [name: "idx_budget_user_period"]
-    (user_id, category_id) [name: "idx_budget_user_category"]
-    (user_id, category_id, month, year) [unique, name: "unique_user_category_period"]
+    (user_id, scope, effective_from) [name: "idx_budget_lookup"]
+    (user_id, category_id, effective_from) [unique, name: "unique_user_category_effective_date"]
   }
 }
 
@@ -64,18 +81,17 @@ Table recurring_transactions {
   id bigint [pk, increment]
   user_id bigint [not null]
   category_id bigint [not null]
-  type transaction_type [not null]
   name varchar(50) [not null]
   amount numeric(12,2) [not null]
   next_due_date date [not null]
   frequency frequency_type [not null]
   is_active boolean [not null, default: true]
-  created_at timestamp [not null]
-  updated_at timestamp [not null]
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`]
 
   Indexes {
     (is_active, next_due_date) [name: "idx_recurring_tx_worker"]
-    user_id [name: "idx_recurring_tx_user"]
+    (user_id, is_active) [name: "idx_recurring_tx_user"]
   }
 }
 
@@ -84,24 +100,24 @@ Table transactions {
   user_id bigint [not null]
   category_id bigint [not null]
   recurring_transaction_id bigint [null]
-  type transaction_type [not null]
   name varchar(50) [not null]
   amount numeric(12,2) [not null]
   payment_date date [not null]
-  description varchar(100) [null]
-  created_at timestamp [not null]
-  updated_at timestamp [not null]
+  description varchar(255) [null]
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`]
 
   Indexes {
-    (user_id, type, payment_date) [name: "idx_tx_user_type_date"]
-    category_id [name: "idx_tx_category"]
-    recurring_transaction_id [name: "idx_tx_template"]
+    (user_id, payment_date desc) [name: "idx_tx_user_date"]
+    (user_id, category_id, payment_date desc) [name: "idx_tx_user_category_date"]
+    recurring_transaction_id [name: "idx_tx_recurring"]
   }
 }
 
 // --- Relationships & Foreign Keys ---
 
 Ref: categories.user_id > users.id [delete: cascade]
+Ref: categories.category_group_id > category_groups.id [delete: set null]
 Ref: budgets.user_id > users.id [delete: cascade]
 Ref: budgets.category_id > categories.id [delete: cascade]
 Ref: recurring_transactions.user_id > users.id [delete: cascade]

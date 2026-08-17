@@ -20,7 +20,6 @@ class TransactionTest {
 
         tx.setId(100L);
         tx.setUser(user);
-        tx.setType(TransactionType.EXPENSE);
         tx.setCategory(category);
         tx.setSourceTemplate(template);
         tx.setName("Lunch");
@@ -30,7 +29,6 @@ class TransactionTest {
 
         assertThat(tx.getId()).isEqualTo(100L);
         assertThat(tx.getUser()).isEqualTo(user);
-        assertThat(tx.getType()).isEqualTo(TransactionType.EXPENSE);
         assertThat(tx.getCategory()).isEqualTo(category);
         assertThat(tx.getSourceTemplate()).isEqualTo(template);
         assertThat(tx.getName()).isEqualTo("Lunch");

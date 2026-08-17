@@ -1,12 +1,13 @@
 package com.meowny.server.service;
 
-import com.meowny.server.entity.Budget;
-import com.meowny.server.entity.Category;
-import com.meowny.server.entity.TransactionType;
-import com.meowny.server.entity.User;
 import com.meowny.server.dto.budget.BudgetResponse;
 import com.meowny.server.dto.budget.CreateBudgetRequest;
 import com.meowny.server.dto.budget.UpdateBudgetRequest;
+import com.meowny.server.entity.Budget;
+import com.meowny.server.entity.BudgetScope;
+import com.meowny.server.entity.Category;
+import com.meowny.server.entity.TransactionType;
+import com.meowny.server.entity.User;
 import com.meowny.server.exception.ResourceConflictException;
 import com.meowny.server.repository.BudgetRepository;
 import com.meowny.server.repository.CategoryRepository;
@@ -14,6 +15,7 @@ import com.meowny.server.repository.UserRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDate;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -42,7 +44,8 @@ public class BudgetService {
 
     @Transactional(readOnly = true)
     public List<BudgetResponse> getBudgetsByPeriod(Long userId, Integer year, Integer month) {
-        return budgetRepository.findByUserIdAndYearAndMonth(userId, year, month)
+        LocalDate effectiveFrom = LocalDate.of(year, month, 1);
+        return budgetRepository.findByUserIdAndEffectiveFrom(userId, effectiveFrom)
                 .stream()
                 .map(this::mapToResponse)
                 .collect(Collectors.toList());
@@ -53,32 +56,33 @@ public class BudgetService {
         User user = userRepository.findById(request.userId())
                 .orElseThrow(() -> new IllegalArgumentException("User not found with ID: " + request.userId()));
 
-        Category category = categoryRepository.findById(request.categoryId())
-                .orElseThrow(() -> new IllegalArgumentException("Category not found with ID: " + request.categoryId()));
+        LocalDate effectiveFrom = request.effectiveFrom().withDayOfMonth(1);
+        Category category = resolveCategory(request);
 
-        if (!category.getUser().getId().equals(request.userId())) {
-            throw new IllegalArgumentException("Category must belong to the specified user.");
+        if (request.scope() == BudgetScope.GLOBAL) {
+            budgetRepository.findGlobalByUserIdAndEffectiveFrom(request.userId(), effectiveFrom)
+                    .ifPresent(existing -> {
+                        throw new ResourceConflictException(
+                                "A global budget limit is already defined for " + effectiveFrom + "."
+                        );
+                    });
+        } else {
+            budgetRepository.findByUserIdAndCategoryIdAndEffectiveFrom(
+                            request.userId(), category.getId(), effectiveFrom)
+                    .ifPresent(existing -> {
+                        throw new ResourceConflictException(
+                                "A budget limit is already defined for category " + category.getName() +
+                                        " on " + effectiveFrom + "."
+                        );
+                    });
         }
-
-        if (category.getType() != TransactionType.EXPENSE) {
-            throw new IllegalArgumentException("Budgets can only be created for EXPENSE categories.");
-        }
-
-        budgetRepository.findByUserIdAndCategoryIdAndMonthAndYear(
-                        request.userId(), request.categoryId(), request.month(), request.year())
-                .ifPresent(existing -> {
-                    throw new ResourceConflictException(
-                            "A budget limit is already defined for category " + category.getName() +
-                                    " in " + request.month() + "/" + request.year() + "."
-                    );
-                });
 
         Budget budget = new Budget();
         budget.setUser(user);
+        budget.setScope(request.scope());
         budget.setCategory(category);
         budget.setLimitAmount(request.limitAmount());
-        budget.setMonth(request.month());
-        budget.setYear(request.year());
+        budget.setEffectiveFrom(effectiveFrom);
 
         Budget savedBudget = budgetRepository.save(budget);
         return mapToResponse(savedBudget);
@@ -102,15 +106,52 @@ public class BudgetService {
         budgetRepository.deleteById(id);
     }
 
+    private Category resolveCategory(CreateBudgetRequest request) {
+        if (request.scope() == BudgetScope.GLOBAL) {
+            if (request.categoryId() != null) {
+                throw new IllegalArgumentException("Global budgets cannot be assigned to a category.");
+            }
+            return null;
+        }
+
+        if (request.categoryId() == null) {
+            throw new IllegalArgumentException("Category ID is required for CATEGORY scope budgets.");
+        }
+
+        Category category = categoryRepository.findById(request.categoryId())
+                .orElseThrow(() -> new IllegalArgumentException("Category not found with ID: " + request.categoryId()));
+
+        if (category.isDeleted()) {
+            throw new IllegalArgumentException("Category not found with ID: " + request.categoryId());
+        }
+
+        if (!category.getUser().getId().equals(request.userId())) {
+            throw new IllegalArgumentException("Category must belong to the specified user.");
+        }
+
+        if (category.getType() != TransactionType.EXPENSE) {
+            throw new IllegalArgumentException("Budgets can only be created for EXPENSE categories.");
+        }
+
+        return category;
+    }
+
     private BudgetResponse mapToResponse(Budget budget) {
+        Long categoryId = null;
+        String categoryName = null;
+        if (budget.getCategory() != null) {
+            categoryId = budget.getCategory().getId();
+            categoryName = budget.getCategory().getName();
+        }
+
         return new BudgetResponse(
                 budget.getId(),
                 budget.getUser().getId(),
-                budget.getCategory().getId(),
-                budget.getCategory().getName(),
+                budget.getScope(),
+                categoryId,
+                categoryName,
                 budget.getLimitAmount(),
-                budget.getMonth(),
-                budget.getYear(),
+                budget.getEffectiveFrom(),
                 budget.getCreatedAt(),
                 budget.getUpdatedAt()
         );

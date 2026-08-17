@@ -2,6 +2,9 @@ package com.meowny.server.entity;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+
+import java.time.LocalDateTime;
+
 import static org.assertj.core.api.Assertions.assertThat;
 
 class CategoryTest {
@@ -17,10 +20,19 @@ class CategoryTest {
         category.setType(TransactionType.EXPENSE);
         category.setName("Entertainment");
 
+        CategoryGroup group = new CategoryGroup();
+        category.setCategoryGroup(group);
+
+        LocalDateTime deletedAt = LocalDateTime.now();
+        category.setDeletedAt(deletedAt);
+
         assertThat(category.getId()).isEqualTo(10L);
         assertThat(category.getUser()).isEqualTo(user);
         assertThat(category.getType()).isEqualTo(TransactionType.EXPENSE);
         assertThat(category.getName()).isEqualTo("Entertainment");
+        assertThat(category.getCategoryGroup()).isEqualTo(group);
+        assertThat(category.getDeletedAt()).isEqualTo(deletedAt);
+        assertThat(category.isDeleted()).isTrue();
     }
 
     @Test

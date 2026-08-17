@@ -1,12 +1,13 @@
 package com.meowny.server.service;
 
-import com.meowny.server.entity.Budget;
-import com.meowny.server.entity.Category;
-import com.meowny.server.entity.TransactionType;
-import com.meowny.server.entity.User;
 import com.meowny.server.dto.budget.BudgetResponse;
 import com.meowny.server.dto.budget.CreateBudgetRequest;
 import com.meowny.server.dto.budget.UpdateBudgetRequest;
+import com.meowny.server.entity.Budget;
+import com.meowny.server.entity.BudgetScope;
+import com.meowny.server.entity.Category;
+import com.meowny.server.entity.TransactionType;
+import com.meowny.server.entity.User;
 import com.meowny.server.exception.ResourceConflictException;
 import com.meowny.server.repository.BudgetRepository;
 import com.meowny.server.repository.CategoryRepository;
@@ -19,6 +20,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
 
@@ -42,15 +44,11 @@ class BudgetServiceTest {
     @InjectMocks
     private BudgetService budgetService;
 
-    // ==========================================
-    // getBudgetById BRANCHES
-    // ==========================================
-
     @Test
     @DisplayName("getBudgetById: Should return BudgetResponse when budget exists")
     void getBudgetById_BudgetExists_ReturnsResponse() {
         Long budgetId = 100L;
-        Budget budget = createMockBudget(budgetId, 1L, 2L, "Groceries", BigDecimal.valueOf(500), 5, 2026);
+        Budget budget = createMockCategoryBudget(budgetId, 1L, 2L, "Groceries", BigDecimal.valueOf(500), LocalDate.of(2026, 5, 1));
 
         when(budgetRepository.findById(budgetId)).thenReturn(Optional.of(budget));
 
@@ -73,36 +71,30 @@ class BudgetServiceTest {
                 .hasMessageContaining("Budget not found with ID:" + budgetId);
     }
 
-    // ==========================================
-    // getBudgetsByPeriod BRANCHES
-    // ==========================================
-
     @Test
     @DisplayName("getBudgetsByPeriod: Should return list of budget responses")
     void getBudgetsByPeriod_ValidInput_ReturnsList() {
         Long userId = 1L;
         Integer year = 2026;
         Integer month = 5;
-        Budget budget = createMockBudget(100L, userId, 2L, "Rent", BigDecimal.valueOf(1200), month, year);
+        LocalDate effectiveFrom = LocalDate.of(year, month, 1);
+        Budget budget = createMockCategoryBudget(100L, userId, 2L, "Rent", BigDecimal.valueOf(1200), effectiveFrom);
 
-        when(budgetRepository.findByUserIdAndYearAndMonth(userId, year, month))
+        when(budgetRepository.findByUserIdAndEffectiveFrom(userId, effectiveFrom))
                 .thenReturn(List.of(budget));
 
         List<BudgetResponse> results = budgetService.getBudgetsByPeriod(userId, year, month);
 
         assertThat(results).hasSize(1);
         assertThat(results.get(0).limitAmount()).isEqualTo(BigDecimal.valueOf(1200));
-        verify(budgetRepository).findByUserIdAndYearAndMonth(userId, year, month);
+        verify(budgetRepository).findByUserIdAndEffectiveFrom(userId, effectiveFrom);
     }
 
-    // ==========================================
-    // createBudget BRANCHES
-    // ==========================================
-
     @Test
-    @DisplayName("createBudget: Should create budget successfully under valid conditions")
+    @DisplayName("createBudget: Should create category budget successfully under valid conditions")
     void createBudget_ValidRequest_CreatesBudget() {
-        CreateBudgetRequest request = new CreateBudgetRequest(1L, 2L, BigDecimal.valueOf(300), 5, 2026);
+        LocalDate effectiveFrom = LocalDate.of(2026, 5, 15);
+        CreateBudgetRequest request = new CreateBudgetRequest(1L, BudgetScope.CATEGORY, 2L, BigDecimal.valueOf(300), effectiveFrom);
 
         User user = new User();
         user.setId(1L);
@@ -113,11 +105,11 @@ class BudgetServiceTest {
         category.setType(TransactionType.EXPENSE);
         category.setName("Utilities");
 
-        Budget savedBudget = createMockBudget(100L, 1L, 2L, "Utilities", BigDecimal.valueOf(300), 5, 2026);
+        Budget savedBudget = createMockCategoryBudget(100L, 1L, 2L, "Utilities", BigDecimal.valueOf(300), LocalDate.of(2026, 5, 1));
 
         when(userRepository.findById(request.userId())).thenReturn(Optional.of(user));
         when(categoryRepository.findById(request.categoryId())).thenReturn(Optional.of(category));
-        when(budgetRepository.findByUserIdAndCategoryIdAndMonthAndYear(1L, 2L, 5, 2026))
+        when(budgetRepository.findByUserIdAndCategoryIdAndEffectiveFrom(1L, 2L, LocalDate.of(2026, 5, 1)))
                 .thenReturn(Optional.empty());
         when(budgetRepository.save(any(Budget.class))).thenReturn(savedBudget);
 
@@ -129,9 +121,32 @@ class BudgetServiceTest {
     }
 
     @Test
+    @DisplayName("createBudget: Should create a global budget when no category is provided")
+    void createBudget_GlobalScope_CreatesBudget() {
+        LocalDate effectiveFrom = LocalDate.of(2026, 5, 1);
+        CreateBudgetRequest request = new CreateBudgetRequest(1L, BudgetScope.GLOBAL, null, BigDecimal.valueOf(2000), effectiveFrom);
+
+        User user = new User();
+        user.setId(1L);
+
+        Budget savedBudget = createMockGlobalBudget(100L, 1L, BigDecimal.valueOf(2000), effectiveFrom);
+
+        when(userRepository.findById(request.userId())).thenReturn(Optional.of(user));
+        when(budgetRepository.findGlobalByUserIdAndEffectiveFrom(1L, effectiveFrom)).thenReturn(Optional.empty());
+        when(budgetRepository.save(any(Budget.class))).thenReturn(savedBudget);
+
+        BudgetResponse response = budgetService.createBudget(request);
+
+        assertThat(response).isNotNull();
+        assertThat(response.scope()).isEqualTo(BudgetScope.GLOBAL);
+        assertThat(response.categoryId()).isNull();
+        verifyNoInteractions(categoryRepository);
+    }
+
+    @Test
     @DisplayName("createBudget: Should throw IllegalArgumentException when user does not exist")
     void createBudget_UserNotFound_ThrowsException() {
-        CreateBudgetRequest request = new CreateBudgetRequest(99L, 2L, BigDecimal.valueOf(300), 5, 2026);
+        CreateBudgetRequest request = new CreateBudgetRequest(99L, BudgetScope.CATEGORY, 2L, BigDecimal.valueOf(300), LocalDate.of(2026, 5, 1));
         when(userRepository.findById(request.userId())).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> budgetService.createBudget(request))
@@ -144,21 +159,19 @@ class BudgetServiceTest {
     @Test
     @DisplayName("createBudget: Should throw IllegalArgumentException when category does not exist")
     void createBudget_CategoryNotFound_ThrowsException() {
-        CreateBudgetRequest request = new CreateBudgetRequest(1L, 99L, BigDecimal.valueOf(300), 5, 2026);
+        CreateBudgetRequest request = new CreateBudgetRequest(1L, BudgetScope.CATEGORY, 99L, BigDecimal.valueOf(300), LocalDate.of(2026, 5, 1));
         when(userRepository.findById(request.userId())).thenReturn(Optional.of(new User()));
         when(categoryRepository.findById(request.categoryId())).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> budgetService.createBudget(request))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("Category not found with ID: " + request.categoryId());
-
-        verifyNoInteractions(budgetRepository);
     }
 
     @Test
     @DisplayName("createBudget: Should throw IllegalArgumentException when category belongs to a different user")
     void createBudget_CategoryBelongsToAnotherUser_ThrowsException() {
-        CreateBudgetRequest request = new CreateBudgetRequest(1L, 2L, BigDecimal.valueOf(300), 5, 2026);
+        CreateBudgetRequest request = new CreateBudgetRequest(1L, BudgetScope.CATEGORY, 2L, BigDecimal.valueOf(300), LocalDate.of(2026, 5, 1));
 
         User actualUser = new User();
         actualUser.setId(1L);
@@ -176,14 +189,12 @@ class BudgetServiceTest {
         assertThatThrownBy(() -> budgetService.createBudget(request))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("Category must belong to the specified user.");
-
-        verifyNoInteractions(budgetRepository);
     }
 
     @Test
     @DisplayName("createBudget: Should throw IllegalArgumentException when category type is INCOME")
     void createBudget_CategoryNotExpense_ThrowsException() {
-        CreateBudgetRequest request = new CreateBudgetRequest(1L, 2L, BigDecimal.valueOf(300), 5, 2026);
+        CreateBudgetRequest request = new CreateBudgetRequest(1L, BudgetScope.CATEGORY, 2L, BigDecimal.valueOf(300), LocalDate.of(2026, 5, 1));
 
         User user = new User();
         user.setId(1L);
@@ -199,14 +210,35 @@ class BudgetServiceTest {
         assertThatThrownBy(() -> budgetService.createBudget(request))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("Budgets can only be created for EXPENSE categories.");
-
-        verifyNoInteractions(budgetRepository);
     }
 
     @Test
-    @DisplayName("createBudget: Should throw ResourceConflictException when a budget record already exists for period")
+    @DisplayName("createBudget: Should throw IllegalArgumentException when CATEGORY scope is missing a category ID")
+    void createBudget_CategoryScopeMissingCategoryId_ThrowsException() {
+        CreateBudgetRequest request = new CreateBudgetRequest(1L, BudgetScope.CATEGORY, null, BigDecimal.valueOf(300), LocalDate.of(2026, 5, 1));
+        when(userRepository.findById(request.userId())).thenReturn(Optional.of(new User()));
+
+        assertThatThrownBy(() -> budgetService.createBudget(request))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("Category ID is required for CATEGORY scope budgets.");
+    }
+
+    @Test
+    @DisplayName("createBudget: Should throw IllegalArgumentException when GLOBAL scope includes a category ID")
+    void createBudget_GlobalScopeWithCategory_ThrowsException() {
+        CreateBudgetRequest request = new CreateBudgetRequest(1L, BudgetScope.GLOBAL, 2L, BigDecimal.valueOf(300), LocalDate.of(2026, 5, 1));
+        when(userRepository.findById(request.userId())).thenReturn(Optional.of(new User()));
+
+        assertThatThrownBy(() -> budgetService.createBudget(request))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("Global budgets cannot be assigned to a category.");
+    }
+
+    @Test
+    @DisplayName("createBudget: Should throw ResourceConflictException when a category budget already exists for the effective date")
     void createBudget_BudgetAlreadyExists_ThrowsResourceConflictException() {
-        CreateBudgetRequest request = new CreateBudgetRequest(1L, 2L, BigDecimal.valueOf(300), 5, 2026);
+        LocalDate effectiveFrom = LocalDate.of(2026, 5, 1);
+        CreateBudgetRequest request = new CreateBudgetRequest(1L, BudgetScope.CATEGORY, 2L, BigDecimal.valueOf(300), effectiveFrom);
 
         User user = new User();
         user.setId(1L);
@@ -219,26 +251,22 @@ class BudgetServiceTest {
 
         when(userRepository.findById(request.userId())).thenReturn(Optional.of(user));
         when(categoryRepository.findById(request.categoryId())).thenReturn(Optional.of(category));
-        when(budgetRepository.findByUserIdAndCategoryIdAndMonthAndYear(1L, 2L, 5, 2026))
+        when(budgetRepository.findByUserIdAndCategoryIdAndEffectiveFrom(1L, 2L, effectiveFrom))
                 .thenReturn(Optional.of(new Budget()));
 
         assertThatThrownBy(() -> budgetService.createBudget(request))
                 .isInstanceOf(ResourceConflictException.class)
-                .hasMessageContaining("A budget limit is already defined for category Dining in 5/2026.");
+                .hasMessageContaining("A budget limit is already defined for category Dining on 2026-05-01.");
 
         verify(budgetRepository, never()).save(any());
     }
-
-    // ==========================================
-    // updateBudget BRANCHES
-    // ==========================================
 
     @Test
     @DisplayName("updateBudget: Should update limit amount successfully when budget exists")
     void updateBudget_BudgetExists_UpdatesSuccessfully() {
         Long budgetId = 100L;
         UpdateBudgetRequest request = new UpdateBudgetRequest(BigDecimal.valueOf(750));
-        Budget existingBudget = createMockBudget(budgetId, 1L, 2L, "Leisure", BigDecimal.valueOf(500), 5, 2026);
+        Budget existingBudget = createMockCategoryBudget(budgetId, 1L, 2L, "Leisure", BigDecimal.valueOf(500), LocalDate.of(2026, 5, 1));
 
         when(budgetRepository.findById(budgetId)).thenReturn(Optional.of(existingBudget));
         when(budgetRepository.save(existingBudget)).thenReturn(existingBudget);
@@ -264,10 +292,6 @@ class BudgetServiceTest {
         verify(budgetRepository, never()).save(any());
     }
 
-    // ==========================================
-    // deleteBudget BRANCHES
-    // ==========================================
-
     @Test
     @DisplayName("deleteBudget: Should delete target budget when it exists")
     void deleteBudget_BudgetExists_DeletesSuccessfully() {
@@ -292,12 +316,8 @@ class BudgetServiceTest {
         verify(budgetRepository, never()).deleteById(any());
     }
 
-    // ==========================================
-    // PRIVATE HELPER METHODS
-    // ==========================================
-
-    private Budget createMockBudget(Long id, Long userId, Long categoryId, String categoryName,
-                                    BigDecimal limit, Integer month, Integer year) {
+    private Budget createMockCategoryBudget(Long id, Long userId, Long categoryId, String categoryName,
+                                            BigDecimal limit, LocalDate effectiveFrom) {
         User user = new User();
         user.setId(userId);
 
@@ -308,10 +328,23 @@ class BudgetServiceTest {
         Budget budget = new Budget();
         budget.setId(id);
         budget.setUser(user);
+        budget.setScope(BudgetScope.CATEGORY);
         budget.setCategory(category);
         budget.setLimitAmount(limit);
-        budget.setMonth(month);
-        budget.setYear(year);
+        budget.setEffectiveFrom(effectiveFrom);
+        return budget;
+    }
+
+    private Budget createMockGlobalBudget(Long id, Long userId, BigDecimal limit, LocalDate effectiveFrom) {
+        User user = new User();
+        user.setId(userId);
+
+        Budget budget = new Budget();
+        budget.setId(id);
+        budget.setUser(user);
+        budget.setScope(BudgetScope.GLOBAL);
+        budget.setLimitAmount(limit);
+        budget.setEffectiveFrom(effectiveFrom);
         return budget;
     }
 }

@@ -22,9 +22,9 @@ public class User extends BaseAuditEntity {
     @Size(max = 50, message = "First name must be 50 characters or fewer")
     private String firstName;
 
-    @Column(name = "lastname", length = 30, nullable = false)
+    @Column(name = "lastname", length = 50, nullable = false)
     @NotBlank(message = "Last name is required")
-    @Size(max = 30, message = "Last name must be 30 characters or fewer")
+    @Size(max = 50, message = "Last name must be 50 characters or fewer")
     private String lastName;
 
     @Email(message = "Must be a valid email format")
@@ -33,14 +33,14 @@ public class User extends BaseAuditEntity {
     @Size(max = 254, message = "Email must be 254 characters or fewer")
     private String email;
 
-    @Column(length = 30, nullable = false)
+    @Column(length = 50, nullable = false, unique = true)
     @NotBlank(message = "Username is required")
-    @Size(max = 30, message = "Username must be 30 characters or fewer")
+    @Size(max = 50, message = "Username must be 50 characters or fewer")
     private String username;
 
-    @Column(length = 100, nullable = false)
+    @Column(length = 255, nullable = false)
     @NotBlank(message = "Password is required")
-    @Size(max = 100, message = "Password must be 100 characters or fewer")
+    @Size(max = 255, message = "Password must be 255 characters or fewer")
     private String password;
 
     @OneToMany(mappedBy = "user", cascade = CascadeType.ALL, orphanRemoval = true)

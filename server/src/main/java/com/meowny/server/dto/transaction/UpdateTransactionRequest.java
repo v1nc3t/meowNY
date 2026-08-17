@@ -25,7 +25,7 @@ public record UpdateTransactionRequest(
         @PastOrPresent(message = "Payment date cannot be in the future")
         LocalDate paymentDate,
 
-        @Size(max = 100, message = "Description must be 100 characters or fewer")
+        @Size(max = 255, message = "Description must be 255 characters or fewer")
         @JsonDeserialize(using = HtmlSanitizationDeserializer.class)
         String description
 ) {

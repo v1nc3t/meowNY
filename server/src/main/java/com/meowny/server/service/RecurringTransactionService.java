@@ -1,11 +1,11 @@
 package com.meowny.server.service;
 
-import com.meowny.server.entity.Category;
-import com.meowny.server.entity.RecurringTransaction;
-import com.meowny.server.entity.User;
 import com.meowny.server.dto.recurringtransaction.CreateRecurringTransactionRequest;
 import com.meowny.server.dto.recurringtransaction.RecurringTransactionResponse;
 import com.meowny.server.dto.recurringtransaction.UpdateRecurringTransactionRequest;
+import com.meowny.server.entity.Category;
+import com.meowny.server.entity.RecurringTransaction;
+import com.meowny.server.entity.User;
 import com.meowny.server.exception.ResourceConflictException;
 import com.meowny.server.repository.CategoryRepository;
 import com.meowny.server.repository.RecurringTransactionRepository;
@@ -55,24 +55,11 @@ public class RecurringTransactionService {
         User user = userRepository.findById(request.userId())
                 .orElseThrow(() -> new IllegalArgumentException("User not found with ID: " + request.userId()));
 
-        Category category = categoryRepository.findById(request.categoryId())
-                .orElseThrow(() -> new IllegalArgumentException("Category not found with ID: " + request.categoryId()));
-
-        if (!category.getUser().getId().equals(request.userId())) {
-            throw new IllegalArgumentException("Category must belong to the specified user.");
-        }
-
-        if (category.getType() != request.type()) {
-            throw new IllegalArgumentException(String.format(
-                    "Template transaction type (%s) must match Category type (%s).",
-                    request.type(), category.getType()
-            ));
-        }
+        Category category = resolveActiveCategory(request.categoryId(), request.userId());
 
         RecurringTransaction template = new RecurringTransaction();
         template.setUser(user);
         template.setCategory(category);
-        template.setType(request.type());
         template.setName(request.name());
         template.setAmount(request.amount());
         template.setNextDueDate(request.nextDueDate());
@@ -88,19 +75,7 @@ public class RecurringTransactionService {
         RecurringTransaction template = recurringTransactionRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("Recurring template not found with ID: " + id));
 
-        Category category = categoryRepository.findById(request.categoryId())
-                .orElseThrow(() -> new IllegalArgumentException("Category not found with ID: " + request.categoryId()));
-
-        if (!category.getUser().getId().equals(template.getUser().getId())) {
-            throw new IllegalArgumentException("Category must belong to the template owner.");
-        }
-
-        if (category.getType() != template.getType()) {
-            throw new IllegalArgumentException(String.format(
-                    "Cannot assign to Category '%s' (%s) because this is an %s recurring template.",
-                    category.getName(), category.getType(), template.getType()
-            ));
-        }
+        Category category = resolveActiveCategory(request.categoryId(), template.getUser().getId());
 
         template.setCategory(category);
         template.setName(request.name());
@@ -127,13 +102,28 @@ public class RecurringTransactionService {
         recurringTransactionRepository.deleteById(id);
     }
 
+    private Category resolveActiveCategory(Long categoryId, Long userId) {
+        Category category = categoryRepository.findById(categoryId)
+                .orElseThrow(() -> new IllegalArgumentException("Category not found with ID: " + categoryId));
+
+        if (category.isDeleted()) {
+            throw new IllegalArgumentException("Category not found with ID: " + categoryId);
+        }
+
+        if (!category.getUser().getId().equals(userId)) {
+            throw new IllegalArgumentException("Category must belong to the specified user.");
+        }
+
+        return category;
+    }
+
     private RecurringTransactionResponse mapToResponse(RecurringTransaction template) {
         return new RecurringTransactionResponse(
                 template.getId(),
                 template.getUser().getId(),
                 template.getCategory().getId(),
                 template.getCategory().getName(),
-                template.getType(),
+                template.getCategory().getType(),
                 template.getName(),
                 template.getAmount(),
                 template.getNextDueDate(),

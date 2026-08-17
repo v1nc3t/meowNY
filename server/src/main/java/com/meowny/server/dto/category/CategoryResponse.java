@@ -7,6 +7,8 @@ import java.time.LocalDateTime;
 public record CategoryResponse(
         Long id,
         Long userId,
+        Long categoryGroupId,
+        String categoryGroupName,
         TransactionType type,
         String name,
         LocalDateTime createdAt,

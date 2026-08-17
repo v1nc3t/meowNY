@@ -55,7 +55,7 @@ public class CategoryRepositoryTest extends AbstractIntegrationTest {
         entityManager.persist(cat2);
         entityManager.flush();
 
-        List<Category> categories = categoryRepository.findByUserId(savedUser.getId());
+        List<Category> categories = categoryRepository.findByUserIdAndDeletedAtIsNull(savedUser.getId());
 
         assertThat(categories).hasSize(2);
         assertThat(categories)
@@ -75,7 +75,7 @@ public class CategoryRepositoryTest extends AbstractIntegrationTest {
         entityManager.persist(income1);
         entityManager.flush();
 
-        List<Category> expenses = categoryRepository.findByUserIdAndType(savedUser.getId(), TransactionType.EXPENSE);
+        List<Category> expenses = categoryRepository.findByUserIdAndTypeAndDeletedAtIsNull(savedUser.getId(), TransactionType.EXPENSE);
 
         assertThat(expenses).hasSize(2);
         assertThat(expenses)
@@ -105,6 +105,22 @@ public class CategoryRepositoryTest extends AbstractIntegrationTest {
         Optional<Category> found = categoryRepository.findByUserIdAndNameIgnoreCase(savedUser.getId(), "NonExistentCategory");
 
         assertThat(found).isEmpty();
+    }
+
+    @Test
+    @DisplayName("Should exclude soft-deleted categories when listing by user")
+    void shouldExcludeSoftDeletedCategories() {
+        Category active = createCategory("Food", TransactionType.EXPENSE, savedUser);
+        Category deleted = createCategory("Old Category", TransactionType.EXPENSE, savedUser);
+        deleted.setDeletedAt(java.time.LocalDateTime.now());
+        entityManager.persist(active);
+        entityManager.persist(deleted);
+        entityManager.flush();
+
+        List<Category> categories = categoryRepository.findByUserIdAndDeletedAtIsNull(savedUser.getId());
+
+        assertThat(categories).hasSize(1);
+        assertThat(categories.get(0).getName()).isEqualTo("Food");
     }
 
     private Category createCategory(String name, TransactionType type, User user) {

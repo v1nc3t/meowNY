@@ -1,13 +1,13 @@
 package com.meowny.server.service;
 
+import com.meowny.server.dto.recurringtransaction.CreateRecurringTransactionRequest;
+import com.meowny.server.dto.recurringtransaction.RecurringTransactionResponse;
+import com.meowny.server.dto.recurringtransaction.UpdateRecurringTransactionRequest;
 import com.meowny.server.entity.Category;
 import com.meowny.server.entity.Frequency;
 import com.meowny.server.entity.RecurringTransaction;
 import com.meowny.server.entity.TransactionType;
 import com.meowny.server.entity.User;
-import com.meowny.server.dto.recurringtransaction.CreateRecurringTransactionRequest;
-import com.meowny.server.dto.recurringtransaction.RecurringTransactionResponse;
-import com.meowny.server.dto.recurringtransaction.UpdateRecurringTransactionRequest;
 import com.meowny.server.exception.ResourceConflictException;
 import com.meowny.server.repository.CategoryRepository;
 import com.meowny.server.repository.RecurringTransactionRepository;
@@ -48,10 +48,6 @@ class RecurringTransactionServiceTest {
     @InjectMocks
     private RecurringTransactionService recurringTransactionService;
 
-    // ==========================================
-    // getTemplatesByUserId BRANCHES
-    // ==========================================
-
     @Test
     @DisplayName("getTemplatesByUserId: Should return list of mapped templates for valid user")
     void getTemplatesByUserId_ValidUser_ReturnsMappedList() {
@@ -66,10 +62,6 @@ class RecurringTransactionServiceTest {
         verify(recurringTransactionRepository).findByUserId(userId);
     }
 
-    // ==========================================
-    // getTemplateById BRANCHES
-    // ==========================================
-
     @Test
     @DisplayName("getTemplateById: Should return response when template exists")
     void getTemplateById_Exists_ReturnsResponse() {
@@ -81,6 +73,7 @@ class RecurringTransactionServiceTest {
 
         assertThat(response).isNotNull();
         assertThat(response.id()).isEqualTo(templateId);
+        assertThat(response.type()).isEqualTo(TransactionType.EXPENSE);
     }
 
     @Test
@@ -94,15 +87,11 @@ class RecurringTransactionServiceTest {
                 .hasMessageContaining("Recurring template not found with ID: " + templateId);
     }
 
-    // ==========================================
-    // createTemplate BRANCHES
-    // ==========================================
-
     @Test
     @DisplayName("createTemplate: Should successfully save template when cross-validations pass")
     void createTemplate_ValidInput_CreatesSuccessfully() {
         CreateRecurringTransactionRequest request = new CreateRecurringTransactionRequest(
-                1L, 2L, TransactionType.EXPENSE, "Netflix", BigDecimal.valueOf(15), LocalDate.now().plusDays(5), Frequency.MONTHLY
+                1L, 2L, "Netflix", BigDecimal.valueOf(15), LocalDate.now().plusDays(5), Frequency.MONTHLY
         );
 
         User user = new User(); user.setId(1L);
@@ -124,7 +113,7 @@ class RecurringTransactionServiceTest {
     @Test
     @DisplayName("createTemplate: Should throw exception if target user context is absent")
     void createTemplate_UserNotFound_ThrowsException() {
-        CreateRecurringTransactionRequest request = new CreateRecurringTransactionRequest(1L, 2L, TransactionType.EXPENSE, "Netflix", BigDecimal.valueOf(15), LocalDate.now(), Frequency.MONTHLY);
+        CreateRecurringTransactionRequest request = new CreateRecurringTransactionRequest(1L, 2L, "Netflix", BigDecimal.valueOf(15), LocalDate.now(), Frequency.MONTHLY);
         when(userRepository.findById(request.userId())).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> recurringTransactionService.createTemplate(request))
@@ -135,7 +124,7 @@ class RecurringTransactionServiceTest {
     @Test
     @DisplayName("createTemplate: Should throw exception if provided category does not exist")
     void createTemplate_CategoryNotFound_ThrowsException() {
-        CreateRecurringTransactionRequest request = new CreateRecurringTransactionRequest(1L, 2L, TransactionType.EXPENSE, "Netflix", BigDecimal.valueOf(15), LocalDate.now(), Frequency.MONTHLY);
+        CreateRecurringTransactionRequest request = new CreateRecurringTransactionRequest(1L, 2L, "Netflix", BigDecimal.valueOf(15), LocalDate.now(), Frequency.MONTHLY);
         when(userRepository.findById(request.userId())).thenReturn(Optional.of(new User()));
         when(categoryRepository.findById(request.categoryId())).thenReturn(Optional.empty());
 
@@ -147,7 +136,7 @@ class RecurringTransactionServiceTest {
     @Test
     @DisplayName("createTemplate: Should throw exception if category matches an external user scope")
     void createTemplate_CategoryBelongsToAnother_ThrowsException() {
-        CreateRecurringTransactionRequest request = new CreateRecurringTransactionRequest(1L, 2L, TransactionType.EXPENSE, "Netflix", BigDecimal.valueOf(15), LocalDate.now(), Frequency.MONTHLY);
+        CreateRecurringTransactionRequest request = new CreateRecurringTransactionRequest(1L, 2L, "Netflix", BigDecimal.valueOf(15), LocalDate.now(), Frequency.MONTHLY);
         User user = new User(); user.setId(1L);
         User externalUser = new User(); externalUser.setId(99L);
         Category category = new Category(); category.setId(2L); category.setUser(externalUser);
@@ -159,25 +148,6 @@ class RecurringTransactionServiceTest {
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("Category must belong to the specified user.");
     }
-
-    @Test
-    @DisplayName("createTemplate: Should throw exception if template operation variant opposes category type")
-    void createTemplate_TypeMismatchWithCategory_ThrowsException() {
-        CreateRecurringTransactionRequest request = new CreateRecurringTransactionRequest(1L, 2L, TransactionType.INCOME, "Salary Template", BigDecimal.valueOf(3000), LocalDate.now(), Frequency.MONTHLY);
-        User user = new User(); user.setId(1L);
-        Category category = new Category(); category.setId(2L); category.setUser(user); category.setType(TransactionType.EXPENSE);
-
-        when(userRepository.findById(request.userId())).thenReturn(Optional.of(user));
-        when(categoryRepository.findById(request.categoryId())).thenReturn(Optional.of(category));
-
-        assertThatThrownBy(() -> recurringTransactionService.createTemplate(request))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("Template transaction type (INCOME) must match Category type (EXPENSE).");
-    }
-
-    // ==========================================
-    // updateTemplate BRANCHES
-    // ==========================================
 
     @Test
     @DisplayName("updateTemplate: Should save configurations when modifying internal tracking parameters")
@@ -236,37 +206,15 @@ class RecurringTransactionServiceTest {
 
         RecurringTransaction existingTemplate = createMockTemplate(templateId, 1L, 2L, "Old Name", TransactionType.EXPENSE, BigDecimal.valueOf(15));
         User internalUser = new User(); internalUser.setId(99L);
-        Category targetCategory = new Category(); targetCategory.setId(3L); targetCategory.setUser(internalUser); // mismatch
+        Category targetCategory = new Category(); targetCategory.setId(3L); targetCategory.setUser(internalUser);
 
         when(recurringTransactionRepository.findById(templateId)).thenReturn(Optional.of(existingTemplate));
         when(categoryRepository.findById(request.categoryId())).thenReturn(Optional.of(targetCategory));
 
         assertThatThrownBy(() -> recurringTransactionService.updateTemplate(templateId, request))
                 .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("Category must belong to the template owner.");
+                .hasMessageContaining("Category must belong to the specified user.");
     }
-
-    @Test
-    @DisplayName("updateTemplate: Should throw exception if category swap mutates transactional nature variant")
-    void updateTemplate_CategoryTypeMismatch_ThrowsException() {
-        Long templateId = 100L;
-        UpdateRecurringTransactionRequest request = new UpdateRecurringTransactionRequest(3L, "Name", BigDecimal.valueOf(20), LocalDate.now(), Frequency.WEEKLY, true);
-
-        User user = new User(); user.setId(1L);
-        RecurringTransaction existingTemplate = createMockTemplate(templateId, 1L, 2L, "Old Name", TransactionType.EXPENSE, BigDecimal.valueOf(15));
-        Category targetCategory = new Category(); targetCategory.setId(3L); targetCategory.setUser(user); targetCategory.setType(TransactionType.INCOME); targetCategory.setName("Dividends"); // mismatch
-
-        when(recurringTransactionRepository.findById(templateId)).thenReturn(Optional.of(existingTemplate));
-        when(categoryRepository.findById(request.categoryId())).thenReturn(Optional.of(targetCategory));
-
-        assertThatThrownBy(() -> recurringTransactionService.updateTemplate(templateId, request))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("Cannot assign to Category 'Dividends' (INCOME) because this is an EXPENSE recurring template.");
-    }
-
-    // ==========================================
-    // deleteTemplate BRANCHES
-    // ==========================================
 
     @Test
     @DisplayName("deleteTemplate: Should complete successfully when object exists and has no historical dependencies")
@@ -283,11 +231,9 @@ class RecurringTransactionServiceTest {
     @Test
     @DisplayName("deleteTemplate: Should throw exception if entity identity does not exist")
     void deleteTemplate_NotFound_ThrowsException() {
-        // Given
         Long templateId = 100L;
         when(recurringTransactionRepository.existsById(templateId)).thenReturn(false);
 
-        // When & Then
         assertThatThrownBy(() -> recurringTransactionService.deleteTemplate(templateId))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("Recurring template not found with ID: " + templateId);
@@ -307,10 +253,6 @@ class RecurringTransactionServiceTest {
         verify(recurringTransactionRepository, never()).deleteById(anyLong());
     }
 
-    // ==========================================
-    // PRIVATE HELPER METHODS
-    // ==========================================
-
     private RecurringTransaction createMockTemplate(Long id, Long userId, Long categoryId, String name, TransactionType type, BigDecimal amount) {
         User user = new User();
         user.setId(userId);
@@ -325,7 +267,6 @@ class RecurringTransactionServiceTest {
         template.setId(id);
         template.setUser(user);
         template.setCategory(category);
-        template.setType(type);
         template.setName(name);
         template.setAmount(amount);
         template.setNextDueDate(LocalDate.now().plusDays(30));
