@@ -9,9 +9,9 @@ import java.util.Optional;
 
 public interface CategoryRepository extends JpaRepository<Category, Long> {
 
-    List<Category> findByUserId(Long userId);
+    List<Category> findByUserIdAndDeletedAtIsNull(Long userId);
 
-    List<Category> findByUserIdAndType(Long userId, TransactionType type);
+    List<Category> findByUserIdAndTypeAndDeletedAtIsNull(Long userId, TransactionType type);
 
     Optional<Category> findByUserIdAndNameIgnoreCase(Long userId, String name);
 }
