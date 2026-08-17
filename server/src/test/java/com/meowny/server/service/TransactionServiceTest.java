@@ -1,13 +1,13 @@
 package com.meowny.server.service;
 
+import com.meowny.server.dto.transaction.CreateTransactionRequest;
+import com.meowny.server.dto.transaction.TransactionResponse;
+import com.meowny.server.dto.transaction.UpdateTransactionRequest;
 import com.meowny.server.entity.Category;
 import com.meowny.server.entity.RecurringTransaction;
 import com.meowny.server.entity.Transaction;
 import com.meowny.server.entity.TransactionType;
 import com.meowny.server.entity.User;
-import com.meowny.server.dto.transaction.CreateTransactionRequest;
-import com.meowny.server.dto.transaction.TransactionResponse;
-import com.meowny.server.dto.transaction.UpdateTransactionRequest;
 import com.meowny.server.repository.CategoryRepository;
 import com.meowny.server.repository.RecurringTransactionRepository;
 import com.meowny.server.repository.TransactionRepository;
@@ -51,10 +51,6 @@ class TransactionServiceTest {
     @InjectMocks
     private TransactionService transactionService;
 
-    // ==========================================
-    // getTransactionById BRANCHES
-    // ==========================================
-
     @Test
     @DisplayName("getTransactionById: Should return response when transaction exists")
     void getTransactionById_Exists_ReturnsResponse() {
@@ -67,6 +63,7 @@ class TransactionServiceTest {
 
         assertThat(response).isNotNull();
         assertThat(response.id()).isEqualTo(txId);
+        assertThat(response.type()).isEqualTo(TransactionType.EXPENSE);
         verify(transactionRepository).findById(txId);
     }
 
@@ -80,10 +77,6 @@ class TransactionServiceTest {
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("Transaction not found with ID: " + txId);
     }
-
-    // ==========================================
-    // getTransactionsByUserId BRANCHES
-    // ==========================================
 
     @Test
     @DisplayName("getTransactionsByUserId: Should return mapped page of transactions")
@@ -102,15 +95,11 @@ class TransactionServiceTest {
         verify(transactionRepository).findByUserId(userId, pageable);
     }
 
-    // ==========================================
-    // createTransaction BRANCHES
-    // ==========================================
-
     @Test
     @DisplayName("createTransaction: Should successfully save standard transaction without template link")
     void createTransaction_NoTemplate_CreatesSuccessfully() {
         CreateTransactionRequest request = new CreateTransactionRequest(
-                1L, 2L, null, TransactionType.EXPENSE, "Lunch", BigDecimal.valueOf(15), LocalDate.now(), "Food truck"
+                1L, 2L, null, "Lunch", BigDecimal.valueOf(15), LocalDate.now(), "Food truck"
         );
 
         User user = new User(); user.setId(1L);
@@ -131,7 +120,7 @@ class TransactionServiceTest {
     @Test
     @DisplayName("createTransaction: Should throw exception if user isn't found")
     void createTransaction_UserNotFound_ThrowsException() {
-        CreateTransactionRequest request = new CreateTransactionRequest(1L, 2L, null, TransactionType.EXPENSE, "Lunch", BigDecimal.valueOf(15), LocalDate.now(), "Food");
+        CreateTransactionRequest request = new CreateTransactionRequest(1L, 2L, null, "Lunch", BigDecimal.valueOf(15), LocalDate.now(), "Food");
         when(userRepository.findById(request.userId())).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> transactionService.createTransaction(request))
@@ -142,7 +131,7 @@ class TransactionServiceTest {
     @Test
     @DisplayName("createTransaction: Should throw exception if category isn't found")
     void createTransaction_CategoryNotFound_ThrowsException() {
-        CreateTransactionRequest request = new CreateTransactionRequest(1L, 2L, null, TransactionType.EXPENSE, "Lunch", BigDecimal.valueOf(15), LocalDate.now(), "Food");
+        CreateTransactionRequest request = new CreateTransactionRequest(1L, 2L, null, "Lunch", BigDecimal.valueOf(15), LocalDate.now(), "Food");
         when(userRepository.findById(request.userId())).thenReturn(Optional.of(new User()));
         when(categoryRepository.findById(request.categoryId())).thenReturn(Optional.empty());
 
@@ -154,7 +143,7 @@ class TransactionServiceTest {
     @Test
     @DisplayName("createTransaction: Should throw exception if category belongs to another user")
     void createTransaction_CategoryBelongsToAnother_ThrowsException() {
-        CreateTransactionRequest request = new CreateTransactionRequest(1L, 2L, null, TransactionType.EXPENSE, "Lunch", BigDecimal.valueOf(15), LocalDate.now(), "Food");
+        CreateTransactionRequest request = new CreateTransactionRequest(1L, 2L, null, "Lunch", BigDecimal.valueOf(15), LocalDate.now(), "Food");
         User user = new User(); user.setId(1L);
         User otherUser = new User(); otherUser.setId(99L);
         Category category = new Category(); category.setId(2L); category.setUser(otherUser);
@@ -168,32 +157,17 @@ class TransactionServiceTest {
     }
 
     @Test
-    @DisplayName("createTransaction: Should throw exception if request transaction type differs from category config")
-    void createTransaction_TypeMismatchWithCategory_ThrowsException() {
-        CreateTransactionRequest request = new CreateTransactionRequest(1L, 2L, null, TransactionType.INCOME, "Lunch", BigDecimal.valueOf(15), LocalDate.now(), "Food");
-        User user = new User(); user.setId(1L);
-        Category category = new Category(); category.setId(2L); category.setUser(user); category.setType(TransactionType.EXPENSE);
-
-        when(userRepository.findById(request.userId())).thenReturn(Optional.of(user));
-        when(categoryRepository.findById(request.categoryId())).thenReturn(Optional.of(category));
-
-        assertThatThrownBy(() -> transactionService.createTransaction(request))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("Transaction type (INCOME) does not match Category type (EXPENSE).");
-    }
-
-    @Test
     @DisplayName("createTransaction: Should successfully map with template relation when cross-validations match")
     void createTransaction_ValidTemplate_LinksSuccessfully() {
         CreateTransactionRequest request = new CreateTransactionRequest(
-                1L, 2L, 50L, TransactionType.EXPENSE, "Rent Bill", BigDecimal.valueOf(1000), LocalDate.now(), "Rent"
+                1L, 2L, 50L, "Rent Bill", BigDecimal.valueOf(1000), LocalDate.now(), "Rent"
         );
 
         User user = new User(); user.setId(1L);
         Category category = new Category(); category.setId(2L); category.setUser(user); category.setType(TransactionType.EXPENSE); category.setName("Housing");
 
         RecurringTransaction template = new RecurringTransaction();
-        template.setId(50L); template.setUser(user); template.setType(TransactionType.EXPENSE); template.setCategory(category); template.setName("Rent Template");
+        template.setId(50L); template.setUser(user); template.setCategory(category); template.setName("Rent Template");
 
         Transaction txToSave = createMockTransaction(100L, 1L, 2L, "Rent Bill", TransactionType.EXPENSE, BigDecimal.valueOf(1000));
         txToSave.setSourceTemplate(template);
@@ -213,7 +187,7 @@ class TransactionServiceTest {
     @Test
     @DisplayName("createTransaction: Should throw exception if provided template ID does not exist")
     void createTransaction_TemplateIdNotFound_ThrowsException() {
-        CreateTransactionRequest request = new CreateTransactionRequest(1L, 2L, 50L, TransactionType.EXPENSE, "Rent Bill", BigDecimal.valueOf(1000), LocalDate.now(), "Rent");
+        CreateTransactionRequest request = new CreateTransactionRequest(1L, 2L, 50L, "Rent Bill", BigDecimal.valueOf(1000), LocalDate.now(), "Rent");
         User user = new User(); user.setId(1L);
         Category category = new Category(); category.setId(2L); category.setUser(user); category.setType(TransactionType.EXPENSE);
 
@@ -229,7 +203,7 @@ class TransactionServiceTest {
     @Test
     @DisplayName("createTransaction: Should throw exception if targeted template belongs to another account")
     void createTransaction_TemplateBelongsToOtherUser_ThrowsException() {
-        CreateTransactionRequest request = new CreateTransactionRequest(1L, 2L, 50L, TransactionType.EXPENSE, "Rent Bill", BigDecimal.valueOf(1000), LocalDate.now(), "Rent");
+        CreateTransactionRequest request = new CreateTransactionRequest(1L, 2L, 50L, "Rent Bill", BigDecimal.valueOf(1000), LocalDate.now(), "Rent");
         User user = new User(); user.setId(1L);
         User otherUser = new User(); otherUser.setId(99L);
         Category category = new Category(); category.setId(2L); category.setUser(user); category.setType(TransactionType.EXPENSE);
@@ -246,33 +220,15 @@ class TransactionServiceTest {
     }
 
     @Test
-    @DisplayName("createTransaction: Should throw exception if template configuration has type variant divergence")
-    void createTransaction_TemplateTypeMismatch_ThrowsException() {
-        CreateTransactionRequest request = new CreateTransactionRequest(1L, 2L, 50L, TransactionType.EXPENSE, "Rent Bill", BigDecimal.valueOf(1000), LocalDate.now(), "Rent");
-        User user = new User(); user.setId(1L);
-        Category category = new Category(); category.setId(2L); category.setUser(user); category.setType(TransactionType.EXPENSE);
-
-        RecurringTransaction template = new RecurringTransaction(); template.setId(50L); template.setUser(user); template.setType(TransactionType.INCOME); // mismatch
-
-        when(userRepository.findById(request.userId())).thenReturn(Optional.of(user));
-        when(categoryRepository.findById(request.categoryId())).thenReturn(Optional.of(category));
-        when(recurringTransactionRepository.findById(50L)).thenReturn(Optional.of(template));
-
-        assertThatThrownBy(() -> transactionService.createTransaction(request))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("Transaction type must match the recurring template type.");
-    }
-
-    @Test
     @DisplayName("createTransaction: Should throw exception if request category does not match template base category")
     void createTransaction_TemplateCategoryMismatch_ThrowsException() {
-        CreateTransactionRequest request = new CreateTransactionRequest(1L, 2L, 50L, TransactionType.EXPENSE, "Rent Bill", BigDecimal.valueOf(1000), LocalDate.now(), "Rent");
+        CreateTransactionRequest request = new CreateTransactionRequest(1L, 2L, 50L, "Rent Bill", BigDecimal.valueOf(1000), LocalDate.now(), "Rent");
         User user = new User(); user.setId(1L);
         Category requestCategory = new Category(); requestCategory.setId(2L); requestCategory.setUser(user); requestCategory.setType(TransactionType.EXPENSE);
-        Category templateCategory = new Category(); templateCategory.setId(88L); // mismatch
+        Category templateCategory = new Category(); templateCategory.setId(88L);
 
         RecurringTransaction template = new RecurringTransaction();
-        template.setId(50L); template.setUser(user); template.setType(TransactionType.EXPENSE); template.setCategory(templateCategory);
+        template.setId(50L); template.setUser(user); template.setCategory(templateCategory);
 
         when(userRepository.findById(request.userId())).thenReturn(Optional.of(user));
         when(categoryRepository.findById(request.categoryId())).thenReturn(Optional.of(requestCategory));
@@ -282,10 +238,6 @@ class TransactionServiceTest {
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("Transaction category must match the recurring template category.");
     }
-
-    // ==========================================
-    // updateTransaction BRANCHES
-    // ==========================================
 
     @Test
     @DisplayName("updateTransaction: Should successfully modify properties if categories are valid and owned")
@@ -338,44 +290,22 @@ class TransactionServiceTest {
     }
 
     @Test
-    @DisplayName("updateTransaction: Should throw exception if category swap references a profile workspace owned by another user")
+    @DisplayName("updateTransaction: Should throw exception if category swap references another user's category")
     void updateTransaction_CategoryUserMismatch_ThrowsException() {
         Long txId = 100L;
         UpdateTransactionRequest request = new UpdateTransactionRequest(3L, "Name", BigDecimal.valueOf(25), LocalDate.now(), "Desc");
 
         Transaction existingTx = createMockTransaction(txId, 1L, 2L, "Old Name", TransactionType.EXPENSE, BigDecimal.valueOf(15));
         User otherUser = new User(); otherUser.setId(99L);
-        Category targetCategory = new Category(); targetCategory.setId(3L); targetCategory.setUser(otherUser); // mismatch
+        Category targetCategory = new Category(); targetCategory.setId(3L); targetCategory.setUser(otherUser);
 
         when(transactionRepository.findById(txId)).thenReturn(Optional.of(existingTx));
         when(categoryRepository.findById(request.categoryId())).thenReturn(Optional.of(targetCategory));
 
         assertThatThrownBy(() -> transactionService.updateTransaction(txId, request))
                 .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("Category must belong to the transaction owner.");
+                .hasMessageContaining("Category must belong to the specified user.");
     }
-
-    @Test
-    @DisplayName("updateTransaction: Should throw exception if mutating a transaction into an incompatible category variant type")
-    void updateTransaction_CategoryTypeMismatch_ThrowsException() {
-        Long txId = 100L;
-        UpdateTransactionRequest request = new UpdateTransactionRequest(3L, "Name", BigDecimal.valueOf(25), LocalDate.now(), "Desc");
-
-        User user = new User(); user.setId(1L);
-        Transaction existingTx = createMockTransaction(txId, 1L, 2L, "Old Name", TransactionType.EXPENSE, BigDecimal.valueOf(15)); // EXPENSE
-        Category targetCategory = new Category(); targetCategory.setId(3L); targetCategory.setUser(user); targetCategory.setType(TransactionType.INCOME); targetCategory.setName("Investments"); // INCOME
-
-        when(transactionRepository.findById(txId)).thenReturn(Optional.of(existingTx));
-        when(categoryRepository.findById(request.categoryId())).thenReturn(Optional.of(targetCategory));
-
-        assertThatThrownBy(() -> transactionService.updateTransaction(txId, request))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("Cannot assign to Category 'Investments' (INCOME) because this is an EXPENSE transaction.");
-    }
-
-    // ==========================================
-    // deleteTransaction BRANCHES
-    // ==========================================
 
     @Test
     @DisplayName("deleteTransaction: Should successfully remove transaction when it has no relationships")
@@ -424,10 +354,6 @@ class TransactionServiceTest {
         verify(transactionRepository, never()).delete(any(Transaction.class));
     }
 
-    // ==========================================
-    // PRIVATE HELPER METHODS
-    // ==========================================
-
     private Transaction createMockTransaction(Long id, Long userId, Long categoryId, String categoryName, TransactionType type, BigDecimal amount) {
         User user = new User();
         user.setId(userId);
@@ -442,7 +368,6 @@ class TransactionServiceTest {
         tx.setId(id);
         tx.setUser(user);
         tx.setCategory(category);
-        tx.setType(type);
         tx.setName(categoryName);
         tx.setAmount(amount);
         tx.setPaymentDate(LocalDate.now());
