@@ -25,6 +25,7 @@ import org.springframework.data.domain.Pageable;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
@@ -134,6 +135,21 @@ class TransactionServiceTest {
         CreateTransactionRequest request = new CreateTransactionRequest(1L, 2L, null, "Lunch", BigDecimal.valueOf(15), LocalDate.now(), "Food");
         when(userRepository.findById(request.userId())).thenReturn(Optional.of(new User()));
         when(categoryRepository.findById(request.categoryId())).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> transactionService.createTransaction(request))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("Category not found with ID: " + request.categoryId());
+    }
+
+    @Test
+    @DisplayName("createTransaction: Should throw exception if category is soft-deleted")
+    void createTransaction_DeletedCategory_ThrowsException() {
+        CreateTransactionRequest request = new CreateTransactionRequest(1L, 2L, null, "Lunch", BigDecimal.valueOf(15), LocalDate.now(), "Food");
+        User user = new User(); user.setId(1L);
+        Category category = new Category(); category.setId(2L); category.setUser(user); category.setDeletedAt(LocalDateTime.now());
+
+        when(userRepository.findById(request.userId())).thenReturn(Optional.of(user));
+        when(categoryRepository.findById(request.categoryId())).thenReturn(Optional.of(category));
 
         assertThatThrownBy(() -> transactionService.createTransaction(request))
                 .isInstanceOf(IllegalArgumentException.class)
@@ -272,6 +288,50 @@ class TransactionServiceTest {
         assertThatThrownBy(() -> transactionService.updateTransaction(txId, request))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("Transaction not found with ID: " + txId);
+    }
+
+    @Test
+    @DisplayName("updateTransaction: Should allow updating other fields when keeping a soft-deleted category")
+    void updateTransaction_KeepDeletedCategory_UpdatesSuccessfully() {
+        Long txId = 100L;
+        UpdateTransactionRequest request = new UpdateTransactionRequest(2L, "Updated Name", BigDecimal.valueOf(25), LocalDate.now(), "Updated desc");
+
+        Transaction existingTx = createMockTransaction(txId, 1L, 2L, "Old Name", TransactionType.EXPENSE, BigDecimal.valueOf(15));
+        existingTx.getCategory().setDeletedAt(LocalDateTime.now());
+
+        when(transactionRepository.findById(txId)).thenReturn(Optional.of(existingTx));
+        when(categoryRepository.findById(request.categoryId())).thenReturn(Optional.of(existingTx.getCategory()));
+        when(transactionRepository.save(existingTx)).thenReturn(existingTx);
+
+        TransactionResponse response = transactionService.updateTransaction(txId, request);
+
+        assertThat(response).isNotNull();
+        assertThat(existingTx.getName()).isEqualTo("Updated Name");
+        assertThat(existingTx.getAmount()).isEqualByComparingTo(BigDecimal.valueOf(25));
+        assertThat(existingTx.getDescription()).isEqualTo("Updated desc");
+        assertThat(existingTx.getCategory().getId()).isEqualTo(2L);
+        verify(transactionRepository).save(existingTx);
+    }
+
+    @Test
+    @DisplayName("updateTransaction: Should throw exception when swapping to a different soft-deleted category")
+    void updateTransaction_SwapToDeletedCategory_ThrowsException() {
+        Long txId = 100L;
+        UpdateTransactionRequest request = new UpdateTransactionRequest(3L, "Name", BigDecimal.valueOf(25), LocalDate.now(), "Desc");
+
+        Transaction existingTx = createMockTransaction(txId, 1L, 2L, "Old Name", TransactionType.EXPENSE, BigDecimal.valueOf(15));
+        User user = new User(); user.setId(1L);
+        Category deletedTarget = new Category(); deletedTarget.setId(3L); deletedTarget.setUser(user);
+        deletedTarget.setDeletedAt(LocalDateTime.now());
+
+        when(transactionRepository.findById(txId)).thenReturn(Optional.of(existingTx));
+        when(categoryRepository.findById(request.categoryId())).thenReturn(Optional.of(deletedTarget));
+
+        assertThatThrownBy(() -> transactionService.updateTransaction(txId, request))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("Category not found with ID: " + request.categoryId());
+
+        verify(transactionRepository, never()).save(any(Transaction.class));
     }
 
     @Test

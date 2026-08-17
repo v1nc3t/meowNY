@@ -52,7 +52,7 @@ public class TransactionService {
         User user = userRepository.findById(request.userId())
                 .orElseThrow(() -> new IllegalArgumentException("User not found with ID: " + request.userId()));
 
-        Category category = resolveActiveCategory(request.categoryId(), request.userId());
+        Category category = resolveActiveCategory(request.categoryId(), request.userId(), null);
 
         Transaction tx = new Transaction();
         tx.setUser(user);
@@ -84,7 +84,7 @@ public class TransactionService {
         Transaction tx = transactionRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("Transaction not found with ID: " + id));
 
-        Category category = resolveActiveCategory(request.categoryId(), tx.getUser().getId());
+        Category category = resolveActiveCategory(request.categoryId(), tx.getUser().getId(), tx.getCategory().getId());
 
         tx.setCategory(category);
         tx.setName(request.name());
@@ -108,11 +108,11 @@ public class TransactionService {
         transactionRepository.delete(tx);
     }
 
-    private Category resolveActiveCategory(Long categoryId, Long userId) {
+    private Category resolveActiveCategory(Long categoryId, Long userId, Long currentCategoryId) {
         Category category = categoryRepository.findById(categoryId)
                 .orElseThrow(() -> new IllegalArgumentException("Category not found with ID: " + categoryId));
 
-        if (category.isDeleted()) {
+        if (category.isDeleted() && !categoryId.equals(currentCategoryId)) {
             throw new IllegalArgumentException("Category not found with ID: " + categoryId);
         }
 
