@@ -1,12 +1,12 @@
 package com.meowny.server.service;
 
+import com.meowny.server.dto.transaction.CreateTransactionRequest;
+import com.meowny.server.dto.transaction.TransactionResponse;
+import com.meowny.server.dto.transaction.UpdateTransactionRequest;
 import com.meowny.server.entity.Category;
 import com.meowny.server.entity.RecurringTransaction;
 import com.meowny.server.entity.Transaction;
 import com.meowny.server.entity.User;
-import com.meowny.server.dto.transaction.CreateTransactionRequest;
-import com.meowny.server.dto.transaction.TransactionResponse;
-import com.meowny.server.dto.transaction.UpdateTransactionRequest;
 import com.meowny.server.repository.CategoryRepository;
 import com.meowny.server.repository.RecurringTransactionRepository;
 import com.meowny.server.repository.TransactionRepository;
@@ -52,24 +52,11 @@ public class TransactionService {
         User user = userRepository.findById(request.userId())
                 .orElseThrow(() -> new IllegalArgumentException("User not found with ID: " + request.userId()));
 
-        Category category = categoryRepository.findById(request.categoryId())
-                .orElseThrow(() -> new IllegalArgumentException("Category not found with ID: " + request.categoryId()));
-
-        if (!category.getUser().getId().equals(request.userId())) {
-            throw new IllegalArgumentException("Category must belong to the specified user.");
-        }
-
-        if (category.getType() != request.type()) {
-            throw new IllegalArgumentException(String.format(
-                    "Transaction type (%s) does not match Category type (%s).",
-                    request.type(), category.getType()
-            ));
-        }
+        Category category = resolveActiveCategory(request.categoryId(), request.userId());
 
         Transaction tx = new Transaction();
         tx.setUser(user);
         tx.setCategory(category);
-        tx.setType(request.type());
         tx.setName(request.name());
         tx.setAmount(request.amount());
         tx.setPaymentDate(request.paymentDate());
@@ -81,9 +68,6 @@ public class TransactionService {
 
             if (!template.getUser().getId().equals(request.userId())) {
                 throw new IllegalArgumentException("Recurring template must belong to the specified user.");
-            }
-            if (template.getType() != request.type()) {
-                throw new IllegalArgumentException("Transaction type must match the recurring template type.");
             }
             if (!template.getCategory().getId().equals(request.categoryId())) {
                 throw new IllegalArgumentException("Transaction category must match the recurring template category.");
@@ -100,19 +84,7 @@ public class TransactionService {
         Transaction tx = transactionRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("Transaction not found with ID: " + id));
 
-        Category category = categoryRepository.findById(request.categoryId())
-                .orElseThrow(() -> new IllegalArgumentException("Category not found with ID: " + request.categoryId()));
-
-        if (!category.getUser().getId().equals(tx.getUser().getId())) {
-            throw new IllegalArgumentException("Category must belong to the transaction owner.");
-        }
-
-        if (category.getType() != tx.getType()) {
-            throw new IllegalArgumentException(String.format(
-                    "Cannot assign to Category '%s' (%s) because this is an %s transaction.",
-                    category.getName(), category.getType(), tx.getType()
-            ));
-        }
+        Category category = resolveActiveCategory(request.categoryId(), tx.getUser().getId());
 
         tx.setCategory(category);
         tx.setName(request.name());
@@ -136,6 +108,21 @@ public class TransactionService {
         transactionRepository.delete(tx);
     }
 
+    private Category resolveActiveCategory(Long categoryId, Long userId) {
+        Category category = categoryRepository.findById(categoryId)
+                .orElseThrow(() -> new IllegalArgumentException("Category not found with ID: " + categoryId));
+
+        if (category.isDeleted()) {
+            throw new IllegalArgumentException("Category not found with ID: " + categoryId);
+        }
+
+        if (!category.getUser().getId().equals(userId)) {
+            throw new IllegalArgumentException("Category must belong to the specified user.");
+        }
+
+        return category;
+    }
+
     private TransactionResponse mapToResponse(Transaction tx) {
         Long templateId = null;
         String templateName = null;
@@ -154,7 +141,7 @@ public class TransactionService {
                 templateId,
                 templateName,
 
-                tx.getType(),
+                tx.getCategory().getType(),
                 tx.getName(),
                 tx.getAmount(),
                 tx.getPaymentDate(),
