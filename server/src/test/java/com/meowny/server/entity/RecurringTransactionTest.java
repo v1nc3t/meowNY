@@ -19,7 +19,6 @@ class RecurringTransactionTest {
 
         rt.setId(5L);
         rt.setUser(user);
-        rt.setType(TransactionType.EXPENSE);
         rt.setCategory(category);
         rt.setName("Gym Membership");
         rt.setAmount(amount);
@@ -29,7 +28,6 @@ class RecurringTransactionTest {
 
         assertThat(rt.getId()).isEqualTo(5L);
         assertThat(rt.getUser()).isEqualTo(user);
-        assertThat(rt.getType()).isEqualTo(TransactionType.EXPENSE);
         assertThat(rt.getCategory()).isEqualTo(category);
         assertThat(rt.getName()).isEqualTo("Gym Membership");
         assertThat(rt.getAmount()).isEqualTo(amount);

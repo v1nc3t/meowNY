@@ -2,7 +2,10 @@ package com.meowny.server.entity;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+
 import java.math.BigDecimal;
+import java.time.LocalDate;
+
 import static org.assertj.core.api.Assertions.assertThat;
 
 class BudgetTest {
@@ -14,19 +17,20 @@ class BudgetTest {
         User user = new User();
         Category category = new Category();
         BigDecimal limit = new BigDecimal("500.00");
+        LocalDate effectiveFrom = LocalDate.of(2026, 7, 1);
 
         budget.setId(1L);
         budget.setUser(user);
+        budget.setScope(BudgetScope.CATEGORY);
         budget.setLimitAmount(limit);
-        budget.setMonth(7);
-        budget.setYear(2026);
+        budget.setEffectiveFrom(effectiveFrom);
         budget.setCategory(category);
 
         assertThat(budget.getId()).isEqualTo(1L);
         assertThat(budget.getUser()).isEqualTo(user);
+        assertThat(budget.getScope()).isEqualTo(BudgetScope.CATEGORY);
         assertThat(budget.getLimitAmount()).isEqualTo(limit);
-        assertThat(budget.getMonth()).isEqualTo(7);
-        assertThat(budget.getYear()).isEqualTo(2026);
+        assertThat(budget.getEffectiveFrom()).isEqualTo(effectiveFrom);
         assertThat(budget.getCategory()).isEqualTo(category);
     }
 
