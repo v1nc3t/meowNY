@@ -14,8 +14,8 @@ const router = createBrowserRouter([
     element: <PublicLayout />,
     children: [
       { index: true, element: <LandingPage /> },
-      // { path: 'login', element: <LoginPage /> },
-      // { path: 'signup', element: <SignUpPage /> },
+      { path: 'login', element: <div>Log In View (Mock)</div> },
+      { path: 'signup', element: <div>Sign Up View (Mock)</div> },
     ],
   },
   // Authenticated App Routes
