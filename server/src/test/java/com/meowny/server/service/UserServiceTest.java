@@ -67,7 +67,7 @@ class UserServiceTest {
         savedUser.setId(1L);
         savedUser.setEmail(request.email());
 
-        when(userRepository.findUserByEmail(request.email())).thenReturn(Optional.empty());
+        when(userRepository.findUserByEmailIgnoreCase("john@example.com")).thenReturn(Optional.empty());
         when(userRepository.findUserByUsername(request.username())).thenReturn(Optional.empty());
         when(passwordEncoder.encode(request.password())).thenReturn("hashed_pass");
         when(userRepository.save(any(User.class))).thenReturn(savedUser);
@@ -83,7 +83,7 @@ class UserServiceTest {
     void createUser_EmailExists_ThrowsResourceConflictException() {
         CreateUserRequest request = new CreateUserRequest(
                 "John", "Doe", "taken@example.com", "johndoe", "securepass123");
-        when(userRepository.findUserByEmail(request.email())).thenReturn(Optional.of(new User()));
+        when(userRepository.findUserByEmailIgnoreCase("taken@example.com")).thenReturn(Optional.of(new User()));
 
         assertThatThrownBy(() -> userService.createUser(request))
                 .isInstanceOf(ResourceConflictException.class)
@@ -97,8 +97,22 @@ class UserServiceTest {
     void createUser_UsernameExists_ThrowsResourceConflictException() {
         CreateUserRequest request = new CreateUserRequest(
                 "John", "Doe", "john@example.com", "taken_user", "securepass123");
-        when(userRepository.findUserByEmail(request.email())).thenReturn(Optional.empty());
+        when(userRepository.findUserByEmailIgnoreCase("john@example.com")).thenReturn(Optional.empty());
         when(userRepository.findUserByUsername(request.username())).thenReturn(Optional.of(new User()));
+
+        assertThatThrownBy(() -> userService.createUser(request))
+                .isInstanceOf(ResourceConflictException.class)
+                .hasMessageContaining("Registration failed. Check your details and try again.");
+
+        verify(userRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("createUser: Should reject registration when email differs only by casing")
+    void createUser_EmailExistsDifferentCasing_ThrowsResourceConflictException() {
+        CreateUserRequest request = new CreateUserRequest(
+                "John", "Doe", "Taken@Example.com", "johndoe", "securepass123");
+        when(userRepository.findUserByEmailIgnoreCase("taken@example.com")).thenReturn(Optional.of(new User()));
 
         assertThatThrownBy(() -> userService.createUser(request))
                 .isInstanceOf(ResourceConflictException.class)
@@ -117,7 +131,7 @@ class UserServiceTest {
         UserResponse response = userService.updateCurrentUser(request);
 
         assertThat(response).isNotNull();
-        verify(userRepository, never()).findUserByEmail(any());
+        verify(userRepository, never()).findUserByEmailIgnoreCase(any());
         verify(userRepository).save(currentUser);
     }
 
@@ -128,13 +142,13 @@ class UserServiceTest {
         currentUser.setEmail("old@example.com");
 
         when(currentUserService.getCurrentUser()).thenReturn(currentUser);
-        when(userRepository.findUserByEmail(request.email())).thenReturn(Optional.empty());
+        when(userRepository.findUserByEmailIgnoreCase("new@example.com")).thenReturn(Optional.empty());
         when(userRepository.save(any(User.class))).thenReturn(currentUser);
 
         UserResponse response = userService.updateCurrentUser(request);
 
         assertThat(response).isNotNull();
-        verify(userRepository).findUserByEmail(request.email());
+        verify(userRepository).findUserByEmailIgnoreCase("new@example.com");
         verify(userRepository).save(currentUser);
     }
 
@@ -145,7 +159,7 @@ class UserServiceTest {
         currentUser.setEmail("old@example.com");
 
         when(currentUserService.getCurrentUser()).thenReturn(currentUser);
-        when(userRepository.findUserByEmail(request.email())).thenReturn(Optional.of(new User()));
+        when(userRepository.findUserByEmailIgnoreCase("taken@example.com")).thenReturn(Optional.of(new User()));
 
         assertThatThrownBy(() -> userService.updateCurrentUser(request))
                 .isInstanceOf(ResourceConflictException.class)

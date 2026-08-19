@@ -11,6 +11,9 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.Locale;
+import java.util.Objects;
+
 @Service
 public class UserService {
 
@@ -37,7 +40,8 @@ public class UserService {
 
     @Transactional
     public UserResponse createUser(CreateUserRequest request) {
-        if (userRepository.findUserByEmail(request.email()).isPresent()
+        String normalizedEmail = normalizeEmail(request.email());
+        if (userRepository.findUserByEmailIgnoreCase(normalizedEmail).isPresent()
                 || userRepository.findUserByUsername(request.username()).isPresent()) {
             throw new ResourceConflictException(REGISTRATION_FAILED_MESSAGE);
         }
@@ -45,7 +49,7 @@ public class UserService {
         User user = new User();
         user.setFirstName(request.firstName());
         user.setLastName(request.lastName());
-        user.setEmail(request.email());
+        user.setEmail(normalizedEmail);
         user.setUsername(request.username());
         user.setPassword(passwordEncoder.encode(request.password()));
 
@@ -57,11 +61,15 @@ public class UserService {
     public UserResponse updateCurrentUser(UpdateUserRequest request) {
         User user = currentUserService.getCurrentUser();
 
-        if (!user.getEmail().equalsIgnoreCase(request.email())) {
-            userRepository.findUserByEmail(request.email()).ifPresent(existing -> {
-                throw new ResourceConflictException("This email address is already registered to another user.");
+        String normalizedEmail = normalizeEmail(request.email());
+        if (!user.getEmail().equalsIgnoreCase(normalizedEmail)) {
+            userRepository.findUserByEmailIgnoreCase(normalizedEmail).ifPresent(existing -> {
+                if (!Objects.equals(existing.getId(), user.getId())) {
+                    throw new ResourceConflictException(
+                            "This email address is already registered to another user.");
+                }
             });
-            user.setEmail(request.email());
+            user.setEmail(normalizedEmail);
         }
 
         user.setFirstName(request.firstName());
@@ -75,6 +83,10 @@ public class UserService {
     public void deleteCurrentUser() {
         User user = currentUserService.getCurrentUser();
         userRepository.delete(user);
+    }
+
+    private static String normalizeEmail(String email) {
+        return email.toLowerCase(Locale.ROOT);
     }
 
     private UserResponse mapToResponse(User user) {
