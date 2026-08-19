@@ -7,14 +7,10 @@ import jakarta.validation.constraints.*;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 
-public record CreateTransactionRequest (
-        @NotNull(message = "User ID is required")
-        Long userId,
-
+public record CreateTransactionRequest(
         @NotNull(message = "Category ID is required")
         Long categoryId,
 
-        // Optional field: null if manually logged, populated if spawned from a template
         Long recurringTransactionId,
 
         @NotBlank(message = "Transaction name is required")

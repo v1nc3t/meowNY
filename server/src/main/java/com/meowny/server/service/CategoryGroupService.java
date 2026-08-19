@@ -6,8 +6,9 @@ import com.meowny.server.dto.categorygroup.UpdateCategoryGroupRequest;
 import com.meowny.server.entity.CategoryGroup;
 import com.meowny.server.entity.User;
 import com.meowny.server.exception.ResourceConflictException;
+import com.meowny.server.exception.ResourceNotFoundException;
 import com.meowny.server.repository.CategoryGroupRepository;
-import com.meowny.server.repository.UserRepository;
+import com.meowny.server.security.CurrentUserService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -18,17 +19,19 @@ import java.util.stream.Collectors;
 public class CategoryGroupService {
 
     private final CategoryGroupRepository categoryGroupRepository;
-    private final UserRepository userRepository;
+    private final CurrentUserService currentUserService;
 
-    public CategoryGroupService(CategoryGroupRepository categoryGroupRepository,
-                                UserRepository userRepository) {
+    public CategoryGroupService(
+            CategoryGroupRepository categoryGroupRepository,
+            CurrentUserService currentUserService) {
         this.categoryGroupRepository = categoryGroupRepository;
-        this.userRepository = userRepository;
+        this.currentUserService = currentUserService;
     }
 
     @Transactional(readOnly = true)
-    public List<CategoryGroupResponse> getCategoryGroupsByUserId(Long userId) {
-        return categoryGroupRepository.findByUserId(userId)
+    public List<CategoryGroupResponse> getCurrentUserCategoryGroups() {
+        User currentUser = currentUserService.getCurrentUser();
+        return categoryGroupRepository.findByUserId(currentUser.getId())
                 .stream()
                 .map(this::mapToResponse)
                 .collect(Collectors.toList());
@@ -36,12 +39,13 @@ public class CategoryGroupService {
 
     @Transactional
     public CategoryGroupResponse createCategoryGroup(CreateCategoryGroupRequest request) {
-        User user = userRepository.findById(request.userId())
-                .orElseThrow(() -> new IllegalArgumentException("User not found with ID: " + request.userId()));
+        User user = currentUserService.getCurrentUser();
+        Long userId = user.getId();
 
-        categoryGroupRepository.findByUserIdAndNameIgnoreCase(request.userId(), request.name())
+        categoryGroupRepository.findByUserIdAndNameIgnoreCase(userId, request.name())
                 .ifPresent(existing -> {
-                    throw new ResourceConflictException("A category group with the name '" + request.name() + "' already exists.");
+                    throw new ResourceConflictException(
+                            "A category group with the name '" + request.name() + "' already exists.");
                 });
 
         CategoryGroup group = new CategoryGroup();
@@ -54,13 +58,13 @@ public class CategoryGroupService {
 
     @Transactional
     public CategoryGroupResponse updateCategoryGroup(Long id, UpdateCategoryGroupRequest request) {
-        CategoryGroup group = categoryGroupRepository.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("Category group not found with ID: " + id));
+        CategoryGroup group = findOwnedCategoryGroup(id);
 
         if (!group.getName().equalsIgnoreCase(request.name())) {
             categoryGroupRepository.findByUserIdAndNameIgnoreCase(group.getUser().getId(), request.name())
                     .ifPresent(existing -> {
-                        throw new ResourceConflictException("Another category group with the name '" + request.name() + "' already exists.");
+                        throw new ResourceConflictException(
+                                "Another category group with the name '" + request.name() + "' already exists.");
                     });
             group.setName(request.name());
         }
@@ -71,10 +75,15 @@ public class CategoryGroupService {
 
     @Transactional
     public void deleteCategoryGroup(Long id) {
-        if (!categoryGroupRepository.existsById(id)) {
-            throw new IllegalArgumentException("Category group not found with ID: " + id);
-        }
-        categoryGroupRepository.deleteById(id);
+        CategoryGroup group = findOwnedCategoryGroup(id);
+        categoryGroupRepository.delete(group);
+    }
+
+    private CategoryGroup findOwnedCategoryGroup(Long id) {
+        CategoryGroup group = categoryGroupRepository.findById(id)
+                .orElseThrow(ResourceNotFoundException::new);
+        currentUserService.requireOwnedByCurrentUser(group.getUser().getId());
+        return group;
     }
 
     private CategoryGroupResponse mapToResponse(CategoryGroup group) {

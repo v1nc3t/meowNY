@@ -9,9 +9,6 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 
 public record CreateRecurringTransactionRequest(
-        @NotNull(message = "User ID is required")
-        Long userId,
-
         @NotNull(message = "Category ID is required")
         Long categoryId,
 

@@ -7,9 +7,6 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 
 public record CreateBudgetRequest(
-        @NotNull(message = "User ID is required")
-        Long userId,
-
         @NotNull(message = "Budget scope is required")
         BudgetScope scope,
 

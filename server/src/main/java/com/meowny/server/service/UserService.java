@@ -6,6 +6,7 @@ import com.meowny.server.dto.user.UpdateUserRequest;
 import com.meowny.server.dto.user.UserResponse;
 import com.meowny.server.exception.ResourceConflictException;
 import com.meowny.server.repository.UserRepository;
+import com.meowny.server.security.CurrentUserService;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -13,37 +14,39 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class UserService {
 
+    private static final String REGISTRATION_FAILED_MESSAGE =
+            "Registration failed. Check your details and try again.";
+
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
+    private final CurrentUserService currentUserService;
 
-    public UserService(UserRepository userRepository, PasswordEncoder passwordEncoder) {
+    public UserService(
+            UserRepository userRepository,
+            PasswordEncoder passwordEncoder,
+            CurrentUserService currentUserService) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
+        this.currentUserService = currentUserService;
     }
 
     @Transactional(readOnly = true)
-    public UserResponse getUserById(Long id) {
-        User user = userRepository.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("User not found with ID:" + id));
-        return mapToResponse(user);
+    public UserResponse getCurrentUserProfile() {
+        return mapToResponse(currentUserService.getCurrentUser());
     }
 
     @Transactional
     public UserResponse createUser(CreateUserRequest request) {
-        userRepository.findUserByEmail(request.email()).ifPresent(u -> {
-            throw new ResourceConflictException("An account with this email address already exists.");
-        });
-
-        userRepository.findUserByUsername(request.username()).ifPresent(u -> {
-            throw new ResourceConflictException("This username is already taken.");
-        });
+        if (userRepository.findUserByEmail(request.email()).isPresent()
+                || userRepository.findUserByUsername(request.username()).isPresent()) {
+            throw new ResourceConflictException(REGISTRATION_FAILED_MESSAGE);
+        }
 
         User user = new User();
         user.setFirstName(request.firstName());
         user.setLastName(request.lastName());
         user.setEmail(request.email());
         user.setUsername(request.username());
-
         user.setPassword(passwordEncoder.encode(request.password()));
 
         User savedUser = userRepository.save(user);
@@ -51,9 +54,8 @@ public class UserService {
     }
 
     @Transactional
-    public UserResponse updateUser(Long id, UpdateUserRequest request) {
-        User user = userRepository.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("User not found with ID: " + id));
+    public UserResponse updateCurrentUser(UpdateUserRequest request) {
+        User user = currentUserService.getCurrentUser();
 
         if (!user.getEmail().equalsIgnoreCase(request.email())) {
             userRepository.findUserByEmail(request.email()).ifPresent(existing -> {
@@ -70,11 +72,9 @@ public class UserService {
     }
 
     @Transactional
-    public void deleteUser(Long id) {
-        if (!userRepository.existsById(id)) {
-            throw new IllegalArgumentException("User not found with ID: " + id);
-        }
-        userRepository.deleteById(id);
+    public void deleteCurrentUser() {
+        User user = currentUserService.getCurrentUser();
+        userRepository.delete(user);
     }
 
     private UserResponse mapToResponse(User user) {

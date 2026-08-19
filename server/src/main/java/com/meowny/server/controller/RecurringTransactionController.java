@@ -5,7 +5,6 @@ import com.meowny.server.dto.recurringtransaction.RecurringTransactionResponse;
 import com.meowny.server.dto.recurringtransaction.UpdateRecurringTransactionRequest;
 import com.meowny.server.service.RecurringTransactionService;
 import jakarta.validation.Valid;
-import jakarta.validation.constraints.NotNull;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.annotation.Validated;
@@ -31,17 +30,14 @@ public class RecurringTransactionController {
     }
 
     @GetMapping
-    public ResponseEntity<List<RecurringTransactionResponse>> getTemplatesByUserId(
-            @RequestParam @NotNull Long userId) {
-
-        List<RecurringTransactionResponse> responses = recurringTransactionService.getTemplatesByUserId(userId);
+    public ResponseEntity<List<RecurringTransactionResponse>> getCurrentUserTemplates() {
+        List<RecurringTransactionResponse> responses = recurringTransactionService.getCurrentUserTemplates();
         return ResponseEntity.ok(responses);
     }
 
     @PostMapping
     public ResponseEntity<RecurringTransactionResponse> createTemplate(
             @Valid @RequestBody CreateRecurringTransactionRequest request) {
-
         RecurringTransactionResponse response = recurringTransactionService.createTemplate(request);
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
@@ -50,7 +46,6 @@ public class RecurringTransactionController {
     public ResponseEntity<RecurringTransactionResponse> updateTemplate(
             @PathVariable Long id,
             @Valid @RequestBody UpdateRecurringTransactionRequest request) {
-
         RecurringTransactionResponse response = recurringTransactionService.updateTemplate(id, request);
         return ResponseEntity.ok(response);
     }

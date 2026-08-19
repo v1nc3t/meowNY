@@ -8,9 +8,6 @@ import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 
 public record CreateCategoryRequest(
-        @NotNull(message = "User ID is required")
-        Long userId,
-
         Long categoryGroupId,
 
         @NotNull(message = "Transaction type is required")

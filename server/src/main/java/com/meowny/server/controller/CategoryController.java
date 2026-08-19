@@ -5,7 +5,6 @@ import com.meowny.server.dto.category.CreateCategoryRequest;
 import com.meowny.server.dto.category.UpdateCategoryRequest;
 import com.meowny.server.service.CategoryService;
 import jakarta.validation.Valid;
-import jakarta.validation.constraints.NotNull;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.annotation.Validated;
@@ -25,17 +24,14 @@ public class CategoryController {
     }
 
     @GetMapping
-    public ResponseEntity<List<CategoryResponse>> getCategoriesByUserId(
-            @RequestParam @NotNull Long userId) {
-
-        List<CategoryResponse> responses = categoryService.getCategoriesByUserId(userId);
+    public ResponseEntity<List<CategoryResponse>> getCurrentUserCategories() {
+        List<CategoryResponse> responses = categoryService.getCurrentUserCategories();
         return ResponseEntity.ok(responses);
     }
 
     @PostMapping
     public ResponseEntity<CategoryResponse> createCategory(
             @Valid @RequestBody CreateCategoryRequest request) {
-
         CategoryResponse response = categoryService.createCategory(request);
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
@@ -44,7 +40,6 @@ public class CategoryController {
     public ResponseEntity<CategoryResponse> updateCategoryName(
             @PathVariable Long id,
             @Valid @RequestBody UpdateCategoryRequest request) {
-
         CategoryResponse response = categoryService.updateCategoryName(id, request);
         return ResponseEntity.ok(response);
     }
