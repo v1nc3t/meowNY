@@ -67,6 +67,12 @@
 			<version>${jjwt.version}</version>
 			<scope>runtime</scope>
 		</dependency>
+		<!-- Bouncy Castle for Argon2id -->
+		<dependency>
+			<groupId>org.bouncycastle</groupId>
+			<artifactId>bcprov-jdk18on</artifactId>
+			<version>1.78.1</version>
+		</dependency>
 
 		<!-- ============ Security - Input Sanitization ============ -->
 		<dependency>
