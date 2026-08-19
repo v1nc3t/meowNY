@@ -28,6 +28,6 @@ public record CreateUserRequest (
         String username,
 
         @NotBlank(message = "Password is required")
-        @Size(max = 100, message = "Password must be 100 characters or fewer")
+        @Size(min = 12, max = 100, message = "Password must be between 12 and 100 characters")
         String password
 ) {}
