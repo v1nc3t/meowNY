@@ -1,11 +1,13 @@
 package com.meowny.server.service;
 
-import com.meowny.server.entity.User;
 import com.meowny.server.dto.user.CreateUserRequest;
 import com.meowny.server.dto.user.UpdateUserRequest;
 import com.meowny.server.dto.user.UserResponse;
+import com.meowny.server.entity.User;
 import com.meowny.server.exception.ResourceConflictException;
 import com.meowny.server.repository.UserRepository;
+import com.meowny.server.security.CurrentUserService;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -30,50 +32,37 @@ class UserServiceTest {
     @Mock
     private PasswordEncoder passwordEncoder;
 
+    @Mock
+    private CurrentUserService currentUserService;
+
     @InjectMocks
     private UserService userService;
 
-    // ==========================================
-    // getUserById BRANCHES
-    // ==========================================
+    private User currentUser;
 
-    @Test
-    @DisplayName("getUserById: Should return UserResponse when user exists")
-    void getUserById_UserExists_ReturnsResponse() {
-        Long userId = 1L;
-        User user = new User();
-        user.setId(userId);
-        user.setEmail("test@example.com");
-
-        when(userRepository.findById(userId)).thenReturn(Optional.of(user));
-
-        UserResponse response = userService.getUserById(userId);
-
-        assertThat(response).isNotNull();
-        assertThat(response.id()).isEqualTo(userId);
-        verify(userRepository).findById(userId);
+    @BeforeEach
+    void setUp() {
+        currentUser = new User();
+        currentUser.setId(1L);
+        currentUser.setEmail("same@example.com");
     }
 
     @Test
-    @DisplayName("getUserById: Should throw IllegalArgumentException when user does not exist")
-    void getUserById_UserDoesNotExist_ThrowsException() {
-        Long userId = 1L;
-        when(userRepository.findById(userId)).thenReturn(Optional.empty());
+    @DisplayName("getCurrentUserProfile: Should return the authenticated user's profile")
+    void getCurrentUserProfile_ReturnsResponse() {
+        when(currentUserService.getCurrentUser()).thenReturn(currentUser);
 
-        assertThatThrownBy(() -> userService.getUserById(userId))
-                .isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> userService.getUserById(userId))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("User not found with ID:" + userId);
+        UserResponse response = userService.getCurrentUserProfile();
+
+        assertThat(response.id()).isEqualTo(1L);
+        verify(currentUserService).getCurrentUser();
     }
-    // ==========================================
-    // createUser BRANCHES
-    // ==========================================
 
     @Test
     @DisplayName("createUser: Should create user successfully when email and username are unique")
     void createUser_ValidRequest_CreatesUser() {
-        CreateUserRequest request = new CreateUserRequest("John", "Doe", "john@example.com", "johndoe", "pass");
+        CreateUserRequest request = new CreateUserRequest(
+                "John", "Doe", "john@example.com", "johndoe", "securepass123");
         User savedUser = new User();
         savedUser.setId(1L);
         savedUser.setEmail(request.email());
@@ -92,135 +81,86 @@ class UserServiceTest {
     @Test
     @DisplayName("createUser: Should throw ResourceConflictException when email is taken")
     void createUser_EmailExists_ThrowsResourceConflictException() {
-        CreateUserRequest request = new CreateUserRequest("John", "Doe", "taken@example.com", "johndoe", "pass");
+        CreateUserRequest request = new CreateUserRequest(
+                "John", "Doe", "taken@example.com", "johndoe", "securepass123");
         when(userRepository.findUserByEmail(request.email())).thenReturn(Optional.of(new User()));
 
         assertThatThrownBy(() -> userService.createUser(request))
                 .isInstanceOf(ResourceConflictException.class)
-                .hasMessageContaining("An account with this email address already exists.");
+                .hasMessageContaining("Registration failed. Check your details and try again.");
 
-        verify(userRepository, never()).findUserByUsername(any());
-        verifyNoInteractions(passwordEncoder);
+        verify(userRepository, never()).save(any());
     }
 
     @Test
     @DisplayName("createUser: Should throw ResourceConflictException when username is taken")
     void createUser_UsernameExists_ThrowsResourceConflictException() {
-        CreateUserRequest request = new CreateUserRequest("John", "Doe", "john@example.com", "taken_user", "pass");
+        CreateUserRequest request = new CreateUserRequest(
+                "John", "Doe", "john@example.com", "taken_user", "securepass123");
         when(userRepository.findUserByEmail(request.email())).thenReturn(Optional.empty());
         when(userRepository.findUserByUsername(request.username())).thenReturn(Optional.of(new User()));
 
         assertThatThrownBy(() -> userService.createUser(request))
                 .isInstanceOf(ResourceConflictException.class)
-                .hasMessageContaining("This username is already taken.");
+                .hasMessageContaining("Registration failed. Check your details and try again.");
 
         verify(userRepository, never()).save(any());
     }
 
-    // ==========================================
-    // updateUser BRANCHES
-    // ==========================================
-
     @Test
-    @DisplayName("updateUser: Should throw IllegalArgumentException when target user to update is not found")
-    void updateUser_UserNotFound_ThrowsException() {
-        Long userId = 1L;
-        UpdateUserRequest request = new UpdateUserRequest("John", "Doe", "john@example.com");
-        when(userRepository.findById(userId)).thenReturn(Optional.empty());
-
-        assertThatThrownBy(() -> userService.updateUser(userId, request))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("User not found with ID: " + userId);
-    }
-
-    @Test
-    @DisplayName("updateUser: Should update names without checking uniqueness if email is unchanged")
-    void updateUser_EmailUnchanged_UpdatesSuccessfully() {
-        Long userId = 1L;
+    @DisplayName("updateCurrentUser: Should update names without checking uniqueness if email is unchanged")
+    void updateCurrentUser_EmailUnchanged_UpdatesSuccessfully() {
         UpdateUserRequest request = new UpdateUserRequest("UpdatedFirst", "UpdatedLast", "same@example.com");
+        when(currentUserService.getCurrentUser()).thenReturn(currentUser);
+        when(userRepository.save(any(User.class))).thenReturn(currentUser);
 
-        User existingUser = new User();
-        existingUser.setId(userId);
-        existingUser.setEmail("same@example.com");
+        UserResponse response = userService.updateCurrentUser(request);
 
-        when(userRepository.findById(userId)).thenReturn(Optional.of(existingUser));
-        when(userRepository.save(any(User.class))).thenReturn(existingUser);
-
-        UserResponse response = userService.updateUser(userId, request);
-
-        // Then
         assertThat(response).isNotNull();
         verify(userRepository, never()).findUserByEmail(any());
-        verify(userRepository).save(existingUser);
+        verify(userRepository).save(currentUser);
     }
 
     @Test
-    @DisplayName("updateUser: Should check uniqueness and update email when email changes and is free")
-    void updateUser_EmailChangedAndFree_UpdatesSuccessfully() {
-        Long userId = 1L;
+    @DisplayName("updateCurrentUser: Should check uniqueness and update email when email changes and is free")
+    void updateCurrentUser_EmailChangedAndFree_UpdatesSuccessfully() {
         UpdateUserRequest request = new UpdateUserRequest("John", "Doe", "new@example.com");
+        currentUser.setEmail("old@example.com");
 
-        User existingUser = new User();
-        existingUser.setId(userId);
-        existingUser.setEmail("old@example.com");
-
-        when(userRepository.findById(userId)).thenReturn(Optional.of(existingUser));
+        when(currentUserService.getCurrentUser()).thenReturn(currentUser);
         when(userRepository.findUserByEmail(request.email())).thenReturn(Optional.empty());
-        when(userRepository.save(any(User.class))).thenReturn(existingUser);
+        when(userRepository.save(any(User.class))).thenReturn(currentUser);
 
-        UserResponse response = userService.updateUser(userId, request);
+        UserResponse response = userService.updateCurrentUser(request);
 
         assertThat(response).isNotNull();
         verify(userRepository).findUserByEmail(request.email());
-        verify(userRepository).save(existingUser);
+        verify(userRepository).save(currentUser);
     }
 
     @Test
-    @DisplayName("updateUser: Should throw ResourceConflictException when changing to an already registered email")
-    void updateUser_EmailChangedAndTaken_ThrowsResourceConflictException() {
-        Long userId = 1L;
+    @DisplayName("updateCurrentUser: Should throw ResourceConflictException when changing to an already registered email")
+    void updateCurrentUser_EmailChangedAndTaken_ThrowsResourceConflictException() {
         UpdateUserRequest request = new UpdateUserRequest("John", "Doe", "taken@example.com");
+        currentUser.setEmail("old@example.com");
 
-        User existingUser = new User();
-        existingUser.setId(userId);
-        existingUser.setEmail("old@example.com");
-
-        when(userRepository.findById(userId)).thenReturn(Optional.of(existingUser));
+        when(currentUserService.getCurrentUser()).thenReturn(currentUser);
         when(userRepository.findUserByEmail(request.email())).thenReturn(Optional.of(new User()));
 
-        // When & Then
-        assertThatThrownBy(() -> userService.updateUser(userId, request))
+        assertThatThrownBy(() -> userService.updateCurrentUser(request))
                 .isInstanceOf(ResourceConflictException.class)
                 .hasMessageContaining("This email address is already registered to another user.");
 
         verify(userRepository, never()).save(any());
     }
 
-    // ==========================================
-    // deleteUser BRANCHES
-    // ==========================================
-
     @Test
-    @DisplayName("deleteUser: Should delete user successfully when user exists")
-    void deleteUser_UserExists_DeletesSuccessfully() {
-        Long userId = 1L;
-        when(userRepository.existsById(userId)).thenReturn(true);
+    @DisplayName("deleteCurrentUser: Should delete the authenticated user")
+    void deleteCurrentUser_DeletesSuccessfully() {
+        when(currentUserService.getCurrentUser()).thenReturn(currentUser);
 
-        userService.deleteUser(userId);
+        userService.deleteCurrentUser();
 
-        verify(userRepository).deleteById(userId);
-    }
-
-    @Test
-    @DisplayName("deleteUser: Should throw IllegalArgumentException when user does not exist")
-    void deleteUser_UserDoesNotExist_ThrowsException() {
-        Long userId = 1L;
-        when(userRepository.existsById(userId)).thenReturn(false);
-
-        assertThatThrownBy(() -> userService.deleteUser(userId))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("User not found with ID: " + userId);
-
-        verify(userRepository, never()).deleteById(any());
+        verify(userRepository).delete(currentUser);
     }
 }

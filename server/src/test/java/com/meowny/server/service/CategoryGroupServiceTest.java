@@ -6,8 +6,11 @@ import com.meowny.server.dto.categorygroup.UpdateCategoryGroupRequest;
 import com.meowny.server.entity.CategoryGroup;
 import com.meowny.server.entity.User;
 import com.meowny.server.exception.ResourceConflictException;
+import com.meowny.server.exception.ResourceNotFoundException;
 import com.meowny.server.repository.CategoryGroupRepository;
-import com.meowny.server.repository.UserRepository;
+import com.meowny.server.security.CurrentUserService;
+import com.meowny.server.support.TestCurrentUserSupport;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -21,6 +24,7 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -30,19 +34,27 @@ class CategoryGroupServiceTest {
     private CategoryGroupRepository categoryGroupRepository;
 
     @Mock
-    private UserRepository userRepository;
+    private CurrentUserService currentUserService;
 
     @InjectMocks
     private CategoryGroupService categoryGroupService;
 
-    @Test
-    @DisplayName("getCategoryGroupsByUserId: Should return list of group responses")
-    void getCategoryGroupsByUserId_ValidUser_ReturnsList() {
-        Long userId = 1L;
-        CategoryGroup group = createMockGroup(10L, userId, "Essentials");
-        when(categoryGroupRepository.findByUserId(userId)).thenReturn(List.of(group));
+    private User currentUser;
 
-        List<CategoryGroupResponse> results = categoryGroupService.getCategoryGroupsByUserId(userId);
+    @BeforeEach
+    void setUp() {
+        currentUser = new User();
+        currentUser.setId(1L);
+        TestCurrentUserSupport.stubCurrentUser(currentUserService, currentUser);
+    }
+
+    @Test
+    @DisplayName("getCurrentUserCategoryGroups: Should return list of group responses")
+    void getCurrentUserCategoryGroups_ValidUser_ReturnsList() {
+        CategoryGroup group = createMockGroup(10L, 1L, "Essentials");
+        when(categoryGroupRepository.findByUserId(1L)).thenReturn(List.of(group));
+
+        List<CategoryGroupResponse> results = categoryGroupService.getCurrentUserCategoryGroups();
 
         assertThat(results).hasSize(1);
         assertThat(results.get(0).name()).isEqualTo("Essentials");
@@ -51,12 +63,9 @@ class CategoryGroupServiceTest {
     @Test
     @DisplayName("createCategoryGroup: Should create group successfully when valid and unique")
     void createCategoryGroup_ValidRequest_CreatesGroup() {
-        CreateCategoryGroupRequest request = new CreateCategoryGroupRequest(1L, "Lifestyle");
-        User user = new User();
-        user.setId(1L);
+        CreateCategoryGroupRequest request = new CreateCategoryGroupRequest("Lifestyle");
         CategoryGroup savedGroup = createMockGroup(10L, 1L, "Lifestyle");
 
-        when(userRepository.findById(1L)).thenReturn(Optional.of(user));
         when(categoryGroupRepository.findByUserIdAndNameIgnoreCase(1L, "Lifestyle")).thenReturn(Optional.empty());
         when(categoryGroupRepository.save(any(CategoryGroup.class))).thenReturn(savedGroup);
 
@@ -67,22 +76,11 @@ class CategoryGroupServiceTest {
     }
 
     @Test
-    @DisplayName("createCategoryGroup: Should throw IllegalArgumentException when user does not exist")
-    void createCategoryGroup_UserNotFound_ThrowsException() {
-        CreateCategoryGroupRequest request = new CreateCategoryGroupRequest(99L, "Lifestyle");
-        when(userRepository.findById(99L)).thenReturn(Optional.empty());
-
-        assertThatThrownBy(() -> categoryGroupService.createCategoryGroup(request))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("User not found with ID: 99");
-    }
-
-    @Test
     @DisplayName("createCategoryGroup: Should throw ResourceConflictException when name already exists")
     void createCategoryGroup_NameExists_ThrowsResourceConflictException() {
-        CreateCategoryGroupRequest request = new CreateCategoryGroupRequest(1L, "Lifestyle");
-        when(userRepository.findById(1L)).thenReturn(Optional.of(new User()));
-        when(categoryGroupRepository.findByUserIdAndNameIgnoreCase(1L, "Lifestyle")).thenReturn(Optional.of(new CategoryGroup()));
+        CreateCategoryGroupRequest request = new CreateCategoryGroupRequest("Lifestyle");
+        when(categoryGroupRepository.findByUserIdAndNameIgnoreCase(1L, "Lifestyle"))
+                .thenReturn(Optional.of(new CategoryGroup()));
 
         assertThatThrownBy(() -> categoryGroupService.createCategoryGroup(request))
                 .isInstanceOf(ResourceConflictException.class)
@@ -90,14 +88,26 @@ class CategoryGroupServiceTest {
     }
 
     @Test
-    @DisplayName("updateCategoryGroup: Should throw IllegalArgumentException when group does not exist")
+    @DisplayName("updateCategoryGroup: Should throw ResourceNotFoundException when group does not exist")
     void updateCategoryGroup_NotFound_ThrowsException() {
         UpdateCategoryGroupRequest request = new UpdateCategoryGroupRequest("New Name");
         when(categoryGroupRepository.findById(10L)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> categoryGroupService.updateCategoryGroup(10L, request))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("Category group not found with ID: 10");
+                .isInstanceOf(ResourceNotFoundException.class);
+    }
+
+    @Test
+    @DisplayName("updateCategoryGroup: Should throw ResourceNotFoundException when group belongs to another user")
+    void updateCategoryGroup_OtherUsersGroup_ThrowsException() {
+        UpdateCategoryGroupRequest request = new UpdateCategoryGroupRequest("Housing");
+        CategoryGroup existing = createMockGroup(10L, 2L, "Essentials");
+        when(categoryGroupRepository.findById(10L)).thenReturn(Optional.of(existing));
+
+        assertThatThrownBy(() -> categoryGroupService.updateCategoryGroup(10L, request))
+                .isInstanceOf(ResourceNotFoundException.class);
+
+        verify(categoryGroupRepository, never()).save(any());
     }
 
     @Test
@@ -137,7 +147,8 @@ class CategoryGroupServiceTest {
         CategoryGroup existing = createMockGroup(10L, 1L, "Essentials");
 
         when(categoryGroupRepository.findById(10L)).thenReturn(Optional.of(existing));
-        when(categoryGroupRepository.findByUserIdAndNameIgnoreCase(1L, "Housing")).thenReturn(Optional.of(new CategoryGroup()));
+        when(categoryGroupRepository.findByUserIdAndNameIgnoreCase(1L, "Housing"))
+                .thenReturn(Optional.of(new CategoryGroup()));
 
         assertThatThrownBy(() -> categoryGroupService.updateCategoryGroup(10L, request))
                 .isInstanceOf(ResourceConflictException.class)
@@ -145,25 +156,25 @@ class CategoryGroupServiceTest {
     }
 
     @Test
-    @DisplayName("deleteCategoryGroup: Should delete when the group exists")
+    @DisplayName("deleteCategoryGroup: Should delete when the group exists and is owned")
     void deleteCategoryGroup_Exists_DeletesSuccessfully() {
-        when(categoryGroupRepository.existsById(10L)).thenReturn(true);
+        CategoryGroup existing = createMockGroup(10L, 1L, "Essentials");
+        when(categoryGroupRepository.findById(10L)).thenReturn(Optional.of(existing));
 
         categoryGroupService.deleteCategoryGroup(10L);
 
-        verify(categoryGroupRepository).deleteById(10L);
+        verify(categoryGroupRepository).delete(existing);
     }
 
     @Test
-    @DisplayName("deleteCategoryGroup: Should throw IllegalArgumentException when group does not exist")
+    @DisplayName("deleteCategoryGroup: Should throw ResourceNotFoundException when group does not exist")
     void deleteCategoryGroup_NotFound_ThrowsException() {
-        when(categoryGroupRepository.existsById(10L)).thenReturn(false);
+        when(categoryGroupRepository.findById(10L)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> categoryGroupService.deleteCategoryGroup(10L))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("Category group not found with ID: 10");
+                .isInstanceOf(ResourceNotFoundException.class);
 
-        verify(categoryGroupRepository, never()).deleteById(any());
+        verify(categoryGroupRepository, never()).delete(any());
     }
 
     private CategoryGroup createMockGroup(Long id, Long userId, String name) {

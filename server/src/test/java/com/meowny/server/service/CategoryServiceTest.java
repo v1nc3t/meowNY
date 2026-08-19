@@ -8,11 +8,14 @@ import com.meowny.server.entity.CategoryGroup;
 import com.meowny.server.entity.TransactionType;
 import com.meowny.server.entity.User;
 import com.meowny.server.exception.ResourceConflictException;
+import com.meowny.server.exception.ResourceNotFoundException;
 import com.meowny.server.repository.BudgetRepository;
 import com.meowny.server.repository.CategoryGroupRepository;
 import com.meowny.server.repository.CategoryRepository;
 import com.meowny.server.repository.RecurringTransactionRepository;
-import com.meowny.server.repository.UserRepository;
+import com.meowny.server.security.CurrentUserService;
+import com.meowny.server.support.TestCurrentUserSupport;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -39,42 +42,47 @@ class CategoryServiceTest {
     private CategoryGroupRepository categoryGroupRepository;
 
     @Mock
-    private UserRepository userRepository;
-
-    @Mock
     private RecurringTransactionRepository recurringTransactionRepository;
 
     @Mock
     private BudgetRepository budgetRepository;
 
+    @Mock
+    private CurrentUserService currentUserService;
+
     @InjectMocks
     private CategoryService categoryService;
 
+    private User currentUser;
+
+    @BeforeEach
+    void setUp() {
+        currentUser = new User();
+        currentUser.setId(1L);
+        TestCurrentUserSupport.stubCurrentUser(currentUserService, currentUser);
+    }
+
     @Test
-    @DisplayName("getCategoriesByUserId: Should return list of category responses")
-    void getCategoriesByUserId_ValidUser_ReturnsList() {
-        Long userId = 1L;
-        Category category = createMockCategory(10L, userId, TransactionType.EXPENSE, "Food");
+    @DisplayName("getCurrentUserCategories: Should return list of category responses")
+    void getCurrentUserCategories_ValidUser_ReturnsList() {
+        Category category = createMockCategory(10L, 1L, TransactionType.EXPENSE, "Food");
 
-        when(categoryRepository.findByUserIdAndDeletedAtIsNull(userId)).thenReturn(List.of(category));
+        when(categoryRepository.findByUserIdAndDeletedAtIsNull(1L)).thenReturn(List.of(category));
 
-        List<CategoryResponse> results = categoryService.getCategoriesByUserId(userId);
+        List<CategoryResponse> results = categoryService.getCurrentUserCategories();
 
         assertThat(results).hasSize(1);
         assertThat(results.get(0).name()).isEqualTo("Food");
-        verify(categoryRepository).findByUserIdAndDeletedAtIsNull(userId);
+        verify(categoryRepository).findByUserIdAndDeletedAtIsNull(1L);
     }
 
     @Test
     @DisplayName("createCategory: Should create category successfully when valid and unique")
     void createCategory_ValidRequest_CreatesCategory() {
-        CreateCategoryRequest request = new CreateCategoryRequest(1L, null, TransactionType.EXPENSE, "Salary");
-        User user = new User();
-        user.setId(1L);
+        CreateCategoryRequest request = new CreateCategoryRequest(null, TransactionType.EXPENSE, "Salary");
 
         Category savedCategory = createMockCategory(10L, 1L, TransactionType.EXPENSE, "Salary");
 
-        when(userRepository.findById(request.userId())).thenReturn(Optional.of(user));
         when(categoryRepository.findByUserIdAndNameIgnoreCase(1L, "Salary")).thenReturn(Optional.empty());
         when(categoryRepository.save(any(Category.class))).thenReturn(savedCategory);
 
@@ -88,19 +96,16 @@ class CategoryServiceTest {
     @Test
     @DisplayName("createCategory: Should assign category group when a valid group ID is provided")
     void createCategory_ValidGroup_AssignsGroup() {
-        CreateCategoryRequest request = new CreateCategoryRequest(1L, 5L, TransactionType.EXPENSE, "Rent");
-        User user = new User();
-        user.setId(1L);
+        CreateCategoryRequest request = new CreateCategoryRequest(5L, TransactionType.EXPENSE, "Rent");
 
         CategoryGroup group = new CategoryGroup();
         group.setId(5L);
         group.setName("Housing");
-        group.setUser(user);
+        group.setUser(currentUser);
 
         Category savedCategory = createMockCategory(10L, 1L, TransactionType.EXPENSE, "Rent");
         savedCategory.setCategoryGroup(group);
 
-        when(userRepository.findById(request.userId())).thenReturn(Optional.of(user));
         when(categoryRepository.findByUserIdAndNameIgnoreCase(1L, "Rent")).thenReturn(Optional.empty());
         when(categoryGroupRepository.findById(5L)).thenReturn(Optional.of(group));
         when(categoryRepository.save(any(Category.class))).thenReturn(savedCategory);
@@ -112,23 +117,9 @@ class CategoryServiceTest {
     }
 
     @Test
-    @DisplayName("createCategory: Should throw IllegalArgumentException when user does not exist")
-    void createCategory_UserNotFound_ThrowsException() {
-        CreateCategoryRequest request = new CreateCategoryRequest(99L, null, TransactionType.EXPENSE, "Salary");
-        when(userRepository.findById(request.userId())).thenReturn(Optional.empty());
-
-        assertThatThrownBy(() -> categoryService.createCategory(request))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("User not found with ID: " + request.userId());
-
-        verifyNoInteractions(categoryRepository);
-    }
-
-    @Test
     @DisplayName("createCategory: Should throw ResourceConflictException when category name already exists for user")
     void createCategory_NameExists_ThrowsResourceConflictException() {
-        CreateCategoryRequest request = new CreateCategoryRequest(1L, null, TransactionType.EXPENSE, "Food");
-        when(userRepository.findById(request.userId())).thenReturn(Optional.of(new User()));
+        CreateCategoryRequest request = new CreateCategoryRequest(null, TransactionType.EXPENSE, "Food");
         when(categoryRepository.findByUserIdAndNameIgnoreCase(1L, "Food")).thenReturn(Optional.of(new Category()));
 
         assertThatThrownBy(() -> categoryService.createCategory(request))
@@ -139,27 +130,21 @@ class CategoryServiceTest {
     }
 
     @Test
-    @DisplayName("createCategory: Should throw IllegalArgumentException when category group does not exist")
+    @DisplayName("createCategory: Should throw ResourceNotFoundException when category group does not exist")
     void createCategory_GroupNotFound_ThrowsException() {
-        CreateCategoryRequest request = new CreateCategoryRequest(1L, 99L, TransactionType.EXPENSE, "Food");
-        User user = new User();
-        user.setId(1L);
+        CreateCategoryRequest request = new CreateCategoryRequest(99L, TransactionType.EXPENSE, "Food");
 
-        when(userRepository.findById(request.userId())).thenReturn(Optional.of(user));
         when(categoryRepository.findByUserIdAndNameIgnoreCase(1L, "Food")).thenReturn(Optional.empty());
         when(categoryGroupRepository.findById(99L)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> categoryService.createCategory(request))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("Category group not found with ID: 99");
+                .isInstanceOf(ResourceNotFoundException.class);
     }
 
     @Test
-    @DisplayName("createCategory: Should throw IllegalArgumentException when category group belongs to another user")
+    @DisplayName("createCategory: Should throw ResourceNotFoundException when category group belongs to another user")
     void createCategory_GroupBelongsToAnotherUser_ThrowsException() {
-        CreateCategoryRequest request = new CreateCategoryRequest(1L, 5L, TransactionType.EXPENSE, "Food");
-        User user = new User();
-        user.setId(1L);
+        CreateCategoryRequest request = new CreateCategoryRequest(5L, TransactionType.EXPENSE, "Food");
         User otherUser = new User();
         otherUser.setId(2L);
 
@@ -167,31 +152,28 @@ class CategoryServiceTest {
         group.setId(5L);
         group.setUser(otherUser);
 
-        when(userRepository.findById(request.userId())).thenReturn(Optional.of(user));
         when(categoryRepository.findByUserIdAndNameIgnoreCase(1L, "Food")).thenReturn(Optional.empty());
         when(categoryGroupRepository.findById(5L)).thenReturn(Optional.of(group));
 
         assertThatThrownBy(() -> categoryService.createCategory(request))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("Category group must belong to the specified user.");
+                .isInstanceOf(ResourceNotFoundException.class);
     }
 
     @Test
-    @DisplayName("updateCategoryName: Should throw IllegalArgumentException when target category doesn't exist")
+    @DisplayName("updateCategoryName: Should throw ResourceNotFoundException when target category doesn't exist")
     void updateCategoryName_CategoryNotFound_ThrowsException() {
         Long categoryId = 10L;
         UpdateCategoryRequest request = new UpdateCategoryRequest("NewName", null);
         when(categoryRepository.findById(categoryId)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> categoryService.updateCategoryName(categoryId, request))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("Category not found with ID: " + categoryId);
+                .isInstanceOf(ResourceNotFoundException.class);
 
         verify(categoryRepository, never()).save(any());
     }
 
     @Test
-    @DisplayName("updateCategoryName: Should throw IllegalArgumentException when category is soft-deleted")
+    @DisplayName("updateCategoryName: Should throw ResourceNotFoundException when category is soft-deleted")
     void updateCategoryName_CategorySoftDeleted_ThrowsException() {
         Long categoryId = 10L;
         UpdateCategoryRequest request = new UpdateCategoryRequest("NewName", null);
@@ -201,8 +183,7 @@ class CategoryServiceTest {
         when(categoryRepository.findById(categoryId)).thenReturn(Optional.of(existingCategory));
 
         assertThatThrownBy(() -> categoryService.updateCategoryName(categoryId, request))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("Category not found with ID: " + categoryId);
+                .isInstanceOf(ResourceNotFoundException.class);
     }
 
     @Test
@@ -258,14 +239,13 @@ class CategoryServiceTest {
     }
 
     @Test
-    @DisplayName("deleteCategory: Should throw IllegalArgumentException when target category doesn't exist")
+    @DisplayName("deleteCategory: Should throw ResourceNotFoundException when target category doesn't exist")
     void deleteCategory_CategoryNotFound_ThrowsException() {
         Long categoryId = 10L;
         when(categoryRepository.findById(categoryId)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> categoryService.deleteCategory(categoryId))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("Category not found with ID: " + categoryId);
+                .isInstanceOf(ResourceNotFoundException.class);
 
         verify(categoryRepository, never()).save(any());
     }
