@@ -9,9 +9,10 @@ import com.meowny.server.entity.Category;
 import com.meowny.server.entity.TransactionType;
 import com.meowny.server.entity.User;
 import com.meowny.server.exception.ResourceConflictException;
+import com.meowny.server.exception.ResourceNotFoundException;
 import com.meowny.server.repository.BudgetRepository;
 import com.meowny.server.repository.CategoryRepository;
-import com.meowny.server.repository.UserRepository;
+import com.meowny.server.security.CurrentUserService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -23,29 +24,28 @@ import java.util.stream.Collectors;
 public class BudgetService {
 
     private final BudgetRepository budgetRepository;
-    private final UserRepository userRepository;
     private final CategoryRepository categoryRepository;
+    private final CurrentUserService currentUserService;
 
-    public BudgetService(BudgetRepository budgetRepository,
-                         UserRepository userRepository,
-                         CategoryRepository categoryRepository
-    ) {
+    public BudgetService(
+            BudgetRepository budgetRepository,
+            CategoryRepository categoryRepository,
+            CurrentUserService currentUserService) {
         this.budgetRepository = budgetRepository;
-        this.userRepository = userRepository;
         this.categoryRepository = categoryRepository;
+        this.currentUserService = currentUserService;
     }
 
     @Transactional(readOnly = true)
     public BudgetResponse getBudgetById(Long id) {
-        Budget budget = budgetRepository.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("Budget not found with ID:" + id));
-        return mapToResponse(budget);
+        return mapToResponse(findOwnedBudget(id));
     }
 
     @Transactional(readOnly = true)
-    public List<BudgetResponse> getBudgetsByPeriod(Long userId, Integer year, Integer month) {
+    public List<BudgetResponse> getCurrentUserBudgetsByPeriod(Integer year, Integer month) {
+        User currentUser = currentUserService.getCurrentUser();
         LocalDate effectiveFrom = LocalDate.of(year, month, 1);
-        return budgetRepository.findByUserIdAndEffectiveFrom(userId, effectiveFrom)
+        return budgetRepository.findByUserIdAndEffectiveFrom(currentUser.getId(), effectiveFrom)
                 .stream()
                 .map(this::mapToResponse)
                 .collect(Collectors.toList());
@@ -53,26 +53,24 @@ public class BudgetService {
 
     @Transactional
     public BudgetResponse createBudget(CreateBudgetRequest request) {
-        User user = userRepository.findById(request.userId())
-                .orElseThrow(() -> new IllegalArgumentException("User not found with ID: " + request.userId()));
-
+        User user = currentUserService.getCurrentUser();
+        Long userId = user.getId();
         LocalDate effectiveFrom = request.effectiveFrom().withDayOfMonth(1);
-        Category category = resolveCategory(request);
+        Category category = resolveCategory(request, userId);
 
         if (request.scope() == BudgetScope.GLOBAL) {
-            budgetRepository.findGlobalByUserIdAndEffectiveFrom(request.userId(), effectiveFrom)
+            budgetRepository.findGlobalByUserIdAndEffectiveFrom(userId, effectiveFrom)
                     .ifPresent(existing -> {
                         throw new ResourceConflictException(
                                 "A global budget limit is already defined for " + effectiveFrom + "."
                         );
                     });
         } else {
-            budgetRepository.findByUserIdAndCategoryIdAndEffectiveFrom(
-                            request.userId(), category.getId(), effectiveFrom)
+            budgetRepository.findByUserIdAndCategoryIdAndEffectiveFrom(userId, category.getId(), effectiveFrom)
                     .ifPresent(existing -> {
                         throw new ResourceConflictException(
-                                "A budget limit is already defined for category " + category.getName() +
-                                        " on " + effectiveFrom + "."
+                                "A budget limit is already defined for category " + category.getName()
+                                        + " on " + effectiveFrom + "."
                         );
                     });
         }
@@ -90,9 +88,7 @@ public class BudgetService {
 
     @Transactional
     public BudgetResponse updateBudget(Long id, UpdateBudgetRequest request) {
-        Budget budget = budgetRepository.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("Budget not found with ID:" + id));
-
+        Budget budget = findOwnedBudget(id);
         budget.setLimitAmount(request.limitAmount());
         Budget updatedBudget = budgetRepository.save(budget);
         return mapToResponse(updatedBudget);
@@ -100,13 +96,18 @@ public class BudgetService {
 
     @Transactional
     public void deleteBudget(Long id) {
-        if (!budgetRepository.existsById(id)) {
-            throw new IllegalArgumentException("Budget not found with ID: " + id);
-        }
-        budgetRepository.deleteById(id);
+        Budget budget = findOwnedBudget(id);
+        budgetRepository.delete(budget);
     }
 
-    private Category resolveCategory(CreateBudgetRequest request) {
+    private Budget findOwnedBudget(Long id) {
+        Budget budget = budgetRepository.findById(id)
+                .orElseThrow(ResourceNotFoundException::new);
+        currentUserService.requireOwnedByCurrentUser(budget.getUser().getId());
+        return budget;
+    }
+
+    private Category resolveCategory(CreateBudgetRequest request, Long userId) {
         if (request.scope() == BudgetScope.GLOBAL) {
             if (request.categoryId() != null) {
                 throw new IllegalArgumentException("Global budgets cannot be assigned to a category.");
@@ -119,14 +120,14 @@ public class BudgetService {
         }
 
         Category category = categoryRepository.findById(request.categoryId())
-                .orElseThrow(() -> new IllegalArgumentException("Category not found with ID: " + request.categoryId()));
+                .orElseThrow(ResourceNotFoundException::new);
 
         if (category.isDeleted()) {
-            throw new IllegalArgumentException("Category not found with ID: " + request.categoryId());
+            throw new ResourceNotFoundException();
         }
 
-        if (!category.getUser().getId().equals(request.userId())) {
-            throw new IllegalArgumentException("Category must belong to the specified user.");
+        if (!category.getUser().getId().equals(userId)) {
+            throw new ResourceNotFoundException();
         }
 
         if (category.getType() != TransactionType.EXPENSE) {
@@ -156,5 +157,4 @@ public class BudgetService {
                 budget.getUpdatedAt()
         );
     }
-
 }

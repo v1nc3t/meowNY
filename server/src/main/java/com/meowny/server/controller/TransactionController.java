@@ -5,7 +5,6 @@ import com.meowny.server.dto.transaction.TransactionResponse;
 import com.meowny.server.dto.transaction.UpdateTransactionRequest;
 import com.meowny.server.service.TransactionService;
 import jakarta.validation.Valid;
-import jakarta.validation.constraints.NotNull;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.web.PageableDefault;
@@ -32,18 +31,15 @@ public class TransactionController {
     }
 
     @GetMapping
-    public ResponseEntity<Page<TransactionResponse>> getTransactionsByUserId(
-            @RequestParam @NotNull Long userId,
+    public ResponseEntity<Page<TransactionResponse>> getCurrentUserTransactions(
             @PageableDefault(size = 20, sort = "paymentDate") Pageable pageable) {
-
-        Page<TransactionResponse> responsePage = transactionService.getTransactionsByUserId(userId, pageable);
+        Page<TransactionResponse> responsePage = transactionService.getCurrentUserTransactions(pageable);
         return ResponseEntity.ok(responsePage);
     }
 
     @PostMapping
     public ResponseEntity<TransactionResponse> createTransaction(
             @Valid @RequestBody CreateTransactionRequest request) {
-
         TransactionResponse response = transactionService.createTransaction(request);
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
@@ -52,7 +48,6 @@ public class TransactionController {
     public ResponseEntity<TransactionResponse> updateTransaction(
             @PathVariable Long id,
             @Valid @RequestBody UpdateTransactionRequest request) {
-
         TransactionResponse response = transactionService.updateTransaction(id, request);
         return ResponseEntity.ok(response);
     }

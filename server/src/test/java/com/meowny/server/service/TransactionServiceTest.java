@@ -8,10 +8,13 @@ import com.meowny.server.entity.RecurringTransaction;
 import com.meowny.server.entity.Transaction;
 import com.meowny.server.entity.TransactionType;
 import com.meowny.server.entity.User;
+import com.meowny.server.exception.ResourceNotFoundException;
 import com.meowny.server.repository.CategoryRepository;
 import com.meowny.server.repository.RecurringTransactionRepository;
 import com.meowny.server.repository.TransactionRepository;
-import com.meowny.server.repository.UserRepository;
+import com.meowny.server.security.CurrentUserService;
+import com.meowny.server.support.TestCurrentUserSupport;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -32,6 +35,7 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -41,16 +45,25 @@ class TransactionServiceTest {
     private TransactionRepository transactionRepository;
 
     @Mock
-    private UserRepository userRepository;
-
-    @Mock
     private CategoryRepository categoryRepository;
 
     @Mock
     private RecurringTransactionRepository recurringTransactionRepository;
 
+    @Mock
+    private CurrentUserService currentUserService;
+
     @InjectMocks
     private TransactionService transactionService;
+
+    private User currentUser;
+
+    @BeforeEach
+    void setUp() {
+        currentUser = new User();
+        currentUser.setId(1L);
+        TestCurrentUserSupport.stubCurrentUser(currentUserService, currentUser);
+    }
 
     @Test
     @DisplayName("getTransactionById: Should return response when transaction exists")
@@ -69,45 +82,47 @@ class TransactionServiceTest {
     }
 
     @Test
-    @DisplayName("getTransactionById: Should throw IllegalArgumentException when not found")
+    @DisplayName("getTransactionById: Should throw ResourceNotFoundException when not found")
     void getTransactionById_NotFound_ThrowsException() {
         Long txId = 100L;
         when(transactionRepository.findById(txId)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> transactionService.getTransactionById(txId))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("Transaction not found with ID: " + txId);
+                .isInstanceOf(ResourceNotFoundException.class);
     }
 
     @Test
-    @DisplayName("getTransactionsByUserId: Should return mapped page of transactions")
-    void getTransactionsByUserId_ValidUser_ReturnsPagedData() {
-        Long userId = 1L;
+    @DisplayName("getCurrentUserTransactions: Should return mapped page of transactions")
+    void getCurrentUserTransactions_ValidUser_ReturnsPagedData() {
         Pageable pageable = PageRequest.of(0, 10);
-        Transaction tx = createMockTransaction(100L, userId, 2L, "Salary", TransactionType.INCOME, BigDecimal.valueOf(3000));
+        Transaction tx = createMockTransaction(100L, 1L, 2L, "Salary", TransactionType.INCOME, BigDecimal.valueOf(3000));
         Page<Transaction> page = new PageImpl<>(List.of(tx), pageable, 1);
 
-        when(transactionRepository.findByUserId(userId, pageable)).thenReturn(page);
+        when(transactionRepository.findByUserId(eq(1L), any(Pageable.class))).thenReturn(page);
 
-        Page<TransactionResponse> result = transactionService.getTransactionsByUserId(userId, pageable);
+        Page<TransactionResponse> result = transactionService.getCurrentUserTransactions(pageable);
 
         assertThat(result.getContent()).hasSize(1);
         assertThat(result.getContent().get(0).id()).isEqualTo(100L);
-        verify(transactionRepository).findByUserId(userId, pageable);
+        verify(transactionRepository).findByUserId(eq(1L), any(Pageable.class));
     }
 
     @Test
     @DisplayName("createTransaction: Should successfully save standard transaction without template link")
     void createTransaction_NoTemplate_CreatesSuccessfully() {
         CreateTransactionRequest request = new CreateTransactionRequest(
-                1L, 2L, null, "Lunch", BigDecimal.valueOf(15), LocalDate.now(), "Food truck"
+                2L, null, "Lunch", BigDecimal.valueOf(15), LocalDate.now(), "Food truck"
         );
 
-        User user = new User(); user.setId(1L);
-        Category category = new Category(); category.setId(2L); category.setUser(user); category.setType(TransactionType.EXPENSE); category.setName("Food");
+        User user = new User();
+        user.setId(1L);
+        Category category = new Category();
+        category.setId(2L);
+        category.setUser(user);
+        category.setType(TransactionType.EXPENSE);
+        category.setName("Food");
         Transaction savedTx = createMockTransaction(100L, 1L, 2L, "Lunch", TransactionType.EXPENSE, BigDecimal.valueOf(15));
 
-        when(userRepository.findById(request.userId())).thenReturn(Optional.of(user));
         when(categoryRepository.findById(request.categoryId())).thenReturn(Optional.of(category));
         when(transactionRepository.save(any(Transaction.class))).thenReturn(savedTx);
 
@@ -119,76 +134,72 @@ class TransactionServiceTest {
     }
 
     @Test
-    @DisplayName("createTransaction: Should throw exception if user isn't found")
-    void createTransaction_UserNotFound_ThrowsException() {
-        CreateTransactionRequest request = new CreateTransactionRequest(1L, 2L, null, "Lunch", BigDecimal.valueOf(15), LocalDate.now(), "Food");
-        when(userRepository.findById(request.userId())).thenReturn(Optional.empty());
-
-        assertThatThrownBy(() -> transactionService.createTransaction(request))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("User not found with ID: " + request.userId());
-    }
-
-    @Test
     @DisplayName("createTransaction: Should throw exception if category isn't found")
     void createTransaction_CategoryNotFound_ThrowsException() {
-        CreateTransactionRequest request = new CreateTransactionRequest(1L, 2L, null, "Lunch", BigDecimal.valueOf(15), LocalDate.now(), "Food");
-        when(userRepository.findById(request.userId())).thenReturn(Optional.of(new User()));
+        CreateTransactionRequest request = new CreateTransactionRequest(2L, null, "Lunch", BigDecimal.valueOf(15), LocalDate.now(), "Food");
         when(categoryRepository.findById(request.categoryId())).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> transactionService.createTransaction(request))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("Category not found with ID: " + request.categoryId());
+                .isInstanceOf(ResourceNotFoundException.class);
     }
 
     @Test
     @DisplayName("createTransaction: Should throw exception if category is soft-deleted")
     void createTransaction_DeletedCategory_ThrowsException() {
-        CreateTransactionRequest request = new CreateTransactionRequest(1L, 2L, null, "Lunch", BigDecimal.valueOf(15), LocalDate.now(), "Food");
-        User user = new User(); user.setId(1L);
-        Category category = new Category(); category.setId(2L); category.setUser(user); category.setDeletedAt(LocalDateTime.now());
+        CreateTransactionRequest request = new CreateTransactionRequest(2L, null, "Lunch", BigDecimal.valueOf(15), LocalDate.now(), "Food");
+        User user = new User();
+        user.setId(1L);
+        Category category = new Category();
+        category.setId(2L);
+        category.setUser(user);
+        category.setDeletedAt(LocalDateTime.now());
 
-        when(userRepository.findById(request.userId())).thenReturn(Optional.of(user));
         when(categoryRepository.findById(request.categoryId())).thenReturn(Optional.of(category));
 
         assertThatThrownBy(() -> transactionService.createTransaction(request))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("Category not found with ID: " + request.categoryId());
+                .isInstanceOf(ResourceNotFoundException.class);
     }
 
     @Test
     @DisplayName("createTransaction: Should throw exception if category belongs to another user")
     void createTransaction_CategoryBelongsToAnother_ThrowsException() {
-        CreateTransactionRequest request = new CreateTransactionRequest(1L, 2L, null, "Lunch", BigDecimal.valueOf(15), LocalDate.now(), "Food");
-        User user = new User(); user.setId(1L);
-        User otherUser = new User(); otherUser.setId(99L);
-        Category category = new Category(); category.setId(2L); category.setUser(otherUser);
+        CreateTransactionRequest request = new CreateTransactionRequest(2L, null, "Lunch", BigDecimal.valueOf(15), LocalDate.now(), "Food");
+        User otherUser = new User();
+        otherUser.setId(99L);
+        Category category = new Category();
+        category.setId(2L);
+        category.setUser(otherUser);
 
-        when(userRepository.findById(request.userId())).thenReturn(Optional.of(user));
         when(categoryRepository.findById(request.categoryId())).thenReturn(Optional.of(category));
 
         assertThatThrownBy(() -> transactionService.createTransaction(request))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("Category must belong to the specified user.");
+                .isInstanceOf(ResourceNotFoundException.class);
     }
 
     @Test
     @DisplayName("createTransaction: Should successfully map with template relation when cross-validations match")
     void createTransaction_ValidTemplate_LinksSuccessfully() {
         CreateTransactionRequest request = new CreateTransactionRequest(
-                1L, 2L, 50L, "Rent Bill", BigDecimal.valueOf(1000), LocalDate.now(), "Rent"
+                2L, 50L, "Rent Bill", BigDecimal.valueOf(1000), LocalDate.now(), "Rent"
         );
 
-        User user = new User(); user.setId(1L);
-        Category category = new Category(); category.setId(2L); category.setUser(user); category.setType(TransactionType.EXPENSE); category.setName("Housing");
+        User user = new User();
+        user.setId(1L);
+        Category category = new Category();
+        category.setId(2L);
+        category.setUser(user);
+        category.setType(TransactionType.EXPENSE);
+        category.setName("Housing");
 
         RecurringTransaction template = new RecurringTransaction();
-        template.setId(50L); template.setUser(user); template.setCategory(category); template.setName("Rent Template");
+        template.setId(50L);
+        template.setUser(user);
+        template.setCategory(category);
+        template.setName("Rent Template");
 
         Transaction txToSave = createMockTransaction(100L, 1L, 2L, "Rent Bill", TransactionType.EXPENSE, BigDecimal.valueOf(1000));
         txToSave.setSourceTemplate(template);
 
-        when(userRepository.findById(request.userId())).thenReturn(Optional.of(user));
         when(categoryRepository.findById(request.categoryId())).thenReturn(Optional.of(category));
         when(recurringTransactionRepository.findById(50L)).thenReturn(Optional.of(template));
         when(transactionRepository.save(any(Transaction.class))).thenReturn(txToSave);
@@ -203,50 +214,63 @@ class TransactionServiceTest {
     @Test
     @DisplayName("createTransaction: Should throw exception if provided template ID does not exist")
     void createTransaction_TemplateIdNotFound_ThrowsException() {
-        CreateTransactionRequest request = new CreateTransactionRequest(1L, 2L, 50L, "Rent Bill", BigDecimal.valueOf(1000), LocalDate.now(), "Rent");
-        User user = new User(); user.setId(1L);
-        Category category = new Category(); category.setId(2L); category.setUser(user); category.setType(TransactionType.EXPENSE);
+        CreateTransactionRequest request = new CreateTransactionRequest(2L, 50L, "Rent Bill", BigDecimal.valueOf(1000), LocalDate.now(), "Rent");
+        User user = new User();
+        user.setId(1L);
+        Category category = new Category();
+        category.setId(2L);
+        category.setUser(user);
+        category.setType(TransactionType.EXPENSE);
 
-        when(userRepository.findById(request.userId())).thenReturn(Optional.of(user));
         when(categoryRepository.findById(request.categoryId())).thenReturn(Optional.of(category));
         when(recurringTransactionRepository.findById(50L)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> transactionService.createTransaction(request))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("Recurring template not found with ID: 50");
+                .isInstanceOf(ResourceNotFoundException.class);
     }
 
     @Test
     @DisplayName("createTransaction: Should throw exception if targeted template belongs to another account")
     void createTransaction_TemplateBelongsToOtherUser_ThrowsException() {
-        CreateTransactionRequest request = new CreateTransactionRequest(1L, 2L, 50L, "Rent Bill", BigDecimal.valueOf(1000), LocalDate.now(), "Rent");
-        User user = new User(); user.setId(1L);
-        User otherUser = new User(); otherUser.setId(99L);
-        Category category = new Category(); category.setId(2L); category.setUser(user); category.setType(TransactionType.EXPENSE);
+        CreateTransactionRequest request = new CreateTransactionRequest(2L, 50L, "Rent Bill", BigDecimal.valueOf(1000), LocalDate.now(), "Rent");
+        User user = new User();
+        user.setId(1L);
+        User otherUser = new User();
+        otherUser.setId(99L);
+        Category category = new Category();
+        category.setId(2L);
+        category.setUser(user);
+        category.setType(TransactionType.EXPENSE);
 
-        RecurringTransaction template = new RecurringTransaction(); template.setId(50L); template.setUser(otherUser);
+        RecurringTransaction template = new RecurringTransaction();
+        template.setId(50L);
+        template.setUser(otherUser);
 
-        when(userRepository.findById(request.userId())).thenReturn(Optional.of(user));
         when(categoryRepository.findById(request.categoryId())).thenReturn(Optional.of(category));
         when(recurringTransactionRepository.findById(50L)).thenReturn(Optional.of(template));
 
         assertThatThrownBy(() -> transactionService.createTransaction(request))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("Recurring template must belong to the specified user.");
+                .isInstanceOf(ResourceNotFoundException.class);
     }
 
     @Test
     @DisplayName("createTransaction: Should throw exception if request category does not match template base category")
     void createTransaction_TemplateCategoryMismatch_ThrowsException() {
-        CreateTransactionRequest request = new CreateTransactionRequest(1L, 2L, 50L, "Rent Bill", BigDecimal.valueOf(1000), LocalDate.now(), "Rent");
-        User user = new User(); user.setId(1L);
-        Category requestCategory = new Category(); requestCategory.setId(2L); requestCategory.setUser(user); requestCategory.setType(TransactionType.EXPENSE);
-        Category templateCategory = new Category(); templateCategory.setId(88L);
+        CreateTransactionRequest request = new CreateTransactionRequest(2L, 50L, "Rent Bill", BigDecimal.valueOf(1000), LocalDate.now(), "Rent");
+        User user = new User();
+        user.setId(1L);
+        Category requestCategory = new Category();
+        requestCategory.setId(2L);
+        requestCategory.setUser(user);
+        requestCategory.setType(TransactionType.EXPENSE);
+        Category templateCategory = new Category();
+        templateCategory.setId(88L);
 
         RecurringTransaction template = new RecurringTransaction();
-        template.setId(50L); template.setUser(user); template.setCategory(templateCategory);
+        template.setId(50L);
+        template.setUser(user);
+        template.setCategory(templateCategory);
 
-        when(userRepository.findById(request.userId())).thenReturn(Optional.of(user));
         when(categoryRepository.findById(request.categoryId())).thenReturn(Optional.of(requestCategory));
         when(recurringTransactionRepository.findById(50L)).thenReturn(Optional.of(template));
 
@@ -261,10 +285,15 @@ class TransactionServiceTest {
         Long txId = 100L;
         UpdateTransactionRequest request = new UpdateTransactionRequest(3L, "New Name", BigDecimal.valueOf(25), LocalDate.now(), "Desc");
 
-        User user = new User(); user.setId(1L);
+        User user = new User();
+        user.setId(1L);
         Transaction existingTx = createMockTransaction(txId, 1L, 2L, "Old Name", TransactionType.EXPENSE, BigDecimal.valueOf(15));
 
-        Category newCategory = new Category(); newCategory.setId(3L); newCategory.setUser(user); newCategory.setType(TransactionType.EXPENSE); newCategory.setName("New Cat");
+        Category newCategory = new Category();
+        newCategory.setId(3L);
+        newCategory.setUser(user);
+        newCategory.setType(TransactionType.EXPENSE);
+        newCategory.setName("New Cat");
 
         when(transactionRepository.findById(txId)).thenReturn(Optional.of(existingTx));
         when(categoryRepository.findById(request.categoryId())).thenReturn(Optional.of(newCategory));
@@ -286,8 +315,7 @@ class TransactionServiceTest {
         when(transactionRepository.findById(txId)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> transactionService.updateTransaction(txId, request))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("Transaction not found with ID: " + txId);
+                .isInstanceOf(ResourceNotFoundException.class);
     }
 
     @Test
@@ -320,16 +348,18 @@ class TransactionServiceTest {
         UpdateTransactionRequest request = new UpdateTransactionRequest(3L, "Name", BigDecimal.valueOf(25), LocalDate.now(), "Desc");
 
         Transaction existingTx = createMockTransaction(txId, 1L, 2L, "Old Name", TransactionType.EXPENSE, BigDecimal.valueOf(15));
-        User user = new User(); user.setId(1L);
-        Category deletedTarget = new Category(); deletedTarget.setId(3L); deletedTarget.setUser(user);
+        User user = new User();
+        user.setId(1L);
+        Category deletedTarget = new Category();
+        deletedTarget.setId(3L);
+        deletedTarget.setUser(user);
         deletedTarget.setDeletedAt(LocalDateTime.now());
 
         when(transactionRepository.findById(txId)).thenReturn(Optional.of(existingTx));
         when(categoryRepository.findById(request.categoryId())).thenReturn(Optional.of(deletedTarget));
 
         assertThatThrownBy(() -> transactionService.updateTransaction(txId, request))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("Category not found with ID: " + request.categoryId());
+                .isInstanceOf(ResourceNotFoundException.class);
 
         verify(transactionRepository, never()).save(any(Transaction.class));
     }
@@ -345,8 +375,7 @@ class TransactionServiceTest {
         when(categoryRepository.findById(request.categoryId())).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> transactionService.updateTransaction(txId, request))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("Category not found with ID: " + request.categoryId());
+                .isInstanceOf(ResourceNotFoundException.class);
     }
 
     @Test
@@ -356,23 +385,24 @@ class TransactionServiceTest {
         UpdateTransactionRequest request = new UpdateTransactionRequest(3L, "Name", BigDecimal.valueOf(25), LocalDate.now(), "Desc");
 
         Transaction existingTx = createMockTransaction(txId, 1L, 2L, "Old Name", TransactionType.EXPENSE, BigDecimal.valueOf(15));
-        User otherUser = new User(); otherUser.setId(99L);
-        Category targetCategory = new Category(); targetCategory.setId(3L); targetCategory.setUser(otherUser);
+        User otherUser = new User();
+        otherUser.setId(99L);
+        Category targetCategory = new Category();
+        targetCategory.setId(3L);
+        targetCategory.setUser(otherUser);
 
         when(transactionRepository.findById(txId)).thenReturn(Optional.of(existingTx));
         when(categoryRepository.findById(request.categoryId())).thenReturn(Optional.of(targetCategory));
 
         assertThatThrownBy(() -> transactionService.updateTransaction(txId, request))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("Category must belong to the specified user.");
+                .isInstanceOf(ResourceNotFoundException.class);
     }
 
     @Test
     @DisplayName("deleteTransaction: Should successfully remove transaction when it has no relationships")
     void deleteTransaction_PlainTransaction_DeletesSuccessfully() {
         Long txId = 42L;
-        Transaction tx = new Transaction();
-        tx.setId(txId);
+        Transaction tx = createMockTransaction(txId, 1L, 2L, "Plain", TransactionType.EXPENSE, BigDecimal.TEN);
         tx.setSourceTemplate(null);
 
         when(transactionRepository.findById(txId)).thenReturn(Optional.of(tx));
@@ -386,8 +416,7 @@ class TransactionServiceTest {
     @DisplayName("deleteTransaction: Should safely unbind relationship before dropping if linked to a template")
     void deleteTransaction_LinkedToTemplate_UnbindsAndDeletes() {
         Long txId = 42L;
-        Transaction tx = new Transaction();
-        tx.setId(txId);
+        Transaction tx = createMockTransaction(txId, 1L, 2L, "Linked", TransactionType.EXPENSE, BigDecimal.TEN);
 
         RecurringTransaction template = new RecurringTransaction();
         template.setId(100L);
@@ -402,14 +431,13 @@ class TransactionServiceTest {
     }
 
     @Test
-    @DisplayName("deleteTransaction: Should throw IllegalArgumentException when transaction target is absent")
+    @DisplayName("deleteTransaction: Should throw ResourceNotFoundException when transaction target is absent")
     void deleteTransaction_NotFound_ThrowsException() {
         Long txId = 42L;
         when(transactionRepository.findById(txId)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> transactionService.deleteTransaction(txId))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("Transaction not found with ID: " + txId);
+                .isInstanceOf(ResourceNotFoundException.class);
 
         verify(transactionRepository, never()).delete(any(Transaction.class));
     }

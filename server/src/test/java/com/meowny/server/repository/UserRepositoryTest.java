@@ -96,6 +96,23 @@ public class UserRepositoryTest extends AbstractIntegrationTest {
     }
 
     @Test
+    @DisplayName("Should find user by email ignoring case")
+    void shouldFindUserByEmailIgnoreCase() {
+        Optional<User> foundUser = userRepository.findUserByEmailIgnoreCase("Vincent@Meowny.com");
+
+        assertThat(foundUser).isPresent();
+        assertThat(foundUser.get().getUsername()).isEqualTo("vincent_m");
+    }
+
+    @Test
+    @DisplayName("Should return true when verifying email existence ignoring case")
+    void shouldReturnTrueWhenEmailExistsIgnoreCase() {
+        boolean exists = userRepository.existsByEmailIgnoreCase("VINCENT@meowny.com");
+
+        assertThat(exists).isTrue();
+    }
+
+    @Test
     @DisplayName("Should return false when verifying existence of an unregistered email")
     void shouldReturnFalseWhenEmailDoesNotExist() {
         boolean exists = userRepository.existsByEmail("nobody@nowhere.com");

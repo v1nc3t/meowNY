@@ -7,7 +7,9 @@ import com.meowny.server.entity.Category;
 import com.meowny.server.entity.CategoryGroup;
 import com.meowny.server.entity.User;
 import com.meowny.server.exception.ResourceConflictException;
+import com.meowny.server.exception.ResourceNotFoundException;
 import com.meowny.server.repository.*;
+import com.meowny.server.security.CurrentUserService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -20,25 +22,27 @@ public class CategoryService {
 
     private final CategoryRepository categoryRepository;
     private final CategoryGroupRepository categoryGroupRepository;
-    private final UserRepository userRepository;
     private final RecurringTransactionRepository recurringTransactionRepository;
     private final BudgetRepository budgetRepository;
+    private final CurrentUserService currentUserService;
 
-    public CategoryService(CategoryRepository categoryRepository,
-                           CategoryGroupRepository categoryGroupRepository,
-                           UserRepository userRepository,
-                           RecurringTransactionRepository recurringTransactionRepository,
-                           BudgetRepository budgetRepository) {
+    public CategoryService(
+            CategoryRepository categoryRepository,
+            CategoryGroupRepository categoryGroupRepository,
+            RecurringTransactionRepository recurringTransactionRepository,
+            BudgetRepository budgetRepository,
+            CurrentUserService currentUserService) {
         this.categoryRepository = categoryRepository;
         this.categoryGroupRepository = categoryGroupRepository;
-        this.userRepository = userRepository;
         this.recurringTransactionRepository = recurringTransactionRepository;
         this.budgetRepository = budgetRepository;
+        this.currentUserService = currentUserService;
     }
 
     @Transactional(readOnly = true)
-    public List<CategoryResponse> getCategoriesByUserId(Long userId) {
-        return categoryRepository.findByUserIdAndDeletedAtIsNull(userId)
+    public List<CategoryResponse> getCurrentUserCategories() {
+        User currentUser = currentUserService.getCurrentUser();
+        return categoryRepository.findByUserIdAndDeletedAtIsNull(currentUser.getId())
                 .stream()
                 .map(this::mapToResponse)
                 .collect(Collectors.toList());
@@ -46,19 +50,20 @@ public class CategoryService {
 
     @Transactional
     public CategoryResponse createCategory(CreateCategoryRequest request) {
-        User user = userRepository.findById(request.userId())
-                .orElseThrow(() -> new IllegalArgumentException("User not found with ID: " + request.userId()));
+        User user = currentUserService.getCurrentUser();
+        Long userId = user.getId();
 
-        categoryRepository.findByUserIdAndNameIgnoreCase(request.userId(), request.name())
+        categoryRepository.findByUserIdAndNameIgnoreCase(userId, request.name())
                 .ifPresent(existing -> {
-                    throw new ResourceConflictException("A category with the name '" + request.name() + "' already exists.");
+                    throw new ResourceConflictException(
+                            "A category with the name '" + request.name() + "' already exists.");
                 });
 
         Category category = new Category();
         category.setUser(user);
         category.setType(request.type());
         category.setName(request.name());
-        category.setCategoryGroup(resolveCategoryGroup(request.categoryGroupId(), request.userId()));
+        category.setCategoryGroup(resolveCategoryGroup(request.categoryGroupId(), userId));
 
         Category savedCategory = categoryRepository.save(category);
         return mapToResponse(savedCategory);
@@ -66,17 +71,19 @@ public class CategoryService {
 
     @Transactional
     public CategoryResponse updateCategoryName(Long id, UpdateCategoryRequest request) {
-        Category category = findActiveCategory(id);
+        Category category = findActiveOwnedCategory(id);
+        Long userId = category.getUser().getId();
 
         if (!category.getName().equalsIgnoreCase(request.name())) {
-            categoryRepository.findByUserIdAndNameIgnoreCase(category.getUser().getId(), request.name())
+            categoryRepository.findByUserIdAndNameIgnoreCase(userId, request.name())
                     .ifPresent(existing -> {
-                        throw new ResourceConflictException("Another category with the name '" + request.name() + "' already exists.");
+                        throw new ResourceConflictException(
+                                "Another category with the name '" + request.name() + "' already exists.");
                     });
             category.setName(request.name());
         }
 
-        category.setCategoryGroup(resolveCategoryGroup(request.categoryGroupId(), category.getUser().getId()));
+        category.setCategoryGroup(resolveCategoryGroup(request.categoryGroupId(), userId));
 
         Category updatedCategory = categoryRepository.save(category);
         return mapToResponse(updatedCategory);
@@ -84,11 +91,12 @@ public class CategoryService {
 
     @Transactional
     public void deleteCategory(Long id) {
-        Category category = findActiveCategory(id);
+        Category category = findActiveOwnedCategory(id);
 
         boolean hasRecurringTransactions = recurringTransactionRepository.existsByCategoryId(id);
         if (hasRecurringTransactions) {
-            throw new ResourceConflictException("Cannot delete category because it is linked to active recurring transactions.");
+            throw new ResourceConflictException(
+                    "Cannot delete category because it is linked to active recurring transactions.");
         }
 
         budgetRepository.deleteByUserIdAndCategoryId(category.getUser().getId(), id);
@@ -97,12 +105,13 @@ public class CategoryService {
         categoryRepository.save(category);
     }
 
-    private Category findActiveCategory(Long id) {
+    private Category findActiveOwnedCategory(Long id) {
         Category category = categoryRepository.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("Category not found with ID: " + id));
+                .orElseThrow(ResourceNotFoundException::new);
         if (category.isDeleted()) {
-            throw new IllegalArgumentException("Category not found with ID: " + id);
+            throw new ResourceNotFoundException();
         }
+        currentUserService.requireOwnedByCurrentUser(category.getUser().getId());
         return category;
     }
 
@@ -112,10 +121,10 @@ public class CategoryService {
         }
 
         CategoryGroup group = categoryGroupRepository.findById(categoryGroupId)
-                .orElseThrow(() -> new IllegalArgumentException("Category group not found with ID: " + categoryGroupId));
+                .orElseThrow(ResourceNotFoundException::new);
 
         if (!group.getUser().getId().equals(userId)) {
-            throw new IllegalArgumentException("Category group must belong to the specified user.");
+            throw new ResourceNotFoundException();
         }
 
         return group;

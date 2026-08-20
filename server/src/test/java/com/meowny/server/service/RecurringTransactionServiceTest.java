@@ -9,10 +9,13 @@ import com.meowny.server.entity.RecurringTransaction;
 import com.meowny.server.entity.TransactionType;
 import com.meowny.server.entity.User;
 import com.meowny.server.exception.ResourceConflictException;
+import com.meowny.server.exception.ResourceNotFoundException;
 import com.meowny.server.repository.CategoryRepository;
 import com.meowny.server.repository.RecurringTransactionRepository;
 import com.meowny.server.repository.TransactionRepository;
-import com.meowny.server.repository.UserRepository;
+import com.meowny.server.security.CurrentUserService;
+import com.meowny.server.support.TestCurrentUserSupport;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -37,29 +40,37 @@ class RecurringTransactionServiceTest {
     private RecurringTransactionRepository recurringTransactionRepository;
 
     @Mock
-    private UserRepository userRepository;
-
-    @Mock
     private CategoryRepository categoryRepository;
 
     @Mock
     private TransactionRepository transactionRepository;
 
+    @Mock
+    private CurrentUserService currentUserService;
+
     @InjectMocks
     private RecurringTransactionService recurringTransactionService;
 
-    @Test
-    @DisplayName("getTemplatesByUserId: Should return list of mapped templates for valid user")
-    void getTemplatesByUserId_ValidUser_ReturnsMappedList() {
-        Long userId = 1L;
-        RecurringTransaction template = createMockTemplate(100L, userId, 2L, "Subscription", TransactionType.EXPENSE, BigDecimal.valueOf(15));
-        when(recurringTransactionRepository.findByUserId(userId)).thenReturn(List.of(template));
+    private User currentUser;
 
-        List<RecurringTransactionResponse> results = recurringTransactionService.getTemplatesByUserId(userId);
+    @BeforeEach
+    void setUp() {
+        currentUser = new User();
+        currentUser.setId(1L);
+        TestCurrentUserSupport.stubCurrentUser(currentUserService, currentUser);
+    }
+
+    @Test
+    @DisplayName("getCurrentUserTemplates: Should return list of mapped templates for valid user")
+    void getCurrentUserTemplates_ValidUser_ReturnsMappedList() {
+        RecurringTransaction template = createMockTemplate(100L, 1L, 2L, "Subscription", TransactionType.EXPENSE, BigDecimal.valueOf(15));
+        when(recurringTransactionRepository.findByUserId(1L)).thenReturn(List.of(template));
+
+        List<RecurringTransactionResponse> results = recurringTransactionService.getCurrentUserTemplates();
 
         assertThat(results).hasSize(1);
         assertThat(results.get(0).id()).isEqualTo(100L);
-        verify(recurringTransactionRepository).findByUserId(userId);
+        verify(recurringTransactionRepository).findByUserId(1L);
     }
 
     @Test
@@ -77,28 +88,31 @@ class RecurringTransactionServiceTest {
     }
 
     @Test
-    @DisplayName("getTemplateById: Should throw IllegalArgumentException when template missing")
+    @DisplayName("getTemplateById: Should throw ResourceNotFoundException when template missing")
     void getTemplateById_NotFound_ThrowsException() {
         Long templateId = 100L;
         when(recurringTransactionRepository.findById(templateId)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> recurringTransactionService.getTemplateById(templateId))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("Recurring template not found with ID: " + templateId);
+                .isInstanceOf(ResourceNotFoundException.class);
     }
 
     @Test
     @DisplayName("createTemplate: Should successfully save template when cross-validations pass")
     void createTemplate_ValidInput_CreatesSuccessfully() {
         CreateRecurringTransactionRequest request = new CreateRecurringTransactionRequest(
-                1L, 2L, "Netflix", BigDecimal.valueOf(15), LocalDate.now().plusDays(5), Frequency.MONTHLY
+                2L, "Netflix", BigDecimal.valueOf(15), LocalDate.now().plusDays(5), Frequency.MONTHLY
         );
 
-        User user = new User(); user.setId(1L);
-        Category category = new Category(); category.setId(2L); category.setUser(user); category.setType(TransactionType.EXPENSE); category.setName("Entertainment");
+        User user = new User();
+        user.setId(1L);
+        Category category = new Category();
+        category.setId(2L);
+        category.setUser(user);
+        category.setType(TransactionType.EXPENSE);
+        category.setName("Entertainment");
         RecurringTransaction savedTemplate = createMockTemplate(100L, 1L, 2L, "Netflix", TransactionType.EXPENSE, BigDecimal.valueOf(15));
 
-        when(userRepository.findById(request.userId())).thenReturn(Optional.of(user));
         when(categoryRepository.findById(request.categoryId())).thenReturn(Optional.of(category));
         when(recurringTransactionRepository.save(any(RecurringTransaction.class))).thenReturn(savedTemplate);
 
@@ -111,42 +125,29 @@ class RecurringTransactionServiceTest {
     }
 
     @Test
-    @DisplayName("createTemplate: Should throw exception if target user context is absent")
-    void createTemplate_UserNotFound_ThrowsException() {
-        CreateRecurringTransactionRequest request = new CreateRecurringTransactionRequest(1L, 2L, "Netflix", BigDecimal.valueOf(15), LocalDate.now(), Frequency.MONTHLY);
-        when(userRepository.findById(request.userId())).thenReturn(Optional.empty());
-
-        assertThatThrownBy(() -> recurringTransactionService.createTemplate(request))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("User not found with ID: " + request.userId());
-    }
-
-    @Test
     @DisplayName("createTemplate: Should throw exception if provided category does not exist")
     void createTemplate_CategoryNotFound_ThrowsException() {
-        CreateRecurringTransactionRequest request = new CreateRecurringTransactionRequest(1L, 2L, "Netflix", BigDecimal.valueOf(15), LocalDate.now(), Frequency.MONTHLY);
-        when(userRepository.findById(request.userId())).thenReturn(Optional.of(new User()));
+        CreateRecurringTransactionRequest request = new CreateRecurringTransactionRequest(2L, "Netflix", BigDecimal.valueOf(15), LocalDate.now(), Frequency.MONTHLY);
         when(categoryRepository.findById(request.categoryId())).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> recurringTransactionService.createTemplate(request))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("Category not found with ID: " + request.categoryId());
+                .isInstanceOf(ResourceNotFoundException.class);
     }
 
     @Test
     @DisplayName("createTemplate: Should throw exception if category matches an external user scope")
     void createTemplate_CategoryBelongsToAnother_ThrowsException() {
-        CreateRecurringTransactionRequest request = new CreateRecurringTransactionRequest(1L, 2L, "Netflix", BigDecimal.valueOf(15), LocalDate.now(), Frequency.MONTHLY);
-        User user = new User(); user.setId(1L);
-        User externalUser = new User(); externalUser.setId(99L);
-        Category category = new Category(); category.setId(2L); category.setUser(externalUser);
+        CreateRecurringTransactionRequest request = new CreateRecurringTransactionRequest(2L, "Netflix", BigDecimal.valueOf(15), LocalDate.now(), Frequency.MONTHLY);
+        User externalUser = new User();
+        externalUser.setId(99L);
+        Category category = new Category();
+        category.setId(2L);
+        category.setUser(externalUser);
 
-        when(userRepository.findById(request.userId())).thenReturn(Optional.of(user));
         when(categoryRepository.findById(request.categoryId())).thenReturn(Optional.of(category));
 
         assertThatThrownBy(() -> recurringTransactionService.createTemplate(request))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("Category must belong to the specified user.");
+                .isInstanceOf(ResourceNotFoundException.class);
     }
 
     @Test
@@ -155,9 +156,14 @@ class RecurringTransactionServiceTest {
         Long templateId = 100L;
         UpdateRecurringTransactionRequest request = new UpdateRecurringTransactionRequest(3L, "New Name", BigDecimal.valueOf(20), LocalDate.now(), Frequency.WEEKLY, false);
 
-        User user = new User(); user.setId(1L);
+        User user = new User();
+        user.setId(1L);
         RecurringTransaction existingTemplate = createMockTemplate(templateId, 1L, 2L, "Old Name", TransactionType.EXPENSE, BigDecimal.valueOf(15));
-        Category targetCategory = new Category(); targetCategory.setId(3L); targetCategory.setUser(user); targetCategory.setType(TransactionType.EXPENSE); targetCategory.setName("New Cat");
+        Category targetCategory = new Category();
+        targetCategory.setId(3L);
+        targetCategory.setUser(user);
+        targetCategory.setType(TransactionType.EXPENSE);
+        targetCategory.setName("New Cat");
 
         when(recurringTransactionRepository.findById(templateId)).thenReturn(Optional.of(existingTemplate));
         when(categoryRepository.findById(request.categoryId())).thenReturn(Optional.of(targetCategory));
@@ -179,8 +185,7 @@ class RecurringTransactionServiceTest {
         when(recurringTransactionRepository.findById(templateId)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> recurringTransactionService.updateTemplate(templateId, request))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("Recurring template not found with ID: " + templateId);
+                .isInstanceOf(ResourceNotFoundException.class);
     }
 
     @Test
@@ -194,8 +199,7 @@ class RecurringTransactionServiceTest {
         when(categoryRepository.findById(request.categoryId())).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> recurringTransactionService.updateTemplate(templateId, request))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("Category not found with ID: " + request.categoryId());
+                .isInstanceOf(ResourceNotFoundException.class);
     }
 
     @Test
@@ -205,52 +209,55 @@ class RecurringTransactionServiceTest {
         UpdateRecurringTransactionRequest request = new UpdateRecurringTransactionRequest(3L, "Name", BigDecimal.valueOf(20), LocalDate.now(), Frequency.WEEKLY, true);
 
         RecurringTransaction existingTemplate = createMockTemplate(templateId, 1L, 2L, "Old Name", TransactionType.EXPENSE, BigDecimal.valueOf(15));
-        User internalUser = new User(); internalUser.setId(99L);
-        Category targetCategory = new Category(); targetCategory.setId(3L); targetCategory.setUser(internalUser);
+        User internalUser = new User();
+        internalUser.setId(99L);
+        Category targetCategory = new Category();
+        targetCategory.setId(3L);
+        targetCategory.setUser(internalUser);
 
         when(recurringTransactionRepository.findById(templateId)).thenReturn(Optional.of(existingTemplate));
         when(categoryRepository.findById(request.categoryId())).thenReturn(Optional.of(targetCategory));
 
         assertThatThrownBy(() -> recurringTransactionService.updateTemplate(templateId, request))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("Category must belong to the specified user.");
+                .isInstanceOf(ResourceNotFoundException.class);
     }
 
     @Test
     @DisplayName("deleteTemplate: Should complete successfully when object exists and has no historical dependencies")
     void deleteTemplate_Clean_DeletesSuccessfully() {
         Long templateId = 100L;
-        when(recurringTransactionRepository.existsById(templateId)).thenReturn(true);
+        RecurringTransaction template = createMockTemplate(templateId, 1L, 2L, "Subscription", TransactionType.EXPENSE, BigDecimal.valueOf(15));
+        when(recurringTransactionRepository.findById(templateId)).thenReturn(Optional.of(template));
         when(transactionRepository.existsBySourceTemplate_Id(templateId)).thenReturn(false);
 
         recurringTransactionService.deleteTemplate(templateId);
 
-        verify(recurringTransactionRepository).deleteById(templateId);
+        verify(recurringTransactionRepository).delete(template);
     }
 
     @Test
     @DisplayName("deleteTemplate: Should throw exception if entity identity does not exist")
     void deleteTemplate_NotFound_ThrowsException() {
         Long templateId = 100L;
-        when(recurringTransactionRepository.existsById(templateId)).thenReturn(false);
+        when(recurringTransactionRepository.findById(templateId)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> recurringTransactionService.deleteTemplate(templateId))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("Recurring template not found with ID: " + templateId);
-        verify(recurringTransactionRepository, never()).deleteById(anyLong());
+                .isInstanceOf(ResourceNotFoundException.class);
+        verify(recurringTransactionRepository, never()).delete(any());
     }
 
     @Test
     @DisplayName("deleteTemplate: Should throw ResourceConflictException if history tracking constraints prevent purging")
     void deleteTemplate_LinkedToTransactions_ThrowsConflictException() {
         Long templateId = 100L;
-        when(recurringTransactionRepository.existsById(templateId)).thenReturn(true);
+        RecurringTransaction template = createMockTemplate(templateId, 1L, 2L, "Subscription", TransactionType.EXPENSE, BigDecimal.valueOf(15));
+        when(recurringTransactionRepository.findById(templateId)).thenReturn(Optional.of(template));
         when(transactionRepository.existsBySourceTemplate_Id(templateId)).thenReturn(true);
 
         assertThatThrownBy(() -> recurringTransactionService.deleteTemplate(templateId))
                 .isInstanceOf(ResourceConflictException.class)
                 .hasMessageContaining("Cannot delete this template because it has generated past transaction records. Disable it instead.");
-        verify(recurringTransactionRepository, never()).deleteById(anyLong());
+        verify(recurringTransactionRepository, never()).delete(any());
     }
 
     private RecurringTransaction createMockTemplate(Long id, Long userId, Long categoryId, String name, TransactionType type, BigDecimal amount) {

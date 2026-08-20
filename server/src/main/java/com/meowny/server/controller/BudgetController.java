@@ -33,12 +33,11 @@ public class BudgetController {
     }
 
     @GetMapping
-    public ResponseEntity<List<BudgetResponse>> getBudgetByPeriod(
-            @RequestParam @NotNull Long userId,
+    public ResponseEntity<List<BudgetResponse>> getCurrentUserBudgetsByPeriod(
             @RequestParam @NotNull @Min(0) Integer year,
             @RequestParam @NotNull @Min(1) @Max(12) Integer month
     ) {
-        List<BudgetResponse> responses = budgetService.getBudgetsByPeriod(userId, year, month);
+        List<BudgetResponse> responses = budgetService.getCurrentUserBudgetsByPeriod(year, month);
         return ResponseEntity.ok(responses);
     }
 
