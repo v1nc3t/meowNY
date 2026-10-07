@@ -1,0 +1,1079 @@
+=====================================================================
+ EXPENSE TRACKER - DATABASE SCHEMA  v3  (PostgreSQL 14+, Node.js)
+ Auth: Better Auth      Privacy: GDPR-minded      Plan: see PLAN.md
+=====================================================================
+
+FILE LAYOUT
+  PART 1  DBML        tables, indexes, foreign keys
+                      (paste into dbdiagram.io to get the diagram)
+  PART 2  SQL         what DBML cannot express: CHECKs, partial unique
+                      indexes, triggers (updated_at, history)
+  PART 3  SQL         budget-vs-actual functions (statistics + charts)
+  PART 4  GDPR        checklist, erase/export functions, retention, cleanup
+  PART 5  FLOWS       budgets, recurring, history, auth, charts, currency,
+                      mobile, how to extend
+  PART 6  FUTURE      notes for expense splitting, admin board, bank
+                      connection (NOT part of the v1 schema)
+  PART 7  BUILD ORDER short version of the plan (full plan: PLAN.md)
+
+I am not a lawyer. Part 4 is a technical checklist, not legal advice.
+Get it reviewed before you open the app to people outside your circle.
+
+KEY DESIGN DECISIONS
+  1. BUDGETS ARE EFFECTIVE-DATED. A budget row says "from month X
+     onward the limit is Y". The limit for any month is the latest row
+     whose effective_from <= that month. Nothing is copied month to
+     month, so budgets stay the same until the user changes them, and
+     old rows are never lost (that IS the budget history).
+  2. TWO BUDGET LEVELS, for both EXPENSE and INCOME:
+        GLOBAL   = the monthly total (spending cap / expected income)
+        CATEGORY = the part of that total allocated to one category
+     Allocated and unallocated amounts are computed, not stored.
+  3. A budget row with amount_limit = NULL means "no budget from this
+     month onward" (removes a budget without losing history).
+  4. BUDGETS LIVE ON CATEGORIES. Recurring items (salary, subscription,
+     bill, ...) have a category like any transaction, so budgeting the
+     category budgets them.
+  5. RECURRING items are templates. "Mark as paid" copies them into a
+     normal row in transactions (with a back-reference). The recurring
+     amount is the expected cost; transactions.planned_amount keeps
+     what was expected at that moment.
+  6. HISTORY: budgets keep their own timeline. Every other change
+     (create/edit/delete) on user data is recorded in audit_log by
+     database triggers. Secret tables (sessions, accounts,
+     verifications) are NOT logged.
+  7. Amounts are always positive. Direction comes from categories.type.
+  8. AUTH = BETTER AUTH. It owns four tables (users, sessions, accounts,
+     verifications). Their names/columns are mapped to this snake_case
+     style with its modelName/fields options. User ids are UUIDs.
+  9. UUID FOR USERS. users.id is a uuid (Better Auth supports it
+     natively, ids are not guessable, and they will appear in admin
+     screens, exports and later in sharing/invites). Other tables keep
+     bigint ids; they are never exposed as a way to find a person.
+ 10. GDPR BY DESIGN: all user data hangs off users.id with ON DELETE
+     CASCADE, so erasing an account is one operation (erase_user()).
+     Consents and privacy requests are recorded. Data export is one
+     function (export_user_data()).
+ 11. Small closed sets (type, scope, interval_unit, ...) are varchar +
+     CHECK instead of native Postgres enums (easy with Hibernate-less
+     Node code, easy to extend with a migration).
+ 12. Every schema change goes through a migration tool (node-pg-migrate
+     or Drizzle Kit), never through ORM auto-sync.
+ 13. One currency per user (user_settings.currency), user-changeable.
+
+
+=====================================================================
+ PART 1 - DBML
+=====================================================================
+
+// ------------------- Better Auth core tables (mapped) -------------------
+// IMPORTANT: Better Auth generates its own schema from its config.
+// Run its CLI against a scratch database, compare the output with the four
+// tables below, and adjust the mapping options until they match
+// (see PLAN.md, phase 1). The column list here is the target, the CLI
+// output is the truth for your installed version.
+
+Table users {
+  id uuid [pk, default: `gen_random_uuid()`]
+  name varchar(100) [not null, note: 'Required by Better Auth. Google fills it in; email sign-ups provide it.']
+  email varchar(254) [not null, note: 'Login identifier']
+  email_verified boolean [not null, default: false]
+  image text [null, note: 'Profile picture URL (Google provides one). Optional; you can choose not to keep it (data minimization).']
+  deletion_requested_at timestamptz [null, note: 'Set when the user asks to delete the account. A scheduled job erases it after a short grace period (Part 4).']
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`]
+
+  Indexes {
+    `lower(email)` [unique, name: "uq_users_email_ci"]
+    email [name: "idx_users_email", note: 'plain lookups by email at login']
+  }
+}
+
+Table sessions {
+  id uuid [pk, default: `gen_random_uuid()`]
+  user_id uuid [not null]
+  token text [not null, note: 'Opaque session token']
+  expires_at timestamptz [not null]
+  ip_address text [null, note: 'Personal data. Turn IP tracking off if Better Auth allows it, or purge sessions quickly (Part 4).']
+  user_agent text [null, note: 'Device/browser string, used for a "your sessions" screen']
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`]
+
+  Indexes {
+    token [unique, name: "uq_sessions_token"]
+    user_id [name: "idx_sessions_user"]
+    expires_at [name: "idx_sessions_expiry"]
+  }
+}
+
+Table accounts {
+  id uuid [pk, default: `gen_random_uuid()`]
+  user_id uuid [not null]
+  provider_id varchar(50) [not null, note: '"credential" (email+password) or "google" (more later, no schema change)']
+  account_id varchar(255) [not null, note: 'Provider-side id: Google "sub", or the user id for credential']
+  password text [null, note: 'Password hash, only for provider "credential". Salt is stored inside the hash string. No separate salt column.']
+  access_token text [null, note: 'Not needed for sign-in only. Do not keep if Better Auth lets you skip it.']
+  refresh_token text [null, note: 'Same as above']
+  id_token text [null, note: 'Same as above']
+  access_token_expires_at timestamptz [null]
+  refresh_token_expires_at timestamptz [null]
+  scope text [null]
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`]
+
+  Indexes {
+    (provider_id, account_id) [unique, name: "uq_accounts_provider_subject"]
+    user_id [name: "idx_accounts_user"]
+  }
+}
+
+Table verifications {
+  id uuid [pk, default: `gen_random_uuid()`]
+  identifier text [not null, note: 'What is being verified (e.g. an email). NOT a foreign key to users.']
+  value text [not null, note: 'Token/code value (Better Auth decides the format)']
+  expires_at timestamptz [not null]
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`]
+
+  Indexes {
+    identifier [name: "idx_verifications_identifier"]
+    expires_at [name: "idx_verifications_expiry"]
+  }
+}
+
+// --------------------------- App user data ---------------------------
+
+Table user_settings {
+  user_id uuid [pk]
+  currency char(3) [not null, note: 'ISO 4217, e.g. EUR. User-changeable. A display setting: amounts are NOT converted when it changes.']
+  locale varchar(35) [not null, default: 'en', note: 'BCP 47 tag, number/date formatting']
+  timezone varchar(64) [not null, default: 'UTC', note: 'IANA zone, e.g. Europe/Amsterdam']
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`]
+  Note: 'Created in the onboarding step after the first login (currency is chosen there). No row = user still has to finish onboarding.'
+}
+
+Table user_consents {
+  id bigint [pk, increment]
+  user_id uuid [not null]
+  purpose varchar(40) [not null, note: 'TERMS_OF_SERVICE | PRIVACY_POLICY now; later BANK_DATA_ACCESS, MARKETING_EMAIL, ...']
+  policy_version varchar(20) [not null, note: 'Which version of the text was accepted, e.g. 2026-10-01']
+  granted_at timestamptz [not null, default: `now()`]
+  withdrawn_at timestamptz [null]
+
+  Indexes {
+    (user_id, purpose, granted_at desc) [name: "idx_consents_user_purpose"]
+  }
+  Note: 'Append-only record of what the user agreed to and when. Withdrawing sets withdrawn_at, never deletes the row.'
+}
+
+Table privacy_requests {
+  id bigint [pk, increment]
+  user_id uuid [not null, note: 'Deliberately NO foreign key: the record must survive the erasure it documents.']
+  type varchar(20) [not null, note: 'EXPORT | ERASURE | RECTIFICATION | OTHER']
+  status varchar(20) [not null, default: 'PENDING', note: 'PENDING | COMPLETED | REJECTED']
+  requested_at timestamptz [not null, default: `now()`]
+  completed_at timestamptz [null]
+  note varchar(255) [null]
+
+  Indexes {
+    (user_id, requested_at desc) [name: "idx_privacy_requests_user"]
+  }
+  Note: 'Proof that requests were handled (accountability). Contains no personal data besides the (now orphaned) id.'
+}
+
+// ----------------------------- Budgeting ------------------------------
+
+Table category_groups {
+  id bigint [pk, increment]
+  user_id uuid [not null]
+  name varchar(50) [not null]
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`]
+
+  Indexes {
+    (user_id, name) [unique, name: "uq_user_group_name"]
+  }
+  Note: 'Optional rollup for statistics, e.g. "Housing" = rent + utilities. Same-user check for categories.category_group_id is done in the service layer.'
+}
+
+Table categories {
+  id bigint [pk, increment]
+  user_id uuid [not null]
+  category_group_id bigint [null]
+  type varchar(10) [not null, note: 'INCOME | EXPENSE. Immutable after creation (trigger in Part 2)']
+  name varchar(50) [not null]
+  deleted_at timestamptz [null, note: 'Soft delete; keeps old transactions reportable']
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`]
+
+  Indexes {
+    (id, user_id) [unique, name: "uq_categories_id_user", note: 'target of composite FKs']
+    (id, user_id, type) [unique, name: "uq_categories_id_user_type", note: 'target of composite FK from budgets']
+    (user_id, deleted_at) [name: "idx_categories_user_active"]
+    category_group_id [name: "idx_categories_group"]
+  }
+  Note: 'Unique active name per user+type is a partial index, see Part 2.'
+}
+
+Table budgets {
+  id bigint [pk, increment]
+  user_id uuid [not null]
+  type varchar(10) [not null, note: 'EXPENSE = spending limit, INCOME = predicted income. For CATEGORY rows it must equal the category type (composite FK).']
+  scope varchar(10) [not null, note: 'GLOBAL | CATEGORY']
+  category_id bigint [null, note: 'NULL for GLOBAL, set for CATEGORY']
+  amount_limit numeric(12,2) [null, note: 'NULL = no budget from effective_from onward']
+  effective_from date [not null, note: 'Always the 1st of a month. Applies to that month and every later month until a newer row exists.']
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`]
+
+  Indexes {
+    (user_id, category_id, effective_from) [unique, name: "uq_budget_category_month", note: 'GLOBAL rows have NULL category_id, covered by the partial index in Part 2']
+    (user_id, type, scope, category_id, effective_from) [name: "idx_budget_lookup"]
+    category_id [name: "idx_budgets_category"]
+  }
+}
+
+Table recurring_transactions {
+  id bigint [pk, increment]
+  user_id uuid [not null]
+  category_id bigint [not null, note: 'Salary, Subscriptions, Bills, ... The category type decides income vs expense.']
+  name varchar(50) [not null]
+  description varchar(255) [null]
+  amount numeric(12,2) [not null, note: 'Expected amount per occurrence']
+  start_date date [not null, note: 'Anchor. Due dates are computed from this, never from the previous due date (avoids month-end drift).']
+  interval_unit varchar(10) [not null, note: 'DAY | WEEK | MONTH | YEAR']
+  interval_count smallint [not null, default: 1, note: 'Every N units. Weekly = (WEEK,1), biweekly = (WEEK,2), quarterly = (MONTH,3), yearly = (YEAR,1)']
+  next_due_date date [not null, note: 'The occurrence waiting to be paid or skipped']
+  end_date date [null, note: 'Optional last possible due date']
+  is_active boolean [not null, default: true]
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`]
+
+  Indexes {
+    (is_active, next_due_date) [name: "idx_recurring_due"]
+    (user_id, is_active, next_due_date) [name: "idx_recurring_user_due"]
+    category_id [name: "idx_recurring_category"]
+  }
+}
+
+Table transactions {
+  id bigint [pk, increment]
+  user_id uuid [not null]
+  category_id bigint [not null]
+  recurring_transaction_id bigint [null, note: 'Set when created through "mark recurring as paid"']
+  recurring_due_date date [null, note: 'Which occurrence this paid. Together with the id it prevents paying the same occurrence twice.']
+  client_uuid uuid [null, note: 'Generated by the client (web/mobile) per new transaction. Makes retries idempotent: the same request twice creates one row.']
+  name varchar(50) [not null]
+  amount numeric(12,2) [not null, note: 'Actual amount, always positive']
+  planned_amount numeric(12,2) [null, note: 'Recurring amount at the time it was paid; NULL for normal transactions']
+  payment_date date [not null]
+  description varchar(255) [null]
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`]
+
+  Indexes {
+    (user_id, payment_date desc) [name: "idx_tx_user_date"]
+    (user_id, category_id, payment_date desc) [name: "idx_tx_user_category_date"]
+    category_id [name: "idx_tx_category"]
+    (recurring_transaction_id, recurring_due_date) [unique, name: "uq_tx_recurring_occurrence", note: 'NULLs are distinct in Postgres, so normal transactions are unaffected']
+    (user_id, client_uuid) [unique, name: "uq_tx_client_uuid", note: 'NULLs are distinct, so transactions without a client_uuid are unaffected']
+  }
+}
+
+// ------------------------------- History -------------------------------
+
+Table audit_log {
+  id bigint [pk, increment]
+  user_id uuid [null, note: 'Owner of the changed row. Deliberately NO foreign key, so logging never blocks a delete. erase_user() purges these rows.']
+  entity_type varchar(50) [not null, note: 'Table name']
+  entity_id varchar(64) [not null, note: 'Row id as text (bigint ids and uuid ids both fit)']
+  action varchar(10) [not null, note: 'INSERT | UPDATE | DELETE']
+  old_values jsonb [null, note: 'NULL on INSERT. Contains personal data: treat like the rest of the account.']
+  new_values jsonb [null, note: 'NULL on DELETE']
+  changed_at timestamptz [not null, default: `now()`]
+
+  Indexes {
+    (user_id, changed_at desc) [name: "idx_audit_user_time"]
+    (entity_type, entity_id, changed_at desc) [name: "idx_audit_entity"]
+  }
+}
+
+// ----------------------------- Relationships ---------------------------
+
+Ref: sessions.user_id > users.id [delete: cascade]
+Ref: accounts.user_id > users.id [delete: cascade]
+Ref: user_settings.user_id - users.id [delete: cascade]
+Ref: user_consents.user_id > users.id [delete: cascade]
+
+Ref: category_groups.user_id > users.id [delete: cascade]
+
+Ref: categories.user_id > users.id [delete: cascade]
+Ref: categories.category_group_id > category_groups.id [delete: set null]
+
+Ref: budgets.user_id > users.id [delete: cascade]
+// composite: same owner AND same type as the category (skipped for GLOBAL rows, category_id is NULL)
+Ref: budgets.(category_id, user_id, type) > categories.(id, user_id, type) [delete: cascade]
+
+Ref: recurring_transactions.user_id > users.id [delete: cascade]
+// composite: category must belong to the same user
+Ref: recurring_transactions.(category_id, user_id) > categories.(id, user_id) [delete: no action]
+
+Ref: transactions.user_id > users.id [delete: cascade]
+Ref: transactions.(category_id, user_id) > categories.(id, user_id) [delete: no action]
+Ref: transactions.recurring_transaction_id > recurring_transactions.id [delete: set null]
+
+
+=====================================================================
+ PART 2 - POSTGRESQL SUPPLEMENT (constraints, indexes, triggers)
+=====================================================================
+
+-- 2.1 CHECK constraints ------------------------------------------------
+-- (closed value sets: to add a value later, DROP + ADD the constraint
+--  inside one migration)
+
+ALTER TABLE user_settings ADD CONSTRAINT ck_settings_currency
+  CHECK (currency ~ '^[A-Z]{3}$');
+
+ALTER TABLE privacy_requests ADD CONSTRAINT ck_privacy_type
+  CHECK (type IN ('EXPORT','ERASURE','RECTIFICATION','OTHER'));
+ALTER TABLE privacy_requests ADD CONSTRAINT ck_privacy_status
+  CHECK (status IN ('PENDING','COMPLETED','REJECTED'));
+
+ALTER TABLE categories ADD CONSTRAINT ck_categories_type
+  CHECK (type IN ('INCOME','EXPENSE'));
+
+ALTER TABLE budgets ADD CONSTRAINT ck_budget_type
+  CHECK (type IN ('INCOME','EXPENSE'));
+ALTER TABLE budgets ADD CONSTRAINT ck_budget_scope
+  CHECK (scope IN ('GLOBAL','CATEGORY'));
+ALTER TABLE budgets ADD CONSTRAINT ck_budget_scope_category CHECK (
+  (scope = 'GLOBAL'   AND category_id IS NULL) OR
+  (scope = 'CATEGORY' AND category_id IS NOT NULL));
+ALTER TABLE budgets ADD CONSTRAINT ck_budget_first_of_month
+  CHECK (EXTRACT(DAY FROM effective_from) = 1);
+ALTER TABLE budgets ADD CONSTRAINT ck_budget_amount
+  CHECK (amount_limit IS NULL OR amount_limit >= 0);
+
+ALTER TABLE transactions ADD CONSTRAINT ck_tx_amount
+  CHECK (amount > 0);
+ALTER TABLE transactions ADD CONSTRAINT ck_tx_planned
+  CHECK (planned_amount IS NULL OR planned_amount >= 0);
+ALTER TABLE transactions ADD CONSTRAINT ck_tx_recurring_due
+  CHECK (recurring_transaction_id IS NULL OR recurring_due_date IS NOT NULL);
+
+ALTER TABLE recurring_transactions ADD CONSTRAINT ck_rec_amount
+  CHECK (amount > 0);
+ALTER TABLE recurring_transactions ADD CONSTRAINT ck_rec_unit
+  CHECK (interval_unit IN ('DAY','WEEK','MONTH','YEAR'));
+ALTER TABLE recurring_transactions ADD CONSTRAINT ck_rec_interval
+  CHECK (interval_count > 0);
+ALTER TABLE recurring_transactions ADD CONSTRAINT ck_rec_dates
+  CHECK (next_due_date >= start_date AND (end_date IS NULL OR end_date >= start_date));
+
+ALTER TABLE audit_log ADD CONSTRAINT ck_audit_action
+  CHECK (action IN ('INSERT','UPDATE','DELETE'));
+
+-- 2.2 Partial unique indexes --------------------------------------------
+
+-- A category name is unique among ACTIVE categories, so a deleted
+-- "Gym" does not block creating a new "Gym". The same name is allowed
+-- once as INCOME and once as EXPENSE.
+CREATE UNIQUE INDEX uq_categories_active_name
+  ON categories (user_id, type, name) WHERE deleted_at IS NULL;
+
+-- Only one GLOBAL budget per user, type and month.
+CREATE UNIQUE INDEX uq_budget_global_month
+  ON budgets (user_id, type, effective_from) WHERE scope = 'GLOBAL';
+
+-- 2.3 Category type is immutable ------------------------------------------
+-- Changing it would silently flip the meaning of all past transactions.
+
+CREATE FUNCTION prevent_category_type_change() RETURNS trigger
+LANGUAGE plpgsql AS $$
+BEGIN
+  IF NEW.type <> OLD.type THEN
+    RAISE EXCEPTION 'categories.type is immutable (category id %)', OLD.id;
+  END IF;
+  RETURN NEW;
+END $$;
+
+CREATE TRIGGER trg_category_type_immutable
+  BEFORE UPDATE OF type ON categories
+  FOR EACH ROW EXECUTE FUNCTION prevent_category_type_change();
+
+-- 2.4 updated_at ----------------------------------------------------------
+
+CREATE FUNCTION set_updated_at() RETURNS trigger
+LANGUAGE plpgsql AS $$
+BEGIN
+  NEW.updated_at := now();
+  RETURN NEW;
+END $$;
+
+-- 2.5 History: generic audit trigger ---------------------------------------
+
+CREATE FUNCTION audit_row_change() RETURNS trigger
+LANGUAGE plpgsql AS $$
+DECLARE
+  v_old jsonb := CASE WHEN TG_OP IN ('UPDATE','DELETE') THEN to_jsonb(OLD) END;
+  v_new jsonb := CASE WHEN TG_OP IN ('INSERT','UPDATE') THEN to_jsonb(NEW) END;
+  v_row jsonb := COALESCE(v_new, v_old);
+BEGIN
+  -- ignore updates where only updated_at changed
+  IF TG_OP = 'UPDATE' AND (v_old - 'updated_at') = (v_new - 'updated_at') THEN
+    RETURN NULL;
+  END IF;
+
+  INSERT INTO audit_log (user_id, entity_type, entity_id, action, old_values, new_values)
+  VALUES (
+    CASE WHEN TG_TABLE_NAME = 'users' THEN (v_row->>'id')::uuid
+         ELSE (v_row->>'user_id')::uuid END,
+    TG_TABLE_NAME,
+    COALESCE(v_row->>'id', v_row->>'user_id'),      -- user_settings has no id column
+    TG_OP,
+    v_old,
+    v_new);
+  RETURN NULL;
+END $$;
+
+-- Attach to every table that holds user data. NOT attached to
+-- sessions, accounts, verifications (secrets / short-lived), nor to
+-- user_consents and privacy_requests (they are records themselves).
+-- To get history for a NEW table later, add its name to this array.
+DO $$
+DECLARE t text;
+BEGIN
+  FOREACH t IN ARRAY ARRAY['users','user_settings','category_groups','categories',
+                           'budgets','recurring_transactions','transactions']
+  LOOP
+    EXECUTE format('CREATE TRIGGER trg_updated_at BEFORE UPDATE ON %I
+                    FOR EACH ROW EXECUTE FUNCTION set_updated_at()', t);
+    EXECUTE format('CREATE TRIGGER trg_audit AFTER INSERT OR UPDATE OR DELETE ON %I
+                    FOR EACH ROW EXECUTE FUNCTION audit_row_change()', t);
+  END LOOP;
+END $$;
+
+
+=====================================================================
+ PART 3 - STATISTICS ENGINE (functions, used by the charts)
+=====================================================================
+
+-- 3.1 Which budget applies in a given month?
+--     Latest row with effective_from <= month, per (type, scope, category).
+--     Rows with amount_limit NULL (budget removed) are dropped.
+
+CREATE OR REPLACE FUNCTION effective_budgets(p_user uuid, p_month date)
+RETURNS TABLE (type varchar, scope varchar,
+               category_id bigint, amount_limit numeric)
+LANGUAGE sql STABLE AS $$
+  SELECT x.type, x.scope, x.category_id, x.amount_limit
+  FROM (
+    SELECT DISTINCT ON (b.type, b.scope, b.category_id)
+           b.type, b.scope, b.category_id, b.amount_limit
+    FROM budgets b
+    WHERE b.user_id = p_user
+      AND b.effective_from <= date_trunc('month', p_month)::date
+    ORDER BY b.type, b.scope, b.category_id, b.effective_from DESC
+  ) x
+  WHERE x.amount_limit IS NOT NULL
+$$;
+
+-- 3.2 Per category: budgeted vs actual for ONE month (income AND expense)
+--     -> bar chart "budget vs actual per category" / progress bars
+
+CREATE OR REPLACE FUNCTION budget_vs_actual(p_user uuid, p_month date)
+RETURNS TABLE (type varchar, category_id bigint, category_name varchar,
+               budgeted numeric, actual numeric, remaining numeric, pct_used numeric)
+LANGUAGE sql STABLE AS $$
+  WITH act AS (
+    SELECT t.category_id, SUM(t.amount) AS actual
+    FROM transactions t
+    WHERE t.user_id = p_user
+      AND t.payment_date >= date_trunc('month', p_month)::date
+      AND t.payment_date <  date_trunc('month', p_month)::date + INTERVAL '1 month'
+    GROUP BY t.category_id
+  )
+  SELECT c.type, c.id, c.name,
+         eb.amount_limit,
+         COALESCE(act.actual, 0),
+         eb.amount_limit - COALESCE(act.actual, 0),
+         ROUND(100 * COALESCE(act.actual, 0) / NULLIF(eb.amount_limit, 0), 1)
+  FROM categories c
+  LEFT JOIN effective_budgets(p_user, p_month) eb
+         ON eb.scope = 'CATEGORY' AND eb.category_id = c.id
+  LEFT JOIN act ON act.category_id = c.id
+  WHERE c.user_id = p_user
+    AND (c.deleted_at IS NULL OR act.category_id IS NOT NULL)
+  ORDER BY c.type, c.name
+$$;
+
+-- 3.3 One category over a range of months
+--     -> line/bar chart "Food: budget vs actual, Jan-Dec"
+--     budgeted is NULL for months where the category has no budget.
+
+CREATE OR REPLACE FUNCTION category_trend(p_user uuid, p_category bigint,
+                                          p_from date, p_to date)
+RETURNS TABLE (month_start date, budgeted numeric, actual numeric)
+LANGUAGE sql STABLE AS $$
+  SELECT m::date,
+         b.amount_limit,
+         COALESCE(a.actual, 0)
+  FROM generate_series(date_trunc('month', p_from)::date,
+                       date_trunc('month', p_to)::date,
+                       INTERVAL '1 month') m
+  LEFT JOIN LATERAL (
+    SELECT bb.amount_limit
+    FROM budgets bb
+    WHERE bb.user_id = p_user AND bb.category_id = p_category
+      AND bb.effective_from <= m::date
+    ORDER BY bb.effective_from DESC
+    LIMIT 1
+  ) b ON true
+  LEFT JOIN LATERAL (
+    SELECT SUM(t.amount) AS actual
+    FROM transactions t
+    WHERE t.user_id = p_user AND t.category_id = p_category
+      AND t.payment_date >= m::date
+      AND t.payment_date <  (m + INTERVAL '1 month')::date
+  ) a ON true
+  ORDER BY 1
+$$;
+
+-- 3.4 Month totals: global budget, how much of it is allocated to
+--     categories, what is left unallocated, and the actual total.
+--     unallocated < 0 means categories are over-allocated.
+
+CREATE OR REPLACE FUNCTION monthly_overview(p_user uuid, p_month date)
+RETURNS TABLE (type varchar, budgeted numeric, allocated numeric,
+               unallocated numeric, actual numeric, remaining numeric)
+LANGUAGE sql STABLE AS $$
+  WITH eb AS (
+    SELECT * FROM effective_budgets(p_user, p_month)
+  ), act AS (
+    SELECT c.type, SUM(t.amount) AS actual
+    FROM transactions t
+    JOIN categories c ON c.id = t.category_id
+    WHERE t.user_id = p_user
+      AND t.payment_date >= date_trunc('month', p_month)::date
+      AND t.payment_date <  date_trunc('month', p_month)::date + INTERVAL '1 month'
+    GROUP BY c.type
+  )
+  SELECT s.type, s.budgeted, s.allocated,
+         s.budgeted - s.allocated,
+         s.actual,
+         s.budgeted - s.actual
+  FROM (
+    SELECT ty.type,
+           (SELECT g.amount_limit FROM eb g
+             WHERE g.type = ty.type AND g.scope = 'GLOBAL')                 AS budgeted,
+           (SELECT COALESCE(SUM(a.amount_limit), 0) FROM eb a
+             WHERE a.type = ty.type AND a.scope = 'CATEGORY')               AS allocated,
+           COALESCE((SELECT x.actual FROM act x WHERE x.type = ty.type), 0) AS actual
+    FROM (VALUES ('INCOME'::varchar), ('EXPENSE'::varchar)) AS ty(type)
+  ) s
+$$;
+
+-- 3.5 Example: a whole year, month by month (trend charts)
+--   SELECT m::date AS month, o.*
+--   FROM generate_series('2026-01-01'::date, '2026-12-01'::date, '1 month') m,
+--        LATERAL monthly_overview(:user_id, m::date) o;
+
+-- These functions are optional. The same SQL can live as queries in
+-- your Node data layer if you prefer to keep logic in TypeScript.
+
+
+=====================================================================
+ PART 4 - GDPR / PRIVACY
+=====================================================================
+
+4.1 WHAT GDPR ASKS FOR  ->  WHERE THIS SCHEMA / APP HANDLES IT
+  (Technical checklist, not legal advice.)
+
+  Right of access + portability (Art. 15, 20)
+     -> export_user_data(user) below: everything about one user as JSON;
+        also offer CSV for transactions. Only the user themselves
+        (authenticated) can trigger it.
+  Right to erasure (Art. 17)
+     -> erase_user(user) below. Every user-owned table cascades from
+        users.id; the tables without a foreign key (audit_log,
+        verifications) are cleaned explicitly. A short grace period
+        (deletion_requested_at) lets the user change their mind.
+        Backups: see 4.3.
+  Right to rectification (Art. 16)
+     -> users edit their profile/transactions; changes are logged in
+        audit_log (that history belongs to the user and is exported/
+        erased with them).
+  Data minimization + storage limitation (Art. 5)
+     -> collect only: email, name, optional picture, currency/locale/
+        timezone, and the financial entries the user types in.
+        No IP addresses in your own tables; sessions/IP are short-lived
+        (see 4.3). No analytics trackers without consent.
+  Consent and transparency (Art. 6, 7, 12-14)
+     -> user_consents records which policy version was accepted and when.
+        Account creation itself runs on "performance of a contract".
+        Optional things (marketing mails, bank access later) need their
+        own separate consent entry and can be withdrawn.
+  Security (Art. 32)
+     -> TLS everywhere; hashed passwords; secrets only as hashes
+        (sessions are opaque tokens); least-privilege DB roles (the app
+        role cannot DROP/ALTER; an admin role sees a view only);
+        encrypted disk and encrypted backups if you self-host; secrets
+        (Google client secret, auth secret, later bank tokens) NOT in
+        the database or git.
+  Accountability (Art. 5(2), 30)
+     -> privacy_requests shows requests were handled. Keep a short
+        written "data inventory": what personal data, why, where, how
+        long, which processors.
+  Breach handling (Art. 33)
+     -> a written 1-page procedure (who decides, what logs to check,
+        notify the authority within 72 hours when required, notify
+        users when high risk). Keep server logs free of personal data.
+  Third parties (processors)
+     -> list and have terms in place with: hosting, email sender,
+        backups storage, later the bank aggregator. Google sign-in is
+        Google's own processing; mention it in the privacy policy.
+  Cookies
+     -> the session cookie is strictly necessary, no banner needed for
+        it. Anything beyond (analytics, ads) needs consent.
+
+  Note on "special categories" (Art. 9): transaction names and
+  descriptions can reveal health, religion, union membership etc. even
+  though the app is "just expenses". Treat all financial text as
+  sensitive: never send it to analytics, logs, or third-party AI
+  services without a clear reason and consent.
+
+4.2 FUNCTIONS
+
+-- Erase one account completely, in one transaction.
+CREATE OR REPLACE FUNCTION erase_user(p_user uuid) RETURNS void
+LANGUAGE plpgsql AS $$
+DECLARE v_email text;
+BEGIN
+  SELECT email INTO v_email FROM users WHERE id = p_user;
+
+  -- tables WITHOUT a foreign key to users (check the formats of your
+  -- installed Better Auth version: identifier is often the email, and
+  -- reset flows may keep the user id in value)
+  DELETE FROM verifications
+   WHERE identifier = v_email OR value = p_user::text;
+
+  -- cascades to: sessions, accounts, user_settings, user_consents,
+  -- category_groups, categories, budgets, recurring_transactions,
+  -- transactions (and fires the audit triggers)
+  DELETE FROM users WHERE id = p_user;
+
+  -- audit rows (including those just written by the cascade) go too
+  DELETE FROM audit_log WHERE user_id = p_user;
+
+  INSERT INTO privacy_requests (user_id, type, status, completed_at, note)
+  VALUES (p_user, 'ERASURE', 'COMPLETED', now(), 'account erased');
+END $$;
+
+-- Daily job: erase accounts whose grace period is over.
+-- The law expects erasure "without undue delay" and an answer within
+-- one month at the latest; keep the grace period short.
+CREATE OR REPLACE FUNCTION run_scheduled_erasures(p_grace interval DEFAULT interval '7 days')
+RETURNS integer
+LANGUAGE plpgsql AS $$
+DECLARE r record; n integer := 0;
+BEGIN
+  FOR r IN SELECT id FROM users
+            WHERE deletion_requested_at IS NOT NULL
+              AND deletion_requested_at < now() - p_grace
+  LOOP
+    PERFORM erase_user(r.id);
+    n := n + 1;
+  END LOOP;
+  RETURN n;
+END $$;
+
+-- Everything the app holds about one user, as JSON (no secrets:
+-- no password hash, no provider tokens, no session tokens).
+CREATE OR REPLACE FUNCTION export_user_data(p_user uuid) RETURNS jsonb
+LANGUAGE sql STABLE AS $$
+  SELECT jsonb_build_object(
+    'exported_at', now(),
+    'profile',     (SELECT to_jsonb(u) FROM users u WHERE u.id = p_user),
+    'settings',    (SELECT to_jsonb(s) FROM user_settings s WHERE s.user_id = p_user),
+    'linked_logins', COALESCE((
+        SELECT jsonb_agg(jsonb_build_object('provider', a.provider_id,
+                                            'linked_at', a.created_at))
+        FROM accounts a WHERE a.user_id = p_user), '[]'::jsonb),
+    'sessions',    COALESCE((
+        SELECT jsonb_agg(jsonb_build_object('created_at', x.created_at,
+                                            'expires_at', x.expires_at,
+                                            'ip_address', x.ip_address,
+                                            'user_agent', x.user_agent))
+        FROM sessions x WHERE x.user_id = p_user), '[]'::jsonb),
+    'consents',    COALESCE((SELECT jsonb_agg(to_jsonb(c) ORDER BY c.id)
+                             FROM user_consents c WHERE c.user_id = p_user), '[]'::jsonb),
+    'category_groups', COALESCE((SELECT jsonb_agg(to_jsonb(g) ORDER BY g.id)
+                             FROM category_groups g WHERE g.user_id = p_user), '[]'::jsonb),
+    'categories',  COALESCE((SELECT jsonb_agg(to_jsonb(k) ORDER BY k.id)
+                             FROM categories k WHERE k.user_id = p_user), '[]'::jsonb),
+    'budgets',     COALESCE((SELECT jsonb_agg(to_jsonb(b) ORDER BY b.id)
+                             FROM budgets b WHERE b.user_id = p_user), '[]'::jsonb),
+    'recurring_transactions', COALESCE((SELECT jsonb_agg(to_jsonb(r) ORDER BY r.id)
+                             FROM recurring_transactions r WHERE r.user_id = p_user), '[]'::jsonb),
+    'transactions', COALESCE((SELECT jsonb_agg(to_jsonb(t) ORDER BY t.id)
+                             FROM transactions t WHERE t.user_id = p_user), '[]'::jsonb),
+    'history',     COALESCE((SELECT jsonb_agg(to_jsonb(h) ORDER BY h.id)
+                             FROM audit_log h WHERE h.user_id = p_user), '[]'::jsonb)
+  )
+$$;
+
+-- When you add a new table with user data, add it to BOTH
+-- export_user_data() and the erasure checklist (a test in PLAN.md
+-- phase 6 fails if a table with a user_id column is forgotten).
+
+4.3 RETENTION (decide the numbers, then write them in the privacy policy)
+
+  Data                    Suggested retention
+  ----------------------  ---------------------------------------------
+  Account + budgeting     while the account exists; erased on request
+  data
+  audit_log (history)     while the account exists (it is the user's
+                          history); optional cap, e.g. older than 3 years
+  sessions                until expiry, then purge (short: IP + device)
+  verifications           until expiry, then purge
+  user_consents           while the account exists (proof of consent)
+  privacy_requests        kept after erasure (contains no personal data
+                          besides the orphaned id); e.g. 3 years
+  Backups                 fixed rotation (e.g. 30 days). Data erased
+                          from the live DB can still sit in a backup
+                          until it rotates out. Rule: if you ever
+                          RESTORE a backup, re-run erase_user() for every
+                          erasure recorded in privacy_requests after the
+                          backup date. Write this in your restore notes.
+  Server / proxy logs     short (e.g. 14-30 days), no request bodies,
+                          IPs truncated or off
+
+4.4 SCHEDULED CLEANUP (daily, e.g. node-cron or pg_cron)
+
+  SELECT run_scheduled_erasures();
+  DELETE FROM sessions      WHERE expires_at < now() - interval '7 days';
+  DELETE FROM verifications WHERE expires_at < now();
+  -- optional history cap:
+  -- DELETE FROM audit_log WHERE changed_at < now() - interval '3 years';
+
+4.5 BETTER AUTH SETTINGS WITH PRIVACY IMPACT (check names in its docs)
+  - IP address tracking on sessions: switch off if possible.
+  - OAuth provider tokens: you only need sign-in with Google, so request
+    no extra scopes and do not keep access/refresh tokens if you can skip it.
+  - Rate limiting stores keys derived from IPs: keep them short-lived.
+  - Account deletion: use your own flow (deletion_requested_at +
+    erase_user()) so the audit/verification cleanup is not skipped.
+
+
+=====================================================================
+ PART 5 - HOW THE FLOWS WORK
+=====================================================================
+
+A) SET OR CHANGE A BUDGET  ("from this month onward")
+   Global monthly expense budget from March 2026:
+
+   INSERT INTO budgets (user_id, type, scope, amount_limit, effective_from)
+   VALUES (:u, 'EXPENSE', 'GLOBAL', 2000.00, '2026-03-01')
+   ON CONFLICT (user_id, type, effective_from) WHERE scope = 'GLOBAL'
+   DO UPDATE SET amount_limit = EXCLUDED.amount_limit;
+
+   Allocate part of it to a category (type must match the category):
+
+   INSERT INTO budgets (user_id, type, scope, category_id, amount_limit, effective_from)
+   VALUES (:u, 'EXPENSE', 'CATEGORY', :cat, 400.00, '2026-03-01')
+   ON CONFLICT (user_id, category_id, effective_from)
+   DO UPDATE SET amount_limit = EXCLUDED.amount_limit;
+
+   Income works identically with type = 'INCOME' (predicted income).
+   Remove a budget: same upsert with amount_limit = NULL.
+   When soft-deleting a category, write a NULL budget row for it so it
+   stops counting as "allocated".
+   Service-layer rule: warn when the category allocations sum to more
+   than the global budget (monthly_overview.unallocated < 0).
+
+B) MARK A RECURRING ITEM AS PAID  (one DB transaction)
+
+   1. SELECT * FROM recurring_transactions
+        WHERE id = :r AND user_id = :u AND is_active FOR UPDATE;
+
+   2. INSERT INTO transactions
+        (user_id, category_id, recurring_transaction_id, recurring_due_date,
+         name, amount, planned_amount, payment_date, description)
+      SELECT user_id, category_id, id, next_due_date,
+             name, COALESCE(:actual_amount, amount), amount,
+             COALESCE(:paid_on, CURRENT_DATE), description
+      FROM recurring_transactions WHERE id = :r;
+
+   3. UPDATE recurring_transactions
+        SET next_due_date = :new_due,
+            is_active = (end_date IS NULL OR :new_due <= end_date)
+      WHERE id = :r;
+
+   :new_due is the next occurrence AFTER the one just paid, computed from
+   start_date: start_date + k * interval_count units, not
+   previous_due + 1 month. Jan 31 -> Feb 28 -> Mar 31 instead of
+   drifting to the 28th forever. (Unit-test this function.)
+
+   - The new transaction has the recurring item's category, so it counts
+     in that category's actual (and budget-vs-actual) immediately.
+   - Paying the same occurrence twice is blocked by uq_tx_recurring_occurrence.
+   - The paid amount may differ from the expected amount (e.g. an
+     electricity bill); both are kept (amount vs planned_amount).
+   - SKIP an occurrence: do step 3 only. The skip shows up in audit_log.
+   - OVERDUE = is_active AND next_due_date < CURRENT_DATE.
+   - PAUSE / END: set is_active = false.
+   - Editing a recurring item never changes already-paid transactions
+     (they are copies), but the edit is recorded in audit_log.
+
+C) HISTORY
+   - Budget timeline for a category:
+       SELECT effective_from, amount_limit FROM budgets
+       WHERE user_id = :u AND category_id = :c ORDER BY effective_from;
+   - Everything that happened to one record:
+       SELECT action, old_values, new_values, changed_at FROM audit_log
+       WHERE entity_type = 'transactions' AND entity_id = '123'
+       ORDER BY changed_at;
+   - Activity feed for the user:
+       SELECT * FROM audit_log WHERE user_id = :u ORDER BY changed_at DESC LIMIT 50;
+   - Deleted transactions are recoverable from audit_log.old_values.
+
+D) AUTH WITH BETTER AUTH
+   Why a framework: password hashing, email verification, reset links,
+   OAuth state/PKCE checks, session handling and rate limiting are easy
+   to get subtly wrong. Better Auth runs inside the Express process
+   (no extra service, no extra RAM) and works with Postgres.
+
+   Mapping (Better Auth default model -> table here)
+     user          -> users          (name, email, emailVerified, image)
+     session       -> sessions       (token, expiresAt, ipAddress, userAgent)
+     account       -> accounts       (providerId, accountId, password, tokens)
+     verification  -> verifications  (identifier, value, expiresAt)
+   Set via its modelName / fields options; set its id generation to
+   "uuid". Always compare with `npx @better-auth/cli@latest generate`
+   output for your installed version, and re-run it after adding any
+   plugin (plugins add columns/tables, e.g. the admin plugin in Part 6).
+
+   Password storage: Better Auth hashes passwords itself (memory-hard,
+   salted; scrypt by default as far as I know, and you can plug in
+   Argon2id). The salt is part of the hash string in accounts.password,
+   so there is no salt column. You never touch plaintext passwords.
+
+   Sign up with email + password
+     Better Auth creates users + accounts('credential'), sends the
+     verification email (verifications row). Require verification
+     before login if you want.
+   Sign up / log in with Google
+     Better Auth creates users + accounts('google', account_id = sub)
+     with email_verified = true. Keep automatic linking to an existing
+     email account strict (only link when both sides have a verified
+     email), otherwise someone can take over an account by creating a
+     Google account with the same address.
+   Onboarding (first login, both methods)
+     One screen, one request: accept Terms + Privacy Policy
+     (user_consents rows) and choose currency (user_settings row).
+     The frontend treats "no user_settings row" as "onboarding not done".
+   Sessions: cookie-based on web. Mobile uses tokens (see G).
+   Password reset / email change: handled by Better Auth through
+   verifications; no extra tables.
+
+E) CHARTS: WHAT IS COMPUTED WHERE
+   Rule: the database aggregates, the API serves, the frontend only draws.
+   - Budget resolution ("which row applies to this month") lives in
+     exactly one place, so numbers never disagree between screens.
+   - The frontend never needs raw transactions for a chart.
+   - Mobile apps get the same numbers for free.
+
+   Endpoint 1: one month, all categories (bars / progress bars)
+     GET /api/v1/stats/budget-vs-actual?month=2026-10
+     { "month": "2026-10-01", "currency": "EUR",
+       "categories": [
+         { "categoryId": 12, "name": "Food", "type": "EXPENSE",
+           "budgeted": "400.00", "actual": "356.20",
+           "remaining": "43.80", "pctUsed": 89.1 } ],
+       "totals": [
+         { "type": "EXPENSE", "budgeted": "2000.00", "allocated": "1650.00",
+           "unallocated": "350.00", "actual": "1722.40", "remaining": "277.60" },
+         { "type": "INCOME", ... } ] }
+     Backed by budget_vs_actual() + monthly_overview().
+
+   Endpoint 2: one category over time (line chart: budget vs actual)
+     GET /api/v1/stats/categories/12/trend?from=2026-01&to=2026-12
+     { "categoryId": 12, "points": [
+         { "month": "2026-01-01", "budgeted": "400.00", "actual": "380.10" },
+         { "month": "2026-02-01", "budgeted": "400.00", "actual": "455.00" } ] }
+     Backed by category_trend().
+
+   Money is sent as STRINGS. node-postgres returns numeric (and bigint)
+   as strings on purpose; never parseFloat() money for sums.
+   Frontend: format with the user's currency/locale, color a bar red when
+   actual > budgeted, hide "budgeted" when it is null.
+
+F) CURRENCY
+   - user_settings.currency is changeable per user. It is a display
+     label: changing it does NOT convert existing amounts.
+   - The service layer can ask for confirmation (or lock it) once the
+     user has transactions.
+   - Real multi-currency later = transactions.currency + exchange_rates.
+
+G) MOBILE (web fallback now, native app later)
+   - A mobile web fallback (responsive layout, installable PWA) needs NO
+     schema change.
+   - Native app: tokens instead of cookies. Better Auth has a bearer
+     token plugin and an Expo integration, and it can verify a Google ID
+     token coming from the phone. Add every Google client id you use
+     (web, iOS, Android) to the allowed audiences.
+   - client_uuid on transactions makes retries on bad connections safe:
+     the app generates it once per new entry.
+   - sessions.user_agent already supports a "your devices" screen.
+   - Push reminders for due recurring items later: a devices table
+     (user_id, platform, push_token). idx_recurring_due already supports
+     "what is due soon".
+   - Offline-first (entries created offline, synced later) is NOT built
+     in. It is possible later: every table has updated_at and audit_log
+     records deletions, so "changed since X" is answerable. If you ever
+     want offline creation, decide on client-generated uuid keys BEFORE
+     building it.
+   - API rules: prefix /api/v1, only add fields (old app versions stay
+     installed on phones), keep money as strings.
+
+H) HOW TO EXTEND THIS SCHEMA LATER
+   - Every change is a migration file (V7__add_accounts.sql style).
+   - New columns on existing tables: nullable or with a default.
+   - New table with user data: give it user_id (uuid, FK ON DELETE
+     CASCADE), updated_at, add it to the audit array in 2.5, to
+     export_user_data(), and to the erasure test.
+   - New budget kinds = a new scope value + a widened CHECK.
+   Small additive options (not built now):
+     Accounts/wallets ...... accounts_wallet table + nullable transactions.account_id
+     Tags .................. tags + transaction_tags
+     Receipts .............. transaction_attachments(transaction_id, storage_key)
+     Multi-currency ........ transactions.currency + exchange_rates
+     Budget per group ...... nullable budgets.category_group_id + scope 'GROUP'
+     One-off monthly budget  nullable budgets.effective_to
+     Savings goals ......... own table
+     More login providers .. config only (accounts.provider_id)
+     Reminders ............. own table + devices
+
+
+=====================================================================
+ PART 6 - FUTURE FEATURES (notes only, NOT in the v1 schema)
+=====================================================================
+
+6.1 ADMIN BOARD  ("see all users, but not all their details")
+   Goal: the admin can run the service without being able to read
+   anyone's finances.
+   - Admin sees (per user): id, email, created_at, email_verified,
+     last session date, number of transactions/categories (counts only),
+     deletion_requested_at, banned flag.
+   - Admin never sees: name, picture, amounts, categories, descriptions,
+     budgets, audit_log, sessions' IP/user agent, export data.
+   - Enforce this in the DATABASE, not only in the UI: create a view and
+     a Postgres role that can read only that view.
+
+       -- SKETCH (build in the admin phase)
+       CREATE VIEW admin_user_overview AS
+       SELECT u.id, u.email, u.email_verified, u.created_at,
+              u.deletion_requested_at,
+              (SELECT max(s.created_at) FROM sessions s
+                WHERE s.user_id = u.id)                          AS last_login_at,
+              (SELECT count(*) FROM transactions t
+                WHERE t.user_id = u.id)                          AS transaction_count
+       FROM users u;
+       -- CREATE ROLE admin_app LOGIN ...;
+       -- GRANT SELECT ON admin_user_overview TO admin_app;   -- nothing else
+
+   - Roles/banning: Better Auth has an admin plugin (roles, ban). It adds
+     columns (e.g. role, banned) through its CLI migration. Keep its
+     user impersonation feature OFF: impersonating shows the user's data.
+   - Admin actions (ban, unban, delete on request, resend verification)
+     are written to a new admin_audit_log (admin_id, action, target_user_id,
+     at, reason). Admin access is itself personal-data processing and
+     must be traceable.
+   - The first admin is created by a one-off SQL/CLI step, never by a
+     public sign-up path.
+
+6.2 EXPENSE SPLITTING WITH FRIENDS
+   This is the first feature where one row is NOT owned by a single
+   user, so design it separately before coding. Keep it independent of
+   budgets: a person's share of a split expense becomes (or links to) a
+   normal transaction in THEIR OWN account, so budgets, charts and
+   history keep working unchanged.
+   Rough shape (to refine in its own design step):
+     groups / group_members (user_id, or a pending invite by email)
+     shared_expenses (paid_by, amount, date, description, group_id)
+     expense_shares (shared_expense_id, member, amount)
+     settlements (from, to, amount, date)
+     link: transactions.shared_expense_id (nullable)
+   GDPR points to design in from day one:
+     - Visibility: members see the shared expense and balances, nothing
+       else about each other (no budgets, no other transactions).
+     - Invites by email store a third person's email: expire pending
+       invites quickly, delete on decline, do not email repeatedly.
+     - When a member deletes their account the group's records must stay
+       consistent for the others: replace the person with a "Former
+       member" placeholder (ON DELETE SET NULL on the member reference,
+       no display-name snapshot), do NOT cascade-delete shared expenses.
+       Their own linked transactions are erased with their account.
+     - Add it to export_user_data() (what the user paid, owes, settled).
+
+6.3 BANK CONNECTION (automatic transactions)
+   - You cannot call banks' PSD2 APIs directly as a hobby project (that
+     needs a regulated licence). You go through a licensed account-
+     information aggregator. Before committing, do a short spike: does the
+     provider support your bank(s), can an individual/hobby project use
+     it, what does it cost, where is data processed, what is their
+     data-processing agreement.
+   - Consent: the user authorises at their bank, the connection has an
+     expiry and must be renewed (re-authentication) periodically; the
+     length depends on the provider/bank. Record it in user_consents
+     (purpose BANK_DATA_ACCESS, with provider and version) and show
+     status and expiry in the UI. Disconnecting deletes the tokens.
+   - Rough shape (own design step):
+       bank_connections (user_id, provider, institution, status,
+                         consent_expires_at, encrypted credentials)
+       bank_accounts (connection_id, provider_account_id, name, masked iban/last4, currency)
+       imported_transactions (bank_account_id, provider_tx_id UNIQUE per account,
+                              booking_date, amount, counterparty, raw text,
+                              status PENDING|ACCEPTED|IGNORED, transaction_id)
+       category_rules (user_id, match text/counterparty -> category_id)
+       + additive columns on transactions: source ('MANUAL','RECURRING','BANK'),
+         external_id, account_id (all nullable / defaulted)
+   - Imports land in a PENDING queue: the user confirms/categorizes
+     (rules pre-fill). Nothing hits budgets silently at first.
+     Deduplicate by the provider's transaction id. Detect a bank
+     transaction that matches a recurring item and offer "mark as paid".
+   - Security: provider tokens are encrypted at application level with a
+     key that is NOT in the database; never log them. Store masked
+     account numbers, not full IBANs, unless really needed. Consider a
+     short DPIA-style note (what is imported, why, retention) before building.
+   - Imported text is highly sensitive (see the Art. 9 note in 4.1).
+     Do not feed it to analytics or external AI services.
+   - Add everything to export_user_data() and erase_user().
+
+
+=====================================================================
+ PART 7 - BUILD ORDER (short version; full checklist in PLAN.md)
+=====================================================================
+
+   Why this order: foundations and privacy basics first, because they
+   are painful to retrofit; the core budgeting loop next (it is the
+   product); then recurring, then charts; GDPR completion and
+   deployment BEFORE anyone else is invited; features that need other
+   users or outside parties come last, riskiest last.
+
+   Phase 0   Setup and decisions
+   Phase 1   Database foundation + Better Auth schema reconciled
+   Phase 2   Auth, onboarding, account page, consent
+   Phase 3   Categories, transactions, budgets (core)
+   Phase 4   Recurring items
+   Phase 5   Statistics and charts
+   Phase 6   History screens + GDPR completion (export, erasure, retention)
+   Phase 7   Deploy and harden (gate: before inviting other people)
+   Phase 8   Mobile web (responsive + PWA)
+   Phase 9   Admin board
+   Phase 10  Expense splitting
+   Phase 11  Bank connection
+   Phase 12  Native mobile app
+   (10 and 11 can swap if the bank feature matters more to you; 12 can
+    move earlier if the PWA is not enough.)
