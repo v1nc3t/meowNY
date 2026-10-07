@@ -3,6 +3,10 @@ import PublicLayout from './layouts/PublicLayout'
 import AppLayout from './layouts/AppLayout'
 import ProtectedRoute from './routes/ProtectedRoute'
 import LandingPage from './pages/LandingPage'
+import LoginPage from './pages/LoginPage'
+import SignupPage from './pages/SignupPage'
+import ForgotPasswordPage from './pages/ForgotPasswordPage'
+import ResetPasswordPage from './pages/ResetPasswordPage'
 import DashboardPage from './pages/DashboardPage'
 
 // Pages
@@ -14,8 +18,10 @@ const router = createBrowserRouter([
     element: <PublicLayout />,
     children: [
       { index: true, element: <LandingPage /> },
-      { path: 'login', element: <div>Log In View (Mock)</div> },
-      { path: 'signup', element: <div>Sign Up View (Mock)</div> },
+      { path: 'login', element: <LoginPage /> },
+      { path: 'signup', element: <SignupPage /> },
+      { path: 'forgot-password', element: <ForgotPasswordPage /> },
+      { path: 'reset-password', element: <ResetPasswordPage /> },
     ],
   },
   // Authenticated App Routes

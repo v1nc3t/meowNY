@@ -1,5 +1,6 @@
 import { betterAuth } from 'better-auth';
 import { Pool } from 'pg';
+import { smtpMailer, type Mailer } from './mail.js';
 
 const WEEK_SECONDS = 60 * 60 * 24 * 7;
 const DAY_SECONDS = 60 * 60 * 24;
@@ -9,7 +10,11 @@ export type AuthOrigins = {
   trustedOrigin: string;
 };
 
-export function authConfig(connectionString: string, origins: AuthOrigins = defaultOrigins()) {
+export function authConfig(
+  connectionString: string,
+  origins: AuthOrigins = defaultOrigins(),
+  send: Mailer = smtpMailer(),
+) {
   const pool = new Pool({ connectionString });
   return {
     pool,
@@ -18,7 +23,19 @@ export function authConfig(connectionString: string, origins: AuthOrigins = defa
       baseURL: origins.baseURL,
       trustedOrigins: [origins.trustedOrigin],
       database: pool,
-      emailAndPassword: { enabled: true },
+      emailAndPassword: {
+        enabled: true,
+        requireEmailVerification: true,
+        sendResetPassword: async ({ user, url }: { user: { email: string }; url: string }) => {
+          await send({ to: user.email, subject: 'Reset your password', text: url });
+        },
+      },
+      emailVerification: {
+        sendOnSignUp: true,
+        sendVerificationEmail: async ({ user, url }: { user: { email: string }; url: string }) => {
+          await send({ to: user.email, subject: 'Verify your email', text: url });
+        },
+      },
       // Built-in rules already cap sign-in and sign-up (3 per 10s) and password reset (3 per 60s).
       rateLimit: { enabled: true },
       advanced: {
@@ -95,8 +112,8 @@ export function authConfig(connectionString: string, origins: AuthOrigins = defa
   };
 }
 
-export function createAuth(connectionString: string, origins?: AuthOrigins) {
-  const { pool, options } = authConfig(connectionString, origins);
+export function createAuth(connectionString: string, origins?: AuthOrigins, send?: Mailer) {
+  const { pool, options } = authConfig(connectionString, origins, send);
   return { auth: betterAuth(options), pool };
 }
 
