@@ -20,3 +20,5 @@ npm run dev
 `docker compose` creates `meowny` and, on a new volume, `meowny_test`. Tests also create `meowny_test` if it is missing. An old Docker volume ignores the init script. `docker compose down -v` once, then `up -d`, if the test database is missing and you do not want the test helper to create it.
 
 `npm test` uses `DATABASE_URL_TEST`.
+
+`npm run seed` loads a demo user, categories, budgets, and transactions into `DATABASE_URL`. That user has no password. `npm run db:types` regenerates `src/db/schema.ts` after a schema change.

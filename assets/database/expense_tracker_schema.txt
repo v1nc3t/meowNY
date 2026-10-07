@@ -67,11 +67,10 @@ KEY DESIGN DECISIONS
 =====================================================================
 
 // ------------------- Better Auth core tables (mapped) -------------------
-// IMPORTANT: Better Auth generates its own schema from its config.
-// Run its CLI against a scratch database, compare the output with the four
-// tables below, and adjust the mapping options until they match
-// (see PLAN.md, phase 1). The column list here is the target, the CLI
-// output is the truth for your installed version.
+// IMPORTANT: Reconciled with better-auth 1.7.7 (generateId: uuid, snake_case
+// field names). The generator emits text for strings; varchar limits below
+// are accepted as the same string type. Auth index names match the generator.
+// uq_users_email_ci is extra: it rejects emails that differ only by case.
 
 Table users {
   id uuid [pk, default: `gen_random_uuid()`]
@@ -84,8 +83,8 @@ Table users {
   updated_at timestamptz [not null, default: `now()`]
 
   Indexes {
-    `lower(email)` [unique, name: "uq_users_email_ci"]
-    email [name: "idx_users_email", note: 'plain lookups by email at login']
+    email [unique, name: "users_email_uidx", note: 'Name matches Better Auth. Lookups use this index.']
+    `lower(email)` [unique, name: "uq_users_email_ci", note: 'Extra. Stops A@x.com and a@x.com both existing.']
   }
 }
 
@@ -100,8 +99,8 @@ Table sessions {
   updated_at timestamptz [not null, default: `now()`]
 
   Indexes {
-    token [unique, name: "uq_sessions_token"]
-    user_id [name: "idx_sessions_user"]
+    token [unique, name: "sessions_token_uidx", note: 'Name matches Better Auth.']
+    user_id [name: "sessions_user_id_idx", note: 'Name matches Better Auth.']
     expires_at [name: "idx_sessions_expiry"]
   }
 }
@@ -122,8 +121,8 @@ Table accounts {
   updated_at timestamptz [not null, default: `now()`]
 
   Indexes {
-    (provider_id, account_id) [unique, name: "uq_accounts_provider_subject"]
-    user_id [name: "idx_accounts_user"]
+    (provider_id, account_id) [unique, name: "uq_accounts_provider_subject", note: 'Extra. Better Auth 1.7.7 does not create this.']
+    user_id [name: "accounts_user_id_idx", note: 'Name matches Better Auth.']
   }
 }
 
@@ -136,7 +135,7 @@ Table verifications {
   updated_at timestamptz [not null, default: `now()`]
 
   Indexes {
-    identifier [name: "idx_verifications_identifier"]
+    identifier [name: "verifications_identifier_idx", note: 'Name matches Better Auth.']
     expires_at [name: "idx_verifications_expiry"]
   }
 }

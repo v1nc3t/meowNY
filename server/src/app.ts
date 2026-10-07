@@ -1,13 +1,13 @@
 import express, { type Express } from 'express';
 import type { Kysely } from 'kysely';
 import type { Logger } from 'pino';
-import type { Database } from './db/schema.js';
+import type { DB } from './db/schema.js';
 import { healthRouter } from './health/health.router.js';
 import { errorHandler } from './http/error-handler.js';
 import { requestLogger } from './http/logger.js';
 
 export type AppDeps = {
-  db: Kysely<Database>;
+  db: Kysely<DB>;
   logger: Logger;
 };
 

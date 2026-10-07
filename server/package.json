@@ -13,7 +13,20 @@
     "typecheck": "tsc --noEmit",
     "lint": "oxlint src test",
     "test": "tsx --env-file-if-exists=../.env --test --test-concurrency=1 test/**/*.test.ts",
-    "migrate": "tsx --env-file-if-exists=../.env src/db/migrate.ts"
+    "migrate": "tsx --env-file-if-exists=../.env src/db/migrate.ts",
+    "seed": "tsx --env-file-if-exists=../.env src/db/seed.ts",
+    "db:types": "kysely-codegen"
+  },
+  "kysely-codegen": {
+    "dialect": "postgres",
+    "envFile": "../.env",
+    "excludePattern": "pgmigrations",
+    "outFile": "src/db/schema.ts",
+    "numericParser": "string",
+    "dateParser": "string",
+    "typeMapping": {
+      "numeric": "string"
+    }
   },
   "dependencies": {
     "better-auth": "^1.7.7",

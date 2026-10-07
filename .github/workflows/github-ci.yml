@@ -30,6 +30,7 @@ jobs:
       DATABASE_URL: postgres://meowny:meowny@127.0.0.1:5432/meowny
       DATABASE_URL_TEST: postgres://meowny:meowny@127.0.0.1:5432/meowny_test
       PORT: 3000
+      BETTER_AUTH_SECRET: ci-only-not-a-real-secret
     steps:
       - name: Checkout
         uses: actions/checkout@v4

@@ -1,8 +1,8 @@
 import { Router } from 'express';
 import { sql, type Kysely } from 'kysely';
-import type { Database } from '../db/schema.js';
+import type { DB } from '../db/schema.js';
 
-export function healthRouter(db: Kysely<Database>): Router {
+export function healthRouter(db: Kysely<DB>): Router {
   const router = Router();
   router.get('/health', async (_req, res) => {
     await sql`select 1`.execute(db);
