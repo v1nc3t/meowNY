@@ -37,6 +37,13 @@ export default function AppSidebar() {
         >
           Budgets
         </NavLink>
+
+        <NavLink
+          to="/app/account"
+          className={({ isActive }) => isActive ? 'nav-item active' : 'nav-item'}
+        >
+          Account
+        </NavLink>
       </nav>
 
       <div className="sidebar-footer">

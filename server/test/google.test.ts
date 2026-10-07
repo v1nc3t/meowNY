@@ -17,7 +17,7 @@ test('google sign-in links only a verified email and stores no provider tokens',
   const sub = `sub-${Date.now()}`;
   const verified = idToken({ sub, email, email_verified: true, name: 'Ada' });
   const unverified = idToken({ sub: `${sub}-other`, email, email_verified: false, name: 'Ada' });
-  const { auth, pool } = createAuth(
+  const { auth, pool, google } = createAuth(
     databaseUrl,
     undefined,
     async (mail) => {
@@ -30,8 +30,11 @@ test('google sign-in links only a verified email and stores no provider tokens',
     },
   );
   try {
-    const app = createApp({ db, logger: pino({ level: 'silent' }), auth });
+    const app = createApp({ db, logger: pino({ level: 'silent' }), auth, google });
     await withServer(app, async (baseUrl) => {
+      const listed = await fetch(`${baseUrl}/api/auth`);
+      assert.deepEqual(await listed.json(), { providers: ['google'] });
+
       const start = await authPost(baseUrl, '/api/auth/sign-in/social', '203.0.113.20', {
         provider: 'google',
         disableRedirect: true,

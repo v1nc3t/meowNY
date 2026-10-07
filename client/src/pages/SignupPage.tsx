@@ -1,8 +1,9 @@
 import { useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
-import { authClient, signInWithGoogle } from '../auth'
+import { authClient, signInWithGoogle, useGoogle } from '../auth'
 
 export default function SignupPage() {
+  const google = useGoogle()
   const [message, setMessage] = useState('')
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
@@ -38,9 +39,11 @@ export default function SignupPage() {
         <input name="password" type="password" required minLength={8} autoComplete="new-password" />
       </label>
       <button type="submit">Sign up</button>
-      <button type="button" onClick={() => void onGoogle()}>
-        Continue with Google
-      </button>
+      {google ? (
+        <button type="button" onClick={() => void onGoogle()}>
+          Continue with Google
+        </button>
+      ) : null}
       <p>{message}</p>
       <p>
         <Link to="/login">Log in</Link>

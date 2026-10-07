@@ -1,9 +1,10 @@
 import { useState, type FormEvent } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { authClient, signInWithGoogle } from '../auth'
+import { authClient, signInWithGoogle, useGoogle } from '../auth'
 
 export default function LoginPage() {
   const navigate = useNavigate()
+  const google = useGoogle()
   const [message, setMessage] = useState('')
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
@@ -37,9 +38,11 @@ export default function LoginPage() {
         <input name="password" type="password" required minLength={8} autoComplete="current-password" />
       </label>
       <button type="submit">Log in</button>
-      <button type="button" onClick={() => void onGoogle()}>
-        Continue with Google
-      </button>
+      {google ? (
+        <button type="button" onClick={() => void onGoogle()}>
+          Continue with Google
+        </button>
+      ) : null}
       <p>{message}</p>
       <p>
         <Link to="/forgot-password">Forgot password</Link>

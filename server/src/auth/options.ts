@@ -132,7 +132,7 @@ export function createAuth(
   google?: GoogleSignIn,
 ) {
   const { pool, options } = authConfig(connectionString, origins, send, google);
-  return { auth: betterAuth(options), pool };
+  return { auth: betterAuth(options), pool, google: Boolean(options.socialProviders?.google) };
 }
 
 export type AppAuth = ReturnType<typeof createAuth>['auth'];

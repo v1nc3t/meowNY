@@ -2,7 +2,7 @@
 
 What personal data this app is built to hold, why, where it lives, how long, and who else processes it. Update this page in every phase. This is a technical note, not a privacy policy.
 
-Status: email sign-up sends a verification link, and password reset sends a reset link. In development those messages go to local Mailpit over SMTP. The message contains the address and the link. Google sign-in is optional: when `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` are set, the browser is sent to Google, which returns the name, email, and whether that email is verified. Provider tokens are not stored. The demo seed is fixture data, not a person.
+Status: after sign-in, onboarding records acceptance of the terms and privacy policy (version 2026-10-01) and the chosen currency. Email sign-up sends a verification link, and password reset sends a reset link. In development those messages go to local Mailpit over SMTP. The message contains the address and the link. Google sign-in is optional: when `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` are set, the browser is sent to Google, which returns the name, email, and whether that email is verified. Provider tokens are not stored. The demo seed is fixture data, not a person.
 
 | Data | Purpose | Where | Retention | Processor |
 |---|---|---|---|---|

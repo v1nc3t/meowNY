@@ -8,7 +8,7 @@ import { createLogger } from './http/logger.js';
 const env = loadEnv();
 const logger = createLogger();
 const db = createDb(env.DATABASE_URL);
-const { auth, pool } = createAuth(
+const { auth, pool, google } = createAuth(
   env.DATABASE_URL,
   {
     baseURL: env.BETTER_AUTH_URL,
@@ -16,7 +16,7 @@ const { auth, pool } = createAuth(
   },
   smtpMailer(logger),
 );
-const app = createApp({ db, logger, auth });
+const app = createApp({ db, logger, auth, google });
 
 const server = app.listen(env.PORT, () => {
   logger.info({ port: env.PORT }, 'listening');
