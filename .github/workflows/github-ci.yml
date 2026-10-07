@@ -1,4 +1,4 @@
-name: Java CI with Maven
+name: CI
 
 on:
   push:
@@ -7,30 +7,51 @@ on:
   pull_request:
 
 jobs:
-  build:
+  server:
     runs-on: ubuntu-latest
-
+    defaults:
+      run:
+        working-directory: server
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: meowny
+          POSTGRES_PASSWORD: meowny
+          POSTGRES_DB: meowny
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U meowny -d meowny"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgres://meowny:meowny@127.0.0.1:5432/meowny
+      DATABASE_URL_TEST: postgres://meowny:meowny@127.0.0.1:5432/meowny_test
+      PORT: 3000
     steps:
-      - name: Checkout Code
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up JDK 21
-        uses: actions/setup-java@v5
+      - name: Set up Node
+        uses: actions/setup-node@v4
         with:
-          java-version: '21'
-          distribution: 'corretto'
-          cache: 'maven'
+          node-version: 22
+          cache: npm
+          cache-dependency-path: server/package-lock.json
 
-      - name: Cache Maven build cache
-        uses: actions/cache@v4
-        with:
-          path: ~/.m2/build-cache
-          key: maven-build-cache-${{ runner.os }}
+      - name: Install
+        run: npm ci
 
-      - name: Install Graphical Dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libxxf86vm1 libxrender1 libxtst6 libxi6 libglib2.0-0 libgtk-3-0 libasound2t64
+      - name: Lint
+        run: npm run lint
 
-      - name: Build and Test with Maven
-        run: mvn -B -ntp clean verify -T 1C -f server/pom.xml
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Migrate
+        run: npm run migrate
+
+      - name: Test
+        run: npm test
