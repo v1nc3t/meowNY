@@ -15,12 +15,13 @@ export function createLogger(): Logger {
 export function requestLogger(logger: Logger): RequestHandler {
   return (req, res, next) => {
     const start = process.hrtime.bigint();
+    const path = req.originalUrl.split('?')[0] ?? req.path;
     res.on('finish', () => {
       const durationMs = Number(process.hrtime.bigint() - start) / 1_000_000;
       logger.info(
         {
           method: req.method,
-          path: req.path,
+          path,
           status: res.statusCode,
           durationMs: Math.round(durationMs),
         },
