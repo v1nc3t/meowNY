@@ -73,13 +73,13 @@ Phases 10 and 11 can swap places if the bank feature matters more to you than sp
 
 ## Phase 2: Auth, onboarding and account page (M)
 
-- [ ] Mount Better Auth in Express. Follow its docs for Express: its handler must come **before** the JSON body parser.
+- [x] Mount Better Auth in Express. Follow its docs for Express: its handler must come **before** the JSON body parser.
 - [ ] Email + password sign-up with email verification and password reset (needs the email sender)
 - [ ] Google sign-in: create the OAuth client in Google Cloud Console, set redirect URIs for dev and prod, keep automatic account linking strict (verified emails only)
-- [ ] Privacy settings in Better Auth config: turn off IP tracking if possible, do not keep provider tokens if you can skip them, short session lifetime, secure cookies, trusted origins/CORS for your frontend only
-- [ ] Rate limiting on auth endpoints
+- [x] Privacy settings in Better Auth config: turn off IP tracking if possible, do not keep provider tokens if you can skip them, short session lifetime, secure cookies, trusted origins/CORS for your frontend only
+- [x] Rate limiting on auth endpoints
 - [ ] Onboarding screen: accept Terms + Privacy Policy (`user_consents`) and choose currency (`user_settings`) in one request. Users without a `user_settings` row are sent here.
-- [ ] Auth middleware: load the session, put `userId` on the request, reject everything else
+- [x] Auth middleware: load the session, put `userId` on the request, reject everything else
 - [ ] Account page: edit name, change currency/locale/timezone, change password, linked logins, list and revoke sessions, **request account deletion** (sets `deletion_requested_at`, signs the user out)
 - [ ] First draft of Terms and Privacy Policy text (versioned, e.g. `2026-10-01`)
 - [ ] Tests: sign-up, verification, login, Google (mocked), reset, session revoke, unauthenticated access is rejected

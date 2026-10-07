@@ -1,17 +1,43 @@
 import { betterAuth } from 'better-auth';
 import { Pool } from 'pg';
 
-export function authConfig(connectionString: string) {
+const WEEK_SECONDS = 60 * 60 * 24 * 7;
+const DAY_SECONDS = 60 * 60 * 24;
+
+export type AuthOrigins = {
+  baseURL: string;
+  trustedOrigin: string;
+};
+
+export function authConfig(connectionString: string, origins: AuthOrigins = defaultOrigins()) {
   const pool = new Pool({ connectionString });
   return {
     pool,
     options: {
       secret: requiredSecret(),
-      baseURL: 'http://127.0.0.1:3000',
+      baseURL: origins.baseURL,
+      trustedOrigins: [origins.trustedOrigin],
       database: pool,
       emailAndPassword: { enabled: true },
+      // Built-in rules already cap sign-in and sign-up (3 per 10s) and password reset (3 per 60s).
+      rateLimit: { enabled: true },
       advanced: {
+        useSecureCookies: process.env.NODE_ENV === 'production',
+        defaultCookieAttributes: {
+          sameSite: 'lax' as const,
+          httpOnly: true,
+        },
         database: { generateId: 'uuid' as const },
+      },
+      databaseHooks: {
+        session: {
+          create: { before: dropSessionIp },
+          update: { before: dropSessionIp },
+        },
+        account: {
+          create: { before: dropProviderTokens },
+          update: { before: dropProviderTokens },
+        },
       },
       user: {
         modelName: 'users',
@@ -24,11 +50,14 @@ export function authConfig(connectionString: string) {
           deletionRequestedAt: {
             type: 'date' as const,
             required: false,
+            input: false,
             fieldName: 'deletion_requested_at',
           },
         },
       },
       session: {
+        expiresIn: WEEK_SECONDS,
+        updateAge: DAY_SECONDS,
         modelName: 'sessions',
         fields: {
           expiresAt: 'expires_at',
@@ -66,8 +95,18 @@ export function authConfig(connectionString: string) {
   };
 }
 
-export function createAuth(connectionString: string) {
-  return betterAuth(authConfig(connectionString).options);
+export function createAuth(connectionString: string, origins?: AuthOrigins) {
+  const { pool, options } = authConfig(connectionString, origins);
+  return { auth: betterAuth(options), pool };
+}
+
+export type AppAuth = ReturnType<typeof createAuth>['auth'];
+
+function defaultOrigins(): AuthOrigins {
+  return {
+    baseURL: process.env.BETTER_AUTH_URL || 'http://127.0.0.1:3000',
+    trustedOrigin: process.env.FRONTEND_ORIGIN || 'http://127.0.0.1:5173',
+  };
 }
 
 function requiredSecret(): string {
@@ -76,4 +115,13 @@ function requiredSecret(): string {
     throw new Error('BETTER_AUTH_SECRET is required');
   }
   return secret;
+}
+
+// disableIpTracking also turns rate limiting off. The address stays in the in-memory limiter only.
+async function dropSessionIp() {
+  return { data: { ipAddress: null } };
+}
+
+async function dropProviderTokens() {
+  return { data: { accessToken: null, refreshToken: null, idToken: null } };
 }

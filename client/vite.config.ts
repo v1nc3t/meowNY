@@ -7,12 +7,10 @@ export default defineConfig({
   server: {
     port: 5173,
     proxy: {
-      // Any request starting with /api will be forwarded to Spring Boot
       '/api': {
-        target: 'http://localhost:8080',
+        target: 'http://127.0.0.1:3000',
         changeOrigin: true,
-        secure: false,
-      }
+      },
     }
   }
 })

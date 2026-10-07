@@ -5,5 +5,5 @@ if (!databaseUrl) {
   throw new Error('DATABASE_URL is required');
 }
 
-/** Loaded by the Better Auth CLI. Not mounted on the Express app until phase 2. */
-export const auth = createAuth(databaseUrl);
+/** Loaded by the Better Auth CLI. The server mounts its own instance in main.ts. */
+export const auth = createAuth(databaseUrl).auth;
