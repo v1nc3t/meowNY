@@ -15,6 +15,10 @@ Thumbs.db
 .env.local
 .env.development.local
 
+# Node
+node_modules/
+dist/
+
 # Docker Infrastructure Local Databases
 # (Prevents raw DB volumes from being pushed to remote repos)
 postgres_data/

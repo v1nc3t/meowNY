@@ -1,0 +1,18 @@
+{
+  "dependencies": {
+    "express": "^5.2.1",
+    "kysely": "^0.29.6",
+    "pg": "^8.23.1",
+    "pino": "^10.4.0",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.6",
+    "@types/node": "^26.6.4",
+    "@types/pg": "^8.23.1",
+    "node-pg-migrate": "^9.0.0",
+    "oxlint": "^1.87.0",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2"
+  }
+}
