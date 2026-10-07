@@ -10,10 +10,17 @@ export type AuthOrigins = {
   trustedOrigin: string;
 };
 
+export type GoogleSignIn = {
+  clientId: string;
+  clientSecret: string;
+  verifyIdToken?: (token: string) => Promise<boolean>;
+};
+
 export function authConfig(
   connectionString: string,
   origins: AuthOrigins = defaultOrigins(),
   send: Mailer = smtpMailer(),
+  google: GoogleSignIn | undefined = googleFromEnv(),
 ) {
   const pool = new Pool({ connectionString });
   return {
@@ -86,6 +93,11 @@ export function authConfig(
         },
       },
       account: {
+        // Link only when the provider and the local user both say the email is verified.
+        accountLinking: {
+          enabled: true,
+          trustedProviders: [],
+        },
         modelName: 'accounts',
         fields: {
           accountId: 'account_id',
@@ -108,12 +120,18 @@ export function authConfig(
           updatedAt: 'updated_at',
         },
       },
+      socialProviders: google ? { google: googleProvider(google) } : undefined,
     },
   };
 }
 
-export function createAuth(connectionString: string, origins?: AuthOrigins, send?: Mailer) {
-  const { pool, options } = authConfig(connectionString, origins, send);
+export function createAuth(
+  connectionString: string,
+  origins?: AuthOrigins,
+  send?: Mailer,
+  google?: GoogleSignIn,
+) {
+  const { pool, options } = authConfig(connectionString, origins, send, google);
   return { auth: betterAuth(options), pool };
 }
 
@@ -123,6 +141,21 @@ function defaultOrigins(): AuthOrigins {
   return {
     baseURL: process.env.BETTER_AUTH_URL || 'http://127.0.0.1:3000',
     trustedOrigin: process.env.FRONTEND_ORIGIN || 'http://127.0.0.1:5173',
+  };
+}
+
+function googleFromEnv(): GoogleSignIn | undefined {
+  const clientId = process.env.GOOGLE_CLIENT_ID;
+  const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
+  if (!clientId || !clientSecret) return undefined;
+  return { clientId, clientSecret };
+}
+
+function googleProvider(google: GoogleSignIn) {
+  return {
+    clientId: google.clientId,
+    clientSecret: google.clientSecret,
+    ...(google.verifyIdToken ? { verifyIdToken: google.verifyIdToken } : {}),
   };
 }
 

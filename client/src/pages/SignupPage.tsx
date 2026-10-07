@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
-import { authClient } from '../auth'
+import { authClient, signInWithGoogle } from '../auth'
 
 export default function SignupPage() {
   const [message, setMessage] = useState('')
@@ -15,6 +15,11 @@ export default function SignupPage() {
       callbackURL: `${window.location.origin}/login`,
     })
     setMessage(error ? 'Could not sign up.' : 'Check your email for a verification link.')
+  }
+
+  async function onGoogle() {
+    const { error } = await signInWithGoogle()
+    if (error) setMessage('Google sign-in is unavailable.')
   }
 
   return (
@@ -33,6 +38,9 @@ export default function SignupPage() {
         <input name="password" type="password" required minLength={8} autoComplete="new-password" />
       </label>
       <button type="submit">Sign up</button>
+      <button type="button" onClick={() => void onGoogle()}>
+        Continue with Google
+      </button>
       <p>{message}</p>
       <p>
         <Link to="/login">Log in</Link>

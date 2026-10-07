@@ -19,6 +19,8 @@ npm run dev
 
 `docker compose up -d` also starts Mailpit. Verification and password-reset messages show up at `http://127.0.0.1:8025`. SMTP defaults to `127.0.0.1:1025`.
 
+Google sign-in stays off until `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` are both set. In Google Cloud Console, create a web OAuth client. Authorized redirect URI for this API: `http://127.0.0.1:3000/api/auth/callback/google`. Authorized JavaScript origin: `http://127.0.0.1:5173`. Production uses a separate OAuth client and the same callback path on the production API origin.
+
 `docker compose` creates `meowny` and, on a new volume, `meowny_test`. Tests also create `meowny_test` if it is missing. An old Docker volume ignores the init script. `docker compose down -v` once, then `up -d`, if the test database is missing and you do not want the test helper to create it.
 
 `npm test` uses `DATABASE_URL_TEST`.
