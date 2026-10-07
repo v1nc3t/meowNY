@@ -22,14 +22,14 @@ Phases 10 and 11 can swap places if the bank feature matters more to you than sp
 - Users have uuid ids; other tables use bigint ids.
 - Budgets are effective-dated; recurring items use categories; history via database triggers.
 - Money is handled as strings/decimals in code, never floats.
+- Query layer: Kysely. Schema stays in SQL migrations.
+- Migrations: node-pg-migrate, SQL files.
 - Later features (not modeled yet): expense splitting, admin board, bank connection, mobile app.
 
 ## Open decisions (decide when you reach the phase)
 
 | Decision | Needed by | Notes |
 |---|---|---|
-| Query layer: Kysely or Drizzle (or plain `pg`) | Phase 0 | SQL-first suits triggers, functions, partial indexes |
-| Migration tool: node-pg-migrate or Drizzle Kit | Phase 0 | Any, as long as every change is a migration |
 | Email sender (SMTP or a provider) | Phase 2 | Needed for verification and password reset; it is a data processor |
 | Hosting and backups | Phase 7 | If self-hosting: disk encryption, encrypted backups, TLS |
 | Chart library | Phase 5 | Any that works with your frontend |
@@ -41,33 +41,33 @@ Phases 10 and 11 can swap places if the bank feature matters more to you than sp
 
 ## Phase 0: Setup and decisions (S)
 
-- [ ] Repo layout: `server/`, `web/`, optional `shared/` for types and validation schemas
-- [ ] TypeScript everywhere, Express 5, linter/formatter, `.env` handling (secrets never in git)
-- [ ] PostgreSQL in Docker for dev, plus a separate throwaway database for tests
-- [ ] Pick migration tool and query layer (see open decisions)
-- [ ] Request validation with a schema library at the API boundary (e.g. zod)
-- [ ] Logging that never prints request bodies or personal data
-- [ ] Test setup: unit tests plus integration tests against a real Postgres (Testcontainers or Docker)
-- [ ] CI that runs lint, tests and migrations from scratch
-- [ ] Start a one-page **data inventory** (what personal data, why, where, how long, which processors). Update it every phase.
+- [x] Repo layout: `server/` is the API. The React app stays in `client/` until a frontend phase. No `shared/` package yet.
+- [x] TypeScript, Express 5, oxlint, `.env` handling (secrets never in git). No separate formatter.
+- [x] PostgreSQL in Docker for dev, plus a separate throwaway database for tests
+- [x] Pick migration tool and query layer (see decisions above)
+- [x] Request validation with Zod at the API boundary
+- [x] Logging that never prints request bodies or personal data
+- [x] Test setup: unit tests plus integration tests against a real Postgres (Docker)
+- [x] CI that runs lint, tests and migrations from scratch
+- [x] Start a one-page **data inventory** (what personal data, why, where, how long, which processors). Update it every phase.
 
 **Done when:** an empty Express app starts, connects to Postgres, one migration runs from scratch in CI, and one test passes.
 
 ## Phase 1: Database foundation (M)
 
-- [ ] Migration 1: all tables, indexes and foreign keys from Part 1 of the schema file
-- [ ] Migration 2: CHECK constraints, partial unique indexes, triggers (Part 2)
-- [ ] Migration 3: statistics functions (Part 3) and GDPR functions (Part 4)
-- [ ] **Reconcile Better Auth**: run `npx @better-auth/cli@latest generate` against a scratch database, compare its tables to `users`, `sessions`, `accounts`, `verifications`, and tune the mapping options (model names, field names, uuid ids) until they match. If the CLI output wins, update the schema file.
-- [ ] Constraint tests (these are your safety net):
-  - [ ] a transaction cannot use another user's category
-  - [ ] a budget's type must match its category's type
-  - [ ] only one GLOBAL budget per user, type and month
-  - [ ] a category type cannot change after creation
-  - [ ] the same recurring occurrence cannot be paid twice
-  - [ ] the same `client_uuid` cannot create two transactions
-  - [ ] audit rows appear for insert, update and delete, and are skipped when only `updated_at` changed
-- [ ] Dev seed script with a demo user, categories, budgets and transactions
+- [x] Migration 1: all tables, indexes and foreign keys from Part 1 of the schema file (`002_tables.sql`. `001_init.sql` only enables `pgcrypto`)
+- [x] Migration 2: CHECK constraints, partial unique indexes, triggers (Part 2, `003_constraints.sql`)
+- [x] Migration 3: statistics functions (Part 3) and GDPR functions (Part 4, `004_functions.sql`)
+- [x] **Reconcile Better Auth** with better-auth 1.7.7: uuid ids, snake_case tables and fields. The published CLI package is deprecated, so this used that version's own schema compiler. Auth index names follow it, and the schema file was updated.
+- [x] Constraint tests (these are your safety net):
+  - [x] a transaction cannot use another user's category
+  - [x] a budget's type must match its category's type
+  - [x] only one GLOBAL budget per user, type and month
+  - [x] a category type cannot change after creation
+  - [x] the same recurring occurrence cannot be paid twice
+  - [x] the same `client_uuid` cannot create two transactions
+  - [x] audit rows appear for insert, update and delete, and are skipped when only `updated_at` changed
+- [x] Dev seed script with a demo user, categories, budgets and transactions
 
 **Done when:** a fresh database builds from migrations only, Better Auth's generated schema matches yours, and all constraint tests pass.
 
