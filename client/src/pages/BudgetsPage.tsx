@@ -1,16 +1,19 @@
 import { useEffect, useState, type FormEvent } from 'react'
-import Modal, { modalFormId } from '../components/Modal'
+import DateScroll from '../DateScroll'
 import { api, errorMessage } from '../http'
 import { amountString, formatMoney } from '../money'
 import { useMoneySettings } from '../useMoneySettings'
 
-type Category = { id: string; name: string; type: string }
+type Group = { id: string; name: string }
+type Category = { id: string; name: string; type: string; categoryGroupId: string | null }
+type Side = 'EXPENSE' | 'INCOME'
 type Overview = {
   type: string
   budgeted: string | null
   allocated: string | null
   unallocated: string | null
   overAllocated: boolean
+  categories?: { categoryId: string; amountLimit: string }[]
 }
 
 const monthPattern = /^\d{4}-(?:0[1-9]|1[0-2])$/
@@ -19,22 +22,26 @@ export default function BudgetsPage() {
   const { settings, error } = useMoneySettings()
   const [month, setMonth] = useState(() => thisMonth())
   const [overview, setOverview] = useState<Overview[] | null>(null)
+  const [groups, setGroups] = useState<Group[] | null>(null)
   const [categories, setCategories] = useState<Category[] | null>(null)
   const [reload, setReload] = useState(0)
   const [message, setMessage] = useState('')
-  const [draft, setDraft] = useState<Category | null>(null)
-  const [draftMessage, setDraftMessage] = useState('')
 
   useEffect(() => {
     let cancelled = false
-    void api('/api/v1/categories').then(async (response) => {
+    void Promise.all([api('/api/v1/categories'), api('/api/v1/category-groups')]).then(async ([categoriesResponse, groupsResponse]) => {
       if (cancelled) return
-      if (!response.ok) {
-        setMessage(await errorMessage(response))
+      if (!categoriesResponse.ok) {
+        setMessage(await errorMessage(categoriesResponse))
         setCategories([])
+      } else {
+        setCategories((await categoriesResponse.json()) as Category[])
+      }
+      if (!groupsResponse.ok) {
+        setMessage(await errorMessage(groupsResponse))
         return
       }
-      setCategories((await response.json()) as Category[])
+      setGroups((await groupsResponse.json()) as Group[])
     })
     return () => {
       cancelled = true
@@ -77,40 +84,37 @@ export default function BudgetsPage() {
     return null
   }
 
-  function limitFrom(event: FormEvent<HTMLFormElement>, report: (text: string) => void): string | null | undefined {
-    const raw = String(new FormData(event.currentTarget).get('amount') ?? '').trim()
-    if (raw === '') return null
-    const amount = amountString(raw, true)
-    if (!amount) {
-      report('enter an amount with at most two decimals, or leave it blank to clear.')
-      return undefined
-    }
+  function amountFrom(raw: string): string | null | undefined {
+    const trimmed = raw.trim()
+    if (trimmed === '') return null
+    const amount = amountString(trimmed, true)
+    if (!amount) return undefined
     return amount
   }
 
-  async function onGlobal(event: FormEvent<HTMLFormElement>, type: 'EXPENSE' | 'INCOME') {
-    event.preventDefault()
-    const amountLimit = limitFrom(event, setMessage)
-    if (amountLimit === undefined) return
-    setMessage((await save({ type, scope: 'GLOBAL', amountLimit })) ?? '')
+  async function onGlobal(type: Side, raw: string): Promise<string | null> {
+    const amountLimit = amountFrom(raw)
+    if (amountLimit === undefined) return 'enter an amount with at most two decimals, or leave it blank to clear.'
+    const errorText = await save({ type, scope: 'GLOBAL', amountLimit })
+    setMessage(errorText ?? '')
+    return errorText
   }
 
-  async function onCategory(event: FormEvent<HTMLFormElement>, category: Category) {
-    event.preventDefault()
-    const amountLimit = limitFrom(event, setDraftMessage)
-    if (amountLimit === undefined) return
+  async function onCategory(category: Category, raw: string): Promise<string | null> {
+    const amountLimit = amountFrom(raw)
+    if (amountLimit === undefined) {
+      const errorText = 'enter an amount with at most two decimals, or leave it blank to clear.'
+      setMessage(errorText)
+      return errorText
+    }
     const errorText = await save({
       type: category.type,
       scope: 'CATEGORY',
       amountLimit,
       categoryId: category.id,
     })
-    if (errorText) {
-      setDraftMessage(errorText)
-      return
-    }
-    setDraft(null)
-    setDraftMessage('')
+    setMessage(errorText ?? '')
+    return errorText
   }
 
   if (error) return <p className="notice">{error}</p>
@@ -118,106 +122,43 @@ export default function BudgetsPage() {
 
   const money = (amount: string | null) =>
     amount === null ? 'not set' : formatMoney(amount, settings.currency, settings.locale)
-  const rows = ['EXPENSE', 'INCOME'].flatMap((type) => (overview ?? []).filter((row) => row.type === type))
+  const expenseBlocks = groups && categories ? budgetBlocks(groups, categories, 'EXPENSE') : null
+  const incomeBlocks = groups && categories ? budgetBlocks(groups, categories, 'INCOME') : null
 
   return (
-    <section>
-      <h1>budgets</h1>
-      <p className="notice">{message}</p>
-      <label>
-        month
-        <input type="month" value={month} required onChange={(event) => setMonth(event.target.value)} />
-      </label>
-      {rows.map((row) => (
-        <section key={row.type}>
-          <h2>{row.type === 'INCOME' ? 'income' : 'expense'}</h2>
-          <p>budgeted {money(row.budgeted)}</p>
-          <p>allocated {money(row.allocated)}</p>
-          <p>unallocated {money(row.unallocated)}</p>
-          {row.overAllocated && row.budgeted !== null ? (
-            <p className="warn">category budgets exceed the global budget.</p>
-          ) : null}
-        </section>
-      ))}
-      <form onSubmit={(event) => void onGlobal(event, 'EXPENSE')}>
-        <h2>global expense budget</h2>
-        <label>
-          amount
-          <input
-            name="amount"
-            inputMode="decimal"
-            autoComplete="off"
-            key={`EXPENSE:${month}:${overview?.find((row) => row.type === 'EXPENSE')?.budgeted ?? ''}`}
-            defaultValue={overview?.find((row) => row.type === 'EXPENSE')?.budgeted ?? ''}
-          />
+    <section className="tx-page budget-page">
+      <div className="tx-title">
+        <h1>budgets</h1>
+        <label className="budget-date">
+          date
+          <DateScroll announce="date" kind="month" value={month} onChange={setMonth} />
         </label>
-        <p>blank clears the budget.</p>
-        <button type="submit">save expense budget</button>
-      </form>
-      <form onSubmit={(event) => void onGlobal(event, 'INCOME')}>
-        <h2>global income budget</h2>
-        <label>
-          amount
-          <input
-            name="amount"
-            inputMode="decimal"
-            autoComplete="off"
-            key={`INCOME:${month}:${overview?.find((row) => row.type === 'INCOME')?.budgeted ?? ''}`}
-            defaultValue={overview?.find((row) => row.type === 'INCOME')?.budgeted ?? ''}
-          />
-        </label>
-        <p>blank clears the budget.</p>
-        <button type="submit">save income budget</button>
-      </form>
-      {/* shortcut: no budget list endpoint, category fields start empty after a reload or month change */}
-      <div className="wide" key={month}>
-        {(['EXPENSE', 'INCOME'] as const).map((type) => (
-          <section className="wide" key={type}>
-            <h2>{type === 'EXPENSE' ? 'expense categories' : 'income categories'}</h2>
-            <ul className="rows">
-              {(categories ?? [])
-                .filter((category) => category.type === type)
-                .map((category) => (
-                  <li key={category.id}>
-                    <div className="entry-row">
-                      <p className="entry-main">{category.name}</p>
-                      <div className="entry-actions">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setDraftMessage('')
-                            setDraft(category)
-                          }}
-                        >
-                          set budget
-                        </button>
-                      </div>
-                    </div>
-                  </li>
-                ))}
-            </ul>
-          </section>
-        ))}
       </div>
-      {draft ? (
-        <Modal
-          title="set budget"
-          onClose={() => {
-            setDraft(null)
-            setDraftMessage('')
-          }}
-        >
-          <p className="notice">{draftMessage}</p>
-          <form id={modalFormId} onSubmit={(event) => void onCategory(event, draft)}>
-            <p>{draft.name}</p>
-            <label>
-              amount
-              <input name="amount" inputMode="decimal" autoComplete="off" />
-            </label>
-            <p>blank clears the budget.</p>
-          </form>
-        </Modal>
-      ) : null}
+      <p className="notice">{message}</p>
+      <div className="budget-split wide">
+        <BudgetHalf
+          title="expenses"
+          type="EXPENSE"
+          month={month}
+          overview={overview?.find((row) => row.type === 'EXPENSE') ?? null}
+          amounts={amountsFor(overview, 'EXPENSE')}
+          blocks={expenseBlocks}
+          money={money}
+          onGlobal={onGlobal}
+          onCategory={onCategory}
+        />
+        <BudgetHalf
+          title="income"
+          type="INCOME"
+          month={month}
+          overview={overview?.find((row) => row.type === 'INCOME') ?? null}
+          amounts={amountsFor(overview, 'INCOME')}
+          blocks={incomeBlocks}
+          money={money}
+          onGlobal={onGlobal}
+          onCategory={onCategory}
+        />
+      </div>
     </section>
   )
 }
@@ -225,4 +166,176 @@ export default function BudgetsPage() {
 function thisMonth(): string {
   const now = new Date()
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+}
+
+function amountsFor(overview: Overview[] | null, type: Side): Map<string, string> {
+  const row = overview?.find((item) => item.type === type)
+  return new Map((row?.categories ?? []).map((line) => [line.categoryId, line.amountLimit]))
+}
+
+function budgetBlocks(groups: Group[], categories: Category[], type: Side): {
+  groups: { id: string; name: string; categories: Category[] }[]
+  ungrouped: Category[]
+} {
+  const ids = new Set(groups.map((group) => group.id))
+  const allowed = categories.filter((category) => category.type === type)
+  return {
+    groups: groups
+      .map((group) => ({
+        id: group.id,
+        name: group.name,
+        categories: allowed.filter((category) => category.categoryGroupId === group.id),
+      }))
+      .filter((group) => group.categories.length > 0),
+    ungrouped: allowed.filter((category) => category.categoryGroupId === null || !ids.has(category.categoryGroupId)),
+  }
+}
+
+function BudgetHalf({
+  title,
+  type,
+  month,
+  overview,
+  amounts,
+  blocks,
+  money,
+  onGlobal,
+  onCategory,
+}: {
+  title: string
+  type: Side
+  month: string
+  overview: Overview | null
+  amounts: Map<string, string>
+  blocks: ReturnType<typeof budgetBlocks> | null
+  money: (amount: string | null) => string
+  onGlobal: (type: Side, raw: string) => Promise<string | null>
+  onCategory: (category: Category, raw: string) => Promise<string | null>
+}) {
+  const budgeted = overview?.budgeted ?? ''
+  const saveLabel = type === 'INCOME' ? 'income' : 'expense'
+  return (
+    <section className="budget-half">
+      <h2>{title}</h2>
+      {overview ? (
+        <>
+          <p>budgeted {money(overview.budgeted)}</p>
+          <p>allocated {money(overview.allocated)}</p>
+          <p>unallocated {money(overview.unallocated)}</p>
+          {overview.overAllocated && overview.budgeted !== null ? (
+            <p className="warn">category budgets exceed the global budget.</p>
+          ) : null}
+        </>
+      ) : null}
+      <h2>global {saveLabel} budget</h2>
+      <AmountRow
+        key={`${type}:${month}:${budgeted}`}
+        label={`global ${saveLabel} amount`}
+        value={budgeted}
+        onSave={(raw) => onGlobal(type, raw)}
+      />
+      <p>blank clears the budget.</p>
+      {blocks ? (
+        <ul className="rows" key={month}>
+          {blocks.groups.map((group) => (
+            <li key={group.id}>
+              <div className="entry-row">
+                <p className="entry-main">{group.name}</p>
+              </div>
+              <ul className="rows">
+                {group.categories.map((category) => (
+                  <BudgetCategory
+                    key={category.id}
+                    category={category}
+                    amount={amounts.get(category.id) ?? ''}
+                    onSave={onCategory}
+                  />
+                ))}
+              </ul>
+            </li>
+          ))}
+          {blocks.ungrouped.length > 0 ? (
+            <li>
+              <div className="entry-row">
+                <p className="entry-main">ungrouped</p>
+              </div>
+              <ul className="rows">
+                {blocks.ungrouped.map((category) => (
+                  <BudgetCategory
+                    key={category.id}
+                    category={category}
+                    amount={amounts.get(category.id) ?? ''}
+                    onSave={onCategory}
+                  />
+                ))}
+              </ul>
+            </li>
+          ) : null}
+        </ul>
+      ) : null}
+      {blocks && blocks.groups.length === 0 && blocks.ungrouped.length === 0 ? <p>no categories.</p> : null}
+    </section>
+  )
+}
+
+function BudgetCategory({
+  category,
+  amount,
+  onSave,
+}: {
+  category: Category
+  amount: string
+  onSave: (category: Category, raw: string) => Promise<string | null>
+}) {
+  return (
+    <li>
+      <div className="entry-row budget-line">
+        <p className="entry-main">{category.name}</p>
+        <AmountRow label={`${category.name} amount`} value={amount} onSave={(raw) => onSave(category, raw)} />
+      </div>
+    </li>
+  )
+}
+
+function AmountRow({
+  value,
+  label,
+  onSave,
+}: {
+  value: string
+  label: string
+  onSave: (raw: string) => Promise<string | null>
+}) {
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState(value)
+
+  useEffect(() => {
+    if (!editing) setDraft(value)
+  }, [value, editing])
+
+  async function onSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    const errorText = await onSave(draft)
+    if (!errorText) setEditing(false)
+  }
+
+  return (
+    <form className="amount-row" onSubmit={(event) => void onSubmit(event)}>
+      <input
+        aria-label={label}
+        inputMode="decimal"
+        autoComplete="off"
+        readOnly={!editing}
+        value={draft}
+        onChange={(event) => setDraft(event.target.value)}
+      />
+      {editing ? (
+        <button type="submit">save</button>
+      ) : (
+        <button type="button" onClick={() => setEditing(true)}>
+          edit
+        </button>
+      )}
+    </form>
+  )
 }

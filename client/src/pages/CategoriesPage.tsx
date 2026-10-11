@@ -1,20 +1,44 @@
-import { useEffect, useState, type FormEvent } from 'react'
+import { useEffect, useRef, useState, type FormEvent } from 'react'
 import Modal, { modalFormId } from '../components/Modal'
+import { visibleGroups, visibleUngrouped, type Category, type Group, type Kind } from '../categoriesView'
 import { api, errorMessage } from '../http'
 
-type Group = { id: string; name: string }
-type Category = { id: string; name: string; type: string; categoryGroupId: string | null }
-type Kind = 'ALL' | 'INCOME' | 'EXPENSE'
 type Dialog = 'group' | 'category' | null
+
+function kindLabel(kind: Kind): string {
+  if (kind === 'INCOME') return 'income'
+  if (kind === 'EXPENSE') return 'expense'
+  return 'all'
+}
 
 export default function CategoriesPage() {
   const [groups, setGroups] = useState<Group[]>([])
   const [categories, setCategories] = useState<Category[]>([])
   const [kind, setKind] = useState<Kind>('ALL')
+  const [typeOpen, setTypeOpen] = useState(false)
+  const typeRef = useRef<HTMLDivElement>(null)
+  const [query, setQuery] = useState('')
   const [message, setMessage] = useState('')
   const [dialog, setDialog] = useState<Dialog>(null)
   const [dialogMessage, setDialogMessage] = useState('')
   const [renamingGroup, setRenamingGroup] = useState<string | null>(null)
+  const [loaded, setLoaded] = useState(false)
+
+  useEffect(() => {
+    if (!typeOpen) return
+    function onPointerDown(event: PointerEvent) {
+      if (!typeRef.current?.contains(event.target as Node)) setTypeOpen(false)
+    }
+    function onKey(event: KeyboardEvent) {
+      if (event.key === 'Escape') setTypeOpen(false)
+    }
+    document.addEventListener('pointerdown', onPointerDown)
+    document.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('pointerdown', onPointerDown)
+      document.removeEventListener('keydown', onKey)
+    }
+  }, [typeOpen])
 
   async function load() {
     const [groupResponse, categoryResponse] = await Promise.all([
@@ -31,6 +55,7 @@ export default function CategoriesPage() {
     }
     setGroups((await groupResponse.json()) as Group[])
     setCategories((await categoryResponse.json()) as Category[])
+    setLoaded(true)
   }
 
   useEffect(() => {
@@ -123,19 +148,63 @@ export default function CategoriesPage() {
     await load()
   }
 
-  const visible = categories.filter((category) => kind === 'ALL' || category.type === kind)
-  const ungrouped = visible.filter((category) => category.categoryGroupId === null)
+  const shownGroups = visibleGroups(groups, categories, kind, query)
+  const ungrouped = visibleUngrouped(groups, categories, kind, query)
 
   return (
-    <section>
-      <h1>categories</h1>
-      <div className="page-actions">
-        <button type="button" onClick={() => openDialog('group')}>
-          add group
-        </button>
-        <button type="button" onClick={() => openDialog('category')}>
-          add category
-        </button>
+    <section className="tx-page">
+      <div className="tx-title">
+        <h1>categories</h1>
+        <div className="tx-actions">
+          <button type="button" onClick={() => openDialog('group')}>
+            add group
+          </button>
+          <button type="button" onClick={() => openDialog('category')}>
+            add category
+          </button>
+        </div>
+      </div>
+      <div className="toolbar wide tx-bar">
+        <label className="grow">
+          search
+          <input
+            value={query}
+            maxLength={50}
+            autoComplete="off"
+            onChange={(event) => setQuery(event.target.value)}
+          />
+        </label>
+        <div className="pick fit type" ref={typeRef}>
+          <span>type</span>
+          <button
+            type="button"
+            className="pick-button"
+            aria-expanded={typeOpen}
+            aria-haspopup="listbox"
+            onClick={() => setTypeOpen((open) => !open)}
+          >
+            {kindLabel(kind)}
+          </button>
+          {typeOpen ? (
+            <ul className="pick-list" role="listbox">
+              {(['ALL', 'INCOME', 'EXPENSE'] as const).map((value) => (
+                <li key={value}>
+                  <button
+                    type="button"
+                    role="option"
+                    aria-selected={kind === value}
+                    onClick={() => {
+                      setKind(value)
+                      setTypeOpen(false)
+                    }}
+                  >
+                    {kindLabel(value)}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          ) : null}
+        </div>
       </div>
       <p className="notice">{message}</p>
       {dialog === 'group' ? (
@@ -178,48 +247,39 @@ export default function CategoriesPage() {
           </form>
         </Modal>
       ) : null}
-      <label>
-        show
-        <select value={kind} onChange={(event) => setKind(event.target.value as Kind)}>
-          <option value="ALL">all</option>
-          <option value="INCOME">income</option>
-          <option value="EXPENSE">expense</option>
-        </select>
-      </label>
-      <h2>groups</h2>
-      <ul className="rows">
-        {groups.map((group) => (
-          <li key={group.id}>
-            {renamingGroup === group.id ? (
-              <form className="entry-row" onSubmit={(event) => void onRenameGroup(event, group.id)}>
-                <label>
-                  group name
-                  <input name="name" required maxLength={50} defaultValue={group.name} autoComplete="off" />
-                </label>
-                <div className="entry-actions">
-                  <button type="submit">save</button>
-                  <button type="button" onClick={() => setRenamingGroup(null)}>
-                    cancel
-                  </button>
+      <div className="tx-pane wide">
+        {loaded && shownGroups.length === 0 && ungrouped.length === 0 ? <p>no categories.</p> : null}
+        <ul className="rows">
+          {shownGroups.map(({ group, categories: members }) => (
+            <li key={group.id}>
+              {renamingGroup === group.id ? (
+                <form className="entry-row" onSubmit={(event) => void onRenameGroup(event, group.id)}>
+                  <label>
+                    group name
+                    <input name="name" required maxLength={50} defaultValue={group.name} autoComplete="off" />
+                  </label>
+                  <div className="entry-actions">
+                    <button type="submit">save</button>
+                    <button type="button" onClick={() => setRenamingGroup(null)}>
+                      cancel
+                    </button>
+                  </div>
+                </form>
+              ) : (
+                <div className="entry-row">
+                  <p className="entry-main">{group.name}</p>
+                  <div className="entry-actions">
+                    <button type="button" className="tx-text" onClick={() => setRenamingGroup(group.id)}>
+                      rename
+                    </button>
+                    <button type="button" className="tx-text" onClick={() => void onDeleteGroup(group.id)}>
+                      delete
+                    </button>
+                  </div>
                 </div>
-              </form>
-            ) : (
-              <div className="entry-row">
-                <p className="entry-main">{group.name}</p>
-                <div className="entry-actions">
-                  <button type="button" onClick={() => setRenamingGroup(group.id)}>
-                    rename
-                  </button>
-                  <button type="button" onClick={() => void onDeleteGroup(group.id)}>
-                    delete
-                  </button>
-                </div>
-              </div>
-            )}
-            <ul className="rows">
-              {visible
-                .filter((category) => category.categoryGroupId === group.id)
-                .map((category) => (
+              )}
+              <ul className="rows">
+                {members.map((category) => (
                   <CategoryEditor
                     key={`${category.id}:${category.name}:${category.categoryGroupId ?? ''}`}
                     category={category}
@@ -228,22 +288,29 @@ export default function CategoriesPage() {
                     onError={setMessage}
                   />
                 ))}
-            </ul>
-          </li>
-        ))}
-      </ul>
-      <h2>no group</h2>
-      <ul className="rows">
-        {ungrouped.map((category) => (
-          <CategoryEditor
-            key={`${category.id}:${category.name}:${category.categoryGroupId ?? ''}`}
-            category={category}
-            groups={groups}
-            onDone={load}
-            onError={setMessage}
-          />
-        ))}
-      </ul>
+              </ul>
+            </li>
+          ))}
+          {ungrouped.length > 0 ? (
+            <li>
+              <div className="entry-row">
+                <p className="entry-main">ungrouped</p>
+              </div>
+              <ul className="rows">
+                {ungrouped.map((category) => (
+                  <CategoryEditor
+                    key={`${category.id}:${category.name}:${category.categoryGroupId ?? ''}`}
+                    category={category}
+                    groups={groups}
+                    onDone={load}
+                    onError={setMessage}
+                  />
+                ))}
+              </ul>
+            </li>
+          ) : null}
+        </ul>
+      </div>
     </section>
   )
 }
@@ -333,10 +400,10 @@ function CategoryEditor({
           <span className="entry-meta">{typeLabel}</span>
         </p>
         <div className="entry-actions">
-          <button type="button" onClick={() => setRenaming(true)}>
+          <button type="button" className="tx-text" onClick={() => setRenaming(true)}>
             rename
           </button>
-          <button type="button" onClick={() => void onDelete()}>
+          <button type="button" className="tx-text" onClick={() => void onDelete()}>
             delete
           </button>
         </div>

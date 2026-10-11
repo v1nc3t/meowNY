@@ -28,6 +28,7 @@ type Overview = {
   actual: string | null;
   remaining: string | null;
   overAllocated: boolean;
+  categories: { categoryId: string; amountLimit: string }[];
 };
 
 type Category = { id: string; name: string; type: string; categoryGroupId: string | null };
@@ -128,6 +129,7 @@ test('category allocations subtract from the global budget and warn when they ex
     assert.equal(within.budgeted, '2000.00');
     assert.equal(within.allocated, '400.00');
     assert.equal(within.unallocated, '1600.00');
+    assert.deepEqual(within.categories, [{ categoryId: food.id, amountLimit: '400.00' }]);
     assert.equal(within.overAllocated, false);
     assert.equal(typeof within.actual, 'string');
     assert.equal(typeof within.remaining, 'string');

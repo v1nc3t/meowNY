@@ -1,19 +1,15 @@
+import { Link } from 'react-router-dom'
+
 export default function DashboardPage() {
   return (
-    <div>
-      <h1>dashboard</h1>
-      <p>welcome to meowny.</p>
-
-      <div>
-        <div>
-          <h4>total balance</h4>
-          <p>$2,450.00</p>
-        </div>
-        <div>
-          <h4>monthly budget</h4>
-          <p>$1,200.00</p>
-        </div>
+    <section className="tx-page">
+      <div className="tx-title">
+        <h1>dashboard</h1>
       </div>
-    </div>
+      <p>
+        <Link to="/app/transactions">transactions</Link>, <Link to="/app/categories">categories</Link>, and{' '}
+        <Link to="/app/budgets">budgets</Link>.
+      </p>
+    </section>
   )
 }

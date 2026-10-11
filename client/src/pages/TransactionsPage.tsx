@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react'
 import Modal, { modalFormId } from '../components/Modal'
+import DateScroll from '../DateScroll'
 import { api, errorMessage } from '../http'
 import { amountString, formatMoney } from '../money'
 import { useMoneySettings } from '../useMoneySettings'
@@ -206,16 +207,18 @@ export default function TransactionsPage() {
     <section className="tx-page">
       <div className="tx-title">
         <h1>transactions</h1>
-        <button
-          type="button"
-          onClick={() => {
-            setMenu(null)
-            setDraftMessage('')
-            setAdding(true)
-          }}
-        >
-          add
-        </button>
+        <div className="tx-actions">
+          <button
+            type="button"
+            onClick={() => {
+              setMenu(null)
+              setDraftMessage('')
+              setAdding(true)
+            }}
+          >
+            add
+          </button>
+        </div>
       </div>
       <div className="toolbar wide tx-bar">
         <label className="grow">
@@ -254,7 +257,7 @@ export default function TransactionsPage() {
           <Pick
             label="range"
             className="mode"
-            text={filters.mode}
+            text={filters.mode === 'date' ? 'day' : filters.mode}
             open={menu === 'range'}
             onToggle={() => setMenu((current) => (current === 'range' ? null : 'range'))}
             onClose={() => setMenu(null)}
@@ -268,34 +271,26 @@ export default function TransactionsPage() {
                   setMenu(null)
                 }}
               >
-                {mode}
+                {mode === 'date' ? 'day' : mode}
               </PickOption>
             ))}
           </Pick>
           <label>
             from
-            <input
+            <DateScroll
               key={`from-${filters.mode}`}
-              type={filters.mode === 'year' ? 'number' : filters.mode}
-              min={filters.mode === 'year' ? 1000 : undefined}
-              max={filters.mode === 'year' ? 9999 : undefined}
-              step={filters.mode === 'year' ? 1 : undefined}
-              inputMode={filters.mode === 'year' ? 'numeric' : undefined}
+              kind={filters.mode}
               value={filters.from}
-              onChange={(event) => patchFilters({ from: event.target.value })}
+              onChange={(from) => patchFilters({ from })}
             />
           </label>
           <label>
             to
-            <input
+            <DateScroll
               key={`to-${filters.mode}`}
-              type={filters.mode === 'year' ? 'number' : filters.mode}
-              min={filters.mode === 'year' ? 1000 : undefined}
-              max={filters.mode === 'year' ? 9999 : undefined}
-              step={filters.mode === 'year' ? 1 : undefined}
-              inputMode={filters.mode === 'year' ? 'numeric' : undefined}
+              kind={filters.mode}
               value={filters.to}
-              onChange={(event) => patchFilters({ to: event.target.value })}
+              onChange={(to) => patchFilters({ to })}
             />
           </label>
         </div>
@@ -368,10 +363,7 @@ export default function TransactionsPage() {
               amount
               <input name="amount" required inputMode="decimal" autoComplete="off" />
             </label>
-            <label>
-              payment date
-              <input name="paymentDate" type="date" required defaultValue={today()} />
-            </label>
+            <PaymentDate defaultValue={today()} />
             <label>
               description
               <input name="description" maxLength={255} autoComplete="off" />
@@ -415,10 +407,7 @@ export default function TransactionsPage() {
                         autoComplete="off"
                       />
                     </label>
-                    <label>
-                      payment date
-                      <input name="paymentDate" type="date" required defaultValue={transaction.paymentDate} />
-                    </label>
+                    <PaymentDate defaultValue={transaction.paymentDate} />
                     <label>
                       description
                       <input
@@ -488,6 +477,16 @@ export default function TransactionsPage() {
         </>
       ) : null}
     </section>
+  )
+}
+
+function PaymentDate({ defaultValue }: { defaultValue: string }) {
+  const [value, setValue] = useState(defaultValue)
+  return (
+    <label>
+      payment date
+      <DateScroll name="paymentDate" kind="date" value={value} onChange={setValue} />
+    </label>
   )
 }
 

@@ -46,6 +46,12 @@ type OverviewRow = {
   over_allocated: boolean;
 };
 
+type CategoryBudgetRow = {
+  type: string;
+  category_id: string;
+  amount_limit: string;
+};
+
 export function budgetRouter(db: Kysely<DB>): Router {
   const router = Router();
   const json = express.json({ limit: '100kb' });
@@ -78,12 +84,20 @@ export function budgetRouter(db: Kysely<DB>): Router {
     }
     try {
       const monthStart = `${parsed.data.month}-01`;
-      const { rows } = await sql<OverviewRow>`
-        select type, budgeted, allocated, unallocated, actual, remaining,
-               (unallocated < 0) is true as over_allocated
-        from monthly_overview(${userId}::uuid, ${monthStart}::date)
-      `.execute(db);
-      res.json(rows.map(overviewJson));
+      const [{ rows }, { rows: categoryRows }] = await Promise.all([
+        sql<OverviewRow>`
+          select type, budgeted, allocated, unallocated, actual, remaining,
+                 (unallocated < 0) is true as over_allocated
+          from monthly_overview(${userId}::uuid, ${monthStart}::date)
+        `.execute(db),
+        sql<CategoryBudgetRow>`
+          select type, category_id::text as category_id, amount_limit::text as amount_limit
+          from effective_budgets(${userId}::uuid, ${monthStart}::date)
+          where scope = 'CATEGORY'
+          order by category_id
+        `.execute(db),
+      ]);
+      res.json(rows.map((row) => overviewJson(row, categoryRows)));
     } catch (err) {
       next(err);
     }
@@ -189,7 +203,7 @@ function budgetJson(row: BudgetRow): {
   };
 }
 
-function overviewJson(row: OverviewRow): {
+function overviewJson(row: OverviewRow, categoryRows: CategoryBudgetRow[]): {
   type: string;
   budgeted: string | null;
   allocated: string | null;
@@ -197,6 +211,7 @@ function overviewJson(row: OverviewRow): {
   actual: string | null;
   remaining: string | null;
   overAllocated: boolean;
+  categories: { categoryId: string; amountLimit: string }[];
 } {
   return {
     type: row.type,
@@ -206,6 +221,9 @@ function overviewJson(row: OverviewRow): {
     actual: row.actual,
     remaining: row.remaining,
     overAllocated: row.over_allocated,
+    categories: categoryRows
+      .filter((line) => line.type === row.type)
+      .map((line) => ({ categoryId: line.category_id, amountLimit: line.amount_limit })),
   };
 }
 
