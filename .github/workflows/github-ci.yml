@@ -9,9 +9,6 @@ on:
 jobs:
   server:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: server
     services:
       postgres:
         image: postgres:16-alpine
@@ -40,19 +37,23 @@ jobs:
         with:
           node-version: 22
           cache: npm
-          cache-dependency-path: server/package-lock.json
+          cache-dependency-path: package-lock.json
 
       - name: Install
         run: npm ci
 
       - name: Lint
+        working-directory: server
         run: npm run lint
 
       - name: Typecheck
+        working-directory: server
         run: npm run typecheck
 
       - name: Migrate
+        working-directory: server
         run: npm run migrate
 
       - name: Test
+        working-directory: server
         run: npm test

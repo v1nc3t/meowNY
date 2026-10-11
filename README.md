@@ -11,8 +11,8 @@ From the repo root:
 ```bash
 cp .env.example .env
 docker compose up -d
-cd server && npm install && npm run migrate
-cd ../client && npm install
+npm install
+cd server && npm run migrate
 ```
 
 `docker compose up -d` starts Postgres on `127.0.0.1:5432` and Mailpit. Mailpit catches signup and password-reset mail. Open the inbox at http://127.0.0.1:8025.
