@@ -41,15 +41,16 @@ Optional demo rows (a user, categories, budgets, and transactions) go into the d
 
 Google sign-in stays off until both `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` are set. For local development, the OAuth redirect URI is `http://127.0.0.1:3000/api/auth/callback/google` and the JavaScript origin is `http://127.0.0.1:5173`.
 
-## Tests
+## Tests and checks
 
-From `server`, with Compose already running:
+Server tests need Compose running. They use `DATABASE_URL_TEST` and do not write to the app database.
 
 ```bash
-npm test
+cd server && npm run lint && npm run typecheck && npm test
+cd ../client && npm run lint && npm run build && npm test
 ```
 
-Tests use `DATABASE_URL_TEST` and do not write to the app database.
+CI runs the same commands on every push.
 
 ## Production-style start
 
@@ -61,3 +62,5 @@ cd ../client && npm run build
 ```
 
 `npm start` reads `../.env`. Set `BETTER_AUTH_URL` and `FRONTEND_ORIGIN` to the public API and site origins before you use this outside your machine.
+
+Migrations run through `npm run migrate` (it needs the dev dependencies, so run it from a full `npm install` checkout). `npm start` does not migrate on its own.

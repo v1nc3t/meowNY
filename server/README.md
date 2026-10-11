@@ -1,6 +1,6 @@
 # meowNY server
 
-Express API for meowNY. Phase 0 serves a health check and runs SQL migrations against Postgres.
+Express API for meowNY. It serves auth, the account, categories, transactions, and budgets, and runs the TypeScript migrations in `migrations/` against Postgres.
 
 ## Run
 

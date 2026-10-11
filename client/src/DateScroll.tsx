@@ -206,6 +206,14 @@ function PartField({
         onBlur={finish}
         onKeyDown={(event) => {
           if (event.key === 'Enter') event.currentTarget.blur()
+          if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return
+          event.preventDefault()
+          if (!open) {
+            onOpen()
+            return
+          }
+          const next = values[values.indexOf(selected) + (event.key === 'ArrowDown' ? 1 : -1)]
+          if (next !== undefined) onType(next)
         }}
         onChange={(event) => {
           if (part === 'month') return
