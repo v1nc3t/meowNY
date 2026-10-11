@@ -4,6 +4,7 @@ import type { Kysely } from 'kysely';
 import type { Logger } from 'pino';
 import { accountRouter } from './account/router.js';
 import { categoryRouter } from './category/router.js';
+import { transactionRouter } from './transaction/router.js';
 import type { AppAuth } from './auth/options.js';
 import { requireUser } from './auth/middleware.js';
 import type { DB } from './db/schema.js';
@@ -32,6 +33,7 @@ export function createApp({ db, logger, auth, google = false }: AppDeps): Expres
     api.use(requireUser(auth));
     api.use(accountRouter(db, auth));
     api.use(categoryRouter(db));
+    api.use(transactionRouter(db));
     app.use('/api/v1', api);
   }
   app.use(express.json({ limit: '100kb' }));

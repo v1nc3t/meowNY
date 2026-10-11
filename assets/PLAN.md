@@ -89,8 +89,8 @@ Phases 10 and 11 can swap places if the bank feature matters more to you than sp
 ## Phase 3: Core budgeting: categories, transactions, budgets (L)
 
 - [ ] Every query is scoped by `user_id` from the session, never from the request body
-- [ ] Category groups and categories CRUD. Soft delete writes the NULL budget row (schema Part 5-A).
-- [ ] Transactions CRUD with filters (date range, category, text), pagination, and `client_uuid` idempotency. Amount rules: positive, two decimals, sent as strings.
+- [x] Category groups and categories CRUD. Soft delete writes the NULL budget row (schema Part 5-A).
+- [x] Transactions CRUD with filters (date range, category, text), pagination, and `client_uuid` idempotency. Amount rules: positive, two decimals, sent as strings.
 - [ ] Budgets API: set / remove a GLOBAL or CATEGORY budget from a given month (upserts from Part 5-A), for both EXPENSE and INCOME
 - [ ] Budget overview: allocated vs unallocated, with a warning when categories exceed the global budget
 - [ ] Frontend: category management, transaction form and list, budget setup screen
