@@ -11,6 +11,9 @@ import OnboardingPage from './pages/OnboardingPage'
 import TermsPage from './pages/TermsPage'
 import PrivacyPage from './pages/PrivacyPage'
 import DashboardPage from './pages/DashboardPage'
+import TransactionsPage from './pages/TransactionsPage'
+import CategoriesPage from './pages/CategoriesPage'
+import BudgetsPage from './pages/BudgetsPage'
 import AccountPage from './pages/AccountPage'
 
 // Pages
@@ -46,9 +49,9 @@ const router = createBrowserRouter([
           // Automatically redirect /app to /app/dashboard
           { index: true, element: <Navigate to="dashboard" replace /> },
           { path: 'dashboard', element: <DashboardPage /> },
-          { path: 'transactions', element: <div>Transactions Mock View</div> },
-          { path: 'categories', element: <div>Categories Mock View</div> },
-          { path: 'budgets', element: <div>Budgets Mock View</div> },
+          { path: 'transactions', element: <TransactionsPage /> },
+          { path: 'categories', element: <CategoriesPage /> },
+          { path: 'budgets', element: <BudgetsPage /> },
           { path: 'account', element: <AccountPage /> },
         ],
       },

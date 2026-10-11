@@ -93,7 +93,7 @@ Phases 10 and 11 can swap places if the bank feature matters more to you than sp
 - [x] Transactions CRUD with filters (date range, category, text), pagination, and `client_uuid` idempotency. Amount rules: positive, two decimals, sent as strings.
 - [x] Budgets API: set / remove a GLOBAL or CATEGORY budget from a given month (upserts from Part 5-A), for both EXPENSE and INCOME
 - [x] Budget overview: allocated vs unallocated, with a warning when categories exceed the global budget
-- [ ] Frontend: category management, transaction form and list, budget setup screen
+- [x] Frontend: category management, transaction form and list, budget setup screen
 - [x] Tests: carry-over (a March budget applies in June until changed), removal via NULL, income budgets, idempotent create
 
 **Done when:** you can record income and expenses, set monthly budgets and category allocations, change them, and see that old months keep their old limits.
