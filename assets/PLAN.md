@@ -22,8 +22,8 @@ Phases 10 and 11 can swap places if the bank feature matters more to you than sp
 - Users have uuid ids; other tables use bigint ids.
 - Budgets are effective-dated; recurring items use categories; history via database triggers.
 - Money is handled as strings/decimals in code, never floats.
-- Query layer: Kysely. Schema stays in SQL migrations.
-- Migrations: node-pg-migrate, SQL files.
+- Query layer: Kysely. Schema stays in TypeScript migrations.
+- Migrations: node-pg-migrate, TypeScript files.
 - Later features (not modeled yet): expense splitting, admin board, bank connection, mobile app.
 
 ## Open decisions (decide when you reach the phase)
