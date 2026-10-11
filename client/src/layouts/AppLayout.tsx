@@ -1,9 +1,11 @@
 import { useState } from 'react'
-import { Outlet } from 'react-router-dom'
+import { Outlet, useMatch } from 'react-router-dom'
 import AppSidebar from '../components/AppSidebar'
+import Footer from '../components/Footer'
 
 export default function AppLayout() {
   const [collapsed, setCollapsed] = useState(() => localStorage.getItem('sidebar-collapsed') === '1')
+  const locked = useMatch({ path: '/app/transactions', end: true })
 
   function toggleSidebar() {
     const next = !collapsed
@@ -11,13 +13,16 @@ export default function AppLayout() {
     setCollapsed(next)
   }
 
+  const shell = ['app-shell', collapsed ? 'is-collapsed' : '', locked ? 'is-locked' : ''].filter(Boolean).join(' ')
+
   return (
-    <div className={collapsed ? 'app-shell is-collapsed' : 'app-shell'}>
+    <div className={shell}>
       <AppSidebar collapsed={collapsed} onToggle={toggleSidebar} />
       <div className="app-main">
         <main>
           <Outlet />
         </main>
+        <Footer />
       </div>
     </div>
   )

@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react'
-import Modal from '../components/Modal'
+import Modal, { modalFormId } from '../components/Modal'
 import { api, errorMessage } from '../http'
 
 type Group = { id: string; name: string }
@@ -141,19 +141,18 @@ export default function CategoriesPage() {
       {dialog === 'group' ? (
         <Modal title="add group" onClose={() => setDialog(null)}>
           <p className="notice">{dialogMessage}</p>
-          <form onSubmit={(event) => void onCreateGroup(event)}>
+          <form id={modalFormId} onSubmit={(event) => void onCreateGroup(event)}>
             <label>
               name
               <input name="name" required maxLength={50} autoComplete="off" />
             </label>
-            <button type="submit">add group</button>
           </form>
         </Modal>
       ) : null}
       {dialog === 'category' ? (
         <Modal title="add category" onClose={() => setDialog(null)}>
           <p className="notice">{dialogMessage}</p>
-          <form onSubmit={(event) => void onCreateCategory(event)}>
+          <form id={modalFormId} onSubmit={(event) => void onCreateCategory(event)}>
             <label>
               name
               <input name="name" required maxLength={50} autoComplete="off" />
@@ -176,7 +175,6 @@ export default function CategoriesPage() {
                 ))}
               </select>
             </label>
-            <button type="submit">add category</button>
           </form>
         </Modal>
       ) : null}

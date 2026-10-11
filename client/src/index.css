@@ -31,10 +31,6 @@ body {
   margin: 0;
   min-height: 100svh;
   background-color: var(--bg);
-  background-image:
-    linear-gradient(rgba(255, 255, 255, 0.04) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.04) 1px, transparent 1px);
-  background-size: 48px 48px;
 }
 
 #root {
@@ -195,9 +191,26 @@ input[type='month']::-webkit-datetime-edit-year-field {
   text-transform: none;
 }
 
+input:focus::-webkit-datetime-edit-month-field,
+input:focus::-webkit-datetime-edit-day-field,
+input:focus::-webkit-datetime-edit-year-field,
+input:focus::-webkit-datetime-edit-text {
+  background-color: transparent;
+  color: rgba(255, 255, 255, 0.85);
+}
+
 :focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
+}
+
+input:focus,
+textarea:focus,
+select:focus,
+.pick-button:focus {
+  outline: 2px solid #fff;
+  outline-offset: 2px;
+  box-shadow: none;
 }
 
 form {
@@ -361,10 +374,30 @@ footer {
 }
 
 footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 24px;
   border-top: 0.8px solid var(--border);
-  padding: 48px 24px;
+  padding: 16px 24px;
   color: var(--text-muted);
   font-size: 12px;
+}
+
+footer nav {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 16px;
+}
+
+footer a {
+  color: inherit;
+  text-decoration: none;
+}
+
+footer a:hover {
+  color: var(--text-h);
 }
 
 .app-shell {
@@ -484,7 +517,50 @@ footer {
 
 .app-main {
   min-width: 0;
-  padding: 56px 32px 96px;
+  display: flex;
+  flex-direction: column;
+}
+
+.app-main > main {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 56px 32px 32px;
+}
+
+.app-main > footer {
+  flex-shrink: 0;
+  padding-inline: 32px;
+}
+
+.app-shell.is-locked {
+  height: 100svh;
+  max-height: 100svh;
+  overflow: hidden;
+  grid-template-rows: minmax(0, 1fr);
+}
+
+.app-shell.is-locked .app-main {
+  min-height: 0;
+  overflow: hidden;
+}
+
+.app-shell.is-locked .app-main > main {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+  padding-bottom: 16px;
+}
+
+.app-shell.is-locked .tx-page {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+}
+
+html:has(.app-shell.is-locked),
+body:has(.app-shell.is-locked) {
+  overflow: hidden;
 }
 
 .app-main main > section,
@@ -541,11 +617,212 @@ footer {
 }
 
 .page-actions,
-.entry-actions {
+.entry-actions,
+.page-numbers {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 8px;
+}
+
+.page-numbers button,
+.page-numbers button:hover,
+.page-numbers button:focus-visible {
+  border: 0;
+  outline: none;
+  background: transparent;
+  padding: 0 2px;
+  box-shadow: none;
+}
+
+.page-numbers button[aria-current='page'] {
+  color: var(--text-h);
+  text-decoration: line-through;
+  text-decoration-thickness: 1px;
+  text-decoration-skip-ink: none;
+}
+
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 12px 14px;
+  width: 100%;
+  min-width: 0;
+}
+
+.toolbar > button {
+  flex: 0 0 auto;
+}
+
+.toolbar > label {
+  width: auto;
+  flex: 0 1 auto;
+  min-width: 0;
+}
+
+.toolbar input,
+.toolbar select {
+  width: 11rem;
+}
+
+.tx-title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  width: auto;
+  max-width: 100%;
+}
+
+.tx-title h1 {
+  margin: 0;
+}
+
+.tx-title button {
+  flex: 0 0 auto;
+}
+
+.toolbar.tx-bar {
+  flex-wrap: wrap;
+  align-items: flex-end;
+}
+
+.tx-range {
+  display: flex;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 12px 14px;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.tx-range > label {
+  width: auto;
+  flex: 0 0 auto;
+}
+
+.toolbar .grow {
+  flex: 1 1 0%;
+  width: auto;
+  min-width: min(100%, 8rem);
+  max-width: 100%;
+}
+
+.toolbar .grow input {
+  width: 100%;
+}
+
+.toolbar.tx-bar .pick {
+  max-width: 100%;
+}
+
+.toolbar.tx-bar .pick-button,
+.toolbar.tx-bar .tx-range input {
+  width: max-content;
+  max-width: 100%;
+}
+
+.toolbar.tx-bar .pick.limit {
+  flex-shrink: 0;
+  min-width: max-content;
+  max-width: none;
+}
+
+.toolbar.tx-bar .pick.limit .pick-button {
+  min-width: calc(3ch + 26px);
+  max-width: none;
+  overflow-wrap: normal;
+  white-space: nowrap;
+}
+
+.pick.limit .pick-list {
+  width: max-content;
+  min-width: 100%;
+}
+
+.pick.limit .pick-list button {
+  width: max-content;
+  min-width: 100%;
+  overflow-wrap: normal;
+  white-space: nowrap;
+}
+
+.pick {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+  width: auto;
+  flex: 0 0 auto;
+  min-width: 0;
+  font-family: var(--mono);
+  font-size: 12px;
+  line-height: 1.4;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+
+.pick-button {
+  width: 11rem;
+  min-height: 42px;
+  padding: 10px 12px;
+  text-align: left;
+  letter-spacing: normal;
+  font-size: 14px;
+  background: #000;
+  color: var(--text-h);
+  border: 0.8px solid var(--border-strong);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pick-button:hover {
+  background: #000;
+}
+
+.pick-list {
+  position: absolute;
+  z-index: 30;
+  top: calc(100% + 4px);
+  left: 0;
+  width: 100%;
+  max-height: 16rem;
+  margin: 0;
+  padding: 0;
+  overflow: auto;
+  background: #000;
+  color: var(--text-h);
+  border: 0.8px solid var(--border-strong);
+}
+
+.pick-list > li {
+  display: block;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  gap: 0;
+  border: 0;
+}
+
+.pick-list button {
+  width: 100%;
+  border: 0;
+  background: #000;
+  color: var(--text-h);
+  text-align: left;
+  padding: 8px 12px;
+  letter-spacing: normal;
+  font-size: 14px;
+  white-space: normal;
+}
+
+.pick-list button:hover,
+.pick-list button[aria-selected='true'] {
+  background: rgba(255, 255, 255, 0.08);
 }
 
 .entry-row {
@@ -583,6 +860,76 @@ footer {
   white-space: nowrap;
 }
 
+.tx-row {
+  align-items: flex-start;
+}
+
+.tx-row .entry-actions {
+  gap: 24px;
+}
+
+.tx-main {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.tx-sub,
+.tx-desc {
+  font-family: var(--mono);
+  font-size: 14px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.tx-sub {
+  color: var(--text-muted);
+}
+
+.tx-page button:hover:not(:disabled) {
+  text-decoration: line-through;
+  text-decoration-thickness: 1px;
+  text-decoration-skip-ink: none;
+}
+
+.tx-page .tx-text,
+.tx-page .tx-text:hover,
+.tx-page .tx-desc,
+.tx-page .tx-desc:hover {
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.tx-page .tx-text {
+  padding: 0;
+  letter-spacing: normal;
+}
+
+.tx-page .tx-desc {
+  align-self: flex-start;
+  width: auto;
+  max-width: 100%;
+  min-width: 0;
+  padding: 0;
+  text-align: left;
+  letter-spacing: normal;
+  color: var(--text-muted);
+}
+
+.tx-pane {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  width: 100%;
+}
+
+.tx-page > :not(.tx-pane) {
+  flex-shrink: 0;
+}
+
 ul.rows {
   width: 100%;
   max-width: none;
@@ -617,14 +964,15 @@ body:has(dialog[open]) {
   margin: auto;
   padding: 0;
   border: 0.8px solid var(--border-strong);
-  background: #000;
+  background-color: #000;
+  background-image: none;
   color: var(--text);
   overflow: auto;
   box-shadow: none;
 }
 
 .modal::backdrop {
-  background: rgba(255, 255, 255, 0.14);
+  background: rgb(0 0 0 / 55%);
 }
 
 .modal-panel {
@@ -633,6 +981,16 @@ body:has(dialog[open]) {
   align-items: stretch;
   gap: 16px;
   padding: 24px;
+  background-color: #000;
+  background-image: none;
+}
+
+.modal-actions {
+  display: flex;
+  flex-wrap: nowrap;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 8px;
 }
 
 .modal-head {
@@ -685,6 +1043,7 @@ body:has(dialog[open]) {
   .app-shell,
   .app-shell.is-collapsed {
     grid-template-columns: 1fr;
+    grid-template-rows: auto minmax(auto, 1fr);
   }
 
   .sidebar-toggle,
@@ -724,6 +1083,11 @@ body:has(dialog[open]) {
     padding: 8px 10px;
   }
 
+  .toolbar.tx-bar,
+  .tx-bar .tx-range {
+    flex-wrap: wrap;
+  }
+
   .entry-row,
   form.entry-row {
     flex-wrap: wrap;
@@ -743,8 +1107,21 @@ body:has(dialog[open]) {
     margin-top: 0;
   }
 
-  .app-main {
-    padding: 28px 16px 64px;
+  .app-main > main {
+    padding: 28px 16px 32px;
+  }
+
+  .app-main > footer {
+    padding-inline: 16px;
+  }
+
+  .app-shell.is-locked,
+  .app-shell.is-collapsed.is-locked {
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+
+  .app-shell.is-locked .app-main > main {
+    padding-bottom: 12px;
   }
 
   .app-main div:has(> div > h4) {

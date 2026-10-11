@@ -1,9 +1,10 @@
-import { useEffect, useState, type FormEvent } from 'react'
-import Modal from '../components/Modal'
+import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react'
+import Modal, { modalFormId } from '../components/Modal'
 import { api, errorMessage } from '../http'
 import { amountString, formatMoney } from '../money'
 import { useMoneySettings } from '../useMoneySettings'
 
+type Group = { id: string; name: string }
 type Category = { id: string; name: string; type: string }
 type Transaction = {
   id: string
@@ -14,17 +15,31 @@ type Transaction = {
   description: string | null
 }
 type TransactionList = { transactions: Transaction[]; total: number; limit: number; offset: number }
-type Filters = { from: string; to: string; categoryId: string; q: string }
-
-const pageLimit = 20
+type RangeMode = 'date' | 'month' | 'year'
+type MenuName = 'range' | 'show' | 'category'
+type Filters = {
+  mode: RangeMode
+  from: string
+  to: string
+  categoryId: string
+  groupId: string
+  q: string
+}
 
 export default function TransactionsPage() {
   const { settings, error } = useMoneySettings()
+  const [groups, setGroups] = useState<Group[]>([])
   const [categories, setCategories] = useState<Category[]>([])
-  const [filters, setFilters] = useState<Filters>({ from: '', to: '', categoryId: '', q: '' })
+  const [filters, setFilters] = useState<Filters>(() => {
+    const month = currentMonth()
+    return { mode: 'month', from: month, to: month, categoryId: '', groupId: '', q: '' }
+  })
+  const [limit, setLimit] = useState(50)
   const [offset, setOffset] = useState(0)
   const [reload, setReload] = useState(0)
   const [page, setPage] = useState<TransactionList | null>(null)
+  const [menu, setMenu] = useState<MenuName | null>(null)
+  const [openId, setOpenId] = useState<string | null>(null)
   const [clientUuid, setClientUuid] = useState(() => crypto.randomUUID())
   const [pending, setPending] = useState(false)
   const [adding, setAdding] = useState(false)
@@ -34,9 +49,10 @@ export default function TransactionsPage() {
 
   useEffect(() => {
     let cancelled = false
-    void api('/api/v1/categories').then(async (response) => {
-      if (cancelled || !response.ok) return
-      setCategories((await response.json()) as Category[])
+    void Promise.all([api('/api/v1/categories'), api('/api/v1/category-groups')]).then(async ([categoriesResponse, groupsResponse]) => {
+      if (cancelled) return
+      if (categoriesResponse.ok) setCategories((await categoriesResponse.json()) as Category[])
+      if (groupsResponse.ok) setGroups((await groupsResponse.json()) as Group[])
     })
     return () => {
       cancelled = true
@@ -46,11 +62,15 @@ export default function TransactionsPage() {
   useEffect(() => {
     let cancelled = false
     const params = new URLSearchParams()
-    if (filters.from) params.set('from', filters.from)
-    if (filters.to) params.set('to', filters.to)
+    const from = apiBound(filters.mode, filters.from, 'from')
+    const to = apiBound(filters.mode, filters.to, 'to')
+    if (from) params.set('from', from)
+    if (to) params.set('to', to)
     if (filters.categoryId) params.set('categoryId', filters.categoryId)
-    if (filters.q) params.set('q', filters.q)
-    params.set('limit', String(pageLimit))
+    else if (filters.groupId) params.set('groupId', filters.groupId)
+    const q = filters.q.trim()
+    if (q) params.set('q', q)
+    params.set('limit', String(limit))
     params.set('offset', String(offset))
     void api(`/api/v1/transactions?${params}`).then(async (response) => {
       if (cancelled) return
@@ -63,17 +83,21 @@ export default function TransactionsPage() {
     return () => {
       cancelled = true
     }
-  }, [filters, offset, reload])
+  }, [filters, limit, offset, reload])
 
-  function onFilter(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    const form = new FormData(event.currentTarget)
-    setFilters({
-      from: String(form.get('from') ?? ''),
-      to: String(form.get('to') ?? ''),
-      categoryId: String(form.get('categoryId') ?? ''),
-      q: String(form.get('q') ?? '').trim(),
-    })
+  function patchFilters(patch: Partial<Filters>) {
+    setFilters((current) => ({ ...current, ...patch }))
+    setOffset(0)
+    setEditing(null)
+  }
+
+  function onMode(mode: RangeMode) {
+    setFilters((current) => ({
+      ...current,
+      mode,
+      from: shiftBound(current.from, current.mode, mode, 'from'),
+      to: shiftBound(current.to, current.mode, mode, 'to'),
+    }))
     setOffset(0)
     setEditing(null)
   }
@@ -165,32 +189,164 @@ export default function TransactionsPage() {
     setReload((value) => value + 1)
   }
 
-  function categoryName(id: string): string {
-    return categories.find((category) => category.id === id)?.name ?? 'deleted category'
+  function scopeLabel(): string {
+    if (filters.groupId) return groups.find((group) => group.id === filters.groupId)?.name ?? 'group'
+    if (filters.categoryId) return categories.find((category) => category.id === filters.categoryId)?.name ?? 'deleted category'
+    return 'all categories'
   }
 
   if (error) return <p className="notice">{error}</p>
   if (!settings) return null
 
+  // shortcut: one button per page, upgrade if lists run past a few dozen pages
+  const pageCount = page && page.limit > 0 ? Math.max(1, Math.ceil(page.total / page.limit)) : 0
+  const currentPage = page && page.limit > 0 ? Math.floor(page.offset / page.limit) + 1 : 1
+
   return (
-    <section>
-      <h1>transactions</h1>
-      <div className="page-actions">
+    <section className="tx-page">
+      <div className="tx-title">
+        <h1>transactions</h1>
         <button
           type="button"
           onClick={() => {
+            setMenu(null)
             setDraftMessage('')
             setAdding(true)
           }}
         >
-          add transaction
+          add
         </button>
+      </div>
+      <div className="toolbar wide tx-bar">
+        <label className="grow">
+          search
+          <input
+            value={filters.q}
+            maxLength={255}
+            autoComplete="off"
+            onChange={(event) => patchFilters({ q: event.target.value })}
+          />
+        </label>
+        <Pick
+          label="show"
+          className="limit"
+          text={String(limit)}
+          open={menu === 'show'}
+          onToggle={() => setMenu((current) => (current === 'show' ? null : 'show'))}
+          onClose={() => setMenu(null)}
+        >
+          {['10', '50', '100'].map((value) => (
+            <PickOption
+              key={value}
+              selected={String(limit) === value}
+              onClick={() => {
+                setLimit(Number(value))
+                setOffset(0)
+                setEditing(null)
+                setMenu(null)
+              }}
+            >
+              {value}
+            </PickOption>
+          ))}
+        </Pick>
+        <div className="tx-range">
+          <Pick
+            label="range"
+            className="mode"
+            text={filters.mode}
+            open={menu === 'range'}
+            onToggle={() => setMenu((current) => (current === 'range' ? null : 'range'))}
+            onClose={() => setMenu(null)}
+          >
+            {(['date', 'month', 'year'] as const).map((mode) => (
+              <PickOption
+                key={mode}
+                selected={filters.mode === mode}
+                onClick={() => {
+                  onMode(mode)
+                  setMenu(null)
+                }}
+              >
+                {mode}
+              </PickOption>
+            ))}
+          </Pick>
+          <label>
+            from
+            <input
+              key={`from-${filters.mode}`}
+              type={filters.mode === 'year' ? 'number' : filters.mode}
+              min={filters.mode === 'year' ? 1000 : undefined}
+              max={filters.mode === 'year' ? 9999 : undefined}
+              step={filters.mode === 'year' ? 1 : undefined}
+              inputMode={filters.mode === 'year' ? 'numeric' : undefined}
+              value={filters.from}
+              onChange={(event) => patchFilters({ from: event.target.value })}
+            />
+          </label>
+          <label>
+            to
+            <input
+              key={`to-${filters.mode}`}
+              type={filters.mode === 'year' ? 'number' : filters.mode}
+              min={filters.mode === 'year' ? 1000 : undefined}
+              max={filters.mode === 'year' ? 9999 : undefined}
+              step={filters.mode === 'year' ? 1 : undefined}
+              inputMode={filters.mode === 'year' ? 'numeric' : undefined}
+              value={filters.to}
+              onChange={(event) => patchFilters({ to: event.target.value })}
+            />
+          </label>
+        </div>
+        <Pick
+          label="category"
+          className="scope"
+          text={scopeLabel()}
+          open={menu === 'category'}
+          onToggle={() => setMenu((current) => (current === 'category' ? null : 'category'))}
+          onClose={() => setMenu(null)}
+        >
+          <PickOption
+            selected={!filters.categoryId && !filters.groupId}
+            onClick={() => {
+              patchFilters({ categoryId: '', groupId: '' })
+              setMenu(null)
+            }}
+          >
+            all categories
+          </PickOption>
+          {groups.map((group) => (
+            <PickOption
+              key={`group-${group.id}`}
+              selected={filters.groupId === group.id}
+              onClick={() => {
+                patchFilters({ categoryId: '', groupId: group.id })
+                setMenu(null)
+              }}
+            >
+              {group.name}
+            </PickOption>
+          ))}
+          {categories.map((category) => (
+            <PickOption
+              key={`category-${category.id}`}
+              selected={filters.categoryId === category.id}
+              onClick={() => {
+                patchFilters({ categoryId: category.id, groupId: '' })
+                setMenu(null)
+              }}
+            >
+              {category.name}
+            </PickOption>
+          ))}
+        </Pick>
       </div>
       <p className="notice">{message}</p>
       {adding ? (
-        <Modal title="add transaction" onClose={() => setAdding(false)}>
+        <Modal title="add transaction" pending={pending} onClose={() => setAdding(false)}>
           <p className="notice">{draftMessage}</p>
-          <form key={clientUuid} onSubmit={(event) => void onCreate(event)}>
+          <form id={modalFormId} key={clientUuid} onSubmit={(event) => void onCreate(event)}>
             <label>
               category
               <select name="categoryId" required defaultValue="">
@@ -220,48 +376,14 @@ export default function TransactionsPage() {
               description
               <input name="description" maxLength={255} autoComplete="off" />
             </label>
-            <button type="submit" disabled={pending}>
-              add transaction
-            </button>
           </form>
         </Modal>
       ) : null}
-      <form onSubmit={onFilter}>
-        <h2>filter</h2>
-        <label>
-          from
-          <input name="from" type="date" />
-        </label>
-        <label>
-          to
-          <input name="to" type="date" />
-        </label>
-        <label>
-          category
-          <select name="categoryId" defaultValue="">
-            <option value="">all categories</option>
-            {categories.map((category) => (
-              <option key={category.id} value={category.id}>
-                {category.name}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label>
-          text
-          <input name="q" maxLength={255} autoComplete="off" />
-        </label>
-        <button type="submit">apply</button>
-      </form>
-      <h2>list</h2>
       {page ? (
         <>
-          <p>
-            {page.total === 0
-              ? 'no transactions.'
-              : `${page.offset + 1}–${page.offset + page.transactions.length} of ${page.total}`}
-          </p>
-          <ul className="rows">
+          <div className="tx-pane wide">
+            {page.transactions.length === 0 ? <p>no transactions.</p> : null}
+            <ul className="rows">
             {page.transactions.map((transaction) => (
               <li key={transaction.id}>
                 {editing === transaction.id ? (
@@ -314,19 +436,28 @@ export default function TransactionsPage() {
                     </div>
                   </form>
                 ) : (
-                  <div className="entry-row">
-                    <p className="entry-main">
-                      {transaction.name} {formatMoney(transaction.amount, settings.currency, settings.locale)}
-                      <span className="entry-meta">
-                        {transaction.paymentDate} {categoryName(transaction.categoryId)}
-                        {transaction.description ? ` ${transaction.description}` : ''}
-                      </span>
-                    </p>
+                  <div className="entry-row tx-row">
+                    <div className="tx-main">
+                      <p className="entry-main">{transaction.name}</p>
+                      <p className="tx-sub">
+                        {formatMoney(transaction.amount, settings.currency, settings.locale)} | {transaction.paymentDate}
+                      </p>
+                      {transaction.description?.trim() ? (
+                        <button
+                          type="button"
+                          className="tx-desc"
+                          aria-expanded={openId === transaction.id}
+                          onClick={() => setOpenId((current) => (current === transaction.id ? null : transaction.id))}
+                        >
+                          {openId === transaction.id ? transaction.description : 'description'}
+                        </button>
+                      ) : null}
+                    </div>
                     <div className="entry-actions">
-                      <button type="button" onClick={() => setEditing(transaction.id)}>
+                      <button type="button" className="tx-text" onClick={() => setEditing(transaction.id)}>
                         edit
                       </button>
-                      <button type="button" onClick={() => void onDelete(transaction.id)}>
+                      <button type="button" className="tx-text" onClick={() => void onDelete(transaction.id)}>
                         delete
                       </button>
                     </div>
@@ -334,23 +465,129 @@ export default function TransactionsPage() {
                 )}
               </li>
             ))}
-          </ul>
-          <div className="page-actions">
-            <button type="button" disabled={page.offset === 0} onClick={() => setOffset(Math.max(0, page.offset - page.limit))}>
-              previous
-            </button>
-            <button
-              type="button"
-              disabled={page.offset + page.limit >= page.total}
-              onClick={() => setOffset(page.offset + page.limit)}
-            >
-              next
-            </button>
+            </ul>
+          </div>
+          <div className="page-numbers">
+            {Array.from({ length: pageCount }, (_, index) => {
+              const number = index + 1
+              return (
+                <button
+                  key={number}
+                  type="button"
+                  aria-current={number === currentPage ? 'page' : undefined}
+                  onClick={() => {
+                    setOffset((number - 1) * (page?.limit ?? limit))
+                    setEditing(null)
+                  }}
+                >
+                  {number}
+                </button>
+              )
+            })}
           </div>
         </>
       ) : null}
     </section>
   )
+}
+
+function Pick({
+  label,
+  className,
+  text,
+  open,
+  onToggle,
+  onClose,
+  children,
+}: {
+  label: string
+  className?: string
+  text: string
+  open: boolean
+  onToggle: () => void
+  onClose: () => void
+  children: ReactNode
+}) {
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!open) return
+    function onPointerDown(event: PointerEvent) {
+      if (!ref.current?.contains(event.target as Node)) onClose()
+    }
+    function onKey(event: KeyboardEvent) {
+      if (event.key === 'Escape') onClose()
+    }
+    document.addEventListener('pointerdown', onPointerDown)
+    document.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('pointerdown', onPointerDown)
+      document.removeEventListener('keydown', onKey)
+    }
+  }, [open, onClose])
+
+  return (
+    <div className={className ? `pick ${className}` : 'pick'} ref={ref}>
+      <span>{label}</span>
+      <button type="button" className="pick-button" aria-expanded={open} aria-haspopup="listbox" onClick={onToggle}>
+        {text}
+      </button>
+      {open ? (
+        <ul className="pick-list" role="listbox">
+          {children}
+        </ul>
+      ) : null}
+    </div>
+  )
+}
+
+function PickOption({ selected, onClick, children }: { selected: boolean; onClick: () => void; children: string }) {
+  return (
+    <li>
+      <button type="button" role="option" aria-selected={selected} onClick={onClick}>
+        {children}
+      </button>
+    </li>
+  )
+}
+
+function apiBound(mode: RangeMode, value: string, edge: 'from' | 'to'): string {
+  if (mode === 'date') return /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : ''
+  if (mode === 'month') {
+    if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(value)) return ''
+    return edge === 'from' ? `${value}-01` : lastDay(value)
+  }
+  if (!/^\d{4}$/.test(value)) return ''
+  return edge === 'from' ? `${value}-01-01` : `${value}-12-31`
+}
+
+function shiftBound(value: string, fromMode: RangeMode, toMode: RangeMode, edge: 'from' | 'to'): string {
+  if (!value || fromMode === toMode) return fromMode === toMode ? value : ''
+  if (fromMode === 'date' && /^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    if (toMode === 'month') return value.slice(0, 7)
+    return value.slice(0, 4)
+  }
+  if (fromMode === 'month' && /^\d{4}-(0[1-9]|1[0-2])$/.test(value)) {
+    if (toMode === 'year') return value.slice(0, 4)
+    return edge === 'from' ? `${value}-01` : lastDay(value)
+  }
+  if (fromMode === 'year' && /^\d{4}$/.test(value)) {
+    if (toMode === 'month') return edge === 'from' ? `${value}-01` : `${value}-12`
+    return edge === 'from' ? `${value}-01-01` : `${value}-12-31`
+  }
+  return ''
+}
+
+function lastDay(yearMonth: string): string {
+  const year = Number(yearMonth.slice(0, 4))
+  const month = Number(yearMonth.slice(5, 7))
+  const day = new Date(Date.UTC(year, month, 0)).getUTCDate()
+  return `${yearMonth}-${String(day).padStart(2, '0')}`
+}
+
+function currentMonth(): string {
+  const now = new Date()
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
 }
 
 function today(): string {

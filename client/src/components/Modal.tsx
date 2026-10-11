@@ -1,12 +1,16 @@
 import { useEffect, useRef, type ReactNode } from 'react'
 
+export const modalFormId = 'modal-form'
+
 export default function Modal({
   title,
   onClose,
+  pending = false,
   children,
 }: {
   title: string
   onClose: () => void
+  pending?: boolean
   children: ReactNode
 }) {
   const ref = useRef<HTMLDialogElement>(null)
@@ -40,11 +44,16 @@ export default function Modal({
       <div className="modal-panel">
         <div className="modal-head">
           <h2 id="modal-title">{title}</h2>
-          <button type="button" onClick={onClose}>
-            close
-          </button>
         </div>
         {children}
+        <div className="modal-actions">
+          <button type="button" onClick={onClose}>
+            cancel
+          </button>
+          <button type="submit" form={modalFormId} disabled={pending}>
+            done
+          </button>
+        </div>
       </div>
     </dialog>
   )

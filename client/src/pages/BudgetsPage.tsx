@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react'
-import Modal from '../components/Modal'
+import Modal, { modalFormId } from '../components/Modal'
 import { api, errorMessage } from '../http'
 import { amountString, formatMoney } from '../money'
 import { useMoneySettings } from '../useMoneySettings'
@@ -208,14 +208,13 @@ export default function BudgetsPage() {
           }}
         >
           <p className="notice">{draftMessage}</p>
-          <form onSubmit={(event) => void onCategory(event, draft)}>
+          <form id={modalFormId} onSubmit={(event) => void onCategory(event, draft)}>
             <p>{draft.name}</p>
             <label>
               amount
               <input name="amount" inputMode="decimal" autoComplete="off" />
             </label>
             <p>blank clears the budget.</p>
-            <button type="submit">save</button>
           </form>
         </Modal>
       ) : null}

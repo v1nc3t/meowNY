@@ -1,7 +1,13 @@
+import { Link } from 'react-router-dom'
+
 export default function Footer() {
   return (
     <footer>
-      <p>github</p>
+      <p>© {new Date().getFullYear()} meowny</p>
+      <nav>
+        <Link to="/legal/terms">terms</Link>
+        <Link to="/legal/privacy">privacy</Link>
+      </nav>
     </footer>
   )
 }
