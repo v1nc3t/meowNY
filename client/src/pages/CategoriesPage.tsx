@@ -1,15 +1,20 @@
 import { useEffect, useState, type FormEvent } from 'react'
+import Modal from '../components/Modal'
 import { api, errorMessage } from '../http'
 
 type Group = { id: string; name: string }
 type Category = { id: string; name: string; type: string; categoryGroupId: string | null }
 type Kind = 'ALL' | 'INCOME' | 'EXPENSE'
+type Dialog = 'group' | 'category' | null
 
 export default function CategoriesPage() {
   const [groups, setGroups] = useState<Group[]>([])
   const [categories, setCategories] = useState<Category[]>([])
   const [kind, setKind] = useState<Kind>('ALL')
   const [message, setMessage] = useState('')
+  const [dialog, setDialog] = useState<Dialog>(null)
+  const [dialogMessage, setDialogMessage] = useState('')
+  const [renamingGroup, setRenamingGroup] = useState<string | null>(null)
 
   async function load() {
     const [groupResponse, categoryResponse] = await Promise.all([
@@ -32,12 +37,17 @@ export default function CategoriesPage() {
     void load()
   }, [])
 
+  function openDialog(next: Exclude<Dialog, null>) {
+    setDialogMessage('')
+    setDialog(next)
+  }
+
   async function onCreateGroup(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     const form = event.currentTarget
     const name = String(new FormData(form).get('name') ?? '').trim()
     if (!name) {
-      setMessage('Enter a group name.')
+      setDialogMessage('enter a group name.')
       return
     }
     const response = await api('/api/v1/category-groups', {
@@ -45,10 +55,11 @@ export default function CategoriesPage() {
       body: JSON.stringify({ name }),
     })
     if (!response.ok) {
-      setMessage(await errorMessage(response))
+      setDialogMessage(await errorMessage(response))
       return
     }
-    form.reset()
+    setDialog(null)
+    setDialogMessage('')
     setMessage('')
     await load()
   }
@@ -61,7 +72,7 @@ export default function CategoriesPage() {
     const type = String(data.get('type') ?? '')
     const groupId = String(data.get('categoryGroupId') ?? '')
     if (!name || (type !== 'INCOME' && type !== 'EXPENSE')) {
-      setMessage('Enter a category name and type.')
+      setDialogMessage('enter a category name and type.')
       return
     }
     const response = await api('/api/v1/categories', {
@@ -73,10 +84,11 @@ export default function CategoriesPage() {
       }),
     })
     if (!response.ok) {
-      setMessage(await errorMessage(response))
+      setDialogMessage(await errorMessage(response))
       return
     }
-    form.reset()
+    setDialog(null)
+    setDialogMessage('')
     setMessage('')
     await load()
   }
@@ -85,7 +97,7 @@ export default function CategoriesPage() {
     event.preventDefault()
     const name = String(new FormData(event.currentTarget).get('name') ?? '').trim()
     if (!name) {
-      setMessage('Enter a group name.')
+      setMessage('enter a group name.')
       return
     }
     const response = await api(`/api/v1/category-groups/${encodeURIComponent(id)}`, {
@@ -96,6 +108,7 @@ export default function CategoriesPage() {
       setMessage(await errorMessage(response))
       return
     }
+    setRenamingGroup(null)
     setMessage('')
     await load()
   }
@@ -115,65 +128,97 @@ export default function CategoriesPage() {
 
   return (
     <section>
-      <h1>Categories</h1>
-      <p>{message}</p>
-      <form onSubmit={(event) => void onCreateGroup(event)}>
-        <h2>New group</h2>
-        <label>
-          Name
-          <input name="name" required maxLength={50} autoComplete="off" />
-        </label>
-        <button type="submit">Create group</button>
-      </form>
-      <form onSubmit={(event) => void onCreateCategory(event)}>
-        <h2>New category</h2>
-        <label>
-          Name
-          <input name="name" required maxLength={50} autoComplete="off" />
-        </label>
-        <label>
-          Type
-          <select name="type" required defaultValue="EXPENSE">
-            <option value="EXPENSE">Expense</option>
-            <option value="INCOME">Income</option>
-          </select>
-        </label>
-        <label>
-          Group
-          <select name="categoryGroupId" defaultValue="">
-            <option value="">No group</option>
-            {groups.map((group) => (
-              <option key={group.id} value={group.id}>
-                {group.name}
-              </option>
-            ))}
-          </select>
-        </label>
-        <button type="submit">Create category</button>
-      </form>
+      <h1>categories</h1>
+      <div className="page-actions">
+        <button type="button" onClick={() => openDialog('group')}>
+          add group
+        </button>
+        <button type="button" onClick={() => openDialog('category')}>
+          add category
+        </button>
+      </div>
+      <p className="notice">{message}</p>
+      {dialog === 'group' ? (
+        <Modal title="add group" onClose={() => setDialog(null)}>
+          <p className="notice">{dialogMessage}</p>
+          <form onSubmit={(event) => void onCreateGroup(event)}>
+            <label>
+              name
+              <input name="name" required maxLength={50} autoComplete="off" />
+            </label>
+            <button type="submit">add group</button>
+          </form>
+        </Modal>
+      ) : null}
+      {dialog === 'category' ? (
+        <Modal title="add category" onClose={() => setDialog(null)}>
+          <p className="notice">{dialogMessage}</p>
+          <form onSubmit={(event) => void onCreateCategory(event)}>
+            <label>
+              name
+              <input name="name" required maxLength={50} autoComplete="off" />
+            </label>
+            <label>
+              type
+              <select name="type" required defaultValue="EXPENSE">
+                <option value="EXPENSE">expense</option>
+                <option value="INCOME">income</option>
+              </select>
+            </label>
+            <label>
+              group
+              <select name="categoryGroupId" defaultValue="">
+                <option value="">no group</option>
+                {groups.map((group) => (
+                  <option key={group.id} value={group.id}>
+                    {group.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <button type="submit">add category</button>
+          </form>
+        </Modal>
+      ) : null}
       <label>
-        Show
+        show
         <select value={kind} onChange={(event) => setKind(event.target.value as Kind)}>
-          <option value="ALL">All</option>
-          <option value="INCOME">Income</option>
-          <option value="EXPENSE">Expense</option>
+          <option value="ALL">all</option>
+          <option value="INCOME">income</option>
+          <option value="EXPENSE">expense</option>
         </select>
       </label>
-      <h2>Groups</h2>
-      <ul>
+      <h2>groups</h2>
+      <ul className="rows">
         {groups.map((group) => (
           <li key={group.id}>
-            <form onSubmit={(event) => void onRenameGroup(event, group.id)}>
-              <label>
-                Group name
-                <input name="name" required maxLength={50} defaultValue={group.name} key={group.name} autoComplete="off" />
-              </label>
-              <button type="submit">Rename {group.name}</button>
-            </form>
-            <button type="button" onClick={() => void onDeleteGroup(group.id)}>
-              Delete {group.name}
-            </button>
-            <ul>
+            {renamingGroup === group.id ? (
+              <form className="entry-row" onSubmit={(event) => void onRenameGroup(event, group.id)}>
+                <label>
+                  group name
+                  <input name="name" required maxLength={50} defaultValue={group.name} autoComplete="off" />
+                </label>
+                <div className="entry-actions">
+                  <button type="submit">save</button>
+                  <button type="button" onClick={() => setRenamingGroup(null)}>
+                    cancel
+                  </button>
+                </div>
+              </form>
+            ) : (
+              <div className="entry-row">
+                <p className="entry-main">{group.name}</p>
+                <div className="entry-actions">
+                  <button type="button" onClick={() => setRenamingGroup(group.id)}>
+                    rename
+                  </button>
+                  <button type="button" onClick={() => void onDeleteGroup(group.id)}>
+                    delete
+                  </button>
+                </div>
+              </div>
+            )}
+            <ul className="rows">
               {visible
                 .filter((category) => category.categoryGroupId === group.id)
                 .map((category) => (
@@ -189,8 +234,8 @@ export default function CategoriesPage() {
           </li>
         ))}
       </ul>
-      <h2>No group</h2>
-      <ul>
+      <h2>no group</h2>
+      <ul className="rows">
         {ungrouped.map((category) => (
           <CategoryEditor
             key={`${category.id}:${category.name}:${category.categoryGroupId ?? ''}`}
@@ -216,13 +261,15 @@ function CategoryEditor({
   onDone: () => Promise<void>
   onError: (message: string) => void
 }) {
+  const [renaming, setRenaming] = useState(false)
+
   async function onSave(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     const form = new FormData(event.currentTarget)
     const name = String(form.get('name') ?? '').trim()
     const groupId = String(form.get('categoryGroupId') ?? '')
     if (!name) {
-      onError('Enter a category name.')
+      onError('enter a category name.')
       return
     }
     const response = await api(`/api/v1/categories/${encodeURIComponent(category.id)}`, {
@@ -234,6 +281,7 @@ function CategoryEditor({
       return
     }
     onError('')
+    setRenaming(false)
     await onDone()
   }
 
@@ -247,32 +295,54 @@ function CategoryEditor({
     await onDone()
   }
 
-  const typeLabel = category.type === 'INCOME' ? 'Income' : 'Expense'
+  const typeLabel = category.type === 'INCOME' ? 'income' : 'expense'
+
+  if (renaming) {
+    return (
+      <li>
+        <form className="entry-row" onSubmit={(event) => void onSave(event)}>
+          <label>
+            name
+            <input name="name" required maxLength={50} defaultValue={category.name} autoComplete="off" />
+          </label>
+          <label>
+            group
+            <select name="categoryGroupId" defaultValue={category.categoryGroupId ?? ''}>
+              <option value="">no group</option>
+              {groups.map((group) => (
+                <option key={group.id} value={group.id}>
+                  {group.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <div className="entry-actions">
+            <button type="submit">save</button>
+            <button type="button" onClick={() => setRenaming(false)}>
+              cancel
+            </button>
+          </div>
+        </form>
+      </li>
+    )
+  }
 
   return (
     <li>
-      <p>{typeLabel}</p>
-      <form onSubmit={(event) => void onSave(event)}>
-        <label>
-          Name
-          <input name="name" required maxLength={50} defaultValue={category.name} autoComplete="off" />
-        </label>
-        <label>
-          Group
-          <select name="categoryGroupId" defaultValue={category.categoryGroupId ?? ''}>
-            <option value="">No group</option>
-            {groups.map((group) => (
-              <option key={group.id} value={group.id}>
-                {group.name}
-              </option>
-            ))}
-          </select>
-        </label>
-        <button type="submit">Save {category.name}</button>
-      </form>
-      <button type="button" onClick={() => void onDelete()}>
-        Delete {category.name}
-      </button>
+      <div className="entry-row">
+        <p className="entry-main">
+          {category.name}
+          <span className="entry-meta">{typeLabel}</span>
+        </p>
+        <div className="entry-actions">
+          <button type="button" onClick={() => setRenaming(true)}>
+            rename
+          </button>
+          <button type="button" onClick={() => void onDelete()}>
+            delete
+          </button>
+        </div>
+      </div>
     </li>
   )
 }

@@ -32,7 +32,7 @@ export default function AccountPage() {
     event.preventDefault()
     const name = String(new FormData(event.currentTarget).get('name'))
     const { error } = await authClient.updateUser({ name })
-    setMessage(error ? 'Could not update your name.' : 'Name saved.')
+    setMessage(error ? 'could not update your name.' : 'name saved.')
   }
 
   async function onSettings(event: FormEvent<HTMLFormElement>) {
@@ -49,10 +49,10 @@ export default function AccountPage() {
       }),
     })
     if (!response.ok) {
-      setMessage('Could not save settings.')
+      setMessage('could not save settings.')
       return
     }
-    setMessage('Settings saved. Changing currency does not convert amounts.')
+    setMessage('settings saved. changing currency does not convert amounts.')
     await load()
   }
 
@@ -63,13 +63,13 @@ export default function AccountPage() {
       currentPassword: String(form.get('currentPassword')),
       newPassword: String(form.get('newPassword')),
     })
-    setMessage(error ? 'Could not change your password.' : 'Password changed.')
+    setMessage(error ? 'could not change your password.' : 'password changed.')
   }
 
   async function onRevoke(token: string) {
     const { error } = await authClient.revokeSession({ token })
     if (error) {
-      setMessage('Could not revoke that session.')
+      setMessage('could not revoke that session.')
       return
     }
     if (token === current?.session.token) {
@@ -81,7 +81,7 @@ export default function AccountPage() {
 
   async function onUnlink(accountId: string) {
     const { error } = await authClient.unlinkAccount({ accountId })
-    setMessage(error ? 'Could not unlink that login.' : 'Login unlinked.')
+    setMessage(error ? 'could not unlink that login.' : 'login unlinked.')
     if (!error) await load()
   }
 
@@ -89,7 +89,7 @@ export default function AccountPage() {
     event.preventDefault()
     const response = await fetch('/api/v1/account/deletion', { method: 'POST', credentials: 'include' })
     if (!response.ok) {
-      setMessage('Could not request deletion.')
+      setMessage('could not request deletion.')
       return
     }
     await authClient.signOut()
@@ -100,71 +100,71 @@ export default function AccountPage() {
 
   return (
     <section>
-      <h1>Account</h1>
+      <h1>account</h1>
       <p>{me?.email}</p>
       <form onSubmit={(event) => void onName(event)}>
-        <h2>Name</h2>
+        <h2>name</h2>
         <label>
-          Name
+          name
           <input name="name" required defaultValue={me?.name ?? ''} key={me?.name} autoComplete="name" />
         </label>
-        <button type="submit">Save name</button>
+        <button type="submit">save name</button>
       </form>
       {me?.settings ? (
         <form onSubmit={(event) => void onSettings(event)}>
-          <h2>Settings</h2>
+          <h2>settings</h2>
           <label>
-            Currency
+            currency
             <input name="currency" required defaultValue={me.settings.currency} pattern="[A-Za-z]{3}" />
           </label>
           <label>
-            Locale
+            locale
             <input name="locale" required defaultValue={me.settings.locale} maxLength={35} />
           </label>
           <label>
-            Timezone
+            timezone
             <input name="timezone" required defaultValue={me.settings.timezone} maxLength={64} />
           </label>
-          <p>Changing currency does not convert amounts.</p>
-          <button type="submit">Save settings</button>
+          <p>changing currency does not convert amounts.</p>
+          <button type="submit">save settings</button>
         </form>
       ) : null}
       {credential ? (
         <form onSubmit={(event) => void onPassword(event)}>
-          <h2>Password</h2>
+          <h2>password</h2>
           <label>
-            Current password
+            current password
             <input name="currentPassword" type="password" required autoComplete="current-password" />
           </label>
           <label>
-            New password
+            new password
             <input name="newPassword" type="password" required minLength={8} autoComplete="new-password" />
           </label>
-          <button type="submit">Change password</button>
+          <button type="submit">change password</button>
         </form>
       ) : null}
       <section>
-        <h2>Sessions</h2>
+        <h2>sessions</h2>
         <ul>
           {sessions.map((session) => (
             <li key={session.token}>
-              {session.token === current?.session.token ? 'This device' : 'Other session'}
+              {session.token === current?.session.token ? 'this device' : 'other session'}
               <button type="button" onClick={() => void onRevoke(session.token)}>
-                Revoke
+                revoke
               </button>
             </li>
           ))}
         </ul>
       </section>
       <section>
-        <h2>Linked logins</h2>
+        <h2>linked logins</h2>
         <ul>
           {accounts.map((account) => (
             <li key={account.id}>
               {account.providerId}
               {accounts.length > 1 ? (
                 <button type="button" onClick={() => void onUnlink(account.id)}>
-                  Unlink
+                  unlink
                 </button>
               ) : null}
             </li>
@@ -172,14 +172,14 @@ export default function AccountPage() {
         </ul>
       </section>
       <form onSubmit={(event) => void onDelete(event)}>
-        <h2>Delete account</h2>
+        <h2>delete account</h2>
         <label>
           <input type="checkbox" required />
-          Sign me out and request deletion
+          sign me out and request deletion
         </label>
-        <button type="submit">Request deletion</button>
+        <button type="submit">request deletion</button>
       </form>
-      <p>{message}</p>
+      <p className="notice">{message}</p>
     </section>
   )
 }

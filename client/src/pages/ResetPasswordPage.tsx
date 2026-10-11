@@ -12,22 +12,22 @@ export default function ResetPasswordPage() {
     if (!token) return
     const password = String(new FormData(event.currentTarget).get('password'))
     const { error } = await authClient.resetPassword({ newPassword: password, token })
-    setMessage(error ? 'Could not reset the password.' : 'Password updated. You can log in.')
+    setMessage(error ? 'could not reset the password.' : 'password updated. you can log in.')
   }
 
-  if (!token) return <p>This reset link is invalid.</p>
+  if (!token) return <p className="notice">this reset link is invalid.</p>
 
   return (
     <form onSubmit={onSubmit}>
-      <h1>Reset password</h1>
+      <h1>reset password</h1>
       <label>
-        New password
+        new password
         <input name="password" type="password" required minLength={8} autoComplete="new-password" />
       </label>
-      <button type="submit">Save</button>
-      <p>{message}</p>
+      <button type="submit">save</button>
+      <p className="notice">{message}</p>
       <p>
-        <Link to="/login">Log in</Link>
+        <Link to="/login">log in</Link>
       </p>
     </form>
   )

@@ -4,7 +4,7 @@ import Footer from '../components/Footer'
 
 export default function PublicLayout() {
   return (
-    <div>
+    <div className="public-shell">
       <PublicNavbar />
       
       {/* Dynamic page content (HomePage, AboutPage, etc.) renders here */}

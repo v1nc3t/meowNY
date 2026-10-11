@@ -12,20 +12,20 @@ export default function ForgotPasswordPage() {
       email: String(form.get('email')),
       redirectTo: `${window.location.origin}/reset-password`,
     })
-    setMessage(error ? 'Could not send the reset link.' : 'If that email is registered, a reset link is on its way.')
+    setMessage(error ? 'could not send the reset link.' : 'if that email is registered, a reset link is on its way.')
   }
 
   return (
     <form onSubmit={onSubmit}>
-      <h1>Forgot password</h1>
+      <h1>forgot password</h1>
       <label>
-        Email
+        email
         <input name="email" type="email" required autoComplete="email" />
       </label>
-      <button type="submit">Send reset link</button>
-      <p>{message}</p>
+      <button type="submit">send reset link</button>
+      <p className="notice">{message}</p>
       <p>
-        <Link to="/login">Log in</Link>
+        <Link to="/login">log in</Link>
       </p>
     </form>
   )

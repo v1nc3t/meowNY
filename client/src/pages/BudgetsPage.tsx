@@ -1,4 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react'
+import Modal from '../components/Modal'
 import { api, errorMessage } from '../http'
 import { amountString, formatMoney } from '../money'
 import { useMoneySettings } from '../useMoneySettings'
@@ -21,6 +22,8 @@ export default function BudgetsPage() {
   const [categories, setCategories] = useState<Category[] | null>(null)
   const [reload, setReload] = useState(0)
   const [message, setMessage] = useState('')
+  const [draft, setDraft] = useState<Category | null>(null)
+  const [draftMessage, setDraftMessage] = useState('')
 
   useEffect(() => {
     let cancelled = false
@@ -63,29 +66,23 @@ export default function BudgetsPage() {
     scope: 'GLOBAL' | 'CATEGORY'
     amountLimit: string | null
     categoryId?: string
-  }) {
-    if (!monthPattern.test(month)) {
-      setMessage('Choose a month.')
-      return
-    }
+  }): Promise<string | null> {
+    if (!monthPattern.test(month)) return 'choose a month.'
     const response = await api('/api/v1/budgets', {
       method: 'PUT',
       body: JSON.stringify({ ...body, month }),
     })
-    if (!response.ok) {
-      setMessage(await errorMessage(response))
-      return
-    }
-    setMessage('')
+    if (!response.ok) return errorMessage(response)
     setReload((value) => value + 1)
+    return null
   }
 
-  function limitFrom(event: FormEvent<HTMLFormElement>): string | null | undefined {
+  function limitFrom(event: FormEvent<HTMLFormElement>, report: (text: string) => void): string | null | undefined {
     const raw = String(new FormData(event.currentTarget).get('amount') ?? '').trim()
     if (raw === '') return null
     const amount = amountString(raw, true)
     if (!amount) {
-      setMessage('Enter an amount with at most two decimals, or leave it blank to clear.')
+      report('enter an amount with at most two decimals, or leave it blank to clear.')
       return undefined
     }
     return amount
@@ -93,58 +90,59 @@ export default function BudgetsPage() {
 
   async function onGlobal(event: FormEvent<HTMLFormElement>, type: 'EXPENSE' | 'INCOME') {
     event.preventDefault()
-    const amountLimit = limitFrom(event)
+    const amountLimit = limitFrom(event, setMessage)
     if (amountLimit === undefined) return
-    await save({ type, scope: 'GLOBAL', amountLimit })
+    setMessage((await save({ type, scope: 'GLOBAL', amountLimit })) ?? '')
   }
 
   async function onCategory(event: FormEvent<HTMLFormElement>, category: Category) {
     event.preventDefault()
-    const amountLimit = limitFrom(event)
+    const amountLimit = limitFrom(event, setDraftMessage)
     if (amountLimit === undefined) return
-    await save({
+    const errorText = await save({
       type: category.type,
       scope: 'CATEGORY',
       amountLimit,
       categoryId: category.id,
     })
+    if (errorText) {
+      setDraftMessage(errorText)
+      return
+    }
+    setDraft(null)
+    setDraftMessage('')
   }
 
-  if (error) return <p>{error}</p>
+  if (error) return <p className="notice">{error}</p>
   if (!settings) return null
 
   const money = (amount: string | null) =>
-    amount === null ? 'Not set' : formatMoney(amount, settings.currency, settings.locale)
+    amount === null ? 'not set' : formatMoney(amount, settings.currency, settings.locale)
   const rows = ['EXPENSE', 'INCOME'].flatMap((type) => (overview ?? []).filter((row) => row.type === type))
 
   return (
     <section>
-      <h1>Budgets</h1>
-      <p>{message}</p>
+      <h1>budgets</h1>
+      <p className="notice">{message}</p>
       <label>
-        Month
-        <input
-          type="month"
-          value={month}
-          required
-          onChange={(event) => setMonth(event.target.value)}
-        />
+        month
+        <input type="month" value={month} required onChange={(event) => setMonth(event.target.value)} />
       </label>
       {rows.map((row) => (
         <section key={row.type}>
-          <h2>{row.type === 'INCOME' ? 'Income' : 'Expense'}</h2>
-          <p>Budgeted {money(row.budgeted)}</p>
-          <p>Allocated {money(row.allocated)}</p>
-          <p>Unallocated {money(row.unallocated)}</p>
+          <h2>{row.type === 'INCOME' ? 'income' : 'expense'}</h2>
+          <p>budgeted {money(row.budgeted)}</p>
+          <p>allocated {money(row.allocated)}</p>
+          <p>unallocated {money(row.unallocated)}</p>
           {row.overAllocated && row.budgeted !== null ? (
-            <p>Category budgets exceed the global budget.</p>
+            <p className="warn">category budgets exceed the global budget.</p>
           ) : null}
         </section>
       ))}
       <form onSubmit={(event) => void onGlobal(event, 'EXPENSE')}>
-        <h2>Global expense budget</h2>
+        <h2>global expense budget</h2>
         <label>
-          Amount
+          amount
           <input
             name="amount"
             inputMode="decimal"
@@ -153,13 +151,13 @@ export default function BudgetsPage() {
             defaultValue={overview?.find((row) => row.type === 'EXPENSE')?.budgeted ?? ''}
           />
         </label>
-        <p>Blank clears the budget.</p>
-        <button type="submit">Save expense budget</button>
+        <p>blank clears the budget.</p>
+        <button type="submit">save expense budget</button>
       </form>
       <form onSubmit={(event) => void onGlobal(event, 'INCOME')}>
-        <h2>Global income budget</h2>
+        <h2>global income budget</h2>
         <label>
-          Amount
+          amount
           <input
             name="amount"
             inputMode="decimal"
@@ -168,28 +166,59 @@ export default function BudgetsPage() {
             defaultValue={overview?.find((row) => row.type === 'INCOME')?.budgeted ?? ''}
           />
         </label>
-        <p>Blank clears the budget.</p>
-        <button type="submit">Save income budget</button>
+        <p>blank clears the budget.</p>
+        <button type="submit">save income budget</button>
       </form>
       {/* shortcut: no budget list endpoint, category fields start empty after a reload or month change */}
-      <div key={month}>
+      <div className="wide" key={month}>
         {(['EXPENSE', 'INCOME'] as const).map((type) => (
-          <section key={type}>
-            <h2>{type === 'EXPENSE' ? 'Expense categories' : 'Income categories'}</h2>
-            {(categories ?? [])
-              .filter((category) => category.type === type)
-              .map((category) => (
-                <form key={category.id} onSubmit={(event) => void onCategory(event, category)}>
-                  <label>
-                    {category.name}
-                    <input name="amount" inputMode="decimal" autoComplete="off" />
-                  </label>
-                  <button type="submit">Save {category.name} budget</button>
-                </form>
-              ))}
+          <section className="wide" key={type}>
+            <h2>{type === 'EXPENSE' ? 'expense categories' : 'income categories'}</h2>
+            <ul className="rows">
+              {(categories ?? [])
+                .filter((category) => category.type === type)
+                .map((category) => (
+                  <li key={category.id}>
+                    <div className="entry-row">
+                      <p className="entry-main">{category.name}</p>
+                      <div className="entry-actions">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setDraftMessage('')
+                            setDraft(category)
+                          }}
+                        >
+                          set budget
+                        </button>
+                      </div>
+                    </div>
+                  </li>
+                ))}
+            </ul>
           </section>
         ))}
       </div>
+      {draft ? (
+        <Modal
+          title="set budget"
+          onClose={() => {
+            setDraft(null)
+            setDraftMessage('')
+          }}
+        >
+          <p className="notice">{draftMessage}</p>
+          <form onSubmit={(event) => void onCategory(event, draft)}>
+            <p>{draft.name}</p>
+            <label>
+              amount
+              <input name="amount" inputMode="decimal" autoComplete="off" />
+            </label>
+            <p>blank clears the budget.</p>
+            <button type="submit">save</button>
+          </form>
+        </Modal>
+      ) : null}
     </section>
   )
 }

@@ -18,5 +18,5 @@ export async function errorMessage(response: Response): Promise<string> {
   } catch {
     // The body was empty or not JSON.
   }
-  return 'Request failed.'
+  return 'request failed.'
 }

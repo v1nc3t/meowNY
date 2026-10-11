@@ -15,7 +15,7 @@ export function useMoneySettings(): { settings: MoneySettings | null; error: str
       .then(async (response) => {
         if (cancelled) return
         if (!response.ok) {
-          setError('Could not load your settings.')
+          setError('could not load your settings.')
           return
         }
         const body = (await response.json()) as { settings: MoneySettings | null }
@@ -27,7 +27,7 @@ export function useMoneySettings(): { settings: MoneySettings | null; error: str
         setSettings({ currency: body.settings.currency, locale: body.settings.locale })
       })
       .catch(() => {
-        if (!cancelled) setError('Could not load your settings.')
+        if (!cancelled) setError('could not load your settings.')
       })
     return () => {
       cancelled = true

@@ -1,4 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react'
+import Modal from '../components/Modal'
 import { api, errorMessage } from '../http'
 import { amountString, formatMoney } from '../money'
 import { useMoneySettings } from '../useMoneySettings'
@@ -26,6 +27,8 @@ export default function TransactionsPage() {
   const [page, setPage] = useState<TransactionList | null>(null)
   const [clientUuid, setClientUuid] = useState(() => crypto.randomUUID())
   const [pending, setPending] = useState(false)
+  const [adding, setAdding] = useState(false)
+  const [draftMessage, setDraftMessage] = useState('')
   const [editing, setEditing] = useState<string | null>(null)
   const [message, setMessage] = useState('')
 
@@ -85,11 +88,11 @@ export default function TransactionsPage() {
     const categoryId = String(form.get('categoryId') ?? '')
     const description = String(form.get('description') ?? '').trim()
     if (!name || !paymentDate || !categoryId) {
-      setMessage('Name, category, and payment date are required.')
+      setDraftMessage('name, category, and payment date are required.')
       return
     }
     if (!amount) {
-      setMessage('Enter an amount greater than zero, with at most two decimals.')
+      setDraftMessage('enter an amount greater than zero, with at most two decimals.')
       return
     }
     setPending(true)
@@ -106,10 +109,12 @@ export default function TransactionsPage() {
     })
     setPending(false)
     if (!response.ok) {
-      setMessage(await errorMessage(response))
+      setDraftMessage(await errorMessage(response))
       return
     }
+    setDraftMessage('')
     setMessage('')
+    setAdding(false)
     setClientUuid(crypto.randomUUID())
     setReload((value) => value + 1)
   }
@@ -123,11 +128,11 @@ export default function TransactionsPage() {
     const categoryId = String(form.get('categoryId') ?? '')
     const description = String(form.get('description') ?? '').trim()
     if (!name || !paymentDate || !categoryId) {
-      setMessage('Name, category, and payment date are required.')
+      setMessage('name, category, and payment date are required.')
       return
     }
     if (!amount) {
-      setMessage('Enter an amount greater than zero, with at most two decimals.')
+      setMessage('enter an amount greater than zero, with at most two decimals.')
       return
     }
     const response = await api(`/api/v1/transactions/${encodeURIComponent(id)}`, {
@@ -161,65 +166,80 @@ export default function TransactionsPage() {
   }
 
   function categoryName(id: string): string {
-    return categories.find((category) => category.id === id)?.name ?? 'Deleted category'
+    return categories.find((category) => category.id === id)?.name ?? 'deleted category'
   }
 
-  if (error) return <p>{error}</p>
+  if (error) return <p className="notice">{error}</p>
   if (!settings) return null
 
   return (
     <section>
-      <h1>Transactions</h1>
-      <p>{message}</p>
-      <form key={clientUuid} onSubmit={(event) => void onCreate(event)}>
-        <h2>New transaction</h2>
-        <label>
-          Category
-          <select name="categoryId" required defaultValue="">
-            <option value="" disabled>
-              Choose a category
-            </option>
-            {categories.map((category) => (
-              <option key={category.id} value={category.id}>
-                {category.name}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label>
-          Name
-          <input name="name" required maxLength={50} autoComplete="off" />
-        </label>
-        <label>
-          Amount
-          <input name="amount" required inputMode="decimal" autoComplete="off" />
-        </label>
-        <label>
-          Payment date
-          <input name="paymentDate" type="date" required defaultValue={today()} />
-        </label>
-        <label>
-          Description
-          <input name="description" maxLength={255} autoComplete="off" />
-        </label>
-        <button type="submit" disabled={pending}>
-          Add transaction
+      <h1>transactions</h1>
+      <div className="page-actions">
+        <button
+          type="button"
+          onClick={() => {
+            setDraftMessage('')
+            setAdding(true)
+          }}
+        >
+          add transaction
         </button>
-      </form>
+      </div>
+      <p className="notice">{message}</p>
+      {adding ? (
+        <Modal title="add transaction" onClose={() => setAdding(false)}>
+          <p className="notice">{draftMessage}</p>
+          <form key={clientUuid} onSubmit={(event) => void onCreate(event)}>
+            <label>
+              category
+              <select name="categoryId" required defaultValue="">
+                <option value="" disabled>
+                  choose a category
+                </option>
+                {categories.map((category) => (
+                  <option key={category.id} value={category.id}>
+                    {category.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              name
+              <input name="name" required maxLength={50} autoComplete="off" />
+            </label>
+            <label>
+              amount
+              <input name="amount" required inputMode="decimal" autoComplete="off" />
+            </label>
+            <label>
+              payment date
+              <input name="paymentDate" type="date" required defaultValue={today()} />
+            </label>
+            <label>
+              description
+              <input name="description" maxLength={255} autoComplete="off" />
+            </label>
+            <button type="submit" disabled={pending}>
+              add transaction
+            </button>
+          </form>
+        </Modal>
+      ) : null}
       <form onSubmit={onFilter}>
-        <h2>Filter</h2>
+        <h2>filter</h2>
         <label>
-          From
+          from
           <input name="from" type="date" />
         </label>
         <label>
-          To
+          to
           <input name="to" type="date" />
         </label>
         <label>
-          Category
+          category
           <select name="categoryId" defaultValue="">
-            <option value="">All categories</option>
+            <option value="">all categories</option>
             {categories.map((category) => (
               <option key={category.id} value={category.id}>
                 {category.name}
@@ -228,29 +248,29 @@ export default function TransactionsPage() {
           </select>
         </label>
         <label>
-          Text
+          text
           <input name="q" maxLength={255} autoComplete="off" />
         </label>
-        <button type="submit">Apply</button>
+        <button type="submit">apply</button>
       </form>
-      <h2>List</h2>
+      <h2>list</h2>
       {page ? (
         <>
           <p>
             {page.total === 0
-              ? 'No transactions.'
+              ? 'no transactions.'
               : `${page.offset + 1}–${page.offset + page.transactions.length} of ${page.total}`}
           </p>
-          <ul>
+          <ul className="rows">
             {page.transactions.map((transaction) => (
               <li key={transaction.id}>
                 {editing === transaction.id ? (
                   <form onSubmit={(event) => void onEdit(event, transaction.id)}>
                     <label>
-                      Category
+                      category
                       <select name="categoryId" required defaultValue={transaction.categoryId}>
                         {categories.every((category) => category.id !== transaction.categoryId) ? (
-                          <option value={transaction.categoryId}>Deleted category</option>
+                          <option value={transaction.categoryId}>deleted category</option>
                         ) : null}
                         {categories.map((category) => (
                           <option key={category.id} value={category.id}>
@@ -260,11 +280,11 @@ export default function TransactionsPage() {
                       </select>
                     </label>
                     <label>
-                      Name
+                      name
                       <input name="name" required maxLength={50} defaultValue={transaction.name} autoComplete="off" />
                     </label>
                     <label>
-                      Amount
+                      amount
                       <input
                         name="amount"
                         required
@@ -274,11 +294,11 @@ export default function TransactionsPage() {
                       />
                     </label>
                     <label>
-                      Payment date
+                      payment date
                       <input name="paymentDate" type="date" required defaultValue={transaction.paymentDate} />
                     </label>
                     <label>
-                      Description
+                      description
                       <input
                         name="description"
                         maxLength={255}
@@ -286,40 +306,47 @@ export default function TransactionsPage() {
                         autoComplete="off"
                       />
                     </label>
-                    <button type="submit">Save transaction</button>
-                    <button type="button" onClick={() => setEditing(null)}>
-                      Cancel
-                    </button>
+                    <div className="entry-actions">
+                      <button type="submit">save</button>
+                      <button type="button" onClick={() => setEditing(null)}>
+                        cancel
+                      </button>
+                    </div>
                   </form>
                 ) : (
-                  <>
-                    <p>
-                      {transaction.paymentDate} {transaction.name}{' '}
-                      {formatMoney(transaction.amount, settings.currency, settings.locale)}{' '}
-                      {categoryName(transaction.categoryId)}
-                      {transaction.description ? ` ${transaction.description}` : ''}
+                  <div className="entry-row">
+                    <p className="entry-main">
+                      {transaction.name} {formatMoney(transaction.amount, settings.currency, settings.locale)}
+                      <span className="entry-meta">
+                        {transaction.paymentDate} {categoryName(transaction.categoryId)}
+                        {transaction.description ? ` ${transaction.description}` : ''}
+                      </span>
                     </p>
-                    <button type="button" onClick={() => setEditing(transaction.id)}>
-                      Edit {transaction.name}
-                    </button>
-                    <button type="button" onClick={() => void onDelete(transaction.id)}>
-                      Delete {transaction.name}
-                    </button>
-                  </>
+                    <div className="entry-actions">
+                      <button type="button" onClick={() => setEditing(transaction.id)}>
+                        edit
+                      </button>
+                      <button type="button" onClick={() => void onDelete(transaction.id)}>
+                        delete
+                      </button>
+                    </div>
+                  </div>
                 )}
               </li>
             ))}
           </ul>
-          <button type="button" disabled={page.offset === 0} onClick={() => setOffset(Math.max(0, page.offset - page.limit))}>
-            Previous
-          </button>
-          <button
-            type="button"
-            disabled={page.offset + page.limit >= page.total}
-            onClick={() => setOffset(page.offset + page.limit)}
-          >
-            Next
-          </button>
+          <div className="page-actions">
+            <button type="button" disabled={page.offset === 0} onClick={() => setOffset(Math.max(0, page.offset - page.limit))}>
+              previous
+            </button>
+            <button
+              type="button"
+              disabled={page.offset + page.limit >= page.total}
+              onClick={() => setOffset(page.offset + page.limit)}
+            >
+              next
+            </button>
+          </div>
         </>
       ) : null}
     </section>

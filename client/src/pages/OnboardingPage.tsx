@@ -22,7 +22,7 @@ export default function OnboardingPage() {
       return
     }
     if (!response.ok) {
-      setMessage('Could not save. Use a three-letter currency code.')
+      setMessage('could not save. use a three-letter currency code.')
       return
     }
     navigate('/app')
@@ -30,19 +30,19 @@ export default function OnboardingPage() {
 
   return (
     <form onSubmit={onSubmit}>
-      <h1>Set up your account</h1>
+      <h1>set up your account</h1>
       <p>
-        Accept the <Link to="/legal/terms">Terms</Link> and the <Link to="/legal/privacy">Privacy Policy</Link> ({POLICY_VERSION}), then choose a currency. Changing it later does not convert amounts.
+        accept the <Link to="/legal/terms">terms</Link> and the <Link to="/legal/privacy">privacy policy</Link> ({POLICY_VERSION}), then choose a currency. changing it later does not convert amounts.
       </p>
       <label>
-        <input name="accept" type="checkbox" required /> I accept the Terms and the Privacy Policy
+        <input name="accept" type="checkbox" required /> i accept the terms and the privacy policy
       </label>
       <label>
-        Currency
+        currency
         <input name="currency" required minLength={3} maxLength={3} pattern="[A-Za-z]{3}" placeholder="EUR" autoComplete="off" />
       </label>
-      <button type="submit">Continue</button>
-      <p>{message}</p>
+      <button type="submit">continue</button>
+      <p className="notice">{message}</p>
     </form>
   )
 }
