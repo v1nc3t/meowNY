@@ -4,116 +4,19 @@ import { z } from 'zod';
 import type { DB } from '../db/schema.js';
 import { validate } from '../http/validate.js';
 
-const Id = z.string().regex(/^[1-9]\d{0,17}$/);
 const Name = z.string().min(1).max(50);
 const CategoryType = z.enum(['INCOME', 'EXPENSE']);
-
-const GroupBody = z.strictObject({ name: Name });
-const GroupPatch = z.strictObject({ name: Name });
 
 const CategoryBody = z.strictObject({
   name: Name,
   type: CategoryType,
-  categoryGroupId: Id.nullable().optional(),
 });
 
-const CategoryPatch = z
-  .strictObject({
-    name: Name.optional(),
-    categoryGroupId: Id.nullable().optional(),
-  })
-  .refine((body) => body.name !== undefined || body.categoryGroupId !== undefined);
+const CategoryPatch = z.strictObject({ name: Name });
 
 export function categoryRouter(db: Kysely<DB>): Router {
   const router = Router();
   const json = express.json({ limit: '100kb' });
-
-  router.get('/category-groups', async (req, res, next) => {
-    const userId = requiredUserId(req.userId);
-    try {
-      const rows = await db
-        .selectFrom('category_groups')
-        .select(['id', 'name'])
-        .where('user_id', '=', userId)
-        .orderBy('id')
-        .execute();
-      res.json(rows.map((row) => ({ id: row.id, name: row.name })));
-    } catch (err) {
-      next(err);
-    }
-  });
-
-  router.post('/category-groups', json, validate(GroupBody), async (req, res, next) => {
-    const userId = requiredUserId(req.userId);
-    const body = req.body as z.infer<typeof GroupBody>;
-    try {
-      const row = await db
-        .insertInto('category_groups')
-        .values({ user_id: userId, name: body.name })
-        .returning(['id', 'name'])
-        .executeTakeFirstOrThrow();
-      res.status(201).json({ id: row.id, name: row.name });
-    } catch (err) {
-      if (isPgCode(err, '23505')) {
-        res.status(409).json({ error: 'name already exists' });
-        return;
-      }
-      next(err);
-    }
-  });
-
-  router.patch('/category-groups/:id', json, validate(GroupPatch), async (req, res, next) => {
-    const userId = requiredUserId(req.userId);
-    const id = routeId(req.params.id);
-    const body = req.body as z.infer<typeof GroupPatch>;
-    if (!id) {
-      res.status(404).json({ error: 'not found' });
-      return;
-    }
-    try {
-      const row = await db
-        .updateTable('category_groups')
-        .set({ name: body.name })
-        .where('id', '=', id)
-        .where('user_id', '=', userId)
-        .returning(['id', 'name'])
-        .executeTakeFirst();
-      if (!row) {
-        res.status(404).json({ error: 'not found' });
-        return;
-      }
-      res.json({ id: row.id, name: row.name });
-    } catch (err) {
-      if (isPgCode(err, '23505')) {
-        res.status(409).json({ error: 'name already exists' });
-        return;
-      }
-      next(err);
-    }
-  });
-
-  router.delete('/category-groups/:id', async (req, res, next) => {
-    const userId = requiredUserId(req.userId);
-    const id = routeId(req.params.id);
-    if (!id) {
-      res.status(404).json({ error: 'not found' });
-      return;
-    }
-    try {
-      const deleted = await db
-        .deleteFrom('category_groups')
-        .where('id', '=', id)
-        .where('user_id', '=', userId)
-        .executeTakeFirst();
-      if (Number(deleted.numDeletedRows) === 0) {
-        res.status(404).json({ error: 'not found' });
-        return;
-      }
-      res.json({ ok: true });
-    } catch (err) {
-      next(err);
-    }
-  });
 
   router.get('/categories', async (req, res, next) => {
     const userId = requiredUserId(req.userId);
@@ -125,7 +28,7 @@ export function categoryRouter(db: Kysely<DB>): Router {
     try {
       let query = db
         .selectFrom('categories')
-        .select(['id', 'name', 'type', 'category_group_id'])
+        .select(['id', 'name', 'type'])
         .where('user_id', '=', userId)
         .where('deleted_at', 'is', null);
       if (type !== undefined) query = query.where('type', '=', type);
@@ -140,19 +43,10 @@ export function categoryRouter(db: Kysely<DB>): Router {
     const userId = requiredUserId(req.userId);
     const body = req.body as z.infer<typeof CategoryBody>;
     try {
-      if (body.categoryGroupId != null && !(await ownsGroup(db, userId, body.categoryGroupId))) {
-        res.status(400).json({ error: 'invalid category group' });
-        return;
-      }
       const row = await db
         .insertInto('categories')
-        .values({
-          user_id: userId,
-          name: body.name,
-          type: body.type,
-          category_group_id: body.categoryGroupId ?? null,
-        })
-        .returning(['id', 'name', 'type', 'category_group_id'])
+        .values({ user_id: userId, name: body.name, type: body.type })
+        .returning(['id', 'name', 'type'])
         .executeTakeFirstOrThrow();
       res.status(201).json(categoryJson(row));
     } catch (err) {
@@ -169,20 +63,13 @@ export function categoryRouter(db: Kysely<DB>): Router {
       return;
     }
     try {
-      if (body.categoryGroupId != null && !(await ownsGroup(db, userId, body.categoryGroupId))) {
-        res.status(400).json({ error: 'invalid category group' });
-        return;
-      }
       const row = await db
         .updateTable('categories')
-        .set({
-          ...(body.name !== undefined ? { name: body.name } : {}),
-          ...(body.categoryGroupId !== undefined ? { category_group_id: body.categoryGroupId } : {}),
-        })
+        .set({ name: body.name })
         .where('id', '=', id)
         .where('user_id', '=', userId)
         .where('deleted_at', 'is', null)
-        .returning(['id', 'name', 'type', 'category_group_id'])
+        .returning(['id', 'name', 'type'])
         .executeTakeFirst();
       if (!row) {
         res.status(404).json({ error: 'not found' });
@@ -241,18 +128,12 @@ export function categoryRouter(db: Kysely<DB>): Router {
   return router;
 }
 
-function categoryJson(row: {
+function categoryJson(row: { id: string; name: string; type: string }): {
   id: string;
   name: string;
   type: string;
-  category_group_id: string | null;
-}): { id: string; name: string; type: string; categoryGroupId: string | null } {
-  return {
-    id: row.id,
-    name: row.name,
-    type: row.type,
-    categoryGroupId: row.category_group_id,
-  };
+} {
+  return { id: row.id, name: row.name, type: row.type };
 }
 
 function categoryTypeFilter(value: unknown): 'INCOME' | 'EXPENSE' | undefined | 'invalid' {
@@ -261,23 +142,9 @@ function categoryTypeFilter(value: unknown): 'INCOME' | 'EXPENSE' | undefined | 
   return parsed.success ? parsed.data : 'invalid';
 }
 
-async function ownsGroup(db: Kysely<DB>, userId: string, groupId: string): Promise<boolean> {
-  const group = await db
-    .selectFrom('category_groups')
-    .select('id')
-    .where('id', '=', groupId)
-    .where('user_id', '=', userId)
-    .executeTakeFirst();
-  return group !== undefined;
-}
-
 function categoryWriteError(err: unknown, res: Response, next: NextFunction): void {
   if (isPgCode(err, '23505')) {
     res.status(409).json({ error: 'name already exists' });
-    return;
-  }
-  if (isPgCode(err, '23503')) {
-    res.status(400).json({ error: 'invalid category group' });
     return;
   }
   next(err);

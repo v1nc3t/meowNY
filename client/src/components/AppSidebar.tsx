@@ -3,7 +3,7 @@ import { NavLink, Link } from 'react-router-dom'
 const items = [
   { to: '/app/dashboard', label: 'dashboard', icon: 'dashboard' },
   { to: '/app/transactions', label: 'transactions', icon: 'transactions' },
-  { to: '/app/categories', label: 'categories and groups', icon: 'categories' },
+  { to: '/app/categories', label: 'categories', icon: 'categories' },
   { to: '/app/budgets', label: 'budgets', icon: 'budgets' },
   { to: '/app/account', label: 'account', icon: 'account' },
 ] as const

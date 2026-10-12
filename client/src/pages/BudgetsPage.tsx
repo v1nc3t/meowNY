@@ -4,8 +4,7 @@ import { api, errorMessage } from '../http'
 import { amountString, formatMoney } from '../money'
 import { useMoneySettings } from '../useMoneySettings'
 
-type Group = { id: string; name: string }
-type Category = { id: string; name: string; type: string; categoryGroupId: string | null }
+type Category = { id: string; name: string; type: string }
 type Side = 'EXPENSE' | 'INCOME'
 type Overview = {
   type: string
@@ -22,26 +21,20 @@ export default function BudgetsPage() {
   const { settings, error } = useMoneySettings()
   const [month, setMonth] = useState(() => thisMonth())
   const [overview, setOverview] = useState<Overview[] | null>(null)
-  const [groups, setGroups] = useState<Group[] | null>(null)
   const [categories, setCategories] = useState<Category[] | null>(null)
   const [reload, setReload] = useState(0)
   const [message, setMessage] = useState('')
 
   useEffect(() => {
     let cancelled = false
-    void Promise.all([api('/api/v1/categories'), api('/api/v1/category-groups')]).then(async ([categoriesResponse, groupsResponse]) => {
+    void api('/api/v1/categories').then(async (response) => {
       if (cancelled) return
-      if (!categoriesResponse.ok) {
-        setMessage(await errorMessage(categoriesResponse))
+      if (!response.ok) {
+        setMessage(await errorMessage(response))
         setCategories([])
-      } else {
-        setCategories((await categoriesResponse.json()) as Category[])
-      }
-      if (!groupsResponse.ok) {
-        setMessage(await errorMessage(groupsResponse))
         return
       }
-      setGroups((await groupsResponse.json()) as Group[])
+      setCategories((await response.json()) as Category[])
     })
     return () => {
       cancelled = true
@@ -122,8 +115,8 @@ export default function BudgetsPage() {
 
   const money = (amount: string | null) =>
     amount === null ? 'not set' : formatMoney(amount, settings.currency, settings.locale)
-  const expenseBlocks = groups && categories ? budgetBlocks(groups, categories, 'EXPENSE') : null
-  const incomeBlocks = groups && categories ? budgetBlocks(groups, categories, 'INCOME') : null
+  const expenseCategories = categories?.filter((category) => category.type === 'EXPENSE') ?? null
+  const incomeCategories = categories?.filter((category) => category.type === 'INCOME') ?? null
 
   return (
     <section className="tx-page budget-page">
@@ -142,7 +135,7 @@ export default function BudgetsPage() {
           month={month}
           overview={overview?.find((row) => row.type === 'EXPENSE') ?? null}
           amounts={amountsFor(overview, 'EXPENSE')}
-          blocks={expenseBlocks}
+          categories={expenseCategories}
           money={money}
           onGlobal={onGlobal}
           onCategory={onCategory}
@@ -153,7 +146,7 @@ export default function BudgetsPage() {
           month={month}
           overview={overview?.find((row) => row.type === 'INCOME') ?? null}
           amounts={amountsFor(overview, 'INCOME')}
-          blocks={incomeBlocks}
+          categories={incomeCategories}
           money={money}
           onGlobal={onGlobal}
           onCategory={onCategory}
@@ -173,31 +166,13 @@ function amountsFor(overview: Overview[] | null, type: Side): Map<string, string
   return new Map((row?.categories ?? []).map((line) => [line.categoryId, line.amountLimit]))
 }
 
-function budgetBlocks(groups: Group[], categories: Category[], type: Side): {
-  groups: { id: string; name: string; categories: Category[] }[]
-  ungrouped: Category[]
-} {
-  const ids = new Set(groups.map((group) => group.id))
-  const allowed = categories.filter((category) => category.type === type)
-  return {
-    groups: groups
-      .map((group) => ({
-        id: group.id,
-        name: group.name,
-        categories: allowed.filter((category) => category.categoryGroupId === group.id),
-      }))
-      .filter((group) => group.categories.length > 0),
-    ungrouped: allowed.filter((category) => category.categoryGroupId === null || !ids.has(category.categoryGroupId)),
-  }
-}
-
 function BudgetHalf({
   title,
   type,
   month,
   overview,
   amounts,
-  blocks,
+  categories,
   money,
   onGlobal,
   onCategory,
@@ -207,7 +182,7 @@ function BudgetHalf({
   month: string
   overview: Overview | null
   amounts: Map<string, string>
-  blocks: ReturnType<typeof budgetBlocks> | null
+  categories: Category[] | null
   money: (amount: string | null) => string
   onGlobal: (type: Side, raw: string) => Promise<string | null>
   onCategory: (category: Category, raw: string) => Promise<string | null>
@@ -235,45 +210,19 @@ function BudgetHalf({
         onSave={(raw) => onGlobal(type, raw)}
       />
       <p>blank clears the budget.</p>
-      {blocks ? (
+      {categories ? (
         <ul className="rows" key={month}>
-          {blocks.groups.map((group) => (
-            <li key={group.id}>
-              <div className="entry-row">
-                <p className="entry-main">{group.name}</p>
-              </div>
-              <ul className="rows">
-                {group.categories.map((category) => (
-                  <BudgetCategory
-                    key={category.id}
-                    category={category}
-                    amount={amounts.get(category.id) ?? ''}
-                    onSave={onCategory}
-                  />
-                ))}
-              </ul>
-            </li>
+          {categories.map((category) => (
+            <BudgetCategory
+              key={category.id}
+              category={category}
+              amount={amounts.get(category.id) ?? ''}
+              onSave={onCategory}
+            />
           ))}
-          {blocks.ungrouped.length > 0 ? (
-            <li>
-              <div className="entry-row">
-                <p className="entry-main">ungrouped</p>
-              </div>
-              <ul className="rows">
-                {blocks.ungrouped.map((category) => (
-                  <BudgetCategory
-                    key={category.id}
-                    category={category}
-                    amount={amounts.get(category.id) ?? ''}
-                    onSave={onCategory}
-                  />
-                ))}
-              </ul>
-            </li>
-          ) : null}
         </ul>
       ) : null}
-      {blocks && blocks.groups.length === 0 && blocks.ungrouped.length === 0 ? <p>no categories.</p> : null}
+      {categories && categories.length === 0 ? <p>no categories.</p> : null}
     </section>
   )
 }

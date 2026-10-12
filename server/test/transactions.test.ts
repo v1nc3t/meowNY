@@ -29,7 +29,7 @@ type Page = {
   offset: number;
 };
 
-type Category = { id: string; name: string; type: string; categoryGroupId: string | null };
+type Category = { id: string; name: string; type: string };
 type SignedIn = { email: string; cookie: string };
 
 test('GET /api/v1/transactions rejects a request with no session', async () => {
@@ -475,81 +475,8 @@ test('the same client_uuid creates one transaction and replays the original row'
   });
 });
 
-test('groupId lists transactions in the group, one page at a time', async () => {
-  await withUsers(2, async ({ baseUrl, users }) => {
-    const ada = users[0];
-    const grace = users[1];
-    assert.ok(ada);
-    assert.ok(grace);
-    const housing = await createGroup(baseUrl, ada.cookie, 'Housing');
-    const empty = await createGroup(baseUrl, ada.cookie, 'Empty');
-    const rent = await createCategory(baseUrl, ada.cookie, 'Rent', 'EXPENSE', housing.id);
-    const power = await createCategory(baseUrl, ada.cookie, 'Power', 'EXPENSE', housing.id);
-    const food = await createCategory(baseUrl, ada.cookie, 'Food');
-    const graceHome = await createGroup(baseUrl, grace.cookie, 'Home');
-    const graceRent = await createCategory(baseUrl, grace.cookie, 'Rent', 'EXPENSE', graceHome.id);
-
-    const march = await createTx(baseUrl, ada.cookie, {
-      name: 'March rent',
-      amount: '800.00',
-      paymentDate: '2026-03-02',
-      categoryId: rent.id,
-    });
-    const april = await createTx(baseUrl, ada.cookie, {
-      name: 'April power',
-      amount: '60.00',
-      paymentDate: '2026-04-02',
-      categoryId: power.id,
-    });
-    await createTx(baseUrl, ada.cookie, {
-      name: 'Groceries',
-      amount: '12.00',
-      paymentDate: '2026-05-02',
-      categoryId: food.id,
-    });
-    await createTx(baseUrl, grace.cookie, {
-      name: 'Grace rent',
-      amount: '900.00',
-      paymentDate: '2026-04-03',
-      categoryId: graceRent.id,
-    });
-
-    const first = await listTx(baseUrl, ada.cookie, { groupId: housing.id, limit: '1', offset: '0' });
-    assert.deepEqual(first.transactions, [april]);
-    assert.equal(first.total, 2);
-    assert.equal(first.limit, 1);
-    assert.equal(first.offset, 0);
-    const second = await listTx(baseUrl, ada.cookie, { groupId: housing.id, limit: '1', offset: '1' });
-    assert.deepEqual(second.transactions, [march]);
-    assert.equal(second.total, 2);
-
-    const none = await listTx(baseUrl, ada.cookie, { groupId: empty.id });
-    assert.deepEqual(none, { transactions: [], total: 0, limit: 50, offset: 0 });
-    const foreign = await listTx(baseUrl, ada.cookie, { groupId: graceHome.id });
-    assert.equal(foreign.total, 0);
-    assert.deepEqual(foreign.transactions, []);
-    assert.equal((await api(baseUrl, ada.cookie, 'GET', transactionsPath({ groupId: 'nope' }))).status, 400);
-  });
-});
-
-async function createGroup(baseUrl: string, cookie: string, name: string): Promise<{ id: string; name: string }> {
-  const response = await api(baseUrl, cookie, 'POST', '/api/v1/category-groups', { name });
-  assert.equal(response.status, 201);
-  return (await response.json()) as { id: string; name: string };
-}
-
-async function createCategory(
-  baseUrl: string,
-  cookie: string,
-  name: string,
-  type = 'EXPENSE',
-  categoryGroupId?: string,
-): Promise<Category> {
-  const response = await api(baseUrl, cookie, 'POST', '/api/v1/categories', {
-    name,
-    type,
-    ...(categoryGroupId ? { categoryGroupId } : {}),
-  });
+async function createCategory(baseUrl: string, cookie: string, name: string, type = 'EXPENSE'): Promise<Category> {
+  const response = await api(baseUrl, cookie, 'POST', '/api/v1/categories', { name, type });
   assert.equal(response.status, 201);
   return (await response.json()) as Category;
 }

@@ -46,7 +46,6 @@ const ListQuery = z.strictObject({
   from: CalendarDate.optional(),
   to: CalendarDate.optional(),
   categoryId: Id.optional(),
-  groupId: Id.optional(),
   q: z.string().max(255).optional(),
   limit: LimitParam.optional(),
   offset: OffsetParam.optional(),
@@ -72,7 +71,6 @@ export function transactionRouter(db: Kysely<DB>): Router {
       from: req.query.from,
       to: req.query.to,
       categoryId: req.query.categoryId,
-      groupId: req.query.groupId,
       q: req.query.q,
       limit: req.query.limit,
       offset: req.query.offset,
@@ -254,22 +252,12 @@ function selectTransaction(db: Kysely<DB>, userId: string) {
 function filteredTransactions(
   db: Kysely<DB>,
   userId: string,
-  filter: { from?: string; to?: string; categoryId?: string; groupId?: string; q?: string },
+  filter: { from?: string; to?: string; categoryId?: string; q?: string },
 ) {
   let query = db.selectFrom('transactions').where('user_id', '=', userId);
   if (filter.from !== undefined) query = query.where(sql<SqlBool>`payment_date >= ${filter.from}::date`);
   if (filter.to !== undefined) query = query.where(sql<SqlBool>`payment_date <= ${filter.to}::date`);
   if (filter.categoryId !== undefined) query = query.where('category_id', '=', filter.categoryId);
-  if (filter.groupId !== undefined) {
-    const groupId = filter.groupId;
-    query = query.where('category_id', 'in', (eb) =>
-      eb
-        .selectFrom('categories')
-        .select('id')
-        .where('user_id', '=', userId)
-        .where('category_group_id', '=', groupId),
-    );
-  }
   if (filter.q !== undefined && filter.q.length > 0) {
     const pattern = `%${escapeLike(filter.q)}%`;
     query = query.where(

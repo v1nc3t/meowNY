@@ -10,14 +10,9 @@ VALUES ('00000000-0000-4000-8000-000000000001'::uuid, 'Demo', 'demo@example.com'
 INSERT INTO user_settings (user_id, currency, locale, timezone)
 VALUES ('00000000-0000-4000-8000-000000000001'::uuid, 'EUR', 'en', 'Europe/Amsterdam');
 
-WITH housing AS (
-  INSERT INTO category_groups (user_id, name)
-  VALUES ('00000000-0000-4000-8000-000000000001'::uuid, 'Housing')
-  RETURNING id
-), rent AS (
-  INSERT INTO categories (user_id, category_group_id, type, name)
-  SELECT '00000000-0000-4000-8000-000000000001'::uuid, housing.id, 'EXPENSE', 'Rent'
-  FROM housing
+WITH rent AS (
+  INSERT INTO categories (user_id, type, name)
+  VALUES ('00000000-0000-4000-8000-000000000001'::uuid, 'EXPENSE', 'Rent')
   RETURNING id
 ), food AS (
   INSERT INTO categories (user_id, type, name)

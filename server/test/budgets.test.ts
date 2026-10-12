@@ -31,7 +31,7 @@ type Overview = {
   categories: { categoryId: string; amountLimit: string }[];
 };
 
-type Category = { id: string; name: string; type: string; categoryGroupId: string | null };
+type Category = { id: string; name: string; type: string };
 type SignedIn = { email: string; cookie: string };
 
 test('budget routes reject a request with no session', async () => {

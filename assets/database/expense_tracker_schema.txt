@@ -183,23 +183,9 @@ Table privacy_requests {
 
 // ----------------------------- Budgeting ------------------------------
 
-Table category_groups {
-  id bigint [pk, increment]
-  user_id uuid [not null]
-  name varchar(50) [not null]
-  created_at timestamptz [not null, default: `now()`]
-  updated_at timestamptz [not null, default: `now()`]
-
-  Indexes {
-    (user_id, name) [unique, name: "uq_user_group_name"]
-  }
-  Note: 'Optional rollup for statistics, e.g. "Housing" = rent + utilities. Same-user check for categories.category_group_id is done in the service layer.'
-}
-
 Table categories {
   id bigint [pk, increment]
   user_id uuid [not null]
-  category_group_id bigint [null]
   type varchar(10) [not null, note: 'INCOME | EXPENSE. Immutable after creation (trigger in Part 2)']
   name varchar(50) [not null]
   deleted_at timestamptz [null, note: 'Soft delete; keeps old transactions reportable']
@@ -210,7 +196,6 @@ Table categories {
     (id, user_id) [unique, name: "uq_categories_id_user", note: 'target of composite FKs']
     (id, user_id, type) [unique, name: "uq_categories_id_user_type", note: 'target of composite FK from budgets']
     (user_id, deleted_at) [name: "idx_categories_user_active"]
-    category_group_id [name: "idx_categories_group"]
   }
   Note: 'Unique active name per user+type is a partial index, see Part 2.'
 }
@@ -305,10 +290,7 @@ Ref: accounts.user_id > users.id [delete: cascade]
 Ref: user_settings.user_id - users.id [delete: cascade]
 Ref: user_consents.user_id > users.id [delete: cascade]
 
-Ref: category_groups.user_id > users.id [delete: cascade]
-
 Ref: categories.user_id > users.id [delete: cascade]
-Ref: categories.category_group_id > category_groups.id [delete: set null]
 
 Ref: budgets.user_id > users.id [delete: cascade]
 // composite: same owner AND same type as the category (skipped for GLOBAL rows, category_id is NULL)
@@ -443,7 +425,7 @@ END $$;
 DO $$
 DECLARE t text;
 BEGIN
-  FOREACH t IN ARRAY ARRAY['users','user_settings','category_groups','categories',
+  FOREACH t IN ARRAY ARRAY['users','user_settings','categories',
                            'budgets','recurring_transactions','transactions']
   LOOP
     EXECUTE format('CREATE TRIGGER trg_updated_at BEFORE UPDATE ON %I
@@ -658,7 +640,7 @@ BEGIN
    WHERE identifier = v_email OR value = p_user::text;
 
   -- cascades to: sessions, accounts, user_settings, user_consents,
-  -- category_groups, categories, budgets, recurring_transactions,
+  -- categories, budgets, recurring_transactions,
   -- transactions (and fires the audit triggers)
   DELETE FROM users WHERE id = p_user;
 
@@ -707,8 +689,6 @@ LANGUAGE sql STABLE AS $$
         FROM sessions x WHERE x.user_id = p_user), '[]'::jsonb),
     'consents',    COALESCE((SELECT jsonb_agg(to_jsonb(c) ORDER BY c.id)
                              FROM user_consents c WHERE c.user_id = p_user), '[]'::jsonb),
-    'category_groups', COALESCE((SELECT jsonb_agg(to_jsonb(g) ORDER BY g.id)
-                             FROM category_groups g WHERE g.user_id = p_user), '[]'::jsonb),
     'categories',  COALESCE((SELECT jsonb_agg(to_jsonb(k) ORDER BY k.id)
                              FROM categories k WHERE k.user_id = p_user), '[]'::jsonb),
     'budgets',     COALESCE((SELECT jsonb_agg(to_jsonb(b) ORDER BY b.id)
@@ -948,7 +928,6 @@ H) HOW TO EXTEND THIS SCHEMA LATER
      Tags .................. tags + transaction_tags
      Receipts .............. transaction_attachments(transaction_id, storage_key)
      Multi-currency ........ transactions.currency + exchange_rates
-     Budget per group ...... nullable budgets.category_group_id + scope 'GROUP'
      One-off monthly budget  nullable budgets.effective_to
      Savings goals ......... own table
      More login providers .. config only (accounts.provider_id)

@@ -29,18 +29,12 @@ test('GET /api/v1/categories rejects a request with no session', async () => {
   }
 });
 
-test('users only see and change their own groups and categories', async () => {
+test('users only see and change their own categories', async () => {
   await withUsers(2, async ({ baseUrl, db, users }) => {
     const ada = users[0];
     const grace = users[1];
     assert.ok(ada);
     assert.ok(grace);
-
-    const createdGroup = await api(baseUrl, ada.cookie, 'POST', '/api/v1/category-groups', { name: 'Housing' });
-    assert.equal(createdGroup.status, 201);
-    const group = (await createdGroup.json()) as Group;
-    assert.equal(typeof group.id, 'string');
-    assert.equal(group.name, 'Housing');
 
     const createdCategory = await api(baseUrl, ada.cookie, 'POST', '/api/v1/categories', {
       name: 'Rent',
@@ -49,73 +43,47 @@ test('users only see and change their own groups and categories', async () => {
     assert.equal(createdCategory.status, 201);
     const category = (await createdCategory.json()) as Category;
     assert.equal(typeof category.id, 'string');
-    assert.deepEqual(category, { id: category.id, name: 'Rent', type: 'EXPENSE', categoryGroupId: null });
+    assert.deepEqual(category, { id: category.id, name: 'Rent', type: 'EXPENSE' });
 
-    assert.deepEqual(await (await api(baseUrl, ada.cookie, 'GET', '/api/v1/category-groups')).json(), [group]);
     assert.deepEqual(await (await api(baseUrl, ada.cookie, 'GET', '/api/v1/categories')).json(), [category]);
 
-    const renamed = await api(baseUrl, ada.cookie, 'PATCH', `/api/v1/category-groups/${group.id}`, { name: 'Home' });
+    const renamed = await api(baseUrl, ada.cookie, 'PATCH', `/api/v1/categories/${category.id}`, { name: 'Housing' });
     assert.equal(renamed.status, 200);
-    assert.deepEqual(await renamed.json(), { id: group.id, name: 'Home' });
-
-    const moved = await api(baseUrl, ada.cookie, 'PATCH', `/api/v1/categories/${category.id}`, {
-      categoryGroupId: group.id,
-    });
-    assert.equal(moved.status, 200);
-    const movedCategory = { ...category, categoryGroupId: group.id };
-    assert.deepEqual(await moved.json(), movedCategory);
+    const renamedCategory = { ...category, name: 'Housing' };
+    assert.deepEqual(await renamed.json(), renamedCategory);
     assert.deepEqual(await (await api(baseUrl, ada.cookie, 'GET', '/api/v1/categories?type=EXPENSE')).json(), [
-      movedCategory,
+      renamedCategory,
     ]);
     assert.deepEqual(await (await api(baseUrl, ada.cookie, 'GET', '/api/v1/categories?type=INCOME')).json(), []);
 
-    assert.deepEqual(await (await api(baseUrl, grace.cookie, 'GET', '/api/v1/category-groups')).json(), []);
     assert.deepEqual(await (await api(baseUrl, grace.cookie, 'GET', '/api/v1/categories')).json(), []);
-    assert.equal(
-      (await api(baseUrl, grace.cookie, 'PATCH', `/api/v1/category-groups/${group.id}`, { name: 'Stolen' })).status,
-      404,
-    );
     assert.equal(
       (await api(baseUrl, grace.cookie, 'PATCH', `/api/v1/categories/${category.id}`, { name: 'Stolen' })).status,
       404,
     );
-    assert.equal((await api(baseUrl, grace.cookie, 'DELETE', `/api/v1/category-groups/${group.id}`)).status, 404);
     assert.equal((await api(baseUrl, grace.cookie, 'DELETE', `/api/v1/categories/${category.id}`)).status, 404);
-    assert.deepEqual(await (await api(baseUrl, ada.cookie, 'GET', '/api/v1/category-groups')).json(), [
-      { id: group.id, name: 'Home' },
-    ]);
-
-    const foreignGroup = await api(baseUrl, grace.cookie, 'POST', '/api/v1/categories', {
-      name: 'Rent',
-      type: 'EXPENSE',
-      categoryGroupId: group.id,
-    });
-    assert.equal(foreignGroup.status, 400);
-    assert.deepEqual(await foreignGroup.json(), { error: 'invalid category group' });
-
-    const missingGroup = await api(baseUrl, ada.cookie, 'POST', '/api/v1/categories', {
-      name: 'Ghost',
-      type: 'EXPENSE',
-      categoryGroupId: '999999999',
-    });
-    assert.equal(missingGroup.status, 400);
 
     const sameName = await api(baseUrl, grace.cookie, 'POST', '/api/v1/categories', { name: 'Rent', type: 'EXPENSE' });
     assert.equal(sameName.status, 201);
     const graceCategory = (await sameName.json()) as Category;
     assert.deepEqual(await (await api(baseUrl, grace.cookie, 'GET', '/api/v1/categories')).json(), [graceCategory]);
-    assert.deepEqual(await (await api(baseUrl, ada.cookie, 'GET', '/api/v1/categories')).json(), [movedCategory]);
+    assert.deepEqual(await (await api(baseUrl, ada.cookie, 'GET', '/api/v1/categories')).json(), [renamedCategory]);
 
     assert.equal((await api(baseUrl, ada.cookie, 'PATCH', `/api/v1/categories/${category.id}`, {})).status, 400);
     assert.equal(
       (await api(baseUrl, ada.cookie, 'PATCH', `/api/v1/categories/${category.id}`, { type: 'INCOME' })).status,
       400,
     );
-    assert.equal(
-      (await api(baseUrl, ada.cookie, 'PATCH', `/api/v1/category-groups/${group.id}`, {})).status,
-      400,
-    );
-    assert.deepEqual(await (await api(baseUrl, ada.cookie, 'GET', '/api/v1/categories')).json(), [movedCategory]);
+    assert.deepEqual(await (await api(baseUrl, ada.cookie, 'GET', '/api/v1/categories')).json(), [renamedCategory]);
+
+    // Category groups no longer exist: no endpoint, and the field is rejected.
+    assert.equal((await api(baseUrl, ada.cookie, 'GET', '/api/v1/category-groups')).status, 404);
+    const withGroup = await api(baseUrl, ada.cookie, 'POST', '/api/v1/categories', {
+      name: 'Ghost',
+      type: 'EXPENSE',
+      categoryGroupId: '1',
+    });
+    assert.equal(withGroup.status, 400);
 
     const user = await db.selectFrom('users').select('id').where('email', '=', ada.email).executeTakeFirstOrThrow();
     const stored = await db
@@ -132,12 +100,6 @@ test('active category names are unique per user and type', async () => {
   await withUsers(1, async ({ baseUrl, users }) => {
     const ada = users[0];
     assert.ok(ada);
-
-    const group = await api(baseUrl, ada.cookie, 'POST', '/api/v1/category-groups', { name: 'Bills' });
-    assert.equal(group.status, 201);
-    const duplicateGroup = await api(baseUrl, ada.cookie, 'POST', '/api/v1/category-groups', { name: 'Bills' });
-    assert.equal(duplicateGroup.status, 409);
-    assert.deepEqual(await duplicateGroup.json(), { error: 'name already exists' });
 
     const expense = await api(baseUrl, ada.cookie, 'POST', '/api/v1/categories', { name: 'Pay', type: 'EXPENSE' });
     assert.equal(expense.status, 201);
@@ -218,8 +180,7 @@ async function createCategory(baseUrl: string, cookie: string, name: string): Pr
   return (await response.json()) as Category;
 }
 
-type Group = { id: string; name: string };
-type Category = { id: string; name: string; type: string; categoryGroupId: string | null };
+type Category = { id: string; name: string; type: string };
 type SignedIn = { email: string; cookie: string };
 
 async function withUsers(

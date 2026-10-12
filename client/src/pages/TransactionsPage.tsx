@@ -5,7 +5,6 @@ import { api, errorMessage } from '../http'
 import { amountString, formatMoney } from '../money'
 import { useMoneySettings } from '../useMoneySettings'
 
-type Group = { id: string; name: string }
 type Category = { id: string; name: string; type: string }
 type Transaction = {
   id: string
@@ -23,17 +22,15 @@ type Filters = {
   from: string
   to: string
   categoryId: string
-  groupId: string
   q: string
 }
 
 export default function TransactionsPage() {
   const { settings, error } = useMoneySettings()
-  const [groups, setGroups] = useState<Group[]>([])
   const [categories, setCategories] = useState<Category[]>([])
   const [filters, setFilters] = useState<Filters>(() => {
     const month = currentMonth()
-    return { mode: 'month', from: month, to: month, categoryId: '', groupId: '', q: '' }
+    return { mode: 'month', from: month, to: month, categoryId: '', q: '' }
   })
   const [limit, setLimit] = useState(50)
   const [offset, setOffset] = useState(0)
@@ -50,10 +47,9 @@ export default function TransactionsPage() {
 
   useEffect(() => {
     let cancelled = false
-    void Promise.all([api('/api/v1/categories'), api('/api/v1/category-groups')]).then(async ([categoriesResponse, groupsResponse]) => {
+    void api('/api/v1/categories').then(async (response) => {
       if (cancelled) return
-      if (categoriesResponse.ok) setCategories((await categoriesResponse.json()) as Category[])
-      if (groupsResponse.ok) setGroups((await groupsResponse.json()) as Group[])
+      if (response.ok) setCategories((await response.json()) as Category[])
     })
     return () => {
       cancelled = true
@@ -68,7 +64,6 @@ export default function TransactionsPage() {
     if (from) params.set('from', from)
     if (to) params.set('to', to)
     if (filters.categoryId) params.set('categoryId', filters.categoryId)
-    else if (filters.groupId) params.set('groupId', filters.groupId)
     const q = filters.q.trim()
     if (q) params.set('q', q)
     params.set('limit', String(limit))
@@ -191,7 +186,6 @@ export default function TransactionsPage() {
   }
 
   function scopeLabel(): string {
-    if (filters.groupId) return groups.find((group) => group.id === filters.groupId)?.name ?? 'group'
     if (filters.categoryId) return categories.find((category) => category.id === filters.categoryId)?.name ?? 'deleted category'
     return 'all categories'
   }
@@ -303,32 +297,20 @@ export default function TransactionsPage() {
           onClose={() => setMenu(null)}
         >
           <PickOption
-            selected={!filters.categoryId && !filters.groupId}
+            selected={!filters.categoryId}
             onClick={() => {
-              patchFilters({ categoryId: '', groupId: '' })
+              patchFilters({ categoryId: '' })
               setMenu(null)
             }}
           >
             all categories
           </PickOption>
-          {groups.map((group) => (
-            <PickOption
-              key={`group-${group.id}`}
-              selected={filters.groupId === group.id}
-              onClick={() => {
-                patchFilters({ categoryId: '', groupId: group.id })
-                setMenu(null)
-              }}
-            >
-              {group.name}
-            </PickOption>
-          ))}
           {categories.map((category) => (
             <PickOption
               key={`category-${category.id}`}
               selected={filters.categoryId === category.id}
               onClick={() => {
-                patchFilters({ categoryId: category.id, groupId: '' })
+                patchFilters({ categoryId: category.id })
                 setMenu(null)
               }}
             >
