@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
-import Modal, { modalFormId } from '../components/Modal'
+import AddCategoryModal from '../components/AddCategoryModal'
 import { visibleCategories, type Category, type Kind } from '../categoriesView'
 import { api, errorMessage } from '../http'
 
@@ -17,7 +17,6 @@ export default function CategoriesPage() {
   const [query, setQuery] = useState('')
   const [message, setMessage] = useState('')
   const [adding, setAdding] = useState(false)
-  const [dialogMessage, setDialogMessage] = useState('')
   const [loaded, setLoaded] = useState(false)
 
   useEffect(() => {
@@ -50,35 +49,6 @@ export default function CategoriesPage() {
     void load()
   }, [])
 
-  function openAdd() {
-    setDialogMessage('')
-    setAdding(true)
-  }
-
-  async function onCreateCategory(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    const form = event.currentTarget
-    const data = new FormData(form)
-    const name = String(data.get('name') ?? '').trim()
-    const type = String(data.get('type') ?? '')
-    if (!name || (type !== 'INCOME' && type !== 'EXPENSE')) {
-      setDialogMessage('enter a category name and type.')
-      return
-    }
-    const response = await api('/api/v1/categories', {
-      method: 'POST',
-      body: JSON.stringify({ name, type }),
-    })
-    if (!response.ok) {
-      setDialogMessage(await errorMessage(response))
-      return
-    }
-    setAdding(false)
-    setDialogMessage('')
-    setMessage('')
-    await load()
-  }
-
   const shown = visibleCategories(categories, kind, query)
 
   return (
@@ -86,7 +56,7 @@ export default function CategoriesPage() {
       <div className="tx-title">
         <h1>categories</h1>
         <div className="tx-actions">
-          <button type="button" onClick={openAdd}>
+          <button type="button" onClick={() => setAdding(true)}>
             add category
           </button>
         </div>
@@ -135,22 +105,14 @@ export default function CategoriesPage() {
       </div>
       <p className="notice">{message}</p>
       {adding ? (
-        <Modal title="add category" onClose={() => setAdding(false)}>
-          <p className="notice">{dialogMessage}</p>
-          <form id={modalFormId} onSubmit={(event) => void onCreateCategory(event)}>
-            <label>
-              name
-              <input name="name" required maxLength={50} autoComplete="off" />
-            </label>
-            <label>
-              type
-              <select name="type" required defaultValue="EXPENSE">
-                <option value="EXPENSE">expense</option>
-                <option value="INCOME">income</option>
-              </select>
-            </label>
-          </form>
-        </Modal>
+        <AddCategoryModal
+          onClose={() => setAdding(false)}
+          onCreated={() => {
+            setAdding(false)
+            setMessage('')
+            void load()
+          }}
+        />
       ) : null}
       <div className="tx-pane wide">
         {loaded && shown.length === 0 ? <p>no categories.</p> : null}

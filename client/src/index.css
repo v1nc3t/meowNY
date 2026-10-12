@@ -670,7 +670,8 @@ body:has(.app-shell.is-locked) {
   line-height: 1;
 }
 
-.tx-title:has(> .tx-actions) {
+.tx-title:has(> .tx-actions),
+.tx-title:has(> .budget-date) {
   flex-direction: column;
   align-items: flex-start;
   gap: 8px;
@@ -891,6 +892,22 @@ body:has(.app-shell.is-locked) {
 .pick-list button:hover,
 .pick-list button[aria-selected='true'] {
   background: rgba(255, 255, 255, 0.08);
+}
+
+/* Dropdown inside a form (modals): same look as a text field, full width. */
+.pick.field {
+  width: 100%;
+}
+
+.pick.field .pick-button {
+  width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pick-button.empty {
+  color: rgba(255, 255, 255, 0.35);
 }
 
 .date-scroll {

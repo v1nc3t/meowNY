@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from 'react'
+import { useEffect, useRef, useState, type FormEvent } from 'react'
 import DateScroll from '../DateScroll'
 import { api, errorMessage } from '../http'
 import { amountString, formatMoney } from '../money'
@@ -257,10 +257,15 @@ function AmountRow({
 }) {
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState(value)
+  const inputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     if (!editing) setDraft(value)
   }, [value, editing])
+
+  useEffect(() => {
+    if (editing) inputRef.current?.focus()
+  }, [editing])
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -271,6 +276,7 @@ function AmountRow({
   return (
     <form className="amount-row" onSubmit={(event) => void onSubmit(event)}>
       <input
+        ref={inputRef}
         aria-label={label}
         inputMode="decimal"
         autoComplete="off"
@@ -278,10 +284,20 @@ function AmountRow({
         value={draft}
         onChange={(event) => setDraft(event.target.value)}
       />
+      {/* Distinct keys: reusing one button node and flipping its type to submit mid-click submits the form at once. */}
       {editing ? (
-        <button type="submit">save</button>
+        <button key="save" type="submit">
+          save
+        </button>
       ) : (
-        <button type="button" onClick={() => setEditing(true)}>
+        <button
+          key="edit"
+          type="button"
+          onClick={(event) => {
+            event.preventDefault()
+            setEditing(true)
+          }}
+        >
           edit
         </button>
       )}

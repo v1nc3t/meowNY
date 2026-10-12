@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react'
+import AddCategoryModal from '../components/AddCategoryModal'
+import Dropdown from '../components/Dropdown'
 import Modal, { modalFormId } from '../components/Modal'
 import DateScroll from '../DateScroll'
 import { api, errorMessage } from '../http'
@@ -28,6 +30,7 @@ type Filters = {
 export default function TransactionsPage() {
   const { settings, error } = useMoneySettings()
   const [categories, setCategories] = useState<Category[]>([])
+  const [categoriesReady, setCategoriesReady] = useState(false)
   const [filters, setFilters] = useState<Filters>(() => {
     const month = currentMonth()
     return { mode: 'month', from: month, to: month, categoryId: '', q: '' }
@@ -42,14 +45,16 @@ export default function TransactionsPage() {
   const [pending, setPending] = useState(false)
   const [adding, setAdding] = useState(false)
   const [draftMessage, setDraftMessage] = useState('')
-  const [editing, setEditing] = useState<string | null>(null)
+  const [editing, setEditing] = useState<Transaction | null>(null)
   const [message, setMessage] = useState('')
 
   useEffect(() => {
     let cancelled = false
     void api('/api/v1/categories').then(async (response) => {
       if (cancelled) return
-      if (response.ok) setCategories((await response.json()) as Category[])
+      if (!response.ok) return
+      setCategories((await response.json()) as Category[])
+      setCategoriesReady(true)
     })
     return () => {
       cancelled = true
@@ -84,7 +89,6 @@ export default function TransactionsPage() {
   function patchFilters(patch: Partial<Filters>) {
     setFilters((current) => ({ ...current, ...patch }))
     setOffset(0)
-    setEditing(null)
   }
 
   function onMode(mode: RangeMode) {
@@ -95,10 +99,29 @@ export default function TransactionsPage() {
       to: shiftBound(current.to, current.mode, mode, 'to'),
     }))
     setOffset(0)
+  }
+
+  function openAdd() {
+    setMenu(null)
+    setDraftMessage('')
+    setEditing(null)
+    setAdding(true)
+  }
+
+  function openEdit(transaction: Transaction) {
+    setMenu(null)
+    setDraftMessage('')
+    setAdding(false)
+    setEditing(transaction)
+  }
+
+  function closeModal() {
+    setAdding(false)
     setEditing(null)
   }
 
-  async function onCreate(event: FormEvent<HTMLFormElement>) {
+  // One handler for both modes: the add modal creates, the same modal prefilled edits.
+  async function onSave(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (pending) return
     const form = new FormData(event.currentTarget)
@@ -115,18 +138,17 @@ export default function TransactionsPage() {
       setDraftMessage('enter an amount greater than zero, with at most two decimals.')
       return
     }
+    const body = { name, amount, paymentDate, categoryId, description: description.length > 0 ? description : null }
     setPending(true)
-    const response = await api('/api/v1/transactions', {
-      method: 'POST',
-      body: JSON.stringify({
-        name,
-        amount,
-        paymentDate,
-        categoryId,
-        description: description.length > 0 ? description : null,
-        clientUuid,
-      }),
-    })
+    const response = editing
+      ? await api(`/api/v1/transactions/${encodeURIComponent(editing.id)}`, {
+          method: 'PATCH',
+          body: JSON.stringify(body),
+        })
+      : await api('/api/v1/transactions', {
+          method: 'POST',
+          body: JSON.stringify({ ...body, clientUuid }),
+        })
     setPending(false)
     if (!response.ok) {
       setDraftMessage(await errorMessage(response))
@@ -134,43 +156,8 @@ export default function TransactionsPage() {
     }
     setDraftMessage('')
     setMessage('')
-    setAdding(false)
-    setClientUuid(crypto.randomUUID())
-    setReload((value) => value + 1)
-  }
-
-  async function onEdit(event: FormEvent<HTMLFormElement>, id: string) {
-    event.preventDefault()
-    const form = new FormData(event.currentTarget)
-    const name = String(form.get('name') ?? '').trim()
-    const amount = amountString(String(form.get('amount') ?? ''), false)
-    const paymentDate = String(form.get('paymentDate') ?? '')
-    const categoryId = String(form.get('categoryId') ?? '')
-    const description = String(form.get('description') ?? '').trim()
-    if (!name || !paymentDate || !categoryId) {
-      setMessage('name, category, and payment date are required.')
-      return
-    }
-    if (!amount) {
-      setMessage('enter an amount greater than zero, with at most two decimals.')
-      return
-    }
-    const response = await api(`/api/v1/transactions/${encodeURIComponent(id)}`, {
-      method: 'PATCH',
-      body: JSON.stringify({
-        name,
-        amount,
-        paymentDate,
-        categoryId,
-        description: description.length > 0 ? description : null,
-      }),
-    })
-    if (!response.ok) {
-      setMessage(await errorMessage(response))
-      return
-    }
-    setEditing(null)
-    setMessage('')
+    if (!editing) setClientUuid(crypto.randomUUID())
+    closeModal()
     setReload((value) => value + 1)
   }
 
@@ -180,7 +167,6 @@ export default function TransactionsPage() {
       setMessage(await errorMessage(response))
       return
     }
-    if (editing === id) setEditing(null)
     setMessage('')
     setReload((value) => value + 1)
   }
@@ -202,14 +188,7 @@ export default function TransactionsPage() {
       <div className="tx-title">
         <h1>transactions</h1>
         <div className="tx-actions">
-          <button
-            type="button"
-            onClick={() => {
-              setMenu(null)
-              setDraftMessage('')
-              setAdding(true)
-            }}
-          >
+          <button type="button" onClick={openAdd}>
             add
           </button>
         </div>
@@ -239,7 +218,6 @@ export default function TransactionsPage() {
               onClick={() => {
                 setLimit(Number(value))
                 setOffset(0)
-                setEditing(null)
                 setMenu(null)
               }}
             >
@@ -320,38 +298,17 @@ export default function TransactionsPage() {
         </Pick>
       </div>
       <p className="notice">{message}</p>
-      {adding ? (
-        <Modal title="add transaction" pending={pending} onClose={() => setAdding(false)}>
-          <p className="notice">{draftMessage}</p>
-          <form id={modalFormId} key={clientUuid} onSubmit={(event) => void onCreate(event)}>
-            <label>
-              category
-              <select name="categoryId" required defaultValue="">
-                <option value="" disabled>
-                  choose a category
-                </option>
-                {categories.map((category) => (
-                  <option key={category.id} value={category.id}>
-                    {category.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label>
-              name
-              <input name="name" required maxLength={50} autoComplete="off" />
-            </label>
-            <label>
-              amount
-              <input name="amount" required inputMode="decimal" autoComplete="off" />
-            </label>
-            <PaymentDate defaultValue={today()} />
-            <label>
-              description
-              <input name="description" maxLength={255} autoComplete="off" />
-            </label>
-          </form>
-        </Modal>
+      {adding || editing ? (
+        <TransactionModal
+          key={editing ? editing.id : clientUuid}
+          transaction={editing}
+          categories={categories}
+          pending={pending}
+          message={draftMessage}
+          onSubmit={(event) => void onSave(event)}
+          onClose={closeModal}
+          onCategoryAdded={(category) => setCategories((current) => [...current, category])}
+        />
       ) : null}
       {page ? (
         <>
@@ -360,80 +317,39 @@ export default function TransactionsPage() {
             <ul className="rows">
             {page.transactions.map((transaction) => (
               <li key={transaction.id}>
-                {editing === transaction.id ? (
-                  <form onSubmit={(event) => void onEdit(event, transaction.id)}>
-                    <label>
-                      category
-                      <select name="categoryId" required defaultValue={transaction.categoryId}>
-                        {categories.every((category) => category.id !== transaction.categoryId) ? (
-                          <option value={transaction.categoryId}>deleted category</option>
-                        ) : null}
-                        {categories.map((category) => (
-                          <option key={category.id} value={category.id}>
-                            {category.name}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                    <label>
-                      name
-                      <input name="name" required maxLength={50} defaultValue={transaction.name} autoComplete="off" />
-                    </label>
-                    <label>
-                      amount
-                      <input
-                        name="amount"
-                        required
-                        inputMode="decimal"
-                        defaultValue={transaction.amount}
-                        autoComplete="off"
-                      />
-                    </label>
-                    <PaymentDate defaultValue={transaction.paymentDate} />
-                    <label>
-                      description
-                      <input
-                        name="description"
-                        maxLength={255}
-                        defaultValue={transaction.description ?? ''}
-                        autoComplete="off"
-                      />
-                    </label>
-                    <div className="entry-actions">
-                      <button type="submit">save</button>
-                      <button type="button" onClick={() => setEditing(null)}>
-                        cancel
+                <div className="entry-row tx-row">
+                  <div className="tx-main">
+                    <p className="entry-main">{transaction.name}</p>
+                    <p className="tx-sub">
+                      {[
+                        formatMoney(transaction.amount, settings.currency, settings.locale),
+                        categories.find((category) => category.id === transaction.categoryId)?.name ??
+                          (categoriesReady ? 'deleted category' : ''),
+                        transaction.paymentDate,
+                      ]
+                        .filter(Boolean)
+                        .join(' | ')}
+                    </p>
+                    {transaction.description?.trim() ? (
+                      <button
+                        type="button"
+                        className="tx-desc"
+                        aria-expanded={openId === transaction.id}
+                        onClick={() => setOpenId((current) => (current === transaction.id ? null : transaction.id))}
+                      >
+                        {openId === transaction.id ? transaction.description : 'description'}
                       </button>
-                    </div>
-                  </form>
-                ) : (
-                  <div className="entry-row tx-row">
-                    <div className="tx-main">
-                      <p className="entry-main">{transaction.name}</p>
-                      <p className="tx-sub">
-                        {formatMoney(transaction.amount, settings.currency, settings.locale)} | {transaction.paymentDate}
-                      </p>
-                      {transaction.description?.trim() ? (
-                        <button
-                          type="button"
-                          className="tx-desc"
-                          aria-expanded={openId === transaction.id}
-                          onClick={() => setOpenId((current) => (current === transaction.id ? null : transaction.id))}
-                        >
-                          {openId === transaction.id ? transaction.description : 'description'}
-                        </button>
-                      ) : null}
-                    </div>
-                    <div className="entry-actions">
-                      <button type="button" className="tx-text" onClick={() => setEditing(transaction.id)}>
-                        edit
-                      </button>
-                      <button type="button" className="tx-text" onClick={() => void onDelete(transaction.id)}>
-                        delete
-                      </button>
-                    </div>
+                    ) : null}
                   </div>
-                )}
+                  <div className="entry-actions">
+                    <button type="button" className="tx-text" onClick={() => openEdit(transaction)}>
+                      edit
+                    </button>
+                    <button type="button" className="tx-text" onClick={() => void onDelete(transaction.id)}>
+                      delete
+                    </button>
+                  </div>
+                </div>
               </li>
             ))}
             </ul>
@@ -446,10 +362,7 @@ export default function TransactionsPage() {
                   key={number}
                   type="button"
                   aria-current={number === currentPage ? 'page' : undefined}
-                  onClick={() => {
-                    setOffset((number - 1) * (page?.limit ?? limit))
-                    setEditing(null)
-                  }}
+                  onClick={() => setOffset((number - 1) * (page?.limit ?? limit))}
                 >
                   {number}
                 </button>
@@ -459,6 +372,79 @@ export default function TransactionsPage() {
         </>
       ) : null}
     </section>
+  )
+}
+
+// Add and edit share this modal. Field order: name, amount, category, date, description.
+function TransactionModal({
+  transaction,
+  categories,
+  pending,
+  message,
+  onSubmit,
+  onClose,
+  onCategoryAdded,
+}: {
+  transaction: Transaction | null
+  categories: Category[]
+  pending: boolean
+  message: string
+  onSubmit: (event: FormEvent<HTMLFormElement>) => void
+  onClose: () => void
+  onCategoryAdded: (category: Category) => void
+}) {
+  const [categoryId, setCategoryId] = useState(transaction?.categoryId ?? '')
+  const [addingCategory, setAddingCategory] = useState(false)
+  const options = categories.map((category) => ({ value: category.id, label: category.name }))
+  if (transaction && categories.every((category) => category.id !== transaction.categoryId)) {
+    options.unshift({ value: transaction.categoryId, label: 'deleted category' })
+  }
+  return (
+    <>
+      <Modal title={transaction ? 'edit transaction' : 'add transaction'} pending={pending} onClose={onClose}>
+        <p className="notice">{message}</p>
+        <form id={modalFormId} onSubmit={onSubmit}>
+          <label>
+            name
+            <input name="name" required maxLength={50} defaultValue={transaction?.name ?? ''} autoComplete="off" />
+          </label>
+          <label>
+            amount
+            <input
+              name="amount"
+              required
+              inputMode="decimal"
+              defaultValue={transaction?.amount ?? ''}
+              autoComplete="off"
+            />
+          </label>
+          <Dropdown
+            label="category"
+            name="categoryId"
+            value={categoryId}
+            options={options}
+            onChange={setCategoryId}
+            placeholder="choose a category"
+            action={{ label: 'add category', onSelect: () => setAddingCategory(true) }}
+          />
+          <PaymentDate defaultValue={transaction?.paymentDate ?? today()} />
+          <label>
+            description
+            <input name="description" maxLength={255} defaultValue={transaction?.description ?? ''} autoComplete="off" />
+          </label>
+        </form>
+      </Modal>
+      {addingCategory ? (
+        <AddCategoryModal
+          onClose={() => setAddingCategory(false)}
+          onCreated={(category) => {
+            onCategoryAdded(category)
+            setCategoryId(category.id)
+            setAddingCategory(false)
+          }}
+        />
+      ) : null}
+    </>
   )
 }
 
