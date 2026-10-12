@@ -15,7 +15,11 @@ export default function SignupPage() {
       password: String(form.get('password')),
       callbackURL: `${window.location.origin}/login`,
     })
-    setMessage(error ? 'could not sign up.' : 'check your email for a verification link.')
+    setMessage(
+      error
+        ? 'could not sign up.'
+        : `check your email for a verification link.${import.meta.env.DEV ? ' in development it arrives in the local inbox at http://127.0.0.1:8025.' : ''}`,
+    )
   }
 
   async function onGoogle() {

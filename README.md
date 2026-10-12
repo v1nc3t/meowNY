@@ -15,7 +15,9 @@ npm install
 cd server && npm run migrate
 ```
 
-`docker compose up -d` starts Postgres on `127.0.0.1:5432` and Mailpit. Mailpit catches signup and password-reset mail. Open the inbox at http://127.0.0.1:8025.
+`docker compose up -d` starts Postgres on `127.0.0.1:5432` and Mailpit. Mailpit catches signup and password-reset mail, so in development no mail reaches a real inbox. Open the verification link from http://127.0.0.1:8025.
+
+To send real mail, set `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, and `SMTP_FROM` in `.env` to your provider's values, then restart the API.
 
 Copy `.env.example` only once. Generate `BETTER_AUTH_SECRET` with `openssl rand -base64 32` and put it in `.env` before you sign anyone up.
 
