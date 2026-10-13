@@ -32,41 +32,44 @@ export default function FirstRunScreen({ onDone }: { onDone: () => void }) {
   }
 
   return (
-    <form onSubmit={onSubmit}>
-      <h1>welcome to meowny</h1>
-      <p>your data stays on this computer, in an encrypted file. nothing is sent anywhere.</p>
+    <main className="gate">
+      <form onSubmit={onSubmit}>
+        <p className="brand-mark">meowny</p>
+        <h1>welcome</h1>
+        <p className="hint">your data stays on this computer, in an encrypted file. nothing is sent anywhere.</p>
 
-      <label>
-        currency
-        <input name="currency" required minLength={3} maxLength={3} placeholder="EUR" autoComplete="off" />
-      </label>
-      <p className="notice">changing it later does not convert existing amounts.</p>
+        <label>
+          currency
+          <input name="currency" required minLength={3} maxLength={3} placeholder="EUR" autoComplete="off" />
+        </label>
+        <p className="hint">changing it later does not convert existing amounts.</p>
 
-      <label>
-        passphrase (optional)
-        <input name="passphrase" type="password" autoComplete="new-password" />
-      </label>
-      <label>
-        repeat passphrase
-        <input name="confirm" type="password" autoComplete="new-password" />
-      </label>
-      <p className="notice">
-        without a passphrase the key lives in your operating system's keychain and the app opens when you sign in
-        to this computer. with one, the file also needs the passphrase to open. a forgotten passphrase cannot be recovered.
-      </p>
-
-      {location && (
-        <p className="notice">
-          data file location: <code>{location}</code>
+        <label>
+          passphrase (optional)
+          <input name="passphrase" type="password" autoComplete="new-password" />
+        </label>
+        <label>
+          repeat passphrase
+          <input name="confirm" type="password" autoComplete="new-password" />
+        </label>
+        <p className="hint">
+          without a passphrase the key lives in your operating system's keychain and the app opens when you sign in
+          to this computer. with one, the file also needs the passphrase to open. a forgotten passphrase cannot be recovered.
         </p>
-      )}
 
-      <button type="submit" disabled={busy}>
-        create encrypted data file
-      </button>
-      <p className="notice" role="alert">
-        {message}
-      </p>
-    </form>
+        {location && (
+          <p className="hint">
+            data file location: <code>{location}</code>
+          </p>
+        )}
+
+        <button type="submit" disabled={busy}>
+          create encrypted data file
+        </button>
+        <p className="notice" role="alert">
+          {message}
+        </p>
+      </form>
+    </main>
   )
 }

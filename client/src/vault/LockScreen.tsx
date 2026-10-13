@@ -38,22 +38,25 @@ export default function LockScreen({ onUnlocked }: { onUnlocked: () => void }) {
   }
 
   return (
-    <form onSubmit={onSubmit}>
-      <h1>meowny is locked</h1>
-      {needsPassphrase && (
-        <>
-          <label>
-            passphrase
-            <input name="passphrase" type="password" autoFocus autoComplete="current-password" />
-          </label>
-          <button type="submit" disabled={busy}>
-            unlock
-          </button>
-        </>
-      )}
-      <p className="notice" role="alert">
-        {message}
-      </p>
-    </form>
+    <main className="gate">
+      <form onSubmit={onSubmit}>
+        <p className="brand-mark">meowny</p>
+        <h1>locked</h1>
+        {needsPassphrase && (
+          <>
+            <label>
+              passphrase
+              <input name="passphrase" type="password" autoFocus autoComplete="current-password" />
+            </label>
+            <button type="submit" disabled={busy}>
+              unlock
+            </button>
+          </>
+        )}
+        <p className="notice" role="alert">
+          {message}
+        </p>
+      </form>
+    </main>
   )
 }

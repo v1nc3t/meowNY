@@ -6,8 +6,8 @@
   --border: rgba(255, 255, 255, 0.1);
   --border-strong: rgba(255, 255, 255, 0.2);
   --surface: rgba(255, 255, 255, 0.05);
-  --accent: #3b82f6;
-  --accent-bg: rgba(59, 130, 246, 0.14);
+  /* One dark green, used only to draw attention, and only as an outline or as text. */
+  --accent: #2e8b57;
   --sans: system-ui, 'Segoe UI', Roboto, sans-serif;
   --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
 
@@ -132,6 +132,7 @@ textarea {
   font: inherit;
 }
 
+/* Buttons are plain text. Hover strikes them through. */
 button {
   font-family: var(--mono);
   font-size: 13px;
@@ -139,9 +140,9 @@ button {
   letter-spacing: 0.02em;
   color: var(--text-h);
   background: transparent;
-  border: 0.8px solid var(--border-strong);
+  border: 0;
   border-radius: 0;
-  padding: 6px 10px;
+  padding: 6px 0;
   cursor: pointer;
   box-shadow: none;
   min-width: max-content;
@@ -151,18 +152,10 @@ button {
   text-align: center;
 }
 
-button[type='submit'] {
-  background: #fff;
-  color: #000;
-  border-color: #fff;
-}
-
-button:hover {
-  background: rgba(255, 255, 255, 0.05);
-}
-
-button[type='submit']:hover {
-  background: rgba(255, 255, 255, 0.88);
+button:hover:not(:disabled) {
+  text-decoration: line-through;
+  text-decoration-thickness: 1px;
+  text-decoration-skip-ink: none;
 }
 
 button:disabled {
@@ -192,7 +185,7 @@ input[type='checkbox'] {
   width: 16px;
   height: 16px;
   margin: 0;
-  accent-color: #fff;
+  accent-color: var(--accent);
   flex: 0 0 auto;
 }
 
@@ -201,8 +194,8 @@ input[type='checkbox'] {
 }
 
 :focus-visible {
-  outline: 1px solid #fff;
-  outline-offset: -1px;
+  outline: 1px solid var(--accent);
+  outline-offset: 2px;
 }
 
 input:focus,
@@ -210,13 +203,7 @@ textarea:focus,
 select:focus,
 .pick-button:focus {
   outline: none;
-  box-shadow: inset 0 0 0 1px #fff;
-}
-
-button[type='submit']:focus,
-button[type='submit']:focus-visible {
-  outline: none;
-  box-shadow: inset 0 0 0 1px #000;
+  box-shadow: inset 0 0 0 1px var(--accent);
 }
 
 form {
@@ -278,108 +265,17 @@ li > p,
   color: rgba(255, 255, 255, 0.85);
 }
 
+/* Attention text: an outline in the accent colour, never a fill. */
 p.notice:not(:empty),
 .app-main p.warn,
 p.warn {
-  color: #fff;
-  background: #0b1c33;
-  border: 0.8px solid var(--accent);
-  padding: 12px 14px;
+  color: var(--text-h);
+  background: transparent;
+  border: 1px solid var(--accent);
+  padding: 10px 14px;
   margin: 0;
   width: min(100%, 40rem);
-}
-
-.public-shell {
-  min-height: 100svh;
-  display: flex;
-  flex-direction: column;
-}
-
-.public-shell > main {
-  flex: 1;
-  width: min(1024px, 100%);
-  margin: 0 auto;
-  padding: 96px 24px 120px;
-}
-
-.public-shell main > section {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  border: 0.8px solid var(--border);
-  margin-top: 64px;
-}
-
-.public-shell main > section > div {
-  padding: 24px;
-  min-width: 0;
-}
-
-.public-shell main > section > div + div {
-  border-left: 0.8px solid var(--border);
-}
-
-.public-navbar {
-  position: sticky;
-  top: 0;
-  z-index: 20;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  min-height: 65px;
-  padding: 12px 24px;
-  border-bottom: 0.8px solid var(--border);
-  background: #000;
-}
-
-.brand a,
-.app-logo,
-.nav-links a,
-.nav-item,
-.exit-btn,
-footer {
-  font-family: var(--mono);
-  letter-spacing: 0.04em;
-  text-decoration: none;
-}
-
-.brand a,
-.app-logo {
-  color: var(--text-h);
-  font-size: 14px;
-}
-
-.nav-links {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 8px 18px;
-}
-
-.nav-links a {
-  color: var(--text-h);
-  font-size: 13px;
-}
-
-.nav-links a:hover,
-.nav-item:hover,
-.exit-btn:hover {
-  color: rgba(255, 255, 255, 0.5);
-}
-
-.nav-links a.signup-btn,
-.nav-links a.signup-btn:hover {
-  background: #fff;
-  color: #000;
-  border: 0.8px solid #fff;
-  padding: 8px 16px;
-}
-
-.nav-links a.signup-btn:hover {
-  background: rgba(255, 255, 255, 0.88);
-}
-
-footer {
+}footer {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -503,8 +399,7 @@ footer a:hover {
 
 .nav-item.active {
   color: var(--text-h);
-  border-color: var(--border-strong);
-  background: var(--surface);
+  border-color: var(--accent);
 }
 
 .nav-item.active:hover {
@@ -612,21 +507,13 @@ body:has(.app-shell.is-locked) {
   gap: 8px;
 }
 
-.page-numbers button,
-.page-numbers button:hover,
-.page-numbers button:focus-visible {
-  border: 0;
-  outline: none;
-  background: transparent;
-  padding: 0 2px;
-  box-shadow: none;
+.page-numbers button {
+  padding: 0 6px;
 }
 
 .page-numbers button[aria-current='page'] {
   color: var(--text-h);
-  text-decoration: line-through;
-  text-decoration-thickness: 1px;
-  text-decoration-skip-ink: none;
+  box-shadow: inset 0 0 0 1px var(--accent);
 }
 
 .toolbar {
@@ -701,18 +588,7 @@ body:has(.app-shell.is-locked) {
   padding-inline: 2px;
 }
 
-.tx-actions > button,
-.tx-actions > button:hover,
-.tx-actions > button:focus,
-.tx-actions > button:focus-visible {
-  flex: 0 0 auto;
-  white-space: nowrap;
-  border: 0;
-  background: transparent;
-  box-shadow: none;
-  outline: none;
-  padding: 6px 0;
-}
+
 
 .toolbar.tx-bar {
   position: relative;
@@ -847,8 +723,8 @@ body:has(.app-shell.is-locked) {
   overflow: visible;
 }
 
-.pick-button:hover {
-  background: #000;
+.pick-button:hover:not(:disabled) {
+  text-decoration: none;
 }
 
 .pick-list {
@@ -889,9 +765,8 @@ body:has(.app-shell.is-locked) {
   white-space: nowrap;
 }
 
-.pick-list button:hover,
 .pick-list button[aria-selected='true'] {
-  background: rgba(255, 255, 255, 0.08);
+  color: var(--accent);
 }
 
 /* Dropdown inside a form (modals): same look as a text field, full width. */
@@ -1029,21 +904,9 @@ body:has(.app-shell.is-locked) {
   color: var(--text-muted);
 }
 
-.tx-page .tx-actions > button,
-.tx-page .tx-actions > button:hover,
-.tx-page .tx-actions > button:focus,
-.tx-page .tx-actions > button:focus-visible {
-  border: 0;
-  background: transparent;
-  box-shadow: none;
-  outline: none;
-}
 
-.tx-page button:hover:not(:disabled) {
-  text-decoration: line-through;
-  text-decoration-thickness: 1px;
-  text-decoration-skip-ink: none;
-}
+
+
 
 .tx-page .tx-text,
 .tx-page .tx-text:hover,
@@ -1282,36 +1145,9 @@ body:has(dialog[open]) {
 .modal p.notice {
   width: 100%;
   margin: 0;
-}
-
-.public-shell article {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-  max-width: 40rem;
-}
-
-@media (max-width: 720px) {
+}@media (max-width: 720px) {
   h1 {
     font-size: 32px;
-  }
-
-  .public-shell > main {
-    padding: 48px 16px 72px;
-  }
-
-  .public-navbar {
-    align-items: flex-start;
-    padding: 12px 16px;
-  }
-
-  .public-shell main > section {
-    grid-template-columns: 1fr;
-  }
-
-  .public-shell main > section > div + div {
-    border-left: none;
-    border-top: 0.8px solid var(--border);
   }
 
   .app-shell,
@@ -1398,4 +1234,80 @@ body:has(dialog[open]) {
     padding-bottom: 12px;
   }
 
+}
+
+/* First-run and lock screens: one centred column on an empty page. */
+.gate {
+  min-height: 100svh;
+  display: grid;
+  place-items: center;
+  padding: 32px 16px;
+}
+
+.gate > form {
+  width: min(100%, 26rem);
+  margin: 0;
+  padding: 32px 0;
+}
+
+.gate .brand-mark {
+  font-family: var(--mono);
+  font-size: 14px;
+  letter-spacing: 0.04em;
+  color: var(--text-h);
+  margin: 0 0 24px;
+}
+
+.gate h1 {
+  font-size: 28px;
+  margin: 0;
+}
+
+.gate .hint {
+  font-family: var(--mono);
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--text-muted);
+}
+
+.gate button[type='submit'] {
+  align-self: flex-start;
+}
+
+.gate code {
+  overflow-wrap: anywhere;
+}
+
+/* Settings: sections separated by a hairline. */
+.app-main main > div > form,
+.app-main main > div > section {
+  padding-top: 16px;
+  border-top: 0.8px solid var(--border);
+  width: min(100%, 28rem);
+}
+
+/* Navigation text: mono, no underlines; hover strikes through like every button. */
+.app-logo,
+.nav-item,
+.exit-btn,
+footer {
+  font-family: var(--mono);
+  letter-spacing: 0.04em;
+  text-decoration: none;
+}
+
+.app-logo {
+  color: var(--text-h);
+  font-size: 14px;
+}
+
+.nav-item:hover {
+  color: var(--text-h);
+  text-decoration: line-through;
+  text-decoration-thickness: 1px;
+  text-decoration-skip-ink: none;
+}
+
+form > button {
+  align-self: flex-start;
 }
