@@ -1,5 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { errorText, inDesktopApp, vault, type LockPrefs } from '../vault/api'
+import Dropdown from '../components/Dropdown'
 import PasswordField from '../vault/PasswordField'
 import RecoveryKeyPanel from '../vault/RecoveryKeyPanel'
 import { LOCK_AFTER_CHOICES, isCurrency, nearestLockChoice, normalizeCurrency, type Settings } from '../vault/rules'
@@ -11,11 +12,18 @@ export default function SettingsPage() {
   const [message, setMessage] = useState('')
   const [confirmation, setConfirmation] = useState('')
   const [newKey, setNewKey] = useState<string | null>(null)
+  const [lockAfter, setLockAfter] = useState('300')
 
   useEffect(() => {
     if (!inDesktopApp()) return
     vault.settings().then(setSettings, (e) => setMessage(errorText(e)))
-    vault.lockPrefs().then(setPrefs, (e) => setMessage(errorText(e)))
+    vault.lockPrefs().then(
+      (loaded) => {
+        setPrefs(loaded)
+        setLockAfter(String(nearestLockChoice(loaded.lock_after_secs)))
+      },
+      (e) => setMessage(errorText(e)),
+    )
     vault.dataLocation().then(setLocation, () => undefined)
   }, [])
 
@@ -106,16 +114,13 @@ export default function SettingsPage() {
       {prefs && (
         <form onSubmit={onLock}>
           <h2>app lock</h2>
-          <label>
-            lock after being idle for
-            <select name="lock_after" defaultValue={nearestLockChoice(prefs.lock_after_secs)}>
-              {LOCK_AFTER_CHOICES.map((choice) => (
-                <option key={choice.seconds} value={choice.seconds}>
-                  {choice.label}
-                </option>
-              ))}
-            </select>
-          </label>
+          <Dropdown
+            label="lock after being idle for"
+            name="lock_after"
+            value={lockAfter}
+            options={LOCK_AFTER_CHOICES.map((choice) => ({ value: String(choice.seconds), label: choice.label }))}
+            onChange={setLockAfter}
+          />
           <label>
             <input name="lock_on_minimize" type="checkbox" defaultChecked={prefs.lock_on_minimize} /> lock when the window is minimized
           </label>

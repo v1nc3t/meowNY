@@ -726,22 +726,48 @@ body:has(.app-shell.is-locked) {
 }
 
 .pick-button {
+  position: relative;
   width: max-content;
   min-width: max-content;
   min-height: 0;
-  padding: 6px 10px;
+  padding: 7px 34px 7px 12px;
   text-align: left;
   letter-spacing: normal;
-  font-size: 14px;
-  background: #000;
+  font-family: var(--mono);
+  font-size: 13px;
+  background: transparent;
   color: var(--text-h);
   border: 0.8px solid var(--border-strong);
   white-space: nowrap;
   overflow: visible;
 }
 
+/* A thin chevron on the right; it flips while the list is open. */
+.pick-button::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  right: 13px;
+  width: 5px;
+  height: 5px;
+  border-right: 1px solid currentColor;
+  border-bottom: 1px solid currentColor;
+  opacity: 0.6;
+  transform: translateY(-70%) rotate(45deg);
+  transition: transform 0.12s ease;
+}
+
+.pick-button[aria-expanded='true']::after {
+  transform: translateY(-30%) rotate(-135deg);
+}
+
 .pick-button:hover:not(:disabled) {
   text-decoration: none;
+  border-color: var(--text-muted);
+}
+
+.pick-button[aria-expanded='true'] {
+  border-color: var(--accent);
 }
 
 .pick-list {
@@ -753,11 +779,11 @@ body:has(.app-shell.is-locked) {
   min-width: 100%;
   max-height: 16rem;
   margin: 0;
-  padding: 0;
+  padding: 4px 0;
   overflow: auto;
   background: #000;
   color: var(--text-h);
-  border: 0.8px solid var(--border-strong);
+  border: 0.8px solid var(--accent);
 }
 
 .pick-list > li {
@@ -770,16 +796,23 @@ body:has(.app-shell.is-locked) {
 }
 
 .pick-list button {
+  display: block;
   width: max-content;
   min-width: 100%;
   border: 0;
-  background: #000;
-  color: var(--text-h);
+  background: transparent;
+  color: var(--text);
   text-align: left;
-  padding: 6px 10px;
+  padding: 8px 14px;
   letter-spacing: normal;
-  font-size: 14px;
+  font-size: 13px;
   white-space: nowrap;
+}
+
+.pick-list button:hover:not(:disabled),
+.pick-list button:focus-visible {
+  color: var(--text-h);
+  outline: none;
 }
 
 .pick-list button[aria-selected='true'] {
@@ -995,58 +1028,90 @@ body:has(.app-shell.is-locked) {
   min-width: 0;
   min-height: 0;
   align-items: stretch;
-  gap: 12px;
+  gap: 28px;
   overflow: auto;
 }
 
 .budget-half:first-child {
-  padding-right: 24px;
+  padding-right: 32px;
 }
 
 .budget-half + .budget-half {
   border-left: 0.8px solid var(--border);
-  padding-left: 24px;
+  padding-left: 32px;
 }
 
 .budget-half > * {
   flex-shrink: 0;
 }
 
-.budget-half form,
-form.amount-row {
-  width: min(100%, 28rem);
+.budget-half h2 {
   margin: 0;
+  font-size: 20px;
 }
 
-.budget-line {
-  align-items: center;
-}
-
-form.amount-row {
-  flex-direction: row;
-  flex-wrap: nowrap;
-  align-items: center;
-  gap: 8px;
-  width: auto;
-  flex: 0 0 auto;
-}
-
-.amount-row input {
-  width: 8rem;
-  min-width: 8rem;
-  flex: 0 0 auto;
-}
-
-.amount-row button {
-  flex: 0 0 auto;
-}
-
-.budget-half p.warn {
+/* Rows of label, amount and actions. Amounts are plain text until "edit" is clicked. */
+.budget-table {
+  display: flex;
+  flex-direction: column;
   width: 100%;
 }
 
-.budget-half .rows {
+.budget-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  column-gap: 20px;
   width: 100%;
+  min-height: 46px;
+  margin: 0;
+  padding: 6px 0;
+  border-top: 0.8px solid var(--border);
+}
+
+.budget-row:last-child {
+  border-bottom: 0.8px solid var(--border);
+}
+
+.budget-label {
+  font-family: var(--mono);
+  font-size: 13px;
+  letter-spacing: 0.02em;
+  color: var(--text-h);
+  overflow-wrap: anywhere;
+}
+
+.budget-row.quiet .budget-label {
+  color: var(--text-muted);
+}
+
+.budget-amount {
+  font-family: var(--mono);
+  font-size: 14px;
+  color: var(--text-h);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.budget-amount.unset {
+  color: var(--text-muted);
+}
+
+.budget-amount.over {
+  border: 1px solid var(--accent);
+  padding: 2px 8px;
+}
+
+.budget-row input {
+  width: 9rem;
+  text-align: right;
+}
+
+.budget-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 16px;
+  min-width: 3rem;
 }
 
 @container budget (max-width: 700px) {
@@ -1054,13 +1119,11 @@ form.amount-row {
     display: flex;
     flex-direction: column;
     overflow: auto;
-    gap: 16px;
+    gap: 24px;
   }
 
   .app-main main section section.budget-half {
-    overflow: auto;
-    min-height: 16rem;
-    max-height: 70svh;
+    overflow: visible;
     height: auto;
     flex: none;
   }
@@ -1073,9 +1136,8 @@ form.amount-row {
     border-left: none;
     border-top: 0.8px solid var(--border);
     padding-left: 0;
-    padding-top: 16px;
+    padding-top: 24px;
   }
-
 }
 
 ul.rows {
@@ -1392,4 +1454,8 @@ form > button {
 .panel .actions {
   display: flex;
   gap: 24px;
+}
+
+.budget-date .date-scroll input {
+  text-align: left;
 }

@@ -113,8 +113,9 @@ function BudgetsView({ settings, thisMonth }: { settings: MoneySettings; thisMon
     return errorText
   }
 
-  const money = (amount: string | null) =>
-    amount === null ? 'not set' : formatMoney(amount, settings.currency, settings.locale)
+  // Zero and "not set" both read as a dash.
+  const money = (amount: string) =>
+    Number(amount) === 0 ? '-' : formatMoney(amount, settings.currency, settings.locale)
   const expenseCategories = categories?.filter((category) => category.type === 'EXPENSE') ?? null
   const incomeCategories = categories?.filter((category) => category.type === 'INCOME') ?? null
 
@@ -122,10 +123,9 @@ function BudgetsView({ settings, thisMonth }: { settings: MoneySettings; thisMon
     <section className="tx-page budget-page">
       <div className="tx-title">
         <h1>budgets</h1>
-        <label className="budget-date">
-          date
+        <div className="budget-date">
           <DateScroll announce="date" kind="month" value={month} onChange={setMonth} />
-        </label>
+        </div>
       </div>
       <p className="notice">{message}</p>
       <div className="budget-split wide">
@@ -178,76 +178,68 @@ function BudgetHalf({
   overview: Overview | null
   amounts: Map<string, string>
   categories: Category[] | null
-  money: (amount: string | null) => string
+  money: (amount: string) => string
   onGlobal: (type: Side, raw: string) => Promise<string | null>
   onCategory: (category: Category, raw: string) => Promise<string | null>
 }) {
   const budgeted = overview?.budgeted ?? ''
-  const saveLabel = type === 'INCOME' ? 'income' : 'expense'
+  const over = overview !== null && overview.overAllocated && overview.budgeted !== null
   return (
     <section className="budget-half">
       <h2>{title}</h2>
-      {overview ? (
-        <>
-          <p>budgeted {money(overview.budgeted)}</p>
-          <p>allocated {money(overview.allocated)}</p>
-          <p>unallocated {money(overview.unallocated)}</p>
-          {overview.overAllocated && overview.budgeted !== null ? (
-            <p className="warn">category budgets exceed the global budget.</p>
-          ) : null}
-        </>
-      ) : null}
-      <h2>global {saveLabel} budget</h2>
-      <AmountRow
-        key={`${type}:${month}:${budgeted}`}
-        label={`global ${saveLabel} amount`}
-        value={budgeted}
-        onSave={(raw) => onGlobal(type, raw)}
-      />
-      <p>blank clears the budget.</p>
-      {categories ? (
-        <ul className="rows" key={month}>
+      <div className="budget-table">
+        <BudgetRow
+          key={`${type}:${month}:${budgeted}`}
+          label="budget"
+          value={budgeted}
+          money={money}
+          onSave={(raw) => onGlobal(type, raw)}
+        />
+        {overview ? (
+          <>
+            <div className="budget-row quiet">
+              <span className="budget-label">allocated</span>
+              <span className="budget-amount">{money(overview.allocated)}</span>
+              <span className="budget-actions" />
+            </div>
+            <div className="budget-row quiet">
+              <span className="budget-label">unallocated</span>
+              <span className={over ? 'budget-amount over' : 'budget-amount'}>
+                {overview.unallocated === null ? '-' : money(overview.unallocated)}
+              </span>
+              <span className="budget-actions" />
+            </div>
+          </>
+        ) : null}
+      </div>
+      {categories && categories.length > 0 ? (
+        <div className="budget-table" key={month}>
           {categories.map((category) => (
-            <BudgetCategory
+            <BudgetRow
               key={category.id}
-              category={category}
-              amount={amounts.get(category.id) ?? ''}
-              onSave={onCategory}
+              label={category.name}
+              value={amounts.get(category.id) ?? ''}
+              money={money}
+              onSave={(raw) => onCategory(category, raw)}
             />
           ))}
-        </ul>
+        </div>
       ) : null}
       {categories && categories.length === 0 ? <p>no categories.</p> : null}
     </section>
   )
 }
 
-function BudgetCategory({
-  category,
-  amount,
-  onSave,
-}: {
-  category: Category
-  amount: string
-  onSave: (category: Category, raw: string) => Promise<string | null>
-}) {
-  return (
-    <li>
-      <div className="entry-row budget-line">
-        <p className="entry-main">{category.name}</p>
-        <AmountRow label={`${category.name} amount`} value={amount} onSave={(raw) => onSave(category, raw)} />
-      </div>
-    </li>
-  )
-}
-
-function AmountRow({
-  value,
+/** One amount that is plain text until "edit" is clicked. Saving an empty field removes the budget. */
+function BudgetRow({
   label,
+  value,
+  money,
   onSave,
 }: {
-  value: string
   label: string
+  value: string
+  money: (amount: string) => string
   onSave: (raw: string) => Promise<string | null>
 }) {
   const [editing, setEditing] = useState(false)
@@ -262,40 +254,66 @@ function AmountRow({
     if (editing) inputRef.current?.focus()
   }, [editing])
 
-  async function onSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    const errorText = await onSave(draft)
+  async function save(raw: string) {
+    const errorText = await onSave(raw)
     if (!errorText) setEditing(false)
   }
 
+  function onSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    void save(draft)
+  }
+
   return (
-    <form className="amount-row" onSubmit={(event) => void onSubmit(event)}>
-      <input
-        ref={inputRef}
-        aria-label={label}
-        inputMode="decimal"
-        autoComplete="off"
-        readOnly={!editing}
-        value={draft}
-        onChange={(event) => setDraft(event.target.value)}
-      />
-      {/* Distinct keys: reusing one button node and flipping its type to submit mid-click submits the form at once. */}
+    <form className="budget-row" onSubmit={onSubmit}>
+      <span className="budget-label">{label}</span>
       {editing ? (
-        <button key="save" type="submit">
-          save
-        </button>
-      ) : (
-        <button
-          key="edit"
-          type="button"
-          onClick={(event) => {
-            event.preventDefault()
-            setEditing(true)
+        <input
+          ref={inputRef}
+          aria-label={`${label} amount`}
+          inputMode="decimal"
+          autoComplete="off"
+          placeholder="0.00"
+          value={draft}
+          onChange={(event) => setDraft(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === 'Escape') setEditing(false)
           }}
-        >
-          edit
-        </button>
+        />
+      ) : (
+        <span className={value === '' || Number(value) === 0 ? 'budget-amount unset' : 'budget-amount'}>
+          {value === '' ? '-' : money(value)}
+        </span>
       )}
+      <span className="budget-actions">
+        {/* Distinct keys: reusing one button node and flipping its type to submit mid-click submits the form at once. */}
+        {editing ? (
+          <>
+            <button key="save" type="submit">
+              save
+            </button>
+            {value !== '' ? (
+              <button key="clear" type="button" onClick={() => void save('')}>
+                clear
+              </button>
+            ) : null}
+            <button key="cancel" type="button" onClick={() => setEditing(false)}>
+              cancel
+            </button>
+          </>
+        ) : (
+          <button
+            key="edit"
+            type="button"
+            onClick={(event) => {
+              event.preventDefault()
+              setEditing(true)
+            }}
+          >
+            edit
+          </button>
+        )}
+      </span>
     </form>
   )
 }
