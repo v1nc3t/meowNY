@@ -1,6 +1,6 @@
 # meowNY server
 
-Express API for meowNY. Phase 0 serves a health check and runs SQL migrations against Postgres.
+Express API for meowNY. It serves auth, the account, categories, transactions, and budgets, and runs the TypeScript migrations in `migrations/` against Postgres.
 
 ## Run
 
@@ -9,8 +9,8 @@ From the repo root:
 ```bash
 docker compose up -d
 cp .env.example .env   # skip if .env already has DATABASE_URL
-cd server
 npm install
+cd server
 npm run migrate
 npm run dev
 ```

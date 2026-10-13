@@ -44,10 +44,6 @@
     "kysely-codegen": "^0.20.0",
     "node-pg-migrate": "^9.0.0",
     "oxlint": "^1.87.0",
-    "tsx": "^4.23.15",
-    "typescript": "^6.0.3"
-  },
-  "allowScripts": {
-    "esbuild@0.28.2": true
+    "tsx": "^4.23.15"
   }
 }

@@ -1,5 +1,7 @@
--- Up Migration
+import type { MigrationBuilder } from 'node-pg-migrate';
 
+// Statistics and GDPR functions stay SQL. createFunction rewrites volatility, quoting, and RETURNS.
+const functions = `
 CREATE FUNCTION effective_budgets(p_user uuid, p_month date)
 RETURNS TABLE (type varchar, scope varchar, category_id bigint, amount_limit numeric)
 LANGUAGE sql STABLE AS $$
@@ -175,13 +177,18 @@ LANGUAGE sql STABLE AS $$
                          FROM audit_log h WHERE h.user_id = p_user), '[]'::jsonb)
   )
 $$;
+`;
 
--- Down Migration
+export function up(pgm: MigrationBuilder): void {
+  pgm.sql(functions);
+}
 
-DROP FUNCTION IF EXISTS export_user_data(uuid);
-DROP FUNCTION IF EXISTS run_scheduled_erasures(interval);
-DROP FUNCTION IF EXISTS erase_user(uuid);
-DROP FUNCTION IF EXISTS monthly_overview(uuid, date);
-DROP FUNCTION IF EXISTS category_trend(uuid, bigint, date, date);
-DROP FUNCTION IF EXISTS budget_vs_actual(uuid, date);
-DROP FUNCTION IF EXISTS effective_budgets(uuid, date);
+export function down(pgm: MigrationBuilder): void {
+  pgm.dropFunction('export_user_data', ['uuid'], { ifExists: true });
+  pgm.dropFunction('run_scheduled_erasures', ['interval'], { ifExists: true });
+  pgm.dropFunction('erase_user', ['uuid'], { ifExists: true });
+  pgm.dropFunction('monthly_overview', ['uuid', 'date'], { ifExists: true });
+  pgm.dropFunction('category_trend', ['uuid', 'bigint', 'date', 'date'], { ifExists: true });
+  pgm.dropFunction('budget_vs_actual', ['uuid', 'date'], { ifExists: true });
+  pgm.dropFunction('effective_budgets', ['uuid', 'date'], { ifExists: true });
+}

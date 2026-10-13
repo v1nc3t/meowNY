@@ -14,10 +14,14 @@ type MailLog = {
 
 /** Sends through SMTP. Defaults to the local Mailpit inbox. Logs only that a message went out. */
 export function smtpMailer(logger?: MailLog): Mailer {
+  const port = Number(process.env.SMTP_PORT || 1025);
+  const user = process.env.SMTP_USER;
   const transport = nodemailer.createTransport({
     host: process.env.SMTP_HOST || '127.0.0.1',
-    port: Number(process.env.SMTP_PORT || 1025),
-    secure: false,
+    port,
+    // Port 465 is TLS from the first byte. Other ports upgrade with STARTTLS when the server offers it.
+    secure: port === 465,
+    ...(user ? { auth: { user, pass: process.env.SMTP_PASS ?? '' } } : {}),
   });
   const from = process.env.SMTP_FROM || 'meowny@localhost';
   return async (mail) => {

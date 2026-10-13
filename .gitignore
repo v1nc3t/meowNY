@@ -18,6 +18,7 @@ Thumbs.db
 # Node
 node_modules/
 dist/
+.tmp/
 
 # Docker Infrastructure Local Databases
 # (Prevents raw DB volumes from being pushed to remote repos)

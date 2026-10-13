@@ -2,7 +2,7 @@
 
 What personal data this app is built to hold, why, where it lives, how long, and who else processes it. Update this page in every phase. This is a technical note, not a privacy policy.
 
-Status: after sign-in, onboarding records acceptance of the terms and privacy policy (version 2026-10-01) and the chosen currency. Email sign-up sends a verification link, and password reset sends a reset link. In development those messages go to local Mailpit over SMTP. The message contains the address and the link. Google sign-in is optional: when `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` are set, the browser is sent to Google, which returns the name, email, and whether that email is verified. Provider tokens are not stored. The demo seed is fixture data, not a person.
+Status: after sign-in, onboarding records acceptance of the terms and privacy policy (version 2026-10-01) and the chosen currency. Email sign-up sends a verification link, and password reset sends a reset link. In development those messages go to local Mailpit over SMTP. The message contains the address and the link. Google sign-in is optional: when `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` are set, the browser is sent to Google, which returns the name, email, and whether that email is verified. Provider tokens are not stored. The demo seed is fixture data, not a person. A signed-in user can create categories, transactions, and budgets in the app.
 
 | Data | Purpose | Where | Retention | Processor |
 |---|---|---|---|---|
@@ -14,7 +14,7 @@ Status: after sign-in, onboarding records acceptance of the terms and privacy po
 | Currency, locale, timezone | Display money and dates. Amounts are not converted when currency changes | `user_settings` | While the account exists | Local Postgres (the operator's machine in development) |
 | Consent purpose, policy version, granted and withdrawn times | Record which terms were accepted | `user_consents` | While the account exists | Local Postgres (the operator's machine in development) |
 | Privacy request type, status, times, orphaned user id | Proof a request was handled. No name or email | `privacy_requests` | Kept after erasure (id only) | Local Postgres (the operator's machine in development) |
-| Category groups, categories, budgets, transactions, recurring items | The budgeting product. Names and descriptions can reveal sensitive facts | those tables | While the account exists | Local Postgres (the operator's machine in development) |
+| Categories, budgets, transactions, recurring items | The budgeting product. Names and descriptions can reveal sensitive facts | those tables | While the account exists | Local Postgres (the operator's machine in development) |
 | History of creates, edits, and deletes | The user's own change history | `audit_log` | While the account exists, then erased with the account | Local Postgres (the operator's machine in development) |
 
 Server logs: method, path, status, duration, and that a mail was sent. No body, query string, headers, address, or link.

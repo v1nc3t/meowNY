@@ -15,38 +15,42 @@ export default function SignupPage() {
       password: String(form.get('password')),
       callbackURL: `${window.location.origin}/login`,
     })
-    setMessage(error ? 'Could not sign up.' : 'Check your email for a verification link.')
+    setMessage(
+      error
+        ? 'could not sign up.'
+        : `check your email for a verification link.${import.meta.env.DEV ? ' in development it arrives in the local inbox at http://127.0.0.1:8025.' : ''}`,
+    )
   }
 
   async function onGoogle() {
     const { error } = await signInWithGoogle()
-    if (error) setMessage('Google sign-in is unavailable.')
+    if (error) setMessage('google sign-in is unavailable.')
   }
 
   return (
     <form onSubmit={onSubmit}>
-      <h1>Sign up</h1>
+      <h1>sign up</h1>
       <label>
-        Name
+        name
         <input name="name" required autoComplete="name" />
       </label>
       <label>
-        Email
+        email
         <input name="email" type="email" required autoComplete="email" />
       </label>
       <label>
-        Password
+        password
         <input name="password" type="password" required minLength={8} autoComplete="new-password" />
       </label>
-      <button type="submit">Sign up</button>
+      <button type="submit">sign up</button>
       {google ? (
         <button type="button" onClick={() => void onGoogle()}>
-          Continue with Google
+          continue with google
         </button>
       ) : null}
-      <p>{message}</p>
+      <p className="notice">{message}</p>
       <p>
-        <Link to="/login">Log in</Link>
+        <Link to="/login">log in</Link>
       </p>
     </form>
   )

@@ -65,20 +65,11 @@ export interface Budgets {
 }
 
 export interface Categories {
-  category_group_id: Int8 | null;
   created_at: Generated<Timestamp>;
   deleted_at: Timestamp | null;
   id: Generated<Int8>;
   name: string;
   type: string;
-  updated_at: Generated<Timestamp>;
-  user_id: string;
-}
-
-export interface CategoryGroups {
-  created_at: Generated<Timestamp>;
-  id: Generated<Int8>;
-  name: string;
   updated_at: Generated<Timestamp>;
   user_id: string;
 }
@@ -180,7 +171,6 @@ export interface DB {
   audit_log: AuditLog;
   budgets: Budgets;
   categories: Categories;
-  category_groups: CategoryGroups;
   privacy_requests: PrivacyRequests;
   recurring_transactions: RecurringTransactions;
   sessions: Sessions;

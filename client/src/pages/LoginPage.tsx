@@ -15,7 +15,7 @@ export default function LoginPage() {
       password: String(form.get('password')),
     })
     if (error) {
-      setMessage(error.status === 403 ? 'Verify your email first.' : 'Wrong email or password.')
+      setMessage(error.status === 403 ? 'verify your email first.' : 'wrong email or password.')
       return
     }
     navigate('/app')
@@ -23,29 +23,29 @@ export default function LoginPage() {
 
   async function onGoogle() {
     const { error } = await signInWithGoogle()
-    if (error) setMessage('Google sign-in is unavailable.')
+    if (error) setMessage('google sign-in is unavailable.')
   }
 
   return (
     <form onSubmit={onSubmit}>
-      <h1>Log in</h1>
+      <h1>log in</h1>
       <label>
-        Email
+        email
         <input name="email" type="email" required autoComplete="email" />
       </label>
       <label>
-        Password
+        password
         <input name="password" type="password" required minLength={8} autoComplete="current-password" />
       </label>
-      <button type="submit">Log in</button>
+      <button type="submit">log in</button>
       {google ? (
         <button type="button" onClick={() => void onGoogle()}>
-          Continue with Google
+          continue with google
         </button>
       ) : null}
-      <p>{message}</p>
+      <p className="notice">{message}</p>
       <p>
-        <Link to="/forgot-password">Forgot password</Link>
+        <Link to="/forgot-password">forgot password</Link>
       </p>
     </form>
   )
