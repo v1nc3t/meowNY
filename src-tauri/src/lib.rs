@@ -1,3 +1,4 @@
+pub mod budgets;
 pub mod categories;
 pub mod clock;
 pub mod commands;
@@ -99,6 +100,8 @@ pub fn run() {
             commands::update_transaction,
             commands::delete_transaction,
             commands::today,
+            commands::set_budget,
+            commands::budget_overview,
         ])
         .run(tauri::generate_context!())
         .expect("error while running meowNY");

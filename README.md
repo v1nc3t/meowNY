@@ -2,7 +2,7 @@
 
 Local-first expense tracker. A Tauri desktop app (Rust) shows a React client and keeps all data in an encrypted SQLite file (SQLCipher) on your own machine. No server, no accounts, no telemetry. See `assets/PLAN.md` for the roadmap and `assets/data-inventory.md` for what data lives where.
 
-The app is mid-migration. The database, key handling, app lock and settings are done (phases 0 to 2). The budgeting screens (categories, transactions, budgets) still use the old Express/Postgres server until phase 3 moves them over. See [Old server (temporary)](#old-server-temporary).
+Categories, transactions and budgets work in the desktop app (phases 0 to 3). Recurring items, charts, backup, the CLI and phone sync are still to come; see the plan. The old Express/Postgres server is no longer used by the app, see [Old server (temporary)](#old-server-temporary).
 
 ## Requirements
 
@@ -27,7 +27,7 @@ The first run compiles the Rust side (a few minutes). It starts the Vite dev ser
 
 On first launch the app asks for a currency and an optional passphrase, then creates the encrypted data file. Settings (currency, locale, timezone, app lock, delete all data) are at `/app/settings`.
 
-Running `npm run dev --workspace client` on its own opens the client in a browser. That mode has no vault and no backend: the lock, first-run, settings and category screens only work in the desktop window. Pages not yet moved (transactions, budgets) still use the old server there.
+Running `npm run dev --workspace client` on its own opens the client in a browser, but there is no backend there: every screen talks to the Rust side, so it only works in the desktop window.
 
 ### Where the data lives
 
@@ -75,7 +75,7 @@ This creates a separate encrypted database with demo categories, budgets, recurr
 
 ## Old server (temporary)
 
-The `server/` package (Express, Better Auth, Postgres) and the pages that call it (login, signup, dashboard, transactions, categories, budgets, account) are being replaced in phase 3, then deleted. Until then they still work in a browser. These notes are for that code only.
+The `server/` package (Express, Better Auth, Postgres) is no longer used by the client and is only kept as a reference for the statistics and export logic that phases 5 and 6 rebuild. It can be deleted once those are done. These notes are for that code only.
 
 ### First-time setup
 

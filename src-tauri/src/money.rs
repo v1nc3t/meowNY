@@ -34,8 +34,11 @@ pub fn parse_positive_amount(text: &str) -> Result<i64, AppError> {
     }
 }
 
+/// Negative values appear in results such as "remaining" when spending passes the budget.
 pub fn format_amount(minor: i64) -> String {
-    format!("{}.{:02}", minor / 100, minor % 100)
+    let sign = if minor < 0 { "-" } else { "" };
+    let abs = minor.unsigned_abs();
+    format!("{sign}{}.{:02}", abs / 100, abs % 100)
 }
 
 #[cfg(test)]
@@ -72,6 +75,9 @@ mod tests {
         assert_eq!(format_amount(1), "0.01");
         assert_eq!(format_amount(1250), "12.50");
         assert_eq!(format_amount(MAX_MINOR), "9999999999.99");
+        assert_eq!(format_amount(0), "0.00");
+        assert_eq!(format_amount(-5), "-0.05");
+        assert_eq!(format_amount(-1250), "-12.50");
         for text in ["0.07", "3.10", "100.00", "9999999999.99"] {
             assert_eq!(format_amount(parse_amount(text).unwrap()), text);
         }

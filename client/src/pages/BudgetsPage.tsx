@@ -1,25 +1,26 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import DateScroll from '../DateScroll'
-import { api, errorMessage } from '../http'
+import { budgets as budgetsApi, MONTH, type Overview } from '../api/budgets'
+import { categories as categoriesApi, type Category } from '../api/categories'
+import { errorText } from '../api/invoke'
+import { useToday } from '../api/today'
 import { amountString, formatMoney } from '../money'
-import { useMoneySettings } from '../useMoneySettings'
+import { useMoneySettings, type MoneySettings } from '../useMoneySettings'
 
-type Category = { id: string; name: string; type: string }
 type Side = 'EXPENSE' | 'INCOME'
-type Overview = {
-  type: string
-  budgeted: string | null
-  allocated: string | null
-  unallocated: string | null
-  overAllocated: boolean
-  categories?: { categoryId: string; amountLimit: string }[]
-}
 
-const monthPattern = /^\d{4}-(?:0[1-9]|1[0-2])$/
+const monthPattern = MONTH
 
 export default function BudgetsPage() {
   const { settings, error } = useMoneySettings()
-  const [month, setMonth] = useState(() => thisMonth())
+  const now = useToday()
+  if (error) return <p className="notice">{error}</p>
+  if (!settings || !now) return null
+  return <BudgetsView settings={settings} thisMonth={now.month} />
+}
+
+function BudgetsView({ settings, thisMonth }: { settings: MoneySettings; thisMonth: string }) {
+  const [month, setMonth] = useState(thisMonth)
   const [overview, setOverview] = useState<Overview[] | null>(null)
   const [categories, setCategories] = useState<Category[] | null>(null)
   const [reload, setReload] = useState(0)
@@ -27,15 +28,16 @@ export default function BudgetsPage() {
 
   useEffect(() => {
     let cancelled = false
-    void api('/api/v1/categories').then(async (response) => {
-      if (cancelled) return
-      if (!response.ok) {
-        setMessage(await errorMessage(response))
+    void categoriesApi.list().then(
+      (list) => {
+        if (!cancelled) setCategories(list)
+      },
+      (failure) => {
+        if (cancelled) return
+        setMessage(errorText(failure))
         setCategories([])
-        return
-      }
-      setCategories((await response.json()) as Category[])
-    })
+      },
+    )
     return () => {
       cancelled = true
     }
@@ -47,15 +49,16 @@ export default function BudgetsPage() {
       return
     }
     let cancelled = false
-    void api(`/api/v1/budgets/overview?month=${month}`).then(async (response) => {
-      if (cancelled) return
-      if (!response.ok) {
-        setMessage(await errorMessage(response))
+    void budgetsApi.overview(month).then(
+      (result) => {
+        if (!cancelled) setOverview(result)
+      },
+      (failure) => {
+        if (cancelled) return
+        setMessage(errorText(failure))
         setOverview([])
-        return
-      }
-      setOverview((await response.json()) as Overview[])
-    })
+      },
+    )
     return () => {
       cancelled = true
     }
@@ -68,11 +71,11 @@ export default function BudgetsPage() {
     categoryId?: string
   }): Promise<string | null> {
     if (!monthPattern.test(month)) return 'choose a month.'
-    const response = await api('/api/v1/budgets', {
-      method: 'PUT',
-      body: JSON.stringify({ ...body, month }),
-    })
-    if (!response.ok) return errorMessage(response)
+    try {
+      await budgetsApi.set({ ...body, type: body.type as Side, month })
+    } catch (failure) {
+      return errorText(failure)
+    }
     setReload((value) => value + 1)
     return null
   }
@@ -109,9 +112,6 @@ export default function BudgetsPage() {
     setMessage(errorText ?? '')
     return errorText
   }
-
-  if (error) return <p className="notice">{error}</p>
-  if (!settings) return null
 
   const money = (amount: string | null) =>
     amount === null ? 'not set' : formatMoney(amount, settings.currency, settings.locale)
@@ -154,11 +154,6 @@ export default function BudgetsPage() {
       </div>
     </section>
   )
-}
-
-function thisMonth(): string {
-  const now = new Date()
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
 }
 
 function amountsFor(overview: Overview[] | null, type: Side): Map<string, string> {

@@ -6,6 +6,7 @@ use std::sync::Arc;
 use tauri::State;
 
 use crate::categories::{self, Category, CategoryType};
+use crate::budgets::{self, Budget, Overview, SetBudget};
 use crate::clock;
 use crate::transactions::{self, Filter, NewTransaction, Page, Transaction, TransactionPatch};
 use crate::vault::{AppError, LockPrefs, Settings, Vault, VaultStatus};
@@ -34,6 +35,8 @@ pub const COMMANDS: &[&str] = &[
     "update_transaction",
     "delete_transaction",
     "today",
+    "set_budget",
+    "budget_overview",
 ];
 
 #[tauri::command]
@@ -133,6 +136,16 @@ pub fn update_transaction(vault: Shared, id: String, patch: TransactionPatch) ->
 pub fn delete_transaction(vault: Shared, id: String) -> Result<(), AppError> {
     let id = categories::parse_id(&id)?;
     vault.with_conn(|c| transactions::delete(c, id))
+}
+
+#[tauri::command]
+pub fn set_budget(vault: Shared, input: SetBudget) -> Result<Budget, AppError> {
+    vault.with_conn(|c| budgets::set(c, &input))
+}
+
+#[tauri::command]
+pub fn budget_overview(vault: Shared, month: String) -> Result<Vec<Overview>, AppError> {
+    vault.with_conn(|c| budgets::overview(c, &month))
 }
 
 /// Today and this month in the user's timezone setting, so the UI never guesses from the browser clock.

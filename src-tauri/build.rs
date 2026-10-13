@@ -22,6 +22,8 @@ const COMMANDS: &[&str] = &[
     "update_transaction",
     "delete_transaction",
     "today",
+    "set_budget",
+    "budget_overview",
 ];
 
 fn main() {

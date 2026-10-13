@@ -24,6 +24,8 @@
     "allow-update-transaction",
     "allow-delete-transaction",
     "allow-today",
+    "allow-set-budget",
+    "allow-budget-overview",
     "core:event:allow-listen",
     "core:event:allow-unlisten",
     {

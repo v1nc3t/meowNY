@@ -107,13 +107,13 @@ Kept: the React client (`client/src`), Zod schemas, money and date logic, and th
 ## Phase 3: Core budgeting: categories, transactions, budgets (L)
 
 - [x] Existing React screens: category management, transaction form and list, budget setup (built against the old HTTP API)
-- [ ] Replace `client/src/http.ts` and the `fetch` calls with a typed command layer over Tauri (`invoke`), one place for validation and errors (In progress: the typed layer is `client/src/api/` with Zod-checked answers and fixed error codes, and categories, transactions and the settings hook already use it. Only the budgets page still calls `http.ts` and moves with its task; delete `http.ts` last.)
+- [x] Replace `client/src/http.ts` and the `fetch` calls with a typed command layer over Tauri (`invoke`), one place for validation and errors (`client/src/api/`: answers are checked with Zod, failures are fixed codes. `http.ts`, the login/signup/account/landing/legal pages, `ProtectedRoute` and the `better-auth` client dependency are deleted; the app opens straight into `/app` behind the vault gate.)
 - [x] Categories CRUD. Soft delete writes the NULL budget row (schema Part 5-A). (`src-tauri/src/categories.rs`; names trimmed, 1 to 50 characters, unique among active categories of a type; the NULL budget row uses the current month in the user's timezone.)
 - [x] Transactions CRUD with filters (date range, category, text), pagination, and `client_uuid` idempotency. Amount rules: positive, two decimals, sent as strings. (`src-tauri/src/transactions.rs`, `money.rs`. Amounts cross the boundary as `"12.50"` strings and are stored as integer cents. Two decimals are assumed for every currency; JPY or BHD need a per-currency exponent later. Text search ignores case for ASCII letters only.)
-- [ ] Budgets: set / remove a GLOBAL or CATEGORY budget from a given month, for both EXPENSE and INCOME
-- [ ] Budget overview: allocated vs unallocated, with a warning when categories exceed the global budget
-- [ ] Month filters and "current month" use the timezone setting, with a test around midnight at month end (Started: `src-tauri/src/clock.rs` computes the month start in the timezone setting, with tests around midnight at month end and year end. The `today` command gives the UI the date and month in that timezone and the transactions page uses it; the budget page is still to do.)
-- [ ] Tests: carry-over (a March budget applies in June until changed), removal via NULL, income budgets, idempotent create
+- [x] Budgets: set / remove a GLOBAL or CATEGORY budget from a given month, for both EXPENSE and INCOME (`src-tauri/src/budgets.rs`. Month is `YYYY-MM` and applies from then on; a null limit removes the budget from that month and keeps history. Category budgets must match the category type and be active.)
+- [x] Budget overview: allocated vs unallocated, with a warning when categories exceed the global budget (Per side: budgeted, allocated, unallocated, actual, remaining and an over-allocated flag, computed from the effective budgets.)
+- [x] Month filters and "current month" use the timezone setting, with a test around midnight at month end (`clock.rs` computes today and the month in the timezone setting; the transactions and budgets pages use it through the `today` command. Tests cover midnight at month end and year end.)
+- [x] Tests: carry-over (a March budget applies in June until changed), removal via NULL, income budgets, idempotent create (`budgets.rs`, `transactions.rs`, `categories.rs`, `clock.rs`.)
 
 **Done when:** you can record income and expenses, set monthly budgets and category allocations, change them, and old months keep their old limits, all inside the desktop app.
 
