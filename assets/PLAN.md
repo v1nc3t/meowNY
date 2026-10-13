@@ -92,15 +92,15 @@ Kept: the React client (`client/src`), Zod schemas, money and date logic, and th
 
 ## Phase 2: App security (M)
 
-- [ ] Database encrypted at rest. The key comes from the OS keychain, optionally combined with a passphrase.
-- [ ] App lock: lock on idle timeout and on window close/minimize (configurable), optional biometrics where the OS offers it. Locked means the key is dropped from memory.
-- [ ] Tauri hardening: strict CSP, no remote content, minimal allowed commands, no shell access from the webview, external links open in the system browser
-- [ ] No network access unless a feature the user turned on needs it. A test or CI check lists every outbound call site.
-- [ ] Safe logging: logs and crash reports never contain amounts, descriptions or keys
-- [ ] "Delete all my data" action: wipes the database, keys and backups the app created, with confirmation
-- [ ] Settings: currency, locale, timezone (carried over from the old account page)
-- [ ] First-run screen: choose currency, set lock method, show where the data file lives
-- [ ] Tests: wrong key cannot open the file, locked state holds no key, the database file contains no plaintext
+- [x] Database encrypted at rest. The key comes from the OS keychain, optionally combined with a passphrase. (`src-tauri/src/keys.rs`, `vault.rs`: random secret in the OS keychain; with a passphrase the key is HKDF(secret + Argon2id(passphrase)).)
+- [x] App lock: lock on idle timeout and on window close/minimize (configurable), optional biometrics where the OS offers it. Locked means the key is dropped from memory. (Idle timeout, minimize and close, configurable; connection closed on lock. Biometrics are not done: they need a platform plugin per OS and are left for later.)
+- [x] Tauri hardening: strict CSP, no remote content, minimal allowed commands, no shell access from the webview, external links open in the system browser (Strict CSP, one permission per command, navigation guard, https links via the opener plugin.)
+- [x] No network access unless a feature the user turned on needs it. A test or CI check lists every outbound call site. (`npm run check:outbound` in CI, allowlist in `scripts/outbound-allowlist.txt`. The old client code that still calls the server API is listed there and goes in phase 3.)
+- [x] Safe logging: logs and crash reports never contain amounts, descriptions or keys (Fixed error codes only, panic hook prints the location only.)
+- [x] "Delete all my data" action: wipes the database, keys and backups the app created, with confirmation (Needs typing DELETE. Also removes the keychain secret, which makes any leftover copy of the file unreadable.)
+- [x] Settings: currency, locale, timezone (carried over from the old account page) (`client/src/pages/SettingsPage.tsx`, route `/app/settings`. The old `AccountPage` is removed in phase 3.)
+- [x] First-run screen: choose currency, set lock method, show where the data file lives (`client/src/vault/`.)
+- [x] Tests: wrong key cannot open the file, locked state holds no key, the database file contains no plaintext (Rust tests in `vault.rs`, `keys.rs`, `commands.rs`, `lib.rs`.)
 
 **Done when:** the data file is unreadable without the key, the app locks itself, and you can wipe everything.
 

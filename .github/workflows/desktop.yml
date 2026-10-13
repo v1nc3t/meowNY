@@ -9,6 +9,7 @@ on:
       - 'client/**'
       - 'package.json'
       - 'package-lock.json'
+      - 'scripts/**'
       - '.github/workflows/desktop.yml'
   pull_request:
     paths:
@@ -16,6 +17,7 @@ on:
       - 'client/**'
       - 'package.json'
       - 'package-lock.json'
+      - 'scripts/**'
       - '.github/workflows/desktop.yml'
 
 # A newer push to the same branch makes the older run pointless.
@@ -75,6 +77,9 @@ jobs:
 
       - name: Install
         run: npm ci
+
+      - name: Outbound network call sites
+        run: npm run check:outbound
 
       - name: Rust tests
         working-directory: src-tauri

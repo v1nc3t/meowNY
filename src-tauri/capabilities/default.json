@@ -1,7 +1,25 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Minimal permissions for the main window",
+  "description": "Minimal permissions for the main window: the vault commands and opening https links in the system browser",
   "windows": ["main"],
-  "permissions": []
+  "permissions": [
+    "allow-vault-status",
+    "allow-create-vault",
+    "allow-unlock-vault",
+    "allow-lock-vault",
+    "allow-touch-activity",
+    "allow-get-settings",
+    "allow-save-settings",
+    "allow-get-lock-prefs",
+    "allow-save-lock-prefs",
+    "allow-data-location",
+    "allow-wipe-all-data",
+    "core:event:allow-listen",
+    "core:event:allow-unlisten",
+    {
+      "identifier": "opener:allow-open-url",
+      "allow": [{ "url": "https://*" }]
+    }
+  ]
 }

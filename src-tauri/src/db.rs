@@ -6,11 +6,17 @@ use std::path::Path;
 use rusqlite::Connection;
 
 /// A raw 256-bit database key. Phase 2 decides where it comes from (OS keychain, passphrase).
+#[derive(zeroize::Zeroize, zeroize::ZeroizeOnDrop)]
 pub struct DbKey([u8; 32]);
 
 impl DbKey {
     pub fn from_bytes(bytes: [u8; 32]) -> Self {
         Self(bytes)
+    }
+
+    #[cfg(test)]
+    pub fn pragma_value_for_tests(&self) -> String {
+        self.pragma_value()
     }
 
     /// SQLCipher raw-key syntax: skips the passphrase KDF, so the key must be random.
@@ -61,7 +67,8 @@ pub fn open_and_migrate(path: &Path, key: &DbKey) -> Result<Connection, DbError>
 /// Opens the database at `path`, creating it if missing, and unlocks it with `key`.
 pub fn open(path: &Path, key: &DbKey) -> Result<Connection, DbError> {
     let conn = Connection::open(path)?;
-    conn.execute_batch(&format!("PRAGMA key = {};", key.pragma_value()))?;
+    let pragma = zeroize::Zeroizing::new(format!("PRAGMA key = {};", key.pragma_value()));
+    conn.execute_batch(&pragma)?;
 
     let cipher: Option<String> = conn
         .query_row("PRAGMA cipher_version", [], |row| row.get(0))

@@ -6,6 +6,7 @@ const items = [
   { to: '/app/categories', label: 'categories', icon: 'categories' },
   { to: '/app/budgets', label: 'budgets', icon: 'budgets' },
   { to: '/app/account', label: 'account', icon: 'account' },
+  { to: '/app/settings', label: 'settings', icon: 'account' },
 ] as const
 
 export default function AppSidebar({
