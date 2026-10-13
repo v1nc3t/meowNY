@@ -1,3 +1,5 @@
+import { activeLanguage } from '../i18n/translate'
+
 /** Currencies offered in the picker. Any three-letter code is accepted by the backend; this is the list people choose from. */
 export const CURRENCIES = [
   ['AED', 'UAE dirham'],
@@ -51,14 +53,23 @@ export const CURRENCIES = [
   ['ZAR', 'South African rand'],
 ] as const
 
-export function currencyName(code: string): string {
+/** The currency's name in `language` when the system knows it, else the English name from the list, else ''. */
+export function currencyName(code: string, language = activeLanguage()): string {
+  try {
+    const name = new Intl.DisplayNames([language], { type: 'currency' }).of(code)
+    if (name && name !== code) return name
+  } catch {
+    // Fall back to the English name below.
+  }
   return CURRENCIES.find(([known]) => known === code)?.[1] ?? ''
 }
 
-/** "EUR  euro", or just the code for one that is not in the list. */
-export function currencyLabel(code: string): string {
-  const name = currencyName(code)
+/** "EUR  euro", or just the code for one with no known name. */
+export function currencyLabel(code: string, language = activeLanguage()): string {
+  const name = currencyName(code, language)
   return name ? `${code}  ${name.toLowerCase()}` : code
 }
 
-export const currencyOptions = CURRENCIES.map(([code]) => ({ value: code, label: currencyLabel(code) }))
+export function currencyOptions(language = activeLanguage()): { value: string; label: string }[] {
+  return CURRENCIES.map(([code]) => ({ value: code, label: currencyLabel(code, language) }))
+}

@@ -1,3 +1,5 @@
+import { activeLanguage } from '../i18n/translate'
+
 /** Common number and date formats, offered after the ones the system itself prefers. */
 const COMMON_LOCALES = [
   'en-US', 'en-GB', 'en-IE', 'en-AU', 'en-CA', 'en-NZ', 'en-IN', 'en-ZA',
@@ -43,9 +45,9 @@ export function localeChoices(
 }
 
 /** "en-IE  English (Ireland)", or just the tag when the system has no name for it. */
-export function localeLabel(tag: string): string {
+export function localeLabel(tag: string, language = activeLanguage()): string {
   try {
-    const name = new Intl.DisplayNames(['en'], { type: 'language', languageDisplay: 'standard' }).of(tag)
+    const name = new Intl.DisplayNames([language], { type: 'language', languageDisplay: 'standard' }).of(tag)
     return name && name !== tag ? `${tag}  ${name.toLowerCase()}` : tag
   } catch {
     return tag
@@ -72,4 +74,19 @@ export function timeZoneChoices(all: readonly string[] | null, system: string, c
   const rest = [...new Set([...(all ?? COMMON_TIME_ZONES), 'UTC'])].sort()
   const first = [current, system].filter((zone, index, list) => zone && list.indexOf(zone) === index)
   return [...first, ...rest.filter((zone) => !first.includes(zone))]
+}
+
+/** Format choices as dropdown options: the system's preferred formats first, then common ones. */
+export function localeOptions(current: string, language = activeLanguage()): { value: string; label: string }[] {
+  const supported = (tag: string) => Intl.NumberFormat.supportedLocalesOf(tag).length > 0
+  return localeChoices(current, typeof navigator === 'undefined' ? [] : navigator.languages ?? [], supported).map(
+    (tag) => ({ value: tag, label: localeLabel(tag, language) }),
+  )
+}
+
+/** Time zone choices as dropdown options: every zone the system knows, the current and the system's own first. */
+export function zoneOptions(current: string): { value: string; label: string }[] {
+  const all = typeof Intl.supportedValuesOf === 'function' ? Intl.supportedValuesOf('timeZone') : null
+  const system = Intl.DateTimeFormat().resolvedOptions().timeZone
+  return timeZoneChoices(all, system, current).map((zone) => ({ value: zone, label: zone }))
 }

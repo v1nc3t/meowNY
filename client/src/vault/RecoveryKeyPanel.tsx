@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { errorText, vault } from './api'
 import { useNotice } from '../useNotice'
+import { useT } from '../i18n/context'
 
 /**
  * Shows a recovery key. The app does not keep it, so this is the only time it can be read.
@@ -20,6 +21,7 @@ export default function RecoveryKeyPanel({
   /** Shown inside a page section: a smaller heading and no big title. */
   inline?: boolean
 }) {
+  const t = useT()
   const [saved, setSaved] = useState(!confirm)
   const [copied, setCopied] = useState(false)
   const [downloaded, setDownloaded] = useState(false)
@@ -47,20 +49,17 @@ export default function RecoveryKeyPanel({
 
   return (
     <div className="panel">
-      {inline ? null : <h1>your recovery key</h1>}
-      <p className="hint">
-        this is the only way back in if you forget your passphrase. it is shown once and the app does not keep a copy.
-        keep it somewhere safe, away from this computer.
-      </p>
-      <p className="recovery-code" aria-label="recovery key">
+      {inline ? null : <h1>{t('recovery.yourTitle')}</h1>}
+      <p className="hint">{t('recovery.shownOnce')}</p>
+      <p className="recovery-code" aria-label={t('recovery.label')}>
         {code}
       </p>
       <div className="actions">
         <button type="button" onClick={() => void copy()}>
-          {copied ? 'copied' : 'copy'}
+          {copied ? t('common.copied') : t('common.copy')}
         </button>
         <button type="button" onClick={() => void download()}>
-          {downloaded ? 'downloaded' : 'download'}
+          {downloaded ? t('common.downloaded') : t('common.download')}
         </button>
       </div>
       <p className="notice" role="alert">
@@ -69,7 +68,7 @@ export default function RecoveryKeyPanel({
       {confirm && (
         <label className="check">
           <input type="checkbox" checked={saved} onChange={(event) => setSaved(event.target.checked)} />
-          i saved my recovery key
+          {t('recovery.saved')}
         </label>
       )}
       <button type="button" disabled={!saved} onClick={onDone}>

@@ -1,18 +1,26 @@
 import { useEffect, useState, type FormEvent } from 'react'
-import { errorText, vault } from './api'
 import { currencyOptions } from '../api/currencies'
+import { formatExample, localeOptions, zoneOptions } from '../api/locales'
 import Dropdown from '../components/Dropdown'
+import { useI18n } from '../i18n/context'
+import { languageOptions } from '../i18n/languages'
+import { useNotice } from '../useNotice'
+import { errorText, vault } from './api'
 import PasswordField from './PasswordField'
 import RecoveryKeyPanel from './RecoveryKeyPanel'
 import { defaultSettings, isCurrency, normalizeCurrency, passphraseProblem } from './rules'
-import { useNotice } from '../useNotice'
 
+/** First run: language, region, currency and security, all in one place, each starting from what the system suggests. */
 export default function FirstRunScreen({ onDone }: { onDone: () => void }) {
+  const { t, language, setLanguage } = useI18n()
   const [location, setLocation] = useState('')
   const [message, setMessage] = useNotice()
   const [busy, setBusy] = useState(false)
   const [recoveryKey, setRecoveryKey] = useState<string | null>(null)
+  const [suggested] = useState(defaultSettings)
   const [currency, setCurrency] = useState('')
+  const [locale, setLocale] = useState(suggested.locale)
+  const [timezone, setTimezone] = useState(suggested.timezone)
 
   useEffect(() => {
     vault.dataLocation().then(setLocation, () => setLocation(''))
@@ -23,14 +31,15 @@ export default function FirstRunScreen({ onDone }: { onDone: () => void }) {
     const form = new FormData(event.currentTarget)
     const passphrase = String(form.get('passphrase'))
     const problem = passphraseProblem(passphrase, String(form.get('confirm')))
-    if (!isCurrency(currency)) return setMessage('choose your currency.')
+    if (!isCurrency(currency)) return setMessage(t('welcome.currencyError'))
     if (problem) return setMessage(problem)
 
     setBusy(true)
     try {
-      const defaults = defaultSettings()
       // The data file exists from here on, but the app stays on this screen until the key is saved.
-      setRecoveryKey(await vault.create({ ...defaults, currency: normalizeCurrency(currency) }, passphrase))
+      setRecoveryKey(
+        await vault.create({ currency: normalizeCurrency(currency), locale, timezone, language }, passphrase),
+      )
     } catch (error) {
       setMessage(errorText(error))
       setBusy(false)
@@ -40,7 +49,7 @@ export default function FirstRunScreen({ onDone }: { onDone: () => void }) {
   if (recoveryKey) {
     return (
       <main className="gate">
-        <RecoveryKeyPanel code={recoveryKey} confirm doneLabel="continue" onDone={onDone} />
+        <RecoveryKeyPanel code={recoveryKey} confirm doneLabel={t('common.continue')} onDone={onDone} />
       </main>
     )
   }
@@ -49,39 +58,53 @@ export default function FirstRunScreen({ onDone }: { onDone: () => void }) {
     <main className="gate">
       <form onSubmit={onSubmit}>
         <p className="brand-mark">meowny</p>
-        <h1>welcome</h1>
-        <p className="hint">your data stays on this computer, encrypted. nothing is sent anywhere.</p>
+        <h1>{t('welcome.title')}</h1>
+        <p className="hint">{t('welcome.intro')}</p>
 
         <Dropdown
-          label="currency"
-          name="currency"
-          value={currency}
-          options={currencyOptions}
-          onChange={setCurrency}
-          placeholder="choose your currency"
+          label={t('welcome.language')}
+          value={language}
+          options={languageOptions}
+          onChange={setLanguage}
         />
-        <p className="hint">you can change it later and convert your amounts.</p>
+        <p className="hint">{t('welcome.languageHint')}</p>
 
-        <PasswordField label="passphrase (optional)" name="passphrase" />
-        <PasswordField label="repeat passphrase" name="confirm" />
-        <p className="hint">
-          leave it empty and the app opens when you log in to this computer. set one and you type it every time you
-          unlock.
-        </p>
+        <Dropdown
+          label={t('welcome.format')}
+          value={locale}
+          options={localeOptions(locale)}
+          onChange={setLocale}
+        />
+        <p className="hint">{formatExample(locale, currency || 'EUR')}</p>
+        <p className="hint">{t('welcome.formatHint')}</p>
+
+        <Dropdown label={t('welcome.timezone')} value={timezone} options={zoneOptions(timezone)} onChange={setTimezone} />
+
+        <Dropdown
+          label={t('welcome.currency')}
+          value={currency}
+          options={currencyOptions()}
+          onChange={setCurrency}
+          placeholder={t('welcome.currencyChoose')}
+        />
+        <p className="hint">{t('welcome.currencyHint')}</p>
+
+        <PasswordField label={t('welcome.passphrase')} name="passphrase" />
+        <PasswordField label={t('welcome.passphraseRepeat')} name="confirm" />
+        <p className="hint">{t('welcome.passphraseHint')}</p>
 
         <p className="warning" role="note">
-          you get a recovery key on the next screen. if you forget the passphrase, it is the only way back in. lose both
-          and your data is gone for good.
+          {t('welcome.warning')}
         </p>
 
         {location && (
           <p className="hint">
-            data file location: <code>{location}</code>
+            {t('welcome.location')} <code>{location}</code>
           </p>
         )}
 
         <button type="submit" disabled={busy}>
-          create encrypted data file
+          {t('welcome.create')}
         </button>
         <p className="notice" role="alert">
           {message}

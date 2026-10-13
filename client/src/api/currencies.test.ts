@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { CURRENCIES, currencyLabel, currencyName } from './currencies.ts'
+import { CURRENCIES, currencyLabel, currencyName, currencyOptions } from './currencies.ts'
 
 test('every listed code is three capital letters and appears once, in order', () => {
   const codes = CURRENCIES.map(([code]) => code)
@@ -10,7 +10,14 @@ test('every listed code is three capital letters and appears once, in order', ()
 })
 
 test('labels show the code and a lower-case name, and fall back to the bare code', () => {
-  assert.equal(currencyName('EUR'), 'Euro')
-  assert.equal(currencyLabel('USD'), 'USD  us dollar')
-  assert.equal(currencyLabel('XYZ'), 'XYZ')
+  assert.equal(currencyName('EUR', 'en'), 'Euro')
+  assert.equal(currencyLabel('USD', 'en'), 'USD  us dollar')
+  assert.equal(currencyLabel('XYZ', 'en'), 'XYZ')
+})
+
+test('currency names follow the language', () => {
+  assert.equal(currencyName('EUR', 'de'), 'Euro')
+  assert.equal(currencyName('USD', 'de'), 'US-Dollar')
+  assert.equal(currencyName('JPY', 'ro'), 'yen japonez')
+  assert.equal(currencyOptions('fr').length, CURRENCIES.length)
 })

@@ -1,14 +1,15 @@
 import { NavLink, Link } from 'react-router-dom'
 import { vault } from '../vault/api'
+import { useT } from '../i18n/context'
 
 const YEAR = new Date().getFullYear()
 
 const items = [
-  { to: '/app/dashboard', label: 'dashboard', icon: 'dashboard' },
-  { to: '/app/transactions', label: 'transactions', icon: 'transactions' },
-  { to: '/app/categories', label: 'categories', icon: 'categories' },
-  { to: '/app/budgets', label: 'budgets', icon: 'budgets' },
-  { to: '/app/settings', label: 'settings', icon: 'settings' },
+  { to: '/app/dashboard', label: 'nav.dashboard', icon: 'dashboard' },
+  { to: '/app/transactions', label: 'nav.transactions', icon: 'transactions' },
+  { to: '/app/categories', label: 'nav.categories', icon: 'categories' },
+  { to: '/app/budgets', label: 'nav.budgets', icon: 'budgets' },
+  { to: '/app/settings', label: 'nav.settings', icon: 'settings' },
 ] as const
 
 export default function AppSidebar({
@@ -18,6 +19,7 @@ export default function AppSidebar({
   collapsed: boolean
   onToggle: () => void
 }) {
+  const t = useT()
   return (
     <aside className="app-sidebar">
       <div className="sidebar-header">
@@ -28,7 +30,7 @@ export default function AppSidebar({
           type="button"
           className="sidebar-toggle"
           aria-expanded={!collapsed}
-          aria-label={collapsed ? 'expand sidebar' : 'collapse sidebar'}
+          aria-label={collapsed ? t('nav.expand') : t('nav.collapse')}
           onClick={onToggle}
         >
           {collapsed ? <span className="toggle-logo">m</span> : null}
@@ -41,12 +43,12 @@ export default function AppSidebar({
           <NavLink
             key={item.to}
             to={item.to}
-            title={item.label}
-            aria-label={item.label}
+            title={t(item.label)}
+            aria-label={t(item.label)}
             className={({ isActive }) => (isActive ? 'nav-item active' : 'nav-item')}
           >
             <Icon name={item.icon} />
-            <span className="nav-label">{item.label}</span>
+            <span className="nav-label">{t(item.label)}</span>
           </NavLink>
         ))}
       </nav>
@@ -55,11 +57,11 @@ export default function AppSidebar({
         <button
           type="button"
           className="exit-btn"
-          title="lock the app"
+          title={t('nav.lockTitle')}
           onClick={() => void vault.lock().then(() => window.location.reload(), () => undefined)}
         >
           <Icon name="exit" />
-          <span className="nav-label">lock</span>
+          <span className="nav-label">{t('nav.lock')}</span>
         </button>
         <div className="sidebar-legal nav-label">
           <span>© {YEAR} meowny</span>

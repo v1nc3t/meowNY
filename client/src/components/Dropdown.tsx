@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { place } from '../placeList'
+import { useT } from '../i18n/context'
 
 export type DropdownOption = { value: string; label: string }
 
@@ -13,7 +14,7 @@ export default function Dropdown({
   value,
   options,
   onChange,
-  placeholder = 'choose',
+  placeholder,
   action,
   compact = false,
 }: {
@@ -27,6 +28,7 @@ export default function Dropdown({
   /** No visible label above the button; the label is kept for screen readers. */
   compact?: boolean
 }) {
+  const t = useT()
   const [host, setHost] = useState<HTMLElement | null>(null)
   const rootRef = useRef<HTMLDivElement>(null)
   const buttonRef = useRef<HTMLButtonElement>(null)
@@ -99,7 +101,7 @@ export default function Dropdown({
           openList()
         }}
       >
-        {selected ? selected.label : placeholder}
+        {selected ? selected.label : (placeholder ?? t('common.choose'))}
       </button>
       {name ? <input type="hidden" name={name} value={value} /> : null}
       {host

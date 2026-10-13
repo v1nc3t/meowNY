@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from 'react'
 import { currencyOptions } from '../api/currencies'
+import { useT } from '../i18n/context'
 import { errorText } from '../api/invoke'
 import { convertAmount, parseRate } from '../money'
 import { vault } from '../vault/api'
@@ -21,28 +22,29 @@ export default function ChangeCurrencyModal({
   onClose: () => void
   onChanged: (currency: string, summary: string) => void
 }) {
+  const t = useT()
   const [next, setNext] = useState('')
   const [rate, setRate] = useState('')
   const [labelOnly, setLabelOnly] = useState(false)
   const [message, setMessage] = useState('')
   const [pending, setPending] = useState(false)
 
-  const options = currencyOptions.filter((option) => option.value !== current)
+  const options = currencyOptions().filter((option) => option.value !== current)
   const preview = !labelOnly && next ? convertAmount('100.00', rate.trim()) : null
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (pending) return
-    if (!next) return setMessage('choose a currency.')
-    if (!labelOnly && !parseRate(rate.trim())) return setMessage('enter the exchange rate, like 1.08.')
+    if (!next) return setMessage(t('currency.chooseError'))
+    if (!labelOnly && !parseRate(rate.trim())) return setMessage(t('currency.rateError'))
     setPending(true)
     try {
       const done = await vault.changeCurrency(next, labelOnly ? null : rate.trim())
       onChanged(
         next,
         labelOnly
-          ? `currency is now ${next}. amounts were not changed.`
-          : `converted to ${next}: ${done.transactions} transactions, ${done.recurring} recurring, ${done.budgets} budgets.`,
+          ? t('currency.relabelled', { to: next })
+          : t('currency.converted', { to: next, transactions: done.transactions, recurring: done.recurring, budgets: done.budgets }),
       )
     } catch (error) {
       setMessage(errorText(error))
@@ -51,18 +53,18 @@ export default function ChangeCurrencyModal({
   }
 
   return (
-    <Modal title="change currency" pending={pending} formId={formId} onClose={onClose}>
+    <Modal title={t('currency.changeTitle')} pending={pending} formId={formId} onClose={onClose}>
       <p className="notice">{message}</p>
       <form id={formId} onSubmit={(event) => void onSubmit(event)}>
         <Dropdown
-          label="new currency"
+          label={t('currency.new')}
           value={next}
           options={options}
           onChange={setNext}
-          placeholder="choose a currency"
+          placeholder={t('currency.choose')}
         />
         <label>
-          {next ? `rate: 1 ${current} = ? ${next}` : 'rate'}
+          {next ? t('currency.rateFor', { from: current, to: next }) : t('currency.rate')}
           <input
             inputMode="decimal"
             autoComplete="off"
@@ -74,12 +76,12 @@ export default function ChangeCurrencyModal({
         </label>
         {preview ? (
           <p className="hint">
-            100.00 {current} becomes {preview} {next}
+            {t('currency.preview', { from: current, to: next, to_amount: preview })}
           </p>
         ) : null}
         <label className="check">
           <input type="checkbox" checked={labelOnly} onChange={(event) => setLabelOnly(event.target.checked)} />
-          only change the label, keep amounts
+          {t('currency.labelOnly')}
         </label>
       </form>
     </Modal>

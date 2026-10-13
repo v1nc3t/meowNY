@@ -8,6 +8,7 @@ import { useToday } from '../api/today'
 import { amountString, formatMoney } from '../money'
 import { useMoneySettings, type MoneySettings } from '../useMoneySettings'
 import { useNotice } from '../useNotice'
+import { useI18n, useT } from '../i18n/context'
 
 type Side = 'EXPENSE' | 'INCOME'
 
@@ -22,6 +23,7 @@ export default function BudgetsPage() {
 }
 
 function BudgetsView({ settings, thisMonth }: { settings: MoneySettings; thisMonth: string }) {
+  const { t, language } = useI18n()
   const [month, setMonth] = useState(thisMonth)
   const [overview, setOverview] = useState<Overview[] | null>(null)
   const [history, setHistory] = useState<MonthHistory[] | null>(null)
@@ -45,7 +47,7 @@ function BudgetsView({ settings, thisMonth }: { settings: MoneySettings; thisMon
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [setMessage])
 
   useEffect(() => {
     if (!monthPattern.test(month)) {
@@ -66,7 +68,7 @@ function BudgetsView({ settings, thisMonth }: { settings: MoneySettings; thisMon
     return () => {
       cancelled = true
     }
-  }, [month, reload])
+  }, [month, reload, setMessage])
 
   useEffect(() => {
     let cancelled = false
@@ -87,7 +89,7 @@ function BudgetsView({ settings, thisMonth }: { settings: MoneySettings; thisMon
     amountLimit: string | null
     categoryId?: string
   }): Promise<string | null> {
-    if (!monthPattern.test(month)) return 'choose a month.'
+    if (!monthPattern.test(month)) return t('budgets.chooseMonth')
     try {
       await budgetsApi.set({ ...body, type: body.type as Side, month })
     } catch (failure) {
@@ -107,7 +109,7 @@ function BudgetsView({ settings, thisMonth }: { settings: MoneySettings; thisMon
 
   async function onGlobal(type: Side, raw: string): Promise<string | null> {
     const amountLimit = amountFrom(raw)
-    if (amountLimit === undefined) return 'enter an amount with at most two decimals, or leave it blank to clear.'
+    if (amountLimit === undefined) return t('budgets.amountError')
     const errorText = await save({ type, scope: 'GLOBAL', amountLimit })
     setMessage(errorText ?? '')
     return errorText
@@ -116,7 +118,7 @@ function BudgetsView({ settings, thisMonth }: { settings: MoneySettings; thisMon
   async function onCategory(category: Category, raw: string): Promise<string | null> {
     const amountLimit = amountFrom(raw)
     if (amountLimit === undefined) {
-      const errorText = 'enter an amount with at most two decimals, or leave it blank to clear.'
+      const errorText = t('budgets.amountError')
       setMessage(errorText)
       return errorText
     }
@@ -139,21 +141,21 @@ function BudgetsView({ settings, thisMonth }: { settings: MoneySettings; thisMon
   return (
     <section className="tx-page budget-page" ref={pageRef}>
       <div className="tx-title">
-        <h1>budgets</h1>
+        <h1>{t('budgets.title')}</h1>
         <div className="month-nav">
-          <button type="button" aria-label="previous month" onClick={() => setMonth(shiftMonth(month, -1))}>
+          <button type="button" aria-label={t('budgets.prevMonth')} onClick={() => setMonth(shiftMonth(month, -1))}>
             &lsaquo;
           </button>
           <Dropdown
             compact
-            label="month"
+            label={t('common.month')}
             value={String(Number(month.slice(5, 7)))}
-            options={monthNames(settings.locale).map((name, index) => ({ value: String(index + 1), label: name }))}
+            options={monthNames(language).map((name, index) => ({ value: String(index + 1), label: name }))}
             onChange={(value) => setMonth(withMonth(month, Number(value)))}
           />
           <Dropdown
             compact
-            label="year"
+            label={t('common.year')}
             value={month.slice(0, 4)}
             options={yearChoices(month, Number(thisMonth.slice(0, 4))).map((year) => ({
               value: String(year),
@@ -161,18 +163,18 @@ function BudgetsView({ settings, thisMonth }: { settings: MoneySettings; thisMon
             }))}
             onChange={(value) => setMonth(withYear(month, Number(value)))}
           />
-          <button type="button" aria-label="next month" onClick={() => setMonth(shiftMonth(month, 1))}>
+          <button type="button" aria-label={t('budgets.nextMonth')} onClick={() => setMonth(shiftMonth(month, 1))}>
             &rsaquo;
           </button>
           <button type="button" disabled={month === thisMonth} onClick={() => setMonth(thisMonth)}>
-            current
+            {t('common.current')}
           </button>
         </div>
       </div>
       <p className="notice">{message}</p>
       <div className="budget-split wide">
         <BudgetHalf
-          title="expenses"
+          title={t('budgets.expenses')}
           type="EXPENSE"
           month={month}
           overview={overview?.find((row) => row.type === 'EXPENSE') ?? null}
@@ -183,7 +185,7 @@ function BudgetsView({ settings, thisMonth }: { settings: MoneySettings; thisMon
           onCategory={onCategory}
         />
         <BudgetHalf
-          title="income"
+          title={t('budgets.income')}
           type="INCOME"
           month={month}
           overview={overview?.find((row) => row.type === 'INCOME') ?? null}
@@ -196,16 +198,16 @@ function BudgetsView({ settings, thisMonth }: { settings: MoneySettings; thisMon
       </div>
       {history && history.length > 0 ? (
         <section className="budget-history">
-          <h2>history</h2>
+          <h2>{t('budgets.history')}</h2>
           <div className="budget-history-scroll">
             <table>
               <thead>
                 <tr>
-                  <th>month</th>
-                  <th>expense budget</th>
-                  <th>spent</th>
-                  <th>income budget</th>
-                  <th>earned</th>
+                  <th>{t('budgets.colMonth')}</th>
+                  <th>{t('budgets.colExpenseBudget')}</th>
+                  <th>{t('budgets.colSpent')}</th>
+                  <th>{t('budgets.colIncomeBudget')}</th>
+                  <th>{t('budgets.colEarned')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -221,7 +223,7 @@ function BudgetsView({ settings, thisMonth }: { settings: MoneySettings; thisMon
                             pageRef.current?.scrollTo({ top: 0 })
                           }}
                         >
-                          {monthLabel(row.month, settings.locale)}
+                          {monthLabel(row.month, language)}
                         </button>
                       </td>
                       <td>{row.expenseBudget === null ? '-' : money(row.expenseBudget)}</td>
@@ -268,6 +270,7 @@ function BudgetHalf({
   onGlobal: (type: Side, raw: string) => Promise<string | null>
   onCategory: (category: Category, raw: string) => Promise<string | null>
 }) {
+  const t = useT()
   const budgeted = overview?.budgeted ?? ''
   const over = overview !== null && overview.overAllocated && overview.budgeted !== null
   return (
@@ -276,7 +279,7 @@ function BudgetHalf({
       <div className="budget-table">
         <BudgetRow
           key={`${type}:${month}:${budgeted}`}
-          label="budget"
+          label={t('budgets.budget')}
           value={budgeted}
           money={money}
           onSave={(raw) => onGlobal(type, raw)}
@@ -284,12 +287,12 @@ function BudgetHalf({
         {overview ? (
           <>
             <div className="budget-row quiet">
-              <span className="budget-label">allocated</span>
+              <span className="budget-label">{t('budgets.allocated')}</span>
               <span className="budget-amount">{money(overview.allocated)}</span>
               <span className="budget-actions" />
             </div>
             <div className="budget-row quiet">
-              <span className="budget-label">unallocated</span>
+              <span className="budget-label">{t('budgets.unallocated')}</span>
               <span className={over ? 'budget-amount over' : 'budget-amount'}>
                 {overview.unallocated === null ? '-' : money(overview.unallocated)}
               </span>
@@ -313,7 +316,7 @@ function BudgetHalf({
             ))}
           </div>
         ) : null}
-        {categories && categories.length === 0 ? <p>no categories.</p> : null}
+        {categories && categories.length === 0 ? <p>{t('common.noCategories')}</p> : null}
       </div>
     </section>
   )
@@ -331,6 +334,7 @@ function BudgetRow({
   money: (amount: string) => string
   onSave: (raw: string) => Promise<string | null>
 }) {
+  const t = useT()
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState(value)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -359,7 +363,7 @@ function BudgetRow({
       {editing ? (
         <input
           ref={inputRef}
-          aria-label={`${label} amount`}
+          aria-label={t('budgets.amountOf', { label })}
           inputMode="decimal"
           autoComplete="off"
           placeholder="0.00"
@@ -379,15 +383,15 @@ function BudgetRow({
         {editing ? (
           <>
             <button key="save" type="submit">
-              save
+              {t('common.save')}
             </button>
             {value !== '' ? (
               <button key="clear" type="button" onClick={() => void save('')}>
-                clear
+                {t('common.clear')}
               </button>
             ) : null}
             <button key="cancel" type="button" onClick={() => setEditing(false)}>
-              cancel
+              {t('common.cancel')}
             </button>
           </>
         ) : (
@@ -399,7 +403,7 @@ function BudgetRow({
               setEditing(true)
             }}
           >
-            edit
+            {t('common.edit')}
           </button>
         )}
       </span>

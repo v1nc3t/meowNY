@@ -17,7 +17,12 @@ const Conversion = z.object({
 })
 const RecoveryKey = z.string().regex(/^([0-9A-Z]{4}-){7}[0-9A-Z]{4}$/)
 const Status = z.enum(['not_set_up', 'locked', 'unlocked'])
-const SettingsShape = z.object({ currency: z.string(), locale: z.string(), timezone: z.string() })
+const SettingsShape = z.object({
+  currency: z.string(),
+  locale: z.string(),
+  timezone: z.string(),
+  language: z.string(),
+})
 const LockPrefsShape = z.object({
   lock_after_secs: z.number().int(),
   lock_on_minimize: z.boolean(),

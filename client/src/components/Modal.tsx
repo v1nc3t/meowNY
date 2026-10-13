@@ -1,4 +1,5 @@
 import { useEffect, useId, useRef, type ReactNode } from 'react'
+import { useT } from '../i18n/context'
 
 export const modalFormId = 'modal-form'
 
@@ -16,6 +17,7 @@ export default function Modal({
   formId?: string
   children: ReactNode
 }) {
+  const t = useT()
   const ref = useRef<HTMLDialogElement>(null)
   const titleId = useId()
 
@@ -52,10 +54,10 @@ export default function Modal({
         {children}
         <div className="modal-actions">
           <button type="button" onClick={onClose}>
-            cancel
+            {t('common.cancel')}
           </button>
           <button type="submit" form={formId} disabled={pending}>
-            done
+            {t('common.done')}
           </button>
         </div>
       </div>

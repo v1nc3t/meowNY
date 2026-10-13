@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useT } from '../i18n/context'
 
 /** A password input with a show/hide button inside it, at the right edge. */
 export default function PasswordField({
@@ -13,6 +14,7 @@ export default function PasswordField({
   current?: boolean
   autoFocus?: boolean
 }) {
+  const t = useT()
   const [shown, setShown] = useState(false)
   return (
     <label>
@@ -25,7 +27,7 @@ export default function PasswordField({
           autoFocus={autoFocus}
         />
         <button type="button" aria-pressed={shown} onClick={() => setShown((value) => !value)}>
-          {shown ? 'hide' : 'show'}
+          {shown ? t('common.hide') : t('common.show')}
         </button>
       </span>
     </label>

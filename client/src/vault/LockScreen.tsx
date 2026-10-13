@@ -1,11 +1,13 @@
 import { useEffect, useState, type FormEvent } from 'react'
-import { MESSAGES } from '../api/invoke'
+import { messageFor } from '../api/invoke'
 import { errorText, vault } from './api'
 import PasswordField from './PasswordField'
 import { passphraseProblem } from './rules'
 import { useNotice } from '../useNotice'
+import { useT } from '../i18n/context'
 
 export default function LockScreen({ onUnlocked }: { onUnlocked: () => void }) {
+  const t = useT()
   const [needsPassphrase, setNeedsPassphrase] = useState(false)
   const [keyMissing, setKeyMissing] = useState(false)
   const [recovering, setRecovering] = useState(false)
@@ -29,7 +31,7 @@ export default function LockScreen({ onUnlocked }: { onUnlocked: () => void }) {
     return () => {
       cancelled = true
     }
-  }, [onUnlocked])
+  }, [onUnlocked, setMessage])
 
   async function onUnlock(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -65,10 +67,10 @@ export default function LockScreen({ onUnlocked }: { onUnlocked: () => void }) {
       <main className="gate">
         <form onSubmit={onRecover}>
           <p className="brand-mark">meowny</p>
-          <h1>recovery key</h1>
-          <p className="hint">enter the recovery key you saved when you set up. then choose a new passphrase.</p>
+          <h1>{t('recovery.title')}</h1>
+          <p className="hint">{t('recovery.enter')}</p>
           <label>
-            recovery key
+            {t('recovery.label')}
             <input
               name="recoveryKey"
               required
@@ -78,11 +80,11 @@ export default function LockScreen({ onUnlocked }: { onUnlocked: () => void }) {
               placeholder="XXXX-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX"
             />
           </label>
-          <PasswordField label="new passphrase (optional)" name="passphrase" />
-          <PasswordField label="repeat new passphrase" name="confirm" />
-          <p className="hint">leave the passphrase empty to open the app without one.</p>
+          <PasswordField label={t('recovery.newPassphrase')} name="passphrase" />
+          <PasswordField label={t('recovery.newPassphraseRepeat')} name="confirm" />
+          <p className="hint">{t('recovery.emptyHint')}</p>
           <button type="submit" disabled={busy}>
-            unlock
+            {t('common.unlock')}
           </button>
           <button
             type="button"
@@ -91,7 +93,7 @@ export default function LockScreen({ onUnlocked }: { onUnlocked: () => void }) {
               setMessage('')
             }}
           >
-            back
+            {t('common.back')}
           </button>
           <p className="notice" role="alert">
             {message}
@@ -105,12 +107,12 @@ export default function LockScreen({ onUnlocked }: { onUnlocked: () => void }) {
     <main className="gate">
       <form onSubmit={onUnlock}>
         <p className="brand-mark">meowny</p>
-        <h1>locked</h1>
+        <h1>{t('lock.title')}</h1>
         {needsPassphrase && (
           <>
-            <PasswordField label="passphrase" name="passphrase" current autoFocus />
+            <PasswordField label={t('lock.passphrase')} name="passphrase" current autoFocus />
             <button type="submit" disabled={busy}>
-              unlock
+              {t('common.unlock')}
             </button>
           </>
         )}
@@ -122,11 +124,11 @@ export default function LockScreen({ onUnlocked }: { onUnlocked: () => void }) {
               setMessage('')
             }}
           >
-            {keyMissing ? 'use my recovery key' : 'forgot my passphrase'}
+            {keyMissing ? t('lock.useRecovery') : t('lock.forgot')}
           </button>
         )}
         {/* This one stays: it explains why the app cannot open by itself. */}
-        {keyMissing ? <p className="notice">{MESSAGES.key_unavailable}</p> : null}
+        {keyMissing ? <p className="notice">{messageFor('key_unavailable')}</p> : null}
         <p className="notice" role="alert">
           {message}
         </p>

@@ -229,3 +229,29 @@ fn updated_at_moves_forward_on_update() {
     let updated: String = conn.query_row("SELECT updated_at FROM categories WHERE id = ?1", [food], |r| r.get(0)).unwrap();
     assert!(updated.as_str() > "2020-01-01", "updated_at was {updated}");
 }
+
+#[test]
+fn settings_have_a_language_that_defaults_to_english_and_is_audited() {
+    let conn = db();
+    conn.execute("INSERT INTO settings (id, currency, timezone) VALUES (1, 'EUR', 'UTC')", []).unwrap();
+    let language: String = conn.query_row("SELECT language FROM settings", [], |r| r.get(0)).unwrap();
+    assert_eq!(language, "en");
+
+    conn.execute("UPDATE settings SET language = 'ro'", []).unwrap();
+    let (old, new): (String, String) = conn
+        .query_row(
+            "SELECT old_values, new_values FROM audit_log WHERE entity_type = 'settings' AND action = 'UPDATE'",
+            [],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )
+        .unwrap();
+    assert!(old.contains("\"language\":\"en\"") && new.contains("\"language\":\"ro\""));
+}
+
+#[test]
+fn a_language_that_is_too_short_or_too_long_is_refused() {
+    let conn = db();
+    conn.execute("INSERT INTO settings (id, currency, timezone) VALUES (1, 'EUR', 'UTC')", []).unwrap();
+    assert!(conn.execute("UPDATE settings SET language = 'e'", []).is_err());
+    assert!(conn.execute(&format!("UPDATE settings SET language = '{}'", "x".repeat(36)), []).is_err());
+}

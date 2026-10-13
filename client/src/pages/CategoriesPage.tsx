@@ -4,14 +4,11 @@ import { visibleCategories, type Category, type Kind } from '../categoriesView'
 import { categories as categoriesApi, cleanCategoryName } from '../api/categories'
 import { errorText } from '../api/invoke'
 import { useNotice } from '../useNotice'
-
-function kindLabel(kind: Kind): string {
-  if (kind === 'INCOME') return 'income'
-  if (kind === 'EXPENSE') return 'expense'
-  return 'all'
-}
+import { useT } from '../i18n/context'
 
 export default function CategoriesPage() {
+  const t = useT()
+  const kindLabel = (kind: Kind) => (kind === 'INCOME' ? t('common.income') : kind === 'EXPENSE' ? t('common.expense') : t('categories.all'))
   const [categories, setCategories] = useState<Category[]>([])
   const [kind, setKind] = useState<Kind>('ALL')
   const [typeOpen, setTypeOpen] = useState(false)
@@ -55,16 +52,16 @@ export default function CategoriesPage() {
   return (
     <section className="tx-page">
       <div className="tx-title">
-        <h1>categories</h1>
+        <h1>{t('categories.title')}</h1>
         <div className="tx-actions">
           <button type="button" onClick={() => setAdding(true)}>
-            add category
+            {t('categories.add')}
           </button>
         </div>
       </div>
       <div className="toolbar wide tx-bar">
         <label className="grow">
-          search
+          {t('common.search')}
           <input
             value={query}
             maxLength={50}
@@ -73,7 +70,7 @@ export default function CategoriesPage() {
           />
         </label>
         <div className="pick fit type" ref={typeRef}>
-          <span>type</span>
+          <span>{t('common.type')}</span>
           <button
             type="button"
             className="pick-button"
@@ -116,7 +113,7 @@ export default function CategoriesPage() {
         />
       ) : null}
       <div className="tx-pane wide">
-        {loaded && shown.length === 0 ? <p>no categories.</p> : null}
+        {loaded && shown.length === 0 ? <p>{t('common.noCategories')}</p> : null}
         <ul className="rows">
           {shown.map((category) => (
             <CategoryEditor
@@ -141,6 +138,7 @@ function CategoryEditor({
   onDone: () => Promise<void>
   onError: (message: string) => void
 }) {
+  const t = useT()
   const [renaming, setRenaming] = useState(false)
 
   async function onSave(event: FormEvent<HTMLFormElement>) {
@@ -148,7 +146,7 @@ function CategoryEditor({
     const form = new FormData(event.currentTarget)
     const name = cleanCategoryName(String(form.get('name') ?? ''))
     if (!name) {
-      onError('enter a category name of up to 50 characters.')
+      onError(t('categories.nameError'))
       return
     }
     try {
@@ -173,20 +171,20 @@ function CategoryEditor({
     await onDone()
   }
 
-  const typeLabel = category.type === 'INCOME' ? 'income' : 'expense'
+  const typeLabel = category.type === 'INCOME' ? t('common.income') : t('common.expense')
 
   if (renaming) {
     return (
       <li>
         <form className="entry-row" onSubmit={(event) => void onSave(event)}>
           <label>
-            name
+            {t('common.name')}
             <input name="name" required maxLength={50} defaultValue={category.name} autoComplete="off" />
           </label>
           <div className="entry-actions">
-            <button type="submit">save</button>
+            <button type="submit">{t('common.save')}</button>
             <button type="button" onClick={() => setRenaming(false)}>
-              cancel
+              {t('common.cancel')}
             </button>
           </div>
         </form>
@@ -203,10 +201,10 @@ function CategoryEditor({
         </p>
         <div className="entry-actions">
           <button type="button" className="tx-text" onClick={() => setRenaming(true)}>
-            rename
+            {t('common.rename')}
           </button>
           <button type="button" className="tx-text" onClick={() => void onDelete()}>
-            delete
+            {t('common.delete')}
           </button>
         </div>
       </div>

@@ -1,5 +1,6 @@
 import { changePart, daysInMonth, joinParts, monthNames, parseParts, yearChoices, type DateKind } from '../api/months'
 import Dropdown from './Dropdown'
+import { useI18n } from '../i18n/context'
 
 /**
  * A date as dropdowns: day, month and year for a date, month and year for a month, year alone for a year.
@@ -11,7 +12,6 @@ export default function DatePicker({
   value,
   onChange,
   label,
-  locale,
   today,
   name,
 }: {
@@ -19,10 +19,10 @@ export default function DatePicker({
   value: string
   onChange: (value: string) => void
   label: string
-  locale: string
   today: string
   name?: string
 }) {
+  const { t, language } = useI18n()
   const parts = parseParts(kind, value, today)
   const update = (part: 'day' | 'month' | 'year', next: string) =>
     onChange(joinParts(kind, changePart(parts, part, Number(next))))
@@ -32,7 +32,7 @@ export default function DatePicker({
       {kind === 'date' ? (
         <Dropdown
           compact
-          label={`${label} day`}
+          label={`${label} ${t('common.day')}`}
           value={String(parts.day)}
           options={Array.from({ length: daysInMonth(parts.year, parts.month) }, (_, index) => ({
             value: String(index + 1),
@@ -44,15 +44,15 @@ export default function DatePicker({
       {kind !== 'year' ? (
         <Dropdown
           compact
-          label={`${label} month`}
+          label={`${label} ${t('common.month')}`}
           value={String(parts.month)}
-          options={monthNames(locale).map((month, index) => ({ value: String(index + 1), label: month }))}
+          options={monthNames(language).map((month, index) => ({ value: String(index + 1), label: month }))}
           onChange={(next) => update('month', next)}
         />
       ) : null}
       <Dropdown
         compact
-        label={`${label} year`}
+        label={`${label} ${t('common.year')}`}
         value={String(parts.year)}
         options={yearChoices(`${parts.year}`, Number(today.slice(0, 4))).map((year) => ({
           value: String(year),

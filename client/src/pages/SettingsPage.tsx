@@ -1,7 +1,9 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { errorText, inDesktopApp, vault, type LockPrefs } from '../vault/api'
 import { currencyLabel } from '../api/currencies'
-import { formatExample, localeChoices, localeLabel, timeZoneChoices } from '../api/locales'
+import { formatExample, localeOptions, zoneOptions } from '../api/locales'
+import { useI18n } from '../i18n/context'
+import { languageOptions } from '../i18n/languages'
 import ChangeCurrencyModal from '../components/ChangeCurrencyModal'
 import Dropdown from '../components/Dropdown'
 import PasswordField from '../vault/PasswordField'
@@ -10,6 +12,8 @@ import { LOCK_AFTER_CHOICES, nearestLockChoice, type Settings } from '../vault/r
 import { useNotice } from '../useNotice'
 
 export default function SettingsPage() {
+  const { t, language, setLanguage } = useI18n()
+  const [chosenLanguage, setChosenLanguage] = useState(language)
   const [settings, setSettings] = useState<Settings | null>(null)
   const [prefs, setPrefs] = useState<LockPrefs | null>(null)
   const [location, setLocation] = useState('')
@@ -27,6 +31,7 @@ export default function SettingsPage() {
       (loaded) => {
         setSettings(loaded)
         setLocale(loaded.locale)
+        setChosenLanguage(loaded.language)
         setTimezone(loaded.timezone)
       },
       (e) => setMessage(errorText(e)),
@@ -41,7 +46,7 @@ export default function SettingsPage() {
     vault.dataLocation().then(setLocation, () => undefined)
   }, [setMessage])
 
-  if (!inDesktopApp()) return <p>settings are available in the desktop app.</p>
+  if (!inDesktopApp()) return <p>{t('settings.unavailable')}</p>
 
   async function onSettings(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -49,11 +54,13 @@ export default function SettingsPage() {
       currency: settings?.currency ?? '',
       locale,
       timezone,
+      language: chosenLanguage,
     }
     try {
       await vault.saveSettings(next)
       setSettings(next)
-      setMessage('saved.')
+      setLanguage(chosenLanguage)
+      setMessage(t('settings.saved'))
     } catch (error) {
       setMessage(errorText(error))
     }
@@ -70,7 +77,7 @@ export default function SettingsPage() {
     try {
       await vault.saveLockPrefs(next)
       setPrefs(next)
-      setMessage('lock settings saved.')
+      setMessage(t('settings.saved'))
     } catch (error) {
       setMessage(errorText(error))
     }
@@ -100,7 +107,7 @@ export default function SettingsPage() {
   return (
     <section className="tx-page settings-page">
       <div className="tx-title">
-        <h1>settings</h1>
+        <h1>{t('settings.title')}</h1>
       </div>
       <p className="notice" role="status">
         {message}
@@ -121,86 +128,92 @@ export default function SettingsPage() {
       <div className="tx-pane wide settings-grid">
         {settings && (
           <form className="settings-block" onSubmit={onSettings}>
-            <h2>money and time</h2>
-            <div className="settings-row">
-              <span className="settings-row-label">currency</span>
-              <span className="settings-row-value">{currencyLabel(settings.currency)}</span>
-              <button type="button" onClick={() => setChangingCurrency(true)}>
-                change
-              </button>
-            </div>
+            <h2>{t('settings.region')}</h2>
             <Dropdown
-              label="number and date format"
+              label={t('settings.language')}
+              value={chosenLanguage}
+              options={languageOptions}
+              onChange={setChosenLanguage}
+            />
+            <Dropdown
+              label={t('settings.format')}
               value={locale}
               options={localeOptions(locale)}
               onChange={setLocale}
             />
             <p className="hint">{formatExample(locale, settings.currency)}</p>
-            <Dropdown label="timezone" value={timezone} options={zoneOptions(timezone)} onChange={setTimezone} />
+            <Dropdown label={t('settings.timezone')} value={timezone} options={zoneOptions(timezone)} onChange={setTimezone} />
+            <div className="settings-row">
+              <span className="settings-row-label">{t('settings.currency')}</span>
+              <span className="settings-row-value">{currencyLabel(settings.currency)}</span>
+              <button type="button" onClick={() => setChangingCurrency(true)}>
+                {t('common.change')}
+              </button>
+            </div>
             <div className="actions">
-              <button type="submit">save</button>
+              <button type="submit">{t('common.save')}</button>
             </div>
           </form>
         )}
 
         {prefs && (
           <form className="settings-block" onSubmit={onLock}>
-            <h2>app lock</h2>
+            <h2>{t('settings.appLock')}</h2>
             <Dropdown
-              label="lock after idle for"
+              label={t('settings.lockAfter')}
               name="lock_after"
               value={lockAfter}
-              options={LOCK_AFTER_CHOICES.map((choice) => ({ value: String(choice.seconds), label: choice.label }))}
+              options={LOCK_AFTER_CHOICES.map((choice) => ({ value: String(choice.seconds), label: t(choice.labelKey) }))}
               onChange={setLockAfter}
             />
             <label className="check">
               <input name="lock_on_minimize" type="checkbox" defaultChecked={prefs.lock_on_minimize} />
-              lock when minimized
+              {t('settings.lockMinimized')}
             </label>
             <label className="check">
               <input name="lock_on_close" type="checkbox" defaultChecked={prefs.lock_on_close} />
-              lock when closed
+              {t('settings.lockClosed')}
             </label>
             <div className="actions">
-              <button type="submit">save</button>
+              <button type="submit">{t('common.save')}</button>
               <button type="button" onClick={() => void vault.lock().then(() => window.location.reload())}>
-                lock now
+                {t('settings.lockNow')}
               </button>
             </div>
           </form>
         )}
 
         <div className="settings-block">
-          <h2>recovery key</h2>
+          <h2>{t('settings.recovery')}</h2>
           {newKey ? (
-            <RecoveryKeyPanel code={newKey} inline doneLabel="done" onDone={() => setNewKey(null)} />
+            <RecoveryKeyPanel code={newKey} inline doneLabel={t('common.done')} onDone={() => setNewKey(null)} />
           ) : (
             <form onSubmit={onRecoveryKey}>
-              <p className="hint">a new key replaces the old one. the old key stops working.</p>
-              <PasswordField label="passphrase (if you set one)" name="passphrase" current />
+              <p className="hint">{t('settings.recoveryHint')}</p>
+              <PasswordField label={t('settings.recoveryPassphrase')} name="passphrase" current />
               <div className="actions">
-                <button type="submit">make new key</button>
+                <button type="submit">{t('settings.recoveryNew')}</button>
               </div>
             </form>
           )}
         </div>
 
         <div className="settings-block">
-          <h2>your data</h2>
+          <h2>{t('settings.data')}</h2>
           {location && (
             <p className="hint">
-              stored in <code>{location}</code>
+              {t('settings.storedIn')} <code>{location}</code>
             </p>
           )}
           <form onSubmit={onWipe}>
-            <p className="hint">deletes your data, key and backups. this cannot be undone.</p>
+            <p className="hint">{t('settings.deleteHint')}</p>
             <label>
-              type DELETE to confirm
+              {t('settings.deleteConfirm')}
               <input value={confirmation} onChange={(e) => setConfirmation(e.target.value)} autoComplete="off" />
             </label>
             <div className="actions">
               <button type="submit" disabled={confirmation !== 'DELETE'}>
-                delete all data
+                {t('settings.deleteAll')}
               </button>
             </div>
           </form>
@@ -208,17 +221,4 @@ export default function SettingsPage() {
       </div>
     </section>
   )
-}
-
-/** The formats the system prefers first (its own language list), then common ones. */
-function localeOptions(current: string): { value: string; label: string }[] {
-  const supported = (tag: string) => Intl.NumberFormat.supportedLocalesOf(tag).length > 0
-  return localeChoices(current, navigator.languages ?? [], supported).map((tag) => ({ value: tag, label: localeLabel(tag) }))
-}
-
-/** Every zone the system knows, with the current and the system's own first. */
-function zoneOptions(current: string): { value: string; label: string }[] {
-  const all = typeof Intl.supportedValuesOf === 'function' ? Intl.supportedValuesOf('timeZone') : null
-  const system = Intl.DateTimeFormat().resolvedOptions().timeZone
-  return timeZoneChoices(all, system, current).map((zone) => ({ value: zone, label: zone }))
 }

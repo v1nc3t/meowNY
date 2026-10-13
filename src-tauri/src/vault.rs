@@ -121,8 +121,16 @@ pub struct LockPrefs {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Settings {
     pub currency: String,
+    /// How numbers and dates are written, e.g. "en-IE".
     pub locale: String,
     pub timezone: String,
+    /// The language the app is shown in, e.g. "en" or "ro". Separate from `locale`.
+    #[serde(default = "default_language")]
+    pub language: String,
+}
+
+fn default_language() -> String {
+    "en".to_string()
 }
 
 struct State {
@@ -206,8 +214,8 @@ impl Vault {
 
         let conn = db::open_and_migrate(&self.db_path(), &db_key)?;
         conn.execute(
-            "INSERT INTO settings (id, currency, locale, timezone) VALUES (1, ?1, ?2, ?3)",
-            [&settings.currency, &settings.locale, &settings.timezone],
+            "INSERT INTO settings (id, currency, locale, timezone, language) VALUES (1, ?1, ?2, ?3, ?4)",
+            [&settings.currency, &settings.locale, &settings.timezone, &settings.language],
         )?;
 
         let mut state = self.lock_state();
@@ -339,13 +347,13 @@ impl Vault {
 
     pub fn settings(&self) -> Result<Settings, AppError> {
         self.with_conn(|c| {
-            Ok(c.query_row("SELECT currency, locale, timezone FROM settings WHERE id = 1", [], |r| {
-                Ok(Settings { currency: r.get(0)?, locale: r.get(1)?, timezone: r.get(2)? })
+            Ok(c.query_row("SELECT currency, locale, timezone, language FROM settings WHERE id = 1", [], |r| {
+                Ok(Settings { currency: r.get(0)?, locale: r.get(1)?, timezone: r.get(2)?, language: r.get(3)? })
             })?)
         })
     }
 
-    /// Saves locale and timezone. The currency cannot change here: changing it can mean converting
+    /// Saves language, locale and timezone. The currency cannot change here: changing it can mean converting
     /// every amount, so it goes through `currency::change`, which makes that choice explicit.
     pub fn save_settings(&self, settings: &Settings) -> Result<(), AppError> {
         let s = validate_settings(settings)?;
@@ -354,7 +362,10 @@ impl Vault {
             if current != s.currency {
                 return Err(AppError::InvalidInput);
             }
-            c.execute("UPDATE settings SET locale = ?1, timezone = ?2 WHERE id = 1", [&s.locale, &s.timezone])?;
+            c.execute(
+                "UPDATE settings SET locale = ?1, timezone = ?2, language = ?3 WHERE id = 1",
+                [&s.locale, &s.timezone, &s.language],
+            )?;
             Ok(())
         })?;
         Ok(())
@@ -467,14 +478,22 @@ pub fn validate_settings(settings: &Settings) -> Result<Settings, AppError> {
     let currency = settings.currency.trim().to_ascii_uppercase();
     let locale = settings.locale.trim().to_string();
     let timezone = settings.timezone.trim().to_string();
+    let language = settings.language.trim().to_string();
 
     let currency_ok = currency.len() == 3 && currency.bytes().all(|b| b.is_ascii_uppercase());
     let locale_ok = (2..=35).contains(&locale.len())
         && locale.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_');
     let timezone_ok = crate::clock::is_valid_timezone(&timezone);
+    // A language tag such as "en", "pt-BR" or "zh-Hant": a 2 or 3 letter language, then optional parts.
+    let language_ok = (2..=35).contains(&language.len())
+        && language.split('-').enumerate().all(|(i, part)| {
+            !part.is_empty()
+                && part.bytes().all(|b| b.is_ascii_alphanumeric())
+                && (i > 0 || ((2..=3).contains(&part.len()) && part.bytes().all(|b| b.is_ascii_alphabetic())))
+        });
 
-    if currency_ok && locale_ok && timezone_ok {
-        Ok(Settings { currency, locale, timezone })
+    if currency_ok && locale_ok && timezone_ok && language_ok {
+        Ok(Settings { currency, locale, timezone, language })
     } else {
         Err(AppError::InvalidInput)
     }
@@ -486,7 +505,7 @@ mod tests {
     use crate::keys::memory::MemoryStore;
 
     fn settings() -> Settings {
-        Settings { currency: "eur".into(), locale: "en-IE".into(), timezone: "Europe/Dublin".into() }
+        Settings { currency: "eur".into(), locale: "en-IE".into(), timezone: "Europe/Dublin".into(), language: "en".into() }
     }
 
     fn vault(dir: &Path) -> Vault {
@@ -567,6 +586,12 @@ mod tests {
             Settings { currency: "E1R".into(), ..settings() },
             Settings { locale: "".into(), ..settings() },
             Settings { timezone: "Europe/Dublin; DROP".into(), ..settings() },
+            Settings { language: "".into(), ..settings() },
+            Settings { language: "e".into(), ..settings() },
+            Settings { language: "en_US".into(), ..settings() },
+            Settings { language: "en-".into(), ..settings() },
+            Settings { language: "english".into(), ..settings() },
+            Settings { language: "1n".into(), ..settings() },
         ] {
             assert_eq!(v.create(&bad, None), Err(AppError::InvalidInput));
         }
@@ -577,10 +602,31 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let v = vault(dir.path());
         v.create(&settings(), None).unwrap();
-        v.save_settings(&Settings { currency: "eur".into(), locale: "en-US".into(), timezone: "UTC".into() })
+        v.save_settings(&Settings { currency: "eur".into(), locale: "en-US".into(), timezone: "UTC".into(), language: "ro".into() })
             .unwrap();
         let saved = v.settings().unwrap();
-        assert_eq!((saved.locale.as_str(), saved.timezone.as_str(), saved.currency.as_str()), ("en-US", "UTC", "EUR"));
+        assert_eq!(
+            (saved.locale.as_str(), saved.timezone.as_str(), saved.currency.as_str(), saved.language.as_str()),
+            ("en-US", "UTC", "EUR", "ro")
+        );
+    }
+
+    #[test]
+    fn language_tags_are_accepted_in_their_usual_shapes() {
+        let dir = tempfile::tempdir().unwrap();
+        let v = vault(dir.path());
+        v.create(&settings(), None).unwrap();
+        for tag in ["en", "ro", "pt-BR", "zh-Hant", "sr-Latn-RS", "fil"] {
+            v.save_settings(&Settings { language: tag.into(), ..settings() }).unwrap();
+            assert_eq!(v.settings().unwrap().language, tag);
+        }
+    }
+
+    #[test]
+    fn a_missing_language_defaults_to_english_so_older_callers_still_work() {
+        let parsed: Settings =
+            serde_json::from_str(r#"{"currency":"EUR","locale":"en-IE","timezone":"UTC"}"#).unwrap();
+        assert_eq!(parsed.language, "en");
     }
 
     #[test]
