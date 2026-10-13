@@ -2,6 +2,8 @@
 mod db;
 #[allow(dead_code)] // Called by the startup path once the app opens its database.
 mod migrate;
+#[cfg(test)]
+mod schema_tests;
 
 pub fn run() {
     tauri::Builder::default()

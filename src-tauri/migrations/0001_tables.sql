@@ -40,7 +40,7 @@ CREATE TABLE budgets (
   amount_limit_minor INTEGER CONSTRAINT ck_budget_amount
     CHECK (amount_limit_minor IS NULL OR amount_limit_minor BETWEEN 0 AND 999999999999),
   effective_from   TEXT NOT NULL CONSTRAINT ck_budget_first_of_month
-    CHECK (effective_from GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-01' AND date(effective_from) = effective_from),
+    CHECK (effective_from GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-01' AND date(effective_from) IS effective_from),
   created_at       TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   updated_at       TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   CONSTRAINT ck_budget_scope_category CHECK (
