@@ -9,6 +9,7 @@ import { useToday, type Today } from '../api/today'
 import { transactions as transactionsApi, type Transaction, type TransactionPage } from '../api/transactions'
 import { amountString, formatMoney } from '../money'
 import { useMoneySettings, type MoneySettings } from '../useMoneySettings'
+import { useNotice } from '../useNotice'
 
 type TransactionList = TransactionPage
 type RangeMode = 'date' | 'month' | 'year'
@@ -45,9 +46,9 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
   const [clientUuid, setClientUuid] = useState(() => crypto.randomUUID())
   const [pending, setPending] = useState(false)
   const [adding, setAdding] = useState(false)
-  const [draftMessage, setDraftMessage] = useState('')
+  const [draftMessage, setDraftMessage] = useNotice()
   const [editing, setEditing] = useState<Transaction | null>(null)
-  const [message, setMessage] = useState('')
+  const [message, setMessage] = useNotice()
 
   useEffect(() => {
     let cancelled = false

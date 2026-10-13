@@ -4,12 +4,13 @@ import Dropdown from '../components/Dropdown'
 import PasswordField from '../vault/PasswordField'
 import RecoveryKeyPanel from '../vault/RecoveryKeyPanel'
 import { LOCK_AFTER_CHOICES, isCurrency, nearestLockChoice, normalizeCurrency, type Settings } from '../vault/rules'
+import { useNotice } from '../useNotice'
 
 export default function SettingsPage() {
   const [settings, setSettings] = useState<Settings | null>(null)
   const [prefs, setPrefs] = useState<LockPrefs | null>(null)
   const [location, setLocation] = useState('')
-  const [message, setMessage] = useState('')
+  const [message, setMessage] = useNotice()
   const [confirmation, setConfirmation] = useState('')
   const [newKey, setNewKey] = useState<string | null>(null)
   const [lockAfter, setLockAfter] = useState('300')
@@ -86,95 +87,99 @@ export default function SettingsPage() {
   }
 
   return (
-    <div>
-      <h1>settings</h1>
+    <section className="tx-page settings-page">
+      <div className="tx-title">
+        <h1>settings</h1>
+      </div>
       <p className="notice" role="status">
         {message}
       </p>
 
-      {settings && (
-        <form onSubmit={onSettings}>
-          <h2>money and time</h2>
-          <label>
-            currency
-            <input name="currency" required minLength={3} maxLength={3} defaultValue={settings.currency} />
-          </label>
-          <label>
-            locale
-            <input name="locale" required defaultValue={settings.locale} />
-          </label>
-          <label>
-            timezone
-            <input name="timezone" required defaultValue={settings.timezone} />
-          </label>
-          <button type="submit">save</button>
-        </form>
-      )}
-
-      {prefs && (
-        <form onSubmit={onLock}>
-          <h2>app lock</h2>
-          <Dropdown
-            label="lock after being idle for"
-            name="lock_after"
-            value={lockAfter}
-            options={LOCK_AFTER_CHOICES.map((choice) => ({ value: String(choice.seconds), label: choice.label }))}
-            onChange={setLockAfter}
-          />
-          <label>
-            <input name="lock_on_minimize" type="checkbox" defaultChecked={prefs.lock_on_minimize} /> lock when the window is minimized
-          </label>
-          <label>
-            <input name="lock_on_close" type="checkbox" defaultChecked={prefs.lock_on_close} /> lock when the window is closed
-          </label>
-          <button type="submit">save</button>
-          <button type="button" onClick={() => void vault.lock().then(() => window.location.reload())}>
-            lock now
-          </button>
-        </form>
-      )}
-
-      <section>
-        <h2>recovery key</h2>
-        {newKey ? (
-          <RecoveryKeyPanel
-            code={newKey}
-            doneLabel="done"
-            onDone={() => {
-              setNewKey(null)
-            }}
-          />
-        ) : (
-          <form onSubmit={onRecoveryKey}>
-            <p>
-              the recovery key is the way back in if you forget your passphrase. making a new one stops the old one
-              working.
-            </p>
-            <PasswordField label="passphrase (leave empty if you have none)" name="passphrase" current />
-            <button type="submit">make a new recovery key</button>
+      <div className="tx-pane wide settings-grid">
+        {settings && (
+          <form className="settings-block" onSubmit={onSettings}>
+            <h2>money and time</h2>
+            <label>
+              currency
+              <input name="currency" required minLength={3} maxLength={3} placeholder="EUR" defaultValue={settings.currency} />
+            </label>
+            <label>
+              number and date format
+              <input name="locale" required placeholder="en-IE" defaultValue={settings.locale} />
+            </label>
+            <label>
+              timezone
+              <input name="timezone" required placeholder="Europe/Dublin" defaultValue={settings.timezone} />
+            </label>
+            <div className="actions">
+              <button type="submit">save</button>
+            </div>
           </form>
         )}
-      </section>
 
-      <section>
-        <h2>your data</h2>
-        {location && (
-          <p>
-            data file location: <code>{location}</code>
-          </p>
+        {prefs && (
+          <form className="settings-block" onSubmit={onLock}>
+            <h2>app lock</h2>
+            <Dropdown
+              label="lock after idle for"
+              name="lock_after"
+              value={lockAfter}
+              options={LOCK_AFTER_CHOICES.map((choice) => ({ value: String(choice.seconds), label: choice.label }))}
+              onChange={setLockAfter}
+            />
+            <label className="check">
+              <input name="lock_on_minimize" type="checkbox" defaultChecked={prefs.lock_on_minimize} />
+              lock when minimized
+            </label>
+            <label className="check">
+              <input name="lock_on_close" type="checkbox" defaultChecked={prefs.lock_on_close} />
+              lock when closed
+            </label>
+            <div className="actions">
+              <button type="submit">save</button>
+              <button type="button" onClick={() => void vault.lock().then(() => window.location.reload())}>
+                lock now
+              </button>
+            </div>
+          </form>
         )}
-        <form onSubmit={onWipe}>
-          <h3>delete all my data</h3>
-          <p>
-            removes the data file, its key from the keychain and any backups made by this app. this cannot be undone.
-            type DELETE to confirm.
-          </p>
-          <input value={confirmation} onChange={(e) => setConfirmation(e.target.value)} aria-label="type DELETE to confirm" autoComplete="off" />
-          <button type="submit" disabled={confirmation !== 'DELETE'}>
-            delete everything
-          </button>
-        </form>
-      </section>
-    </div>
+
+        <div className="settings-block">
+          <h2>recovery key</h2>
+          {newKey ? (
+            <RecoveryKeyPanel code={newKey} inline doneLabel="done" onDone={() => setNewKey(null)} />
+          ) : (
+            <form onSubmit={onRecoveryKey}>
+              <p className="hint">a new key replaces the old one. the old key stops working.</p>
+              <PasswordField label="passphrase (if you set one)" name="passphrase" current />
+              <div className="actions">
+                <button type="submit">make new key</button>
+              </div>
+            </form>
+          )}
+        </div>
+
+        <div className="settings-block">
+          <h2>your data</h2>
+          {location && (
+            <p className="hint">
+              stored in <code>{location}</code>
+            </p>
+          )}
+          <form onSubmit={onWipe}>
+            <p className="hint">deletes your data, key and backups. this cannot be undone.</p>
+            <label>
+              type DELETE to confirm
+              <input value={confirmation} onChange={(e) => setConfirmation(e.target.value)} autoComplete="off" />
+            </label>
+            <div className="actions">
+              <button type="submit" disabled={confirmation !== 'DELETE'}>
+                delete all data
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </section>
   )
 }

@@ -1,13 +1,15 @@
 import { useEffect, useState, type FormEvent } from 'react'
+import { MESSAGES } from '../api/invoke'
 import { errorText, vault } from './api'
 import PasswordField from './PasswordField'
 import { passphraseProblem } from './rules'
+import { useNotice } from '../useNotice'
 
 export default function LockScreen({ onUnlocked }: { onUnlocked: () => void }) {
   const [needsPassphrase, setNeedsPassphrase] = useState(false)
   const [keyMissing, setKeyMissing] = useState(false)
   const [recovering, setRecovering] = useState(false)
-  const [message, setMessage] = useState('')
+  const [message, setMessage] = useNotice()
   const [busy, setBusy] = useState(false)
 
   // Try without a passphrase first: a keychain-only vault opens straight away.
@@ -20,10 +22,8 @@ export default function LockScreen({ onUnlocked }: { onUnlocked: () => void }) {
       (error) => {
         if (cancelled) return
         if (error?.code === 'wrong_credentials') setNeedsPassphrase(true)
-        else {
-          if (error?.code === 'key_unavailable') setKeyMissing(true)
-          setMessage(errorText(error))
-        }
+        else if (error?.code === 'key_unavailable') setKeyMissing(true)
+        else setMessage(errorText(error))
       },
     )
     return () => {
@@ -125,6 +125,8 @@ export default function LockScreen({ onUnlocked }: { onUnlocked: () => void }) {
             {keyMissing ? 'use my recovery key' : 'forgot my passphrase'}
           </button>
         )}
+        {/* This one stays: it explains why the app cannot open by itself. */}
+        {keyMissing ? <p className="notice">{MESSAGES.key_unavailable}</p> : null}
         <p className="notice" role="alert">
           {message}
         </p>

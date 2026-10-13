@@ -3,10 +3,11 @@ import { errorText, vault } from './api'
 import PasswordField from './PasswordField'
 import RecoveryKeyPanel from './RecoveryKeyPanel'
 import { defaultSettings, isCurrency, normalizeCurrency, passphraseProblem } from './rules'
+import { useNotice } from '../useNotice'
 
 export default function FirstRunScreen({ onDone }: { onDone: () => void }) {
   const [location, setLocation] = useState('')
-  const [message, setMessage] = useState('')
+  const [message, setMessage] = useNotice()
   const [busy, setBusy] = useState(false)
   const [recoveryKey, setRecoveryKey] = useState<string | null>(null)
 

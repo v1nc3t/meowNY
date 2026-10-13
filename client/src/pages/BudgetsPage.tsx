@@ -7,6 +7,7 @@ import Dropdown from '../components/Dropdown'
 import { useToday } from '../api/today'
 import { amountString, formatMoney } from '../money'
 import { useMoneySettings, type MoneySettings } from '../useMoneySettings'
+import { useNotice } from '../useNotice'
 
 type Side = 'EXPENSE' | 'INCOME'
 
@@ -27,7 +28,7 @@ function BudgetsView({ settings, thisMonth }: { settings: MoneySettings; thisMon
   const pageRef = useRef<HTMLElement>(null)
   const [categories, setCategories] = useState<Category[] | null>(null)
   const [reload, setReload] = useState(0)
-  const [message, setMessage] = useState('')
+  const [message, setMessage] = useNotice()
 
   useEffect(() => {
     let cancelled = false

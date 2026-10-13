@@ -4,6 +4,7 @@ import { categories, cleanCategoryName, type CategoryType } from '../api/categor
 import { errorText } from '../api/invoke'
 import Dropdown from './Dropdown'
 import Modal from './Modal'
+import { useNotice } from '../useNotice'
 
 const typeOptions = [
   { value: 'EXPENSE', label: 'expense' },
@@ -21,7 +22,7 @@ export default function AddCategoryModal({
   onCreated: (category: Category) => void
 }) {
   const [type, setType] = useState('EXPENSE')
-  const [message, setMessage] = useState('')
+  const [message, setMessage] = useNotice()
   const [pending, setPending] = useState(false)
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {

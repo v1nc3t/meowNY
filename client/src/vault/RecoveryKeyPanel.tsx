@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { errorText, vault } from './api'
+import { useNotice } from '../useNotice'
 
 /**
  * Shows a recovery key. The app does not keep it, so this is the only time it can be read.
@@ -10,16 +11,19 @@ export default function RecoveryKeyPanel({
   confirm = false,
   doneLabel,
   onDone,
+  inline = false,
 }: {
   code: string
   confirm?: boolean
   doneLabel: string
   onDone: () => void
+  /** Shown inside a page section: a smaller heading and no big title. */
+  inline?: boolean
 }) {
   const [saved, setSaved] = useState(!confirm)
   const [copied, setCopied] = useState(false)
   const [downloaded, setDownloaded] = useState(false)
-  const [message, setMessage] = useState('')
+  const [message, setMessage] = useNotice()
 
   async function copy() {
     try {
@@ -43,7 +47,7 @@ export default function RecoveryKeyPanel({
 
   return (
     <div className="panel">
-      <h1>your recovery key</h1>
+      {inline ? null : <h1>your recovery key</h1>}
       <p className="hint">
         this is the only way back in if you forget your passphrase. it is shown once and the app does not keep a copy.
         keep it somewhere safe, away from this computer.

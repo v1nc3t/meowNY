@@ -3,6 +3,7 @@ import AddCategoryModal from '../components/AddCategoryModal'
 import { visibleCategories, type Category, type Kind } from '../categoriesView'
 import { categories as categoriesApi, cleanCategoryName } from '../api/categories'
 import { errorText } from '../api/invoke'
+import { useNotice } from '../useNotice'
 
 function kindLabel(kind: Kind): string {
   if (kind === 'INCOME') return 'income'
@@ -16,7 +17,7 @@ export default function CategoriesPage() {
   const [typeOpen, setTypeOpen] = useState(false)
   const typeRef = useRef<HTMLDivElement>(null)
   const [query, setQuery] = useState('')
-  const [message, setMessage] = useState('')
+  const [message, setMessage] = useNotice()
   const [adding, setAdding] = useState(false)
   const [loaded, setLoaded] = useState(false)
 
