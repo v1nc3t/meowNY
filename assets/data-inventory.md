@@ -4,7 +4,7 @@ What data this app holds, where it lives, which optional network calls exist, an
 
 meowNY is local-first: no server, no accounts, no telemetry. All data stays on the user's own devices. Nobody operates a service, so there is no operator or controller holding anyone's data.
 
-Status: phase 0. The app shell opens and the encrypted database layer exists (`src-tauri/src/db.rs`, tested with SQLCipher). The tables below are the planned design and are not built yet. The old server-based design (Postgres, accounts, sessions, consents) is retired and is only in git history.
+Status: phase 2. The encrypted database, its migrations, key handling, app lock and "delete all my data" exist (`src-tauri/src/{db,migrate,keys,vault}.rs`). The key is a random secret in the OS keychain, optionally combined with an Argon2id-stretched passphrase. Categories, transactions and the other tables exist in the schema but the screens that use them come in phases 3 to 5. The old server-based design (Postgres, accounts, sessions, consents) is retired and is only in git history.
 
 ## Data stored on the device
 
@@ -33,7 +33,7 @@ Nothing leaves the device unless the user turns a feature on.
 
 ## Logs
 
-Logs and crash reports never contain amounts, descriptions, tokens or keys.
+Logs and crash reports never contain amounts, descriptions, tokens or keys. Errors cross into the UI as fixed codes, database error text is dropped, and the panic hook prints only the source location.
 
 ## Not collected
 

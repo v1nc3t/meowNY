@@ -17,6 +17,7 @@
     "esbuild@0.28.2": true
   },
   "scripts": {
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "check:outbound": "node scripts/check-outbound.mjs"
   }
 }

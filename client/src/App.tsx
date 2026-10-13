@@ -15,6 +15,8 @@ import TransactionsPage from './pages/TransactionsPage'
 import CategoriesPage from './pages/CategoriesPage'
 import BudgetsPage from './pages/BudgetsPage'
 import AccountPage from './pages/AccountPage'
+import SettingsPage from './pages/SettingsPage'
+import VaultGate from './vault/VaultGate'
 
 // Pages
 
@@ -53,6 +55,7 @@ const router = createBrowserRouter([
           { path: 'categories', element: <CategoriesPage /> },
           { path: 'budgets', element: <BudgetsPage /> },
           { path: 'account', element: <AccountPage /> },
+          { path: 'settings', element: <SettingsPage /> },
         ],
       },
     ],
@@ -60,5 +63,9 @@ const router = createBrowserRouter([
 ])
 
 export default function App() {
-  return <RouterProvider router={router} />
+  return (
+    <VaultGate>
+      <RouterProvider router={router} />
+    </VaultGate>
+  )
 }
