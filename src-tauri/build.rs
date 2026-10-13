@@ -13,6 +13,10 @@ const COMMANDS: &[&str] = &[
     "save_lock_prefs",
     "data_location",
     "wipe_all_data",
+    "list_categories",
+    "create_category",
+    "rename_category",
+    "delete_category",
 ];
 
 fn main() {

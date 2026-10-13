@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import type { Category } from '../categoriesView'
-import { api, errorMessage } from '../http'
+import { categories, cleanCategoryName, type CategoryType } from '../api/categories'
+import { errorText } from '../api/invoke'
 import Dropdown from './Dropdown'
 import Modal from './Modal'
 
@@ -26,22 +27,19 @@ export default function AddCategoryModal({
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (pending) return
-    const name = String(new FormData(event.currentTarget).get('name') ?? '').trim()
+    const name = cleanCategoryName(String(new FormData(event.currentTarget).get('name') ?? ''))
     if (!name) {
-      setMessage('enter a category name.')
+      setMessage('enter a category name of up to 50 characters.')
       return
     }
     setPending(true)
-    const response = await api('/api/v1/categories', {
-      method: 'POST',
-      body: JSON.stringify({ name, type }),
-    })
-    setPending(false)
-    if (!response.ok) {
-      setMessage(await errorMessage(response))
-      return
+    try {
+      onCreated(await categories.create(name, type as CategoryType))
+    } catch (error) {
+      setMessage(errorText(error))
+    } finally {
+      setPending(false)
     }
-    onCreated((await response.json()) as Category)
   }
 
   return (

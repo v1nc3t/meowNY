@@ -27,7 +27,7 @@ The first run compiles the Rust side (a few minutes). It starts the Vite dev ser
 
 On first launch the app asks for a currency and an optional passphrase, then creates the encrypted data file. Settings (currency, locale, timezone, app lock, delete all data) are at `/app/settings`.
 
-Running `npm run dev --workspace client` on its own opens the client in a browser. That mode has no vault: the lock, first-run and settings screens only work in the desktop window.
+Running `npm run dev --workspace client` on its own opens the client in a browser. That mode has no vault and no backend: the lock, first-run, settings and category screens only work in the desktop window. Pages not yet moved (transactions, budgets) still use the old server there.
 
 ### Where the data lives
 

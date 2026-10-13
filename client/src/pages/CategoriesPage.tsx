@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import AddCategoryModal from '../components/AddCategoryModal'
 import { visibleCategories, type Category, type Kind } from '../categoriesView'
-import { api, errorMessage } from '../http'
+import { categories as categoriesApi, cleanCategoryName } from '../api/categories'
+import { errorText } from '../api/invoke'
 
 function kindLabel(kind: Kind): string {
   if (kind === 'INCOME') return 'income'
@@ -36,13 +37,12 @@ export default function CategoriesPage() {
   }, [typeOpen])
 
   async function load() {
-    const response = await api('/api/v1/categories')
-    if (!response.ok) {
-      setMessage(await errorMessage(response))
-      return
+    try {
+      setCategories(await categoriesApi.list())
+      setLoaded(true)
+    } catch (error) {
+      setMessage(errorText(error))
     }
-    setCategories((await response.json()) as Category[])
-    setLoaded(true)
   }
 
   useEffect(() => {
@@ -145,17 +145,15 @@ function CategoryEditor({
   async function onSave(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     const form = new FormData(event.currentTarget)
-    const name = String(form.get('name') ?? '').trim()
+    const name = cleanCategoryName(String(form.get('name') ?? ''))
     if (!name) {
-      onError('enter a category name.')
+      onError('enter a category name of up to 50 characters.')
       return
     }
-    const response = await api(`/api/v1/categories/${encodeURIComponent(category.id)}`, {
-      method: 'PATCH',
-      body: JSON.stringify({ name }),
-    })
-    if (!response.ok) {
-      onError(await errorMessage(response))
+    try {
+      await categoriesApi.rename(category.id, name)
+    } catch (error) {
+      onError(errorText(error))
       return
     }
     onError('')
@@ -164,9 +162,10 @@ function CategoryEditor({
   }
 
   async function onDelete() {
-    const response = await api(`/api/v1/categories/${encodeURIComponent(category.id)}`, { method: 'DELETE' })
-    if (!response.ok) {
-      onError(await errorMessage(response))
+    try {
+      await categoriesApi.remove(category.id)
+    } catch (error) {
+      onError(errorText(error))
       return
     }
     onError('')

@@ -107,12 +107,12 @@ Kept: the React client (`client/src`), Zod schemas, money and date logic, and th
 ## Phase 3: Core budgeting: categories, transactions, budgets (L)
 
 - [x] Existing React screens: category management, transaction form and list, budget setup (built against the old HTTP API)
-- [ ] Replace `client/src/http.ts` and the `fetch` calls with a typed command layer over Tauri (`invoke`), one place for validation and errors
-- [ ] Categories CRUD. Soft delete writes the NULL budget row (schema Part 5-A).
+- [ ] Replace `client/src/http.ts` and the `fetch` calls with a typed command layer over Tauri (`invoke`), one place for validation and errors (In progress: the typed layer is `client/src/api/` with Zod-checked answers and fixed error codes, and categories already use it. Transactions, budgets and the settings hook still call `http.ts` and move with their tasks; delete `http.ts` last.)
+- [x] Categories CRUD. Soft delete writes the NULL budget row (schema Part 5-A). (`src-tauri/src/categories.rs`; names trimmed, 1 to 50 characters, unique among active categories of a type; the NULL budget row uses the current month in the user's timezone.)
 - [ ] Transactions CRUD with filters (date range, category, text), pagination, and `client_uuid` idempotency. Amount rules: positive, two decimals, sent as strings.
 - [ ] Budgets: set / remove a GLOBAL or CATEGORY budget from a given month, for both EXPENSE and INCOME
 - [ ] Budget overview: allocated vs unallocated, with a warning when categories exceed the global budget
-- [ ] Month filters and "current month" use the timezone setting, with a test around midnight at month end
+- [ ] Month filters and "current month" use the timezone setting, with a test around midnight at month end (Started: `src-tauri/src/clock.rs` computes the month start in the timezone setting, with tests around midnight at month end and year end. The month filters themselves come with the transaction and budget tasks.)
 - [ ] Tests: carry-over (a March budget applies in June until changed), removal via NULL, income budgets, idempotent create
 
 **Done when:** you can record income and expenses, set monthly budgets and category allocations, change them, and old months keep their old limits, all inside the desktop app.

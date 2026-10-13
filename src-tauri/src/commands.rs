@@ -5,6 +5,7 @@ use std::sync::Arc;
 
 use tauri::State;
 
+use crate::categories::{self, Category, CategoryType};
 use crate::vault::{AppError, LockPrefs, Settings, Vault, VaultStatus};
 
 type Shared<'a> = State<'a, Arc<Vault>>;
@@ -22,6 +23,10 @@ pub const COMMANDS: &[&str] = &[
     "save_lock_prefs",
     "data_location",
     "wipe_all_data",
+    "list_categories",
+    "create_category",
+    "rename_category",
+    "delete_category",
 ];
 
 #[tauri::command]
@@ -77,6 +82,28 @@ pub fn data_location(vault: Shared) -> String {
 #[tauri::command]
 pub fn wipe_all_data(vault: Shared, confirmation: String) -> Result<(), AppError> {
     vault.wipe(&confirmation)
+}
+
+#[tauri::command]
+pub fn list_categories(vault: Shared, kind: Option<CategoryType>) -> Result<Vec<Category>, AppError> {
+    vault.with_conn(|c| categories::list(c, kind))
+}
+
+#[tauri::command]
+pub fn create_category(vault: Shared, name: String, kind: CategoryType) -> Result<Category, AppError> {
+    vault.with_conn(|c| categories::create(c, &name, kind))
+}
+
+#[tauri::command]
+pub fn rename_category(vault: Shared, id: String, name: String) -> Result<Category, AppError> {
+    let id = categories::parse_id(&id)?;
+    vault.with_conn(|c| categories::rename(c, id, &name))
+}
+
+#[tauri::command]
+pub fn delete_category(vault: Shared, id: String) -> Result<(), AppError> {
+    let id = categories::parse_id(&id)?;
+    vault.with_conn(|c| categories::delete(c, id, chrono::Utc::now()))
 }
 
 #[cfg(test)]

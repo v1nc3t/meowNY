@@ -33,6 +33,8 @@ pub enum AppError {
     KeyUnavailable,
     DatabaseTooNew,
     InvalidInput,
+    NotFound,
+    NameExists,
     Internal,
 }
 
@@ -46,6 +48,8 @@ impl std::fmt::Display for AppError {
             AppError::KeyUnavailable => "the key is not available in the OS keychain",
             AppError::DatabaseTooNew => "this data file was written by a newer version of the app",
             AppError::InvalidInput => "invalid input",
+            AppError::NotFound => "not found",
+            AppError::NameExists => "that name already exists",
             AppError::Internal => "something went wrong",
         };
         write!(f, "{text}")
@@ -251,17 +255,18 @@ impl Vault {
         false
     }
 
-    pub fn with_conn<R>(&self, f: impl FnOnce(&mut Connection) -> rusqlite::Result<R>) -> Result<R, AppError> {
+    /// Runs `f` on the open database, or fails with `Locked`. The only way data code gets a connection.
+    pub fn with_conn<R>(&self, f: impl FnOnce(&mut Connection) -> Result<R, AppError>) -> Result<R, AppError> {
         let mut state = self.lock_state();
         let conn = state.conn.as_mut().ok_or(AppError::Locked)?;
-        Ok(f(conn)?)
+        f(conn)
     }
 
     pub fn settings(&self) -> Result<Settings, AppError> {
         self.with_conn(|c| {
-            c.query_row("SELECT currency, locale, timezone FROM settings WHERE id = 1", [], |r| {
+            Ok(c.query_row("SELECT currency, locale, timezone FROM settings WHERE id = 1", [], |r| {
                 Ok(Settings { currency: r.get(0)?, locale: r.get(1)?, timezone: r.get(2)? })
-            })
+            })?)
         })
     }
 
@@ -271,7 +276,8 @@ impl Vault {
             c.execute(
                 "UPDATE settings SET currency = ?1, locale = ?2, timezone = ?3 WHERE id = 1",
                 [&s.currency, &s.locale, &s.timezone],
-            )
+            )?;
+            Ok(())
         })?;
         Ok(())
     }
@@ -387,8 +393,7 @@ pub fn validate_settings(settings: &Settings) -> Result<Settings, AppError> {
     let currency_ok = currency.len() == 3 && currency.bytes().all(|b| b.is_ascii_uppercase());
     let locale_ok = (2..=35).contains(&locale.len())
         && locale.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_');
-    let timezone_ok = (1..=64).contains(&timezone.len())
-        && timezone.bytes().all(|b| b.is_ascii_alphanumeric() || matches!(b, b'/' | b'_' | b'+' | b'-'));
+    let timezone_ok = crate::clock::is_valid_timezone(&timezone);
 
     if currency_ok && locale_ok && timezone_ok {
         Ok(Settings { currency, locale, timezone })

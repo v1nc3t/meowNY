@@ -1,3 +1,5 @@
+pub mod categories;
+pub mod clock;
 pub mod commands;
 pub mod db;
 pub mod keys;
@@ -86,6 +88,10 @@ pub fn run() {
             commands::save_lock_prefs,
             commands::data_location,
             commands::wipe_all_data,
+            commands::list_categories,
+            commands::create_category,
+            commands::rename_category,
+            commands::delete_category,
         ])
         .run(tauri::generate_context!())
         .expect("error while running meowNY");

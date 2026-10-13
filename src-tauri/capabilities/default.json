@@ -15,6 +15,10 @@
     "allow-save-lock-prefs",
     "allow-data-location",
     "allow-wipe-all-data",
+    "allow-list-categories",
+    "allow-create-category",
+    "allow-rename-category",
+    "allow-delete-category",
     "core:event:allow-listen",
     "core:event:allow-unlisten",
     {
