@@ -5,7 +5,8 @@
 --   * Money is integer minor units (cents) in *_minor columns. Never floats.
 --   * Dates are 'YYYY-MM-DD' text; timestamps are ISO 8601 UTC text.
 --   * Ids are INTEGER PRIMARY KEY (rowid aliases).
--- Money-column constraints come with the money task; triggers are in 0002_triggers.sql.
+-- Money columns are bounded to 0..999_999_999_999 minor units (the old numeric(12,2) range,
+-- and well inside JS's safe integer range). Triggers are in 0002_triggers.sql.
 -- SQLite cannot add CHECKs to an existing table, so they live in the table definitions.
 
 CREATE TABLE settings (
@@ -36,7 +37,8 @@ CREATE TABLE budgets (
   type             TEXT NOT NULL CONSTRAINT ck_budget_type CHECK (type IN ('INCOME', 'EXPENSE')),
   scope            TEXT NOT NULL CONSTRAINT ck_budget_scope CHECK (scope IN ('GLOBAL', 'CATEGORY')),
   category_id      INTEGER,
-  amount_limit_minor INTEGER,
+  amount_limit_minor INTEGER CONSTRAINT ck_budget_amount
+    CHECK (amount_limit_minor IS NULL OR amount_limit_minor BETWEEN 0 AND 999999999999),
   effective_from   TEXT NOT NULL CONSTRAINT ck_budget_first_of_month
     CHECK (effective_from GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-01' AND date(effective_from) = effective_from),
   created_at       TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
@@ -58,7 +60,7 @@ CREATE TABLE recurring_transactions (
   category_id    INTEGER NOT NULL REFERENCES categories (id) ON DELETE NO ACTION,
   name           TEXT NOT NULL,
   description    TEXT,
-  amount_minor   INTEGER NOT NULL,
+  amount_minor   INTEGER NOT NULL CONSTRAINT ck_rec_amount CHECK (amount_minor BETWEEN 1 AND 999999999999),
   start_date     TEXT NOT NULL,
   interval_unit  TEXT NOT NULL CONSTRAINT ck_rec_unit CHECK (interval_unit IN ('DAY', 'WEEK', 'MONTH', 'YEAR')),
   interval_count INTEGER NOT NULL DEFAULT 1 CONSTRAINT ck_rec_interval CHECK (interval_count > 0),
@@ -80,8 +82,9 @@ CREATE TABLE transactions (
   recurring_due_date       TEXT,
   client_uuid              TEXT,
   name                     TEXT NOT NULL,
-  amount_minor             INTEGER NOT NULL,
-  planned_amount_minor     INTEGER,
+  amount_minor             INTEGER NOT NULL CONSTRAINT ck_tx_amount CHECK (amount_minor BETWEEN 1 AND 999999999999),
+  planned_amount_minor     INTEGER CONSTRAINT ck_tx_planned
+    CHECK (planned_amount_minor IS NULL OR planned_amount_minor BETWEEN 0 AND 999999999999),
   payment_date             TEXT NOT NULL,
   description              TEXT,
   created_at               TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
