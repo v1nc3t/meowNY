@@ -5,11 +5,12 @@
 --   * Money is integer minor units (cents) in *_minor columns. Never floats.
 --   * Dates are 'YYYY-MM-DD' text; timestamps are ISO 8601 UTC text.
 --   * Ids are INTEGER PRIMARY KEY (rowid aliases).
--- CHECK constraints, partial unique indexes and triggers come in later migrations.
+-- Money-column constraints come with the money task; triggers are in 0002_triggers.sql.
+-- SQLite cannot add CHECKs to an existing table, so they live in the table definitions.
 
 CREATE TABLE settings (
   id         INTEGER PRIMARY KEY,
-  currency   TEXT NOT NULL,
+  currency   TEXT NOT NULL CONSTRAINT ck_settings_currency CHECK (currency GLOB '[A-Z][A-Z][A-Z]'),
   locale     TEXT NOT NULL DEFAULT 'en',
   timezone   TEXT NOT NULL DEFAULT 'UTC',
   created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
@@ -18,7 +19,7 @@ CREATE TABLE settings (
 
 CREATE TABLE categories (
   id         INTEGER PRIMARY KEY,
-  type       TEXT NOT NULL,
+  type       TEXT NOT NULL CONSTRAINT ck_categories_type CHECK (type IN ('INCOME', 'EXPENSE')),
   name       TEXT NOT NULL,
   deleted_at TEXT,
   created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
@@ -28,21 +29,26 @@ CREATE TABLE categories (
 -- Target of the composite foreign key from budgets (budget type must match category type).
 CREATE UNIQUE INDEX uq_categories_id_type ON categories (id, type);
 CREATE INDEX idx_categories_active ON categories (deleted_at);
+CREATE UNIQUE INDEX uq_categories_active_name ON categories (type, name) WHERE deleted_at IS NULL;
 
 CREATE TABLE budgets (
   id               INTEGER PRIMARY KEY,
-  type             TEXT NOT NULL,
-  scope            TEXT NOT NULL,
+  type             TEXT NOT NULL CONSTRAINT ck_budget_type CHECK (type IN ('INCOME', 'EXPENSE')),
+  scope            TEXT NOT NULL CONSTRAINT ck_budget_scope CHECK (scope IN ('GLOBAL', 'CATEGORY')),
   category_id      INTEGER,
   amount_limit_minor INTEGER,
-  effective_from   TEXT NOT NULL,
+  effective_from   TEXT NOT NULL CONSTRAINT ck_budget_first_of_month
+    CHECK (effective_from GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-01' AND date(effective_from) = effective_from),
   created_at       TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   updated_at       TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  CONSTRAINT ck_budget_scope_category CHECK (
+    (scope = 'GLOBAL' AND category_id IS NULL) OR (scope = 'CATEGORY' AND category_id IS NOT NULL)),
   CONSTRAINT fk_budgets_category_type
     FOREIGN KEY (category_id, type) REFERENCES categories (id, type) ON DELETE CASCADE
 ) STRICT;
 
--- GLOBAL rows have NULL category_id and are covered by a partial index later.
+-- GLOBAL rows have NULL category_id, so they are covered by the partial index below.
+CREATE UNIQUE INDEX uq_budget_global_month ON budgets (type, effective_from) WHERE scope = 'GLOBAL';
 CREATE UNIQUE INDEX uq_budget_category_month ON budgets (category_id, effective_from);
 CREATE INDEX idx_budget_lookup ON budgets (type, scope, category_id, effective_from);
 CREATE INDEX idx_budgets_category ON budgets (category_id);
@@ -54,13 +60,14 @@ CREATE TABLE recurring_transactions (
   description    TEXT,
   amount_minor   INTEGER NOT NULL,
   start_date     TEXT NOT NULL,
-  interval_unit  TEXT NOT NULL,
-  interval_count INTEGER NOT NULL DEFAULT 1,
+  interval_unit  TEXT NOT NULL CONSTRAINT ck_rec_unit CHECK (interval_unit IN ('DAY', 'WEEK', 'MONTH', 'YEAR')),
+  interval_count INTEGER NOT NULL DEFAULT 1 CONSTRAINT ck_rec_interval CHECK (interval_count > 0),
   next_due_date  TEXT NOT NULL,
   end_date       TEXT,
-  is_active      INTEGER NOT NULL DEFAULT 1,
+  is_active      INTEGER NOT NULL DEFAULT 1 CONSTRAINT ck_rec_active CHECK (is_active IN (0, 1)),
   created_at     TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-  updated_at     TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+  updated_at     TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  CONSTRAINT ck_rec_dates CHECK (next_due_date >= start_date AND (end_date IS NULL OR end_date >= start_date))
 ) STRICT;
 
 CREATE INDEX idx_recurring_due ON recurring_transactions (is_active, next_due_date);
@@ -78,7 +85,8 @@ CREATE TABLE transactions (
   payment_date             TEXT NOT NULL,
   description              TEXT,
   created_at               TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-  updated_at               TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+  updated_at               TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  CONSTRAINT ck_tx_recurring_due CHECK (recurring_transaction_id IS NULL OR recurring_due_date IS NOT NULL)
 ) STRICT;
 
 CREATE INDEX idx_tx_date ON transactions (payment_date DESC);
@@ -91,7 +99,7 @@ CREATE TABLE audit_log (
   id         INTEGER PRIMARY KEY,
   entity_type TEXT NOT NULL,
   entity_id  TEXT NOT NULL,
-  action     TEXT NOT NULL,
+  action     TEXT NOT NULL CONSTRAINT ck_audit_action CHECK (action IN ('INSERT', 'UPDATE', 'DELETE')),
   old_values TEXT,
   new_values TEXT,
   changed_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
