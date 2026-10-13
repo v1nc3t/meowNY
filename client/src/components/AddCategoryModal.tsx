@@ -1,13 +1,11 @@
 import { useState, type FormEvent } from 'react'
 import type { Category } from '../categoriesView'
-import { api, errorMessage } from '../http'
+import { categories, cleanCategoryName, type CategoryType } from '../api/categories'
+import { errorText } from '../api/invoke'
 import Dropdown from './Dropdown'
 import Modal from './Modal'
-
-const typeOptions = [
-  { value: 'EXPENSE', label: 'expense' },
-  { value: 'INCOME', label: 'income' },
-]
+import { useNotice } from '../useNotice'
+import { useT } from '../i18n/context'
 
 // Own form id, so this modal also works when opened on top of another modal.
 const formId = 'category-form'
@@ -19,40 +17,42 @@ export default function AddCategoryModal({
   onClose: () => void
   onCreated: (category: Category) => void
 }) {
+  const t = useT()
   const [type, setType] = useState('EXPENSE')
-  const [message, setMessage] = useState('')
+  const typeOptions = [
+    { value: 'EXPENSE', label: t('common.expense') },
+    { value: 'INCOME', label: t('common.income') },
+  ]
+  const [message, setMessage] = useNotice()
   const [pending, setPending] = useState(false)
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (pending) return
-    const name = String(new FormData(event.currentTarget).get('name') ?? '').trim()
+    const name = cleanCategoryName(String(new FormData(event.currentTarget).get('name') ?? ''))
     if (!name) {
-      setMessage('enter a category name.')
+      setMessage(t('categories.nameError'))
       return
     }
     setPending(true)
-    const response = await api('/api/v1/categories', {
-      method: 'POST',
-      body: JSON.stringify({ name, type }),
-    })
-    setPending(false)
-    if (!response.ok) {
-      setMessage(await errorMessage(response))
-      return
+    try {
+      onCreated(await categories.create(name, type as CategoryType))
+    } catch (error) {
+      setMessage(errorText(error))
+    } finally {
+      setPending(false)
     }
-    onCreated((await response.json()) as Category)
   }
 
   return (
-    <Modal title="add category" pending={pending} formId={formId} onClose={onClose}>
+    <Modal title={t('categories.addTitle')} pending={pending} formId={formId} onClose={onClose}>
       <p className="notice">{message}</p>
       <form id={formId} onSubmit={(event) => void onSubmit(event)}>
         <label>
-          name
+          {t('common.name')}
           <input name="name" required maxLength={50} autoComplete="off" />
         </label>
-        <Dropdown label="type" value={type} options={typeOptions} onChange={setType} />
+        <Dropdown label={t('common.type')} value={type} options={typeOptions} onChange={setType} />
       </form>
     </Modal>
   )

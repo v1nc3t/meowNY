@@ -1,4 +1,5 @@
-export type Category = { id: string; name: string; type: string }
+export type { Category } from './api/categories'
+import type { Category } from './api/categories'
 export type Kind = 'ALL' | 'INCOME' | 'EXPENSE'
 
 export function visibleCategories(categories: Category[], kind: Kind, query: string): Category[] {

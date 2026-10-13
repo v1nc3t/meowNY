@@ -2,7 +2,7 @@
 
 Local-first expense tracker. A Tauri desktop app (Rust) shows a React client and keeps all data in an encrypted SQLite file (SQLCipher) on your own machine. No server, no accounts, no telemetry. See `assets/PLAN.md` for the roadmap and `assets/data-inventory.md` for what data lives where.
 
-The app is mid-migration. The database, key handling, app lock and settings are done (phases 0 to 2). The budgeting screens (categories, transactions, budgets) still use the old Express/Postgres server until phase 3 moves them over. See [Old server (temporary)](#old-server-temporary).
+Categories, transactions and budgets work in the desktop app (phases 0 to 3). Recurring items, charts, backup, the CLI and phone sync are still to come; see the plan. The old Express/Postgres server design is retired and only exists in git history.
 
 ## Requirements
 
@@ -27,7 +27,7 @@ The first run compiles the Rust side (a few minutes). It starts the Vite dev ser
 
 On first launch the app asks for a currency and an optional passphrase, then creates the encrypted data file. Settings (currency, locale, timezone, app lock, delete all data) are at `/app/settings`.
 
-Running `npm run dev --workspace client` on its own opens the client in a browser. That mode has no vault: the lock, first-run and settings screens only work in the desktop window.
+Running `npm run dev --workspace client` on its own opens the client in a browser, but there is no backend there: every screen talks to the Rust side, so it only works in the desktop window.
 
 ### Where the data lives
 
@@ -37,15 +37,35 @@ Running `npm run dev --workspace client` on its own opens the client in a browse
 | macOS | `~/Library/Application Support/org.meowny.app/` |
 | Windows | `%APPDATA%\org.meowny.app\` |
 
-It holds `meowny.db` (encrypted) and `vault.json` (lock settings and the passphrase salt, nothing secret). The key is in the OS keychain under the service name `org.meowny.app`.
+It holds `meowny.db` (encrypted; while the app runs there are also `meowny.db-wal` and `meowny.db-shm`, encrypted too) and `vault.json` (lock settings, the wrapped keys and the passphrase salt). The key is in the OS keychain under the service name `org.meowny.app`.
 
 To start over in development, use Settings, delete all my data. That removes the files and the keychain entry together. Deleting the folder by hand leaves a stale keychain entry, which is harmless and gets replaced on the next first run.
+
+## Keyboard shortcuts
+
+Press `?` in the app to see them all. Hovering or focusing a control shows its shortcut. Shortcuts are ignored while typing in a field and inside dialogs.
+
+| Keys | Does |
+|---|---|
+| `g` then `d` `t` `c` `b` `s` | go to dashboard, transactions, categories, budgets, settings |
+| `n` | add a new transaction or category |
+| `/` | search |
+| `[` and `]` | previous and next month (budgets) |
+| `t` | jump to the current month |
+| `j` and `k` | next and previous row in a list (Enter opens it) |
+| `Ctrl+L` / `Cmd+L` | lock the app |
+| `Ctrl+B` / `Cmd+B` | show or hide the sidebar |
+
+All shortcuts are defined in one table, `client/src/keys/shortcuts.ts`.
 
 ## Tests and checks
 
 ```bash
 # Rust: migrations, constraints, vault, key handling
 cd src-tauri && cargo test
+
+# Timings of the main queries on 50,000 transactions (prints, does not assert)
+cd src-tauri && cargo test bench -- --ignored --nocapture
 
 # Client
 npm run lint --workspace client
@@ -56,7 +76,7 @@ npm run build --workspace client
 npm run check:outbound
 ```
 
-CI (`.github/workflows/desktop.yml`) runs the outbound check and `cargo test`, then builds the app on Linux, macOS and Windows.
+CI (`.github/workflows/desktop.yml`) runs the outbound check and `cargo test`, then builds the app. Pull requests build on Linux only (about 2.5 minutes); pushes to `main` also build on macOS and Windows, and you can run all three for any branch from the Actions tab with "Run workflow".
 
 ## Database
 
@@ -72,70 +92,3 @@ cargo run --example seed -- /path/to/dev.db <64-hex-character-key>
 ```
 
 This creates a separate encrypted database with demo categories, budgets, recurring items and transactions, using the key you pass. The desktop app does not open it: the app derives its own key from the OS keychain. Use the seed file for inspecting the schema and for tests. It refuses a database that already has data.
-
-## Old server (temporary)
-
-The `server/` package (Express, Better Auth, Postgres) and the pages that call it (login, signup, dashboard, transactions, categories, budgets, account) are being replaced in phase 3, then deleted. Until then they still work in a browser. These notes are for that code only.
-
-### First-time setup
-
-From the repo root:
-
-```bash
-cp .env.example .env
-docker compose up -d
-npm install
-cd server && npm run migrate
-```
-
-`docker compose up -d` starts Postgres on `127.0.0.1:5432` and Mailpit. Mailpit catches signup and password-reset mail, so in development no mail reaches a real inbox. Open the verification link from http://127.0.0.1:8025.
-
-To send real mail, set `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, and `SMTP_FROM` in `.env` to your provider's values, then restart the API.
-
-Copy `.env.example` only once. Generate `BETTER_AUTH_SECRET` with `openssl rand -base64 32` and put it in `.env` before you sign anyone up.
-
-On a brand-new Docker volume, Compose also creates the `meowny_test` database. An old volume skips that init script. Run `docker compose down -v` and then `docker compose up -d` if tests cannot find `meowny_test` and you are fine losing the local database.
-
-### Development
-
-Start the API and the client in two terminals. The client proxies `/api` to the API, so the browser only talks to port 5173.
-
-```bash
-# terminal 1
-cd server && npm run dev
-```
-
-```bash
-# terminal 2
-cd client && npm run dev
-```
-
-Open http://127.0.0.1:5173 and create an account. The API listens on http://127.0.0.1:3000. `GET /health` returns `{ "status": "ok" }` when Postgres answers.
-
-Optional demo rows (a user, categories, budgets, and transactions) go into the database with `npm run seed` from `server`. That demo user has no password and cannot sign in.
-
-Google sign-in stays off until both `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` are set. For local development, the OAuth redirect URI is `http://127.0.0.1:3000/api/auth/callback/google` and the JavaScript origin is `http://127.0.0.1:5173`.
-
-### Tests and checks
-
-Server tests need Compose running. They use `DATABASE_URL_TEST` and do not write to the app database.
-
-```bash
-cd server && npm run lint && npm run typecheck && npm test
-cd ../client && npm run lint && npm run build && npm test
-```
-
-CI runs the same commands on every push.
-
-### Production-style start
-
-Build both packages, then run the API from its compiled output. Serve the client build with any static host that forwards `/api` to the API.
-
-```bash
-cd server && npm run build && npm start
-cd ../client && npm run build
-```
-
-`npm start` reads `../.env`. Set `BETTER_AUTH_URL` and `FRONTEND_ORIGIN` to the public API and site origins before you use this outside your machine.
-
-Migrations run through `npm run migrate` (it needs the dev dependencies, so run it from a full `npm install` checkout). `npm start` does not migrate on its own.

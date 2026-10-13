@@ -3,8 +3,7 @@
   "private": true,
   "license": "AGPL-3.0-only",
   "workspaces": [
-    "client",
-    "server"
+    "client"
   ],
   "engines": {
     "node": ">=22"

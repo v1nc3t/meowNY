@@ -14,6 +14,10 @@ impl DbKey {
         Self(bytes)
     }
 
+    pub(crate) fn as_bytes(&self) -> &[u8; 32] {
+        &self.0
+    }
+
     #[cfg(test)]
     pub fn pragma_value_for_tests(&self) -> String {
         self.pragma_value()
@@ -81,7 +85,15 @@ pub fn open(path: &Path, key: &DbKey) -> Result<Connection, DbError> {
     conn.query_row("SELECT count(*) FROM sqlite_master", [], |row| row.get::<_, i64>(0))
         .map_err(|_| DbError::Unreadable)?;
 
-    conn.execute_batch("PRAGMA foreign_keys = ON;")?;
+    // WAL lets reads and writes overlap and makes commits cheaper; NORMAL is the safe pairing with WAL.
+    // A larger page cache and in-memory temp tables keep the common queries off the disk.
+    conn.execute_batch(
+        "PRAGMA foreign_keys = ON;
+         PRAGMA journal_mode = WAL;
+         PRAGMA synchronous = NORMAL;
+         PRAGMA temp_store = MEMORY;
+         PRAGMA cache_size = -16384;",
+    )?;
     Ok(conn)
 }
 

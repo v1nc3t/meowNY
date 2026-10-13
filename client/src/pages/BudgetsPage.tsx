@@ -1,45 +1,55 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
-import DateScroll from '../DateScroll'
-import { api, errorMessage } from '../http'
+import { budgets as budgetsApi, MONTH, type MonthHistory, type Overview } from '../api/budgets'
+import { categories as categoriesApi, type Category } from '../api/categories'
+import { errorText } from '../api/invoke'
+import { monthLabel, monthNames, shiftMonth, withMonth, withYear, yearChoices } from '../api/months'
+import Dropdown from '../components/Dropdown'
+import { useToday } from '../api/today'
 import { amountString, formatMoney } from '../money'
-import { useMoneySettings } from '../useMoneySettings'
+import { useMoneySettings, type MoneySettings } from '../useMoneySettings'
+import { useNotice } from '../useNotice'
+import { useI18n, useT } from '../i18n/context'
+import { useShortcut } from '../keys/registry'
+import { tip } from '../keys/tip'
 
-type Category = { id: string; name: string; type: string }
 type Side = 'EXPENSE' | 'INCOME'
-type Overview = {
-  type: string
-  budgeted: string | null
-  allocated: string | null
-  unallocated: string | null
-  overAllocated: boolean
-  categories?: { categoryId: string; amountLimit: string }[]
-}
 
-const monthPattern = /^\d{4}-(?:0[1-9]|1[0-2])$/
+const monthPattern = MONTH
 
 export default function BudgetsPage() {
   const { settings, error } = useMoneySettings()
-  const [month, setMonth] = useState(() => thisMonth())
+  const now = useToday()
+  if (error) return <p className="notice">{error}</p>
+  if (!settings || !now) return null
+  return <BudgetsView settings={settings} thisMonth={now.month} />
+}
+
+function BudgetsView({ settings, thisMonth }: { settings: MoneySettings; thisMonth: string }) {
+  const { t, language } = useI18n()
+  const [month, setMonth] = useState(thisMonth)
   const [overview, setOverview] = useState<Overview[] | null>(null)
+  const [history, setHistory] = useState<MonthHistory[] | null>(null)
+  const pageRef = useRef<HTMLElement>(null)
   const [categories, setCategories] = useState<Category[] | null>(null)
   const [reload, setReload] = useState(0)
-  const [message, setMessage] = useState('')
+  const [message, setMessage] = useNotice()
 
   useEffect(() => {
     let cancelled = false
-    void api('/api/v1/categories').then(async (response) => {
-      if (cancelled) return
-      if (!response.ok) {
-        setMessage(await errorMessage(response))
+    void categoriesApi.list().then(
+      (list) => {
+        if (!cancelled) setCategories(list)
+      },
+      (failure) => {
+        if (cancelled) return
+        setMessage(errorText(failure))
         setCategories([])
-        return
-      }
-      setCategories((await response.json()) as Category[])
-    })
+      },
+    )
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [setMessage])
 
   useEffect(() => {
     if (!monthPattern.test(month)) {
@@ -47,19 +57,38 @@ export default function BudgetsPage() {
       return
     }
     let cancelled = false
-    void api(`/api/v1/budgets/overview?month=${month}`).then(async (response) => {
-      if (cancelled) return
-      if (!response.ok) {
-        setMessage(await errorMessage(response))
+    void budgetsApi.overview(month).then(
+      (result) => {
+        if (!cancelled) setOverview(result)
+      },
+      (failure) => {
+        if (cancelled) return
+        setMessage(errorText(failure))
         setOverview([])
-        return
-      }
-      setOverview((await response.json()) as Overview[])
-    })
+      },
+    )
     return () => {
       cancelled = true
     }
-  }, [month, reload])
+  }, [month, reload, setMessage])
+
+  useEffect(() => {
+    let cancelled = false
+    void budgetsApi.history().then(
+      (rows) => {
+        if (!cancelled) setHistory(rows)
+      },
+      () => undefined,
+    )
+    return () => {
+      cancelled = true
+    }
+  }, [reload])
+
+  // Keyboard: [ and ] step through months, t jumps to this month.
+  useShortcut('prev', () => setMonth((current) => shiftMonth(current, -1)))
+  useShortcut('next', () => setMonth((current) => shiftMonth(current, 1)))
+  useShortcut('today', () => setMonth(thisMonth))
 
   async function save(body: {
     type: string
@@ -67,12 +96,12 @@ export default function BudgetsPage() {
     amountLimit: string | null
     categoryId?: string
   }): Promise<string | null> {
-    if (!monthPattern.test(month)) return 'choose a month.'
-    const response = await api('/api/v1/budgets', {
-      method: 'PUT',
-      body: JSON.stringify({ ...body, month }),
-    })
-    if (!response.ok) return errorMessage(response)
+    if (!monthPattern.test(month)) return t('budgets.chooseMonth')
+    try {
+      await budgetsApi.set({ ...body, type: body.type as Side, month })
+    } catch (failure) {
+      return errorText(failure)
+    }
     setReload((value) => value + 1)
     return null
   }
@@ -87,7 +116,7 @@ export default function BudgetsPage() {
 
   async function onGlobal(type: Side, raw: string): Promise<string | null> {
     const amountLimit = amountFrom(raw)
-    if (amountLimit === undefined) return 'enter an amount with at most two decimals, or leave it blank to clear.'
+    if (amountLimit === undefined) return t('budgets.amountError')
     const errorText = await save({ type, scope: 'GLOBAL', amountLimit })
     setMessage(errorText ?? '')
     return errorText
@@ -96,7 +125,7 @@ export default function BudgetsPage() {
   async function onCategory(category: Category, raw: string): Promise<string | null> {
     const amountLimit = amountFrom(raw)
     if (amountLimit === undefined) {
-      const errorText = 'enter an amount with at most two decimals, or leave it blank to clear.'
+      const errorText = t('budgets.amountError')
       setMessage(errorText)
       return errorText
     }
@@ -110,27 +139,49 @@ export default function BudgetsPage() {
     return errorText
   }
 
-  if (error) return <p className="notice">{error}</p>
-  if (!settings) return null
-
-  const money = (amount: string | null) =>
-    amount === null ? 'not set' : formatMoney(amount, settings.currency, settings.locale)
+  // Zero and "not set" both read as a dash.
+  const money = (amount: string) =>
+    Number(amount) === 0 ? '-' : formatMoney(amount, settings.currency, settings.locale)
   const expenseCategories = categories?.filter((category) => category.type === 'EXPENSE') ?? null
   const incomeCategories = categories?.filter((category) => category.type === 'INCOME') ?? null
 
   return (
-    <section className="tx-page budget-page">
+    <section className="tx-page budget-page" ref={pageRef}>
       <div className="tx-title">
-        <h1>budgets</h1>
-        <label className="budget-date">
-          date
-          <DateScroll announce="date" kind="month" value={month} onChange={setMonth} />
-        </label>
+        <h1>{t('budgets.title')}</h1>
+        <div className="month-nav">
+          <button type="button" aria-label={t('budgets.prevMonth')} {...tip('prev')} onClick={() => setMonth(shiftMonth(month, -1))}>
+            &lsaquo;
+          </button>
+          <Dropdown
+            compact
+            label={t('common.month')}
+            value={String(Number(month.slice(5, 7)))}
+            options={monthNames(language).map((name, index) => ({ value: String(index + 1), label: name }))}
+            onChange={(value) => setMonth(withMonth(month, Number(value)))}
+          />
+          <Dropdown
+            compact
+            label={t('common.year')}
+            value={month.slice(0, 4)}
+            options={yearChoices(month, Number(thisMonth.slice(0, 4))).map((year) => ({
+              value: String(year),
+              label: String(year),
+            }))}
+            onChange={(value) => setMonth(withYear(month, Number(value)))}
+          />
+          <button type="button" aria-label={t('budgets.nextMonth')} {...tip('next')} onClick={() => setMonth(shiftMonth(month, 1))}>
+            &rsaquo;
+          </button>
+          <button type="button" disabled={month === thisMonth} {...tip('today')} onClick={() => setMonth(thisMonth)}>
+            {t('common.current')}
+          </button>
+        </div>
       </div>
       <p className="notice">{message}</p>
       <div className="budget-split wide">
         <BudgetHalf
-          title="expenses"
+          title={t('budgets.expenses')}
           type="EXPENSE"
           month={month}
           overview={overview?.find((row) => row.type === 'EXPENSE') ?? null}
@@ -141,7 +192,7 @@ export default function BudgetsPage() {
           onCategory={onCategory}
         />
         <BudgetHalf
-          title="income"
+          title={t('budgets.income')}
           type="INCOME"
           month={month}
           overview={overview?.find((row) => row.type === 'INCOME') ?? null}
@@ -152,13 +203,52 @@ export default function BudgetsPage() {
           onCategory={onCategory}
         />
       </div>
+      {history && history.length > 0 ? (
+        <section className="budget-history">
+          <h2>{t('budgets.history')}</h2>
+          <div className="budget-history-scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th>{t('budgets.colMonth')}</th>
+                  <th>{t('budgets.colExpenseBudget')}</th>
+                  <th>{t('budgets.colSpent')}</th>
+                  <th>{t('budgets.colIncomeBudget')}</th>
+                  <th>{t('budgets.colEarned')}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {history.map((row) => {
+                  const overspent = row.expenseBudget !== null && Number(row.expenseActual) > Number(row.expenseBudget)
+                  return (
+                    <tr key={row.month} className={row.month === month ? 'selected' : undefined}>
+                      <td>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setMonth(row.month)
+                            pageRef.current?.scrollTo({ top: 0 })
+                          }}
+                        >
+                          {monthLabel(row.month, language)}
+                        </button>
+                      </td>
+                      <td>{row.expenseBudget === null ? '-' : money(row.expenseBudget)}</td>
+                      <td>
+                        <span className={overspent ? 'over' : undefined}>{money(row.expenseActual)}</span>
+                      </td>
+                      <td>{row.incomeBudget === null ? '-' : money(row.incomeBudget)}</td>
+                      <td>{money(row.incomeActual)}</td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      ) : null}
     </section>
   )
-}
-
-function thisMonth(): string {
-  const now = new Date()
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
 }
 
 function amountsFor(overview: Overview[] | null, type: Side): Map<string, string> {
@@ -183,78 +273,75 @@ function BudgetHalf({
   overview: Overview | null
   amounts: Map<string, string>
   categories: Category[] | null
-  money: (amount: string | null) => string
+  money: (amount: string) => string
   onGlobal: (type: Side, raw: string) => Promise<string | null>
   onCategory: (category: Category, raw: string) => Promise<string | null>
 }) {
+  const t = useT()
   const budgeted = overview?.budgeted ?? ''
-  const saveLabel = type === 'INCOME' ? 'income' : 'expense'
+  const over = overview !== null && overview.overAllocated && overview.budgeted !== null
   return (
     <section className="budget-half">
       <h2>{title}</h2>
-      {overview ? (
-        <>
-          <p>budgeted {money(overview.budgeted)}</p>
-          <p>allocated {money(overview.allocated)}</p>
-          <p>unallocated {money(overview.unallocated)}</p>
-          {overview.overAllocated && overview.budgeted !== null ? (
-            <p className="warn">category budgets exceed the global budget.</p>
-          ) : null}
-        </>
-      ) : null}
-      <h2>global {saveLabel} budget</h2>
-      <AmountRow
-        key={`${type}:${month}:${budgeted}`}
-        label={`global ${saveLabel} amount`}
-        value={budgeted}
-        onSave={(raw) => onGlobal(type, raw)}
-      />
-      <p>blank clears the budget.</p>
-      {categories ? (
-        <ul className="rows" key={month}>
-          {categories.map((category) => (
-            <BudgetCategory
-              key={category.id}
-              category={category}
-              amount={amounts.get(category.id) ?? ''}
-              onSave={onCategory}
-            />
-          ))}
-        </ul>
-      ) : null}
-      {categories && categories.length === 0 ? <p>no categories.</p> : null}
+      <div className="budget-table">
+        <BudgetRow
+          key={`${type}:${month}:${budgeted}`}
+          label={t('budgets.budget')}
+          value={budgeted}
+          money={money}
+          onSave={(raw) => onGlobal(type, raw)}
+        />
+        {overview ? (
+          <>
+            <div className="budget-row quiet">
+              <span className="budget-label">{t('budgets.allocated')}</span>
+              <span className="budget-amount">{money(overview.allocated)}</span>
+              <span className="budget-actions" />
+            </div>
+            <div className="budget-row quiet">
+              <span className="budget-label">{t('budgets.unallocated')}</span>
+              <span className={over ? 'budget-amount over' : 'budget-amount'}>
+                {overview.unallocated === null ? '-' : money(overview.unallocated)}
+              </span>
+              <span className="budget-actions" />
+            </div>
+          </>
+        ) : null}
+      </div>
+      {/* The category list scrolls on its own, so the summary above and the history below stay in view. */}
+      <div className="budget-pane">
+        {categories && categories.length > 0 ? (
+          <div className="budget-table" key={month}>
+            {categories.map((category) => (
+              <BudgetRow
+                key={category.id}
+                label={category.name}
+                value={amounts.get(category.id) ?? ''}
+                money={money}
+                onSave={(raw) => onCategory(category, raw)}
+              />
+            ))}
+          </div>
+        ) : null}
+        {categories && categories.length === 0 ? <p>{t('common.noCategories')}</p> : null}
+      </div>
     </section>
   )
 }
 
-function BudgetCategory({
-  category,
-  amount,
-  onSave,
-}: {
-  category: Category
-  amount: string
-  onSave: (category: Category, raw: string) => Promise<string | null>
-}) {
-  return (
-    <li>
-      <div className="entry-row budget-line">
-        <p className="entry-main">{category.name}</p>
-        <AmountRow label={`${category.name} amount`} value={amount} onSave={(raw) => onSave(category, raw)} />
-      </div>
-    </li>
-  )
-}
-
-function AmountRow({
-  value,
+/** One amount that is plain text until "edit" is clicked. Saving an empty field removes the budget. */
+function BudgetRow({
   label,
+  value,
+  money,
   onSave,
 }: {
-  value: string
   label: string
+  value: string
+  money: (amount: string) => string
   onSave: (raw: string) => Promise<string | null>
 }) {
+  const t = useT()
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState(value)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -267,40 +354,66 @@ function AmountRow({
     if (editing) inputRef.current?.focus()
   }, [editing])
 
-  async function onSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    const errorText = await onSave(draft)
+  async function save(raw: string) {
+    const errorText = await onSave(raw)
     if (!errorText) setEditing(false)
   }
 
+  function onSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    void save(draft)
+  }
+
   return (
-    <form className="amount-row" onSubmit={(event) => void onSubmit(event)}>
-      <input
-        ref={inputRef}
-        aria-label={label}
-        inputMode="decimal"
-        autoComplete="off"
-        readOnly={!editing}
-        value={draft}
-        onChange={(event) => setDraft(event.target.value)}
-      />
-      {/* Distinct keys: reusing one button node and flipping its type to submit mid-click submits the form at once. */}
+    <form className={editing ? 'budget-row editing' : 'budget-row'} onSubmit={onSubmit}>
+      <span className="budget-label">{label}</span>
       {editing ? (
-        <button key="save" type="submit">
-          save
-        </button>
-      ) : (
-        <button
-          key="edit"
-          type="button"
-          onClick={(event) => {
-            event.preventDefault()
-            setEditing(true)
+        <input
+          ref={inputRef}
+          aria-label={t('budgets.amountOf', { label })}
+          inputMode="decimal"
+          autoComplete="off"
+          placeholder="0.00"
+          value={draft}
+          onChange={(event) => setDraft(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === 'Escape') setEditing(false)
           }}
-        >
-          edit
-        </button>
+        />
+      ) : (
+        <span className={value === '' || Number(value) === 0 ? 'budget-amount unset' : 'budget-amount'}>
+          {value === '' ? '-' : money(value)}
+        </span>
       )}
+      <span className="budget-actions">
+        {/* Distinct keys: reusing one button node and flipping its type to submit mid-click submits the form at once. */}
+        {editing ? (
+          <>
+            <button key="save" type="submit">
+              {t('common.save')}
+            </button>
+            {value !== '' ? (
+              <button key="clear" type="button" onClick={() => void save('')}>
+                {t('common.clear')}
+              </button>
+            ) : null}
+            <button key="cancel" type="button" onClick={() => setEditing(false)}>
+              {t('common.cancel')}
+            </button>
+          </>
+        ) : (
+          <button
+            key="edit"
+            type="button"
+            onClick={(event) => {
+              event.preventDefault()
+              setEditing(true)
+            }}
+          >
+            {t('common.edit')}
+          </button>
+        )}
+      </span>
     </form>
   )
 }

@@ -3,15 +3,5 @@
 # Checked by scripts/check-outbound.mjs in CI. New entries need a reason a reviewer can judge.
 # The webview CSP (connect-src) only allows the app itself and the Tauri IPC bridge.
 
-# Legacy client code that still talks to the old server API. Under the desktop app's CSP these
-# calls cannot leave the machine. Phase 3 replaces them with vault commands and these go away.
-fetch client/src/auth.ts  # legacy server login client (removed in phase 3)
-network-package client/src/auth.ts  # better-auth, legacy server login (removed in phase 3)
-fetch client/src/http.ts  # legacy server API helper (removed in phase 3)
-fetch client/src/pages/AccountPage.tsx  # legacy server account page (removed in phase 3)
-fetch client/src/pages/OnboardingPage.tsx  # legacy server onboarding (removed in phase 3)
-fetch client/src/routes/ProtectedRoute.tsx  # legacy server session check (removed in phase 3)
-url-literal client/src/pages/SignupPage.tsx  # text mentioning the dev mail inbox, not a request (removed in phase 3)
-
 # Test-only strings that check the navigation guard refuses remote URLs.
 url-literal src-tauri/src/lib.rs  # URLs in unit tests for the navigation guard

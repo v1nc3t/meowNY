@@ -1,22 +1,22 @@
-import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react'
 import AddCategoryModal from '../components/AddCategoryModal'
 import Dropdown from '../components/Dropdown'
 import Modal, { modalFormId } from '../components/Modal'
-import DateScroll from '../DateScroll'
-import { api, errorMessage } from '../http'
-import { amountString, formatMoney } from '../money'
-import { useMoneySettings } from '../useMoneySettings'
+import DatePicker from '../components/DatePicker'
+import { categories as categoriesApi, type Category } from '../api/categories'
+import { errorText } from '../api/invoke'
+import { useToday, type Today } from '../api/today'
+import { transactions as transactionsApi, type Transaction, type TransactionPage } from '../api/transactions'
+import { amountString, formatDate, formatMoney } from '../money'
+import { useMoneySettings, type MoneySettings } from '../useMoneySettings'
+import { useNotice } from '../useNotice'
+import { useT } from '../i18n/context'
+import { useDebounced } from '../useDebounced'
+import { useShortcut } from '../keys/registry'
+import { tip } from '../keys/tip'
+import { useRowNavigation } from '../keys/useRowNavigation'
 
-type Category = { id: string; name: string; type: string }
-type Transaction = {
-  id: string
-  categoryId: string
-  name: string
-  amount: string
-  paymentDate: string
-  description: string | null
-}
-type TransactionList = { transactions: Transaction[]; total: number; limit: number; offset: number }
+type TransactionList = TransactionPage
 type RangeMode = 'date' | 'month' | 'year'
 type MenuName = 'range' | 'show' | 'category'
 type Filters = {
@@ -29,10 +29,18 @@ type Filters = {
 
 export default function TransactionsPage() {
   const { settings, error } = useMoneySettings()
+  const now = useToday()
+  if (error) return <p className="notice">{error}</p>
+  if (!settings || !now) return null
+  return <TransactionsView settings={settings} now={now} />
+}
+
+function TransactionsView({ settings, now }: { settings: MoneySettings; now: Today }) {
+  const t = useT()
   const [categories, setCategories] = useState<Category[]>([])
   const [categoriesReady, setCategoriesReady] = useState(false)
   const [filters, setFilters] = useState<Filters>(() => {
-    const month = currentMonth()
+    const month = now.month
     return { mode: 'month', from: month, to: month, categoryId: '', q: '' }
   })
   const [limit, setLimit] = useState(50)
@@ -44,18 +52,23 @@ export default function TransactionsPage() {
   const [clientUuid, setClientUuid] = useState(() => crypto.randomUUID())
   const [pending, setPending] = useState(false)
   const [adding, setAdding] = useState(false)
-  const [draftMessage, setDraftMessage] = useState('')
+  const [draftMessage, setDraftMessage] = useNotice()
   const [editing, setEditing] = useState<Transaction | null>(null)
-  const [message, setMessage] = useState('')
+  const [message, setMessage] = useNotice()
+  // The list waits for a short pause in typing instead of asking the database on every key.
+  const searchText = useDebounced(filters.q, 200)
+  const categoryNames = useMemo(() => new Map(categories.map((category) => [category.id, category.name])), [categories])
 
   useEffect(() => {
     let cancelled = false
-    void api('/api/v1/categories').then(async (response) => {
-      if (cancelled) return
-      if (!response.ok) return
-      setCategories((await response.json()) as Category[])
-      setCategoriesReady(true)
-    })
+    void categoriesApi.list().then(
+      (list) => {
+        if (cancelled) return
+        setCategories(list)
+        setCategoriesReady(true)
+      },
+      () => undefined,
+    )
     return () => {
       cancelled = true
     }
@@ -63,28 +76,30 @@ export default function TransactionsPage() {
 
   useEffect(() => {
     let cancelled = false
-    const params = new URLSearchParams()
     const from = apiBound(filters.mode, filters.from, 'from')
     const to = apiBound(filters.mode, filters.to, 'to')
-    if (from) params.set('from', from)
-    if (to) params.set('to', to)
-    if (filters.categoryId) params.set('categoryId', filters.categoryId)
-    const q = filters.q.trim()
-    if (q) params.set('q', q)
-    params.set('limit', String(limit))
-    params.set('offset', String(offset))
-    void api(`/api/v1/transactions?${params}`).then(async (response) => {
-      if (cancelled) return
-      if (!response.ok) {
-        setMessage(await errorMessage(response))
-        return
-      }
-      setPage((await response.json()) as TransactionList)
-    })
+    const q = searchText.trim()
+    void transactionsApi
+      .list({
+        ...(from ? { from } : {}),
+        ...(to ? { to } : {}),
+        ...(filters.categoryId ? { categoryId: filters.categoryId } : {}),
+        ...(q ? { q } : {}),
+        limit,
+        offset,
+      })
+      .then(
+        (result) => {
+          if (!cancelled) setPage(result)
+        },
+        (failure) => {
+          if (!cancelled) setMessage(errorText(failure))
+        },
+      )
     return () => {
       cancelled = true
     }
-  }, [filters, limit, offset, reload])
+  }, [filters.mode, filters.from, filters.to, filters.categoryId, searchText, limit, offset, reload, setMessage])
 
   function patchFilters(patch: Partial<Filters>) {
     setFilters((current) => ({ ...current, ...patch }))
@@ -98,6 +113,13 @@ export default function TransactionsPage() {
       from: shiftBound(current.from, current.mode, mode, 'from'),
       to: shiftBound(current.to, current.mode, mode, 'to'),
     }))
+    setOffset(0)
+  }
+
+  const searchRef = useRef<HTMLInputElement>(null)
+
+  function goCurrentMonth() {
+    setFilters((current) => ({ ...current, mode: 'month', from: now.month, to: now.month }))
     setOffset(0)
   }
 
@@ -120,6 +142,12 @@ export default function TransactionsPage() {
     setEditing(null)
   }
 
+  // Keyboard: n adds, / searches, t jumps to this month, j and k move between rows.
+  useShortcut('new', openAdd)
+  useShortcut('search', () => searchRef.current?.focus())
+  useShortcut('today', goCurrentMonth)
+  useRowNavigation()
+
   // One handler for both modes: the add modal creates, the same modal prefilled edits.
   async function onSave(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -131,28 +159,23 @@ export default function TransactionsPage() {
     const categoryId = String(form.get('categoryId') ?? '')
     const description = String(form.get('description') ?? '').trim()
     if (!name || !paymentDate || !categoryId) {
-      setDraftMessage('name, category, and payment date are required.')
+      setDraftMessage(t('tx.errorRequired'))
       return
     }
     if (!amount) {
-      setDraftMessage('enter an amount greater than zero, with at most two decimals.')
+      setDraftMessage(t('tx.errorAmount'))
       return
     }
     const body = { name, amount, paymentDate, categoryId, description: description.length > 0 ? description : null }
     setPending(true)
-    const response = editing
-      ? await api(`/api/v1/transactions/${encodeURIComponent(editing.id)}`, {
-          method: 'PATCH',
-          body: JSON.stringify(body),
-        })
-      : await api('/api/v1/transactions', {
-          method: 'POST',
-          body: JSON.stringify({ ...body, clientUuid }),
-        })
-    setPending(false)
-    if (!response.ok) {
-      setDraftMessage(await errorMessage(response))
+    try {
+      if (editing) await transactionsApi.update(editing.id, body)
+      else await transactionsApi.create({ ...body, clientUuid })
+    } catch (failure) {
+      setDraftMessage(errorText(failure))
       return
+    } finally {
+      setPending(false)
     }
     setDraftMessage('')
     setMessage('')
@@ -162,9 +185,10 @@ export default function TransactionsPage() {
   }
 
   async function onDelete(id: string) {
-    const response = await api(`/api/v1/transactions/${encodeURIComponent(id)}`, { method: 'DELETE' })
-    if (!response.ok) {
-      setMessage(await errorMessage(response))
+    try {
+      await transactionsApi.remove(id)
+    } catch (failure) {
+      setMessage(errorText(failure))
       return
     }
     setMessage('')
@@ -172,12 +196,11 @@ export default function TransactionsPage() {
   }
 
   function scopeLabel(): string {
-    if (filters.categoryId) return categories.find((category) => category.id === filters.categoryId)?.name ?? 'deleted category'
-    return 'all categories'
+    if (filters.categoryId) return categoryNames.get(filters.categoryId) ?? t('tx.deletedCategory')
+    return t('tx.allCategories')
   }
 
-  if (error) return <p className="notice">{error}</p>
-  if (!settings) return null
+  const modeLabel = (mode: RangeMode) => (mode === 'date' ? t('common.day') : mode === 'month' ? t('common.month') : t('common.year'))
 
   // shortcut: one button per page, upgrade if lists run past a few dozen pages
   const pageCount = page && page.limit > 0 ? Math.max(1, Math.ceil(page.total / page.limit)) : 0
@@ -186,17 +209,21 @@ export default function TransactionsPage() {
   return (
     <section className="tx-page">
       <div className="tx-title">
-        <h1>transactions</h1>
+        <h1>{t('tx.title')}</h1>
         <div className="tx-actions">
-          <button type="button" onClick={openAdd}>
-            add
+          <button type="button" onClick={openAdd} {...tip('new', t('tx.add'))}>
+            {t('tx.add')}
           </button>
         </div>
       </div>
       <div className="toolbar wide tx-bar">
-        <label className="grow">
-          search
+        <label className="grow" {...tip('search')}>
+          {t('common.search')}
           <input
+            ref={searchRef}
+            onKeyDown={(event) => {
+              if (event.key === 'Escape') event.currentTarget.blur()
+            }}
             value={filters.q}
             maxLength={255}
             autoComplete="off"
@@ -204,7 +231,7 @@ export default function TransactionsPage() {
           />
         </label>
         <Pick
-          label="show"
+          label={t('tx.show')}
           className="limit"
           text={String(limit)}
           open={menu === 'show'}
@@ -225,49 +252,8 @@ export default function TransactionsPage() {
             </PickOption>
           ))}
         </Pick>
-        <div className="tx-range">
-          <Pick
-            label="range"
-            className="mode"
-            text={filters.mode === 'date' ? 'day' : filters.mode}
-            open={menu === 'range'}
-            onToggle={() => setMenu((current) => (current === 'range' ? null : 'range'))}
-            onClose={() => setMenu(null)}
-          >
-            {(['date', 'month', 'year'] as const).map((mode) => (
-              <PickOption
-                key={mode}
-                selected={filters.mode === mode}
-                onClick={() => {
-                  onMode(mode)
-                  setMenu(null)
-                }}
-              >
-                {mode === 'date' ? 'day' : mode}
-              </PickOption>
-            ))}
-          </Pick>
-          <label>
-            from
-            <DateScroll
-              key={`from-${filters.mode}`}
-              kind={filters.mode}
-              value={filters.from}
-              onChange={(from) => patchFilters({ from })}
-            />
-          </label>
-          <label>
-            to
-            <DateScroll
-              key={`to-${filters.mode}`}
-              kind={filters.mode}
-              value={filters.to}
-              onChange={(to) => patchFilters({ to })}
-            />
-          </label>
-        </div>
         <Pick
-          label="category"
+          label={t('common.category')}
           className="scope"
           text={scopeLabel()}
           open={menu === 'category'}
@@ -281,7 +267,7 @@ export default function TransactionsPage() {
               setMenu(null)
             }}
           >
-            all categories
+            {t('tx.allCategories')}
           </PickOption>
           {categories.map((category) => (
             <PickOption
@@ -296,12 +282,66 @@ export default function TransactionsPage() {
             </PickOption>
           ))}
         </Pick>
+        <div className="tx-range">
+          <Pick
+            label={t('tx.range')}
+            className="mode"
+            text={modeLabel(filters.mode)}
+            open={menu === 'range'}
+            onToggle={() => setMenu((current) => (current === 'range' ? null : 'range'))}
+            onClose={() => setMenu(null)}
+          >
+            {(['date', 'month', 'year'] as const).map((mode) => (
+              <PickOption
+                key={mode}
+                selected={filters.mode === mode}
+                onClick={() => {
+                  onMode(mode)
+                  setMenu(null)
+                }}
+              >
+                {modeLabel(mode)}
+              </PickOption>
+            ))}
+          </Pick>
+          <div className="tx-date-group">
+            <span>{t('tx.from')}</span>
+            <DatePicker
+              key={`from-${filters.mode}`}
+              kind={filters.mode}
+              value={filters.from}
+              label={t('tx.from')}
+              today={now.date}
+              onChange={(from) => patchFilters({ from })}
+            />
+          </div>
+          <div className="tx-date-group">
+            <span>{t('tx.to')}</span>
+            <DatePicker
+              key={`to-${filters.mode}`}
+              kind={filters.mode}
+              value={filters.to}
+              label={t('tx.to')}
+              today={now.date}
+              onChange={(to) => patchFilters({ to })}
+            />
+          </div>
+          <button
+            type="button"
+            disabled={filters.mode === 'month' && filters.from === now.month && filters.to === now.month}
+            onClick={goCurrentMonth}
+            {...tip('today', t('tx.currentMonth'))}
+          >
+            {t('tx.currentMonth')}
+          </button>
+        </div>
       </div>
       <p className="notice">{message}</p>
       {adding || editing ? (
         <TransactionModal
           key={editing ? editing.id : clientUuid}
           transaction={editing}
+          todayDate={now.date}
           categories={categories}
           pending={pending}
           message={draftMessage}
@@ -313,7 +353,7 @@ export default function TransactionsPage() {
       {page ? (
         <>
           <div className="tx-pane wide">
-            {page.transactions.length === 0 ? <p>no transactions.</p> : null}
+            {page.transactions.length === 0 ? <p>{t('tx.empty')}</p> : null}
             <ul className="rows">
             {page.transactions.map((transaction) => (
               <li key={transaction.id}>
@@ -323,9 +363,8 @@ export default function TransactionsPage() {
                     <p className="tx-sub">
                       {[
                         formatMoney(transaction.amount, settings.currency, settings.locale),
-                        categories.find((category) => category.id === transaction.categoryId)?.name ??
-                          (categoriesReady ? 'deleted category' : ''),
-                        transaction.paymentDate,
+                        categoryNames.get(transaction.categoryId) ?? (categoriesReady ? t('tx.deletedCategory') : ''),
+                        formatDate(transaction.paymentDate, settings.locale),
                       ]
                         .filter(Boolean)
                         .join(' | ')}
@@ -337,16 +376,16 @@ export default function TransactionsPage() {
                         aria-expanded={openId === transaction.id}
                         onClick={() => setOpenId((current) => (current === transaction.id ? null : transaction.id))}
                       >
-                        {openId === transaction.id ? transaction.description : 'description'}
+                        {openId === transaction.id ? transaction.description : t('common.description')}
                       </button>
                     ) : null}
                   </div>
                   <div className="entry-actions">
-                    <button type="button" className="tx-text" onClick={() => openEdit(transaction)}>
-                      edit
+                    <button type="button" className="tx-text" data-row-focus onClick={() => openEdit(transaction)}>
+                      {t('common.edit')}
                     </button>
                     <button type="button" className="tx-text" onClick={() => void onDelete(transaction.id)}>
-                      delete
+                      {t('common.delete')}
                     </button>
                   </div>
                 </div>
@@ -378,6 +417,7 @@ export default function TransactionsPage() {
 // Add and edit share this modal. Field order: name, amount, category, date, description.
 function TransactionModal({
   transaction,
+  todayDate,
   categories,
   pending,
   message,
@@ -386,6 +426,7 @@ function TransactionModal({
   onCategoryAdded,
 }: {
   transaction: Transaction | null
+  todayDate: string
   categories: Category[]
   pending: boolean
   message: string
@@ -393,23 +434,24 @@ function TransactionModal({
   onClose: () => void
   onCategoryAdded: (category: Category) => void
 }) {
+  const t = useT()
   const [categoryId, setCategoryId] = useState(transaction?.categoryId ?? '')
   const [addingCategory, setAddingCategory] = useState(false)
   const options = categories.map((category) => ({ value: category.id, label: category.name }))
   if (transaction && categories.every((category) => category.id !== transaction.categoryId)) {
-    options.unshift({ value: transaction.categoryId, label: 'deleted category' })
+    options.unshift({ value: transaction.categoryId, label: t('tx.deletedCategory') })
   }
   return (
     <>
-      <Modal title={transaction ? 'edit transaction' : 'add transaction'} pending={pending} onClose={onClose}>
+      <Modal title={transaction ? t('tx.editTitle') : t('tx.addTitle')} pending={pending} onClose={onClose}>
         <p className="notice">{message}</p>
         <form id={modalFormId} onSubmit={onSubmit}>
           <label>
-            name
+            {t('common.name')}
             <input name="name" required maxLength={50} defaultValue={transaction?.name ?? ''} autoComplete="off" />
           </label>
           <label>
-            amount
+            {t('tx.amount')}
             <input
               name="amount"
               required
@@ -419,17 +461,17 @@ function TransactionModal({
             />
           </label>
           <Dropdown
-            label="category"
+            label={t('common.category')}
             name="categoryId"
             value={categoryId}
             options={options}
             onChange={setCategoryId}
-            placeholder="choose a category"
-            action={{ label: 'add category', onSelect: () => setAddingCategory(true) }}
+            placeholder={t('tx.chooseCategory')}
+            action={{ label: t('categories.add'), onSelect: () => setAddingCategory(true) }}
           />
-          <PaymentDate defaultValue={transaction?.paymentDate ?? today()} />
+          <PaymentDate defaultValue={transaction?.paymentDate ?? todayDate} />
           <label>
-            description
+            {t('common.description')}
             <input name="description" maxLength={255} defaultValue={transaction?.description ?? ''} autoComplete="off" />
           </label>
         </form>
@@ -449,12 +491,20 @@ function TransactionModal({
 }
 
 function PaymentDate({ defaultValue }: { defaultValue: string }) {
+  const t = useT()
   const [value, setValue] = useState(defaultValue)
   return (
-    <label>
-      payment date
-      <DateScroll name="paymentDate" kind="date" value={value} onChange={setValue} />
-    </label>
+    <div className="tx-date-group">
+      <span>{t('tx.paymentDate')}</span>
+      <DatePicker
+        name="paymentDate"
+        kind="date"
+        value={value}
+        label={t('tx.paymentDate')}
+        today={defaultValue}
+        onChange={setValue}
+      />
+    </div>
   )
 }
 
@@ -550,16 +600,4 @@ function lastDay(yearMonth: string): string {
   const month = Number(yearMonth.slice(5, 7))
   const day = new Date(Date.UTC(year, month, 0)).getUTCDate()
   return `${yearMonth}-${String(day).padStart(2, '0')}`
-}
-
-function currentMonth(): string {
-  const now = new Date()
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
-}
-
-function today(): string {
-  const now = new Date()
-  const month = String(now.getMonth() + 1).padStart(2, '0')
-  const day = String(now.getDate()).padStart(2, '0')
-  return `${now.getFullYear()}-${month}-${day}`
 }

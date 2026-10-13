@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState, type ReactNode } from 'react'
 import FirstRunScreen from './FirstRunScreen'
 import LockScreen from './LockScreen'
 import { inDesktopApp, vault, type VaultStatus } from './api'
+import { useI18n } from '../i18n/context'
 
 const ACTIVITY_PING_MS = 15_000
 
@@ -12,6 +13,7 @@ const ACTIVITY_PING_MS = 15_000
  */
 export default function VaultGate({ children }: { children: ReactNode }) {
   const desktop = inDesktopApp()
+  const { setLanguage } = useI18n()
   const [status, setStatus] = useState<VaultStatus | 'loading'>(desktop ? 'loading' : 'unlocked')
 
   const refresh = useCallback(() => {
@@ -26,6 +28,12 @@ export default function VaultGate({ children }: { children: ReactNode }) {
       void stop.then((unlisten) => unlisten())
     }
   }, [desktop, refresh])
+
+  // Once unlocked, show the app in the language saved with the data.
+  useEffect(() => {
+    if (!desktop || status !== 'unlocked') return
+    vault.settings().then((saved) => setLanguage(saved.language), () => undefined)
+  }, [desktop, status, setLanguage])
 
   // Tell the idle timer the person is still here. Throttled; it carries no content.
   useEffect(() => {

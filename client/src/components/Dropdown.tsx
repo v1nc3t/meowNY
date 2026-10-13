@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { place } from '../placeList'
+import { useT } from '../i18n/context'
 
 export type DropdownOption = { value: string; label: string }
 
@@ -13,8 +14,9 @@ export default function Dropdown({
   value,
   options,
   onChange,
-  placeholder = 'choose',
+  placeholder,
   action,
+  compact = false,
 }: {
   label: string
   name?: string
@@ -23,11 +25,15 @@ export default function Dropdown({
   onChange: (value: string) => void
   placeholder?: string
   action?: { label: string; onSelect: () => void }
+  /** No visible label above the button; the label is kept for screen readers. */
+  compact?: boolean
 }) {
+  const t = useT()
   const [host, setHost] = useState<HTMLElement | null>(null)
   const rootRef = useRef<HTMLDivElement>(null)
   const buttonRef = useRef<HTMLButtonElement>(null)
   const listRef = useRef<HTMLUListElement>(null)
+  const typed = useRef({ text: '', timer: 0 })
   const selected = options.find((option) => option.value === value)
   const open = host !== null
 
@@ -80,9 +86,10 @@ export default function Dropdown({
 
   return (
     <div className="pick field" ref={rootRef}>
-      <span>{label}</span>
+      {compact ? null : <span>{label}</span>}
       <button
         ref={buttonRef}
+        aria-label={compact ? label : undefined}
         type="button"
         className={selected ? 'pick-button' : 'pick-button empty'}
         aria-haspopup="listbox"
@@ -94,7 +101,7 @@ export default function Dropdown({
           openList()
         }}
       >
-        {selected ? selected.label : placeholder}
+        {selected ? selected.label : (placeholder ?? t('common.choose'))}
       </button>
       {name ? <input type="hidden" name={name} value={value} /> : null}
       {host
@@ -105,11 +112,23 @@ export default function Dropdown({
               aria-label={label}
               ref={listRef}
               onKeyDown={(event) => {
-                if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return
-                event.preventDefault()
                 const items = Array.from(event.currentTarget.querySelectorAll<HTMLButtonElement>('button'))
                 const at = items.indexOf(document.activeElement as HTMLButtonElement)
-                items[at + (event.key === 'ArrowDown' ? 1 : -1)]?.focus()
+                if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+                  event.preventDefault()
+                  items[at + (event.key === 'ArrowDown' ? 1 : -1)]?.focus()
+                  return
+                }
+                // Type to jump: letters typed quickly build a prefix, and the first matching option gets focus.
+                if (event.key.length !== 1 || event.ctrlKey || event.metaKey || event.altKey) return
+                event.preventDefault()
+                window.clearTimeout(typed.current.timer)
+                typed.current.text += event.key.toLowerCase()
+                typed.current.timer = window.setTimeout(() => (typed.current.text = ''), 700)
+                const prefix = typed.current.text
+                const from = prefix.length > 1 ? at : at + 1
+                const ordered = [...items.slice(Math.max(from, 0)), ...items.slice(0, Math.max(from, 0))]
+                ordered.find((item) => item.textContent?.trim().toLowerCase().startsWith(prefix))?.focus()
               }}
             >
               {action ? (

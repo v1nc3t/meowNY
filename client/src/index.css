@@ -6,13 +6,17 @@
   --border: rgba(255, 255, 255, 0.1);
   --border-strong: rgba(255, 255, 255, 0.2);
   --surface: rgba(255, 255, 255, 0.05);
-  --accent: #3b82f6;
-  --accent-bg: rgba(59, 130, 246, 0.14);
-  --sans: system-ui, 'Segoe UI', Roboto, sans-serif;
-  --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+  /* One dark green, used only to draw attention, and only as an outline or as text. */
+  --accent: #2e8b57;
+  /* One font for everything: headings, text, buttons, fields and labels. */
+  --font: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
 
   color-scheme: dark;
-  font: 16px/1.5 var(--sans);
+  font-family: var(--font);
+  line-height: 1.5;
+  /* Everything is in rem, so this one value scales spacing, text and controls with the window.
+     It starts from the browser's own font size, so the person's text-size setting still counts. */
+  font-size: clamp(0.875rem, 0.8rem + 0.3vw, 1.0625rem);
   color: var(--text);
   background: var(--bg);
   font-synthesis: none;
@@ -81,35 +85,35 @@ h4 {
 }
 
 h1 {
-  font-family: var(--sans);
-  font-size: 40px;
+  font-family: var(--font);
+  font-size: clamp(1.75rem, 1.25rem + 2.2vw, 2.5rem);
   line-height: 1.15;
-  letter-spacing: -0.03em;
-  margin: 0 0 16px;
+  letter-spacing: -0.02em;
+  margin: 0 0 1rem;
 }
 
 h2 {
-  font-family: var(--sans);
-  font-size: 20px;
+  font-family: var(--font);
+  font-size: 1.25rem;
   line-height: 1.3;
   letter-spacing: -0.02em;
-  margin: 8px 0 0;
+  margin: 0.5rem 0 0;
 }
 
 h3 {
-  font-family: var(--sans);
-  font-size: 18px;
+  font-family: var(--font);
+  font-size: 1.125rem;
   line-height: 1.4;
-  margin: 0 0 8px;
+  margin: 0 0 0.5rem;
 }
 
 h4 {
-  font-family: var(--mono);
-  font-size: 12px;
+  font-family: var(--font);
+  font-size: 0.75rem;
   line-height: 1.4;
   letter-spacing: 0.04em;
   color: var(--text-muted);
-  margin: 0 0 8px;
+  margin: 0 0 0.5rem;
 }
 
 p {
@@ -132,16 +136,17 @@ textarea {
   font: inherit;
 }
 
+/* Buttons are plain text. Hover strikes them through. */
 button {
-  font-family: var(--mono);
-  font-size: 13px;
+  font-family: var(--font);
+  font-size: 0.8125rem;
   line-height: 1.4;
   letter-spacing: 0.02em;
   color: var(--text-h);
   background: transparent;
-  border: 0.8px solid var(--border-strong);
+  border: 0;
   border-radius: 0;
-  padding: 6px 10px;
+  padding: 0.375rem 0;
   cursor: pointer;
   box-shadow: none;
   min-width: max-content;
@@ -151,18 +156,10 @@ button {
   text-align: center;
 }
 
-button[type='submit'] {
-  background: #fff;
-  color: #000;
-  border-color: #fff;
-}
-
-button:hover {
-  background: rgba(255, 255, 255, 0.05);
-}
-
-button[type='submit']:hover {
-  background: rgba(255, 255, 255, 0.88);
+button:hover:not(:disabled) {
+  text-decoration: line-through;
+  text-decoration-thickness: 1px;
+  text-decoration-skip-ink: none;
 }
 
 button:disabled {
@@ -180,20 +177,37 @@ textarea {
   background: #000;
   border: 0.8px solid var(--border-strong);
   border-radius: 0;
-  padding: 6px 10px;
-  font-family: var(--mono);
-  font-size: 13px;
+  padding: 0.375rem 0.625rem;
+  font-family: var(--font);
+  font-size: 0.8125rem;
   line-height: 1.4;
   letter-spacing: normal;
   text-transform: none;
 }
 
+/* Checkboxes are an empty outlined square; checked, they hold a simple x. */
 input[type='checkbox'] {
-  width: 16px;
-  height: 16px;
+  appearance: none;
+  display: inline-grid;
+  place-content: center;
+  width: 1.125rem;
+  height: 1.125rem;
   margin: 0;
-  accent-color: #fff;
+  padding: 0;
   flex: 0 0 auto;
+  cursor: pointer;
+  background: transparent;
+  border: 0.8px solid var(--border-strong);
+  border-radius: 0;
+  color: var(--text-h);
+  font-family: var(--font);
+  font-size: 0.875rem;
+  line-height: 1;
+}
+
+input[type='checkbox']:checked::before {
+  content: 'x';
+  transform: translateY(-1px);
 }
 
 ::placeholder {
@@ -201,8 +215,8 @@ input[type='checkbox'] {
 }
 
 :focus-visible {
-  outline: 1px solid #fff;
-  outline-offset: -1px;
+  outline: 1px solid var(--accent);
+  outline-offset: 2px;
 }
 
 input:focus,
@@ -210,33 +224,27 @@ textarea:focus,
 select:focus,
 .pick-button:focus {
   outline: none;
-  box-shadow: inset 0 0 0 1px #fff;
-}
-
-button[type='submit']:focus,
-button[type='submit']:focus-visible {
-  outline: none;
-  box-shadow: inset 0 0 0 1px #000;
+  box-shadow: inset 0 0 0 1px var(--accent);
 }
 
 form {
   display: flex;
   flex-direction: column;
   align-items: stretch;
-  gap: 14px;
+  gap: 0.875rem;
   width: min(100%, 28rem);
-  margin: 0 0 8px;
+  margin: 0 0 0.5rem;
 }
 
 label {
   display: flex;
   flex-direction: column;
   align-items: stretch;
-  gap: 6px;
+  gap: 0.375rem;
   width: 100%;
   min-width: 0;
-  font-family: var(--mono);
-  font-size: 12px;
+  font-family: var(--font);
+  font-size: 0.75rem;
   line-height: 1.4;
   letter-spacing: 0.04em;
   color: var(--text-muted);
@@ -245,12 +253,12 @@ label {
 label:has(input[type='checkbox']) {
   flex-direction: row;
   align-items: center;
-  gap: 10px;
-  font-family: var(--sans);
-  font-size: 16px;
-  letter-spacing: normal;
+  gap: 0.625rem;
+  font-family: var(--font);
+  font-size: 0.8125rem;
+  letter-spacing: 0.02em;
   text-transform: none;
-  color: var(--text);
+  color: var(--text-h);
 }
 
 ul {
@@ -264,156 +272,40 @@ li {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 8px;
+  gap: 0.5rem;
   border-top: 0.8px solid var(--border);
-  padding: 16px 0;
+  padding: 1rem 0;
   overflow-wrap: break-word;
 }
 
 li > p,
 .app-main section > p {
-  font-family: var(--mono);
-  font-size: 14px;
+  font-family: var(--font);
+  font-size: 0.875rem;
   line-height: 1.5;
   color: rgba(255, 255, 255, 0.85);
 }
 
+/* Attention text: an outline in the accent colour, never a fill. */
 p.notice:not(:empty),
 .app-main p.warn,
 p.warn {
-  color: #fff;
-  background: #0b1c33;
-  border: 0.8px solid var(--accent);
-  padding: 12px 14px;
+  color: var(--text-h);
+  background: transparent;
+  border: 1px solid var(--accent);
+  padding: 0.625rem 0.875rem;
   margin: 0;
   width: min(100%, 40rem);
-}
-
-.public-shell {
-  min-height: 100svh;
-  display: flex;
-  flex-direction: column;
-}
-
-.public-shell > main {
-  flex: 1;
-  width: min(1024px, 100%);
-  margin: 0 auto;
-  padding: 96px 24px 120px;
-}
-
-.public-shell main > section {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  border: 0.8px solid var(--border);
-  margin-top: 64px;
-}
-
-.public-shell main > section > div {
-  padding: 24px;
-  min-width: 0;
-}
-
-.public-shell main > section > div + div {
-  border-left: 0.8px solid var(--border);
-}
-
-.public-navbar {
-  position: sticky;
-  top: 0;
-  z-index: 20;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  min-height: 65px;
-  padding: 12px 24px;
-  border-bottom: 0.8px solid var(--border);
-  background: #000;
-}
-
-.brand a,
-.app-logo,
-.nav-links a,
-.nav-item,
-.exit-btn,
-footer {
-  font-family: var(--mono);
-  letter-spacing: 0.04em;
-  text-decoration: none;
-}
-
-.brand a,
-.app-logo {
-  color: var(--text-h);
-  font-size: 14px;
-}
-
-.nav-links {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 8px 18px;
-}
-
-.nav-links a {
-  color: var(--text-h);
-  font-size: 13px;
-}
-
-.nav-links a:hover,
-.nav-item:hover,
-.exit-btn:hover {
-  color: rgba(255, 255, 255, 0.5);
-}
-
-.nav-links a.signup-btn,
-.nav-links a.signup-btn:hover {
-  background: #fff;
-  color: #000;
-  border: 0.8px solid #fff;
-  padding: 8px 16px;
-}
-
-.nav-links a.signup-btn:hover {
-  background: rgba(255, 255, 255, 0.88);
-}
-
-footer {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px 24px;
-  border-top: 0.8px solid var(--border);
-  padding: 16px 24px;
-  color: var(--text-muted);
-  font-size: 12px;
-}
-
-footer nav {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 16px;
-}
-
-footer a {
-  color: inherit;
-  text-decoration: none;
-}
-
-footer a:hover {
-  color: var(--text-h);
 }
 
 .app-shell {
   min-height: 100svh;
   display: grid;
-  grid-template-columns: 220px minmax(0, 1fr);
+  grid-template-columns: 13.75rem minmax(0, 1fr);
 }
 
 .app-shell.is-collapsed {
-  grid-template-columns: 64px minmax(0, 1fr);
+  grid-template-columns: 4rem minmax(0, 1fr);
 }
 
 .app-sidebar {
@@ -421,9 +313,9 @@ footer a:hover {
   top: 0;
   display: flex;
   flex-direction: column;
-  gap: 28px;
+  gap: 1.75rem;
   height: 100svh;
-  padding: 24px 16px;
+  padding: 1.5rem 1rem;
   border-right: 0.8px solid var(--border);
   background: #000;
 }
@@ -432,7 +324,7 @@ footer a:hover {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
+  gap: 0.5rem;
   min-width: 0;
 }
 
@@ -440,71 +332,89 @@ footer a:hover {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 36px;
-  height: 36px;
+  width: 2.25rem;
+  height: 2.25rem;
   padding: 0;
   flex: 0 0 auto;
 }
 
-.logo-mark {
+/* Collapsed: the toggle shows the logo; hovering or focusing it shows the expand icon instead. */
+.toggle-logo {
   display: none;
+  font-family: var(--font);
+  font-size: 0.9375rem;
+  color: var(--text-h);
 }
 
 .nav-icon {
-  width: 16px;
-  height: 16px;
+  width: 1rem;
+  height: 1rem;
   flex: 0 0 auto;
 }
 
+/* Collapsing changes the width only: the icons keep the same vertical positions as when open. */
 .app-shell.is-collapsed .app-sidebar {
-  padding: 16px 8px;
+  padding: 1.5rem 0.5rem;
   align-items: stretch;
 }
 
 .app-shell.is-collapsed .sidebar-header {
-  flex-direction: column;
+  justify-content: center;
 }
 
-.app-shell.is-collapsed .logo-full,
+.app-shell.is-collapsed .app-logo,
 .app-shell.is-collapsed .nav-label {
   display: none;
 }
 
-.app-shell.is-collapsed .logo-mark {
+.app-shell.is-collapsed .sidebar-toggle .toggle-logo {
   display: inline;
+}
+
+.app-shell.is-collapsed .sidebar-toggle .nav-icon {
+  display: none;
+}
+
+.app-shell.is-collapsed .sidebar-toggle:hover .toggle-logo,
+.app-shell.is-collapsed .sidebar-toggle:focus-visible .toggle-logo {
+  display: none;
+}
+
+.app-shell.is-collapsed .sidebar-toggle:hover .nav-icon,
+.app-shell.is-collapsed .sidebar-toggle:focus-visible .nav-icon {
+  display: block;
 }
 
 .app-shell.is-collapsed .nav-item,
 .app-shell.is-collapsed .exit-btn {
   justify-content: center;
-  padding-inline: 8px;
+  padding-inline: 0.5rem;
 }
 
 .sidebar-nav {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 0.25rem;
 }
 
 .nav-item,
 .exit-btn {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 0.625rem;
 }
 
 .nav-item {
   color: var(--text-muted);
-  font-size: 12px;
+  font-size: 0.75rem;
   line-height: 1.4;
-  padding: 8px 10px;
+  padding: 0.5rem 0.625rem;
   border: 0.8px solid transparent;
 }
 
 .nav-item.active {
   color: var(--text-h);
-  border-color: var(--border-strong);
-  background: var(--surface);
+  border-color: var(--accent);
 }
 
 .nav-item.active:hover {
@@ -517,8 +427,8 @@ footer a:hover {
 
 .exit-btn {
   color: var(--text-muted);
-  font-size: 12px;
-  padding: 8px 10px;
+  font-size: 0.75rem;
+  padding: 0.5rem 0.625rem;
 }
 
 .app-main {
@@ -530,12 +440,7 @@ footer a:hover {
 .app-main > main {
   flex: 1 1 auto;
   min-width: 0;
-  padding: 56px 32px 32px;
-}
-
-.app-main > footer {
-  flex-shrink: 0;
-  padding-inline: 32px;
+  padding: 3.5rem 2rem 2rem;
 }
 
 .app-shell.is-locked {
@@ -555,7 +460,7 @@ footer a:hover {
   flex-direction: column;
   min-height: 0;
   overflow: hidden;
-  padding-bottom: 16px;
+  padding-bottom: 1rem;
 }
 
 .app-shell.is-locked .tx-page {
@@ -574,7 +479,7 @@ body:has(.app-shell.is-locked) {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 16px;
+  gap: 1rem;
   min-width: 0;
   max-width: 100%;
 }
@@ -600,7 +505,7 @@ body:has(.app-shell.is-locked) {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 8px;
+  gap: 0.5rem;
 }
 
 .page-actions,
@@ -609,31 +514,23 @@ body:has(.app-shell.is-locked) {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
+  gap: 0.5rem;
 }
 
-.page-numbers button,
-.page-numbers button:hover,
-.page-numbers button:focus-visible {
-  border: 0;
-  outline: none;
-  background: transparent;
-  padding: 0 2px;
-  box-shadow: none;
+.page-numbers button {
+  padding: 0 0.375rem;
 }
 
 .page-numbers button[aria-current='page'] {
   color: var(--text-h);
-  text-decoration: line-through;
-  text-decoration-thickness: 1px;
-  text-decoration-skip-ink: none;
+  box-shadow: inset 0 0 0 1px var(--accent);
 }
 
 .toolbar {
   display: flex;
   flex-wrap: wrap;
   align-items: flex-end;
-  gap: 12px 14px;
+  gap: 0.75rem 0.875rem;
   width: 100%;
   min-width: 0;
 }
@@ -659,59 +556,28 @@ body:has(.app-shell.is-locked) {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 14px;
+  gap: 0.875rem;
   width: auto;
   max-width: 100%;
 }
 
 .tx-title h1 {
   margin: 0;
-  font-size: 28px;
+  font-size: 1.75rem;
   line-height: 1;
 }
 
 .tx-title:has(> .tx-actions),
-.tx-title:has(> .budget-date) {
+.tx-title:has(> .month-nav) {
   flex-direction: column;
   align-items: flex-start;
-  gap: 8px;
+  gap: 1.25rem;
 }
 
 .tx-actions {
   display: flex;
   align-items: center;
-  gap: 24px;
-}
-
-.tx-title .budget-date {
-  flex-direction: row;
-  align-items: center;
-  width: auto;
-  gap: 10px;
-  margin: 0;
-}
-
-.budget-date .date-scroll input,
-.budget-date .date-scroll input:focus,
-.budget-date .date-scroll input:focus-visible {
-  border: 0;
-  outline: none;
-  box-shadow: none;
-  background: transparent;
-  padding-inline: 2px;
-}
-
-.tx-actions > button,
-.tx-actions > button:hover,
-.tx-actions > button:focus,
-.tx-actions > button:focus-visible {
-  flex: 0 0 auto;
-  white-space: nowrap;
-  border: 0;
-  background: transparent;
-  box-shadow: none;
-  outline: none;
-  padding: 6px 0;
+  gap: 1.5rem;
 }
 
 .toolbar.tx-bar {
@@ -726,7 +592,7 @@ body:has(.app-shell.is-locked) {
   flex: 0 0 auto;
   flex-wrap: wrap;
   align-items: flex-end;
-  gap: 12px 14px;
+  gap: 0.75rem 0.875rem;
   min-width: 0;
   max-width: 100%;
 }
@@ -763,8 +629,8 @@ body:has(.app-shell.is-locked) {
 }
 
 .toolbar.tx-bar .fit select {
-  width: calc(8ch + 44px);
-  min-width: calc(8ch + 44px);
+  width: calc(8ch + 2.75rem);
+  min-width: calc(8ch + 2.75rem);
 }
 
 .toolbar.tx-bar .pick {
@@ -798,7 +664,7 @@ body:has(.app-shell.is-locked) {
 }
 
 .toolbar.tx-bar .pick.limit .pick-button {
-  min-width: calc(3ch + 26px);
+  min-width: calc(3ch + 1.625rem);
   max-width: none;
   overflow-wrap: normal;
   white-space: nowrap;
@@ -821,50 +687,76 @@ body:has(.app-shell.is-locked) {
   display: flex;
   flex-direction: column;
   align-items: stretch;
-  gap: 6px;
+  gap: 0.375rem;
   width: auto;
   flex: 0 0 auto;
   min-width: 0;
-  font-family: var(--mono);
-  font-size: 12px;
+  font-family: var(--font);
+  font-size: 0.75rem;
   line-height: 1.4;
   letter-spacing: 0.04em;
   color: var(--text-muted);
 }
 
 .pick-button {
+  position: relative;
   width: max-content;
   min-width: max-content;
   min-height: 0;
-  padding: 6px 10px;
+  padding: 0.4375rem 2.125rem 0.4375rem 0.75rem;
   text-align: left;
   letter-spacing: normal;
-  font-size: 14px;
-  background: #000;
+  font-family: var(--font);
+  font-size: 0.8125rem;
+  background: transparent;
   color: var(--text-h);
   border: 0.8px solid var(--border-strong);
   white-space: nowrap;
   overflow: visible;
 }
 
-.pick-button:hover {
-  background: #000;
+/* A thin chevron on the right; it flips while the list is open. */
+.pick-button::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  right: 0.8125rem;
+  width: 0.3125rem;
+  height: 0.3125rem;
+  border-right: 1px solid currentColor;
+  border-bottom: 1px solid currentColor;
+  opacity: 0.6;
+  transform: translateY(-70%) rotate(45deg);
+  transition: transform 0.12s ease;
+}
+
+.pick-button[aria-expanded='true']::after {
+  transform: translateY(-30%) rotate(-135deg);
+}
+
+.pick-button:hover:not(:disabled) {
+  text-decoration: none;
+  border-color: var(--text-muted);
+}
+
+.pick-button[aria-expanded='true'] {
+  border-color: var(--accent);
 }
 
 .pick-list {
   position: absolute;
   z-index: 30;
-  top: calc(100% + 4px);
+  top: calc(100% + 0.25rem);
   left: 0;
   width: max-content;
   min-width: 100%;
   max-height: 16rem;
   margin: 0;
-  padding: 0;
+  padding: 0.25rem 0;
   overflow: auto;
   background: #000;
   color: var(--text-h);
-  border: 0.8px solid var(--border-strong);
+  border: 0.8px solid var(--accent);
 }
 
 .pick-list > li {
@@ -877,21 +769,27 @@ body:has(.app-shell.is-locked) {
 }
 
 .pick-list button {
+  display: block;
   width: max-content;
   min-width: 100%;
   border: 0;
-  background: #000;
-  color: var(--text-h);
+  background: transparent;
+  color: var(--text);
   text-align: left;
-  padding: 6px 10px;
+  padding: 0.5rem 0.875rem;
   letter-spacing: normal;
-  font-size: 14px;
+  font-size: 0.8125rem;
   white-space: nowrap;
 }
 
-.pick-list button:hover,
+.pick-list button:hover:not(:disabled),
+.pick-list button:focus-visible {
+  color: var(--text-h);
+  outline: none;
+}
+
 .pick-list button[aria-selected='true'] {
-  background: rgba(255, 255, 255, 0.08);
+  color: var(--accent);
 }
 
 /* Dropdown inside a form (modals): same look as a text field, full width. */
@@ -915,7 +813,7 @@ body:has(.app-shell.is-locked) {
   flex-direction: row;
   flex-wrap: nowrap;
   align-items: center;
-  gap: 6px;
+  gap: 0.375rem;
   width: max-content;
   max-width: 100%;
 }
@@ -933,7 +831,7 @@ body:has(.app-shell.is-locked) {
   max-width: 4.5ch;
   flex: 0 0 auto;
   text-align: center;
-  padding: 6px 8px;
+  padding: 0.375rem 0.5rem;
 }
 
 .date-scroll input.date-month,
@@ -957,7 +855,7 @@ body:has(.app-shell.is-locked) {
 .pick-list.date-part-list {
   width: max-content;
   min-width: 4.5ch;
-  max-height: calc(4 * 32px);
+  max-height: calc(4 * 2rem);
 }
 
 .pick-list.date-part-list button {
@@ -970,7 +868,7 @@ body:has(.app-shell.is-locked) {
   flex-direction: row;
   align-items: center;
   justify-content: space-between;
-  gap: 12px 16px;
+  gap: 0.75rem 1rem;
   width: 100%;
   min-width: 0;
 }
@@ -979,15 +877,15 @@ body:has(.app-shell.is-locked) {
   flex: 1 1 auto;
   min-width: 0;
   overflow-wrap: anywhere;
-  font-family: var(--mono);
-  font-size: 14px;
+  font-family: var(--font);
+  font-size: 0.875rem;
   line-height: 1.5;
   color: rgba(255, 255, 255, 0.85);
 }
 
 .entry-meta {
   color: var(--text-muted);
-  margin-left: 8px;
+  margin-left: 0.5rem;
 }
 
 .entry-actions {
@@ -1006,7 +904,7 @@ body:has(.app-shell.is-locked) {
 
 .tx-row .entry-actions,
 .tx-page .entry-row .entry-actions {
-  gap: 24px;
+  gap: 1.5rem;
 }
 
 .tx-main {
@@ -1014,13 +912,13 @@ body:has(.app-shell.is-locked) {
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 0.125rem;
 }
 
 .tx-sub,
 .tx-desc {
-  font-family: var(--mono);
-  font-size: 14px;
+  font-family: var(--font);
+  font-size: 0.875rem;
   line-height: 1.5;
   overflow-wrap: anywhere;
 }
@@ -1029,21 +927,9 @@ body:has(.app-shell.is-locked) {
   color: var(--text-muted);
 }
 
-.tx-page .tx-actions > button,
-.tx-page .tx-actions > button:hover,
-.tx-page .tx-actions > button:focus,
-.tx-page .tx-actions > button:focus-visible {
-  border: 0;
-  background: transparent;
-  box-shadow: none;
-  outline: none;
-}
 
-.tx-page button:hover:not(:disabled) {
-  text-decoration: line-through;
-  text-decoration-thickness: 1px;
-  text-decoration-skip-ink: none;
-}
+
+
 
 .tx-page .tx-text,
 .tx-page .tx-text:hover,
@@ -1081,7 +967,7 @@ body:has(.app-shell.is-locked) {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 16px;
+  gap: 1rem;
   min-width: 0;
 }
 
@@ -1098,11 +984,10 @@ body:has(.app-shell.is-locked) {
   container-name: budget;
 }
 
+/* Three bands: title, expenses | income (half each), history. The page itself never scrolls. */
 .tx-page > .budget-split {
   flex: 1 1 auto;
-  flex-shrink: 1;
   min-height: 0;
-  overflow: hidden;
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   grid-template-rows: minmax(0, 1fr);
@@ -1115,72 +1000,123 @@ body:has(.app-shell.is-locked) {
   min-width: 0;
   min-height: 0;
   align-items: stretch;
-  gap: 12px;
+  gap: 1.25rem;
+  overflow: hidden;
+}
+
+/* The category list is the part that scrolls. */
+.budget-pane {
+  flex: 1 1 auto;
+  min-height: 0;
   overflow: auto;
 }
 
+.budget-half > .budget-pane {
+  flex-shrink: 1;
+}
+
 .budget-half:first-child {
-  padding-right: 24px;
+  padding-right: 2rem;
 }
 
 .budget-half + .budget-half {
   border-left: 0.8px solid var(--border);
-  padding-left: 24px;
+  padding-left: 2rem;
 }
 
 .budget-half > * {
   flex-shrink: 0;
 }
 
-.budget-half form,
-form.amount-row {
-  width: min(100%, 28rem);
+.budget-half h2 {
   margin: 0;
+  font-size: 1.25rem;
 }
 
-.budget-line {
-  align-items: center;
-}
-
-form.amount-row {
-  flex-direction: row;
-  flex-wrap: nowrap;
-  align-items: center;
-  gap: 8px;
-  width: auto;
-  flex: 0 0 auto;
-}
-
-.amount-row input {
-  width: 8rem;
-  min-width: 8rem;
-  flex: 0 0 auto;
-}
-
-.amount-row button {
-  flex: 0 0 auto;
-}
-
-.budget-half p.warn {
+/* Rows of label, amount and actions. Amounts are plain text until "edit" is clicked. */
+.budget-table {
+  display: flex;
+  flex-direction: column;
   width: 100%;
 }
 
-.budget-half .rows {
+.budget-row {
+  display: grid;
+  /* The actions column keeps room for the longest "edit" word in any language, so amounts line up. */
+  grid-template-columns: minmax(0, 1fr) auto minmax(6.5rem, auto);
+  align-items: center;
+  column-gap: 1.25rem;
   width: 100%;
+  min-height: 2.875rem;
+  margin: 0;
+  padding: 0.375rem 0;
+  border-top: 0.8px solid var(--border);
 }
 
-@container budget (max-width: 700px) {
+.budget-row:last-child {
+  border-bottom: 0.8px solid var(--border);
+}
+
+.budget-label {
+  font-family: var(--font);
+  font-size: 0.8125rem;
+  letter-spacing: 0.02em;
+  color: var(--text-h);
+  overflow-wrap: anywhere;
+}
+
+.budget-row.quiet .budget-label {
+  color: var(--text-muted);
+}
+
+.budget-amount {
+  font-family: var(--font);
+  font-size: 0.875rem;
+  color: var(--text-h);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.budget-amount.unset {
+  color: var(--text-muted);
+}
+
+.budget-amount.over {
+  border: 1px solid var(--accent);
+  padding: 0.125rem 0.5rem;
+}
+
+.budget-row input {
+  width: min(9rem, 100%);
+  text-align: right;
+}
+
+.budget-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 1rem;
+  min-width: 3rem;
+}
+
+@container budget (max-width: 43.75rem) {
+  .app-shell.is-locked .tx-page.budget-page {
+    overflow: auto;
+  }
+
   .tx-page > .budget-split {
+    flex: none;
     display: flex;
     flex-direction: column;
-    overflow: auto;
-    gap: 16px;
+    gap: 1.5rem;
+  }
+
+  .budget-pane {
+    flex: none;
+    max-height: 16rem;
   }
 
   .app-main main section section.budget-half {
-    overflow: auto;
-    min-height: 16rem;
-    max-height: 70svh;
+    overflow: visible;
     height: auto;
     flex: none;
   }
@@ -1193,9 +1129,8 @@ form.amount-row {
     border-left: none;
     border-top: 0.8px solid var(--border);
     padding-left: 0;
-    padding-top: 16px;
+    padding-top: 1.5rem;
   }
-
 }
 
 ul.rows {
@@ -1204,7 +1139,7 @@ ul.rows {
 }
 
 ul.rows ul.rows {
-  padding-left: 20px;
+  padding-left: 1.25rem;
 }
 
 ul.rows > li {
@@ -1231,8 +1166,8 @@ body:has(dialog[open]) {
 }
 
 .modal {
-  width: min(28rem, calc(100vw - 32px));
-  max-height: calc(100svh - 32px);
+  width: min(28rem, calc(100vw - 2rem));
+  max-height: calc(100svh - 2rem);
   margin: auto;
   padding: 0;
   border: 0.8px solid var(--border-strong);
@@ -1251,9 +1186,9 @@ body:has(dialog[open]) {
   display: flex;
   flex-direction: column;
   align-items: stretch;
-  gap: 16px;
-  max-height: calc(100svh - 32px);
-  padding: 24px;
+  gap: 1rem;
+  max-height: calc(100svh - 2rem);
+  padding: 1.5rem;
   overflow: auto;
   background-color: #000;
   background-image: none;
@@ -1264,14 +1199,14 @@ body:has(dialog[open]) {
   flex-wrap: nowrap;
   justify-content: flex-end;
   align-items: center;
-  gap: 8px;
+  gap: 1.5rem;
 }
 
 .modal-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
+  gap: 1rem;
 }
 
 .modal-head h2 {
@@ -1284,34 +1219,9 @@ body:has(dialog[open]) {
   margin: 0;
 }
 
-.public-shell article {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-  max-width: 40rem;
-}
-
-@media (max-width: 720px) {
+@media (max-width: 45em) {
   h1 {
-    font-size: 32px;
-  }
-
-  .public-shell > main {
-    padding: 48px 16px 72px;
-  }
-
-  .public-navbar {
-    align-items: flex-start;
-    padding: 12px 16px;
-  }
-
-  .public-shell main > section {
-    grid-template-columns: 1fr;
-  }
-
-  .public-shell main > section > div + div {
-    border-left: none;
-    border-top: 0.8px solid var(--border);
+    font-size: 2rem;
   }
 
   .app-shell,
@@ -1332,29 +1242,26 @@ body:has(dialog[open]) {
     z-index: 20;
     height: auto;
     align-items: stretch;
-    gap: 12px;
-    padding: 12px 16px;
+    gap: 0.75rem;
+    padding: 0.75rem 1rem;
     border-right: none;
     border-bottom: 0.8px solid var(--border);
   }
 
   .app-shell.is-collapsed .sidebar-header {
     flex-direction: row;
+    justify-content: space-between;
   }
 
-  .app-shell.is-collapsed .logo-full,
+  .app-shell.is-collapsed .app-logo,
   .app-shell.is-collapsed .nav-label {
     display: inline;
-  }
-
-  .app-shell.is-collapsed .logo-mark {
-    display: none;
   }
 
   .app-shell.is-collapsed .nav-item,
   .app-shell.is-collapsed .exit-btn {
     justify-content: flex-start;
-    padding: 8px 10px;
+    padding: 0.5rem 0.625rem;
   }
 
   .toolbar.tx-bar,
@@ -1374,7 +1281,7 @@ body:has(dialog[open]) {
   .sidebar-nav {
     flex-direction: row;
     flex-wrap: wrap;
-    gap: 8px 10px;
+    gap: 0.5rem 0.625rem;
   }
 
   .sidebar-footer {
@@ -1382,11 +1289,7 @@ body:has(dialog[open]) {
   }
 
   .app-main > main {
-    padding: 28px 16px 32px;
-  }
-
-  .app-main > footer {
-    padding-inline: 16px;
+    padding: 1.75rem 1rem 2rem;
   }
 
   .app-shell.is-locked,
@@ -1395,7 +1298,516 @@ body:has(dialog[open]) {
   }
 
   .app-shell.is-locked .app-main > main {
-    padding-bottom: 12px;
+    padding-bottom: 0.75rem;
   }
 
+}
+
+/* First-run and lock screens: one centred column on an empty page. */
+.gate {
+  min-height: 100svh;
+  display: grid;
+  place-items: center;
+  padding: 2rem 1rem;
+}
+
+.gate > form,
+.gate > .panel {
+  width: min(100%, 40rem);
+  margin: 0;
+  padding: 2rem 0;
+}
+
+.gate .brand-mark {
+  font-family: var(--font);
+  font-size: 0.875rem;
+  letter-spacing: 0.04em;
+  color: var(--text-h);
+  margin: 0 0 1.5rem;
+}
+
+.gate h1 {
+  font-size: 1.75rem;
+  margin: 0;
+}
+
+.hint {
+  font-family: var(--font);
+  font-size: 0.75rem;
+  line-height: 1.6;
+  color: var(--text-muted);
+}
+
+.gate button[type='submit'] {
+  align-self: flex-start;
+}
+
+.gate code {
+  overflow-wrap: anywhere;
+}
+
+/* Navigation text: mono, no underlines; hover strikes through like every button. */
+.app-logo,
+.nav-item,
+.exit-btn {
+  font-family: var(--font);
+  letter-spacing: 0.04em;
+  text-decoration: none;
+}
+
+.app-logo {
+  color: var(--text-h);
+  font-size: 0.875rem;
+}
+
+.nav-item:hover {
+  color: var(--text-h);
+  text-decoration: line-through;
+  text-decoration-thickness: 1px;
+  text-decoration-skip-ink: none;
+}
+
+form > button {
+  align-self: flex-start;
+}
+
+/* Warning: outline only. */
+.warning {
+  border: 1px solid var(--accent);
+  padding: 1rem 1.25rem;
+  color: var(--text-h);
+  font-size: 0.9375rem;
+  line-height: 1.6;
+}
+
+/* A field with a button inside it, at the right edge. */
+.field-input {
+  position: relative;
+  display: flex;
+}
+
+.field-input input {
+  padding-right: 4.5rem;
+}
+
+.field-input button {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  padding: 0 0.625rem;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.field-input button:hover:not(:disabled) {
+  color: var(--text-h);
+}
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.875rem;
+}
+
+.recovery-code {
+  font-family: var(--font);
+  font-size: clamp(0.95rem, 0.5rem + 2.6vw, 1.375rem);
+  line-height: 1.6;
+  letter-spacing: 0.08em;
+  color: var(--text-h);
+  border: 1px solid var(--accent);
+  padding: 1.25rem 1.5rem;
+  width: 100%;
+  overflow-wrap: anywhere;
+  user-select: all;
+}
+
+.check {
+  flex-direction: row;
+  align-items: center;
+  gap: 0.625rem;
+}
+
+.panel .actions {
+  display: flex;
+  gap: 1.5rem;
+}
+
+
+/* Month picker: previous and next as text buttons around the month name. */
+.month-nav {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-family: var(--font);
+  font-size: 0.875rem;
+  color: var(--text-h);
+}
+
+.month-nav > button {
+  padding: 0.25rem 0.625rem;
+  font-size: 1.125rem;
+  line-height: 1;
+}
+
+.month-nav > button:last-child {
+  margin-left: 0.5rem;
+  font-size: 0.8125rem;
+}
+
+.month-nav .pick.field {
+  width: auto;
+}
+
+.month-nav .pick-button {
+  text-transform: lowercase;
+}
+
+/* Monthly history: one row per month since the first budget. */
+.app-main main section section.budget-history {
+  flex: 0 0 auto;
+  width: 100%;
+  max-width: none;
+  gap: 0.75rem;
+  height: clamp(11rem, 30svh, 17rem);
+  min-height: 0;
+  padding-top: 1rem;
+  border-top: 0.8px solid var(--border);
+}
+
+.budget-history h2 {
+  margin: 0;
+  font-size: 1.25rem;
+}
+
+.budget-history-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  width: 100%;
+  overflow: auto;
+}
+
+.budget-history table {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: var(--font);
+  font-size: 0.8125rem;
+}
+
+.budget-history th {
+  position: sticky;
+  top: 0;
+  background: var(--bg);
+  padding: 0.5rem 0 0.5rem 1rem;
+  font-size: 0.75rem;
+  font-weight: 400;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  text-align: right;
+  white-space: nowrap;
+  border-bottom: 0.8px solid var(--border);
+}
+
+.budget-history td {
+  padding: 0.625rem 0 0.625rem 1rem;
+  color: var(--text-h);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  border-bottom: 0.8px solid var(--border);
+}
+
+.budget-history th:first-child,
+.budget-history td:first-child {
+  padding-left: 0;
+  text-align: left;
+}
+
+.budget-history td:first-child button {
+  padding: 0.125rem 0;
+  font-size: 0.8125rem;
+  text-transform: lowercase;
+}
+
+.budget-history tr.selected td:first-child button {
+  padding: 0.125rem 0.5rem;
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+
+.budget-history .over {
+  border: 1px solid var(--accent);
+  padding: 0.125rem 0.5rem;
+}
+
+/* Dates as dropdowns: day, month and year side by side. A label sits above, like other fields. */
+.date-picker {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 0.375rem;
+}
+
+.date-picker .pick.field {
+  width: auto;
+}
+
+.tx-date-group {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.375rem;
+  width: auto;
+  flex: 0 0 auto;
+}
+
+.tx-date-group > span {
+  font-family: var(--font);
+  font-size: 0.75rem;
+  letter-spacing: 0.04em;
+  line-height: 1.4;
+  color: var(--text-muted);
+}
+
+/* From and to are kept whole: when the row is too narrow, "to" drops below "from". */
+.tx-range {
+  flex-wrap: wrap;
+}
+
+.tx-range > button {
+  padding: 0.5rem 0;
+}
+
+/* When the filters run out of room the range block wraps upwards: it appears above the other filters,
+   not under them. Items sit at the bottom of their row (flex-start is the bottom with wrap-reverse). */
+.toolbar.tx-bar {
+  flex-wrap: wrap-reverse;
+  align-items: flex-start;
+}
+
+/* Copyright and licence under the lock button; hidden when the sidebar is collapsed or on small screens. */
+.sidebar-legal {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  margin-top: 1rem;
+  padding: 1rem 0.625rem 0;
+  border-top: 0.8px solid var(--border);
+  font-family: var(--font);
+  font-size: 0.6875rem;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+
+@media (max-width: 45em) {
+  .app-shell .sidebar-legal,
+  .app-shell.is-collapsed .sidebar-legal {
+    display: none;
+  }
+}
+
+/* Keep the legal block's space when collapsed (hidden, not removed) so the lock button does not move down. */
+.app-shell.is-collapsed .sidebar-legal {
+  display: flex;
+  visibility: hidden;
+}
+
+@media (max-width: 45em) {
+  .app-shell .sidebar-legal,
+  .app-shell.is-collapsed .sidebar-legal {
+    display: none;
+  }
+}
+
+/* Fixed row heights, so the rows are the same height with and without their labels. */
+.nav-item,
+.exit-btn {
+  height: 2.25rem;
+}
+
+.sidebar-legal {
+  white-space: nowrap;
+}
+
+/* Narrow containers: while editing, the buttons take their own line under the label and amount. */
+@container budget (max-width: 30rem) {
+  .budget-row.editing {
+    grid-template-columns: minmax(0, 1fr) auto;
+    row-gap: 0.25rem;
+  }
+
+  .budget-row.editing .budget-actions {
+    grid-column: 1 / -1;
+    justify-content: flex-start;
+  }
+}
+
+/* Settings: blocks in a grid that wraps to one column as the window narrows. */
+.settings-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 20rem), 1fr));
+  gap: 2rem clamp(1.5rem, 4vw, 4rem);
+  align-items: start;
+  align-content: start;
+}
+
+.settings-block {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1rem;
+  width: 100%;
+  min-width: 0;
+  margin: 0;
+  padding-top: 1rem;
+  border-top: 0.8px solid var(--border);
+}
+
+.settings-block h2 {
+  margin: 0;
+}
+
+.settings-block form {
+  width: 100%;
+  margin: 0;
+}
+
+.settings-block .actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1.5rem;
+}
+
+.settings-block .panel {
+  width: 100%;
+}
+
+.settings-block code {
+  font-family: var(--font);
+  font-size: 0.8125rem;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+/* A setting that shows its value and a text button to change it. */
+.settings-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  column-gap: 1rem;
+  width: 100%;
+  min-height: 2.5rem;
+  border-top: 0.8px solid var(--border);
+  border-bottom: 0.8px solid var(--border);
+}
+
+.settings-row-label {
+  font-size: 0.75rem;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+
+.settings-row-value {
+  color: var(--text-h);
+  font-size: 0.8125rem;
+  overflow-wrap: anywhere;
+}
+
+/* Hover hints for keyboard shortcuts: a small outlined label that fades in shortly after hovering or focusing. */
+[data-tip] {
+  position: relative;
+}
+
+[data-tip]::after {
+  content: attr(data-tip);
+  position: absolute;
+  top: calc(100% + 0.4rem);
+  left: 0;
+  z-index: 60;
+  padding: 0.25rem 0.5rem;
+  background: #000;
+  border: 0.8px solid var(--border-strong);
+  color: var(--text-h);
+  font-family: var(--font);
+  font-size: 0.6875rem;
+  font-weight: 400;
+  letter-spacing: 0.04em;
+  line-height: 1.4;
+  text-decoration: none;
+  text-transform: none;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  transform: translateY(-2px);
+  transition: opacity 0.12s ease 0.45s, transform 0.12s ease 0.45s;
+}
+
+[data-tip]:hover::after,
+[data-tip]:focus-visible::after {
+  opacity: 1;
+  transform: none;
+}
+
+/* With the sidebar collapsed the hints sit beside the icons, not under them. */
+.app-shell.is-collapsed .app-sidebar [data-tip]::after {
+  top: 50%;
+  left: calc(100% + 0.5rem);
+  transform: translateY(-50%);
+}
+
+.app-shell.is-collapsed .app-sidebar [data-tip]:hover::after,
+.app-shell.is-collapsed .app-sidebar [data-tip]:focus-visible::after {
+  transform: translateY(-50%);
+}
+
+/* Keyboard shortcut help. */
+.modal.modal-wide {
+  width: min(38rem, calc(100vw - 2rem));
+}
+
+.shortcut-groups {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 15rem), 1fr));
+  gap: 1.5rem 2rem;
+}
+
+.shortcut-group h3 {
+  margin: 0 0 0.5rem;
+  font-size: 0.75rem;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+
+.shortcut-group dl {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+}
+
+.shortcut-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.4rem 0;
+  border-top: 0.8px solid var(--border);
+}
+
+.shortcut-row dt {
+  font-size: 0.8125rem;
+  color: var(--text-h);
+  overflow-wrap: anywhere;
+}
+
+.shortcut-row dd {
+  margin: 0;
+}
+
+kbd {
+  display: inline-block;
+  padding: 0.05rem 0.45rem;
+  border: 0.8px solid var(--border-strong);
+  font-family: var(--font);
+  font-size: 0.75rem;
+  color: var(--text-h);
+  white-space: nowrap;
 }

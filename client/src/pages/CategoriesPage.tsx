@@ -1,23 +1,26 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import AddCategoryModal from '../components/AddCategoryModal'
 import { visibleCategories, type Category, type Kind } from '../categoriesView'
-import { api, errorMessage } from '../http'
-
-function kindLabel(kind: Kind): string {
-  if (kind === 'INCOME') return 'income'
-  if (kind === 'EXPENSE') return 'expense'
-  return 'all'
-}
+import { categories as categoriesApi, cleanCategoryName } from '../api/categories'
+import { errorText } from '../api/invoke'
+import { useNotice } from '../useNotice'
+import { useT } from '../i18n/context'
+import { useShortcut } from '../keys/registry'
+import { tip } from '../keys/tip'
+import { useRowNavigation } from '../keys/useRowNavigation'
 
 export default function CategoriesPage() {
+  const t = useT()
+  const kindLabel = (kind: Kind) => (kind === 'INCOME' ? t('common.income') : kind === 'EXPENSE' ? t('common.expense') : t('categories.all'))
   const [categories, setCategories] = useState<Category[]>([])
   const [kind, setKind] = useState<Kind>('ALL')
   const [typeOpen, setTypeOpen] = useState(false)
   const typeRef = useRef<HTMLDivElement>(null)
   const [query, setQuery] = useState('')
-  const [message, setMessage] = useState('')
+  const [message, setMessage] = useNotice()
   const [adding, setAdding] = useState(false)
   const [loaded, setLoaded] = useState(false)
+  const searchRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     if (!typeOpen) return
@@ -36,13 +39,12 @@ export default function CategoriesPage() {
   }, [typeOpen])
 
   async function load() {
-    const response = await api('/api/v1/categories')
-    if (!response.ok) {
-      setMessage(await errorMessage(response))
-      return
+    try {
+      setCategories(await categoriesApi.list())
+      setLoaded(true)
+    } catch (error) {
+      setMessage(errorText(error))
     }
-    setCategories((await response.json()) as Category[])
-    setLoaded(true)
   }
 
   useEffect(() => {
@@ -51,20 +53,29 @@ export default function CategoriesPage() {
 
   const shown = visibleCategories(categories, kind, query)
 
+  // Keyboard: n adds, / searches, j and k move between rows.
+  useShortcut('new', () => setAdding(true))
+  useShortcut('search', () => searchRef.current?.focus())
+  useRowNavigation()
+
   return (
     <section className="tx-page">
       <div className="tx-title">
-        <h1>categories</h1>
+        <h1>{t('categories.title')}</h1>
         <div className="tx-actions">
-          <button type="button" onClick={() => setAdding(true)}>
-            add category
+          <button type="button" onClick={() => setAdding(true)} {...tip('new', t('categories.add'))}>
+            {t('categories.add')}
           </button>
         </div>
       </div>
       <div className="toolbar wide tx-bar">
-        <label className="grow">
-          search
+        <label className="grow" {...tip('search')}>
+          {t('common.search')}
           <input
+            ref={searchRef}
+            onKeyDown={(event) => {
+              if (event.key === 'Escape') event.currentTarget.blur()
+            }}
             value={query}
             maxLength={50}
             autoComplete="off"
@@ -72,7 +83,7 @@ export default function CategoriesPage() {
           />
         </label>
         <div className="pick fit type" ref={typeRef}>
-          <span>type</span>
+          <span>{t('common.type')}</span>
           <button
             type="button"
             className="pick-button"
@@ -115,7 +126,7 @@ export default function CategoriesPage() {
         />
       ) : null}
       <div className="tx-pane wide">
-        {loaded && shown.length === 0 ? <p>no categories.</p> : null}
+        {loaded && shown.length === 0 ? <p>{t('common.noCategories')}</p> : null}
         <ul className="rows">
           {shown.map((category) => (
             <CategoryEditor
@@ -140,22 +151,21 @@ function CategoryEditor({
   onDone: () => Promise<void>
   onError: (message: string) => void
 }) {
+  const t = useT()
   const [renaming, setRenaming] = useState(false)
 
   async function onSave(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     const form = new FormData(event.currentTarget)
-    const name = String(form.get('name') ?? '').trim()
+    const name = cleanCategoryName(String(form.get('name') ?? ''))
     if (!name) {
-      onError('enter a category name.')
+      onError(t('categories.nameError'))
       return
     }
-    const response = await api(`/api/v1/categories/${encodeURIComponent(category.id)}`, {
-      method: 'PATCH',
-      body: JSON.stringify({ name }),
-    })
-    if (!response.ok) {
-      onError(await errorMessage(response))
+    try {
+      await categoriesApi.rename(category.id, name)
+    } catch (error) {
+      onError(errorText(error))
       return
     }
     onError('')
@@ -164,29 +174,30 @@ function CategoryEditor({
   }
 
   async function onDelete() {
-    const response = await api(`/api/v1/categories/${encodeURIComponent(category.id)}`, { method: 'DELETE' })
-    if (!response.ok) {
-      onError(await errorMessage(response))
+    try {
+      await categoriesApi.remove(category.id)
+    } catch (error) {
+      onError(errorText(error))
       return
     }
     onError('')
     await onDone()
   }
 
-  const typeLabel = category.type === 'INCOME' ? 'income' : 'expense'
+  const typeLabel = category.type === 'INCOME' ? t('common.income') : t('common.expense')
 
   if (renaming) {
     return (
       <li>
         <form className="entry-row" onSubmit={(event) => void onSave(event)}>
           <label>
-            name
+            {t('common.name')}
             <input name="name" required maxLength={50} defaultValue={category.name} autoComplete="off" />
           </label>
           <div className="entry-actions">
-            <button type="submit">save</button>
+            <button type="submit">{t('common.save')}</button>
             <button type="button" onClick={() => setRenaming(false)}>
-              cancel
+              {t('common.cancel')}
             </button>
           </div>
         </form>
@@ -202,11 +213,11 @@ function CategoryEditor({
           <span className="entry-meta">{typeLabel}</span>
         </p>
         <div className="entry-actions">
-          <button type="button" className="tx-text" onClick={() => setRenaming(true)}>
-            rename
+          <button type="button" className="tx-text" data-row-focus onClick={() => setRenaming(true)}>
+            {t('common.rename')}
           </button>
           <button type="button" className="tx-text" onClick={() => void onDelete()}>
-            delete
+            {t('common.delete')}
           </button>
         </div>
       </div>

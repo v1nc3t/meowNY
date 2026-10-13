@@ -1,69 +1,62 @@
-import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
+import { z } from 'zod'
+import { call, errorText, inDesktopApp, ApiError, type ErrorCode } from '../api/invoke'
 import type { Settings } from './rules'
+
+export { errorText, inDesktopApp, ApiError as VaultError }
+export type { ErrorCode }
 
 export type VaultStatus = 'not_set_up' | 'locked' | 'unlocked'
 export type LockPrefs = { lock_after_secs: number; lock_on_minimize: boolean; lock_on_close: boolean }
 
-export type ErrorCode =
-  | 'locked'
-  | 'not_set_up'
-  | 'already_set_up'
-  | 'wrong_credentials'
-  | 'key_unavailable'
-  | 'database_too_new'
-  | 'invalid_input'
-  | 'internal'
+const Nothing = z.null()
+const Conversion = z.object({
+  transactions: z.number().int().nonnegative(),
+  recurring: z.number().int().nonnegative(),
+  budgets: z.number().int().nonnegative(),
+})
+const RecoveryKey = z.string().regex(/^([0-9A-Z]{4}-){7}[0-9A-Z]{4}$/)
+const Status = z.enum(['not_set_up', 'locked', 'unlocked'])
+const SettingsShape = z.object({
+  currency: z.string(),
+  locale: z.string(),
+  timezone: z.string(),
+  language: z.string(),
+})
+const LockPrefsShape = z.object({
+  lock_after_secs: z.number().int(),
+  lock_on_minimize: z.boolean(),
+  lock_on_close: z.boolean(),
+})
 
-const MESSAGES: Record<ErrorCode, string> = {
-  locked: 'the app is locked.',
-  not_set_up: 'the app is not set up yet.',
-  already_set_up: 'the app is already set up.',
-  wrong_credentials: 'wrong passphrase.',
-  key_unavailable: 'the key is not in the OS keychain. the data file cannot be opened on this machine.',
-  database_too_new: 'this data file was written by a newer version of meowny. update the app.',
-  invalid_input: 'check the values and try again.',
-  internal: 'something went wrong.',
-}
-
-export class VaultError extends Error {
-  readonly code: ErrorCode
-  constructor(code: ErrorCode) {
-    super(MESSAGES[code])
-    this.code = code
-  }
-}
-
-/** True inside the desktop app. In a plain browser (client dev against the old server) there is no vault. */
-export function inDesktopApp(): boolean {
-  return typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
-}
-
-async function call<T>(command: string, args?: Record<string, unknown>): Promise<T> {
-  try {
-    return await invoke<T>(command, args)
-  } catch (error) {
-    const code = typeof error === 'string' && error in MESSAGES ? (error as ErrorCode) : 'internal'
-    throw new VaultError(code)
-  }
-}
-
-export function errorText(error: unknown): string {
-  return error instanceof VaultError ? error.message : MESSAGES.internal
-}
+const none = (passphrase: string) => (passphrase === '' ? null : passphrase)
+const done = <T>(promise: Promise<T>) => promise.then(() => undefined)
 
 export const vault = {
-  status: () => call<VaultStatus>('vault_status'),
+  status: () => call('vault_status', Status),
+  /** Creates the data file and returns the recovery key, which is shown once and never stored. */
   create: (settings: Settings, passphrase: string) =>
-    call<void>('create_vault', { settings, passphrase: passphrase === '' ? null : passphrase }),
-  unlock: (passphrase: string) => call<void>('unlock_vault', { passphrase: passphrase === '' ? null : passphrase }),
-  lock: () => call<void>('lock_vault'),
-  touch: () => call<void>('touch_activity'),
-  settings: () => call<Settings>('get_settings'),
-  saveSettings: (settings: Settings) => call<void>('save_settings', { settings }),
-  lockPrefs: () => call<LockPrefs>('get_lock_prefs'),
-  saveLockPrefs: (prefs: LockPrefs) => call<void>('save_lock_prefs', { prefs }),
-  dataLocation: () => call<string>('data_location'),
-  wipe: (confirmation: string) => call<void>('wipe_all_data', { confirmation }),
+    call('create_vault', RecoveryKey, { settings, passphrase: none(passphrase) }),
+  /** Unlocks with the recovery key and sets a new passphrase (empty means none). */
+  recover: (recoveryKey: string, newPassphrase: string) =>
+    done(call('recover_vault', Nothing, { recoveryKey, newPassphrase: none(newPassphrase) })),
+  /**
+   * Changes the currency. With a rate (units of the new currency per one of the current), every amount is
+   * converted at that rate; with null only the label changes.
+   */
+  changeCurrency: (currency: string, rate: string | null) => call('change_currency', Conversion, { input: { currency, rate } }),
+  /** Opens a save dialog and writes the key to a text file. False when the person cancels. */
+  saveRecoveryKey: (code: string) => call('save_recovery_key', z.boolean(), { code }),
+  /** Replaces the recovery key; the old one stops working. */
+  newRecoveryKey: (passphrase: string) => call('new_recovery_key', RecoveryKey, { passphrase: none(passphrase) }),
+  unlock: (passphrase: string) => done(call('unlock_vault', Nothing, { passphrase: none(passphrase) })),
+  lock: () => done(call('lock_vault', Nothing)),
+  touch: () => done(call('touch_activity', Nothing)),
+  settings: () => call('get_settings', SettingsShape),
+  saveSettings: (settings: Settings) => done(call('save_settings', Nothing, { settings })),
+  lockPrefs: () => call('get_lock_prefs', LockPrefsShape),
+  saveLockPrefs: (prefs: LockPrefs) => done(call('save_lock_prefs', Nothing, { prefs })),
+  dataLocation: () => call('data_location', z.string()),
+  wipe: (confirmation: string) => done(call('wipe_all_data', Nothing, { confirmation })),
   onLocked: (handler: () => void) => listen('vault-locked', handler),
 }

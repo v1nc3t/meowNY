@@ -13,6 +13,22 @@ const COMMANDS: &[&str] = &[
     "save_lock_prefs",
     "data_location",
     "wipe_all_data",
+    "list_categories",
+    "create_category",
+    "rename_category",
+    "delete_category",
+    "list_transactions",
+    "create_transaction",
+    "update_transaction",
+    "delete_transaction",
+    "today",
+    "set_budget",
+    "budget_overview",
+    "recover_vault",
+    "new_recovery_key",
+    "save_recovery_key",
+    "budget_history",
+    "change_currency",
 ];
 
 fn main() {
