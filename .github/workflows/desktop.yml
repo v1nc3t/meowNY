@@ -23,6 +23,12 @@ concurrency:
   group: desktop-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  # CI never debugs these binaries: no incremental data and no debug symbols
+  # means less to compile, link and cache.
+  CARGO_INCREMENTAL: 0
+  CARGO_PROFILE_DEV_DEBUG: 0
+
 jobs:
   desktop:
     name: desktop (${{ matrix.os }})
