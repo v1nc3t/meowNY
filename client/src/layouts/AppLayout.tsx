@@ -1,7 +1,6 @@
 import { useState } from 'react'
 import { Outlet } from 'react-router-dom'
 import AppSidebar from '../components/AppSidebar'
-import Footer from '../components/Footer'
 
 export default function AppLayout() {
   const [collapsed, setCollapsed] = useState(() => localStorage.getItem('sidebar-collapsed') === '1')
@@ -22,7 +21,6 @@ export default function AppLayout() {
         <main>
           <Outlet />
         </main>
-        <Footer />
       </div>
     </div>
   )

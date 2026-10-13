@@ -49,3 +49,40 @@ export function withMonth(month: string, monthNumber: number): string {
 export function withYear(month: string, year: number): string {
   return `${year}-${month.slice(5, 7)}`
 }
+
+export type DateKind = 'date' | 'month' | 'year'
+export type DateParts = { year: number; month: number; day: number }
+
+export function daysInMonth(year: number, month: number): number {
+  return new Date(Date.UTC(year, month, 0)).getUTCDate()
+}
+
+/**
+ * Splits "YYYY-MM-DD", "YYYY-MM" or "YYYY" (by kind) into parts. Anything that does not
+ * parse falls back to `fallback`, a full "YYYY-MM-DD" date such as today.
+ */
+export function parseParts(kind: DateKind, value: string, fallback: string): DateParts {
+  const pattern = kind === 'date' ? /^(\d{4})-(\d{2})-(\d{2})$/ : kind === 'month' ? /^(\d{4})-(\d{2})$/ : /^(\d{4})$/
+  const match = pattern.exec(value)
+  const [year, month, day] = (match ?? /^(\d{4})-(\d{2})-(\d{2})$/.exec(fallback) ?? [])
+    .slice(1)
+    .map(Number)
+  const safeYear = year || 2000
+  const safeMonth = Math.min(12, Math.max(1, kind === 'year' && match ? 1 : month || 1))
+  const safeDay = Math.min(daysInMonth(safeYear, safeMonth), Math.max(1, kind === 'date' ? day || 1 : 1))
+  return { year: safeYear, month: safeMonth, day: safeDay }
+}
+
+/** Changes one part, keeping the day inside the month (31 Jan to Feb becomes 28 or 29 Feb). */
+export function changePart(parts: DateParts, part: keyof DateParts, value: number): DateParts {
+  const next = { ...parts, [part]: value }
+  next.day = Math.min(next.day, daysInMonth(next.year, next.month))
+  return next
+}
+
+export function joinParts(kind: DateKind, parts: DateParts): string {
+  const pad = (n: number) => String(n).padStart(2, '0')
+  if (kind === 'year') return String(parts.year)
+  if (kind === 'month') return `${parts.year}-${pad(parts.month)}`
+  return `${parts.year}-${pad(parts.month)}-${pad(parts.day)}`
+}

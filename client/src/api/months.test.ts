@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { monthLabel, monthNames, shiftMonth, withMonth, withYear, yearChoices } from './months.ts'
+import { changePart, daysInMonth, joinParts, monthLabel, monthNames, parseParts, shiftMonth, withMonth, withYear, yearChoices } from './months.ts'
 
 test('stepping a month crosses year ends in both directions', () => {
   assert.equal(shiftMonth('2026-10', 1), '2026-11')
@@ -37,4 +37,33 @@ test('year choices cover a window around this year and always include the select
 test('changing only the month or only the year keeps the other part', () => {
   assert.equal(withMonth('2026-10', 3), '2026-03')
   assert.equal(withYear('2026-10', 2027), '2027-10')
+})
+
+test('date parts parse each kind and fall back to the given date', () => {
+  assert.deepEqual(parseParts('date', '2026-10-15', '2020-01-01'), { year: 2026, month: 10, day: 15 })
+  assert.deepEqual(parseParts('month', '2026-10', '2020-01-01'), { year: 2026, month: 10, day: 1 })
+  assert.deepEqual(parseParts('year', '2026', '2020-05-05'), { year: 2026, month: 1, day: 1 })
+  assert.deepEqual(parseParts('date', '', '2026-10-13'), { year: 2026, month: 10, day: 13 })
+  assert.deepEqual(parseParts('month', 'oops', '2026-10-13'), { year: 2026, month: 10, day: 1 })
+  assert.deepEqual(parseParts('date', '2026-02-31', '2020-01-01'), { year: 2026, month: 2, day: 28 }, 'an impossible day is pulled into the month')
+})
+
+test('changing a part keeps the day valid', () => {
+  const jan31 = { year: 2026, month: 1, day: 31 }
+  assert.deepEqual(changePart(jan31, 'month', 2), { year: 2026, month: 2, day: 28 })
+  assert.deepEqual(changePart({ year: 2024, month: 2, day: 29 }, 'year', 2025), { year: 2025, month: 2, day: 28 })
+  assert.deepEqual(changePart(jan31, 'day', 15), { year: 2026, month: 1, day: 15 })
+})
+
+test('joining parts writes the shape for each kind', () => {
+  const parts = { year: 2026, month: 3, day: 7 }
+  assert.equal(joinParts('date', parts), '2026-03-07')
+  assert.equal(joinParts('month', parts), '2026-03')
+  assert.equal(joinParts('year', parts), '2026')
+})
+
+test('days in a month handle leap years', () => {
+  assert.equal(daysInMonth(2024, 2), 29)
+  assert.equal(daysInMonth(2026, 2), 28)
+  assert.equal(daysInMonth(2026, 4), 30)
 })

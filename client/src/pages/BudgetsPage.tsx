@@ -353,7 +353,7 @@ function BudgetRow({
   }
 
   return (
-    <form className="budget-row" onSubmit={onSubmit}>
+    <form className={editing ? 'budget-row editing' : 'budget-row'} onSubmit={onSubmit}>
       <span className="budget-label">{label}</span>
       {editing ? (
         <input

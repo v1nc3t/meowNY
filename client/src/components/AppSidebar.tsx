@@ -1,6 +1,8 @@
 import { NavLink, Link } from 'react-router-dom'
 import { vault } from '../vault/api'
 
+const YEAR = new Date().getFullYear()
+
 const items = [
   { to: '/app/dashboard', label: 'dashboard', icon: 'dashboard' },
   { to: '/app/transactions', label: 'transactions', icon: 'transactions' },
@@ -20,8 +22,7 @@ export default function AppSidebar({
     <aside className="app-sidebar">
       <div className="sidebar-header">
         <Link to="/app/dashboard" className="app-logo">
-          <span className="logo-full">meowny</span>
-          <span className="logo-mark">m</span>
+          meowny
         </Link>
         <button
           type="button"
@@ -30,6 +31,7 @@ export default function AppSidebar({
           aria-label={collapsed ? 'expand sidebar' : 'collapse sidebar'}
           onClick={onToggle}
         >
+          {collapsed ? <span className="toggle-logo">m</span> : null}
           <Icon name={collapsed ? 'expand' : 'collapse'} />
         </button>
       </div>
@@ -59,6 +61,10 @@ export default function AppSidebar({
           <Icon name="exit" />
           <span className="nav-label">lock</span>
         </button>
+        <div className="sidebar-legal nav-label">
+          <span>© {YEAR} meowny</span>
+          <span>AGPL-3.0</span>
+        </div>
       </div>
     </aside>
   )
