@@ -25,3 +25,6 @@ dist/
 postgres_data/
 mysql_data/
 .containers/
+# Tauri / Rust
+src-tauri/target/
+src-tauri/gen/
