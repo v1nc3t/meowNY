@@ -13,8 +13,8 @@ use std::time::{Duration, Instant};
 use rusqlite::Connection;
 use serde::{Deserialize, Serialize};
 
-use crate::db::{self, DbError, DbKey};
-use crate::keys::{self, KeyError, SecretStore, SALT_LEN};
+use crate::db::{self, DbError};
+use crate::keys::{self, KeyError, Purpose, RecoveryKey, SecretStore, SALT_LEN};
 use crate::migrate::MigrateError;
 
 const DB_FILE: &str = "meowny.db";
@@ -30,6 +30,7 @@ pub enum AppError {
     NotSetUp,
     AlreadySetUp,
     WrongCredentials,
+    WrongRecoveryKey,
     KeyUnavailable,
     DatabaseTooNew,
     InvalidInput,
@@ -45,6 +46,7 @@ impl std::fmt::Display for AppError {
             AppError::NotSetUp => "the app is not set up yet",
             AppError::AlreadySetUp => "the app is already set up",
             AppError::WrongCredentials => "wrong passphrase or damaged data file",
+            AppError::WrongRecoveryKey => "that recovery key does not open this data",
             AppError::KeyUnavailable => "the key is not available in the OS keychain",
             AppError::DatabaseTooNew => "this data file was written by a newer version of the app",
             AppError::InvalidInput => "invalid input",
@@ -62,6 +64,7 @@ impl From<KeyError> for AppError {
     fn from(e: KeyError) -> Self {
         match e {
             KeyError::Store | KeyError::Corrupt => AppError::KeyUnavailable,
+            KeyError::Wrong => AppError::WrongCredentials,
             KeyError::Random => AppError::Internal,
         }
     }
@@ -98,6 +101,10 @@ struct VaultConfig {
     passphrase: bool,
     /// Hex Argon2 salt. Public by design.
     salt: String,
+    /// The database key encrypted under the keychain secret (and passphrase).
+    wrapped_everyday: String,
+    /// The same key encrypted under the recovery key.
+    wrapped_recovery: String,
     lock_after_secs: u32,
     lock_on_minimize: bool,
     lock_on_close: bool,
@@ -161,8 +168,9 @@ impl Vault {
         }
     }
 
-    /// First run: creates the key, the encrypted database and the settings row, and leaves the app unlocked.
-    pub fn create(&self, settings: &Settings, passphrase: Option<&str>) -> Result<(), AppError> {
+    /// First run: creates the keys, the encrypted database and the settings row, and leaves the app unlocked.
+    /// Returns the recovery key. It is shown to the person once and is not stored anywhere.
+    pub fn create(&self, settings: &Settings, passphrase: Option<&str>) -> Result<String, AppError> {
         let settings = validate_settings(settings)?;
         let passphrase = normalize_passphrase(passphrase)?;
         if self.db_path().exists() {
@@ -176,24 +184,27 @@ impl Vault {
         result
     }
 
-    fn create_inner(&self, settings: &Settings, passphrase: Option<&str>) -> Result<(), AppError> {
+    fn create_inner(&self, settings: &Settings, passphrase: Option<&str>) -> Result<String, AppError> {
         create_private_dir(&self.dir)?;
         let secret = keys::new_secret()?;
         let salt = keys::random_bytes::<SALT_LEN>()?;
         self.store.set(&secret)?;
 
+        let db_key = keys::new_db_key()?;
+        let recovery = RecoveryKey::generate()?;
         let config = VaultConfig {
             version: 1,
             passphrase: passphrase.is_some(),
             salt: keys::hex_encode(&salt),
+            wrapped_everyday: keys::wrap(&keys::derive_kek(&secret, passphrase, &salt)?, &db_key, Purpose::Everyday)?,
+            wrapped_recovery: keys::wrap(&recovery.kek()?, &db_key, Purpose::Recovery)?,
             lock_after_secs: 300,
             lock_on_minimize: true,
             lock_on_close: true,
         };
         write_config(&self.config_path(), &config)?;
 
-        let key = keys::derive_db_key(&secret, passphrase, &salt)?;
-        let conn = db::open_and_migrate(&self.db_path(), &key)?;
+        let conn = db::open_and_migrate(&self.db_path(), &db_key)?;
         conn.execute(
             "INSERT INTO settings (id, currency, locale, timezone) VALUES (1, ?1, ?2, ?3)",
             [&settings.currency, &settings.locale, &settings.timezone],
@@ -202,7 +213,7 @@ impl Vault {
         let mut state = self.lock_state();
         state.conn = Some(conn);
         state.last_activity = Instant::now();
-        Ok(())
+        Ok(recovery.to_display())
     }
 
     pub fn unlock(&self, passphrase: Option<&str>) -> Result<(), AppError> {
@@ -220,15 +231,79 @@ impl Vault {
             (false, _) => None,
         };
 
-        let secret = self.store.get()?.ok_or(AppError::KeyUnavailable)?;
-        let salt = keys::hex_decode::<SALT_LEN>(&config.salt).ok_or(AppError::Internal)?;
-        let key: DbKey = keys::derive_db_key(&secret, passphrase, &salt)?;
+        let key = self.everyday_key(&config, passphrase)?;
         let conn = db::open_and_migrate(&self.db_path(), &key)?;
 
         let mut state = self.lock_state();
         state.conn = Some(conn);
         state.last_activity = Instant::now();
         Ok(())
+    }
+
+    /// Opens the everyday copy of the database key with the keychain secret and the passphrase.
+    fn everyday_key(&self, config: &VaultConfig, passphrase: Option<&str>) -> Result<crate::db::DbKey, AppError> {
+        let secret = self.store.get()?.ok_or(AppError::KeyUnavailable)?;
+        let salt = keys::hex_decode::<SALT_LEN>(&config.salt).ok_or(AppError::Internal)?;
+        let kek = keys::derive_kek(&secret, passphrase, &salt)?;
+        Ok(keys::unwrap(&kek, &config.wrapped_everyday, Purpose::Everyday)?)
+    }
+
+    /// "Forgot my passphrase": opens the data with the recovery key, then sets a new passphrase
+    /// (or none) for everyday use. Works even if the keychain entry is gone, and puts a fresh one there.
+    /// The recovery key itself stays valid.
+    pub fn recover(&self, recovery_key: &str, new_passphrase: Option<&str>) -> Result<(), AppError> {
+        if !self.db_path().exists() {
+            return Err(AppError::NotSetUp);
+        }
+        let new_passphrase = normalize_passphrase(new_passphrase)?;
+        let recovery = RecoveryKey::parse(recovery_key).ok_or(AppError::WrongRecoveryKey)?;
+        let mut config = read_config(&self.config_path())?;
+        let key = keys::unwrap(&recovery.kek()?, &config.wrapped_recovery, Purpose::Recovery).map_err(|e| match e {
+            KeyError::Wrong => AppError::WrongRecoveryKey,
+            other => other.into(),
+        })?;
+
+        // Prove the key opens the database before changing anything on disk.
+        let conn = db::open_and_migrate(&self.db_path(), &key)?;
+
+        let secret = match self.store.get()? {
+            Some(secret) => secret,
+            None => {
+                let fresh = keys::new_secret()?;
+                self.store.set(&fresh)?;
+                fresh
+            }
+        };
+        let salt = keys::random_bytes::<SALT_LEN>()?;
+        config.passphrase = new_passphrase.is_some();
+        config.salt = keys::hex_encode(&salt);
+        config.wrapped_everyday =
+            keys::wrap(&keys::derive_kek(&secret, new_passphrase, &salt)?, &key, Purpose::Everyday)?;
+        write_config(&self.config_path(), &config)?;
+
+        let mut state = self.lock_state();
+        state.conn = Some(conn);
+        state.last_activity = Instant::now();
+        Ok(())
+    }
+
+    /// Replaces the recovery key. The old one stops working. Needs the current passphrase (if any)
+    /// again, so someone at an unlocked screen cannot quietly make themselves a key.
+    pub fn new_recovery_key(&self, passphrase: Option<&str>) -> Result<String, AppError> {
+        if self.lock_state().conn.is_none() {
+            return Err(AppError::Locked);
+        }
+        let mut config = read_config(&self.config_path())?;
+        let passphrase = if config.passphrase { passphrase.filter(|p| !p.is_empty()) } else { None };
+        if config.passphrase && passphrase.is_none() {
+            return Err(AppError::WrongCredentials);
+        }
+        let key = self.everyday_key(&config, passphrase)?;
+
+        let recovery = RecoveryKey::generate()?;
+        config.wrapped_recovery = keys::wrap(&recovery.kek()?, &key, Purpose::Recovery)?;
+        write_config(&self.config_path(), &config)?;
+        Ok(recovery.to_display())
     }
 
     /// Closes the database. The connection owned the only copy of the key.
@@ -571,6 +646,138 @@ mod tests {
         assert!(v.store.get().unwrap().is_none());
         // The app can start over.
         v.create(&settings(), None).unwrap();
+    }
+
+    #[test]
+    fn create_returns_a_recovery_key_that_is_not_stored_in_plain_text() {
+        let dir = tempfile::tempdir().unwrap();
+        let v = vault(dir.path());
+        let key = v.create(&settings(), None).unwrap();
+        assert_eq!(key.len(), 8 * 4 + 7);
+        let on_disk = fs::read_to_string(v.config_path()).unwrap();
+        assert!(!on_disk.contains(&key) && !on_disk.contains(&key.replace('-', "")));
+    }
+
+    #[test]
+    fn recovery_key_unlocks_after_a_forgotten_passphrase_and_sets_a_new_one() {
+        let dir = tempfile::tempdir().unwrap();
+        let v = vault(dir.path());
+        let recovery = v.create(&settings(), Some("old passphrase")).unwrap();
+        v.save_settings(&Settings { currency: "usd".into(), ..settings() }).unwrap();
+        v.lock();
+        assert_eq!(v.unlock(Some("forgotten")), Err(AppError::WrongCredentials));
+
+        v.recover(&recovery, Some("brand new passphrase")).unwrap();
+        assert_eq!(v.status(), VaultStatus::Unlocked);
+        assert_eq!(v.settings().unwrap().currency, "USD", "data is intact");
+
+        v.lock();
+        assert_eq!(v.unlock(Some("old passphrase")), Err(AppError::WrongCredentials), "the old passphrase is dead");
+        v.unlock(Some("brand new passphrase")).unwrap();
+    }
+
+    #[test]
+    fn recovery_can_also_remove_the_passphrase() {
+        let dir = tempfile::tempdir().unwrap();
+        let v = vault(dir.path());
+        let recovery = v.create(&settings(), Some("old passphrase")).unwrap();
+        v.lock();
+        v.recover(&recovery, None).unwrap();
+        v.lock();
+        v.unlock(None).unwrap();
+        assert!(!read_config(&v.config_path()).unwrap().passphrase);
+    }
+
+    #[test]
+    fn recovery_key_is_forgiving_about_case_and_spacing() {
+        let dir = tempfile::tempdir().unwrap();
+        let v = vault(dir.path());
+        let recovery = v.create(&settings(), None).unwrap();
+        v.lock();
+        v.recover(&recovery.to_lowercase().replace('-', " "), None).unwrap();
+    }
+
+    #[test]
+    fn recovery_works_when_the_keychain_entry_is_gone_and_restores_it() {
+        let dir = tempfile::tempdir().unwrap();
+        let v = vault(dir.path());
+        let recovery = v.create(&settings(), None).unwrap();
+        v.lock();
+        v.store.delete().unwrap();
+        assert_eq!(v.unlock(None), Err(AppError::KeyUnavailable));
+
+        v.recover(&recovery, Some("a new passphrase")).unwrap();
+        assert!(v.store.get().unwrap().is_some(), "a fresh keychain secret was stored");
+        v.lock();
+        v.unlock(Some("a new passphrase")).unwrap();
+    }
+
+    #[test]
+    fn wrong_or_malformed_recovery_keys_change_nothing() {
+        let dir = tempfile::tempdir().unwrap();
+        let v = vault(dir.path());
+        v.create(&settings(), Some("long enough pass")).unwrap();
+        v.lock();
+        let before = fs::read_to_string(v.config_path()).unwrap();
+        let other = RecoveryKey::generate().unwrap().to_display();
+        for bad in [other.as_str(), "nonsense", ""] {
+            assert_eq!(v.recover(bad, Some("another passphrase")), Err(AppError::WrongRecoveryKey), "{bad:?}");
+        }
+        assert_eq!(v.status(), VaultStatus::Locked);
+        assert_eq!(fs::read_to_string(v.config_path()).unwrap(), before, "the config is untouched");
+        v.unlock(Some("long enough pass")).unwrap();
+    }
+
+    #[test]
+    fn recovery_rejects_a_too_short_new_passphrase_before_doing_anything() {
+        let dir = tempfile::tempdir().unwrap();
+        let v = vault(dir.path());
+        let recovery = v.create(&settings(), None).unwrap();
+        v.lock();
+        assert_eq!(v.recover(&recovery, Some("short")), Err(AppError::InvalidInput));
+        assert_eq!(v.status(), VaultStatus::Locked);
+    }
+
+    #[test]
+    fn a_new_recovery_key_replaces_the_old_one() {
+        let dir = tempfile::tempdir().unwrap();
+        let v = vault(dir.path());
+        let old = v.create(&settings(), Some("long enough pass")).unwrap();
+        let new = v.new_recovery_key(Some("long enough pass")).unwrap();
+        assert_ne!(old, new);
+        v.lock();
+        assert_eq!(v.recover(&old, None), Err(AppError::WrongRecoveryKey), "the old key is dead");
+        v.recover(&new, Some("long enough pass")).unwrap();
+    }
+
+    #[test]
+    fn making_a_new_recovery_key_needs_the_passphrase_and_an_unlocked_app() {
+        let dir = tempfile::tempdir().unwrap();
+        let v = vault(dir.path());
+        let old = v.create(&settings(), Some("long enough pass")).unwrap();
+        assert_eq!(v.new_recovery_key(None), Err(AppError::WrongCredentials));
+        assert_eq!(v.new_recovery_key(Some("not the passphrase")), Err(AppError::WrongCredentials));
+        v.lock();
+        assert_eq!(v.new_recovery_key(Some("long enough pass")), Err(AppError::Locked));
+        v.recover(&old, Some("long enough pass")).unwrap();
+    }
+
+    #[test]
+    fn without_a_passphrase_a_new_recovery_key_needs_none() {
+        let dir = tempfile::tempdir().unwrap();
+        let v = vault(dir.path());
+        let old = v.create(&settings(), None).unwrap();
+        let new = v.new_recovery_key(None).unwrap();
+        assert_ne!(old, new);
+    }
+
+    #[test]
+    fn the_recovery_key_is_never_in_an_error() {
+        let key = RecoveryKey::generate().unwrap().to_display();
+        for e in [AppError::WrongRecoveryKey, AppError::WrongCredentials, AppError::KeyUnavailable] {
+            assert!(!e.to_string().contains(&key));
+            assert!(!serde_json::to_string(&e).unwrap().contains(&key));
+        }
     }
 
     #[test]

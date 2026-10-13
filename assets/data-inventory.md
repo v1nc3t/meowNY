@@ -13,7 +13,8 @@ Status: phase 2. The encrypted database, its migrations, key handling, app lock 
 | Categories, budgets, transactions, recurring items | The budgeting product. Names and descriptions can reveal sensitive facts | Encrypted SQLite file on the desktop | SQLCipher, key from the OS keychain (and optional passphrase), app lock | 1 to 5 |
 | History of creates, edits and deletes | The user's own change history | Same database (`audit_log`) | Same | 1 |
 | Currency, locale, timezone, lock settings | Display money and dates, lock the app | Same database | Same | 2 |
-| Database key | Unlock the database | OS keychain (never in the database, a file or logs) | OS keychain | 2 |
+| Database key | Unlock the database | Never stored as-is. Kept as two encrypted copies in `vault.json`: one opened by the OS keychain secret (and passphrase), one by the recovery key. The keychain holds only the random secret | OS keychain, optional passphrase | 2 |
+| Recovery key | Get back in after a forgotten passphrase or a lost keychain entry | Not stored by the app. Shown once; the user keeps it | The user's own safekeeping. Anyone with it and the data folder can open the data | 2 |
 | Backups and exports (JSON, CSV, Excel, PDF) | Backup, moving to a new PC, reports | A file the user chooses | Encrypted backups use a user passphrase. Exports are plain files and the screen says so | 6 |
 | CLI tokens (hashed), scopes, expiry, last use | Let scripts and AI agents use the app | Same database | Stored hashed, revocable, read-only by default | 7 |
 | Phone copy, device ids, sync keys, change log | Offline use on the phone, sync between devices | Encrypted database on the phone, sync keys in the OS keychain | End-to-end encrypted sync. Lost devices can be revoked from the desktop | 8 |

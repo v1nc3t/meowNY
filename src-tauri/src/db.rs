@@ -14,6 +14,10 @@ impl DbKey {
         Self(bytes)
     }
 
+    pub(crate) fn as_bytes(&self) -> &[u8; 32] {
+        &self.0
+    }
+
     #[cfg(test)]
     pub fn pragma_value_for_tests(&self) -> String {
         self.pragma_value()

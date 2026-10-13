@@ -10,6 +10,7 @@ export type ErrorCode =
   | 'not_set_up'
   | 'already_set_up'
   | 'wrong_credentials'
+  | 'wrong_recovery_key'
   | 'key_unavailable'
   | 'database_too_new'
   | 'invalid_input'
@@ -22,6 +23,7 @@ export const MESSAGES: Record<ErrorCode, string> = {
   not_set_up: 'the app is not set up yet.',
   already_set_up: 'the app is already set up.',
   wrong_credentials: 'wrong passphrase.',
+  wrong_recovery_key: 'that recovery key does not open this data. check it and try again.',
   key_unavailable: 'the key is not in the OS keychain. the data file cannot be opened on this machine.',
   database_too_new: 'this data file was written by a newer version of meowny. update the app.',
   invalid_input: 'check the values and try again.',

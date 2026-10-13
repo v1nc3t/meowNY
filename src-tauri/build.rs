@@ -24,6 +24,9 @@ const COMMANDS: &[&str] = &[
     "today",
     "set_budget",
     "budget_overview",
+    "recover_vault",
+    "new_recovery_key",
+    "save_recovery_key",
 ];
 
 fn main() {

@@ -5,6 +5,7 @@ pub mod commands;
 pub mod db;
 pub mod keys;
 pub mod migrate;
+pub mod recovery_file;
 pub mod money;
 /// Dev demo data, used by `examples/seed.rs`.
 pub mod seed;
@@ -50,6 +51,7 @@ pub fn run() {
 
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_dialog::init())
         .plugin(tauri::plugin::Builder::<tauri::Wry>::new("navigation-guard").on_navigation(|_, url| is_app_url(url)).build())
         .setup(|app| {
             let dir = app.path().app_data_dir()?;
@@ -102,6 +104,9 @@ pub fn run() {
             commands::today,
             commands::set_budget,
             commands::budget_overview,
+            commands::recover_vault,
+            commands::new_recovery_key,
+            commands::save_recovery_key,
         ])
         .run(tauri::generate_context!())
         .expect("error while running meowNY");

@@ -26,6 +26,9 @@
     "allow-today",
     "allow-set-budget",
     "allow-budget-overview",
+    "allow-recover-vault",
+    "allow-new-recovery-key",
+    "allow-save-recovery-key",
     "core:event:allow-listen",
     "core:event:allow-unlisten",
     {

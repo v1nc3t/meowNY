@@ -1,11 +1,17 @@
-//! Key handling. The database key is never stored as-is next to the data:
+//! Key handling. The database key is a random 32-byte key that is never stored as-is. It is
+//! kept only in wrapped (encrypted) copies, each opened by a different key-encryption key:
 //!
-//! * A random 32-byte secret lives in the OS keychain (or an equivalent secret service).
-//! * Without a passphrase the secret is the database key.
-//! * With a passphrase the key is HKDF(secret || Argon2id(passphrase, salt)), so the data file
-//!   needs both the keychain entry and the passphrase. Copying the file elsewhere gets nothing.
+//! * Everyday copy. Opened by HKDF(keychain secret [|| Argon2id(passphrase, salt)]). The random
+//!   secret lives in the OS keychain, so with a passphrase the data needs both the keychain
+//!   entry and the passphrase. Copying the file elsewhere gets nothing.
+//! * Recovery copy. Opened by a random recovery key shown once at setup. It works without the
+//!   keychain and without the passphrase, so it must be stored like a spare house key.
+//!
+//! Wrapping is ChaCha20-Poly1305, so a wrong key is detected before the database is touched.
 
 use argon2::{Algorithm, Argon2, Params, Version};
+use chacha20poly1305::aead::{Aead, KeyInit, Payload};
+use chacha20poly1305::{ChaCha20Poly1305, Key, Nonce};
 use hkdf::Hkdf;
 use sha2::Sha256;
 use zeroize::{Zeroize, Zeroizing};
@@ -23,6 +29,8 @@ pub enum KeyError {
     Random,
     /// The stored secret is not what we wrote.
     Corrupt,
+    /// The key did not open the wrapped copy: wrong passphrase or wrong recovery key.
+    Wrong,
 }
 
 impl std::fmt::Display for KeyError {
@@ -31,6 +39,7 @@ impl std::fmt::Display for KeyError {
             KeyError::Store => write!(f, "the OS keychain is not available"),
             KeyError::Random => write!(f, "no secure randomness available"),
             KeyError::Corrupt => write!(f, "the stored key is damaged"),
+            KeyError::Wrong => write!(f, "the key does not open this data"),
         }
     }
 }
@@ -98,14 +107,27 @@ fn argon_params() -> Params {
     Params::new(8, 1, 1, Some(32)).expect("valid argon2 params")
 }
 
-/// Derives the database key from the keychain secret and an optional passphrase.
-pub fn derive_db_key(
-    secret: &[u8; SECRET_LEN],
-    passphrase: Option<&str>,
-    salt: &[u8; SALT_LEN],
-) -> Result<DbKey, KeyError> {
+/// A key-encryption key: opens one wrapped copy of the database key.
+pub type Kek = Zeroizing<[u8; 32]>;
+
+/// A fresh random database key.
+pub fn new_db_key() -> Result<DbKey, KeyError> {
+    let mut bytes = random_bytes::<32>()?;
+    let key = DbKey::from_bytes(bytes);
+    bytes.zeroize();
+    Ok(key)
+}
+
+fn hkdf_key(salt: Option<&[u8]>, ikm: &[u8], info: &[u8]) -> Result<Kek, KeyError> {
+    let mut out = Zeroizing::new([0u8; 32]);
+    Hkdf::<Sha256>::new(salt, ikm).expand(info, out.as_mut()).map_err(|_| KeyError::Corrupt)?;
+    Ok(out)
+}
+
+/// The everyday key-encryption key, from the keychain secret and an optional passphrase.
+pub fn derive_kek(secret: &[u8; SECRET_LEN], passphrase: Option<&str>, salt: &[u8; SALT_LEN]) -> Result<Kek, KeyError> {
     let Some(passphrase) = passphrase else {
-        return Ok(DbKey::from_bytes(*secret));
+        return hkdf_key(Some(salt), secret, b"meowny kek v1");
     };
 
     let mut stretched = Zeroizing::new([0u8; 32]);
@@ -116,14 +138,115 @@ pub fn derive_db_key(
     let mut ikm = Zeroizing::new([0u8; SECRET_LEN + 32]);
     ikm[..SECRET_LEN].copy_from_slice(secret);
     ikm[SECRET_LEN..].copy_from_slice(stretched.as_ref());
+    hkdf_key(Some(salt), ikm.as_ref(), b"meowny kek v1")
+}
 
-    let mut okm = [0u8; 32];
-    Hkdf::<Sha256>::new(Some(salt), ikm.as_ref())
-        .expand(b"meowny database key v1", &mut okm)
+#[derive(Clone, Copy)]
+pub enum Purpose {
+    Everyday,
+    Recovery,
+}
+
+impl Purpose {
+    /// Bound into each wrapped copy so one cannot be passed off as the other.
+    fn aad(self) -> &'static [u8] {
+        match self {
+            Purpose::Everyday => b"meowny wrap v1 everyday",
+            Purpose::Recovery => b"meowny wrap v1 recovery",
+        }
+    }
+}
+
+const NONCE_LEN: usize = 12;
+
+/// Encrypts the database key under `kek`. Output is hex of nonce followed by ciphertext.
+pub fn wrap(kek: &Kek, key: &DbKey, purpose: Purpose) -> Result<String, KeyError> {
+    let nonce_bytes = random_bytes::<NONCE_LEN>()?;
+    let cipher = ChaCha20Poly1305::new(Key::from_slice(kek.as_ref()));
+    let sealed = cipher
+        .encrypt(Nonce::from_slice(&nonce_bytes), Payload { msg: key.as_bytes(), aad: purpose.aad() })
         .map_err(|_| KeyError::Corrupt)?;
-    let key = DbKey::from_bytes(okm);
-    okm.zeroize();
-    Ok(key)
+    let mut out = nonce_bytes.to_vec();
+    out.extend_from_slice(&sealed);
+    Ok(hex_encode(&out))
+}
+
+/// Opens a wrapped copy. A wrong key returns `Wrong`; malformed text returns `Corrupt`.
+pub fn unwrap(kek: &Kek, wrapped: &str, purpose: Purpose) -> Result<DbKey, KeyError> {
+    const TOTAL: usize = NONCE_LEN + 32 + 16;
+    let bytes = hex_decode::<TOTAL>(wrapped).ok_or(KeyError::Corrupt)?;
+    let cipher = ChaCha20Poly1305::new(Key::from_slice(kek.as_ref()));
+    let opened = cipher
+        .decrypt(Nonce::from_slice(&bytes[..NONCE_LEN]), Payload { msg: &bytes[NONCE_LEN..], aad: purpose.aad() })
+        .map_err(|_| KeyError::Wrong)?;
+    let opened = Zeroizing::new(opened);
+    let key: [u8; 32] = opened.as_slice().try_into().map_err(|_| KeyError::Corrupt)?;
+    Ok(DbKey::from_bytes(key))
+}
+
+const RECOVERY_BYTES: usize = 20;
+const ALPHABET: &[u8; 32] = b"0123456789ABCDEFGHJKMNPQRSTVWXYZ";
+
+/// 160 random bits written as 32 characters in groups of four, e.g. `7F3K-9QXM-...`.
+/// Random and long enough that no stretching is needed.
+#[derive(zeroize::Zeroize, zeroize::ZeroizeOnDrop)]
+pub struct RecoveryKey([u8; RECOVERY_BYTES]);
+
+impl RecoveryKey {
+    pub fn generate() -> Result<Self, KeyError> {
+        Ok(Self(random_bytes::<RECOVERY_BYTES>()?))
+    }
+
+    pub fn to_display(&self) -> String {
+        let mut chars = Vec::with_capacity(32);
+        let (mut buffer, mut bits) = (0u32, 0u32);
+        for byte in self.0 {
+            buffer = (buffer << 8) | u32::from(byte);
+            bits += 8;
+            while bits >= 5 {
+                bits -= 5;
+                chars.push(ALPHABET[((buffer >> bits) & 31) as usize]);
+            }
+            buffer &= (1 << bits) - 1;
+        }
+        chars
+            .chunks(4)
+            .map(|group| String::from_utf8_lossy(group).into_owned())
+            .collect::<Vec<_>>()
+            .join("-")
+    }
+
+    /// Accepts any case, spaces or dashes between groups, and the usual look-alike letters (O for 0, I or L for 1).
+    pub fn parse(text: &str) -> Option<Self> {
+        let mut bytes = [0u8; RECOVERY_BYTES];
+        let (mut buffer, mut bits, mut count, mut chars) = (0u32, 0u32, 0usize, 0usize);
+        for c in text.chars().filter(|c| !c.is_whitespace() && *c != '-') {
+            let c = match c.to_ascii_uppercase() {
+                'O' => '0',
+                'I' | 'L' => '1',
+                other => other,
+            };
+            let value = ALPHABET.iter().position(|&a| a as char == c)? as u32;
+            chars += 1;
+            buffer = (buffer << 5) | value;
+            bits += 5;
+            if bits >= 8 {
+                bits -= 8;
+                if count == RECOVERY_BYTES {
+                    return None;
+                }
+                bytes[count] = ((buffer >> bits) & 0xff) as u8;
+                count += 1;
+                buffer &= (1 << bits) - 1;
+            }
+        }
+        (chars == 32 && count == RECOVERY_BYTES).then_some(Self(bytes))
+    }
+
+    /// The key-encryption key for the recovery copy.
+    pub fn kek(&self) -> Result<Kek, KeyError> {
+        hkdf_key(None, &self.0, b"meowny recovery kek v1")
+    }
 }
 
 pub fn hex_encode(bytes: &[u8]) -> String {
@@ -176,35 +299,93 @@ mod tests {
     const SECRET: [u8; 32] = [7; 32];
     const SALT: [u8; 16] = [9; 16];
 
-    fn key_bytes(key: &DbKey) -> String {
-        // DbKey exposes the key only as its SQLCipher pragma value; compare through that.
-        key.pragma_value_for_tests()
+    fn kek(passphrase: Option<&str>) -> Kek {
+        derive_kek(&SECRET, passphrase, &SALT).unwrap()
     }
 
     #[test]
-    fn without_passphrase_the_secret_is_the_key() {
-        let key = derive_db_key(&SECRET, None, &SALT).unwrap();
-        assert_eq!(key_bytes(&key), key_bytes(&DbKey::from_bytes(SECRET)));
+    fn passphrase_changes_the_key_encryption_key() {
+        let plain = kek(None);
+        let a = kek(Some("correct horse"));
+        assert_eq!(*a, *kek(Some("correct horse")));
+        assert_ne!(*a, *plain);
+        assert_ne!(*a, *kek(Some("wrong horse")));
     }
 
     #[test]
-    fn passphrase_changes_the_key() {
-        let plain = derive_db_key(&SECRET, None, &SALT).unwrap();
-        let a = derive_db_key(&SECRET, Some("correct horse"), &SALT).unwrap();
-        let b = derive_db_key(&SECRET, Some("correct horse"), &SALT).unwrap();
-        let c = derive_db_key(&SECRET, Some("wrong horse"), &SALT).unwrap();
-        assert_eq!(key_bytes(&a), key_bytes(&b));
-        assert_ne!(key_bytes(&a), key_bytes(&plain));
-        assert_ne!(key_bytes(&a), key_bytes(&c));
+    fn kek_depends_on_secret_and_salt() {
+        let base = kek(Some("pw"));
+        assert_ne!(*base, *derive_kek(&[8; 32], Some("pw"), &SALT).unwrap());
+        assert_ne!(*base, *derive_kek(&SECRET, Some("pw"), &[1; 16]).unwrap());
+        assert_ne!(*kek(None), *derive_kek(&SECRET, None, &[1; 16]).unwrap());
     }
 
     #[test]
-    fn key_depends_on_secret_and_salt() {
-        let base = derive_db_key(&SECRET, Some("pw"), &SALT).unwrap();
-        let other_secret = derive_db_key(&[8; 32], Some("pw"), &SALT).unwrap();
-        let other_salt = derive_db_key(&SECRET, Some("pw"), &[1; 16]).unwrap();
-        assert_ne!(key_bytes(&base), key_bytes(&other_secret));
-        assert_ne!(key_bytes(&base), key_bytes(&other_salt));
+    fn wrapped_key_round_trips_and_only_the_right_kek_opens_it() {
+        let key = new_db_key().unwrap();
+        let wrapped = wrap(&kek(Some("pw")), &key, Purpose::Everyday).unwrap();
+        assert_eq!(unwrap(&kek(Some("pw")), &wrapped, Purpose::Everyday).unwrap().as_bytes(), key.as_bytes());
+        assert_eq!(unwrap(&kek(Some("other")), &wrapped, Purpose::Everyday).err(), Some(KeyError::Wrong));
+        assert_eq!(unwrap(&kek(None), &wrapped, Purpose::Everyday).err(), Some(KeyError::Wrong));
+    }
+
+    #[test]
+    fn a_wrapped_copy_cannot_be_used_for_another_purpose() {
+        let key = new_db_key().unwrap();
+        let wrapped = wrap(&kek(None), &key, Purpose::Everyday).unwrap();
+        assert_eq!(unwrap(&kek(None), &wrapped, Purpose::Recovery).err(), Some(KeyError::Wrong));
+    }
+
+    #[test]
+    fn tampered_or_malformed_wrapped_keys_are_refused() {
+        let key = new_db_key().unwrap();
+        let mut wrapped = wrap(&kek(None), &key, Purpose::Everyday).unwrap();
+        assert_eq!(unwrap(&kek(None), "abc", Purpose::Everyday).err(), Some(KeyError::Corrupt));
+        let last = wrapped.pop().unwrap();
+        wrapped.push(if last == '0' { '1' } else { '0' });
+        assert_eq!(unwrap(&kek(None), &wrapped, Purpose::Everyday).err(), Some(KeyError::Wrong));
+    }
+
+    #[test]
+    fn wrapping_twice_gives_different_text() {
+        let key = new_db_key().unwrap();
+        assert_ne!(wrap(&kek(None), &key, Purpose::Everyday).unwrap(), wrap(&kek(None), &key, Purpose::Everyday).unwrap());
+    }
+
+    #[test]
+    fn recovery_key_displays_as_eight_groups_and_parses_back() {
+        let key = RecoveryKey::generate().unwrap();
+        let shown = key.to_display();
+        assert_eq!(shown.len(), 8 * 4 + 7);
+        assert!(shown.split('-').all(|g| g.len() == 4));
+        let parsed = RecoveryKey::parse(&shown).unwrap();
+        assert_eq!(*parsed.kek().unwrap(), *key.kek().unwrap());
+    }
+
+    #[test]
+    fn recovery_key_parsing_is_forgiving_but_exact() {
+        let key = RecoveryKey::generate().unwrap();
+        let shown = key.to_display();
+        let kek = key.kek().unwrap();
+        for variant in [shown.to_lowercase(), shown.replace('-', " "), shown.replace('-', ""), format!("  {shown}  ")] {
+            assert_eq!(*RecoveryKey::parse(&variant).unwrap().kek().unwrap(), *kek, "{variant}");
+        }
+        assert!(RecoveryKey::parse("").is_none());
+        assert!(RecoveryKey::parse(&shown[..shown.len() - 1]).is_none(), "too short");
+        assert!(RecoveryKey::parse(&format!("{shown}A")).is_none(), "too long");
+        assert!(RecoveryKey::parse("UUUU-UUUU-UUUU-UUUU-UUUU-UUUU-UUUU-UUUU").is_none(), "U is not in the alphabet");
+    }
+
+    #[test]
+    fn look_alike_letters_are_read_as_digits() {
+        let a = RecoveryKey::parse("0000-0000-0000-0000-0000-0000-0000-0001").unwrap();
+        let b = RecoveryKey::parse("OOOO-oooo-0000-0000-0000-0000-0000-000L").unwrap();
+        assert_eq!(*a.kek().unwrap(), *b.kek().unwrap());
+    }
+
+    #[test]
+    fn recovery_keys_differ_each_time() {
+        assert_ne!(RecoveryKey::generate().unwrap().to_display(), RecoveryKey::generate().unwrap().to_display());
     }
 
     #[test]

@@ -1,5 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { errorText, inDesktopApp, vault, type LockPrefs } from '../vault/api'
+import PasswordField from '../vault/PasswordField'
+import RecoveryKeyPanel from '../vault/RecoveryKeyPanel'
 import { LOCK_AFTER_CHOICES, isCurrency, nearestLockChoice, normalizeCurrency, type Settings } from '../vault/rules'
 
 export default function SettingsPage() {
@@ -8,6 +10,7 @@ export default function SettingsPage() {
   const [location, setLocation] = useState('')
   const [message, setMessage] = useState('')
   const [confirmation, setConfirmation] = useState('')
+  const [newKey, setNewKey] = useState<string | null>(null)
 
   useEffect(() => {
     if (!inDesktopApp()) return
@@ -48,6 +51,17 @@ export default function SettingsPage() {
       await vault.saveLockPrefs(next)
       setPrefs(next)
       setMessage('lock settings saved.')
+    } catch (error) {
+      setMessage(errorText(error))
+    }
+  }
+
+  async function onRecoveryKey(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    const passphrase = String(new FormData(event.currentTarget).get('passphrase') ?? '')
+    try {
+      setNewKey(await vault.newRecoveryKey(passphrase))
+      setMessage('')
     } catch (error) {
       setMessage(errorText(error))
     }
@@ -114,6 +128,28 @@ export default function SettingsPage() {
           </button>
         </form>
       )}
+
+      <section>
+        <h2>recovery key</h2>
+        {newKey ? (
+          <RecoveryKeyPanel
+            code={newKey}
+            doneLabel="done"
+            onDone={() => {
+              setNewKey(null)
+            }}
+          />
+        ) : (
+          <form onSubmit={onRecoveryKey}>
+            <p>
+              the recovery key is the way back in if you forget your passphrase. making a new one stops the old one
+              working.
+            </p>
+            <PasswordField label="passphrase (leave empty if you have none)" name="passphrase" current />
+            <button type="submit">make a new recovery key</button>
+          </form>
+        )}
+      </section>
 
       <section>
         <h2>your data</h2>

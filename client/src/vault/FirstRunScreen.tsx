@@ -1,11 +1,14 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { errorText, vault } from './api'
+import PasswordField from './PasswordField'
+import RecoveryKeyPanel from './RecoveryKeyPanel'
 import { defaultSettings, isCurrency, normalizeCurrency, passphraseProblem } from './rules'
 
 export default function FirstRunScreen({ onDone }: { onDone: () => void }) {
   const [location, setLocation] = useState('')
   const [message, setMessage] = useState('')
   const [busy, setBusy] = useState(false)
+  const [recoveryKey, setRecoveryKey] = useState<string | null>(null)
 
   useEffect(() => {
     vault.dataLocation().then(setLocation, () => setLocation(''))
@@ -23,12 +26,20 @@ export default function FirstRunScreen({ onDone }: { onDone: () => void }) {
     setBusy(true)
     try {
       const defaults = defaultSettings()
-      await vault.create({ ...defaults, currency: normalizeCurrency(currency) }, passphrase)
-      onDone()
+      // The data file exists from here on, but the app stays on this screen until the key is saved.
+      setRecoveryKey(await vault.create({ ...defaults, currency: normalizeCurrency(currency) }, passphrase))
     } catch (error) {
       setMessage(errorText(error))
       setBusy(false)
     }
+  }
+
+  if (recoveryKey) {
+    return (
+      <main className="gate">
+        <RecoveryKeyPanel code={recoveryKey} confirm doneLabel="continue" onDone={onDone} />
+      </main>
+    )
   }
 
   return (
@@ -36,25 +47,24 @@ export default function FirstRunScreen({ onDone }: { onDone: () => void }) {
       <form onSubmit={onSubmit}>
         <p className="brand-mark">meowny</p>
         <h1>welcome</h1>
-        <p className="hint">your data stays on this computer, in an encrypted file. nothing is sent anywhere.</p>
+        <p className="hint">your data stays on this computer, encrypted. nothing is sent anywhere.</p>
 
         <label>
           currency
           <input name="currency" required minLength={3} maxLength={3} placeholder="EUR" autoComplete="off" />
         </label>
-        <p className="hint">changing it later does not convert existing amounts.</p>
+        <p className="hint">changing it later does not convert old amounts.</p>
 
-        <label>
-          passphrase (optional)
-          <input name="passphrase" type="password" autoComplete="new-password" />
-        </label>
-        <label>
-          repeat passphrase
-          <input name="confirm" type="password" autoComplete="new-password" />
-        </label>
+        <PasswordField label="passphrase (optional)" name="passphrase" />
+        <PasswordField label="repeat passphrase" name="confirm" />
         <p className="hint">
-          without a passphrase the key lives in your operating system's keychain and the app opens when you sign in
-          to this computer. with one, the file also needs the passphrase to open. a forgotten passphrase cannot be recovered.
+          leave it empty and the app opens when you log in to this computer. set one and you type it every time you
+          unlock.
+        </p>
+
+        <p className="warning" role="note">
+          you get a recovery key on the next screen. if you forget the passphrase, it is the only way back in. lose both
+          and your data is gone for good.
         </p>
 
         {location && (

@@ -37,6 +37,9 @@ pub const COMMANDS: &[&str] = &[
     "today",
     "set_budget",
     "budget_overview",
+    "recover_vault",
+    "new_recovery_key",
+    "save_recovery_key",
 ];
 
 #[tauri::command]
@@ -45,8 +48,40 @@ pub fn vault_status(vault: Shared) -> VaultStatus {
 }
 
 #[tauri::command]
-pub fn create_vault(vault: Shared, settings: Settings, passphrase: Option<String>) -> Result<(), AppError> {
+pub fn create_vault(vault: Shared, settings: Settings, passphrase: Option<String>) -> Result<String, AppError> {
     vault.create(&settings, passphrase.as_deref())
+}
+
+/// "Forgot my passphrase": unlock with the recovery key and choose a new passphrase (or none).
+#[tauri::command]
+pub fn recover_vault(vault: Shared, recovery_key: String, new_passphrase: Option<String>) -> Result<(), AppError> {
+    vault.recover(&recovery_key, new_passphrase.as_deref())
+}
+
+/// Saves the recovery key as a text file the person picks a place for. Returns false if they cancel.
+/// Only a valid recovery key can be written, so this cannot be used to write other content to disk.
+#[tauri::command]
+pub async fn save_recovery_key(app: tauri::AppHandle, code: String) -> Result<bool, AppError> {
+    use tauri_plugin_dialog::DialogExt;
+    let text = crate::recovery_file::text(&code)?;
+    let Some(path) = app
+        .dialog()
+        .file()
+        .set_file_name("meowny-recovery-key.txt")
+        .add_filter("Text file", &["txt"])
+        .blocking_save_file()
+    else {
+        return Ok(false);
+    };
+    let path = path.into_path().map_err(|_| AppError::Internal)?;
+    crate::recovery_file::write(&path, &text)?;
+    Ok(true)
+}
+
+/// Makes a new recovery key and invalidates the old one. Asks for the passphrase again.
+#[tauri::command]
+pub fn new_recovery_key(vault: Shared, passphrase: Option<String>) -> Result<String, AppError> {
+    vault.new_recovery_key(passphrase.as_deref())
 }
 
 #[tauri::command]

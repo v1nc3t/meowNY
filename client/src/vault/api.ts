@@ -10,6 +10,7 @@ export type VaultStatus = 'not_set_up' | 'locked' | 'unlocked'
 export type LockPrefs = { lock_after_secs: number; lock_on_minimize: boolean; lock_on_close: boolean }
 
 const Nothing = z.null()
+const RecoveryKey = z.string().regex(/^([0-9A-Z]{4}-){7}[0-9A-Z]{4}$/)
 const Status = z.enum(['not_set_up', 'locked', 'unlocked'])
 const SettingsShape = z.object({ currency: z.string(), locale: z.string(), timezone: z.string() })
 const LockPrefsShape = z.object({
@@ -23,8 +24,16 @@ const done = <T>(promise: Promise<T>) => promise.then(() => undefined)
 
 export const vault = {
   status: () => call('vault_status', Status),
+  /** Creates the data file and returns the recovery key, which is shown once and never stored. */
   create: (settings: Settings, passphrase: string) =>
-    done(call('create_vault', Nothing, { settings, passphrase: none(passphrase) })),
+    call('create_vault', RecoveryKey, { settings, passphrase: none(passphrase) }),
+  /** Unlocks with the recovery key and sets a new passphrase (empty means none). */
+  recover: (recoveryKey: string, newPassphrase: string) =>
+    done(call('recover_vault', Nothing, { recoveryKey, newPassphrase: none(newPassphrase) })),
+  /** Opens a save dialog and writes the key to a text file. False when the person cancels. */
+  saveRecoveryKey: (code: string) => call('save_recovery_key', z.boolean(), { code }),
+  /** Replaces the recovery key; the old one stops working. */
+  newRecoveryKey: (passphrase: string) => call('new_recovery_key', RecoveryKey, { passphrase: none(passphrase) }),
   unlock: (passphrase: string) => done(call('unlock_vault', Nothing, { passphrase: none(passphrase) })),
   lock: () => done(call('lock_vault', Nothing)),
   touch: () => done(call('touch_activity', Nothing)),
