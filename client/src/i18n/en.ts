@@ -191,6 +191,26 @@ export const en = {
   'recovery.shownOnce':
     'this is the only way back in if you forget your passphrase. it is shown once and the app does not keep a copy. keep it somewhere safe, away from this computer.',
   'recovery.saved': 'i saved my recovery key',
+
+  // Keyboard shortcuts
+  'keys.title': 'keyboard shortcuts',
+  'keys.groupGo': 'go to',
+  'keys.groupActions': 'actions',
+  'keys.groupLists': 'lists',
+  'keys.groupGeneral': 'general',
+  'keys.goTo': 'go to {page}',
+  'keys.new': 'add new',
+  'keys.search': 'search',
+  'keys.prev': 'previous month',
+  'keys.next': 'next month',
+  'keys.today': 'current month',
+  'keys.rowNext': 'next row',
+  'keys.rowPrev': 'previous row',
+  'keys.help': 'show shortcuts',
+  'keys.lock': 'lock the app',
+  'keys.sidebar': 'show or hide the sidebar',
+  'keys.close': 'close',
+  'nav.shortcuts': 'shortcuts',
 } as const
 
 export type MessageKey = keyof typeof en

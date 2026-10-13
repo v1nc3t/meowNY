@@ -292,20 +292,41 @@ pub fn list(conn: &Connection, filter: &Filter) -> Result<Page, AppError> {
     }
     let offset = filter.offset.unwrap_or(0);
 
-    const WHERE: &str = "WHERE (?1 IS NULL OR payment_date >= ?1)
-           AND (?2 IS NULL OR payment_date <= ?2)
-           AND (?3 IS NULL OR category_id = ?3)
-           AND (?4 IS NULL OR name LIKE ?4 ESCAPE '\\' OR description LIKE ?4 ESCAPE '\\')";
+    // Only the filters that are set go into the query, so SQLite can use an index for them
+    // (a catch-all "? IS NULL OR column = ?" condition would force a scan).
+    let mut clauses: Vec<&str> = Vec::new();
+    let mut values: Vec<Box<dyn rusqlite::ToSql>> = Vec::new();
+    if let Some(from) = from {
+        clauses.push("payment_date >= ?");
+        values.push(Box::new(from));
+    }
+    if let Some(to) = to {
+        clauses.push("payment_date <= ?");
+        values.push(Box::new(to));
+    }
+    if let Some(category) = category {
+        clauses.push("category_id = ?");
+        values.push(Box::new(category));
+    }
+    if let Some(pattern) = pattern {
+        clauses.push("(name LIKE ? ESCAPE '\\' OR description LIKE ? ESCAPE '\\')");
+        values.push(Box::new(pattern.clone()));
+        values.push(Box::new(pattern));
+    }
+    let filter_sql = if clauses.is_empty() { String::new() } else { format!("WHERE {}", clauses.join(" AND ")) };
 
     let total: u32 = conn.query_row(
-        &format!("SELECT count(*) FROM transactions {WHERE}"),
-        params![from, to, category, pattern],
+        &format!("SELECT count(*) FROM transactions {filter_sql}"),
+        rusqlite::params_from_iter(values.iter().map(|v| v.as_ref())),
         |r| r.get(0),
     )?;
-    let mut statement = conn.prepare(&format!(
-        "SELECT {COLUMNS} FROM transactions {WHERE} ORDER BY payment_date DESC, id DESC LIMIT ?5 OFFSET ?6"
+    let mut page_values: Vec<&dyn rusqlite::ToSql> = values.iter().map(|v| v.as_ref()).collect();
+    page_values.push(&limit);
+    page_values.push(&offset);
+    let mut statement = conn.prepare_cached(&format!(
+        "SELECT {COLUMNS} FROM transactions {filter_sql} ORDER BY payment_date DESC, id DESC LIMIT ? OFFSET ?"
     ))?;
-    let rows = statement.query_map(params![from, to, category, pattern, limit, offset], from_row)?;
+    let rows = statement.query_map(rusqlite::params_from_iter(page_values), from_row)?;
     let transactions = rows.collect::<Result<Vec<_>, _>>()?;
     Ok(Page { transactions, total, limit, offset })
 }
@@ -557,5 +578,58 @@ mod tests {
         let patch: TransactionPatch = serde_json::from_str(r#"{}"#).unwrap();
         assert_eq!(patch.description, None);
         assert!(serde_json::from_str::<TransactionPatch>(r#"{"userId": 1}"#).is_err(), "unknown fields are refused");
+    }
+}
+
+#[cfg(test)]
+mod bench {
+    use super::*;
+    use crate::budgets::{self, Scope, SetBudget};
+    use crate::categories::{self, CategoryType};
+    use std::time::Instant;
+
+    /// Not a pass/fail test: prints how long the main queries take on a large database.
+    /// Run with `cargo test bench -- --ignored --nocapture`.
+    #[test]
+    #[ignore]
+    fn timings_on_a_large_database() {
+        let mut conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch("PRAGMA foreign_keys = ON;").unwrap();
+        crate::migrate::run(&mut conn).unwrap();
+        conn.execute("INSERT INTO settings (id, currency, timezone) VALUES (1, 'EUR', 'UTC')", []).unwrap();
+        let cats: Vec<i64> = (0..30).map(|i| categories::create(&conn, &format!("c{i}"), if i % 6 == 0 { CategoryType::Income } else { CategoryType::Expense }).unwrap().id).collect();
+        let tx = conn.transaction().unwrap();
+        for i in 0..50_000i64 {
+            let month = 1 + (i % 60);
+            let (year, m) = (2022 + (month - 1) / 12, 1 + (month - 1) % 12);
+            tx.execute(
+                "INSERT INTO transactions (category_id, name, amount_minor, payment_date, description) VALUES (?1, ?2, ?3, ?4, ?5)",
+                params![cats[(i % 30) as usize], format!("shop {i}"), 100 + i % 9000, format!("{year}-{m:02}-{:02}", 1 + i % 28), "weekly"],
+            ).unwrap();
+        }
+        tx.commit().unwrap();
+        for &c in &cats {
+            let kind = if c % 6 == 1 { CategoryType::Income } else { CategoryType::Expense };
+            let _ = budgets::set(&conn, &SetBudget { kind, scope: Scope::Category, month: "2022-01".into(), amount_limit: Some("100.00".into()), category_id: Some(c.to_string()) }, "2022-01-15T00:00:00Z".parse().unwrap());
+        }
+        let time = |label: &str, f: &dyn Fn()| {
+            let start = Instant::now();
+            f();
+            println!("{label}: {:?}", start.elapsed());
+        };
+        time("list newest 50", &|| { list(&conn, &Filter::default()).unwrap(); });
+        time("list page 500", &|| { list(&conn, &Filter { offset: Some(25_000), ..Default::default() }).unwrap(); });
+        time("list one month", &|| { list(&conn, &Filter { from: Some("2025-03-01".into()), to: Some("2025-03-31".into()), ..Default::default() }).unwrap(); });
+        time("list search", &|| { list(&conn, &Filter { q: Some("shop 4999".into()), ..Default::default() }).unwrap(); });
+        time("overview one month", &|| { budgets::overview(&conn, "2025-03").unwrap(); });
+        time("history 5 years", &|| { budgets::history(&conn, "2026-12-15T00:00:00Z".parse().unwrap()).unwrap(); });
+        let plan: Vec<String> = conn
+            .prepare("EXPLAIN QUERY PLAN SELECT id FROM transactions WHERE payment_date >= '2025-03-01' AND payment_date <= '2025-03-31' ORDER BY payment_date DESC, id DESC LIMIT 50")
+            .unwrap()
+            .query_map([], |r| r.get::<_, String>(3))
+            .unwrap()
+            .collect::<Result<_, _>>()
+            .unwrap();
+        println!("plan: {plan:?}");
     }
 }

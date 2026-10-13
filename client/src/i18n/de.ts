@@ -181,4 +181,24 @@ export const de: Messages = {
   'recovery.shownOnce':
     'das ist der einzige weg zurück, wenn du deine passphrase vergisst. er wird nur einmal angezeigt, und die app speichert keine kopie. bewahre ihn an einem sicheren ort auf, getrennt von diesem computer.',
   'recovery.saved': 'ich habe meinen wiederherstellungsschlüssel gespeichert',
+
+  // Keyboard shortcuts
+  'keys.title': 'tastenkürzel',
+  'keys.groupGo': 'gehe zu',
+  'keys.groupActions': 'aktionen',
+  'keys.groupLists': 'listen',
+  'keys.groupGeneral': 'allgemein',
+  'keys.goTo': 'gehe zu {page}',
+  'keys.new': 'neu hinzufügen',
+  'keys.search': 'suchen',
+  'keys.prev': 'voriger monat',
+  'keys.next': 'nächster monat',
+  'keys.today': 'aktueller monat',
+  'keys.rowNext': 'nächste zeile',
+  'keys.rowPrev': 'vorige zeile',
+  'keys.help': 'tastenkürzel anzeigen',
+  'keys.lock': 'app sperren',
+  'keys.sidebar': 'seitenleiste ein- oder ausblenden',
+  'keys.close': 'schließen',
+  'nav.shortcuts': 'tastenkürzel',
 }

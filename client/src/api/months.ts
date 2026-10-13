@@ -1,3 +1,5 @@
+import { memoByKey } from '../cache'
+
 /** Month helpers for "YYYY-MM" strings. No time zones involved: a month is just a label. */
 
 export function shiftMonth(month: string, delta: number): string {
@@ -7,31 +9,41 @@ export function shiftMonth(month: string, delta: number): string {
   return `${nextYear}-${String((index % 12) + 1).padStart(2, '0')}`
 }
 
+const labelFormatter = memoByKey(
+  (locale: string) => locale,
+  (locale: string) => {
+    try {
+      return new Intl.DateTimeFormat(locale, { month: 'long', year: 'numeric', timeZone: 'UTC' })
+    } catch {
+      return null
+    }
+  },
+)
+
 /** "October 2026" in the person's locale. Falls back to the plain label if the locale is unusable. */
 export function monthLabel(month: string, locale: string): string {
   const [year, number] = month.split('-').map(Number)
-  try {
-    return new Date(Date.UTC(year, number - 1, 1)).toLocaleDateString(locale, {
-      month: 'long',
-      year: 'numeric',
-      timeZone: 'UTC',
-    })
-  } catch {
-    return month
-  }
+  return labelFormatter(locale)?.format(new Date(Date.UTC(year, number - 1, 1))) ?? month
 }
 
-/** The twelve months as three-letter abbreviations in the person's locale, January first. */
-export function monthNames(locale: string): string[] {
-  return Array.from({ length: 12 }, (_, index) => {
+const namesFor = memoByKey(
+  (locale: string) => locale,
+  (locale: string): string[] => {
     try {
-      const short = new Date(Date.UTC(2000, index, 1)).toLocaleDateString(locale, { month: 'short', timeZone: 'UTC' })
+      const formatter = new Intl.DateTimeFormat(locale, { month: 'short', timeZone: 'UTC' })
       // Some locales write "Sept" or "Sep."; keep three characters.
-      return short.replace(/\.$/, '').slice(0, 3)
+      return Array.from({ length: 12 }, (_, index) =>
+        formatter.format(new Date(Date.UTC(2000, index, 1))).replace(/\.$/, '').slice(0, 3),
+      )
     } catch {
-      return String(index + 1)
+      return Array.from({ length: 12 }, (_, index) => String(index + 1))
     }
-  })
+  },
+)
+
+/** The twelve months as three-letter abbreviations in the person's locale, January first. The list is shared; do not change it. */
+export function monthNames(locale: string): string[] {
+  return namesFor(locale)
 }
 
 /** Years to pick from: a window around this year, widened to always include the selected month's year. */

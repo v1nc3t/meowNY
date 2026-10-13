@@ -37,15 +37,35 @@ Running `npm run dev --workspace client` on its own opens the client in a browse
 | macOS | `~/Library/Application Support/org.meowny.app/` |
 | Windows | `%APPDATA%\org.meowny.app\` |
 
-It holds `meowny.db` (encrypted) and `vault.json` (lock settings and the passphrase salt, nothing secret). The key is in the OS keychain under the service name `org.meowny.app`.
+It holds `meowny.db` (encrypted; while the app runs there are also `meowny.db-wal` and `meowny.db-shm`, encrypted too) and `vault.json` (lock settings, the wrapped keys and the passphrase salt). The key is in the OS keychain under the service name `org.meowny.app`.
 
 To start over in development, use Settings, delete all my data. That removes the files and the keychain entry together. Deleting the folder by hand leaves a stale keychain entry, which is harmless and gets replaced on the next first run.
+
+## Keyboard shortcuts
+
+Press `?` in the app to see them all. Hovering or focusing a control shows its shortcut. Shortcuts are ignored while typing in a field and inside dialogs.
+
+| Keys | Does |
+|---|---|
+| `g` then `d` `t` `c` `b` `s` | go to dashboard, transactions, categories, budgets, settings |
+| `n` | add a new transaction or category |
+| `/` | search |
+| `[` and `]` | previous and next month (budgets) |
+| `t` | jump to the current month |
+| `j` and `k` | next and previous row in a list (Enter opens it) |
+| `Ctrl+L` / `Cmd+L` | lock the app |
+| `Ctrl+B` / `Cmd+B` | show or hide the sidebar |
+
+All shortcuts are defined in one table, `client/src/keys/shortcuts.ts`.
 
 ## Tests and checks
 
 ```bash
 # Rust: migrations, constraints, vault, key handling
 cd src-tauri && cargo test
+
+# Timings of the main queries on 50,000 transactions (prints, does not assert)
+cd src-tauri && cargo test bench -- --ignored --nocapture
 
 # Client
 npm run lint --workspace client

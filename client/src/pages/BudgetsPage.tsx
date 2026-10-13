@@ -9,6 +9,8 @@ import { amountString, formatMoney } from '../money'
 import { useMoneySettings, type MoneySettings } from '../useMoneySettings'
 import { useNotice } from '../useNotice'
 import { useI18n, useT } from '../i18n/context'
+import { useShortcut } from '../keys/registry'
+import { tip } from '../keys/tip'
 
 type Side = 'EXPENSE' | 'INCOME'
 
@@ -83,6 +85,11 @@ function BudgetsView({ settings, thisMonth }: { settings: MoneySettings; thisMon
     }
   }, [reload])
 
+  // Keyboard: [ and ] step through months, t jumps to this month.
+  useShortcut('prev', () => setMonth((current) => shiftMonth(current, -1)))
+  useShortcut('next', () => setMonth((current) => shiftMonth(current, 1)))
+  useShortcut('today', () => setMonth(thisMonth))
+
   async function save(body: {
     type: string
     scope: 'GLOBAL' | 'CATEGORY'
@@ -143,7 +150,7 @@ function BudgetsView({ settings, thisMonth }: { settings: MoneySettings; thisMon
       <div className="tx-title">
         <h1>{t('budgets.title')}</h1>
         <div className="month-nav">
-          <button type="button" aria-label={t('budgets.prevMonth')} onClick={() => setMonth(shiftMonth(month, -1))}>
+          <button type="button" aria-label={t('budgets.prevMonth')} {...tip('prev')} onClick={() => setMonth(shiftMonth(month, -1))}>
             &lsaquo;
           </button>
           <Dropdown
@@ -163,10 +170,10 @@ function BudgetsView({ settings, thisMonth }: { settings: MoneySettings; thisMon
             }))}
             onChange={(value) => setMonth(withYear(month, Number(value)))}
           />
-          <button type="button" aria-label={t('budgets.nextMonth')} onClick={() => setMonth(shiftMonth(month, 1))}>
+          <button type="button" aria-label={t('budgets.nextMonth')} {...tip('next')} onClick={() => setMonth(shiftMonth(month, 1))}>
             &rsaquo;
           </button>
-          <button type="button" disabled={month === thisMonth} onClick={() => setMonth(thisMonth)}>
+          <button type="button" disabled={month === thisMonth} {...tip('today')} onClick={() => setMonth(thisMonth)}>
             {t('common.current')}
           </button>
         </div>

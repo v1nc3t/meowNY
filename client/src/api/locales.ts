@@ -1,3 +1,4 @@
+import { memoByKey } from '../cache'
 import { activeLanguage } from '../i18n/translate'
 
 /** Common number and date formats, offered after the ones the system itself prefers. */
@@ -45,9 +46,20 @@ export function localeChoices(
 }
 
 /** "en-IE  English (Ireland)", or just the tag when the system has no name for it. */
+const languageNames = memoByKey(
+  (language: string) => language,
+  (language: string) => {
+    try {
+      return new Intl.DisplayNames([language], { type: 'language', languageDisplay: 'standard' })
+    } catch {
+      return null
+    }
+  },
+)
+
 export function localeLabel(tag: string, language = activeLanguage()): string {
   try {
-    const name = new Intl.DisplayNames([language], { type: 'language', languageDisplay: 'standard' }).of(tag)
+    const name = languageNames(language)?.of(tag)
     return name && name !== tag ? `${tag}  ${name.toLowerCase()}` : tag
   } catch {
     return tag
@@ -76,17 +88,31 @@ export function timeZoneChoices(all: readonly string[] | null, system: string, c
   return [...first, ...rest.filter((zone) => !first.includes(zone))]
 }
 
-/** Format choices as dropdown options: the system's preferred formats first, then common ones. */
+const localeOptionsFor = memoByKey(
+  (current: string, language: string) => `${current}|${language}|${typeof navigator === 'undefined' ? '' : (navigator.languages ?? []).join(',')}`,
+  (current: string, language: string) => {
+    const supported = (tag: string) => Intl.NumberFormat.supportedLocalesOf(tag).length > 0
+    return localeChoices(current, typeof navigator === 'undefined' ? [] : navigator.languages ?? [], supported).map(
+      (tag) => ({ value: tag, label: localeLabel(tag, language) }),
+    )
+  },
+)
+
+/** Format choices as dropdown options: the system's preferred formats first, then common ones. Built once and shared. */
 export function localeOptions(current: string, language = activeLanguage()): { value: string; label: string }[] {
-  const supported = (tag: string) => Intl.NumberFormat.supportedLocalesOf(tag).length > 0
-  return localeChoices(current, typeof navigator === 'undefined' ? [] : navigator.languages ?? [], supported).map(
-    (tag) => ({ value: tag, label: localeLabel(tag, language) }),
-  )
+  return localeOptionsFor(current, language)
 }
 
-/** Time zone choices as dropdown options: every zone the system knows, the current and the system's own first. */
+const zoneOptionsFor = memoByKey(
+  (current: string) => current,
+  (current: string) => {
+    const all = typeof Intl.supportedValuesOf === 'function' ? Intl.supportedValuesOf('timeZone') : null
+    const system = Intl.DateTimeFormat().resolvedOptions().timeZone
+    return timeZoneChoices(all, system, current).map((zone) => ({ value: zone, label: zone }))
+  },
+)
+
+/** Time zone choices as dropdown options: every zone the system knows, the current and the system's own first. Built once and shared. */
 export function zoneOptions(current: string): { value: string; label: string }[] {
-  const all = typeof Intl.supportedValuesOf === 'function' ? Intl.supportedValuesOf('timeZone') : null
-  const system = Intl.DateTimeFormat().resolvedOptions().timeZone
-  return timeZoneChoices(all, system, current).map((zone) => ({ value: zone, label: zone }))
+  return zoneOptionsFor(current)
 }

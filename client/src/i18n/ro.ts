@@ -177,4 +177,24 @@ export const ro: Messages = {
   'recovery.shownOnce':
     'aceasta este singura cale de a reveni dacă uiți fraza de acces. este afișată o singură dată și aplicația nu păstrează o copie. păstreaz-o într-un loc sigur, departe de acest computer.',
   'recovery.saved': 'mi-am salvat cheia de recuperare',
+
+  // Keyboard shortcuts
+  'keys.title': 'comenzi rapide de la tastatură',
+  'keys.groupGo': 'mergi la',
+  'keys.groupActions': 'acțiuni',
+  'keys.groupLists': 'liste',
+  'keys.groupGeneral': 'general',
+  'keys.goTo': 'mergi la {page}',
+  'keys.new': 'adaugă nou',
+  'keys.search': 'caută',
+  'keys.prev': 'luna anterioară',
+  'keys.next': 'luna următoare',
+  'keys.today': 'luna curentă',
+  'keys.rowNext': 'rândul următor',
+  'keys.rowPrev': 'rândul anterior',
+  'keys.help': 'arată comenzile rapide',
+  'keys.lock': 'blochează aplicația',
+  'keys.sidebar': 'arată sau ascunde bara laterală',
+  'keys.close': 'închide',
+  'nav.shortcuts': 'comenzi rapide',
 }

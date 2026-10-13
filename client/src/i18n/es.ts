@@ -179,4 +179,24 @@ export const es: Messages = {
   'recovery.shownOnce':
     'es la única forma de volver a entrar si olvidas tu frase de contraseña. se muestra una sola vez y la aplicación no guarda ninguna copia. guárdala en un lugar seguro, lejos de este equipo.',
   'recovery.saved': 'he guardado mi clave de recuperación',
+
+  // Keyboard shortcuts
+  'keys.title': 'atajos de teclado',
+  'keys.groupGo': 'ir a',
+  'keys.groupActions': 'acciones',
+  'keys.groupLists': 'listas',
+  'keys.groupGeneral': 'general',
+  'keys.goTo': 'ir a {page}',
+  'keys.new': 'añadir nuevo',
+  'keys.search': 'buscar',
+  'keys.prev': 'mes anterior',
+  'keys.next': 'mes siguiente',
+  'keys.today': 'mes actual',
+  'keys.rowNext': 'fila siguiente',
+  'keys.rowPrev': 'fila anterior',
+  'keys.help': 'mostrar atajos',
+  'keys.lock': 'bloquear la aplicación',
+  'keys.sidebar': 'mostrar u ocultar la barra lateral',
+  'keys.close': 'cerrar',
+  'nav.shortcuts': 'atajos',
 }

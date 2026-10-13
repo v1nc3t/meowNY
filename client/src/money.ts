@@ -1,3 +1,4 @@
+import { memoByKey } from './cache'
 const transactionAmount = /^(?:0\.(?:0[1-9]|[1-9]\d)|[1-9]\d{0,9}\.\d{2})$/
 const budgetAmount = /^(?:0\.\d{2}|[1-9]\d{0,9}\.\d{2})$/
 
@@ -10,14 +11,21 @@ export function amountString(raw: string, allowZero: boolean): string | null {
   return (allowZero ? budgetAmount : transactionAmount).test(amount) ? amount : null
 }
 
+const currencyFormatter = memoByKey(
+  (locale: string, currency: string) => `${locale}|${currency}`,
+  (locale: string, currency: string) => {
+    try {
+      return new Intl.NumberFormat(locale, { style: 'currency', currency })
+    } catch {
+      return null
+    }
+  },
+)
+
 export function formatMoney(amount: string, currency: string, locale: string): string {
   const value = Number(amount)
   if (!Number.isFinite(value)) return amount
-  try {
-    return new Intl.NumberFormat(locale, { style: 'currency', currency }).format(value)
-  } catch {
-    return amount
-  }
+  return currencyFormatter(locale, currency)?.format(value) ?? amount
 }
 
 /** An exchange rate as an exact fraction: "1.08" is 108/100. Same rules as the Rust side. */
@@ -44,15 +52,22 @@ export function convertAmount(amount: string, rate: string): string | null {
   return `${text.slice(0, -2)}.${text.slice(-2)}`
 }
 
+const dateFormatter = memoByKey(
+  (locale: string) => locale,
+  (locale: string) => {
+    try {
+      return new Intl.DateTimeFormat(locale, { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'UTC' })
+    } catch {
+      return null
+    }
+  },
+)
+
 /** "2026-10-12" written the way the locale writes dates. The calendar day never shifts with the time zone. */
 export function formatDate(isoDate: string, locale: string): string {
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(isoDate)
   if (!match) return isoDate
-  try {
-    return new Intl.DateTimeFormat(locale, { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'UTC' }).format(
-      new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3]))),
-    )
-  } catch {
-    return isoDate
-  }
+  return (
+    dateFormatter(locale)?.format(new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3])))) ?? isoDate
+  )
 }

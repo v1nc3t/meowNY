@@ -1,3 +1,4 @@
+import { memoByKey } from '../cache'
 import { activeLanguage } from '../i18n/translate'
 
 /** Currencies offered in the picker. Any three-letter code is accepted by the backend; this is the list people choose from. */
@@ -53,10 +54,21 @@ export const CURRENCIES = [
   ['ZAR', 'South African rand'],
 ] as const
 
+const displayNames = memoByKey(
+  (language: string) => language,
+  (language: string) => {
+    try {
+      return new Intl.DisplayNames([language], { type: 'currency' })
+    } catch {
+      return null
+    }
+  },
+)
+
 /** The currency's name in `language` when the system knows it, else the English name from the list, else ''. */
 export function currencyName(code: string, language = activeLanguage()): string {
   try {
-    const name = new Intl.DisplayNames([language], { type: 'currency' }).of(code)
+    const name = displayNames(language)?.of(code)
     if (name && name !== code) return name
   } catch {
     // Fall back to the English name below.
@@ -70,6 +82,12 @@ export function currencyLabel(code: string, language = activeLanguage()): string
   return name ? `${code}  ${name.toLowerCase()}` : code
 }
 
+const optionsFor = memoByKey(
+  (language: string) => language,
+  (language: string) => CURRENCIES.map(([code]) => ({ value: code, label: currencyLabel(code, language) })),
+)
+
+/** The picker's options. The list is built once per language and shared; do not change it. */
 export function currencyOptions(language = activeLanguage()): { value: string; label: string }[] {
-  return CURRENCIES.map(([code]) => ({ value: code, label: currencyLabel(code, language) }))
+  return optionsFor(language)
 }

@@ -1,11 +1,14 @@
+import { lazy } from 'react'
 import { createBrowserRouter, RouterProvider, Navigate } from 'react-router-dom'
 import AppLayout from './layouts/AppLayout'
-import DashboardPage from './pages/DashboardPage'
-import TransactionsPage from './pages/TransactionsPage'
-import CategoriesPage from './pages/CategoriesPage'
-import BudgetsPage from './pages/BudgetsPage'
-import SettingsPage from './pages/SettingsPage'
+import { pageLoaders } from './pages'
 import VaultGate from './vault/VaultGate'
+
+const DashboardPage = lazy(pageLoaders.dashboard)
+const TransactionsPage = lazy(pageLoaders.transactions)
+const CategoriesPage = lazy(pageLoaders.categories)
+const BudgetsPage = lazy(pageLoaders.budgets)
+const SettingsPage = lazy(pageLoaders.settings)
 
 // No accounts and no public pages: the desktop app opens straight into the app, behind the vault gate.
 const router = createBrowserRouter([

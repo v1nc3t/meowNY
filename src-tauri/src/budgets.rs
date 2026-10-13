@@ -319,23 +319,56 @@ pub fn history(conn: &Connection, now: DateTime<Utc>) -> Result<Vec<MonthHistory
         |r| r.get(0),
     )?;
     let Some(first) = first else { return Ok(Vec::new()) };
-    let mut month = NaiveDate::parse_from_str(&first, "%Y-%m-%d").map_err(|_| AppError::Internal)?;
+    let first = NaiveDate::parse_from_str(&first, "%Y-%m-%d").map_err(|_| AppError::Internal)?;
     let timezone: String = conn.query_row("SELECT timezone FROM settings WHERE id = 1", [], |r| r.get(0))?;
     let current = clock::month_start(now, &timezone)?;
+    if first > current {
+        return Ok(Vec::new());
+    }
+    let after_current = next_month(current)?;
+
+    // The global budget rows of each side, oldest first. A month shows the latest row at or before it.
+    let mut limits: std::collections::HashMap<&'static str, Vec<(String, Option<i64>)>> = std::collections::HashMap::new();
+    let mut statement = conn.prepare(
+        "SELECT type, effective_from, amount_limit_minor FROM budgets WHERE scope = 'GLOBAL' ORDER BY effective_from",
+    )?;
+    for row in statement.query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?, r.get::<_, Option<i64>>(2)?)))? {
+        let (kind, from, limit) = row?;
+        limits.entry(kind_sql(kind_from_sql(&kind)?)).or_default().push((from, limit));
+    }
+
+    // What was spent and earned in every month, in one pass over the transactions.
+    let mut actuals: std::collections::HashMap<(String, &'static str), i64> = std::collections::HashMap::new();
+    let mut statement = conn.prepare(
+        "SELECT substr(t.payment_date, 1, 7), c.type, SUM(t.amount_minor)
+         FROM transactions t JOIN categories c ON c.id = t.category_id
+         WHERE t.payment_date >= ?1 AND t.payment_date < ?2
+         GROUP BY 1, 2",
+    )?;
+    let range = (first.to_string(), after_current.to_string());
+    for row in statement.query_map([&range.0, &range.1], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?, r.get::<_, i64>(2)?)))? {
+        let (month, kind, sum) = row?;
+        actuals.insert((month, kind_sql(kind_from_sql(&kind)?)), sum);
+    }
+
+    let budgeted = |kind: CategoryType, start: &str| -> Option<String> {
+        let rows = limits.get(kind_sql(kind))?;
+        let upto = rows.partition_point(|(from, _)| from.as_str() <= start);
+        rows[..upto].last().and_then(|(_, limit)| *limit).map(format_amount)
+    };
+    let actual = |month: &str, kind: CategoryType| format_amount(actuals.get(&(month.to_string(), kind_sql(kind))).copied().unwrap_or(0));
 
     let mut rows = Vec::new();
+    let mut month = first;
     while month <= current && rows.len() < MAX_HISTORY_MONTHS {
         let label = month.format("%Y-%m").to_string();
-        let sides = overview(conn, &label)?;
-        let side = |kind: CategoryType| sides.iter().find(|o| o.kind == kind).cloned();
-        let (expense, income) = (side(CategoryType::Expense), side(CategoryType::Income));
-        let actual = |o: &Option<Overview>| o.as_ref().map_or_else(|| format_amount(0), |o| o.actual.clone());
+        let start = month.to_string();
         rows.push(MonthHistory {
+            expense_budget: budgeted(CategoryType::Expense, &start),
+            expense_actual: actual(&label, CategoryType::Expense),
+            income_budget: budgeted(CategoryType::Income, &start),
+            income_actual: actual(&label, CategoryType::Income),
             month: label,
-            expense_budget: expense.as_ref().and_then(|o| o.budgeted.clone()),
-            expense_actual: actual(&expense),
-            income_budget: income.as_ref().and_then(|o| o.budgeted.clone()),
-            income_actual: actual(&income),
         });
         month = next_month(month)?;
     }
@@ -747,5 +780,32 @@ mod tests {
         put(&conn, &global(CategoryType::Expense, "2026-09", Some("100.00"))).unwrap();
         let utc_evening = at("2026-09-30T23:30:00Z");
         assert_eq!(history(&conn, utc_evening).unwrap().len(), 2, "already October in Dublin");
+    }
+
+    #[test]
+    fn history_matches_the_single_month_overview_for_every_month() {
+        let (conn, food, rent, salary) = db();
+        put(&conn, &global(CategoryType::Expense, "2026-01", Some("2000.00"))).unwrap();
+        put(&conn, &global(CategoryType::Income, "2026-02", Some("3000.00"))).unwrap();
+        put_at(&conn, &global(CategoryType::Expense, "2026-04", Some("2500.00")), LATE).unwrap();
+        put_at(&conn, &global(CategoryType::Expense, "2026-06", None), LATE).unwrap();
+        put(&conn, &global(CategoryType::Expense, "2026-08", Some("1800.00"))).unwrap();
+        for (cat, amount, date) in [
+            (food, "10.00", "2026-01-05"), (rent, "700.00", "2026-01-31"), (salary, "3000.00", "2026-02-01"),
+            (food, "55.50", "2026-03-31"), (food, "9.99", "2026-04-01"), (rent, "700.00", "2026-05-15"),
+            (salary, "3100.00", "2026-07-30"), (food, "1.00", "2026-09-30"), (food, "2.00", "2026-10-01"),
+        ] {
+            spend(&conn, cat, amount, date);
+        }
+        let rows = history(&conn, at(LATE)).unwrap();
+        assert_eq!(rows.len(), 10);
+        for row in &rows {
+            let expense = side(&conn, &row.month, CategoryType::Expense);
+            let income = side(&conn, &row.month, CategoryType::Income);
+            assert_eq!(row.expense_budget, expense.budgeted, "{} expense budget", row.month);
+            assert_eq!(row.expense_actual, expense.actual, "{} expense actual", row.month);
+            assert_eq!(row.income_budget, income.budgeted, "{} income budget", row.month);
+            assert_eq!(row.income_actual, income.actual, "{} income actual", row.month);
+        }
     }
 }

@@ -180,4 +180,24 @@ export const fr: Messages = {
   'recovery.shownOnce':
     "c'est le seul moyen de revenir si tu oublies ta phrase secrète. elle n'est affichée qu'une fois et l'application n'en garde pas de copie. conserve-la en lieu sûr, loin de cet ordinateur.",
   'recovery.saved': "j'ai enregistré ma clé de récupération",
+
+  // Keyboard shortcuts
+  'keys.title': 'raccourcis clavier',
+  'keys.groupGo': 'aller à',
+  'keys.groupActions': 'actions',
+  'keys.groupLists': 'listes',
+  'keys.groupGeneral': 'général',
+  'keys.goTo': 'aller à {page}',
+  'keys.new': 'ajouter',
+  'keys.search': 'rechercher',
+  'keys.prev': 'mois précédent',
+  'keys.next': 'mois suivant',
+  'keys.today': 'mois en cours',
+  'keys.rowNext': 'ligne suivante',
+  'keys.rowPrev': 'ligne précédente',
+  'keys.help': 'afficher les raccourcis',
+  'keys.lock': "verrouiller l'application",
+  'keys.sidebar': 'afficher ou masquer la barre latérale',
+  'keys.close': 'fermer',
+  'nav.shortcuts': 'raccourcis',
 }

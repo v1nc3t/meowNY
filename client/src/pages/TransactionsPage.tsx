@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react'
 import AddCategoryModal from '../components/AddCategoryModal'
 import Dropdown from '../components/Dropdown'
 import Modal, { modalFormId } from '../components/Modal'
@@ -11,6 +11,10 @@ import { amountString, formatDate, formatMoney } from '../money'
 import { useMoneySettings, type MoneySettings } from '../useMoneySettings'
 import { useNotice } from '../useNotice'
 import { useT } from '../i18n/context'
+import { useDebounced } from '../useDebounced'
+import { useShortcut } from '../keys/registry'
+import { tip } from '../keys/tip'
+import { useRowNavigation } from '../keys/useRowNavigation'
 
 type TransactionList = TransactionPage
 type RangeMode = 'date' | 'month' | 'year'
@@ -51,6 +55,9 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
   const [draftMessage, setDraftMessage] = useNotice()
   const [editing, setEditing] = useState<Transaction | null>(null)
   const [message, setMessage] = useNotice()
+  // The list waits for a short pause in typing instead of asking the database on every key.
+  const searchText = useDebounced(filters.q, 200)
+  const categoryNames = useMemo(() => new Map(categories.map((category) => [category.id, category.name])), [categories])
 
   useEffect(() => {
     let cancelled = false
@@ -71,7 +78,7 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
     let cancelled = false
     const from = apiBound(filters.mode, filters.from, 'from')
     const to = apiBound(filters.mode, filters.to, 'to')
-    const q = filters.q.trim()
+    const q = searchText.trim()
     void transactionsApi
       .list({
         ...(from ? { from } : {}),
@@ -92,7 +99,7 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
     return () => {
       cancelled = true
     }
-  }, [filters, limit, offset, reload, setMessage])
+  }, [filters.mode, filters.from, filters.to, filters.categoryId, searchText, limit, offset, reload, setMessage])
 
   function patchFilters(patch: Partial<Filters>) {
     setFilters((current) => ({ ...current, ...patch }))
@@ -106,6 +113,13 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
       from: shiftBound(current.from, current.mode, mode, 'from'),
       to: shiftBound(current.to, current.mode, mode, 'to'),
     }))
+    setOffset(0)
+  }
+
+  const searchRef = useRef<HTMLInputElement>(null)
+
+  function goCurrentMonth() {
+    setFilters((current) => ({ ...current, mode: 'month', from: now.month, to: now.month }))
     setOffset(0)
   }
 
@@ -127,6 +141,12 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
     setAdding(false)
     setEditing(null)
   }
+
+  // Keyboard: n adds, / searches, t jumps to this month, j and k move between rows.
+  useShortcut('new', openAdd)
+  useShortcut('search', () => searchRef.current?.focus())
+  useShortcut('today', goCurrentMonth)
+  useRowNavigation()
 
   // One handler for both modes: the add modal creates, the same modal prefilled edits.
   async function onSave(event: FormEvent<HTMLFormElement>) {
@@ -176,7 +196,7 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
   }
 
   function scopeLabel(): string {
-    if (filters.categoryId) return categories.find((category) => category.id === filters.categoryId)?.name ?? t('tx.deletedCategory')
+    if (filters.categoryId) return categoryNames.get(filters.categoryId) ?? t('tx.deletedCategory')
     return t('tx.allCategories')
   }
 
@@ -191,15 +211,19 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
       <div className="tx-title">
         <h1>{t('tx.title')}</h1>
         <div className="tx-actions">
-          <button type="button" onClick={openAdd}>
+          <button type="button" onClick={openAdd} {...tip('new', t('tx.add'))}>
             {t('tx.add')}
           </button>
         </div>
       </div>
       <div className="toolbar wide tx-bar">
-        <label className="grow">
+        <label className="grow" {...tip('search')}>
           {t('common.search')}
           <input
+            ref={searchRef}
+            onKeyDown={(event) => {
+              if (event.key === 'Escape') event.currentTarget.blur()
+            }}
             value={filters.q}
             maxLength={255}
             autoComplete="off"
@@ -305,10 +329,8 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
           <button
             type="button"
             disabled={filters.mode === 'month' && filters.from === now.month && filters.to === now.month}
-            onClick={() => {
-              setFilters((current) => ({ ...current, mode: 'month', from: now.month, to: now.month }))
-              setOffset(0)
-            }}
+            onClick={goCurrentMonth}
+            {...tip('today', t('tx.currentMonth'))}
           >
             {t('tx.currentMonth')}
           </button>
@@ -341,8 +363,7 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
                     <p className="tx-sub">
                       {[
                         formatMoney(transaction.amount, settings.currency, settings.locale),
-                        categories.find((category) => category.id === transaction.categoryId)?.name ??
-                          (categoriesReady ? t('tx.deletedCategory') : ''),
+                        categoryNames.get(transaction.categoryId) ?? (categoriesReady ? t('tx.deletedCategory') : ''),
                         formatDate(transaction.paymentDate, settings.locale),
                       ]
                         .filter(Boolean)
@@ -360,7 +381,7 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
                     ) : null}
                   </div>
                   <div className="entry-actions">
-                    <button type="button" className="tx-text" onClick={() => openEdit(transaction)}>
+                    <button type="button" className="tx-text" data-row-focus onClick={() => openEdit(transaction)}>
                       {t('common.edit')}
                     </button>
                     <button type="button" className="tx-text" onClick={() => void onDelete(transaction.id)}>

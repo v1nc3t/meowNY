@@ -180,4 +180,24 @@ export const pt: Messages = {
   'recovery.shownOnce':
     'é a única forma de voltar a entrar se te esqueceres da frase-passe. é mostrada uma só vez e a aplicação não guarda cópia. guarda-a num sítio seguro, longe deste computador.',
   'recovery.saved': 'guardei a minha chave de recuperação',
+
+  // Keyboard shortcuts
+  'keys.title': 'atalhos de teclado',
+  'keys.groupGo': 'ir para',
+  'keys.groupActions': 'ações',
+  'keys.groupLists': 'listas',
+  'keys.groupGeneral': 'geral',
+  'keys.goTo': 'ir para {page}',
+  'keys.new': 'adicionar novo',
+  'keys.search': 'pesquisar',
+  'keys.prev': 'mês anterior',
+  'keys.next': 'mês seguinte',
+  'keys.today': 'mês atual',
+  'keys.rowNext': 'linha seguinte',
+  'keys.rowPrev': 'linha anterior',
+  'keys.help': 'mostrar atalhos',
+  'keys.lock': 'bloquear a aplicação',
+  'keys.sidebar': 'mostrar ou ocultar a barra lateral',
+  'keys.close': 'fechar',
+  'nav.shortcuts': 'atalhos',
 }

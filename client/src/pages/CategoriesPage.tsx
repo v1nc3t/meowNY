@@ -5,6 +5,9 @@ import { categories as categoriesApi, cleanCategoryName } from '../api/categorie
 import { errorText } from '../api/invoke'
 import { useNotice } from '../useNotice'
 import { useT } from '../i18n/context'
+import { useShortcut } from '../keys/registry'
+import { tip } from '../keys/tip'
+import { useRowNavigation } from '../keys/useRowNavigation'
 
 export default function CategoriesPage() {
   const t = useT()
@@ -17,6 +20,7 @@ export default function CategoriesPage() {
   const [message, setMessage] = useNotice()
   const [adding, setAdding] = useState(false)
   const [loaded, setLoaded] = useState(false)
+  const searchRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     if (!typeOpen) return
@@ -49,20 +53,29 @@ export default function CategoriesPage() {
 
   const shown = visibleCategories(categories, kind, query)
 
+  // Keyboard: n adds, / searches, j and k move between rows.
+  useShortcut('new', () => setAdding(true))
+  useShortcut('search', () => searchRef.current?.focus())
+  useRowNavigation()
+
   return (
     <section className="tx-page">
       <div className="tx-title">
         <h1>{t('categories.title')}</h1>
         <div className="tx-actions">
-          <button type="button" onClick={() => setAdding(true)}>
+          <button type="button" onClick={() => setAdding(true)} {...tip('new', t('categories.add'))}>
             {t('categories.add')}
           </button>
         </div>
       </div>
       <div className="toolbar wide tx-bar">
-        <label className="grow">
+        <label className="grow" {...tip('search')}>
           {t('common.search')}
           <input
+            ref={searchRef}
+            onKeyDown={(event) => {
+              if (event.key === 'Escape') event.currentTarget.blur()
+            }}
             value={query}
             maxLength={50}
             autoComplete="off"
@@ -200,7 +213,7 @@ function CategoryEditor({
           <span className="entry-meta">{typeLabel}</span>
         </p>
         <div className="entry-actions">
-          <button type="button" className="tx-text" onClick={() => setRenaming(true)}>
+          <button type="button" className="tx-text" data-row-focus onClick={() => setRenaming(true)}>
             {t('common.rename')}
           </button>
           <button type="button" className="tx-text" onClick={() => void onDelete()}>

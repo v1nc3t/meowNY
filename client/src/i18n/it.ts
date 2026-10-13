@@ -180,4 +180,24 @@ export const it: Messages = {
   'recovery.shownOnce':
     "è l'unico modo per rientrare se dimentichi la frase segreta. viene mostrata una sola volta e l'app non ne conserva una copia. conservala in un posto sicuro, lontano da questo computer.",
   'recovery.saved': 'ho salvato la mia chiave di ripristino',
+
+  // Keyboard shortcuts
+  'keys.title': 'scorciatoie da tastiera',
+  'keys.groupGo': 'vai a',
+  'keys.groupActions': 'azioni',
+  'keys.groupLists': 'elenchi',
+  'keys.groupGeneral': 'generale',
+  'keys.goTo': 'vai a {page}',
+  'keys.new': 'aggiungi nuovo',
+  'keys.search': 'cerca',
+  'keys.prev': 'mese precedente',
+  'keys.next': 'mese successivo',
+  'keys.today': 'mese corrente',
+  'keys.rowNext': 'riga successiva',
+  'keys.rowPrev': 'riga precedente',
+  'keys.help': 'mostra le scorciatoie',
+  'keys.lock': "blocca l'app",
+  'keys.sidebar': 'mostra o nascondi la barra laterale',
+  'keys.close': 'chiudi',
+  'nav.shortcuts': 'scorciatoie',
 }
