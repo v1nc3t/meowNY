@@ -17,6 +17,11 @@ const COMMANDS: &[&str] = &[
     "create_category",
     "rename_category",
     "delete_category",
+    "list_transactions",
+    "create_transaction",
+    "update_transaction",
+    "delete_transaction",
+    "today",
 ];
 
 fn main() {

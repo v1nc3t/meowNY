@@ -4,8 +4,10 @@ pub mod commands;
 pub mod db;
 pub mod keys;
 pub mod migrate;
+pub mod money;
 /// Dev demo data, used by `examples/seed.rs`.
 pub mod seed;
+pub mod transactions;
 pub mod vault;
 #[cfg(test)]
 mod schema_tests;
@@ -92,6 +94,11 @@ pub fn run() {
             commands::create_category,
             commands::rename_category,
             commands::delete_category,
+            commands::list_transactions,
+            commands::create_transaction,
+            commands::update_transaction,
+            commands::delete_transaction,
+            commands::today,
         ])
         .run(tauri::generate_context!())
         .expect("error while running meowNY");

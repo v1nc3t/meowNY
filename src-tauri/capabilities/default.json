@@ -19,6 +19,11 @@
     "allow-create-category",
     "allow-rename-category",
     "allow-delete-category",
+    "allow-list-transactions",
+    "allow-create-transaction",
+    "allow-update-transaction",
+    "allow-delete-transaction",
+    "allow-today",
     "core:event:allow-listen",
     "core:event:allow-unlisten",
     {

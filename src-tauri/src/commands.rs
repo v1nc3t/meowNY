@@ -6,6 +6,8 @@ use std::sync::Arc;
 use tauri::State;
 
 use crate::categories::{self, Category, CategoryType};
+use crate::clock;
+use crate::transactions::{self, Filter, NewTransaction, Page, Transaction, TransactionPatch};
 use crate::vault::{AppError, LockPrefs, Settings, Vault, VaultStatus};
 
 type Shared<'a> = State<'a, Arc<Vault>>;
@@ -27,6 +29,11 @@ pub const COMMANDS: &[&str] = &[
     "create_category",
     "rename_category",
     "delete_category",
+    "list_transactions",
+    "create_transaction",
+    "update_transaction",
+    "delete_transaction",
+    "today",
 ];
 
 #[tauri::command]
@@ -104,6 +111,42 @@ pub fn rename_category(vault: Shared, id: String, name: String) -> Result<Catego
 pub fn delete_category(vault: Shared, id: String) -> Result<(), AppError> {
     let id = categories::parse_id(&id)?;
     vault.with_conn(|c| categories::delete(c, id, chrono::Utc::now()))
+}
+
+#[tauri::command]
+pub fn list_transactions(vault: Shared, filter: Filter) -> Result<Page, AppError> {
+    vault.with_conn(|c| transactions::list(c, &filter))
+}
+
+#[tauri::command]
+pub fn create_transaction(vault: Shared, input: NewTransaction) -> Result<Transaction, AppError> {
+    vault.with_conn(|c| transactions::create(c, &input))
+}
+
+#[tauri::command]
+pub fn update_transaction(vault: Shared, id: String, patch: TransactionPatch) -> Result<Transaction, AppError> {
+    let id = categories::parse_id(&id)?;
+    vault.with_conn(|c| transactions::update(c, id, &patch))
+}
+
+#[tauri::command]
+pub fn delete_transaction(vault: Shared, id: String) -> Result<(), AppError> {
+    let id = categories::parse_id(&id)?;
+    vault.with_conn(|c| transactions::delete(c, id))
+}
+
+/// Today and this month in the user's timezone setting, so the UI never guesses from the browser clock.
+#[tauri::command]
+pub fn today(vault: Shared) -> Result<Today, AppError> {
+    let timezone = vault.settings()?.timezone;
+    let date = clock::today(chrono::Utc::now(), &timezone)?;
+    Ok(Today { date: date.to_string(), month: date.format("%Y-%m").to_string() })
+}
+
+#[derive(serde::Serialize)]
+pub struct Today {
+    pub date: String,
+    pub month: String,
 }
 
 #[cfg(test)]

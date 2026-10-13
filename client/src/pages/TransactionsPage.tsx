@@ -3,20 +3,14 @@ import AddCategoryModal from '../components/AddCategoryModal'
 import Dropdown from '../components/Dropdown'
 import Modal, { modalFormId } from '../components/Modal'
 import DateScroll from '../DateScroll'
-import { api, errorMessage } from '../http'
+import { categories as categoriesApi, type Category } from '../api/categories'
+import { errorText } from '../api/invoke'
+import { useToday, type Today } from '../api/today'
+import { transactions as transactionsApi, type Transaction, type TransactionPage } from '../api/transactions'
 import { amountString, formatMoney } from '../money'
-import { useMoneySettings } from '../useMoneySettings'
+import { useMoneySettings, type MoneySettings } from '../useMoneySettings'
 
-type Category = { id: string; name: string; type: string }
-type Transaction = {
-  id: string
-  categoryId: string
-  name: string
-  amount: string
-  paymentDate: string
-  description: string | null
-}
-type TransactionList = { transactions: Transaction[]; total: number; limit: number; offset: number }
+type TransactionList = TransactionPage
 type RangeMode = 'date' | 'month' | 'year'
 type MenuName = 'range' | 'show' | 'category'
 type Filters = {
@@ -29,10 +23,17 @@ type Filters = {
 
 export default function TransactionsPage() {
   const { settings, error } = useMoneySettings()
+  const now = useToday()
+  if (error) return <p className="notice">{error}</p>
+  if (!settings || !now) return null
+  return <TransactionsView settings={settings} now={now} />
+}
+
+function TransactionsView({ settings, now }: { settings: MoneySettings; now: Today }) {
   const [categories, setCategories] = useState<Category[]>([])
   const [categoriesReady, setCategoriesReady] = useState(false)
   const [filters, setFilters] = useState<Filters>(() => {
-    const month = currentMonth()
+    const month = now.month
     return { mode: 'month', from: month, to: month, categoryId: '', q: '' }
   })
   const [limit, setLimit] = useState(50)
@@ -50,12 +51,14 @@ export default function TransactionsPage() {
 
   useEffect(() => {
     let cancelled = false
-    void api('/api/v1/categories').then(async (response) => {
-      if (cancelled) return
-      if (!response.ok) return
-      setCategories((await response.json()) as Category[])
-      setCategoriesReady(true)
-    })
+    void categoriesApi.list().then(
+      (list) => {
+        if (cancelled) return
+        setCategories(list)
+        setCategoriesReady(true)
+      },
+      () => undefined,
+    )
     return () => {
       cancelled = true
     }
@@ -63,24 +66,26 @@ export default function TransactionsPage() {
 
   useEffect(() => {
     let cancelled = false
-    const params = new URLSearchParams()
     const from = apiBound(filters.mode, filters.from, 'from')
     const to = apiBound(filters.mode, filters.to, 'to')
-    if (from) params.set('from', from)
-    if (to) params.set('to', to)
-    if (filters.categoryId) params.set('categoryId', filters.categoryId)
     const q = filters.q.trim()
-    if (q) params.set('q', q)
-    params.set('limit', String(limit))
-    params.set('offset', String(offset))
-    void api(`/api/v1/transactions?${params}`).then(async (response) => {
-      if (cancelled) return
-      if (!response.ok) {
-        setMessage(await errorMessage(response))
-        return
-      }
-      setPage((await response.json()) as TransactionList)
-    })
+    void transactionsApi
+      .list({
+        ...(from ? { from } : {}),
+        ...(to ? { to } : {}),
+        ...(filters.categoryId ? { categoryId: filters.categoryId } : {}),
+        ...(q ? { q } : {}),
+        limit,
+        offset,
+      })
+      .then(
+        (result) => {
+          if (!cancelled) setPage(result)
+        },
+        (failure) => {
+          if (!cancelled) setMessage(errorText(failure))
+        },
+      )
     return () => {
       cancelled = true
     }
@@ -140,19 +145,14 @@ export default function TransactionsPage() {
     }
     const body = { name, amount, paymentDate, categoryId, description: description.length > 0 ? description : null }
     setPending(true)
-    const response = editing
-      ? await api(`/api/v1/transactions/${encodeURIComponent(editing.id)}`, {
-          method: 'PATCH',
-          body: JSON.stringify(body),
-        })
-      : await api('/api/v1/transactions', {
-          method: 'POST',
-          body: JSON.stringify({ ...body, clientUuid }),
-        })
-    setPending(false)
-    if (!response.ok) {
-      setDraftMessage(await errorMessage(response))
+    try {
+      if (editing) await transactionsApi.update(editing.id, body)
+      else await transactionsApi.create({ ...body, clientUuid })
+    } catch (failure) {
+      setDraftMessage(errorText(failure))
       return
+    } finally {
+      setPending(false)
     }
     setDraftMessage('')
     setMessage('')
@@ -162,9 +162,10 @@ export default function TransactionsPage() {
   }
 
   async function onDelete(id: string) {
-    const response = await api(`/api/v1/transactions/${encodeURIComponent(id)}`, { method: 'DELETE' })
-    if (!response.ok) {
-      setMessage(await errorMessage(response))
+    try {
+      await transactionsApi.remove(id)
+    } catch (failure) {
+      setMessage(errorText(failure))
       return
     }
     setMessage('')
@@ -175,9 +176,6 @@ export default function TransactionsPage() {
     if (filters.categoryId) return categories.find((category) => category.id === filters.categoryId)?.name ?? 'deleted category'
     return 'all categories'
   }
-
-  if (error) return <p className="notice">{error}</p>
-  if (!settings) return null
 
   // shortcut: one button per page, upgrade if lists run past a few dozen pages
   const pageCount = page && page.limit > 0 ? Math.max(1, Math.ceil(page.total / page.limit)) : 0
@@ -302,6 +300,7 @@ export default function TransactionsPage() {
         <TransactionModal
           key={editing ? editing.id : clientUuid}
           transaction={editing}
+          todayDate={now.date}
           categories={categories}
           pending={pending}
           message={draftMessage}
@@ -378,6 +377,7 @@ export default function TransactionsPage() {
 // Add and edit share this modal. Field order: name, amount, category, date, description.
 function TransactionModal({
   transaction,
+  todayDate,
   categories,
   pending,
   message,
@@ -386,6 +386,7 @@ function TransactionModal({
   onCategoryAdded,
 }: {
   transaction: Transaction | null
+  todayDate: string
   categories: Category[]
   pending: boolean
   message: string
@@ -427,7 +428,7 @@ function TransactionModal({
             placeholder="choose a category"
             action={{ label: 'add category', onSelect: () => setAddingCategory(true) }}
           />
-          <PaymentDate defaultValue={transaction?.paymentDate ?? today()} />
+          <PaymentDate defaultValue={transaction?.paymentDate ?? todayDate} />
           <label>
             description
             <input name="description" maxLength={255} defaultValue={transaction?.description ?? ''} autoComplete="off" />
@@ -550,16 +551,4 @@ function lastDay(yearMonth: string): string {
   const month = Number(yearMonth.slice(5, 7))
   const day = new Date(Date.UTC(year, month, 0)).getUTCDate()
   return `${yearMonth}-${String(day).padStart(2, '0')}`
-}
-
-function currentMonth(): string {
-  const now = new Date()
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
-}
-
-function today(): string {
-  const now = new Date()
-  const month = String(now.getMonth() + 1).padStart(2, '0')
-  const day = String(now.getDate()).padStart(2, '0')
-  return `${now.getFullYear()}-${month}-${day}`
 }

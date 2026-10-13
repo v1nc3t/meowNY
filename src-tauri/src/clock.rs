@@ -17,6 +17,12 @@ pub fn month_start(now: DateTime<Utc>, tz: &str) -> Result<NaiveDate, AppError> 
     local.with_day(1).ok_or(AppError::Internal)
 }
 
+/// Today's date as seen in timezone `tz`.
+pub fn today(now: DateTime<Utc>, tz: &str) -> Result<NaiveDate, AppError> {
+    let tz: Tz = tz.parse().map_err(|_| AppError::Internal)?;
+    Ok(tz.from_utc_datetime(&now.naive_utc()).date_naive())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -55,6 +61,13 @@ mod tests {
     fn year_end_rolls_the_year() {
         assert_eq!(start("2026-12-31T23:30:00Z", "Pacific/Auckland"), "2027-01-01");
         assert_eq!(start("2027-01-01T03:00:00Z", "America/Los_Angeles"), "2026-12-01");
+    }
+
+    #[test]
+    fn today_follows_the_timezone() {
+        let now = at("2026-09-30T23:30:00Z");
+        assert_eq!(today(now, "UTC").unwrap().to_string(), "2026-09-30");
+        assert_eq!(today(now, "Europe/Dublin").unwrap().to_string(), "2026-10-01");
     }
 
     #[test]
