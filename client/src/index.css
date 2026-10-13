@@ -575,10 +575,10 @@ body:has(.app-shell.is-locked) {
 }
 
 .tx-title:has(> .tx-actions),
-.tx-title:has(> .budget-date) {
+.tx-title:has(> .month-nav) {
   flex-direction: column;
   align-items: flex-start;
-  gap: 8px;
+  gap: 20px;
 }
 
 .tx-actions {
@@ -586,26 +586,6 @@ body:has(.app-shell.is-locked) {
   align-items: center;
   gap: 24px;
 }
-
-.tx-title .budget-date {
-  flex-direction: row;
-  align-items: center;
-  width: auto;
-  gap: 10px;
-  margin: 0;
-}
-
-.budget-date .date-scroll input,
-.budget-date .date-scroll input:focus,
-.budget-date .date-scroll input:focus-visible {
-  border: 0;
-  outline: none;
-  box-shadow: none;
-  background: transparent;
-  padding-inline: 2px;
-}
-
-
 
 .toolbar.tx-bar {
   position: relative;
@@ -1011,11 +991,10 @@ body:has(.app-shell.is-locked) {
   container-name: budget;
 }
 
+/* Three bands: title, expenses | income (half each), history. The page itself never scrolls. */
 .tx-page > .budget-split {
   flex: 1 1 auto;
-  flex-shrink: 1;
   min-height: 0;
-  overflow: hidden;
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   grid-template-rows: minmax(0, 1fr);
@@ -1028,8 +1007,19 @@ body:has(.app-shell.is-locked) {
   min-width: 0;
   min-height: 0;
   align-items: stretch;
-  gap: 28px;
+  gap: 20px;
+  overflow: hidden;
+}
+
+/* The category list is the part that scrolls. */
+.budget-pane {
+  flex: 1 1 auto;
+  min-height: 0;
   overflow: auto;
+}
+
+.budget-half > .budget-pane {
+  flex-shrink: 1;
 }
 
 .budget-half:first-child {
@@ -1115,11 +1105,20 @@ body:has(.app-shell.is-locked) {
 }
 
 @container budget (max-width: 700px) {
+  .app-shell.is-locked .tx-page.budget-page {
+    overflow: auto;
+  }
+
   .tx-page > .budget-split {
+    flex: none;
     display: flex;
     flex-direction: column;
-    overflow: auto;
     gap: 24px;
+  }
+
+  .budget-pane {
+    flex: none;
+    max-height: 16rem;
   }
 
   .app-main main section section.budget-half {
@@ -1456,6 +1455,107 @@ form > button {
   gap: 24px;
 }
 
-.budget-date .date-scroll input {
+
+/* Month picker: previous and next as text buttons around the month name. */
+.month-nav {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--mono);
+  font-size: 14px;
+  color: var(--text-h);
+}
+
+.month-nav > button {
+  padding: 4px 10px;
+  font-size: 18px;
+  line-height: 1;
+}
+
+.month-nav > button:last-child {
+  margin-left: 8px;
+  font-size: 13px;
+}
+
+.month-nav .pick.field {
+  width: auto;
+}
+
+.month-nav .pick-button {
+  text-transform: lowercase;
+}
+
+/* Monthly history: one row per month since the first budget. */
+.app-main main section section.budget-history {
+  flex: 0 0 auto;
+  width: 100%;
+  max-width: none;
+  gap: 12px;
+  height: clamp(11rem, 30svh, 17rem);
+  min-height: 0;
+  padding-top: 16px;
+  border-top: 0.8px solid var(--border);
+}
+
+.budget-history h2 {
+  margin: 0;
+  font-size: 20px;
+}
+
+.budget-history-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  width: 100%;
+  overflow: auto;
+}
+
+.budget-history table {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: var(--mono);
+  font-size: 13px;
+}
+
+.budget-history th {
+  position: sticky;
+  top: 0;
+  background: var(--bg);
+  padding: 8px 0 8px 16px;
+  font-size: 12px;
+  font-weight: 400;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  text-align: right;
+  white-space: nowrap;
+  border-bottom: 0.8px solid var(--border);
+}
+
+.budget-history td {
+  padding: 10px 0 10px 16px;
+  color: var(--text-h);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  border-bottom: 0.8px solid var(--border);
+}
+
+.budget-history th:first-child,
+.budget-history td:first-child {
+  padding-left: 0;
   text-align: left;
+}
+
+.budget-history td:first-child button {
+  padding: 2px 0;
+  font-size: 13px;
+  text-transform: lowercase;
+}
+
+.budget-history tr.selected td:first-child button {
+  padding: 2px 8px;
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+
+.budget-history .over {
+  border: 1px solid var(--accent);
+  padding: 2px 8px;
 }

@@ -40,6 +40,7 @@ pub const COMMANDS: &[&str] = &[
     "recover_vault",
     "new_recovery_key",
     "save_recovery_key",
+    "budget_history",
 ];
 
 #[tauri::command]
@@ -175,7 +176,12 @@ pub fn delete_transaction(vault: Shared, id: String) -> Result<(), AppError> {
 
 #[tauri::command]
 pub fn set_budget(vault: Shared, input: SetBudget) -> Result<Budget, AppError> {
-    vault.with_conn(|c| budgets::set(c, &input))
+    vault.with_conn(|c| budgets::set(c, &input, chrono::Utc::now()))
+}
+
+#[tauri::command]
+pub fn budget_history(vault: Shared) -> Result<Vec<budgets::MonthHistory>, AppError> {
+    vault.with_conn(|c| budgets::history(c, chrono::Utc::now()))
 }
 
 #[tauri::command]

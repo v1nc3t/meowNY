@@ -29,6 +29,7 @@
     "allow-recover-vault",
     "allow-new-recovery-key",
     "allow-save-recovery-key",
+    "allow-budget-history",
     "core:event:allow-listen",
     "core:event:allow-unlisten",
     {

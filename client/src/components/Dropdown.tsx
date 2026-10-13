@@ -15,6 +15,7 @@ export default function Dropdown({
   onChange,
   placeholder = 'choose',
   action,
+  compact = false,
 }: {
   label: string
   name?: string
@@ -23,6 +24,8 @@ export default function Dropdown({
   onChange: (value: string) => void
   placeholder?: string
   action?: { label: string; onSelect: () => void }
+  /** No visible label above the button; the label is kept for screen readers. */
+  compact?: boolean
 }) {
   const [host, setHost] = useState<HTMLElement | null>(null)
   const rootRef = useRef<HTMLDivElement>(null)
@@ -80,9 +83,10 @@ export default function Dropdown({
 
   return (
     <div className="pick field" ref={rootRef}>
-      <span>{label}</span>
+      {compact ? null : <span>{label}</span>}
       <button
         ref={buttonRef}
+        aria-label={compact ? label : undefined}
         type="button"
         className={selected ? 'pick-button' : 'pick-button empty'}
         aria-haspopup="listbox"

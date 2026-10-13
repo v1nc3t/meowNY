@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
-import DateScroll from '../DateScroll'
-import { budgets as budgetsApi, MONTH, type Overview } from '../api/budgets'
+import { budgets as budgetsApi, MONTH, type MonthHistory, type Overview } from '../api/budgets'
 import { categories as categoriesApi, type Category } from '../api/categories'
 import { errorText } from '../api/invoke'
+import { monthLabel, monthNames, shiftMonth, withMonth, withYear, yearChoices } from '../api/months'
+import Dropdown from '../components/Dropdown'
 import { useToday } from '../api/today'
 import { amountString, formatMoney } from '../money'
 import { useMoneySettings, type MoneySettings } from '../useMoneySettings'
@@ -22,6 +23,8 @@ export default function BudgetsPage() {
 function BudgetsView({ settings, thisMonth }: { settings: MoneySettings; thisMonth: string }) {
   const [month, setMonth] = useState(thisMonth)
   const [overview, setOverview] = useState<Overview[] | null>(null)
+  const [history, setHistory] = useState<MonthHistory[] | null>(null)
+  const pageRef = useRef<HTMLElement>(null)
   const [categories, setCategories] = useState<Category[] | null>(null)
   const [reload, setReload] = useState(0)
   const [message, setMessage] = useState('')
@@ -63,6 +66,19 @@ function BudgetsView({ settings, thisMonth }: { settings: MoneySettings; thisMon
       cancelled = true
     }
   }, [month, reload])
+
+  useEffect(() => {
+    let cancelled = false
+    void budgetsApi.history().then(
+      (rows) => {
+        if (!cancelled) setHistory(rows)
+      },
+      () => undefined,
+    )
+    return () => {
+      cancelled = true
+    }
+  }, [reload])
 
   async function save(body: {
     type: string
@@ -120,11 +136,36 @@ function BudgetsView({ settings, thisMonth }: { settings: MoneySettings; thisMon
   const incomeCategories = categories?.filter((category) => category.type === 'INCOME') ?? null
 
   return (
-    <section className="tx-page budget-page">
+    <section className="tx-page budget-page" ref={pageRef}>
       <div className="tx-title">
         <h1>budgets</h1>
-        <div className="budget-date">
-          <DateScroll announce="date" kind="month" value={month} onChange={setMonth} />
+        <div className="month-nav">
+          <button type="button" aria-label="previous month" onClick={() => setMonth(shiftMonth(month, -1))}>
+            &lsaquo;
+          </button>
+          <Dropdown
+            compact
+            label="month"
+            value={String(Number(month.slice(5, 7)))}
+            options={monthNames(settings.locale).map((name, index) => ({ value: String(index + 1), label: name }))}
+            onChange={(value) => setMonth(withMonth(month, Number(value)))}
+          />
+          <Dropdown
+            compact
+            label="year"
+            value={month.slice(0, 4)}
+            options={yearChoices(month, Number(thisMonth.slice(0, 4))).map((year) => ({
+              value: String(year),
+              label: String(year),
+            }))}
+            onChange={(value) => setMonth(withYear(month, Number(value)))}
+          />
+          <button type="button" aria-label="next month" onClick={() => setMonth(shiftMonth(month, 1))}>
+            &rsaquo;
+          </button>
+          <button type="button" disabled={month === thisMonth} onClick={() => setMonth(thisMonth)}>
+            current
+          </button>
         </div>
       </div>
       <p className="notice">{message}</p>
@@ -152,6 +193,50 @@ function BudgetsView({ settings, thisMonth }: { settings: MoneySettings; thisMon
           onCategory={onCategory}
         />
       </div>
+      {history && history.length > 0 ? (
+        <section className="budget-history">
+          <h2>history</h2>
+          <div className="budget-history-scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th>month</th>
+                  <th>expense budget</th>
+                  <th>spent</th>
+                  <th>income budget</th>
+                  <th>earned</th>
+                </tr>
+              </thead>
+              <tbody>
+                {history.map((row) => {
+                  const overspent = row.expenseBudget !== null && Number(row.expenseActual) > Number(row.expenseBudget)
+                  return (
+                    <tr key={row.month} className={row.month === month ? 'selected' : undefined}>
+                      <td>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setMonth(row.month)
+                            pageRef.current?.scrollTo({ top: 0 })
+                          }}
+                        >
+                          {monthLabel(row.month, settings.locale)}
+                        </button>
+                      </td>
+                      <td>{row.expenseBudget === null ? '-' : money(row.expenseBudget)}</td>
+                      <td>
+                        <span className={overspent ? 'over' : undefined}>{money(row.expenseActual)}</span>
+                      </td>
+                      <td>{row.incomeBudget === null ? '-' : money(row.incomeBudget)}</td>
+                      <td>{money(row.incomeActual)}</td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      ) : null}
     </section>
   )
 }
@@ -212,20 +297,23 @@ function BudgetHalf({
           </>
         ) : null}
       </div>
-      {categories && categories.length > 0 ? (
-        <div className="budget-table" key={month}>
-          {categories.map((category) => (
-            <BudgetRow
-              key={category.id}
-              label={category.name}
-              value={amounts.get(category.id) ?? ''}
-              money={money}
-              onSave={(raw) => onCategory(category, raw)}
-            />
-          ))}
-        </div>
-      ) : null}
-      {categories && categories.length === 0 ? <p>no categories.</p> : null}
+      {/* The category list scrolls on its own, so the summary above and the history below stay in view. */}
+      <div className="budget-pane">
+        {categories && categories.length > 0 ? (
+          <div className="budget-table" key={month}>
+            {categories.map((category) => (
+              <BudgetRow
+                key={category.id}
+                label={category.name}
+                value={amounts.get(category.id) ?? ''}
+                money={money}
+                onSave={(raw) => onCategory(category, raw)}
+              />
+            ))}
+          </div>
+        ) : null}
+        {categories && categories.length === 0 ? <p>no categories.</p> : null}
+      </div>
     </section>
   )
 }

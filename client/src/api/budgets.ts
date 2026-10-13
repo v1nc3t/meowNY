@@ -27,6 +27,15 @@ export const Overview = z.object({
 })
 export type Overview = z.infer<typeof Overview>
 
+export const MonthHistory = z.object({
+  month: z.string().regex(/^\d{4}-\d{2}$/),
+  expenseBudget: Amount.nullable(),
+  expenseActual: Amount,
+  incomeBudget: Amount.nullable(),
+  incomeActual: Amount,
+})
+export type MonthHistory = z.infer<typeof MonthHistory>
+
 export type SetBudget = {
   type: CategoryType
   scope: 'GLOBAL' | 'CATEGORY'
@@ -41,5 +50,7 @@ export const MONTH = /^\d{4}-(?:0[1-9]|1[0-2])$/
 
 export const budgets = {
   set: (input: SetBudget) => call('set_budget', Budget, { input }),
+  /** One row per month since the first budget, newest first. */
+  history: () => call('budget_history', z.array(MonthHistory)),
   overview: (month: string) => call('budget_overview', z.array(Overview), { month }),
 }

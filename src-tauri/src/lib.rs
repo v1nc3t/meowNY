@@ -107,6 +107,7 @@ pub fn run() {
             commands::recover_vault,
             commands::new_recovery_key,
             commands::save_recovery_key,
+            commands::budget_history,
         ])
         .run(tauri::generate_context!())
         .expect("error while running meowNY");
