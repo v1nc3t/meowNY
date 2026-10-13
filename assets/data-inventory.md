@@ -1,22 +1,40 @@
 # Data inventory
 
-What personal data this app is built to hold, why, where it lives, how long, and who else processes it. Update this page in every phase. This is a technical note, not a privacy policy.
+What data this app holds, where it lives, which optional network calls exist, and who else could see it. Update this page in every phase. This is a technical note, not a privacy policy.
 
-Status: after sign-in, onboarding records acceptance of the terms and privacy policy (version 2026-10-01) and the chosen currency. Email sign-up sends a verification link, and password reset sends a reset link. In development those messages go to local Mailpit over SMTP. The message contains the address and the link. Google sign-in is optional: when `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` are set, the browser is sent to Google, which returns the name, email, and whether that email is verified. Provider tokens are not stored. The demo seed is fixture data, not a person. A signed-in user can create categories, transactions, and budgets in the app.
+meowNY is local-first: no server, no accounts, no telemetry. All data stays on the user's own devices. Nobody operates a service, so there is no operator or controller holding anyone's data.
 
-| Data | Purpose | Where | Retention | Processor |
+Status: phase 0. The app shell opens and the encrypted database layer exists (`src-tauri/src/db.rs`, tested with SQLCipher). The tables below are the planned design and are not built yet. The old server-based design (Postgres, accounts, sessions, consents) is retired and is only in git history.
+
+## Data stored on the device
+
+| Data | Purpose | Where | Protection | Planned in phase |
 |---|---|---|---|---|
-| Name, email, email verified, optional picture URL | Account and login | `users` | While the account exists | Local Postgres (the operator's machine in development) |
-| Deletion request time | Erase the account after a short grace period | `users.deletion_requested_at` | Until erasure runs | Local Postgres (the operator's machine in development) |
-| Session token, expiry, user agent | Stay signed in, show sessions. The client IP is used for rate limiting in process memory and is not written to the session row | `sessions` | Until session expiry, then a short purge | Local Postgres (the operator's machine in development) |
-| Login provider, provider account id, password hash | Email or Google sign-in. Provider access, refresh, and id tokens are cleared before save | `accounts` | While the account exists | Local Postgres. Google, when Google sign-in is configured |
-| Verification identifier and token | Email verification and password reset. The message (address and link) is handed to the configured SMTP server | `verifications` | Until expiry | Local Postgres, plus local Mailpit in development |
-| Currency, locale, timezone | Display money and dates. Amounts are not converted when currency changes | `user_settings` | While the account exists | Local Postgres (the operator's machine in development) |
-| Consent purpose, policy version, granted and withdrawn times | Record which terms were accepted | `user_consents` | While the account exists | Local Postgres (the operator's machine in development) |
-| Privacy request type, status, times, orphaned user id | Proof a request was handled. No name or email | `privacy_requests` | Kept after erasure (id only) | Local Postgres (the operator's machine in development) |
-| Categories, budgets, transactions, recurring items | The budgeting product. Names and descriptions can reveal sensitive facts | those tables | While the account exists | Local Postgres (the operator's machine in development) |
-| History of creates, edits, and deletes | The user's own change history | `audit_log` | While the account exists, then erased with the account | Local Postgres (the operator's machine in development) |
+| Categories, budgets, transactions, recurring items | The budgeting product. Names and descriptions can reveal sensitive facts | Encrypted SQLite file on the desktop | SQLCipher, key from the OS keychain (and optional passphrase), app lock | 1 to 5 |
+| History of creates, edits and deletes | The user's own change history | Same database (`audit_log`) | Same | 1 |
+| Currency, locale, timezone, lock settings | Display money and dates, lock the app | Same database | Same | 2 |
+| Database key | Unlock the database | OS keychain (never in the database, a file or logs) | OS keychain | 2 |
+| Backups and exports (JSON, CSV, Excel, PDF) | Backup, moving to a new PC, reports | A file the user chooses | Encrypted backups use a user passphrase. Exports are plain files and the screen says so | 6 |
+| CLI tokens (hashed), scopes, expiry, last use | Let scripts and AI agents use the app | Same database | Stored hashed, revocable, read-only by default | 7 |
+| Phone copy, device ids, sync keys, change log | Offline use on the phone, sync between devices | Encrypted database on the phone, sync keys in the OS keychain | End-to-end encrypted sync. Lost devices can be revoked from the desktop | 8 |
+| Captured payment notifications (amount, merchant) | Phone capture into the review queue | Phone, then the review queue | Parsed on the device, never logged | 9 |
+| Bank aggregator credentials and token | Optional bank import | OS keychain only | Never in the database, exports, CLI output or sync. Included in backups only when the backup is encrypted | 10 |
+| Bank accounts and imported transactions | Optional bank import | Encrypted database | Same as other financial data. Goes through the review queue | 10 |
 
-Server logs: method, path, status, duration, and that a mail was sent. No body, query string, headers, address, or link.
+## Network calls
 
-Processor: the Postgres database this app is pointed at, and the SMTP server in `SMTP_HOST`. In development both are local Docker (Postgres and Mailpit). When Google sign-in is configured, Google also receives the sign-in redirect and returns the profile. Server logs stay method, path, status, and duration, plus a line that mail was sent. They do not include the address, the link, or provider tokens.
+Nothing leaves the device unless the user turns a feature on.
+
+| Call | When | What is sent | To whom |
+|---|---|---|---|
+| Update check | Phase 11, a visible setting | App version and platform | The project's release host |
+| Phone sync | Phase 8, after pairing | End-to-end encrypted changes | The other paired device, directly or through a transport the user picks (Tailscale, WebRTC, a synced folder, or an optional relay that sees only ciphertext) |
+| Bank import | Phase 10, opt-in | Credentials and requests the user's own aggregator needs | The aggregator the user registered with. This is the only external processor, and the user chooses it |
+
+## Logs
+
+Logs and crash reports never contain amounts, descriptions, tokens or keys.
+
+## Not collected
+
+Analytics, telemetry, advertising identifiers and remote error reports.

@@ -1,0 +1,8 @@
+#[allow(dead_code)] // Not called yet: the app opens the database from phase 1 on.
+mod db;
+
+pub fn run() {
+    tauri::Builder::default()
+        .run(tauri::generate_context!())
+        .expect("error while running meowNY");
+}

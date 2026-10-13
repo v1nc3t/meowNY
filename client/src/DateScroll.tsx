@@ -11,7 +11,7 @@ import {
   yearsIn,
   type ScrollKind,
   type Ymd,
-} from './dateScroll'
+} from './dateScrollModel'
 import { place } from './placeList'
 
 type Part = 'day' | 'month' | 'year'

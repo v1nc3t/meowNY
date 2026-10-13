@@ -63,12 +63,12 @@ Kept: the React client (`client/src`), Zod schemas, money and date logic, and th
 - [x] Logging that never prints personal data
 - [x] Test setup: unit tests plus integration tests against a real database
 - [x] CI that runs lint, tests and migrations from scratch
-- [ ] Tauri app shell that opens the existing React client in a window
-- [ ] SQLCipher database opens from Rust and from the test setup; decide the query layer (see open decisions)
-- [ ] Choose a license and add `LICENSE`
-- [ ] CI also runs a dependency audit and a secret scan
-- [ ] CI builds the app for Linux, macOS and Windows (unsigned at this stage)
-- [ ] Start a one-page **data inventory**: what data, where it is stored, which optional network calls exist (`assets/data-inventory.md` is rewritten for local-first)
+- [x] Tauri app shell that opens the existing React client in a window
+- [x] SQLCipher database opens from Rust and from the test setup; decide the query layer (see open decisions)
+- [x] Choose a license and add `LICENSE`
+- [x] CI also runs a dependency audit and a secret scan
+- [x] CI builds the app for Linux, macOS and Windows (unsigned at this stage)
+- [x] Start a one-page **data inventory**: what data, where it is stored, which optional network calls exist (`assets/data-inventory.md` is rewritten for local-first)
 
 **Done when:** `npm run tauri dev` opens a window, it reads a row from an encrypted SQLite file, and CI is green on all three platforms.
 
