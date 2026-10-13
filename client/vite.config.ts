@@ -4,14 +4,10 @@ import react from '@vitejs/plugin-react'
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [react()],
+  // The desktop app loads this dev server, so the port and host must match src-tauri/tauri.conf.json.
   server: {
     host: '127.0.0.1',
     port: 5173,
-    proxy: {
-      '/api': {
-        target: 'http://127.0.0.1:3000',
-        changeOrigin: true,
-      },
-    }
-  }
+    strictPort: true,
+  },
 })

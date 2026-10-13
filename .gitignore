@@ -20,11 +20,6 @@ node_modules/
 dist/
 .tmp/
 
-# Docker Infrastructure Local Databases
-# (Prevents raw DB volumes from being pushed to remote repos)
-postgres_data/
-mysql_data/
-.containers/
 # Tauri / Rust
 src-tauri/target/
 src-tauri/gen/
