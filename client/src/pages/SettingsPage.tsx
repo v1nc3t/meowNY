@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { errorText, inDesktopApp, vault, type LockPrefs } from '../vault/api'
 import { currencyLabel } from '../api/currencies'
+import { formatExample, localeChoices, localeLabel, timeZoneChoices } from '../api/locales'
 import ChangeCurrencyModal from '../components/ChangeCurrencyModal'
 import Dropdown from '../components/Dropdown'
 import PasswordField from '../vault/PasswordField'
@@ -17,10 +18,19 @@ export default function SettingsPage() {
   const [newKey, setNewKey] = useState<string | null>(null)
   const [lockAfter, setLockAfter] = useState('300')
   const [changingCurrency, setChangingCurrency] = useState(false)
+  const [locale, setLocale] = useState('')
+  const [timezone, setTimezone] = useState('')
 
   useEffect(() => {
     if (!inDesktopApp()) return
-    vault.settings().then(setSettings, (e) => setMessage(errorText(e)))
+    vault.settings().then(
+      (loaded) => {
+        setSettings(loaded)
+        setLocale(loaded.locale)
+        setTimezone(loaded.timezone)
+      },
+      (e) => setMessage(errorText(e)),
+    )
     vault.lockPrefs().then(
       (loaded) => {
         setPrefs(loaded)
@@ -35,11 +45,10 @@ export default function SettingsPage() {
 
   async function onSettings(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    const form = new FormData(event.currentTarget)
     const next = {
       currency: settings?.currency ?? '',
-      locale: String(form.get('locale')).trim(),
-      timezone: String(form.get('timezone')).trim(),
+      locale,
+      timezone,
     }
     try {
       await vault.saveSettings(next)
@@ -120,14 +129,14 @@ export default function SettingsPage() {
                 change
               </button>
             </div>
-            <label>
-              number and date format
-              <input name="locale" required placeholder="en-IE" defaultValue={settings.locale} />
-            </label>
-            <label>
-              timezone
-              <input name="timezone" required placeholder="Europe/Dublin" defaultValue={settings.timezone} />
-            </label>
+            <Dropdown
+              label="number and date format"
+              value={locale}
+              options={localeOptions(locale)}
+              onChange={setLocale}
+            />
+            <p className="hint">{formatExample(locale, settings.currency)}</p>
+            <Dropdown label="timezone" value={timezone} options={zoneOptions(timezone)} onChange={setTimezone} />
             <div className="actions">
               <button type="submit">save</button>
             </div>
@@ -199,4 +208,17 @@ export default function SettingsPage() {
       </div>
     </section>
   )
+}
+
+/** The formats the system prefers first (its own language list), then common ones. */
+function localeOptions(current: string): { value: string; label: string }[] {
+  const supported = (tag: string) => Intl.NumberFormat.supportedLocalesOf(tag).length > 0
+  return localeChoices(current, navigator.languages ?? [], supported).map((tag) => ({ value: tag, label: localeLabel(tag) }))
+}
+
+/** Every zone the system knows, with the current and the system's own first. */
+function zoneOptions(current: string): { value: string; label: string }[] {
+  const all = typeof Intl.supportedValuesOf === 'function' ? Intl.supportedValuesOf('timeZone') : null
+  const system = Intl.DateTimeFormat().resolvedOptions().timeZone
+  return timeZoneChoices(all, system, current).map((zone) => ({ value: zone, label: zone }))
 }

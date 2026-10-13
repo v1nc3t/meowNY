@@ -7,7 +7,7 @@ import { categories as categoriesApi, type Category } from '../api/categories'
 import { errorText } from '../api/invoke'
 import { useToday, type Today } from '../api/today'
 import { transactions as transactionsApi, type Transaction, type TransactionPage } from '../api/transactions'
-import { amountString, formatMoney } from '../money'
+import { amountString, formatDate, formatMoney } from '../money'
 import { useMoneySettings, type MoneySettings } from '../useMoneySettings'
 import { useNotice } from '../useNotice'
 
@@ -342,7 +342,7 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
                         formatMoney(transaction.amount, settings.currency, settings.locale),
                         categories.find((category) => category.id === transaction.categoryId)?.name ??
                           (categoriesReady ? 'deleted category' : ''),
-                        transaction.paymentDate,
+                        formatDate(transaction.paymentDate, settings.locale),
                       ]
                         .filter(Boolean)
                         .join(' | ')}

@@ -43,3 +43,16 @@ export function convertAmount(amount: string, rate: string): string | null {
   const text = converted.toString().padStart(3, '0')
   return `${text.slice(0, -2)}.${text.slice(-2)}`
 }
+
+/** "2026-10-12" written the way the locale writes dates. The calendar day never shifts with the time zone. */
+export function formatDate(isoDate: string, locale: string): string {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(isoDate)
+  if (!match) return isoDate
+  try {
+    return new Intl.DateTimeFormat(locale, { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'UTC' }).format(
+      new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3]))),
+    )
+  } catch {
+    return isoDate
+  }
+}

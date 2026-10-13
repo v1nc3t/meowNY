@@ -31,6 +31,7 @@ export default function Dropdown({
   const rootRef = useRef<HTMLDivElement>(null)
   const buttonRef = useRef<HTMLButtonElement>(null)
   const listRef = useRef<HTMLUListElement>(null)
+  const typed = useRef({ text: '', timer: 0 })
   const selected = options.find((option) => option.value === value)
   const open = host !== null
 
@@ -109,11 +110,23 @@ export default function Dropdown({
               aria-label={label}
               ref={listRef}
               onKeyDown={(event) => {
-                if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return
-                event.preventDefault()
                 const items = Array.from(event.currentTarget.querySelectorAll<HTMLButtonElement>('button'))
                 const at = items.indexOf(document.activeElement as HTMLButtonElement)
-                items[at + (event.key === 'ArrowDown' ? 1 : -1)]?.focus()
+                if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+                  event.preventDefault()
+                  items[at + (event.key === 'ArrowDown' ? 1 : -1)]?.focus()
+                  return
+                }
+                // Type to jump: letters typed quickly build a prefix, and the first matching option gets focus.
+                if (event.key.length !== 1 || event.ctrlKey || event.metaKey || event.altKey) return
+                event.preventDefault()
+                window.clearTimeout(typed.current.timer)
+                typed.current.text += event.key.toLowerCase()
+                typed.current.timer = window.setTimeout(() => (typed.current.text = ''), 700)
+                const prefix = typed.current.text
+                const from = prefix.length > 1 ? at : at + 1
+                const ordered = [...items.slice(Math.max(from, 0)), ...items.slice(0, Math.max(from, 0))]
+                ordered.find((item) => item.textContent?.trim().toLowerCase().startsWith(prefix))?.focus()
               }}
             >
               {action ? (
