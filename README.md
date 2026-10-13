@@ -76,7 +76,7 @@ npm run build --workspace client
 npm run check:outbound
 ```
 
-CI (`.github/workflows/desktop.yml`) runs the outbound check and `cargo test`, then builds the app on Linux, macOS and Windows.
+CI (`.github/workflows/desktop.yml`) runs the outbound check and `cargo test`, then builds the app. Pull requests build on Linux only (about 2.5 minutes); pushes to `main` also build on macOS and Windows, and you can run all three for any branch from the Actions tab with "Run workflow".
 
 ## Database
 

@@ -1,6 +1,7 @@
 name: Desktop
 
 on:
+  workflow_dispatch:
   push:
     branches:
       - main
@@ -38,13 +39,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - os: ubuntu-latest
-            bundle: deb
-          - os: macos-latest
-            bundle: app
-          - os: windows-latest
-            bundle: nsis
+        # Pull requests build on Linux only (about 2.5 minutes). The macOS and Windows builds are slower,
+        # mostly because OpenSSL is compiled from source (about 10 minutes on Windows), so they run when
+        # code reaches main, or on demand from the Actions tab ("Run workflow") for any branch.
+        include: ${{ fromJSON(github.event_name == 'pull_request' && '[{"os":"ubuntu-latest","bundle":"deb"}]' || '[{"os":"ubuntu-latest","bundle":"deb"},{"os":"macos-latest","bundle":"app"},{"os":"windows-latest","bundle":"nsis"}]') }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
