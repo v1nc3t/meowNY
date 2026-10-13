@@ -3,11 +3,15 @@ name: Security
 on:
   push:
     branches:
-      - '**'
+      - main
   pull_request:
   schedule:
     # Weekly, so new advisories are caught even when nobody pushes.
     - cron: '17 6 * * 1'
+
+concurrency:
+  group: security-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   security:
