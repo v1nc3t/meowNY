@@ -345,13 +345,16 @@ impl Vault {
         })
     }
 
+    /// Saves locale and timezone. The currency cannot change here: changing it can mean converting
+    /// every amount, so it goes through `currency::change`, which makes that choice explicit.
     pub fn save_settings(&self, settings: &Settings) -> Result<(), AppError> {
         let s = validate_settings(settings)?;
         self.with_conn(|c| {
-            c.execute(
-                "UPDATE settings SET currency = ?1, locale = ?2, timezone = ?3 WHERE id = 1",
-                [&s.currency, &s.locale, &s.timezone],
-            )?;
+            let current: String = c.query_row("SELECT currency FROM settings WHERE id = 1", [], |r| r.get(0))?;
+            if current != s.currency {
+                return Err(AppError::InvalidInput);
+            }
+            c.execute("UPDATE settings SET locale = ?1, timezone = ?2 WHERE id = 1", [&s.locale, &s.timezone])?;
             Ok(())
         })?;
         Ok(())
@@ -574,9 +577,20 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let v = vault(dir.path());
         v.create(&settings(), None).unwrap();
-        v.save_settings(&Settings { currency: "usd".into(), locale: "en-US".into(), timezone: "UTC".into() })
+        v.save_settings(&Settings { currency: "eur".into(), locale: "en-US".into(), timezone: "UTC".into() })
             .unwrap();
-        assert_eq!(v.settings().unwrap().currency, "USD");
+        let saved = v.settings().unwrap();
+        assert_eq!((saved.locale.as_str(), saved.timezone.as_str(), saved.currency.as_str()), ("en-US", "UTC", "EUR"));
+    }
+
+    #[test]
+    fn the_currency_cannot_be_changed_through_the_plain_settings_save() {
+        let dir = tempfile::tempdir().unwrap();
+        let v = vault(dir.path());
+        v.create(&settings(), None).unwrap();
+        let usd = Settings { currency: "usd".into(), ..settings() };
+        assert_eq!(v.save_settings(&usd), Err(AppError::InvalidInput));
+        assert_eq!(v.settings().unwrap().currency, "EUR");
     }
 
     #[test]
@@ -663,13 +677,13 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let v = vault(dir.path());
         let recovery = v.create(&settings(), Some("old passphrase")).unwrap();
-        v.save_settings(&Settings { currency: "usd".into(), ..settings() }).unwrap();
+        v.save_settings(&Settings { locale: "en-US".into(), ..settings() }).unwrap();
         v.lock();
         assert_eq!(v.unlock(Some("forgotten")), Err(AppError::WrongCredentials));
 
         v.recover(&recovery, Some("brand new passphrase")).unwrap();
         assert_eq!(v.status(), VaultStatus::Unlocked);
-        assert_eq!(v.settings().unwrap().currency, "USD", "data is intact");
+        assert_eq!(v.settings().unwrap().locale, "en-US", "data is intact");
 
         v.lock();
         assert_eq!(v.unlock(Some("old passphrase")), Err(AppError::WrongCredentials), "the old passphrase is dead");

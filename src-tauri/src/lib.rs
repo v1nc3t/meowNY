@@ -2,6 +2,7 @@ pub mod budgets;
 pub mod categories;
 pub mod clock;
 pub mod commands;
+pub mod currency;
 pub mod db;
 pub mod keys;
 pub mod migrate;
@@ -108,6 +109,7 @@ pub fn run() {
             commands::new_recovery_key,
             commands::save_recovery_key,
             commands::budget_history,
+            commands::change_currency,
         ])
         .run(tauri::generate_context!())
         .expect("error while running meowNY");

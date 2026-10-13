@@ -115,6 +115,7 @@ Kept: the React client (`client/src`), Zod schemas, money and date logic, and th
 - [x] Budget overview: allocated vs unallocated, with a warning when categories exceed the global budget (Per side: budgeted, allocated, unallocated, actual, remaining and an over-allocated flag, computed from the effective budgets.)
 - [x] Month filters and "current month" use the timezone setting, with a test around midnight at month end (`clock.rs` computes today and the month in the timezone setting; the transactions and budgets pages use it through the `today` command. Tests cover midnight at month end and year end.)
 - [x] Tests: carry-over (a March budget applies in June until changed), removal via NULL, income budgets, idempotent create (`budgets.rs`, `transactions.rs`, `categories.rs`, `clock.rs`.)
+- [x] Currency: pick from a list at first run; change it later in Settings with a typed exchange rate that converts every stored amount (transactions, planned amounts, recurring items, budget limits) in one transaction, rounded half up to the cent, or relabel only. No rate is fetched; the rate and date go to the history. (`src-tauri/src/currency.rs`, `client/src/components/ChangeCurrencyModal.tsx`. Two decimals are still assumed for every currency, so JPY, KRW and similar show `.00`.)
 
 **Done when:** you can record income and expenses, set monthly budgets and category allocations, change them, and old months keep their old limits, all inside the desktop app.
 

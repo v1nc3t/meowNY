@@ -1,5 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { errorText, vault } from './api'
+import { currencyOptions } from '../api/currencies'
+import Dropdown from '../components/Dropdown'
 import PasswordField from './PasswordField'
 import RecoveryKeyPanel from './RecoveryKeyPanel'
 import { defaultSettings, isCurrency, normalizeCurrency, passphraseProblem } from './rules'
@@ -10,6 +12,7 @@ export default function FirstRunScreen({ onDone }: { onDone: () => void }) {
   const [message, setMessage] = useNotice()
   const [busy, setBusy] = useState(false)
   const [recoveryKey, setRecoveryKey] = useState<string | null>(null)
+  const [currency, setCurrency] = useState('')
 
   useEffect(() => {
     vault.dataLocation().then(setLocation, () => setLocation(''))
@@ -18,10 +21,9 @@ export default function FirstRunScreen({ onDone }: { onDone: () => void }) {
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     const form = new FormData(event.currentTarget)
-    const currency = String(form.get('currency'))
     const passphrase = String(form.get('passphrase'))
     const problem = passphraseProblem(passphrase, String(form.get('confirm')))
-    if (!isCurrency(currency)) return setMessage('use a three-letter currency code, like EUR.')
+    if (!isCurrency(currency)) return setMessage('choose your currency.')
     if (problem) return setMessage(problem)
 
     setBusy(true)
@@ -50,11 +52,15 @@ export default function FirstRunScreen({ onDone }: { onDone: () => void }) {
         <h1>welcome</h1>
         <p className="hint">your data stays on this computer, encrypted. nothing is sent anywhere.</p>
 
-        <label>
-          currency
-          <input name="currency" required minLength={3} maxLength={3} placeholder="EUR" autoComplete="off" />
-        </label>
-        <p className="hint">changing it later does not convert old amounts.</p>
+        <Dropdown
+          label="currency"
+          name="currency"
+          value={currency}
+          options={currencyOptions}
+          onChange={setCurrency}
+          placeholder="choose your currency"
+        />
+        <p className="hint">you can change it later and convert your amounts.</p>
 
         <PasswordField label="passphrase (optional)" name="passphrase" />
         <PasswordField label="repeat passphrase" name="confirm" />

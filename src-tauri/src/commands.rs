@@ -8,6 +8,7 @@ use tauri::State;
 use crate::categories::{self, Category, CategoryType};
 use crate::budgets::{self, Budget, Overview, SetBudget};
 use crate::clock;
+use crate::currency::{self, Conversion};
 use crate::transactions::{self, Filter, NewTransaction, Page, Transaction, TransactionPatch};
 use crate::vault::{AppError, LockPrefs, Settings, Vault, VaultStatus};
 
@@ -41,6 +42,7 @@ pub const COMMANDS: &[&str] = &[
     "new_recovery_key",
     "save_recovery_key",
     "budget_history",
+    "change_currency",
 ];
 
 #[tauri::command]
@@ -177,6 +179,22 @@ pub fn delete_transaction(vault: Shared, id: String) -> Result<(), AppError> {
 #[tauri::command]
 pub fn set_budget(vault: Shared, input: SetBudget) -> Result<Budget, AppError> {
     vault.with_conn(|c| budgets::set(c, &input, chrono::Utc::now()))
+}
+
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ChangeCurrency {
+    pub currency: String,
+    /// How many units of the new currency one unit of the current one is worth. Null only relabels.
+    pub rate: Option<String>,
+}
+
+/// Changes the currency, converting every amount at the rate the person typed, or only relabelling.
+#[tauri::command]
+pub fn change_currency(vault: Shared, input: ChangeCurrency) -> Result<Conversion, AppError> {
+    let timezone = vault.settings()?.timezone;
+    let today = clock::today(chrono::Utc::now(), &timezone)?.to_string();
+    vault.with_conn(|c| currency::change(c, &input.currency, input.rate.as_deref(), &today))
 }
 
 #[tauri::command]

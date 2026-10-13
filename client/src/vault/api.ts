@@ -10,6 +10,11 @@ export type VaultStatus = 'not_set_up' | 'locked' | 'unlocked'
 export type LockPrefs = { lock_after_secs: number; lock_on_minimize: boolean; lock_on_close: boolean }
 
 const Nothing = z.null()
+const Conversion = z.object({
+  transactions: z.number().int().nonnegative(),
+  recurring: z.number().int().nonnegative(),
+  budgets: z.number().int().nonnegative(),
+})
 const RecoveryKey = z.string().regex(/^([0-9A-Z]{4}-){7}[0-9A-Z]{4}$/)
 const Status = z.enum(['not_set_up', 'locked', 'unlocked'])
 const SettingsShape = z.object({ currency: z.string(), locale: z.string(), timezone: z.string() })
@@ -30,6 +35,11 @@ export const vault = {
   /** Unlocks with the recovery key and sets a new passphrase (empty means none). */
   recover: (recoveryKey: string, newPassphrase: string) =>
     done(call('recover_vault', Nothing, { recoveryKey, newPassphrase: none(newPassphrase) })),
+  /**
+   * Changes the currency. With a rate (units of the new currency per one of the current), every amount is
+   * converted at that rate; with null only the label changes.
+   */
+  changeCurrency: (currency: string, rate: string | null) => call('change_currency', Conversion, { input: { currency, rate } }),
   /** Opens a save dialog and writes the key to a text file. False when the person cancels. */
   saveRecoveryKey: (code: string) => call('save_recovery_key', z.boolean(), { code }),
   /** Replaces the recovery key; the old one stops working. */

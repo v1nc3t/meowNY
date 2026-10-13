@@ -30,6 +30,7 @@
     "allow-new-recovery-key",
     "allow-save-recovery-key",
     "allow-budget-history",
+    "allow-change-currency",
     "core:event:allow-listen",
     "core:event:allow-unlisten",
     {

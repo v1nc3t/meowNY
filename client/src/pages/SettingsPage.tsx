@@ -1,9 +1,11 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { errorText, inDesktopApp, vault, type LockPrefs } from '../vault/api'
+import { currencyLabel } from '../api/currencies'
+import ChangeCurrencyModal from '../components/ChangeCurrencyModal'
 import Dropdown from '../components/Dropdown'
 import PasswordField from '../vault/PasswordField'
 import RecoveryKeyPanel from '../vault/RecoveryKeyPanel'
-import { LOCK_AFTER_CHOICES, isCurrency, nearestLockChoice, normalizeCurrency, type Settings } from '../vault/rules'
+import { LOCK_AFTER_CHOICES, nearestLockChoice, type Settings } from '../vault/rules'
 import { useNotice } from '../useNotice'
 
 export default function SettingsPage() {
@@ -14,6 +16,7 @@ export default function SettingsPage() {
   const [confirmation, setConfirmation] = useState('')
   const [newKey, setNewKey] = useState<string | null>(null)
   const [lockAfter, setLockAfter] = useState('300')
+  const [changingCurrency, setChangingCurrency] = useState(false)
 
   useEffect(() => {
     if (!inDesktopApp()) return
@@ -26,7 +29,7 @@ export default function SettingsPage() {
       (e) => setMessage(errorText(e)),
     )
     vault.dataLocation().then(setLocation, () => undefined)
-  }, [])
+  }, [setMessage])
 
   if (!inDesktopApp()) return <p>settings are available in the desktop app.</p>
 
@@ -34,15 +37,14 @@ export default function SettingsPage() {
     event.preventDefault()
     const form = new FormData(event.currentTarget)
     const next = {
-      currency: normalizeCurrency(String(form.get('currency'))),
+      currency: settings?.currency ?? '',
       locale: String(form.get('locale')).trim(),
       timezone: String(form.get('timezone')).trim(),
     }
-    if (!isCurrency(next.currency)) return setMessage('use a three-letter currency code, like EUR.')
     try {
       await vault.saveSettings(next)
       setSettings(next)
-      setMessage('settings saved. changing currency does not convert amounts.')
+      setMessage('saved.')
     } catch (error) {
       setMessage(errorText(error))
     }
@@ -95,14 +97,29 @@ export default function SettingsPage() {
         {message}
       </p>
 
+      {changingCurrency && settings ? (
+        <ChangeCurrencyModal
+          current={settings.currency}
+          onClose={() => setChangingCurrency(false)}
+          onChanged={(currency, summary) => {
+            setSettings({ ...settings, currency })
+            setChangingCurrency(false)
+            setMessage(summary)
+          }}
+        />
+      ) : null}
+
       <div className="tx-pane wide settings-grid">
         {settings && (
           <form className="settings-block" onSubmit={onSettings}>
             <h2>money and time</h2>
-            <label>
-              currency
-              <input name="currency" required minLength={3} maxLength={3} placeholder="EUR" defaultValue={settings.currency} />
-            </label>
+            <div className="settings-row">
+              <span className="settings-row-label">currency</span>
+              <span className="settings-row-value">{currencyLabel(settings.currency)}</span>
+              <button type="button" onClick={() => setChangingCurrency(true)}>
+                change
+              </button>
+            </div>
             <label>
               number and date format
               <input name="locale" required placeholder="en-IE" defaultValue={settings.locale} />

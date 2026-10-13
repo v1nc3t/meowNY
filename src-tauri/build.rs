@@ -28,6 +28,7 @@ const COMMANDS: &[&str] = &[
     "new_recovery_key",
     "save_recovery_key",
     "budget_history",
+    "change_currency",
 ];
 
 fn main() {
