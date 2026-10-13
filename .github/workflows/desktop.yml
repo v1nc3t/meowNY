@@ -69,6 +69,9 @@ jobs:
           workspaces: src-tauri
           # Keep the dependency build even when a later step fails.
           cache-on-failure: true
+          # Only main writes the cache. Branches and PRs restore it, so each OS keeps one
+          # warm cache instead of every branch pushing its own and evicting the others.
+          save-if: ${{ github.ref == 'refs/heads/main' }}
 
       - name: Install
         run: npm ci

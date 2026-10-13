@@ -22,6 +22,8 @@ impl DbKey {
 
 #[derive(Debug)]
 pub enum DbError {
+    /// Schema migrations failed, or the database is from a newer app version.
+    Migrate(crate::migrate::MigrateError),
     /// The linked SQLite has no SQLCipher, so nothing would be encrypted.
     CipherMissing,
     /// Wrong key, or the file is not an encrypted database.
@@ -34,6 +36,7 @@ impl std::fmt::Display for DbError {
         match self {
             DbError::CipherMissing => write!(f, "SQLCipher is not available"),
             DbError::Unreadable => write!(f, "cannot open database: wrong key or not an encrypted database"),
+            DbError::Migrate(e) => write!(f, "{e}"),
             DbError::Sqlite(e) => write!(f, "database error: {e}"),
         }
     }
@@ -45,6 +48,14 @@ impl From<rusqlite::Error> for DbError {
     fn from(e: rusqlite::Error) -> Self {
         DbError::Sqlite(e)
     }
+}
+
+/// Startup entry point: opens the database and brings its schema up to date.
+/// Refuses a database written by a newer app version.
+pub fn open_and_migrate(path: &Path, key: &DbKey) -> Result<Connection, DbError> {
+    let mut conn = open(path, key)?;
+    crate::migrate::run(&mut conn).map_err(DbError::Migrate)?;
+    Ok(conn)
 }
 
 /// Opens the database at `path`, creating it if missing, and unlocks it with `key`.
@@ -141,5 +152,17 @@ mod tests {
         )
         .unwrap();
         assert!(conn.execute("INSERT INTO b VALUES (99)", []).is_err());
+    }
+
+    #[test]
+    fn open_and_migrate_builds_schema_and_refuses_newer_database() {
+        let (_dir, path) = temp_db();
+        {
+            let conn = open_and_migrate(&path, &key(1)).unwrap();
+            conn.execute("INSERT INTO categories (type, name) VALUES ('EXPENSE', 'Food')", []).unwrap();
+            conn.pragma_update(None, "user_version", 999).unwrap();
+        }
+        let err = open_and_migrate(&path, &key(1)).unwrap_err();
+        assert!(matches!(err, DbError::Migrate(crate::migrate::MigrateError::DatabaseTooNew { .. })));
     }
 }

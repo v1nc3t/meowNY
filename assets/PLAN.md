@@ -74,19 +74,19 @@ Kept: the React client (`client/src`), Zod schemas, money and date logic, and th
 
 ## Phase 1: Database foundation (M)
 
-- [ ] Port the tables, indexes and foreign keys from the schema file to SQLite migrations. Remove user ids, auth tables and server-only tables.
-- [ ] Port CHECK constraints, partial unique indexes and triggers (history, `updated_at`). Postgres functions for statistics and GDPR become queries or Rust/TypeScript code.
-- [ ] Money storage decision applied: decimal strings or integer minor units, with constraints on the column
-- [ ] Migration runner that applies migrations on startup and refuses to open a database from a newer app version
-- [ ] Constraint tests (these are your safety net):
-  - [ ] a transaction cannot use a missing category
-  - [ ] a budget's type must match its category's type
-  - [ ] only one GLOBAL budget per type and month
-  - [ ] a category type cannot change after creation
-  - [ ] the same recurring occurrence cannot be paid twice
-  - [ ] the same `client_uuid` cannot create two transactions
-  - [ ] audit rows appear for insert, update and delete, and are skipped when only `updated_at` changed
-- [ ] Dev seed script with demo categories, budgets and transactions
+- [x] Port the tables, indexes and foreign keys from the schema file to SQLite migrations. Remove user ids, auth tables and server-only tables. (`src-tauri/migrations/0001_tables.sql`, plain SQL, `STRICT` tables.)
+- [x] Port CHECK constraints, partial unique indexes and triggers (history, `updated_at`). Postgres functions for statistics and GDPR become queries or Rust/TypeScript code. (CHECKs and partial indexes are in `0001_tables.sql`, triggers in `0002_triggers.sql`. The statistics and GDPR functions are not ported here; they are rebuilt in phases 5 and 6.)
+- [x] Money storage decision applied: decimal strings or integer minor units, with constraints on the column (Integer minor units in `*_minor` columns, bounded 0..999,999,999,999; amounts > 0, planned amounts and limits >= 0.)
+- [x] Migration runner that applies migrations on startup and refuses to open a database from a newer app version (`src-tauri/src/migrate.rs`, version kept in `user_version`. Startup should call `db::open_and_migrate`; the app does not open the database yet because key handling is phase 2.)
+- [x] Constraint tests (these are your safety net), in `src-tauri/src/schema_tests.rs`:
+  - [x] a transaction cannot use a missing category
+  - [x] a budget's type must match its category's type
+  - [x] only one GLOBAL budget per type and month
+  - [x] a category type cannot change after creation
+  - [x] the same recurring occurrence cannot be paid twice
+  - [x] the same `client_uuid` cannot create two transactions
+  - [x] audit rows appear for insert, update and delete, and are skipped when only `updated_at` changed
+- [x] Dev seed script with demo categories, budgets and transactions (`src-tauri/seeds/dev.sql`, loaded by `src/seed.rs`; run `cargo run --example seed -- <db-path> <64-hex-key>` from `src-tauri/`. Dates are relative to today.)
 
 **Done when:** a fresh database builds from migrations only and all constraint tests pass on SQLite.
 
