@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { choiceLabel, daysIn, emitValue, monthName, monthsIn, parseValue, rangeBounds, withPart, yearsIn } from './dateScroll.ts'
+import { choiceLabel, daysIn, emitValue, monthName, monthsIn, parseValue, rangeBounds, withPart, yearsIn } from './dateScrollModel.ts'
 
 test('date parts stop one year ahead and read dd mm yyyy', () => {
   const now = new Date(2026, 9, 11)
