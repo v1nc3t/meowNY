@@ -1559,3 +1559,47 @@ form > button {
   border: 1px solid var(--accent);
   padding: 2px 8px;
 }
+
+/* Dates as dropdowns: day, month and year side by side. A label sits above, like other fields. */
+.date-picker {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 6px;
+}
+
+.date-picker .pick.field {
+  width: auto;
+}
+
+.tx-date-group {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  width: auto;
+  flex: 0 0 auto;
+}
+
+.tx-date-group > span {
+  font-family: var(--mono);
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  line-height: 1.4;
+  color: var(--text-muted);
+}
+
+/* From and to are kept whole: when the row is too narrow, "to" drops below "from". */
+.tx-range {
+  flex-wrap: wrap;
+}
+
+.tx-range > button {
+  padding: 8px 0;
+}
+
+/* When the filters run out of room the range block wraps upwards: it appears above the other filters,
+   not under them. Items sit at the bottom of their row (flex-start is the bottom with wrap-reverse). */
+.toolbar.tx-bar {
+  flex-wrap: wrap-reverse;
+  align-items: flex-start;
+}

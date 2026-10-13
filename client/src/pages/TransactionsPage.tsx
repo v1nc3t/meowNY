@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'rea
 import AddCategoryModal from '../components/AddCategoryModal'
 import Dropdown from '../components/Dropdown'
 import Modal, { modalFormId } from '../components/Modal'
-import DateScroll from '../DateScroll'
+import DatePicker from '../components/DatePicker'
 import { categories as categoriesApi, type Category } from '../api/categories'
 import { errorText } from '../api/invoke'
 import { useToday, type Today } from '../api/today'
@@ -187,7 +187,7 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
         <h1>transactions</h1>
         <div className="tx-actions">
           <button type="button" onClick={openAdd}>
-            add
+            add transaction
           </button>
         </div>
       </div>
@@ -223,47 +223,6 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
             </PickOption>
           ))}
         </Pick>
-        <div className="tx-range">
-          <Pick
-            label="range"
-            className="mode"
-            text={filters.mode === 'date' ? 'day' : filters.mode}
-            open={menu === 'range'}
-            onToggle={() => setMenu((current) => (current === 'range' ? null : 'range'))}
-            onClose={() => setMenu(null)}
-          >
-            {(['date', 'month', 'year'] as const).map((mode) => (
-              <PickOption
-                key={mode}
-                selected={filters.mode === mode}
-                onClick={() => {
-                  onMode(mode)
-                  setMenu(null)
-                }}
-              >
-                {mode === 'date' ? 'day' : mode}
-              </PickOption>
-            ))}
-          </Pick>
-          <label>
-            from
-            <DateScroll
-              key={`from-${filters.mode}`}
-              kind={filters.mode}
-              value={filters.from}
-              onChange={(from) => patchFilters({ from })}
-            />
-          </label>
-          <label>
-            to
-            <DateScroll
-              key={`to-${filters.mode}`}
-              kind={filters.mode}
-              value={filters.to}
-              onChange={(to) => patchFilters({ to })}
-            />
-          </label>
-        </div>
         <Pick
           label="category"
           className="scope"
@@ -294,6 +253,63 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
             </PickOption>
           ))}
         </Pick>
+        <div className="tx-range">
+          <Pick
+            label="range"
+            className="mode"
+            text={filters.mode === 'date' ? 'day' : filters.mode}
+            open={menu === 'range'}
+            onToggle={() => setMenu((current) => (current === 'range' ? null : 'range'))}
+            onClose={() => setMenu(null)}
+          >
+            {(['date', 'month', 'year'] as const).map((mode) => (
+              <PickOption
+                key={mode}
+                selected={filters.mode === mode}
+                onClick={() => {
+                  onMode(mode)
+                  setMenu(null)
+                }}
+              >
+                {mode === 'date' ? 'day' : mode}
+              </PickOption>
+            ))}
+          </Pick>
+          <div className="tx-date-group">
+            <span>from</span>
+            <DatePicker
+              key={`from-${filters.mode}`}
+              kind={filters.mode}
+              value={filters.from}
+              label="from"
+              locale={settings.locale}
+              today={now.date}
+              onChange={(from) => patchFilters({ from })}
+            />
+          </div>
+          <div className="tx-date-group">
+            <span>to</span>
+            <DatePicker
+              key={`to-${filters.mode}`}
+              kind={filters.mode}
+              value={filters.to}
+              label="to"
+              locale={settings.locale}
+              today={now.date}
+              onChange={(to) => patchFilters({ to })}
+            />
+          </div>
+          <button
+            type="button"
+            disabled={filters.mode === 'month' && filters.from === now.month && filters.to === now.month}
+            onClick={() => {
+              setFilters((current) => ({ ...current, mode: 'month', from: now.month, to: now.month }))
+              setOffset(0)
+            }}
+          >
+            current month
+          </button>
+        </div>
       </div>
       <p className="notice">{message}</p>
       {adding || editing ? (
@@ -301,6 +317,7 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
           key={editing ? editing.id : clientUuid}
           transaction={editing}
           todayDate={now.date}
+          locale={settings.locale}
           categories={categories}
           pending={pending}
           message={draftMessage}
@@ -378,6 +395,7 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
 function TransactionModal({
   transaction,
   todayDate,
+  locale,
   categories,
   pending,
   message,
@@ -387,6 +405,7 @@ function TransactionModal({
 }: {
   transaction: Transaction | null
   todayDate: string
+  locale: string
   categories: Category[]
   pending: boolean
   message: string
@@ -428,7 +447,7 @@ function TransactionModal({
             placeholder="choose a category"
             action={{ label: 'add category', onSelect: () => setAddingCategory(true) }}
           />
-          <PaymentDate defaultValue={transaction?.paymentDate ?? todayDate} />
+          <PaymentDate defaultValue={transaction?.paymentDate ?? todayDate} locale={locale} />
           <label>
             description
             <input name="description" maxLength={255} defaultValue={transaction?.description ?? ''} autoComplete="off" />
@@ -449,13 +468,21 @@ function TransactionModal({
   )
 }
 
-function PaymentDate({ defaultValue }: { defaultValue: string }) {
+function PaymentDate({ defaultValue, locale }: { defaultValue: string; locale: string }) {
   const [value, setValue] = useState(defaultValue)
   return (
-    <label>
-      payment date
-      <DateScroll name="paymentDate" kind="date" value={value} onChange={setValue} />
-    </label>
+    <div className="tx-date-group">
+      <span>payment date</span>
+      <DatePicker
+        name="paymentDate"
+        kind="date"
+        value={value}
+        label="payment date"
+        locale={locale}
+        today={defaultValue}
+        onChange={setValue}
+      />
+    </div>
   )
 }
 
