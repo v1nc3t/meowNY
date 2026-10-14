@@ -1,3 +1,4 @@
+pub mod backup;
 pub mod budgets;
 pub mod categories;
 pub mod clock;
@@ -131,6 +132,9 @@ pub fn run() {
             commands::top_categories,
             commands::recurring_commitments,
             commands::recurring_planned_vs_paid,
+            commands::create_backup,
+            commands::restore_backup,
+            commands::restore_backup_new_vault,
         ])
         .run(tauri::generate_context!())
         .expect("error while running meowNY");

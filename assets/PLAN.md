@@ -148,6 +148,9 @@ Kept: the React client (`client/src`), Zod schemas, money and date logic, and th
 ## Phase 6: Backup, export and import (M)
 
 - [ ] **Encrypted backup**: one click writes a single encrypted file (passphrase chosen by the user), plus restore with a version check. Optional scheduled backups to a folder the user picks.
+  - [x] Backup file and restore with a version check (`src-tauri/src/backup.rs`, commands `create_backup`, `restore_backup`, `restore_backup_new_vault`. The file holds every row as JSON, sealed with ChaCha20-Poly1305 under an Argon2id key from the backup passphrase (8 characters or more, not the app's), so it does not depend on the vault's keys and opens on a clean install. The header carries the schema version of the app that wrote it: a newer one is refused, an older one is loaded into a scratch database of that version and migrated forward. Restoring checks every constraint in the scratch database first and then replaces all data in one transaction, so a damaged file changes nothing. Over an open vault it needs the word RESTORE typed. `vault.json` (lock settings, notification choice) is not part of a backup. A test fails when a migration adds a table that the backup does not list.)
+  - [ ] Backup and restore screens: Settings, and "restore from a backup" on the first-run screen
+  - [ ] Scheduled backups to a folder the user picks
 - [ ] **Export**: full JSON of all data, CSV of transactions. CSV safety: cells starting with `=`, `+`, `-` or `@` are prefixed with `'`.
 - [ ] **Excel export (.xlsx)**: one workbook with sheets for transactions, categories, budgets, recurring items and a monthly summary. Dates are real dates, money cells are numbers with the currency format (converted from the stored strings only at write time). The same formula-cell safety as CSV applies to text cells.
 - [ ] **PDF reports**: a printable report for a chosen month or date range, with totals for income and expense, savings rate, budget vs actual per category, the charts from phase 5, and optionally the transaction list. Generated locally, with no network calls. Options: page size, include/hide descriptions (so a report can be shared without private details).
@@ -155,7 +158,7 @@ Kept: the React client (`client/src`), Zod schemas, money and date logic, and th
 - [ ] **Import**: CSV and Excel (.xlsx) first, then OFX and CAMT/MT940. A saved column mapping per bank, a dry-run preview, and neutralisation of formula cells (Excel formulas are read as text and never evaluated).
 - [ ] **Review queue**: imported rows land as PENDING. The user can accept, edit, ignore, set a category, or match to a recurring item ("mark as paid?"). Category rules pre-fill (merchant text to category).
 - [ ] Deduplicate imports by a hash of date, amount and normalised description, and by provider transaction id when one exists
-- [ ] Restore test: back up, wipe, restore on a clean install, compare all rows
+- [x] Restore test: back up, wipe, restore on a clean install, compare all rows (`vault::tests::back_up_wipe_and_restore_on_a_clean_install_brings_back_every_row` compares every row of every table, including the change history, and checks the restored install has keys of its own; `backup::tests` cover wrong passphrase, tampered and truncated files, newer and older versions, and hostile content.)
 - [ ] Export tests: the Excel totals and the PDF totals match the dashboard for the same month; an Excel file with a formula-looking description is neutralised on export and not evaluated on import; the PDF with descriptions hidden contains none
 - [ ] Review the data inventory against what the system really stores
 

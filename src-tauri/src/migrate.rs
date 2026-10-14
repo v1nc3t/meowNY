@@ -38,10 +38,21 @@ impl From<rusqlite::Error> for MigrateError {
     }
 }
 
+/// The schema version this app writes and understands.
+pub fn latest_version() -> u32 {
+    MIGRATIONS.len() as u32
+}
+
 /// Brings the database up to the latest schema. Each migration runs in its own transaction,
 /// so a failure leaves the database at the last good version.
 pub fn run(conn: &mut Connection) -> Result<(), MigrateError> {
     apply(conn, MIGRATIONS)
+}
+
+/// Builds the schema as it was at `version`. Restoring an older backup loads its rows into a
+/// database of that shape first, then runs the remaining migrations over them.
+pub fn run_up_to(conn: &mut Connection, version: u32) -> Result<(), MigrateError> {
+    apply(conn, &MIGRATIONS[..(version as usize).min(MIGRATIONS.len())])
 }
 
 fn apply(conn: &mut Connection, migrations: &[&str]) -> Result<(), MigrateError> {

@@ -13,6 +13,7 @@ use std::time::{Duration, Instant};
 use rusqlite::Connection;
 use serde::{Deserialize, Serialize};
 
+use crate::backup::{self, Snapshot};
 use crate::db::{self, DbError};
 use crate::keys::{self, KeyError, Purpose, RecoveryKey, SecretStore, SALT_LEN};
 use crate::migrate::MigrateError;
@@ -20,7 +21,7 @@ use crate::migrate::MigrateError;
 const DB_FILE: &str = "meowny.db";
 const CONFIG_FILE: &str = "vault.json";
 const BACKUP_DIR: &str = "backups";
-const MIN_PASSPHRASE_CHARS: usize = 8;
+pub(crate) const MIN_PASSPHRASE_CHARS: usize = 8;
 
 /// What the UI is told when something fails. Serialized as the snake_case name.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -34,6 +35,8 @@ pub enum AppError {
     KeyUnavailable,
     DatabaseTooNew,
     InvalidInput,
+    /// Not a meowNY backup, or damaged. A wrong passphrase is `WrongCredentials`.
+    InvalidBackup,
     NotFound,
     NameExists,
     Internal,
@@ -50,6 +53,7 @@ impl std::fmt::Display for AppError {
             AppError::KeyUnavailable => "the key is not available in the OS keychain",
             AppError::DatabaseTooNew => "this data file was written by a newer version of the app",
             AppError::InvalidInput => "invalid input",
+            AppError::InvalidBackup => "that is not a meowNY backup, or it is damaged",
             AppError::NotFound => "not found",
             AppError::NameExists => "that name already exists",
             AppError::Internal => "something went wrong",
@@ -322,6 +326,47 @@ impl Vault {
         Ok(recovery.to_display())
     }
 
+    /// Replaces all data with the contents of a backup. Needs the typed confirmation, because what
+    /// is in the app now is gone afterwards. Nothing changes if the backup cannot be opened or fails a check.
+    pub fn restore_backup(&self, bytes: &[u8], backup_passphrase: &str, confirmation: &str) -> Result<(), AppError> {
+        if confirmation != "RESTORE" {
+            return Err(AppError::InvalidInput);
+        }
+        if self.lock_state().conn.is_none() {
+            return Err(AppError::Locked);
+        }
+        // The slow key stretching happens before the connection is borrowed.
+        let snapshot = backup::open(bytes, backup_passphrase)?;
+        self.with_conn(|c| backup::restore_snapshot(c, &snapshot))?;
+        self.touch();
+        Ok(())
+    }
+
+    /// First run, from a backup instead of an empty start: makes new keys and a new database, then
+    /// loads the backup into it. Returns the recovery key, as `create` does. A backup that fails
+    /// leaves the app as it was, not set up.
+    pub fn create_from_backup(
+        &self,
+        bytes: &[u8],
+        backup_passphrase: &str,
+        passphrase: Option<&str>,
+    ) -> Result<String, AppError> {
+        if self.db_path().exists() {
+            return Err(AppError::AlreadySetUp);
+        }
+        let snapshot = backup::open(bytes, backup_passphrase)?;
+        let settings = settings_of(&snapshot)
+            .and_then(|s| validate_settings(&s).ok())
+            .ok_or(AppError::InvalidBackup)?;
+        let recovery = self.create(&settings, passphrase)?;
+        if let Err(e) = self.with_conn(|c| backup::restore_snapshot(c, &snapshot)) {
+            self.lock();
+            self.remove_everything();
+            return Err(e);
+        }
+        Ok(recovery)
+    }
+
     /// Closes the database. The connection owned the only copy of the key.
     pub fn lock(&self) {
         self.lock_state().conn = None;
@@ -493,6 +538,18 @@ fn normalize_passphrase(passphrase: Option<&str>) -> Result<Option<&str>, AppErr
         Some(p) if p.chars().count() >= MIN_PASSPHRASE_CHARS => Ok(Some(p)),
         Some(_) => Err(AppError::InvalidInput),
     }
+}
+
+/// The settings row of a backup, which decides the currency and formats of the restored app.
+fn settings_of(snapshot: &Snapshot) -> Option<Settings> {
+    let row = snapshot.rows("settings").first()?;
+    let text = |key: &str| row.get(key).and_then(|v| v.as_str()).map(str::to_string);
+    Some(Settings {
+        currency: text("currency")?,
+        locale: text("locale")?,
+        timezone: text("timezone")?,
+        language: text("language").unwrap_or_else(default_language),
+    })
 }
 
 pub fn validate_settings(settings: &Settings) -> Result<Settings, AppError> {
@@ -883,6 +940,201 @@ mod tests {
             assert!(!e.to_string().contains(&key));
             assert!(!serde_json::to_string(&e).unwrap().contains(&key));
         }
+    }
+
+    /// Some of everything, written through the same functions the app uses.
+    fn fill(v: &Vault) {
+        use crate::categories::{self, CategoryType};
+        use crate::{recurring, transactions};
+        v.with_conn(|c| {
+            let salary = categories::create(c, "Salary", CategoryType::Income)?;
+            let rent = categories::create(c, "Rent", CategoryType::Expense)?;
+            let plan = recurring::create(
+                c,
+                &recurring::NewRecurring {
+                    name: "Rent".into(),
+                    amount: "900.00".into(),
+                    category_id: rent.id.to_string(),
+                    start_date: "2026-01-01".into(),
+                    interval_unit: recurring::Unit::Month,
+                    interval_count: 1,
+                    end_date: None,
+                    description: None,
+                },
+            )?;
+            recurring::pay(c, plan.id, None, Some("2026-01-01"), "2026-01-01")?;
+            for (name, amount, category) in [("Pay", "3200.00", salary.id), ("Coffee", "3.50", rent.id)] {
+                transactions::create(
+                    c,
+                    &transactions::NewTransaction {
+                        name: name.into(),
+                        amount: amount.into(),
+                        payment_date: "2026-01-15".into(),
+                        category_id: category.to_string(),
+                        description: Some("Café \"quoted\"".into()),
+                        client_uuid: None,
+                    },
+                )?;
+            }
+            categories::rename(c, rent.id, "Housing")?;
+            Ok(())
+        })
+        .unwrap();
+    }
+
+    fn snapshot_of(v: &Vault) -> backup::Snapshot {
+        v.with_conn(|c| backup::dump(c)).unwrap()
+    }
+
+    #[test]
+    fn back_up_wipe_and_restore_on_a_clean_install_brings_back_every_row() {
+        let dir = tempfile::tempdir().unwrap();
+        let v = vault(dir.path());
+        v.create(&settings(), Some("old app passphrase")).unwrap();
+        fill(&v);
+        let before = snapshot_of(&v);
+        let file = backup::seal(&before, "backup passphrase").unwrap();
+
+        v.wipe("DELETE").unwrap();
+        assert_eq!(v.status(), VaultStatus::NotSetUp);
+
+        // A clean install: no data file, no keychain entry.
+        let recovery = v.create_from_backup(&file, "backup passphrase", Some("new app passphrase")).unwrap();
+        assert_eq!(v.status(), VaultStatus::Unlocked);
+        assert_eq!(snapshot_of(&v), before, "all rows of all tables, including the change history");
+        assert_eq!(v.settings().unwrap(), settings_after_create());
+
+        // The restored install has keys of its own. The backup's passphrase is not the app's.
+        v.lock();
+        assert_eq!(v.unlock(Some("old app passphrase")), Err(AppError::WrongCredentials));
+        assert_eq!(v.unlock(Some("backup passphrase")), Err(AppError::WrongCredentials));
+        v.unlock(Some("new app passphrase")).unwrap();
+        v.lock();
+        v.recover(&recovery, None).unwrap();
+        assert_eq!(snapshot_of(&v), before);
+    }
+
+    fn settings_after_create() -> Settings {
+        Settings { currency: "EUR".into(), ..settings() }
+    }
+
+    #[test]
+    fn a_restore_that_fails_leaves_a_clean_install() {
+        let dir = tempfile::tempdir().unwrap();
+        let v = vault(dir.path());
+        v.create(&settings(), None).unwrap();
+        fill(&v);
+        let good = snapshot_of(&v);
+        v.wipe("DELETE").unwrap();
+
+        // A transaction in a category that does not exist: the file is intact but its content is not valid.
+        let mut broken = good.clone();
+        let mut orphan = broken.rows("transactions")[0].clone();
+        orphan.insert("id".into(), 999.into());
+        orphan.insert("category_id".into(), 12345.into());
+        orphan.insert("client_uuid".into(), serde_json::Value::Null);
+        orphan.insert("recurring_transaction_id".into(), serde_json::Value::Null);
+        orphan.insert("recurring_due_date".into(), serde_json::Value::Null);
+        broken.tables.get_mut("transactions").unwrap().push(orphan);
+
+        let mut no_settings = good.clone();
+        no_settings.tables.insert("settings".into(), Vec::new());
+        let mut bad_locale = good.clone();
+        bad_locale.tables.get_mut("settings").unwrap()[0].insert("locale".into(), "".into());
+
+        for (file, expected) in [
+            (backup::seal(&broken, "backup passphrase").unwrap(), AppError::InvalidBackup),
+            (backup::seal(&no_settings, "backup passphrase").unwrap(), AppError::InvalidBackup),
+            (backup::seal(&bad_locale, "backup passphrase").unwrap(), AppError::InvalidBackup),
+            (backup::seal(&good, "backup passphrase").unwrap(), AppError::WrongCredentials),
+            (b"not a backup at all, just some text in a file".to_vec(), AppError::InvalidBackup),
+        ] {
+            let passphrase = if expected == AppError::WrongCredentials { "the wrong one" } else { "backup passphrase" };
+            assert_eq!(v.create_from_backup(&file, passphrase, None), Err(expected));
+            assert_eq!(v.status(), VaultStatus::NotSetUp);
+            assert!(!v.db_path().exists());
+            assert!(!v.config_path().exists());
+            assert!(v.store.get().unwrap().is_none(), "no keychain entry is left behind");
+        }
+
+        // And the install still works afterwards.
+        v.create_from_backup(&backup::seal(&good, "backup passphrase").unwrap(), "backup passphrase", None).unwrap();
+        assert_eq!(snapshot_of(&v), good);
+    }
+
+    #[test]
+    fn a_backup_cannot_be_restored_as_a_new_install_over_an_existing_one() {
+        let dir = tempfile::tempdir().unwrap();
+        let v = vault(dir.path());
+        v.create(&settings(), None).unwrap();
+        fill(&v);
+        let file = backup::seal(&snapshot_of(&v), "backup passphrase").unwrap();
+        let before = snapshot_of(&v);
+        assert_eq!(v.create_from_backup(&file, "backup passphrase", None), Err(AppError::AlreadySetUp));
+        v.lock();
+        assert_eq!(v.create_from_backup(&file, "backup passphrase", None), Err(AppError::AlreadySetUp));
+        v.unlock(None).unwrap();
+        assert_eq!(snapshot_of(&v), before);
+    }
+
+    #[test]
+    fn restoring_over_an_open_vault_replaces_the_data_after_the_typed_confirmation() {
+        let dir = tempfile::tempdir().unwrap();
+        let v = vault(dir.path());
+        v.create(&settings(), Some("long enough pass")).unwrap();
+        fill(&v);
+        let saved = snapshot_of(&v);
+        let file = backup::seal(&saved, "backup passphrase").unwrap();
+
+        // Changes made after the backup.
+        v.with_conn(|c| crate::categories::create(c, "Added later", crate::categories::CategoryType::Expense)).unwrap();
+        v.save_settings(&Settings { language: "ro".into(), ..settings_after_create() }).unwrap();
+        assert_ne!(snapshot_of(&v), saved);
+
+        for wrong in ["", "restore", "DELETE", "RESTORE "] {
+            assert_eq!(v.restore_backup(&file, "backup passphrase", wrong), Err(AppError::InvalidInput), "{wrong:?}");
+        }
+        assert_eq!(v.restore_backup(&file, "wrong passphrase", "RESTORE"), Err(AppError::WrongCredentials));
+        assert_ne!(snapshot_of(&v), saved, "nothing changed yet");
+
+        v.restore_backup(&file, "backup passphrase", "RESTORE").unwrap();
+        assert_eq!(snapshot_of(&v), saved);
+        assert_eq!(v.settings().unwrap().language, "en");
+
+        // The keys are untouched: the same app passphrase still opens it.
+        v.lock();
+        v.unlock(Some("long enough pass")).unwrap();
+        assert_eq!(snapshot_of(&v), saved);
+    }
+
+    #[test]
+    fn a_locked_vault_cannot_be_restored_into() {
+        let dir = tempfile::tempdir().unwrap();
+        let v = vault(dir.path());
+        v.create(&settings(), None).unwrap();
+        let file = backup::seal(&snapshot_of(&v), "backup passphrase").unwrap();
+        v.lock();
+        assert_eq!(v.restore_backup(&file, "backup passphrase", "RESTORE"), Err(AppError::Locked));
+    }
+
+    #[test]
+    fn a_damaged_backup_leaves_an_open_vault_as_it_was() {
+        let dir = tempfile::tempdir().unwrap();
+        let v = vault(dir.path());
+        v.create(&settings(), None).unwrap();
+        fill(&v);
+        let before = snapshot_of(&v);
+
+        let mut broken = before.clone();
+        broken.tables.get_mut("budgets").unwrap().push(
+            serde_json::json!({ "id": 1, "type": "EXPENSE", "scope": "GLOBAL", "category_id": 77, "effective_from": "2026-01-01" })
+                .as_object()
+                .unwrap()
+                .clone(),
+        );
+        let file = backup::seal(&broken, "backup passphrase").unwrap();
+        assert_eq!(v.restore_backup(&file, "backup passphrase", "RESTORE"), Err(AppError::InvalidBackup));
+        assert_eq!(snapshot_of(&v), before);
     }
 
     #[test]

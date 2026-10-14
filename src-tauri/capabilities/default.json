@@ -49,6 +49,9 @@
     "allow-top-categories",
     "allow-recurring-commitments",
     "allow-recurring-planned-vs-paid",
+    "allow-create-backup",
+    "allow-restore-backup",
+    "allow-restore-backup-new-vault",
     "core:event:allow-listen",
     "core:event:allow-unlisten",
     {

@@ -5,6 +5,7 @@ use std::sync::Arc;
 
 use tauri::State;
 
+use crate::backup;
 use crate::categories::{self, Category, CategoryType};
 use crate::budgets::{self, Budget, Overview, SetBudget};
 use crate::clock;
@@ -63,6 +64,9 @@ pub const COMMANDS: &[&str] = &[
     "top_categories",
     "recurring_commitments",
     "recurring_planned_vs_paid",
+    "create_backup",
+    "restore_backup",
+    "restore_backup_new_vault",
 ];
 
 #[tauri::command]
@@ -367,6 +371,80 @@ pub fn recurring_commitments(vault: Shared) -> Result<Commitments, AppError> {
 #[tauri::command]
 pub fn recurring_planned_vs_paid(vault: Shared, month: String) -> Result<Vec<PlannedVsPaid>, AppError> {
     vault.with_conn(|c| stats::planned_vs_paid(c, &month))
+}
+
+/// Asks the person to pick a backup file. None if they cancel.
+fn pick_backup_file(app: &tauri::AppHandle) -> Result<Option<std::path::PathBuf>, AppError> {
+    use tauri_plugin_dialog::DialogExt;
+    let Some(path) = app
+        .dialog()
+        .file()
+        .add_filter("meowNY backup", &[backup::EXTENSION])
+        .blocking_pick_file()
+    else {
+        return Ok(None);
+    };
+    Ok(Some(path.into_path().map_err(|_| AppError::Internal)?))
+}
+
+/// Writes all data to one encrypted file in a place the person picks, locked with the passphrase
+/// they chose for this backup. Returns false if they cancel the save dialog.
+#[tauri::command]
+pub async fn create_backup(app: tauri::AppHandle, vault: Shared<'_>, passphrase: String) -> Result<bool, AppError> {
+    use tauri_plugin_dialog::DialogExt;
+    let snapshot = vault.with_conn(|c| backup::dump(c))?;
+    let bytes = backup::seal(&snapshot, &passphrase)?;
+    let name = format!("meowny-backup-{}.{}", today_text(&vault)?, backup::EXTENSION);
+    let Some(path) = app
+        .dialog()
+        .file()
+        .set_file_name(name)
+        .add_filter("meowNY backup", &[backup::EXTENSION])
+        .blocking_save_file()
+    else {
+        return Ok(false);
+    };
+    let path = path.into_path().map_err(|_| AppError::Internal)?;
+    backup::write_file(&path, &bytes)?;
+    Ok(true)
+}
+
+/// Replaces all data with a backup the person picks. `confirmation` must be "RESTORE". Returns false
+/// if they cancel the file dialog. Nothing changes unless the whole backup is valid.
+#[tauri::command]
+pub async fn restore_backup(
+    app: tauri::AppHandle,
+    vault: Shared<'_>,
+    passphrase: String,
+    confirmation: String,
+) -> Result<bool, AppError> {
+    if confirmation != "RESTORE" {
+        return Err(AppError::InvalidInput);
+    }
+    if vault.status() != VaultStatus::Unlocked {
+        return Err(AppError::Locked);
+    }
+    let Some(path) = pick_backup_file(&app)? else { return Ok(false) };
+    vault.restore_backup(&backup::read_file(&path)?, &passphrase, &confirmation)?;
+    Ok(true)
+}
+
+/// First run from a backup: new keys and a new data file, filled from the backup. `vault_passphrase`
+/// is the optional app passphrase for this install. Returns the recovery key, or None if the person
+/// cancels the file dialog.
+#[tauri::command]
+pub async fn restore_backup_new_vault(
+    app: tauri::AppHandle,
+    vault: Shared<'_>,
+    passphrase: String,
+    vault_passphrase: Option<String>,
+) -> Result<Option<String>, AppError> {
+    if vault.status() != VaultStatus::NotSetUp {
+        return Err(AppError::AlreadySetUp);
+    }
+    let Some(path) = pick_backup_file(&app)? else { return Ok(None) };
+    let key = vault.create_from_backup(&backup::read_file(&path)?, &passphrase, vault_passphrase.as_deref())?;
+    Ok(Some(key))
 }
 
 #[cfg(test)]
