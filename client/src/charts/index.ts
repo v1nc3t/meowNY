@@ -1,5 +1,0 @@
-export { BrailleCanvas } from './braille'
-export { columns, meter, sparkline, type ColumnGroup } from './bars'
-export { donut, type DonutOptions, type Slice } from './donut'
-export { lineChart, type LineOptions, type LineSeries } from './line'
-export { merge, rowsToText, type Rows, type Seg, type Tone } from './types'
