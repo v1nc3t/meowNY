@@ -5,11 +5,13 @@ pub mod clock;
 pub mod commands;
 pub mod currency;
 pub mod db;
+pub mod display;
 pub mod export;
 pub mod keys;
 pub mod migrate;
 pub mod recovery_file;
 pub mod recurring;
+pub mod report;
 pub mod money;
 pub mod schedule;
 /// Dev demo data, used by `examples/seed.rs`.
@@ -151,6 +153,7 @@ pub fn run() {
             commands::export_json,
             commands::export_csv,
             commands::export_xlsx,
+            commands::export_pdf,
         ])
         .run(tauri::generate_context!())
         .expect("error while running meowNY");

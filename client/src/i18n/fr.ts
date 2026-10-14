@@ -280,4 +280,12 @@ export const fr: Messages = {
   'dashboard.prevYear': 'année précédente',
   'dashboard.nextYear': 'année suivante',
   'dashboard.noRecurring': 'aucune transaction récurrente.',
+  'report.title': 'rapport meowNY',
+  'report.byMonth': 'revenus et dépenses par mois',
+  'report.spending': "où est passé l'argent",
+  'report.budgetVsActual': 'budget et réel',
+  'report.noBudget': 'sans budget',
+  'report.page': 'page',
+  'report.noData': 'aucune transaction sur cette période.',
+  'report.date': 'date',
 }

@@ -281,4 +281,12 @@ export const de: Messages = {
   'dashboard.prevYear': 'vorheriges jahr',
   'dashboard.nextYear': 'nächstes jahr',
   'dashboard.noRecurring': 'keine wiederkehrenden buchungen.',
+  'report.title': 'meowNY-bericht',
+  'report.byMonth': 'einnahmen und ausgaben pro monat',
+  'report.spending': 'wohin das geld ging',
+  'report.budgetVsActual': 'budget und tatsächliche beträge',
+  'report.noBudget': 'kein budget',
+  'report.page': 'seite',
+  'report.noData': 'keine transaktionen in diesem zeitraum.',
+  'report.date': 'datum',
 }

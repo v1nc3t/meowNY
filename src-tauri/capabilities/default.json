@@ -58,6 +58,7 @@
     "allow-export-json",
     "allow-export-csv",
     "allow-export-xlsx",
+    "allow-export-pdf",
     "core:event:allow-listen",
     "core:event:allow-unlisten",
     {

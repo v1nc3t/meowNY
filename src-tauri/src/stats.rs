@@ -40,7 +40,7 @@ pub struct BudgetVsActual {
 }
 
 /// Percent with one decimal, rounded half up, from integer amounts.
-fn pct_tenths(actual: i64, budget: i64) -> Option<f64> {
+pub(crate) fn pct_tenths(actual: i64, budget: i64) -> Option<f64> {
     if budget <= 0 {
         return None;
     }
@@ -193,7 +193,7 @@ pub fn year_trend(conn: &Connection, year: &str) -> Result<Vec<YearPoint>, AppEr
 }
 
 /// Like `pct_tenths`, but the part may be negative (spending above income).
-fn pct_tenths_signed(part: i64, whole: i64) -> Option<f64> {
+pub(crate) fn pct_tenths_signed(part: i64, whole: i64) -> Option<f64> {
     let sign = if part < 0 { -1.0 } else { 1.0 };
     pct_tenths(part.abs(), whole).map(|p| p * sign)
 }

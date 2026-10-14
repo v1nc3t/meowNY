@@ -21,7 +21,7 @@ use crate::recurring;
 use crate::transactions::clean_date;
 use crate::vault::AppError;
 
-pub use xlsx::{workbook, SheetFormat};
+pub use xlsx::workbook;
 
 #[derive(Debug, Clone, Default, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -36,10 +36,10 @@ pub struct Selection {
     pub category_ids: Option<Vec<String>>,
 }
 
-struct Parsed {
-    from: Option<String>,
-    to: Option<String>,
-    categories: Option<Vec<i64>>,
+pub(crate) struct Parsed {
+    pub(crate) from: Option<String>,
+    pub(crate) to: Option<String>,
+    pub(crate) categories: Option<Vec<i64>>,
 }
 
 impl Parsed {
@@ -59,7 +59,7 @@ impl Parsed {
     }
 }
 
-fn parse(selection: &Selection) -> Result<Parsed, AppError> {
+pub(crate) fn parse(selection: &Selection) -> Result<Parsed, AppError> {
     let date = |d: &Option<String>| d.as_deref().map(clean_date).transpose();
     let (from, to) = (date(&selection.from)?, date(&selection.to)?);
     if matches!((&from, &to), (Some(f), Some(t)) if f > t) {
@@ -84,28 +84,28 @@ pub fn neutralise(cell: &str) -> Cow<'_, str> {
     }
 }
 
-struct Tx {
-    id: i64,
-    date: String,
-    kind: String,
-    category_id: i64,
-    category: String,
-    name: String,
-    amount: i64,
-    planned: Option<i64>,
-    description: Option<String>,
-    recurring_id: Option<i64>,
+pub(crate) struct Tx {
+    pub(crate) id: i64,
+    pub(crate) date: String,
+    pub(crate) kind: String,
+    pub(crate) category_id: i64,
+    pub(crate) category: String,
+    pub(crate) name: String,
+    pub(crate) amount: i64,
+    pub(crate) planned: Option<i64>,
+    pub(crate) description: Option<String>,
+    pub(crate) recurring_id: Option<i64>,
 }
 
 /// The `WHERE` of every transaction query: `?1` is the first date, `?2` the last, both optional.
-fn transaction_filter(sel: &Parsed) -> String {
+pub(crate) fn transaction_filter(sel: &Parsed) -> String {
     format!(
         "(?1 IS NULL OR t.payment_date >= ?1) AND (?2 IS NULL OR t.payment_date <= ?2) AND {}",
         sel.category_filter("t.category_id")
     )
 }
 
-fn transactions(conn: &Connection, sel: &Parsed) -> Result<Vec<Tx>, AppError> {
+pub(crate) fn transactions(conn: &Connection, sel: &Parsed) -> Result<Vec<Tx>, AppError> {
     let mut statement = conn.prepare(&format!(
         "SELECT t.id, t.payment_date, c.type, t.category_id, c.name, t.name, t.amount_minor,
                 t.planned_amount_minor, t.description, t.recurring_transaction_id
@@ -131,7 +131,31 @@ fn transactions(conn: &Connection, sel: &Parsed) -> Result<Vec<Tx>, AppError> {
     Ok(rows.collect::<Result<Vec<_>, _>>()?)
 }
 
-fn currency(conn: &Connection) -> Result<String, AppError> {
+/// (income, expense) in minor units for every month that has transactions, "YYYY-MM" keys.
+pub(crate) fn monthly_sums(conn: &Connection, sel: &Parsed) -> Result<std::collections::BTreeMap<String, (i64, i64)>, AppError> {
+    let mut sums: std::collections::BTreeMap<String, (i64, i64)> = Default::default();
+    let mut statement = conn.prepare(&format!(
+        "SELECT substr(t.payment_date, 1, 7), c.type, SUM(t.amount_minor)
+         FROM transactions t JOIN categories c ON c.id = t.category_id
+         WHERE {} GROUP BY 1, 2",
+        transaction_filter(sel)
+    ))?;
+    let rows = statement.query_map(params![sel.from, sel.to], |r| {
+        Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?, r.get::<_, i64>(2)?))
+    })?;
+    for row in rows {
+        let (month, kind, sum) = row?;
+        let entry = sums.entry(month).or_default();
+        if kind == "INCOME" {
+            entry.0 = sum;
+        } else {
+            entry.1 = sum;
+        }
+    }
+    Ok(sums)
+}
+
+pub(crate) fn currency(conn: &Connection) -> Result<String, AppError> {
     Ok(conn.query_row("SELECT currency FROM settings WHERE id = 1", [], |r| r.get(0))?)
 }
 

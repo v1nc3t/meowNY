@@ -10,7 +10,9 @@ use crate::categories::{self, Category, CategoryType};
 use crate::budgets::{self, Budget, Overview, SetBudget};
 use crate::clock;
 use crate::currency::{self, Conversion};
-use crate::export::{self, Selection, SheetFormat};
+use crate::display::DisplayFormat;
+use crate::export::{self, Selection};
+use crate::report::{self, ReportOptions};
 use crate::recurring::{self, Dues, NewRecurring, Recurring, RecurringPatch};
 use crate::schedule::{self, Schedule};
 use crate::stats::{self, BudgetVsActual, CategoryTrend, Commitments, PlannedVsPaid, TopCategory, YearPoint};
@@ -75,6 +77,7 @@ pub const COMMANDS: &[&str] = &[
     "export_json",
     "export_csv",
     "export_xlsx",
+    "export_pdf",
 ];
 
 #[tauri::command]
@@ -517,10 +520,22 @@ pub async fn export_xlsx(
     app: tauri::AppHandle,
     vault: Shared<'_>,
     selection: Selection,
-    format: Option<SheetFormat>,
+    format: Option<DisplayFormat>,
 ) -> Result<bool, AppError> {
     let bytes = vault.with_conn(|c| export::workbook(c, &selection, &format.unwrap_or_default()))?;
     save_export(&app, format!("meowny-{}.xlsx", today_text(&vault)?), "Excel workbook", "xlsx", &bytes)
+}
+
+/// A PDF report for a month or a range of months: totals, charts, budget against actual and, if asked,
+/// the transactions. Made on this computer. Not encrypted, so `showDescriptions` off is the way to share
+/// one without private details.
+#[tauri::command]
+pub async fn export_pdf(app: tauri::AppHandle, vault: Shared<'_>, options: ReportOptions) -> Result<bool, AppError> {
+    let report = vault.with_conn(|c| report::read(c, &options))?;
+    // Laying out and writing the file can take a moment for a long list; the database is free meanwhile.
+    let bytes = report.pdf(&options)?;
+    let name = format!("meowny-report-{}-{}.pdf", options.from_month, options.to_month);
+    save_export(&app, name, "PDF report", "pdf", &bytes)
 }
 
 #[cfg(test)]

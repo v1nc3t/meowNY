@@ -5,20 +5,21 @@
 //! filter and sum in Excel. Amounts are stored as whole minor units and divided by 100 only when a cell
 //! is written. Text cells go through `neutralise`, as in the CSV, and no cell holds a formula.
 //!
-//! The person's number and date format decide how the cells look: the order and separator of dates,
-//! and where the currency symbol goes. Excel and LibreOffice choose the digit grouping and the decimal
-//! mark themselves from the computer they run on, so those are not part of the file.
+//! The person's number and date format (`DisplayFormat`) decide how the cells look: the order and
+//! separator of dates, and where the currency symbol goes. Excel and LibreOffice choose the digit
+//! grouping and the decimal mark themselves from the computer they run on, so those are not part of
+//! the file.
 
-use std::collections::{BTreeMap, HashMap};
+use std::collections::HashMap;
 
-use rusqlite::{params, Connection};
+use rusqlite::Connection;
 use rust_xlsxwriter::{ExcelDateTime, Format, Workbook, Worksheet, XlsxError};
-use serde::Deserialize;
 
 use super::{
-    budget_rows, category_rows, currency, neutralise, parse, recurring_rows, transaction_filter, transactions,
-    BudgetRow, CategoryRow, Parsed, Selection, Tx,
+    budget_rows, category_rows, currency, monthly_sums, neutralise, parse, recurring_rows, transactions, BudgetRow,
+    CategoryRow, Parsed, Selection, Tx,
 };
+use crate::display::{DateOrder, DateSeparator, DisplayFormat};
 use crate::recurring::Recurring;
 use crate::vault::AppError;
 
@@ -27,58 +28,18 @@ const MAX_ROWS: usize = 1_000_000;
 /// Gaps in the monthly summary are filled in only for spans up to this many months.
 const MAX_FILLED_MONTHS: usize = 1200;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Deserialize)]
-pub enum DateOrder {
-    #[serde(rename = "DMY")]
-    DayMonthYear,
-    #[serde(rename = "MDY")]
-    MonthDayYear,
-    #[default]
-    #[serde(rename = "YMD")]
-    YearMonthDay,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Deserialize)]
-pub enum DateSeparator {
-    #[serde(rename = "/")]
-    Slash,
-    #[serde(rename = ".")]
-    Dot,
-    #[default]
-    #[serde(rename = "-")]
-    Dash,
-    #[serde(rename = " ")]
-    Space,
-}
-
-/// How dates and money should look in the sheets. The UI works it out from the person's number and
-/// date format setting; the default is ISO dates and a plain number.
-#[derive(Debug, Clone, Default, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields, default)]
-pub struct SheetFormat {
-    pub date_order: DateOrder,
-    pub date_separator: DateSeparator,
-    /// "€", "$", "kr". Empty for none; the currency code is in the column heading either way.
-    pub currency_symbol: String,
-    pub symbol_before: bool,
-    /// A space between the symbol and the number.
-    pub symbol_space: bool,
-}
-
 struct Codes {
     date: String,
     month: String,
     money: String,
 }
 
-impl SheetFormat {
+impl DisplayFormat {
     /// Excel number format codes. Separators and the symbol are written as quoted or escaped
     /// literals, so Excel shows exactly these characters and not its own idea of a date separator.
     fn codes(&self) -> Result<Codes, AppError> {
+        self.validate()?;
         let symbol = &self.currency_symbol;
-        if symbol.chars().count() > 8 || symbol.chars().any(|c| c.is_control() || c == '"') {
-            return Err(AppError::InvalidInput);
-        }
         let sep = match self.date_separator {
             DateSeparator::Slash => "\\/",
             DateSeparator::Dot => "\\.",
@@ -119,25 +80,7 @@ fn next_month(month: &str) -> Option<String> {
 }
 
 fn summary(conn: &Connection, sel: &Parsed) -> Result<Vec<(String, i64, i64)>, AppError> {
-    let mut sums: BTreeMap<String, (i64, i64)> = BTreeMap::new();
-    let mut statement = conn.prepare(&format!(
-        "SELECT substr(t.payment_date, 1, 7), c.type, SUM(t.amount_minor)
-         FROM transactions t JOIN categories c ON c.id = t.category_id
-         WHERE {} GROUP BY 1, 2",
-        transaction_filter(sel)
-    ))?;
-    let rows = statement.query_map(params![sel.from, sel.to], |r| {
-        Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?, r.get::<_, i64>(2)?))
-    })?;
-    for row in rows {
-        let (month, kind, sum) = row?;
-        let entry = sums.entry(month).or_default();
-        if kind == "INCOME" {
-            entry.0 = sum;
-        } else {
-            entry.1 = sum;
-        }
-    }
+    let sums = monthly_sums(conn, sel)?;
 
     let (Some(first), Some(last)) = (sums.keys().next().cloned(), sums.keys().next_back().cloned()) else {
         return Ok(Vec::new());
@@ -179,7 +122,7 @@ fn load(conn: &Connection, sel: &Parsed) -> Result<Data, AppError> {
 }
 
 /// The workbook as the bytes of an .xlsx file.
-pub fn workbook(conn: &Connection, selection: &Selection, format: &SheetFormat) -> Result<Vec<u8>, AppError> {
+pub fn workbook(conn: &Connection, selection: &Selection, format: &DisplayFormat) -> Result<Vec<u8>, AppError> {
     let sel = parse(selection)?;
     let codes = format.codes()?;
     // One read transaction, so the sheets agree with each other.
@@ -348,7 +291,7 @@ mod tests {
         book.worksheet_range(name).unwrap().rows().map(|r| r.to_vec()).collect()
     }
 
-    fn build(conn: &Connection, selection: &Selection, format: &SheetFormat) -> Vec<u8> {
+    fn build(conn: &Connection, selection: &Selection, format: &DisplayFormat) -> Vec<u8> {
         workbook(conn, selection, format).unwrap()
     }
 
@@ -371,7 +314,7 @@ mod tests {
     #[test]
     fn the_workbook_has_the_five_sheets() {
         let (conn, ..) = lived_in();
-        let bytes = build(&conn, &Selection::default(), &SheetFormat::default());
+        let bytes = build(&conn, &Selection::default(), &DisplayFormat::default());
         assert!(bytes.starts_with(b"PK"), "an .xlsx file is a zip");
         assert_eq!(open(&bytes).sheet_names(), ["Transactions", "Categories", "Budgets", "Recurring", "Monthly summary"]);
     }
@@ -379,7 +322,7 @@ mod tests {
     #[test]
     fn transactions_have_real_dates_and_numeric_money() {
         let (conn, ..) = lived_in();
-        let mut book = open(&build(&conn, &Selection::default(), &SheetFormat::default()));
+        let mut book = open(&build(&conn, &Selection::default(), &DisplayFormat::default()));
         let sheet = rows(&mut book, "Transactions");
         assert_eq!(sheet.len(), 5, "heading and four transactions");
         assert_eq!(sheet[0][4], Cell::String("Amount (EUR)".into()));
@@ -400,43 +343,45 @@ mod tests {
     fn dates_and_money_follow_the_number_and_date_format() {
         let (conn, ..) = lived_in();
         let all = Selection::default();
-        let german = SheetFormat {
+        let german = DisplayFormat {
             date_order: DateOrder::DayMonthYear,
             date_separator: DateSeparator::Dot,
             currency_symbol: "€".into(),
             symbol_before: false,
             symbol_space: true,
+            ..Default::default()
         };
         let styles_de = styles(&build(&conn, &all, &german));
         assert!(styles_de.contains(r#"formatCode="dd\.mm\.yyyy""#), "{styles_de}");
         assert!(styles_de.contains(r#"formatCode="mm\.yyyy""#));
         assert!(styles_de.contains("formatCode=\"#,##0.00&quot; €&quot;\""));
 
-        let american = SheetFormat {
+        let american = DisplayFormat {
             date_order: DateOrder::MonthDayYear,
             date_separator: DateSeparator::Slash,
             currency_symbol: "$".into(),
             symbol_before: true,
             symbol_space: false,
+            ..Default::default()
         };
         let styles_us = styles(&build(&conn, &all, &american));
         assert!(styles_us.contains(r#"formatCode="mm\/dd\/yyyy""#));
         assert!(styles_us.contains("formatCode=\"&quot;$&quot;#,##0.00\""));
 
-        let japanese = SheetFormat { date_order: DateOrder::YearMonthDay, date_separator: DateSeparator::Slash, ..Default::default() };
+        let japanese = DisplayFormat { date_order: DateOrder::YearMonthDay, date_separator: DateSeparator::Slash, ..Default::default() };
         let styles_jp = styles(&build(&conn, &all, &japanese));
         assert!(styles_jp.contains(r#"formatCode="yyyy\/mm\/dd""#) && styles_jp.contains(r#"formatCode="yyyy\/mm""#));
         assert!(styles_jp.contains(r##"formatCode="#,##0.00""##), "no symbol, a plain number");
 
-        let default = styles(&build(&conn, &all, &SheetFormat::default()));
+        let default = styles(&build(&conn, &all, &DisplayFormat::default()));
         assert!(default.contains(r#"formatCode="yyyy\-mm\-dd""#));
     }
 
     #[test]
     fn the_format_does_not_change_the_values() {
         let (conn, ..) = lived_in();
-        let german = SheetFormat { date_order: DateOrder::DayMonthYear, date_separator: DateSeparator::Dot, ..Default::default() };
-        let a = rows(&mut open(&build(&conn, &Selection::default(), &SheetFormat::default())), "Transactions");
+        let german = DisplayFormat { date_order: DateOrder::DayMonthYear, date_separator: DateSeparator::Dot, ..Default::default() };
+        let a = rows(&mut open(&build(&conn, &Selection::default(), &DisplayFormat::default())), "Transactions");
         let b = rows(&mut open(&build(&conn, &Selection::default(), &german)), "Transactions");
         assert_eq!(a, b);
     }
@@ -445,17 +390,9 @@ mod tests {
     fn a_format_the_file_cannot_hold_is_refused() {
         let (conn, ..) = lived_in();
         for symbol in ["\"", "a\"b", "\n", "123456789", "\u{7}"] {
-            let format = SheetFormat { currency_symbol: symbol.into(), ..Default::default() };
+            let format = DisplayFormat { currency_symbol: symbol.into(), ..Default::default() };
             assert_eq!(workbook(&conn, &Selection::default(), &format), Err(AppError::InvalidInput), "{symbol:?}");
         }
-        let format: Result<SheetFormat, _> = serde_json::from_str(r#"{"dateOrder":"XYZ"}"#);
-        assert!(format.is_err());
-        let format: Result<SheetFormat, _> = serde_json::from_str(r#"{"dateSeparator":"; DROP"}"#);
-        assert!(format.is_err());
-        let format: Result<SheetFormat, _> = serde_json::from_str(r#"{"somethingElse":1}"#);
-        assert!(format.is_err());
-        let ok: SheetFormat = serde_json::from_str(r#"{"dateOrder":"DMY","dateSeparator":".","currencySymbol":"kr","symbolBefore":false}"#).unwrap();
-        assert_eq!((ok.date_order, ok.date_separator), (DateOrder::DayMonthYear, DateSeparator::Dot));
     }
 
     #[test]
@@ -463,7 +400,7 @@ mod tests {
         let (conn, _, rent, _) = lived_in();
         spend(&conn, rent, "=cmd|' /C calc'!A0", "1.00", "2026-04-01", Some("+1+1"));
         spend(&conn, rent, "@SUM(1)", "2.00", "2026-04-02", Some("-5% promo"));
-        let bytes = build(&conn, &Selection::default(), &SheetFormat::default());
+        let bytes = build(&conn, &Selection::default(), &DisplayFormat::default());
         let mut book = open(&bytes);
         for name in ["Transactions", "Categories", "Budgets", "Recurring", "Monthly summary"] {
             for cell in strings(&rows(&mut book, name)) {
@@ -487,7 +424,7 @@ mod tests {
     #[test]
     fn the_monthly_summary_matches_the_dashboard() {
         let (conn, ..) = lived_in();
-        let mut book = open(&build(&conn, &Selection::default(), &SheetFormat::default()));
+        let mut book = open(&build(&conn, &Selection::default(), &DisplayFormat::default()));
         let sheet = rows(&mut book, "Monthly summary");
         let dashboard = crate::stats::year_trend(&conn, "2026").unwrap();
         assert_eq!(sheet.len(), 1 + 3, "January to March, the months with transactions");
@@ -517,7 +454,7 @@ mod tests {
         let food = categories::create(&conn, "Food", CategoryType::Expense).unwrap().id;
         spend(&conn, food, "Bread", "2.50", "2025-11-30", None);
         spend(&conn, food, "Bread", "2.50", "2026-02-01", None);
-        let mut book = open(&build(&conn, &Selection::default(), &SheetFormat::default()));
+        let mut book = open(&build(&conn, &Selection::default(), &DisplayFormat::default()));
         let sheet = rows(&mut book, "Monthly summary");
         assert_eq!(sheet.len(), 1 + 4, "November, December, January, February");
         assert_eq!(sheet[2][2], Cell::Float(0.0));
@@ -527,7 +464,7 @@ mod tests {
     fn a_selection_limits_every_sheet() {
         let (conn, _, rent, _) = lived_in();
         let selection = Selection { category_ids: Some(vec![rent.to_string()]), ..Default::default() };
-        let mut book = open(&build(&conn, &selection, &SheetFormat::default()));
+        let mut book = open(&build(&conn, &selection, &DisplayFormat::default()));
         for name in ["Transactions", "Categories", "Budgets", "Recurring", "Monthly summary"] {
             let sheet = rows(&mut book, name);
             for cell in strings(&sheet) {
@@ -543,14 +480,14 @@ mod tests {
         assert!(expense_only[1..].iter().all(|r| r[1] == Cell::Float(0.0)), "no income in a Rent-only export");
 
         let range = Selection { from: Some("2026-03-01".into()), ..Default::default() };
-        assert_eq!(rows(&mut open(&build(&conn, &range, &SheetFormat::default())), "Transactions").len(), 2);
+        assert_eq!(rows(&mut open(&build(&conn, &range, &DisplayFormat::default())), "Transactions").len(), 2);
     }
 
     #[test]
     fn budgets_recurring_items_and_categories_are_listed() {
-        let (mut conn, _, rent, secret) = lived_in();
+        let (mut conn, _, _, secret) = lived_in();
         categories::delete(&mut conn, secret, Utc::now()).unwrap();
-        let mut book = open(&build(&conn, &Selection::default(), &SheetFormat::default()));
+        let mut book = open(&build(&conn, &Selection::default(), &DisplayFormat::default()));
 
         let budgets = rows(&mut book, "Budgets");
         let stored: i64 = conn.query_row("SELECT count(*) FROM budgets", [], |r| r.get(0)).unwrap();
@@ -575,7 +512,7 @@ mod tests {
     #[test]
     fn an_empty_database_still_gives_a_valid_workbook() {
         let conn = db();
-        let mut book = open(&build(&conn, &Selection::default(), &SheetFormat::default()));
+        let mut book = open(&build(&conn, &Selection::default(), &DisplayFormat::default()));
         for name in ["Transactions", "Categories", "Budgets", "Recurring", "Monthly summary"] {
             assert_eq!(rows(&mut book, name).len(), 1, "{name}: only the heading");
         }
@@ -587,7 +524,7 @@ mod tests {
         let food = categories::create(&conn, "Food", CategoryType::Expense).unwrap().id;
         spend(&conn, food, "Old", "1.00", "1850-05-01", None);
         set_budget(&conn, CategoryType::Expense, Scope::Global, None, "2026-01", Some("10.00"));
-        let mut book = open(&build(&conn, &Selection::default(), &SheetFormat::default()));
+        let mut book = open(&build(&conn, &Selection::default(), &DisplayFormat::default()));
         assert_eq!(rows(&mut book, "Transactions")[1][0], Cell::String("1850-05-01".into()));
     }
 
@@ -595,7 +532,7 @@ mod tests {
     fn building_the_workbook_changes_nothing() {
         let (conn, ..) = lived_in();
         let before: i64 = conn.query_row("SELECT count(*) FROM audit_log", [], |r| r.get(0)).unwrap();
-        build(&conn, &Selection::default(), &SheetFormat::default());
+        build(&conn, &Selection::default(), &DisplayFormat::default());
         let after: i64 = conn.query_row("SELECT count(*) FROM audit_log", [], |r| r.get(0)).unwrap();
         assert_eq!(before, after);
     }

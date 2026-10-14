@@ -291,6 +291,14 @@ export const en = {
   'dashboard.prevYear': 'previous year',
   'dashboard.nextYear': 'next year',
   'dashboard.noRecurring': 'no recurring items.',
+  'report.title': 'meowNY report',
+  'report.byMonth': 'income and expenses by month',
+  'report.spending': 'where the money went',
+  'report.budgetVsActual': 'budget vs actual',
+  'report.noBudget': 'no budget',
+  'report.page': 'page',
+  'report.noData': 'no transactions in this period.',
+  'report.date': 'date',
 } as const
 
 export type MessageKey = keyof typeof en

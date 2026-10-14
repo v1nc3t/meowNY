@@ -277,4 +277,12 @@ export const ro: Messages = {
   'dashboard.prevYear': 'anul anterior',
   'dashboard.nextYear': 'anul următor',
   'dashboard.noRecurring': 'nicio tranzacție recurentă.',
+  'report.title': 'raport meowNY',
+  'report.byMonth': 'venituri și cheltuieli pe luni',
+  'report.spending': 'unde au mers banii',
+  'report.budgetVsActual': 'buget și real',
+  'report.noBudget': 'fără buget',
+  'report.page': 'pagina',
+  'report.noData': 'nicio tranzacție în această perioadă.',
+  'report.date': 'data',
 }
