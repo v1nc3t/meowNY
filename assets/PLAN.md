@@ -128,7 +128,7 @@ Kept: the React client (`client/src`), Zod schemas, money and date logic, and th
 - [x] "Mark as paid" in one database transaction (schema Part 5-B), with optional actual amount and payment date (`recurring::pay`. The planned amount is kept on the transaction. Paying the last occurrence before the end date makes the item inactive.)
 - [x] Skip, pause, end; overdue and upcoming lists (`skip`, `set_active`, `end`, `dues`. Resuming an item past its end date is refused. Upcoming defaults to the next 30 days, at most 366.)
 - [x] Due dates and "overdue" are evaluated in the timezone setting (`pay`, `end` and `dues` take today's date as an argument; the commands in the next batch pass the date from `clock::today`.)
-- [ ] Frontend: recurring list with due/overdue state and a mark-as-paid action, built mobile-first
+- [x] Frontend: recurring list with due/overdue state and a mark-as-paid action, built mobile-first (`client/src/pages/RecurringPage.tsx`, route `/app/recurring`, sidebar entry and `g r` shortcut. It reuses the transactions list layout, so it wraps on narrow screens. Status per row: overdue, due today, due on a date, paused or ended. Actions: mark as paid (amount and date prefilled), skip, pause or resume, edit, end, delete. All text is in the seven languages.)
 - [ ] Optional desktop notification for items due today (local only)
 - [x] Tests: paying twice is rejected, planned vs actual amount stored, paid transaction counts in its category's actual (`recurring.rs` tests.)
 

@@ -1811,3 +1811,8 @@ kbd {
   color: var(--text-h);
   white-space: nowrap;
 }
+
+/* An overdue recurring item reads brighter than the rest of its row. */
+.tx-sub.rec-overdue {
+  color: var(--text-h);
+}

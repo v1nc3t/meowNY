@@ -1,0 +1,409 @@
+import { useEffect, useMemo, useState, type FormEvent } from 'react'
+import AddCategoryModal from '../components/AddCategoryModal'
+import DatePicker from '../components/DatePicker'
+import Dropdown from '../components/Dropdown'
+import Modal, { modalFormId } from '../components/Modal'
+import { categories as categoriesApi, type Category } from '../api/categories'
+import { errorText } from '../api/invoke'
+import { INTERVAL_UNITS, recurring as recurringApi, type IntervalUnit, type Recurring } from '../api/recurring'
+import { useToday, type Today } from '../api/today'
+import { amountString, formatDate, formatMoney } from '../money'
+import { useMoneySettings, type MoneySettings } from '../useMoneySettings'
+import { useNotice } from '../useNotice'
+import { useT } from '../i18n/context'
+import { useShortcut } from '../keys/registry'
+import { tip } from '../keys/tip'
+import { useRowNavigation } from '../keys/useRowNavigation'
+
+const MAX_COUNT = 1000
+
+type Status = 'overdue' | 'today' | 'upcoming' | 'paused' | 'ended'
+
+// Dates are "YYYY-MM-DD", so comparing the text compares the dates. `today` is the date in
+// the timezone setting.
+function statusOf(item: Recurring, today: string): Status {
+  if (item.isActive) {
+    if (item.nextDueDate < today) return 'overdue'
+    return item.nextDueDate === today ? 'today' : 'upcoming'
+  }
+  return item.endDate !== null && (item.endDate < today || item.nextDueDate > item.endDate) ? 'ended' : 'paused'
+}
+
+export default function RecurringPage() {
+  const { settings, error } = useMoneySettings()
+  const now = useToday()
+  if (error) return <p className="notice">{error}</p>
+  if (!settings || !now) return null
+  return <RecurringView settings={settings} now={now} />
+}
+
+function RecurringView({ settings, now }: { settings: MoneySettings; now: Today }) {
+  const t = useT()
+  const [categories, setCategories] = useState<Category[]>([])
+  const [items, setItems] = useState<Recurring[] | null>(null)
+  const [reload, setReload] = useState(0)
+  const [adding, setAdding] = useState(false)
+  const [editing, setEditing] = useState<Recurring | null>(null)
+  const [paying, setPaying] = useState<Recurring | null>(null)
+  const [pending, setPending] = useState(false)
+  const [draftMessage, setDraftMessage] = useNotice()
+  const [message, setMessage] = useNotice()
+  const categoryNames = useMemo(() => new Map(categories.map((category) => [category.id, category.name])), [categories])
+
+  useEffect(() => {
+    let cancelled = false
+    void Promise.all([categoriesApi.list(), recurringApi.list()]).then(
+      ([categoryList, list]) => {
+        if (cancelled) return
+        setCategories(categoryList)
+        setItems(list)
+      },
+      (failure) => {
+        if (!cancelled) setMessage(errorText(failure))
+      },
+    )
+    return () => {
+      cancelled = true
+    }
+  }, [reload, setMessage])
+
+  function closeModals() {
+    setAdding(false)
+    setEditing(null)
+    setPaying(null)
+  }
+
+  function openAdd() {
+    setDraftMessage('')
+    closeModals()
+    setAdding(true)
+  }
+
+  function openEdit(item: Recurring) {
+    setDraftMessage('')
+    closeModals()
+    setEditing(item)
+  }
+
+  function openPay(item: Recurring) {
+    setDraftMessage('')
+    closeModals()
+    setPaying(item)
+  }
+
+  // Keyboard: n adds, j and k move between rows.
+  useShortcut('new', openAdd)
+  useRowNavigation()
+
+  // Runs one change, then reloads the list. Failures show as a notice.
+  async function run(action: () => Promise<unknown>) {
+    try {
+      await action()
+    } catch (failure) {
+      setMessage(errorText(failure))
+      return false
+    }
+    setMessage('')
+    setReload((value) => value + 1)
+    return true
+  }
+
+  async function onSave(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (pending) return
+    const form = new FormData(event.currentTarget)
+    const name = String(form.get('name') ?? '').trim()
+    const amount = amountString(String(form.get('amount') ?? ''), false)
+    const categoryId = String(form.get('categoryId') ?? '')
+    const startDate = String(form.get('startDate') ?? '')
+    const intervalUnit = String(form.get('intervalUnit') ?? '') as IntervalUnit
+    const count = Number(form.get('intervalCount'))
+    const endDate = String(form.get('endDate') ?? '')
+    const description = String(form.get('description') ?? '').trim()
+    if (!name || !categoryId || !startDate) {
+      setDraftMessage(t('rec.errorRequired'))
+      return
+    }
+    if (!amount) {
+      setDraftMessage(t('rec.errorAmount'))
+      return
+    }
+    if (!Number.isInteger(count) || count < 1 || count > MAX_COUNT || !INTERVAL_UNITS.includes(intervalUnit)) {
+      setDraftMessage(t('rec.errorCount'))
+      return
+    }
+    const body = {
+      name,
+      amount,
+      categoryId,
+      startDate,
+      intervalUnit,
+      intervalCount: count,
+      endDate: endDate || null,
+      description: description || null,
+    }
+    setPending(true)
+    try {
+      if (editing) await recurringApi.update(editing.id, body)
+      else await recurringApi.create(body)
+    } catch (failure) {
+      setDraftMessage(errorText(failure))
+      return
+    } finally {
+      setPending(false)
+    }
+    setDraftMessage('')
+    setMessage('')
+    closeModals()
+    setReload((value) => value + 1)
+  }
+
+  async function onPay(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (pending || !paying) return
+    const form = new FormData(event.currentTarget)
+    const amount = amountString(String(form.get('amount') ?? ''), false)
+    const paidOn = String(form.get('paidOn') ?? '')
+    if (!amount) {
+      setDraftMessage(t('rec.errorAmount'))
+      return
+    }
+    setPending(true)
+    try {
+      await recurringApi.pay(paying.id, { amount, paidOn })
+    } catch (failure) {
+      setDraftMessage(errorText(failure))
+      return
+    } finally {
+      setPending(false)
+    }
+    setDraftMessage('')
+    setMessage('')
+    closeModals()
+    setReload((value) => value + 1)
+  }
+
+  const everyText = (item: Recurring) =>
+    item.intervalCount === 1
+      ? t(`rec.every1.${item.intervalUnit}`)
+      : t(`rec.everyN.${item.intervalUnit}`, { count: item.intervalCount })
+
+  function statusText(item: Recurring, status: Status): string {
+    if (status === 'overdue') return t('rec.overdue')
+    if (status === 'today') return t('rec.dueToday')
+    if (status === 'paused') return t('rec.paused')
+    if (status === 'ended') return t('rec.ended')
+    return t('rec.due', { date: formatDate(item.nextDueDate, settings.locale) })
+  }
+
+  return (
+    <section className="tx-page">
+      <div className="tx-title">
+        <h1>{t('rec.title')}</h1>
+        <div className="tx-actions">
+          <button type="button" onClick={openAdd} {...tip('new', t('rec.add'))}>
+            {t('rec.add')}
+          </button>
+        </div>
+      </div>
+      <p className="notice">{message}</p>
+      {adding || editing ? (
+        <RecurringModal
+          key={editing ? editing.id : 'new'}
+          item={editing}
+          todayDate={now.date}
+          categories={categories}
+          pending={pending}
+          message={draftMessage}
+          onSubmit={(event) => void onSave(event)}
+          onClose={closeModals}
+          onCategoryAdded={(category) => setCategories((current) => [...current, category])}
+        />
+      ) : null}
+      {paying ? (
+        <Modal title={t('rec.payTitle')} pending={pending} onClose={closeModals}>
+          <p className="notice">{draftMessage}</p>
+          <form id={modalFormId} onSubmit={(event) => void onPay(event)}>
+            <p>{paying.name}</p>
+            <label>
+              {t('rec.paidAmount')}
+              <input name="amount" required inputMode="decimal" defaultValue={paying.amount} autoComplete="off" />
+            </label>
+            <DateField name="paidOn" label={t('rec.paidOn')} defaultValue={now.date} today={now.date} />
+          </form>
+        </Modal>
+      ) : null}
+      {items ? (
+        <div className="tx-pane wide">
+          {items.length === 0 ? <p>{t('rec.empty')}</p> : null}
+          <ul className="rows">
+            {items.map((item) => {
+              const status = statusOf(item, now.date)
+              return (
+                <li key={item.id}>
+                  <div className="entry-row tx-row">
+                    <div className="tx-main">
+                      <p className="entry-main">{item.name}</p>
+                      <p className="tx-sub">
+                        {[
+                          formatMoney(item.amount, settings.currency, settings.locale),
+                          categoryNames.get(item.categoryId) ?? '',
+                          everyText(item),
+                        ]
+                          .filter(Boolean)
+                          .join(' | ')}
+                      </p>
+                      <p className={status === 'overdue' ? 'tx-sub rec-overdue' : 'tx-sub'} data-status={status}>
+                        {statusText(item, status)}
+                      </p>
+                    </div>
+                    <div className="entry-actions">
+                      {item.isActive ? (
+                        <>
+                          <button type="button" className="tx-text" data-row-focus onClick={() => openPay(item)}>
+                            {t('rec.pay')}
+                          </button>
+                          <button type="button" className="tx-text" onClick={() => void run(() => recurringApi.skip(item.id))}>
+                            {t('rec.skip')}
+                          </button>
+                          <button type="button" className="tx-text" onClick={() => void run(() => recurringApi.setActive(item.id, false))}>
+                            {t('rec.pause')}
+                          </button>
+                        </>
+                      ) : status === 'paused' ? (
+                        <button
+                          type="button"
+                          className="tx-text"
+                          data-row-focus
+                          onClick={() => void run(() => recurringApi.setActive(item.id, true))}
+                        >
+                          {t('rec.resume')}
+                        </button>
+                      ) : null}
+                      <button type="button" className="tx-text" onClick={() => openEdit(item)}>
+                        {t('common.edit')}
+                      </button>
+                      {status !== 'ended' ? (
+                        <button type="button" className="tx-text" onClick={() => void run(() => recurringApi.end(item.id))}>
+                          {t('rec.end')}
+                        </button>
+                      ) : null}
+                      <button type="button" className="tx-text" onClick={() => void run(() => recurringApi.remove(item.id))}>
+                        {t('common.delete')}
+                      </button>
+                    </div>
+                  </div>
+                </li>
+              )
+            })}
+          </ul>
+        </div>
+      ) : null}
+    </section>
+  )
+}
+
+// Add and edit share this modal. Field order: name, amount, category, first due date, repeat, end, description.
+function RecurringModal({
+  item,
+  todayDate,
+  categories,
+  pending,
+  message,
+  onSubmit,
+  onClose,
+  onCategoryAdded,
+}: {
+  item: Recurring | null
+  todayDate: string
+  categories: Category[]
+  pending: boolean
+  message: string
+  onSubmit: (event: FormEvent<HTMLFormElement>) => void
+  onClose: () => void
+  onCategoryAdded: (category: Category) => void
+}) {
+  const t = useT()
+  const [categoryId, setCategoryId] = useState(item?.categoryId ?? '')
+  const [unit, setUnit] = useState<IntervalUnit>(item?.intervalUnit ?? 'MONTH')
+  const [hasEnd, setHasEnd] = useState(item?.endDate != null)
+  const [addingCategory, setAddingCategory] = useState(false)
+  const options = categories.map((category) => ({ value: category.id, label: category.name }))
+  return (
+    <>
+      <Modal title={item ? t('rec.editTitle') : t('rec.addTitle')} pending={pending} onClose={onClose}>
+        <p className="notice">{message}</p>
+        <form id={modalFormId} onSubmit={onSubmit}>
+          <label>
+            {t('common.name')}
+            <input name="name" required maxLength={50} defaultValue={item?.name ?? ''} autoComplete="off" />
+          </label>
+          <label>
+            {t('tx.amount')}
+            <input name="amount" required inputMode="decimal" defaultValue={item?.amount ?? ''} autoComplete="off" />
+          </label>
+          <Dropdown
+            label={t('common.category')}
+            name="categoryId"
+            value={categoryId}
+            options={options}
+            onChange={setCategoryId}
+            placeholder={t('tx.chooseCategory')}
+            action={{ label: t('categories.add'), onSelect: () => setAddingCategory(true) }}
+          />
+          <DateField name="startDate" label={t('rec.startDate')} defaultValue={item?.startDate ?? todayDate} today={todayDate} />
+          <label>
+            {t('rec.every')}
+            <input
+              name="intervalCount"
+              type="number"
+              required
+              min={1}
+              max={MAX_COUNT}
+              step={1}
+              defaultValue={item?.intervalCount ?? 1}
+            />
+          </label>
+          <Dropdown
+            label={t('rec.every')}
+            name="intervalUnit"
+            value={unit}
+            options={INTERVAL_UNITS.map((value) => ({ value, label: t(`rec.unit.${value}`) }))}
+            onChange={(value) => setUnit(value as IntervalUnit)}
+          />
+          <label>
+            <input type="checkbox" checked={hasEnd} onChange={(event) => setHasEnd(event.target.checked)} />
+            {t('rec.hasEnd')}
+          </label>
+          {hasEnd ? (
+            <DateField name="endDate" label={t('rec.endDate')} defaultValue={item?.endDate ?? todayDate} today={todayDate} />
+          ) : null}
+          <label>
+            {t('common.description')}
+            <input name="description" maxLength={255} defaultValue={item?.description ?? ''} autoComplete="off" />
+          </label>
+        </form>
+      </Modal>
+      {addingCategory ? (
+        <AddCategoryModal
+          onClose={() => setAddingCategory(false)}
+          onCreated={(category) => {
+            onCategoryAdded(category)
+            setCategoryId(category.id)
+            setAddingCategory(false)
+          }}
+        />
+      ) : null}
+    </>
+  )
+}
+
+function DateField({ name, label, defaultValue, today }: { name: string; label: string; defaultValue: string; today: string }) {
+  const [value, setValue] = useState(defaultValue)
+  return (
+    <div className="tx-date-group">
+      <span>{label}</span>
+      <DatePicker name={name} kind="date" value={value} label={label} today={today} onChange={setValue} />
+    </div>
+  )
+}

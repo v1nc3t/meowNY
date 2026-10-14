@@ -30,6 +30,7 @@ export default function ShortcutsProvider({
       registerShortcut('goTransactions', () => navigate('/app/transactions')),
       registerShortcut('goCategories', () => navigate('/app/categories')),
       registerShortcut('goBudgets', () => navigate('/app/budgets')),
+      registerShortcut('goRecurring', () => navigate('/app/recurring')),
       registerShortcut('goSettings', () => navigate('/app/settings')),
       registerShortcut('help', () => setHelpOpen((open) => !open)),
       registerShortcut('sidebar', onToggleSidebar),
