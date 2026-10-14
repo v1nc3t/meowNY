@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type FormEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import AddCategoryModal from '../components/AddCategoryModal'
 import DatePicker from '../components/DatePicker'
 import Dropdown from '../components/Dropdown'
@@ -352,18 +352,7 @@ function RecurringModal({
             action={{ label: t('categories.add'), onSelect: () => setAddingCategory(true) }}
           />
           <DateField name="startDate" label={t('rec.startDate')} defaultValue={item?.startDate ?? todayDate} today={todayDate} />
-          <label>
-            {t('rec.every')}
-            <input
-              name="intervalCount"
-              type="number"
-              required
-              min={1}
-              max={MAX_COUNT}
-              step={1}
-              defaultValue={item?.intervalCount ?? 1}
-            />
-          </label>
+          <CountField label={t('rec.every')} defaultValue={item?.intervalCount ?? 1} />
           <Dropdown
             label={t('rec.every')}
             name="intervalUnit"
@@ -395,6 +384,41 @@ function RecurringModal({
         />
       ) : null}
     </>
+  )
+}
+
+// A number field that also steps with the mouse wheel while it has focus (click it first).
+// The wheel listener is native because React's onWheel is passive and cannot stop the page from scrolling.
+function CountField({ label, defaultValue }: { label: string; defaultValue: number }) {
+  const [value, setValue] = useState(String(defaultValue))
+  const ref = useRef<HTMLInputElement>(null)
+  useEffect(() => {
+    const input = ref.current
+    if (!input) return
+    function onWheel(event: WheelEvent) {
+      if (document.activeElement !== input || event.deltaY === 0) return
+      event.preventDefault()
+      const step = event.deltaY < 0 ? 1 : -1
+      setValue((current) => String(Math.min(MAX_COUNT, Math.max(1, (Number(current) || 1) + step))))
+    }
+    input.addEventListener('wheel', onWheel, { passive: false })
+    return () => input.removeEventListener('wheel', onWheel)
+  }, [])
+  return (
+    <label>
+      {label}
+      <input
+        ref={ref}
+        name="intervalCount"
+        type="number"
+        required
+        min={1}
+        max={MAX_COUNT}
+        step={1}
+        value={value}
+        onChange={(event) => setValue(event.target.value)}
+      />
+    </label>
   )
 }
 
