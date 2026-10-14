@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
+import { Fragment, useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import AddCategoryModal from '../components/AddCategoryModal'
 import DatePicker from '../components/DatePicker'
 import Dropdown from '../components/Dropdown'
@@ -49,6 +49,15 @@ function RecurringView({ settings, now }: { settings: MoneySettings; now: Today 
   const [draftMessage, setDraftMessage] = useNotice()
   const [message, setMessage] = useNotice()
   const categoryNames = useMemo(() => new Map(categories.map((category) => [category.id, category.name])), [categories])
+
+  // One group per category, in the category list's order; items of a deleted category go last.
+  const groups = useMemo(() => {
+    const byCategory = new Map<string, Recurring[]>()
+    for (const item of items ?? []) byCategory.set(item.categoryId, [...(byCategory.get(item.categoryId) ?? []), item])
+    const known = categories.filter((c) => byCategory.has(c.id)).map((c) => ({ id: c.id, name: c.name, items: byCategory.get(c.id) ?? [] }))
+    const unknown = [...byCategory].filter(([id]) => !categoryNames.has(id))
+    return [...known, ...unknown.map(([id, list]) => ({ id, name: t('tx.deletedCategory'), items: list }))]
+  }, [items, categories, categoryNames, t])
 
   useEffect(() => {
     let cancelled = false
@@ -236,8 +245,11 @@ function RecurringView({ settings, now }: { settings: MoneySettings; now: Today 
       {items ? (
         <div className="tx-pane wide">
           {items.length === 0 ? <p>{t('rec.empty')}</p> : null}
-          <ul className="rows">
-            {items.map((item) => {
+          {groups.map((group) => (
+            <Fragment key={group.id}>
+              <h2>{group.name}</h2>
+              <ul className="rows">
+            {group.items.map((item) => {
               const status = statusOf(item, now.date)
               return (
                 <li key={item.id}>
@@ -247,7 +259,6 @@ function RecurringView({ settings, now }: { settings: MoneySettings; now: Today 
                       <p className="tx-sub">
                         {[
                           formatMoney(item.amount, settings.currency, settings.locale),
-                          categoryNames.get(item.categoryId) ?? '',
                           everyText(item),
                         ]
                           .filter(Boolean)
@@ -296,7 +307,9 @@ function RecurringView({ settings, now }: { settings: MoneySettings; now: Today 
                 </li>
               )
             })}
-          </ul>
+              </ul>
+            </Fragment>
+          ))}
         </div>
       ) : null}
     </section>
