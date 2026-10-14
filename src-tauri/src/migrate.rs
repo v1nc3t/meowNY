@@ -9,6 +9,7 @@ const MIGRATIONS: &[&str] = &[
     include_str!("../migrations/0002_triggers.sql"),
     include_str!("../migrations/0003_language.sql"),
     include_str!("../migrations/0004_indexes.sql"),
+    include_str!("../migrations/0005_backup_schedule.sql"),
 ];
 
 #[derive(Debug)]

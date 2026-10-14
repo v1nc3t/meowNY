@@ -44,6 +44,11 @@ pub const EXTENSION: &str = "meowbak";
 /// that is missing here, so a backup cannot silently leave data out.
 const TABLES: &[&str] = &["settings", "categories", "budgets", "recurring_transactions", "transactions", "audit_log"];
 
+/// Tables a backup leaves out on purpose, and restoring leaves alone. `backup_schedule` belongs to
+/// this device and holds the backup passphrase.
+#[cfg(test)]
+const EXCLUDED_TABLES: &[&str] = &["backup_schedule"];
+
 /// Restoring writes the history from the file, not the history the restore itself would trigger.
 const HISTORY_TABLE: &str = "audit_log";
 
@@ -209,7 +214,7 @@ pub fn restore_snapshot(target: &mut Connection, snapshot: &Snapshot) -> Result<
     replace_all(target, &current.tables)
 }
 
-fn check_passphrase(passphrase: &str) -> Result<(), AppError> {
+pub(crate) fn check_passphrase(passphrase: &str) -> Result<(), AppError> {
     if passphrase.chars().count() >= MIN_PASSPHRASE_CHARS {
         Ok(())
     } else {
@@ -421,16 +426,16 @@ mod tests {
     }
 
     #[test]
-    fn the_list_of_tables_covers_the_whole_schema() {
+    fn the_lists_of_tables_cover_the_whole_schema() {
         let conn = db();
         let mut stmt = conn
             .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name")
             .unwrap();
         let mut in_schema: Vec<String> = stmt.query_map([], |r| r.get(0)).unwrap().map(Result::unwrap).collect();
-        let mut listed: Vec<String> = TABLES.iter().map(|t| t.to_string()).collect();
+        let mut listed: Vec<String> = TABLES.iter().chain(EXCLUDED_TABLES).map(|t| t.to_string()).collect();
         in_schema.sort();
         listed.sort();
-        assert_eq!(listed, in_schema, "a table that is not listed is missing from every backup");
+        assert_eq!(listed, in_schema, "a table that is in neither list is missing from every backup");
     }
 
     #[test]

@@ -11,6 +11,7 @@ use crate::budgets::{self, Budget, Overview, SetBudget};
 use crate::clock;
 use crate::currency::{self, Conversion};
 use crate::recurring::{self, Dues, NewRecurring, Recurring, RecurringPatch};
+use crate::schedule::{self, Schedule};
 use crate::stats::{self, BudgetVsActual, CategoryTrend, Commitments, PlannedVsPaid, TopCategory, YearPoint};
 use crate::transactions::{self, Filter, NewTransaction, Page, Transaction, TransactionPatch};
 use crate::vault::{AppError, LockPrefs, Settings, Vault, VaultStatus};
@@ -67,6 +68,9 @@ pub const COMMANDS: &[&str] = &[
     "create_backup",
     "restore_backup",
     "restore_backup_new_vault",
+    "get_backup_schedule",
+    "set_backup_schedule",
+    "clear_backup_schedule",
 ];
 
 #[tauri::command]
@@ -445,6 +449,34 @@ pub async fn restore_backup_new_vault(
     let Some(path) = pick_backup_file(&app)? else { return Ok(None) };
     let key = vault.create_from_backup(&backup::read_file(&path)?, &passphrase, vault_passphrase.as_deref())?;
     Ok(Some(key))
+}
+
+/// The scheduled backup setup, without its passphrase. None when there is none.
+#[tauri::command]
+pub fn get_backup_schedule(vault: Shared) -> Result<Option<Schedule>, AppError> {
+    vault.with_conn(|c| schedule::get(c))
+}
+
+/// Starts (or replaces) scheduled backups: asks for the folder, then makes the first backup there.
+/// `every_days` is 1, 7 or 30. Returns false if the person cancels the folder dialog.
+#[tauri::command]
+pub async fn set_backup_schedule(
+    app: tauri::AppHandle,
+    vault: Shared<'_>,
+    passphrase: String,
+    every_days: u32,
+) -> Result<bool, AppError> {
+    use tauri_plugin_dialog::DialogExt;
+    backup::check_passphrase(&passphrase)?;
+    let Some(folder) = app.dialog().file().blocking_pick_folder() else { return Ok(false) };
+    let folder = folder.into_path().map_err(|_| AppError::Internal)?;
+    schedule::start(&vault, &folder, &passphrase, every_days, chrono::Utc::now())?;
+    Ok(true)
+}
+
+#[tauri::command]
+pub fn clear_backup_schedule(vault: Shared) -> Result<(), AppError> {
+    vault.with_conn(|c| schedule::stop(c))
 }
 
 #[cfg(test)]

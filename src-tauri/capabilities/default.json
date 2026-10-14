@@ -52,6 +52,9 @@
     "allow-create-backup",
     "allow-restore-backup",
     "allow-restore-backup-new-vault",
+    "allow-get-backup-schedule",
+    "allow-set-backup-schedule",
+    "allow-clear-backup-schedule",
     "core:event:allow-listen",
     "core:event:allow-unlisten",
     {

@@ -152,6 +152,18 @@ export const en = {
   'settings.restoreHint': 'replaces everything in the app with the contents of a backup file. this cannot be undone.',
   'settings.restoreConfirm': 'type RESTORE to confirm',
   'settings.restoreStart': 'restore from backup',
+  'settings.scheduleHint': 'saves a backup to a folder you choose, now and then again on a schedule. it only runs while the app is open and unlocked. the newest 10 are kept.',
+  'settings.scheduleEvery': 'how often',
+  'settings.scheduleDaily': 'every day',
+  'settings.scheduleWeekly': 'every week',
+  'settings.scheduleMonthly': 'every month',
+  'settings.scheduleStart': 'choose folder and start',
+  'settings.scheduleStop': 'stop scheduled backups',
+  'settings.scheduleOn': 'scheduled: {every}, to {folder}.',
+  'settings.scheduleLast': 'last backup: {time}.',
+  'settings.scheduleFailed': 'the last backup, {time}, failed. check that the folder is still there.',
+  'settings.scheduleStarted': 'scheduled backups are on. the first backup is done.',
+  'settings.scheduleStopped': 'scheduled backups are off.',
 
   // Change currency
   'currency.changeTitle': 'change currency',

@@ -50,6 +50,9 @@ const COMMANDS: &[&str] = &[
     "create_backup",
     "restore_backup",
     "restore_backup_new_vault",
+    "get_backup_schedule",
+    "set_backup_schedule",
+    "clear_backup_schedule",
 ];
 
 fn main() {
