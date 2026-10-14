@@ -8,7 +8,7 @@ import ChangeCurrencyModal from '../components/ChangeCurrencyModal'
 import Dropdown from '../components/Dropdown'
 import PasswordField from '../vault/PasswordField'
 import RecoveryKeyPanel from '../vault/RecoveryKeyPanel'
-import { LOCK_AFTER_CHOICES, nearestLockChoice, type Settings } from '../vault/rules'
+import { backupPassphraseProblem, LOCK_AFTER_CHOICES, nearestLockChoice, type Settings } from '../vault/rules'
 import { useNotice } from '../useNotice'
 
 export default function SettingsPage() {
@@ -19,6 +19,8 @@ export default function SettingsPage() {
   const [location, setLocation] = useState('')
   const [message, setMessage] = useNotice()
   const [confirmation, setConfirmation] = useState('')
+  const [restoreWord, setRestoreWord] = useState('')
+  const [busy, setBusy] = useState(false)
   const [newKey, setNewKey] = useState<string | null>(null)
   const [notifyDue, setNotifyDue] = useState<boolean | null>(null)
   const [lockAfter, setLockAfter] = useState('300')
@@ -103,6 +105,38 @@ export default function SettingsPage() {
     } catch (error) {
       setMessage(errorText(error))
     }
+  }
+
+  async function onBackup(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    const form = event.currentTarget
+    const data = new FormData(form)
+    const passphrase = String(data.get('backup_passphrase'))
+    const problem = backupPassphraseProblem(passphrase, String(data.get('backup_confirm')))
+    if (problem) return setMessage(problem)
+    setBusy(true)
+    try {
+      if (await vault.createBackup(passphrase)) {
+        form.reset()
+        setMessage(t('settings.backupSaved'))
+      }
+    } catch (error) {
+      setMessage(errorText(error))
+    }
+    setBusy(false)
+  }
+
+  async function onRestore(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    const passphrase = String(new FormData(event.currentTarget).get('restore_passphrase'))
+    setBusy(true)
+    try {
+      // Everything on screen is old data now, so start over from the top.
+      if (await vault.restoreBackup(passphrase, restoreWord)) window.location.assign('/')
+    } catch (error) {
+      setMessage(errorText(error))
+    }
+    setBusy(false)
   }
 
   async function onWipe(event: FormEvent<HTMLFormElement>) {
@@ -217,6 +251,33 @@ export default function SettingsPage() {
               </div>
             </form>
           )}
+        </div>
+
+        <div className="settings-block">
+          <h2>{t('settings.backup')}</h2>
+          <form onSubmit={onBackup}>
+            <p className="hint">{t('settings.backupHint')}</p>
+            <PasswordField label={t('settings.backupPassphrase')} name="backup_passphrase" />
+            <PasswordField label={t('settings.backupPassphraseRepeat')} name="backup_confirm" />
+            <div className="actions">
+              <button type="submit" disabled={busy}>
+                {t('settings.backupCreate')}
+              </button>
+            </div>
+          </form>
+          <form onSubmit={onRestore}>
+            <p className="hint">{t('settings.restoreHint')}</p>
+            <PasswordField label={t('settings.backupPassphrase')} name="restore_passphrase" current />
+            <label>
+              {t('settings.restoreConfirm')}
+              <input value={restoreWord} onChange={(e) => setRestoreWord(e.target.value)} autoComplete="off" />
+            </label>
+            <div className="actions">
+              <button type="submit" disabled={busy || restoreWord !== 'RESTORE'}>
+                {t('settings.restoreStart')}
+              </button>
+            </div>
+          </form>
         </div>
 
         <div className="settings-block">

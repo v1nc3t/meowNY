@@ -49,6 +49,19 @@ export const vault = {
   saveRecoveryKey: (code: string) => call('save_recovery_key', z.boolean(), { code }),
   /** Replaces the recovery key; the old one stops working. */
   newRecoveryKey: (passphrase: string) => call('new_recovery_key', RecoveryKey, { passphrase: none(passphrase) }),
+  /**
+   * Opens a save dialog and writes an encrypted backup locked with `passphrase`. False when the person cancels.
+   */
+  createBackup: (passphrase: string) => call('create_backup', z.boolean(), { passphrase }),
+  /**
+   * Opens a file dialog and replaces all data with the backup the person picks. `confirmation` must be "RESTORE".
+   * False when the person cancels.
+   */
+  restoreBackup: (passphrase: string, confirmation: string) =>
+    call('restore_backup', z.boolean(), { passphrase, confirmation }),
+  /** First run: new data file filled from a backup. Returns the recovery key, or null when the person cancels. */
+  restoreFromBackup: (backupPassphrase: string, passphrase: string) =>
+    call('restore_backup_new_vault', RecoveryKey.nullable(), { passphrase: backupPassphrase, vaultPassphrase: none(passphrase) }),
   unlock: (passphrase: string) => done(call('unlock_vault', Nothing, { passphrase: none(passphrase) })),
   lock: () => done(call('lock_vault', Nothing)),
   touch: () => done(call('touch_activity', Nothing)),

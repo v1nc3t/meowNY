@@ -48,6 +48,12 @@ test('the confirmation word the app asks for is never translated', () => {
   }
 })
 
+test('the restore confirmation word is never translated either', () => {
+  for (const language of LANGUAGES) {
+    assert.match(language.messages['settings.restoreConfirm'], /RESTORE/, language.code)
+  }
+})
+
 test('placeholders are filled in and unknown ones are left alone', () => {
   assert.equal(interpolate('use {count} characters', { count: 8 }), 'use 8 characters')
   assert.equal(interpolate('{a} and {b}', { a: 'x' }), 'x and {b}')

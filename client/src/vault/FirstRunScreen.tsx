@@ -8,6 +8,7 @@ import { useNotice } from '../useNotice'
 import { errorText, vault } from './api'
 import PasswordField from './PasswordField'
 import RecoveryKeyPanel from './RecoveryKeyPanel'
+import RestoreFromBackup from './RestoreFromBackup'
 import { defaultSettings, isCurrency, normalizeCurrency, passphraseProblem } from './rules'
 
 /** First run: language, region, currency and security, all in one place, each starting from what the system suggests. */
@@ -17,6 +18,7 @@ export default function FirstRunScreen({ onDone }: { onDone: () => void }) {
   const [message, setMessage] = useNotice()
   const [busy, setBusy] = useState(false)
   const [recoveryKey, setRecoveryKey] = useState<string | null>(null)
+  const [restoring, setRestoring] = useState(false)
   const [suggested] = useState(defaultSettings)
   const [currency, setCurrency] = useState('')
   const [locale, setLocale] = useState(suggested.locale)
@@ -53,6 +55,8 @@ export default function FirstRunScreen({ onDone }: { onDone: () => void }) {
       </main>
     )
   }
+
+  if (restoring) return <RestoreFromBackup onKey={setRecoveryKey} onBack={() => setRestoring(false)} />
 
   return (
     <main className="gate">
@@ -105,6 +109,9 @@ export default function FirstRunScreen({ onDone }: { onDone: () => void }) {
 
         <button type="submit" disabled={busy}>
           {t('welcome.create')}
+        </button>
+        <button type="button" onClick={() => setRestoring(true)}>
+          {t('welcome.restore')}
         </button>
         <p className="notice" role="alert">
           {message}

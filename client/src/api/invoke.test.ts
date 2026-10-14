@@ -6,6 +6,7 @@ import { ApiError, errorText, messageFor, toErrorCode } from './invoke.ts'
 
 test('known codes pass through and anything else becomes internal', () => {
   assert.equal(toErrorCode('name_exists'), 'name_exists')
+  assert.equal(toErrorCode('invalid_backup'), 'invalid_backup')
   assert.equal(toErrorCode('toString'), 'internal')
   assert.equal(toErrorCode('UNIQUE constraint failed: categories.name'), 'internal')
   assert.equal(toErrorCode(undefined), 'internal')

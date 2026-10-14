@@ -59,10 +59,12 @@ export const en = {
   'error.invalid_input': 'check the values and try again.',
   'error.not_found': 'that item no longer exists.',
   'error.name_exists': 'that name already exists.',
+  'error.invalid_backup': 'that file is not a meowny backup, or it is damaged.',
   'error.internal': 'something went wrong.',
 
   // Rules
   'rule.passphraseShort': 'use at least {count} characters, or leave it empty.',
+  'rule.backupPassphraseShort': 'use at least {count} characters.',
   'rule.passphraseMismatch': 'the two passphrases do not match.',
   'lock.1m': '1 minute',
   'lock.5m': '5 minutes',
@@ -141,6 +143,15 @@ export const en = {
   'settings.deleteHint': 'deletes your data, key and backups. this cannot be undone.',
   'settings.deleteConfirm': 'type DELETE to confirm',
   'settings.deleteAll': 'delete all data',
+  'settings.backup': 'backup',
+  'settings.backupHint': 'saves all your data in one encrypted file. choose a passphrase for it. it is not the app passphrase, and without it the backup cannot be opened.',
+  'settings.backupPassphrase': 'backup passphrase',
+  'settings.backupPassphraseRepeat': 'repeat backup passphrase',
+  'settings.backupCreate': 'back up now',
+  'settings.backupSaved': 'backup saved.',
+  'settings.restoreHint': 'replaces everything in the app with the contents of a backup file. this cannot be undone.',
+  'settings.restoreConfirm': 'type RESTORE to confirm',
+  'settings.restoreStart': 'restore from backup',
 
   // Change currency
   'currency.changeTitle': 'change currency',
@@ -175,6 +186,9 @@ export const en = {
     'you get a recovery key on the next screen. if you forget the passphrase, it is the only way back in. lose both and your data is gone for good.',
   'welcome.location': 'data file location:',
   'welcome.create': 'create encrypted data file',
+  'welcome.restore': 'restore from a backup',
+  'welcome.restoreIntro': 'your data comes from a backup file you choose. it goes into a new encrypted data file with new keys.',
+  'welcome.restoreSubmit': 'choose backup file and restore',
 
   // Lock screen and recovery
   'lock.title': 'locked',
