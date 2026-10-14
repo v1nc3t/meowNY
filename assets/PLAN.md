@@ -125,12 +125,12 @@ Kept: the React client (`client/src`), Zod schemas, money and date logic, and th
 
 - [x] Recurring CRUD (income or expense, any category, interval unit + count, optional end date) (`src-tauri/src/recurring.rs`: create, update, delete, list. Not yet exposed as commands. Changing the schedule moves the next due date to the first new occurrence on or after the old one. Deleting an item keeps its paid transactions.)
 - [x] Due-date function computed from `start_date` (not from the previous due date). **Unit-test month-end cases** (Jan 31, Feb 29, yearly on Feb 29). (`recurring::due_date`, `next_after`, `first_on_or_after`; tests cover Jan 31, leap February and yearly Feb 29.)
-- [ ] "Mark as paid" in one database transaction (schema Part 5-B), with optional actual amount and payment date
-- [ ] Skip, pause, end; overdue and upcoming lists
-- [ ] Due dates and "overdue" are evaluated in the timezone setting
+- [x] "Mark as paid" in one database transaction (schema Part 5-B), with optional actual amount and payment date (`recurring::pay`. The planned amount is kept on the transaction. Paying the last occurrence before the end date makes the item inactive.)
+- [x] Skip, pause, end; overdue and upcoming lists (`skip`, `set_active`, `end`, `dues`. Resuming an item past its end date is refused. Upcoming defaults to the next 30 days, at most 366.)
+- [x] Due dates and "overdue" are evaluated in the timezone setting (`pay`, `end` and `dues` take today's date as an argument; the commands in the next batch pass the date from `clock::today`.)
 - [ ] Frontend: recurring list with due/overdue state and a mark-as-paid action, built mobile-first
 - [ ] Optional desktop notification for items due today (local only)
-- [ ] Tests: paying twice is rejected, planned vs actual amount stored, paid transaction counts in its category's actual
+- [x] Tests: paying twice is rejected, planned vs actual amount stored, paid transaction counts in its category's actual (`recurring.rs` tests.)
 
 **Done when:** a monthly subscription shows up as due, one click turns it into a normal transaction, and the next due date is correct.
 

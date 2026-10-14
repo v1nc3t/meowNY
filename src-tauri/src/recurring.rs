@@ -266,6 +266,141 @@ pub fn list(conn: &Connection) -> Result<Vec<Recurring>, AppError> {
     Ok(rows.collect::<Result<Vec<_>, _>>()?)
 }
 
+#[derive(Debug, Serialize)]
+pub struct Dues {
+    /// Active and due before today, oldest first.
+    pub overdue: Vec<Recurring>,
+    /// Active and due from today up to `within_days` ahead, soonest first.
+    pub upcoming: Vec<Recurring>,
+}
+
+const DEFAULT_WITHIN_DAYS: u32 = 30;
+const MAX_WITHIN_DAYS: u32 = 366;
+
+/// `today` is the date in the user's timezone setting, so "overdue" follows it too.
+pub fn dues(conn: &Connection, today: &str, within_days: Option<u32>) -> Result<Dues, AppError> {
+    let today_date = parse_date(today)?;
+    let days = within_days.unwrap_or(DEFAULT_WITHIN_DAYS);
+    if days > MAX_WITHIN_DAYS {
+        return Err(AppError::InvalidInput);
+    }
+    let horizon = today_date.checked_add_days(Days::new(days.into())).ok_or(AppError::InvalidInput)?.to_string();
+    let mut statement = conn.prepare_cached(&format!(
+        "SELECT {COLUMNS} FROM recurring_transactions
+         WHERE is_active = 1 AND next_due_date <= ?1 ORDER BY next_due_date, id"
+    ))?;
+    let items = statement.query_map([&horizon], from_row)?.collect::<Result<Vec<_>, _>>()?;
+    let (overdue, upcoming) = items.into_iter().partition(|r| r.next_due_date.as_str() < today);
+    Ok(Dues { overdue, upcoming })
+}
+
+/// Moves the item past the occurrence it is on. Stops it when the next one is after the end date
+/// or off the calendar. The caller runs this inside its own database transaction.
+fn advance(conn: &Connection, item: &Recurring) -> Result<(), AppError> {
+    let start = parse_date(&item.start_date)?;
+    let due = parse_date(&item.next_due_date)?;
+    let next = next_after(start, item.interval_unit, item.interval_count, due);
+    let (next_text, active) = match next {
+        Some(next) => {
+            let within_end = item.end_date.as_deref().is_none_or(|end| next.to_string().as_str() <= end);
+            (next.to_string(), within_end)
+        }
+        None => (item.next_due_date.clone(), false),
+    };
+    conn.execute(
+        "UPDATE recurring_transactions SET next_due_date = ?1, is_active = ?2 WHERE id = ?3",
+        params![next_text, active, item.id],
+    )?;
+    Ok(())
+}
+
+fn find_active(conn: &Connection, id: i64) -> Result<Recurring, AppError> {
+    let item = get(conn, id)?;
+    if item.is_active {
+        Ok(item)
+    } else {
+        Err(AppError::InvalidInput)
+    }
+}
+
+fn is_unique_conflict(error: &rusqlite::Error) -> bool {
+    matches!(
+        error,
+        rusqlite::Error::SqliteFailure(e, _) if e.extended_code == rusqlite::ffi::SQLITE_CONSTRAINT_UNIQUE
+    )
+}
+
+/// Turns the current occurrence into a normal transaction and moves to the next one, all or
+/// nothing. `amount` defaults to the planned amount and `paid_on` to `today`; the planned amount
+/// is kept on the transaction. An occurrence that already has a transaction is refused.
+pub fn pay(
+    conn: &Connection,
+    id: i64,
+    amount: Option<&str>,
+    paid_on: Option<&str>,
+    today: &str,
+) -> Result<crate::transactions::Transaction, AppError> {
+    let paid_on = clean_date(paid_on.unwrap_or(today))?;
+    let actual = amount.map(parse_positive_amount).transpose()?;
+
+    let tx = conn.unchecked_transaction()?;
+    let item = find_active(&tx, id)?;
+    let planned = parse_positive_amount(&item.amount)?;
+    let inserted = tx.execute(
+        "INSERT INTO transactions
+           (category_id, recurring_transaction_id, recurring_due_date, name, amount_minor,
+            planned_amount_minor, payment_date, description)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+        params![item.category_id, id, item.next_due_date, item.name, actual.unwrap_or(planned), planned, paid_on, item.description],
+    );
+    match inserted {
+        Ok(_) => {}
+        Err(e) if is_unique_conflict(&e) => return Err(AppError::InvalidInput),
+        Err(e) => return Err(e.into()),
+    }
+    let created = tx.last_insert_rowid();
+    advance(&tx, &item)?;
+    tx.commit()?;
+    crate::transactions::get(conn, created)
+}
+
+/// Passes over the current occurrence without a transaction. The audit log records it.
+pub fn skip(conn: &Connection, id: i64) -> Result<Recurring, AppError> {
+    let tx = conn.unchecked_transaction()?;
+    let item = find_active(&tx, id)?;
+    advance(&tx, &item)?;
+    tx.commit()?;
+    get(conn, id)
+}
+
+/// Pause (`false`) or resume (`true`). An item whose next occurrence is past its end date
+/// cannot be resumed.
+pub fn set_active(conn: &Connection, id: i64, active: bool) -> Result<Recurring, AppError> {
+    let item = get(conn, id)?;
+    if active && item.end_date.as_deref().is_some_and(|end| item.next_due_date.as_str() > end) {
+        return Err(AppError::InvalidInput);
+    }
+    conn.execute("UPDATE recurring_transactions SET is_active = ?1 WHERE id = ?2", params![active, id])?;
+    get(conn, id)
+}
+
+/// Stops the item for good: inactive, and the end date is today, or the start date if that is
+/// later, unless it already ends sooner. Nothing already paid changes.
+pub fn end(conn: &Connection, id: i64, today: &str) -> Result<Recurring, AppError> {
+    let item = get(conn, id)?;
+    let today = parse_date(today)?;
+    let start = parse_date(&item.start_date)?;
+    let mut end = today.max(start);
+    if let Some(existing) = item.end_date.as_deref() {
+        end = end.min(parse_date(existing)?);
+    }
+    conn.execute(
+        "UPDATE recurring_transactions SET is_active = 0, end_date = ?1 WHERE id = ?2",
+        params![end.to_string(), id],
+    )?;
+    get(conn, id)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -407,5 +542,131 @@ mod tests {
         let left: i64 = conn.query_row("SELECT count(*) FROM transactions", [], |r| r.get(0)).unwrap();
         assert_eq!(left, 1);
         assert_eq!(delete(&conn, item.id), Err(AppError::NotFound));
+    }
+
+    const TODAY: &str = "2026-03-15";
+
+    #[test]
+    fn pay_makes_a_transaction_and_moves_on() {
+        let (conn, rent, _) = db();
+        let item = create(&conn, &new(rent, "2026-01-31")).unwrap();
+        let paid = pay(&conn, item.id, None, Some("2026-01-30"), TODAY).unwrap();
+        assert_eq!((paid.amount.as_str(), paid.payment_date.as_str(), paid.name.as_str()), ("900.00", "2026-01-30", "Rent"));
+        assert_eq!(get(&conn, item.id).unwrap().next_due_date, "2026-02-28");
+        let next = pay(&conn, item.id, None, None, TODAY).unwrap();
+        assert_eq!(next.payment_date, TODAY);
+        assert_eq!(get(&conn, item.id).unwrap().next_due_date, "2026-03-31");
+    }
+
+    #[test]
+    fn pay_keeps_planned_and_actual_amounts() {
+        let (conn, rent, _) = db();
+        let item = create(&conn, &new(rent, "2026-01-31")).unwrap();
+        let paid = pay(&conn, item.id, Some("87.35"), None, TODAY).unwrap();
+        assert_eq!(paid.amount, "87.35");
+        let (planned, due, link): (i64, String, i64) = conn
+            .query_row(
+                "SELECT planned_amount_minor, recurring_due_date, recurring_transaction_id FROM transactions WHERE id = ?1",
+                [paid.id.to_string()],
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+            )
+            .unwrap();
+        assert_eq!((planned, due.as_str(), link), (90000, "2026-01-31", item.id));
+    }
+
+    #[test]
+    fn paid_transaction_counts_in_its_category() {
+        let (conn, rent, _) = db();
+        let item = create(&conn, &new(rent, "2026-03-01")).unwrap();
+        pay(&conn, item.id, None, Some("2026-03-01"), TODAY).unwrap();
+        let spent: i64 = conn
+            .query_row("SELECT sum(amount_minor) FROM transactions WHERE category_id = ?1 AND payment_date LIKE '2026-03%'", [rent], |r| r.get(0))
+            .unwrap();
+        assert_eq!(spent, 90000);
+    }
+
+    #[test]
+    fn an_occurrence_cannot_be_paid_twice() {
+        let (conn, rent, _) = db();
+        let item = create(&conn, &new(rent, "2026-01-31")).unwrap();
+        pay(&conn, item.id, None, None, TODAY).unwrap();
+        // Move the item back onto the paid occurrence, as a stale edit could.
+        conn.execute("UPDATE recurring_transactions SET next_due_date = '2026-01-31'", []).unwrap();
+        assert_eq!(pay(&conn, item.id, None, None, TODAY).unwrap_err(), AppError::InvalidInput);
+        // The failed attempt changed nothing.
+        assert_eq!(get(&conn, item.id).unwrap().next_due_date, "2026-01-31");
+        let count: i64 = conn.query_row("SELECT count(*) FROM transactions", [], |r| r.get(0)).unwrap();
+        assert_eq!(count, 1);
+    }
+
+    #[test]
+    fn pay_rejects_bad_amount_and_inactive_items() {
+        let (conn, rent, _) = db();
+        let item = create(&conn, &new(rent, "2026-01-31")).unwrap();
+        assert_eq!(pay(&conn, item.id, Some("0.00"), None, TODAY).unwrap_err(), AppError::InvalidInput);
+        assert_eq!(pay(&conn, item.id, None, Some("nope"), TODAY).unwrap_err(), AppError::InvalidInput);
+        set_active(&conn, item.id, false).unwrap();
+        assert_eq!(pay(&conn, item.id, None, None, TODAY).unwrap_err(), AppError::InvalidInput);
+        assert_eq!(pay(&conn, 999, None, None, TODAY).unwrap_err(), AppError::NotFound);
+    }
+
+    #[test]
+    fn the_last_payment_before_the_end_date_finishes_the_item() {
+        let (conn, rent, _) = db();
+        let mut input = new(rent, "2026-01-31");
+        input.end_date = Some("2026-02-28".into());
+        let item = create(&conn, &input).unwrap();
+        pay(&conn, item.id, None, None, TODAY).unwrap();
+        assert!(get(&conn, item.id).unwrap().is_active);
+        pay(&conn, item.id, None, None, TODAY).unwrap();
+        let done = get(&conn, item.id).unwrap();
+        assert!(!done.is_active);
+        assert_eq!(set_active(&conn, item.id, true).unwrap_err(), AppError::InvalidInput);
+    }
+
+    #[test]
+    fn skip_moves_on_without_a_transaction() {
+        let (conn, rent, _) = db();
+        let item = create(&conn, &new(rent, "2026-01-31")).unwrap();
+        assert_eq!(skip(&conn, item.id).unwrap().next_due_date, "2026-02-28");
+        let count: i64 = conn.query_row("SELECT count(*) FROM transactions", [], |r| r.get(0)).unwrap();
+        assert_eq!(count, 0);
+        let logged: i64 = conn
+            .query_row("SELECT count(*) FROM audit_log WHERE entity_type = 'recurring_transactions' AND action = 'UPDATE'", [], |r| r.get(0))
+            .unwrap();
+        assert!(logged >= 1);
+    }
+
+    #[test]
+    fn pause_resume_and_end() {
+        let (conn, rent, _) = db();
+        let item = create(&conn, &new(rent, "2026-01-31")).unwrap();
+        assert!(!set_active(&conn, item.id, false).unwrap().is_active);
+        assert!(set_active(&conn, item.id, true).unwrap().is_active);
+        let ended = end(&conn, item.id, TODAY).unwrap();
+        assert!(!ended.is_active);
+        assert_eq!(ended.end_date.as_deref(), Some(TODAY));
+        // Ending before the start date cannot put the end date before it.
+        let future = create(&conn, &new(rent, "2026-09-01")).unwrap();
+        assert_eq!(end(&conn, future.id, TODAY).unwrap().end_date.as_deref(), Some("2026-09-01"));
+    }
+
+    #[test]
+    fn dues_split_overdue_and_upcoming_by_the_given_today() {
+        let (conn, rent, salary) = db();
+        let late = create(&conn, &new(rent, "2026-03-14")).unwrap();
+        let today = create(&conn, &new(rent, "2026-03-15")).unwrap();
+        let soon = create(&conn, &new(salary, "2026-04-14")).unwrap();
+        let _far = create(&conn, &new(salary, "2026-04-15")).unwrap();
+        let paused = create(&conn, &new(rent, "2026-03-01")).unwrap();
+        set_active(&conn, paused.id, false).unwrap();
+        let d = dues(&conn, TODAY, None).unwrap();
+        assert_eq!(d.overdue.iter().map(|r| r.id).collect::<Vec<_>>(), vec![late.id]);
+        assert_eq!(d.upcoming.iter().map(|r| r.id).collect::<Vec<_>>(), vec![today.id, soon.id]);
+        // One day earlier in a timezone behind, the same item is not overdue yet.
+        let behind = dues(&conn, "2026-03-14", Some(0)).unwrap();
+        assert!(behind.overdue.is_empty());
+        assert_eq!(behind.upcoming.iter().map(|r| r.id).collect::<Vec<_>>(), vec![late.id]);
+        assert_eq!(dues(&conn, TODAY, Some(MAX_WITHIN_DAYS + 1)).unwrap_err(), AppError::InvalidInput);
     }
 }
