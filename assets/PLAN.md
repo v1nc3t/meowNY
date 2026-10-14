@@ -139,7 +139,7 @@ Kept: the React client (`client/src`), Zod schemas, money and date logic, and th
 - [x] Command: budget vs actual for a month (categories + totals) (`budget_vs_actual` in `src-tauri/src/stats.rs`. Per category: budgeted (null without a budget), actual, remaining, percent used with one decimal; totals reuse the budget overview. A deleted category is listed only for months where it has transactions. Budget lookup is shared with the budget screens.)
 - [x] Command: category trend over a date range (`category_trend`: one point per month, `budgeted` null where the category has no budget, at most 120 months.)
 - [ ] Dashboard (built mobile-first): budget vs actual per category (bars/progress), month totals for income and expense, savings rate, year trend
-- [ ] Extra stats from the schema: top categories, committed recurring cost per month, planned vs paid for recurring items
+- [ ] Extra stats from the schema: top categories, committed recurring cost per month, planned vs paid for recurring items (Commands done in `stats.rs`: `year_trend` with savings and savings rate, `top_categories`, `recurring_commitments`, `recurring_planned_vs_paid`. Not shown on screen yet.)
 - [ ] Frontend formats money using the currency and locale setting
 - [ ] Tests: numbers match hand-calculated examples, months with no budget return `budgeted: null`
 

@@ -43,6 +43,10 @@ const COMMANDS: &[&str] = &[
     "show_due_notification",
     "budget_vs_actual",
     "category_trend",
+    "year_trend",
+    "top_categories",
+    "recurring_commitments",
+    "recurring_planned_vs_paid",
 ];
 
 fn main() {

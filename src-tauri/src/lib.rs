@@ -127,6 +127,10 @@ pub fn run() {
             commands::show_due_notification,
             commands::budget_vs_actual,
             commands::category_trend,
+            commands::year_trend,
+            commands::top_categories,
+            commands::recurring_commitments,
+            commands::recurring_planned_vs_paid,
         ])
         .run(tauri::generate_context!())
         .expect("error while running meowNY");
