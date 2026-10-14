@@ -7,6 +7,7 @@ pub mod db;
 pub mod keys;
 pub mod migrate;
 pub mod recovery_file;
+pub mod recurring;
 pub mod money;
 /// Dev demo data, used by `examples/seed.rs`.
 pub mod seed;
