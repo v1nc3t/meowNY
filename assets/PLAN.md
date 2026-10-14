@@ -161,7 +161,7 @@ Kept: the React client (`client/src`), Zod schemas, money and date logic, and th
   - [x] The PDF totals match the dashboard (`report::tests::the_pdf_totals_are_the_dashboard_totals` reads the text back out of the PDF file and compares it with `stats`)
   - [x] The PDF with descriptions hidden contains none (`report::tests::a_pdf_made_without_descriptions_contains_none`, on the text of the file and on its raw bytes; a PDF limited to some categories contains nothing about the others)
   - [x] A formula-looking description is neutralised in the Excel file (`text_that_looks_like_a_formula_is_written_as_text_and_comes_back_as_text`, which also checks that the file has no formula cells)
-- [ ] Review the data inventory against what the system really stores
+- [x] Review the data inventory against what the system really stores (`assets/data-inventory.md`, checked against the code and the files the app leaves on disk, and by searching the whole data folder for demo-only text, which turned up in no plain place. Corrections: the lock settings and the notification choice live in `vault.json`, not in the database. Added what was missing: the webview's stored preferences (language, sidebar state, date of the last notification), desktop notifications and the clipboard as places data goes, that the change history keeps what deleted rows said, what a backup and an export hold, and what "delete all my data" removes and leaves behind.)
 
 **Done when:** you can back up, wipe, restore, and export to JSON, CSV, Excel and PDF from one screen, choosing the period and the categories.
 
