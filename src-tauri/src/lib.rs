@@ -54,6 +54,7 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_notification::init())
         .plugin(tauri::plugin::Builder::<tauri::Wry>::new("navigation-guard").on_navigation(|_, url| is_app_url(url)).build())
         .setup(|app| {
             let dir = app.path().app_data_dir()?;
@@ -120,6 +121,9 @@ pub fn run() {
             commands::set_recurring_active,
             commands::end_recurring,
             commands::recurring_dues,
+            commands::get_notify_due,
+            commands::set_notify_due,
+            commands::show_due_notification,
         ])
         .run(tauri::generate_context!())
         .expect("error while running meowNY");

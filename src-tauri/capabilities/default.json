@@ -40,6 +40,9 @@
     "allow-set-recurring-active",
     "allow-end-recurring",
     "allow-recurring-dues",
+    "allow-get-notify-due",
+    "allow-set-notify-due",
+    "allow-show-due-notification",
     "core:event:allow-listen",
     "core:event:allow-unlisten",
     {

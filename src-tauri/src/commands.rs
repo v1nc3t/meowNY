@@ -53,6 +53,9 @@ pub const COMMANDS: &[&str] = &[
     "set_recurring_active",
     "end_recurring",
     "recurring_dues",
+    "get_notify_due",
+    "set_notify_due",
+    "show_due_notification",
 ];
 
 #[tauri::command]
@@ -296,6 +299,30 @@ pub fn end_recurring(vault: Shared, id: String) -> Result<Recurring, AppError> {
 pub fn recurring_dues(vault: Shared, within_days: Option<u32>) -> Result<Dues, AppError> {
     let today = today_text(&vault)?;
     vault.with_conn(|c| recurring::dues(c, &today, within_days))
+}
+
+#[tauri::command]
+pub fn get_notify_due(vault: Shared) -> Result<bool, AppError> {
+    vault.notify_due()
+}
+
+#[tauri::command]
+pub fn set_notify_due(vault: Shared, on: bool) -> Result<(), AppError> {
+    vault.set_notify_due(on)
+}
+
+/// Shows a desktop notification, only if the person has them on. The text comes from the UI so
+/// it is in the chosen language; it is a local notification and nothing leaves the machine.
+#[tauri::command]
+pub fn show_due_notification(app: tauri::AppHandle, vault: Shared, title: String, body: String) -> Result<(), AppError> {
+    use tauri_plugin_notification::NotificationExt;
+    if title.chars().count() > 100 || body.chars().count() > 300 {
+        return Err(AppError::InvalidInput);
+    }
+    if vault.status() != VaultStatus::Unlocked || !vault.notify_due()? {
+        return Ok(());
+    }
+    app.notification().builder().title(title).body(body).show().map_err(|_| AppError::Internal)
 }
 
 #[cfg(test)]

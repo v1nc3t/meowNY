@@ -38,6 +38,9 @@ const COMMANDS: &[&str] = &[
     "set_recurring_active",
     "end_recurring",
     "recurring_dues",
+    "get_notify_due",
+    "set_notify_due",
+    "show_due_notification",
 ];
 
 fn main() {
