@@ -8,7 +8,7 @@ use krilla::num::NormalizedF32;
 use krilla::page::PageSettings;
 use krilla::paint::{Fill, Stroke};
 use krilla::text::{Font, TextDirection};
-use krilla::Document;
+use krilla::{Document, SerializeSettings};
 
 use super::layout::{Color, Doc, Op, BOLD_FONT, REGULAR_FONT};
 use crate::vault::AppError;
@@ -25,10 +25,11 @@ fn font(data: &'static [u8]) -> Result<Font, AppError> {
     Font::new(data.to_vec().into(), 0).ok_or(AppError::Internal)
 }
 
-pub fn pdf(doc: &Doc, title: &str) -> Result<Vec<u8>, AppError> {
+/// `compress` is on for real reports. The tests turn it off so the page content can be read as text.
+pub fn pdf(doc: &Doc, title: &str, compress: bool) -> Result<Vec<u8>, AppError> {
     let regular = font(REGULAR_FONT)?;
     let bold = font(BOLD_FONT)?;
-    let mut document = Document::new();
+    let mut document = Document::new_with(SerializeSettings { compress_content_streams: compress, ..Default::default() });
     // No creation date and no author: the file says only what it is.
     document.set_metadata(Metadata::new().title(title.to_string()).creator("meowNY".to_string()));
 

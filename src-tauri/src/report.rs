@@ -291,8 +291,12 @@ pub fn read(conn: &Connection, options: &ReportOptions) -> Result<Report, AppErr
 impl Report {
     /// The report as the bytes of a PDF file.
     pub fn pdf(&self, options: &ReportOptions) -> Result<Vec<u8>, AppError> {
+        self.pdf_with(options, true)
+    }
+
+    fn pdf_with(&self, options: &ReportOptions, compress: bool) -> Result<Vec<u8>, AppError> {
         let doc = layout::build(&self.0, options)?;
-        render::pdf(&doc, &options.labels.title)
+        render::pdf(&doc, &options.labels.title, compress)
     }
 }
 
@@ -687,129 +691,13 @@ mod tests {
     }
 
     #[test]
-    fn the_pdf_is_a_valid_file_with_the_pages_of_the_layout() {
-        let w = world();
-        for page in [PageSize::A4, PageSize::Letter] {
-            let mut o = options("2026-01", "2026-03");
-            o.page = page;
-            o.include_transactions = true;
-            let report = read(&w.conn, &o).unwrap();
-            let bytes = report.pdf(&o).unwrap();
-            assert!(bytes.starts_with(b"%PDF-") && bytes.ends_with(b"%%EOF\n") || bytes.ends_with(b"%%EOF"));
-            let expected_pages = layout::build(&report.0, &o).unwrap().pages.len();
-            let file = lopdf::Document::load_mem(&bytes).unwrap();
-            assert_eq!(file.get_pages().len(), expected_pages);
-            let (width, height) = page.points();
-            let first = file.get_pages()[&1];
-            let media = file.get_object(first).unwrap().as_dict().unwrap().get(b"MediaBox").unwrap().as_array().unwrap().clone();
-            let size: Vec<f32> = media.iter().map(|n| n.as_float().unwrap()).collect();
-            assert!((size[2] - width).abs() < 0.1 && (size[3] - height).abs() < 0.1, "{size:?}");
-        }
-    }
-
-    #[test]
-    fn the_pdf_carries_a_title_and_no_names_or_dates() {
-        let w = world();
-        let o = options("2026-01", "2026-01");
-        let bytes = read(&w.conn, &o).unwrap().pdf(&o).unwrap();
-        let file = lopdf::Document::load_mem(&bytes).unwrap();
-        let text = String::from_utf8_lossy(&bytes).to_string();
-        assert!(text.contains("meowNY"));
-        assert!(!text.contains("CreationDate") && !text.contains("Author"), "no creation date or author");
-        let _ = file;
-    }
-
-    /// Reads the text out of a PDF the way a viewer's "copy" does: each font maps the codes drawn on the
-    /// page back to characters through its ToUnicode table. Returns one string per text-showing operation.
-    fn pdf_text(bytes: &[u8]) -> Vec<String> {
-        use lopdf::{content::Content, Object};
-        let file = lopdf::Document::load_mem(bytes).unwrap();
-
-        fn decode_cmap(cmap: &str) -> HashMap<u16, String> {
-            let hex = |t: &str| u32::from_str_radix(t.trim_matches(|c| c == '<' || c == '>'), 16).unwrap();
-            let utf16 = |t: &str| {
-                let digits = t.trim_matches(|c| c == '<' || c == '>');
-                let units: Vec<u16> = (0..digits.len() / 4).map(|i| u16::from_str_radix(&digits[i * 4..i * 4 + 4], 16).unwrap()).collect();
-                String::from_utf16(&units).unwrap()
-            };
-            let mut map = HashMap::new();
-            let mut mode = "";
-            for line in cmap.lines().map(str::trim) {
-                // A section starts with its size in front: "47 beginbfchar".
-                match line {
-                    _ if line.ends_with("beginbfchar") => mode = "char",
-                    _ if line.ends_with("beginbfrange") => mode = "range",
-                    "endbfchar" | "endbfrange" => mode = "",
-                    _ if mode == "char" => {
-                        let t: Vec<&str> = line.split_whitespace().collect();
-                        map.insert(hex(t[0]) as u16, utf16(t[1]));
-                    }
-                    _ if mode == "range" => {
-                        let t: Vec<&str> = line.split_whitespace().collect();
-                        let (lo, hi) = (hex(t[0]), hex(t[1]));
-                        for (i, code) in (lo..=hi).enumerate() {
-                            let mut text = utf16(t[2]);
-                            let last = text.pop().unwrap();
-                            text.push(char::from_u32(last as u32 + i as u32).unwrap());
-                            map.insert(code as u16, text);
-                        }
-                    }
-                    _ => {}
-                }
-            }
-            map
-        }
-
-        let mut shown = Vec::new();
-        for (_, page) in file.get_pages() {
-            let (resources, _) = file.get_page_resources(page).unwrap();
-            let fonts = file.get_dict_in_dict(resources.unwrap(), b"Font").unwrap();
-            let mut maps: HashMap<Vec<u8>, HashMap<u16, String>> = HashMap::new();
-            for (name, font) in fonts {
-                let font = file.get_object(font.as_reference().unwrap()).unwrap().as_dict().unwrap();
-                let id = font.get(b"ToUnicode").unwrap().as_reference().unwrap();
-                let stream = file.get_object(id).unwrap().as_stream().unwrap();
-                // A stream without a filter is stored as it is.
-                let stream = stream.decompressed_content().unwrap_or_else(|_| stream.content.clone());
-                maps.insert(name.clone(), decode_cmap(&String::from_utf8(stream).unwrap()));
-            }
-            let content = Content::decode(&file.get_page_content(page).unwrap()).unwrap();
-            let mut current: Option<&HashMap<u16, String>> = None;
-            let read = |map: &HashMap<u16, String>, bytes: &[u8]| -> String {
-                bytes.chunks(2).map(|c| map.get(&u16::from_be_bytes([c[0], c[1]])).cloned().unwrap_or_else(|| "\u{fffd}".into())).collect()
-            };
-            for op in &content.operations {
-                match op.operator.as_str() {
-                    "Tf" => current = maps.get(op.operands[0].as_name().unwrap()),
-                    "Tj" => {
-                        if let Object::String(bytes, _) = &op.operands[0] {
-                            shown.push(read(current.unwrap(), bytes));
-                        }
-                    }
-                    "TJ" => {
-                        let parts: Vec<String> = op.operands[0]
-                            .as_array()
-                            .unwrap()
-                            .iter()
-                            .filter_map(|o| if let Object::String(bytes, _) = o { Some(read(current.unwrap(), bytes)) } else { None })
-                            .collect();
-                        shown.push(parts.concat());
-                    }
-                    _ => {}
-                }
-            }
-        }
-        shown
-    }
-
-    #[test]
     fn the_text_of_the_pdf_is_what_the_layout_says() {
         let w = world();
         let mut o = options("2026-01", "2026-01");
         o.include_transactions = true;
         o.show_descriptions = true;
         let report = read(&w.conn, &o).unwrap();
-        let in_file = pdf_text(&report.pdf(&o).unwrap()).concat();
+        let in_file = pdf_text(&report.pdf_with(&o, false).unwrap()).concat();
         // The reader works: everything the layout drew can be read back from the file.
         for text in layout::build(&report.0, &o).unwrap().texts() {
             assert!(in_file.contains(text), "{text:?} is not in the PDF");
@@ -823,15 +711,17 @@ mod tests {
         let mut o = options("2026-01", "2026-03");
         o.include_transactions = true;
         o.show_descriptions = false;
-        let in_file = pdf_text(&read(&w.conn, &o).unwrap().pdf(&o).unwrap()).concat();
+        let in_file = pdf_text(&read(&w.conn, &o).unwrap().pdf_with(&o, false).unwrap()).concat();
         assert!(in_file.contains("Market") && in_file.contains("Session"), "the transactions are listed");
         assert!(!in_file.contains("PRIVATE"), "a description is in the file");
         // Nor anywhere else in the raw bytes, where a font name or a stray string could carry one.
-        let raw = read(&w.conn, &o).unwrap().pdf(&o).unwrap();
-        assert!(!raw.windows(7).any(|window| window == b"PRIVATE"));
+        let report = read(&w.conn, &o).unwrap();
+        for raw in [report.pdf(&o).unwrap(), report.pdf_with(&o, false).unwrap()] {
+            assert!(!raw.windows(7).any(|window| window == b"PRIVATE"));
+        }
 
         o.show_descriptions = true;
-        let shown = pdf_text(&read(&w.conn, &o).unwrap().pdf(&o).unwrap()).concat();
+        let shown = pdf_text(&read(&w.conn, &o).unwrap().pdf_with(&o, false).unwrap()).concat();
         for note in ["PRIVATE-PAY-NOTE", "PRIVATE-FOOD-NOTE", "PRIVATE-THERAPY-NOTE"] {
             assert!(shown.contains(note), "{note}");
         }
@@ -844,7 +734,7 @@ mod tests {
         o.category_ids = Some(vec![w.food.to_string()]);
         o.include_transactions = true;
         o.show_descriptions = true;
-        let in_file = pdf_text(&read(&w.conn, &o).unwrap().pdf(&o).unwrap()).concat();
+        let in_file = pdf_text(&read(&w.conn, &o).unwrap().pdf_with(&o, false).unwrap()).concat();
         assert!(in_file.contains("Food") && in_file.contains("Market"));
         for hidden in ["Rent", "Therapy", "Session", "Salary", "PRIVATE-THERAPY-NOTE", "PRIVATE-PAY-NOTE"] {
             assert!(!in_file.contains(hidden), "{hidden} is in the PDF");
@@ -855,7 +745,7 @@ mod tests {
     fn the_pdf_totals_are_the_dashboard_totals() {
         let w = world();
         let o = options("2026-01", "2026-01");
-        let in_file = pdf_text(&read(&w.conn, &o).unwrap().pdf(&o).unwrap());
+        let in_file = pdf_text(&read(&w.conn, &o).unwrap().pdf_with(&o, false).unwrap());
         let trend = &stats::year_trend(&w.conn, "2026").unwrap()[0];
         let f = DisplayFormat::default();
         for (label, minor) in [("income", money(&trend.income)), ("expense", money(&trend.expense)), ("savings", money(&trend.savings))] {
@@ -870,6 +760,207 @@ mod tests {
         }
     }
 
+    /// A PDF taken apart, for the tests. It understands what the report writer produces with compression
+    /// off: plain objects, one text operation per line, and fonts that map the codes drawn on the page back
+    /// to characters through a ToUnicode table. It is not a general PDF reader.
+    struct PdfFile {
+        pages: Vec<PdfPage>,
+        title: Option<String>,
+    }
+
+    struct PdfPage {
+        media_box: Vec<f32>,
+        /// One string per text-showing operation, in drawing order.
+        text: Vec<String>,
+    }
+
+    /// The numbers written as "N 0 R" in `text`, in order.
+    fn references(text: &str) -> Vec<u32> {
+        let words: Vec<&str> = text.split_whitespace().collect();
+        words.windows(3).filter(|w| w[1] == "0" && w[2].trim_end_matches(']') == "R").filter_map(|w| w[0].trim_start_matches('[').parse().ok()).collect()
+    }
+
+    fn reference_after(dict: &str, key: &str) -> Option<u32> {
+        let rest = &dict[dict.find(key)? + key.len()..];
+        references(rest.split('/').next()?).first().copied()
+    }
+
+    fn read_cmap(cmap: &str) -> HashMap<u16, String> {
+        let hex = |t: &str| u32::from_str_radix(t.trim_matches(|c| c == '<' || c == '>'), 16).unwrap();
+        let utf16 = |t: &str| {
+            let digits = t.trim_matches(|c| c == '<' || c == '>');
+            let units: Vec<u16> = (0..digits.len() / 4).map(|i| u16::from_str_radix(&digits[i * 4..i * 4 + 4], 16).unwrap()).collect();
+            String::from_utf16(&units).unwrap()
+        };
+        let mut map = HashMap::new();
+        let mut mode = "";
+        for line in cmap.lines().map(str::trim) {
+            // A section starts with its size in front: "47 beginbfchar".
+            if line.ends_with("beginbfchar") {
+                mode = "char";
+            } else if line.ends_with("beginbfrange") {
+                mode = "range";
+            } else if line == "endbfchar" || line == "endbfrange" {
+                mode = "";
+            } else if mode == "char" {
+                let t: Vec<&str> = line.split_whitespace().collect();
+                map.insert(hex(t[0]) as u16, utf16(t[1]));
+            } else if mode == "range" {
+                let t: Vec<&str> = line.split_whitespace().collect();
+                for (i, code) in (hex(t[0])..=hex(t[1])).enumerate() {
+                    let mut text = utf16(t[2]);
+                    let last = text.pop().unwrap();
+                    text.push(char::from_u32(last as u32 + i as u32).unwrap());
+                    map.insert(code as u16, text);
+                }
+            }
+        }
+        map
+    }
+
+    /// The bytes of every `(...)` string in a line of page content, with the escapes undone.
+    fn literal_strings(line: &str) -> Vec<u8> {
+        let (mut out, mut depth, mut chars) = (Vec::new(), 0, line.chars().peekable());
+        while let Some(c) = chars.next() {
+            match (depth, c) {
+                (_, '\\') if depth > 0 => {
+                    let next = chars.next().unwrap();
+                    match next {
+                        '0'..='7' => {
+                            let mut value = next.to_digit(8).unwrap();
+                            for _ in 0..2 {
+                                match chars.peek().and_then(|d| d.to_digit(8)) {
+                                    Some(d) => {
+                                        value = value * 8 + d;
+                                        chars.next();
+                                    }
+                                    None => break,
+                                }
+                            }
+                            out.push(value as u8);
+                        }
+                        'n' => out.push(b'\n'),
+                        'r' => out.push(b'\r'),
+                        't' => out.push(b'\t'),
+                        'b' => out.push(8),
+                        'f' => out.push(12),
+                        other => out.push(other as u8),
+                    }
+                }
+                (0, '(') => depth = 1,
+                (_, '(') => {
+                    depth += 1;
+                    out.push(b'(');
+                }
+                (1, ')') => depth = 0,
+                (_, ')') if depth > 1 => {
+                    depth -= 1;
+                    out.push(b')');
+                }
+                (d, c) if d > 0 => out.push(c as u8),
+                _ => {}
+            }
+        }
+        out
+    }
+
+    fn read_pdf(bytes: &[u8]) -> PdfFile {
+        // One character per byte, so binary parts survive and the text parts can be searched.
+        let raw: String = bytes.iter().map(|&b| b as char).collect();
+        assert!(raw.starts_with("%PDF-"), "not a PDF");
+        let mut objects: HashMap<u32, (String, Option<String>)> = HashMap::new();
+        for chunk in raw.split("\nendobj") {
+            let Some(at) = chunk.find(" 0 obj\n") else { continue };
+            let number: u32 = chunk[..at].rsplit(|c: char| !c.is_ascii_digit()).next().unwrap().parse().unwrap();
+            let body = &chunk[at + 7..];
+            match body.split_once("\nstream\n") {
+                Some((dict, stream)) => {
+                    objects.insert(number, (dict.to_string(), Some(stream.split("\nendstream").next().unwrap().to_string())));
+                }
+                None => {
+                    objects.insert(number, (body.to_string(), None));
+                }
+            }
+        }
+        let dict = |n: u32| objects[&n].0.clone();
+        let tree = objects.values().find(|(d, _)| d.contains("/Type /Pages")).expect("a page tree");
+        let kids = tree.0.split("/Kids").nth(1).unwrap().split(']').next().unwrap();
+        let mut pages = Vec::new();
+        for page in references(kids) {
+            let d = dict(page);
+            let media_box: Vec<f32> = d.split("/MediaBox [").nth(1).unwrap().split(']').next().unwrap().split_whitespace().map(|n| n.parse().unwrap()).collect();
+            let fonts_text = d.split("/Font <<").nth(1).unwrap().split(">>").next().unwrap();
+            let words: Vec<&str> = fonts_text.split_whitespace().collect();
+            let mut maps: HashMap<String, HashMap<u16, String>> = HashMap::new();
+            for pair in words.chunks(4) {
+                let font = dict(pair[1].parse().unwrap());
+                let cmap = reference_after(&font, "/ToUnicode").unwrap();
+                maps.insert(pair[0].trim_start_matches('/').to_string(), read_cmap(objects[&cmap].1.as_ref().unwrap()));
+            }
+            let content = objects[&reference_after(&d, "/Contents").unwrap()].1.clone().unwrap();
+            let (mut current, mut text) = (None, Vec::new());
+            for line in content.lines() {
+                if line.ends_with(" Tf") {
+                    current = Some(line.split_whitespace().next().unwrap().trim_start_matches('/').to_string());
+                } else if line.ends_with("TJ") || line.ends_with("Tj") {
+                    let map = &maps[current.as_ref().expect("text before any font")];
+                    let codes = literal_strings(line);
+                    text.push(codes.chunks(2).map(|c| map.get(&u16::from_be_bytes([c[0], c[1]])).cloned().unwrap_or_else(|| "\u{fffd}".into())).collect());
+                }
+            }
+            pages.push(PdfPage { media_box, text });
+        }
+        let title = objects.values().find_map(|(d, _)| d.split("/Title (").nth(1).map(|t| t.split(')').next().unwrap().to_string()));
+        PdfFile { pages, title }
+    }
+
+    /// Every piece of text a viewer would let you copy, in drawing order.
+    fn pdf_text(bytes: &[u8]) -> Vec<String> {
+        read_pdf(bytes).pages.into_iter().flat_map(|p| p.text).collect()
+    }
+
+    #[test]
+    fn the_pdf_is_a_valid_file_with_the_pages_of_the_layout() {
+        let w = world();
+        for page in [PageSize::A4, PageSize::Letter] {
+            let mut o = options("2026-01", "2026-03");
+            o.page = page;
+            o.include_transactions = true;
+            let report = read(&w.conn, &o).unwrap();
+            let expected_pages = layout::build(&report.0, &o).unwrap().pages.len();
+            let (width, height) = page.points();
+            // The real file, compressed, and the readable one have the same pages and page size.
+            for bytes in [report.pdf(&o).unwrap(), report.pdf_with(&o, false).unwrap()] {
+                assert!(bytes.starts_with(b"%PDF-") && String::from_utf8_lossy(&bytes).trim_end().ends_with("%%EOF"));
+                let file = read_pdf_pages_only(&bytes);
+                assert_eq!(file.len(), expected_pages);
+                for size in file {
+                    assert!((size[2] - width).abs() < 0.1 && (size[3] - height).abs() < 0.1, "{size:?}");
+                }
+            }
+            let readable = read_pdf(&report.pdf_with(&o, false).unwrap());
+            assert_eq!(readable.pages.len(), expected_pages);
+            assert!(readable.pages.iter().all(|p| p.media_box.len() == 4 && !p.text.is_empty()));
+        }
+    }
+
+    /// The page sizes of a PDF, without reading the content (which a compressed file keeps packed).
+    fn read_pdf_pages_only(bytes: &[u8]) -> Vec<Vec<f32>> {
+        let raw: String = bytes.iter().map(|&b| b as char).collect();
+        raw.split("/MediaBox [").skip(1).map(|t| t.split(']').next().unwrap().split_whitespace().map(|n| n.parse().unwrap()).collect()).collect()
+    }
+
+    #[test]
+    fn the_pdf_carries_a_title_and_no_author_or_dates() {
+        let w = world();
+        let o = options("2026-01", "2026-01");
+        let bytes = read(&w.conn, &o).unwrap().pdf(&o).unwrap();
+        assert_eq!(read_pdf(&read(&w.conn, &o).unwrap().pdf_with(&o, false).unwrap()).title.as_deref(), Some("meowNY report"));
+        let raw = String::from_utf8_lossy(&bytes).to_string();
+        for absent in ["CreationDate", "ModDate", "/Author", "CreateDate", "ModifyDate", "dc:creator"] {
+            assert!(!raw.contains(absent), "{absent} is in the file");
+        }
+    }
     /// Writes a sample report where a person can look at it: `MEOWNY_REPORT_DIR=/some/dir cargo test sample`.
     #[test]
     fn sample() {

@@ -12,7 +12,7 @@ use std::borrow::Cow;
 
 use chrono::{DateTime, SecondsFormat, Utc};
 use rusqlite::{params, Connection};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
 use crate::categories::parse_id;
@@ -287,6 +287,53 @@ fn history_json(conn: &Connection) -> Result<Vec<Value>, AppError> {
         }))
     })?;
     Ok(rows.collect::<Result<Vec<_>, _>>()?)
+}
+
+/// What an export with this selection would contain, so the screen can say so before anything is saved.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Preview {
+    pub transactions: u32,
+    /// Dates of the oldest and the newest transaction in the selection.
+    pub first_date: Option<String>,
+    pub last_date: Option<String>,
+    /// Decimal strings, like every amount that reaches the UI.
+    pub income: String,
+    pub expense: String,
+    pub categories: u32,
+    pub budgets: u32,
+    pub recurring: u32,
+    /// Entries of the change history. Only a JSON file with no selection carries them; with any
+    /// selection this is 0.
+    pub history: u32,
+}
+
+pub fn preview(conn: &Connection, selection: &Selection) -> Result<Preview, AppError> {
+    let sel = parse(selection)?;
+    let tx = conn.unchecked_transaction()?;
+    let (transactions, first_date, last_date, income, expense) = tx.query_row(
+        &format!(
+            "SELECT COUNT(*), MIN(t.payment_date), MAX(t.payment_date),
+                    COALESCE(SUM(CASE WHEN c.type = 'INCOME' THEN t.amount_minor END), 0),
+                    COALESCE(SUM(CASE WHEN c.type = 'EXPENSE' THEN t.amount_minor END), 0)
+             FROM transactions t JOIN categories c ON c.id = t.category_id WHERE {}",
+            transaction_filter(&sel)
+        ),
+        params![sel.from, sel.to],
+        |r| Ok((r.get::<_, u32>(0)?, r.get(1)?, r.get(2)?, r.get::<_, i64>(3)?, r.get::<_, i64>(4)?)),
+    )?;
+    let history = if sel.everything() { tx.query_row("SELECT COUNT(*) FROM audit_log", [], |r| r.get(0))? } else { 0 };
+    Ok(Preview {
+        transactions,
+        first_date,
+        last_date,
+        income: format_amount(income),
+        expense: format_amount(expense),
+        categories: category_rows(&tx, &sel)?.len() as u32,
+        budgets: budget_rows(&tx, &sel)?.len() as u32,
+        recurring: recurring_rows(&tx, &sel)?.len() as u32,
+        history,
+    })
 }
 
 /// The data as one JSON file. Amounts are decimal strings and ids are strings, as in the app's own
@@ -623,6 +670,48 @@ mod tests {
         let text = json(&conn, &Selection::default(), Utc::now()).unwrap();
         assert!(!text.contains("unmistakable") && !text.contains("/somewhere/private"));
         assert!(!csv(&conn, &Selection::default()).unwrap().contains("unmistakable"));
+    }
+
+    #[test]
+    fn the_preview_counts_what_the_files_contain() {
+        let (conn, _, rent, _) = lived_in();
+        for selection in [
+            Selection::default(),
+            Selection { from: Some("2026-02-01".into()), ..Default::default() },
+            Selection { category_ids: Some(vec![rent.to_string()]), ..Default::default() },
+            Selection { from: Some("2026-02-01".into()), to: Some("2026-02-28".into()), category_ids: Some(vec![rent.to_string()]) },
+            Selection { category_ids: Some(vec![]), ..Default::default() },
+        ] {
+            let shown = preview(&conn, &selection).unwrap();
+            let file = parsed(&conn, &selection);
+            let count = |section: &str| file[section].as_array().unwrap().len() as u32;
+            assert_eq!(shown.transactions, count("transactions"), "{selection:?}");
+            assert_eq!((shown.categories, shown.budgets, shown.recurring), (count("categories"), count("budgets"), count("recurring")), "{selection:?}");
+            assert_eq!(shown.history, file.get("history").map_or(0, |h| h.as_array().unwrap().len() as u32), "{selection:?}");
+            assert_eq!(read_csv(&csv(&conn, &selection).unwrap()).len() as u32 - 1, shown.transactions, "{selection:?}");
+        }
+    }
+
+    #[test]
+    fn the_preview_gives_the_span_and_the_totals() {
+        let (conn, ..) = lived_in();
+        let all = preview(&conn, &Selection::default()).unwrap();
+        assert_eq!((all.first_date.as_deref(), all.last_date.as_deref()), (Some("2026-01-25"), Some("2026-03-01")));
+        assert_eq!((all.income.as_str(), all.expense.as_str()), ("3200.00", "1885.50"), "900.00 + 905.50 rent and 80.00 of therapy");
+        assert!(all.history > 0);
+
+        let narrow = preview(&conn, &Selection { from: Some("2026-03-01".into()), ..Default::default() }).unwrap();
+        assert_eq!((narrow.transactions, narrow.first_date.as_deref(), narrow.expense.as_str()), (1, Some("2026-03-01"), "905.50"));
+        assert_eq!(narrow.history, 0, "a range is not all the data");
+    }
+
+    #[test]
+    fn the_preview_of_nothing_is_empty_not_an_error() {
+        let conn = db();
+        let empty = preview(&conn, &Selection::default()).unwrap();
+        assert_eq!((empty.transactions, empty.first_date, empty.last_date), (0, None, None));
+        assert_eq!((empty.income.as_str(), empty.expense.as_str()), ("0.00", "0.00"));
+        assert_eq!(preview(&conn, &Selection { from: Some("bad".into()), ..Default::default() }), Err(AppError::InvalidInput));
     }
 
     #[test]

@@ -21,7 +21,7 @@ Status: phase 2. The encrypted database, its migrations, key handling, app lock 
 | Phone copy, device ids, sync keys, change log | Offline use on the phone, sync between devices | Encrypted database on the phone, sync keys in the OS keychain | End-to-end encrypted sync. Lost devices can be revoked from the desktop | 8 |
 | Captured payment notifications (amount, merchant) | Phone capture into the review queue | Phone, then the review queue | Parsed on the device, never logged | 9 |
 | Bank aggregator credentials and token | Optional bank import | OS keychain only | Never in the database, exports, CLI output or sync. Included in backups only when the backup is encrypted | 10 |
-| Bank accounts and imported transactions | Optional bank import | Encrypted database | Same as other financial data. Goes through the review queue | 10 |
+| Bank accounts and imported transactions | Optional bank import | Encrypted database | Same as other financial data. Goes through the pending list (phase 9) | 10 |
 
 ## Network calls
 

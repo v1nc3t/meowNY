@@ -271,9 +271,9 @@ fn write(data: &Data, codes: &Codes) -> Result<Vec<u8>, XlsxError> {
 
 #[cfg(test)]
 mod tests {
-    use std::io::{Cursor, Read};
+    use std::collections::HashMap;
+    use std::io::Read;
 
-    use calamine::{Data as Cell, Reader, Xlsx};
     use chrono::{NaiveDate, Utc};
 
     use super::super::tests::{db, lived_in, set_budget, spend};
@@ -281,14 +281,194 @@ mod tests {
     use crate::budgets::Scope;
     use crate::categories::{self, CategoryType};
 
-    type Book = Xlsx<Cursor<Vec<u8>>>;
 
-    fn open(bytes: &[u8]) -> Book {
-        Xlsx::new(Cursor::new(bytes.to_vec())).unwrap()
+    /// What a cell holds, as a spreadsheet program would show it.
+    #[derive(Debug, Clone, PartialEq)]
+    enum Cell {
+        Empty,
+        Text(String),
+        Number(f64),
+        /// A number whose format is a date format: days since 1899-12-30.
+        Date(f64),
+        Bool(bool),
     }
 
-    fn rows(book: &mut Book, name: &str) -> Vec<Vec<Cell>> {
-        book.worksheet_range(name).unwrap().rows().map(|r| r.to_vec()).collect()
+    /// An .xlsx file taken apart, for the tests: a zip of XML parts. Only what this app writes is understood.
+    struct Book {
+        parts: HashMap<String, Vec<u8>>,
+    }
+
+    fn u16_at(b: &[u8], at: usize) -> usize {
+        u16::from_le_bytes([b[at], b[at + 1]]) as usize
+    }
+
+    fn u32_at(b: &[u8], at: usize) -> usize {
+        u32::from_le_bytes([b[at], b[at + 1], b[at + 2], b[at + 3]]) as usize
+    }
+
+    fn unzip(bytes: &[u8]) -> HashMap<String, Vec<u8>> {
+        let end = (0..=bytes.len() - 22).rev().find(|&i| bytes[i..i + 4] == [0x50, 0x4b, 0x05, 0x06]).expect("a zip file");
+        let (count, mut at) = (u16_at(bytes, end + 10), u32_at(bytes, end + 16));
+        let mut parts = HashMap::new();
+        for _ in 0..count {
+            assert_eq!(&bytes[at..at + 4], [0x50, 0x4b, 0x01, 0x02]);
+            let (method, packed) = (u16_at(bytes, at + 10), u32_at(bytes, at + 20));
+            let (name_len, extra_len, comment_len) = (u16_at(bytes, at + 28), u16_at(bytes, at + 30), u16_at(bytes, at + 32));
+            let local = u32_at(bytes, at + 42);
+            let name = String::from_utf8(bytes[at + 46..at + 46 + name_len].to_vec()).unwrap();
+            let start = local + 30 + u16_at(bytes, local + 26) + u16_at(bytes, local + 28);
+            let data = &bytes[start..start + packed];
+            let mut out = Vec::new();
+            match method {
+                0 => out.extend_from_slice(data),
+                8 => {
+                    flate2::read::DeflateDecoder::new(data).read_to_end(&mut out).unwrap();
+                }
+                other => panic!("zip method {other}"),
+            }
+            parts.insert(name, out);
+            at += 46 + name_len + extra_len + comment_len;
+        }
+        parts
+    }
+
+    fn unescape(text: &str) -> String {
+        text.replace("&lt;", "<").replace("&gt;", ">").replace("&quot;", "\"").replace("&apos;", "'").replace("&amp;", "&")
+    }
+
+    /// The value of `name="..."` in the text of a tag.
+    fn attribute<'a>(tag: &'a str, name: &str) -> Option<&'a str> {
+        let start = tag.find(&format!(" {name}=\""))? + name.len() + 3;
+        Some(&tag[start..start + tag[start..].find('"')?])
+    }
+
+    /// The text inside every `<t ...>` element of `xml`, joined.
+    fn texts_in(xml: &str) -> String {
+        let mut out = String::new();
+        let mut rest = xml;
+        while let Some(open) = rest.find("<t") {
+            let after = &rest[open..];
+            let Some(gt) = after.find('>') else { break };
+            if after.as_bytes().get(2).is_some_and(|c| *c != b'>' && *c != b' ') {
+                rest = &after[2..];
+                continue;
+            }
+            let body = &after[gt + 1..];
+            let close = body.find("</t>").unwrap();
+            out.push_str(&unescape(&body[..close]));
+            rest = &body[close..];
+        }
+        out
+    }
+
+    impl Book {
+        fn open(bytes: &[u8]) -> Book {
+            Book { parts: unzip(bytes) }
+        }
+
+        fn part(&self, name: &str) -> String {
+            String::from_utf8(self.parts[name].clone()).unwrap()
+        }
+
+        fn sheet_names(&self) -> Vec<String> {
+            let workbook = self.part("xl/workbook.xml");
+            workbook.split("<sheet ").skip(1).map(|tag| unescape(attribute(&format!(" {tag}"), "name").unwrap())).collect()
+        }
+
+        /// The number format code of each cell style, by style index, and whether it is a date format.
+        fn date_styles(&self) -> Vec<bool> {
+            let styles = self.part("xl/styles.xml");
+            let formats: HashMap<usize, String> = styles
+                .split("<numFmt ")
+                .skip(1)
+                .map(|tag| {
+                    let tag = format!(" {tag}");
+                    (attribute(&tag, "numFmtId").unwrap().parse().unwrap(), unescape(attribute(&tag, "formatCode").unwrap()))
+                })
+                .collect();
+            let xfs = styles.split("<cellXfs").nth(1).unwrap().split("</cellXfs>").next().unwrap();
+            xfs.split("<xf ")
+                .skip(1)
+                .map(|tag| {
+                    let id: usize = attribute(&format!(" {tag}"), "numFmtId").unwrap().parse().unwrap();
+                    let code = formats.get(&id).cloned().unwrap_or_default();
+                    // Quoted text and escaped characters are not format letters.
+                    let mut bare = String::new();
+                    let (mut quoted, mut escaped) = (false, false);
+                    for c in code.chars() {
+                        match (quoted, escaped, c) {
+                            (_, true, _) => escaped = false,
+                            (false, false, '\\') => escaped = true,
+                            (_, _, '"') => quoted = !quoted,
+                            (false, false, c) => bare.push(c),
+                            _ => {}
+                        }
+                    }
+                    bare.contains('y') || (id >= 14 && id <= 22 && !formats.contains_key(&id))
+                })
+                .collect()
+        }
+
+        fn shared_strings(&self) -> Vec<String> {
+            match self.parts.get("xl/sharedStrings.xml") {
+                Some(_) => self.part("xl/sharedStrings.xml").split("<si>").skip(1).map(|si| texts_in(si.split("</si>").next().unwrap())).collect(),
+                None => Vec::new(),
+            }
+        }
+
+        /// The rows of a sheet, every row as wide as the widest.
+        fn rows(&self, name: &str) -> Vec<Vec<Cell>> {
+            let index = self.sheet_names().iter().position(|n| n == name).unwrap_or_else(|| panic!("no sheet {name}"));
+            let xml = self.part(&format!("xl/worksheets/sheet{}.xml", index + 1));
+            let (shared, dates) = (self.shared_strings(), self.date_styles());
+            let data = xml.split("<sheetData>").nth(1).unwrap_or("").split("</sheetData>").next().unwrap();
+            let mut rows: Vec<Vec<(usize, Cell)>> = Vec::new();
+            for row in data.split("<row ").skip(1) {
+                let mut cells = Vec::new();
+                for cell in row.split("<c ").skip(1) {
+                    let tag_end = cell.find('>').unwrap();
+                    let tag = format!(" {}", &cell[..tag_end]);
+                    let reference = attribute(&tag, "r").unwrap();
+                    let column = reference.trim_end_matches(|c: char| c.is_ascii_digit()).bytes().fold(0, |n, b| n * 26 + (b - b'A') as usize + 1) - 1;
+                    let body = if cell[..tag_end].ends_with('/') { "" } else { cell[tag_end + 1..].split("</c>").next().unwrap() };
+                    let value = body.split("<v>").nth(1).and_then(|v| v.split("</v>").next());
+                    let style: usize = attribute(&tag, "s").map_or(0, |s| s.parse().unwrap());
+                    let kind = attribute(&tag, "t");
+                    let cell = match (kind, value) {
+                        (Some("inlineStr"), _) => Cell::Text(texts_in(body)),
+                        (_, None) => Cell::Empty,
+                        (Some("s"), Some(v)) => Cell::Text(shared[v.parse::<usize>().unwrap()].clone()),
+                        (Some("b"), Some(v)) => Cell::Bool(v == "1"),
+                        (Some("str"), Some(v)) => Cell::Text(unescape(v)),
+                        (None | Some("n"), Some(v)) if dates.get(style) == Some(&true) => Cell::Date(v.parse().unwrap()),
+                        (None | Some("n"), Some(v)) => Cell::Number(v.parse().unwrap()),
+                        (other, _) => panic!("cell type {other:?}"),
+                    };
+                    cells.push((column, cell));
+                }
+                rows.push(cells);
+            }
+            let width = rows.iter().flatten().map(|(c, _)| c + 1).max().unwrap_or(0);
+            rows.into_iter()
+                .map(|cells| {
+                    let mut row = vec![Cell::Empty; width];
+                    for (column, cell) in cells {
+                        row[column] = cell;
+                    }
+                    row
+                })
+                .collect()
+        }
+    }
+
+    type Sheets = Book;
+
+    fn open(bytes: &[u8]) -> Sheets {
+        Book::open(bytes)
+    }
+
+    fn rows(book: &mut Sheets, name: &str) -> Vec<Vec<Cell>> {
+        book.rows(name)
     }
 
     fn build(conn: &Connection, selection: &Selection, format: &DisplayFormat) -> Vec<u8> {
@@ -301,14 +481,11 @@ mod tests {
     }
 
     fn styles(bytes: &[u8]) -> String {
-        let mut archive = zip::ZipArchive::new(Cursor::new(bytes.to_vec())).unwrap();
-        let mut text = String::new();
-        archive.by_name("xl/styles.xml").unwrap().read_to_string(&mut text).unwrap();
-        text
+        Book::open(bytes).part("xl/styles.xml")
     }
 
     fn strings(cells: &[Vec<Cell>]) -> Vec<String> {
-        cells.iter().flatten().filter_map(|c| if let Cell::String(s) = c { Some(s.clone()) } else { None }).collect()
+        cells.iter().flatten().filter_map(|c| if let Cell::Text(s) = c { Some(s.clone()) } else { None }).collect()
     }
 
     #[test]
@@ -325,18 +502,17 @@ mod tests {
         let mut book = open(&build(&conn, &Selection::default(), &DisplayFormat::default()));
         let sheet = rows(&mut book, "Transactions");
         assert_eq!(sheet.len(), 5, "heading and four transactions");
-        assert_eq!(sheet[0][4], Cell::String("Amount (EUR)".into()));
+        assert_eq!(sheet[0][4], Cell::Text("Amount (EUR)".into()));
 
-        let Cell::DateTime(day) = &sheet[1][0] else { panic!("the date is a date cell: {:?}", sheet[1][0]) };
-        assert_eq!(day.as_f64(), serial(2026, 1, 25));
-        assert_eq!(sheet[1][1], Cell::String("INCOME".into()));
-        assert_eq!(sheet[1][3], Cell::String("Pay".into()));
-        assert_eq!(sheet[1][5], Cell::String("Monthly pay".into()));
+        assert_eq!(sheet[1][0], Cell::Date(serial(2026, 1, 25)), "a real date, not text");
+        assert_eq!(sheet[1][1], Cell::Text("INCOME".into()));
+        assert_eq!(sheet[1][3], Cell::Text("Pay".into()));
+        assert_eq!(sheet[1][5], Cell::Text("Monthly pay".into()));
         for (row, minor) in [(1, 320_000), (2, 90_000), (3, 8_000), (4, 90_550)] {
-            let Cell::Float(value) = sheet[row][4] else { panic!("money is a number: {:?}", sheet[row][4]) };
+            let Cell::Number(value) = sheet[row][4] else { panic!("money is a number: {:?}", sheet[row][4]) };
             assert_eq!((value * 100.0).round() as i64, minor, "row {row}");
         }
-        assert_eq!(sheet[1][5], Cell::String("Monthly pay".into()));
+        assert_eq!(sheet[1][5], Cell::Text("Monthly pay".into()));
     }
 
     #[test]
@@ -408,16 +584,14 @@ mod tests {
             }
         }
         let sheet = rows(&mut book, "Transactions");
-        let evil = sheet.iter().find(|r| matches!(&r[3], Cell::String(s) if s.contains("cmd"))).unwrap();
-        assert_eq!((&evil[3], &evil[5]), (&Cell::String("'=cmd|' /C calc'!A0".into()), &Cell::String("'+1+1".into())));
+        let evil = sheet.iter().find(|r| matches!(&r[3], Cell::Text(s) if s.contains("cmd"))).unwrap();
+        assert_eq!((&evil[3], &evil[5]), (&Cell::Text("'=cmd|' /C calc'!A0".into()), &Cell::Text("'+1+1".into())));
         // No cell is a formula: the file has no <f> elements at all.
-        let mut archive = zip::ZipArchive::new(Cursor::new(bytes)).unwrap();
-        for i in 0..archive.len() {
-            let mut part = String::new();
-            let mut file = archive.by_index(i).unwrap();
-            if file.name().starts_with("xl/worksheets/") && file.read_to_string(&mut part).is_ok() {
-                assert!(!part.contains("<f>") && !part.contains("<f "), "{} has a formula", file.name());
-            }
+        let sheets: Vec<String> = Book::open(&bytes).parts.keys().filter(|n| n.starts_with("xl/worksheets/sheet")).cloned().collect();
+        assert_eq!(sheets.len(), 5);
+        for name in sheets {
+            let part = Book::open(&bytes).part(&name);
+            assert!(!part.contains("<f>") && !part.contains("<f "), "{name} has a formula");
         }
     }
 
@@ -429,10 +603,10 @@ mod tests {
         let dashboard = crate::stats::year_trend(&conn, "2026").unwrap();
         assert_eq!(sheet.len(), 1 + 3, "January to March, the months with transactions");
         for row in &sheet[1..] {
-            let Cell::DateTime(first) = &row[0] else { panic!("{:?}", row[0]) };
-            let month = (0..12).find(|m| serial(2026, m + 1, 1) == first.as_f64()).unwrap() as usize;
+            let Cell::Date(first) = &row[0] else { panic!("{:?}", row[0]) };
+            let month = (0..12).find(|m| serial(2026, m + 1, 1) == *first).unwrap() as usize;
             let point = &dashboard[month];
-            let number = |cell: &Cell| if let Cell::Float(f) = cell { *f } else { panic!("{cell:?}") };
+            let number = |cell: &Cell| if let Cell::Number(f) = cell { *f } else { panic!("{cell:?}") };
             let money = |text: &str| text.parse::<f64>().unwrap();
             assert_eq!(number(&row[1]), money(&point.income), "income, {}", point.month);
             assert_eq!(number(&row[2]), money(&point.expense), "expense, {}", point.month);
@@ -443,8 +617,8 @@ mod tests {
             }
         }
         // January: 3200.00 earned, nothing spent. February: 980.00 spent with no income.
-        assert_eq!(sheet[1][1], Cell::Float(3200.0));
-        assert_eq!(sheet[1][4], Cell::Float(1.0));
+        assert_eq!(sheet[1][1], Cell::Number(3200.0));
+        assert_eq!(sheet[1][4], Cell::Number(1.0));
         assert_eq!(sheet[2][4], Cell::Empty);
     }
 
@@ -457,7 +631,7 @@ mod tests {
         let mut book = open(&build(&conn, &Selection::default(), &DisplayFormat::default()));
         let sheet = rows(&mut book, "Monthly summary");
         assert_eq!(sheet.len(), 1 + 4, "November, December, January, February");
-        assert_eq!(sheet[2][2], Cell::Float(0.0));
+        assert_eq!(sheet[2][2], Cell::Number(0.0));
     }
 
     #[test]
@@ -477,7 +651,7 @@ mod tests {
         assert_eq!(rows(&mut book, "Categories").len(), 2);
         assert_eq!(rows(&mut book, "Recurring").len(), 2);
         let expense_only = rows(&mut book, "Monthly summary");
-        assert!(expense_only[1..].iter().all(|r| r[1] == Cell::Float(0.0)), "no income in a Rent-only export");
+        assert!(expense_only[1..].iter().all(|r| r[1] == Cell::Number(0.0)), "no income in a Rent-only export");
 
         let range = Selection { from: Some("2026-03-01".into()), ..Default::default() };
         assert_eq!(rows(&mut open(&build(&conn, &range, &DisplayFormat::default())), "Transactions").len(), 2);
@@ -492,20 +666,20 @@ mod tests {
         let budgets = rows(&mut book, "Budgets");
         let stored: i64 = conn.query_row("SELECT count(*) FROM budgets", [], |r| r.get(0)).unwrap();
         assert_eq!(budgets.len() as i64, 1 + stored);
-        let global = budgets.iter().find(|r| r[2] == Cell::String("GLOBAL".into())).unwrap();
-        assert_eq!((&global[3], &global[4]), (&Cell::Empty, &Cell::Float(2200.0)));
-        let removed = budgets.iter().find(|r| matches!(&r[0], Cell::DateTime(d) if d.as_f64() == serial(2026, 3, 1)) && r[3] == Cell::String("Therapy".into()));
+        let global = budgets.iter().find(|r| r[2] == Cell::Text("GLOBAL".into())).unwrap();
+        assert_eq!((&global[3], &global[4]), (&Cell::Empty, &Cell::Number(2200.0)));
+        let removed = budgets.iter().find(|r| r[0] == Cell::Date(serial(2026, 3, 1)) && r[3] == Cell::Text("Therapy".into()));
         assert_eq!(removed.map(|r| &r[4]), Some(&Cell::Empty), "a removed budget has no limit");
 
         let recurring = rows(&mut book, "Recurring");
         assert_eq!(recurring.len(), 3);
-        let rent_item = recurring.iter().find(|r| r[0] == Cell::String("Rent".into())).unwrap();
-        assert_eq!(rent_item[1], Cell::String("Rent".into()));
-        assert_eq!((&rent_item[3], &rent_item[4], &rent_item[5]), (&Cell::Float(100.0), &Cell::Float(1.0), &Cell::String("MONTH".into())));
+        let rent_item = recurring.iter().find(|r| r[0] == Cell::Text("Rent".into())).unwrap();
+        assert_eq!(rent_item[1], Cell::Text("Rent".into()));
+        assert_eq!((&rent_item[3], &rent_item[4], &rent_item[5]), (&Cell::Number(100.0), &Cell::Number(1.0), &Cell::Text("MONTH".into())));
         assert_eq!(rent_item[9], Cell::Bool(true));
 
         let sheet = rows(&mut book, "Categories");
-        let gone = sheet.iter().find(|r| r[0] == Cell::String("Therapy".into())).unwrap();
+        let gone = sheet.iter().find(|r| r[0] == Cell::Text("Therapy".into())).unwrap();
         assert_eq!(gone[2], Cell::Bool(true));
     }
 
@@ -525,7 +699,7 @@ mod tests {
         spend(&conn, food, "Old", "1.00", "1850-05-01", None);
         set_budget(&conn, CategoryType::Expense, Scope::Global, None, "2026-01", Some("10.00"));
         let mut book = open(&build(&conn, &Selection::default(), &DisplayFormat::default()));
-        assert_eq!(rows(&mut book, "Transactions")[1][0], Cell::String("1850-05-01".into()));
+        assert_eq!(rows(&mut book, "Transactions")[1][0], Cell::Text("1850-05-01".into()));
     }
 
     #[test]

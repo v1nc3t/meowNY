@@ -78,6 +78,7 @@ pub const COMMANDS: &[&str] = &[
     "export_csv",
     "export_xlsx",
     "export_pdf",
+    "export_preview",
 ];
 
 #[tauri::command]
@@ -496,6 +497,12 @@ fn save_export(app: &tauri::AppHandle, name: String, kind: &str, extension: &str
     let path = path.into_path().map_err(|_| AppError::Internal)?;
     backup::write_file(&path, bytes)?;
     Ok(true)
+}
+
+/// What an export of this selection would contain: counts, the span of dates and the totals.
+#[tauri::command]
+pub fn export_preview(vault: Shared, selection: Selection) -> Result<export::Preview, AppError> {
+    vault.with_conn(|c| export::preview(c, &selection))
 }
 
 /// The data as a JSON file, or part of it: see `Selection`. Not encrypted.

@@ -9,6 +9,7 @@ export const pageLoaders = {
   categories: () => import('./CategoriesPage'),
   budgets: () => import('./BudgetsPage'),
   recurring: () => import('./RecurringPage'),
+  export: () => import('./ExportPage'),
   settings: () => import('./SettingsPage'),
 } as const
 

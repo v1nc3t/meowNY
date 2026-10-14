@@ -29,6 +29,7 @@ const SAME_AS_ENGLISH = new Set([
   'fr lock.15m', 'fr tx.title', 'fr budgets.title', 'fr budgets.budget',
   'it budgets.budget',
   'fr report.date', 'fr report.page',
+  'de nav.export', 'de export.title', 'fr export.format', 'ro export.format',
   'es keys.groupGeneral', 'ro keys.groupGeneral', 'fr keys.groupActions', 'fr settings.notifications',
 ])
 

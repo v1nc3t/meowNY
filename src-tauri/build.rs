@@ -57,6 +57,7 @@ const COMMANDS: &[&str] = &[
     "export_csv",
     "export_xlsx",
     "export_pdf",
+    "export_preview",
 ];
 
 fn main() {
