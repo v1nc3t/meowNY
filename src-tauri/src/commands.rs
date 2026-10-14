@@ -5,11 +5,16 @@ use std::sync::Arc;
 
 use tauri::State;
 
+use crate::backup;
 use crate::categories::{self, Category, CategoryType};
 use crate::budgets::{self, Budget, Overview, SetBudget};
 use crate::clock;
 use crate::currency::{self, Conversion};
+use crate::display::DisplayFormat;
+use crate::export::{self, Selection};
+use crate::report::{self, ReportOptions};
 use crate::recurring::{self, Dues, NewRecurring, Recurring, RecurringPatch};
+use crate::schedule::{self, Schedule};
 use crate::stats::{self, BudgetVsActual, CategoryTrend, Commitments, PlannedVsPaid, TopCategory, YearPoint};
 use crate::transactions::{self, Filter, NewTransaction, Page, Transaction, TransactionPatch};
 use crate::vault::{AppError, LockPrefs, Settings, Vault, VaultStatus};
@@ -63,6 +68,17 @@ pub const COMMANDS: &[&str] = &[
     "top_categories",
     "recurring_commitments",
     "recurring_planned_vs_paid",
+    "create_backup",
+    "restore_backup",
+    "restore_backup_new_vault",
+    "get_backup_schedule",
+    "set_backup_schedule",
+    "clear_backup_schedule",
+    "export_json",
+    "export_csv",
+    "export_xlsx",
+    "export_pdf",
+    "export_preview",
 ];
 
 #[tauri::command]
@@ -367,6 +383,166 @@ pub fn recurring_commitments(vault: Shared) -> Result<Commitments, AppError> {
 #[tauri::command]
 pub fn recurring_planned_vs_paid(vault: Shared, month: String) -> Result<Vec<PlannedVsPaid>, AppError> {
     vault.with_conn(|c| stats::planned_vs_paid(c, &month))
+}
+
+/// Asks the person to pick a backup file. None if they cancel.
+fn pick_backup_file(app: &tauri::AppHandle) -> Result<Option<std::path::PathBuf>, AppError> {
+    use tauri_plugin_dialog::DialogExt;
+    let Some(path) = app
+        .dialog()
+        .file()
+        .add_filter("meowNY backup", &[backup::EXTENSION])
+        .blocking_pick_file()
+    else {
+        return Ok(None);
+    };
+    Ok(Some(path.into_path().map_err(|_| AppError::Internal)?))
+}
+
+/// Writes all data to one encrypted file in a place the person picks, locked with the passphrase
+/// they chose for this backup. Returns false if they cancel the save dialog.
+#[tauri::command]
+pub async fn create_backup(app: tauri::AppHandle, vault: Shared<'_>, passphrase: String) -> Result<bool, AppError> {
+    use tauri_plugin_dialog::DialogExt;
+    let snapshot = vault.with_conn(|c| backup::dump(c))?;
+    let bytes = backup::seal(&snapshot, &passphrase)?;
+    let name = format!("meowny-backup-{}.{}", today_text(&vault)?, backup::EXTENSION);
+    let Some(path) = app
+        .dialog()
+        .file()
+        .set_file_name(name)
+        .add_filter("meowNY backup", &[backup::EXTENSION])
+        .blocking_save_file()
+    else {
+        return Ok(false);
+    };
+    let path = path.into_path().map_err(|_| AppError::Internal)?;
+    backup::write_file(&path, &bytes)?;
+    Ok(true)
+}
+
+/// Replaces all data with a backup the person picks. `confirmation` must be "RESTORE". Returns false
+/// if they cancel the file dialog. Nothing changes unless the whole backup is valid.
+#[tauri::command]
+pub async fn restore_backup(
+    app: tauri::AppHandle,
+    vault: Shared<'_>,
+    passphrase: String,
+    confirmation: String,
+) -> Result<bool, AppError> {
+    if confirmation != "RESTORE" {
+        return Err(AppError::InvalidInput);
+    }
+    if vault.status() != VaultStatus::Unlocked {
+        return Err(AppError::Locked);
+    }
+    let Some(path) = pick_backup_file(&app)? else { return Ok(false) };
+    vault.restore_backup(&backup::read_file(&path)?, &passphrase, &confirmation)?;
+    Ok(true)
+}
+
+/// First run from a backup: new keys and a new data file, filled from the backup. `vault_passphrase`
+/// is the optional app passphrase for this install. Returns the recovery key, or None if the person
+/// cancels the file dialog.
+#[tauri::command]
+pub async fn restore_backup_new_vault(
+    app: tauri::AppHandle,
+    vault: Shared<'_>,
+    passphrase: String,
+    vault_passphrase: Option<String>,
+) -> Result<Option<String>, AppError> {
+    if vault.status() != VaultStatus::NotSetUp {
+        return Err(AppError::AlreadySetUp);
+    }
+    let Some(path) = pick_backup_file(&app)? else { return Ok(None) };
+    let key = vault.create_from_backup(&backup::read_file(&path)?, &passphrase, vault_passphrase.as_deref())?;
+    Ok(Some(key))
+}
+
+/// The scheduled backup setup, without its passphrase. None when there is none.
+#[tauri::command]
+pub fn get_backup_schedule(vault: Shared) -> Result<Option<Schedule>, AppError> {
+    vault.with_conn(|c| schedule::get(c))
+}
+
+/// Starts (or replaces) scheduled backups: asks for the folder, then makes the first backup there.
+/// `every_days` is 1, 7 or 30. Returns false if the person cancels the folder dialog.
+#[tauri::command]
+pub async fn set_backup_schedule(
+    app: tauri::AppHandle,
+    vault: Shared<'_>,
+    passphrase: String,
+    every_days: u32,
+) -> Result<bool, AppError> {
+    use tauri_plugin_dialog::DialogExt;
+    backup::check_passphrase(&passphrase)?;
+    let Some(folder) = app.dialog().file().blocking_pick_folder() else { return Ok(false) };
+    let folder = folder.into_path().map_err(|_| AppError::Internal)?;
+    schedule::start(&vault, &folder, &passphrase, every_days, chrono::Utc::now())?;
+    Ok(true)
+}
+
+#[tauri::command]
+pub fn clear_backup_schedule(vault: Shared) -> Result<(), AppError> {
+    vault.with_conn(|c| schedule::stop(c))
+}
+
+/// Asks where to save `text`, then writes it there readable by the owner only. False if the person cancels.
+/// These files are not encrypted; the export screen says so.
+fn save_export(app: &tauri::AppHandle, name: String, kind: &str, extension: &str, bytes: &[u8]) -> Result<bool, AppError> {
+    use tauri_plugin_dialog::DialogExt;
+    let Some(path) = app.dialog().file().set_file_name(name).add_filter(kind, &[extension]).blocking_save_file() else {
+        return Ok(false);
+    };
+    let path = path.into_path().map_err(|_| AppError::Internal)?;
+    backup::write_file(&path, bytes)?;
+    Ok(true)
+}
+
+/// What an export of this selection would contain: counts, the span of dates and the totals.
+#[tauri::command]
+pub fn export_preview(vault: Shared, selection: Selection) -> Result<export::Preview, AppError> {
+    vault.with_conn(|c| export::preview(c, &selection))
+}
+
+/// The data as a JSON file, or part of it: see `Selection`. Not encrypted.
+#[tauri::command]
+pub async fn export_json(app: tauri::AppHandle, vault: Shared<'_>, selection: Selection) -> Result<bool, AppError> {
+    let text = vault.with_conn(|c| export::json(c, &selection, chrono::Utc::now()))?;
+    save_export(&app, format!("meowny-export-{}.json", today_text(&vault)?), "JSON", "json", text.as_bytes())
+}
+
+/// Transactions as a CSV file. Cells that start like a formula are written as text. Not encrypted.
+#[tauri::command]
+pub async fn export_csv(app: tauri::AppHandle, vault: Shared<'_>, selection: Selection) -> Result<bool, AppError> {
+    let text = vault.with_conn(|c| export::csv(c, &selection))?;
+    save_export(&app, format!("meowny-transactions-{}.csv", today_text(&vault)?), "CSV", "csv", text.as_bytes())
+}
+
+/// An Excel workbook with sheets for transactions, categories, budgets, recurring items and a monthly
+/// summary. `format` sets how dates and money look; leave it out for ISO dates and a plain number.
+/// Text cells that start like a formula are written as text. Not encrypted.
+#[tauri::command]
+pub async fn export_xlsx(
+    app: tauri::AppHandle,
+    vault: Shared<'_>,
+    selection: Selection,
+    format: Option<DisplayFormat>,
+) -> Result<bool, AppError> {
+    let bytes = vault.with_conn(|c| export::workbook(c, &selection, &format.unwrap_or_default()))?;
+    save_export(&app, format!("meowny-{}.xlsx", today_text(&vault)?), "Excel workbook", "xlsx", &bytes)
+}
+
+/// A PDF report for a month or a range of months: totals, charts, budget against actual and, if asked,
+/// the transactions. Made on this computer. Not encrypted, so `showDescriptions` off is the way to share
+/// one without private details.
+#[tauri::command]
+pub async fn export_pdf(app: tauri::AppHandle, vault: Shared<'_>, options: ReportOptions) -> Result<bool, AppError> {
+    let report = vault.with_conn(|c| report::read(c, &options))?;
+    // Laying out and writing the file can take a moment for a long list; the database is free meanwhile.
+    let bytes = report.pdf(&options)?;
+    let name = format!("meowny-report-{}-{}.pdf", options.from_month, options.to_month);
+    save_export(&app, name, "PDF report", "pdf", &bytes)
 }
 
 #[cfg(test)]

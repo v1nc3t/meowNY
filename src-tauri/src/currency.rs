@@ -116,7 +116,7 @@ fn convert_transactions(tx: &rusqlite::Transaction, rate: Rate) -> Result<u32, A
 
 fn convert_recurring(tx: &rusqlite::Transaction, rate: Rate) -> Result<u32, AppError> {
     let rows: Vec<(i64, i64)> = tx
-        .prepare("SELECT id, amount_minor FROM recurring_transactions")?
+        .prepare("SELECT id, amount_minor FROM recurring_transactions WHERE amount_minor IS NOT NULL")?
         .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?
         .collect::<Result<_, _>>()?;
     let mut update = tx.prepare("UPDATE recurring_transactions SET amount_minor = ?1 WHERE id = ?2")?;
@@ -231,6 +231,27 @@ mod tests {
         assert_eq!(rent, 86_400);
         let limit: i64 = conn.query_row("SELECT amount_limit_minor FROM budgets", [], |r| r.get(0)).unwrap();
         assert_eq!(limit, 108_000);
+    }
+
+    #[test]
+    fn a_bill_with_no_fixed_amount_stays_without_one_when_the_currency_changes() {
+        let (mut conn, food) = db();
+        conn.execute(
+            "INSERT INTO recurring_transactions (category_id, name, amount_minor, start_date, interval_unit, next_due_date)
+             VALUES (?1, 'Rent', 90000, '2026-01-01', 'MONTH', '2026-02-01'), (?1, 'Electricity', NULL, '2026-01-01', 'MONTH', '2026-02-01')",
+            [food],
+        )
+        .unwrap();
+        let done = change(&mut conn, "USD", Some("2"), "2026-10-01").unwrap();
+        assert_eq!(done.recurring, 1, "only the item with an amount was converted");
+        let amounts: Vec<Option<i64>> = conn
+            .prepare("SELECT amount_minor FROM recurring_transactions ORDER BY id")
+            .unwrap()
+            .query_map([], |r| r.get(0))
+            .unwrap()
+            .map(Result::unwrap)
+            .collect();
+        assert_eq!(amounts, [Some(180_000), None]);
     }
 
     #[test]

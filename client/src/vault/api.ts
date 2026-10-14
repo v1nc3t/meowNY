@@ -29,6 +29,15 @@ const LockPrefsShape = z.object({
   lock_on_close: z.boolean(),
 })
 
+const BackupSchedule = z.object({
+  folder: z.string(),
+  everyDays: z.number().int(),
+  /** UTC, ISO 8601. */
+  lastAttemptAt: z.string().nullable(),
+  lastOk: z.boolean(),
+})
+export type BackupSchedule = z.infer<typeof BackupSchedule>
+
 const none = (passphrase: string) => (passphrase === '' ? null : passphrase)
 const done = <T>(promise: Promise<T>) => promise.then(() => undefined)
 
@@ -49,6 +58,28 @@ export const vault = {
   saveRecoveryKey: (code: string) => call('save_recovery_key', z.boolean(), { code }),
   /** Replaces the recovery key; the old one stops working. */
   newRecoveryKey: (passphrase: string) => call('new_recovery_key', RecoveryKey, { passphrase: none(passphrase) }),
+  /**
+   * Opens a save dialog and writes an encrypted backup locked with `passphrase`. False when the person cancels.
+   */
+  createBackup: (passphrase: string) => call('create_backup', z.boolean(), { passphrase }),
+  /**
+   * Opens a file dialog and replaces all data with the backup the person picks. `confirmation` must be "RESTORE".
+   * False when the person cancels.
+   */
+  restoreBackup: (passphrase: string, confirmation: string) =>
+    call('restore_backup', z.boolean(), { passphrase, confirmation }),
+  /** First run: new data file filled from a backup. Returns the recovery key, or null when the person cancels. */
+  restoreFromBackup: (backupPassphrase: string, passphrase: string) =>
+    call('restore_backup_new_vault', RecoveryKey.nullable(), { passphrase: backupPassphrase, vaultPassphrase: none(passphrase) }),
+  /** The scheduled backup setup, never its passphrase. Null when there is none. */
+  backupSchedule: () => call('get_backup_schedule', BackupSchedule.nullable()),
+  /**
+   * Asks for a folder, makes a first backup there and then repeats every 1, 7 or 30 days while the app is open.
+   * False when the person cancels the folder dialog.
+   */
+  startBackupSchedule: (passphrase: string, everyDays: number) =>
+    call('set_backup_schedule', z.boolean(), { passphrase, everyDays }),
+  stopBackupSchedule: () => done(call('clear_backup_schedule', Nothing)),
   unlock: (passphrase: string) => done(call('unlock_vault', Nothing, { passphrase: none(passphrase) })),
   lock: () => done(call('lock_vault', Nothing)),
   touch: () => done(call('touch_activity', Nothing)),

@@ -86,9 +86,21 @@ Money is stored as integer minor units (`*_minor` columns). Constraint tests are
 
 ### Demo data
 
+Sixteen months of demo data, with dates relative to today (`src-tauri/seeds/dev.sql`): categories, budgets that change over time, recurring items that are paid, overdue, paused and ended, a deleted category and a few hundred transactions, including awkward text (accents, Romanian and Japanese letters, quotes, cells that look like formulas) for trying the exports.
+
+To put it in the desktop app, quit the app and run:
+
 ```bash
 cd src-tauri
+cargo run --example dev_vault -- ~/.local/share/org.meowny.app
+```
+
+This **deletes the app's data** (the data file, its key in the OS keychain, the settings file and any backups in that folder, as "delete all my data" does), sets the app up again with the demo data and prints the new recovery key. The lock settings are kept. The data file has no passphrase unless you set `MEOWNY_DEV_PASSPHRASE` for the run. The folder above is where the app keeps its data on Linux. Run the command again to start over.
+
+To load it into a separate file instead, which the desktop app does not open:
+
+```bash
 cargo run --example seed -- /path/to/dev.db <64-hex-character-key>
 ```
 
-This creates a separate encrypted database with demo categories, budgets, recurring items and transactions, using the key you pass. The desktop app does not open it: the app derives its own key from the OS keychain. Use the seed file for inspecting the schema and for tests. It refuses a database that already has data.
+It refuses a database that already has data.

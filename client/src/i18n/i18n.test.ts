@@ -28,6 +28,8 @@ const SAME_AS_ENGLISH = new Set([
   'fr common.type', 'fr common.description', 'fr nav.transactions', 'fr nav.budgets', 'fr lock.1m', 'fr lock.5m',
   'fr lock.15m', 'fr tx.title', 'fr budgets.title', 'fr budgets.budget',
   'it budgets.budget',
+  'fr report.date', 'fr report.page',
+  'de nav.export', 'de export.title', 'fr export.format', 'ro export.format',
   'es keys.groupGeneral', 'ro keys.groupGeneral', 'fr keys.groupActions', 'fr settings.notifications',
 ])
 
@@ -45,6 +47,12 @@ test('no translation is empty or an untranslated copy of the English text', () =
 test('the confirmation word the app asks for is never translated', () => {
   for (const language of LANGUAGES) {
     assert.match(language.messages['settings.deleteConfirm'], /DELETE/, language.code)
+  }
+})
+
+test('the restore confirmation word is never translated either', () => {
+  for (const language of LANGUAGES) {
+    assert.match(language.messages['settings.restoreConfirm'], /RESTORE/, language.code)
   }
 })
 

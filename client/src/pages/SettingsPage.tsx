@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react'
-import { errorText, inDesktopApp, vault, type LockPrefs } from '../vault/api'
+import { errorText, inDesktopApp, vault, type BackupSchedule, type LockPrefs } from '../vault/api'
 import { currencyLabel } from '../api/currencies'
 import { formatExample, localeOptions, zoneOptions } from '../api/locales'
 import { useI18n } from '../i18n/context'
@@ -8,8 +8,23 @@ import ChangeCurrencyModal from '../components/ChangeCurrencyModal'
 import Dropdown from '../components/Dropdown'
 import PasswordField from '../vault/PasswordField'
 import RecoveryKeyPanel from '../vault/RecoveryKeyPanel'
-import { LOCK_AFTER_CHOICES, nearestLockChoice, type Settings } from '../vault/rules'
+import { backupPassphraseProblem, LOCK_AFTER_CHOICES, nearestLockChoice, type Settings } from '../vault/rules'
 import { useNotice } from '../useNotice'
+
+const EVERY_CHOICES = [
+  { days: 1, labelKey: 'settings.scheduleDaily' },
+  { days: 7, labelKey: 'settings.scheduleWeekly' },
+  { days: 30, labelKey: 'settings.scheduleMonthly' },
+] as const
+
+/** A UTC timestamp in the person's own format and time zone. */
+function whenText(iso: string, locale: string, timezone: string): string {
+  try {
+    return new Date(iso).toLocaleString(locale, { timeZone: timezone, dateStyle: 'medium', timeStyle: 'short' })
+  } catch {
+    return iso
+  }
+}
 
 export default function SettingsPage() {
   const { t, language, setLanguage } = useI18n()
@@ -19,6 +34,10 @@ export default function SettingsPage() {
   const [location, setLocation] = useState('')
   const [message, setMessage] = useNotice()
   const [confirmation, setConfirmation] = useState('')
+  const [restoreWord, setRestoreWord] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [schedule, setSchedule] = useState<BackupSchedule | null>(null)
+  const [every, setEvery] = useState('7')
   const [newKey, setNewKey] = useState<string | null>(null)
   const [notifyDue, setNotifyDue] = useState<boolean | null>(null)
   const [lockAfter, setLockAfter] = useState('300')
@@ -46,6 +65,7 @@ export default function SettingsPage() {
     )
     vault.notifyDue().then(setNotifyDue, (e) => setMessage(errorText(e)))
     vault.dataLocation().then(setLocation, () => undefined)
+    vault.backupSchedule().then(setSchedule, (e) => setMessage(errorText(e)))
   }, [setMessage])
 
   if (!inDesktopApp()) return <p>{t('settings.unavailable')}</p>
@@ -103,6 +123,73 @@ export default function SettingsPage() {
     } catch (error) {
       setMessage(errorText(error))
     }
+  }
+
+  async function onBackup(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    const form = event.currentTarget
+    const data = new FormData(form)
+    const passphrase = String(data.get('backup_passphrase'))
+    const problem = backupPassphraseProblem(passphrase, String(data.get('backup_confirm')))
+    if (problem) return setMessage(problem)
+    setBusy(true)
+    try {
+      if (await vault.createBackup(passphrase)) {
+        form.reset()
+        setMessage(t('settings.backupSaved'))
+      }
+    } catch (error) {
+      setMessage(errorText(error))
+    }
+    setBusy(false)
+  }
+
+  const everyLabel = (days: number) => {
+    const choice = EVERY_CHOICES.find((c) => c.days === days)
+    return choice ? t(choice.labelKey) : String(days)
+  }
+
+  async function onSchedule(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    const form = event.currentTarget
+    const data = new FormData(form)
+    const passphrase = String(data.get('schedule_passphrase'))
+    const problem = backupPassphraseProblem(passphrase, String(data.get('schedule_confirm')))
+    if (problem) return setMessage(problem)
+    setBusy(true)
+    try {
+      if (await vault.startBackupSchedule(passphrase, Number(every))) {
+        form.reset()
+        setSchedule(await vault.backupSchedule())
+        setMessage(t('settings.scheduleStarted'))
+      }
+    } catch (error) {
+      setMessage(errorText(error))
+    }
+    setBusy(false)
+  }
+
+  async function onStopSchedule() {
+    try {
+      await vault.stopBackupSchedule()
+      setSchedule(null)
+      setMessage(t('settings.scheduleStopped'))
+    } catch (error) {
+      setMessage(errorText(error))
+    }
+  }
+
+  async function onRestore(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    const passphrase = String(new FormData(event.currentTarget).get('restore_passphrase'))
+    setBusy(true)
+    try {
+      // Everything on screen is old data now, so start over from the top.
+      if (await vault.restoreBackup(passphrase, restoreWord)) window.location.assign('/')
+    } catch (error) {
+      setMessage(errorText(error))
+    }
+    setBusy(false)
   }
 
   async function onWipe(event: FormEvent<HTMLFormElement>) {
@@ -217,6 +304,63 @@ export default function SettingsPage() {
               </div>
             </form>
           )}
+        </div>
+
+        <div className="settings-block">
+          <h2>{t('settings.backup')}</h2>
+          <form onSubmit={onBackup}>
+            <p className="hint">{t('settings.backupHint')}</p>
+            <PasswordField label={t('settings.backupPassphrase')} name="backup_passphrase" />
+            <PasswordField label={t('settings.backupPassphraseRepeat')} name="backup_confirm" />
+            <div className="actions">
+              <button type="submit" disabled={busy}>
+                {t('settings.backupCreate')}
+              </button>
+            </div>
+          </form>
+          <form onSubmit={onSchedule}>
+            <p className="hint">{t('settings.scheduleHint')}</p>
+            {schedule && (
+              <p className="hint">
+                {t('settings.scheduleOn', { every: everyLabel(schedule.everyDays), folder: schedule.folder })}{' '}
+                {schedule.lastAttemptAt &&
+                  t(schedule.lastOk ? 'settings.scheduleLast' : 'settings.scheduleFailed', {
+                    time: whenText(schedule.lastAttemptAt, locale, timezone),
+                  })}
+              </p>
+            )}
+            <PasswordField label={t('settings.backupPassphrase')} name="schedule_passphrase" />
+            <PasswordField label={t('settings.backupPassphraseRepeat')} name="schedule_confirm" />
+            <Dropdown
+              label={t('settings.scheduleEvery')}
+              value={every}
+              options={EVERY_CHOICES.map((choice) => ({ value: String(choice.days), label: t(choice.labelKey) }))}
+              onChange={setEvery}
+            />
+            <div className="actions">
+              <button type="submit" disabled={busy}>
+                {t('settings.scheduleStart')}
+              </button>
+              {schedule && (
+                <button type="button" onClick={() => void onStopSchedule()}>
+                  {t('settings.scheduleStop')}
+                </button>
+              )}
+            </div>
+          </form>
+          <form onSubmit={onRestore}>
+            <p className="hint">{t('settings.restoreHint')}</p>
+            <PasswordField label={t('settings.backupPassphrase')} name="restore_passphrase" current />
+            <label>
+              {t('settings.restoreConfirm')}
+              <input value={restoreWord} onChange={(e) => setRestoreWord(e.target.value)} autoComplete="off" />
+            </label>
+            <div className="actions">
+              <button type="submit" disabled={busy || restoreWord !== 'RESTORE'}>
+                {t('settings.restoreStart')}
+              </button>
+            </div>
+          </form>
         </div>
 
         <div className="settings-block">

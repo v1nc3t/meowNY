@@ -29,5 +29,7 @@ test('the other statistics answers have the expected shape', () => {
   assert.ok(TopCategory.safeParse({ categoryId: '2', name: 'Rent', actual: '850.00', share: 85 }).success)
   assert.ok(Commitments.safeParse({ expense: '943.33', income: '0.00', items: [{ id: '1', name: 'Rent', type: 'EXPENSE', perMonth: '900.00' }] }).success)
   assert.ok(PlannedVsPaid.safeParse({ recurringId: '1', name: 'Power', paidCount: 1, planned: '80.00', paid: '70.00', difference: '-10.00' }).success)
+  assert.ok(Commitments.safeParse({ expense: '0.00', income: '0.00', items: [{ id: '2', name: 'Power', type: 'EXPENSE', perMonth: null }] }).success, 'a bill with no fixed amount')
+  assert.ok(PlannedVsPaid.safeParse({ recurringId: '2', name: 'Power', paidCount: 2, planned: null, paid: '159.50', difference: null }).success)
   assert.ok(!PlannedVsPaid.safeParse({ recurringId: '1', name: 'Power', paidCount: 0, planned: '80.00', paid: '70.00', difference: '-10.00' }).success)
 })

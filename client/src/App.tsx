@@ -9,6 +9,7 @@ const TransactionsPage = lazy(pageLoaders.transactions)
 const CategoriesPage = lazy(pageLoaders.categories)
 const BudgetsPage = lazy(pageLoaders.budgets)
 const RecurringPage = lazy(pageLoaders.recurring)
+const ExportPage = lazy(pageLoaders.export)
 const SettingsPage = lazy(pageLoaders.settings)
 
 // No accounts and no public pages: the desktop app opens straight into the app, behind the vault gate.
@@ -23,6 +24,7 @@ const router = createBrowserRouter([
       { path: 'categories', element: <CategoriesPage /> },
       { path: 'budgets', element: <BudgetsPage /> },
       { path: 'recurring', element: <RecurringPage /> },
+      { path: 'export', element: <ExportPage /> },
       { path: 'settings', element: <SettingsPage /> },
     ],
   },

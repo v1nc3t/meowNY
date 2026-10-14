@@ -47,6 +47,17 @@ const COMMANDS: &[&str] = &[
     "top_categories",
     "recurring_commitments",
     "recurring_planned_vs_paid",
+    "create_backup",
+    "restore_backup",
+    "restore_backup_new_vault",
+    "get_backup_schedule",
+    "set_backup_schedule",
+    "clear_backup_schedule",
+    "export_json",
+    "export_csv",
+    "export_xlsx",
+    "export_pdf",
+    "export_preview",
 ];
 
 fn main() {

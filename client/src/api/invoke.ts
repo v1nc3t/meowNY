@@ -15,6 +15,7 @@ const ERROR_CODES = [
   'key_unavailable',
   'database_too_new',
   'invalid_input',
+  'invalid_backup',
   'not_found',
   'name_exists',
   'internal',

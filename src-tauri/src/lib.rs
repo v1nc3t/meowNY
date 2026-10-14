@@ -1,14 +1,19 @@
+pub mod backup;
 pub mod budgets;
 pub mod categories;
 pub mod clock;
 pub mod commands;
 pub mod currency;
 pub mod db;
+pub mod display;
+pub mod export;
 pub mod keys;
 pub mod migrate;
 pub mod recovery_file;
 pub mod recurring;
+pub mod report;
 pub mod money;
+pub mod schedule;
 /// Dev demo data, used by `examples/seed.rs`.
 pub mod seed;
 pub mod stats;
@@ -26,6 +31,7 @@ use crate::keys::KeychainStore;
 use crate::vault::Vault;
 
 const IDLE_CHECK_EVERY: Duration = Duration::from_secs(5);
+const SCHEDULE_CHECK_EVERY: Duration = Duration::from_secs(60);
 
 /// Panic messages can quote data (an amount, a description), so only the location is printed.
 fn install_safe_panic_hook() {
@@ -62,6 +68,13 @@ pub fn run() {
             let store = KeychainStore::new().expect("keychain entry");
             let vault = Arc::new(Vault::new(dir, Box::new(store)));
             app.manage(vault.clone());
+
+            // Scheduled backups, while the app is unlocked.
+            let scheduled = vault.clone();
+            std::thread::spawn(move || loop {
+                std::thread::sleep(SCHEDULE_CHECK_EVERY);
+                schedule::run_if_due(&scheduled, chrono::Utc::now());
+            });
 
             // Idle lock. The UI is told so it can show the lock screen.
             let handle = app.handle().clone();
@@ -131,6 +144,17 @@ pub fn run() {
             commands::top_categories,
             commands::recurring_commitments,
             commands::recurring_planned_vs_paid,
+            commands::create_backup,
+            commands::restore_backup,
+            commands::restore_backup_new_vault,
+            commands::get_backup_schedule,
+            commands::set_backup_schedule,
+            commands::clear_backup_schedule,
+            commands::export_json,
+            commands::export_csv,
+            commands::export_xlsx,
+            commands::export_pdf,
+            commands::export_preview,
         ])
         .run(tauri::generate_context!())
         .expect("error while running meowNY");

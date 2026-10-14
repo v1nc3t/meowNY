@@ -40,7 +40,7 @@ pub struct BudgetVsActual {
 }
 
 /// Percent with one decimal, rounded half up, from integer amounts.
-fn pct_tenths(actual: i64, budget: i64) -> Option<f64> {
+pub(crate) fn pct_tenths(actual: i64, budget: i64) -> Option<f64> {
     if budget <= 0 {
         return None;
     }
@@ -193,7 +193,7 @@ pub fn year_trend(conn: &Connection, year: &str) -> Result<Vec<YearPoint>, AppEr
 }
 
 /// Like `pct_tenths`, but the part may be negative (spending above income).
-fn pct_tenths_signed(part: i64, whole: i64) -> Option<f64> {
+pub(crate) fn pct_tenths_signed(part: i64, whole: i64) -> Option<f64> {
     let sign = if part < 0 { -1.0 } else { 1.0 };
     pct_tenths(part.abs(), whole).map(|p| p * sign)
 }
@@ -241,8 +241,9 @@ pub struct Commitment {
     pub name: String,
     #[serde(rename = "type")]
     pub kind: CategoryType,
-    /// What the item costs (or brings in) in an average month.
-    pub per_month: String,
+    /// What the item costs (or brings in) in an average month. Null for a bill with no fixed amount,
+    /// which is left out of the totals.
+    pub per_month: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -272,19 +273,19 @@ pub fn commitments(conn: &Connection) -> Result<Commitments, AppError> {
          WHERE r.is_active = 1 ORDER BY c.type, r.name COLLATE NOCASE, r.id",
     )?;
     let rows = statement.query_map([], |r| {
-        Ok((r.get::<_, i64>(0)?, r.get::<_, String>(1)?, r.get::<_, String>(2)?, r.get::<_, i64>(3)?, r.get::<_, String>(4)?, r.get::<_, i64>(5)?))
+        Ok((r.get::<_, i64>(0)?, r.get::<_, String>(1)?, r.get::<_, String>(2)?, r.get::<_, Option<i64>>(3)?, r.get::<_, String>(4)?, r.get::<_, i64>(5)?))
     })?;
     let (mut expense, mut income) = (0, 0);
     let mut items = Vec::new();
     for row in rows {
         let (id, name, kind, amount, unit, count) = row?;
-        let monthly = per_month_minor(amount, &unit, count);
+        let monthly = amount.map(|amount| per_month_minor(amount, &unit, count));
         let kind = if kind == "INCOME" { CategoryType::Income } else { CategoryType::Expense };
         match kind {
-            CategoryType::Income => income += monthly,
-            CategoryType::Expense => expense += monthly,
+            CategoryType::Income => income += monthly.unwrap_or(0),
+            CategoryType::Expense => expense += monthly.unwrap_or(0),
         }
-        items.push(Commitment { id, name, kind, per_month: format_amount(monthly) });
+        items.push(Commitment { id, name, kind, per_month: monthly.map(format_amount) });
     }
     Ok(Commitments { expense: format_amount(expense), income: format_amount(income), items })
 }
@@ -297,10 +298,11 @@ pub struct PlannedVsPaid {
     pub name: String,
     /// How many occurrences were paid in the month.
     pub paid_count: u32,
-    pub planned: String,
+    /// Null when none of the payments had a plan: a bill with no fixed amount.
+    pub planned: Option<String>,
     pub paid: String,
-    /// Paid minus planned; positive means it cost more than planned.
-    pub difference: String,
+    /// Paid minus planned; positive means it cost more than planned. Null when there was no plan.
+    pub difference: Option<String>,
 }
 
 /// For each recurring item paid in the month: what was planned and what was actually paid.
@@ -308,23 +310,25 @@ pub fn planned_vs_paid(conn: &Connection, month: &str) -> Result<Vec<PlannedVsPa
     let first = month_start(month)?;
     let (start, end) = (first.to_string(), next_month(first)?.to_string());
     let mut statement = conn.prepare(
-        "SELECT r.id, r.name, COUNT(*), SUM(COALESCE(t.planned_amount_minor, t.amount_minor)), SUM(t.amount_minor)
+        "SELECT r.id, r.name, COUNT(*), COUNT(t.planned_amount_minor), SUM(COALESCE(t.planned_amount_minor, t.amount_minor)), SUM(t.amount_minor)
          FROM transactions t JOIN recurring_transactions r ON r.id = t.recurring_transaction_id
          WHERE t.payment_date >= ?1 AND t.payment_date < ?2
          GROUP BY r.id ORDER BY r.name COLLATE NOCASE, r.id",
     )?;
     let rows = statement.query_map([&start, &end], |r| {
-        Ok((r.get::<_, i64>(0)?, r.get::<_, String>(1)?, r.get::<_, u32>(2)?, r.get::<_, i64>(3)?, r.get::<_, i64>(4)?))
+        Ok((r.get::<_, i64>(0)?, r.get::<_, String>(1)?, r.get::<_, u32>(2)?, r.get::<_, u32>(3)?, r.get::<_, i64>(4)?, r.get::<_, i64>(5)?))
     })?;
     rows.map(|row| {
-        let (recurring_id, name, paid_count, planned, paid) = row?;
+        let (recurring_id, name, paid_count, planned_count, planned, paid) = row?;
+        // Payments without a plan are not compared with one.
+        let has_plan = planned_count > 0;
         Ok(PlannedVsPaid {
             recurring_id,
             name,
             paid_count,
-            planned: format_amount(planned),
+            planned: has_plan.then(|| format_amount(planned)),
             paid: format_amount(paid),
-            difference: format_amount(paid - planned),
+            difference: has_plan.then(|| format_amount(paid - planned)),
         })
     })
     .collect()
@@ -525,6 +529,42 @@ mod tests {
     }
 
     #[test]
+    fn a_bill_with_no_fixed_amount_is_listed_but_not_counted() {
+        use crate::recurring::{self, NewRecurring, Unit};
+        let (conn, _, rent, _) = db();
+        let make = |name: &str, amount: Option<&str>| {
+            recurring::create(
+                &conn,
+                &NewRecurring {
+                    name: name.into(),
+                    amount: amount.map(str::to_string),
+                    category_id: rent.to_string(),
+                    start_date: "2026-01-01".into(),
+                    interval_unit: Unit::Month,
+                    interval_count: 1,
+                    end_date: None,
+                    description: None,
+                },
+            )
+            .unwrap()
+        };
+        make("Rent", Some("900.00"));
+        let electricity = make("Electricity", None);
+        let c = commitments(&conn).unwrap();
+        assert_eq!(c.expense, "900.00", "only what is known is added up");
+        let listed = c.items.iter().find(|i| i.id == electricity.id).unwrap();
+        assert_eq!(listed.per_month, None);
+        assert_eq!(c.items.iter().find(|i| i.name == "Rent").unwrap().per_month.as_deref(), Some("900.00"));
+
+        // Paid with whatever the bill was: there was no plan to compare it with.
+        recurring::pay(&conn, electricity.id, Some("78.40"), Some("2026-09-02"), "2026-09-02").unwrap();
+        recurring::pay(&conn, electricity.id, Some("81.10"), Some("2026-09-28"), "2026-09-28").unwrap();
+        let row = planned_vs_paid(&conn, "2026-09").unwrap().into_iter().find(|r| r.name == "Electricity").unwrap();
+        assert_eq!((row.planned, row.difference), (None, None));
+        assert_eq!((row.paid.as_str(), row.paid_count), ("159.50", 2));
+    }
+
+    #[test]
     fn commitments_add_up_active_items_only() {
         use crate::recurring::{self, NewRecurring, Unit};
         let (conn, food, rent, salary) = db();
@@ -533,7 +573,7 @@ mod tests {
                 &conn,
                 &NewRecurring {
                     name: name.into(),
-                    amount: amount.into(),
+                    amount: Some(amount.into()),
                     category_id: category.to_string(),
                     start_date: "2026-01-01".into(),
                     interval_unit: unit,
@@ -563,7 +603,7 @@ mod tests {
             &conn,
             &NewRecurring {
                 name: "Power".into(),
-                amount: "80.00".into(),
+                amount: Some("80.00".into()),
                 category_id: rent.to_string(),
                 start_date: "2026-09-01".into(),
                 interval_unit: Unit::Month,
@@ -579,8 +619,8 @@ mod tests {
         let october = planned_vs_paid(&conn, "2026-10").unwrap();
         assert_eq!(october.len(), 1, "a normal transaction is not a recurring payment");
         let row = &october[0];
-        assert_eq!((row.planned.as_str(), row.paid.as_str(), row.difference.as_str(), row.paid_count), ("80.00", "70.00", "-10.00", 1));
-        assert_eq!(planned_vs_paid(&conn, "2026-09").unwrap()[0].difference, "15.50");
+        assert_eq!((row.planned.as_deref(), row.paid.as_str(), row.difference.as_deref(), row.paid_count), (Some("80.00"), "70.00", Some("-10.00"), 1));
+        assert_eq!(planned_vs_paid(&conn, "2026-09").unwrap()[0].difference.as_deref(), Some("15.50"));
         assert!(planned_vs_paid(&conn, "2026-11").unwrap().is_empty());
     }
 }

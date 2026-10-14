@@ -52,8 +52,8 @@ pub struct Recurring {
     pub category_id: i64,
     pub name: String,
     pub description: Option<String>,
-    /// Decimal string, e.g. "12.50".
-    pub amount: String,
+    /// Decimal string, e.g. "12.50". Null for a bill with no fixed amount: each payment says what was paid.
+    pub amount: Option<String>,
     pub start_date: String,
     pub interval_unit: Unit,
     pub interval_count: u32,
@@ -66,7 +66,9 @@ pub struct Recurring {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct NewRecurring {
     pub name: String,
-    pub amount: String,
+    /// Leave out (or null) when the amount changes every time.
+    #[serde(default)]
+    pub amount: Option<String>,
     pub category_id: String,
     pub start_date: String,
     pub interval_unit: Unit,
@@ -77,14 +79,15 @@ pub struct NewRecurring {
     pub description: Option<String>,
 }
 
-/// Fields left out stay as they are. `description: null` and `endDate: null` clear them.
+/// Fields left out stay as they are. `description: null` and `endDate: null` clear them, and `amount: null`
+/// makes it a bill with no fixed amount.
 #[derive(Debug, Clone, Default, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct RecurringPatch {
     #[serde(default)]
     pub name: Option<String>,
-    #[serde(default)]
-    pub amount: Option<String>,
+    #[serde(default, deserialize_with = "present_or_null")]
+    pub amount: Option<Option<String>>,
     #[serde(default)]
     pub category_id: Option<String>,
     #[serde(default)]
@@ -140,7 +143,7 @@ fn from_row(row: &rusqlite::Row) -> rusqlite::Result<Recurring> {
         category_id: row.get(1)?,
         name: row.get(2)?,
         description: row.get(3)?,
-        amount: format_amount(row.get(4)?),
+        amount: row.get::<_, Option<i64>>(4)?.map(format_amount),
         start_date: row.get(5)?,
         interval_unit: Unit::parse(&unit).map_err(|_| rusqlite::Error::InvalidQuery)?,
         interval_count: row.get(7)?,
@@ -156,6 +159,14 @@ pub fn find(conn: &Connection, id: i64) -> Result<Option<Recurring>, AppError> {
 
 pub fn get(conn: &Connection, id: i64) -> Result<Recurring, AppError> {
     find(conn, id)?.ok_or(AppError::NotFound)
+}
+
+/// No amount, or an empty one, means the bill varies. Otherwise it is a positive amount in minor units.
+fn optional_amount(text: Option<&str>) -> Result<Option<i64>, AppError> {
+    match text.map(str::trim).filter(|t| !t.is_empty()) {
+        None => Ok(None),
+        Some(text) => Ok(Some(parse_positive_amount(text)?)),
+    }
 }
 
 fn clean_count(count: u32) -> Result<u32, AppError> {
@@ -176,7 +187,7 @@ fn clean_end(start: NaiveDate, end: Option<&str>) -> Result<Option<String>, AppE
 
 pub fn create(conn: &Connection, input: &NewRecurring) -> Result<Recurring, AppError> {
     let name = clean_name(&input.name)?;
-    let minor = parse_positive_amount(&input.amount)?;
+    let minor = optional_amount(input.amount.as_deref())?;
     let category_id = parse_id(&input.category_id)?;
     let start = parse_date(&input.start_date)?;
     let count = clean_count(input.interval_count)?;
@@ -205,7 +216,10 @@ pub fn update(conn: &Connection, id: i64, patch: &RecurringPatch) -> Result<Recu
         Some(name) => clean_name(name)?,
         None => current.name.clone(),
     };
-    let minor = parse_positive_amount(patch.amount.as_deref().unwrap_or(&current.amount))?;
+    let minor = match &patch.amount {
+        Some(amount) => optional_amount(amount.as_deref())?,
+        None => optional_amount(current.amount.as_deref())?,
+    };
     let category_id = match &patch.category_id {
         Some(category) => {
             let category_id = parse_id(category)?;
@@ -345,13 +359,15 @@ pub fn pay(
 
     let tx = conn.unchecked_transaction()?;
     let item = find_active(&tx, id)?;
-    let planned = parse_positive_amount(&item.amount)?;
+    // A bill with no fixed amount has nothing planned, so the payment must say what was paid.
+    let planned = optional_amount(item.amount.as_deref())?;
+    let paid = actual.or(planned).ok_or(AppError::InvalidInput)?;
     let inserted = tx.execute(
         "INSERT INTO transactions
            (category_id, recurring_transaction_id, recurring_due_date, name, amount_minor,
             planned_amount_minor, payment_date, description)
          VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
-        params![item.category_id, id, item.next_due_date, item.name, actual.unwrap_or(planned), planned, paid_on, item.description],
+        params![item.category_id, id, item.next_due_date, item.name, paid, planned, paid_on, item.description],
     );
     match inserted {
         Ok(_) => {}
@@ -467,7 +483,7 @@ mod tests {
     fn new(category: i64, start: &str) -> NewRecurring {
         NewRecurring {
             name: "Rent".into(),
-            amount: "900.00".into(),
+            amount: Some("900.00".into()),
             category_id: category.to_string(),
             start_date: start.into(),
             interval_unit: Unit::Month,
@@ -477,12 +493,91 @@ mod tests {
         }
     }
 
+    fn varying(category: i64, start: &str) -> NewRecurring {
+        NewRecurring { name: "Electricity".into(), amount: None, ..new(category, start) }
+    }
+
+    #[test]
+    fn a_bill_can_have_no_fixed_amount() {
+        let (conn, rent, _) = db();
+        let item = create(&conn, &varying(rent, "2026-01-20")).unwrap();
+        assert_eq!(item.amount, None);
+        assert_eq!(list(&conn).unwrap()[0].amount, None);
+        // An empty amount means the same, and a stray space does not matter.
+        for blank in ["", "  "] {
+            let input = NewRecurring { amount: Some(blank.into()), ..varying(rent, "2026-01-20") };
+            assert_eq!(create(&conn, &input).unwrap().amount, None, "{blank:?}");
+        }
+        // What is written must still be a real amount.
+        for bad in ["0.00", "-5.00", "abc", "12", "12.345"] {
+            let input = NewRecurring { amount: Some(bad.into()), ..varying(rent, "2026-01-20") };
+            assert_eq!(create(&conn, &input).unwrap_err(), AppError::InvalidInput, "{bad}");
+        }
+    }
+
+    #[test]
+    fn editing_can_add_or_remove_the_fixed_amount() {
+        let (conn, rent, _) = db();
+        let fixed = create(&conn, &new(rent, "2026-01-31")).unwrap();
+        // Left out: unchanged. Null: no fixed amount any more. A value: fixed again.
+        let renamed = update(&conn, fixed.id, &RecurringPatch { name: Some("Flat".into()), ..Default::default() }).unwrap();
+        assert_eq!(renamed.amount.as_deref(), Some("900.00"));
+        let varies = update(&conn, fixed.id, &RecurringPatch { amount: Some(None), ..Default::default() }).unwrap();
+        assert_eq!(varies.amount, None);
+        let renamed_again = update(&conn, fixed.id, &RecurringPatch { name: Some("Flat 4".into()), ..Default::default() }).unwrap();
+        assert_eq!(renamed_again.amount, None, "an edit that does not mention the amount leaves a varying bill varying");
+        let fixed_again = update(&conn, fixed.id, &RecurringPatch { amount: Some(Some("950.00".into())), ..Default::default() }).unwrap();
+        assert_eq!(fixed_again.amount.as_deref(), Some("950.00"));
+        assert_eq!(update(&conn, fixed.id, &RecurringPatch { amount: Some(Some("0.00".into())), ..Default::default() }).unwrap_err(), AppError::InvalidInput);
+    }
+
+    #[test]
+    fn a_varying_bill_is_paid_with_the_amount_of_the_day() {
+        let (conn, rent, _) = db();
+        let item = create(&conn, &varying(rent, "2026-01-20")).unwrap();
+
+        // It cannot be paid without saying how much, and a failed attempt changes nothing.
+        assert_eq!(pay(&conn, item.id, None, Some("2026-01-21"), TODAY).unwrap_err(), AppError::InvalidInput);
+        assert_eq!(pay(&conn, item.id, Some("0.00"), Some("2026-01-21"), TODAY).unwrap_err(), AppError::InvalidInput);
+        assert_eq!(get(&conn, item.id).unwrap().next_due_date, "2026-01-20");
+        assert_eq!(conn.query_row("SELECT count(*) FROM transactions", [], |r| r.get::<_, i64>(0)).unwrap(), 0);
+
+        let january = pay(&conn, item.id, Some("78.40"), Some("2026-01-21"), TODAY).unwrap();
+        let february = pay(&conn, item.id, Some("91.05"), Some("2026-02-19"), TODAY).unwrap();
+        assert_eq!((january.amount.as_str(), february.amount.as_str()), ("78.40", "91.05"));
+        assert_eq!(get(&conn, item.id).unwrap().next_due_date, "2026-03-20", "it moves on like any other item");
+        // Nothing was planned, so nothing is stored as planned.
+        let planned: Vec<Option<i64>> = conn
+            .prepare("SELECT planned_amount_minor FROM transactions ORDER BY id")
+            .unwrap()
+            .query_map([], |r| r.get(0))
+            .unwrap()
+            .map(Result::unwrap)
+            .collect();
+        assert_eq!(planned, [None, None]);
+    }
+
+    #[test]
+    fn the_amount_in_a_request_may_be_left_out_or_null() {
+        let make = |amount: &str| -> NewRecurring {
+            serde_json::from_str(&format!(r#"{{"name":"Gas","categoryId":"1","startDate":"2026-01-01","intervalUnit":"MONTH","intervalCount":1{amount}}}"#)).unwrap()
+        };
+        assert_eq!(make("").amount, None);
+        assert_eq!(make(r#","amount":null"#).amount, None);
+        assert_eq!(make(r#","amount":"12.00""#).amount.as_deref(), Some("12.00"));
+
+        let patch = |json: &str| -> RecurringPatch { serde_json::from_str(json).unwrap() };
+        assert_eq!(patch("{}").amount, None, "left out: unchanged");
+        assert_eq!(patch(r#"{"amount":null}"#).amount, Some(None), "null: no fixed amount");
+        assert_eq!(patch(r#"{"amount":"5.00"}"#).amount, Some(Some("5.00".into())));
+    }
+
     #[test]
     fn create_starts_due_on_the_start_date() {
         let (conn, rent, _) = db();
         let item = create(&conn, &new(rent, "2026-01-31")).unwrap();
         assert_eq!(item.next_due_date, "2026-01-31");
-        assert_eq!(item.amount, "900.00");
+        assert_eq!(item.amount.as_deref(), Some("900.00"));
         assert!(item.is_active);
         assert_eq!(list(&conn).unwrap(), vec![item]);
     }
@@ -496,7 +591,7 @@ mod tests {
             assert_eq!(create(&conn, &input), Err(AppError::InvalidInput));
         };
         bad(|i| i.name = " ".into());
-        bad(|i| i.amount = "0.00".into());
+        bad(|i| i.amount = Some("0.00".into()));
         bad(|i| i.interval_count = 0);
         bad(|i| i.interval_count = MAX_INTERVAL_COUNT + 1);
         bad(|i| i.start_date = "2026-1-31".into());
@@ -519,9 +614,9 @@ mod tests {
     fn plain_edit_changes_only_what_was_sent() {
         let (conn, rent, _) = db();
         let item = create(&conn, &new(rent, "2026-01-31")).unwrap();
-        let patch = RecurringPatch { amount: Some("950.00".into()), end_date: Some(Some("2026-12-31".into())), ..Default::default() };
+        let patch = RecurringPatch { amount: Some(Some("950.00".into())), end_date: Some(Some("2026-12-31".into())), ..Default::default() };
         let edited = update(&conn, item.id, &patch).unwrap();
-        assert_eq!((edited.amount.as_str(), edited.end_date.as_deref()), ("950.00", Some("2026-12-31")));
+        assert_eq!((edited.amount.as_deref(), edited.end_date.as_deref()), (Some("950.00"), Some("2026-12-31")));
         assert_eq!(edited.next_due_date, "2026-01-31");
         let cleared = update(&conn, item.id, &RecurringPatch { end_date: Some(None), ..Default::default() }).unwrap();
         assert_eq!(cleared.end_date, None);

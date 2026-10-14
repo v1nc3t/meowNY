@@ -1812,11 +1812,6 @@ kbd {
   white-space: nowrap;
 }
 
-/* An overdue recurring item reads brighter than the rest of its row. */
-.tx-sub.rec-overdue {
-  color: var(--text-h);
-}
-
 /* Settings: one wider column, flush left. Each setting is a row: the label, a gap, then its control right after it. */
 .settings-grid {
   display: flex;
@@ -2355,4 +2350,433 @@ kbd {
 .dash .rec-diff {
   font-size: 0.6875rem;
   opacity: 0.8;
+}
+
+/* Export. The choices are cards on the left; what the file will contain is a receipt on the right. */
+.export-page {
+  --c-income: var(--accent);
+  --c-expense: #f7768e;
+}
+
+.export-page .tx-title {
+  margin-bottom: 0.5rem;
+}
+
+.export-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 1.25rem;
+  align-items: start;
+  max-width: 64rem;
+}
+
+@media (min-width: 62em) {
+  .export-layout {
+    grid-template-columns: minmax(0, 1fr) 21rem;
+  }
+}
+
+.export-main {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  min-width: 0;
+}
+
+.export-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.875rem;
+  min-width: 0;
+  padding: 1rem 1.125rem;
+  border: 0.8px solid var(--border);
+  border-radius: 6px;
+}
+
+.export-card h2 {
+  margin: 0;
+  font-size: 0.75rem;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+
+.export-card .hint {
+  margin: 0;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+/* The format: four tiles, one choice. The real radio button is hidden but still takes the keyboard. */
+.export-formats {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+@media (max-width: 30em) {
+  .export-formats {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.export-format {
+  position: relative;
+  gap: 0.375rem;
+  padding: 0.875rem 1rem;
+  border: 0.8px solid var(--border);
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.export-format:hover {
+  border-color: var(--border-strong);
+}
+
+.export-format input,
+.export-chip input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.export-format-name {
+  font-size: 1.0625rem;
+  color: var(--text-h);
+}
+
+.export-format-hint {
+  font-size: 0.75rem;
+  line-height: 1.5;
+  letter-spacing: 0;
+  color: var(--text-muted);
+}
+
+.export-format:has(input:checked),
+.export-chip:has(input:checked) {
+  border-color: var(--accent);
+}
+
+.export-format:has(input:focus-visible),
+.export-chip:has(input:focus-visible) {
+  outline: 1px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* A yes-or-no row: the words on the left, the box at the far edge. */
+.export-card label.export-switch {
+  justify-content: space-between;
+  width: 100%;
+}
+
+.export-date {
+  display: grid;
+  grid-template-columns: 4rem minmax(0, 1fr);
+  align-items: center;
+  gap: 0.5rem 1rem;
+  font-size: 0.8125rem;
+  color: var(--text-h);
+}
+
+@media (max-width: 30em) {
+  .export-date {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.export-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.export-card label.export-chip {
+  position: relative;
+  flex-direction: row;
+  width: auto;
+  max-width: 100%;
+  padding: 0.25rem 0.75rem;
+  border: 0.8px solid var(--border-strong);
+  color: var(--text-muted);
+  font-size: 0.8125rem;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+}
+
+.export-card label.export-chip:has(input:checked) {
+  border-color: var(--accent);
+  color: var(--text-h);
+}
+
+.export-card .pick.field {
+  max-width: 16rem;
+}
+
+.export-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.export-groups h3 {
+  margin: 0 0 0.5rem;
+  font-size: 0.75rem;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+
+/* The receipt. */
+.export-side {
+  gap: 1.125rem;
+}
+
+@media (min-width: 62em) {
+  .export-side {
+    position: sticky;
+    top: 1.5rem;
+  }
+}
+
+.export-receipt {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.export-row {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+}
+
+.export-row .leader {
+  flex: 1 1 1rem;
+  min-width: 1rem;
+  border-bottom: 1px dotted var(--border-strong);
+  transform: translateY(-0.2em);
+}
+
+.export-row strong {
+  min-width: 0;
+  font-weight: 400;
+  color: var(--text-h);
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+
+.export-row.income strong {
+  color: var(--c-income);
+}
+
+.export-row.expense strong {
+  color: var(--c-expense);
+}
+
+.export-side .warning {
+  padding: 0.75rem 0.875rem;
+  font-size: 0.75rem;
+  line-height: 1.55;
+}
+
+.export-side .notice {
+  width: 100%;
+}
+
+.export-side .export-go {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 1rem;
+  width: 100%;
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--text-h);
+  font-size: 0.9375rem;
+}
+
+.export-go .export-ext {
+  color: var(--text-muted);
+}
+
+/* Recurring: a card for each item. The next date is an outlined badge, and what you do about it sits right
+   beside it. Overdue is red, due today is green, and a paused or ended item is dashed and quiet. */
+.rec-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  width: 100%;
+  margin: 0 0 0.5rem;
+}
+
+ul.rec-list > li.rec-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-areas: 'body' 'due' 'more';
+  align-items: start;
+  gap: 0.875rem 1.5rem;
+  padding: 1rem 1.125rem;
+  border: 0.8px solid var(--border);
+  border-radius: 6px;
+  white-space: normal;
+}
+
+@media (min-width: 52em) {
+  ul.rec-list > li.rec-item {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      'body due'
+      'body more';
+    gap: 0.625rem 1.5rem;
+  }
+}
+
+ul.rec-list > li.rec-item[data-status='overdue'] {
+  border-color: rgba(247, 118, 142, 0.5);
+}
+
+ul.rec-list > li.rec-item[data-status='today'] {
+  border-color: var(--accent);
+}
+
+ul.rec-list > li.rec-item[data-status='paused'],
+ul.rec-list > li.rec-item[data-status='ended'] {
+  border-style: dashed;
+}
+
+.rec-body {
+  grid-area: body;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  min-width: 0;
+}
+
+.rec-name {
+  margin: 0;
+  font-size: 1.0625rem;
+  color: var(--text-h);
+  overflow-wrap: anywhere;
+}
+
+.rec-item[data-status='paused'] .rec-name,
+.rec-item[data-status='ended'] .rec-name {
+  color: var(--text);
+}
+
+.rec-meta {
+  margin: 0;
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+}
+
+.rec-amount {
+  color: var(--text-h);
+  font-variant-numeric: tabular-nums;
+}
+
+.rec-amount.rec-varies {
+  color: var(--text-muted);
+}
+
+.rec-due {
+  grid-area: due;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.625rem 1.25rem;
+}
+
+.rec-badge {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.625rem;
+  padding: 0.375rem 0.75rem;
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  color: var(--text-h);
+  font-variant-numeric: tabular-nums;
+}
+
+.rec-date {
+  font-size: 1rem;
+}
+
+.rec-state {
+  font-size: 0.75rem;
+  letter-spacing: 0.02em;
+}
+
+.rec-badge[data-status='overdue'] {
+  border-color: #f7768e;
+}
+
+.rec-badge[data-status='overdue'] .rec-state {
+  color: #f7768e;
+}
+
+.rec-badge[data-status='today'] {
+  border-color: var(--accent);
+}
+
+.rec-badge[data-status='today'] .rec-state {
+  color: var(--accent);
+}
+
+.rec-badge[data-status='paused'],
+.rec-badge[data-status='ended'] {
+  border-style: dashed;
+  border-color: var(--border-strong);
+  color: var(--text-muted);
+}
+
+/* The three actions stay together: they move under the date as a group when there is no room beside it. */
+.rec-actions {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.375rem 1.25rem;
+}
+
+.tx-pane > h2.rec-group {
+  margin: 1.5rem 0 0.625rem;
+}
+
+.tx-pane > h2.rec-group:first-child {
+  margin-top: 0.5rem;
+}
+
+.rec-due .rec-pay {
+  padding: 0.375rem 0.875rem;
+  border: 1px solid var(--text-h);
+}
+
+.rec-due .rec-act {
+  padding: 0.375rem 0;
+}
+
+.rec-more {
+  grid-area: more;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 1.25rem;
+}
+
+@media (min-width: 52em) {
+  .rec-more {
+    justify-self: end;
+  }
+}
+
+.rec-more button {
+  padding: 0;
+  font-size: 0.75rem;
+  color: var(--text-muted);
 }

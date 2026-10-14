@@ -10,7 +10,7 @@ import { useMoneySettings, type MoneySettings } from '../useMoneySettings'
 import { useNotice } from '../useNotice'
 import { useI18n, useT } from '../i18n/context'
 import { useShortcut } from '../keys/registry'
-import { changePercent, niceCeil, usedPercent } from './dashboardMath'
+import { changePercent, niceCeil, savingsRateText, usedPercent } from './dashboardMath'
 
 const TOP_CATEGORIES = 7
 
@@ -84,7 +84,7 @@ function DashboardView({ settings, now }: { settings: MoneySettings; now: Today 
               <Stat label={t('dashboard.savings')} value={point.savings} before={previous?.savings} good="up" settings={settings} />
               <div className="dash-stat">
                 <span className="dash-stat-label">{t('dashboard.savingsRate')}</span>
-                <span className="dash-stat-value">{point.savingsRate === null ? '-' : formatPercent(point.savingsRate, settings.locale)}</span>
+                <span className="dash-stat-value">{savingsRateText(point.savingsRate, settings.locale)}</span>
                 <Bar percent={point.savingsRate ?? 0} />
               </div>
             </div>
@@ -486,16 +486,16 @@ function RecurringTable({
         </li>
         {commitments.items.map((item) => {
           const p = byId.get(item.id)
-          const more = p !== undefined && (toMinor(p.difference) ?? 0n) > 0n
+          const more = p !== undefined && p.difference !== null && (toMinor(p.difference) ?? 0n) > 0n
           return (
             <li key={item.id}>
               <span className="legend-name">
                 <span className={`swatch ${item.type === 'INCOME' ? 'swatch-income' : 'swatch-expense'}`} aria-hidden="true" /> {item.name}
               </span>
-              <span className="legend-amount">{money(item.perMonth)}</span>
+              <span className="legend-amount">{item.perMonth === null ? t('rec.varies') : money(item.perMonth)}</span>
               <span className={`legend-amount${p ? (more ? ' rec-more' : ' rec-paid') : ' muted'}`}>
                 {p ? money(p.paid) : '-'}
-                {p && p.difference !== '0.00' ? <span className="rec-diff"> ({(p.difference.startsWith('-') ? '' : '+') + money(p.difference)})</span> : null}
+                {p && p.difference !== null && p.difference !== '0.00' ? <span className="rec-diff"> ({(p.difference.startsWith('-') ? '' : '+') + money(p.difference)})</span> : null}
               </span>
             </li>
           )

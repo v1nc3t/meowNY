@@ -14,6 +14,7 @@ const items = [
   { to: '/app/categories', label: 'nav.categories', icon: 'categories', page: 'categories', shortcut: 'goCategories' },
   { to: '/app/budgets', label: 'nav.budgets', icon: 'budgets', page: 'budgets', shortcut: 'goBudgets' },
   { to: '/app/recurring', label: 'nav.recurring', icon: 'recurring', page: 'recurring', shortcut: 'goRecurring' },
+  { to: '/app/export', label: 'nav.export', icon: 'export', page: 'export', shortcut: 'goExport' },
   { to: '/app/settings', label: 'nav.settings', icon: 'settings', page: 'settings', shortcut: 'goSettings' },
 ] as const satisfies readonly { to: string; label: string; icon: string; page: PageName; shortcut: ShortcutId }[]
 
@@ -92,6 +93,7 @@ function Icon({ name }: { name: string }) {
       {name === 'categories' ? <path d="M4 8h7l2-3h7v14H4z" /> : null}
       {name === 'budgets' ? <path d="M5 19V9M12 19V5M19 19v-7" /> : null}
       {name === 'recurring' ? <path d="M5 12a7 7 0 0 1 12-5l2 2M19 4v5h-5M19 12a7 7 0 0 1-12 5l-2-2M5 20v-5h5" /> : null}
+      {name === 'export' ? <path d="M12 15V4M8 8l4-4 4 4M5 14v5h14v-5" /> : null}
       {name === 'help' ? <path d="M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM9.6 9.3a2.4 2.4 0 1 1 3.4 2.2c-.7.4-1 .9-1 1.7M12 16.8h.01" /> : null}
       {name === 'settings' ? <path d="M4 7h10M18 7h2M4 17h2M10 17h10M14 4v6M6 14v6" /> : null}
       {name === 'account' ? <path d="M12 12a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7zM6.5 19a5.5 5.5 0 0 1 11 0" /> : null}

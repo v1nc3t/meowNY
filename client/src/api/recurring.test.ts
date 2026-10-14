@@ -24,6 +24,12 @@ test('a recurring answer keeps money as a two-decimal string and a known unit', 
   assert.ok(!Recurring.safeParse({ ...row, nextDueDate: '28/02/2026' }).success)
 })
 
+test('a bill with no fixed amount has a null amount, and no other amount may be anything but two decimals', () => {
+  assert.ok(Recurring.safeParse({ ...row, amount: null }).success)
+  assert.ok(!Recurring.safeParse({ ...row, amount: '12' }).success)
+  assert.ok(!Recurring.safeParse({ ...row, amount: undefined }).success, 'the amount is always present, as a value or null')
+})
+
 test('dues carry both lists', () => {
   assert.ok(Dues.safeParse({ overdue: [], upcoming: [row] }).success)
   assert.ok(!Dues.safeParse({ overdue: [] }).success)

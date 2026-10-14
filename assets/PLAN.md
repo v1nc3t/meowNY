@@ -18,7 +18,7 @@ Companion to `expense_tracker_schema.txt` (schema v3, written for Postgres; it i
 1. **Foundations and security first**, because the encrypted database, key handling and the data model are painful to retrofit.
 2. **Core budgeting loop next**: categories, transactions, budgets. This is the product.
 3. **Recurring, then charts**: both build on the core.
-4. **Backup, export and import before anything that spreads your data to other devices.** The review queue built here is reused by phone capture and bank import.
+4. **Backup and export before anything that spreads your data to other devices.**
 5. **CLI, then phone sync and capture, then bank connection.** Packaging and release is a gate before sharing the app with anyone else.
 
 Phone sync (phase 8) can move ahead of the CLI (phase 7) if you mostly use the app on your phone.
@@ -35,7 +35,7 @@ Kept: the React client (`client/src`), Zod schemas, money and date logic, and th
 - One local profile. No user ids in the schema.
 - Budgets are effective-dated; recurring items use categories; history via database triggers.
 - Money is handled as strings/decimals (or integer minor units) in code, never floats.
-- Request validation with Zod at every boundary (UI to core, CLI to core, sync, import).
+- Request validation with Zod at every boundary (UI to core, CLI to core, sync).
 - Mobile-first rule: every new screen from phase 4 on is built mobile-first, so the phone app (phase 8) can reuse it.
 - Time: months, due dates and "this month" are computed in the user's timezone setting, never in UTC by accident.
 - The CLI never opens the database file directly. It talks to the running app through a local command API, described by a schema it can print (`meowny schema`).
@@ -86,7 +86,7 @@ Kept: the React client (`client/src`), Zod schemas, money and date logic, and th
   - [x] the same recurring occurrence cannot be paid twice
   - [x] the same `client_uuid` cannot create two transactions
   - [x] audit rows appear for insert, update and delete, and are skipped when only `updated_at` changed
-- [x] Dev seed script with demo categories, budgets and transactions (`src-tauri/seeds/dev.sql`, loaded by `src/seed.rs`; run `cargo run --example seed -- <db-path> <64-hex-key>` from `src-tauri/`. Dates are relative to today.)
+- [x] Dev seed script with demo categories, budgets and transactions (`src-tauri/seeds/dev.sql`, loaded by `src/seed.rs`; run `cargo run --example seed -- <db-path> <64-hex-key>` from `src-tauri/`. Dates are relative to today. Later widened: sixteen months of history, awkward text for the exports, and `cargo run --example dev_vault -- <data-dir>`, which replaces the app's own data with it. The tests run the seed for ten different "today" dates, month ends and leap days included.)
 
 **Done when:** a fresh database builds from migrations only and all constraint tests pass on SQLite.
 
@@ -123,12 +123,12 @@ Kept: the React client (`client/src`), Zod schemas, money and date logic, and th
 
 ## Phase 4: Recurring items (M)
 
-- [x] Recurring CRUD (income or expense, any category, interval unit + count, optional end date) (`src-tauri/src/recurring.rs`: create, update, delete, list. Exposed as the `*_recurring` commands and `client/src/api/recurring.ts`. Changing the schedule moves the next due date to the first new occurrence on or after the old one. Deleting an item keeps its paid transactions.)
+- [x] Recurring CRUD (income or expense, any category, interval unit + count, optional end date) (`src-tauri/src/recurring.rs`: create, update, delete, list. Exposed as the `*_recurring` commands and `client/src/api/recurring.ts`. Changing the schedule moves the next due date to the first new occurrence on or after the old one. Deleting an item keeps its paid transactions. Later: the amount is optional. A bill that changes every time (electricity, a phone bill) has no fixed amount (`amount_minor` is NULL, migration `0006_recurring_amount_optional.sql`); each payment then says what was paid, and nothing is stored as planned. Such a bill is listed but left out of the monthly commitments, and the dashboard shows it as "varies". In the form, leave the amount empty; in an edit, clearing it makes the item varying. The migration rebuilds the table, so the runner now turns foreign keys off while a migration runs and checks them before it commits (a test shows the payments stay linked, and the migration was run on a copy of real data first).)
 - [x] Due-date function computed from `start_date` (not from the previous due date). **Unit-test month-end cases** (Jan 31, Feb 29, yearly on Feb 29). (`recurring::due_date`, `next_after`, `first_on_or_after`; tests cover Jan 31, leap February and yearly Feb 29.)
 - [x] "Mark as paid" in one database transaction (schema Part 5-B), with optional actual amount and payment date (`recurring::pay`. The planned amount is kept on the transaction. Paying the last occurrence before the end date makes the item inactive.)
 - [x] Skip, pause, end; overdue and upcoming lists (`skip`, `set_active`, `end`, `dues`. Resuming an item past its end date is refused. Upcoming defaults to the next 30 days, at most 366.)
 - [x] Due dates and "overdue" are evaluated in the timezone setting (`pay`, `end` and `dues` take today's date as an argument; the commands in the next batch pass the date from `clock::today`.)
-- [x] Frontend: recurring list with due/overdue state and a mark-as-paid action, built mobile-first (`client/src/pages/RecurringPage.tsx`, route `/app/recurring`, sidebar entry and `g r` shortcut. It reuses the transactions list layout, so it wraps on narrow screens. Status per row: overdue, due today, due on a date, paused or ended. Actions: mark as paid (amount and date prefilled), skip, pause or resume, edit, end, delete. All text is in the seven languages.)
+- [x] Frontend: recurring list with due/overdue state and a mark-as-paid action, built mobile-first (`client/src/pages/RecurringPage.tsx`, route `/app/recurring`, sidebar entry and `g r` shortcut. It reuses the transactions list layout, so it wraps on narrow screens. Status per row: overdue, due today, due on a date, paused or ended. Actions: mark as paid (amount and date prefilled), skip, pause or resume, edit, end, delete. All text is in the seven languages. Later restyled: a card for each item with the next date as an outlined badge (red when overdue, green when due today, dashed when paused or ended), "mark as paid", skip and pause right beside the date, and edit, end and delete underneath, quieter. A varying bill asks for the amount when it is marked as paid.)
 - [x] Optional desktop notification for items due today (local only) (Once a day while the app is open and unlocked, one notification lists items due today or overdue; checked at start and every 30 minutes. A checkbox under Settings, notifications, turns it off; the choice is kept in the vault config file and is on by default. `client/src/useDueNotifications.ts`, `show_due_notification` in `commands.rs`. Nothing is shown while the app is closed or for items that fall due later the same day.)
 - [x] Tests: paying twice is rejected, planned vs actual amount stored, paid transaction counts in its category's actual (`recurring.rs` tests.)
 
@@ -145,21 +145,25 @@ Kept: the React client (`client/src`), Zod schemas, money and date logic, and th
 
 **Done when:** the Food example works end to end: a budget of 400, transactions summing to 356.20, the chart shows both.
 
-## Phase 6: Backup, export and import (M)
+## Phase 6: Backup and export (M)
 
-- [ ] **Encrypted backup**: one click writes a single encrypted file (passphrase chosen by the user), plus restore with a version check. Optional scheduled backups to a folder the user picks.
-- [ ] **Export**: full JSON of all data, CSV of transactions. CSV safety: cells starting with `=`, `+`, `-` or `@` are prefixed with `'`.
-- [ ] **Excel export (.xlsx)**: one workbook with sheets for transactions, categories, budgets, recurring items and a monthly summary. Dates are real dates, money cells are numbers with the currency format (converted from the stored strings only at write time). The same formula-cell safety as CSV applies to text cells.
-- [ ] **PDF reports**: a printable report for a chosen month or date range, with totals for income and expense, savings rate, budget vs actual per category, the charts from phase 5, and optionally the transaction list. Generated locally, with no network calls. Options: page size, include/hide descriptions (so a report can be shared without private details).
-- [ ] Export screen lets you pick the format (JSON, CSV, Excel, PDF), the date range and the categories, and shows what the file will contain before saving. A file with sensitive data is not encrypted unless you choose the encrypted backup, and the screen says so.
-- [ ] **Import**: CSV and Excel (.xlsx) first, then OFX and CAMT/MT940. A saved column mapping per bank, a dry-run preview, and neutralisation of formula cells (Excel formulas are read as text and never evaluated).
-- [ ] **Review queue**: imported rows land as PENDING. The user can accept, edit, ignore, set a category, or match to a recurring item ("mark as paid?"). Category rules pre-fill (merchant text to category).
-- [ ] Deduplicate imports by a hash of date, amount and normalised description, and by provider transaction id when one exists
-- [ ] Restore test: back up, wipe, restore on a clean install, compare all rows
-- [ ] Export tests: the Excel totals and the PDF totals match the dashboard for the same month; an Excel file with a formula-looking description is neutralised on export and not evaluated on import; the PDF with descriptions hidden contains none
-- [ ] Review the data inventory against what the system really stores
+- [x] **Encrypted backup**: one click writes a single encrypted file (passphrase chosen by the user), plus restore with a version check. Optional scheduled backups to a folder the user picks.
+  - [x] Backup file and restore with a version check (`src-tauri/src/backup.rs`, commands `create_backup`, `restore_backup`, `restore_backup_new_vault`. The file holds every row as JSON, sealed with ChaCha20-Poly1305 under an Argon2id key from the backup passphrase (8 characters or more, not the app's), so it does not depend on the vault's keys and opens on a clean install. The header carries the schema version of the app that wrote it: a newer one is refused, an older one is loaded into a scratch database of that version and migrated forward. Restoring checks every constraint in the scratch database first and then replaces all data in one transaction, so a damaged file changes nothing. Over an open vault it needs the word RESTORE typed. `vault.json` (lock settings, notification choice) is not part of a backup. A test fails when a migration adds a table that the backup does not list.)
+  - [x] Backup and restore screens (Settings, backup block: a passphrase typed twice and "back up now" opens a save dialog; restoring asks for the backup passphrase and the word RESTORE, then opens a file dialog and reloads the app. The first-run screen has "restore from a backup" (`client/src/vault/RestoreFromBackup.tsx`), which sets an app passphrase for the new install and then shows its recovery key. Calls are `vault.createBackup`, `restoreBackup`, `restoreFromBackup`; new error code `invalid_backup` and new texts in all seven languages.)
+  - [x] Scheduled backups to a folder the user picks (`src-tauri/src/schedule.rs`, migration `0005_backup_schedule.sql`, commands `get_backup_schedule`, `set_backup_schedule`, `clear_backup_schedule`. Settings, backup: a passphrase, daily, weekly or monthly, and a folder chosen in a dialog; the first backup is made at once so a folder that does not work is reported then. A timer checks every minute and backs up when due, only while the app is unlocked. A failed run is recorded, shown in Settings and tried again after an hour. Files are named `meowny-auto-<date>-<time>.meowbak`; the newest 10 are kept and only files with that exact name are deleted. The passphrase is stored in the encrypted database, in a table with no audit triggers; it is never sent to the UI and is left out of backups. Restoring does not change the schedule, and "delete all data" removes it but does not touch the backup files in the folder.)
+- [x] **Export**: full JSON of all data, CSV of transactions. CSV safety: cells starting with `=`, `+`, `-` or `@` are prefixed with `'`. (`src-tauri/src/export.rs`, commands `export_json` and `export_csv`, client call in `client/src/api/dataExport.ts`; the screen is the export screen item below. Both take a selection: a date range for transactions and a set of categories. With categories chosen, the JSON leaves out other categories, global budgets and the change history, and a test checks that no other category name leaks. The full JSON has settings, categories, every budget row, recurring items, transactions and the change history; amounts and ids are strings. The CSV has `date,type,category,name,amount,currency,description`, amounts positive, a byte order mark for Excel and CRLF line ends. Cells starting with `=`, `+`, `-`, `@`, tab or carriage return get a `'` in front (`export::neutralise`, shared with the Excel export). The files are written readable by the owner only. The scheduled-backup passphrase is never exported.)
+- [x] **Excel export (.xlsx)**: one workbook with sheets for transactions, categories, budgets, recurring items and a monthly summary. Dates are real dates, money cells are numbers with the currency format (converted from the stored strings only at write time). The same formula-cell safety as CSV applies to text cells. (`src-tauri/src/export/xlsx.rs`, command `export_xlsx`, written with the `rust_xlsxwriter` crate; the tests take the file apart with a small reader of their own (plus `flate2`, a dev dependency, to unpack it). Sheets: Transactions, Categories, Budgets, Recurring, Monthly summary (income, expense, savings and savings rate for every month from the first to the last, quiet months as zeros). No cell holds a formula. Cells follow the person's number and date format setting: `client/src/api/displayFormat.ts` reads the date order, the date separator and the symbol position from `Intl` and sends them as `DisplayFormat` (`src-tauri/src/display.rs`, shared with the PDF); the app turns them into Excel format codes with the separators and symbol as literals (`dd\.mm\.yyyy`, `#,##0.00" €"`). Digit grouping and the decimal mark are left to Excel, which takes them from the computer it runs on. The same selection as JSON and CSV limits every sheet. Dates before 1900 are written as text.)
+- [x] **PDF reports**: a printable report for a chosen month or date range, with totals for income and expense, savings rate, budget vs actual per category, the charts from phase 5, and optionally the transaction list. Generated locally, with no network calls. Options: page size, include/hide descriptions (so a report can be shared without private details). (`src-tauri/src/report.rs`, `report/layout.rs`, `report/render.rs`, command `export_pdf`, written with the `krilla` crate, no network. The report covers whole months, from one month to another, optionally limited to some categories. Page 1: four tiles (income, expenses, savings, savings rate), income and expenses by month as bars, where the money went as a donut with a legend (top seven categories and the rest), then budget against actual per category as bars (over budget in red, categories without a budget marked), with the global budget on top. The transaction list is optional, repeats its headings on every page and shows descriptions only when asked. A4 or Letter, with page numbers. Numbers and dates follow the person's format (`DisplayFormat`, now also with decimal mark and group separator) and the fixed text comes from the app in the chosen language (`client/src/api/reportLabels.ts`, 8 new texts in seven languages). The charts are drawn directly in the page, not copied from the screen. For a range, budget against actual compares each category over the months in which it had a budget; for one month it is exactly what the budget screen shows. Text is set in DejaVu Sans and Bold, embedded as subsets (`src-tauri/fonts/`, with its license): Latin, Greek and Cyrillic are drawn, a character outside them, such as Chinese, shows as `?`. The file has a title and no author or creation date. Limits: 120 months and 20,000 listed transactions.)
+- [x] Export screen lets you pick the format (JSON, CSV, Excel, PDF), the date range and the categories, and shows what the file will contain before saving. A file with sensitive data is not encrypted unless you choose the encrypted backup, and the screen says so. (`client/src/pages/ExportPage.tsx`, route `/app/export`, sidebar entry and `g e`; the choices are worked out in `exportPlan.ts` with tests. One format picker with a line about each; all dates or a from and to; all categories or a ticked list. For a PDF the dates widen to whole months and the screen says which, with a page size, a switch for the transaction list and a switch for descriptions (off by default). "What the file will contain" is a receipt on the right (it stays in view on a wide screen and comes last on a phone), filled from the new `export_preview` command: the number of transactions, the first and last date, the income and expense totals, and for JSON and Excel the categories, budget entries and recurring items, and for a full JSON the history. The format is four tiles, the categories are toggle chips grouped by expenses and income, and the export button shows the file extension. It follows the choice a moment after it changes and shows the same counts as the file; a choice that cannot be exported (end before start, no category ticked, a report over ten years) says why and disables the button. Dates, money and the language of the PDF come from the person's settings. The page ends with the plain warning that the file is not encrypted, with a link to the backup in Settings.)
+- [x] Restore test: back up, wipe, restore on a clean install, compare all rows (`vault::tests::back_up_wipe_and_restore_on_a_clean_install_brings_back_every_row` compares every row of every table, including the change history, and checks the restored install has keys of its own; `backup::tests` cover wrong passphrase, tampered and truncated files, newer and older versions, and hostile content.)
+- [x] Export tests: the Excel totals and the PDF totals match the dashboard for the same month; an Excel file with a formula-looking description is neutralised on export; the PDF with descriptions hidden contains none
+  - [x] The Excel totals match the dashboard (`export::xlsx::tests::the_monthly_summary_matches_the_dashboard`)
+  - [x] The PDF totals match the dashboard (`report::tests::the_pdf_totals_are_the_dashboard_totals` reads the text back out of the PDF file and compares it with `stats`)
+  - [x] The PDF with descriptions hidden contains none (`report::tests::a_pdf_made_without_descriptions_contains_none`, on the text of the file and on its raw bytes; a PDF limited to some categories contains nothing about the others)
+  - [x] A formula-looking description is neutralised in the Excel file (`text_that_looks_like_a_formula_is_written_as_text_and_comes_back_as_text`, which also checks that the file has no formula cells)
+- [x] Review the data inventory against what the system really stores (`assets/data-inventory.md`, checked against the code and the files the app leaves on disk, and by searching the whole data folder for demo-only text, which turned up in no plain place. Corrections: the lock settings and the notification choice live in `vault.json`, not in the database. Added what was missing: the webview's stored preferences (language, sidebar state, date of the last notification), desktop notifications and the clipboard as places data goes, that the change history keeps what deleted rows said, what a backup and an export hold, and what "delete all my data" removes and leaves behind.)
 
-**Done when:** you can back up, wipe, restore, export to JSON, CSV, Excel and PDF, and import a bank CSV or Excel file into a review queue without duplicates.
+**Done when:** you can back up, wipe, restore, and export to JSON, CSV, Excel and PDF from one screen, choosing the period and the categories.
 
 ## Phase 7: CLI for AI agents (M)
 
@@ -170,17 +174,17 @@ The whole app is usable from the terminal, so scripts and AI agents can drive it
 - [ ] Package in `cli/` (TypeScript, one binary, e.g. `meowny`), installed by the desktop installer and available standalone. Reuses the Zod schemas for argument validation.
 - [ ] Tokens: created in the app, revocable, stored hashed, with scopes (read-only by default, write opt-in), an expiry and a last-used time. Passed by `MEOWNY_TOKEN` or stored in a `0600` file. Never printed or logged. `export`, `delete-all` and backup restore are not allowed with a token and need the user at the app.
 - [ ] If the app is locked, the CLI gets a clear exit code and no data.
-- [ ] Command groups: `settings`, `categories`, `transactions`, `budgets`, `recurring`, `stats`, `import`, `export` (json, csv, xlsx, pdf), `backup`. Pattern `meowny <noun> <verb>`, with `--help` at every level.
+- [ ] Command groups: `settings`, `categories`, `transactions`, `budgets`, `recurring`, `stats`, `export` (json, csv, xlsx, pdf), `backup`. Pattern `meowny <noun> <verb>`, with `--help` at every level.
 - [ ] Agent-friendly output: `--json` on every command (stable shape, additive fields only), human table otherwise. Data on stdout, messages and errors on stderr.
 - [ ] Non-interactive by default: no prompts; every input is a flag or stdin. Destructive commands need `--yes`. Transaction create sends a `client_uuid`, so retries are safe.
 - [ ] Exit codes: 0 ok, 1 error, 2 bad usage, 3 auth failed or app locked, 4 not found. In `--json` mode errors are `{code, message}`.
-- [ ] Money stays strings end to end; dates are ISO 8601. Bulk transaction import from CSV/JSON on stdin goes through the review queue.
+- [ ] Money stays strings end to end; dates are ISO 8601.
 - [ ] `meowny schema` prints all commands and arguments as JSON, so an agent can discover them.
 - [ ] Docs: one `CLI.md` with an example per command, plus a short agent note (env var, `--json`, exit codes).
 - [ ] Tests: each command against a real app instance (happy path, validation error, bad token, locked app, `--json` shape snapshot), plus one test that fails if a command-API route is missing from the schema or has no CLI command.
 - [ ] From here on, every new feature phase ships its CLI commands in the same phase.
 
-**Done when:** a script or agent holding only a token can record an expense, set a budget, read budget vs actual and queue an import, all with `--json` and no prompts.
+**Done when:** a script or agent holding only a token can record an expense, set a budget, and read budget vs actual, all with `--json` and no prompts.
 
 ## Phase 8: Phone app and sync (L)
 
@@ -206,11 +210,11 @@ The phone keeps its own full copy and works offline. Sync is separate from the w
 
 ## Phase 9: Phone capture (S to M)
 
-Adds transactions without opening the app, and feeds the same review queue as imports.
+Adds transactions without opening the app.
 
 - [ ] iOS: a documented Shortcuts automation that fires on each Wallet/Apple Pay transaction and sends amount and merchant to the app
 - [ ] Android: a notification listener (opt-in permission) that reads bank and wallet notifications and extracts amount and merchant
-- [ ] Captured items land as PENDING in the review queue, never straight in the books
+- [ ] Captured items land as PENDING in a pending list, never straight in the books. (Phase 6 no longer builds a review queue, so this phase builds the small pending list: accept, edit, ignore, set a category.)
 - [ ] Parsing is local; notification text is untrusted and never executed or logged
 - [ ] Docs: setup guide per platform, and what is not captured (transfers, direct debits, anything not paid with the phone)
 - [ ] Tests: sample notifications parse correctly; duplicates from the same payment are merged
@@ -228,16 +232,16 @@ Read-only account information through an Open Banking aggregator, with credentia
 - [ ] Least scope: read-only accounts and transactions, no payment initiation
 - [ ] Consent: show status and expiry, remind before it runs out (EU consent lasts roughly 90 to 180 days), and make renewal one click
 - [ ] Disconnect: revokes the token at the aggregator first, then deletes it locally. "Delete all my data" does the same.
-- [ ] Import job: fetch, deduplicate by provider transaction id, put into the review queue from phase 6. Token expiry or aggregator errors mark the connection `NEEDS_REAUTH` and notify the user.
+- [ ] Import job: fetch, deduplicate by provider transaction id, put into the pending list from phase 9. Token expiry or aggregator errors mark the connection `NEEDS_REAUTH` and notify the user.
 - [ ] Currency: accounts in a currency other than yours store the original currency and amount; no silent conversion
 - [ ] Imported merchant names and descriptions are untrusted text: escape on render, neutralise in CSV export
 - [ ] Tables for connections, accounts and imported transactions; additive columns on `transactions`
-- [ ] CLI: commands for connections, the review queue (list, accept, ignore) and disconnect. Credentials are never readable through the CLI.
+- [ ] CLI: commands for connections, the pending list (list, accept, ignore) and disconnect. Credentials are never readable through the CLI.
 - [ ] Docs: a step-by-step "get your key" guide for each supported aggregator, and a clear note that the aggregator is the only external service involved
 - [ ] Update the data inventory (aggregator as an optional external processor chosen by the user)
 - [ ] Tests: no duplicates on re-import, disconnect revokes and deletes the token, expired consent stops imports, credentials never appear in logs, exports, CLI output or unencrypted backups
 
-**Done when:** a connected account imports new transactions into the review queue, accepted ones show up in budgets, and disconnecting revokes the token at the aggregator and removes it from the machine.
+**Done when:** a connected account brings new transactions into the pending list, accepted ones show up in budgets, and disconnecting revokes the token at the aggregator and removes it from the machine.
 
 ## Phase 11: Packaging and release (M). Gate before sharing the app
 
@@ -254,7 +258,7 @@ Read-only account information through an Open Banking aggregator, with credentia
 
 ## Phase 12: Later (optional)
 
-- [ ] More aggregators, and more import formats
+- [ ] More aggregators
 - [ ] Expense splitting. It is hard without a server because both sides need the same group data. Options: peer-to-peer groups over the sync transports, or leave it out.
 - [ ] Home-screen widgets, shared budgets between two devices of the same household
 

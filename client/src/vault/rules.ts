@@ -26,6 +26,12 @@ export function passphraseProblem(passphrase: string, confirm: string): string {
   return ''
 }
 
+/** Like `passphraseProblem`, but a backup always needs a passphrase. */
+export function backupPassphraseProblem(passphrase: string, confirm: string): string {
+  if ([...passphrase].length < MIN_PASSPHRASE_CHARS) return t('rule.backupPassphraseShort', { count: MIN_PASSPHRASE_CHARS })
+  return passphraseProblem(passphrase, confirm)
+}
+
 export const LOCK_AFTER_CHOICES = [
   { seconds: 60, labelKey: 'lock.1m' },
   { seconds: 300, labelKey: 'lock.5m' },

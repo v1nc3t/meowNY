@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { isCurrency, nearestLockChoice, normalizeCurrency, passphraseProblem } from './rules.ts'
+import { backupPassphraseProblem, isCurrency, nearestLockChoice, normalizeCurrency, passphraseProblem } from './rules.ts'
 
 test('currency codes are three letters, any case', () => {
   assert.equal(normalizeCurrency(' eur '), 'EUR')
@@ -23,6 +23,13 @@ test('a passphrase must be long enough and confirmed', () => {
 test('passphrase length counts characters, not bytes', () => {
   assert.match(passphraseProblem('ééééééé', 'ééééééé'), /at least 8/)
   assert.equal(passphraseProblem('éééééééé', 'éééééééé'), '')
+})
+
+test('a backup passphrase cannot be empty', () => {
+  assert.match(backupPassphraseProblem('', ''), /at least 8 characters\.$/)
+  assert.match(backupPassphraseProblem('short', 'short'), /at least 8 characters\.$/)
+  assert.match(backupPassphraseProblem('long enough', 'different'), /do not match/)
+  assert.equal(backupPassphraseProblem('long enough', 'long enough'), '')
 })
 
 test('a stored lock time outside the list maps to the nearest choice', () => {

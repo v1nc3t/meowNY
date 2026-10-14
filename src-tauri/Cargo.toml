@@ -21,10 +21,13 @@ chrono-tz = "0.10.4"
 getrandom = "0.3.4"
 hkdf = "0.12.4"
 keyring = { version = "3", default-features = false, features = ["apple-native", "windows-native", "sync-secret-service", "crypto-rust"] }
+krilla = { version = "0.6.0", default-features = false, features = ["simple-text"] }
 rusqlite = { version = "0.40.2", features = ["bundled-sqlcipher-vendored-openssl"] }
+rust_xlsxwriter = "0.92.0"
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"
 sha2 = "0.10.9"
+skrifa = "0.37"
 tauri = { version = "2", features = [] }
 tauri-plugin-dialog = "2"
 tauri-plugin-notification = "2"
@@ -32,4 +35,5 @@ tauri-plugin-opener = "2.5.5"
 zeroize = { version = "1.8.2", features = ["derive"] }
 
 [dev-dependencies]
+flate2 = "1"
 tempfile = "3.27.0"

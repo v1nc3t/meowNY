@@ -14,8 +14,8 @@ export const Recurring = z.object({
   categoryId: id,
   name: z.string(),
   description: z.string().nullable(),
-  /** Decimal string such as "12.50". Never converted to a number for storage or sums. */
-  amount: z.string().regex(/^\d+\.\d{2}$/),
+  /** Decimal string such as "12.50", never converted to a number for storage or sums. Null for a bill with no fixed amount. */
+  amount: z.string().regex(/^\d+\.\d{2}$/).nullable(),
   startDate: date,
   intervalUnit: IntervalUnit,
   intervalCount: z.number().int().positive(),
@@ -30,7 +30,8 @@ export type Dues = z.infer<typeof Dues>
 
 export type NewRecurring = {
   name: string
-  amount: string
+  /** Left out or null for a bill whose amount changes every time. */
+  amount?: string | null
   categoryId: string
   startDate: string
   intervalUnit: IntervalUnit
@@ -39,7 +40,7 @@ export type NewRecurring = {
   description?: string | null
 }
 
-/** Fields left out stay as they are; `endDate: null` and `description: null` clear them. */
+/** Fields left out stay as they are; `endDate: null` and `description: null` clear them, and `amount: null` makes it a bill with no fixed amount. */
 export type RecurringPatch = Partial<NewRecurring>
 
 export const recurring = {
