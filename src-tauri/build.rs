@@ -29,6 +29,18 @@ const COMMANDS: &[&str] = &[
     "save_recovery_key",
     "budget_history",
     "change_currency",
+    "list_recurring",
+    "create_recurring",
+    "update_recurring",
+    "delete_recurring",
+    "pay_recurring",
+    "skip_recurring",
+    "set_recurring_active",
+    "end_recurring",
+    "recurring_dues",
+    "get_notify_due",
+    "set_notify_due",
+    "show_due_notification",
 ];
 
 fn main() {

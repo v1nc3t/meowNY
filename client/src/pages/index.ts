@@ -8,6 +8,7 @@ export const pageLoaders = {
   transactions: () => import('./TransactionsPage'),
   categories: () => import('./CategoriesPage'),
   budgets: () => import('./BudgetsPage'),
+  recurring: () => import('./RecurringPage'),
   settings: () => import('./SettingsPage'),
 } as const
 

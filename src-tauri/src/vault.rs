@@ -108,6 +108,13 @@ struct VaultConfig {
     lock_after_secs: u32,
     lock_on_minimize: bool,
     lock_on_close: bool,
+    /// Desktop notification for recurring transactions that are due. On unless the person turns it off.
+    #[serde(default = "default_notify_due")]
+    notify_due: bool,
+}
+
+fn default_notify_due() -> bool {
+    true
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -209,6 +216,7 @@ impl Vault {
             lock_after_secs: 300,
             lock_on_minimize: true,
             lock_on_close: true,
+            notify_due: true,
         };
         write_config(&self.config_path(), &config)?;
 
@@ -392,6 +400,19 @@ impl Vault {
         config.lock_after_secs = prefs.lock_after_secs;
         config.lock_on_minimize = prefs.lock_on_minimize;
         config.lock_on_close = prefs.lock_on_close;
+        write_config(&self.config_path(), &config)
+    }
+
+    pub fn notify_due(&self) -> Result<bool, AppError> {
+        Ok(read_config(&self.config_path())?.notify_due)
+    }
+
+    pub fn set_notify_due(&self, on: bool) -> Result<(), AppError> {
+        if self.lock_state().conn.is_none() {
+            return Err(AppError::Locked);
+        }
+        let mut config = read_config(&self.config_path())?;
+        config.notify_due = on;
         write_config(&self.config_path(), &config)
     }
 
@@ -685,6 +706,30 @@ mod tests {
         v.lock();
         assert_eq!(v.lock_prefs().unwrap(), prefs);
         assert_eq!(v.save_lock_prefs(&prefs), Err(AppError::Locked));
+    }
+
+    #[test]
+    fn due_notifications_are_on_by_default_and_the_choice_persists() {
+        let dir = tempfile::tempdir().unwrap();
+        let v = vault(dir.path());
+        v.create(&settings(), None).unwrap();
+        assert!(v.notify_due().unwrap());
+        v.set_notify_due(false).unwrap();
+        v.lock();
+        assert!(!v.notify_due().unwrap());
+        assert_eq!(v.set_notify_due(true), Err(AppError::Locked));
+    }
+
+    #[test]
+    fn a_config_from_before_the_option_counts_as_on() {
+        let dir = tempfile::tempdir().unwrap();
+        let v = vault(dir.path());
+        v.create(&settings(), None).unwrap();
+        let path = v.config_path();
+        let mut json: serde_json::Value = serde_json::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
+        json.as_object_mut().unwrap().remove("notify_due");
+        fs::write(&path, json.to_string()).unwrap();
+        assert!(v.notify_due().unwrap());
     }
 
     #[test]

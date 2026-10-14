@@ -94,7 +94,7 @@ fn no_controls(text: &str) -> bool {
     !text.chars().any(char::is_control)
 }
 
-fn clean_name(name: &str) -> Result<String, AppError> {
+pub(crate) fn clean_name(name: &str) -> Result<String, AppError> {
     let name = name.trim();
     let length = name.chars().count();
     if length == 0 || length > NAME_MAX_CHARS || !no_controls(name) {
@@ -104,7 +104,7 @@ fn clean_name(name: &str) -> Result<String, AppError> {
 }
 
 /// Empty means "no description".
-fn clean_description(text: Option<&str>) -> Result<Option<String>, AppError> {
+pub(crate) fn clean_description(text: Option<&str>) -> Result<Option<String>, AppError> {
     let Some(text) = text.map(str::trim).filter(|t| !t.is_empty()) else { return Ok(None) };
     if text.chars().count() > DESCRIPTION_MAX_CHARS || !no_controls(text) {
         return Err(AppError::InvalidInput);
@@ -159,7 +159,7 @@ fn find_by_uuid(conn: &Connection, uuid: &str) -> Result<Option<Transaction>, Ap
         .optional()?)
 }
 
-fn category_is_active(conn: &Connection, id: i64) -> Result<bool, AppError> {
+pub(crate) fn category_is_active(conn: &Connection, id: i64) -> Result<bool, AppError> {
     Ok(conn
         .query_row("SELECT 1 FROM categories WHERE id = ?1 AND deleted_at IS NULL", [id], |_| Ok(()))
         .optional()?

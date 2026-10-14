@@ -7,6 +7,7 @@ pub mod db;
 pub mod keys;
 pub mod migrate;
 pub mod recovery_file;
+pub mod recurring;
 pub mod money;
 /// Dev demo data, used by `examples/seed.rs`.
 pub mod seed;
@@ -53,6 +54,7 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_notification::init())
         .plugin(tauri::plugin::Builder::<tauri::Wry>::new("navigation-guard").on_navigation(|_, url| is_app_url(url)).build())
         .setup(|app| {
             let dir = app.path().app_data_dir()?;
@@ -110,6 +112,18 @@ pub fn run() {
             commands::save_recovery_key,
             commands::budget_history,
             commands::change_currency,
+            commands::list_recurring,
+            commands::create_recurring,
+            commands::update_recurring,
+            commands::delete_recurring,
+            commands::pay_recurring,
+            commands::skip_recurring,
+            commands::set_recurring_active,
+            commands::end_recurring,
+            commands::recurring_dues,
+            commands::get_notify_due,
+            commands::set_notify_due,
+            commands::show_due_notification,
         ])
         .run(tauri::generate_context!())
         .expect("error while running meowNY");

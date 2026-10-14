@@ -9,6 +9,7 @@ use crate::categories::{self, Category, CategoryType};
 use crate::budgets::{self, Budget, Overview, SetBudget};
 use crate::clock;
 use crate::currency::{self, Conversion};
+use crate::recurring::{self, Dues, NewRecurring, Recurring, RecurringPatch};
 use crate::transactions::{self, Filter, NewTransaction, Page, Transaction, TransactionPatch};
 use crate::vault::{AppError, LockPrefs, Settings, Vault, VaultStatus};
 
@@ -43,6 +44,18 @@ pub const COMMANDS: &[&str] = &[
     "save_recovery_key",
     "budget_history",
     "change_currency",
+    "list_recurring",
+    "create_recurring",
+    "update_recurring",
+    "delete_recurring",
+    "pay_recurring",
+    "skip_recurring",
+    "set_recurring_active",
+    "end_recurring",
+    "recurring_dues",
+    "get_notify_due",
+    "set_notify_due",
+    "show_due_notification",
 ];
 
 #[tauri::command]
@@ -219,6 +232,97 @@ pub fn today(vault: Shared) -> Result<Today, AppError> {
 pub struct Today {
     pub date: String,
     pub month: String,
+}
+
+/// Today in the user's timezone setting; due dates and "overdue" use it, never the system date.
+fn today_text(vault: &Vault) -> Result<String, AppError> {
+    let timezone = vault.settings()?.timezone;
+    Ok(clock::today(chrono::Utc::now(), &timezone)?.to_string())
+}
+
+#[tauri::command]
+pub fn list_recurring(vault: Shared) -> Result<Vec<Recurring>, AppError> {
+    vault.with_conn(|c| recurring::list(c))
+}
+
+#[tauri::command]
+pub fn create_recurring(vault: Shared, input: NewRecurring) -> Result<Recurring, AppError> {
+    vault.with_conn(|c| recurring::create(c, &input))
+}
+
+#[tauri::command]
+pub fn update_recurring(vault: Shared, id: String, patch: RecurringPatch) -> Result<Recurring, AppError> {
+    let id = categories::parse_id(&id)?;
+    vault.with_conn(|c| recurring::update(c, id, &patch))
+}
+
+#[tauri::command]
+pub fn delete_recurring(vault: Shared, id: String) -> Result<(), AppError> {
+    let id = categories::parse_id(&id)?;
+    vault.with_conn(|c| recurring::delete(c, id))
+}
+
+/// Turns the current occurrence into a transaction. `amount` and `paid_on` default to the
+/// planned amount and today.
+#[tauri::command]
+pub fn pay_recurring(
+    vault: Shared,
+    id: String,
+    amount: Option<String>,
+    paid_on: Option<String>,
+) -> Result<Transaction, AppError> {
+    let id = categories::parse_id(&id)?;
+    let today = today_text(&vault)?;
+    vault.with_conn(|c| recurring::pay(c, id, amount.as_deref(), paid_on.as_deref(), &today))
+}
+
+#[tauri::command]
+pub fn skip_recurring(vault: Shared, id: String) -> Result<Recurring, AppError> {
+    let id = categories::parse_id(&id)?;
+    vault.with_conn(|c| recurring::skip(c, id))
+}
+
+#[tauri::command]
+pub fn set_recurring_active(vault: Shared, id: String, active: bool) -> Result<Recurring, AppError> {
+    let id = categories::parse_id(&id)?;
+    vault.with_conn(|c| recurring::set_active(c, id, active))
+}
+
+#[tauri::command]
+pub fn end_recurring(vault: Shared, id: String) -> Result<Recurring, AppError> {
+    let id = categories::parse_id(&id)?;
+    let today = today_text(&vault)?;
+    vault.with_conn(|c| recurring::end(c, id, &today))
+}
+
+#[tauri::command]
+pub fn recurring_dues(vault: Shared, within_days: Option<u32>) -> Result<Dues, AppError> {
+    let today = today_text(&vault)?;
+    vault.with_conn(|c| recurring::dues(c, &today, within_days))
+}
+
+#[tauri::command]
+pub fn get_notify_due(vault: Shared) -> Result<bool, AppError> {
+    vault.notify_due()
+}
+
+#[tauri::command]
+pub fn set_notify_due(vault: Shared, on: bool) -> Result<(), AppError> {
+    vault.set_notify_due(on)
+}
+
+/// Shows a desktop notification, only if the person has them on. The text comes from the UI so
+/// it is in the chosen language; it is a local notification and nothing leaves the machine.
+#[tauri::command]
+pub fn show_due_notification(app: tauri::AppHandle, vault: Shared, title: String, body: String) -> Result<(), AppError> {
+    use tauri_plugin_notification::NotificationExt;
+    if title.chars().count() > 100 || body.chars().count() > 300 {
+        return Err(AppError::InvalidInput);
+    }
+    if vault.status() != VaultStatus::Unlocked || !vault.notify_due()? {
+        return Ok(());
+    }
+    app.notification().builder().title(title).body(body).show().map_err(|_| AppError::Internal)
 }
 
 #[cfg(test)]

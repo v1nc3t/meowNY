@@ -22,7 +22,7 @@ test('capital letters work the same (caps lock)', () => {
 
 test('g then a letter goes to a page', () => {
   const m = new KeyMatcher()
-  const pages: [string, ShortcutId][] = [['d', 'goDashboard'], ['t', 'goTransactions'], ['c', 'goCategories'], ['b', 'goBudgets'], ['s', 'goSettings']]
+  const pages: [string, ShortcutId][] = [['d', 'goDashboard'], ['t', 'goTransactions'], ['c', 'goCategories'], ['b', 'goBudgets'], ['r', 'goRecurring'], ['s', 'goSettings']]
   for (const [key, id] of pages) {
     assert.equal(m.handle(press('g'), 0), null)
     assert.equal(m.handle(press(key), 100), id, key)
