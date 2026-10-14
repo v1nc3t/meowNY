@@ -10,7 +10,7 @@ use crate::categories::{self, Category, CategoryType};
 use crate::budgets::{self, Budget, Overview, SetBudget};
 use crate::clock;
 use crate::currency::{self, Conversion};
-use crate::export::{self, Selection};
+use crate::export::{self, Selection, SheetFormat};
 use crate::recurring::{self, Dues, NewRecurring, Recurring, RecurringPatch};
 use crate::schedule::{self, Schedule};
 use crate::stats::{self, BudgetVsActual, CategoryTrend, Commitments, PlannedVsPaid, TopCategory, YearPoint};
@@ -74,6 +74,7 @@ pub const COMMANDS: &[&str] = &[
     "clear_backup_schedule",
     "export_json",
     "export_csv",
+    "export_xlsx",
 ];
 
 #[tauri::command]
@@ -484,13 +485,13 @@ pub fn clear_backup_schedule(vault: Shared) -> Result<(), AppError> {
 
 /// Asks where to save `text`, then writes it there readable by the owner only. False if the person cancels.
 /// These files are not encrypted; the export screen says so.
-fn save_export(app: &tauri::AppHandle, name: String, kind: &str, extension: &str, text: String) -> Result<bool, AppError> {
+fn save_export(app: &tauri::AppHandle, name: String, kind: &str, extension: &str, bytes: &[u8]) -> Result<bool, AppError> {
     use tauri_plugin_dialog::DialogExt;
     let Some(path) = app.dialog().file().set_file_name(name).add_filter(kind, &[extension]).blocking_save_file() else {
         return Ok(false);
     };
     let path = path.into_path().map_err(|_| AppError::Internal)?;
-    backup::write_file(&path, text.as_bytes())?;
+    backup::write_file(&path, bytes)?;
     Ok(true)
 }
 
@@ -498,14 +499,28 @@ fn save_export(app: &tauri::AppHandle, name: String, kind: &str, extension: &str
 #[tauri::command]
 pub async fn export_json(app: tauri::AppHandle, vault: Shared<'_>, selection: Selection) -> Result<bool, AppError> {
     let text = vault.with_conn(|c| export::json(c, &selection, chrono::Utc::now()))?;
-    save_export(&app, format!("meowny-export-{}.json", today_text(&vault)?), "JSON", "json", text)
+    save_export(&app, format!("meowny-export-{}.json", today_text(&vault)?), "JSON", "json", text.as_bytes())
 }
 
 /// Transactions as a CSV file. Cells that start like a formula are written as text. Not encrypted.
 #[tauri::command]
 pub async fn export_csv(app: tauri::AppHandle, vault: Shared<'_>, selection: Selection) -> Result<bool, AppError> {
     let text = vault.with_conn(|c| export::csv(c, &selection))?;
-    save_export(&app, format!("meowny-transactions-{}.csv", today_text(&vault)?), "CSV", "csv", text)
+    save_export(&app, format!("meowny-transactions-{}.csv", today_text(&vault)?), "CSV", "csv", text.as_bytes())
+}
+
+/// An Excel workbook with sheets for transactions, categories, budgets, recurring items and a monthly
+/// summary. `format` sets how dates and money look; leave it out for ISO dates and a plain number.
+/// Text cells that start like a formula are written as text. Not encrypted.
+#[tauri::command]
+pub async fn export_xlsx(
+    app: tauri::AppHandle,
+    vault: Shared<'_>,
+    selection: Selection,
+    format: Option<SheetFormat>,
+) -> Result<bool, AppError> {
+    let bytes = vault.with_conn(|c| export::workbook(c, &selection, &format.unwrap_or_default()))?;
+    save_export(&app, format!("meowny-{}.xlsx", today_text(&vault)?), "Excel workbook", "xlsx", &bytes)
 }
 
 #[cfg(test)]

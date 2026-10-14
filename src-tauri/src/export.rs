@@ -6,6 +6,8 @@
 //! budgets and the change history are left out, so a limited export reveals nothing about the rest.
 //! The device-specific scheduled-backup setup, which holds a passphrase, is never exported.
 
+mod xlsx;
+
 use std::borrow::Cow;
 
 use chrono::{DateTime, SecondsFormat, Utc};
@@ -18,6 +20,8 @@ use crate::money::format_amount;
 use crate::recurring;
 use crate::transactions::clean_date;
 use crate::vault::AppError;
+
+pub use xlsx::{workbook, SheetFormat};
 
 #[derive(Debug, Clone, Default, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -93,15 +97,22 @@ struct Tx {
     recurring_id: Option<i64>,
 }
 
+/// The `WHERE` of every transaction query: `?1` is the first date, `?2` the last, both optional.
+fn transaction_filter(sel: &Parsed) -> String {
+    format!(
+        "(?1 IS NULL OR t.payment_date >= ?1) AND (?2 IS NULL OR t.payment_date <= ?2) AND {}",
+        sel.category_filter("t.category_id")
+    )
+}
+
 fn transactions(conn: &Connection, sel: &Parsed) -> Result<Vec<Tx>, AppError> {
     let mut statement = conn.prepare(&format!(
         "SELECT t.id, t.payment_date, c.type, t.category_id, c.name, t.name, t.amount_minor,
                 t.planned_amount_minor, t.description, t.recurring_transaction_id
          FROM transactions t JOIN categories c ON c.id = t.category_id
-         WHERE (?1 IS NULL OR t.payment_date >= ?1) AND (?2 IS NULL OR t.payment_date <= ?2)
-           AND {}
+         WHERE {}
          ORDER BY t.payment_date, t.id",
-        sel.category_filter("t.category_id")
+        transaction_filter(sel)
     ))?;
     let rows = statement.query_map(params![sel.from, sel.to], |r| {
         Ok(Tx {
@@ -157,24 +168,36 @@ pub fn csv(conn: &Connection, selection: &Selection) -> Result<String, AppError>
     Ok(out)
 }
 
-fn categories_json(conn: &Connection, sel: &Parsed) -> Result<Vec<Value>, AppError> {
+struct CategoryRow {
+    id: i64,
+    kind: String,
+    name: String,
+    deleted: bool,
+}
+
+fn category_rows(conn: &Connection, sel: &Parsed) -> Result<Vec<CategoryRow>, AppError> {
     let mut statement = conn.prepare(&format!(
         "SELECT id, type, name, deleted_at IS NOT NULL FROM categories WHERE {} ORDER BY id",
         sel.category_filter("id")
     ))?;
     let rows = statement.query_map([], |r| {
-        Ok(json!({
-            "id": r.get::<_, i64>(0)?.to_string(),
-            "type": r.get::<_, String>(1)?,
-            "name": r.get::<_, String>(2)?,
-            "deleted": r.get::<_, bool>(3)?,
-        }))
+        Ok(CategoryRow { id: r.get(0)?, kind: r.get(1)?, name: r.get(2)?, deleted: r.get(3)? })
     })?;
     Ok(rows.collect::<Result<Vec<_>, _>>()?)
 }
 
-/// Every budget row, including the ones that remove a budget from a month on (`limit` null).
-fn budgets_json(conn: &Connection, sel: &Parsed) -> Result<Vec<Value>, AppError> {
+struct BudgetRow {
+    kind: String,
+    scope: String,
+    category_id: Option<i64>,
+    /// "YYYY-MM-01".
+    effective_from: String,
+    /// Null on rows that remove a budget from that month on.
+    limit: Option<i64>,
+}
+
+/// Every budget row, including the ones that remove a budget from a month on.
+fn budget_rows(conn: &Connection, sel: &Parsed) -> Result<Vec<BudgetRow>, AppError> {
     // Global budgets belong to no category, so they only go out with an export of every category.
     let filter = if sel.categories.is_some() { sel.category_filter("category_id") } else { "1".to_string() };
     let mut statement = conn.prepare(&format!(
@@ -182,21 +205,43 @@ fn budgets_json(conn: &Connection, sel: &Parsed) -> Result<Vec<Value>, AppError>
          FROM budgets WHERE {filter} ORDER BY effective_from, id"
     ))?;
     let rows = statement.query_map([], |r| {
-        Ok(json!({
-            "type": r.get::<_, String>(0)?,
-            "scope": r.get::<_, String>(1)?,
-            "categoryId": r.get::<_, Option<i64>>(2)?.map(|id| id.to_string()),
-            "month": r.get::<_, String>(4)?[..7].to_string(),
-            "limit": r.get::<_, Option<i64>>(3)?.map(format_amount),
-        }))
+        Ok(BudgetRow { kind: r.get(0)?, scope: r.get(1)?, category_id: r.get(2)?, limit: r.get(3)?, effective_from: r.get(4)? })
     })?;
     Ok(rows.collect::<Result<Vec<_>, _>>()?)
 }
 
-fn recurring_json(conn: &Connection, sel: &Parsed) -> Result<Vec<Value>, AppError> {
-    recurring::list(conn)?
+fn recurring_rows(conn: &Connection, sel: &Parsed) -> Result<Vec<recurring::Recurring>, AppError> {
+    Ok(recurring::list(conn)?
         .into_iter()
         .filter(|item| sel.categories.as_ref().is_none_or(|ids| ids.contains(&item.category_id)))
+        .collect())
+}
+
+fn categories_json(conn: &Connection, sel: &Parsed) -> Result<Vec<Value>, AppError> {
+    Ok(category_rows(conn, sel)?
+        .into_iter()
+        .map(|c| json!({ "id": c.id.to_string(), "type": c.kind, "name": c.name, "deleted": c.deleted }))
+        .collect())
+}
+
+fn budgets_json(conn: &Connection, sel: &Parsed) -> Result<Vec<Value>, AppError> {
+    Ok(budget_rows(conn, sel)?
+        .into_iter()
+        .map(|b| {
+            json!({
+                "type": b.kind,
+                "scope": b.scope,
+                "categoryId": b.category_id.map(|id| id.to_string()),
+                "month": b.effective_from[..7],
+                "limit": b.limit.map(format_amount),
+            })
+        })
+        .collect())
+}
+
+fn recurring_json(conn: &Connection, sel: &Parsed) -> Result<Vec<Value>, AppError> {
+    recurring_rows(conn, sel)?
+        .into_iter()
         .map(|item| serde_json::to_value(item).map_err(|_| AppError::Internal))
         .collect()
 }
@@ -273,7 +318,7 @@ mod tests {
     use crate::categories::{self, CategoryType};
     use crate::transactions::{self, NewTransaction};
 
-    fn db() -> Connection {
+    pub(super) fn db() -> Connection {
         let mut conn = Connection::open_in_memory().unwrap();
         conn.execute_batch("PRAGMA foreign_keys = ON;").unwrap();
         crate::migrate::run(&mut conn).unwrap();
@@ -285,7 +330,7 @@ mod tests {
         conn
     }
 
-    fn spend(conn: &Connection, category: i64, name: &str, amount: &str, date: &str, description: Option<&str>) {
+    pub(super) fn spend(conn: &Connection, category: i64, name: &str, amount: &str, date: &str, description: Option<&str>) {
         transactions::create(
             conn,
             &NewTransaction {
@@ -300,7 +345,7 @@ mod tests {
         .unwrap();
     }
 
-    fn set_budget(conn: &Connection, kind: CategoryType, scope: Scope, category: Option<i64>, month: &str, limit: Option<&str>) {
+    pub(super) fn set_budget(conn: &Connection, kind: CategoryType, scope: Scope, category: Option<i64>, month: &str, limit: Option<&str>) {
         budgets::set(
             conn,
             &SetBudget {
@@ -316,7 +361,7 @@ mod tests {
     }
 
     /// Salary and rent (with a budget and a recurring item) plus a private category for the filter tests.
-    fn lived_in() -> (Connection, i64, i64, i64) {
+    pub(super) fn lived_in() -> (Connection, i64, i64, i64) {
         let conn = db();
         let salary = categories::create(&conn, "Salary", CategoryType::Income).unwrap().id;
         let rent = categories::create(&conn, "Rent", CategoryType::Expense).unwrap().id;
@@ -464,7 +509,7 @@ mod tests {
         assert_eq!(count, 4);
     }
 
-    fn parsed(conn: &Connection, selection: &Selection) -> Value {
+    pub(super) fn parsed(conn: &Connection, selection: &Selection) -> Value {
         serde_json::from_str(&json(conn, selection, Utc::now()).unwrap()).unwrap()
     }
 

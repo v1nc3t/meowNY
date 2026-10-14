@@ -55,6 +55,7 @@ const COMMANDS: &[&str] = &[
     "clear_backup_schedule",
     "export_json",
     "export_csv",
+    "export_xlsx",
 ];
 
 fn main() {

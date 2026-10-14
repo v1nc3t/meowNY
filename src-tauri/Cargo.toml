@@ -22,6 +22,7 @@ getrandom = "0.3.4"
 hkdf = "0.12.4"
 keyring = { version = "3", default-features = false, features = ["apple-native", "windows-native", "sync-secret-service", "crypto-rust"] }
 rusqlite = { version = "0.40.2", features = ["bundled-sqlcipher-vendored-openssl"] }
+rust_xlsxwriter = "0.92.0"
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"
 sha2 = "0.10.9"
@@ -32,4 +33,6 @@ tauri-plugin-opener = "2.5.5"
 zeroize = { version = "1.8.2", features = ["derive"] }
 
 [dev-dependencies]
+calamine = "0.30.1"
 tempfile = "3.27.0"
+zip = { version = "4", default-features = false, features = ["deflate"] }

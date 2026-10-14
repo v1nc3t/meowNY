@@ -57,6 +57,7 @@
     "allow-clear-backup-schedule",
     "allow-export-json",
     "allow-export-csv",
+    "allow-export-xlsx",
     "core:event:allow-listen",
     "core:event:allow-unlisten",
     {

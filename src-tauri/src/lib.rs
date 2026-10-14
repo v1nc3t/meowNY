@@ -150,6 +150,7 @@ pub fn run() {
             commands::clear_backup_schedule,
             commands::export_json,
             commands::export_csv,
+            commands::export_xlsx,
         ])
         .run(tauri::generate_context!())
         .expect("error while running meowNY");
