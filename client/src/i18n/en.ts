@@ -254,6 +254,17 @@ export const en = {
   'settings.notifyDue': 'notify me about recurring transactions that are due',
   'notify.title': 'recurring transactions due',
   'notify.body': '{count} due or overdue: {names}',
+  'dashboard.savings': 'savings',
+  'dashboard.savingsRate': 'savings rate',
+  'dashboard.spending': 'spending',
+  'dashboard.other': 'other',
+  'dashboard.empty': 'nothing recorded this month.',
+  'dashboard.emptyYear': 'nothing recorded this year.',
+  'dashboard.perMonth': 'per month',
+  'dashboard.paid': 'paid this month',
+  'dashboard.prevYear': 'previous year',
+  'dashboard.nextYear': 'next year',
+  'dashboard.noRecurring': 'no recurring items.',
 } as const
 
 export type MessageKey = keyof typeof en

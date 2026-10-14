@@ -10,6 +10,7 @@ use crate::budgets::{self, Budget, Overview, SetBudget};
 use crate::clock;
 use crate::currency::{self, Conversion};
 use crate::recurring::{self, Dues, NewRecurring, Recurring, RecurringPatch};
+use crate::stats::{self, BudgetVsActual, CategoryTrend, Commitments, PlannedVsPaid, TopCategory, YearPoint};
 use crate::transactions::{self, Filter, NewTransaction, Page, Transaction, TransactionPatch};
 use crate::vault::{AppError, LockPrefs, Settings, Vault, VaultStatus};
 
@@ -56,6 +57,12 @@ pub const COMMANDS: &[&str] = &[
     "get_notify_due",
     "set_notify_due",
     "show_due_notification",
+    "budget_vs_actual",
+    "category_trend",
+    "year_trend",
+    "top_categories",
+    "recurring_commitments",
+    "recurring_planned_vs_paid",
 ];
 
 #[tauri::command]
@@ -323,6 +330,43 @@ pub fn show_due_notification(app: tauri::AppHandle, vault: Shared, title: String
         return Ok(());
     }
     app.notification().builder().title(title).body(body).show().map_err(|_| AppError::Internal)
+}
+
+/// Every category's budget against what was spent or earned in one month ("YYYY-MM"), plus totals.
+#[tauri::command]
+pub fn budget_vs_actual(vault: Shared, month: String) -> Result<BudgetVsActual, AppError> {
+    vault.with_conn(|c| stats::budget_vs_actual(c, &month))
+}
+
+/// One category month by month, `from` to `to` inclusive ("YYYY-MM").
+#[tauri::command]
+pub fn category_trend(vault: Shared, category_id: String, from: String, to: String) -> Result<CategoryTrend, AppError> {
+    let id = categories::parse_id(&category_id)?;
+    vault.with_conn(|c| stats::category_trend(c, id, &from, &to))
+}
+
+/// Income, expense and savings for each month of a year ("YYYY").
+#[tauri::command]
+pub fn year_trend(vault: Shared, year: String) -> Result<Vec<YearPoint>, AppError> {
+    vault.with_conn(|c| stats::year_trend(c, &year))
+}
+
+/// The categories with the most spending or income in a month, biggest first.
+#[tauri::command]
+pub fn top_categories(vault: Shared, month: String, kind: CategoryType, limit: u32) -> Result<Vec<TopCategory>, AppError> {
+    vault.with_conn(|c| stats::top_categories(c, &month, kind, limit))
+}
+
+/// What the active recurring items cost, or bring in, in an average month.
+#[tauri::command]
+pub fn recurring_commitments(vault: Shared) -> Result<Commitments, AppError> {
+    vault.with_conn(|c| stats::commitments(c))
+}
+
+/// Planned against paid amounts of the recurring items paid in a month.
+#[tauri::command]
+pub fn recurring_planned_vs_paid(vault: Shared, month: String) -> Result<Vec<PlannedVsPaid>, AppError> {
+    vault.with_conn(|c| stats::planned_vs_paid(c, &month))
 }
 
 #[cfg(test)]

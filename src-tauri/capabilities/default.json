@@ -43,6 +43,12 @@
     "allow-get-notify-due",
     "allow-set-notify-due",
     "allow-show-due-notification",
+    "allow-budget-vs-actual",
+    "allow-category-trend",
+    "allow-year-trend",
+    "allow-top-categories",
+    "allow-recurring-commitments",
+    "allow-recurring-planned-vs-paid",
     "core:event:allow-listen",
     "core:event:allow-unlisten",
     {

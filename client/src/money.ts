@@ -71,3 +71,34 @@ export function formatDate(isoDate: string, locale: string): string {
     dateFormatter(locale)?.format(new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3])))) ?? isoDate
   )
 }
+
+/** An amount such as "-12.50" as whole cents. Null if it is not a two-decimal amount. */
+export function toMinor(amount: string): bigint | null {
+  const match = /^(-?)(\d+)\.(\d{2})$/.exec(amount)
+  if (!match) return null
+  const cents = BigInt(`${match[2]}${match[3]}`)
+  return match[1] ? -cents : cents
+}
+
+/** Whole cents back to a two-decimal amount. */
+export function fromMinor(cents: bigint): string {
+  const sign = cents < 0n ? '-' : ''
+  const text = (cents < 0n ? -cents : cents).toString().padStart(3, '0')
+  return `${sign}${text.slice(0, -2)}.${text.slice(-2)}`
+}
+
+const percentFormatter = memoByKey(
+  (locale: string) => locale,
+  (locale: string) => {
+    try {
+      return new Intl.NumberFormat(locale, { maximumFractionDigits: 1 })
+    } catch {
+      return null
+    }
+  },
+)
+
+/** 89.1 as "89.1%" in the person's number format. */
+export function formatPercent(value: number, locale: string): string {
+  return `${percentFormatter(locale)?.format(value) ?? String(value)}%`
+}

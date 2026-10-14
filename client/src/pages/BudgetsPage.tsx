@@ -2,15 +2,14 @@ import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { budgets as budgetsApi, MONTH, type MonthHistory, type Overview } from '../api/budgets'
 import { categories as categoriesApi, type Category } from '../api/categories'
 import { errorText } from '../api/invoke'
-import { monthLabel, monthNames, shiftMonth, withMonth, withYear, yearChoices } from '../api/months'
-import Dropdown from '../components/Dropdown'
+import { monthLabel, shiftMonth } from '../api/months'
+import MonthNav from '../components/MonthNav'
 import { useToday } from '../api/today'
 import { amountString, formatMoney } from '../money'
 import { useMoneySettings, type MoneySettings } from '../useMoneySettings'
 import { useNotice } from '../useNotice'
 import { useI18n, useT } from '../i18n/context'
 import { useShortcut } from '../keys/registry'
-import { tip } from '../keys/tip'
 
 type Side = 'EXPENSE' | 'INCOME'
 
@@ -149,34 +148,7 @@ function BudgetsView({ settings, thisMonth }: { settings: MoneySettings; thisMon
     <section className="tx-page budget-page" ref={pageRef}>
       <div className="tx-title">
         <h1>{t('budgets.title')}</h1>
-        <div className="month-nav">
-          <button type="button" aria-label={t('budgets.prevMonth')} {...tip('prev')} onClick={() => setMonth(shiftMonth(month, -1))}>
-            &lsaquo;
-          </button>
-          <Dropdown
-            compact
-            label={t('common.month')}
-            value={String(Number(month.slice(5, 7)))}
-            options={monthNames(language).map((name, index) => ({ value: String(index + 1), label: name }))}
-            onChange={(value) => setMonth(withMonth(month, Number(value)))}
-          />
-          <Dropdown
-            compact
-            label={t('common.year')}
-            value={month.slice(0, 4)}
-            options={yearChoices(month, Number(thisMonth.slice(0, 4))).map((year) => ({
-              value: String(year),
-              label: String(year),
-            }))}
-            onChange={(value) => setMonth(withYear(month, Number(value)))}
-          />
-          <button type="button" aria-label={t('budgets.nextMonth')} {...tip('next')} onClick={() => setMonth(shiftMonth(month, 1))}>
-            &rsaquo;
-          </button>
-          <button type="button" disabled={month === thisMonth} {...tip('today')} onClick={() => setMonth(thisMonth)}>
-            {t('common.current')}
-          </button>
-        </div>
+        <MonthNav month={month} thisMonth={thisMonth} onChange={setMonth} />
       </div>
       <p className="notice">{message}</p>
       <div className="budget-split wide">

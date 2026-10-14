@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { amountString, convertAmount, formatDate, formatMoney, parseRate } from './money.ts'
+import { amountString, convertAmount, formatDate, formatMoney, fromMinor, parseRate, toMinor } from './money.ts'
 
 test('transaction amounts pad to two decimals and reject empty, zero, and negative', () => {
   assert.equal(amountString('10', false), '10.00')
@@ -54,4 +54,12 @@ test('dates are written the way the locale writes them, on the same calendar day
   assert.equal(formatDate('2026-01-01', 'en-US'), '01/01/2026', 'no shift across the year start')
   assert.equal(formatDate('nonsense', 'en-US'), 'nonsense')
   assert.equal(formatDate('2026-10-12', 'not a locale!!'), '2026-10-12')
+})
+
+test('amounts convert to whole cents and back without loss', () => {
+  assert.equal(toMinor('12.50'), 1250n)
+  assert.equal(toMinor('-0.05'), -5n)
+  assert.equal(toMinor('12.5'), null)
+  for (const amount of ['0.00', '0.07', '-1250.99', '9999999999.99']) assert.equal(fromMinor(toMinor(amount) ?? 0n), amount)
+  assert.equal(fromMinor(-1600n), '-16.00')
 })

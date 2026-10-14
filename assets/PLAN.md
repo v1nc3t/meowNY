@@ -136,12 +136,12 @@ Kept: the React client (`client/src`), Zod schemas, money and date logic, and th
 
 ## Phase 5: Statistics and charts (M)
 
-- [ ] Command: budget vs actual for a month (categories + totals)
-- [ ] Command: category trend over a date range
-- [ ] Dashboard (built mobile-first): budget vs actual per category (bars/progress), month totals for income and expense, savings rate, year trend
-- [ ] Extra stats from the schema: top categories, committed recurring cost per month, planned vs paid for recurring items
-- [ ] Frontend formats money using the currency and locale setting
-- [ ] Tests: numbers match hand-calculated examples, months with no budget return `budgeted: null`
+- [x] Command: budget vs actual for a month (categories + totals) (`budget_vs_actual` in `src-tauri/src/stats.rs`. Per category: budgeted (null without a budget), actual, remaining, percent used with one decimal; totals reuse the budget overview. A deleted category is listed only for months where it has transactions. Budget lookup is shared with the budget screens.)
+- [x] Command: category trend over a date range (`category_trend`: one point per month, `budgeted` null where the category has no budget, at most 120 months.)
+- [x] Dashboard (built mobile-first): budget vs actual per category (bars/progress), month totals for income and expense, savings rate, year trend (`client/src/pages/DashboardPage.tsx`: headline income, expense, savings and savings rate with change from last month; the year as income and expense lines with savings bars, hover to read a month, click to open it, year picked with ‹ year › and a current button; a spending donut; a bar per budget with its percent, over-budget in red; a recurring card. Plain CSS and SVG sized to their container. Chart titles link to transactions, budgets and recurring. Month steps with `[` `]` and `t`.)
+- [x] Extra stats from the schema: top categories, committed recurring cost per month, planned vs paid for recurring items (Commands in `stats.rs`: `year_trend`, `top_categories`, `recurring_commitments`, `recurring_planned_vs_paid`. On the dashboard: top categories are the spending donut; the recurring card shows each item's monthly cost, what was paid this month and the difference from plan.)
+- [x] Frontend formats money using the currency and locale setting (`formatMoney` and `formatPercent` in `money.ts`, used for every figure on the dashboard.)
+- [x] Tests: numbers match hand-calculated examples, months with no budget return `budgeted: null` (Rust: `the_food_example_matches_hand_calculation`, `a_month_without_budgets_has_null_budgeted`. Client: `dashboardMath.test.ts` for percent used, axis scale and change from last month.)
 
 **Done when:** the Food example works end to end: a budget of 400, transactions summing to 356.20, the chart shows both.
 
