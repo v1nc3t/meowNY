@@ -86,7 +86,7 @@ Kept: the React client (`client/src`), Zod schemas, money and date logic, and th
   - [x] the same recurring occurrence cannot be paid twice
   - [x] the same `client_uuid` cannot create two transactions
   - [x] audit rows appear for insert, update and delete, and are skipped when only `updated_at` changed
-- [x] Dev seed script with demo categories, budgets and transactions (`src-tauri/seeds/dev.sql`, loaded by `src/seed.rs`; run `cargo run --example seed -- <db-path> <64-hex-key>` from `src-tauri/`. Dates are relative to today.)
+- [x] Dev seed script with demo categories, budgets and transactions (`src-tauri/seeds/dev.sql`, loaded by `src/seed.rs`; run `cargo run --example seed -- <db-path> <64-hex-key>` from `src-tauri/`. Dates are relative to today. Later widened: sixteen months of history, awkward text for the exports, and `cargo run --example dev_vault -- <data-dir>`, which replaces the app's own data with it. The tests run the seed for ten different "today" dates, month ends and leap days included.)
 
 **Done when:** a fresh database builds from migrations only and all constraint tests pass on SQLite.
 
