@@ -255,7 +255,7 @@ function ExportForm({ today, settings, categories }: { today: Today; settings: M
             )
           )}
           <p className="warning" role="note">
-            {t('export.warning')} <Link to="/app/settings">{t('nav.settings')}</Link>
+            {t('export.warning')} <Link to="/app/settings">{t('export.backupLink')}</Link>
           </p>
           <button type="button" className="export-go" disabled={busy || problem !== null} onClick={() => void run()}>
             <span>{t('export.go')}</span>

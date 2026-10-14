@@ -10,7 +10,7 @@ import { useMoneySettings, type MoneySettings } from '../useMoneySettings'
 import { useNotice } from '../useNotice'
 import { useI18n, useT } from '../i18n/context'
 import { useShortcut } from '../keys/registry'
-import { changePercent, niceCeil, usedPercent } from './dashboardMath'
+import { changePercent, niceCeil, savingsRateText, usedPercent } from './dashboardMath'
 
 const TOP_CATEGORIES = 7
 
@@ -84,7 +84,7 @@ function DashboardView({ settings, now }: { settings: MoneySettings; now: Today 
               <Stat label={t('dashboard.savings')} value={point.savings} before={previous?.savings} good="up" settings={settings} />
               <div className="dash-stat">
                 <span className="dash-stat-label">{t('dashboard.savingsRate')}</span>
-                <span className="dash-stat-value">{point.savingsRate === null ? '-' : formatPercent(point.savingsRate, settings.locale)}</span>
+                <span className="dash-stat-value">{savingsRateText(point.savingsRate, settings.locale)}</span>
                 <Bar percent={point.savingsRate ?? 0} />
               </div>
             </div>
