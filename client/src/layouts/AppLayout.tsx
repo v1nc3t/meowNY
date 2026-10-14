@@ -2,11 +2,13 @@ import { Suspense, useCallback, useEffect, useState } from 'react'
 import { Outlet } from 'react-router-dom'
 import AppSidebar from '../components/AppSidebar'
 import { preloadAllWhenIdle } from '../pages'
+import { useDueNotifications } from '../useDueNotifications'
 import ShortcutsProvider from '../keys/ShortcutsProvider'
 
 export default function AppLayout() {
   const [collapsed, setCollapsed] = useState(() => localStorage.getItem('sidebar-collapsed') === '1')
   const locked = true
+  useDueNotifications()
 
   useEffect(() => {
     preloadAllWhenIdle()

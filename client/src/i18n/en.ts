@@ -250,6 +250,10 @@ export const en = {
   'rec.errorAmount': 'enter an amount greater than zero, with at most two decimals.',
   'rec.errorCount': 'repeat every must be a whole number from 1 to 1000.',
   'rec.paid': 'paid. next due {date}.',
+  'settings.notifications': 'notifications',
+  'settings.notifyDue': 'notify me about recurring transactions that are due',
+  'notify.title': 'recurring transactions due',
+  'notify.body': '{count} due or overdue: {names}',
 } as const
 
 export type MessageKey = keyof typeof en

@@ -239,4 +239,8 @@ export const it: Messages = {
   'rec.errorAmount': 'inserisci un importo maggiore di zero, con al massimo due decimali.',
   'rec.errorCount': 'la ripetizione deve essere un numero intero da 1 a 1000.',
   'rec.paid': 'pagato. prossima scadenza il {date}.',
+  'settings.notifications': 'notifiche',
+  'settings.notifyDue': 'avvisami delle transazioni ricorrenti in scadenza',
+  'notify.title': 'transazioni ricorrenti in scadenza',
+  'notify.body': '{count} in scadenza o scadute: {names}',
 }

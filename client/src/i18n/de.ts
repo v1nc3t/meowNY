@@ -240,4 +240,8 @@ export const de: Messages = {
   'rec.errorAmount': 'gib einen betrag größer als null mit höchstens zwei nachkommastellen ein.',
   'rec.errorCount': 'die wiederholung muss eine ganze zahl von 1 bis 1000 sein.',
   'rec.paid': 'bezahlt. nächste fälligkeit {date}.',
+  'settings.notifications': 'benachrichtigungen',
+  'settings.notifyDue': 'mich an fällige wiederkehrende transaktionen erinnern',
+  'notify.title': 'wiederkehrende transaktionen fällig',
+  'notify.body': '{count} fällig oder überfällig: {names}',
 }

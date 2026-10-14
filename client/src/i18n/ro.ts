@@ -236,4 +236,8 @@ export const ro: Messages = {
   'rec.errorAmount': 'introdu o sumă mai mare ca zero, cu cel mult două zecimale.',
   'rec.errorCount': 'repetarea trebuie să fie un număr întreg de la 1 la 1000.',
   'rec.paid': 'plătit. următoarea scadență la {date}.',
+  'settings.notifications': 'notificări',
+  'settings.notifyDue': 'anunță-mă despre tranzacțiile recurente scadente',
+  'notify.title': 'tranzacții recurente scadente',
+  'notify.body': '{count} scadente sau întârziate: {names}',
 }

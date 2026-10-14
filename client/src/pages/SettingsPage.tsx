@@ -20,6 +20,7 @@ export default function SettingsPage() {
   const [message, setMessage] = useNotice()
   const [confirmation, setConfirmation] = useState('')
   const [newKey, setNewKey] = useState<string | null>(null)
+  const [notifyDue, setNotifyDue] = useState<boolean | null>(null)
   const [lockAfter, setLockAfter] = useState('300')
   const [changingCurrency, setChangingCurrency] = useState(false)
   const [locale, setLocale] = useState('')
@@ -43,6 +44,7 @@ export default function SettingsPage() {
       },
       (e) => setMessage(errorText(e)),
     )
+    vault.notifyDue().then(setNotifyDue, (e) => setMessage(errorText(e)))
     vault.dataLocation().then(setLocation, () => undefined)
   }, [setMessage])
 
@@ -78,6 +80,15 @@ export default function SettingsPage() {
       await vault.saveLockPrefs(next)
       setPrefs(next)
       setMessage(t('settings.saved'))
+    } catch (error) {
+      setMessage(errorText(error))
+    }
+  }
+
+  async function onNotify(on: boolean) {
+    try {
+      await vault.setNotifyDue(on)
+      setNotifyDue(on)
     } catch (error) {
       setMessage(errorText(error))
     }
@@ -181,6 +192,16 @@ export default function SettingsPage() {
               </button>
             </div>
           </form>
+        )}
+
+        {notifyDue !== null && (
+          <div className="settings-block">
+            <h2>{t('settings.notifications')}</h2>
+            <label className="check">
+              <input type="checkbox" checked={notifyDue} onChange={(event) => void onNotify(event.target.checked)} />
+              {t('settings.notifyDue')}
+            </label>
+          </div>
         )}
 
         <div className="settings-block">

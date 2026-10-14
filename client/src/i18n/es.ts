@@ -238,4 +238,8 @@ export const es: Messages = {
   'rec.errorAmount': 'introduce un importe mayor que cero, con un máximo de dos decimales.',
   'rec.errorCount': 'la repetición debe ser un número entero de 1 a 1000.',
   'rec.paid': 'pagado. próximo vencimiento {date}.',
+  'settings.notifications': 'notificaciones',
+  'settings.notifyDue': 'avisarme de las transacciones recurrentes que vencen',
+  'notify.title': 'transacciones recurrentes pendientes',
+  'notify.body': '{count} vencidas o por vencer: {names}',
 }

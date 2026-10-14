@@ -239,4 +239,8 @@ export const fr: Messages = {
   'rec.errorAmount': 'saisissez un montant supérieur à zéro, avec au plus deux décimales.',
   'rec.errorCount': 'la répétition doit être un nombre entier de 1 à 1000.',
   'rec.paid': 'payé. prochaine échéance le {date}.',
+  'settings.notifications': 'notifications',
+  'settings.notifyDue': 'me prévenir des transactions récurrentes à échéance',
+  'notify.title': 'transactions récurrentes à payer',
+  'notify.body': '{count} à payer ou en retard : {names}',
 }
