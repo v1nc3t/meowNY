@@ -123,7 +123,7 @@ Kept: the React client (`client/src`), Zod schemas, money and date logic, and th
 
 ## Phase 4: Recurring items (M)
 
-- [x] Recurring CRUD (income or expense, any category, interval unit + count, optional end date) (`src-tauri/src/recurring.rs`: create, update, delete, list. Not yet exposed as commands. Changing the schedule moves the next due date to the first new occurrence on or after the old one. Deleting an item keeps its paid transactions.)
+- [x] Recurring CRUD (income or expense, any category, interval unit + count, optional end date) (`src-tauri/src/recurring.rs`: create, update, delete, list. Exposed as the `*_recurring` commands and `client/src/api/recurring.ts`. Changing the schedule moves the next due date to the first new occurrence on or after the old one. Deleting an item keeps its paid transactions.)
 - [x] Due-date function computed from `start_date` (not from the previous due date). **Unit-test month-end cases** (Jan 31, Feb 29, yearly on Feb 29). (`recurring::due_date`, `next_after`, `first_on_or_after`; tests cover Jan 31, leap February and yearly Feb 29.)
 - [x] "Mark as paid" in one database transaction (schema Part 5-B), with optional actual amount and payment date (`recurring::pay`. The planned amount is kept on the transaction. Paying the last occurrence before the end date makes the item inactive.)
 - [x] Skip, pause, end; overdue and upcoming lists (`skip`, `set_active`, `end`, `dues`. Resuming an item past its end date is refused. Upcoming defaults to the next 30 days, at most 366.)

@@ -111,6 +111,15 @@ pub fn run() {
             commands::save_recovery_key,
             commands::budget_history,
             commands::change_currency,
+            commands::list_recurring,
+            commands::create_recurring,
+            commands::update_recurring,
+            commands::delete_recurring,
+            commands::pay_recurring,
+            commands::skip_recurring,
+            commands::set_recurring_active,
+            commands::end_recurring,
+            commands::recurring_dues,
         ])
         .run(tauri::generate_context!())
         .expect("error while running meowNY");
