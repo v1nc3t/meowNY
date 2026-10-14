@@ -55,7 +55,8 @@ export type TopCategory = z.infer<typeof TopCategory>
 export const Commitments = z.object({
   expense: Amount,
   income: Amount,
-  items: z.array(z.object({ id: Id, name: z.string(), type: CategoryType, perMonth: Amount })),
+  /** `perMonth` is null for a bill with no fixed amount, which is left out of the totals. */
+  items: z.array(z.object({ id: Id, name: z.string(), type: CategoryType, perMonth: Amount.nullable() })),
 })
 export type Commitments = z.infer<typeof Commitments>
 
@@ -63,9 +64,10 @@ export const PlannedVsPaid = z.object({
   recurringId: Id,
   name: z.string(),
   paidCount: z.number().int().positive(),
-  planned: Amount,
+  /** Null for a bill with no fixed amount: nothing was planned. */
+  planned: Amount.nullable(),
   paid: Amount,
-  difference: Amount,
+  difference: Amount.nullable(),
 })
 export type PlannedVsPaid = z.infer<typeof PlannedVsPaid>
 

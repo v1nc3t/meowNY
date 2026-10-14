@@ -56,8 +56,9 @@ INSERT INTO budgets (type, scope, category_id, amount_limit_minor, effective_fro
   ('EXPENSE', 'CATEGORY', 10,   25000,  date(@today, 'start of month', '-12 months'));
 
 -- Recurring items. next_due_date is the first occurrence that has not been paid; the paid ones follow below.
---   1 rent, 2 and 3 subscriptions, 4 electricity (paid with another amount than planned), 5 a yearly premium,
---   6 a cleaner every two weeks (three days overdue), 7 salary, 8 a course that is paused, 9 a magazine that ended.
+--   1 rent, 2 and 3 subscriptions, 4 electricity (a bill with no fixed amount), 5 a yearly premium,
+--   6 a cleaner every two weeks (three days overdue, paid a little more now and then), 7 salary,
+--   8 a course that is paused, 9 a magazine that ended.
 INSERT INTO recurring_transactions
   (id, category_id, name, description, amount_minor, start_date, interval_unit, interval_count, next_due_date, end_date, is_active) VALUES
   (1, 4, 'Rent', 'Flat, paid by transfer', 95000,
@@ -71,7 +72,7 @@ INSERT INTO recurring_transactions
       date(@today, 'start of month', '-15 months', '+4 days'), 'MONTH', 1,
       CASE WHEN date(@today, 'start of month', '+4 days') > @today THEN date(@today, 'start of month', '+4 days')
            ELSE date(@today, 'start of month', '+1 month', '+4 days') END, NULL, 1),
-  (4, 10, 'Electricity', 'Estimated bill', 7800,
+  (4, 10, 'Electricity', 'Varies with the meter', NULL,
       date(@today, 'start of month', '-15 months', '+19 days'), 'MONTH', 1,
       CASE WHEN date(@today, 'start of month', '+19 days') > @today THEN date(@today, 'start of month', '+19 days')
            ELSE date(@today, 'start of month', '+1 month', '+19 days') END, NULL, 1),
@@ -128,11 +129,12 @@ INSERT INTO transactions
 SELECT 14, 8, due, 'Language course', 3500, 3500, due, 'Tuesday evening class'
 FROM (SELECT date(@today, 'start of month', '-' || i || ' months', '+14 days') AS due FROM m);
 
--- Electricity on the 20th: planned 78.00, paid a little more or less, a day or two late.
+-- Electricity on the 20th: no fixed amount, so nothing is planned and each payment is what the bill was (about 78),
+-- a day or two late.
 WITH RECURSIVE m(i) AS (SELECT 0 UNION ALL SELECT i + 1 FROM m WHERE i < 15)
 INSERT INTO transactions
   (category_id, recurring_transaction_id, recurring_due_date, name, amount_minor, planned_amount_minor, payment_date, description)
-SELECT 10, 4, due, 'Electricity', 7800 + ((i * 53) % 61 - 30) * 10, 7800, min(date(due, '+' || (i % 3) || ' days'), @today), 'Estimated bill'
+SELECT 10, 4, due, 'Electricity', 7800 + ((i * 53) % 61 - 30) * 10, NULL, min(date(due, '+' || (i % 3) || ' days'), @today), 'Varies with the meter'
 FROM (SELECT i, date(@today, 'start of month', '-' || i || ' months', '+19 days') AS due FROM m) WHERE due <= @today;
 
 -- Salary on the 25th, up from 3200 to 3240 six months ago.
@@ -143,7 +145,8 @@ SELECT 1, 7, due, 'Salary', pay, pay, due, 'Monthly pay'
 FROM (SELECT date(@today, 'start of month', '-' || i || ' months', '+24 days') AS due,
              CASE WHEN i >= 6 THEN 320000 ELSE 324000 END AS pay FROM m) WHERE due <= @today;
 
--- The yearly premium was paid once, and the cleaner twelve times; the next visit was three days ago.
+-- The yearly premium was paid once, and the cleaner twelve times (planned 30.00, now and then 35.00 for extra
+-- hours); the next visit was three days ago.
 INSERT INTO transactions
   (category_id, recurring_transaction_id, recurring_due_date, name, amount_minor, planned_amount_minor, payment_date, description)
 VALUES (10, 5, date(@today, 'start of month', '-8 months', '+2 days'), 'Home insurance', 31200, 31200,
@@ -152,8 +155,8 @@ VALUES (10, 5, date(@today, 'start of month', '-8 months', '+2 days'), 'Home ins
 WITH RECURSIVE k(n) AS (SELECT 0 UNION ALL SELECT n + 1 FROM k WHERE n < 11)
 INSERT INTO transactions
   (category_id, recurring_transaction_id, recurring_due_date, name, amount_minor, planned_amount_minor, payment_date, description)
-SELECT 10, 6, due, 'Cleaning service', 3000, 3000, due, NULL
-FROM (SELECT date(@today, '-171 days', '+' || (14 * n) || ' days') AS due FROM k);
+SELECT 10, 6, due, 'Cleaning service', CASE WHEN n % 4 = 3 THEN 3500 ELSE 3000 END, 3000, due, NULL
+FROM (SELECT n, date(@today, '-171 days', '+' || (14 * n) || ' days') AS due FROM k);
 
 -- Everyday spending. `i` is months ago, `j` the n-th purchase that month.
 -- Groceries: five shops a month, between 28 and 110.

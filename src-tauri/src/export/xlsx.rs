@@ -236,7 +236,10 @@ fn write(data: &Data, codes: &Codes) -> Result<Vec<u8>, XlsxError> {
         text(s, row, 0, &r.name)?;
         text(s, row, 1, &category)?;
         text(s, row, 2, &kind)?;
-        money(s, row, 3, crate::money::parse_amount(&r.amount).unwrap_or(0), &cash)?;
+        // A bill with no fixed amount leaves the cell empty.
+        if let Some(amount) = r.amount.as_deref().and_then(|a| crate::money::parse_amount(a).ok()) {
+            money(s, row, 3, amount, &cash)?;
+        }
         s.write_number(row, 4, r.interval_count)?;
         text(s, row, 5, &format!("{:?}", r.interval_unit).to_uppercase())?;
         date(s, row, 6, &r.start_date, &day)?;
@@ -681,6 +684,31 @@ mod tests {
         let sheet = rows(&mut book, "Categories");
         let gone = sheet.iter().find(|r| r[0] == Cell::Text("Therapy".into())).unwrap();
         assert_eq!(gone[2], Cell::Bool(true));
+    }
+
+    #[test]
+    fn a_bill_with_no_fixed_amount_leaves_its_amount_cell_empty() {
+        let (conn, _, rent, _) = lived_in();
+        crate::recurring::create(
+            &conn,
+            &crate::recurring::NewRecurring {
+                name: "Electricity".into(),
+                amount: None,
+                category_id: rent.to_string(),
+                start_date: "2026-01-20".into(),
+                interval_unit: crate::recurring::Unit::Month,
+                interval_count: 1,
+                end_date: None,
+                description: None,
+            },
+        )
+        .unwrap();
+        let mut book = open(&build(&conn, &Selection::default(), &DisplayFormat::default()));
+        let sheet = rows(&mut book, "Recurring");
+        let electricity = sheet.iter().find(|r| r[0] == Cell::Text("Electricity".into())).unwrap();
+        assert_eq!(electricity[3], Cell::Empty, "no amount, no zero");
+        let rent_item = sheet.iter().find(|r| r[0] == Cell::Text("Rent".into())).unwrap();
+        assert_eq!(rent_item[3], Cell::Number(100.0));
     }
 
     #[test]

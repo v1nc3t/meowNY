@@ -446,7 +446,7 @@ mod tests {
                 &conn,
                 &recurring::NewRecurring {
                     name: name.into(),
-                    amount: "100.00".into(),
+                    amount: Some("100.00".into()),
                     category_id: category.to_string(),
                     start_date: "2026-01-01".into(),
                     interval_unit: recurring::Unit::Month,
@@ -712,6 +712,30 @@ mod tests {
         assert_eq!((empty.transactions, empty.first_date, empty.last_date), (0, None, None));
         assert_eq!((empty.income.as_str(), empty.expense.as_str()), ("0.00", "0.00"));
         assert_eq!(preview(&conn, &Selection { from: Some("bad".into()), ..Default::default() }), Err(AppError::InvalidInput));
+    }
+
+    #[test]
+    fn a_bill_with_no_fixed_amount_has_a_null_amount_in_the_json() {
+        let (conn, _, rent, _) = lived_in();
+        recurring::create(
+            &conn,
+            &recurring::NewRecurring {
+                name: "Electricity".into(),
+                amount: None,
+                category_id: rent.to_string(),
+                start_date: "2026-01-20".into(),
+                interval_unit: recurring::Unit::Month,
+                interval_count: 1,
+                end_date: None,
+                description: None,
+            },
+        )
+        .unwrap();
+        let file = parsed(&conn, &Selection::default());
+        let items = file["recurring"].as_array().unwrap();
+        let electricity = items.iter().find(|i| i["name"] == "Electricity").unwrap();
+        assert!(electricity["amount"].is_null());
+        assert!(items.iter().filter(|i| i["name"] != "Electricity").all(|i| i["amount"].is_string()));
     }
 
     #[test]

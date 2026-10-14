@@ -122,7 +122,9 @@ function RecurringView({ settings, now }: { settings: MoneySettings; now: Today 
     if (pending) return
     const form = new FormData(event.currentTarget)
     const name = String(form.get('name') ?? '').trim()
-    const amount = amountString(String(form.get('amount') ?? ''), false)
+    // Empty means a bill with no fixed amount; anything written must be a real amount.
+    const amountText = String(form.get('amount') ?? '').trim()
+    const amount = amountText === '' ? null : amountString(amountText, false)
     const categoryId = String(form.get('categoryId') ?? '')
     const startDate = String(form.get('startDate') ?? '')
     const intervalUnit = String(form.get('intervalUnit') ?? '') as IntervalUnit
@@ -133,7 +135,7 @@ function RecurringView({ settings, now }: { settings: MoneySettings; now: Today 
       setDraftMessage(t('rec.errorRequired'))
       return
     }
-    if (!amount) {
+    if (amountText !== '' && !amount) {
       setDraftMessage(t('rec.errorAmount'))
       return
     }
@@ -197,12 +199,14 @@ function RecurringView({ settings, now }: { settings: MoneySettings; now: Today 
       ? t(`rec.every1.${item.intervalUnit}`)
       : t(`rec.everyN.${item.intervalUnit}`, { count: item.intervalCount })
 
-  function statusText(item: Recurring, status: Status): string {
-    if (status === 'overdue') return t('rec.overdue')
-    if (status === 'today') return t('rec.dueToday')
-    if (status === 'paused') return t('rec.paused')
-    if (status === 'ended') return t('rec.ended')
-    return t('rec.due', { date: formatDate(item.nextDueDate, settings.locale) })
+  /** The date the badge shows, and the word beside it when the item is not simply upcoming. */
+  function badgeOf(item: Recurring, status: Status): { date: string; state: string } {
+    const date = formatDate(status === 'ended' && item.endDate ? item.endDate : item.nextDueDate, settings.locale)
+    if (status === 'overdue') return { date, state: t('rec.overdue') }
+    if (status === 'today') return { date, state: t('rec.dueToday') }
+    if (status === 'paused') return { date, state: t('rec.paused') }
+    if (status === 'ended') return { date, state: t('rec.ended') }
+    return { date, state: '' }
   }
 
   return (
@@ -234,9 +238,10 @@ function RecurringView({ settings, now }: { settings: MoneySettings; now: Today 
           <p className="notice">{draftMessage}</p>
           <form id={modalFormId} onSubmit={(event) => void onPay(event)}>
             <p>{paying.name}</p>
+            {paying.amount === null ? <p className="hint">{t('rec.payHint')}</p> : null}
             <label>
               {t('rec.paidAmount')}
-              <input name="amount" required inputMode="decimal" defaultValue={paying.amount} autoComplete="off" />
+              <input name="amount" required autoFocus={paying.amount === null} inputMode="decimal" defaultValue={paying.amount ?? ''} autoComplete="off" />
             </label>
             <DateField name="paidOn" label={t('rec.paidOn')} defaultValue={now.date} today={now.date} />
           </form>
@@ -247,66 +252,64 @@ function RecurringView({ settings, now }: { settings: MoneySettings; now: Today 
           {items.length === 0 ? <p>{t('rec.empty')}</p> : null}
           {groups.map((group) => (
             <Fragment key={group.id}>
-              <h2>{group.name}</h2>
-              <ul className="rows">
-            {group.items.map((item) => {
-              const status = statusOf(item, now.date)
-              return (
-                <li key={item.id}>
-                  <div className="entry-row tx-row">
-                    <div className="tx-main">
-                      <p className="entry-main">{item.name}</p>
-                      <p className="tx-sub">
-                        {[
-                          formatMoney(item.amount, settings.currency, settings.locale),
-                          everyText(item),
-                        ]
-                          .filter(Boolean)
-                          .join(' | ')}
-                      </p>
-                      <p className={status === 'overdue' ? 'tx-sub rec-overdue' : 'tx-sub'} data-status={status}>
-                        {statusText(item, status)}
-                      </p>
-                    </div>
-                    <div className="entry-actions">
-                      {item.isActive ? (
-                        <>
-                          <button type="button" className="tx-text" data-row-focus onClick={() => openPay(item)}>
-                            {t('rec.pay')}
-                          </button>
-                          <button type="button" className="tx-text" onClick={() => void run(() => recurringApi.skip(item.id))}>
-                            {t('rec.skip')}
-                          </button>
-                          <button type="button" className="tx-text" onClick={() => void run(() => recurringApi.setActive(item.id, false))}>
-                            {t('rec.pause')}
-                          </button>
-                        </>
-                      ) : status === 'paused' ? (
-                        <button
-                          type="button"
-                          className="tx-text"
-                          data-row-focus
-                          onClick={() => void run(() => recurringApi.setActive(item.id, true))}
-                        >
-                          {t('rec.resume')}
+              <h2 className="rec-group">{group.name}</h2>
+              <ul className="rec-list">
+                {group.items.map((item) => {
+                  const status = statusOf(item, now.date)
+                  const badge = badgeOf(item, status)
+                  return (
+                    <li key={item.id} className="rec-item" data-status={status}>
+                      <div className="rec-body">
+                        <p className="rec-name">{item.name}</p>
+                        <p className="rec-meta">
+                          <span className={item.amount === null ? 'rec-amount rec-varies' : 'rec-amount'}>
+                            {item.amount === null ? t('rec.varies') : formatMoney(item.amount, settings.currency, settings.locale)}
+                          </span>
+                          {' \u00b7 '}
+                          {everyText(item)}
+                        </p>
+                      </div>
+                      <div className="rec-due">
+                        <span className="rec-badge" data-status={status}>
+                          <span className="rec-date">{badge.date}</span>
+                          {badge.state ? <span className="rec-state">{badge.state}</span> : null}
+                        </span>
+                        {item.isActive ? (
+                          <span className="rec-actions">
+                            <button type="button" className="rec-pay" data-row-focus onClick={() => openPay(item)}>
+                              {t('rec.pay')}
+                            </button>
+                            <button type="button" className="rec-act" onClick={() => void run(() => recurringApi.skip(item.id))}>
+                              {t('rec.skip')}
+                            </button>
+                            <button type="button" className="rec-act" onClick={() => void run(() => recurringApi.setActive(item.id, false))}>
+                              {t('rec.pause')}
+                            </button>
+                          </span>
+                        ) : status === 'paused' ? (
+                          <span className="rec-actions">
+                            <button type="button" className="rec-pay" data-row-focus onClick={() => void run(() => recurringApi.setActive(item.id, true))}>
+                              {t('rec.resume')}
+                            </button>
+                          </span>
+                        ) : null}
+                      </div>
+                      <div className="rec-more">
+                        <button type="button" onClick={() => openEdit(item)}>
+                          {t('common.edit')}
                         </button>
-                      ) : null}
-                      <button type="button" className="tx-text" onClick={() => openEdit(item)}>
-                        {t('common.edit')}
-                      </button>
-                      {status !== 'ended' ? (
-                        <button type="button" className="tx-text" onClick={() => void run(() => recurringApi.end(item.id))}>
-                          {t('rec.end')}
+                        {status !== 'ended' ? (
+                          <button type="button" onClick={() => void run(() => recurringApi.end(item.id))}>
+                            {t('rec.end')}
+                          </button>
+                        ) : null}
+                        <button type="button" onClick={() => void run(() => recurringApi.remove(item.id))}>
+                          {t('common.delete')}
                         </button>
-                      ) : null}
-                      <button type="button" className="tx-text" onClick={() => void run(() => recurringApi.remove(item.id))}>
-                        {t('common.delete')}
-                      </button>
-                    </div>
-                  </div>
-                </li>
-              )
-            })}
+                      </div>
+                    </li>
+                  )
+                })}
               </ul>
             </Fragment>
           ))}
@@ -353,8 +356,9 @@ function RecurringModal({
           </label>
           <label>
             {t('tx.amount')}
-            <input name="amount" required inputMode="decimal" defaultValue={item?.amount ?? ''} autoComplete="off" />
+            <input name="amount" inputMode="decimal" defaultValue={item?.amount ?? ''} autoComplete="off" />
           </label>
+          <p className="hint">{t('rec.amountHint')}</p>
           <Dropdown
             label={t('common.category')}
             name="categoryId"

@@ -386,7 +386,7 @@ mod tests {
             &conn,
             &recurring::NewRecurring {
                 name: "Rent".into(),
-                amount: "900.00".into(),
+                amount: Some("900.00".into()),
                 category_id: rent.id.to_string(),
                 start_date: "2026-01-01".into(),
                 interval_unit: recurring::Unit::Month,
@@ -665,6 +665,41 @@ mod tests {
             .query_row("SELECT count(*) FROM sqlite_master WHERE name = 'idx_tx_date_id'", [], |r| r.get(0))
             .unwrap();
         assert_eq!(indexed, 1);
+    }
+
+    #[test]
+    fn a_backup_from_before_the_amount_became_optional_keeps_its_recurring_items_and_their_payments() {
+        // Version 5 still required an amount on a recurring item.
+        let old = db_at(5);
+        old.execute("INSERT INTO settings (id, currency, locale, timezone) VALUES (1, 'EUR', 'en-IE', 'UTC')", []).unwrap();
+        old.execute("INSERT INTO categories (type, name) VALUES ('EXPENSE', 'Rent')", []).unwrap();
+        old.execute(
+            "INSERT INTO recurring_transactions (category_id, name, amount_minor, start_date, interval_unit, next_due_date)
+             VALUES (1, 'Rent', 90000, '2026-01-01', 'MONTH', '2026-02-01')",
+            [],
+        )
+        .unwrap();
+        old.execute(
+            "INSERT INTO transactions (category_id, recurring_transaction_id, recurring_due_date, name, amount_minor, planned_amount_minor, payment_date)
+             VALUES (1, 1, '2026-01-01', 'Rent', 90000, 90000, '2026-01-01')",
+            [],
+        )
+        .unwrap();
+        let snapshot = dump(&old).unwrap();
+        assert_eq!(snapshot.schema_version, 5);
+
+        let file = seal(&snapshot, "correct horse").unwrap();
+        let mut target = db();
+        restore(&mut target, &file, "correct horse");
+        let (amount, link): (Option<i64>, Option<i64>) = target
+            .query_row(
+                "SELECT (SELECT amount_minor FROM recurring_transactions), (SELECT recurring_transaction_id FROM transactions)",
+                [],
+                |r| Ok((r.get(0)?, r.get(1)?)),
+            )
+            .unwrap();
+        assert_eq!((amount, link), (Some(90000), Some(1)), "the item and the link to its payment came through");
+        assert!(target.execute("INSERT INTO recurring_transactions (category_id, name, start_date, interval_unit, next_due_date) VALUES (1, 'Gas', '2026-01-01', 'MONTH', '2026-01-01')", []).is_ok(), "the restored database has the newer rule");
     }
 
     #[test]

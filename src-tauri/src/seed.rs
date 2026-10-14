@@ -180,16 +180,34 @@ mod tests {
     }
 
     #[test]
-    fn electricity_is_paid_with_other_amounts_than_planned() {
+    fn electricity_is_a_bill_with_no_fixed_amount() {
         let conn = seeded("2026-10-14");
-        let (differing, total): (i64, i64) = conn
+        let item = recurring::list(&conn).unwrap().into_iter().find(|r| r.name == "Electricity").unwrap();
+        assert_eq!(item.amount, None);
+        let (planned, distinct, total): (i64, i64, i64) = conn
             .query_row(
-                "SELECT SUM(amount_minor <> planned_amount_minor), COUNT(*) FROM transactions WHERE name = 'Electricity'",
+                "SELECT COUNT(planned_amount_minor), COUNT(DISTINCT amount_minor), COUNT(*) FROM transactions WHERE name = 'Electricity'",
+                [],
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+            )
+            .unwrap();
+        assert!(total >= 14, "{total} payments");
+        assert_eq!(planned, 0, "nothing was planned");
+        assert!(distinct * 2 > total, "the amounts differ from month to month: {distinct} of {total}");
+    }
+
+    #[test]
+    fn the_cleaner_is_sometimes_paid_more_than_planned() {
+        let conn = seeded("2026-10-14");
+        let (more, same): (i64, i64) = conn
+            .query_row(
+                "SELECT SUM(amount_minor > planned_amount_minor), SUM(amount_minor = planned_amount_minor)
+                 FROM transactions WHERE name = 'Cleaning service'",
                 [],
                 |r| Ok((r.get(0)?, r.get(1)?)),
             )
             .unwrap();
-        assert!(total >= 14 && differing * 2 > total, "{differing} of {total} differ from the plan");
+        assert!(more >= 2 && same >= 6, "{more} paid more, {same} as planned");
     }
 
     #[test]

@@ -953,7 +953,7 @@ mod tests {
                 c,
                 &recurring::NewRecurring {
                     name: "Rent".into(),
-                    amount: "900.00".into(),
+                    amount: Some("900.00".into()),
                     category_id: rent.id.to_string(),
                     start_date: "2026-01-01".into(),
                     interval_unit: recurring::Unit::Month,
