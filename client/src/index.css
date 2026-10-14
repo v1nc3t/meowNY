@@ -1816,3 +1816,52 @@ kbd {
 .tx-sub.rec-overdue {
   color: var(--text-h);
 }
+
+/* Settings: one wider column, flush left. Each setting is a row: the label, a gap, then its control right after it. */
+.settings-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+  width: 100%;
+  max-width: 52rem;
+  margin-right: auto;
+}
+
+.settings-block {
+  align-items: stretch;
+}
+
+.settings-block .pick.field,
+.settings-block label,
+.settings-block .settings-row {
+  display: grid;
+  grid-template-columns: 16rem minmax(0, 20rem);
+  align-items: center;
+  justify-content: start;
+  gap: 0.5rem 1.5rem;
+}
+
+.settings-block .settings-row {
+  grid-template-columns: 16rem auto auto;
+}
+
+.settings-block .pick.field .pick-button,
+.settings-block label > input:not([type='checkbox']),
+.settings-block label > .field-input {
+  width: 100%;
+  min-width: 0;
+}
+
+/* A checkbox comes after its text, like the other controls. */
+.settings-block label > input[type='checkbox'] {
+  order: 2;
+  justify-self: start;
+}
+
+@media (max-width: 40em) {
+  .settings-block .pick.field,
+  .settings-block label,
+  .settings-block .settings-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
