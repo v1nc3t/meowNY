@@ -10,6 +10,7 @@ import { useMoneySettings, type MoneySettings } from '../useMoneySettings'
 import { useNotice } from '../useNotice'
 import { useI18n, useT } from '../i18n/context'
 import { useShortcut } from '../keys/registry'
+import { changePercent, niceCeil, usedPercent } from './dashboardMath'
 
 const TOP_CATEGORIES = 7
 
@@ -135,9 +136,7 @@ function Stat({
   good: 'up' | 'down'
   settings: MoneySettings
 }) {
-  const now = Number(value)
-  const then = before === undefined ? NaN : Number(before)
-  const change = then > 0 ? ((now - then) / then) * 100 : null
+  const change = changePercent(value, before)
   const tone = change === null || Math.abs(change) < 0.05 ? '' : (change > 0) === (good === 'up') ? ' good' : ' bad'
   return (
     <div className="dash-stat">
@@ -202,14 +201,6 @@ function useWidth() {
     return () => observer.disconnect()
   }, [])
   return [ref, width] as const
-}
-
-/** A round number at or above `value` (1, 2 or 5 times a power of ten), so axis lines land on even amounts. */
-function niceCeil(value: number): number {
-  if (!(value > 0)) return 1
-  const power = 10 ** Math.floor(Math.log10(value))
-  const step = [1, 2, 5, 10].find((s) => s * power >= value) ?? 10
-  return step * power
 }
 
 /** A short number such as 12K, for the axis. */
@@ -410,14 +401,6 @@ function Spending({ top, total, settings }: { top: TopCategory[]; total: string;
   )
 }
 
-/** Percent of a budget used, from two-decimal amounts. */
-function usedPercent(actual: string, budget: string | null): number | null {
-  const limit = toMinor(budget ?? '')
-  const spent = toMinor(actual)
-  if (limit === null || spent === null || limit <= 0n) return null
-  return Number((spent * 1000n) / limit) / 10
-}
-
 /** Overall budgets first, then one bar per category that has a budget or any activity. */
 function BudgetBars({ bva, settings }: { bva: BudgetVsActual; settings: MoneySettings }) {
   const t = useT()
@@ -510,7 +493,10 @@ function RecurringTable({
                 <span className={`swatch ${item.type === 'INCOME' ? 'swatch-income' : 'swatch-expense'}`} aria-hidden="true" /> {item.name}
               </span>
               <span className="legend-amount">{money(item.perMonth)}</span>
-              <span className={`legend-amount${p ? (more ? ' rec-more' : ' rec-paid') : ' muted'}`}>{p ? money(p.paid) : '-'}</span>
+              <span className={`legend-amount${p ? (more ? ' rec-more' : ' rec-paid') : ' muted'}`}>
+                {p ? money(p.paid) : '-'}
+                {p && p.difference !== '0.00' ? <span className="rec-diff"> ({(p.difference.startsWith('-') ? '' : '+') + money(p.difference)})</span> : null}
+              </span>
             </li>
           )
         })}

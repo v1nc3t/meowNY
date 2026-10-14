@@ -2351,3 +2351,8 @@ kbd {
   gap: 1.25rem;
   min-width: 0;
 }
+
+.dash .rec-diff {
+  font-size: 0.6875rem;
+  opacity: 0.8;
+}
