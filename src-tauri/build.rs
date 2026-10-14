@@ -41,6 +41,8 @@ const COMMANDS: &[&str] = &[
     "get_notify_due",
     "set_notify_due",
     "show_due_notification",
+    "budget_vs_actual",
+    "category_trend",
 ];
 
 fn main() {

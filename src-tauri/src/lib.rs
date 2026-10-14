@@ -11,6 +11,7 @@ pub mod recurring;
 pub mod money;
 /// Dev demo data, used by `examples/seed.rs`.
 pub mod seed;
+pub mod stats;
 pub mod transactions;
 pub mod vault;
 #[cfg(test)]
@@ -124,6 +125,8 @@ pub fn run() {
             commands::get_notify_due,
             commands::set_notify_due,
             commands::show_due_notification,
+            commands::budget_vs_actual,
+            commands::category_trend,
         ])
         .run(tauri::generate_context!())
         .expect("error while running meowNY");

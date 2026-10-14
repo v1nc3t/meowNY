@@ -89,12 +89,12 @@ pub fn month_start(month: &str) -> Result<NaiveDate, AppError> {
     Ok(date)
 }
 
-fn next_month(first: NaiveDate) -> Result<NaiveDate, AppError> {
+pub(crate) fn next_month(first: NaiveDate) -> Result<NaiveDate, AppError> {
     let (year, month) = if first.month() == 12 { (first.year() + 1, 1) } else { (first.year(), first.month() + 1) };
     NaiveDate::from_ymd_opt(year, month, 1).ok_or(AppError::InvalidInput)
 }
 
-fn kind_sql(kind: CategoryType) -> &'static str {
+pub(crate) fn kind_sql(kind: CategoryType) -> &'static str {
     match kind {
         CategoryType::Income => "INCOME",
         CategoryType::Expense => "EXPENSE",
@@ -110,7 +110,7 @@ fn kind_from_sql(text: &str) -> Result<CategoryType, AppError> {
 }
 
 /// The limit a budget series shows in the month starting `start`: its latest row at or before it.
-fn series_limit(conn: &Connection, kind: &str, category_id: Option<i64>, start: &str) -> Result<Option<i64>, AppError> {
+pub(crate) fn series_limit(conn: &Connection, kind: &str, category_id: Option<i64>, start: &str) -> Result<Option<i64>, AppError> {
     Ok(conn
         .query_row(
             "SELECT amount_limit_minor FROM budgets
@@ -218,16 +218,16 @@ pub fn set(conn: &Connection, input: &SetBudget, now: DateTime<Utc>) -> Result<B
     })
 }
 
-struct Effective {
-    kind: CategoryType,
-    scope: Scope,
-    category_id: Option<i64>,
-    limit_minor: i64,
+pub(crate) struct Effective {
+    pub(crate) kind: CategoryType,
+    pub(crate) scope: Scope,
+    pub(crate) category_id: Option<i64>,
+    pub(crate) limit_minor: i64,
 }
 
 /// The budgets in force in the month: latest row at or before it per (type, scope, category),
 /// with removed (NULL) budgets dropped.
-fn effective(conn: &Connection, start: &str) -> Result<Vec<Effective>, AppError> {
+pub(crate) fn effective(conn: &Connection, start: &str) -> Result<Vec<Effective>, AppError> {
     let mut statement = conn.prepare(
         "SELECT type, scope, category_id, amount_limit_minor FROM (
            SELECT type, scope, category_id, amount_limit_minor,
