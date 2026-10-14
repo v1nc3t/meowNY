@@ -10,6 +10,7 @@ use crate::categories::{self, Category, CategoryType};
 use crate::budgets::{self, Budget, Overview, SetBudget};
 use crate::clock;
 use crate::currency::{self, Conversion};
+use crate::export::{self, Selection};
 use crate::recurring::{self, Dues, NewRecurring, Recurring, RecurringPatch};
 use crate::schedule::{self, Schedule};
 use crate::stats::{self, BudgetVsActual, CategoryTrend, Commitments, PlannedVsPaid, TopCategory, YearPoint};
@@ -71,6 +72,8 @@ pub const COMMANDS: &[&str] = &[
     "get_backup_schedule",
     "set_backup_schedule",
     "clear_backup_schedule",
+    "export_json",
+    "export_csv",
 ];
 
 #[tauri::command]
@@ -477,6 +480,32 @@ pub async fn set_backup_schedule(
 #[tauri::command]
 pub fn clear_backup_schedule(vault: Shared) -> Result<(), AppError> {
     vault.with_conn(|c| schedule::stop(c))
+}
+
+/// Asks where to save `text`, then writes it there readable by the owner only. False if the person cancels.
+/// These files are not encrypted; the export screen says so.
+fn save_export(app: &tauri::AppHandle, name: String, kind: &str, extension: &str, text: String) -> Result<bool, AppError> {
+    use tauri_plugin_dialog::DialogExt;
+    let Some(path) = app.dialog().file().set_file_name(name).add_filter(kind, &[extension]).blocking_save_file() else {
+        return Ok(false);
+    };
+    let path = path.into_path().map_err(|_| AppError::Internal)?;
+    backup::write_file(&path, text.as_bytes())?;
+    Ok(true)
+}
+
+/// The data as a JSON file, or part of it: see `Selection`. Not encrypted.
+#[tauri::command]
+pub async fn export_json(app: tauri::AppHandle, vault: Shared<'_>, selection: Selection) -> Result<bool, AppError> {
+    let text = vault.with_conn(|c| export::json(c, &selection, chrono::Utc::now()))?;
+    save_export(&app, format!("meowny-export-{}.json", today_text(&vault)?), "JSON", "json", text)
+}
+
+/// Transactions as a CSV file. Cells that start like a formula are written as text. Not encrypted.
+#[tauri::command]
+pub async fn export_csv(app: tauri::AppHandle, vault: Shared<'_>, selection: Selection) -> Result<bool, AppError> {
+    let text = vault.with_conn(|c| export::csv(c, &selection))?;
+    save_export(&app, format!("meowny-transactions-{}.csv", today_text(&vault)?), "CSV", "csv", text)
 }
 
 #[cfg(test)]

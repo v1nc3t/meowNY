@@ -5,6 +5,7 @@ pub mod clock;
 pub mod commands;
 pub mod currency;
 pub mod db;
+pub mod export;
 pub mod keys;
 pub mod migrate;
 pub mod recovery_file;
@@ -147,6 +148,8 @@ pub fn run() {
             commands::get_backup_schedule,
             commands::set_backup_schedule,
             commands::clear_backup_schedule,
+            commands::export_json,
+            commands::export_csv,
         ])
         .run(tauri::generate_context!())
         .expect("error while running meowNY");
