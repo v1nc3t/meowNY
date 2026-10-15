@@ -4,10 +4,10 @@
   "version": "0.1.0",
   "identifier": "org.meowny.app",
   "build": {
-    "beforeDevCommand": "npm run dev --workspace client",
+    "beforeDevCommand": "npm run dev --workspace ui",
     "devUrl": "http://127.0.0.1:5173",
-    "beforeBuildCommand": "npm run build --workspace client",
-    "frontendDist": "../client/dist"
+    "beforeBuildCommand": "npm run build --workspace ui",
+    "frontendDist": "../ui/dist"
   },
   "app": {
     "windows": [

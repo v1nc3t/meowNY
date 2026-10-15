@@ -5,7 +5,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/v1nc3t/meowNY/actions/workflows/github-ci.yml"><img alt="CI" src="https://github.com/v1nc3t/meowNY/actions/workflows/github-ci.yml/badge.svg"></a>
+  <a href="https://github.com/v1nc3t/meowNY/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/v1nc3t/meowNY/actions/workflows/ci.yml/badge.svg"></a>
   <a href="https://github.com/v1nc3t/meowNY/actions/workflows/desktop.yml"><img alt="Desktop build" src="https://github.com/v1nc3t/meowNY/actions/workflows/desktop.yml/badge.svg"></a>
   <a href="https://github.com/v1nc3t/meowNY/actions/workflows/security.yml"><img alt="Security" src="https://github.com/v1nc3t/meowNY/actions/workflows/security.yml/badge.svg"></a>
   <a href="LICENSE"><img alt="License: AGPL-3.0" src="https://img.shields.io/badge/license-AGPL--3.0-blue"></a>
@@ -17,12 +17,12 @@
   <a href="#getting-started">Getting started</a> ·
   <a href="#command-line">Command line</a> ·
   <a href="https://v1nc3t.github.io/meowNY/">CLI reference</a> ·
-  <a href="assets/PLAN.md">Roadmap</a>
+  <a href="docs/PLAN.md">Roadmap</a>
 </p>
 
 ---
 
-meowNY is a desktop app for tracking income and expenses against monthly budgets. A [Tauri](https://tauri.app) shell (Rust) shows a React client and keeps everything in one encrypted SQLite file ([SQLCipher](https://www.zetetic.net/sqlcipher/)) on your own machine. It also ships a command line program, `meowny`, so scripts and AI agents can use the running app without opening the data file.
+meowNY is a desktop app for tracking income and expenses against monthly budgets. A [Tauri](https://tauri.app) shell (Rust) shows a React UI and keeps everything in one encrypted SQLite file ([SQLCipher](https://www.zetetic.net/sqlcipher/)) on your own machine. It also ships a command line program, `meowny`, so scripts and AI agents can use the running app without opening the data file.
 
 > **Status: pre-release (version 0.1.0).** The desktop app and the command line work, and are tested, but there are no installers yet: you build it from source (see [Getting started](#getting-started)). Phone sync, phone capture and the bank connection are planned; see the [roadmap](#roadmap).
 
@@ -40,6 +40,7 @@ meowNY is a desktop app for tracking income and expenses against monthly budgets
   - [Command line](#command-line)
 - [Documentation](#documentation)
 - [Project structure](#project-structure)
+  - [Naming and layout](#naming-and-layout)
 - [Development](#development)
   - [Tests and checks](#tests-and-checks)
   - [Database](#database)
@@ -85,7 +86,7 @@ meowNY is a desktop app for tracking income and expenses against monthly budgets
 - **Safe logs.** Logs and crash reports never contain amounts, descriptions, tokens or keys.
 - **The command API is for you only.** It listens on `127.0.0.1` and nothing else, refuses requests from web pages, answers "locked" while the app is locked, and does not count as activity, so the idle lock still works. Restoring a backup, changing the currency and deleting everything cannot be done through it at all.
 
-What is stored, where, and who could see it is written down in [assets/data-inventory.md](assets/data-inventory.md). It is a technical note, not a privacy policy.
+What is stored, where, and who could see it is written down in [docs/data-inventory.md](docs/data-inventory.md). It is a technical note, not a privacy policy.
 
 ## Getting started
 
@@ -110,11 +111,11 @@ npm install
 npm run tauri dev
 ```
 
-The first run compiles the Rust side, which takes a few minutes. It starts the Vite dev server for the client and opens a window. Edits to `client/src` hot-reload; edits to `src-tauri/src` rebuild and restart the app.
+The first run compiles the Rust side, which takes a few minutes. It starts the Vite dev server for the UI and opens a window. Edits to `ui/src` hot-reload; edits to `src-tauri/src` rebuild and restart the app.
 
 On first launch the app asks for a currency and an optional passphrase, shows your recovery key, and creates the encrypted data file. Settings (currency, language, time zone, app lock, backup, command line access, delete all data) are at `/app/settings`.
 
-`npm run dev --workspace client` on its own opens the client in a browser, but there is no backend there: every screen talks to the Rust side, so the client only works in the desktop window.
+`npm run dev --workspace ui` on its own opens the UI in a browser, but there is no backend there: every screen talks to the Rust side, so the UI only works in the desktop window.
 
 ### Build a bundle
 
@@ -153,7 +154,7 @@ Press `?` in the app to see them all. Hovering or focusing a control shows its s
 | `Ctrl+L` / `Cmd+L` | lock the app |
 | `Ctrl+B` / `Cmd+B` | show or hide the sidebar |
 
-All shortcuts are defined in one table, `client/src/keys/shortcuts.ts`.
+All shortcuts are defined in one table, `ui/src/keys/shortcuts.ts`.
 
 ### Command line
 
@@ -225,17 +226,17 @@ Every command, flag and exit code is documented, with real output, in the [CLI r
 |---|---|
 | [CLI reference site](https://v1nc3t.github.io/meowNY/) | One static page in the style of an API reference: a card per command with its flags and a real example, the exit and error codes, a page for AI agents, and the HTTP API behind the command line |
 | [docs/CLI.md](docs/CLI.md) | The same text in one Markdown file, easier to read in an editor or to give to an agent |
-| [assets/PLAN.md](assets/PLAN.md) | The build plan and roadmap, phase by phase, with what is done |
-| [assets/data-inventory.md](assets/data-inventory.md) | What data the app holds, where, which network calls exist, and who could see it |
+| [docs/PLAN.md](docs/PLAN.md) | The build plan and roadmap, phase by phase, with what is done |
+| [docs/data-inventory.md](docs/data-inventory.md) | What data the app holds, where, which network calls exist, and who could see it |
 
-The reference site is made from the program, so it cannot say something the program does not do. `cli/tests/docs.rs` runs one tour of every command and every way to fail against a real app, records what came out (`docs/commands.json`, `docs/examples.json`), and fails when a command, a flag, a message or an example changes without the docs being redone. The prose around those facts is `docs/content.mjs`; the generator stops with an error if the program has a command, a group or an error code that the prose does not cover. There are no scripts, fonts or images, and the page asks nothing from anywhere else.
+The reference site is made from the program, so it cannot say something the program does not do. `cli/tests/docs.rs` runs one tour of every command and every way to fail against a real app, records what came out (`docs/site/commands.json`, `docs/site/examples.json`), and fails when a command, a flag, a message or an example changes without the docs being redone. The prose around those facts is `docs/site/content.mjs`; the generator stops with an error if the program has a command, a group or an error code that the prose does not cover. There are no scripts, fonts or images, and the page asks nothing from anywhere else.
 
 The site is published by `.github/workflows/pages.yml` on every push to `main` that touches `docs/`. It needs the repository's Settings, Pages, Source set to "GitHub Actions" once.
 
 ```bash
 # After the commands change: record them again, then rebuild the page
 cd cli && UPDATE_DOCS=1 cargo test --offline --test docs
-npm run docs                  # writes docs/CLI.md and the site in docs/_site/ (open docs/_site/index.html)
+npm run docs                  # writes docs/CLI.md and the site in docs/site/_site/ (open docs/site/_site/index.html)
 npm run check:docs            # what CI runs: the generator's tests, and that docs/CLI.md is up to date
 ```
 
@@ -243,8 +244,8 @@ npm run check:docs            # what CI runs: the generator's tests, and that do
 
 ```text
 meowNY/
-├── client/            React client (Vite, TypeScript, Zod). Every screen talks to the Rust side
-│   └── src/           pages, components, i18n (7 languages), keyboard shortcuts, first-run and lock screens
+├── ui/                React UI (Vite, TypeScript, Zod). Every screen talks to the Rust side
+│   └── src/           pages, components, hooks, lib, api, and the vault, i18n and keys features
 ├── src-tauri/         The desktop app (Rust, Tauri 2)
 │   ├── src/           vault and keys, database, budgets, recurring items, statistics, backup, export,
 │   │                  the command API (api/) and the access tokens (tokens.rs)
@@ -252,13 +253,45 @@ meowNY/
 │   ├── seeds/         Demo data
 │   └── examples/      dev_vault, seed and api_demo
 ├── cli/               The `meowny` command line program (Rust, one dependency)
-├── docs/              Generator and output for the CLI reference site and CLI.md
-├── scripts/           check-outbound, the network call check and its allowlist
-├── assets/            PLAN.md, data-inventory.md and the original schema notes
-└── .github/workflows/ CI, desktop builds, security checks and the docs site
+├── docs/              Everything written for people: PLAN.md, data-inventory.md, CLI.md, postgres-schema.txt
+│   └── site/          Generator of the CLI reference site and CLI.md (plain Node, no dependencies)
+├── scripts/           Checks CI runs on the whole repo: check-outbound and its allowlist
+└── .github/workflows/ ci.yml, desktop.yml, security.yml and pages.yml
 ```
 
-How the parts fit: the client calls Rust commands through Tauri; the Rust side owns the database, the keys and every rule. The command line is a client of the running app, through the local command API, and has no other way to the data. The list of API routes is one table in Rust, and `meowny schema`, the command line's commands and the docs are all made from it.
+### Naming and layout
+
+Where things go:
+
+- A top-level folder is one thing you build or run (`ui`, `src-tauri`, `cli`) or one kind of support file (`docs`, `scripts`, `.github`). `src-tauri` keeps its name because the Tauri tools look for it.
+- Anything written for people goes in `docs/`. Code that makes a document goes next to it, in `docs/site/`. Checks that run over the whole repo go in `scripts/`.
+- Nothing is named after a design that is gone. The old server and its Postgres setup are only in git history.
+
+Inside `ui/src/`:
+
+| Folder | Holds |
+|---|---|
+| `pages/` | One screen per route, `NamePage.tsx`. Helpers that only that page uses sit beside it (`dashboardMath.ts`) |
+| `components/` | Pieces of UI that are not a whole screen: modals, dropdowns, the sidebar |
+| `layouts/` | The frame around the pages |
+| `hooks/` | React hooks, `useName.ts` |
+| `lib/` | Plain TypeScript with no React: money, caches, list helpers |
+| `api/` | The calls into the Rust side, one file per area. `invoke.ts` is the one place that calls Tauri |
+| `vault/`, `i18n/`, `keys/` | A feature that keeps its own screens, logic and tests together |
+
+File names:
+
+| What | Rule | Example |
+|---|---|---|
+| Folders | Lowercase, one word where possible, `kebab-case` otherwise | `ui`, `src-tauri` |
+| Rust files | `snake_case`. A module with children is `x.rs` plus a folder `x/`, never `mod.rs` (only `cli/tests/common/mod.rs`, which Cargo needs). The tests of `x` sit beside it in `x_tests.rs` | `recovery_file.rs`, `api/read_tests.rs` |
+| Migrations | `NNNN_name.sql`, numbered, never edited once shipped | `0001_tables.sql` |
+| React components and pages | `PascalCase.tsx`, one component per file | `DashboardPage.tsx` |
+| Other TypeScript | `camelCase.ts`. A test sits beside its file as `name.test.ts` | `displayFormat.ts`, `money.test.ts` |
+| Markdown and text | `kebab-case`. The few files people open first are UPPERCASE | `data-inventory.md`, `README.md`, `PLAN.md` |
+| Workflows | Named for what they do, not for the host | `ci.yml`, `pages.yml` |
+
+How the parts fit: the UI calls Rust commands through Tauri; the Rust side owns the database, the keys and every rule. The command line is a client of the running app, through the local command API, and has no other way to the data. The list of API routes is one table in Rust, and `meowny schema`, the command line's commands and the docs are all made from it.
 
 ## Development
 
@@ -271,10 +304,10 @@ cd src-tauri && cargo test
 # Timings of the main queries on 50,000 transactions (prints, does not assert)
 cd src-tauri && cargo test bench -- --ignored --nocapture
 
-# Client
-npm run lint --workspace client
-npm test --workspace client
-npm run build --workspace client
+# UI
+npm run lint --workspace ui
+npm test --workspace ui
+npm run build --workspace ui
 
 # The command line: unit tests, and tests that run the real binary against the app's own server code
 # (the docs test and the login test assume Linux paths and run only there)
@@ -329,14 +362,14 @@ It refuses a database that already has data.
 
 | Workflow | What it does |
 |---|---|
-| `github-ci.yml` (CI) | Lints, builds and tests the client, and checks the documentation, on every push and pull request |
+| `ci.yml` (CI) | Lints, builds and tests the UI, and checks the documentation, on every push and pull request |
 | `desktop.yml` (Desktop) | Runs the outbound check and `cargo test` for the app and for `cli/`, then builds the app. Pull requests build on Linux only (about 2.5 minutes); pushes to `main` also build on macOS and Windows. You can run all three for any branch from the Actions tab with "Run workflow" |
 | `security.yml` (Security) | `npm audit`, `cargo audit` for the app and for `cli/`, and a secret scan, on pushes to `main`, pull requests and weekly |
 | `pages.yml` (Docs site) | Builds and publishes the CLI reference site |
 
 ## Roadmap
 
-The full plan, with what is done in each phase, is in [assets/PLAN.md](assets/PLAN.md).
+The full plan, with what is done in each phase, is in [docs/PLAN.md](docs/PLAN.md).
 
 | Phase | What | State |
 |---|---|---|
@@ -360,7 +393,7 @@ Contributions are welcome. There is no `CONTRIBUTING.md` yet (it comes with phas
 5. Keep the app local-first. A new network call must be on purpose, off until the user turns it on, and listed in `scripts/outbound-allowlist.txt`.
 6. Every new desktop feature ships its command line commands in the same change. The phone app gets none.
 7. After a route changes, regenerate `cli/schema.json` and the docs (see [Documentation](#documentation)). Never edit a migration that has shipped.
-8. Update [assets/PLAN.md](assets/PLAN.md) and [assets/data-inventory.md](assets/data-inventory.md) when the change affects them.
+8. Update [docs/PLAN.md](docs/PLAN.md) and [docs/data-inventory.md](docs/data-inventory.md) when the change affects them.
 
 ## Reporting a security problem
 

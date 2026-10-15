@@ -1030,15 +1030,15 @@ mod tests {
 
     // ---- the English texts the command line asks for ----
 
-    const CLIENT_ENGLISH: &str = include_str!("../../client/src/i18n/en.ts");
-    const CLIENT_LABELS: &str = include_str!("../../client/src/api/reportLabels.ts");
+    const UI_ENGLISH: &str = include_str!("../../ui/src/i18n/en.ts");
+    const UI_LABELS: &str = include_str!("../../ui/src/api/reportLabels.ts");
 
-    /// The English text of a screen text, read from the client's dictionary.
-    fn client_text(key: &str) -> String {
+    /// The English text of a screen text, read from the UI's dictionary.
+    fn ui_text(key: &str) -> String {
         // On Windows, git may have checked the file out with CRLF line ends.
-        let english = CLIENT_ENGLISH.replace("\r\n", "\n");
+        let english = UI_ENGLISH.replace("\r\n", "\n");
         let marker = format!("'{key}': '");
-        let start = english.find(&marker).unwrap_or_else(|| panic!("no text {key} in the client")) + marker.len();
+        let start = english.find(&marker).unwrap_or_else(|| panic!("no text {key} in the UI")) + marker.len();
         let end = english[start..].find("',\n").expect("the text ends");
         english[start..start + end].to_string()
     }
@@ -1068,17 +1068,17 @@ mod tests {
             "amount" => &labels.amount,
             "page" => &labels.page,
             "noData" => &labels.no_data,
-            other => panic!("the client has a label the app does not know: {other}"),
+            other => panic!("the UI has a label the app does not know: {other}"),
         }
     }
 
     /// The command line writes a report in English without the window's help. Its texts are the ones the
-    /// window would give in English: this reads the client's own recipe for each label and compares.
+    /// window would give in English: this reads the UI's own recipe for each label and compares.
     #[test]
-    fn the_english_labels_are_the_texts_the_client_builds_in_english() {
+    fn the_english_labels_are_the_texts_the_ui_builds_in_english() {
         let labels = ReportLabels::english("2026-01", "2026-03").unwrap();
         let mut seen = Vec::new();
-        for line in CLIENT_LABELS.lines().map(str::trim) {
+        for line in UI_LABELS.lines().map(str::trim) {
             let Some((name, recipe)) = line.split_once(": ") else { continue };
             let recipe = recipe.trim_end_matches(',');
             let (capitalised, key) = if let Some(inner) = recipe.strip_prefix("capital(t('").and_then(|r| r.strip_suffix("'))")) {
@@ -1088,9 +1088,9 @@ mod tests {
             } else {
                 continue;
             };
-            let english = client_text(key);
+            let english = ui_text(key);
             let expected = if capitalised { capital(&english) } else { english };
-            assert_eq!(field(&labels, name), expected, "the label {name} (client text {key})");
+            assert_eq!(field(&labels, name), expected, "the label {name} (UI text {key})");
             seen.push(name.to_string());
         }
         // Every label but the period comes from a text; none was skipped by the reader above.
