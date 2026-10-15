@@ -10,7 +10,7 @@ use serde::de::DeserializeOwned;
 use serde::Serialize;
 use serde_json::{json, Map, Value};
 
-use super::{read, write, ApiError, API_VERSION};
+use super::{confirmed, read, write, Approval, ApiError, API_VERSION};
 use crate::clock;
 use crate::migrate;
 use crate::tokens::{Grant, Scope};
@@ -45,6 +45,11 @@ pub enum Kind {
     Money,
     /// "123e4567-e89b-12d3-a456-426614174000"
     Uuid,
+    /// A list of ids, as a JSON array of strings.
+    Ids,
+    /// A file path as text: absolute, up to 400 characters, no control or direction-changing characters. The
+    /// route says what else it must be (an extension, a folder that exists, a file that does not).
+    Path,
 }
 
 fn all_digits(text: &str) -> bool {
@@ -65,6 +70,12 @@ fn is_money(text: &str) -> bool {
         && !(whole.len() > 1 && whole.starts_with('0'))
         && fraction.len() == 2
         && all_digits(fraction)
+}
+
+/// No control characters, and none of the invisible ones that reorder text (a file name that reads one way and
+/// is another is how a person gets tricked in a dialog).
+pub(super) fn is_plain_text(text: &str) -> bool {
+    !text.chars().any(|c| c.is_control() || matches!(c, '\u{200e}' | '\u{200f}' | '\u{202a}'..='\u{202e}' | '\u{2066}'..='\u{2069}' | '\u{feff}'))
 }
 
 fn is_uuid(text: &str) -> bool {
@@ -91,6 +102,8 @@ impl Kind {
             Kind::Id => "an id as the app lists it",
             Kind::Money => "an amount as text with two decimals, like \"12.50\"",
             Kind::Uuid => "a UUID like 123e4567-e89b-12d3-a456-426614174000",
+            Kind::Ids => "a list of ids as the app lists them",
+            Kind::Path => "a file path",
         }
     }
 
@@ -105,6 +118,8 @@ impl Kind {
             (Kind::Id, Value::String(text)) => is_id(text),
             (Kind::Money, Value::String(text)) => is_money(text),
             (Kind::Uuid, Value::String(text)) => is_uuid(text),
+            (Kind::Ids, Value::Array(items)) => items.len() <= 500 && items.iter().all(|i| i.as_str().is_some_and(is_id)),
+            (Kind::Path, Value::String(text)) => (1..=400).contains(&text.chars().count()) && is_plain_text(text),
             _ => false,
         }
     }
@@ -144,12 +159,18 @@ impl Param {
     }
 }
 
+/// For a route that writes outside the app, or hands data out in bulk: builds what the person is shown,
+/// from the request, before anything is done. It also checks the request, so a bad one never asks.
+pub type Confirm = fn(&Ctx, &Map<String, Value>) -> Result<Approval, ApiError>;
+
 pub struct Route {
     pub name: &'static str,
     /// The least scope a token needs.
     pub scope: Scope,
     pub summary: &'static str,
     pub params: &'static [Param],
+    /// If set, the person has to allow each request in the app before the route runs. A token alone is not enough.
+    pub confirm: Option<Confirm>,
     pub run: fn(&Ctx, Map<String, Value>) -> Result<Value, ApiError>,
 }
 
@@ -169,7 +190,11 @@ impl Route {
                 out
             })
             .collect();
-        json!({ "name": self.name, "scope": self.scope, "summary": self.summary, "params": params })
+        let mut out = json!({ "name": self.name, "scope": self.scope, "summary": self.summary, "params": params });
+        if self.confirm.is_some() {
+            out["confirm"] = json!(true);
+        }
+        out
     }
 
     /// Checks a request body against the entry before the handler sees it: no unknown keys, nothing
@@ -228,6 +253,7 @@ pub const STATUS: Route = Route {
     scope: Scope::Read,
     summary: "The app version, the API version and the scope of the token used.",
     params: &[],
+    confirm: None,
     run: status,
 };
 
@@ -246,6 +272,7 @@ pub const SCHEMA: Route = Route {
     scope: Scope::Read,
     summary: "Every route with its scope and arguments, so a client can discover them.",
     params: &[],
+    confirm: None,
     run: schema,
 };
 
@@ -288,6 +315,13 @@ pub static ALL: &[Route] = &[
     write::RECURRING_PAUSE,
     write::RECURRING_RESUME,
     write::RECURRING_END,
+    read::EXPORT_PREVIEW,
+    read::BACKUP_SCHEDULE,
+    confirmed::EXPORT_JSON,
+    confirmed::EXPORT_CSV,
+    confirmed::EXPORT_XLSX,
+    confirmed::EXPORT_PDF,
+    confirmed::BACKUP_CREATE,
 ];
 
 #[cfg(test)]
@@ -305,7 +339,7 @@ mod tests {
         Param { name: "kind", kind: Kind::String, required: false, nullable: false, summary: "A or B.", values: &["A", "B"] },
     ];
 
-    const ROUTE: Route = Route { name: "x.y", scope: Scope::Read, summary: "Test.", params: PARAMS, run: dummy };
+    const ROUTE: Route = Route { name: "x.y", scope: Scope::Read, summary: "Test.", params: PARAMS, confirm: None, run: dummy };
 
     fn check(body: Value) -> Result<(), ApiError> {
         ROUTE.check(body.as_object().unwrap())
@@ -463,6 +497,7 @@ mod tests {
                 Param::new("plain", Kind::String, "A text."),
                 Param::new("must", Kind::Integer, "A number.").required().nullable(),
             ],
+            confirm: None,
             run: dummy,
         };
         let check = |body: Value| ROUTE.check(body.as_object().unwrap());

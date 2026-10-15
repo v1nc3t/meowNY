@@ -77,7 +77,47 @@ pub struct ReportLabels {
     pub no_data: String,
 }
 
+const MONTH_NAMES: [&str; 12] =
+    ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+
+/// "October 2026" from "2026-10".
+fn english_month(month: &str) -> Result<String, AppError> {
+    let (year, number) = month.split_once('-').ok_or(AppError::InvalidInput)?;
+    let number: usize = number.parse().map_err(|_| AppError::InvalidInput)?;
+    if year.len() != 4 || !(1..=12).contains(&number) {
+        return Err(AppError::InvalidInput);
+    }
+    Ok(format!("{} {year}", MONTH_NAMES[number - 1]))
+}
+
 impl ReportLabels {
+    /// The fixed text in English, for a report asked for without the app's own window (from the command
+    /// line). A test keeps these equal to the English texts the app's screens use.
+    pub fn english(from_month: &str, to_month: &str) -> Result<Self, AppError> {
+        let (from, to) = (english_month(from_month)?, english_month(to_month)?);
+        let s = |t: &str| t.to_string();
+        Ok(Self {
+            title: s("meowNY report"),
+            period: if from_month == to_month { from } else { format!("{from} – {to}") },
+            income: s("Income"),
+            expenses: s("Expenses"),
+            savings: s("Savings"),
+            savings_rate: s("Savings rate"),
+            by_month: s("Income and expenses by month"),
+            spending: s("Where the money went"),
+            other: s("Other"),
+            budget_vs_actual: s("Budget vs actual"),
+            no_budget: s("no budget"),
+            transactions: s("Transactions"),
+            date: s("Date"),
+            category: s("Category"),
+            name: s("Name"),
+            amount: s("Amount"),
+            page: s("Page"),
+            no_data: s("No transactions in this period."),
+        })
+    }
+
     fn all(&self) -> [&String; 18] {
         [
             &self.title, &self.period, &self.income, &self.expenses, &self.savings, &self.savings_rate, &self.by_month,
@@ -986,5 +1026,90 @@ mod tests {
         std::fs::write(format!("{dir}/report.pdf"), read(&w.conn, &o).unwrap().pdf(&o).unwrap()).unwrap();
         let single = options("2026-01", "2026-01");
         std::fs::write(format!("{dir}/month.pdf"), read(&w.conn, &single).unwrap().pdf(&single).unwrap()).unwrap();
+    }
+
+    // ---- the English texts the command line asks for ----
+
+    const CLIENT_ENGLISH: &str = include_str!("../../client/src/i18n/en.ts");
+    const CLIENT_LABELS: &str = include_str!("../../client/src/api/reportLabels.ts");
+
+    /// The English text of a screen text, read from the client's dictionary.
+    fn client_text(key: &str) -> String {
+        let marker = format!("'{key}': '");
+        let start = CLIENT_ENGLISH.find(&marker).unwrap_or_else(|| panic!("no text {key} in the client")) + marker.len();
+        let end = CLIENT_ENGLISH[start..].find("',\n").expect("the text ends");
+        CLIENT_ENGLISH[start..start + end].to_string()
+    }
+
+    fn capital(text: &str) -> String {
+        let mut chars = text.chars();
+        chars.next().map(|c| c.to_uppercase().chain(chars).collect()).unwrap_or_default()
+    }
+
+    fn field<'a>(labels: &'a ReportLabels, name: &str) -> &'a str {
+        match name {
+            "title" => &labels.title,
+            "period" => &labels.period,
+            "income" => &labels.income,
+            "expenses" => &labels.expenses,
+            "savings" => &labels.savings,
+            "savingsRate" => &labels.savings_rate,
+            "byMonth" => &labels.by_month,
+            "spending" => &labels.spending,
+            "other" => &labels.other,
+            "budgetVsActual" => &labels.budget_vs_actual,
+            "noBudget" => &labels.no_budget,
+            "transactions" => &labels.transactions,
+            "date" => &labels.date,
+            "category" => &labels.category,
+            "name" => &labels.name,
+            "amount" => &labels.amount,
+            "page" => &labels.page,
+            "noData" => &labels.no_data,
+            other => panic!("the client has a label the app does not know: {other}"),
+        }
+    }
+
+    /// The command line writes a report in English without the window's help. Its texts are the ones the
+    /// window would give in English: this reads the client's own recipe for each label and compares.
+    #[test]
+    fn the_english_labels_are_the_texts_the_client_builds_in_english() {
+        let labels = ReportLabels::english("2026-01", "2026-03").unwrap();
+        let mut seen = Vec::new();
+        for line in CLIENT_LABELS.lines().map(str::trim) {
+            let Some((name, recipe)) = line.split_once(": ") else { continue };
+            let recipe = recipe.trim_end_matches(',');
+            let (capitalised, key) = if let Some(inner) = recipe.strip_prefix("capital(t('").and_then(|r| r.strip_suffix("'))")) {
+                (true, inner)
+            } else if let Some(inner) = recipe.strip_prefix("t('").and_then(|r| r.strip_suffix("')")) {
+                (false, inner)
+            } else {
+                continue;
+            };
+            let english = client_text(key);
+            let expected = if capitalised { capital(&english) } else { english };
+            assert_eq!(field(&labels, name), expected, "the label {name} (client text {key})");
+            seen.push(name.to_string());
+        }
+        // Every label but the period comes from a text; none was skipped by the reader above.
+        assert_eq!(seen.len(), 17, "{seen:?}");
+        assert!(!seen.contains(&"period".to_string()));
+    }
+
+    #[test]
+    fn the_period_is_written_out_in_english() {
+        assert_eq!(ReportLabels::english("2026-10", "2026-10").unwrap().period, "October 2026");
+        assert_eq!(ReportLabels::english("2026-10", "2027-02").unwrap().period, "October 2026 – February 2027");
+        assert_eq!(ReportLabels::english("2026-01", "2026-12").unwrap().period, "January 2026 – December 2026");
+        for bad in ["2026-13", "2026-00", "2026", "x-1", "26-10", "2026-1x", ""] {
+            assert_eq!(ReportLabels::english(bad, "2026-10").unwrap_err(), AppError::InvalidInput, "{bad:?}");
+            assert_eq!(ReportLabels::english("2026-10", bad).unwrap_err(), AppError::InvalidInput, "{bad:?}");
+        }
+    }
+
+    #[test]
+    fn english_labels_pass_the_reports_own_limits() {
+        let labels = ReportLabels::english("2026-01", "2026-01").unwrap();
+        assert!(labels.all().iter().all(|l| !l.is_empty() && l.chars().count() <= LABEL_MAX_CHARS && !l.chars().any(char::is_control)));
     }
 }

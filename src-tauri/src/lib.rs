@@ -57,6 +57,28 @@ fn is_app_url(url: &tauri::Url) -> bool {
     }
 }
 
+/// Asks the person to allow something a token wants to do, in a native dialog over the app's window.
+struct AllowDialog(tauri::AppHandle);
+
+impl api::Show for AllowDialog {
+    fn show(&self, approval: &api::Approval) -> bool {
+        use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
+        // The window may be behind others or minimised; the question must not wait unseen.
+        if let Some(window) = self.0.get_webview_window("main") {
+            let _ = window.show();
+            let _ = window.unminimize();
+            let _ = window.set_focus();
+        }
+        self.0
+            .dialog()
+            .message(&approval.text)
+            .title(&approval.title)
+            .kind(MessageDialogKind::Warning)
+            .buttons(MessageDialogButtons::OkCancelCustom("Allow".to_string(), "Deny".to_string()))
+            .blocking_show()
+    }
+}
+
 pub fn run() {
     install_safe_panic_hook();
 
@@ -71,8 +93,10 @@ pub fn run() {
             let vault = Arc::new(Vault::new(dir, Box::new(store)));
             app.manage(vault.clone());
 
-            // The command API for the CLI, if the person left it on.
-            let api_host = Arc::new(api::Host::new(vault.clone()));
+            // The command API for the CLI, if the person left it on. Before it writes a file for a token, the person
+            // is asked in a dialog.
+            let prompter = api::Prompter::new(AllowDialog(app.handle().clone()));
+            let api_host = Arc::new(api::Host::with_prompter(vault.clone(), prompter));
             app.manage(api_host.clone());
             api_host.start_if_enabled();
 

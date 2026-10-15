@@ -180,6 +180,11 @@ pub fn list(conn: &Connection, now: DateTime<Utc>) -> Result<Vec<TokenInfo>, App
     .collect()
 }
 
+/// The name a token was given, for telling the person which token is asking.
+pub fn name_of(conn: &Connection, id: i64) -> Result<Option<String>, AppError> {
+    Ok(conn.query_row("SELECT name FROM api_tokens WHERE id = ?1", [id], |r| r.get(0)).optional()?)
+}
+
 pub fn revoke(conn: &Connection, id: i64) -> Result<(), AppError> {
     match conn.execute("DELETE FROM api_tokens WHERE id = ?1", [id])? {
         0 => Err(AppError::NotFound),

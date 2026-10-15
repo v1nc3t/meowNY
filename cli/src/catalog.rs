@@ -49,6 +49,8 @@ pub struct Command {
     pub scope: Option<String>,
     pub summary: String,
     pub params: Vec<Param>,
+    /// The person has to allow each run in the app, so it can take a while.
+    pub confirm: bool,
     pub action: Action,
 }
 
@@ -96,7 +98,7 @@ fn text(value: &Value, key: &str) -> Result<String, String> {
 }
 
 fn local(words: &[&str], summary: &str, action: Action) -> Command {
-    Command { words: words.iter().map(|w| w.to_string()).collect(), route: None, scope: None, summary: summary.into(), params: Vec::new(), action }
+    Command { words: words.iter().map(|w| w.to_string()).collect(), route: None, scope: None, summary: summary.into(), params: Vec::new(), confirm: false, action }
 }
 
 impl Catalog {
@@ -137,6 +139,7 @@ impl Catalog {
                 scope: Some(text(route, "scope")?),
                 summary: text(route, "summary")?,
                 params,
+                confirm: route.get("confirm").and_then(Value::as_bool).unwrap_or(false),
                 action,
             });
         }
@@ -241,6 +244,21 @@ mod tests {
         assert_eq!(catalog.find(&["logout"]).unwrap().route, None);
         assert_eq!(catalog.find(&["schema"]).unwrap().action, Action::Schema);
         assert_eq!(catalog.find(&["status"]).unwrap().action, Action::Route);
+    }
+
+    #[test]
+    fn the_commands_that_write_files_are_the_ones_the_person_must_allow() {
+        let catalog = Catalog::embedded();
+        let asking: Vec<String> = catalog.commands.iter().filter(|c| c.confirm).map(Command::name).collect();
+        assert_eq!(asking, ["export json", "export csv", "export xlsx", "export pdf", "backup create"]);
+        let verbs: Vec<&str> = catalog.verbs("export").iter().map(|c| c.verb()).collect();
+        assert_eq!(verbs, ["preview", "json", "csv", "xlsx", "pdf"]);
+        assert_eq!(catalog.verbs("backup").iter().map(|c| c.verb()).collect::<Vec<_>>(), ["schedule", "create"]);
+        let out = catalog.find(&["export", "json"]).unwrap().params.iter().find(|p| p.name == "out").unwrap();
+        assert!(out.required && out.kind == "path");
+        assert!(catalog.find(&["export", "preview"]).is_some_and(|c| !c.confirm), "a preview needs no yes");
+        assert!(catalog.find(&["backup", "schedule"]).is_some_and(|c| !c.confirm));
+        assert!(catalog.commands.iter().all(|c| c.name() != "backup restore"), "restoring is done in the app");
     }
 
     #[test]

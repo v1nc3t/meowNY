@@ -8,7 +8,7 @@ pub const EXIT_CODES: &[(u8, &str)] = &[
     (0, "success"),
     (1, "error: the app is not reachable, the answer was not understood, or the request failed for another reason"),
     (2, "bad usage: a missing or unknown flag, or a value the app refused"),
-    (3, "the token is missing, wrong, expired or may not do this, or the app is locked"),
+    (3, "the token is missing, wrong, expired or may not do this, the person said no in the app, or the app is locked"),
     (4, "not found"),
 ];
 
@@ -42,7 +42,7 @@ impl CliError {
 pub fn exit_for(code: &str) -> u8 {
     match code {
         "usage" | "invalid_input" => 2,
-        "no_token" | "bad_token" | "token_file_unsafe" | "unauthorized" | "forbidden" | "locked" => 3,
+        "no_token" | "bad_token" | "token_file_unsafe" | "unauthorized" | "forbidden" | "denied" | "locked" => 3,
         "not_found" => 4,
         _ => 1,
     }
@@ -60,10 +60,12 @@ pub const ERROR_CODES: &[&str] = &[
     "invalid_input",
     "unauthorized",
     "forbidden",
+    "denied",
     "not_found",
     "unknown_route",
     "method_not_allowed",
     "name_exists",
+    "file_exists",
     "not_set_up",
     "too_large",
     "locked",
@@ -84,6 +86,7 @@ mod tests {
             ("token_file_unsafe", 3),
             ("unauthorized", 3),
             ("forbidden", 3),
+            ("denied", 3),
             ("locked", 3),
             ("not_found", 4),
             ("unknown_route", 1),
@@ -92,6 +95,7 @@ mod tests {
             ("bad_answer", 1),
             ("method_not_allowed", 1),
             ("name_exists", 1),
+            ("file_exists", 1),
             ("not_set_up", 1),
             ("too_large", 1),
             ("internal", 1),

@@ -160,9 +160,40 @@ fn hint(p: &Param) -> String {
     if p.values.is_empty() { p.kind.clone() } else { p.values.join(", ") }
 }
 
+/// A path the app can use: absolute, with `.` and `..` worked out, because the app does not know where this
+/// program was started.
+fn absolute(flag: &str, raw: &str) -> Result<String, CliError> {
+    use std::path::{Component, Path, PathBuf};
+    let path = Path::new(raw);
+    let full = if path.is_absolute() {
+        path.to_path_buf()
+    } else {
+        std::env::current_dir().map_err(|_| CliError::usage(format!("cannot tell the current folder; give {flag} as an absolute path")))?.join(path)
+    };
+    let mut out = PathBuf::new();
+    for part in full.components() {
+        match part {
+            Component::CurDir => {}
+            Component::ParentDir => {
+                out.pop();
+            }
+            other => out.push(other.as_os_str()),
+        }
+    }
+    out.to_str().map(str::to_string).ok_or_else(|| CliError::usage(format!("{flag} must be text")))
+}
+
 fn convert(p: &Param, raw: String, stdin: &mut dyn BufRead, stdin_used: &mut bool) -> Result<Value, CliError> {
     let flag = format!("--{}", p.flag);
     match p.kind.as_str() {
+        "path" => absolute(&flag, &raw).map(Value::String),
+        "ids" => {
+            let ids: Vec<&str> = raw.split(',').map(str::trim).collect();
+            if ids.iter().any(|id| id.is_empty()) {
+                return Err(CliError::usage(format!("{flag} must be ids separated by commas, like 3,7,12")));
+            }
+            Ok(Value::Array(ids.into_iter().map(|id| Value::String(id.to_string())).collect()))
+        }
         "integer" => raw
             .parse::<i64>()
             .map(Value::from)
@@ -482,6 +513,47 @@ mod tests {
         assert!(usage("status --timeout 9999").contains("--timeout"));
         assert!(usage("status --token-file").contains("--token-file needs a value"));
         assert!(usage("status --json=maybe").contains("--json takes no value"));
+    }
+
+    #[test]
+    fn a_path_is_made_absolute_and_tidied_because_the_app_does_not_know_where_this_started() {
+        let cwd = std::env::current_dir().unwrap();
+        let out = |line: &str| run(line).body["out"].as_str().unwrap().to_string();
+        let cwd_text = |p: std::path::PathBuf| p.to_str().unwrap().to_string();
+        assert_eq!(out("export json --out out.json"), cwd_text(cwd.join("out.json")));
+        assert_eq!(out("export json --out ./sub/./out.json"), cwd_text(cwd.join("sub/out.json")));
+        assert_eq!(out("export json --out ../up.json"), cwd_text(cwd.parent().unwrap().join("up.json")));
+        assert_eq!(out("export json --out=sub/../out.json"), cwd_text(cwd.join("out.json")));
+        #[cfg(unix)]
+        {
+            assert_eq!(out("export json --out /data/out.json"), "/data/out.json", "an absolute path stays");
+            assert_eq!(out("export json --out /a/b/../c/./out.json"), "/a/c/out.json");
+            assert_eq!(out("export json --out /../../out.json"), "/out.json", "there is nothing above the root");
+        }
+    }
+
+    #[test]
+    fn ids_are_given_separated_by_commas_and_sent_as_a_list() {
+        let i = run("export json --out /x/a.json --category-ids 3,7,12");
+        assert_eq!(i.body["categoryIds"], json!(["3", "7", "12"]));
+        assert_eq!(run("export csv --out /x/a.csv --category-ids=5").body["categoryIds"], json!(["5"]));
+        assert_eq!(run("export csv --out /x/a.csv --category-ids  3,7").body["categoryIds"], json!(["3", "7"]));
+        for bad in ["", "3,", ",3", "3,,7", " "] {
+            let line: Vec<String> = ["export", "csv", "--out", "/x/a.csv", "--category-ids", bad].map(String::from).to_vec();
+            match parse(&line, &Catalog::embedded(), &mut std::io::empty()) {
+                Err(e) => assert!(e.message.contains("separated by commas"), "{bad:?}: {}", e.message),
+                other => panic!("{bad:?}: {other:?}"),
+            }
+        }
+    }
+
+    #[test]
+    fn the_backup_passphrase_can_come_from_standard_input() {
+        let line = ["backup", "create", "--out", "/x/a.meowbak", "--passphrase", "-"].map(String::from);
+        let mut stdin: &[u8] = b"correct horse battery\n";
+        let Ok(Parsed::Run(i)) = parse(&line, &Catalog::embedded(), &mut stdin) else { panic!() };
+        assert_eq!(i.body["passphrase"], "correct horse battery");
+        assert!(!i.command.destructive(), "the person's yes is asked in the app, not with --yes");
     }
 
     #[test]

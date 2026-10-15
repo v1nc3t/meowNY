@@ -45,27 +45,28 @@ static TEST_ROUTES: &[Route] = &[
             Param { name: "flag", kind: Kind::Boolean, required: false, nullable: false, summary: "A switch.", values: &[] },
             Param { name: "kind", kind: Kind::String, required: false, nullable: false, summary: "A or B.", values: &["A", "B"] },
         ],
+        confirm: None,
         run: echo,
     },
-    Route { name: "test.write", scope: Scope::Write, summary: "Needs a write token.", params: &[], run: echo },
-    Route { name: "test.exists", scope: Scope::Read, summary: "Fails: name exists.", params: &[], run: name_exists },
-    Route { name: "test.internal", scope: Scope::Read, summary: "Fails: internal.", params: &[], run: internal },
-    Route { name: "test.boom", scope: Scope::Read, summary: "Panics.", params: &[], run: boom },
+    Route { name: "test.write", scope: Scope::Write, summary: "Needs a write token.", params: &[], confirm: None, run: echo },
+    Route { name: "test.exists", scope: Scope::Read, summary: "Fails: name exists.", params: &[], confirm: None, run: name_exists },
+    Route { name: "test.internal", scope: Scope::Read, summary: "Fails: internal.", params: &[], confirm: None, run: internal },
+    Route { name: "test.boom", scope: Scope::Read, summary: "Panics.", params: &[], confirm: None, run: boom },
 ];
 
 // ---- a vault, tokens and a server -------------------------------------------------------------
 
-fn settings() -> Settings {
+pub(super) fn settings() -> Settings {
     Settings { currency: "EUR".into(), locale: "en-IE".into(), timezone: "Europe/Dublin".into(), language: "en".into() }
 }
 
-fn new_vault(dir: &std::path::Path) -> Arc<Vault> {
+pub(super) fn new_vault(dir: &std::path::Path) -> Arc<Vault> {
     let vault = Arc::new(Vault::new(dir.to_path_buf(), Box::new(MemoryStore::default())));
     vault.create(&settings(), None).unwrap();
     vault
 }
 
-fn make_token(vault: &Vault, scope: Scope) -> String {
+pub(super) fn make_token(vault: &Vault, scope: Scope) -> String {
     let input = NewToken { name: "test".into(), scope, expires_in_days: 30 };
     vault.with_conn(|c| tokens::create(c, &input, Utc::now())).unwrap().token
 }
@@ -102,14 +103,14 @@ fn fixture_with(limits: Limits) -> Fixture {
 
 // ---- a small HTTP client ---------------------------------------------------------------------
 
-struct Reply {
-    status: u16,
-    head: String,
-    body: String,
+pub(super) struct Reply {
+    pub(super) status: u16,
+    pub(super) head: String,
+    pub(super) body: String,
 }
 
 impl Reply {
-    fn header(&self, name: &str) -> Option<String> {
+    pub(super) fn header(&self, name: &str) -> Option<String> {
         self.head
             .split("\r\n")
             .skip(1)
@@ -118,33 +119,33 @@ impl Reply {
             .map(|(_, v)| v.to_string())
     }
 
-    fn json(&self) -> Value {
+    pub(super) fn json(&self) -> Value {
         serde_json::from_str(&self.body).unwrap_or_else(|e| panic!("not JSON ({e}): {:?}", self.body))
     }
 
-    fn code(&self) -> String {
+    pub(super) fn code(&self) -> String {
         self.json()["error"]["code"].as_str().unwrap_or("").to_string()
     }
 
-    fn message(&self) -> String {
+    pub(super) fn message(&self) -> String {
         self.json()["error"]["message"].as_str().unwrap_or("").to_string()
     }
 
-    fn data(&self) -> Value {
+    pub(super) fn data(&self) -> Value {
         assert_eq!(self.status, 200, "{}", self.body);
         assert_eq!(self.json()["ok"], true);
         self.json()["data"].clone()
     }
 }
 
-fn connect(port: u16) -> TcpStream {
+pub(super) fn connect(port: u16) -> TcpStream {
     let stream = TcpStream::connect((Ipv4Addr::LOCALHOST, port)).unwrap();
     stream.set_read_timeout(Some(Duration::from_secs(10))).unwrap();
     stream
 }
 
 /// Reads until the server closes. A server that closes without answering gives status 0.
-fn read_reply(stream: &mut TcpStream) -> Reply {
+pub(super) fn read_reply(stream: &mut TcpStream) -> Reply {
     let mut bytes = Vec::new();
     let _ = stream.read_to_end(&mut bytes);
     let text = String::from_utf8_lossy(&bytes).into_owned();
@@ -155,13 +156,13 @@ fn read_reply(stream: &mut TcpStream) -> Reply {
     Reply { status, head: head.to_string(), body: body.to_string() }
 }
 
-fn send(port: u16, bytes: &[u8]) -> Reply {
+pub(super) fn send(port: u16, bytes: &[u8]) -> Reply {
     let mut stream = connect(port);
     let _ = stream.write_all(bytes);
     read_reply(&mut stream)
 }
 
-fn raw_request(method: &str, target: &str, headers: &[String], body: &str) -> Vec<u8> {
+pub(super) fn raw_request(method: &str, target: &str, headers: &[String], body: &str) -> Vec<u8> {
     let mut out = format!("{method} {target} HTTP/1.1\r\n");
     for header in headers {
         out.push_str(header);
@@ -171,7 +172,7 @@ fn raw_request(method: &str, target: &str, headers: &[String], body: &str) -> Ve
     out.into_bytes()
 }
 
-fn headers(port: u16, token: Option<&str>) -> Vec<String> {
+pub(super) fn headers(port: u16, token: Option<&str>) -> Vec<String> {
     let mut out = vec![format!("Host: 127.0.0.1:{port}")];
     if let Some(token) = token {
         out.push(format!("Authorization: Bearer {token}"));
@@ -179,7 +180,7 @@ fn headers(port: u16, token: Option<&str>) -> Vec<String> {
     out
 }
 
-fn call(port: u16, token: Option<&str>, route: &str, body: &str) -> Reply {
+pub(super) fn call(port: u16, token: Option<&str>, route: &str, body: &str) -> Reply {
     send(port, &raw_request("POST", &format!("/v1/{route}"), &headers(port, token), body))
 }
 
@@ -915,7 +916,8 @@ fn a_read_token_uses_every_read_route_over_http_and_gets_what_the_screens_get() 
 
     let category = call(port, Some(&token), "categories.list", r#"{"type":"EXPENSE"}"#).data()[0]["id"].as_str().unwrap().to_string();
     let mut called = 0;
-    for route in routes::ALL.iter().filter(|r| r.scope == Scope::Read) {
+    // The routes that need the person's yes have their own tests; here nobody can answer.
+    for route in routes::ALL.iter().filter(|r| r.scope == Scope::Read && r.confirm.is_none()) {
         let reply = call(port, Some(&token), route.name, &sample_args(route.name, &category));
         assert_eq!(reply.status, 200, "{}: {}", route.name, reply.body);
         assert_eq!(reply.json()["ok"], true, "{}", route.name);

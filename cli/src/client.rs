@@ -21,6 +21,8 @@ use crate::error::CliError;
 const MAX_ANSWER: usize = 32 * 1024 * 1024;
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(3);
 pub const DEFAULT_TIMEOUT_SECS: u64 = 30;
+/// Longer than the app waits for the person (two minutes), so its answer arrives before this gives up.
+pub const CONFIRM_TIMEOUT_SECS: u64 = 180;
 
 /// Where the program looks things up: environment variables, passed in so tests need not set real ones.
 pub type Env<'a> = &'a dyn Fn(&str) -> Option<String>;

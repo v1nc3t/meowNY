@@ -34,6 +34,8 @@ const READ_ROUTES: &[&str] = &[
     "stats.top",
     "stats.commitments",
     "stats.planned",
+    "export.preview",
+    "backup.schedule",
 ];
 
 pub(super) fn at(text: &str) -> DateTime<Utc> {
@@ -376,9 +378,10 @@ fn money_and_ids_are_strings_and_the_only_numbers_are_counts_and_percentages() {
     for name in READ_ROUTES {
         walk(&ok(&vault, name, args(name)), name, &mut numbers);
     }
-    // Counts: `limit`, `offset`, `total` (a page), `intervalCount` (every 2 weeks), `paidCount`. Percentages: `pctUsed`,
+    // Counts: `limit`, `offset`, `total` (a page), `intervalCount` (every 2 weeks), `paidCount`, and what an export
+    // would contain (`transactions`, `categories`, `budgets`, `recurring`, `history`), `everyDays` (a backup schedule). Percentages: `pctUsed`,
     // `share`, `savingsRate`. Everything else, money above all, is a string.
-    let allowed: BTreeSet<String> = ["intervalCount", "limit", "offset", "paidCount", "pctUsed", "savingsRate", "share", "total"]
+    let allowed: BTreeSet<String> = ["intervalCount", "limit", "offset", "paidCount", "pctUsed", "savingsRate", "share", "total", "transactions", "categories", "budgets", "recurring", "history", "everyDays"]
         .into_iter()
         .map(String::from)
         .collect();

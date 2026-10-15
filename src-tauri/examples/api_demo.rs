@@ -3,6 +3,8 @@
 //!
 //!   cargo run --example api_demo
 //!
+//! Exports and backups ask for your yes in this terminal, as the app would in a dialog.
+//!
 //! It builds a throwaway encrypted vault in a temporary folder, seeds it, makes a read token and a
 //! write token, prints them with a curl line and serves until Ctrl+C. The real app's data and the OS
 //! keychain are not touched: the key is kept in memory, so the temporary folder left behind is unreadable.
@@ -10,7 +12,7 @@
 
 use std::sync::{Arc, Mutex};
 
-use meowny_lib::api::{routes, ApiServer, Limits};
+use meowny_lib::api::{routes, Approval, ApiServer, Limits, Prompter, Show};
 use meowny_lib::keys::{KeyError, SecretStore, SECRET_LEN};
 use meowny_lib::tokens::{self, NewToken, Scope};
 use meowny_lib::vault::{Settings, Vault};
@@ -33,6 +35,18 @@ impl SecretStore for MemoryStore {
     }
 }
 
+/// The person at the app, played by the terminal: an export or a backup shows what it is about to write and waits
+/// for y or n here, where the desktop app would show a dialog.
+struct Terminal;
+
+impl Show for Terminal {
+    fn show(&self, approval: &Approval) -> bool {
+        println!("\n--- {} ---\n{}\n[y/N] ", approval.title, approval.text);
+        let mut line = String::new();
+        std::io::stdin().read_line(&mut line).is_ok() && line.trim().eq_ignore_ascii_case("y")
+    }
+}
+
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let dir = std::env::temp_dir().join(format!("meowny-api-demo-{}", std::process::id()));
     let vault = Arc::new(Vault::new(dir.clone(), Box::new(MemoryStore::default())));
@@ -51,7 +65,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
     let (read, write) = (make("demo read", Scope::Read)?, make("demo write", Scope::Write)?);
 
-    let server = ApiServer::start(vault.clone(), routes::ALL, Limits::default())?;
+    let server = ApiServer::start_with(vault.clone(), routes::ALL, Limits::default(), Some(Prompter::new(Terminal)))?;
     let port = server.port();
     println!("serving on 127.0.0.1:{port} (data in {}), Ctrl+C to stop\n", dir.display());
     println!("read token:  {read}");

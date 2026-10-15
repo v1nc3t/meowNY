@@ -10,7 +10,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use serde_json::{json, Value};
 
 use crate::args::{self, Invocation, Parsed};
-use crate::catalog::{Action, Catalog, API_VERSION};
+use crate::catalog::{Action, Catalog, Command, API_VERSION};
 use crate::client::{self, Env};
 use crate::error::CliError;
 use crate::{help, local, output};
@@ -32,6 +32,35 @@ pub fn uuid_v4() -> String {
     bytes[8] = (bytes[8] & 0x3f) | 0x80;
     let hex: String = bytes.iter().map(|b| format!("{b:02x}")).collect();
     format!("{}-{}-{}-{}-{}", &hex[..8], &hex[8..12], &hex[12..16], &hex[16..20], &hex[20..])
+}
+
+/// How long to wait for the app. A command the person has to allow waits for them, which takes longer than one
+/// that does not.
+fn timeout_for(command: &Command, flag: Option<u64>) -> Duration {
+    let default = if command.confirm { client::CONFIRM_TIMEOUT_SECS } else { client::DEFAULT_TIMEOUT_SECS };
+    Duration::from_secs(flag.unwrap_or(default))
+}
+
+/// How long an answer may take before the person at the terminal is told what it is waiting for. A request the app
+/// refuses at once never says it.
+const TELL_AFTER: Duration = Duration::from_millis(1000);
+
+/// The request, with a line on standard error if it takes more than a moment: for a command the person has to allow in
+/// the app, that is where they should look.
+fn call_telling_the_person(port: u16, token: &str, route: &str, body: &Value, timeout: Duration, err: &mut dyn Write) -> Result<Value, CliError> {
+    let (send, receive) = std::sync::mpsc::channel();
+    std::thread::scope(|scope| {
+        scope.spawn(|| {
+            let _ = send.send(client::call(port, token, route, body, timeout));
+        });
+        match receive.recv_timeout(TELL_AFTER) {
+            Ok(result) => result,
+            Err(_) => {
+                let _ = writeln!(err, "waiting for you to allow this in the meowNY app...");
+                receive.recv().unwrap_or_else(|_| Err(CliError::new("internal", "the request stopped unexpectedly")))
+            }
+        }
+    })
 }
 
 /// Whether `--json` was given, even when the rest of the command line could not be read.
@@ -68,11 +97,12 @@ fn page_hint(data: &Value) -> Option<String> {
     (end < total).then(|| format!("showing {}-{end} of {total}; next page: --offset {end}", offset + 1))
 }
 
-fn show(data: &Value, json: bool, out: &mut dyn Write, err: &mut dyn Write) {
+/// `reads` is whether the command only looks: when it finds nothing, "done" would be wrong.
+fn show(data: &Value, json: bool, reads: bool, out: &mut dyn Write, err: &mut dyn Write) {
     if json {
         let _ = writeln!(out, "{}", output::compact(data));
     } else if data.is_null() {
-        let _ = writeln!(err, "done.");
+        let _ = writeln!(err, "{}", if reads { "there is nothing to show." } else { "done." });
     } else {
         let _ = out.write_all(output::human(data).as_bytes());
         if let Some(hint) = page_hint(data) {
@@ -123,13 +153,18 @@ fn execute(
             // Local checks first: a missing token is the same answer whether or not the app is up.
             let token = client::token(env, g.token_file.as_deref())?;
             let port = client::port(env, g.port, g.data_dir.as_deref())?;
-            let timeout = Duration::from_secs(g.timeout_secs.unwrap_or(client::DEFAULT_TIMEOUT_SECS));
+            let timeout = timeout_for(&inv.command, g.timeout_secs);
             let mut body = inv.body;
             if route == "transactions.create" && !body.contains_key("clientUuid") {
                 body.insert("clientUuid".into(), Value::String(uuid_v4()));
             }
-            let data = client::call(port, &token, &route, &Value::Object(body), timeout)?;
-            show(&data, g.json, out, err);
+            let body = Value::Object(body);
+            let data = if inv.command.confirm && !g.json {
+                call_telling_the_person(port, &token, &route, &body, timeout, err)?
+            } else {
+                client::call(port, &token, &route, &body, timeout)?
+            };
+            show(&data, g.json, inv.command.scope.as_deref() == Some("read"), out, err);
             Ok(())
         }
     }
@@ -195,6 +230,11 @@ mod tests {
 
     /// A stand-in for the app: answers one request with `reply` and hands back what it received.
     fn fake_app(reply: &'static str) -> (u16, std::thread::JoinHandle<String>) {
+        fake_app_after(reply, Duration::ZERO)
+    }
+
+    /// The same, but it takes `delay` to answer, like a person deciding in a dialog.
+    fn fake_app_after(reply: &'static str, delay: Duration) -> (u16, std::thread::JoinHandle<String>) {
         let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
         let port = listener.local_addr().unwrap().port();
         let handle = std::thread::spawn(move || {
@@ -215,6 +255,7 @@ mod tests {
                     break;
                 }
             }
+            std::thread::sleep(delay);
             let _ = stream.write_all(reply.as_bytes());
             String::from_utf8_lossy(&received).to_string()
         });
@@ -345,6 +386,14 @@ mod tests {
     }
 
     #[test]
+    fn a_read_that_finds_nothing_says_so_instead_of_done() {
+        let (port, app) = fake_app(answer(r#"{"data":null,"ok":true}"#));
+        let r = go(&format!("backup schedule --port {port}"), &[("MEOWNY_TOKEN", TOKEN)], "");
+        app.join().unwrap();
+        assert_eq!((r.code, r.out.as_str(), r.err.as_str()), (0, "", "there is nothing to show.\n"));
+    }
+
+    #[test]
     fn nothing_returned_prints_done_on_standard_error_and_null_in_json() {
         let (port, app) = fake_app(answer(r#"{"data":null,"ok":true}"#));
         let r = go(&format!("transactions delete 5 --yes --port {port}"), &[("MEOWNY_TOKEN", TOKEN)], "");
@@ -358,12 +407,14 @@ mod tests {
 
     #[test]
     fn what_the_app_refuses_maps_to_the_documented_exit_codes() {
-        let cases: [(&str, &str, &str, u8); 10] = [
+        let cases: [(&str, &str, &str, u8); 12] = [
             ("400 Bad Request", "invalid_input", "`amount` must be an amount", 2),
             ("401 Unauthorized", "unauthorized", "the token is missing, unknown, expired or revoked", 3),
             ("403 Forbidden", "forbidden", "this token is read-only", 3),
             ("404 Not Found", "not_found", "not found", 4),
             ("404 Not Found", "unknown_route", "this app has no such route; update the app or the client", 1),
+            ("403 Forbidden", "denied", "the person did not allow this in the app", 3),
+            ("409 Conflict", "file_exists", "that file already exists; choose a name that does not", 1),
             ("409 Conflict", "name_exists", "that name already exists", 1),
             ("409 Conflict", "not_set_up", "the app is not set up yet", 1),
             ("413 Content Too Large", "too_large", "the request is too large", 1),
@@ -441,6 +492,53 @@ mod tests {
         assert_eq!(r.code, 1);
         assert_eq!(serde_json::from_str::<Value>(&r.err).unwrap()["code"], "timeout");
         assert!(started.elapsed() < Duration::from_secs(4), "{:?}", started.elapsed());
+    }
+
+    #[test]
+    fn a_command_the_person_must_allow_waits_longer_than_the_apps_own_two_minutes() {
+        let catalog = Catalog::embedded();
+        let asks = catalog.find(&["export", "json"]).unwrap();
+        let plain = catalog.find(&["transactions", "list"]).unwrap();
+        assert!(asks.confirm && !plain.confirm);
+        assert_eq!(timeout_for(plain, None), Duration::from_secs(30));
+        assert_eq!(timeout_for(asks, None), Duration::from_secs(180));
+        assert!(timeout_for(asks, None) > Duration::from_secs(120), "the app gives up on the person after two minutes");
+        assert_eq!(timeout_for(asks, Some(7)), Duration::from_secs(7), "--timeout wins");
+        assert_eq!(timeout_for(plain, Some(500)), Duration::from_secs(500));
+    }
+
+    #[test]
+    fn it_says_it_is_waiting_for_the_person_only_if_the_answer_takes_a_moment_and_only_in_the_plain_form() {
+        let reply = r#"{"data":{"path":"/tmp/x.json","bytes":5},"ok":true}"#;
+        let vars = [("MEOWNY_TOKEN", TOKEN)];
+        // The person takes their time: told where to look.
+        let (port, app) = fake_app_after(answer(reply), Duration::from_millis(1300));
+        let slow = go(&format!("export json --out /tmp/x.json --port {port}"), &vars, "");
+        let request = app.join().unwrap();
+        assert!(request.starts_with("POST /v1/export.json "), "{request}");
+        if !cfg!(windows) {
+            assert!(request.ends_with("{\"out\":\"/tmp/x.json\"}"), "{request}");
+        }
+        assert_eq!(slow.err, "waiting for you to allow this in the meowNY app...\n");
+        assert_eq!(slow.out, "bytes: 5\npath: /tmp/x.json\n");
+        // The app answers at once (a refusal, say): nothing to wait for, nothing said.
+        let (port, app) = fake_app(answer(reply));
+        let quick = go(&format!("export json --out /tmp/x.json --port {port}"), &vars, "");
+        app.join().unwrap();
+        assert_eq!((quick.err.as_str(), quick.code), ("", 0));
+        let (port, app) = fake_app(answer_with("409 Conflict", r#"{"error":{"code":"file_exists","message":"that file already exists"},"ok":false}"#));
+        let refused = go(&format!("export json --out /tmp/x.json --port {port}"), &vars, "");
+        app.join().unwrap();
+        assert_eq!((refused.code, refused.err.as_str()), (1, "error: that file already exists\n"), "no 'waiting' before an instant refusal");
+        // A script reading JSON gets no extra text even when it waits.
+        let (port, app) = fake_app_after(answer(reply), Duration::from_millis(1300));
+        let json = go(&format!("export json --out /tmp/x.json --json --port {port}"), &vars, "");
+        app.join().unwrap();
+        assert_eq!((json.err.as_str(), json.out.as_str()), ("", "{\"bytes\":5,\"path\":\"/tmp/x.json\"}\n"));
+        // A command that does not ask the person never says it waits.
+        let (port, app) = fake_app_after(answer(r#"{"data":{"scope":"read"},"ok":true}"#), Duration::from_millis(1300));
+        assert_eq!(go(&format!("status --port {port}"), &vars, "").err, "");
+        app.join().unwrap();
     }
 
     #[test]

@@ -27,14 +27,20 @@ fn cut(text: String) -> String {
     short
 }
 
-fn cell(value: &Value) -> String {
-    cut(match value {
+/// A value as text on one line, whole.
+fn plain(value: &Value) -> String {
+    match value {
         Value::Null => "-".into(),
         Value::Bool(b) => b.to_string(),
         Value::Number(n) => n.to_string(),
         Value::String(s) => clean(s),
         other => clean(&compact(other)),
-    })
+    }
+}
+
+/// A value in a table cell: cut, so one long text cannot push the other columns off the screen.
+fn cell(value: &Value) -> String {
+    cut(plain(value))
 }
 
 fn is_number(text: &str) -> bool {
@@ -104,7 +110,8 @@ pub fn human(data: &Value) -> String {
         Value::Array(rows) => table(rows),
         Value::Object(map) => {
             let (lists, singles): (Vec<_>, Vec<_>) = map.iter().partition(|(_, v)| v.is_array());
-            let mut out: String = singles.iter().map(|(k, v)| format!("{}: {}\n", clean(k), cell(v))).collect();
+            // A line of `key: value` is shown whole: a path or an id is no use cut short.
+            let mut out: String = singles.iter().map(|(k, v)| format!("{}: {}\n", clean(k), plain(v))).collect();
             for (key, rows) in lists {
                 if !out.is_empty() {
                     out.push('\n');
@@ -114,7 +121,7 @@ pub fn human(data: &Value) -> String {
             }
             out
         }
-        other => format!("{}\n", cell(other)),
+        other => format!("{}\n", plain(other)),
     }
 }
 
@@ -205,6 +212,15 @@ mod tests {
         assert_eq!(clean("a\tb\u{85}c"), "a b c");
         // Keys, and scalars outside a table, are cleaned too.
         assert!(!human(&json!({ "k": "\u{1b}[0m" })).contains('\u{1b}'));
+    }
+
+    #[test]
+    fn a_line_of_key_and_value_is_never_cut_but_still_cleaned() {
+        let path = format!("/home/someone/{}/export.json", "folder/".repeat(30));
+        let text = human(&json!({ "path": path, "bytes": 5, "note": "a\u{1b}[31mb" }));
+        assert!(text.contains(&format!("path: {path}\n")), "{text}");
+        assert!(!text.contains('\u{1b}') && !text.contains('…'));
+        assert_eq!(human(&json!(path)), format!("{path}\n"), "a lone value too");
     }
 
     #[test]

@@ -31,6 +31,7 @@ fn hint(p: &Param) -> String {
         "string" => "text",
         "integer" => "number",
         "money" => "amount",
+        "ids" => "id,id,...",
         other => other,
     }
     .to_string()
@@ -87,6 +88,12 @@ fn command_help(c: &Command) -> String {
     }
     if c.destructive() {
         notes.push("This cannot be undone, so it needs --yes.".into());
+    }
+    if c.confirm {
+        notes.push("The app asks the person to allow each run, in a dialog in its window, and nothing is written until they do. This program waits up to 3 minutes for the answer (--timeout changes that). The file must not exist yet, and a relative path is made absolute from where you run this.".into());
+    }
+    if c.name() == "backup create" {
+        notes.push("Give --passphrase - to read the passphrase from standard input, so it does not show in the list of running programs. The backup opens only with it, and only the app restores backups.".into());
     }
     if c.name() == "transactions create" {
         notes.push("A fresh --client-uuid is made if you do not give one, and is in the answer. To retry safely after an error or a timeout, send the same one again: the app returns the first transaction instead of making a second.".into());
@@ -202,6 +209,17 @@ mod tests {
         let update = help(&["transactions", "update"]);
         assert!(update.contains("--clear-description") && update.contains("Clears it."));
         assert!(!update.contains("--clear-name"));
+    }
+
+    #[test]
+    fn a_command_the_person_must_allow_says_so_and_how_long_it_waits() {
+        let text = help(&["export", "json"]);
+        assert!(text.contains("usage: meowny export json --out <path>") && text.contains("[--category-ids <id,id,...>]"), "{text}");
+        assert!(text.contains("asks the person to allow each run") && text.contains("3 minutes") && text.contains("must not exist yet"));
+        assert!(!text.contains("needs --yes"), "the yes is the person's, in the app");
+        let backup = help(&["backup", "create"]);
+        assert!(backup.contains("--passphrase -") && backup.contains("standard input") && backup.contains("only the app restores"));
+        assert!(!help(&["export", "preview"]).contains("asks the person"), "a preview does not ask");
     }
 
     #[test]

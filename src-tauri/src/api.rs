@@ -17,15 +17,23 @@
 //! 3. a bearer token. A locked app cannot check any token, so it answers `locked` to every request
 //!    that carries a token, and gives no data. No token at all is a 401, locked or not;
 //! 4. the route must exist and the token's scope must allow it;
-//! 5. the body is checked against the route's declared arguments.
+//! 5. the body is checked against the route's declared arguments;
+//! 6. a route that writes outside the app (an export, a backup) builds a plain description of what it is
+//!    about to do and the person has to allow it in the app's window, every time. A token is not enough.
+//!    Nothing is written until they do. See `prompt.rs`.
 //!
 //! Requests never count as user activity, so the idle lock still fires while a script is running.
 //! The server logs nothing and keeps nothing: tokens and bodies exist only for the length of a call.
 
+mod confirmed;
+mod files;
 mod http;
+mod prompt;
 mod read;
 pub mod routes;
 mod write;
+
+pub use prompt::{Approval, Prompter, Show};
 
 use std::borrow::Cow;
 use std::io;
@@ -82,6 +90,15 @@ impl ApiError {
     /// `not_found`, so a script can tell "already gone" from "update the app".
     pub const UNKNOWN_ROUTE: Self = Self::fixed(404, "unknown_route", "this app has no such route; update the app or the client");
     pub const METHOD_NOT_ALLOWED: Self = Self::fixed(405, "method_not_allowed", "use POST");
+    /// The person was asked in the app and did not allow it (or could not be asked). All the ways are 403 `denied`.
+    pub const DENIED: Self = Self::fixed(403, "denied", "the person did not allow this in the app");
+    pub const DENIED_BUSY: Self = Self::fixed(403, "denied", "another request is waiting for an answer in the app");
+    pub const DENIED_RECENTLY: Self = Self::fixed(403, "denied", "the person said no to this token a moment ago; try again later");
+    pub const DENIED_TIMEOUT: Self = Self::fixed(403, "denied", "nobody answered in the app in time");
+    pub const DENIED_NO_PROMPT: Self = Self::fixed(403, "denied", "this needs the person to allow it in the app, and the app cannot ask right now");
+    /// A file that is already there is never replaced.
+    pub const FILE_EXISTS: Self = Self::fixed(409, "file_exists", "that file already exists; choose a name that does not");
+    pub const CANNOT_WRITE: Self = Self::fixed(500, "internal", "cannot write the file; check the folder and its permissions");
     pub const NAME_EXISTS: Self = Self::fixed(409, "name_exists", "that name already exists");
     pub const NOT_SET_UP: Self = Self::fixed(409, "not_set_up", "the app is not set up yet");
     pub const TOO_LARGE: Self = Self::fixed(413, "too_large", "the request is too large");
@@ -138,7 +155,12 @@ pub struct ApiServer {
 }
 
 impl ApiServer {
+    /// A server that cannot ask the person anything: a route that needs their yes is always refused.
     pub fn start(vault: Arc<Vault>, routes: &'static [Route], limits: Limits) -> io::Result<Self> {
+        Self::start_with(vault, routes, limits, None)
+    }
+
+    pub fn start_with(vault: Arc<Vault>, routes: &'static [Route], limits: Limits, prompter: Option<Arc<Prompter>>) -> io::Result<Self> {
         let listener = TcpListener::bind((Ipv4Addr::LOCALHOST, 0))?;
         let addr = listener.local_addr()?;
         let file = vault.data_dir().join(DISCOVERY_FILE);
@@ -148,7 +170,7 @@ impl ApiServer {
         let stop = Arc::new(AtomicBool::new(false));
         let thread = {
             let stop = stop.clone();
-            thread::Builder::new().name("command-api".into()).spawn(move || accept_loop(listener, vault, routes, limits, stop))
+            thread::Builder::new().name("command-api".into()).spawn(move || accept_loop(listener, vault, routes, limits, prompter, stop))
         };
         match thread {
             Ok(thread) => Ok(Self { addr, stop, thread: Some(thread), file }),
@@ -189,7 +211,7 @@ impl Drop for Slot {
     }
 }
 
-fn accept_loop(listener: TcpListener, vault: Arc<Vault>, routes: &'static [Route], limits: Limits, stop: Arc<AtomicBool>) {
+fn accept_loop(listener: TcpListener, vault: Arc<Vault>, routes: &'static [Route], limits: Limits, prompter: Option<Arc<Prompter>>, stop: Arc<AtomicBool>) {
     let open = Arc::new(AtomicUsize::new(0));
     let port = listener.local_addr().map(|a| a.port()).unwrap_or(0);
     for stream in listener.incoming() {
@@ -206,17 +228,17 @@ fn accept_loop(listener: TcpListener, vault: Arc<Vault>, routes: &'static [Route
             continue;
         }
         let slot = Slot(open.clone());
-        let vault = vault.clone();
+        let (vault, prompter) = (vault.clone(), prompter.clone());
         let spawned = thread::Builder::new().name("command-api-call".into()).spawn(move || {
             let _slot = slot;
-            serve(stream, &vault, routes, port, limits);
+            serve(stream, &vault, routes, port, limits, prompter.as_deref());
         });
         // On failure the closure, and the slot in it, is dropped.
         drop(spawned);
     }
 }
 
-fn serve(mut stream: TcpStream, vault: &Vault, routes: &'static [Route], port: u16, limits: Limits) {
+fn serve(mut stream: TcpStream, vault: &Vault, routes: &'static [Route], port: u16, limits: Limits, prompter: Option<&Prompter>) {
     let _ = stream.set_write_timeout(Some(limits.request_time));
     let request = match http::read_request(&mut stream, Instant::now() + limits.request_time) {
         Ok(request) => Ok(request),
@@ -225,7 +247,7 @@ fn serve(mut stream: TcpStream, vault: &Vault, routes: &'static [Route], port: u
     };
     // A bug in one route must not take the connection, or the server, down with it.
     let outcome = request.and_then(|request| {
-        catch_unwind(AssertUnwindSafe(|| handle(vault, routes, port, &request, Utc::now()))).unwrap_or(Err(ApiError::INTERNAL))
+        catch_unwind(AssertUnwindSafe(|| handle(vault, routes, port, prompter, &request, Utc::now()))).unwrap_or(Err(ApiError::INTERNAL))
     });
     match outcome {
         Ok(data) => {
@@ -276,7 +298,7 @@ fn parse_body(body: &[u8]) -> Result<Map<String, Value>, ApiError> {
 }
 
 /// One request, start to finish. Everything it can refuse, it refuses here, before a handler runs.
-fn handle(vault: &Vault, routes: &'static [Route], port: u16, request: &http::Request, now: DateTime<Utc>) -> Result<Value, ApiError> {
+fn handle(vault: &Vault, routes: &'static [Route], port: u16, prompter: Option<&Prompter>, request: &http::Request, now: DateTime<Utc>) -> Result<Value, ApiError> {
     if !host_allowed(request.header("host"), port) {
         return Err(ApiError::FORBIDDEN_HOST);
     }
@@ -296,7 +318,13 @@ fn handle(vault: &Vault, routes: &'static [Route], port: u16, request: &http::Re
     }
     let args = parse_body(&request.body)?;
     route.check(&args)?;
-    (route.run)(&Ctx { vault, grant, routes, now }, args)
+    let ctx = Ctx { vault, grant, routes, now };
+    if let Some(describe) = route.confirm {
+        // The request is checked and described first, so one that could never work does not ask. Then the person decides.
+        let approval = describe(&ctx, &args)?;
+        prompter.ok_or(ApiError::DENIED_NO_PROMPT)?.ask(grant.id, approval)?;
+    }
+    (route.run)(&ctx, args)
 }
 
 /// What the Settings screen shows about the API.
@@ -313,12 +341,19 @@ pub struct HostStatus {
 /// Owns the listener for the life of the app and follows the person's on/off choice.
 pub struct Host {
     vault: Arc<Vault>,
+    prompter: Option<Arc<Prompter>>,
     server: Mutex<Option<ApiServer>>,
 }
 
 impl Host {
+    /// A host that cannot ask the person anything, so routes that need their yes are refused.
     pub fn new(vault: Arc<Vault>) -> Self {
-        Self { vault, server: Mutex::new(None) }
+        Self { vault, prompter: None, server: Mutex::new(None) }
+    }
+
+    /// A host that asks the person through `prompter` (the app's window) before an export or a backup.
+    pub fn with_prompter(vault: Arc<Vault>, prompter: Arc<Prompter>) -> Self {
+        Self { vault, prompter: Some(prompter), server: Mutex::new(None) }
     }
 
     fn slot(&self) -> std::sync::MutexGuard<'_, Option<ApiServer>> {
@@ -326,7 +361,7 @@ impl Host {
     }
 
     fn launch(&self) -> io::Result<ApiServer> {
-        ApiServer::start(self.vault.clone(), routes::ALL, Limits::default())
+        ApiServer::start_with(self.vault.clone(), routes::ALL, Limits::default(), self.prompter.clone())
     }
 
     /// At app start: listen if the person left it on. If not, remove a port file that a crash left behind.
@@ -375,6 +410,8 @@ impl Host {
     }
 }
 
+#[cfg(test)]
+mod confirmed_tests;
 #[cfg(test)]
 mod read_tests;
 #[cfg(test)]

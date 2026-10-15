@@ -35,6 +35,7 @@ fn command_json(c: &Command) -> Value {
         "scope": c.scope,
         "summary": c.summary,
         "destructive": c.destructive(),
+        "confirm": c.confirm,
         "positional": c.positional().map(|p| p.name.clone()),
         "flags": flags,
     })
@@ -158,6 +159,11 @@ mod tests {
         assert_eq!(delete["destructive"], true);
         let login = s["commands"].as_array().unwrap().iter().find(|c| c["command"] == "login").unwrap();
         assert_eq!((login["route"].clone(), login["scope"].clone()), (Value::Null, Value::Null));
+        let asking: Vec<&str> = s["commands"].as_array().unwrap().iter().filter(|c| c["confirm"] == true).map(|c| c["command"].as_str().unwrap()).collect();
+        assert_eq!(asking, ["export json", "export csv", "export xlsx", "export pdf", "backup create"], "a script is told which commands wait for the person");
+        assert!(s["commands"].as_array().unwrap().iter().filter(|c| c["confirm"] != true).all(|c| c["confirm"] == false));
+        assert_eq!(s["errorCodes"]["denied"], 3);
+        assert_eq!(s["errorCodes"]["file_exists"], 1);
         let top = s["commands"].as_array().unwrap().iter().find(|c| c["command"] == "categories list").unwrap();
         assert_eq!(top["flags"][0]["values"], json!(["INCOME", "EXPENSE"]));
     }

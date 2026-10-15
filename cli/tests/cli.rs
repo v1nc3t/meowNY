@@ -7,7 +7,7 @@ use std::process::{Command, Stdio};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-use meowny_lib::api::{routes, ApiServer, Limits};
+use meowny_lib::api::{routes, Approval, ApiServer, Limits, Prompter, Show};
 use meowny_lib::keys::{KeyError, SecretStore, SECRET_LEN};
 use meowny_lib::tokens::{self, NewToken, Scope};
 use meowny_lib::vault::{AppError, Settings, Vault};
@@ -33,12 +33,44 @@ impl SecretStore for MemoryStore {
     }
 }
 
+/// The person at the app: records what they were asked and answers as set.
+struct Dialog {
+    shown: Arc<Mutex<Vec<Approval>>>,
+    answer: Arc<Mutex<bool>>,
+    /// How long they take to decide.
+    delay: Arc<Mutex<Duration>>,
+}
+
+impl Show for Dialog {
+    fn show(&self, approval: &Approval) -> bool {
+        self.shown.lock().unwrap().push(approval.clone());
+        let delay = *self.delay.lock().unwrap();
+        std::thread::sleep(delay);
+        *self.answer.lock().unwrap()
+    }
+}
+
 struct App {
     dir: tempfile::TempDir,
+    /// Where exports and backups go.
+    files: tempfile::TempDir,
     vault: Arc<Vault>,
     server: Option<ApiServer>,
     read: String,
     write: String,
+    shown: Arc<Mutex<Vec<Approval>>>,
+    answer: Arc<Mutex<bool>>,
+    delay: Arc<Mutex<Duration>>,
+}
+
+impl App {
+    fn out(&self, name: &str) -> String {
+        self.files.path().join(name).to_str().unwrap().to_string()
+    }
+
+    fn asked(&self) -> usize {
+        self.shown.lock().unwrap().len()
+    }
 }
 
 fn token(vault: &Vault, scope: Scope, days: u32) -> String {
@@ -56,8 +88,10 @@ fn app(demo: bool) -> App {
         vault.with_conn(|c| meowny_lib::seed::run_for(c, "2026-10-14").map_err(|_| AppError::Internal)).unwrap();
     }
     let (read, write) = (token(&vault, Scope::Read, 30), token(&vault, Scope::Write, 30));
-    let server = Some(ApiServer::start(vault.clone(), routes::ALL, Limits::default()).unwrap());
-    App { dir, vault, server, read, write }
+    let (shown, answer, delay) = (Arc::new(Mutex::new(Vec::new())), Arc::new(Mutex::new(true)), Arc::new(Mutex::new(Duration::ZERO)));
+    let prompter = Prompter::with_limits(Dialog { shown: shown.clone(), answer: answer.clone(), delay: delay.clone() }, Duration::from_secs(10), Duration::from_millis(200));
+    let server = Some(ApiServer::start_with(vault.clone(), routes::ALL, Limits::default(), Some(prompter)).unwrap());
+    App { dir, files: tempfile::tempdir().unwrap(), vault, server, read, write, shown, answer, delay }
 }
 
 // ---- running the binary ----------------------------------------------------------------------
@@ -255,7 +289,7 @@ fn every_read_command_runs_and_prints_what_the_app_returns() {
     let schema = run(&app, "", &["schema"]).json();
     let mut tried = 0;
     for command in schema["commands"].as_array().unwrap() {
-        if command["scope"] != "read" || command["command"] == "schema" {
+        if command["scope"] != "read" || command["command"] == "schema" || command["confirm"] == true {
             continue;
         }
         let name = command["command"].as_str().unwrap();
@@ -272,11 +306,11 @@ fn every_read_command_runs_and_prints_what_the_app_returns() {
         // The plain form is text a person can read: no escapes, no JSON, nothing on stderr.
         let plain = run(&app, &app.read, &args);
         assert_eq!(plain.code, 0, "{name}: {}", plain.err);
-        assert!(plain.err.is_empty() || plain.err.starts_with("showing "), "{name}: {}", plain.err);
-        assert!(!plain.out.is_empty() && !plain.out.contains('\u{1b}') && !plain.out.starts_with('{'), "{name}: {:?}", plain.out);
+        assert!(plain.err.is_empty() || plain.err.starts_with("showing ") || (data.is_null() && plain.err == "there is nothing to show.\n"), "{name}: {}", plain.err);
+        assert!((!plain.out.is_empty() || data.is_null()) && !plain.out.contains('\u{1b}') && !plain.out.starts_with('{'), "{name}: {:?}", plain.out);
         tried += 1;
     }
-    assert!(tried >= 14, "only {tried} read commands were tried");
+    assert!(tried >= 16, "only {tried} read commands were tried");
 }
 
 /// The shape of the JSON is a promise: fields may be added, never removed or changed in type.
@@ -768,6 +802,147 @@ fn many_scripts_at_once_do_not_trip_over_each_other() {
     assert_eq!(ok(&app, &app.read, &["transactions", "list", "--limit", "1"])["total"], 24);
 }
 
+// ---- the commands the person must allow --------------------------------------------------------
+
+#[test]
+fn an_export_is_written_after_the_person_allows_it_and_not_before() {
+    let app = app(true);
+    let json = app.out("all.json");
+    // The person takes a moment, so someone at a terminal is told where to look.
+    *app.delay.lock().unwrap() = Duration::from_millis(1300);
+    let out = run(&app, &app.write, &["export", "json", "--out", &json]);
+    assert_eq!(out.code, 0, "{}", out.err);
+    assert_eq!(out.err, "waiting for you to allow this in the meowNY app...\n");
+    *app.delay.lock().unwrap() = Duration::ZERO;
+    assert!(out.out.contains(&json) && out.out.contains("bytes"));
+    let file: Value = serde_json::from_str(&std::fs::read_to_string(&json).unwrap()).unwrap();
+    assert!(file["transactions"].as_array().unwrap().len() > 100);
+    assert_eq!(app.asked(), 1);
+    let said = app.shown.lock().unwrap()[0].text.clone();
+    assert!(said.contains(&json) && said.contains("\"test\"") && said.contains("JSON"), "{said}");
+
+    // As JSON for a script: the answer is the path and size, and nothing else is printed.
+    let csv = app.out("t.csv");
+    let made = ok(&app, &app.read, &["export", "csv", "--out", &csv]);
+    assert_eq!(made["path"], csv.as_str());
+    assert!(made["bytes"].as_u64().unwrap() > 1000);
+    assert!(std::fs::read_to_string(&csv).unwrap().starts_with("\u{feff}date,type,category"));
+    let xlsx = app.out("w.xlsx");
+    ok(&app, &app.write, &["export", "xlsx", "--out", &xlsx]);
+    assert_eq!(&std::fs::read(&xlsx).unwrap()[..2], b"PK");
+    let pdf = app.out("r.pdf");
+    ok(&app, &app.write, &["export", "pdf", "--out", &pdf, "--from-month", "2026-01", "--to-month", "2026-03", "--include-transactions", "--page", "letter"]);
+    assert!(std::fs::read(&pdf).unwrap().starts_with(b"%PDF-"));
+    assert!(app.shown.lock().unwrap().last().unwrap().text.contains("Transaction list: yes"));
+    assert_eq!(app.asked(), 4, "one question for each");
+}
+
+#[test]
+fn a_no_in_the_app_is_exit_3_denied_and_nothing_is_written() {
+    let app = app(true);
+    *app.answer.lock().unwrap() = false;
+    let file = app.out("never.json");
+    assert_eq!(failed(&app, &app.write, &["export", "json", "--out", &file]), (3, "denied".into()));
+    assert!(!std::path::Path::new(&file).exists());
+    let plain = run(&app, &app.write, &["export", "csv", "--out", &app.out("never.csv")]);
+    assert_eq!((plain.code, plain.out.as_str()), (3, ""));
+    assert!(plain.err.contains("a moment ago"), "asking again at once is refused without asking the person: {}", plain.err);
+    assert_eq!(app.asked(), 1);
+    assert!(std::fs::read_dir(app.files.path()).unwrap().next().is_none(), "nothing was written");
+}
+
+#[test]
+fn an_existing_file_is_never_replaced_and_the_person_is_not_asked_about_it() {
+    let app = app(true);
+    let file = app.out("mine.json");
+    std::fs::write(&file, "my notes").unwrap();
+    assert_eq!(failed(&app, &app.write, &["export", "json", "--out", &file]), (1, "file_exists".into()));
+    assert_eq!(std::fs::read_to_string(&file).unwrap(), "my notes");
+    assert_eq!(app.asked(), 0);
+    // A name that is not an export of that kind, or not in a folder that exists, never asks either.
+    for args in [
+        vec!["export", "json", "--out", "/definitely/not/a/folder/x.json"],
+        vec!["export", "csv", "--out", "/tmp/x.txt"],
+    ] {
+        assert_eq!(failed(&app, &app.write, &args), (2, "invalid_input".into()), "{args:?}");
+    }
+    let weird = app.out("a\nb.json");
+    assert_eq!(failed(&app, &app.write, &["export", "json", "--out", &weird]), (2, "invalid_input".into()), "a name that could mislead the dialog");
+    assert_eq!(app.asked(), 0);
+}
+
+#[test]
+fn a_relative_path_is_made_absolute_from_where_the_program_runs() {
+    let app = app(true);
+    let mut c = command(&app);
+    c.current_dir(app.files.path()).env("MEOWNY_TOKEN", &app.write).args(["export", "csv", "--out", "sub/../relative.csv", "--json"]);
+    let out = finish(c);
+    assert_eq!(out.code, 0, "{}", out.err);
+    let shown = out.json()["path"].as_str().unwrap().to_string();
+    let expected = std::fs::canonicalize(app.files.path()).unwrap().join("relative.csv");
+    assert_eq!(std::fs::canonicalize(&shown).unwrap(), expected);
+    assert!(app.shown.lock().unwrap()[0].text.contains(&shown), "the person is shown the full path, not the one that was typed");
+    assert!(!shown.contains(".."));
+}
+
+#[test]
+fn a_selection_by_category_and_date_narrows_the_file() {
+    let app = app(true);
+    let categories = ok(&app, &app.read, &["categories", "list", "--type", "expense"]);
+    let (a, b) = (categories[0].clone(), categories[1].clone());
+    let ids = format!("{},{}", a["id"].as_str().unwrap(), b["id"].as_str().unwrap());
+    let file = app.out("two.json");
+    ok(&app, &app.write, &["export", "json", "--out", &file, "--category-ids", &ids, "--from", "2026-09-01", "--to", "2026-09-30"]);
+    let text = std::fs::read_to_string(&file).unwrap();
+    let parsed: Value = serde_json::from_str(&text).unwrap();
+    assert_eq!(parsed["categories"].as_array().unwrap().len(), 2);
+    assert!(parsed["transactions"].as_array().unwrap().iter().all(|t| t["date"].as_str().unwrap().starts_with("2026-09")));
+    assert!(app.shown.lock().unwrap()[0].text.contains("Only the 2 categories chosen"));
+    let preview = ok(&app, &app.read, &["export", "preview", "--category-ids", &ids, "--from", "2026-09-01", "--to", "2026-09-30"]);
+    assert_eq!(preview["transactions"], parsed["transactions"].as_array().unwrap().len());
+}
+
+#[test]
+fn a_backup_takes_its_passphrase_from_standard_input_and_opens_only_with_it() {
+    let app = app(true);
+    let file = app.out("b.meowbak");
+    let mut c = command(&app);
+    c.env("MEOWNY_TOKEN", &app.write)
+        .args(["backup", "create", "--out", &file, "--passphrase", "-", "--json"])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+    let mut child = c.spawn().unwrap();
+    {
+        use std::io::Write;
+        child.stdin.take().unwrap().write_all(b"a long enough passphrase\n").unwrap();
+    }
+    let out = child.wait_with_output().unwrap();
+    assert_eq!(out.status.code(), Some(0), "{}", String::from_utf8_lossy(&out.stderr));
+    let bytes = std::fs::read(&file).unwrap();
+    assert!(meowny_lib::backup::open(&bytes, "a long enough passphrase").is_ok());
+    assert!(meowny_lib::backup::open(&bytes, "another passphrase here").is_err());
+    let said = app.shown.lock().unwrap()[0].text.clone();
+    assert!(!said.contains("a long enough passphrase") && said.contains("encrypted"), "{said}");
+    // Nothing the program printed holds the passphrase either.
+    assert!(!String::from_utf8_lossy(&out.stdout).contains("a long enough") && !String::from_utf8_lossy(&out.stderr).contains("a long enough"));
+    // Too short: refused before the person is asked.
+    let asked = app.asked();
+    assert_eq!(failed(&app, &app.write, &["backup", "create", "--out", &app.out("c.meowbak"), "--passphrase", "short"]), (2, "invalid_input".into()));
+    assert_eq!(app.asked(), asked);
+}
+
+#[test]
+fn there_is_no_command_to_restore_a_backup_or_to_change_the_currency_or_to_delete_everything() {
+    let app = app(false);
+    for words in [vec!["backup", "restore"], vec!["restore"], vec!["settings", "currency"], vec!["wipe"], vec!["delete-all"], vec!["tokens", "create"]] {
+        let out = run(&app, &app.write, &words);
+        assert_eq!((out.code, out.out.as_str()), (2, ""), "{words:?}");
+        assert!(out.err.contains("unknown command") || out.err.contains("needs one of"), "{words:?}: {}", out.err);
+    }
+    assert_eq!(app.asked(), 0);
+}
+
 // ---- every command, once, against a real app --------------------------------------------------
 
 /// Runs commands and remembers which ones, so a command nobody tested is a failure.
@@ -853,6 +1028,26 @@ fn every_command_runs_against_a_real_app_and_a_new_one_without_a_test_fails_this
     assert!(t.go(&r, &["stats", "top", "--month", "2026-09", "--type", "expense", "--limit", "2"]).is_array());
     assert!(t.go(&r, &["stats", "commitments"]).is_object());
     assert!(t.go(&r, &["stats", "planned", "--month", "2026-10"]).is_array());
+
+    // Files, which the person has to allow.
+    let preview = t.go(&r, &["export", "preview"]);
+    assert!(preview["transactions"].as_u64().unwrap() > 100);
+    assert!(t.go(&r, &["backup", "schedule"]).is_null());
+    for (words, name, extra) in [
+        (vec!["export", "json"], "t.json", vec![]),
+        (vec!["export", "csv"], "t.csv", vec![]),
+        (vec!["export", "xlsx"], "t.xlsx", vec![]),
+        (vec!["export", "pdf"], "t.pdf", vec!["--from-month", "2026-01", "--to-month", "2026-02"]),
+        (vec!["backup", "create"], "t.meowbak", vec!["--passphrase", "a long enough passphrase"]),
+    ] {
+        let out = app.out(name);
+        let mut args = words.clone();
+        args.extend(["--out", &out]);
+        args.extend(extra.iter().copied());
+        let made = t.go(&w, &args);
+        assert_eq!(made["path"], out.as_str());
+        assert!(std::path::Path::new(&out).exists(), "{words:?} wrote no file");
+    }
 
     // Last, because it removes the category the rows above used.
     assert!(t.go(&w, &["categories", "delete", &pets, "--yes"]).is_null());

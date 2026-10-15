@@ -77,6 +77,8 @@ meowny transactions list --limit 5
 meowny transactions create --name Bread --amount 2.40 --payment-date 2026-10-14 --category-id 5
 meowny stats budget --month 2026-10 --json
 meowny transactions delete 42 --yes
+meowny export csv --out ~/budget-2026.csv --from 2026-01-01
+meowny backup create --out ~/meowny.meowbak --passphrase -   # the passphrase on standard input
 meowny --help        # and meowny <command> --help
 meowny schema        # every command, flag and exit code as JSON, without the app
 ```
@@ -88,12 +90,14 @@ The commands are `meowny <noun> <verb>`, worked out from the app's own list of r
 | 0 | done |
 | 1 | the app is not reachable, the answer was not understood, or another error |
 | 2 | bad usage, or a value the app refused |
-| 3 | no token, a wrong or expired token, a token that may not do this, or the app is locked |
+| 3 | no token, a wrong or expired token, a token that may not do this, the person said no in the app, or the app is locked |
 | 4 | not found |
 
 With `--json` an error is `{"code": "...", "message": "..."}` on standard error. The token is found in `--token-file`, then `MEOWNY_TOKEN`, then `MEOWNY_TOKEN_FILE`, then the file `login` saved; a token file that other users can read is refused. `MEOWNY_DATA_DIR` or `--data-dir` says where the app keeps its data (where it writes its port), `MEOWNY_PORT` or `--port` skips that.
 
-To try it without the app, `cargo run --example api_demo` in `src-tauri/` serves demo data and prints the tokens and a ready command line.
+Exports (`export json|csv|xlsx|pdf`) and backups (`backup create`) are not done on a token's say-so: each one is described in a dialog in the app (which token, what, the exact file) and written only if you click Allow. The file must have the right ending, be in a folder that exists, and not exist yet; nothing is ever overwritten. Asking again right after a "no" is refused for 30 seconds. Restoring a backup, changing the currency and deleting everything are not available through the command line at all.
+
+To try it without the app, `cargo run --example api_demo` in `src-tauri/` serves demo data and prints the tokens and a ready command line. There, the questions an export or a backup asks are answered in that terminal (y or n) instead of in a dialog.
 
 ## Tests and checks
 

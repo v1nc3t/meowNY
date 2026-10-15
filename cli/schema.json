@@ -686,6 +686,207 @@
       ],
       "scope": "write",
       "summary": "Ends a recurring item for good: it becomes inactive and its end date is today. What it already paid stays."
+    },
+    {
+      "name": "export.preview",
+      "params": [
+        {
+          "name": "from",
+          "required": false,
+          "summary": "Only transactions on or after this date.",
+          "type": "date"
+        },
+        {
+          "name": "to",
+          "required": false,
+          "summary": "Only transactions on or before this date.",
+          "type": "date"
+        },
+        {
+          "name": "categoryIds",
+          "required": false,
+          "summary": "Only these categories and what belongs to them. Leave out for all of them.",
+          "type": "ids"
+        }
+      ],
+      "scope": "read",
+      "summary": "What an export of this selection would contain: how many transactions, their dates, the income and expense totals, and the other records."
+    },
+    {
+      "name": "backup.schedule",
+      "params": [],
+      "scope": "read",
+      "summary": "The scheduled backup, if one is set up: the folder, how often and how the last one went, or null. Its passphrase is never shown."
+    },
+    {
+      "confirm": true,
+      "name": "export.json",
+      "params": [
+        {
+          "name": "out",
+          "required": true,
+          "summary": "Where to write the file: an absolute path ending in .json, in a folder that exists, that is not there yet.",
+          "type": "path"
+        },
+        {
+          "name": "from",
+          "required": false,
+          "summary": "Only transactions on or after this date.",
+          "type": "date"
+        },
+        {
+          "name": "to",
+          "required": false,
+          "summary": "Only transactions on or before this date.",
+          "type": "date"
+        },
+        {
+          "name": "categoryIds",
+          "required": false,
+          "summary": "Only these categories and what belongs to them. Leave out for all of them.",
+          "type": "ids"
+        }
+      ],
+      "scope": "read",
+      "summary": "Writes the data as a JSON file, after the person allows it in the app. An existing file is never replaced."
+    },
+    {
+      "confirm": true,
+      "name": "export.csv",
+      "params": [
+        {
+          "name": "out",
+          "required": true,
+          "summary": "Where to write the file: an absolute path ending in .csv, in a folder that exists, that is not there yet.",
+          "type": "path"
+        },
+        {
+          "name": "from",
+          "required": false,
+          "summary": "Only transactions on or after this date.",
+          "type": "date"
+        },
+        {
+          "name": "to",
+          "required": false,
+          "summary": "Only transactions on or before this date.",
+          "type": "date"
+        },
+        {
+          "name": "categoryIds",
+          "required": false,
+          "summary": "Only these categories and what belongs to them. Leave out for all of them.",
+          "type": "ids"
+        }
+      ],
+      "scope": "read",
+      "summary": "Writes the transactions as a CSV file, after the person allows it in the app. An existing file is never replaced."
+    },
+    {
+      "confirm": true,
+      "name": "export.xlsx",
+      "params": [
+        {
+          "name": "out",
+          "required": true,
+          "summary": "Where to write the file: an absolute path ending in .xlsx, in a folder that exists, that is not there yet.",
+          "type": "path"
+        },
+        {
+          "name": "from",
+          "required": false,
+          "summary": "Only transactions on or after this date.",
+          "type": "date"
+        },
+        {
+          "name": "to",
+          "required": false,
+          "summary": "Only transactions on or before this date.",
+          "type": "date"
+        },
+        {
+          "name": "categoryIds",
+          "required": false,
+          "summary": "Only these categories and what belongs to them. Leave out for all of them.",
+          "type": "ids"
+        }
+      ],
+      "scope": "read",
+      "summary": "Writes a workbook (.xlsx) with sheets for transactions, categories, budgets, recurring items and a monthly summary, after the person allows it in the app. Dates are ISO and amounts plain numbers. An existing file is never replaced."
+    },
+    {
+      "confirm": true,
+      "name": "export.pdf",
+      "params": [
+        {
+          "name": "out",
+          "required": true,
+          "summary": "Where to write the file: an absolute path ending in .pdf, in a folder that exists, that is not there yet.",
+          "type": "path"
+        },
+        {
+          "name": "fromMonth",
+          "required": true,
+          "summary": "The first month, like 2026-01.",
+          "type": "month"
+        },
+        {
+          "name": "toMonth",
+          "required": true,
+          "summary": "The last month, like 2026-10. At most 120 months.",
+          "type": "month"
+        },
+        {
+          "name": "categoryIds",
+          "required": false,
+          "summary": "Only these categories and what belongs to them. Leave out for all of them.",
+          "type": "ids"
+        },
+        {
+          "name": "includeTransactions",
+          "required": false,
+          "summary": "Also list the transactions. Up to 20,000.",
+          "type": "boolean"
+        },
+        {
+          "name": "showDescriptions",
+          "required": false,
+          "summary": "Show each transaction's description. Leave off to share the report without private details.",
+          "type": "boolean"
+        },
+        {
+          "name": "page",
+          "required": false,
+          "summary": "A4 (the default) or LETTER.",
+          "type": "string",
+          "values": [
+            "A4",
+            "LETTER"
+          ]
+        }
+      ],
+      "scope": "read",
+      "summary": "Writes a PDF report for whole months, in English, after the person allows it in the app: totals, charts and budget against actual, and the transactions if asked. An existing file is never replaced."
+    },
+    {
+      "confirm": true,
+      "name": "backup.create",
+      "params": [
+        {
+          "name": "out",
+          "required": true,
+          "summary": "Where to write the file: an absolute path ending in .meowbak, in a folder that exists, that is not there yet.",
+          "type": "path"
+        },
+        {
+          "name": "passphrase",
+          "required": true,
+          "summary": "Locks the backup. At least 8 characters. Keep it: without it the backup cannot be opened.",
+          "type": "string"
+        }
+      ],
+      "scope": "read",
+      "summary": "Writes an encrypted backup of all the data, after the person allows it in the app. It opens only with the passphrase given here, and only the app can restore it. An existing file is never replaced."
     }
   ]
 }

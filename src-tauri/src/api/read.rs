@@ -12,13 +12,19 @@ use serde_json::{json, Map, Value};
 use super::routes::{parse, reply, today, Ctx, Kind, Param, Route};
 use super::ApiError;
 use crate::categories::{self, CategoryType};
+use crate::export::{self, Selection};
 use crate::tokens::Scope;
 use crate::transactions::{self, Filter};
-use crate::{budgets, clock, recurring, stats};
+use crate::{budgets, clock, recurring, schedule, stats};
 
 const SIDES: &[&str] = &["INCOME", "EXPENSE"];
 const MONTH: Param = Param::new("month", Kind::Month, "The month, like 2026-10.").required();
 const SIDE: Param = Param::new("type", Kind::String, "INCOME or EXPENSE.").one_of(SIDES);
+
+/// What an export covers. Shared with the routes that write the files.
+pub(super) const FROM: Param = Param::new("from", Kind::Date, "Only transactions on or after this date.");
+pub(super) const TO: Param = Param::new("to", Kind::Date, "Only transactions on or before this date.");
+pub(super) const CATEGORY_IDS: Param = Param::new("categoryIds", Kind::Ids, "Only these categories and what belongs to them. Leave out for all of them.");
 
 #[derive(Deserialize)]
 struct MonthArg {
@@ -30,6 +36,7 @@ pub const TODAY: Route = Route {
     scope: Scope::Read,
     summary: "Today's date and the current month in the time zone set in the app.",
     params: &[],
+    confirm: None,
     run: |ctx, _| {
         let timezone = ctx.vault.settings()?.timezone;
         let date = clock::today(ctx.now, &timezone)?;
@@ -42,6 +49,7 @@ pub const SETTINGS_GET: Route = Route {
     scope: Scope::Read,
     summary: "The currency, number format, time zone and language set in the app.",
     params: &[],
+    confirm: None,
     run: |ctx, _| reply(ctx.vault.settings()?),
 };
 
@@ -50,6 +58,7 @@ pub const CATEGORIES_LIST: Route = Route {
     scope: Scope::Read,
     summary: "The categories that are in use, oldest first, with their ids.",
     params: &[SIDE],
+    confirm: None,
     run: categories_list,
 };
 
@@ -75,6 +84,7 @@ pub const TRANSACTIONS_LIST: Route = Route {
         Param::new("limit", Kind::Integer, "How many to return, 1 to 100. Default 50."),
         Param::new("offset", Kind::Integer, "How many to skip, for the next page. Default 0."),
     ],
+    confirm: None,
     run: transactions_list,
 };
 
@@ -88,6 +98,7 @@ pub const BUDGETS_OVERVIEW: Route = Route {
     scope: Scope::Read,
     summary: "For a month, per side (income, expense): the budget, how much of it is given to categories, what is left, and the actual so far.",
     params: &[MONTH],
+    confirm: None,
     run: |ctx, args| {
         let MonthArg { month } = parse(args)?;
         reply(ctx.vault.with_conn(|c| budgets::overview(c, &month))?)
@@ -99,6 +110,7 @@ pub const BUDGETS_HISTORY: Route = Route {
     scope: Scope::Read,
     summary: "One row per month, newest first, from the first month that had a budget: the budget and the actual for each side.",
     params: &[],
+    confirm: None,
     run: |ctx, _| reply(ctx.vault.with_conn(|c| budgets::history(c, ctx.now))?),
 };
 
@@ -107,6 +119,7 @@ pub const RECURRING_LIST: Route = Route {
     scope: Scope::Read,
     summary: "Every recurring item, with its schedule, its next due date and whether it is active.",
     params: &[],
+    confirm: None,
     run: |ctx, _| reply(ctx.vault.with_conn(|c| recurring::list(c))?),
 };
 
@@ -115,6 +128,7 @@ pub const RECURRING_DUES: Route = Route {
     scope: Scope::Read,
     summary: "Active recurring items that are overdue (due before today) and those due in the next days. Today is the date in the app's time zone.",
     params: &[Param::new("withinDays", Kind::Integer, "How many days ahead count as upcoming, 0 to 366. Default 30.")],
+    confirm: None,
     run: |ctx, args| {
         #[derive(Deserialize)]
         #[serde(rename_all = "camelCase")]
@@ -133,6 +147,7 @@ pub const STATS_BUDGET: Route = Route {
     scope: Scope::Read,
     summary: "Budget against actual for a month: each category with its budget, what was spent or earned, what is left and the percent used, and the totals.",
     params: &[MONTH],
+    confirm: None,
     run: |ctx, args| {
         let MonthArg { month } = parse(args)?;
         reply(ctx.vault.with_conn(|c| stats::budget_vs_actual(c, &month))?)
@@ -148,6 +163,7 @@ pub const STATS_TREND: Route = Route {
         Param::new("from", Kind::Month, "The first month, like 2026-01.").required(),
         Param::new("to", Kind::Month, "The last month, like 2026-10.").required(),
     ],
+    confirm: None,
     run: |ctx, args| {
         #[derive(Deserialize)]
         #[serde(rename_all = "camelCase")]
@@ -167,6 +183,7 @@ pub const STATS_YEAR: Route = Route {
     scope: Scope::Read,
     summary: "Income, expense and savings for each month of a year.",
     params: &[Param::new("year", Kind::Year, "The year, like 2026.").required()],
+    confirm: None,
     run: |ctx, args| {
         #[derive(Deserialize)]
         struct Args {
@@ -182,6 +199,7 @@ pub const STATS_TOP: Route = Route {
     scope: Scope::Read,
     summary: "The categories with the most spending, or income, in a month, biggest first, with their share of the month.",
     params: &[MONTH, SIDE.required(), Param::new("limit", Kind::Integer, "How many categories, 1 to 50. Default 5.")],
+    confirm: None,
     run: |ctx, args| {
         #[derive(Deserialize)]
         struct Args {
@@ -201,6 +219,7 @@ pub const STATS_COMMITMENTS: Route = Route {
     scope: Scope::Read,
     summary: "What the active recurring items cost, or bring in, in an average month. Items with no fixed amount are listed but not counted.",
     params: &[],
+    confirm: None,
     run: |ctx, _| reply(ctx.vault.with_conn(|c| stats::commitments(c))?),
 };
 
@@ -209,8 +228,30 @@ pub const STATS_PLANNED: Route = Route {
     scope: Scope::Read,
     summary: "Planned against paid amounts of the recurring items that were paid in a month.",
     params: &[MONTH],
+    confirm: None,
     run: |ctx, args| {
         let MonthArg { month } = parse(args)?;
         reply(ctx.vault.with_conn(|c| stats::planned_vs_paid(c, &month))?)
     },
+};
+
+pub const EXPORT_PREVIEW: Route = Route {
+    name: "export.preview",
+    scope: Scope::Read,
+    confirm: None,
+    summary: "What an export of this selection would contain: how many transactions, their dates, the income and expense totals, and the other records.",
+    params: &[FROM, TO, CATEGORY_IDS],
+    run: |ctx, args| {
+        let selection: Selection = parse(args)?;
+        reply(ctx.vault.with_conn(|c| export::preview(c, &selection))?)
+    },
+};
+
+pub const BACKUP_SCHEDULE: Route = Route {
+    name: "backup.schedule",
+    scope: Scope::Read,
+    confirm: None,
+    summary: "The scheduled backup, if one is set up: the folder, how often and how the last one went, or null. Its passphrase is never shown.",
+    params: &[],
+    run: |ctx, _| reply(ctx.vault.with_conn(|c| schedule::get(c))?),
 };

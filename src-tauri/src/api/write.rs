@@ -39,6 +39,7 @@ pub const SETTINGS_SET: Route = Route {
         Param::new("timezone", Kind::String, "A time zone name, like Europe/Dublin."),
         Param::new("language", Kind::String, "The language of the app, like en or ro."),
     ],
+    confirm: None,
     run: |ctx, args| {
         #[derive(Deserialize)]
         struct Args {
@@ -67,6 +68,7 @@ pub const CATEGORIES_CREATE: Route = Route {
     scope: Scope::Write,
     summary: "Makes a category. Its name is 1 to 50 characters and unique among the categories of that type.",
     params: &[Param::new("name", Kind::String, "The name.").required(), SIDE],
+    confirm: None,
     run: |ctx, args| {
         #[derive(Deserialize)]
         struct Args {
@@ -84,6 +86,7 @@ pub const CATEGORIES_RENAME: Route = Route {
     scope: Scope::Write,
     summary: "Renames a category. Its type cannot change.",
     params: &[Param::new("id", Kind::Id, "The category.").required(), Param::new("name", Kind::String, "The new name.").required()],
+    confirm: None,
     run: |ctx, mut args| {
         let id = take_id(&mut args, "id")?;
         #[derive(Deserialize)]
@@ -100,6 +103,7 @@ pub const CATEGORIES_DELETE: Route = Route {
     scope: Scope::Write,
     summary: "Deletes a category: it is no longer offered or budgeted, and its transactions keep it.",
     params: &[Param::new("id", Kind::Id, "The category.").required()],
+    confirm: None,
     run: |ctx, mut args| {
         let id = take_id(&mut args, "id")?;
         ctx.vault.with_conn(|c| categories::delete(c, id, ctx.now))?;
@@ -119,6 +123,7 @@ pub const TRANSACTIONS_CREATE: Route = Route {
         Param::new("description", Kind::String, "A note."),
         Param::new("clientUuid", Kind::Uuid, "A fresh UUID per transaction, so a retry cannot record it twice."),
     ],
+    confirm: None,
     run: |ctx, args| {
         let input: NewTransaction = parse(args)?;
         reply(ctx.vault.with_conn(|c| transactions::create(c, &input))?)
@@ -137,6 +142,7 @@ pub const TRANSACTIONS_UPDATE: Route = Route {
         Param::new("categoryId", Kind::Id, "The new category."),
         Param::new("description", Kind::String, "The new note, or null to clear it.").nullable(),
     ],
+    confirm: None,
     run: |ctx, mut args| {
         let id = take_id(&mut args, "id")?;
         let patch: TransactionPatch = parse(args)?;
@@ -149,6 +155,7 @@ pub const TRANSACTIONS_DELETE: Route = Route {
     scope: Scope::Write,
     summary: "Deletes a transaction. The change history keeps what it said.",
     params: &[Param::new("id", Kind::Id, "The transaction.").required()],
+    confirm: None,
     run: |ctx, mut args| {
         let id = take_id(&mut args, "id")?;
         ctx.vault.with_conn(|c| transactions::delete(c, id))?;
@@ -183,6 +190,7 @@ pub const BUDGETS_SET: Route = Route {
         Param::new("amountLimit", Kind::Money, "The most to spend, or the aim to earn, each month. Zero is allowed.").required(),
         BUDGET_CATEGORY,
     ],
+    confirm: None,
     run: |ctx, args| {
         let input = budget_input(args, true)?;
         reply(ctx.vault.with_conn(|c| budgets::set(c, &input, ctx.now))?)
@@ -194,6 +202,7 @@ pub const BUDGETS_REMOVE: Route = Route {
     scope: Scope::Write,
     summary: "Removes a budget, with the same month rules as setting one. The months before keep it, and the history stays.",
     params: &[SIDE, MONTH, BUDGET_CATEGORY],
+    confirm: None,
     run: |ctx, args| {
         let input = budget_input(args, false)?;
         reply(ctx.vault.with_conn(|c| budgets::set(c, &input, ctx.now))?)
@@ -214,6 +223,7 @@ pub const RECURRING_CREATE: Route = Route {
         Param::new("endDate", Kind::Date, "The last day it can fall due."),
         Param::new("description", Kind::String, "A note."),
     ],
+    confirm: None,
     run: |ctx, args| {
         let input: NewRecurring = parse(args)?;
         reply(ctx.vault.with_conn(|c| recurring::create(c, &input))?)
@@ -235,6 +245,7 @@ pub const RECURRING_UPDATE: Route = Route {
         Param::new("endDate", Kind::Date, "The new last day, or null for none.").nullable(),
         Param::new("description", Kind::String, "The new note, or null to clear it.").nullable(),
     ],
+    confirm: None,
     run: |ctx, mut args| {
         let id = take_id(&mut args, "id")?;
         let patch: RecurringPatch = parse(args)?;
@@ -247,6 +258,7 @@ pub const RECURRING_DELETE: Route = Route {
     scope: Scope::Write,
     summary: "Deletes a recurring item. The transactions it already made stay.",
     params: &[Param::new("id", Kind::Id, "The recurring item.").required()],
+    confirm: None,
     run: |ctx, mut args| {
         let id = take_id(&mut args, "id")?;
         ctx.vault.with_conn(|c| recurring::delete(c, id))?;
@@ -263,6 +275,7 @@ pub const RECURRING_PAY: Route = Route {
         Param::new("amount", Kind::Money, "What was paid. Defaults to the planned amount."),
         Param::new("paidOn", Kind::Date, "The day it was paid. Defaults to today in the app's time zone."),
     ],
+    confirm: None,
     run: |ctx, mut args| {
         let id = take_id(&mut args, "id")?;
         #[derive(Deserialize)]
@@ -284,6 +297,7 @@ pub const RECURRING_SKIP: Route = Route {
     scope: Scope::Write,
     summary: "Passes over the current occurrence without making a transaction.",
     params: &[Param::new("id", Kind::Id, "The recurring item.").required()],
+    confirm: None,
     run: |ctx, mut args| {
         let id = take_id(&mut args, "id")?;
         reply(ctx.vault.with_conn(|c| recurring::skip(c, id))?)
@@ -295,6 +309,7 @@ pub const RECURRING_PAUSE: Route = Route {
     scope: Scope::Write,
     summary: "Pauses a recurring item: it stops coming due until it is resumed.",
     params: &[Param::new("id", Kind::Id, "The recurring item.").required()],
+    confirm: None,
     run: |ctx, mut args| {
         let id = take_id(&mut args, "id")?;
         reply(ctx.vault.with_conn(|c| recurring::set_active(c, id, false))?)
@@ -306,6 +321,7 @@ pub const RECURRING_RESUME: Route = Route {
     scope: Scope::Write,
     summary: "Resumes a paused recurring item, unless its next date is past its end date.",
     params: &[Param::new("id", Kind::Id, "The recurring item.").required()],
+    confirm: None,
     run: |ctx, mut args| {
         let id = take_id(&mut args, "id")?;
         reply(ctx.vault.with_conn(|c| recurring::set_active(c, id, true))?)
@@ -317,6 +333,7 @@ pub const RECURRING_END: Route = Route {
     scope: Scope::Write,
     summary: "Ends a recurring item for good: it becomes inactive and its end date is today. What it already paid stays.",
     params: &[Param::new("id", Kind::Id, "The recurring item.").required()],
+    confirm: None,
     run: |ctx, mut args| {
         let id = take_id(&mut args, "id")?;
         let today = today(ctx)?;
