@@ -45,9 +45,10 @@ pub const EXTENSION: &str = "meowbak";
 const TABLES: &[&str] = &["settings", "categories", "budgets", "recurring_transactions", "transactions", "audit_log"];
 
 /// Tables a backup leaves out on purpose, and restoring leaves alone. `backup_schedule` belongs to
-/// this device and holds the backup passphrase.
+/// this device and holds the backup passphrase; `api_tokens` holds this device's access grants for
+/// the command-line client, which a restore on another machine must not bring along.
 #[cfg(test)]
-const EXCLUDED_TABLES: &[&str] = &["backup_schedule"];
+const EXCLUDED_TABLES: &[&str] = &["backup_schedule", "api_tokens"];
 
 /// Restoring writes the history from the file, not the history the restore itself would trigger.
 const HISTORY_TABLE: &str = "audit_log";
@@ -700,6 +701,26 @@ mod tests {
             .unwrap();
         assert_eq!((amount, link), (Some(90000), Some(1)), "the item and the link to its payment came through");
         assert!(target.execute("INSERT INTO recurring_transactions (category_id, name, start_date, interval_unit, next_due_date) VALUES (1, 'Gas', '2026-01-01', 'MONTH', '2026-01-01')", []).is_ok(), "the restored database has the newer rule");
+    }
+
+    #[test]
+    fn tokens_stay_on_this_device_a_backup_has_none_and_a_restore_keeps_them() {
+        use crate::tokens::{self, NewToken, Scope};
+        let now = chrono::Utc::now();
+        let input = NewToken { name: "agent".into(), scope: Scope::Write, expires_in_days: 30 };
+
+        let source = lived_in();
+        tokens::create(&source, &input, now).unwrap();
+        let snapshot = dump(&source).unwrap();
+        assert!(!snapshot.tables.contains_key("api_tokens"));
+        let file = seal(&snapshot, "correct horse").unwrap();
+
+        let mut target = db();
+        let mine = tokens::create(&target, &input, now).unwrap();
+        restore(&mut target, &file, "correct horse");
+        assert_eq!(count(&target, "categories"), count(&source, "categories"), "the data did come over");
+        assert!(tokens::verify(&target, &mine.token, now).unwrap().is_some(), "the token on this device still works");
+        assert_eq!(count(&target, "api_tokens"), 1, "and the source's token did not arrive");
     }
 
     #[test]

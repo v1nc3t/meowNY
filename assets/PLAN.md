@@ -169,10 +169,21 @@ Kept: the React client (`client/src`), Zod schemas, money and date logic, and th
 
 The whole app is usable from the terminal, so scripts and AI agents can drive it without the UI. The CLI is a client of the running desktop app. No server is introduced.
 
+Decisions made at the start of the phase (the open "CLI transport and token mechanism" row above):
+
+- **Transport:** HTTP/1.1 on `127.0.0.1` only, on a random port that the app writes to `api.json` in its data folder. Plain `std::net`, no new crates. A plain `curl` works, which helps agents and the docs. Off by default; the switch lives in `vault.json` so the app can answer "locked" while the database is closed.
+- **Browser safety:** every request carries `Authorization: Bearer <token>`, the `Host` header must be a loopback name, and a request with an `Origin` header is refused, so a web page cannot talk to the API.
+- **Tokens:** `mny_` and 64 hex characters, kept as a SHA-256 in the encrypted database. A locked app cannot check any token, so it answers "locked" (exit code 3) to everyone. API calls do not count as activity: the idle lock still fires, and a script cannot keep the app open.
+- **Routes:** one table in Rust lists every route with its scope (read, write, or needs the user at the app), arguments and summary. It is the single source of `meowny schema`, of the docs and of the test that fails when a route has no CLI command. The core is Rust, so serde validates the input; the schema comes from this table and not from Zod.
+
 - [ ] Design rule: the CLI is a thin client over the app's local command API, described by a schema generated from the Zod types. It never opens the database file. Validation, scoping and encryption stay in one place. Every feature through phase 6 gets a command; if the API lacks something, fix the API, not the CLI.
 - [ ] Local command API: listens only on a local socket or loopback, off by default, enabled in settings. Requests must carry a token.
 - [ ] Package in `cli/` (TypeScript, one binary, e.g. `meowny`), installed by the desktop installer and available standalone. Reuses the Zod schemas for argument validation.
 - [ ] Tokens: created in the app, revocable, stored hashed, with scopes (read-only by default, write opt-in), an expiry and a last-used time. Passed by `MEOWNY_TOKEN` or stored in a `0600` file. Never printed or logged. `export`, `delete-all` and backup restore are not allowed with a token and need the user at the app.
+  - [x] Token store: create, list, revoke, verify (`src-tauri/src/tokens.rs`, migration `0007_api_tokens.sql`. A token is `mny_` and 64 hex characters, shown once; the table keeps only its SHA-256. Scope is `read` unless `write` is picked (write also reads); expiry is 1 to 365 days, 30 by default; revoking deletes the row; use is stamped at most once a minute. The table is in the encrypted database with no audit triggers, is left out of backups and exports, and a restore does not touch it. `verify` gives the same answer for unknown, revoked, expired and malformed tokens. Nothing calls it yet. Tests: `tokens.rs`, constraints in `schema_tests.rs`, backup and export tests.)
+  - [ ] Token screen in Settings: create (name, scope, expiry), the secret shown once, list with last used, revoke
+  - [ ] The API refuses a token without the scope a route needs; `export`, `delete-all` and restore need the user at the app
+  - [ ] The CLI takes the token from `MEOWNY_TOKEN` or a `0600` file and never prints or logs it
 - [ ] If the app is locked, the CLI gets a clear exit code and no data.
 - [ ] Command groups: `settings`, `categories`, `transactions`, `budgets`, `recurring`, `stats`, `export` (json, csv, xlsx, pdf), `backup`. Pattern `meowny <noun> <verb>`, with `--help` at every level.
 - [ ] Agent-friendly output: `--json` on every command (stable shape, additive fields only), human table otherwise. Data on stdout, messages and errors on stderr.
