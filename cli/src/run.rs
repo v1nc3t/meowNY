@@ -327,7 +327,8 @@ mod tests {
     #[test]
     fn a_missing_token_is_exit_3_whether_or_not_the_app_is_there() {
         let dir = tempfile::tempdir().unwrap();
-        let none = [("XDG_CONFIG_HOME", dir.path().to_str().unwrap()), ("MEOWNY_DATA_DIR", dir.path().to_str().unwrap())];
+        let d = dir.path().to_str().unwrap();
+        let none = [("XDG_CONFIG_HOME", d), ("HOME", d), ("USERPROFILE", d), ("APPDATA", d), ("MEOWNY_DATA_DIR", d)];
         let r = go("status", &none, "");
         assert_eq!((r.code, r.out.as_str()), (3, ""));
         assert!(r.err.contains("MEOWNY_TOKEN") && r.err.contains("meowny login"));

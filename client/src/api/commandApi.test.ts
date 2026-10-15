@@ -59,13 +59,13 @@ test('the API status is the on/off choice, whether it listens, and the port', ()
   assert.equal(ApiStatus.safeParse({ enabled: true, running: true }).success, false, 'a missing port')
 })
 
-test('a token name is trimmed and must be 1 to 50 characters without control characters', () => {
+test('a token name is trimmed and must be 1 to 50 characters without control characters or hidden direction marks', () => {
   assert.equal(cleanTokenName('  nightly script '), 'nightly script')
   assert.equal(cleanTokenName('x'), 'x')
   assert.equal(cleanTokenName('é'.repeat(TOKEN_NAME_MAX)), 'é'.repeat(TOKEN_NAME_MAX), '50 characters, not 50 bytes')
   assert.equal(cleanTokenName('日本語のスクリプト'), '日本語のスクリプト')
   assert.equal(cleanTokenName('😀'.repeat(TOKEN_NAME_MAX)), '😀'.repeat(TOKEN_NAME_MAX), 'an emoji is one character')
-  for (const bad of ['', '   ', '\t\n', 'x'.repeat(TOKEN_NAME_MAX + 1), 'two\nlines', 'bell\u0007', 'null\u0000byte', 'del\u007f']) {
+  for (const bad of ['', '   ', '\t\n', 'x'.repeat(TOKEN_NAME_MAX + 1), 'two\nlines', 'bell\u0007', 'null\u0000byte', 'del\u007f', 'a‮b', 'a‏b', 'a⁦b', 'a﻿b', 'a‎b']) {
     assert.equal(cleanTokenName(bad), null, JSON.stringify(bad))
   }
 })

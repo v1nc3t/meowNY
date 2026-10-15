@@ -519,8 +519,10 @@ fn errors_from_the_app_keep_their_code_and_hide_everything_else() {
 #[test]
 fn a_route_that_panics_gives_a_500_and_the_server_carries_on() {
     let f = fixture();
+    assert_eq!(f.server.panics(), 0);
     let reply = f.call(&f.read, "test.boom", "");
     assert_eq!((reply.status, reply.code().as_str()), (500, "internal"));
+    assert_eq!(f.server.panics(), 1, "the panic was counted, so the tests that look for panics can see one");
     assert!(!reply.body.contains("lunch") && !reply.body.contains("mny_secret"), "the panic text leaked: {}", reply.body);
     for _ in 0..3 {
         works(&f);

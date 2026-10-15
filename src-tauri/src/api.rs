@@ -148,6 +148,7 @@ impl Default for Limits {
 
 /// A running listener. Dropping it stops it and removes the port file.
 pub struct ApiServer {
+    panics: Arc<AtomicUsize>,
     addr: SocketAddr,
     stop: Arc<AtomicBool>,
     thread: Option<JoinHandle<()>>,
@@ -168,12 +169,13 @@ impl ApiServer {
         backup::write_file(&file, discovery.as_bytes()).map_err(|_| io::Error::other("cannot write the port file"))?;
 
         let stop = Arc::new(AtomicBool::new(false));
+        let panics = Arc::new(AtomicUsize::new(0));
         let thread = {
-            let stop = stop.clone();
-            thread::Builder::new().name("command-api".into()).spawn(move || accept_loop(listener, vault, routes, limits, prompter, stop))
+            let (stop, panics) = (stop.clone(), panics.clone());
+            thread::Builder::new().name("command-api".into()).spawn(move || accept_loop(listener, vault, routes, limits, prompter, stop, panics))
         };
         match thread {
-            Ok(thread) => Ok(Self { addr, stop, thread: Some(thread), file }),
+            Ok(thread) => Ok(Self { panics, addr, stop, thread: Some(thread), file }),
             Err(e) => {
                 let _ = std::fs::remove_file(&file);
                 Err(e)
@@ -187,6 +189,12 @@ impl ApiServer {
 
     pub fn port(&self) -> u16 {
         self.addr.port()
+    }
+
+    /// How many requests made a route panic since this server started. It answers them with a plain 500 and goes
+    /// on; this number is for the tests that throw odd input at every route, and should stay 0.
+    pub fn panics(&self) -> usize {
+        self.panics.load(Ordering::SeqCst)
     }
 }
 
@@ -211,7 +219,15 @@ impl Drop for Slot {
     }
 }
 
-fn accept_loop(listener: TcpListener, vault: Arc<Vault>, routes: &'static [Route], limits: Limits, prompter: Option<Arc<Prompter>>, stop: Arc<AtomicBool>) {
+fn accept_loop(
+    listener: TcpListener,
+    vault: Arc<Vault>,
+    routes: &'static [Route],
+    limits: Limits,
+    prompter: Option<Arc<Prompter>>,
+    stop: Arc<AtomicBool>,
+    panics: Arc<AtomicUsize>,
+) {
     let open = Arc::new(AtomicUsize::new(0));
     let port = listener.local_addr().map(|a| a.port()).unwrap_or(0);
     for stream in listener.incoming() {
@@ -228,26 +244,31 @@ fn accept_loop(listener: TcpListener, vault: Arc<Vault>, routes: &'static [Route
             continue;
         }
         let slot = Slot(open.clone());
-        let (vault, prompter) = (vault.clone(), prompter.clone());
+        let (vault, prompter, panics) = (vault.clone(), prompter.clone(), panics.clone());
         let spawned = thread::Builder::new().name("command-api-call".into()).spawn(move || {
             let _slot = slot;
-            serve(stream, &vault, routes, port, limits, prompter.as_deref());
+            serve(stream, &vault, routes, port, limits, prompter.as_deref(), &panics);
         });
         // On failure the closure, and the slot in it, is dropped.
         drop(spawned);
     }
 }
 
-fn serve(mut stream: TcpStream, vault: &Vault, routes: &'static [Route], port: u16, limits: Limits, prompter: Option<&Prompter>) {
+fn serve(mut stream: TcpStream, vault: &Vault, routes: &'static [Route], port: u16, limits: Limits, prompter: Option<&Prompter>, panics: &AtomicUsize) {
     let _ = stream.set_write_timeout(Some(limits.request_time));
     let request = match http::read_request(&mut stream, Instant::now() + limits.request_time) {
         Ok(request) => Ok(request),
         Err(http::ReadError::Dropped) => return,
         Err(http::ReadError::Refused(e)) => Err(e),
     };
-    // A bug in one route must not take the connection, or the server, down with it.
-    let outcome = request.and_then(|request| {
-        catch_unwind(AssertUnwindSafe(|| handle(vault, routes, port, prompter, &request, Utc::now()))).unwrap_or(Err(ApiError::INTERNAL))
+    // A bug in one route must not take the connection, or the server, down with it. It is counted, so the tests that
+    // throw odd input at every route can tell a panic from an ordinary refusal.
+    let outcome = request.and_then(|request| match catch_unwind(AssertUnwindSafe(|| handle(vault, routes, port, prompter, &request, Utc::now()))) {
+        Ok(outcome) => outcome,
+        Err(_) => {
+            panics.fetch_add(1, Ordering::SeqCst);
+            Err(ApiError::INTERNAL)
+        }
     });
     match outcome {
         Ok(data) => {
@@ -412,6 +433,8 @@ impl Host {
 
 #[cfg(test)]
 mod confirmed_tests;
+#[cfg(test)]
+mod robust_tests;
 #[cfg(test)]
 mod read_tests;
 #[cfg(test)]

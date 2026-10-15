@@ -47,12 +47,12 @@ export type CreatedToken = z.infer<typeof CreatedToken>
 
 export type NewToken = { name: string; scope: Scope; expiresInDays: number }
 
-/** The name as the app will store it (trimmed), or null when it is empty, too long or has control characters. */
+/** The name as the app will store it (trimmed), or null when it is empty, too long, or has control or hidden direction marks. */
 export function cleanTokenName(name: string): string | null {
   const trimmed = name.trim()
   const length = [...trimmed].length
   // eslint-disable-next-line no-control-regex
-  if (length === 0 || length > TOKEN_NAME_MAX || /[\u0000-\u001f\u007f-\u009f]/.test(trimmed)) return null
+  if (length === 0 || length > TOKEN_NAME_MAX || /[\u0000-\u001f\u007f-\u009f‎‏‪-‮⁦-⁩﻿]/.test(trimmed)) return null
   return trimmed
 }
 

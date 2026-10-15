@@ -8,6 +8,10 @@
 //! Without `UPDATE_DOCS` the same tour runs and is compared with the recorded files, so a command that
 //! changes, a message that is reworded or a command with no example fails here until the docs are redone.
 
+// Recorded on Linux, where the paths in the examples are Linux paths (`~/.config/meowny/token`). On another system the
+// same commands print other paths, so comparing there would only fail for a reason that is not a mistake.
+#![cfg(target_os = "linux")]
+
 use std::collections::BTreeSet;
 use std::io::Write;
 use std::process::Stdio;

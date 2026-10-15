@@ -2,7 +2,7 @@
 
 Local-first expense tracker. A Tauri desktop app (Rust) shows a React client and keeps all data in an encrypted SQLite file (SQLCipher) on your own machine. No server, no accounts, no telemetry. See `assets/PLAN.md` for the roadmap and `assets/data-inventory.md` for what data lives where.
 
-The desktop app has categories, transactions, budgets, recurring items, charts, encrypted backup and export (phases 0 to 6). A command line for scripts and AI agents (phase 7) is in progress, and phone sync and the bank connection are still to come; see the plan. The old Express/Postgres server design is retired and only exists in git history.
+The desktop app has categories, transactions, budgets, recurring items, charts, encrypted backup and export (phases 0 to 6), and a command line for scripts and AI agents (phase 7) that works on the desktop only. Phone sync and the bank connection are still to come; see the plan. The old Express/Postgres server design is retired and only exists in git history.
 
 ## Requirements
 
@@ -129,6 +129,7 @@ npm test --workspace client
 npm run build --workspace client
 
 # The command line: unit tests, and tests that run the real binary against the app's own server code
+# (the docs test and the login test assume Linux paths and run only there)
 cd cli && cargo test
 # After a route is added or changed, regenerate the list of routes the command line embeds (a test fails until you do)
 cd cli && cargo run --example dump_schema > schema.json

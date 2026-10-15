@@ -72,11 +72,7 @@ fn is_money(text: &str) -> bool {
         && all_digits(fraction)
 }
 
-/// No control characters, and none of the invisible ones that reorder text (a file name that reads one way and
-/// is another is how a person gets tricked in a dialog).
-pub(super) fn is_plain_text(text: &str) -> bool {
-    !text.chars().any(|c| c.is_control() || matches!(c, '\u{200e}' | '\u{200f}' | '\u{202a}'..='\u{202e}' | '\u{2066}'..='\u{2069}' | '\u{feff}'))
-}
+pub(super) use crate::tokens::is_plain_text;
 
 fn is_uuid(text: &str) -> bool {
     text.len() == 36

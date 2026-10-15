@@ -47,6 +47,16 @@ struct State {
     refused: HashMap<i64, Instant>,
 }
 
+/// Marks the dialog closed when it goes out of scope, so a dialog that fails cannot leave the app thinking a question
+/// is still open for ever.
+struct Closed(Arc<Mutex<State>>);
+
+impl Drop for Closed {
+    fn drop(&mut self) {
+        self.0.lock().unwrap_or_else(|e| e.into_inner()).open = false;
+    }
+}
+
 pub struct Prompter {
     show: Arc<dyn Show>,
     wait: Duration,
@@ -83,8 +93,10 @@ impl Prompter {
         let (send, receive) = mpsc::channel();
         let (show, state) = (self.show.clone(), self.state.clone());
         let spawned = thread::Builder::new().name("command-api-ask".into()).spawn(move || {
+            let closed = Closed(state);
             let answer = show.show(&approval);
-            state.lock().unwrap_or_else(|e| e.into_inner()).open = false;
+            // Closed before the answer goes out, so the next question is not refused as "busy" for a moment.
+            drop(closed);
             // The receiver is gone if we stopped waiting; a late answer is dropped here.
             let _ = send.send(answer);
         });
@@ -98,7 +110,9 @@ impl Prompter {
                 self.state().refused.insert(token, Instant::now());
                 Err(ApiError::DENIED)
             }
-            Err(_) => Err(ApiError::DENIED_TIMEOUT),
+            Err(mpsc::RecvTimeoutError::Timeout) => Err(ApiError::DENIED_TIMEOUT),
+            // The dialog failed (it panicked) without an answer: nobody was asked, so nothing is allowed.
+            Err(mpsc::RecvTimeoutError::Disconnected) => Err(ApiError::DENIED_NO_PROMPT),
         }
     }
 }
@@ -216,6 +230,31 @@ mod tests {
         assert_eq!(allowed + busy, 12, "{results:?}");
         assert_eq!(r.calls.load(Ordering::SeqCst), allowed);
         assert!(allowed >= 1);
+    }
+
+    /// A dialog that fails the first time and works after.
+    struct Flaky(Arc<AtomicUsize>);
+
+    impl Show for Flaky {
+        fn show(&self, _: &Approval) -> bool {
+            if self.0.fetch_add(1, Ordering::SeqCst) == 0 {
+                panic!("the window system failed");
+            }
+            true
+        }
+    }
+
+    #[test]
+    fn a_dialog_that_fails_is_a_no_and_does_not_stop_questions_for_ever() {
+        let calls = Arc::new(AtomicUsize::new(0));
+        let prompter = Prompter::with_limits(Flaky(calls.clone()), Duration::from_secs(2), Duration::from_millis(50));
+        let started = Instant::now();
+        assert_eq!(prompter.ask(1, approval("a")), Err(ApiError::DENIED_NO_PROMPT));
+        assert!(started.elapsed() < Duration::from_secs(1), "the failure was noticed at once, not after the wait");
+        assert!(!prompter.state().open, "the question is not still open");
+        // The same token is asked again (a failure is not a "no"), and now it works.
+        assert_eq!(prompter.ask(1, approval("b")), Ok(()));
+        assert_eq!(calls.load(Ordering::SeqCst), 2);
     }
 
     #[test]

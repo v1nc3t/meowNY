@@ -328,7 +328,9 @@ mod tests {
     #[test]
     fn no_token_anywhere_says_how_to_give_one_without_naming_one() {
         let dir = tempfile::tempdir().unwrap();
-        let e = token(&env(&[("XDG_CONFIG_HOME", dir.path().to_str().unwrap())]), None).unwrap_err();
+        // Every variable a platform looks in, pointing at an empty folder.
+        let d = dir.path().to_str().unwrap();
+        let e = token(&env(&[("XDG_CONFIG_HOME", d), ("HOME", d), ("USERPROFILE", d), ("APPDATA", d)]), None).unwrap_err();
         assert_eq!(e.code, "no_token");
         assert!(e.message.contains("MEOWNY_TOKEN") && e.message.contains("--token-file") && e.message.contains("meowny login"));
         assert_eq!(token(&env(&[("MEOWNY_TOKEN", "")]), Some("/no/such/file")).unwrap_err().code, "no_token");

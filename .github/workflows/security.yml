@@ -49,8 +49,13 @@ jobs:
         with:
           tool: cargo-audit
 
-      - name: cargo audit
+      - name: cargo audit (app)
         working-directory: src-tauri
+        run: cargo audit
+
+      # The command line program has its own lockfile.
+      - name: cargo audit (command line)
+        working-directory: cli
         run: cargo audit
 
       - name: Secret scan

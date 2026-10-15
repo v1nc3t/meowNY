@@ -129,10 +129,16 @@ fn has_token_shape(text: &str) -> bool {
         && text.strip_prefix(PREFIX).is_some_and(|rest| rest.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f')))
 }
 
+/// No control characters, and none of the invisible ones that reorder or hide text. A token's name is shown to
+/// the person inside a dialog, and a file name is shown there too; neither may read one way and be another.
+pub(crate) fn is_plain_text(text: &str) -> bool {
+    !text.chars().any(|c| c.is_control() || matches!(c, '\u{200e}' | '\u{200f}' | '\u{202a}'..='\u{202e}' | '\u{2066}'..='\u{2069}' | '\u{feff}'))
+}
+
 fn clean_name(name: &str) -> Result<String, AppError> {
     let name = name.trim();
     let length = name.chars().count();
-    if length == 0 || length > NAME_MAX_CHARS || name.chars().any(char::is_control) {
+    if length == 0 || length > NAME_MAX_CHARS || !is_plain_text(name) {
         return Err(AppError::InvalidInput);
     }
     Ok(name.to_string())
@@ -366,7 +372,7 @@ mod tests {
         let conn = db();
         let created = create(&conn, &new("  nightly script  ", Scope::Read, 30), at(9, 0, 0)).unwrap();
         assert_eq!(created.info.name, "nightly script");
-        for bad in ["", "   ", &"x".repeat(51), "two\nlines", "bell\u{7}"] {
+        for bad in ["", "   ", &"x".repeat(51), "two\nlines", "bell\u{7}", "evil\u{202e}gnp", "mark\u{200f}", "bom\u{feff}x", "isolate\u{2066}x"] {
             assert_eq!(create(&conn, &new(bad, Scope::Read, 30), at(9, 0, 0)).unwrap_err(), AppError::InvalidInput, "{bad:?}");
         }
         assert!(create(&conn, &new(&"é".repeat(50), Scope::Read, 30), at(9, 0, 0)).is_ok(), "50 characters, not 50 bytes");

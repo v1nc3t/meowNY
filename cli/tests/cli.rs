@@ -513,7 +513,8 @@ fn the_token_can_come_from_a_file_and_a_file_that_others_can_read_is_refused() {
     assert_eq!(finish(c).code, 3);
 }
 
-#[cfg(unix)]
+// The saved token's place follows `XDG_CONFIG_HOME` on Linux; macOS and Windows keep it elsewhere.
+#[cfg(target_os = "linux")]
 #[test]
 fn login_saves_a_token_that_later_commands_use_and_logout_forgets_it() {
     let app = app(false);
