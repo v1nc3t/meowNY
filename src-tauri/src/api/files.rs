@@ -55,9 +55,14 @@ pub fn write_new(path: &Path, bytes: &[u8]) -> Result<(), ApiError> {
         use std::os::unix::fs::OpenOptionsExt;
         options.mode(0o600);
     }
-    let mut file = options.open(path).map_err(|e| match e.kind() {
-        std::io::ErrorKind::AlreadyExists => ApiError::FILE_EXISTS,
-        _ => ApiError::CANNOT_WRITE,
+    let mut file = options.open(path).map_err(|e| {
+        // Windows answers "access denied", not "already exists", when the name is a folder, so anything that is
+        // already there (a file, a folder, a link, even a dangling one) is "exists", whatever the system called it.
+        if e.kind() == std::io::ErrorKind::AlreadyExists || fs::symlink_metadata(path).is_ok() {
+            ApiError::FILE_EXISTS
+        } else {
+            ApiError::CANNOT_WRITE
+        }
     })?;
     if file.write_all(bytes).and_then(|_| file.sync_all()).is_err() {
         drop(file);

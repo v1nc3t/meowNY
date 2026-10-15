@@ -123,7 +123,8 @@ fn no_damaged_request_stops_the_server_or_makes_it_panic_or_hang() {
         let _ = stream.write_all(&payload);
         // Done sending: the server sees the end of the request and has to answer or let go, not wait.
         let _ = stream.shutdown(Shutdown::Write);
-        stream.set_read_timeout(Some(Duration::from_secs(8))).unwrap();
+        // (The read timeout was set by `connect`. Setting it here fails on macOS with "invalid argument" when the
+        // server has already closed its end, which it does at once for a request that is plainly wrong.)
         let mut reply = Vec::new();
         let _ = stream.read_to_end(&mut reply);
         if reply.is_empty() {

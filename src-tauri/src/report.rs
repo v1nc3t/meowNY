@@ -1035,10 +1035,12 @@ mod tests {
 
     /// The English text of a screen text, read from the client's dictionary.
     fn client_text(key: &str) -> String {
+        // On Windows, git may have checked the file out with CRLF line ends.
+        let english = CLIENT_ENGLISH.replace("\r\n", "\n");
         let marker = format!("'{key}': '");
-        let start = CLIENT_ENGLISH.find(&marker).unwrap_or_else(|| panic!("no text {key} in the client")) + marker.len();
-        let end = CLIENT_ENGLISH[start..].find("',\n").expect("the text ends");
-        CLIENT_ENGLISH[start..start + end].to_string()
+        let start = english.find(&marker).unwrap_or_else(|| panic!("no text {key} in the client")) + marker.len();
+        let end = english[start..].find("',\n").expect("the text ends");
+        english[start..start + end].to_string()
     }
 
     fn capital(text: &str) -> String {

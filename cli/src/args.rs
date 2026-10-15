@@ -521,7 +521,7 @@ mod tests {
         let out = |line: &str| run(line).body["out"].as_str().unwrap().to_string();
         let cwd_text = |p: std::path::PathBuf| p.to_str().unwrap().to_string();
         assert_eq!(out("export json --out out.json"), cwd_text(cwd.join("out.json")));
-        assert_eq!(out("export json --out ./sub/./out.json"), cwd_text(cwd.join("sub/out.json")));
+        assert_eq!(out("export json --out ./sub/./out.json"), cwd_text(cwd.join("sub").join("out.json")));
         assert_eq!(out("export json --out ../up.json"), cwd_text(cwd.parent().unwrap().join("up.json")));
         assert_eq!(out("export json --out=sub/../out.json"), cwd_text(cwd.join("out.json")));
         #[cfg(unix)]
