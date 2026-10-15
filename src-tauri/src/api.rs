@@ -23,6 +23,7 @@
 //! The server logs nothing and keeps nothing: tokens and bodies exist only for the length of a call.
 
 mod http;
+mod read;
 pub mod routes;
 
 use std::borrow::Cow;
@@ -369,5 +370,7 @@ impl Host {
     }
 }
 
+#[cfg(test)]
+mod read_tests;
 #[cfg(test)]
 mod tests;

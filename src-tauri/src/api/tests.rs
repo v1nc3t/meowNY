@@ -887,3 +887,72 @@ fn the_host_status_reaches_the_ui_in_camel_case() {
     let status = HostStatus { enabled: true, running: false, port: Some(5) };
     assert_eq!(serde_json::to_value(status).unwrap(), json!({ "enabled": true, "running": false, "port": 5 }));
 }
+
+// ---- the real route table over real sockets ---------------------------------------------------
+
+/// Arguments that make each read route succeed.
+fn sample_args(name: &str, category: &str) -> String {
+    match name {
+        "budgets.overview" | "stats.budget" | "stats.planned" => r#"{"month":"2026-09"}"#.into(),
+        "stats.trend" => format!(r#"{{"categoryId":"{category}","from":"2026-01","to":"2026-09"}}"#),
+        "stats.year" => r#"{"year":"2026"}"#.into(),
+        "stats.top" => r#"{"month":"2026-09","type":"EXPENSE","limit":3}"#.into(),
+        "transactions.list" => r#"{"limit":5}"#.into(),
+        "categories.list" => r#"{"type":"EXPENSE"}"#.into(),
+        "recurring.dues" => r#"{"withinDays":10}"#.into(),
+        _ => "{}".into(),
+    }
+}
+
+#[test]
+fn a_read_token_uses_every_read_route_over_http_and_gets_what_the_screens_get() {
+    let dir = tempfile::tempdir().unwrap();
+    let vault = new_vault(dir.path());
+    vault.with_conn(|c| crate::seed::run_for(c, "2026-10-14").map_err(|_| AppError::Internal)).unwrap();
+    let token = make_token(&vault, Scope::Read);
+    let server = ApiServer::start(vault.clone(), routes::ALL, Limits::default()).unwrap();
+    let port = server.port();
+
+    let category = call(port, Some(&token), "categories.list", r#"{"type":"EXPENSE"}"#).data()[0]["id"].as_str().unwrap().to_string();
+    let mut called = 0;
+    for route in routes::ALL.iter().filter(|r| r.scope == Scope::Read) {
+        let reply = call(port, Some(&token), route.name, &sample_args(route.name, &category));
+        assert_eq!(reply.status, 200, "{}: {}", route.name, reply.body);
+        assert_eq!(reply.json()["ok"], true, "{}", route.name);
+        called += 1;
+    }
+    assert!(called >= 14, "only {called} read routes were called");
+
+    // The same numbers the desktop screens get from the same functions.
+    let list = call(port, Some(&token), "transactions.list", r#"{"limit":5}"#).data();
+    let direct = vault.with_conn(|c| crate::transactions::list(c, &crate::transactions::Filter { limit: Some(5), ..Default::default() })).unwrap();
+    assert_eq!(list, serde_json::to_value(direct).unwrap());
+    assert!(list["transactions"][0]["amount"].is_string(), "money crosses as a string");
+    assert!(list["transactions"][0]["id"].is_string(), "and ids too");
+    let overview = call(port, Some(&token), "budgets.overview", r#"{"month":"2026-09"}"#).data();
+    assert_eq!(overview, serde_json::to_value(vault.with_conn(|c| crate::budgets::overview(c, "2026-09")).unwrap()).unwrap());
+
+    // The schema describes exactly these routes, and a client can build its requests from it.
+    let schema = call(port, Some(&token), "schema", "").data();
+    let described: Vec<&str> = schema["routes"].as_array().unwrap().iter().map(|r| r["name"].as_str().unwrap()).collect();
+    assert_eq!(described, routes::ALL.iter().map(|r| r.name).collect::<Vec<_>>());
+    let transactions = schema["routes"].as_array().unwrap().iter().find(|r| r["name"] == "transactions.list").unwrap();
+    let params: Vec<(&str, &str)> = transactions["params"].as_array().unwrap().iter().map(|p| (p["name"].as_str().unwrap(), p["type"].as_str().unwrap())).collect();
+    assert_eq!(params, [("from", "date"), ("to", "date"), ("categoryId", "id"), ("q", "string"), ("limit", "integer"), ("offset", "integer")]);
+}
+
+#[test]
+fn a_bad_value_over_http_is_a_400_with_the_reason_and_the_server_keeps_going() {
+    let dir = tempfile::tempdir().unwrap();
+    let vault = new_vault(dir.path());
+    let token = make_token(&vault, Scope::Read);
+    let server = ApiServer::start(vault.clone(), routes::ALL, Limits::default()).unwrap();
+    let port = server.port();
+    let reply = call(port, Some(&token), "budgets.overview", r#"{"month":"October"}"#);
+    assert_eq!((reply.status, reply.code().as_str()), (400, "invalid_input"));
+    assert_eq!(reply.message(), "`month` must be a month like 2026-10");
+    let reply = call(port, Some(&token), "budgets.overview", r#"{"month":"2026-13"}"#);
+    assert_eq!((reply.status, reply.message().as_str()), (400, "invalid input"));
+    assert_eq!(call(port, Some(&token), "stats.trend", r#"{"categoryId":"99","from":"2026-01","to":"2026-02"}"#).status, 404);
+    assert_eq!(call(port, Some(&token), "today", "").status, 200);
+}

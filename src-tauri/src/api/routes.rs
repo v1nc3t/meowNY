@@ -6,10 +6,12 @@
 //! Names are `noun.verb` (`transactions.create`), or one word for the API itself (`status`).
 
 use chrono::{DateTime, Utc};
+use serde::de::DeserializeOwned;
 use serde::Serialize;
 use serde_json::{json, Map, Value};
 
-use super::{ApiError, API_VERSION};
+use super::{read, ApiError, API_VERSION};
+use crate::clock;
 use crate::migrate;
 use crate::tokens::{Grant, Scope};
 use crate::vault::Vault;
@@ -23,12 +25,36 @@ pub struct Ctx<'a> {
     pub now: DateTime<Utc>,
 }
 
+/// What an argument is. `date`, `month`, `year` and `id` are JSON strings with a fixed shape that the server
+/// checks before the route runs; whether the date really exists is the route's business.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Kind {
     String,
     Integer,
     Boolean,
+    /// "2026-10-14"
+    Date,
+    /// "2026-10"
+    Month,
+    /// "2026"
+    Year,
+    /// The id of a category, a transaction and so on, as the app lists it: digits, no leading zero.
+    Id,
+}
+
+fn all_digits(text: &str) -> bool {
+    text.bytes().all(|b| b.is_ascii_digit())
+}
+
+/// Whether `text` is `pattern` with a digit wherever the pattern has a `9`. Works on bytes, so odd text cannot panic.
+fn fits(text: &str, pattern: &str) -> bool {
+    text.len() == pattern.len()
+        && text.bytes().zip(pattern.bytes()).all(|(t, p)| if p == b'9' { t.is_ascii_digit() } else { t == p })
+}
+
+fn is_id(text: &str) -> bool {
+    (1..=18).contains(&text.len()) && !text.starts_with('0') && all_digits(text)
 }
 
 impl Kind {
@@ -37,14 +63,23 @@ impl Kind {
             Kind::String => "a string",
             Kind::Integer => "an integer",
             Kind::Boolean => "a boolean",
+            Kind::Date => "a date like 2026-10-14",
+            Kind::Month => "a month like 2026-10",
+            Kind::Year => "a year like 2026",
+            Kind::Id => "an id as the app lists it",
         }
     }
 
     fn matches(self, value: &Value) -> bool {
-        match self {
-            Kind::String => value.is_string(),
-            Kind::Integer => value.is_i64() || value.is_u64(),
-            Kind::Boolean => value.is_boolean(),
+        match (self, value) {
+            (Kind::String, Value::String(_)) => true,
+            (Kind::Integer, v) => v.is_i64() || v.is_u64(),
+            (Kind::Boolean, Value::Bool(_)) => true,
+            (Kind::Date, Value::String(text)) => fits(text, "9999-99-99"),
+            (Kind::Month, Value::String(text)) => fits(text, "9999-99"),
+            (Kind::Year, Value::String(text)) => fits(text, "9999"),
+            (Kind::Id, Value::String(text)) => is_id(text),
+            _ => false,
         }
     }
 }
@@ -58,6 +93,22 @@ pub struct Param {
     pub summary: &'static str,
     /// The only values a string may have. Empty means any.
     pub values: &'static [&'static str],
+}
+
+impl Param {
+    pub const fn new(name: &'static str, kind: Kind, summary: &'static str) -> Self {
+        Self { name, kind, required: false, summary, values: &[] }
+    }
+
+    pub const fn required(mut self) -> Self {
+        self.required = true;
+        self
+    }
+
+    pub const fn one_of(mut self, values: &'static [&'static str]) -> Self {
+        self.values = values;
+        self
+    }
 }
 
 pub struct Route {
@@ -113,6 +164,22 @@ fn printable(key: &str) -> String {
     key.chars().filter(|c| !c.is_control()).take(40).collect()
 }
 
+/// The request body as the route's own input type. A value that does not fit says what was wrong with it
+/// (the message quotes only what the caller sent).
+pub fn parse<T: DeserializeOwned>(args: Map<String, Value>) -> Result<T, ApiError> {
+    serde_json::from_value(Value::Object(args)).map_err(|e| ApiError::invalid(e.to_string()))
+}
+
+pub fn reply<T: Serialize>(value: T) -> Result<Value, ApiError> {
+    serde_json::to_value(value).map_err(|_| ApiError::INTERNAL)
+}
+
+/// Today in the time zone set in the app, as "YYYY-MM-DD". Due dates and "overdue" follow it, never the computer's zone.
+pub fn today(ctx: &Ctx) -> Result<String, ApiError> {
+    let timezone = ctx.vault.settings()?.timezone;
+    Ok(clock::today(ctx.now, &timezone)?.to_string())
+}
+
 pub const STATUS: Route = Route {
     name: "status",
     scope: Scope::Read,
@@ -144,7 +211,24 @@ fn schema(ctx: &Ctx, _: Map<String, Value>) -> Result<Value, ApiError> {
 }
 
 /// Everything the app serves.
-pub static ALL: &[Route] = &[STATUS, SCHEMA];
+pub static ALL: &[Route] = &[
+    STATUS,
+    SCHEMA,
+    read::TODAY,
+    read::SETTINGS_GET,
+    read::CATEGORIES_LIST,
+    read::TRANSACTIONS_LIST,
+    read::BUDGETS_OVERVIEW,
+    read::BUDGETS_HISTORY,
+    read::RECURRING_LIST,
+    read::RECURRING_DUES,
+    read::STATS_BUDGET,
+    read::STATS_TREND,
+    read::STATS_YEAR,
+    read::STATS_TOP,
+    read::STATS_COMMITMENTS,
+    read::STATS_PLANNED,
+];
 
 #[cfg(test)]
 mod tests {
@@ -235,6 +319,54 @@ mod tests {
                 assert!(param.values.is_empty() || param.kind == Kind::String, "{}: {}", route.name, param.name);
             }
         }
+    }
+
+    #[test]
+    fn dates_months_years_and_ids_have_a_fixed_shape() {
+        let accepts = |kind: Kind, text: &str| kind.matches(&json!(text));
+        for ok in ["2026-10-14", "0000-00-00", "9999-99-99"] {
+            assert!(accepts(Kind::Date, ok), "{ok}");
+        }
+        for bad in ["2026-10-1", "2026-1-01", "20261014", "2026/10/14", "2026-10-14 ", " 2026-10-14", "2026-10-14T00:00:00Z", "2026-10", "", "é026-10-14", "2026-10-1é", "２０２６-10-14"] {
+            assert!(!accepts(Kind::Date, bad), "{bad:?}");
+        }
+        assert!(accepts(Kind::Month, "2026-10") && accepts(Kind::Month, "2026-99"), "whether the month exists is for the route");
+        for bad in ["2026-1", "2026-100", "202610", "2026-10-14", "2026-1\n", "", "é026-10", "2026-1é"] {
+            assert!(!accepts(Kind::Month, bad), "{bad:?}");
+        }
+        assert!(accepts(Kind::Year, "2026") && accepts(Kind::Year, "0000"));
+        for bad in ["26", "20266", "abcd", "", "٢٠٢٦", "202é"] {
+            assert!(!accepts(Kind::Year, bad), "{bad:?}");
+        }
+        for ok in ["1", "42", "999999999999999999"] {
+            assert!(accepts(Kind::Id, ok), "{ok}");
+        }
+        for bad in ["0", "01", "-1", "+1", "1.0", "", " 1", "1 ", "1e3", "٣", &"1".repeat(19)] {
+            assert!(!accepts(Kind::Id, bad), "{bad:?}");
+        }
+        // Only a string can be any of these.
+        for kind in [Kind::Date, Kind::Month, Kind::Year, Kind::Id, Kind::String] {
+            for value in [json!(20261014), json!(null), json!(true), json!(["2026"]), json!({})] {
+                assert!(!kind.matches(&value), "{kind:?} accepted {value}");
+            }
+        }
+    }
+
+    #[test]
+    fn the_kinds_have_the_names_a_client_reads_in_the_schema() {
+        let names: Vec<Value> = [Kind::String, Kind::Integer, Kind::Boolean, Kind::Date, Kind::Month, Kind::Year, Kind::Id]
+            .iter()
+            .map(|k| json!(k))
+            .collect();
+        assert_eq!(Value::Array(names), json!(["string", "integer", "boolean", "date", "month", "year", "id"]));
+    }
+
+    #[test]
+    fn a_parameter_is_built_in_steps_and_is_optional_until_said_otherwise() {
+        const P: Param = Param::new("type", Kind::String, "A or B.");
+        assert!(!P.required && P.values.is_empty());
+        const Q: Param = P.required().one_of(&["A", "B"]);
+        assert!(Q.required && Q.values == ["A", "B"]);
     }
 
     #[test]
