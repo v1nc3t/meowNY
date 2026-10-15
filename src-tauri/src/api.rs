@@ -25,6 +25,7 @@
 mod http;
 mod read;
 pub mod routes;
+mod write;
 
 use std::borrow::Cow;
 use std::io;
@@ -374,3 +375,5 @@ impl Host {
 mod read_tests;
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod write_tests;

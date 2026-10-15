@@ -10,7 +10,7 @@ use serde::de::DeserializeOwned;
 use serde::Serialize;
 use serde_json::{json, Map, Value};
 
-use super::{read, ApiError, API_VERSION};
+use super::{read, write, ApiError, API_VERSION};
 use crate::clock;
 use crate::migrate;
 use crate::tokens::{Grant, Scope};
@@ -41,6 +41,10 @@ pub enum Kind {
     Year,
     /// The id of a category, a transaction and so on, as the app lists it: digits, no leading zero.
     Id,
+    /// An amount of money as text with two decimals, "12.50". Never a JSON number, so nothing rounds it.
+    Money,
+    /// "123e4567-e89b-12d3-a456-426614174000"
+    Uuid,
 }
 
 fn all_digits(text: &str) -> bool {
@@ -51,6 +55,24 @@ fn all_digits(text: &str) -> bool {
 fn fits(text: &str, pattern: &str) -> bool {
     text.len() == pattern.len()
         && text.bytes().zip(pattern.bytes()).all(|(t, p)| if p == b'9' { t.is_ascii_digit() } else { t == p })
+}
+
+/// Whole part of 1 to 10 digits (no leading zero unless it is just "0"), a point, exactly two decimals.
+fn is_money(text: &str) -> bool {
+    let Some((whole, fraction)) = text.split_once('.') else { return false };
+    (1..=10).contains(&whole.len())
+        && all_digits(whole)
+        && !(whole.len() > 1 && whole.starts_with('0'))
+        && fraction.len() == 2
+        && all_digits(fraction)
+}
+
+fn is_uuid(text: &str) -> bool {
+    text.len() == 36
+        && text
+            .bytes()
+            .enumerate()
+            .all(|(i, b)| if matches!(i, 8 | 13 | 18 | 23) { b == b'-' } else { b.is_ascii_hexdigit() })
 }
 
 fn is_id(text: &str) -> bool {
@@ -67,6 +89,8 @@ impl Kind {
             Kind::Month => "a month like 2026-10",
             Kind::Year => "a year like 2026",
             Kind::Id => "an id as the app lists it",
+            Kind::Money => "an amount as text with two decimals, like \"12.50\"",
+            Kind::Uuid => "a UUID like 123e4567-e89b-12d3-a456-426614174000",
         }
     }
 
@@ -79,6 +103,8 @@ impl Kind {
             (Kind::Month, Value::String(text)) => fits(text, "9999-99"),
             (Kind::Year, Value::String(text)) => fits(text, "9999"),
             (Kind::Id, Value::String(text)) => is_id(text),
+            (Kind::Money, Value::String(text)) => is_money(text),
+            (Kind::Uuid, Value::String(text)) => is_uuid(text),
             _ => false,
         }
     }
@@ -90,6 +116,8 @@ pub struct Param {
     pub name: &'static str,
     pub kind: Kind,
     pub required: bool,
+    /// `null` is a value of its own that means "clear this" (or "none"). Without it, `null` is refused.
+    pub nullable: bool,
     pub summary: &'static str,
     /// The only values a string may have. Empty means any.
     pub values: &'static [&'static str],
@@ -97,11 +125,16 @@ pub struct Param {
 
 impl Param {
     pub const fn new(name: &'static str, kind: Kind, summary: &'static str) -> Self {
-        Self { name, kind, required: false, summary, values: &[] }
+        Self { name, kind, required: false, nullable: false, summary, values: &[] }
     }
 
     pub const fn required(mut self) -> Self {
         self.required = true;
+        self
+    }
+
+    pub const fn nullable(mut self) -> Self {
+        self.nullable = true;
         self
     }
 
@@ -127,6 +160,9 @@ impl Route {
             .iter()
             .map(|p| {
                 let mut out = json!({ "name": p.name, "type": p.kind, "required": p.required, "summary": p.summary });
+                if p.nullable {
+                    out["nullable"] = json!(true);
+                }
                 if !p.values.is_empty() {
                     out["values"] = json!(p.values);
                 }
@@ -146,6 +182,7 @@ impl Route {
             match args.get(param.name) {
                 None if param.required => return Err(ApiError::invalid(format!("missing argument `{}`", param.name))),
                 None => {}
+                Some(Value::Null) if param.nullable => {}
                 Some(value) if !param.kind.matches(value) => {
                     return Err(ApiError::invalid(format!("`{}` must be {}", param.name, param.kind.with_article())))
                 }
@@ -172,6 +209,12 @@ pub fn parse<T: DeserializeOwned>(args: Map<String, Value>) -> Result<T, ApiErro
 
 pub fn reply<T: Serialize>(value: T) -> Result<Value, ApiError> {
     serde_json::to_value(value).map_err(|_| ApiError::INTERNAL)
+}
+
+/// Removes the id argument and returns it as a number, so what is left can be read as the other fields.
+pub fn take_id(args: &mut Map<String, Value>, name: &str) -> Result<i64, ApiError> {
+    let text = args.remove(name).and_then(|v| v.as_str().map(str::to_string)).ok_or(ApiError::INVALID_INPUT)?;
+    Ok(crate::categories::parse_id(&text)?)
 }
 
 /// Today in the time zone set in the app, as "YYYY-MM-DD". Due dates and "overdue" follow it, never the computer's zone.
@@ -228,6 +271,23 @@ pub static ALL: &[Route] = &[
     read::STATS_TOP,
     read::STATS_COMMITMENTS,
     read::STATS_PLANNED,
+    write::SETTINGS_SET,
+    write::CATEGORIES_CREATE,
+    write::CATEGORIES_RENAME,
+    write::CATEGORIES_DELETE,
+    write::TRANSACTIONS_CREATE,
+    write::TRANSACTIONS_UPDATE,
+    write::TRANSACTIONS_DELETE,
+    write::BUDGETS_SET,
+    write::BUDGETS_REMOVE,
+    write::RECURRING_CREATE,
+    write::RECURRING_UPDATE,
+    write::RECURRING_DELETE,
+    write::RECURRING_PAY,
+    write::RECURRING_SKIP,
+    write::RECURRING_PAUSE,
+    write::RECURRING_RESUME,
+    write::RECURRING_END,
 ];
 
 #[cfg(test)]
@@ -239,10 +299,10 @@ mod tests {
     }
 
     const PARAMS: &[Param] = &[
-        Param { name: "text", kind: Kind::String, required: true, summary: "A text.", values: &[] },
-        Param { name: "count", kind: Kind::Integer, required: false, summary: "A number.", values: &[] },
-        Param { name: "flag", kind: Kind::Boolean, required: false, summary: "A switch.", values: &[] },
-        Param { name: "kind", kind: Kind::String, required: false, summary: "A or B.", values: &["A", "B"] },
+        Param { name: "text", kind: Kind::String, required: true, nullable: false, summary: "A text.", values: &[] },
+        Param { name: "count", kind: Kind::Integer, required: false, nullable: false, summary: "A number.", values: &[] },
+        Param { name: "flag", kind: Kind::Boolean, required: false, nullable: false, summary: "A switch.", values: &[] },
+        Param { name: "kind", kind: Kind::String, required: false, nullable: false, summary: "A or B.", values: &["A", "B"] },
     ];
 
     const ROUTE: Route = Route { name: "x.y", scope: Scope::Read, summary: "Test.", params: PARAMS, run: dummy };
@@ -354,11 +414,71 @@ mod tests {
 
     #[test]
     fn the_kinds_have_the_names_a_client_reads_in_the_schema() {
-        let names: Vec<Value> = [Kind::String, Kind::Integer, Kind::Boolean, Kind::Date, Kind::Month, Kind::Year, Kind::Id]
+        let names: Vec<Value> = [Kind::String, Kind::Integer, Kind::Boolean, Kind::Date, Kind::Month, Kind::Year, Kind::Id, Kind::Money, Kind::Uuid]
             .iter()
             .map(|k| json!(k))
             .collect();
-        assert_eq!(Value::Array(names), json!(["string", "integer", "boolean", "date", "month", "year", "id"]));
+        assert_eq!(Value::Array(names), json!(["string", "integer", "boolean", "date", "month", "year", "id", "money", "uuid"]));
+    }
+
+    #[test]
+    fn money_is_text_with_two_decimals_and_never_a_number() {
+        let accepts = |text: &str| Kind::Money.matches(&json!(text));
+        for ok in ["0.00", "0.01", "12.50", "1000.00", "9999999999.99", "1234567890.00"] {
+            assert!(accepts(ok), "{ok}");
+        }
+        for bad in [
+            "", ".", "1", "1.", "1.5", "1.234", ".50", "01.00", "00.00", "-1.00", "+1.00", "1,00", "1 .00", " 1.00", "1.00 ", "1e3", "1.0e1",
+            "12345678901.00", "１２.５０", "1.5٠", "1.00\n", "NaN", "Infinity", "0x10.00",
+        ] {
+            assert!(!accepts(bad), "{bad:?}");
+        }
+        for value in [json!(12.5), json!(12), json!(null), json!(true), json!(["12.50"])] {
+            assert!(!Kind::Money.matches(&value), "{value}");
+        }
+    }
+
+    #[test]
+    fn a_uuid_has_five_groups_of_hex() {
+        let accepts = |text: &str| Kind::Uuid.matches(&json!(text));
+        assert!(accepts("123e4567-e89b-12d3-a456-426614174000") && accepts("123E4567-E89B-12D3-A456-426614174000"));
+        for bad in [
+            "", "123e4567e89b12d3a456426614174000", "123e4567-e89b-12d3-a456-42661417400", "123e4567-e89b-12d3-a456-4266141740000",
+            "123e4567-e89b-12d3-a456-42661417400g", "123e4567_e89b_12d3_a456_426614174000", "{123e4567-e89b-12d3-a456-426614174000}",
+            "123e4567-e89b-12d3-a456-42661417400é", " 123e4567-e89b-12d3-a456-426614174000",
+        ] {
+            assert!(!accepts(bad), "{bad:?}");
+        }
+    }
+
+    #[test]
+    fn null_is_accepted_only_where_a_parameter_says_so() {
+        const ROUTE: Route = Route {
+            name: "x.clear",
+            scope: Scope::Write,
+            summary: "Test.",
+            params: &[
+                Param::new("note", Kind::String, "A note, or null to clear it.").nullable(),
+                Param::new("when", Kind::Date, "A date, or null for none.").nullable(),
+                Param::new("plain", Kind::String, "A text."),
+                Param::new("must", Kind::Integer, "A number.").required().nullable(),
+            ],
+            run: dummy,
+        };
+        let check = |body: Value| ROUTE.check(body.as_object().unwrap());
+        assert!(check(json!({ "must": 1 })).is_ok());
+        assert!(check(json!({ "must": null, "note": null, "when": null })).is_ok(), "null clears");
+        assert!(check(json!({ "must": 1, "note": "a", "when": "2026-10-14" })).is_ok(), "and a value still works");
+        assert_eq!(check(json!({ "note": null })).unwrap_err().message, "missing argument `must`", "a nullable argument can still be required");
+        assert_eq!(check(json!({ "must": 1, "plain": null })).unwrap_err().message, "`plain` must be a string");
+        // Null does not excuse a wrong value of the right key.
+        assert_eq!(check(json!({ "must": 1, "when": "tomorrow" })).unwrap_err().message, "`when` must be a date like 2026-10-14");
+        assert_eq!(check(json!({ "must": 1, "note": 5 })).unwrap_err().message, "`note` must be a string");
+        // The schema says which arguments take null.
+        let described = ROUTE.describe();
+        let params = described["params"].as_array().unwrap();
+        assert_eq!(params[0]["nullable"], true);
+        assert_eq!(params[2].get("nullable"), None, "absent unless true");
     }
 
     #[test]

@@ -40,10 +40,10 @@ static TEST_ROUTES: &[Route] = &[
         scope: Scope::Read,
         summary: "Gives the arguments back.",
         params: &[
-            Param { name: "text", kind: Kind::String, required: true, summary: "A text.", values: &[] },
-            Param { name: "count", kind: Kind::Integer, required: false, summary: "A number.", values: &[] },
-            Param { name: "flag", kind: Kind::Boolean, required: false, summary: "A switch.", values: &[] },
-            Param { name: "kind", kind: Kind::String, required: false, summary: "A or B.", values: &["A", "B"] },
+            Param { name: "text", kind: Kind::String, required: true, nullable: false, summary: "A text.", values: &[] },
+            Param { name: "count", kind: Kind::Integer, required: false, nullable: false, summary: "A number.", values: &[] },
+            Param { name: "flag", kind: Kind::Boolean, required: false, nullable: false, summary: "A switch.", values: &[] },
+            Param { name: "kind", kind: Kind::String, required: false, nullable: false, summary: "A or B.", values: &["A", "B"] },
         ],
         run: echo,
     },
@@ -955,4 +955,76 @@ fn a_bad_value_over_http_is_a_400_with_the_reason_and_the_server_keeps_going() {
     assert_eq!((reply.status, reply.message().as_str()), (400, "invalid input"));
     assert_eq!(call(port, Some(&token), "stats.trend", r#"{"categoryId":"99","from":"2026-01","to":"2026-02"}"#).status, 404);
     assert_eq!(call(port, Some(&token), "today", "").status, 200);
+}
+
+#[test]
+fn a_read_token_cannot_write_and_a_write_token_can_over_http() {
+    let dir = tempfile::tempdir().unwrap();
+    let vault = new_vault(dir.path());
+    vault.with_conn(|c| crate::seed::run_for(c, "2026-10-14").map_err(|_| AppError::Internal)).unwrap();
+    let (read, write) = (make_token(&vault, Scope::Read), make_token(&vault, Scope::Write));
+    let server = ApiServer::start(vault.clone(), routes::ALL, Limits::default()).unwrap();
+    let port = server.port();
+    let before = vault.with_conn(|c| crate::backup::dump(c)).unwrap();
+
+    let writes: Vec<&str> = routes::ALL.iter().filter(|r| r.scope == Scope::Write).map(|r| r.name).collect();
+    assert!(writes.len() >= 17, "{writes:?}");
+    for name in &writes {
+        // The scope is checked before the body, so even a request that is wrong in every other way is a 403.
+        let refused = call(port, Some(&read), name, "{}");
+        assert_eq!((refused.status, refused.code().as_str()), (403, "forbidden"), "{name}");
+        assert!(refused.message().contains("read-only"), "{name}: {}", refused.message());
+        // With a write token the route is reached: the empty body is then a 400 for what is missing.
+        let reached = call(port, Some(&write), name, "{}");
+        assert_eq!((reached.status, reached.code().as_str()), (400, "invalid_input"), "{name}: {}", reached.body);
+    }
+    // A real request that would work is still refused to the read token, and changes nothing.
+    let food = call(port, Some(&read), "categories.list", r#"{"type":"EXPENSE"}"#).data()[0]["id"].as_str().unwrap().to_string();
+    let request = format!(r#"{{"name":"Bread","amount":"2.40","paymentDate":"2026-10-14","categoryId":"{food}"}}"#);
+    assert_eq!(call(port, Some(&read), "transactions.create", &request).status, 403);
+    assert_eq!(vault.with_conn(|c| crate::backup::dump(c)).unwrap(), before, "a refused write changed something");
+    // The write token's request goes through and shows up for the read token.
+    let made = call(port, Some(&write), "transactions.create", &request);
+    assert_eq!(made.status, 200, "{}", made.body);
+    let seen = call(port, Some(&read), "transactions.list", r#"{"q":"Bread"}"#).data();
+    assert_eq!(seen["total"], 1);
+    assert_eq!(seen["transactions"][0]["id"], made.data()["id"]);
+}
+
+/// The plan's "done when" for the CLI, over the wire: with only a token, record expenses, set a budget
+/// and read budget against actual. A budget of 400 and transactions of 356.20 leave 43.80.
+#[test]
+fn a_write_token_can_record_expenses_set_a_budget_and_read_the_result() {
+    let dir = tempfile::tempdir().unwrap();
+    let vault = new_vault(dir.path());
+    let (read, write) = (make_token(&vault, Scope::Read), make_token(&vault, Scope::Write));
+    let server = ApiServer::start(vault.clone(), routes::ALL, Limits::default()).unwrap();
+    let port = server.port();
+    let post = |token: &str, route: &str, body: Value| {
+        let reply = call(port, Some(token), route, &body.to_string());
+        assert_eq!(reply.status, 200, "{route}: {}", reply.body);
+        reply.data()
+    };
+
+    let food = post(&write, "categories.create", json!({ "name": "Food", "type": "EXPENSE" }))["id"].as_str().unwrap().to_string();
+    post(&write, "budgets.set", json!({ "type": "EXPENSE", "month": "2026-03", "amountLimit": "400.00", "categoryId": food }));
+    let uuids = ["11111111-1111-4111-8111-111111111111", "22222222-2222-4222-8222-222222222222", "33333333-3333-4333-8333-333333333333"];
+    for (uuid, amount) in uuids.iter().zip(["120.50", "99.70", "136.00"]) {
+        let request = json!({ "name": "Shop", "amount": amount, "paymentDate": "2026-03-12", "categoryId": food, "clientUuid": uuid });
+        let first = post(&write, "transactions.create", request.clone());
+        // The script did not hear back and tries again: the same transaction, not a second one.
+        assert_eq!(post(&write, "transactions.create", request), first);
+    }
+
+    let month = post(&read, "stats.budget", json!({ "month": "2026-03" }));
+    let line = month["categories"].as_array().unwrap().iter().find(|c| c["name"] == "Food").unwrap();
+    assert_eq!(line["budgeted"], "400.00");
+    assert_eq!(line["actual"], "356.20", "three payments, each sent twice, counted once");
+    assert_eq!(line["remaining"], "43.80");
+    assert_eq!(line["pctUsed"], 89.1);
+    assert_eq!(post(&read, "transactions.list", json!({ "categoryId": food }))["total"], 3);
+    // A later change to the budget does not touch earlier months.
+    post(&write, "budgets.set", json!({ "type": "EXPENSE", "month": "2026-04", "amountLimit": "500.00", "categoryId": food }));
+    let march = post(&read, "stats.budget", json!({ "month": "2026-03" }));
+    assert_eq!(march["categories"].as_array().unwrap().iter().find(|c| c["name"] == "Food").unwrap()["budgeted"], "400.00");
 }

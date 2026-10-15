@@ -17,7 +17,7 @@ use crate::transactions::{self, Filter};
 use crate::vault::Settings;
 use crate::{backup, budgets, recurring, seed, stats};
 
-const TODAY: &str = "2026-10-14";
+pub(super) const TODAY: &str = "2026-10-14";
 
 const READ_ROUTES: &[&str] = &[
     "today",
@@ -36,11 +36,11 @@ const READ_ROUTES: &[&str] = &[
     "stats.planned",
 ];
 
-fn at(text: &str) -> DateTime<Utc> {
+pub(super) fn at(text: &str) -> DateTime<Utc> {
     text.parse().unwrap()
 }
 
-fn noon() -> DateTime<Utc> {
+pub(super) fn noon() -> DateTime<Utc> {
     at("2026-10-14T12:00:00Z")
 }
 
@@ -49,7 +49,7 @@ fn settings() -> Settings {
 }
 
 /// A vault with sixteen months of demo data ending on `TODAY`.
-fn seeded() -> (tempfile::TempDir, Vault) {
+pub(super) fn seeded() -> (tempfile::TempDir, Vault) {
     let dir = tempfile::tempdir().unwrap();
     let vault = Vault::new(dir.path().to_path_buf(), Box::new(MemoryStore::default()));
     vault.create(&settings(), None).unwrap();
@@ -57,12 +57,12 @@ fn seeded() -> (tempfile::TempDir, Vault) {
     (dir, vault)
 }
 
-fn route(name: &str) -> &'static Route {
+pub(super) fn route(name: &str) -> &'static Route {
     routes::ALL.iter().find(|r| r.name == name).unwrap_or_else(|| panic!("no route {name}"))
 }
 
 /// What the server does after it has found the route and checked the token: check the arguments, run.
-fn run_at(vault: &Vault, name: &str, args: Value, now: DateTime<Utc>) -> Result<Value, ApiError> {
+pub(super) fn run_at(vault: &Vault, name: &str, args: Value, now: DateTime<Utc>) -> Result<Value, ApiError> {
     let route = route(name);
     let args = args.as_object().unwrap().clone();
     route.check(&args)?;
@@ -70,25 +70,25 @@ fn run_at(vault: &Vault, name: &str, args: Value, now: DateTime<Utc>) -> Result<
     (route.run)(&Ctx { vault, grant, routes: routes::ALL, now }, args)
 }
 
-fn run(vault: &Vault, name: &str, args: Value) -> Result<Value, ApiError> {
+pub(super) fn run(vault: &Vault, name: &str, args: Value) -> Result<Value, ApiError> {
     run_at(vault, name, args, noon())
 }
 
-fn ok(vault: &Vault, name: &str, args: Value) -> Value {
+pub(super) fn ok(vault: &Vault, name: &str, args: Value) -> Value {
     run(vault, name, args.clone()).unwrap_or_else(|e| panic!("{name} {args}: {e:?}"))
 }
 
 /// What the screens would get from the same function.
-fn expect<T: Serialize>(vault: &Vault, f: impl FnOnce(&mut Connection) -> Result<T, AppError>) -> Value {
+pub(super) fn expect<T: Serialize>(vault: &Vault, f: impl FnOnce(&mut Connection) -> Result<T, AppError>) -> Value {
     vault.with_conn(|c| Ok(serde_json::to_value(f(c)?).unwrap())).unwrap()
 }
 
-fn refused(vault: &Vault, name: &str, args: Value) -> (u16, String) {
+pub(super) fn refused(vault: &Vault, name: &str, args: Value) -> (u16, String) {
     let e = run(vault, name, args.clone()).expect_err(&format!("{name} {args} was accepted"));
     (e.status, e.code.to_string())
 }
 
-fn first_expense(vault: &Vault) -> Value {
+pub(super) fn first_expense(vault: &Vault) -> Value {
     ok(vault, "categories.list", json!({ "type": "EXPENSE" }))[0].clone()
 }
 
