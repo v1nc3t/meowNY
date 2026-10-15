@@ -46,11 +46,14 @@ export const LOCK_AFTER_CHOICES = [
   { seconds: 0, labelKey: 'lock.never' },
 ] as const
 
+/** The choices of "lock after" a device offers. A phone does not offer "never": it is the one that gets lost. */
+export function lockChoices(phone: boolean): readonly (typeof LOCK_AFTER_CHOICES)[number][] {
+  return phone ? LOCK_AFTER_CHOICES.filter((choice) => choice.seconds > 0) : LOCK_AFTER_CHOICES
+}
+
 /** The nearest offered choice, so a stored value that is not in the list still shows up. */
-export function nearestLockChoice(seconds: number): number {
-  return LOCK_AFTER_CHOICES.reduce((best, choice) =>
-    Math.abs(choice.seconds - seconds) < Math.abs(best.seconds - seconds) ? choice : best,
-  ).seconds
+export function nearestLockChoice(seconds: number, choices: readonly { seconds: number }[] = LOCK_AFTER_CHOICES): number {
+  return choices.reduce((best, choice) => (Math.abs(choice.seconds - seconds) < Math.abs(best.seconds - seconds) ? choice : best)).seconds
 }
 
 /** What the system suggests: its format, its time zone and (if the app has it) its language. */

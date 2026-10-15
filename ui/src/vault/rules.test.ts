@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { backupPassphraseProblem, isCurrency, nearestLockChoice, normalizeCurrency, passphraseProblem, phonePassphraseProblem } from './rules.ts'
+import { backupPassphraseProblem, isCurrency, lockChoices, nearestLockChoice, normalizeCurrency, passphraseProblem, phonePassphraseProblem } from './rules.ts'
 
 test('currency codes are three letters, any case', () => {
   assert.equal(normalizeCurrency(' eur '), 'EUR')
@@ -45,3 +45,11 @@ test('a stored lock time outside the list maps to the nearest choice', () => {
   assert.equal(nearestLockChoice(400), 300)
   assert.equal(nearestLockChoice(5000), 3600)
 })
+
+test('a phone never offers "never lock", and a stored never becomes the longest time', () => {
+  assert.ok(lockChoices(false).some((choice) => choice.seconds === 0))
+  assert.ok(lockChoices(true).every((choice) => choice.seconds > 0))
+  assert.equal(nearestLockChoice(0, lockChoices(true)), 60, 'never is nearest to the shortest time, which is the safe side')
+  assert.equal(nearestLockChoice(900, lockChoices(true)), 900)
+})
+

@@ -106,14 +106,22 @@ impl api::Show for AllowDialog {
     }
 }
 
+// On a phone the app starts through this entry point (Tauri's generated Android project calls it); on a computer `main` does.
+#[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     install_safe_panic_hook();
 
-    tauri::Builder::default()
+    let builder = tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_notification::init())
-        .plugin(tauri::plugin::Builder::<tauri::Wry>::new("navigation-guard").on_navigation(|_, url| is_app_url(url)).build())
+        .plugin(tauri::plugin::Builder::<tauri::Wry>::new("navigation-guard").on_navigation(|_, url| is_app_url(url)).build());
+
+    // The camera that reads the code of the desktop, on a phone only.
+    #[cfg(mobile)]
+    let builder = builder.plugin(tauri_plugin_barcode_scanner::init());
+
+    builder
         .setup(|app| {
             let dir = app.path().app_data_dir()?;
             let vault = Arc::new(make_vault(dir));

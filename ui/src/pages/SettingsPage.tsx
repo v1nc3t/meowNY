@@ -10,7 +10,7 @@ import PhoneSyncBlock from '../components/PhoneSyncBlock'
 import Dropdown from '../components/Dropdown'
 import PasswordField from '../vault/PasswordField'
 import RecoveryKeyPanel from '../vault/RecoveryKeyPanel'
-import { backupPassphraseProblem, LOCK_AFTER_CHOICES, nearestLockChoice, type Settings } from '../vault/rules'
+import { backupPassphraseProblem, lockChoices, nearestLockChoice, type Settings } from '../vault/rules'
 import { useNotice } from '../hooks/useNotice'
 import { useProfile } from '../hooks/profile'
 import { syncApi } from '../api/sync'
@@ -55,14 +55,14 @@ export default function SettingsPage() {
     vault.lockPrefs().then(
       (loaded) => {
         setPrefs(loaded)
-        setLockAfter(String(nearestLockChoice(loaded.lock_after_secs)))
+        setLockAfter(String(nearestLockChoice(loaded.lock_after_secs, lockChoices(phone))))
       },
       (e) => setMessage(errorText(e)),
     )
     vault.notifyDue().then(setNotifyDue, (e) => setMessage(errorText(e)))
     vault.dataLocation().then(setLocation, () => undefined)
     vault.backupSchedule().then(setSchedule, (e) => setMessage(errorText(e)))
-  }, [setMessage])
+  }, [setMessage, phone])
 
   if (!inDesktopApp()) return <p>{t('settings.unavailable')}</p>
 
@@ -89,8 +89,9 @@ export default function SettingsPage() {
     const form = new FormData(event.currentTarget)
     const next: LockPrefs = {
       lock_after_secs: Number(form.get('lock_after')),
-      lock_on_minimize: form.get('lock_on_minimize') === 'on',
-      lock_on_close: form.get('lock_on_close') === 'on',
+      // A phone has no window to minimise or close: what is stored stays.
+      lock_on_minimize: phone && prefs ? prefs.lock_on_minimize : form.get('lock_on_minimize') === 'on',
+      lock_on_close: phone && prefs ? prefs.lock_on_close : form.get('lock_on_close') === 'on',
     }
     try {
       await vault.saveLockPrefs(next)
@@ -264,17 +265,21 @@ export default function SettingsPage() {
               label={t('settings.lockAfter')}
               name="lock_after"
               value={lockAfter}
-              options={LOCK_AFTER_CHOICES.map((choice) => ({ value: String(choice.seconds), label: t(choice.labelKey) }))}
+              options={lockChoices(phone).map((choice) => ({ value: String(choice.seconds), label: t(choice.labelKey) }))}
               onChange={setLockAfter}
             />
-            <label className="check">
-              <input name="lock_on_minimize" type="checkbox" defaultChecked={prefs.lock_on_minimize} />
-              {t('settings.lockMinimized')}
-            </label>
-            <label className="check">
-              <input name="lock_on_close" type="checkbox" defaultChecked={prefs.lock_on_close} />
-              {t('settings.lockClosed')}
-            </label>
+            {phone ? null : (
+              <>
+                <label className="check">
+                  <input name="lock_on_minimize" type="checkbox" defaultChecked={prefs.lock_on_minimize} />
+                  {t('settings.lockMinimized')}
+                </label>
+                <label className="check">
+                  <input name="lock_on_close" type="checkbox" defaultChecked={prefs.lock_on_close} />
+                  {t('settings.lockClosed')}
+                </label>
+              </>
+            )}
             <div className="actions">
               <button type="submit">{t('common.save')}</button>
               <button type="button" onClick={() => void vault.lock().then(() => window.location.reload())}>
@@ -316,62 +321,65 @@ export default function SettingsPage() {
           </div>
         )}
 
-        <div className="settings-block">
-          <h2>{t('settings.backup')}</h2>
-          <form onSubmit={onBackup}>
-            <p className="hint">{t('settings.backupHint')}</p>
-            <PasswordField label={t('settings.backupPassphrase')} name="backup_passphrase" />
-            <PasswordField label={t('settings.backupPassphraseRepeat')} name="backup_confirm" />
-            <div className="actions">
-              <button type="submit" disabled={busy}>
-                {t('settings.backupCreate')}
-              </button>
-            </div>
-          </form>
-          <form onSubmit={onSchedule}>
-            <p className="hint">{t('settings.scheduleHint')}</p>
-            {schedule && (
-              <p className="hint">
-                {t('settings.scheduleOn', { every: everyLabel(schedule.everyDays), folder: schedule.folder })}{' '}
-                {schedule.lastAttemptAt &&
-                  t(schedule.lastOk ? 'settings.scheduleLast' : 'settings.scheduleFailed', {
-                    time: whenText(schedule.lastAttemptAt, locale, timezone),
-                  })}
-              </p>
-            )}
-            <PasswordField label={t('settings.backupPassphrase')} name="schedule_passphrase" />
-            <PasswordField label={t('settings.backupPassphraseRepeat')} name="schedule_confirm" />
-            <Dropdown
-              label={t('settings.scheduleEvery')}
-              value={every}
-              options={EVERY_CHOICES.map((choice) => ({ value: String(choice.days), label: t(choice.labelKey) }))}
-              onChange={setEvery}
-            />
-            <div className="actions">
-              <button type="submit" disabled={busy}>
-                {t('settings.scheduleStart')}
-              </button>
-              {schedule && (
-                <button type="button" onClick={() => void onStopSchedule()}>
-                  {t('settings.scheduleStop')}
+        {/* A backup is a file, and a phone cannot save one yet: its data is also on the desktop, which has the backups. */}
+        {!phone && (
+          <div className="settings-block">
+            <h2>{t('settings.backup')}</h2>
+            <form onSubmit={onBackup}>
+              <p className="hint">{t('settings.backupHint')}</p>
+              <PasswordField label={t('settings.backupPassphrase')} name="backup_passphrase" />
+              <PasswordField label={t('settings.backupPassphraseRepeat')} name="backup_confirm" />
+              <div className="actions">
+                <button type="submit" disabled={busy}>
+                  {t('settings.backupCreate')}
                 </button>
+              </div>
+            </form>
+            <form onSubmit={onSchedule}>
+              <p className="hint">{t('settings.scheduleHint')}</p>
+              {schedule && (
+                <p className="hint">
+                  {t('settings.scheduleOn', { every: everyLabel(schedule.everyDays), folder: schedule.folder })}{' '}
+                  {schedule.lastAttemptAt &&
+                    t(schedule.lastOk ? 'settings.scheduleLast' : 'settings.scheduleFailed', {
+                      time: whenText(schedule.lastAttemptAt, locale, timezone),
+                    })}
+                </p>
               )}
-            </div>
-          </form>
-          <form onSubmit={onRestore}>
-            <p className="hint">{t('settings.restoreHint')}</p>
-            <PasswordField label={t('settings.backupPassphrase')} name="restore_passphrase" current />
-            <label>
-              {t('settings.restoreConfirm')}
-              <input value={restoreWord} onChange={(e) => setRestoreWord(e.target.value)} autoComplete="off" />
-            </label>
-            <div className="actions">
-              <button type="submit" disabled={busy || restoreWord !== 'RESTORE'}>
-                {t('settings.restoreStart')}
-              </button>
-            </div>
-          </form>
-        </div>
+              <PasswordField label={t('settings.backupPassphrase')} name="schedule_passphrase" />
+              <PasswordField label={t('settings.backupPassphraseRepeat')} name="schedule_confirm" />
+              <Dropdown
+                label={t('settings.scheduleEvery')}
+                value={every}
+                options={EVERY_CHOICES.map((choice) => ({ value: String(choice.days), label: t(choice.labelKey) }))}
+                onChange={setEvery}
+              />
+              <div className="actions">
+                <button type="submit" disabled={busy}>
+                  {t('settings.scheduleStart')}
+                </button>
+                {schedule && (
+                  <button type="button" onClick={() => void onStopSchedule()}>
+                    {t('settings.scheduleStop')}
+                  </button>
+                )}
+              </div>
+            </form>
+            <form onSubmit={onRestore}>
+              <p className="hint">{t('settings.restoreHint')}</p>
+              <PasswordField label={t('settings.backupPassphrase')} name="restore_passphrase" current />
+              <label>
+                {t('settings.restoreConfirm')}
+                <input value={restoreWord} onChange={(e) => setRestoreWord(e.target.value)} autoComplete="off" />
+              </label>
+              <div className="actions">
+                <button type="submit" disabled={busy || restoreWord !== 'RESTORE'}>
+                  {t('settings.restoreStart')}
+                </button>
+              </div>
+            </form>
+          </div>
+        )}
 
         <div className="settings-block">
           <h2>{t('settings.data')}</h2>

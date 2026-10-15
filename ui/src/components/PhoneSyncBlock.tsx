@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { whenText } from '../api/locales'
-import { errorText } from '../api/invoke'
+import { ApiError, errorText } from '../api/invoke'
 import { cleanDeviceName, DEVICE_NAME_MAX, syncApi, type Peer } from '../api/sync'
 import { useDeviceName } from '../hooks/useDeviceName'
 import { useNotice } from '../hooks/useNotice'
@@ -17,6 +17,7 @@ export default function PhoneSyncBlock({ locale, timezone }: { locale: string; t
   const { status, refresh, cancel, acknowledge } = useSyncStatus()
   const [devices, setDevices] = useState<Peer[] | null>(null)
   const [name, setName] = useDeviceName('desktop')
+  const [address, setAddress] = useState('')
   const [removing, setRemoving] = useState<string | null>(null)
   const [message, setMessage] = useNotice()
 
@@ -38,9 +39,9 @@ export default function PhoneSyncBlock({ locale, timezone }: { locale: string; t
     const clean = cleanDeviceName(name)
     if (!clean) return setMessage(t('sync.errorName'))
     try {
-      await (pair ? syncApi.startPairing(clean) : syncApi.start(clean))
+      await (pair ? syncApi.startPairing(clean, address) : syncApi.start(clean, address))
     } catch (error) {
-      setMessage(errorText(error))
+      setMessage(error instanceof ApiError && error.code === 'invalid_input' && address.trim() !== '' ? t('sync.errorAddress') : errorText(error))
     }
     await refresh()
   }
@@ -77,6 +78,7 @@ export default function PhoneSyncBlock({ locale, timezone }: { locale: string; t
                 {t('sync.pairedOn', { time: whenText(device.pairedAt, locale, timezone) })}
                 {' · '}
                 {device.lastSyncAt ? t('sync.lastSync', { time: whenText(device.lastSyncAt, locale, timezone) }) : t('sync.neverSynced')}
+                {device.changesWaiting !== null ? ` · ${t('sync.changesWaiting', { count: device.changesWaiting })}` : ''}
               </span>
               {removing === device.deviceId ? (
                 <span className="inline-actions">
@@ -112,6 +114,14 @@ export default function PhoneSyncBlock({ locale, timezone }: { locale: string; t
             <input value={name} onChange={(e) => setName(e.target.value)} maxLength={DEVICE_NAME_MAX} autoComplete="off" />
           </label>
           <p className="hint">{t('sync.nameHint')}</p>
+          <details className="more-options">
+            <summary>{t('sync.addressToggle')}</summary>
+            <label>
+              {t('sync.addressLabel')}
+              <input value={address} onChange={(e) => setAddress(e.target.value)} placeholder="192.168.1.20" inputMode="decimal" autoComplete="off" spellCheck={false} />
+            </label>
+            <p className="hint">{t('sync.addressHint')}</p>
+          </details>
           <div className="actions">
             <button type="button" onClick={() => void begin(true)}>
               {t('sync.add')}

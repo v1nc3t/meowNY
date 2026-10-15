@@ -1,4 +1,4 @@
-import { lazy, useEffect, useState } from 'react'
+import { lazy, useEffect, useState, type ReactNode } from 'react'
 import { createBrowserRouter, RouterProvider, Navigate } from 'react-router-dom'
 import AppLayout from './layouts/AppLayout'
 import { pageLoaders } from './pages'
@@ -14,6 +14,11 @@ const RecurringPage = lazy(pageLoaders.recurring)
 const ExportPage = lazy(pageLoaders.export)
 const SettingsPage = lazy(pageLoaders.settings)
 const SyncPage = lazy(pageLoaders.sync)
+
+/** A page that a phone does not have. */
+function NotOnPhone({ children }: { children: ReactNode }) {
+  return useProfile() === 'phone' ? <Navigate to="/app/dashboard" replace /> : children
+}
 
 /** Opens on the dashboard. A phone that has not met its desktop yet opens on the sync screen: it has nothing to show before that. */
 function Home() {
@@ -41,7 +46,7 @@ const router = createBrowserRouter([
       { path: 'categories', element: <CategoriesPage /> },
       { path: 'budgets', element: <BudgetsPage /> },
       { path: 'recurring', element: <RecurringPage /> },
-      { path: 'export', element: <ExportPage /> },
+      { path: 'export', element: <NotOnPhone><ExportPage /></NotOnPhone> },
       { path: 'settings', element: <SettingsPage /> },
       { path: 'sync', element: <SyncPage /> },
     ],

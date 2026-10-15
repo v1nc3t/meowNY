@@ -504,12 +504,22 @@ pub async fn set_backup_schedule(
     passphrase: String,
     every_days: u32,
 ) -> Result<bool, AppError> {
-    use tauri_plugin_dialog::DialogExt;
     backup::check_passphrase(&passphrase)?;
-    let Some(folder) = app.dialog().file().blocking_pick_folder() else { return Ok(false) };
-    let folder = folder.into_path().map_err(|_| AppError::Internal)?;
-    schedule::start(&vault, &folder, &passphrase, every_days, chrono::Utc::now())?;
-    Ok(true)
+    // A phone cannot pick a folder for the app to write into (the dialog has no such call there), and its data is on the
+    // desktop too; scheduled backups are a desktop feature.
+    #[cfg(mobile)]
+    {
+        let _ = (&app, &vault, every_days);
+        Err(AppError::InvalidInput)
+    }
+    #[cfg(desktop)]
+    {
+        use tauri_plugin_dialog::DialogExt;
+        let Some(folder) = app.dialog().file().blocking_pick_folder() else { return Ok(false) };
+        let folder = folder.into_path().map_err(|_| AppError::Internal)?;
+        schedule::start(&vault, &folder, &passphrase, every_days, chrono::Utc::now())?;
+        Ok(true)
+    }
 }
 
 #[tauri::command]
@@ -643,13 +653,26 @@ pub fn sync_status(syncing: Syncing) -> SyncStatus {
     syncing.status()
 }
 
-/// Desktop: opens a window for a new phone and shows its code (read it with `sync_status`).
+/// The address a person typed to use instead of the one the system picks, for a computer on several networks. Empty means the
+/// system's choice. Only an address of a home network is taken, and not the computer's own loopback address: a phone cannot
+/// reach that.
+fn typed_address(text: Option<&str>) -> Result<Option<std::net::IpAddr>, AppError> {
+    let Some(text) = text.map(str::trim).filter(|t| !t.is_empty()) else { return Ok(None) };
+    let ip: std::net::IpAddr = text.parse().map_err(|_| AppError::InvalidInput)?;
+    if ip.is_loopback() || !crate::sync::qr::is_local(&ip) {
+        return Err(AppError::InvalidInput);
+    }
+    Ok(Some(ip))
+}
+
+/// Desktop: opens a window for a new phone and shows its code (read it with `sync_status`). `address` is optional.
 #[tauri::command]
-pub fn sync_start_pairing(vault: Shared, syncing: Syncing, name: String) -> Result<(), AppError> {
+pub fn sync_start_pairing(vault: Shared, syncing: Syncing, name: String, address: Option<String>) -> Result<(), AppError> {
     if is_phone(&vault) {
         return Err(AppError::InvalidInput);
     }
-    syncing.start_pairing(&name, None).map_err(sync_error)
+    let address = typed_address(address.as_deref())?;
+    syncing.start_pairing(&name, address).map_err(sync_error)
 }
 
 /// Desktop: the person compared the six digits and said yes or no.
@@ -662,13 +685,14 @@ pub fn sync_answer_pairing(vault: Shared, syncing: Syncing, yes: bool) -> Result
     Ok(())
 }
 
-/// Desktop: opens a window for a paired phone and shows its code.
+/// Desktop: opens a window for a paired phone and shows its code. `address` is optional.
 #[tauri::command]
-pub fn sync_start(vault: Shared, syncing: Syncing, name: String) -> Result<(), AppError> {
+pub fn sync_start(vault: Shared, syncing: Syncing, name: String, address: Option<String>) -> Result<(), AppError> {
     if is_phone(&vault) {
         return Err(AppError::InvalidInput);
     }
-    syncing.start_sync(&name, None).map_err(sync_error)
+    let address = typed_address(address.as_deref())?;
+    syncing.start_sync(&name, address).map_err(sync_error)
 }
 
 /// Phone: the text of a scanned code. A pairing code pairs, a sync code syncs.
@@ -703,7 +727,19 @@ pub fn sync_remove_device(syncing: Syncing, device_id: String) -> Result<bool, A
 
 #[cfg(test)]
 mod tests {
-    use super::COMMANDS;
+    use super::{typed_address, COMMANDS};
+
+    #[test]
+    fn an_address_typed_in_the_app_must_be_one_of_a_home_network() {
+        assert_eq!(typed_address(None).unwrap(), None);
+        assert_eq!(typed_address(Some("  ")).unwrap(), None, "empty means the system's choice");
+        assert_eq!(typed_address(Some(" 192.168.1.20 ")).unwrap(), Some("192.168.1.20".parse().unwrap()));
+        assert_eq!(typed_address(Some("10.0.0.7")).unwrap(), Some("10.0.0.7".parse().unwrap()));
+        assert_eq!(typed_address(Some("fd12:3456:789a::1")).unwrap(), Some("fd12:3456:789a::1".parse().unwrap()));
+        for bad in ["8.8.8.8", "127.0.0.1", "::1", "0.0.0.0", "192.168.1.20:5000", "my-computer.local", "192.168.1", "2001:db8::1"] {
+            assert!(typed_address(Some(bad)).is_err(), "{bad}");
+        }
+    }
 
     #[test]
     fn build_script_lists_every_command() {

@@ -21,6 +21,8 @@ pub struct Peer {
     pub last_sync_at: Option<String>,
     /// The currency was changed after the last sync with this device, so it still shows the old one until the next sync.
     pub currency_behind: bool,
+    /// How many changes were made on this device since the last sync with that one (none if they never synced).
+    pub changes_waiting: Option<u32>,
 }
 
 /// A device name as the person sees it in the list: 1 to 50 characters, nothing that is not text.
@@ -48,9 +50,28 @@ pub fn list(conn: &Connection) -> Result<Vec<Peer>, SyncError> {
             (Some(_), None) => true,
             (None, _) => false,
         };
-        peers.push(Peer { device_id, name, paired_at, last_sync_at, currency_behind });
+        let changes_waiting = match synced_ms {
+            Some(synced) => Some(changes_since(conn, synced)?),
+            None => None,
+        };
+        peers.push(Peer { device_id, name, paired_at, last_sync_at, currency_behind, changes_waiting });
     }
     Ok(peers)
+}
+
+/// How many rows this device changed after `since_ms` (a moment in milliseconds): what the next sync has to send. Only its own
+/// changes count. A row that came from the other device carries that device's mark in its stamp, so the rows a sync brought in
+/// are never counted as waiting, whatever the two clocks said.
+pub fn changes_since(conn: &Connection, since_ms: u64) -> Result<u32, SyncError> {
+    let device: String = conn.query_row("SELECT substr(device_id, 1, 8) FROM sync_clock WHERE id = 1", [], |r| r.get(0))?;
+    let from = format!("{:013}", since_ms.saturating_add(1));
+    let mut total: i64 = 0;
+    for table in ["categories", "budgets", "recurring_transactions", "transactions", "settings", "sync_deleted"] {
+        // The names are fixed above, never typed by anyone.
+        let sql = format!("SELECT count(*) FROM {table} WHERE stamp >= ?1 AND substr(stamp, 20, 8) = ?2");
+        total += conn.query_row(&sql, params![from, device], |r| r.get::<_, i64>(0))?;
+    }
+    Ok(u32::try_from(total).unwrap_or(u32::MAX))
 }
 
 /// Pairs with a device. A device that was paired before (the same id) is replaced, with the new secret.
@@ -173,6 +194,26 @@ mod tests {
         add(&conn, B, "Never synced", &[2u8; 32], "2026-10-16T10:00:00.000Z").unwrap();
         assert!(list(&conn).unwrap()[1].currency_behind, "a device that never synced has not seen the change");
         assert!(serde_json::to_string(&list(&conn).unwrap()[0]).unwrap().contains(r#""currencyBehind":false"#));
+    }
+
+    #[test]
+    fn changes_waiting_are_this_devices_own_changes_after_the_last_sync() {
+        let conn = db();
+        add(&conn, A, "Phone", &[1u8; 32], "2026-10-15T10:00:00.000Z").unwrap();
+        assert_eq!(list(&conn).unwrap()[0].changes_waiting, None, "they never synced, so there is nothing to count from");
+        // A sync long ago: every row this device has is later than it.
+        touch(&conn, A, "2001-01-01T00:00:00.000Z").unwrap();
+        let base = list(&conn).unwrap()[0].changes_waiting.unwrap();
+        conn.execute("INSERT INTO categories (type, name) VALUES ('EXPENSE', 'Food')", []).unwrap();
+        assert_eq!(list(&conn).unwrap()[0].changes_waiting, Some(base + 1), "a new row of this device waits");
+        // A row that came from the other device is newer than that sync too, but it is not this device's to send.
+        conn.execute("INSERT INTO categories (type, name, sync_id, stamp) VALUES ('INCOME', 'Pay', ?1, '1999999999999-0000-deadbeef')", [&"ab".repeat(16)]).unwrap();
+        assert_eq!(list(&conn).unwrap()[0].changes_waiting, Some(base + 1), "what the other device sent is not counted");
+        conn.execute("DELETE FROM categories WHERE name = 'Food'", []).unwrap();
+        // A sync after the changes: nothing waits.
+        touch(&conn, A, "2100-01-01T00:00:00.000Z").unwrap();
+        assert_eq!(list(&conn).unwrap()[0].changes_waiting, Some(0));
+        assert!(serde_json::to_string(&list(&conn).unwrap()[0]).unwrap().contains(r#""changesWaiting":0"#));
     }
 
     #[test]

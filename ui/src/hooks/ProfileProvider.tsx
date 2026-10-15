@@ -17,6 +17,11 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
     syncApi.profile().then(setProfile, () => setProfile('desktop'))
   }, [])
 
+  // Styles that are only for a phone (tap sizes, safe areas) hang on this class of the page.
+  useEffect(() => {
+    document.documentElement.classList.toggle('is-phone', profile === 'phone')
+  }, [profile])
+
   if (profile === null) return null
   // Set before the children draw, so no screen shows a shortcut hint on a phone.
   showShortcutHints(profile !== 'phone')

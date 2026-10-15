@@ -445,4 +445,20 @@ export const pt: Messages = {
   'sync.reason.internal': 'algo correu mal. tenta outra vez.',
   'sync.reason.no_network': 'este computador não tem endereço na rede doméstica. liga-te ao wifi e tenta outra vez.',
   'sync.reason.nobody_paired': 'ainda não há nenhum telemóvel emparelhado. adiciona primeiro um telemóvel.',
+
+  // Phone: tabs, quick add, and the sync extras
+  'nav.tabs': 'menu principal',
+  'nav.more': 'mais',
+  'quick.fab': 'adicionar uma transação',
+  'quick.title': 'adição rápida',
+  'quick.errorCategory': 'escolhe uma categoria.',
+  'quick.added': 'adicionado {amount} a {category}.',
+  'quick.recent': 'categorias recentes',
+  'quick.other': 'outra categoria',
+  'quick.name': 'nome (opcional)',
+  'sync.changesWaiting': 'alterações pendentes: {count}',
+  'sync.addressToggle': 'outro endereço…',
+  'sync.addressLabel': 'endereço deste computador',
+  'sync.addressHint': 'só se o telemóvel não chegar ao código, por exemplo quando este computador está em várias redes. escreve o endereço dele no wifi de casa, como 192.168.1.20. deixa vazio para o habitual.',
+  'sync.errorAddress': 'esse não é um endereço de uma rede doméstica, como 192.168.1.20.',
 }

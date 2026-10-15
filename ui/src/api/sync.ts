@@ -61,6 +61,8 @@ export const Peer = z.object({
   lastSyncAt: stamp.nullable(),
   /** The currency was changed after the last sync with this device, so it shows the old one until the next sync. */
   currencyBehind: z.boolean(),
+  /** How many changes were made on this device since the last sync with that one; null when they never synced. */
+  changesWaiting: z.number().int().nonnegative().nullable(),
 })
 export type Peer = z.infer<typeof Peer>
 
@@ -84,12 +86,15 @@ export const syncApi = {
   profile: () => call('app_profile', Profile),
   attempts: () => call('unlock_attempts', Attempts.nullable()),
   status: () => call('sync_status', Status),
-  /** Desktop: opens a window for a new phone. The code is in the status. `name` is what the phone will call this computer. */
-  startPairing: (name: string) => call('sync_start_pairing', z.null(), { name }).then(() => undefined),
+  /**
+   * Desktop: opens a window for a new phone. The code is in the status. `name` is what the phone will call this computer.
+   * `address` is another address of this computer on the home network, for one that is on several networks; empty is the system's choice.
+   */
+  startPairing: (name: string, address = '') => call('sync_start_pairing', z.null(), { name, address: address.trim() || null }).then(() => undefined),
   /** Desktop: the person compared the two codes. */
   answerPairing: (yes: boolean) => call('sync_answer_pairing', z.null(), { yes }).then(() => undefined),
   /** Desktop: opens a window for the paired phones. */
-  start: (name: string) => call('sync_start', z.null(), { name }).then(() => undefined),
+  start: (name: string, address = '') => call('sync_start', z.null(), { name, address: address.trim() || null }).then(() => undefined),
   /** Phone: the text of a scanned code. A pairing code pairs and a sync code syncs. */
   scan: (text: string, name: string) => call('sync_scan', z.null(), { text, name }).then(() => undefined),
   cancel: () => call('sync_cancel', z.null()).then(() => undefined),

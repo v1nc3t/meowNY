@@ -445,4 +445,20 @@ export const fr: Messages = {
   'sync.reason.internal': "quelque chose s'est mal passé. réessaie.",
   'sync.reason.no_network': "cet ordinateur n'a pas d'adresse sur le réseau local. connecte-toi à ton wifi et réessaie.",
   'sync.reason.nobody_paired': "aucun téléphone n'est encore associé. ajoute d'abord un téléphone.",
+
+  // Phone: tabs, quick add, and the sync extras
+  'nav.tabs': 'menu principal',
+  'nav.more': 'plus',
+  'quick.fab': 'ajouter une transaction',
+  'quick.title': 'ajout rapide',
+  'quick.errorCategory': 'choisis une catégorie.',
+  'quick.added': '{amount} ajouté à {category}.',
+  'quick.recent': 'catégories récentes',
+  'quick.other': 'autre catégorie',
+  'quick.name': 'nom (facultatif)',
+  'sync.changesWaiting': 'modifications en attente : {count}',
+  'sync.addressToggle': 'autre adresse…',
+  'sync.addressLabel': 'adresse de cet ordinateur',
+  'sync.addressHint': "seulement si le téléphone n'atteint pas le code, par exemple quand cet ordinateur est sur plusieurs réseaux. saisis son adresse sur ton wifi, comme 192.168.1.20. laisse vide pour l'adresse habituelle.",
+  'sync.errorAddress': "ce n'est pas une adresse de réseau local, comme 192.168.1.20.",
 }

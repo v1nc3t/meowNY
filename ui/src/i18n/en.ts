@@ -456,6 +456,22 @@ export const en = {
   'sync.reason.internal': 'something went wrong. try again.',
   'sync.reason.no_network': 'this computer has no home network address. connect to your wifi and try again.',
   'sync.reason.nobody_paired': 'no phone is paired yet. add a phone first.',
+
+  // Phone: tabs, quick add, and the sync extras
+  'nav.tabs': 'main menu',
+  'nav.more': 'more',
+  'quick.fab': 'add a transaction',
+  'quick.title': 'quick add',
+  'quick.errorCategory': 'choose a category.',
+  'quick.added': 'added {amount} to {category}.',
+  'quick.recent': 'recent categories',
+  'quick.other': 'other category',
+  'quick.name': 'name (optional)',
+  'sync.changesWaiting': 'changes waiting: {count}',
+  'sync.addressToggle': 'another address…',
+  'sync.addressLabel': 'address of this computer',
+  'sync.addressHint': 'only if the phone cannot reach the code, for example when this computer is on several networks. type its address on your home wifi, like 192.168.1.20. leave it empty for the usual one.',
+  'sync.errorAddress': 'that is not an address of a home network, like 192.168.1.20.',
 } as const
 
 export type MessageKey = keyof typeof en

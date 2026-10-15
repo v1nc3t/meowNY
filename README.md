@@ -35,6 +35,7 @@ meowNY is a desktop app for tracking income and expenses against monthly budgets
   - [Program names](#program-names)
   - [Run the app](#run-the-app)
   - [Build a bundle](#build-a-bundle)
+  - [Build the Android app](#build-the-android-app)
   - [Where the data lives](#where-the-data-lives)
 - [Usage](#usage)
   - [Keyboard shortcuts](#keyboard-shortcuts)
@@ -73,7 +74,7 @@ meowNY is a desktop app for tracking income and expenses against monthly budgets
 - Export to JSON, CSV, Excel and PDF, for the period and categories you choose.
 - "Delete all my data" removes the database, its key and the app's own backups.
 
-**Your phone (phase 8: the sync and the screens are built; the Android package is not yet)**
+**Your phone (phase 8: the sync, the screens and the build for Android are written; the Android build has not been run yet)**
 
 - The phone keeps a full copy of your data, works on its own when you are away, and can change everything the desktop can. Back home, the two sync.
 - There is no server of any kind. The desktop shows a QR code, the phone scans it, and the phone connects straight to the desktop on your home network. Every sync starts that way, and the code works once and only for a couple of minutes. Both devices must be on the same wifi network (a network that stops devices from talking to each other, such as many hotels, does not work; connect the desktop to the phone's hotspot there).
@@ -81,6 +82,7 @@ meowNY is a desktop app for tracking income and expenses against monthly budgets
 - On the phone the data is locked by a passphrase, and the phone erases itself after 5 wrong ones. The data comes back by pairing again with the desktop.
 - The currency is changed on the desktop only, and the desktop reminds you to sync the phone.
 - The first time the desktop listens, Windows or macOS may ask whether meowNY may accept connections on the network. Allow it for private networks only; nothing outside your home network is ever involved.
+- On the phone there is a bottom bar with the main pages, and a round "+" on every page to add a transaction in a few taps: the amount first, then the category from the ones you used lately. There is no export and no backup file on the phone, because the desktop keeps those; and Android's own cloud backup of the app is turned off, so the data never leaves your phone except by syncing with your computer.
 
 **For scripts and AI agents (desktop only)**
 
@@ -145,6 +147,22 @@ npm run tauri build
 ```
 
 This builds a release version of the app and the installer formats Tauri supports for your system. The result is not signed, and signed installers for all three systems are planned for the first release.
+
+### Build the Android app
+
+The phone app is the same UI and the same Rust core, packaged by Tauri mobile. It is not run or tested on a phone yet (see [docs/PLAN.md](docs/PLAN.md), phase 8). The CI job `.github/workflows/android.yml` builds a debug-signed APK on every change to the app, and keeps it as a download; building it by hand needs:
+
+- Java 17, the Android SDK, and the Android NDK 27 (`sdkmanager "ndk;27.2.12479018"`), with `ANDROID_HOME`, `NDK_HOME` and `ANDROID_NDK_HOME` set, and the NDK's `toolchains/llvm/prebuilt/<system>/bin` folder on your `PATH` (SQLCipher is built with its own OpenSSL, which needs the NDK compilers)
+- The Rust target for the phone: `rustup target add aarch64-linux-android`
+
+```bash
+npx tauri android init                        # makes src-tauri/gen/android, which is not kept in git
+python3 scripts/android-patch.py              # no Android backup of the app's folder, no screenshots of it
+npx tauri android build --apk --target aarch64 --debug
+adb install src-tauri/gen/android/app/build/outputs/apk/universal/debug/app-universal-debug.apk
+```
+
+The APK is signed with a debug key, which is enough to install it by hand ("install unknown apps" on the phone, or `adb install`). A release key and a store listing belong to the release phase. Run `python3 scripts/android-patch.py` again after every `tauri android init`: it keeps Android's backup from copying the encrypted data and its secret to a Google account, and it makes the app's window secure.
 
 ### Where the data lives
 
@@ -399,7 +417,7 @@ The full plan, with what is done in each phase, is in [docs/PLAN.md](docs/PLAN.m
 | 3 to 5 | Categories, transactions, budgets, recurring items, statistics and charts | Done |
 | 6 | Encrypted backup and export | Done |
 | 7 | Command line for scripts and AI agents (desktop only) | Done. Installing it together with the app is part of phase 11 |
-| 8 | Android app that keeps a full offline copy and syncs with the desktop at home by scanning a QR code (iOS comes later) | In progress: the sync, the phone vault and the screens are built and tested on the desktop. The Android package is next |
+| 8 | Android app that keeps a full offline copy and syncs with the desktop at home by scanning a QR code (iOS comes later) | In progress: the sync, the phone vault and the screens are built and tested on the desktop, and the Android build is written (a CI job and a hardening script) but has not been run yet |
 | 9 | Adding transactions from the phone without opening the app | Planned |
 | 10 | Bank connection through an aggregator with your own key. No project-run backend, ever | Planned |
 | 11 | Signed installers, updates, `SECURITY.md`, `CONTRIBUTING.md` and install guides | Planned |

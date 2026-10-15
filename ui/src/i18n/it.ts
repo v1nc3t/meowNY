@@ -445,4 +445,20 @@ export const it: Messages = {
   'sync.reason.internal': 'qualcosa è andato storto. riprova.',
   'sync.reason.no_network': 'questo computer non ha un indirizzo nella rete di casa. collegati al wifi e riprova.',
   'sync.reason.nobody_paired': 'nessun telefono è ancora associato. aggiungi prima un telefono.',
+
+  // Phone: tabs, quick add, and the sync extras
+  'nav.tabs': 'menu principale',
+  'nav.more': 'altro',
+  'quick.fab': 'aggiungi una transazione',
+  'quick.title': 'aggiunta rapida',
+  'quick.errorCategory': 'scegli una categoria.',
+  'quick.added': 'aggiunto {amount} a {category}.',
+  'quick.recent': 'categorie recenti',
+  'quick.other': 'altra categoria',
+  'quick.name': 'nome (facoltativo)',
+  'sync.changesWaiting': 'modifiche in attesa: {count}',
+  'sync.addressToggle': 'un altro indirizzo…',
+  'sync.addressLabel': 'indirizzo di questo computer',
+  'sync.addressHint': 'solo se il telefono non raggiunge il codice, per esempio quando questo computer è su più reti. scrivi il suo indirizzo sul wifi di casa, come 192.168.1.20. lascia vuoto per quello abituale.',
+  'sync.errorAddress': 'quello non è un indirizzo di una rete di casa, come 192.168.1.20.',
 }

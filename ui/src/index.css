@@ -335,13 +335,6 @@ p.warn {
   min-width: 0;
 }
 
-.sidebar-title {
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-  min-width: 0;
-}
-
 .sidebar-toggle {
   display: inline-flex;
   align-items: center;
@@ -3022,3 +3015,263 @@ html.is-scanning #root {
 .tx-page > .collapse.wide {
   margin-top: -1rem;
 }
+
+/* The phone's shell (phase 8): a bar at the top with the name and the lock, the page, tabs at the bottom, and a round button for
+   adding a transaction. Sizes follow the phone: tap targets of at least 44 px, inputs of at least 16 px, the screen edges (notch,
+   gesture bar) are left free, and the height is the visible height (the address-bar-free `dvh`). */
+html.is-phone .gate {
+  min-height: 100dvh;
+  padding-top: calc(2rem + env(safe-area-inset-top, 0px));
+  padding-bottom: calc(2rem + env(safe-area-inset-bottom, 0px));
+}
+
+html.is-phone button,
+html.is-phone .pick-button {
+  min-height: 2.75rem;
+}
+
+html.is-phone input:not([type='checkbox']),
+html.is-phone select,
+html.is-phone textarea {
+  min-height: 2.75rem;
+  font-size: max(16px, 1rem);
+}
+
+html.is-phone input[type='checkbox'] {
+  width: 1.5rem;
+  height: 1.5rem;
+}
+
+.app-shell.is-phone.is-locked {
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  height: 100dvh;
+  max-height: 100dvh;
+}
+
+.phone-header {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: calc(0.25rem + env(safe-area-inset-top, 0px)) 1rem 0.25rem;
+  border-bottom: 0.8px solid var(--border);
+  background: #000;
+}
+
+.phone-lock {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0 0.625rem;
+  color: var(--text-muted);
+  font-size: 0.8125rem;
+}
+
+.tab-icon {
+  width: 1.375rem;
+  height: 1.375rem;
+  flex: 0 0 auto;
+}
+
+.phone-lock .tab-icon {
+  width: 1.125rem;
+  height: 1.125rem;
+}
+
+.app-shell.is-phone .app-main > main {
+  padding: 1rem 1rem 0.5rem;
+}
+
+/* The round button covers the corner of the page; the lists leave room below their last row. */
+.app-shell.is-phone .app-main > main > section > .tx-pane.wide {
+  padding-bottom: 5rem;
+}
+
+.app-shell.is-phone.is-locked .tx-page.budget-page {
+  padding-bottom: 5rem;
+}
+
+.phone-tabs {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  border-top: 0.8px solid var(--border);
+  background: #000;
+}
+
+.phone-tab {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.125rem;
+  min-width: 0;
+  min-height: 3.5rem;
+  padding: 0.375rem 0.125rem;
+  color: var(--text-muted);
+  font-size: 0.6875rem;
+  letter-spacing: 0.02em;
+  text-decoration: none;
+}
+
+.phone-tab > span {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.phone-tab:hover:not(:disabled) {
+  text-decoration: none;
+}
+
+/* The page you are on: brighter, with a short line above it (a line, not a box). */
+.phone-tab.active {
+  color: var(--text-h);
+  box-shadow: inset 0 2px 0 var(--accent);
+}
+
+.phone-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 35;
+  width: 100%;
+  min-width: 0;
+  padding: 0;
+  background: rgb(0 0 0 / 55%);
+}
+
+.phone-backdrop:hover:not(:disabled) {
+  text-decoration: none;
+}
+
+.phone-more {
+  position: fixed;
+  right: 0.75rem;
+  bottom: calc(3.5rem + env(safe-area-inset-bottom, 0px) + 0.5rem);
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  min-width: 12rem;
+  background: #000;
+  border: 0.8px solid var(--border-strong);
+}
+
+.phone-more-item {
+  display: flex;
+  align-items: center;
+  gap: 0.875rem;
+  min-height: 3rem;
+  padding: 0 1rem;
+  color: var(--text);
+  font-size: 0.875rem;
+  text-decoration: none;
+}
+
+.phone-more-item.active {
+  color: var(--text-h);
+}
+
+.fab {
+  position: fixed;
+  right: 1rem;
+  bottom: calc(3.5rem + env(safe-area-inset-bottom, 0px) + 1rem);
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 3.5rem;
+  height: 3.5rem;
+  min-width: 0;
+  padding: 0;
+  border-radius: 50%;
+  background: var(--text-h);
+  color: #000;
+}
+
+html.is-phone .fab {
+  min-height: 3.5rem;
+}
+
+.fab:hover:not(:disabled) {
+  text-decoration: none;
+}
+
+.fab-icon {
+  width: 1.75rem;
+  height: 1.75rem;
+  stroke-width: 2;
+}
+
+/* A short message after adding: it sits above the tabs and goes away by itself. */
+.toast {
+  position: fixed;
+  left: 1rem;
+  right: 1rem;
+  bottom: calc(3.5rem + env(safe-area-inset-bottom, 0px) + 5.25rem);
+  z-index: 45;
+  margin: 0;
+  padding: 0.75rem 1rem;
+  background: #000;
+  border: 1px solid var(--accent);
+  color: var(--text-h);
+  text-align: center;
+}
+
+.quick-kind {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.5rem;
+}
+
+.quick-kind button,
+.quick-chips button {
+  background: var(--surface);
+  color: var(--text);
+}
+
+.quick-kind button[aria-pressed='true'],
+.quick-chips button[aria-pressed='true'] {
+  color: var(--text-h);
+  box-shadow: inset 0 -2px 0 var(--accent);
+}
+
+.quick-amount {
+  min-height: 3.5rem;
+  font-size: 1.75rem;
+  text-align: right;
+}
+
+html.is-phone .quick-amount {
+  font-size: 1.75rem;
+}
+
+.quick-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.quick-chips button {
+  padding: 0 0.875rem;
+}
+
+/* A short list of choices that opens inside a form. */
+.more-options > summary {
+  cursor: pointer;
+  padding: 0.375rem 0;
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+}
+
+.more-options > label {
+  margin-top: 0.5rem;
+}
+
+/* A phone has no mouse and a narrow card: the buttons sit under the text, and the first one starts where the text starts. */
+@media (max-width: 51.99em) {
+  .card-actions button:first-child {
+    padding-left: 0;
+  }
+}
+

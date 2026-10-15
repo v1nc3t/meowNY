@@ -444,4 +444,20 @@ export const es: Messages = {
   'sync.reason.internal': 'algo salió mal. inténtalo de nuevo.',
   'sync.reason.no_network': 'este ordenador no tiene dirección en la red doméstica. conéctate a tu wifi e inténtalo de nuevo.',
   'sync.reason.nobody_paired': 'aún no hay ningún móvil vinculado. añade primero un móvil.',
+
+  // Phone: tabs, quick add, and the sync extras
+  'nav.tabs': 'menú principal',
+  'nav.more': 'más',
+  'quick.fab': 'añadir una transacción',
+  'quick.title': 'añadir rápido',
+  'quick.errorCategory': 'elige una categoría.',
+  'quick.added': 'añadido {amount} a {category}.',
+  'quick.recent': 'categorías recientes',
+  'quick.other': 'otra categoría',
+  'quick.name': 'nombre (opcional)',
+  'sync.changesWaiting': 'cambios pendientes: {count}',
+  'sync.addressToggle': 'otra dirección…',
+  'sync.addressLabel': 'dirección de este ordenador',
+  'sync.addressHint': 'solo si el móvil no llega al código, por ejemplo cuando este ordenador está en varias redes. escribe su dirección en tu wifi de casa, como 192.168.1.20. déjalo vacío para usar la habitual.',
+  'sync.errorAddress': 'esa no es una dirección de una red doméstica, como 192.168.1.20.',
 }

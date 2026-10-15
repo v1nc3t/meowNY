@@ -68,10 +68,10 @@ test('a status the app would never send is refused', () => {
 })
 
 test('a paired device and the attempts are read as the app sends them', () => {
-  const peer = { deviceId: 'ab'.repeat(16), name: 'Phone', pairedAt: '2026-10-15T10:20:30.123Z', lastSyncAt: null, currencyBehind: false }
+  const peer = { deviceId: 'ab'.repeat(16), name: 'Phone', pairedAt: '2026-10-15T10:20:30.123Z', lastSyncAt: null, currencyBehind: false, changesWaiting: null }
   assert.deepEqual(Peer.parse(peer), peer)
-  assert.equal(Peer.parse({ ...peer, lastSyncAt: '2026-10-15T11:00:00.000Z' }).lastSyncAt, '2026-10-15T11:00:00.000Z')
-  for (const bad of [{ ...peer, deviceId: 'AB'.repeat(16) }, { ...peer, deviceId: 'ab' }, { ...peer, pairedAt: 'now' }, { ...peer, name: undefined }, { ...peer, currencyBehind: 'yes' }, { ...peer, currencyBehind: undefined }]) {
+  assert.equal(Peer.parse({ ...peer, lastSyncAt: '2026-10-15T11:00:00.000Z', changesWaiting: 3 }).changesWaiting, 3)
+  for (const bad of [{ ...peer, deviceId: 'AB'.repeat(16) }, { ...peer, deviceId: 'ab' }, { ...peer, pairedAt: 'now' }, { ...peer, name: undefined }, { ...peer, currencyBehind: 'yes' }, { ...peer, currencyBehind: undefined }, { ...peer, changesWaiting: -1 }, { ...peer, changesWaiting: 1.5 }, { ...peer, changesWaiting: undefined }]) {
     assert.equal(Peer.safeParse(bad).success, false, JSON.stringify(bad))
   }
   assert.deepEqual(Attempts.parse({ failed: 3, allowed: 5, left: 2 }), { failed: 3, allowed: 5, left: 2 })

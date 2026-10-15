@@ -41,3 +41,8 @@ tempfile = "3.27.0"
 # The OS keychain. Android has none the app can use; the phone app keeps its secret in a file and relies on its passphrase.
 [target.'cfg(not(target_os = "android"))'.dependencies]
 keyring = { version = "3", default-features = false, features = ["apple-native", "windows-native", "sync-secret-service", "crypto-rust"] }
+
+# The camera of the phone, which reads the QR code that the desktop shows. It is built for the phone only; the desktop does not
+# contain it. If it ever breaks, pairing and syncing stop and the rest of the app does not.
+[target.'cfg(any(target_os = "android", target_os = "ios"))'.dependencies]
+tauri-plugin-barcode-scanner = "2"

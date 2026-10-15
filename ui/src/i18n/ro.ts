@@ -442,4 +442,20 @@ export const ro: Messages = {
   'sync.reason.internal': 'ceva nu a mers bine. încearcă din nou.',
   'sync.reason.no_network': 'acest calculator nu are adresă în rețeaua de acasă. conectează-te la wifi și încearcă din nou.',
   'sync.reason.nobody_paired': 'încă nu este asociat niciun telefon. adaugă mai întâi un telefon.',
+
+  // Phone: tabs, quick add, and the sync extras
+  'nav.tabs': 'meniu principal',
+  'nav.more': 'mai mult',
+  'quick.fab': 'adaugă o tranzacție',
+  'quick.title': 'adăugare rapidă',
+  'quick.errorCategory': 'alege o categorie.',
+  'quick.added': 'am adăugat {amount} la {category}.',
+  'quick.recent': 'categorii recente',
+  'quick.other': 'altă categorie',
+  'quick.name': 'nume (opțional)',
+  'sync.changesWaiting': 'modificări în așteptare: {count}',
+  'sync.addressToggle': 'altă adresă…',
+  'sync.addressLabel': 'adresa acestui calculator',
+  'sync.addressHint': 'doar dacă telefonul nu ajunge la cod, de exemplu când acest calculator este în mai multe rețele. scrie adresa lui în wifi-ul de acasă, ca 192.168.1.20. lasă gol pentru cea obișnuită.',
+  'sync.errorAddress': 'aceasta nu este o adresă de rețea de acasă, ca 192.168.1.20.',
 }

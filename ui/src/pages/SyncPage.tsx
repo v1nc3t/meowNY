@@ -105,6 +105,7 @@ function PhoneSync() {
                   <span className="settings-row-label">{device.name}</span>
                   <span className="settings-row-value">
                     {device.lastSyncAt ? t('sync.lastSync', { time: whenText(device.lastSyncAt, locale, timezone) }) : t('sync.neverSynced')}
+                    {device.changesWaiting !== null ? ` · ${t('sync.changesWaiting', { count: device.changesWaiting })}` : ''}
                   </span>
                 </div>
               ))}

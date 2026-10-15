@@ -446,4 +446,20 @@ export const de: Messages = {
   'sync.reason.internal': 'etwas ist schiefgelaufen. versuche es erneut.',
   'sync.reason.no_network': 'dieser computer hat keine adresse im heimnetz. verbinde dich mit deinem wlan und versuche es erneut.',
   'sync.reason.nobody_paired': 'noch kein handy gekoppelt. füge zuerst ein handy hinzu.',
+
+  // Phone: tabs, quick add, and the sync extras
+  'nav.tabs': 'hauptmenü',
+  'nav.more': 'mehr',
+  'quick.fab': 'transaktion hinzufügen',
+  'quick.title': 'schnell hinzufügen',
+  'quick.errorCategory': 'wähle eine kategorie.',
+  'quick.added': '{amount} zu {category} hinzugefügt.',
+  'quick.recent': 'zuletzt benutzte kategorien',
+  'quick.other': 'andere kategorie',
+  'quick.name': 'name (freiwillig)',
+  'sync.changesWaiting': 'wartende änderungen: {count}',
+  'sync.addressToggle': 'andere adresse …',
+  'sync.addressLabel': 'adresse dieses computers',
+  'sync.addressHint': 'nur wenn das handy den code nicht erreicht, etwa weil dieser computer in mehreren netzen ist. gib seine adresse im heim-wlan ein, wie 192.168.1.20. leer lassen für die übliche.',
+  'sync.errorAddress': 'das ist keine adresse eines heimnetzes, wie 192.168.1.20.',
 }
