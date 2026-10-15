@@ -14,3 +14,8 @@ std-net src-tauri/src/api/http.rs  # reads and answers those connections
 std-net src-tauri/src/api/tests.rs  # tests connect to the loopback listener
 url-literal src-tauri/src/api/http.rs  # a test: a request with an absolute URL as its target is refused
 url-literal src-tauri/src/api/tests.rs  # tests: Origin values of web pages, which the API refuses
+
+# The command line program (phase 7, `cli/`). Its only connection is to the desktop app, on 127.0.0.1, and only
+# after the person gave it a token. It never talks to anything else and has no network crate.
+std-net cli/src/client.rs  # connects to the app's command API on 127.0.0.1 only
+listener cli/src/run.rs  # tests: a stand-in for the app on 127.0.0.1

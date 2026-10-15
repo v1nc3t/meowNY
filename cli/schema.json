@@ -1,0 +1,691 @@
+{
+  "api": 1,
+  "routes": [
+    {
+      "name": "status",
+      "params": [],
+      "scope": "read",
+      "summary": "The app version, the API version and the scope of the token used."
+    },
+    {
+      "name": "schema",
+      "params": [],
+      "scope": "read",
+      "summary": "Every route with its scope and arguments, so a client can discover them."
+    },
+    {
+      "name": "today",
+      "params": [],
+      "scope": "read",
+      "summary": "Today's date and the current month in the time zone set in the app."
+    },
+    {
+      "name": "settings.get",
+      "params": [],
+      "scope": "read",
+      "summary": "The currency, number format, time zone and language set in the app."
+    },
+    {
+      "name": "categories.list",
+      "params": [
+        {
+          "name": "type",
+          "required": false,
+          "summary": "INCOME or EXPENSE.",
+          "type": "string",
+          "values": [
+            "INCOME",
+            "EXPENSE"
+          ]
+        }
+      ],
+      "scope": "read",
+      "summary": "The categories that are in use, oldest first, with their ids."
+    },
+    {
+      "name": "transactions.list",
+      "params": [
+        {
+          "name": "from",
+          "required": false,
+          "summary": "Only on or after this date.",
+          "type": "date"
+        },
+        {
+          "name": "to",
+          "required": false,
+          "summary": "Only on or before this date.",
+          "type": "date"
+        },
+        {
+          "name": "categoryId",
+          "required": false,
+          "summary": "Only this category.",
+          "type": "id"
+        },
+        {
+          "name": "q",
+          "required": false,
+          "summary": "Only transactions whose name or description contains this text.",
+          "type": "string"
+        },
+        {
+          "name": "limit",
+          "required": false,
+          "summary": "How many to return, 1 to 100. Default 50.",
+          "type": "integer"
+        },
+        {
+          "name": "offset",
+          "required": false,
+          "summary": "How many to skip, for the next page. Default 0.",
+          "type": "integer"
+        }
+      ],
+      "scope": "read",
+      "summary": "Transactions, newest first, with the total that match. Up to 100 a page, 50 unless limit says otherwise."
+    },
+    {
+      "name": "budgets.overview",
+      "params": [
+        {
+          "name": "month",
+          "required": true,
+          "summary": "The month, like 2026-10.",
+          "type": "month"
+        }
+      ],
+      "scope": "read",
+      "summary": "For a month, per side (income, expense): the budget, how much of it is given to categories, what is left, and the actual so far."
+    },
+    {
+      "name": "budgets.history",
+      "params": [],
+      "scope": "read",
+      "summary": "One row per month, newest first, from the first month that had a budget: the budget and the actual for each side."
+    },
+    {
+      "name": "recurring.list",
+      "params": [],
+      "scope": "read",
+      "summary": "Every recurring item, with its schedule, its next due date and whether it is active."
+    },
+    {
+      "name": "recurring.dues",
+      "params": [
+        {
+          "name": "withinDays",
+          "required": false,
+          "summary": "How many days ahead count as upcoming, 0 to 366. Default 30.",
+          "type": "integer"
+        }
+      ],
+      "scope": "read",
+      "summary": "Active recurring items that are overdue (due before today) and those due in the next days. Today is the date in the app's time zone."
+    },
+    {
+      "name": "stats.budget",
+      "params": [
+        {
+          "name": "month",
+          "required": true,
+          "summary": "The month, like 2026-10.",
+          "type": "month"
+        }
+      ],
+      "scope": "read",
+      "summary": "Budget against actual for a month: each category with its budget, what was spent or earned, what is left and the percent used, and the totals."
+    },
+    {
+      "name": "stats.trend",
+      "params": [
+        {
+          "name": "categoryId",
+          "required": true,
+          "summary": "The category.",
+          "type": "id"
+        },
+        {
+          "name": "from",
+          "required": true,
+          "summary": "The first month, like 2026-01.",
+          "type": "month"
+        },
+        {
+          "name": "to",
+          "required": true,
+          "summary": "The last month, like 2026-10.",
+          "type": "month"
+        }
+      ],
+      "scope": "read",
+      "summary": "One category month by month, with its budget and actual for each month. At most 120 months."
+    },
+    {
+      "name": "stats.year",
+      "params": [
+        {
+          "name": "year",
+          "required": true,
+          "summary": "The year, like 2026.",
+          "type": "year"
+        }
+      ],
+      "scope": "read",
+      "summary": "Income, expense and savings for each month of a year."
+    },
+    {
+      "name": "stats.top",
+      "params": [
+        {
+          "name": "month",
+          "required": true,
+          "summary": "The month, like 2026-10.",
+          "type": "month"
+        },
+        {
+          "name": "type",
+          "required": true,
+          "summary": "INCOME or EXPENSE.",
+          "type": "string",
+          "values": [
+            "INCOME",
+            "EXPENSE"
+          ]
+        },
+        {
+          "name": "limit",
+          "required": false,
+          "summary": "How many categories, 1 to 50. Default 5.",
+          "type": "integer"
+        }
+      ],
+      "scope": "read",
+      "summary": "The categories with the most spending, or income, in a month, biggest first, with their share of the month."
+    },
+    {
+      "name": "stats.commitments",
+      "params": [],
+      "scope": "read",
+      "summary": "What the active recurring items cost, or bring in, in an average month. Items with no fixed amount are listed but not counted."
+    },
+    {
+      "name": "stats.planned",
+      "params": [
+        {
+          "name": "month",
+          "required": true,
+          "summary": "The month, like 2026-10.",
+          "type": "month"
+        }
+      ],
+      "scope": "read",
+      "summary": "Planned against paid amounts of the recurring items that were paid in a month."
+    },
+    {
+      "name": "settings.set",
+      "params": [
+        {
+          "name": "locale",
+          "required": false,
+          "summary": "How numbers and dates are written, like en-IE.",
+          "type": "string"
+        },
+        {
+          "name": "timezone",
+          "required": false,
+          "summary": "A time zone name, like Europe/Dublin.",
+          "type": "string"
+        },
+        {
+          "name": "language",
+          "required": false,
+          "summary": "The language of the app, like en or ro.",
+          "type": "string"
+        }
+      ],
+      "scope": "write",
+      "summary": "Changes the number and date format, the time zone or the language. Give at least one. The currency is changed in the app."
+    },
+    {
+      "name": "categories.create",
+      "params": [
+        {
+          "name": "name",
+          "required": true,
+          "summary": "The name.",
+          "type": "string"
+        },
+        {
+          "name": "type",
+          "required": true,
+          "summary": "INCOME or EXPENSE.",
+          "type": "string",
+          "values": [
+            "INCOME",
+            "EXPENSE"
+          ]
+        }
+      ],
+      "scope": "write",
+      "summary": "Makes a category. Its name is 1 to 50 characters and unique among the categories of that type."
+    },
+    {
+      "name": "categories.rename",
+      "params": [
+        {
+          "name": "id",
+          "required": true,
+          "summary": "The category.",
+          "type": "id"
+        },
+        {
+          "name": "name",
+          "required": true,
+          "summary": "The new name.",
+          "type": "string"
+        }
+      ],
+      "scope": "write",
+      "summary": "Renames a category. Its type cannot change."
+    },
+    {
+      "name": "categories.delete",
+      "params": [
+        {
+          "name": "id",
+          "required": true,
+          "summary": "The category.",
+          "type": "id"
+        }
+      ],
+      "scope": "write",
+      "summary": "Deletes a category: it is no longer offered or budgeted, and its transactions keep it."
+    },
+    {
+      "name": "transactions.create",
+      "params": [
+        {
+          "name": "name",
+          "required": true,
+          "summary": "What it was, 1 to 50 characters.",
+          "type": "string"
+        },
+        {
+          "name": "amount",
+          "required": true,
+          "summary": "More than zero, like 12.50.",
+          "type": "money"
+        },
+        {
+          "name": "paymentDate",
+          "required": true,
+          "summary": "The day it was paid.",
+          "type": "date"
+        },
+        {
+          "name": "categoryId",
+          "required": true,
+          "summary": "The category. Its type decides whether this is income or an expense.",
+          "type": "id"
+        },
+        {
+          "name": "description",
+          "required": false,
+          "summary": "A note.",
+          "type": "string"
+        },
+        {
+          "name": "clientUuid",
+          "required": false,
+          "summary": "A fresh UUID per transaction, so a retry cannot record it twice.",
+          "type": "uuid"
+        }
+      ],
+      "scope": "write",
+      "summary": "Records a transaction. With a clientUuid, sending the same request again gives back the first transaction instead of making another."
+    },
+    {
+      "name": "transactions.update",
+      "params": [
+        {
+          "name": "id",
+          "required": true,
+          "summary": "The transaction.",
+          "type": "id"
+        },
+        {
+          "name": "name",
+          "required": false,
+          "summary": "The new name.",
+          "type": "string"
+        },
+        {
+          "name": "amount",
+          "required": false,
+          "summary": "The new amount, more than zero.",
+          "type": "money"
+        },
+        {
+          "name": "paymentDate",
+          "required": false,
+          "summary": "The new date.",
+          "type": "date"
+        },
+        {
+          "name": "categoryId",
+          "required": false,
+          "summary": "The new category.",
+          "type": "id"
+        },
+        {
+          "name": "description",
+          "nullable": true,
+          "required": false,
+          "summary": "The new note, or null to clear it.",
+          "type": "string"
+        }
+      ],
+      "scope": "write",
+      "summary": "Changes a transaction. Fields left out stay as they are; a null description clears it."
+    },
+    {
+      "name": "transactions.delete",
+      "params": [
+        {
+          "name": "id",
+          "required": true,
+          "summary": "The transaction.",
+          "type": "id"
+        }
+      ],
+      "scope": "write",
+      "summary": "Deletes a transaction. The change history keeps what it said."
+    },
+    {
+      "name": "budgets.set",
+      "params": [
+        {
+          "name": "type",
+          "required": true,
+          "summary": "INCOME or EXPENSE.",
+          "type": "string",
+          "values": [
+            "INCOME",
+            "EXPENSE"
+          ]
+        },
+        {
+          "name": "month",
+          "required": true,
+          "summary": "The month, like 2026-10.",
+          "type": "month"
+        },
+        {
+          "name": "amountLimit",
+          "required": true,
+          "summary": "The most to spend, or the aim to earn, each month. Zero is allowed.",
+          "type": "money"
+        },
+        {
+          "name": "categoryId",
+          "required": false,
+          "summary": "The category. Leave out for the global budget of that side.",
+          "type": "id"
+        }
+      ],
+      "scope": "write",
+      "summary": "Sets a monthly budget: the global budget of a side, or one category's. A month that has already started changes only that month; this month and later ones carry the new amount forward. A category budget must match the category's type."
+    },
+    {
+      "name": "budgets.remove",
+      "params": [
+        {
+          "name": "type",
+          "required": true,
+          "summary": "INCOME or EXPENSE.",
+          "type": "string",
+          "values": [
+            "INCOME",
+            "EXPENSE"
+          ]
+        },
+        {
+          "name": "month",
+          "required": true,
+          "summary": "The month, like 2026-10.",
+          "type": "month"
+        },
+        {
+          "name": "categoryId",
+          "required": false,
+          "summary": "The category. Leave out for the global budget of that side.",
+          "type": "id"
+        }
+      ],
+      "scope": "write",
+      "summary": "Removes a budget, with the same month rules as setting one. The months before keep it, and the history stays."
+    },
+    {
+      "name": "recurring.create",
+      "params": [
+        {
+          "name": "name",
+          "required": true,
+          "summary": "What it is, 1 to 50 characters.",
+          "type": "string"
+        },
+        {
+          "name": "amount",
+          "required": false,
+          "summary": "The planned amount. Leave out for a bill that changes every time.",
+          "type": "money"
+        },
+        {
+          "name": "categoryId",
+          "required": true,
+          "summary": "The category.",
+          "type": "id"
+        },
+        {
+          "name": "startDate",
+          "required": true,
+          "summary": "The first due date. Later dates are worked out from it.",
+          "type": "date"
+        },
+        {
+          "name": "intervalUnit",
+          "required": true,
+          "summary": "DAY, WEEK, MONTH or YEAR.",
+          "type": "string",
+          "values": [
+            "DAY",
+            "WEEK",
+            "MONTH",
+            "YEAR"
+          ]
+        },
+        {
+          "name": "intervalCount",
+          "required": true,
+          "summary": "Every how many units, 1 to 1000.",
+          "type": "integer"
+        },
+        {
+          "name": "endDate",
+          "required": false,
+          "summary": "The last day it can fall due.",
+          "type": "date"
+        },
+        {
+          "name": "description",
+          "required": false,
+          "summary": "A note.",
+          "type": "string"
+        }
+      ],
+      "scope": "write",
+      "summary": "Adds a recurring item: a bill or an income that comes back every so many days, weeks, months or years."
+    },
+    {
+      "name": "recurring.update",
+      "params": [
+        {
+          "name": "id",
+          "required": true,
+          "summary": "The recurring item.",
+          "type": "id"
+        },
+        {
+          "name": "name",
+          "required": false,
+          "summary": "The new name.",
+          "type": "string"
+        },
+        {
+          "name": "amount",
+          "nullable": true,
+          "required": false,
+          "summary": "The new planned amount, or null for no fixed amount.",
+          "type": "money"
+        },
+        {
+          "name": "categoryId",
+          "required": false,
+          "summary": "The new category.",
+          "type": "id"
+        },
+        {
+          "name": "startDate",
+          "required": false,
+          "summary": "The new first due date.",
+          "type": "date"
+        },
+        {
+          "name": "intervalUnit",
+          "required": false,
+          "summary": "DAY, WEEK, MONTH or YEAR.",
+          "type": "string",
+          "values": [
+            "DAY",
+            "WEEK",
+            "MONTH",
+            "YEAR"
+          ]
+        },
+        {
+          "name": "intervalCount",
+          "required": false,
+          "summary": "Every how many units, 1 to 1000.",
+          "type": "integer"
+        },
+        {
+          "name": "endDate",
+          "nullable": true,
+          "required": false,
+          "summary": "The new last day, or null for none.",
+          "type": "date"
+        },
+        {
+          "name": "description",
+          "nullable": true,
+          "required": false,
+          "summary": "The new note, or null to clear it.",
+          "type": "string"
+        }
+      ],
+      "scope": "write",
+      "summary": "Changes a recurring item. Fields left out stay as they are; null clears the end date or the description, and a null amount makes it a bill with no fixed amount."
+    },
+    {
+      "name": "recurring.delete",
+      "params": [
+        {
+          "name": "id",
+          "required": true,
+          "summary": "The recurring item.",
+          "type": "id"
+        }
+      ],
+      "scope": "write",
+      "summary": "Deletes a recurring item. The transactions it already made stay."
+    },
+    {
+      "name": "recurring.pay",
+      "params": [
+        {
+          "name": "id",
+          "required": true,
+          "summary": "The recurring item.",
+          "type": "id"
+        },
+        {
+          "name": "amount",
+          "required": false,
+          "summary": "What was paid. Defaults to the planned amount.",
+          "type": "money"
+        },
+        {
+          "name": "paidOn",
+          "required": false,
+          "summary": "The day it was paid. Defaults to today in the app's time zone.",
+          "type": "date"
+        }
+      ],
+      "scope": "write",
+      "summary": "Turns the current occurrence into a transaction and moves the item to the next one. A bill with no fixed amount needs the amount."
+    },
+    {
+      "name": "recurring.skip",
+      "params": [
+        {
+          "name": "id",
+          "required": true,
+          "summary": "The recurring item.",
+          "type": "id"
+        }
+      ],
+      "scope": "write",
+      "summary": "Passes over the current occurrence without making a transaction."
+    },
+    {
+      "name": "recurring.pause",
+      "params": [
+        {
+          "name": "id",
+          "required": true,
+          "summary": "The recurring item.",
+          "type": "id"
+        }
+      ],
+      "scope": "write",
+      "summary": "Pauses a recurring item: it stops coming due until it is resumed."
+    },
+    {
+      "name": "recurring.resume",
+      "params": [
+        {
+          "name": "id",
+          "required": true,
+          "summary": "The recurring item.",
+          "type": "id"
+        }
+      ],
+      "scope": "write",
+      "summary": "Resumes a paused recurring item, unless its next date is past its end date."
+    },
+    {
+      "name": "recurring.end",
+      "params": [
+        {
+          "name": "id",
+          "required": true,
+          "summary": "The recurring item.",
+          "type": "id"
+        }
+      ],
+      "scope": "write",
+      "summary": "Ends a recurring item for good: it becomes inactive and its end date is today. What it already paid stays."
+    }
+  ]
+}

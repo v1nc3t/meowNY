@@ -57,7 +57,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("read token:  {read}");
     println!("write token: {write}\n");
     println!("curl -s -X POST http://127.0.0.1:{port}/v1/status -H 'Authorization: Bearer {read}'");
-    println!("curl -s -X POST http://127.0.0.1:{port}/v1/schema -H 'Authorization: Bearer {read}'");
+    println!("curl -s -X POST http://127.0.0.1:{port}/v1/schema -H 'Authorization: Bearer {read}'\n");
+    println!("meowny (build it with: cargo build --release --manifest-path cli/Cargo.toml):");
+    println!("MEOWNY_DATA_DIR={} MEOWNY_TOKEN={write} meowny transactions list --limit 3", dir.display());
     loop {
         std::thread::park();
     }

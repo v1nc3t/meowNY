@@ -2,7 +2,7 @@
 
 Local-first expense tracker. A Tauri desktop app (Rust) shows a React client and keeps all data in an encrypted SQLite file (SQLCipher) on your own machine. No server, no accounts, no telemetry. See `assets/PLAN.md` for the roadmap and `assets/data-inventory.md` for what data lives where.
 
-Categories, transactions and budgets work in the desktop app (phases 0 to 3). Recurring items, charts, backup, the CLI and phone sync are still to come; see the plan. The old Express/Postgres server design is retired and only exists in git history.
+The desktop app has categories, transactions, budgets, recurring items, charts, encrypted backup and export (phases 0 to 6). A command line for scripts and AI agents (phase 7) is in progress, and phone sync and the bank connection are still to come; see the plan. The old Express/Postgres server design is retired and only exists in git history.
 
 ## Requirements
 
@@ -58,6 +58,43 @@ Press `?` in the app to see them all. Hovering or focusing a control shows its s
 
 All shortcuts are defined in one table, `client/src/keys/shortcuts.ts`.
 
+## Command line
+
+`meowny` drives the running desktop app from a terminal, for scripts and AI agents. It is a small standalone program (under 1 MB, one dependency, `serde_json`) in `cli/`. It never opens the data file: it talks to the app over a local connection (`127.0.0.1` only) that is off until you turn it on, and every request needs a token. The desktop app's own program is also called `meowny`, so this one is built on its own.
+
+```bash
+# 1. In the app: Settings, command line access. Turn it on and make a token
+#    (read only, unless the script has to change things). It is shown once.
+# 2. Build the program; this puts `meowny` in cargo's bin folder
+cargo install --path cli
+# 3. Give it the token: in the environment, or once with `login` (read from standard input, saved
+#    readable only by you). There is deliberately no --token flag: command lines can be read by other users.
+export MEOWNY_TOKEN=mny_...
+echo "$TOKEN" | meowny login
+
+meowny status
+meowny transactions list --limit 5
+meowny transactions create --name Bread --amount 2.40 --payment-date 2026-10-14 --category-id 5
+meowny stats budget --month 2026-10 --json
+meowny transactions delete 42 --yes
+meowny --help        # and meowny <command> --help
+meowny schema        # every command, flag and exit code as JSON, without the app
+```
+
+The commands are `meowny <noun> <verb>`, worked out from the app's own list of routes. Data goes to standard output (`--json` for JSON, otherwise a plain table), messages and errors to standard error. It never asks anything: every input is a flag or standard input, commands that delete or end something need `--yes`, and a new transaction gets a fresh `--client-uuid` so a retry cannot record it twice. The app has to be running and unlocked.
+
+| Exit code | Means |
+|---|---|
+| 0 | done |
+| 1 | the app is not reachable, the answer was not understood, or another error |
+| 2 | bad usage, or a value the app refused |
+| 3 | no token, a wrong or expired token, a token that may not do this, or the app is locked |
+| 4 | not found |
+
+With `--json` an error is `{"code": "...", "message": "..."}` on standard error. The token is found in `--token-file`, then `MEOWNY_TOKEN`, then `MEOWNY_TOKEN_FILE`, then the file `login` saved; a token file that other users can read is refused. `MEOWNY_DATA_DIR` or `--data-dir` says where the app keeps its data (where it writes its port), `MEOWNY_PORT` or `--port` skips that.
+
+To try it without the app, `cargo run --example api_demo` in `src-tauri/` serves demo data and prints the tokens and a ready command line.
+
 ## Tests and checks
 
 ```bash
@@ -72,11 +109,16 @@ npm run lint --workspace client
 npm test --workspace client
 npm run build --workspace client
 
+# The command line: unit tests, and tests that run the real binary against the app's own server code
+cd cli && cargo test
+# After a route is added or changed, regenerate the list of routes the command line embeds (a test fails until you do)
+cd cli && cargo run --example dump_schema > schema.json
+
 # Lists every place that can make a network call and fails on new ones
 npm run check:outbound
 ```
 
-CI (`.github/workflows/desktop.yml`) runs the outbound check and `cargo test`, then builds the app. Pull requests build on Linux only (about 2.5 minutes); pushes to `main` also build on macOS and Windows, and you can run all three for any branch from the Actions tab with "Run workflow".
+CI (`.github/workflows/desktop.yml`) runs the outbound check, `cargo test` for the app and for `cli/`, then builds the app. Pull requests build on Linux only (about 2.5 minutes); pushes to `main` also build on macOS and Windows, and you can run all three for any branch from the Actions tab with "Run workflow".
 
 ## Database
 

@@ -1,0 +1,25 @@
+[package]
+name = "meowny-cli"
+version = "0.1.0"
+description = "meowNY command line: a client of the running desktop app"
+license = "AGPL-3.0-only"
+edition = "2021"
+rust-version = "1.77"
+
+# The command is called `meowny`. The desktop app is a different program with the same name, so this
+# package is built on its own and not as part of the app: `cargo install --path cli` puts it in cargo's bin.
+[[bin]]
+name = "meowny"
+path = "src/main.rs"
+
+[dependencies]
+# The whole job of this program is JSON. It is already a dependency of the app.
+serde_json = "1.0.154"
+
+[dev-dependencies]
+# The tests run the real binary against the app's own server code (a real encrypted vault in a
+# temporary folder), so a command and the route behind it are tested together.
+meowny = { path = "../src-tauri" }
+chrono = { version = "0.4.45", default-features = false, features = ["std", "clock"] }
+tempfile = "3.27.0"
+zeroize = "1.8.2"

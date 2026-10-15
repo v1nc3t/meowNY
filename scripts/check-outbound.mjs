@@ -59,12 +59,15 @@ scan(
   SOURCE_RULES,
 )
 scan(walk(join(root, 'src-tauri', 'src'), (n) => n.endsWith('.rs')), RUST_RULES)
+scan(walk(join(root, 'cli', 'src'), (n) => n.endsWith('.rs')), RUST_RULES)
 
 // Dependencies that bring their own network stack.
-const cargo = readFileSync(join(root, 'src-tauri', 'Cargo.toml'), 'utf8')
-const depsSection = cargo.split(/^\[dependencies\]/m)[1]?.split(/^\[/m)[0] ?? ''
-for (const line of depsSection.split('\n')) {
-  if (NETWORK_CRATES.test(line.trim())) found.add(`network-crate src-tauri/Cargo.toml ${line.trim().split(/[\s=]/)[0]}`)
+for (const manifest of ['src-tauri/Cargo.toml', 'cli/Cargo.toml']) {
+  const cargo = readFileSync(join(root, manifest), 'utf8')
+  const depsSection = cargo.split(/^\[dependencies\]/m)[1]?.split(/^\[/m)[0] ?? ''
+  for (const line of depsSection.split('\n')) {
+    if (NETWORK_CRATES.test(line.trim())) found.add(`network-crate ${manifest} ${line.trim().split(/[\s=]/)[0]}`)
+  }
 }
 
 // The webview may only talk to itself and the Tauri IPC bridge.
