@@ -2825,3 +2825,92 @@ ul.rec-list > li.rec-item[data-status='ended'] {
   font-size: 0.75rem;
   color: var(--text-muted);
 }
+
+/* Phone and sync (phase 8) */
+
+/* A QR code is always dark on white, whatever the theme: a camera needs that contrast. */
+.qr {
+  display: block;
+  width: min(100%, 20rem);
+  height: auto;
+  background: #fff;
+}
+
+.sync-panel {
+  width: 100%;
+}
+
+.sync-panel h3 {
+  margin: 0;
+}
+
+.sync-countdown {
+  margin: 0;
+  font-family: var(--font);
+  font-size: 0.875rem;
+  color: var(--text-h);
+}
+
+/* The six digits that the person compares with the other screen. */
+.check-code {
+  margin: 0;
+  width: 100%;
+  padding: 1rem 1.5rem;
+  border: 1px solid var(--accent);
+  font-family: var(--font);
+  font-size: clamp(1.75rem, 1rem + 5vw, 2.75rem);
+  letter-spacing: 0.2em;
+  text-align: center;
+  color: var(--text-h);
+  user-select: none;
+}
+
+.sync-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.sync-summary p {
+  margin: 0;
+  font-size: 0.8125rem;
+}
+
+.sync-panel .warning {
+  width: 100%;
+  margin: 0;
+}
+
+.inline-actions {
+  display: inline-flex;
+  gap: 1rem;
+}
+
+/* While the camera scans it shows behind the page: everything but the cancel button steps aside. */
+html.is-scanning,
+html.is-scanning body {
+  background: transparent;
+}
+
+html.is-scanning #root {
+  visibility: hidden;
+}
+
+.scan-overlay {
+  position: fixed;
+  inset: auto 0 0 0;
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+  padding: 1.25rem 1rem calc(1.25rem + env(safe-area-inset-bottom, 0px));
+  background: rgba(0, 0, 0, 0.8);
+  visibility: visible;
+  text-align: center;
+}
+
+.scan-overlay p {
+  margin: 0;
+  color: var(--text-h);
+}

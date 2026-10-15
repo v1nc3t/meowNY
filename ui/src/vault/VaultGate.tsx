@@ -1,7 +1,10 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react'
 import FirstRunScreen from './FirstRunScreen'
 import LockScreen from './LockScreen'
+import { PhoneFirstRun } from './PhoneScreens'
 import { inDesktopApp, vault, type VaultStatus } from './api'
+import { locksAfterBackground } from '../api/sync'
+import { useProfile } from '../hooks/profile'
 import { useI18n } from '../i18n/context'
 
 const ACTIVITY_PING_MS = 15_000
@@ -13,6 +16,7 @@ const ACTIVITY_PING_MS = 15_000
  */
 export default function VaultGate({ children }: { children: ReactNode }) {
   const desktop = inDesktopApp()
+  const phone = useProfile() === 'phone'
   const { setLanguage } = useI18n()
   const [status, setStatus] = useState<VaultStatus | 'loading'>(desktop ? 'loading' : 'unlocked')
 
@@ -50,8 +54,32 @@ export default function VaultGate({ children }: { children: ReactNode }) {
     return () => events.forEach((name) => window.removeEventListener(name, ping))
   }, [desktop, status])
 
+  // A phone is locked again when it comes back after the time the person chose: the idle timer cannot be trusted to run while
+  // the app is in the background.
+  useEffect(() => {
+    if (!desktop || !phone || status !== 'unlocked') return
+    let hiddenAt: number | null = null
+    const onVisibility = () => {
+      if (document.visibilityState === 'hidden') {
+        hiddenAt = Date.now()
+        return
+      }
+      if (hiddenAt === null) return
+      const away = Date.now() - hiddenAt
+      hiddenAt = null
+      vault.lockPrefs().then(
+        (prefs) => {
+          if (locksAfterBackground(away, prefs.lock_after_secs)) void vault.lock().then(() => setStatus('locked'), () => undefined)
+        },
+        () => undefined,
+      )
+    }
+    document.addEventListener('visibilitychange', onVisibility)
+    return () => document.removeEventListener('visibilitychange', onVisibility)
+  }, [desktop, phone, status])
+
   if (status === 'loading') return null
-  if (status === 'not_set_up') return <FirstRunScreen onDone={refresh} />
+  if (status === 'not_set_up') return phone ? <PhoneFirstRun onDone={refresh} /> : <FirstRunScreen onDone={refresh} />
   if (status === 'locked') return <LockScreen onUnlocked={refresh} />
   return <>{children}</>
 }

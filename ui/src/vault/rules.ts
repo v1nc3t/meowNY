@@ -26,6 +26,12 @@ export function passphraseProblem(passphrase: string, confirm: string): string {
   return ''
 }
 
+/** Like `passphraseProblem`, but a phone always needs a passphrase: there is no keychain to rely on. */
+export function phonePassphraseProblem(passphrase: string, confirm: string): string {
+  if (passphrase === '') return t('phone.passphraseRequired')
+  return passphraseProblem(passphrase, confirm)
+}
+
 /** Like `passphraseProblem`, but a backup always needs a passphrase. */
 export function backupPassphraseProblem(passphrase: string, confirm: string): string {
   if ([...passphrase].length < MIN_PASSPHRASE_CHARS) return t('rule.backupPassphraseShort', { count: MIN_PASSPHRASE_CHARS })

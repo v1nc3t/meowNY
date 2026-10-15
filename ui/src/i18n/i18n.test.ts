@@ -31,6 +31,7 @@ const SAME_AS_ENGLISH = new Set([
   'fr report.date', 'fr report.page',
   'de nav.export', 'de export.title', 'fr export.format', 'ro export.format',
   'es keys.groupGeneral', 'ro keys.groupGeneral', 'fr keys.groupActions', 'fr settings.notifications',
+  'de nav.sync', 'de phone.passphrase',
 ])
 
 test('no translation is empty or an untranslated copy of the English text', () => {

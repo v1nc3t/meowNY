@@ -226,6 +226,8 @@ Rows from the other device are untrusted input, even from a paired one, so a bug
 - **After an erase**, or on a new phone, the person pairs again and the desktop sends a full copy. Changes made on the phone since its last sync are lost, and the warning says so.
 - Against someone who copies the file off the phone and guesses offline, the erase does not help. Only the length of the passphrase and Argon2 protect it, so the passphrase screen pushes for a long one. With no server there is also no remote wipe.
 - **After a backup restore** on either device, the device gets a new device id and its paired devices are removed, so it has to pair again and gets a full copy. This keeps the rules above free of special cases.
+- **The screens.** The app asks once which app it is (`app_profile`, which needs no unlock) and draws nothing before it knows. On a phone: the first start asks only for a language and a passphrase (twice; a warning shows while it is shorter than 12 characters, and the lowest the app takes is 8), says that 5 wrong tries erase the phone, and shows no recovery key, because a recovery key could only open data that is on the desktop too. The currency of that first start is a placeholder (`EUR`); the first pairing replaces it with the desktop's and converts nothing. The lock screen always asks for the passphrase, warns from the 3rd miss and says how many tries are left, and after the 5th shows "this phone was erased" and then the first start again. "Forgot my passphrase" is "erase this phone" (typing `DELETE`), since there is nothing to recover with. The settings of a phone have no command line block, no phone block, no recovery key block and no button to change the currency. The phone locks when it comes back from the background after the time chosen in "lock after". Its sync screen opens first until it is paired: one name field and one button, "scan the code".
+- **Desktop screens.** Everything is in the "phone" block of the settings: the paired phones (name, when paired, last sync, a two-step remove), a warning for each phone that has not synced since the currency was changed, the name of this computer (kept only on this computer, shown by the phone in its list), and the buttons "add a phone" and "sync with phone". While something runs the buttons are replaced by what it is doing: the QR code with the address in words and a countdown, then the six digits with the question, then the progress, then the summary or the reason it stopped. Leaving the page while a code is on show closes the window. The screens only show what `sync_status` says, polled twice a second while something runs.
 
 ## 14. Threats and what stops them
 
@@ -252,10 +254,10 @@ Settle these while building, and write the answer here:
 
 - Triggers for stamps need a closer look: the clock update must be one statement and must hold up with several writers in the app.
 - Whether the digest for transactions needs per-month hashes, once there are real numbers on a phone.
-- Which address to show on machines with several networks (first version: the system's choice, plus the field to type another).
+- Which address to show on machines with several networks (first version: the system's choice, which is shown in words under the code; the field to type another address is not built, though the service already takes one).
 - IPv6: first version uses IPv4 only; the QR format already allows both.
 - Whether a deletion marker can ever be dropped. For now they stay for good.
-- The wording of the screens: pairing, the check code, the sync summary, and the errors (never include row contents).
+- ~~The wording of the screens: pairing, the check code, the sync summary, and the errors (never include row contents).~~ Written in all seven languages (`sync.*` and `phone.*` in `ui/src/i18n`). A summary is a list of "label: number" lines, so no language needs plural forms; the 22 reasons a sync can stop with each have one text, and no text names a row.
 - What Android asks for: camera permission for scanning, and whether the newest Android versions ask for a local network permission.
 
 ## 16. Tests
@@ -267,4 +269,5 @@ Settle these while building, and write the answer here:
 - **Currency**: a change on the desktop, then edits on the phone, then a sync: the same amounts on both. A change that would go out of range stops the sync with nothing changed.
 - **Never synced**: the tables and fields of section 9 never appear in any message.
 - **Phone**: 5 wrong passphrases erase it; the counter survives a restart; pairing again restores a full copy.
+- **Screens** (`ui/src/api/sync.test.ts`, `ui/src/lib/qr.test.ts`): every status the app sends is accepted and anything it would never send is refused; the reasons the screens translate are read out of `sync/service.rs` and must be exactly those; the QR encoder equals a reference implementation module for module in 124 cases; the warning from the 3rd miss, the passphrase advice and the lock after the background are pure functions with their own tests. The screens were also looked at in a browser at desktop and phone width with the commands faked, and the QR code on screen was read back by an independent decoder.
 - **By hand**: a real Android phone at home, and on a network that isolates devices (it should fail with a clear message that mentions the phone's hotspot).

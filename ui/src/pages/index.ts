@@ -11,6 +11,7 @@ export const pageLoaders = {
   recurring: () => import('./RecurringPage'),
   export: () => import('./ExportPage'),
   settings: () => import('./SettingsPage'),
+  sync: () => import('./SyncPage'),
 } as const
 
 export type PageName = keyof typeof pageLoaders

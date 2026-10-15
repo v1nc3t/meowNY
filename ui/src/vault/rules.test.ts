@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { backupPassphraseProblem, isCurrency, nearestLockChoice, normalizeCurrency, passphraseProblem } from './rules.ts'
+import { backupPassphraseProblem, isCurrency, nearestLockChoice, normalizeCurrency, passphraseProblem, phonePassphraseProblem } from './rules.ts'
 
 test('currency codes are three letters, any case', () => {
   assert.equal(normalizeCurrency(' eur '), 'EUR')
@@ -23,6 +23,13 @@ test('a passphrase must be long enough and confirmed', () => {
 test('passphrase length counts characters, not bytes', () => {
   assert.match(passphraseProblem('ééééééé', 'ééééééé'), /at least 8/)
   assert.equal(passphraseProblem('éééééééé', 'éééééééé'), '')
+})
+
+test('a phone cannot be set up without a passphrase', () => {
+  assert.match(phonePassphraseProblem('', ''), /needs a passphrase/)
+  assert.match(phonePassphraseProblem('short', 'short'), /at least 8/)
+  assert.match(phonePassphraseProblem('long enough', 'different'), /do not match/)
+  assert.equal(phonePassphraseProblem('long enough', 'long enough'), '')
 })
 
 test('a backup passphrase cannot be empty', () => {

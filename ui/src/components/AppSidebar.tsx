@@ -1,6 +1,7 @@
 import { NavLink, Link } from 'react-router-dom'
 import { preloadPage, type PageName } from '../pages'
 import { vault } from '../vault/api'
+import { useProfile } from '../hooks/profile'
 import { useT } from '../i18n/context'
 import { runShortcut } from '../keys/registry'
 import type { ShortcutId } from '../keys/shortcuts'
@@ -26,6 +27,7 @@ export default function AppSidebar({
   onToggle: () => void
 }) {
   const t = useT()
+  const phone = useProfile() === 'phone'
   return (
     <aside className="app-sidebar">
       <div className="sidebar-header">
@@ -60,6 +62,17 @@ export default function AppSidebar({
             <span className="nav-label">{t(item.label)}</span>
           </NavLink>
         ))}
+        {phone ? (
+          <NavLink
+            to="/app/sync"
+            onMouseEnter={() => preloadPage('sync')}
+            aria-label={t('nav.sync')}
+            className={({ isActive }) => (isActive ? 'nav-item active' : 'nav-item')}
+          >
+            <Icon name="sync" />
+            <span className="nav-label">{t('nav.sync')}</span>
+          </NavLink>
+        ) : null}
       </nav>
 
       <div className="sidebar-footer">
@@ -72,10 +85,12 @@ export default function AppSidebar({
           <Icon name="exit" />
           <span className="nav-label">{t('nav.lock')}</span>
         </button>
-        <button type="button" className="exit-btn" {...tip('help')} onClick={() => runShortcut('help')}>
-          <Icon name="help" />
-          <span className="nav-label">{t('nav.shortcuts')}</span>
-        </button>
+        {phone ? null : (
+          <button type="button" className="exit-btn" {...tip('help')} onClick={() => runShortcut('help')}>
+            <Icon name="help" />
+            <span className="nav-label">{t('nav.shortcuts')}</span>
+          </button>
+        )}
         <div className="sidebar-legal nav-label">
           <span>© {YEAR} meowny</span>
           <span>AGPL-3.0</span>
@@ -96,6 +111,7 @@ function Icon({ name }: { name: string }) {
       {name === 'export' ? <path d="M12 15V4M8 8l4-4 4 4M5 14v5h14v-5" /> : null}
       {name === 'help' ? <path d="M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM9.6 9.3a2.4 2.4 0 1 1 3.4 2.2c-.7.4-1 .9-1 1.7M12 16.8h.01" /> : null}
       {name === 'settings' ? <path d="M4 7h10M18 7h2M4 17h2M10 17h10M14 4v6M6 14v6" /> : null}
+      {name === 'sync' ? <path d="M5 9a7 7 0 0 1 12-3l2 2M19 4v4h-4M19 15a7 7 0 0 1-12 3l-2-2M5 20v-4h4" /> : null}
       {name === 'account' ? <path d="M12 12a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7zM6.5 19a5.5 5.5 0 0 1 11 0" /> : null}
       {name === 'exit' ? <path d="M10 7V5h9v14h-9v-2M4 12h11M12 9l3 3-3 3" /> : null}
       {name === 'collapse' ? <path d="M5 5h14v14H5zM10 5v14" /> : null}

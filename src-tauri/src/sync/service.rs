@@ -588,6 +588,19 @@ mod tests {
         let code = Status::CheckCode { purpose: Purpose::Pair, code: "123456".into(), peer: "Phone".into(), needs_answer: true };
         assert_eq!(serde_json::to_string(&code).unwrap(), r#"{"state":"checkCode","purpose":"pair","code":"123456","peer":"Phone","needsAnswer":true}"#);
         assert_eq!(serde_json::to_string(&Status::Idle).unwrap(), r#"{"state":"idle"}"#);
+        let done = Status::Done {
+            purpose: Purpose::Sync,
+            summary: SummaryView { added: 5, updated: 2, replaced: 1, deleted: 0, merged: 0, dropped: 0 },
+            warnings: vec![WarningView { kind: "clock_off", seconds: 75 }],
+            differences: false,
+            peer: "Phone".into(),
+        };
+        assert_eq!(
+            serde_json::to_string(&done).unwrap(),
+            r#"{"state":"done","purpose":"sync","summary":{"added":5,"updated":2,"replaced":1,"deleted":0,"merged":0,"dropped":0},"warnings":[{"kind":"clock_off","seconds":75}],"differences":false,"peer":"Phone"}"#
+        );
+        assert_eq!(serde_json::to_string(&Status::Connecting { purpose: Purpose::Pair }).unwrap(), r#"{"state":"connecting","purpose":"pair"}"#);
+        assert_eq!(serde_json::to_string(&Status::Running { purpose: Purpose::Sync }).unwrap(), r#"{"state":"running","purpose":"sync"}"#);
         assert_eq!(serde_json::to_string(&Status::Failed { purpose: Purpose::Sync, reason: "expired" }).unwrap(), r#"{"state":"failed","purpose":"sync","reason":"expired"}"#);
     }
 }

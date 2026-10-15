@@ -1,21 +1,31 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { messageFor } from '../api/invoke'
-import { errorText, vault } from './api'
+import { shouldWarn, syncApi, type Attempts } from '../api/sync'
+import { errorText, vault, VaultError } from './api'
 import PasswordField from './PasswordField'
+import { ErasedScreen, ForgotPhone } from './PhoneScreens'
 import { passphraseProblem } from './rules'
 import { useNotice } from '../hooks/useNotice'
+import { useProfile } from '../hooks/profile'
 import { useT } from '../i18n/context'
 
 export default function LockScreen({ onUnlocked }: { onUnlocked: () => void }) {
   const t = useT()
-  const [needsPassphrase, setNeedsPassphrase] = useState(false)
+  const phone = useProfile() === 'phone'
+  const [attempts, setAttempts] = useState<Attempts | null>(null)
+  const [erased, setErased] = useState(false)
+  const [needsPassphrase, setNeedsPassphrase] = useState(phone)
   const [keyMissing, setKeyMissing] = useState(false)
   const [recovering, setRecovering] = useState(false)
   const [message, setMessage] = useNotice()
   const [busy, setBusy] = useState(false)
 
-  // Try without a passphrase first: a keychain-only vault opens straight away.
+  // Try without a passphrase first: a keychain-only vault opens straight away. A phone always asks.
   useEffect(() => {
+    if (phone) {
+      syncApi.attempts().then(setAttempts, () => undefined)
+      return
+    }
     let cancelled = false
     vault.unlock('').then(
       () => {
@@ -31,7 +41,7 @@ export default function LockScreen({ onUnlocked }: { onUnlocked: () => void }) {
     return () => {
       cancelled = true
     }
-  }, [onUnlocked, setMessage])
+  }, [onUnlocked, phone, setMessage])
 
   async function onUnlock(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -41,8 +51,10 @@ export default function LockScreen({ onUnlocked }: { onUnlocked: () => void }) {
       await vault.unlock(passphrase)
       onUnlocked()
     } catch (error) {
+      if (error instanceof VaultError && error.code === 'erased') return setErased(true)
       setMessage(errorText(error))
       setBusy(false)
+      if (phone) syncApi.attempts().then(setAttempts, () => undefined)
     }
   }
 
@@ -61,6 +73,10 @@ export default function LockScreen({ onUnlocked }: { onUnlocked: () => void }) {
       setBusy(false)
     }
   }
+
+  if (erased) return <ErasedScreen onContinue={onUnlocked} />
+
+  if (recovering && phone) return <ForgotPhone onBack={() => setRecovering(false)} />
 
   if (recovering) {
     return (
@@ -111,6 +127,11 @@ export default function LockScreen({ onUnlocked }: { onUnlocked: () => void }) {
         {needsPassphrase && (
           <>
             <PasswordField label={t('lock.passphrase')} name="passphrase" current autoFocus />
+            {phone && shouldWarn(attempts) && attempts ? (
+              <p className="warning" role="alert">
+                {t(attempts.left === 1 ? 'lock.lastAttempt' : 'lock.attemptsLeft', { count: attempts.left })}
+              </p>
+            ) : null}
             <button type="submit" disabled={busy}>
               {t('common.unlock')}
             </button>
@@ -124,7 +145,7 @@ export default function LockScreen({ onUnlocked }: { onUnlocked: () => void }) {
               setMessage('')
             }}
           >
-            {keyMissing ? t('lock.useRecovery') : t('lock.forgot')}
+            {keyMissing && !phone ? t('lock.useRecovery') : t('lock.forgot')}
           </button>
         )}
         {/* This one stays: it explains why the app cannot open by itself. */}

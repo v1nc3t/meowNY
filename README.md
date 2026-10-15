@@ -73,6 +73,15 @@ meowNY is a desktop app for tracking income and expenses against monthly budgets
 - Export to JSON, CSV, Excel and PDF, for the period and categories you choose.
 - "Delete all my data" removes the database, its key and the app's own backups.
 
+**Your phone (phase 8: the sync and the screens are built; the Android package is not yet)**
+
+- The phone keeps a full copy of your data, works on its own when you are away, and can change everything the desktop can. Back home, the two sync.
+- There is no server of any kind. The desktop shows a QR code, the phone scans it, and the phone connects straight to the desktop on your home network. Every sync starts that way, and the code works once and only for a couple of minutes. Both devices must be on the same wifi network (a network that stops devices from talking to each other, such as many hotels, does not work; connect the desktop to the phone's hotspot there).
+- Pairing shows six digits on both screens that you compare before the desktop accepts the phone. Everything that is sent is encrypted with keys made from the pairing secret and that one-time code.
+- On the phone the data is locked by a passphrase, and the phone erases itself after 5 wrong ones. The data comes back by pairing again with the desktop.
+- The currency is changed on the desktop only, and the desktop reminds you to sync the phone.
+- The first time the desktop listens, Windows or macOS may ask whether meowNY may accept connections on the network. Allow it for private networks only; nothing outside your home network is ever involved.
+
 **For scripts and AI agents (desktop only)**
 
 - A [command line program](#command-line), `meowny`, with a command for every feature, `--json` output and stable exit codes.
@@ -240,7 +249,7 @@ Every command, flag and exit code is documented, with real output, in the [CLI r
 | [docs/CLI.md](docs/CLI.md) | The same text in one Markdown file, easier to read in an editor or to give to an agent |
 | [docs/PLAN.md](docs/PLAN.md) | The build plan and roadmap, phase by phase, with what is done |
 | [docs/data-inventory.md](docs/data-inventory.md) | What data the app holds, where, which network calls exist, and who could see it |
-| [docs/sync-design.md](docs/sync-design.md) | How the phone syncs with the desktop: the QR codes, the encryption, the merge rules (planned, phase 8) |
+| [docs/sync-design.md](docs/sync-design.md) | How the phone syncs with the desktop: the QR codes, the encryption, the merge rules, the screens (phase 8, built except the Android package) |
 
 The reference site is made from the program, so it cannot say something the program does not do. `cli/tests/docs.rs` runs one tour of every command and every way to fail against a real app, records what came out (`docs/site/commands.json`, `docs/site/examples.json`), and fails when a command, a flag, a message or an example changes without the docs being redone. The prose around those facts is `docs/site/content.mjs`; the generator stops with an error if the program has a command, a group or an error code that the prose does not cover. There are no scripts, fonts or images, and the page asks nothing from anywhere else.
 
@@ -261,7 +270,7 @@ meowNY/
 │   └── src/           pages, components, hooks, lib, api, and the vault, i18n and keys features
 ├── src-tauri/         The desktop app, `meowny-desktop` (Rust, Tauri 2)
 │   ├── src/           vault and keys, database, budgets, recurring items, statistics, backup, export,
-│   │                  the command API (api/) and the access tokens (tokens.rs)
+│   │                  the command API (api/) and the access tokens (tokens.rs), and the phone sync (sync/)
 │   ├── migrations/    Schema changes as numbered SQL files
 │   ├── seeds/         Demo data
 │   └── examples/      dev_vault, seed and api_demo
@@ -390,7 +399,7 @@ The full plan, with what is done in each phase, is in [docs/PLAN.md](docs/PLAN.m
 | 3 to 5 | Categories, transactions, budgets, recurring items, statistics and charts | Done |
 | 6 | Encrypted backup and export | Done |
 | 7 | Command line for scripts and AI agents (desktop only) | Done. Installing it together with the app is part of phase 11 |
-| 8 | Android app that keeps a full offline copy and syncs with the desktop at home by scanning a QR code (iOS comes later) | Planned |
+| 8 | Android app that keeps a full offline copy and syncs with the desktop at home by scanning a QR code (iOS comes later) | In progress: the sync, the phone vault and the screens are built and tested on the desktop. The Android package is next |
 | 9 | Adding transactions from the phone without opening the app | Planned |
 | 10 | Bank connection through an aggregator with your own key. No project-run backend, ever | Planned |
 | 11 | Signed installers, updates, `SECURITY.md`, `CONTRIBUTING.md` and install guides | Planned |

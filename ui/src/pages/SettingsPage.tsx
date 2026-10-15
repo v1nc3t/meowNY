@@ -6,11 +6,14 @@ import { useI18n } from '../i18n/context'
 import { languageOptions } from '../i18n/languages'
 import ChangeCurrencyModal from '../components/ChangeCurrencyModal'
 import CommandApiBlock from '../components/CommandApiBlock'
+import PhoneSyncBlock from '../components/PhoneSyncBlock'
 import Dropdown from '../components/Dropdown'
 import PasswordField from '../vault/PasswordField'
 import RecoveryKeyPanel from '../vault/RecoveryKeyPanel'
 import { backupPassphraseProblem, LOCK_AFTER_CHOICES, nearestLockChoice, type Settings } from '../vault/rules'
 import { useNotice } from '../hooks/useNotice'
+import { useProfile } from '../hooks/profile'
+import { syncApi } from '../api/sync'
 
 const EVERY_CHOICES = [
   { days: 1, labelKey: 'settings.scheduleDaily' },
@@ -20,6 +23,7 @@ const EVERY_CHOICES = [
 
 export default function SettingsPage() {
   const { t, language, setLanguage } = useI18n()
+  const phone = useProfile() === 'phone'
   const [chosenLanguage, setChosenLanguage] = useState(language)
   const [settings, setSettings] = useState<Settings | null>(null)
   const [prefs, setPrefs] = useState<LockPrefs | null>(null)
@@ -210,7 +214,11 @@ export default function SettingsPage() {
           onChanged={(currency, summary) => {
             setSettings({ ...settings, currency })
             setChangingCurrency(false)
-            setMessage(summary)
+            // A paired phone still shows the old currency until the next sync, so say so.
+            syncApi.devices().then(
+              (paired) => setMessage(paired.length > 0 ? `${summary} ${t('currency.syncPhone')}` : summary),
+              () => setMessage(summary),
+            )
           }}
         />
       ) : null}
@@ -236,10 +244,13 @@ export default function SettingsPage() {
             <div className="settings-row">
               <span className="settings-row-label">{t('settings.currency')}</span>
               <span className="settings-row-value">{currencyLabel(settings.currency)}</span>
-              <button type="button" onClick={() => setChangingCurrency(true)}>
-                {t('common.change')}
-              </button>
+              {phone ? null : (
+                <button type="button" onClick={() => setChangingCurrency(true)}>
+                  {t('common.change')}
+                </button>
+              )}
             </div>
+            {phone ? <p className="hint">{t('settings.currencyOnDesktop')}</p> : null}
             <div className="actions">
               <button type="submit">{t('common.save')}</button>
             </div>
@@ -283,22 +294,27 @@ export default function SettingsPage() {
           </div>
         )}
 
-        {settings && <CommandApiBlock locale={settings.locale} timezone={settings.timezone} />}
+        {settings && !phone && <PhoneSyncBlock locale={settings.locale} timezone={settings.timezone} />}
 
-        <div className="settings-block">
-          <h2>{t('settings.recovery')}</h2>
-          {newKey ? (
-            <RecoveryKeyPanel code={newKey} inline doneLabel={t('common.done')} onDone={() => setNewKey(null)} />
-          ) : (
-            <form onSubmit={onRecoveryKey}>
-              <p className="hint">{t('settings.recoveryHint')}</p>
-              <PasswordField label={t('settings.recoveryPassphrase')} name="passphrase" current />
-              <div className="actions">
-                <button type="submit">{t('settings.recoveryNew')}</button>
-              </div>
-            </form>
-          )}
-        </div>
+        {settings && !phone && <CommandApiBlock locale={settings.locale} timezone={settings.timezone} />}
+
+        {/* A phone has no recovery key (it is not shown there): a forgotten passphrase means erasing the phone and pairing again. */}
+        {!phone && (
+          <div className="settings-block">
+            <h2>{t('settings.recovery')}</h2>
+            {newKey ? (
+              <RecoveryKeyPanel code={newKey} inline doneLabel={t('common.done')} onDone={() => setNewKey(null)} />
+            ) : (
+              <form onSubmit={onRecoveryKey}>
+                <p className="hint">{t('settings.recoveryHint')}</p>
+                <PasswordField label={t('settings.recoveryPassphrase')} name="passphrase" current />
+                <div className="actions">
+                  <button type="submit">{t('settings.recoveryNew')}</button>
+                </div>
+              </form>
+            )}
+          </div>
+        )}
 
         <div className="settings-block">
           <h2>{t('settings.backup')}</h2>

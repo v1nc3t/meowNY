@@ -9,6 +9,7 @@ use zeroize::Zeroizing;
 
 use super::crypto::{Secret, SECRET_LEN};
 use super::engine::SyncError;
+use super::stamp::Stamp;
 use crate::keys;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -18,6 +19,8 @@ pub struct Peer {
     pub name: String,
     pub paired_at: String,
     pub last_sync_at: Option<String>,
+    /// The currency was changed after the last sync with this device, so it still shows the old one until the next sync.
+    pub currency_behind: bool,
 }
 
 /// A device name as the person sees it in the list: 1 to 50 characters, nothing that is not text.
@@ -31,11 +34,23 @@ pub fn clean_name(name: &str) -> Result<String, SyncError> {
 }
 
 pub fn list(conn: &Connection) -> Result<Vec<Peer>, SyncError> {
+    // The newest currency change, in milliseconds (the start of its stamp), to compare with each device's last sync.
+    let newest: Option<String> = conn.query_row("SELECT max(stamp) FROM currency_changes", [], |r| r.get(0))?;
+    let changed_ms = newest.and_then(|text| Stamp::parse(&text)).map(|stamp| stamp.ms);
     let mut stmt = conn.prepare("SELECT device_id, name, paired_at, last_sync_at FROM sync_peers ORDER BY paired_at, id")?;
-    let rows = stmt
-        .query_map([], |r| Ok(Peer { device_id: r.get(0)?, name: r.get(1)?, paired_at: r.get(2)?, last_sync_at: r.get(3)? }))?
-        .collect::<Result<_, _>>()?;
-    Ok(rows)
+    let rows: Vec<(String, String, String, Option<String>)> =
+        stmt.query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)))?.collect::<Result<_, _>>()?;
+    let mut peers = Vec::with_capacity(rows.len());
+    for (device_id, name, paired_at, last_sync_at) in rows {
+        let synced_ms = last_sync_ms(conn, &device_id)?;
+        let currency_behind = match (changed_ms, synced_ms) {
+            (Some(changed), Some(synced)) => changed > synced,
+            (Some(_), None) => true,
+            (None, _) => false,
+        };
+        peers.push(Peer { device_id, name, paired_at, last_sync_at, currency_behind });
+    }
+    Ok(peers)
 }
 
 /// Pairs with a device. A device that was paired before (the same id) is replaced, with the new secret.
@@ -138,6 +153,26 @@ mod tests {
         touch(&conn, A, "2026-10-15T10:30:00.250Z").unwrap();
         assert_eq!(last_sync_ms(&conn, A).unwrap(), Some(1_792_060_200_250));
         assert_eq!(last_sync_ms(&conn, B).unwrap(), None);
+    }
+
+    #[test]
+    fn a_phone_is_behind_when_the_currency_changed_after_its_last_sync() {
+        let conn = db();
+        let change = |stamp: &str| {
+            conn.execute("INSERT INTO currency_changes (from_currency, to_currency, rate, stamp) VALUES ('EUR', 'USD', '1.1', ?1)", [stamp]).unwrap();
+        };
+        add(&conn, A, "Phone", &[1u8; 32], "2026-10-15T10:00:00.000Z").unwrap();
+        assert!(!list(&conn).unwrap()[0].currency_behind, "nothing has changed yet");
+        touch(&conn, A, "2026-10-15T10:30:00.250Z").unwrap(); // 1_792_060_200_250 ms
+        change("1792060100000-0000-aaaaaaaa");
+        assert!(!list(&conn).unwrap()[0].currency_behind, "the change came before the sync");
+        change("1792060300000-0001-aaaaaaaa");
+        assert!(list(&conn).unwrap()[0].currency_behind, "the change came after the sync");
+        touch(&conn, A, "2026-10-15T10:40:00.000Z").unwrap();
+        assert!(!list(&conn).unwrap()[0].currency_behind, "the next sync catches up");
+        add(&conn, B, "Never synced", &[2u8; 32], "2026-10-16T10:00:00.000Z").unwrap();
+        assert!(list(&conn).unwrap()[1].currency_behind, "a device that never synced has not seen the change");
+        assert!(serde_json::to_string(&list(&conn).unwrap()[0]).unwrap().contains(r#""currencyBehind":false"#));
     }
 
     #[test]

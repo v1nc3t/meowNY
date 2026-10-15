@@ -254,6 +254,10 @@ pub struct ChangeCurrency {
 /// Changes the currency, converting every amount at the rate the person typed, or only relabelling.
 #[tauri::command]
 pub fn change_currency(vault: Shared, input: ChangeCurrency) -> Result<Conversion, AppError> {
+    // The currency is changed on the desktop and reaches the phone with a sync; a phone that changed it too would never agree.
+    if is_phone(&vault) {
+        return Err(AppError::InvalidInput);
+    }
     let timezone = vault.settings()?.timezone;
     let today = clock::today(chrono::Utc::now(), &timezone)?.to_string();
     vault.with_conn(|c| currency::change(c, &input.currency, input.rate.as_deref(), &today))
