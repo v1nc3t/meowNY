@@ -115,6 +115,10 @@ struct VaultConfig {
     /// Desktop notification for recurring transactions that are due. On unless the person turns it off.
     #[serde(default = "default_notify_due")]
     notify_due: bool,
+    /// The local command API for the CLI. Off unless the person turns it on. Kept here, not in the
+    /// database, so the app knows at start whether to listen while the database is still locked.
+    #[serde(default)]
+    api_enabled: bool,
 }
 
 fn default_notify_due() -> bool {
@@ -221,6 +225,7 @@ impl Vault {
             lock_on_minimize: true,
             lock_on_close: true,
             notify_due: true,
+            api_enabled: false,
         };
         write_config(&self.config_path(), &config)?;
 
@@ -461,6 +466,19 @@ impl Vault {
         write_config(&self.config_path(), &config)
     }
 
+    pub fn api_enabled(&self) -> Result<bool, AppError> {
+        Ok(read_config(&self.config_path())?.api_enabled)
+    }
+
+    pub fn set_api_enabled(&self, on: bool) -> Result<(), AppError> {
+        if self.lock_state().conn.is_none() {
+            return Err(AppError::Locked);
+        }
+        let mut config = read_config(&self.config_path())?;
+        config.api_enabled = on;
+        write_config(&self.config_path(), &config)
+    }
+
     /// "Delete all my data": database, key, config and backups the app created.
     /// Removing the keychain secret also makes any leftover copy of the file unreadable.
     /// Every step is tried even if an earlier one fails; the result says whether all succeeded.
@@ -486,6 +504,8 @@ impl Vault {
             db.with_extension("db-journal"),
             self.config_path(),
             self.config_path().with_extension("json.tmp"),
+            self.dir.join(crate::api::DISCOVERY_FILE),
+            self.dir.join(crate::api::DISCOVERY_FILE).with_extension("json.tmp"),
         ] {
             ok &= remove_file_if_exists(&path);
         }
@@ -790,12 +810,40 @@ mod tests {
     }
 
     #[test]
+    fn the_command_api_is_off_until_turned_on_and_the_choice_persists() {
+        let dir = tempfile::tempdir().unwrap();
+        let v = vault(dir.path());
+        v.create(&settings(), None).unwrap();
+        assert!(!v.api_enabled().unwrap(), "off by default");
+        v.set_api_enabled(true).unwrap();
+        v.lock();
+        assert!(v.api_enabled().unwrap(), "readable while locked, so the app can start the listener");
+        assert_eq!(v.set_api_enabled(false), Err(AppError::Locked), "turning it off, like on, needs the unlocked app");
+        assert!(v.api_enabled().unwrap());
+        v.unlock(None).unwrap();
+        v.set_api_enabled(false).unwrap();
+        assert!(!v.api_enabled().unwrap());
+    }
+
+    #[test]
+    fn a_config_from_before_the_command_api_reads_as_off() {
+        let dir = tempfile::tempdir().unwrap();
+        let v = vault(dir.path());
+        v.create(&settings(), None).unwrap();
+        let mut json: serde_json::Value = serde_json::from_str(&fs::read_to_string(v.config_path()).unwrap()).unwrap();
+        json.as_object_mut().unwrap().remove("api_enabled");
+        fs::write(v.config_path(), json.to_string()).unwrap();
+        assert!(!v.api_enabled().unwrap());
+    }
+
+    #[test]
     fn wipe_needs_confirmation_and_removes_data_config_backups_and_key() {
         let dir = tempfile::tempdir().unwrap();
         let v = vault(dir.path());
         v.create(&settings(), None).unwrap();
         fs::create_dir_all(dir.path().join(BACKUP_DIR)).unwrap();
         fs::write(dir.path().join(BACKUP_DIR).join("b1.meowbak"), b"x").unwrap();
+        fs::write(dir.path().join(crate::api::DISCOVERY_FILE), b"{}").unwrap();
 
         assert_eq!(v.wipe("delete"), Err(AppError::InvalidInput));
         assert_eq!(v.status(), VaultStatus::Unlocked, "a refused wipe changes nothing");
@@ -805,6 +853,7 @@ mod tests {
         assert!(!v.db_path().exists());
         assert!(!v.config_path().exists());
         assert!(!dir.path().join(BACKUP_DIR).exists());
+        assert!(!dir.path().join(crate::api::DISCOVERY_FILE).exists(), "the API's port file is removed too");
         assert!(v.store.get().unwrap().is_none());
         // The app can start over.
         v.create(&settings(), None).unwrap();

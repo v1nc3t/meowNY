@@ -167,7 +167,7 @@ Kept: the React client (`client/src`), Zod schemas, money and date logic, and th
 
 ## Phase 7: CLI for AI agents (M)
 
-The whole app is usable from the terminal, so scripts and AI agents can drive it without the UI. The CLI is a client of the running desktop app. No server is introduced.
+The whole app is usable from the terminal, so scripts and AI agents can drive it without the UI. The CLI is a client of the running desktop app. No server is introduced. The CLI and the command API belong to the desktop app only: the phone app (phases 8 and 9) has neither.
 
 Decisions made at the start of the phase (the open "CLI transport and token mechanism" row above):
 
@@ -178,13 +178,19 @@ Decisions made at the start of the phase (the open "CLI transport and token mech
 
 - [ ] Design rule: the CLI is a thin client over the app's local command API, described by a schema generated from the Zod types. It never opens the database file. Validation, scoping and encryption stay in one place. Every feature through phase 6 gets a command; if the API lacks something, fix the API, not the CLI.
 - [ ] Local command API: listens only on a local socket or loopback, off by default, enabled in settings. Requests must carry a token.
+  - [x] The server (`src-tauri/src/api.rs`, `api/http.rs`, `api/routes.rs`; `std` only, no new crates). `127.0.0.1` on a port the system picks, written to `api.json` in the data folder (owner-only, removed on exit and by "delete all my data"; a crash's leftover is removed at the next start). One request per connection: `POST /v1/<route>` with a JSON object body and `Authorization: Bearer`; answers are `{"ok": true, "data": ...}` or `{"ok": false, "error": {"code", "message"}}` with a matching status (400 `invalid_input`, 401 `unauthorized`, 403 `forbidden`, 404 `not_found`, 405, 409 `name_exists` / `not_set_up`, 413 `too_large`, 423 `locked`, 500 `internal`). Checked in this order: `Host` must be `127.0.0.1:<port>` or `localhost:<port>`, any `Origin` is refused, POST only, a bearer token, then the route, the token's scope and the arguments against the route's declared parameters (unknown, missing, mistyped or not-allowed values are a 400 before the route runs). The HTTP reader is strict (no chunked bodies, no repeated `Host` / `Content-Length` / `Authorization`, no folded headers, head at most 16 KiB, body at most 1 MiB, the whole request within 10 seconds, at most 16 connections). A panic in a route is a 500, and error messages never hold database text or the token. Calls do not count as activity, so the idle lock still fires. Routes so far: `status` and `schema`. `cargo run --example api_demo` serves it on demo data for trying it with curl. `npm run check:outbound` now also lists listeners and `TcpStream` users; the API's are in the allowlist with reasons.
+  - [x] On/off switch and start-up (`api::Host`: `set_enabled` saves the choice in `vault.json`, so it is readable while locked, and starts or stops the listener; it starts at launch if left on and stops on exit and on "delete all my data". A locked app that is left on answers `locked` to every token. Turning it on or off needs the unlocked app.)
+  - [ ] Settings screen for the switch (batch 3, with the token screen)
 - [ ] Package in `cli/` (TypeScript, one binary, e.g. `meowny`), installed by the desktop installer and available standalone. Reuses the Zod schemas for argument validation.
 - [ ] Tokens: created in the app, revocable, stored hashed, with scopes (read-only by default, write opt-in), an expiry and a last-used time. Passed by `MEOWNY_TOKEN` or stored in a `0600` file. Never printed or logged. `export`, `delete-all` and backup restore are not allowed with a token and need the user at the app.
   - [x] Token store: create, list, revoke, verify (`src-tauri/src/tokens.rs`, migration `0007_api_tokens.sql`. A token is `mny_` and 64 hex characters, shown once; the table keeps only its SHA-256. Scope is `read` unless `write` is picked (write also reads); expiry is 1 to 365 days, 30 by default; revoking deletes the row; use is stamped at most once a minute. The table is in the encrypted database with no audit triggers, is left out of backups and exports, and a restore does not touch it. `verify` gives the same answer for unknown, revoked, expired and malformed tokens. Nothing calls it yet. Tests: `tokens.rs`, constraints in `schema_tests.rs`, backup and export tests.)
   - [ ] Token screen in Settings: create (name, scope, expiry), the secret shown once, list with last used, revoke
-  - [ ] The API refuses a token without the scope a route needs; `export`, `delete-all` and restore need the user at the app
+  - [x] The API refuses a token without the scope a route needs (403 `forbidden`; a write token also reads)
+  - [ ] `export`, `delete-all` and restore need the user at the app
   - [ ] The CLI takes the token from `MEOWNY_TOKEN` or a `0600` file and never prints or logs it
 - [ ] If the app is locked, the CLI gets a clear exit code and no data.
+  - [x] The API answers 423 `locked` and no data (tested for a valid token, a wrong one and an unknown route; no token at all stays a 401)
+  - [ ] The CLI turns it into exit code 3
 - [ ] Command groups: `settings`, `categories`, `transactions`, `budgets`, `recurring`, `stats`, `export` (json, csv, xlsx, pdf), `backup`. Pattern `meowny <noun> <verb>`, with `--help` at every level.
 - [ ] Agent-friendly output: `--json` on every command (stable shape, additive fields only), human table otherwise. Data on stdout, messages and errors on stderr.
 - [ ] Non-interactive by default: no prompts; every input is a flag or stdin. Destructive commands need `--yes`. Transaction create sends a `client_uuid`, so retries are safe.
@@ -193,7 +199,7 @@ Decisions made at the start of the phase (the open "CLI transport and token mech
 - [ ] `meowny schema` prints all commands and arguments as JSON, so an agent can discover them.
 - [ ] Docs: one `CLI.md` with an example per command, plus a short agent note (env var, `--json`, exit codes).
 - [ ] Tests: each command against a real app instance (happy path, validation error, bad token, locked app, `--json` shape snapshot), plus one test that fails if a command-API route is missing from the schema or has no CLI command.
-- [ ] From here on, every new feature phase ships its CLI commands in the same phase.
+- [ ] From here on, every new desktop feature ships its CLI commands in the same phase. The phone app gets none.
 
 **Done when:** a script or agent holding only a token can record an expense, set a budget, and read budget vs actual, all with `--json` and no prompts.
 

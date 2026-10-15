@@ -97,7 +97,16 @@ cargo run --example dev_vault -- ~/.local/share/org.meowny.app
 
 This **deletes the app's data** (the data file, its key in the OS keychain, the settings file and any backups in that folder, as "delete all my data" does), sets the app up again with the demo data and prints the new recovery key. The lock settings are kept. The data file has no passphrase unless you set `MEOWNY_DEV_PASSPHRASE` for the run. The folder above is where the app keeps its data on Linux. Run the command again to start over.
 
-To load it into a separate file instead, which the desktop app does not open:
+To try the command API for the CLI (phase 7) on demo data, without the app or your own data:
+
+```bash
+cd src-tauri
+cargo run --example api_demo
+```
+
+It prints a read token, a write token and `curl` lines, and serves until Ctrl+C. The desktop app's Settings screen for turning the API on and making tokens comes later in the phase.
+
+To load the demo data into a separate file instead, which the desktop app does not open:
 
 ```bash
 cargo run --example seed -- /path/to/dev.db <64-hex-character-key>

@@ -1,3 +1,4 @@
+pub mod api;
 pub mod backup;
 pub mod budgets;
 pub mod categories;
@@ -69,6 +70,11 @@ pub fn run() {
             let store = KeychainStore::new().expect("keychain entry");
             let vault = Arc::new(Vault::new(dir, Box::new(store)));
             app.manage(vault.clone());
+
+            // The command API for the CLI, if the person left it on.
+            let api_host = Arc::new(api::Host::new(vault.clone()));
+            app.manage(api_host.clone());
+            api_host.start_if_enabled();
 
             // Scheduled backups, while the app is unlocked.
             let scheduled = vault.clone();
@@ -157,8 +163,16 @@ pub fn run() {
             commands::export_pdf,
             commands::export_preview,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running meowNY");
+        .build(tauri::generate_context!())
+        .expect("error while building meowNY")
+        .run(|handle, event| {
+            // Remove the port file on a normal exit; a crash leaves it and the next start cleans it up.
+            if let tauri::RunEvent::Exit = event {
+                if let Some(host) = handle.try_state::<Arc<api::Host>>() {
+                    host.stop();
+                }
+            }
+        });
 }
 
 #[cfg(test)]

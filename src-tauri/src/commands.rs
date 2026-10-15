@@ -5,6 +5,7 @@ use std::sync::Arc;
 
 use tauri::State;
 
+use crate::api::Host;
 use crate::backup;
 use crate::categories::{self, Category, CategoryType};
 use crate::budgets::{self, Budget, Overview, SetBudget};
@@ -164,8 +165,11 @@ pub fn data_location(vault: Shared) -> String {
 }
 
 #[tauri::command]
-pub fn wipe_all_data(vault: Shared, confirmation: String) -> Result<(), AppError> {
-    vault.wipe(&confirmation)
+pub fn wipe_all_data(vault: Shared, api: State<Arc<Host>>, confirmation: String) -> Result<(), AppError> {
+    vault.wipe(&confirmation)?;
+    // The data is gone, so the command API has nothing left to serve.
+    api.stop();
+    Ok(())
 }
 
 #[tauri::command]

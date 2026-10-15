@@ -5,3 +5,12 @@
 
 # Test-only strings that check the navigation guard refuses remote URLs.
 url-literal src-tauri/src/lib.rs  # URLs in unit tests for the navigation guard
+
+# The command API for the CLI (phase 7). It only listens: on 127.0.0.1, off unless the person turns it on in
+# Settings, and every request needs a token. Nothing here connects out.
+listener src-tauri/src/api.rs  # the command API's listener, bound to 127.0.0.1 only
+std-net src-tauri/src/api.rs  # serves the connections that listener accepts
+std-net src-tauri/src/api/http.rs  # reads and answers those connections
+std-net src-tauri/src/api/tests.rs  # tests connect to the loopback listener
+url-literal src-tauri/src/api/http.rs  # a test: a request with an absolute URL as its target is refused
+url-literal src-tauri/src/api/tests.rs  # tests: Origin values of web pages, which the API refuses
