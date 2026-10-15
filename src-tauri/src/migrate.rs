@@ -13,6 +13,7 @@ const MIGRATIONS: &[&str] = &[
     include_str!("../migrations/0006_recurring_amount_optional.sql"),
     include_str!("../migrations/0007_api_tokens.sql"),
     include_str!("../migrations/0008_sync.sql"),
+    include_str!("../migrations/0009_updated_at_and_sync.sql"),
 ];
 
 #[derive(Debug)]

@@ -145,7 +145,7 @@ $ meowny status
 
 api: 1
 app: meowny
-schemaVersion: 8
+schemaVersion: 9
 scope: read
 version: 0.1.0
 ```
@@ -156,7 +156,7 @@ With `--json` (one line; shown indented):
 {
   "api": 1,
   "app": "meowny",
-  "schemaVersion": 8,
+  "schemaVersion": 9,
   "scope": "read",
   "version": "0.1.0"
 }
@@ -2070,7 +2070,7 @@ The command line is a thin client. Anything it does you can do yourself with `cu
 curl -s -X POST "http://127.0.0.1:$PORT/v1/status" \
   -H "Authorization: Bearer $MEOWNY_TOKEN"
 
-{"data":{"api":1,"app":"meowny","schemaVersion":8,"scope":"read","version":"0.1.0"},"ok":true}
+{"data":{"api":1,"app":"meowny","schemaVersion":9,"scope":"read","version":"0.1.0"},"ok":true}
 ```
 
 The port is in `api.json`. `meowny schema --app` prints every route with its arguments as JSON.

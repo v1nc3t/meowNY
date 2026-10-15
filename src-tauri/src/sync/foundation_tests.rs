@@ -230,7 +230,7 @@ fn deleting_a_transaction_leaves_a_marker_with_a_newer_stamp() {
 }
 
 #[test]
-fn deleting_a_recurring_item_leaves_a_marker_and_clears_the_links_without_new_stamps() {
+fn deleting_a_recurring_item_leaves_a_marker_and_gives_its_payments_the_stamp_of_the_deletion() {
     let conn = db();
     let c = category(&conn, "Rent");
     let r = recurring(&conn, c, "Rent");
@@ -246,9 +246,11 @@ fn deleting_a_recurring_item_leaves_a_marker_and_clears_the_links_without_new_st
     conn.execute("DELETE FROM recurring_transactions WHERE id = ?1", [r]).unwrap();
 
     assert_eq!(count(&conn, "SELECT count(*) FROM transactions WHERE recurring_transaction_id IS NULL"), 1, "the link is cleared");
-    assert_eq!(stamp_of(&conn, "transactions", t), tx_stamp, "clearing the link is not an edit: the other device does it by itself");
-    let kind: String = conn.query_row("SELECT kind FROM sync_deleted WHERE sync_id = ?1", [&sid], |r| r.get(0)).unwrap();
+    let (kind, marker_stamp): (String, String) =
+        conn.query_row("SELECT kind, stamp FROM sync_deleted WHERE sync_id = ?1", [&sid], |r| Ok((r.get(0)?, r.get(1)?))).unwrap();
     assert_eq!(kind, "recurring_transactions");
+    assert_eq!(stamp_of(&conn, "transactions", t), marker_stamp, "clearing the link is a change: the payment takes the stamp of the deletion");
+    assert!(marker_stamp > tx_stamp);
     assert_eq!(count(&conn, "SELECT count(*) FROM sync_deleted"), 1, "the transaction was not deleted");
 }
 

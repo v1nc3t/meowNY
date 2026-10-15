@@ -135,20 +135,21 @@ There is no Diffie-Hellman step, so there is no forward secrecy beyond the OTS. 
 
 ## 8. What is sent, and how the two sides end up equal
 
-Messages are JSON objects with a `t` field, sealed into frames. Large ones are split into frames of at most 64 KiB. Money is an integer in minor units, as in the database.
+Messages are JSON objects with a `t` field, each sealed into one frame of at most 64 KiB, so a long list is cut into several messages and the last one of a table is marked `last`. Money is an integer in minor units, as in the database. The message types are `hello`, `currency`, `hashes`, `digest`, `rows`, `done` and `error`.
 
 1. **`hello`** from both sides: device id and name, app version, schema version, protocol `1`, the clock (section 10) and the currency generation (section 11).
    - Different schema versions: the sync stops with "update the phone app" or "update the desktop app".
    - Clocks more than a minute apart: a warning. More than a day apart: the sync stops with "check the clock on the phone", because a clock far in the future would make its edits win forever.
 2. **`currency`**: the desktop sends the phone any currency changes it has not seen. The phone applies them first and converts its own rows, so both sides are in the same currency before anything is compared (section 11).
-3. **`digest`**: for each synced table, each side lists `[sync_id, stamp, deleted]` for every row and every deletion marker. About 30 bytes a row, so a few MB for ten years of transactions. If the hash of a whole table's list is equal on both sides, that table is skipped.
-4. **`rows`**: both sides now know both lists, so each works out for itself what the other lacks or has older (a missing `sync_id`, or a lower stamp) and sends exactly that, with no request message. A deletion is sent as its marker.
-5. The receiver collects everything, validates it (section 12), and applies it in one database transaction.
-6. **`done`**: each side sends a hash of its final list of `(table, sync_id, stamp, deleted)`. If they are equal the sync is finished and both show a summary. If not, both say "differences remain, sync again", and nothing is thrown away.
+3. **`hashes`**: each side sends one hash per table of its list of `(sync_id, stamp, deleted)`. A table with the same hash on both sides is the same on both and is left out of everything that follows. If no table differs, the sync is already done.
+4. **`digest`**: for each table that differs, each side lists `[sync_id, stamp, deleted]` for every row and every deletion marker. About 30 bytes a row, so a few MB for ten years of transactions.
+5. **`rows`**: both sides now know both lists, so each works out for itself what the other lacks or has older (a missing `sync_id`, or a lower stamp) and sends exactly that, with no request message. A deletion is sent as its marker.
+6. The receiver collects everything, validates it (section 12), and applies it in one database transaction. It counts what it did for the summary: rows added, rows taken over from the other device, of those how many had also been changed here since the last sync (a change of yours that was replaced by a newer one there), rows deleted, categories merged, and duplicates removed. (A row that is newer here is never sent, so the other device is the one that counts it as replaced.)
+7. **`done`**: each side sends a hash of its final list of `(table, sync_id, stamp, deleted)`. If they are equal the sync is finished and both show a summary. If not, both say "differences remain, sync again", and nothing is thrown away.
 
 This is a comparison of states, not a log of changes, so it needs no record of what was sent before. A sync that stops half way, a restored backup or a wiped phone is repaired by the next sync without special cases. Applying is all or nothing on each side; if one side commits and the other does not, the next sync closes the gap.
 
-## 9. Database changes (migration `0008`)
+## 9. Database changes (migrations `0008` and `0009`)
 
 | Change | Why |
 |---|---|
@@ -161,7 +162,7 @@ This is a comparison of states, not a log of changes, so it needs no record of w
 | `currency_changes(generation, from_currency, to_currency, rate, stamp)` and `settings.currency_generation` | Section 11 |
 | The language stays in `settings`, but the stamp of `settings` changes only when `locale` or `timezone` change | The UI language is per device, and a change to it must not touch a shared setting |
 
-Stamps are set by triggers, like `updated_at` is today, so no write path (the screens, the command API, recurring items) can forget one. The triggers read `sync_clock`. While `applying = 1` they leave stamps as they are; a sync, a restore and a currency conversion turn it on inside their own transaction. The update triggers watch only the columns that are content (`UPDATE OF`), so `updated_at`, the sync columns and the link from a transaction to its recurring item (which `ON DELETE SET NULL` clears on both devices by itself) never make a stamp. Built: `migrations/0008_sync.sql`, `sync/stamp.rs` and the tests in `sync/foundation_tests.rs`.
+Stamps are set by triggers, like `updated_at` is today, so no write path (the screens, the command API, recurring items) can forget one. The triggers read `sync_clock`. While `applying = 1` they leave stamps as they are; a sync, a restore and a currency conversion turn it on inside their own transaction. The update triggers watch only the columns that are content (`UPDATE OF`), so `updated_at`, the sync columns and the link from a transaction to its recurring item never make a stamp on their own. There is one exception that follows from the link: deleting a recurring item clears the link of its payments (`ON DELETE SET NULL`), which is a change to them, so they take the stamp of the deletion marker (one tick for both, made by a trigger before the delete). A device that learns of the deletion from a sync does the same, and a payment that arrives for an item that is already deleted takes the marker's stamp unless it is newer. Migration `0009` also makes the `updated_at` triggers stand aside while `applying` is on and stop counting the recurring link, because two devices that each stamp "now" into one row would never hold equal rows. Built: `migrations/0008_sync.sql`, `sync/stamp.rs` and the tests in `sync/foundation_tests.rs`.
 
 Never synced: `audit_log`, `backup_schedule`, `api_tokens`, `sync_peers`, `sync_clock`, the language, the lock settings, and the currency field itself (it travels as a currency change).
 
@@ -189,7 +190,17 @@ For the same `sync_id` on both sides, the larger stamp wins as a whole row (a de
 | Recurring item edited or paid on both | The newer whole row wins. Then, if its next due date is not after the latest occurrence that has a transaction (`recurring_due_date`), the date moves forward by whole intervals, with the function the app uses after a payment, until it is. So an occurrence paid on the other device does not come due again. Known limit: an occurrence skipped on the losing side (a skip makes no transaction) can come due again, and the person can skip it again |
 | Shared settings (locale, time zone) | The newer wins |
 
-Changes made by these rules (a marker for the loser, rows moved to the kept category) get stamps worked out from their inputs only, never from the clock (the larger of the stamps involved, plus one step of the counter, with a fixed device id of zeros). Both sides do the same work and reach the same rows, so a merge does not start another round of changes.
+Stamps of the changes these rules make follow from the stamps involved, never from the clock, so both devices work out the same ones and a merge does not start another round of changes:
+
+- The marker of a duplicate that lost, and the merged-away category, get `derive(a, b)`: the larger of the two stamps with the counter one step on and the device id `00000000`. If the other device has already deleted the loser for good (its marker is in the same batch and covers the row), the loser takes that marker, so both end with the same one.
+- A row moved to the kept category gets `moved(x)`: its own time and counter with the device part `ffffffff`. That is newer than `x`, the other device moves its copy the same way, and two different versions of the row stay different and in order after the move. (A stamp made with `derive` would give them the same stamp whenever the merge is newer than both, and an edit would be lost.)
+
+Rules for the order things are done in, which the random tests found:
+
+- A category row that wants a name held by a category that the same batch is about to rename waits for it, so a chain of renames (one takes the name another just gave up) never looks like two categories with one name. A swap of two names puts one of them aside under a name no person can type until its own row arrives.
+- The budgets of a merged-away category are moved once every row is in, from the final versions, because the two versions of a budget that clash may not both be here yet.
+- Deletions of payments come before the deletion of their recurring item, so a payment deleted on the other device does not get a newer stamp from its item's deletion and survive.
+- After everything is in, every active recurring item whose next due date is not after its latest payment moves on (not only the ones the sync touched), so both devices reach the same date.
 
 **Currency.** Only the desktop can change the currency, and afterwards it tells the person to sync the phone. A change adds a row to `currency_changes` and raises the desktop's `currency_generation`; the desktop converts its own rows at once, as it does today. A conversion does not change any row's stamp. At the start of a sync (step 2 above), the side with the lower generation applies the missing changes in order and converts all of its own rows, including ones added since the last sync, with the same function and rounding. Only then are the lists compared. If a converted amount would leave the allowed range, the sync stops with an error and nothing changes.
 
@@ -245,7 +256,7 @@ Settle these while building, and write the answer here:
 
 ## 16. Tests
 
-- **Test vectors**: fixed `PS`, `OTS`, `session_id`, `Np`, `Nd` and a fixed frame, with every derived key and every output byte written down. Another implementation, or the reviewer, can reproduce them.
+- **Test vectors**: fixed `PS`, `OTS`, `session_id`, `Np`, `Nd` and fixed frames, with every derived key and every output byte written down. `scripts/sync-vectors.py` is a second implementation (standard library only, checked against the test vectors of RFC 8439 and RFC 5869) that prints them, and `sync/crypto.rs` and `sync/qr.rs` hold them in their tests. Another implementation, or the reviewer, can reproduce them.
 - **Hostile input**, with a fixed-seed generator as elsewhere in the project: random and damaged M1, M2 and frames; a wrong counter, repeated, skipped and reflected frames; a changed byte anywhere; a wrong length; a frame over the limit; a slow sender. The session ends and nothing panics.
 - **Secrets**: an OTS works only once; a QR code with the wrong PS never gets an answer; 5 bad handshakes close the listener; secrets are zeroized after use; no key or row appears in any log line.
 - **Two devices, two in-memory databases, a real socket**: random edits on both sides from a fixed seed, then a sync. They hold the same rows, and a second sync changes nothing. Every rule of section 11 has its own case. Replaying the same sync changes nothing. A sync stopped half way (at every message) is repaired by the next one.
