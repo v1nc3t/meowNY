@@ -28,12 +28,22 @@ export default function AppSidebar({
 }) {
   const t = useT()
   const phone = useProfile() === 'phone'
+  const lock = () => void vault.lock().then(() => window.location.reload(), () => undefined)
   return (
     <aside className="app-sidebar">
       <div className="sidebar-header">
-        <Link to="/app/dashboard" className="app-logo">
-          meowny
-        </Link>
+        <div className="sidebar-title">
+          <Link to="/app/dashboard" className="app-logo">
+            meowny
+          </Link>
+          {/* On a phone the lock sits beside the name, where a thumb finds it first. */}
+          {phone ? (
+            <button type="button" className="exit-btn" aria-label={t('nav.lockTitle')} onClick={lock}>
+              <Icon name="exit" />
+              <span className="nav-label">{t('nav.lock')}</span>
+            </button>
+          ) : null}
+        </div>
         <button
           type="button"
           className="sidebar-toggle"
@@ -76,15 +86,12 @@ export default function AppSidebar({
       </nav>
 
       <div className="sidebar-footer">
-        <button
-          type="button"
-          className="exit-btn"
-          {...tip('lock', t('nav.lockTitle'))}
-          onClick={() => void vault.lock().then(() => window.location.reload(), () => undefined)}
-        >
-          <Icon name="exit" />
-          <span className="nav-label">{t('nav.lock')}</span>
-        </button>
+        {phone ? null : (
+          <button type="button" className="exit-btn" {...tip('lock', t('nav.lockTitle'))} onClick={lock}>
+            <Icon name="exit" />
+            <span className="nav-label">{t('nav.lock')}</span>
+          </button>
+        )}
         {phone ? null : (
           <button type="button" className="exit-btn" {...tip('help')} onClick={() => runShortcut('help')}>
             <Icon name="help" />

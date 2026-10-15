@@ -1,6 +1,7 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { inDesktopApp } from '../api/invoke'
 import { syncApi, type Profile } from '../api/sync'
+import { showShortcutHints } from '../keys/tip'
 import { ProfileContext } from './profile'
 
 /**
@@ -17,5 +18,7 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
   }, [])
 
   if (profile === null) return null
+  // Set before the children draw, so no screen shows a shortcut hint on a phone.
+  showShortcutHints(profile !== 'phone')
   return <ProfileContext.Provider value={profile}>{children}</ProfileContext.Provider>
 }

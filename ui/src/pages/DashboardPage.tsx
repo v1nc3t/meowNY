@@ -463,6 +463,14 @@ function RecurringTable({
   const money = (amount: string) => formatMoney(amount, settings.currency, settings.locale)
   const byId = new Map(paid.map((p) => [p.recurringId, p]))
   const share = usedPercent(commitments.expense, income)
+  // Each row's paid amount and, when it differs from the plan, how much.
+  const rows = commitments.items.map((item) => {
+    const paidRow = byId.get(item.id)
+    const diff = paidRow?.difference ?? null
+    const more = diff !== null && (toMinor(diff) ?? 0n) > 0n
+    const difference = diff !== null && diff !== '0.00' ? `(${diff.startsWith('-') ? '' : '+'}${money(diff)})` : ''
+    return { item, paid: paidRow, more, difference }
+  })
   return (
     <div className="dash-rec">
       <div className="dash-rec-sum">
@@ -484,22 +492,19 @@ function RecurringTable({
           <span>{t('dashboard.perMonth')}</span>
           <span>{t('dashboard.paid')}</span>
         </li>
-        {commitments.items.map((item) => {
-          const p = byId.get(item.id)
-          const more = p !== undefined && p.difference !== null && (toMinor(p.difference) ?? 0n) > 0n
-          return (
-            <li key={item.id}>
-              <span className="legend-name">
-                <span className={`swatch ${item.type === 'INCOME' ? 'swatch-income' : 'swatch-expense'}`} aria-hidden="true" /> {item.name}
-              </span>
-              <span className="legend-amount">{item.perMonth === null ? t('rec.varies') : money(item.perMonth)}</span>
-              <span className={`legend-amount${p ? (more ? ' rec-more' : ' rec-paid') : ' muted'}`}>
-                {p ? money(p.paid) : '-'}
-                {p && p.difference !== null && p.difference !== '0.00' ? <span className="rec-diff"> ({(p.difference.startsWith('-') ? '' : '+') + money(p.difference)})</span> : null}
-              </span>
-            </li>
-          )
-        })}
+        {rows.map(({ item, paid: p, more, difference }) => (
+          <li key={item.id}>
+            <span className="legend-name">
+              <span className={`swatch ${item.type === 'INCOME' ? 'swatch-income' : 'swatch-expense'}`} aria-hidden="true" /> {item.name}
+            </span>
+            <span className="legend-amount">{item.perMonth === null ? t('rec.varies') : money(item.perMonth)}</span>
+            {/* The difference sits under the amount, so the amounts stay in one line down the column. */}
+            <span className={`legend-amount rec-paid-cell${p ? (more ? ' rec-over' : ' rec-paid') : ' muted'}`}>
+              <span>{p ? money(p.paid) : '-'}</span>
+              {difference ? <span className="rec-diff">{difference}</span> : null}
+            </span>
+          </li>
+        ))}
       </ul>
     </div>
   )

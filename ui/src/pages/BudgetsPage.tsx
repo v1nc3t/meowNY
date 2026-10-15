@@ -3,10 +3,12 @@ import { budgets as budgetsApi, MONTH, type MonthHistory, type Overview } from '
 import { categories as categoriesApi, type Category } from '../api/categories'
 import { errorText } from '../api/invoke'
 import { monthLabel, shiftMonth } from '../api/months'
+import Collapsible from '../components/Collapsible'
 import MonthNav from '../components/MonthNav'
 import { useToday } from '../api/today'
 import { amountString, formatMoney } from '../lib/money'
 import { useMoneySettings, type MoneySettings } from '../hooks/useMoneySettings'
+import { useProfile } from '../hooks/profile'
 import { useNotice } from '../hooks/useNotice'
 import { useI18n, useT } from '../i18n/context'
 import { useShortcut } from '../keys/registry'
@@ -25,6 +27,7 @@ export default function BudgetsPage() {
 
 function BudgetsView({ settings, thisMonth }: { settings: MoneySettings; thisMonth: string }) {
   const { t, language } = useI18n()
+  const phone = useProfile() === 'phone'
   const [month, setMonth] = useState(thisMonth)
   const [overview, setOverview] = useState<Overview[] | null>(null)
   const [history, setHistory] = useState<MonthHistory[] | null>(null)
@@ -144,6 +147,74 @@ function BudgetsView({ settings, thisMonth }: { settings: MoneySettings; thisMon
   const expenseCategories = categories?.filter((category) => category.type === 'EXPENSE') ?? null
   const incomeCategories = categories?.filter((category) => category.type === 'INCOME') ?? null
 
+  const halves = [
+    <BudgetHalf
+      key="EXPENSE"
+      title={t('budgets.expenses')}
+      hideTitle={phone}
+      type="EXPENSE"
+      month={month}
+      overview={overview?.find((row) => row.type === 'EXPENSE') ?? null}
+      amounts={amountsFor(overview, 'EXPENSE')}
+      categories={expenseCategories}
+      money={money}
+      onGlobal={onGlobal}
+      onCategory={onCategory}
+    />,
+    <BudgetHalf
+      key="INCOME"
+      title={t('budgets.income')}
+      hideTitle={phone}
+      type="INCOME"
+      month={month}
+      overview={overview?.find((row) => row.type === 'INCOME') ?? null}
+      amounts={amountsFor(overview, 'INCOME')}
+      categories={incomeCategories}
+      money={money}
+      onGlobal={onGlobal}
+      onCategory={onCategory}
+    />,
+  ]
+  const historyTable = history ? (
+    <table>
+      <thead>
+        <tr>
+          <th>{t('budgets.colMonth')}</th>
+          <th>{t('budgets.colExpenseBudget')}</th>
+          <th>{t('budgets.colSpent')}</th>
+          <th>{t('budgets.colIncomeBudget')}</th>
+          <th>{t('budgets.colEarned')}</th>
+        </tr>
+      </thead>
+      <tbody>
+        {history.map((row) => {
+          const overspent = row.expenseBudget !== null && Number(row.expenseActual) > Number(row.expenseBudget)
+          return (
+            <tr key={row.month} className={row.month === month ? 'selected' : undefined}>
+              <td>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMonth(row.month)
+                    pageRef.current?.scrollTo({ top: 0 })
+                  }}
+                >
+                  {monthLabel(row.month, language)}
+                </button>
+              </td>
+              <td>{row.expenseBudget === null ? '-' : money(row.expenseBudget)}</td>
+              <td>
+                <span className={overspent ? 'over' : undefined}>{money(row.expenseActual)}</span>
+              </td>
+              <td>{row.incomeBudget === null ? '-' : money(row.incomeBudget)}</td>
+              <td>{money(row.incomeActual)}</td>
+            </tr>
+          )
+        })}
+      </tbody>
+    </table>
+  ) : null
+
   return (
     <section className="tx-page budget-page" ref={pageRef}>
       <div className="tx-title">
@@ -152,72 +223,30 @@ function BudgetsView({ settings, thisMonth }: { settings: MoneySettings; thisMon
       </div>
       <p className="notice">{message}</p>
       <div className="budget-split wide">
-        <BudgetHalf
-          title={t('budgets.expenses')}
-          type="EXPENSE"
-          month={month}
-          overview={overview?.find((row) => row.type === 'EXPENSE') ?? null}
-          amounts={amountsFor(overview, 'EXPENSE')}
-          categories={expenseCategories}
-          money={money}
-          onGlobal={onGlobal}
-          onCategory={onCategory}
-        />
-        <BudgetHalf
-          title={t('budgets.income')}
-          type="INCOME"
-          month={month}
-          overview={overview?.find((row) => row.type === 'INCOME') ?? null}
-          amounts={amountsFor(overview, 'INCOME')}
-          categories={incomeCategories}
-          money={money}
-          onGlobal={onGlobal}
-          onCategory={onCategory}
-        />
+        {phone ? (
+          <>
+            <Collapsible title={t('budgets.expenses')} defaultOpen>
+              {halves[0]}
+            </Collapsible>
+            <Collapsible title={t('budgets.income')}>{halves[1]}</Collapsible>
+          </>
+        ) : (
+          halves
+        )}
       </div>
       {history && history.length > 0 ? (
-        <section className="budget-history">
-          <h2>{t('budgets.history')}</h2>
-          <div className="budget-history-scroll">
-            <table>
-              <thead>
-                <tr>
-                  <th>{t('budgets.colMonth')}</th>
-                  <th>{t('budgets.colExpenseBudget')}</th>
-                  <th>{t('budgets.colSpent')}</th>
-                  <th>{t('budgets.colIncomeBudget')}</th>
-                  <th>{t('budgets.colEarned')}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {history.map((row) => {
-                  const overspent = row.expenseBudget !== null && Number(row.expenseActual) > Number(row.expenseBudget)
-                  return (
-                    <tr key={row.month} className={row.month === month ? 'selected' : undefined}>
-                      <td>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setMonth(row.month)
-                            pageRef.current?.scrollTo({ top: 0 })
-                          }}
-                        >
-                          {monthLabel(row.month, language)}
-                        </button>
-                      </td>
-                      <td>{row.expenseBudget === null ? '-' : money(row.expenseBudget)}</td>
-                      <td>
-                        <span className={overspent ? 'over' : undefined}>{money(row.expenseActual)}</span>
-                      </td>
-                      <td>{row.incomeBudget === null ? '-' : money(row.incomeBudget)}</td>
-                      <td>{money(row.incomeActual)}</td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
-          </div>
-        </section>
+        phone ? (
+          <Collapsible title={t('budgets.history')}>
+            <div className="budget-history">
+              <div className="budget-history-scroll">{historyTable}</div>
+            </div>
+          </Collapsible>
+        ) : (
+          <section className="budget-history">
+            <h2>{t('budgets.history')}</h2>
+            <div className="budget-history-scroll">{historyTable}</div>
+          </section>
+        )
       ) : null}
     </section>
   )
@@ -230,6 +259,7 @@ function amountsFor(overview: Overview[] | null, type: Side): Map<string, string
 
 function BudgetHalf({
   title,
+  hideTitle = false,
   type,
   month,
   overview,
@@ -240,6 +270,8 @@ function BudgetHalf({
   onCategory,
 }: {
   title: string
+  /** The title is already shown by a section around this one. */
+  hideTitle?: boolean
   type: Side
   month: string
   overview: Overview | null
@@ -254,7 +286,7 @@ function BudgetHalf({
   const over = overview !== null && overview.overAllocated && overview.budgeted !== null
   return (
     <section className="budget-half">
-      <h2>{title}</h2>
+      {hideTitle ? null : <h2>{title}</h2>}
       <div className="budget-table">
         <BudgetRow
           key={`${type}:${month}:${budgeted}`}

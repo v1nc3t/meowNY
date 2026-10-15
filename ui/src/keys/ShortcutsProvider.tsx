@@ -11,9 +11,12 @@ import { isTypingTarget, KeyMatcher } from './shortcuts'
  */
 export default function ShortcutsProvider({
   onToggleSidebar,
+  enabled = true,
   children,
 }: {
   onToggleSidebar: () => void
+  /** False on a phone, which has no keyboard shortcuts at all. */
+  enabled?: boolean
   children: ReactNode
 }) {
   const navigate = useNavigate()
@@ -41,6 +44,7 @@ export default function ShortcutsProvider({
   }, [navigate, onToggleSidebar, lock])
 
   useEffect(() => {
+    if (!enabled) return
     function onKeyDown(event: KeyboardEvent) {
       if (event.defaultPrevented || event.isComposing) return
       const modified = event.ctrlKey || event.metaKey
@@ -52,7 +56,7 @@ export default function ShortcutsProvider({
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [])
+  }, [enabled])
 
   return (
     <>

@@ -127,7 +127,7 @@ export default function CategoriesPage() {
       ) : null}
       <div className="tx-pane wide">
         {loaded && shown.length === 0 ? <p>{t('common.noCategories')}</p> : null}
-        <ul className="rows">
+        <ul className="card-list">
           {shown.map((category) => (
             <CategoryEditor
               key={`${category.id}:${category.name}`}
@@ -188,13 +188,13 @@ function CategoryEditor({
 
   if (renaming) {
     return (
-      <li>
-        <form className="entry-row" onSubmit={(event) => void onSave(event)}>
+      <li className="card-item">
+        <form className="card-form" onSubmit={(event) => void onSave(event)}>
           <label>
             {t('common.name')}
             <input name="name" required maxLength={50} defaultValue={category.name} autoComplete="off" />
           </label>
-          <div className="entry-actions">
+          <div className="card-actions">
             <button type="submit">{t('common.save')}</button>
             <button type="button" onClick={() => setRenaming(false)}>
               {t('common.cancel')}
@@ -206,20 +206,18 @@ function CategoryEditor({
   }
 
   return (
-    <li>
-      <div className="entry-row">
-        <p className="entry-main">
-          {category.name}
-          <span className="entry-meta">{typeLabel}</span>
-        </p>
-        <div className="entry-actions">
-          <button type="button" className="tx-text" data-row-focus onClick={() => setRenaming(true)}>
-            {t('common.rename')}
-          </button>
-          <button type="button" className="tx-text" onClick={() => void onDelete()}>
-            {t('common.delete')}
-          </button>
-        </div>
+    <li className="card-item">
+      <div className="card-body">
+        <p className="card-name">{category.name}</p>
+        <p className="card-meta">{typeLabel}</p>
+      </div>
+      <div className="card-actions">
+        <button type="button" data-row-focus onClick={() => setRenaming(true)}>
+          {t('common.rename')}
+        </button>
+        <button type="button" onClick={() => void onDelete()}>
+          {t('common.delete')}
+        </button>
       </div>
     </li>
   )

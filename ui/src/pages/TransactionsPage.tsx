@@ -354,20 +354,20 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
         <>
           <div className="tx-pane wide">
             {page.transactions.length === 0 ? <p>{t('tx.empty')}</p> : null}
-            <ul className="rows">
-            {page.transactions.map((transaction) => (
-              <li key={transaction.id}>
-                <div className="entry-row tx-row">
-                  <div className="tx-main">
-                    <p className="entry-main">{transaction.name}</p>
-                    <p className="tx-sub">
+            <ul className="card-list">
+              {page.transactions.map((transaction) => (
+                <li key={transaction.id} className="card-item">
+                  <div className="card-body">
+                    <p className="card-name">{transaction.name}</p>
+                    <p className="card-meta">
+                      <span className="card-amount">{formatMoney(transaction.amount, settings.currency, settings.locale)}</span>
                       {[
-                        formatMoney(transaction.amount, settings.currency, settings.locale),
                         categoryNames.get(transaction.categoryId) ?? (categoriesReady ? t('tx.deletedCategory') : ''),
                         formatDate(transaction.paymentDate, settings.locale),
                       ]
                         .filter(Boolean)
-                        .join(' | ')}
+                        .map((part) => ` \u00b7 ${part}`)
+                        .join('')}
                     </p>
                     {transaction.description?.trim() ? (
                       <button
@@ -380,17 +380,16 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
                       </button>
                     ) : null}
                   </div>
-                  <div className="entry-actions">
-                    <button type="button" className="tx-text" data-row-focus onClick={() => openEdit(transaction)}>
+                  <div className="card-actions">
+                    <button type="button" data-row-focus onClick={() => openEdit(transaction)}>
                       {t('common.edit')}
                     </button>
-                    <button type="button" className="tx-text" onClick={() => void onDelete(transaction.id)}>
+                    <button type="button" onClick={() => void onDelete(transaction.id)}>
                       {t('common.delete')}
                     </button>
                   </div>
-                </div>
-              </li>
-            ))}
+                </li>
+              ))}
             </ul>
           </div>
           <div className="page-numbers">
