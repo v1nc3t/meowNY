@@ -54,6 +54,20 @@ fn fail(e: &CliError, json: bool, err: &mut dyn Write) -> u8 {
     e.exit()
 }
 
+/// For a page of a longer list (an answer with `total`, `limit`, `offset` and a list), where the rest is.
+/// People get it on standard error; a script reads the same three numbers in the JSON.
+fn page_hint(data: &Value) -> Option<String> {
+    let map = data.as_object()?;
+    let (total, offset) = (map.get("total")?.as_u64()?, map.get("offset")?.as_u64()?);
+    map.get("limit")?.as_u64()?;
+    let shown = map.values().find_map(Value::as_array)?.len() as u64;
+    let end = offset + shown;
+    if shown == 0 && offset > 0 && offset >= total {
+        return Some(format!("{total} in all; --offset {offset} is past the end"));
+    }
+    (end < total).then(|| format!("showing {}-{end} of {total}; next page: --offset {end}", offset + 1))
+}
+
 fn show(data: &Value, json: bool, out: &mut dyn Write, err: &mut dyn Write) {
     if json {
         let _ = writeln!(out, "{}", output::compact(data));
@@ -61,6 +75,9 @@ fn show(data: &Value, json: bool, out: &mut dyn Write, err: &mut dyn Write) {
         let _ = writeln!(err, "done.");
     } else {
         let _ = out.write_all(output::human(data).as_bytes());
+        if let Some(hint) = page_hint(data) {
+            let _ = writeln!(err, "{hint}");
+        }
     }
 }
 
@@ -341,11 +358,12 @@ mod tests {
 
     #[test]
     fn what_the_app_refuses_maps_to_the_documented_exit_codes() {
-        let cases: [(&str, &str, &str, u8); 9] = [
+        let cases: [(&str, &str, &str, u8); 10] = [
             ("400 Bad Request", "invalid_input", "`amount` must be an amount", 2),
             ("401 Unauthorized", "unauthorized", "the token is missing, unknown, expired or revoked", 3),
             ("403 Forbidden", "forbidden", "this token is read-only", 3),
             ("404 Not Found", "not_found", "not found", 4),
+            ("404 Not Found", "unknown_route", "this app has no such route; update the app or the client", 1),
             ("409 Conflict", "name_exists", "that name already exists", 1),
             ("409 Conflict", "not_set_up", "the app is not set up yet", 1),
             ("413 Content Too Large", "too_large", "the request is too large", 1),
@@ -423,6 +441,34 @@ mod tests {
         assert_eq!(r.code, 1);
         assert_eq!(serde_json::from_str::<Value>(&r.err).unwrap()["code"], "timeout");
         assert!(started.elapsed() < Duration::from_secs(4), "{:?}", started.elapsed());
+    }
+
+    #[test]
+    fn a_page_of_a_longer_list_says_where_the_rest_is() {
+        let page = |total: u64, limit: u64, offset: u64, shown: usize| json!({ "total": total, "limit": limit, "offset": offset, "transactions": vec![json!({ "id": "1" }); shown] });
+        assert_eq!(page_hint(&page(404, 4, 0, 4)).unwrap(), "showing 1-4 of 404; next page: --offset 4");
+        assert_eq!(page_hint(&page(404, 50, 100, 50)).unwrap(), "showing 101-150 of 404; next page: --offset 150");
+        assert_eq!(page_hint(&page(10, 4, 8, 2)), None, "the last page has nothing more");
+        assert_eq!(page_hint(&page(4, 50, 0, 4)), None, "everything fit on one page");
+        assert_eq!(page_hint(&page(0, 50, 0, 0)), None, "nothing at all");
+        assert_eq!(page_hint(&page(10, 4, 40, 0)).unwrap(), "10 in all; --offset 40 is past the end");
+        for not_a_page in [json!([1]), json!(null), json!({ "total": 5, "transactions": [] }), json!({ "total": "5", "limit": 1, "offset": 0, "x": [1] }), json!({ "total": 5, "limit": 1, "offset": 0 })] {
+            assert_eq!(page_hint(&not_a_page), None, "{not_a_page}");
+        }
+    }
+
+    #[test]
+    fn the_hint_goes_to_standard_error_in_the_plain_form_only() {
+        let body = r#"{"data":{"total":404,"limit":2,"offset":0,"transactions":[{"id":"1"},{"id":"2"}]},"ok":true}"#;
+        let (port, app) = fake_app(answer(body));
+        let plain = go(&format!("transactions list --limit 2 --port {port}"), &[("MEOWNY_TOKEN", TOKEN)], "");
+        app.join().unwrap();
+        assert_eq!(plain.err, "showing 1-2 of 404; next page: --offset 2\n");
+        assert!(plain.out.contains("transactions") && !plain.out.contains("showing"), "data on standard output only");
+        let (port, app) = fake_app(answer(body));
+        let json = go(&format!("transactions list --limit 2 --json --port {port}"), &[("MEOWNY_TOKEN", TOKEN)], "");
+        app.join().unwrap();
+        assert_eq!(json.err, "", "a script gets no extra text");
     }
 
     #[test]

@@ -261,15 +261,9 @@ fn every_read_command_runs_and_prints_what_the_app_returns() {
         let name = command["command"].as_str().unwrap();
         let args = sample(name, &category);
         let args: Vec<&str> = args.iter().map(String::as_str).collect();
-        // The JSON is exactly what the route returned.
+        // The JSON is exactly what the route returned, and a write token reads the same.
         let data = ok(&app, &app.read, &args);
-        let http = {
-            let route = command["route"].as_str().unwrap();
-            let mut mine = args.clone();
-            mine.push("--json");
-            let _ = route;
-            run(&app, &app.write, &mine).json()
-        };
+        let http = ok(&app, &app.write, &args);
         if name != "status" {
             assert_eq!(data, http, "{name}: a write token and a read token see the same");
         } else {
@@ -277,7 +271,8 @@ fn every_read_command_runs_and_prints_what_the_app_returns() {
         }
         // The plain form is text a person can read: no escapes, no JSON, nothing on stderr.
         let plain = run(&app, &app.read, &args);
-        assert_eq!((plain.code, plain.err.as_str()), (0, ""), "{name}");
+        assert_eq!(plain.code, 0, "{name}: {}", plain.err);
+        assert!(plain.err.is_empty() || plain.err.starts_with("showing "), "{name}: {}", plain.err);
         assert!(!plain.out.is_empty() && !plain.out.contains('\u{1b}') && !plain.out.starts_with('{'), "{name}: {:?}", plain.out);
         tried += 1;
     }
@@ -771,4 +766,118 @@ fn many_scripts_at_once_do_not_trip_over_each_other() {
         assert!(worker.join().unwrap().iter().all(|c| *c == Some(0)));
     }
     assert_eq!(ok(&app, &app.read, &["transactions", "list", "--limit", "1"])["total"], 24);
+}
+
+// ---- every command, once, against a real app --------------------------------------------------
+
+/// Runs commands and remembers which ones, so a command nobody tested is a failure.
+struct Tour<'a> {
+    app: &'a App,
+    known: BTreeSet<String>,
+    used: BTreeSet<String>,
+}
+
+impl Tour<'_> {
+    fn note(&mut self, args: &[&str]) {
+        for n in (1..=2.min(args.len())).rev() {
+            let name = args[..n].join(" ");
+            if self.known.contains(&name) {
+                self.used.insert(name);
+                return;
+            }
+        }
+        panic!("{args:?} is not a command");
+    }
+
+    fn go(&mut self, token: &str, args: &[&str]) -> Value {
+        self.note(args);
+        ok(self.app, token, args)
+    }
+}
+
+fn id_of(value: &Value) -> String {
+    value["id"].as_str().unwrap().to_string()
+}
+
+#[test]
+fn every_command_runs_against_a_real_app_and_a_new_one_without_a_test_fails_this() {
+    let app = app(true);
+    let schema = run(&app, "", &["schema"]).json();
+    let known: BTreeSet<String> = schema["commands"].as_array().unwrap().iter().map(|c| c["command"].as_str().unwrap().to_string()).collect();
+    let mut t = Tour { app: &app, known: known.clone(), used: BTreeSet::new() };
+    let (r, w) = (app.read.clone(), app.write.clone());
+
+    // The app itself.
+    assert_eq!(t.go(&r, &["status"])["app"], "meowny");
+    assert_eq!(t.go(&r, &["today"])["date"].as_str().unwrap().len(), 10);
+    assert_eq!(t.go(&r, &["settings", "get"])["language"], "en");
+    assert_eq!(t.go(&w, &["settings", "set", "--language", "ro", "--locale", "ro-RO"])["language"], "ro");
+    assert_eq!(t.go(&r, &["settings", "get"])["locale"], "ro-RO");
+    t.go(&w, &["settings", "set", "--language", "en", "--locale", "en-IE"]);
+
+    // Categories.
+    let before = t.go(&r, &["categories", "list"]).as_array().unwrap().len();
+    let pets = id_of(&t.go(&w, &["categories", "create", "--name", "Pets", "--type", "expense"]));
+    assert_eq!(t.go(&r, &["categories", "list"]).as_array().unwrap().len(), before + 1);
+    assert_eq!(t.go(&w, &["categories", "rename", &pets, "--name", "Animals"])["name"], "Animals");
+
+    // Transactions.
+    let tx = id_of(&t.go(&w, &["transactions", "create", "--name", "Food", "--amount", "12.50", "--payment-date", "2026-10-14", "--category-id", &pets, "--description", "Kibble"]));
+    assert_eq!(t.go(&r, &["transactions", "list", "--category-id", &pets])["total"], 1);
+    assert_eq!(t.go(&w, &["transactions", "update", &tx, "--amount", "13.00"])["amount"], "13.00");
+    assert!(t.go(&w, &["transactions", "delete", &tx, "--yes"]).is_null());
+    assert_eq!(t.go(&r, &["transactions", "list", "--category-id", &pets])["total"], 0);
+
+    // Budgets.
+    assert_eq!(t.go(&w, &["budgets", "set", "--type", "expense", "--month", "2026-12", "--amount-limit", "100.00", "--category-id", &pets])["amountLimit"], "100.00");
+    assert!(t.go(&r, &["budgets", "overview", "--month", "2026-12"]).is_array());
+    assert!(t.go(&r, &["budgets", "history"]).is_array());
+    t.go(&w, &["budgets", "remove", "--type", "expense", "--month", "2027-01", "--category-id", &pets, "--yes"]);
+
+    // Recurring items.
+    let item = id_of(&t.go(&w, &["recurring", "create", "--name", "Vet plan", "--amount", "20.00", "--category-id", &pets, "--start-date", "2026-10-20", "--interval-unit", "month", "--interval-count", "1"]));
+    assert!(t.go(&r, &["recurring", "list"]).as_array().unwrap().iter().any(|i| i["id"] == json!(item)));
+    assert_eq!(t.go(&w, &["recurring", "update", &item, "--name", "Vet plan plus"])["name"], "Vet plan plus");
+    assert!(t.go(&r, &["recurring", "dues", "--within-days", "30"])["upcoming"].is_array());
+    assert_eq!(t.go(&w, &["recurring", "pay", &item, "--paid-on", "2026-10-14"])["amount"], "20.00");
+    t.go(&w, &["recurring", "skip", &item]);
+    assert_eq!(t.go(&w, &["recurring", "pause", &item])["isActive"], false);
+    assert_eq!(t.go(&w, &["recurring", "resume", &item])["isActive"], true);
+    assert_eq!(t.go(&w, &["recurring", "end", &item, "--yes"])["isActive"], false);
+    assert!(t.go(&w, &["recurring", "delete", &item, "--yes"]).is_null());
+
+    // Statistics.
+    assert!(t.go(&r, &["stats", "budget", "--month", "2026-09"])["categories"].is_array());
+    assert!(t.go(&r, &["stats", "trend", "--category-id", &pets, "--from", "2026-01", "--to", "2026-03"])["points"].is_array());
+    assert!(t.go(&r, &["stats", "year", "--year", "2026"]).is_array());
+    assert!(t.go(&r, &["stats", "top", "--month", "2026-09", "--type", "expense", "--limit", "2"]).is_array());
+    assert!(t.go(&r, &["stats", "commitments"]).is_object());
+    assert!(t.go(&r, &["stats", "planned", "--month", "2026-10"]).is_array());
+
+    // Last, because it removes the category the rows above used.
+    assert!(t.go(&w, &["categories", "delete", &pets, "--yes"]).is_null());
+
+    // The commands that are about this program.
+    assert!(t.go(&r, &["schema"])["commands"].is_array());
+    assert!(t.go(&r, &["schema", "--app"])["routes"].is_array());
+    let file = app.dir.path().join("saved-token");
+    let file = file.to_str().unwrap();
+    for (words, stdin) in [(vec!["login", "--token-file", file], Some(format!("{}\n", app.read))), (vec!["logout", "--token-file", file], None)] {
+        t.note(&words);
+        let mut c = command(&app);
+        c.args(&words).stdin(if stdin.is_some() { Stdio::piped() } else { Stdio::null() }).stdout(Stdio::piped()).stderr(Stdio::piped());
+        let mut child = c.spawn().unwrap();
+        if let Some(text) = stdin {
+            use std::io::Write;
+            child.stdin.take().unwrap().write_all(text.as_bytes()).unwrap();
+        }
+        let out = child.wait_with_output().unwrap();
+        assert_eq!(out.status.code(), Some(0), "{words:?}: {}", String::from_utf8_lossy(&out.stderr));
+    }
+    assert!(!std::path::Path::new(file).exists(), "logout removed what login saved");
+
+    let missing: Vec<&String> = known.difference(&t.used).collect();
+    assert!(missing.is_empty(), "these commands have no test here: {missing:?}");
+    let unknown: Vec<&String> = t.used.difference(&known).collect();
+    assert!(unknown.is_empty(), "{unknown:?}");
 }

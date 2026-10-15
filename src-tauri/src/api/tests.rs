@@ -432,16 +432,16 @@ fn only_post_is_accepted() {
 }
 
 #[test]
-fn unknown_routes_and_odd_paths_are_not_found_and_a_caller_without_a_token_learns_nothing() {
+fn unknown_routes_and_odd_paths_are_unknown_routes_and_a_caller_without_a_token_learns_nothing() {
     let f = fixture();
     let port = f.port();
     for route in ["nope", "test", "test.", ".echo", "status/", "STATUS", "Status", "../status", "status%20", "test.echo.x", "v1/status"] {
-        assert_eq!(f.call(&f.read, route, "").code(), "not_found", "{route:?}");
+        assert_eq!(f.call(&f.read, route, "").code(), "unknown_route", "{route:?}");
         assert_eq!(call(port, None, route, "").code(), "unauthorized", "{route:?} without a token");
     }
     for target in ["/", "/v1", "/v1/", "/v2/status", "/V1/status", "/status", "/v1/status?x=1", "//v1/status", "/v1//status"] {
         let reply = send(port, &raw_request("POST", target, &headers(port, Some(&f.read)), ""));
-        assert_eq!((reply.status, reply.code().as_str()), (404, "not_found"), "{target}");
+        assert_eq!((reply.status, reply.code().as_str()), (404, "unknown_route"), "{target}");
     }
     works(&f);
 }

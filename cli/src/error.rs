@@ -61,6 +61,7 @@ pub const ERROR_CODES: &[&str] = &[
     "unauthorized",
     "forbidden",
     "not_found",
+    "unknown_route",
     "method_not_allowed",
     "name_exists",
     "not_set_up",
@@ -85,6 +86,7 @@ mod tests {
             ("forbidden", 3),
             ("locked", 3),
             ("not_found", 4),
+            ("unknown_route", 1),
             ("app_unavailable", 1),
             ("timeout", 1),
             ("bad_answer", 1),
@@ -99,6 +101,13 @@ mod tests {
             assert!(ERROR_CODES.contains(&code), "{code} is not listed");
         }
         assert_eq!(ERROR_CODES.len(), expected.len(), "a code was added without a test");
+    }
+
+    #[test]
+    fn a_missing_record_is_4_but_a_missing_route_is_not() {
+        // "Already deleted" and "your app is older than this program" must not look alike to a script.
+        assert_eq!(exit_for("not_found"), 4);
+        assert_eq!(exit_for("unknown_route"), 1);
     }
 
     #[test]

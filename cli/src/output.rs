@@ -69,12 +69,12 @@ fn table(rows: &[Value]) -> String {
     if rows.iter().any(|r| !r.is_object()) {
         return rows.iter().map(|r| format!("{}\n", cell(r))).collect();
     }
-    let keys = columns(rows);
+    let keys: Vec<String> = columns(rows);
     let body: Vec<Vec<String>> = rows.iter().map(|row| keys.iter().map(|k| cell(row.get(k).unwrap_or(&Value::Null))).collect()).collect();
     let widths: Vec<usize> = keys
         .iter()
         .enumerate()
-        .map(|(i, k)| body.iter().map(|r| r[i].chars().count()).chain([k.chars().count()]).max().unwrap_or(0))
+        .map(|(i, k)| body.iter().map(|r| r[i].chars().count()).chain([clean(k).chars().count()]).max().unwrap_or(0))
         .collect();
     let right: Vec<bool> = (0..keys.len()).map(|i| body.iter().all(|r| r[i] == "-" || is_number(&r[i])) && body.iter().any(|r| r[i] != "-")).collect();
 
@@ -89,7 +89,8 @@ fn table(rows: &[Value]) -> String {
             .collect();
         format!("{}\n", padded.join("  ").trim_end())
     };
-    let mut out = line(keys.iter().map(String::as_str).collect());
+    let heads: Vec<String> = keys.iter().map(|k| clean(k)).collect();
+    let mut out = line(heads.iter().map(String::as_str).collect());
     for row in &body {
         out.push_str(&line(row.iter().map(String::as_str).collect()));
     }
@@ -103,12 +104,12 @@ pub fn human(data: &Value) -> String {
         Value::Array(rows) => table(rows),
         Value::Object(map) => {
             let (lists, singles): (Vec<_>, Vec<_>) = map.iter().partition(|(_, v)| v.is_array());
-            let mut out: String = singles.iter().map(|(k, v)| format!("{k}: {}\n", cell(v))).collect();
+            let mut out: String = singles.iter().map(|(k, v)| format!("{}: {}\n", clean(k), cell(v))).collect();
             for (key, rows) in lists {
                 if !out.is_empty() {
                     out.push('\n');
                 }
-                out.push_str(&format!("{key}\n"));
+                out.push_str(&format!("{}\n", clean(key)));
                 out.push_str(&table(rows.as_array().map(Vec::as_slice).unwrap_or(&[])));
             }
             out

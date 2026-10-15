@@ -76,7 +76,11 @@ impl ApiError {
     pub const FORBIDDEN_ORIGIN: Self = Self::fixed(403, "forbidden", "requests from web pages are not allowed");
     pub const FORBIDDEN_SCOPE: Self =
         Self::fixed(403, "forbidden", "this token is read-only; make a token that can write in the app");
+    /// A record that is not there (a transaction that was already deleted).
     pub const NOT_FOUND: Self = Self::fixed(404, "not_found", "not found");
+    /// A route this app does not have, say because the client is newer than the app. A different code from
+    /// `not_found`, so a script can tell "already gone" from "update the app".
+    pub const UNKNOWN_ROUTE: Self = Self::fixed(404, "unknown_route", "this app has no such route; update the app or the client");
     pub const METHOD_NOT_ALLOWED: Self = Self::fixed(405, "method_not_allowed", "use POST");
     pub const NAME_EXISTS: Self = Self::fixed(409, "name_exists", "that name already exists");
     pub const NOT_SET_UP: Self = Self::fixed(409, "not_set_up", "the app is not set up yet");
@@ -282,11 +286,11 @@ fn handle(vault: &Vault, routes: &'static [Route], port: u16, request: &http::Re
     if request.method != "POST" {
         return Err(ApiError::METHOD_NOT_ALLOWED);
     }
-    let name = request.target.strip_prefix("/v1/").ok_or(ApiError::NOT_FOUND)?;
+    let name = request.target.strip_prefix("/v1/").ok_or(ApiError::UNKNOWN_ROUTE)?;
     let token = bearer(request.header("authorization")).ok_or(ApiError::UNAUTHORIZED)?;
     let grant = authenticate(vault, token, now)?;
     // After the token, so a caller without one learns nothing about which routes exist.
-    let route = routes.iter().find(|r| r.name == name).ok_or(ApiError::NOT_FOUND)?;
+    let route = routes.iter().find(|r| r.name == name).ok_or(ApiError::UNKNOWN_ROUTE)?;
     if !grant.scope.allows(route.scope) {
         return Err(ApiError::FORBIDDEN_SCOPE);
     }
