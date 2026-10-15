@@ -78,6 +78,8 @@ impl std::error::Error for WireError {}
 #[serde(tag = "t", rename_all = "camelCase")]
 pub enum Message {
     Hello(Hello),
+    /// The desktop's answer to a pairing: the person said yes.
+    Accept(AcceptMessage),
     Currency(CurrencyMessage),
     Hashes(HashesMessage),
     Digest(DigestMessage),
@@ -108,6 +110,7 @@ impl Message {
     pub fn validate(&self) -> Result<(), WireError> {
         match self {
             Message::Hello(h) => h.validate(),
+            Message::Accept(_) => Ok(()),
             Message::Currency(c) => {
                 if c.changes.len() > 1000 {
                     return Err(WireError::Invalid("number of currency changes"));
@@ -190,6 +193,10 @@ impl Hello {
         Ok(())
     }
 }
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct AcceptMessage {}
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -705,6 +712,10 @@ mod tests {
             Message::Hello(h) => assert_eq!((h.schema, h.generation, h.name.as_str()), (8, 2, "Vincent's phone")),
             other => panic!("{other:?}"),
         }
+        let accept = Message::Accept(AcceptMessage {});
+        assert_eq!(accept.to_bytes().unwrap(), br#"{"t":"accept"}"#);
+        assert!(Message::from_bytes(br#"{"t":"accept"}"#).is_ok());
+        assert!(Message::from_bytes(br#"{"t":"accept","extra":1}"#).is_err());
         let digest = Message::Digest(DigestMessage { table: Table::Transactions, entries: vec![(ID_A.into(), STAMP.into(), 0), (ID_B.into(), STAMP.into(), 1)], last: true });
         assert!(Message::from_bytes(&digest.to_bytes().unwrap()).is_ok());
         let rows = Message::Rows(RowsMessage { table: Table::Categories, rows: vec![category()], deleted: vec![], last: true });

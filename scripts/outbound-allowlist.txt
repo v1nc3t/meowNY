@@ -20,5 +20,11 @@ url-literal src-tauri/src/api/tests.rs  # tests: Origin values of web pages, whi
 std-net cli/src/client.rs  # connects to the app's command API on 127.0.0.1 only
 listener cli/src/run.rs  # tests: a stand-in for the app on 127.0.0.1
 
-# The phone sync (phase 8). So far only code that reads and writes bytes: nothing here opens a connection yet.
+# The phone sync (phase 8, docs/sync-design.md). The desktop listens only while a window is open for one QR code (about two minutes),
+# on the one home-network address that is in the code, and takes one connection that proves two secrets; everything else is closed
+# without an answer. The phone connects only to an address in a scanned code, and qr.rs refuses a code with any address that is not
+# on a home network. Nothing here reaches the internet.
+listener src-tauri/src/sync/net.rs  # the window: one home-network address, one QR code, one connection that proves both secrets
+std-net src-tauri/src/sync/net.rs  # the phone's connection to that address, finding this device's home-network address (a UDP socket that is only "connected", nothing is sent), and the tests
 url-literal src-tauri/src/sync/qr.rs  # a test: a web address is not a meowNY code and is refused
+url-literal src-tauri/src/sync/service.rs  # a test: a web address is not a meowNY code and is refused

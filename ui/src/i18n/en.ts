@@ -59,6 +59,7 @@ export const en = {
   'error.invalid_input': 'check the values and try again.',
   'error.not_found': 'that item no longer exists.',
   'error.name_exists': 'that name already exists.',
+  'error.erased': 'the data on this device was erased after too many wrong passphrases. pair it with your desktop again to get it back.',
   'error.invalid_backup': 'that file is not a meowny backup, or it is damaged.',
   'error.internal': 'something went wrong.',
 

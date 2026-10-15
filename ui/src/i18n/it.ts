@@ -55,6 +55,7 @@ export const it: Messages = {
   'error.invalid_input': 'controlla i valori e riprova.',
   'error.not_found': 'questo elemento non esiste più.',
   'error.name_exists': 'questo nome esiste già.',
+  'error.erased': 'i dati su questo dispositivo sono stati cancellati dopo troppe frasi segrete errate. associalo di nuovo al tuo computer per recuperarli.',
   'error.invalid_backup': 'questo file non è un backup di meowny, oppure è danneggiato.',
   'error.internal': 'qualcosa è andato storto.',
 

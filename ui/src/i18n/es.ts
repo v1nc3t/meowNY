@@ -55,6 +55,7 @@ export const es: Messages = {
   'error.invalid_input': 'revisa los valores e inténtalo de nuevo.',
   'error.not_found': 'ese elemento ya no existe.',
   'error.name_exists': 'ese nombre ya existe.',
+  'error.erased': 'los datos de este dispositivo se borraron tras demasiadas frases de contraseña incorrectas. vuelve a emparejarlo con tu ordenador para recuperarlos.',
   'error.invalid_backup': 'ese archivo no es una copia de seguridad de meowny, o está dañado.',
   'error.internal': 'algo salió mal.',
 

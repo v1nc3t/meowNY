@@ -19,9 +19,13 @@ use crate::schedule::{self, Schedule};
 use crate::tokens::{self, CreatedToken, NewToken, TokenInfo};
 use crate::stats::{self, BudgetVsActual, CategoryTrend, Commitments, PlannedVsPaid, TopCategory, YearPoint};
 use crate::transactions::{self, Filter, NewTransaction, Page, Transaction, TransactionPatch};
-use crate::vault::{AppError, LockPrefs, Settings, Vault, VaultStatus};
+use crate::sync::engine::SyncError;
+use crate::sync::peers::Peer;
+use crate::sync::service::{Status as SyncStatus, SyncService};
+use crate::vault::{AppError, Attempts, LockPrefs, Policy, Settings, Vault, VaultStatus};
 
 type Shared<'a> = State<'a, Arc<Vault>>;
+type Syncing<'a> = State<'a, Arc<SyncService<Vault>>>;
 
 /// Names of every command, used by the build script to generate one permission each.
 pub const COMMANDS: &[&str] = &[
@@ -86,6 +90,17 @@ pub const COMMANDS: &[&str] = &[
     "list_api_tokens",
     "create_api_token",
     "revoke_api_token",
+    "app_profile",
+    "unlock_attempts",
+    "sync_status",
+    "sync_start_pairing",
+    "sync_answer_pairing",
+    "sync_start",
+    "sync_scan",
+    "sync_cancel",
+    "sync_acknowledge",
+    "sync_devices",
+    "sync_remove_device",
 ];
 
 #[tauri::command]
@@ -136,8 +151,9 @@ pub fn unlock_vault(vault: Shared, passphrase: Option<String>) -> Result<(), App
 }
 
 #[tauri::command]
-pub fn lock_vault(vault: Shared) {
+pub fn lock_vault(vault: Shared, syncing: Syncing) {
     vault.lock();
+    syncing.cancel();
 }
 
 #[tauri::command]
@@ -585,6 +601,100 @@ pub fn create_api_token(vault: Shared, input: NewToken) -> Result<CreatedToken, 
 pub fn revoke_api_token(vault: Shared, id: String) -> Result<(), AppError> {
     let id = categories::parse_id(&id)?;
     vault.with_conn(|c| tokens::revoke(c, id))
+}
+
+// --- the phone and the sync (phase 8) ---------------------------------------------------------------------------------
+
+/// Which app this is: the desktop's, or the phone's. The screens differ, and so does the vault (the phone's needs a passphrase
+/// and erases itself after 5 wrong ones).
+#[tauri::command]
+pub fn app_profile(vault: Shared) -> &'static str {
+    if vault.policy() == Policy::PHONE {
+        "phone"
+    } else {
+        "desktop"
+    }
+}
+
+/// How many wrong passphrases have been typed and how many are left before the erase; none on a device that never erases.
+#[tauri::command]
+pub fn unlock_attempts(vault: Shared) -> Result<Option<Attempts>, AppError> {
+    vault.attempts()
+}
+
+fn sync_error(e: SyncError) -> AppError {
+    match e {
+        SyncError::Locked => AppError::Locked,
+        SyncError::Invalid(_) => AppError::InvalidInput,
+        _ => AppError::Internal,
+    }
+}
+
+fn is_phone(vault: &Vault) -> bool {
+    vault.policy() == Policy::PHONE
+}
+
+#[tauri::command]
+pub fn sync_status(syncing: Syncing) -> SyncStatus {
+    syncing.status()
+}
+
+/// Desktop: opens a window for a new phone and shows its code (read it with `sync_status`).
+#[tauri::command]
+pub fn sync_start_pairing(vault: Shared, syncing: Syncing, name: String) -> Result<(), AppError> {
+    if is_phone(&vault) {
+        return Err(AppError::InvalidInput);
+    }
+    syncing.start_pairing(&name, None).map_err(sync_error)
+}
+
+/// Desktop: the person compared the six digits and said yes or no.
+#[tauri::command]
+pub fn sync_answer_pairing(vault: Shared, syncing: Syncing, yes: bool) -> Result<(), AppError> {
+    if is_phone(&vault) {
+        return Err(AppError::InvalidInput);
+    }
+    syncing.answer_pairing(yes);
+    Ok(())
+}
+
+/// Desktop: opens a window for a paired phone and shows its code.
+#[tauri::command]
+pub fn sync_start(vault: Shared, syncing: Syncing, name: String) -> Result<(), AppError> {
+    if is_phone(&vault) {
+        return Err(AppError::InvalidInput);
+    }
+    syncing.start_sync(&name, None).map_err(sync_error)
+}
+
+/// Phone: the text of a scanned code. A pairing code pairs, a sync code syncs.
+#[tauri::command]
+pub fn sync_scan(vault: Shared, syncing: Syncing, text: String, name: String) -> Result<(), AppError> {
+    if !is_phone(&vault) {
+        return Err(AppError::InvalidInput);
+    }
+    syncing.scan(&text, &name).map_err(sync_error)
+}
+
+#[tauri::command]
+pub fn sync_cancel(syncing: Syncing) {
+    syncing.cancel();
+}
+
+#[tauri::command]
+pub fn sync_acknowledge(syncing: Syncing) {
+    syncing.acknowledge();
+}
+
+#[tauri::command]
+pub fn sync_devices(syncing: Syncing) -> Result<Vec<Peer>, AppError> {
+    syncing.devices().map_err(sync_error)
+}
+
+/// Forgets a paired device: its secret is deleted and it can never sync again.
+#[tauri::command]
+pub fn sync_remove_device(syncing: Syncing, device_id: String) -> Result<bool, AppError> {
+    syncing.remove_device(&device_id).map_err(sync_error)
 }
 
 #[cfg(test)]

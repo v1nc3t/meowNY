@@ -54,6 +54,7 @@ export const ro: Messages = {
   'error.invalid_input': 'verifică valorile și încearcă din nou.',
   'error.not_found': 'acest element nu mai există.',
   'error.name_exists': 'acest nume există deja.',
+  'error.erased': 'datele de pe acest dispozitiv au fost șterse după prea multe fraze de acces greșite. asociază-l din nou cu computerul tău ca să le recuperezi.',
   'error.invalid_backup': 'acest fișier nu este o copie de rezervă meowny sau este deteriorat.',
   'error.internal': 'ceva nu a mers bine.',
 

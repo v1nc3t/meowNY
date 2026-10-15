@@ -56,6 +56,7 @@ export const de: Messages = {
   'error.invalid_input': 'prüfe die eingaben und versuche es erneut.',
   'error.not_found': 'dieser eintrag existiert nicht mehr.',
   'error.name_exists': 'dieser name existiert bereits.',
+  'error.erased': 'die daten auf diesem gerät wurden nach zu vielen falschen passphrasen gelöscht. koppel es erneut mit deinem desktop, um sie zurückzubekommen.',
   'error.invalid_backup': 'diese datei ist kein meowny-backup oder sie ist beschädigt.',
   'error.internal': 'etwas ist schiefgelaufen.',
 

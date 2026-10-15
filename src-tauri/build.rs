@@ -63,6 +63,17 @@ const COMMANDS: &[&str] = &[
     "list_api_tokens",
     "create_api_token",
     "revoke_api_token",
+    "app_profile",
+    "unlock_attempts",
+    "sync_status",
+    "sync_start_pairing",
+    "sync_answer_pairing",
+    "sync_start",
+    "sync_scan",
+    "sync_cancel",
+    "sync_acknowledge",
+    "sync_devices",
+    "sync_remove_device",
 ];
 
 fn main() {

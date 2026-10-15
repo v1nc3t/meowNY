@@ -18,6 +18,7 @@ const ERROR_CODES = [
   'invalid_backup',
   'not_found',
   'name_exists',
+  'erased',
   'internal',
 ] as const
 

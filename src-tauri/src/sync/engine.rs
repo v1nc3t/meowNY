@@ -35,6 +35,10 @@ pub enum SyncError {
     Currency,
     /// A message or a row broke a rule. Says what kind of thing, never the content.
     Invalid(&'static str),
+    /// The app is locked, so there is no database to sync.
+    Locked,
+    /// A phone that already holds data cannot be paired: it must be new or erased.
+    NotEmpty,
     Wire(WireError),
     Database,
     Internal,
@@ -49,6 +53,8 @@ impl std::fmt::Display for SyncError {
             SyncError::ClockFarOff => f.write_str("the clocks of the two devices are too far apart"),
             SyncError::Currency => f.write_str("the currencies of the two devices do not fit together"),
             SyncError::Invalid(what) => write!(f, "invalid {what} from the other device"),
+            SyncError::Locked => f.write_str("the app is locked"),
+            SyncError::NotEmpty => f.write_str("this device already holds data"),
             SyncError::Wire(e) => write!(f, "{e}"),
             SyncError::Database => f.write_str("the database refused a change"),
             SyncError::Internal => f.write_str("something went wrong"),

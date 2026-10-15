@@ -53,10 +53,12 @@ pub trait SecretStore: Send + Sync {
     fn delete(&self) -> Result<(), KeyError>;
 }
 
+#[cfg(not(target_os = "android"))]
 pub struct KeychainStore {
     entry: keyring::Entry,
 }
 
+#[cfg(not(target_os = "android"))]
 impl KeychainStore {
     pub fn new() -> Result<Self, KeyError> {
         let entry = keyring::Entry::new("org.meowny.app", "database-key").map_err(|_| KeyError::Store)?;
@@ -64,6 +66,7 @@ impl KeychainStore {
     }
 }
 
+#[cfg(not(target_os = "android"))]
 impl SecretStore for KeychainStore {
     fn get(&self) -> Result<Option<Zeroizing<[u8; SECRET_LEN]>>, KeyError> {
         match self.entry.get_password() {
@@ -81,6 +84,58 @@ impl SecretStore for KeychainStore {
     fn delete(&self) -> Result<(), KeyError> {
         match self.entry.delete_credential() {
             Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
+            Err(_) => Err(KeyError::Store),
+        }
+    }
+}
+
+/// The secret in a file next to the data, for a device with no keychain to put it in (the phone app). The file holds no more
+/// protection than the folder does: the passphrase is what keeps the data closed, so a vault that uses this store must have one.
+pub struct FileStore {
+    path: std::path::PathBuf,
+}
+
+impl FileStore {
+    pub fn new(path: std::path::PathBuf) -> FileStore {
+        FileStore { path }
+    }
+}
+
+impl SecretStore for FileStore {
+    fn get(&self) -> Result<Option<Zeroizing<[u8; SECRET_LEN]>>, KeyError> {
+        match std::fs::read_to_string(&self.path) {
+            Ok(hex) => decode_secret(hex.trim()).map(Some),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
+            Err(_) => Err(KeyError::Store),
+        }
+    }
+
+    fn set(&self, secret: &[u8; SECRET_LEN]) -> Result<(), KeyError> {
+        use std::io::Write;
+        let hex = Zeroizing::new(hex_encode(secret));
+        let tmp = self.path.with_extension("tmp");
+        let mut options = std::fs::OpenOptions::new();
+        options.write(true).create(true).truncate(true);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::OpenOptionsExt;
+            options.mode(0o600);
+        }
+        let written = options.open(&tmp).and_then(|mut f| f.write_all(hex.as_bytes()).and_then(|_| f.sync_all()));
+        if written.is_err() {
+            let _ = std::fs::remove_file(&tmp);
+            return Err(KeyError::Store);
+        }
+        std::fs::rename(&tmp, &self.path).map_err(|_| {
+            let _ = std::fs::remove_file(&tmp);
+            KeyError::Store
+        })
+    }
+
+    fn delete(&self) -> Result<(), KeyError> {
+        match std::fs::remove_file(&self.path) {
+            Ok(()) => Ok(()),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
             Err(_) => Err(KeyError::Store),
         }
     }
@@ -386,6 +441,37 @@ mod tests {
     #[test]
     fn recovery_keys_differ_each_time() {
         assert_ne!(RecoveryKey::generate().unwrap().to_display(), RecoveryKey::generate().unwrap().to_display());
+    }
+
+    #[test]
+    fn a_secret_in_a_file_is_stored_private_read_back_and_deleted() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = FileStore::new(dir.path().join("phone.secret"));
+        assert!(store.get().unwrap().is_none());
+        store.set(&[0xAB; SECRET_LEN]).unwrap();
+        assert_eq!(*store.get().unwrap().unwrap(), [0xAB; SECRET_LEN]);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mode = std::fs::metadata(dir.path().join("phone.secret")).unwrap().permissions().mode();
+            assert_eq!(mode & 0o077, 0, "readable by the owner only");
+        }
+        assert!(!dir.path().join("phone.tmp").exists(), "no temporary file is left");
+        store.set(&[0xCD; SECRET_LEN]).unwrap();
+        assert_eq!(*store.get().unwrap().unwrap(), [0xCD; SECRET_LEN], "a new secret replaces the old");
+        store.delete().unwrap();
+        store.delete().unwrap();
+        assert!(store.get().unwrap().is_none());
+    }
+
+    #[test]
+    fn a_damaged_secret_file_is_an_error_not_a_secret() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("phone.secret");
+        for bad in ["", "abcd", &"zz".repeat(32), &"ab".repeat(33)] {
+            std::fs::write(&path, bad).unwrap();
+            assert_eq!(FileStore::new(path.clone()).get().err(), Some(KeyError::Corrupt), "{bad:?}");
+        }
     }
 
     #[test]

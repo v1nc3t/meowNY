@@ -73,6 +73,8 @@ A phone that already holds data is not paired: it must be new or erased. Two set
 
 The pairing QR code holds the PS in the clear, so it is the weak moment: anyone who photographs it during those minutes could try to connect first. That is why the code is single use, short lived, and needs the person to confirm the check code on the desktop while holding the real phone. If the real phone cannot connect, or shows a different code, the person says no and nothing is stored. The PS is not used for anything until the yes.
 
+The messages of a pairing, in order, all inside the encrypted channel: the phone sends `hello` (its name and what it holds); both screens now have the check code; the desktop asks the person and, on a yes, sends `accept`, then its own `hello`, then `currency` (its whole record of currency changes); the phone takes the currency and the generation as they are, stores the desktop and its secret, and sends a new `hello` that says what it holds now; from there it is an ordinary sync. On a no, the desktop sends `error` with the code `cancelled` and closes. The phone waits up to five minutes for the answer; neither side stores anything before it.
+
 To pair again (new phone, lost phone, or a phone that erased itself), remove the old device on the desktop and pair again. A new PS is made every time.
 
 ## 6. The connection and the handshake
@@ -147,6 +149,8 @@ Messages are JSON objects with a `t` field, each sealed into one frame of at mos
 6. The receiver collects everything, validates it (section 12), and applies it in one database transaction. It counts what it did for the summary: rows added, rows taken over from the other device, of those how many had also been changed here since the last sync (a change of yours that was replaced by a newer one there), rows deleted, categories merged, and duplicates removed. (A row that is newer here is never sent, so the other device is the one that counts it as replaced.)
 7. **`done`**: each side sends a hash of its final list of `(table, sync_id, stamp, deleted)`. If they are equal the sync is finished and both show a summary. If not, both say "differences remain, sync again", and nothing is thrown away.
 
+When both sides have a lot to send (the lists of a big database are megabytes), they must not both write at once, or neither would ever read. So the desktop always speaks first and the phone listens, and then the other way round: the lists, then the rows, then `done`. Each side works out what the other lacks from the lists, before it applies anything of what arrives.
+
 This is a comparison of states, not a log of changes, so it needs no record of what was sent before. A sync that stops half way, a restored backup or a wiped phone is repaired by the next sync without special cases. Applying is all or nothing on each side; if one side commits and the other does not, the next sync closes the gap.
 
 ## 9. Database changes (migrations `0008` and `0009`)
@@ -217,7 +221,7 @@ Rows from the other device are untrusted input, even from a paired one, so a bug
 
 ## 13. The phone
 
-- **Vault**: locked by a passphrase (Argon2, as on the desktop), with no OS keychain crate. The database key and the pairing secret live inside the encrypted vault. The app locks itself after a while.
+- **Vault** (`Policy::PHONE` in `vault.rs`): locked by a passphrase (Argon2, as on the desktop), with no OS keychain crate: the random secret that the keychain holds on the desktop is a file next to the data (`FileStore`), so the passphrase is the protection. The database key and the pairing secret live inside the encrypted vault. The app locks itself after a while.
 - **Erase**: after 5 wrong passphrases the phone deletes its database, its keys and its pairing secret. The counter is kept outside the encrypted database, so closing the app does not reset it; a warning shows from the 3rd miss and says how many tries are left. A correct passphrase resets the counter.
 - **After an erase**, or on a new phone, the person pairs again and the desktop sends a full copy. Changes made on the phone since its last sync are lost, and the warning says so.
 - Against someone who copies the file off the phone and guesses offline, the erase does not help. Only the length of the passphrase and Argon2 protect it, so the passphrase screen pushes for a long one. With no server there is also no remote wipe.
