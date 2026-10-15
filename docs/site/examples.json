@@ -103,7 +103,7 @@
       "human": {
         "exit": 0,
         "stderr": "waiting for you to allow this in the meowNY app...\n",
-        "stdout": "bytes: 143482\npath: /home/you/meowny.meowbak\n"
+        "stdout": "bytes: 181029\npath: /home/you/meowny.meowbak\n"
       }
     },
     "backup schedule": {
@@ -242,7 +242,7 @@
       "human": {
         "exit": 0,
         "stderr": "",
-        "stdout": "bytes: 21865\npath: /home/you/budget.xlsx\n"
+        "stdout": "bytes: 21864\npath: /home/you/budget.xlsx\n"
       }
     },
     "login": {
@@ -469,12 +469,12 @@
       "human": {
         "exit": 0,
         "stderr": "",
-        "stdout": "api: 1\napp: meowny\nschemaVersion: 7\nscope: read\nversion: 0.1.0\n"
+        "stdout": "api: 1\napp: meowny\nschemaVersion: 8\nscope: read\nversion: 0.1.0\n"
       },
       "json": {
         "exit": 0,
         "stderr": "",
-        "stdout": "{\"api\":1,\"app\":\"meowny\",\"schemaVersion\":7,\"scope\":\"read\",\"version\":\"0.1.0\"}\n"
+        "stdout": "{\"api\":1,\"app\":\"meowny\",\"schemaVersion\":8,\"scope\":\"read\",\"version\":\"0.1.0\"}\n"
       }
     },
     "today": {

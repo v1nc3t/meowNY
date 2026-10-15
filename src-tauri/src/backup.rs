@@ -35,6 +35,7 @@ use zeroize::Zeroizing;
 
 use crate::keys::{self, SALT_LEN};
 use crate::migrate;
+use crate::sync;
 use crate::vault::{AppError, MIN_PASSPHRASE_CHARS};
 
 /// File extension of a backup, without the dot.
@@ -42,13 +43,24 @@ pub const EXTENSION: &str = "meowbak";
 
 /// Every table in the schema, parents before children. A test fails when a migration adds a table
 /// that is missing here, so a backup cannot silently leave data out.
-const TABLES: &[&str] = &["settings", "categories", "budgets", "recurring_transactions", "transactions", "audit_log"];
+const TABLES: &[&str] = &[
+    "settings",
+    "categories",
+    "budgets",
+    "recurring_transactions",
+    "transactions",
+    "audit_log",
+    "sync_deleted",
+    "currency_changes",
+];
 
 /// Tables a backup leaves out on purpose, and restoring leaves alone. `backup_schedule` belongs to
 /// this device and holds the backup passphrase; `api_tokens` holds this device's access grants for
-/// the command-line client, which a restore on another machine must not bring along.
+/// the command-line client, which a restore on another machine must not bring along; `sync_clock`
+/// and `sync_peers` hold this device's id and the secrets it shares with a paired phone (after a
+/// restore the device gets a new id and has to pair again, see `sync::stamp::after_restore`).
 #[cfg(test)]
-const EXCLUDED_TABLES: &[&str] = &["backup_schedule", "api_tokens"];
+const EXCLUDED_TABLES: &[&str] = &["backup_schedule", "api_tokens", "sync_clock", "sync_peers"];
 
 /// Restoring writes the history from the file, not the history the restore itself would trigger.
 const HISTORY_TABLE: &str = "audit_log";
@@ -173,6 +185,12 @@ fn insert_rows(conn: &Connection, table: &str, columns: &[String], rows: &[Row])
 /// nothing changes. Constraints, foreign keys and checks all apply, so a bad file fails here.
 fn replace_all(conn: &mut Connection, tables: &BTreeMap<String, Vec<Row>>) -> Result<(), AppError> {
     let tx = conn.transaction()?;
+    // The rows keep the sync ids and stamps they come with, and the deletes below leave no markers: the file's
+    // markers replace them. (A database from before the sync tables has no clock to switch.)
+    let has_clock = !table_columns(&tx, "sync_clock")?.is_empty();
+    if has_clock {
+        sync::stamp::set_applying(&tx, true)?;
+    }
     let mut present = Vec::new();
     for name in TABLES {
         let columns = table_columns(&tx, name)?;
@@ -197,6 +215,9 @@ fn replace_all(conn: &mut Connection, tables: &BTreeMap<String, Vec<Row>>) -> Re
         }
         insert_rows(&tx, name, columns, tables.get(*name).map(Vec::as_slice).unwrap_or(&[]))?;
     }
+    if has_clock {
+        sync::stamp::set_applying(&tx, false)?;
+    }
     tx.commit()?;
     Ok(())
 }
@@ -212,7 +233,9 @@ pub fn restore_snapshot(target: &mut Connection, snapshot: &Snapshot) -> Result<
     replace_all(&mut scratch, &snapshot.tables)?;
     migrate::run(&mut scratch).map_err(|_| AppError::Internal)?;
     let current = dump(&scratch)?;
-    replace_all(target, &current.tables)
+    replace_all(target, &current.tables)?;
+    // The data is another device's history now: see `after_restore`.
+    sync::stamp::after_restore(target)
 }
 
 pub(crate) fn check_passphrase(passphrase: &str) -> Result<(), AppError> {
@@ -419,6 +442,9 @@ mod tests {
         categories::rename(&conn, rent.id, "Housing").unwrap();
         let mut conn = conn;
         categories::delete(&mut conn, gym.id, chrono::Utc::now()).unwrap();
+        // a deletion (it leaves a marker for sync) and a change of currency (it is recorded for sync)
+        conn.execute("DELETE FROM transactions WHERE name = 'Coffee'", []).unwrap();
+        crate::currency::change(&mut conn, "GBP", None, "2026-02-04").unwrap();
         conn
     }
 
@@ -486,7 +512,7 @@ mod tests {
             .query_row("SELECT description FROM transactions WHERE name = 'Salary'", [], |r| r.get(0))
             .unwrap();
         assert_eq!(description, "Café “bonus” \\ 日本語 'x'; DROP TABLE transactions;--");
-        assert_eq!(count(&target, "transactions"), 4);
+        assert_eq!(count(&target, "transactions"), 3, "four were made and one deleted");
     }
 
     #[test]

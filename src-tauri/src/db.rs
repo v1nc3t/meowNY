@@ -65,6 +65,8 @@ impl From<rusqlite::Error> for DbError {
 pub fn open_and_migrate(path: &Path, key: &DbKey) -> Result<Connection, DbError> {
     let mut conn = open(path, key)?;
     crate::migrate::run(&mut conn).map_err(DbError::Migrate)?;
+    // The clock must not be behind any stamp in the data (a clock that was set back, a file copied from another machine).
+    crate::sync::stamp::catch_up(&conn).map_err(|_| DbError::Unreadable)?;
     Ok(conn)
 }
 

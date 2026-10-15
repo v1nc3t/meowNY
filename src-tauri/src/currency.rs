@@ -11,6 +11,7 @@ use rusqlite::{params, Connection};
 use serde::Serialize;
 
 use crate::money::MAX_MINOR;
+use crate::sync;
 use crate::vault::AppError;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Default)]
@@ -77,6 +78,9 @@ pub fn change(conn: &mut Connection, new_currency: &str, rate: Option<&str>, tod
         return Err(AppError::InvalidInput);
     }
 
+    // A conversion is not an edit: no row gets a new stamp, and the phone converts its own rows the same way when it
+    // learns of the change (docs/sync-design.md, section 11).
+    sync::stamp::set_applying(&tx, true)?;
     let mut done = Conversion::default();
     if let Some(rate) = rate {
         done.transactions = convert_transactions(&tx, rate)?;
@@ -84,7 +88,14 @@ pub fn change(conn: &mut Connection, new_currency: &str, rate: Option<&str>, tod
         done.budgets = convert_budgets(&tx, rate)?;
     }
 
-    tx.execute("UPDATE settings SET currency = ?1 WHERE id = 1", [&new_currency])?;
+    tx.execute("UPDATE settings SET currency = ?1, currency_generation = currency_generation + 1 WHERE id = 1", [&new_currency])?;
+    let generation: i64 = tx.query_row("SELECT currency_generation FROM settings WHERE id = 1", [], |r| r.get(0))?;
+    let stamp = sync::stamp::tick(&tx)?.format();
+    tx.execute(
+        "INSERT INTO currency_changes (id, from_currency, to_currency, rate, stamp) VALUES (?1, ?2, ?3, ?4, ?5)",
+        params![generation, old_currency, new_currency, rate_text, stamp],
+    )?;
+    sync::stamp::set_applying(&tx, false)?;
     tx.execute(
         "INSERT INTO audit_log (entity_type, entity_id, action, old_values, new_values)
          VALUES ('currency_change', '1', 'UPDATE', json_object('currency', ?1),

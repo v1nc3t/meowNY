@@ -82,7 +82,7 @@ meowNY is a desktop app for tracking income and expenses against monthly budgets
 ## Privacy and security
 
 - **Local-first.** There is no server and no account, so there is no one who could hold your data. Nothing is sent anywhere, and there is no telemetry.
-- **No network by default.** A CI check (`npm run check:outbound`) lists every place in the code that can open a connection and fails when a new one appears. The only optional network traffic planned is something you turn on yourself, such as the bank connection, update checks or sync.
+- **No network by default.** A CI check (`npm run check:outbound`) lists every place in the code that can open a connection and fails when a new one appears. The only optional network traffic planned is something you turn on yourself, such as the bank connection or update checks. Syncing with your phone stays on your home network.
 - **Hardened window.** A strict content security policy, no remote content, one permission per command, no shell access from the web view, and links open in the system browser.
 - **Safe logs.** Logs and crash reports never contain amounts, descriptions, tokens or keys.
 - **The command API is for you only.** It listens on `127.0.0.1` and nothing else, refuses requests from web pages, answers "locked" while the app is locked, and does not count as activity, so the idle lock still works. Restoring a backup, changing the currency and deleting everything cannot be done through it at all.
@@ -240,6 +240,7 @@ Every command, flag and exit code is documented, with real output, in the [CLI r
 | [docs/CLI.md](docs/CLI.md) | The same text in one Markdown file, easier to read in an editor or to give to an agent |
 | [docs/PLAN.md](docs/PLAN.md) | The build plan and roadmap, phase by phase, with what is done |
 | [docs/data-inventory.md](docs/data-inventory.md) | What data the app holds, where, which network calls exist, and who could see it |
+| [docs/sync-design.md](docs/sync-design.md) | How the phone syncs with the desktop: the QR codes, the encryption, the merge rules (planned, phase 8) |
 
 The reference site is made from the program, so it cannot say something the program does not do. `cli/tests/docs.rs` runs one tour of every command and every way to fail against a real app, records what came out (`docs/site/commands.json`, `docs/site/examples.json`), and fails when a command, a flag, a message or an example changes without the docs being redone. The prose around those facts is `docs/site/content.mjs`; the generator stops with an error if the program has a command, a group or an error code that the prose does not cover. There are no scripts, fonts or images, and the page asks nothing from anywhere else.
 
@@ -265,7 +266,7 @@ meowNY/
 │   ├── seeds/         Demo data
 │   └── examples/      dev_vault, seed and api_demo
 ├── cli/               The `meowny` command line program (Rust, one dependency)
-├── docs/              Everything written for people: PLAN.md, data-inventory.md, CLI.md, postgres-schema.txt
+├── docs/              Everything written for people: PLAN.md, data-inventory.md, sync-design.md, CLI.md, postgres-schema.txt
 │   └── site/          Generator of the CLI reference site and CLI.md (plain Node, no dependencies)
 ├── scripts/           Checks CI runs on the whole repo: check-outbound and its allowlist
 └── .github/workflows/ ci.yml, desktop.yml, security.yml and pages.yml
@@ -389,7 +390,7 @@ The full plan, with what is done in each phase, is in [docs/PLAN.md](docs/PLAN.m
 | 3 to 5 | Categories, transactions, budgets, recurring items, statistics and charts | Done |
 | 6 | Encrypted backup and export | Done |
 | 7 | Command line for scripts and AI agents (desktop only) | Done. Installing it together with the app is part of phase 11 |
-| 8 | Phone app that keeps an offline copy and syncs with the desktop | Planned |
+| 8 | Android app that keeps a full offline copy and syncs with the desktop at home by scanning a QR code (iOS comes later) | Planned |
 | 9 | Adding transactions from the phone without opening the app | Planned |
 | 10 | Bank connection through an aggregator with your own key. No project-run backend, ever | Planned |
 | 11 | Signed installers, updates, `SECURITY.md`, `CONTRIBUTING.md` and install guides | Planned |

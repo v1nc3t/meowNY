@@ -9,7 +9,7 @@ Companion to `postgres-schema.txt` (schema v3, written for Postgres; it is porte
 - **Local-first.** A standalone desktop app. No server, no accounts, no internet needed. Data lives in an encrypted SQLite file on your own machine.
 - **Open source and easy to install.** Download, run. No Docker, no database to host.
 - **Secure by design.** No network attack surface. Encrypted at rest, locked app, signed releases.
-- **Phone copy that syncs.** The phone keeps its own offline copy and syncs with the desktop, also on networks you do not own.
+- **Phone copy that syncs.** The phone (Android first) keeps a full offline copy and syncs with the desktop on the home network, started by a QR code. Away from home it works alone. No server of any kind.
 - **CLI for AI agents.** Ships with the desktop app, client side only.
 - **Optional bank connection** with your own aggregator key. No project-run backend, ever.
 
@@ -41,7 +41,8 @@ Kept: the React UI (`ui/src`), Zod schemas, money and date logic, and the schema
 - The CLI never opens the database file directly. It talks to the running app through a local command API, described by a schema it can print (`meowny schema`).
 - Every new desktop feature ships its CLI commands in the same change. The phone app (phases 8 and 9) gets none.
 - Program names: the desktop app is `meowny-desktop` (`src-tauri/`), the command line is `meowny` (`cli/`), so both can be on the PATH.
-- No telemetry. The only optional network traffic is the bank aggregator (phase 10), update checks and sync transports the user turns on.
+- Phone app: Tauri mobile (same `ui/` and Rust core), Android first, iOS later (phase 12). Sync is a direct connection on the home network, started by a QR code the desktop shows and the phone scans. No server, relay or remote reach; the phone works alone away from home. Details in phase 8.
+- No telemetry. The only optional network traffic is the bank aggregator (phase 10) and update checks. The sync connection never leaves the home network.
 
 ## Open decisions (decide when you reach the phase)
 
@@ -52,8 +53,8 @@ Kept: the React UI (`ui/src`), Zod schemas, money and date logic, and the schema
 | Key handling: OS keychain only, or passphrase as well | Phase 2 | Passphrase protects better if the machine is shared |
 | Chart library | Phase 5 | Any that works with the frontend |
 | CLI transport (local socket or loopback HTTP) and token mechanism | Phase 7 | Tokens must be revocable and stored hashed. Decided: loopback HTTP and hashed, scoped, expiring tokens (see phase 7) |
-| Phone app shape: PWA with WASM SQLite, or Tauri mobile / Capacitor | Phase 8 | PWA storage can be evicted by iOS Safari; a native wrapper avoids that |
-| Which sync transports, in which order | Phase 8 | See phase 8; start with LAN plus Tailscale |
+| Phone app shape: PWA with WASM SQLite, or Tauri mobile / Capacitor | Phase 8 | Decided 2026-10-15: Tauri mobile, Android first. A PWA cannot reach a plain-http address on the home network, needs HTTPS for the camera, and its storage can be evicted |
+| Which sync transports, in which order | Phase 8 | Decided 2026-10-15: one only, a direct connection on the home network started by a QR code. No Tailscale, WebRTC, shared folder or relay (no server, fewer dependencies) |
 | Bank aggregator | Phase 10 | Do a spike first |
 
 ---
@@ -220,37 +221,60 @@ Decisions made at the start of the phase (the open "CLI transport and token mech
 
 **Done when:** a script or agent holding only a token can record an expense, set a budget, and read budget vs actual, all with `--json` and no prompts.
 
-## Phase 8: Phone app and sync (L)
+## Phase 8: Phone app (Android) and sync (L)
 
-The phone keeps its own full copy and works offline. Sync is separate from the way the devices reach each other, so transports can be added one at a time. The copy is small (about 10 MB for ten years of data), so storage is not a concern.
+The phone keeps its own full copy of the data, works offline, and can change everything the desktop can change. Away from home it is used on its own; back home, the two sync. Both devices must be online at the same time on the same network, and every sync is started by a QR code that the desktop shows and the phone scans. **Android only for now** (an APK); the iOS app is in phase 12. The copy is small (about 10 MB for ten years of data), so storage is not a concern.
 
-- [ ] **Design step first** (a short doc): an append-only change log with device ids and per-record versions; merge rules (transactions by `client_uuid`, budgets by effective date, categories by id); conflict policy (last writer wins per field, deletes are tombstones); schema version negotiation; what a full re-sync means.
-- [ ] Phone shape decided (see open decisions). If it is a PWA: request persistent storage, show a warning if it is refused, and rely on the desktop copy as the authoritative one, so storage eviction costs only a re-sync.
-- [ ] Phone database encrypted at rest (WASM SQLite with an app-level key, or native SQLCipher) and an app lock.
-- [ ] **Pairing**: scan a QR code shown by the desktop app. It carries a device id and a key for end-to-end encrypted sync. Devices can be listed and revoked.
-- [ ] End-to-end encryption of all sync messages. Transports and relays only ever see ciphertext.
-- [ ] Transports, added one at a time:
-  - [ ] (a) Direct LAN, when both devices are on the same network
-  - [ ] (b) Tailscale or WireGuard address, for networks you do not own. Guest, hotel and campus Wi-Fi often isolate devices, so direct LAN alone is not enough.
-  - [ ] (c) WebRTC peer to peer with QR/short-code signalling (needs both devices online at once)
-  - [ ] (d) Encrypted change files in a folder synced by Syncthing, Nextcloud, iCloud or similar (no network setup, works any time)
-  - [ ] (e) Optional self-hostable dumb relay that stores only encrypted blobs
-- [ ] Phone UI: mobile-first layouts for every screen, bottom tab bar, quick add (floating button, amount first with numeric keypad, recent categories first), tap targets of at least 44 px, safe-area insets, `100dvh`, inputs at least 16 px
-- [ ] Sync status in both apps: last sync time, pending changes, errors
-- [ ] Tests: two devices edit offline and converge; replaying the same changes is idempotent; a revoked device is rejected; a corrupted or tampered message is rejected
-- [ ] Test on real phones (small and large) and on a network that isolates clients
+Decided with the maintainer on 2026-10-15:
 
-**Done when:** you can add an expense on the phone with no connection, later sync it to the desktop over at least one transport that works away from home, and both show the same budget numbers.
+- **No server of any kind.** No mailbox, relay, signalling or STUN service, no router port opening, no way in from outside the home network. So no WebRTC, no Tailscale address and no shared-folder transport. Away from home the phone simply works alone.
+- **Very secure first, few dependencies second.** The sync uses only crates the app already has (`chacha20poly1305`, `hkdf`, `sha2`, `getrandom`, `zeroize`, and `argon2` for the phone passphrase) and `std` networking, like the command API. Only two new crates, both small and kept inside the sync code: a QR encoder (desktop) and a barcode scanner plugin (phone). If one of them breaks, pairing and sync stop and the rest of the app does not.
+- **Tauri mobile**: the phone app is the same `ui/` and the same Rust core (`src-tauri/`) as the desktop, so all 7 languages and every screen come with it. Not a PWA: a web page cannot reach a plain-http address on the home network, cannot use the camera without HTTPS, and its storage can be evicted. The CLI and the command API stay desktop only.
+- **Security rule for the phone:** a passphrase vault (no OS keychain crate on Android), auto-lock, and the phone erases itself after 5 wrong passphrases. The data comes back by pairing again with a QR from the desktop.
+
+- [x] **Design doc first** (`docs/sync-design.md`). (Written on 2026-10-15: the QR code layouts, pairing with a check code, the handshake byte by byte (M1 of 66 bytes, M2 of 53, HKDF key schedule, numbered ChaCha20-Poly1305 frames), what each secret is for, the messages, comparing lists of `(sync_id, stamp)` instead of keeping a log of changes, migration `0008`, stamps, every merge rule, the currency generation rule, safe applying of rows, the phone vault, a threat table and the tests. It is still to be reviewed by someone else before release, and section 15 lists the points to settle while building.)
+- [ ] **Spike (S):** build the existing app for Android on Linux (`tauri android init`, then build), and run it on a real phone: the encrypted database (SQLCipher with vendored OpenSSL needs the Android NDK), the screens, the camera for scanning, and a `std` TCP connection from the phone to the desktop on the home network. Done when an APK shows today's screens and reads a test database.
+- [ ] **Phone vault**: locked by a passphrase (Argon2) with auto-lock and no OS keychain crate. Erase after 5 wrong tries: the counter is kept outside the encrypted database so closing the app does not reset it, a warning shows at 3, and the erase removes the database, the keys and the pairing secret. Recovery is a new pairing and a full copy from the desktop; changes made on the phone since its last sync are lost, and the warning says so. The passphrase screen pushes for a long passphrase: without a server there is no remote wipe, so against someone who copies the file off the phone only the passphrase and Argon2 protect it.
+- [x] **Database changes** (migration `0008_sync.sql`, `src-tauri/src/sync/stamp.rs`, tests in `sync/foundation_tests.rs`). A random 128-bit `sync_id` and a `stamp` on categories, budgets, recurring items and transactions (`transactions.client_uuid` stays), a `stamp` on the shared part of `settings`, `categories.merged_into` and `settings.currency_generation`; new tables `sync_clock` (device id, the clock, the `applying` switch), `sync_deleted` (markers for hard-deleted transactions, recurring items and budgets), `sync_peers` (paired devices and their secrets; nothing fills it yet) and `currency_changes`. Stamps are made by triggers that watch only the content columns (`UPDATE OF`), so no way of writing data can forget one, and `updated_at`, the sync columns and the link from a transaction to its recurring item never make one. Rows that existed get a new id and a stamp worked out from their `updated_at`; no `updated_at` moves and no history is written. The language stays in `settings` instead of moving to a table of its own, because the stamp of `settings` changes only for locale and time zone. Backups carry the ids, stamps, markers and currency changes and leave out `sync_clock` and `sync_peers`. A restore turns `applying` on (so it adds no markers), then gives the device a new device id and forgets its pairings; the clock catches up to the newest stamp when the database opens and after a restore. A currency change records itself in `currency_changes`, raises the generation and converts without touching any stamp. 25 new tests: every trigger, the backfill of old rows, a clock that goes backwards, the restore, the currency change and the constraints; the app has 477 tests now, and the timings on 50,000 transactions are unchanged. Never synced, as planned: the backup schedule, the API tokens, the change history, the language, the lock settings.
+- [ ] **Hybrid logical clock** (no crate): it never goes backwards and takes the larger of what it has seen, so a phone clock that is a minute off cannot make an old edit beat a new one.
+  - [x] The clock itself: the triggers take the wall clock or one step on from the last stamp, `stamp::tick`, `observe` and `catch_up` do the same from Rust, and a stamp is 27 characters of fixed width that sorts as text like (milliseconds, counter, first 8 characters of the device id). (`sync/stamp.rs`; tests include a wall clock that goes back, a full counter, and a clock behind the data.)
+  - [ ] The two devices compare clocks at the start of a sync, warn when they differ by more than a minute, and stop when they differ by more than a day (a clock far in the future would make its edits win forever).
+- [ ] **Merge rules**, written before code and tested one by one. A sync compares the two sides' lists of `(sync_id, stamp)` and sends only the rows the other side lacks or has older, so it needs no record of what was sent before and a sync that stopped half way is repaired by the next one. Both sides apply the same rules, so they end identical.
+  - [ ] Each row: the newer stamp wins (a delete is a change, so the newer of an edit and a delete wins).
+  - [ ] Transactions added on both devices are both kept; the same entry (`client_uuid`) becomes one.
+  - [ ] A recurring item paid on both gives one transaction (the existing unique rule on item and due date).
+  - [ ] Budgets are matched by their natural key (type, scope, category, month), not by row id.
+  - [ ] An active category with the same name and type created on both is merged into one, and the transactions of both move to it.
+  - [ ] A category deleted on one device and used on the other stays deleted, and the new transactions stay attached to it, as old ones of a deleted category already are.
+  - [ ] A recurring item edited or paid on both: the newer row wins, and its next due date moves forward past the latest occurrence that has a transaction, so a payment made on the other device does not come due again. (An occurrence skipped on the losing side can come due again.)
+  - [ ] Shared settings (currency, number format, time zone): the newer wins.
+  - [ ] After each sync both apps show a summary ("5 added, 2 changed on both devices, kept the newer"). Nothing is dropped silently.
+- [ ] **Currency change**: allowed on the desktop only. Each device has a currency generation.
+  - [x] On the desktop a change records itself in `currency_changes`, raises `currency_generation` and converts every amount without changing any stamp (`currency::change`; a failed change records nothing).
+  - [ ] The desktop then tells the person to sync the phone, and the phone cannot change the currency.
+  - [ ] At the start of a sync the side with the lower generation applies the missing changes and converts all its own rows (including ones added since the last sync) with the same function and rounding; stamps do not change. Only then are the lists compared.
+- [ ] **Pairing** (once): the desktop shows a QR code with a random 256-bit long-term secret and its address (the device ids travel inside the encrypted channel). The phone scans it, keeps the secret in its vault, and both screens show a short check code that the person confirms on the desktop. Devices are listed on the desktop and can be revoked (the desktop forgets the secret).
+- [ ] **Every sync** starts on the unlocked desktop ("Sync with phone"). A listener (`std` TCP, the home network address) opens for about two minutes and shows a QR code with a fresh one-time secret, the address, the port and the expiry (under 200 bytes, so it scans easily). The phone scans it and connects. The listener closes after one sync or when the time is up, shuts down after repeated failed handshakes, and never answers anything that has not proved itself, so it looks closed to a scanner. No sync runs in the background.
+- [ ] **The protocol**, made only of standard parts: the session keys come from HKDF over the long-term secret, the one-time secret and a random value from each side; each direction has its own key; every message is numbered and sealed with ChaCha20-Poly1305; a wrong, repeated, out-of-order, reflected or altered message ends the session; the one-time secret works once. Both secrets are needed (the paired phone and the screen at that moment), and the one-time secret is never stored, so a recorded session stays unreadable even if the long-term secret leaks later. It is a small protocol made here and not a library, so it gets known-answer, tamper, replay and reflection tests and a review by someone else before release.
+- [ ] **First copy**: an empty phone gets a full copy (reusing the backup code that writes every row as JSON); after that only the rows that differ are sent. Schema versions must match; if not, the sync stops with "update the phone app" or "update the desktop app".
+- [ ] **Phone UI**: mobile-first layouts for every screen, bottom tab bar, quick add (floating button, amount first with numeric keypad, recent categories first), tap targets of at least 44 px, safe-area insets, `100dvh`, inputs at least 16 px, plus the sync and device screens.
+- [ ] **Sync status** in both apps: last sync time, changes waiting, errors, and the summary after each sync.
+- [ ] **Android APK**: built by hand and in CI on a Linux runner, installed by sideloading. The release signing key and the store question belong to phase 11.
+- [ ] The new network call sites (the desktop listener, the phone connection) are listed in `scripts/outbound-allowlist.txt` with reasons, and the data inventory and the README are updated, including the one-time firewall question that Windows and macOS ask the first time the desktop listens.
+- [ ] Tests: two devices edit offline and converge (random edits from a fixed seed); replaying the same changes changes nothing; every merge rule above; the currency generation rule; a revoked device is refused; a corrupted, replayed, reflected, reordered or expired message is refused; the one-time secret works only once; 5 wrong passphrases erase the phone and pairing again restores it; the things that are never synced never appear in a sync.
+- [ ] Test on real Android phones (small and large), at home and on a network that isolates devices. There it is expected not to work, so the app must say so clearly and suggest connecting the desktop to the phone's hotspot.
+
+**Done when:** you can add an expense on the phone with no connection, later sync it to the desktop at home by scanning the QR code, and both show the same budget numbers. An edit made on both devices while apart ends the same on both.
 
 ## Phase 9: Phone capture (S to M)
 
 Adds transactions without opening the app.
 
-- [ ] iOS: a documented Shortcuts automation that fires on each Wallet/Apple Pay transaction and sends amount and merchant to the app
+- [ ] iOS (later, with the iOS app in phase 12): a documented Shortcuts automation that fires on each Wallet/Apple Pay transaction and sends amount and merchant to the app
 - [ ] Android: a notification listener (opt-in permission) that reads bank and wallet notifications and extracts amount and merchant
 - [ ] Captured items land as PENDING in a pending list, never straight in the books. (Phase 6 no longer builds a review queue, so this phase builds the small pending list: accept, edit, ignore, set a category.)
 - [ ] Parsing is local; notification text is untrusted and never executed or logged
-- [ ] Docs: setup guide per platform, and what is not captured (transfers, direct debits, anything not paid with the phone)
+- [ ] Docs: setup guide for Android (iOS joins when the iOS app does), and what is not captured (transfers, direct debits, anything not paid with the phone)
 - [ ] Tests: sample notifications parse correctly; duplicates from the same payment are merged
 
 **Done when:** paying with the phone creates a pending item you can accept with one tap.
@@ -279,7 +303,7 @@ Read-only account information through an Open Banking aggregator, with credentia
 
 ## Phase 11: Packaging and release (M). Gate before sharing the app
 
-- [ ] Signed installers for Linux (AppImage/deb), macOS (dmg, notarised) and Windows (msi/exe); the phone app is built and installable
+- [ ] Signed installers for Linux (AppImage/deb), macOS (dmg, notarised) and Windows (msi/exe); the Android app is built as a signed APK and installable (sideloaded; Google Play or F-Droid are optional)
 - [ ] Both programs on the PATH after an install: the desktop app as `meowny-desktop` (the Linux deb already installs it as `/usr/bin/meowny-desktop`) and the command line as `meowny`, built in release CI for the three systems with checksums. Moved here from phase 7. A script (`install.sh`) may do the same for a plain download
 - [ ] Auto-update with signed updates only; the update check is a visible setting
 - [ ] Reproducible or at least verifiable builds in CI, checksums published, SBOM generated
@@ -293,6 +317,7 @@ Read-only account information through an Open Banking aggregator, with credentia
 
 ## Phase 12: Later (optional)
 
+- [ ] **iOS app**, after the Android app works. It is the same Tauri mobile code and the same sync, so the work is packaging and platform details: `tauri ios init`, the local network and camera permission texts, the passphrase vault (already planned, so no keychain crate), a build on a macOS runner in CI, and tests on a real iPhone. It needs a Mac with Xcode. Installing it for anyone but yourself needs an Apple developer account (99 USD a year); with a free Apple ID an app installs only on your own iPhone and stops working after 7 days until it is installed again (rules as known on 2026-10-15, check them again). Then the iOS capture of phase 9 (Shortcuts) can be done.
 - [ ] More aggregators
 - [ ] Expense splitting. It is hard without a server because both sides need the same group data. Options: peer-to-peer groups over the sync transports, or leave it out.
 - [ ] Home-screen widgets, shared budgets between two devices of the same household
@@ -306,10 +331,11 @@ Read-only account information through an Open Banking aggregator, with credentia
 | Laptop lost or stolen | Database encrypted at rest, app lock, key in the OS keychain, lost phones can be revoked from the desktop |
 | Data lost with the machine | One-click encrypted backup, scheduled backups, restore test in phase 6 |
 | Backup file leaks | Backups are encrypted with a user passphrase; unencrypted export is explicit and warned |
-| Sync conflicts or lost edits | Append-only change log, merge rules written before code, convergence tests |
-| Sync traffic exposed | End-to-end encryption; transports and relays see only ciphertext |
-| Direct LAN sync blocked on other networks | Transport-independent design, Tailscale/WireGuard and folder-based transports |
-| iOS evicts PWA storage | Request persistent storage, desktop copy stays authoritative, consider a native wrapper |
+| Sync conflicts or lost edits | A stamp on every row from a hybrid clock, markers for deletions, merge rules written before code, a summary after each sync, convergence tests |
+| Sync traffic exposed | Every message is sealed with keys that need both the pairing secret and the QR code shown at that moment; the network sees only ciphertext |
+| Sync blocked on a network that isolates devices | Accepted: no server by design. The app says so and suggests the phone's hotspot; away from home the phone works alone |
+| Phone lost or stolen | Passphrase vault, auto-lock, erase after 5 wrong tries, revoke from the desktop; no remote wipe without a server, so the passphrase must be long |
+| A flaw in the sync protocol made here | Only standard parts (HKDF, ChaCha20-Poly1305), known-answer, tamper, replay and reflection tests, a review by someone else before release |
 | Aggregator credentials stolen | OS keychain only, read-only scope, revoke on disconnect, never in logs, exports or sync |
 | Bank consent expires unnoticed | Expiry shown, reminders, one-click renewal, `NEEDS_REAUTH` state |
 | CLI token leaked or over-privileged | Read-only default scope, expiry, hashed storage, destructive actions require the app |

@@ -17,6 +17,7 @@ pub mod money;
 pub mod schedule;
 /// Dev demo data, used by `examples/seed.rs`.
 pub mod seed;
+pub mod sync;
 pub mod stats;
 pub mod tokens;
 pub mod transactions;
