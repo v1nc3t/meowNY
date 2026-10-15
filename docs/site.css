@@ -1,0 +1,491 @@
+/* The meowny command line docs. One file, no fonts or scripts from anywhere else: the page makes no requests
+   beyond itself. Light and dark follow the system. */
+
+:root {
+  color-scheme: light dark;
+  --bg: #fbfbfa;
+  --fg: #1d2021;
+  --muted: #5a6168;
+  --line: #dcdcd6;
+  --soft: #f0f0eb;
+  --accent: #0b7a4b;
+  --accent-fg: #ffffff;
+  --link: #0b5fa5;
+  --code-bg: #14181b;
+  --code-fg: #e6e9eb;
+  --code-label: #8b949e;
+  --read: #0b5fa5;
+  --write: #a05a00;
+  --ask: #6b3fa0;
+  --danger: #b3261e;
+  --note-info: #e8f1fb;
+  --note-warn: #fdf0e1;
+  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  --sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #14171a;
+    --fg: #e3e6e8;
+    --muted: #a0a8b0;
+    --line: #2e353b;
+    --soft: #1c2125;
+    --accent: #3ccf91;
+    --accent-fg: #07130d;
+    --link: #7ab8f0;
+    --code-bg: #0c0f11;
+    --read: #7ab8f0;
+    --write: #f0b45a;
+    --ask: #c4a2f0;
+    --danger: #f28b82;
+    --note-info: #18262f;
+    --note-warn: #2b2217;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+  scroll-padding-top: 1rem;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font: 1rem/1.6 var(--sans);
+}
+
+a {
+  color: var(--link);
+}
+
+a:focus-visible,
+summary:focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+.skip {
+  position: absolute;
+  left: 0.5rem;
+  top: -4rem;
+  background: var(--accent);
+  color: var(--accent-fg);
+  padding: 0.5rem 0.75rem;
+  z-index: 10;
+}
+
+.skip:focus {
+  top: 0.5rem;
+}
+
+/* ---- layout: a contents column and the page ---- */
+
+.layout {
+  display: grid;
+  grid-template-columns: 17rem minmax(0, 1fr);
+}
+
+.side {
+  position: sticky;
+  top: 0;
+  align-self: start;
+  height: 100vh;
+  overflow-y: auto;
+  padding: 1.25rem 1rem 2rem 1.25rem;
+  border-right: 1px solid var(--line);
+  background: var(--soft);
+  font-size: 0.9rem;
+}
+
+.side .brand {
+  margin: 0 0 1rem;
+  font: 700 1.15rem var(--mono);
+}
+
+.side .brand a {
+  color: var(--fg);
+  text-decoration: none;
+}
+
+.side .group {
+  margin-bottom: 1rem;
+}
+
+.side .group-title {
+  margin: 0 0 0.25rem;
+  font-weight: 700;
+  font-size: 0.78rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.side .group-title a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.side ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.side li a {
+  display: block;
+  padding: 0.15rem 0.5rem;
+  border-radius: 4px;
+  color: var(--fg);
+  text-decoration: none;
+}
+
+.side li a:hover {
+  background: var(--line);
+}
+
+.side ul.commands li a {
+  font-family: var(--mono);
+  font-size: 0.85rem;
+}
+
+main {
+  min-width: 0;
+  max-width: 54rem;
+  padding: 2rem 2rem 4rem;
+}
+
+.hero h1 {
+  margin: 0 0 0.5rem;
+  font-size: 2.2rem;
+  line-height: 1.15;
+}
+
+.lead {
+  margin: 0 0 2rem;
+  font-size: 1.15rem;
+  color: var(--muted);
+}
+
+section.doc {
+  margin-top: 3rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--line);
+}
+
+h2 {
+  margin: 0 0 1rem;
+  font-size: 1.6rem;
+}
+
+h3 {
+  margin: 2rem 0 0.75rem;
+  font-size: 1.2rem;
+}
+
+h4 {
+  margin: 0;
+  font-size: 1.05rem;
+}
+
+.anchor {
+  margin-left: 0.35rem;
+  color: var(--muted);
+  text-decoration: none;
+  opacity: 0;
+  font-weight: 400;
+}
+
+h2:hover .anchor,
+h3:hover .anchor,
+h4:hover .anchor,
+.anchor:focus {
+  opacity: 1;
+}
+
+p,
+ul,
+ol {
+  margin: 0 0 1rem;
+}
+
+li {
+  margin-bottom: 0.35rem;
+}
+
+code {
+  font: 0.88em var(--mono);
+  background: var(--soft);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 0.05em 0.3em;
+}
+
+/* ---- code blocks ---- */
+
+figure.code {
+  margin: 0 0 1rem;
+  border-radius: 6px;
+  background: var(--code-bg);
+  color: var(--code-fg);
+  overflow: hidden;
+}
+
+figure.code figcaption {
+  padding: 0.3rem 0.85rem;
+  font: 600 0.72rem var(--sans);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--code-label);
+  border-bottom: 1px solid #2a3036;
+}
+
+figure.code pre {
+  margin: 0;
+  padding: 0.75rem 0.85rem;
+  overflow-x: auto;
+  font: 0.85rem/1.5 var(--mono);
+}
+
+/* The line you would type is shown whole, wrapped, rather than scrolled out of sight. */
+figure.usage pre,
+figure.command pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+figure.code code {
+  background: none;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+}
+
+/* ---- tables ---- */
+
+.table-wrap {
+  margin: 0 0 1.25rem;
+  overflow-x: auto;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.92rem;
+}
+
+th,
+td {
+  text-align: left;
+  vertical-align: top;
+  padding: 0.45rem 0.7rem;
+  border-bottom: 1px solid var(--line);
+}
+
+th {
+  font-size: 0.78rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+td:first-child {
+  white-space: nowrap;
+}
+
+table.routes td:first-child {
+  white-space: normal;
+}
+
+/* A flag name is never broken at its hyphens; the table scrolls sideways instead. */
+table.flags td:first-child code {
+  white-space: nowrap;
+}
+
+.req {
+  margin-left: 0.3rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--danger);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+/* ---- one command, like an entry in an API reference ---- */
+
+section.command {
+  margin: 1.5rem 0 2.25rem;
+  padding: 1rem 1.25rem 0.25rem;
+  border: 1px solid var(--line);
+  border-left: 4px solid var(--accent);
+  border-radius: 6px;
+  background: var(--bg);
+}
+
+section.command:target {
+  outline: 3px solid var(--accent);
+  outline-offset: 2px;
+}
+
+section.command header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem 1rem;
+  margin-bottom: 0.5rem;
+}
+
+section.command h4 code {
+  font-size: 1.05rem;
+  background: none;
+  border: 0;
+  padding: 0;
+}
+
+.badges {
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.badge {
+  display: inline-block;
+  padding: 0.05rem 0.5rem;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  font-size: 0.74rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.badge.read {
+  color: var(--read);
+}
+
+.badge.write {
+  color: var(--write);
+}
+
+.badge.ask {
+  color: var(--ask);
+}
+
+.badge.danger {
+  color: var(--danger);
+}
+
+.badge.local {
+  color: var(--muted);
+}
+
+.small {
+  font-size: 0.92rem;
+  color: var(--muted);
+}
+
+.example {
+  margin: 1rem 0;
+  display: grid;
+  gap: 0.6rem;
+}
+
+.example figure {
+  margin: 0;
+}
+
+@media (min-width: 70rem) {
+  .example {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .example .command {
+    grid-column: 1 / -1;
+  }
+}
+
+aside.note {
+  margin: 0 0 1rem;
+  padding: 0.1rem 1rem;
+  border-left: 4px solid var(--link);
+  border-radius: 0 6px 6px 0;
+  background: var(--note-info);
+}
+
+aside.note.warn {
+  border-left-color: var(--write);
+  background: var(--note-warn);
+}
+
+footer {
+  margin-top: 4rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+/* ---- narrow screens: the contents become a short strip above the page ---- */
+
+@media (max-width: 56rem) {
+  .layout {
+    grid-template-columns: 1fr;
+  }
+
+  .side {
+    position: static;
+    height: auto;
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+    padding: 1rem;
+  }
+
+  .side .group ul.commands {
+    display: none;
+  }
+
+  .side .group {
+    display: inline-block;
+    margin: 0 1rem 0.25rem 0;
+    vertical-align: top;
+  }
+
+  main {
+    padding: 1.25rem 1rem 3rem;
+  }
+
+  .hero h1 {
+    font-size: 1.75rem;
+  }
+}
+
+@media print {
+  .side,
+  .skip,
+  .anchor {
+    display: none;
+  }
+
+  .layout {
+    display: block;
+  }
+
+  section.command {
+    break-inside: avoid;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+}

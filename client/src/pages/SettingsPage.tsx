@@ -1,10 +1,11 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { errorText, inDesktopApp, vault, type BackupSchedule, type LockPrefs } from '../vault/api'
 import { currencyLabel } from '../api/currencies'
-import { formatExample, localeOptions, zoneOptions } from '../api/locales'
+import { formatExample, localeOptions, whenText, zoneOptions } from '../api/locales'
 import { useI18n } from '../i18n/context'
 import { languageOptions } from '../i18n/languages'
 import ChangeCurrencyModal from '../components/ChangeCurrencyModal'
+import CommandApiBlock from '../components/CommandApiBlock'
 import Dropdown from '../components/Dropdown'
 import PasswordField from '../vault/PasswordField'
 import RecoveryKeyPanel from '../vault/RecoveryKeyPanel'
@@ -16,15 +17,6 @@ const EVERY_CHOICES = [
   { days: 7, labelKey: 'settings.scheduleWeekly' },
   { days: 30, labelKey: 'settings.scheduleMonthly' },
 ] as const
-
-/** A UTC timestamp in the person's own format and time zone. */
-function whenText(iso: string, locale: string, timezone: string): string {
-  try {
-    return new Date(iso).toLocaleString(locale, { timeZone: timezone, dateStyle: 'medium', timeStyle: 'short' })
-  } catch {
-    return iso
-  }
-}
 
 export default function SettingsPage() {
   const { t, language, setLanguage } = useI18n()
@@ -290,6 +282,8 @@ export default function SettingsPage() {
             </label>
           </div>
         )}
+
+        {settings && <CommandApiBlock locale={settings.locale} timezone={settings.timezone} />}
 
         <div className="settings-block">
           <h2>{t('settings.recovery')}</h2>

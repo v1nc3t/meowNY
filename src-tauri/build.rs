@@ -58,6 +58,11 @@ const COMMANDS: &[&str] = &[
     "export_xlsx",
     "export_pdf",
     "export_preview",
+    "get_api_status",
+    "set_api_enabled",
+    "list_api_tokens",
+    "create_api_token",
+    "revoke_api_token",
 ];
 
 fn main() {

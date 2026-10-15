@@ -1,0 +1,65 @@
+name: Docs site
+
+# Publishes the command line documentation (docs/) to GitHub Pages: https://v1nc3t.github.io/meowNY/
+# One-time setup: in the repository's Settings, Pages, set Source to "GitHub Actions".
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'docs/**'
+      - 'cli/schema.json'
+      - '.github/workflows/pages.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# One deployment at a time; a newer one waits rather than cancelling one that is half done.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      # The same checks as for every push: the generator's tests, and that docs/CLI.md is up to date.
+      - name: Test the generator
+        run: node --test docs/build.test.mjs
+
+      - name: Check the page
+        run: node docs/build.mjs --check
+
+      - name: Build the site
+        run: node docs/build.mjs
+
+      - name: Set up Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload the site
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: docs/_site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

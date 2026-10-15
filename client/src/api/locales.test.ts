@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { formatExample, localeChoices, timeZoneChoices } from './locales.ts'
+import { formatExample, localeChoices, timeZoneChoices, whenText } from './locales.ts'
 
 test('the locale in use comes first, then the system preference, then common ones, without repeats', () => {
   const choices = localeChoices('en-IE', ['fr-FR', 'en-IE', 'de-DE'], () => true)
@@ -30,4 +30,16 @@ test('the example shows the number and date style of the locale', () => {
   assert.match(formatExample('en-US', 'USD'), /\$1,234\.56\u00a0\u00a0\|\u00a0\u00a010\/13\/2026/)
   assert.match(formatExample('de-DE', 'EUR'), /1\.234,56\s+€\u00a0\u00a0\|\u00a0\u00a013\.10\.2026/)
   assert.equal(formatExample('not a locale!!', 'EUR'), '')
+})
+
+test('a time is shown in the time zone and format of the person', () => {
+  // 09:30 UTC is 10:30 in Dublin in October (summer time) and 05:30 in New York.
+  assert.match(whenText('2026-10-14T09:30:00Z', 'en-IE', 'Europe/Dublin'), /2026.*10:30/)
+  assert.match(whenText('2026-10-14T09:30:00Z', 'en-US', 'America/New_York'), /Oct 14, 2026.*5:30\s?AM/)
+  assert.match(whenText('2026-10-14T09:30:00Z', 'de-DE', 'Europe/Berlin'), /14\.10\.2026.*11:30/)
+})
+
+test('a time that cannot be shown comes back as written', () => {
+  assert.equal(whenText('2026-10-14T09:30:00Z', 'en-IE', 'Not/AZone'), '2026-10-14T09:30:00Z')
+  assert.equal(whenText('2026-10-14T09:30:00Z', 'not a locale!!', 'UTC'), '2026-10-14T09:30:00Z')
 })

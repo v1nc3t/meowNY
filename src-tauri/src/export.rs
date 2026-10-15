@@ -4,7 +4,8 @@
 //! A `Selection` narrows what goes in: a date range for transactions, and a set of categories for
 //! everything that belongs to a category. With categories chosen, other category names, global
 //! budgets and the change history are left out, so a limited export reveals nothing about the rest.
-//! The device-specific scheduled-backup setup, which holds a passphrase, is never exported.
+//! The device-specific scheduled-backup setup, which holds a passphrase, and the access tokens of the
+//! command-line client are never exported.
 
 mod xlsx;
 
@@ -670,6 +671,17 @@ mod tests {
         let text = json(&conn, &Selection::default(), Utc::now()).unwrap();
         assert!(!text.contains("unmistakable") && !text.contains("/somewhere/private"));
         assert!(!csv(&conn, &Selection::default()).unwrap().contains("unmistakable"));
+    }
+
+    #[test]
+    fn access_tokens_are_never_exported() {
+        let (conn, ..) = lived_in();
+        let input = crate::tokens::NewToken { name: "unmistakable agent".into(), scope: crate::tokens::Scope::Write, expires_in_days: 30 };
+        crate::tokens::create(&conn, &input, Utc::now()).unwrap();
+        let hash: String = conn.query_row("SELECT token_hash FROM api_tokens", [], |r| r.get(0)).unwrap();
+        for text in [json(&conn, &Selection::default(), Utc::now()).unwrap(), csv(&conn, &Selection::default()).unwrap()] {
+            assert!(!text.contains("unmistakable") && !text.contains(&hash) && !text.contains("api_tokens"));
+        }
     }
 
     #[test]

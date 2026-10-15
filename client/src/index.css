@@ -1712,6 +1712,19 @@ form > button {
   overflow-wrap: anywhere;
 }
 
+.settings-row.is-expired .settings-row-label,
+.settings-row.is-expired .settings-row-value {
+  color: var(--text-muted);
+}
+
+.settings-subtitle {
+  margin: 0.5rem 0 0;
+  font-size: 0.75rem;
+  font-weight: normal;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+
 /* Hover hints for keyboard shortcuts: a small outlined label that fades in shortly after hovering or focusing. */
 [data-tip] {
   position: relative;
@@ -1853,10 +1866,42 @@ kbd {
   justify-self: start;
 }
 
+/* Its text looks like the text before a dropdown, and the box starts where the dropdowns start: the global rule for a
+   label with a checkbox sets its own colour, size and gap, which this one is more specific than. */
+.settings-block label:has(> input[type='checkbox']) {
+  gap: 0.5rem 1.5rem;
+  font-size: 0.75rem;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+
 @media (max-width: 40em) {
   .settings-block .pick.field,
   .settings-block label,
   .settings-block .settings-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* A list of rows that share their columns, so the buttons line up, with one line between rows. */
+.settings-block .token-list {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+}
+
+.settings-block .token-list .settings-row {
+  grid-template-columns: 14rem minmax(0, 1fr) auto;
+  padding-block: 0.5rem;
+  border-bottom: 0;
+}
+
+.settings-block .token-list .settings-row:last-child {
+  border-bottom: 0.8px solid var(--border);
+}
+
+@media (max-width: 40em) {
+  .settings-block .token-list .settings-row {
     grid-template-columns: minmax(0, 1fr);
   }
 }

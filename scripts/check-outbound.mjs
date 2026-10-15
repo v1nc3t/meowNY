@@ -1,7 +1,7 @@
 #!/usr/bin/env node
-// Lists every place that can make an outbound network call and fails when one is not in
-// scripts/outbound-allowlist.txt. Adding network code therefore needs a visible, reviewed
-// allowlist entry with a reason. Stale entries fail too, so the list stays honest.
+// Lists every place that can make an outbound network call, or accept an inbound one, and fails when one is
+// not in scripts/outbound-allowlist.txt. Adding network code therefore needs a visible, reviewed allowlist
+// entry with a reason. Stale entries fail too, so the list stays honest.
 //
 //   node scripts/check-outbound.mjs          check (used by CI)
 //   node scripts/check-outbound.mjs --list   print what was found
@@ -24,7 +24,8 @@ const SOURCE_RULES = [
 const RUST_RULES = [
   ['url-literal', /https?:\/\/[a-z0-9]/i],
   ['network-crate', /\b(reqwest|ureq|hyper|isahc|surf|attohttpc|tokio_tungstenite|tungstenite)\b/],
-  ['std-net', /\bstd::net::(TcpStream|UdpSocket)\b/],
+  ['std-net', /\b(TcpStream|UdpSocket)\b/],
+  ['listener', /\bTcpListener\b/],
 ]
 const NETWORK_CRATES = /^(reqwest|ureq|hyper|curl|isahc|surf|attohttpc|tauri-plugin-http|tauri-plugin-updater|tauri-plugin-websocket)\b/
 
@@ -58,12 +59,15 @@ scan(
   SOURCE_RULES,
 )
 scan(walk(join(root, 'src-tauri', 'src'), (n) => n.endsWith('.rs')), RUST_RULES)
+scan(walk(join(root, 'cli', 'src'), (n) => n.endsWith('.rs')), RUST_RULES)
 
 // Dependencies that bring their own network stack.
-const cargo = readFileSync(join(root, 'src-tauri', 'Cargo.toml'), 'utf8')
-const depsSection = cargo.split(/^\[dependencies\]/m)[1]?.split(/^\[/m)[0] ?? ''
-for (const line of depsSection.split('\n')) {
-  if (NETWORK_CRATES.test(line.trim())) found.add(`network-crate src-tauri/Cargo.toml ${line.trim().split(/[\s=]/)[0]}`)
+for (const manifest of ['src-tauri/Cargo.toml', 'cli/Cargo.toml']) {
+  const cargo = readFileSync(join(root, manifest), 'utf8')
+  const depsSection = cargo.split(/^\[dependencies\]/m)[1]?.split(/^\[/m)[0] ?? ''
+  for (const line of depsSection.split('\n')) {
+    if (NETWORK_CRATES.test(line.trim())) found.add(`network-crate ${manifest} ${line.trim().split(/[\s=]/)[0]}`)
+  }
 }
 
 // The webview may only talk to itself and the Tauri IPC bridge.

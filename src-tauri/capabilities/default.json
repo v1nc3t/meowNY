@@ -60,6 +60,11 @@
     "allow-export-xlsx",
     "allow-export-pdf",
     "allow-export-preview",
+    "allow-get-api-status",
+    "allow-set-api-enabled",
+    "allow-list-api-tokens",
+    "allow-create-api-token",
+    "allow-revoke-api-token",
     "core:event:allow-listen",
     "core:event:allow-unlisten",
     {

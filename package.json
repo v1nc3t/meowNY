@@ -17,6 +17,8 @@
   },
   "scripts": {
     "tauri": "tauri",
-    "check:outbound": "node scripts/check-outbound.mjs"
+    "check:outbound": "node scripts/check-outbound.mjs",
+    "docs": "node docs/build.mjs",
+    "check:docs": "node docs/build.mjs --check && node --test docs/build.test.mjs"
   }
 }

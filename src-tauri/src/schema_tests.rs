@@ -255,3 +255,43 @@ fn a_language_that_is_too_short_or_too_long_is_refused() {
     assert!(conn.execute("UPDATE settings SET language = 'e'", []).is_err());
     assert!(conn.execute(&format!("UPDATE settings SET language = '{}'", "x".repeat(36)), []).is_err());
 }
+
+fn token(conn: &Connection, name: &str, scope: &str, hash: &str) -> rusqlite::Result<usize> {
+    conn.execute(
+        "INSERT INTO api_tokens (name, scope, token_hash, created_at, expires_at)
+         VALUES (?1, ?2, ?3, '2026-10-14T09:00:00Z', '2026-11-13T09:00:00Z')",
+        params![name, scope, hash],
+    )
+}
+
+#[test]
+fn a_token_has_a_name_a_known_scope_and_a_sha256_shaped_hash() {
+    let conn = db();
+    let hash = "a".repeat(64);
+    assert!(token(&conn, "agent", "READ", &hash).is_ok());
+    assert!(token(&conn, "agent", "WRITE", &"b".repeat(64)).is_ok());
+    assert!(token(&conn, "", "READ", &"c".repeat(64)).is_err(), "empty name");
+    assert!(token(&conn, &"x".repeat(51), "READ", &"c".repeat(64)).is_err(), "long name");
+    assert!(token(&conn, "agent", "ADMIN", &"c".repeat(64)).is_err(), "unknown scope");
+    assert!(token(&conn, "agent", "read", &"c".repeat(64)).is_err(), "scope is upper case in the table");
+    assert!(token(&conn, "agent", "READ", &"c".repeat(63)).is_err(), "short hash");
+    assert!(token(&conn, "agent", "READ", &"C".repeat(64)).is_err(), "upper case hex");
+    assert!(token(&conn, "agent", "READ", &format!("{}g", "c".repeat(63))).is_err(), "not hex");
+}
+
+#[test]
+fn two_tokens_cannot_share_a_hash() {
+    let conn = db();
+    token(&conn, "one", "READ", &"a".repeat(64)).unwrap();
+    assert!(token(&conn, "two", "WRITE", &"a".repeat(64)).is_err());
+}
+
+#[test]
+fn tokens_leave_no_trace_in_the_history() {
+    let conn = db();
+    token(&conn, "agent", "READ", &"a".repeat(64)).unwrap();
+    conn.execute("UPDATE api_tokens SET last_used_at = '2026-10-14T10:00:00Z'", []).unwrap();
+    conn.execute("DELETE FROM api_tokens", []).unwrap();
+    let rows: i64 = conn.query_row("SELECT count(*) FROM audit_log", [], |r| r.get(0)).unwrap();
+    assert_eq!(rows, 0);
+}

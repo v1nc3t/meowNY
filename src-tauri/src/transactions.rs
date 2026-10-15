@@ -12,8 +12,8 @@ use crate::vault::AppError;
 const NAME_MAX_CHARS: usize = 50;
 const DESCRIPTION_MAX_CHARS: usize = 255;
 const SEARCH_MAX_CHARS: usize = 255;
-const DEFAULT_LIMIT: u32 = 50;
-const MAX_LIMIT: u32 = 100;
+pub(crate) const DEFAULT_LIMIT: u32 = 50;
+pub(crate) const MAX_LIMIT: u32 = 100;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]

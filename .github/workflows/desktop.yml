@@ -8,6 +8,8 @@ on:
     paths:
       - 'src-tauri/**'
       - 'client/**'
+      - 'cli/**'
+      - 'docs/**'
       - 'package.json'
       - 'package-lock.json'
       - 'scripts/**'
@@ -16,6 +18,8 @@ on:
     paths:
       - 'src-tauri/**'
       - 'client/**'
+      - 'cli/**'
+      - 'docs/**'
       - 'package.json'
       - 'package-lock.json'
       - 'scripts/**'
@@ -81,6 +85,14 @@ jobs:
 
       - name: Rust tests
         working-directory: src-tauri
+        run: cargo test
+
+      # The command line program. Its tests run the real binary against the app's own server code, so they
+      # build the app library too; sharing the target folder reuses what `cargo test` just compiled.
+      - name: Rust tests (command line)
+        working-directory: cli
+        env:
+          CARGO_TARGET_DIR: ${{ github.workspace }}/src-tauri/target
         run: cargo test
 
       # Unsigned debug build with one bundle per OS. It reuses the compiled

@@ -1,3 +1,4 @@
+pub mod api;
 pub mod backup;
 pub mod budgets;
 pub mod categories;
@@ -17,6 +18,7 @@ pub mod schedule;
 /// Dev demo data, used by `examples/seed.rs`.
 pub mod seed;
 pub mod stats;
+pub mod tokens;
 pub mod transactions;
 pub mod vault;
 #[cfg(test)]
@@ -55,6 +57,28 @@ fn is_app_url(url: &tauri::Url) -> bool {
     }
 }
 
+/// Asks the person to allow something a token wants to do, in a native dialog over the app's window.
+struct AllowDialog(tauri::AppHandle);
+
+impl api::Show for AllowDialog {
+    fn show(&self, approval: &api::Approval) -> bool {
+        use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
+        // The window may be behind others or minimised; the question must not wait unseen.
+        if let Some(window) = self.0.get_webview_window("main") {
+            let _ = window.show();
+            let _ = window.unminimize();
+            let _ = window.set_focus();
+        }
+        self.0
+            .dialog()
+            .message(&approval.text)
+            .title(&approval.title)
+            .kind(MessageDialogKind::Warning)
+            .buttons(MessageDialogButtons::OkCancelCustom("Allow".to_string(), "Deny".to_string()))
+            .blocking_show()
+    }
+}
+
 pub fn run() {
     install_safe_panic_hook();
 
@@ -68,6 +92,13 @@ pub fn run() {
             let store = KeychainStore::new().expect("keychain entry");
             let vault = Arc::new(Vault::new(dir, Box::new(store)));
             app.manage(vault.clone());
+
+            // The command API for the CLI, if the person left it on. Before it writes a file for a token, the person
+            // is asked in a dialog.
+            let prompter = api::Prompter::new(AllowDialog(app.handle().clone()));
+            let api_host = Arc::new(api::Host::with_prompter(vault.clone(), prompter));
+            app.manage(api_host.clone());
+            api_host.start_if_enabled();
 
             // Scheduled backups, while the app is unlocked.
             let scheduled = vault.clone();
@@ -155,9 +186,22 @@ pub fn run() {
             commands::export_xlsx,
             commands::export_pdf,
             commands::export_preview,
+            commands::get_api_status,
+            commands::set_api_enabled,
+            commands::list_api_tokens,
+            commands::create_api_token,
+            commands::revoke_api_token,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running meowNY");
+        .build(tauri::generate_context!())
+        .expect("error while building meowNY")
+        .run(|handle, event| {
+            // Remove the port file on a normal exit; a crash leaves it and the next start cleans it up.
+            if let tauri::RunEvent::Exit = event {
+                if let Some(host) = handle.try_state::<Arc<api::Host>>() {
+                    host.stop();
+                }
+            }
+        });
 }
 
 #[cfg(test)]

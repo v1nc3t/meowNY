@@ -116,3 +116,12 @@ const zoneOptionsFor = memoByKey(
 export function zoneOptions(current: string): { value: string; label: string }[] {
   return zoneOptionsFor(current)
 }
+
+/** A UTC timestamp ("2026-10-14T09:30:00Z") in the person's own number format and time zone. The text itself if it cannot be read. */
+export function whenText(iso: string, locale: string, timezone: string): string {
+  try {
+    return new Date(iso).toLocaleString(locale, { timeZone: timezone, dateStyle: 'medium', timeStyle: 'short' })
+  } catch {
+    return iso
+  }
+}

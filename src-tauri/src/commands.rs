@@ -5,6 +5,7 @@ use std::sync::Arc;
 
 use tauri::State;
 
+use crate::api::{Host, HostStatus};
 use crate::backup;
 use crate::categories::{self, Category, CategoryType};
 use crate::budgets::{self, Budget, Overview, SetBudget};
@@ -15,6 +16,7 @@ use crate::export::{self, Selection};
 use crate::report::{self, ReportOptions};
 use crate::recurring::{self, Dues, NewRecurring, Recurring, RecurringPatch};
 use crate::schedule::{self, Schedule};
+use crate::tokens::{self, CreatedToken, NewToken, TokenInfo};
 use crate::stats::{self, BudgetVsActual, CategoryTrend, Commitments, PlannedVsPaid, TopCategory, YearPoint};
 use crate::transactions::{self, Filter, NewTransaction, Page, Transaction, TransactionPatch};
 use crate::vault::{AppError, LockPrefs, Settings, Vault, VaultStatus};
@@ -79,6 +81,11 @@ pub const COMMANDS: &[&str] = &[
     "export_xlsx",
     "export_pdf",
     "export_preview",
+    "get_api_status",
+    "set_api_enabled",
+    "list_api_tokens",
+    "create_api_token",
+    "revoke_api_token",
 ];
 
 #[tauri::command]
@@ -164,8 +171,11 @@ pub fn data_location(vault: Shared) -> String {
 }
 
 #[tauri::command]
-pub fn wipe_all_data(vault: Shared, confirmation: String) -> Result<(), AppError> {
-    vault.wipe(&confirmation)
+pub fn wipe_all_data(vault: Shared, api: State<Arc<Host>>, confirmation: String) -> Result<(), AppError> {
+    vault.wipe(&confirmation)?;
+    // The data is gone, so the command API has nothing left to serve.
+    api.stop();
+    Ok(())
 }
 
 #[tauri::command]
@@ -543,6 +553,38 @@ pub async fn export_pdf(app: tauri::AppHandle, vault: Shared<'_>, options: Repor
     let bytes = report.pdf(&options)?;
     let name = format!("meowny-report-{}-{}.pdf", options.from_month, options.to_month);
     save_export(&app, name, "PDF report", "pdf", &bytes)
+}
+
+/// Whether the command API is on and listening, and on which port.
+#[tauri::command]
+pub fn get_api_status(api: State<Arc<Host>>) -> HostStatus {
+    api.status()
+}
+
+/// Turns the command API on or off. Needs the unlocked app. Returns the state after the change.
+#[tauri::command]
+pub fn set_api_enabled(api: State<Arc<Host>>, on: bool) -> Result<HostStatus, AppError> {
+    api.set_enabled(on)?;
+    Ok(api.status())
+}
+
+/// Every access token, newest first, without its secret.
+#[tauri::command]
+pub fn list_api_tokens(vault: Shared) -> Result<Vec<TokenInfo>, AppError> {
+    vault.with_conn(|c| tokens::list(c, chrono::Utc::now()))
+}
+
+/// Makes a token. The answer holds the secret, the only time it can be read. Tokens are made here,
+/// in the app's window, and never through the command API, so a token cannot make another token.
+#[tauri::command]
+pub fn create_api_token(vault: Shared, input: NewToken) -> Result<CreatedToken, AppError> {
+    vault.with_conn(|c| tokens::create(c, &input, chrono::Utc::now()))
+}
+
+#[tauri::command]
+pub fn revoke_api_token(vault: Shared, id: String) -> Result<(), AppError> {
+    let id = categories::parse_id(&id)?;
+    vault.with_conn(|c| tokens::revoke(c, id))
 }
 
 #[cfg(test)]
