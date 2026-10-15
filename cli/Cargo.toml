@@ -6,8 +6,8 @@ license = "AGPL-3.0-only"
 edition = "2021"
 rust-version = "1.77"
 
-# The command is called `meowny`. The desktop app is a different program with the same name, so this
-# package is built on its own and not as part of the app: `cargo install --path cli` puts it in cargo's bin.
+# The command is called `meowny`; the desktop app's program is `meowny-desktop`. This package is built on its own
+# and not as part of the app: `cargo install --path cli` puts it in cargo's bin.
 [[bin]]
 name = "meowny"
 path = "src/main.rs"
@@ -20,7 +20,7 @@ serde_json = { version = "1.0.154", features = ["float_roundtrip"] }
 [dev-dependencies]
 # The tests run the real binary against the app's own server code (a real encrypted vault in a
 # temporary folder), so a command and the route behind it are tested together.
-meowny = { path = "../src-tauri" }
+meowny-desktop = { path = "../src-tauri" }
 chrono = { version = "0.4.45", default-features = false, features = ["std", "clock"] }
 tempfile = "3.27.0"
 zeroize = "1.8.2"

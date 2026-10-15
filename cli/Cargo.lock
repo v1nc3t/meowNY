@@ -2380,7 +2380,18 @@ dependencies = [
 ]
 
 [[package]]
-name = "meowny"
+name = "meowny-cli"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "meowny-desktop",
+ "serde_json",
+ "tempfile",
+ "zeroize",
+]
+
+[[package]]
+name = "meowny-desktop"
 version = "0.1.0"
 dependencies = [
  "argon2",
@@ -2402,17 +2413,6 @@ dependencies = [
  "tauri-plugin-dialog",
  "tauri-plugin-notification",
  "tauri-plugin-opener",
- "zeroize",
-]
-
-[[package]]
-name = "meowny-cli"
-version = "0.1.0"
-dependencies = [
- "chrono",
- "meowny",
- "serde_json",
- "tempfile",
  "zeroize",
 ]
 

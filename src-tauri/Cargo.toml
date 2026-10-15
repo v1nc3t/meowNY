@@ -1,5 +1,6 @@
 [package]
-name = "meowny"
+# The desktop program is `meowny-desktop`. The command line, in cli/, is `meowny`.
+name = "meowny-desktop"
 version = "0.1.0"
 description = "meowNY: local-first expense tracker"
 license = "AGPL-3.0-only"

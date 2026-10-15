@@ -32,6 +32,7 @@ meowNY is a desktop app for tracking income and expenses against monthly budgets
 - [Privacy and security](#privacy-and-security)
 - [Getting started](#getting-started)
   - [Requirements](#requirements)
+  - [Program names](#program-names)
   - [Run the app](#run-the-app)
   - [Build a bundle](#build-a-bundle)
   - [Where the data lives](#where-the-data-lives)
@@ -99,6 +100,17 @@ What is stored, where, and who could see it is written down in [docs/data-invent
   - macOS: Xcode command line tools
   - Windows: Microsoft C++ Build Tools and WebView2
 - A secret service for the key: macOS Keychain, Windows Credential Manager, or on Linux GNOME Keyring or KWallet running in your session. Without one, the first run fails with "key unavailable".
+
+### Program names
+
+The project has two programs, and they do not share a name, so both can be on your `PATH`:
+
+| Program | Name | Source |
+|---|---|---|
+| Desktop app | `meowny-desktop` | `src-tauri/` |
+| Command line | `meowny` | `cli/` |
+
+The window and the installers are still called meowNY. Only the name of the program file differs. The data folder (`org.meowny.app`) is the same, so nothing moves.
 
 ### Run the app
 
@@ -183,7 +195,7 @@ All shortcuts are defined in one table, `ui/src/keys/shortcuts.ts`.
    meowny status
    ```
 
-The desktop app's own program is also called `meowny`, so the command line is built on its own and not as part of the app.
+The desktop app's program is `meowny-desktop` (see [Program names](#program-names)), so the two never clash on your `PATH`. The command line is still built on its own and not as part of the app.
 
 **Examples**
 
@@ -246,7 +258,7 @@ npm run check:docs            # what CI runs: the generator's tests, and that do
 meowNY/
 ├── ui/                React UI (Vite, TypeScript, Zod). Every screen talks to the Rust side
 │   └── src/           pages, components, hooks, lib, api, and the vault, i18n and keys features
-├── src-tauri/         The desktop app (Rust, Tauri 2)
+├── src-tauri/         The desktop app, `meowny-desktop` (Rust, Tauri 2)
 │   ├── src/           vault and keys, database, budgets, recurring items, statistics, backup, export,
 │   │                  the command API (api/) and the access tokens (tokens.rs)
 │   ├── migrations/    Schema changes as numbered SQL files
@@ -376,7 +388,7 @@ The full plan, with what is done in each phase, is in [docs/PLAN.md](docs/PLAN.m
 | 0 to 2 | Setup, encrypted database, app security | Done |
 | 3 to 5 | Categories, transactions, budgets, recurring items, statistics and charts | Done |
 | 6 | Encrypted backup and export | Done |
-| 7 | Command line for scripts and AI agents (desktop only) | Done, except installing it together with the app (phase 11) |
+| 7 | Command line for scripts and AI agents (desktop only) | Done. Installing it together with the app is part of phase 11 |
 | 8 | Phone app that keeps an offline copy and syncs with the desktop | Planned |
 | 9 | Adding transactions from the phone without opening the app | Planned |
 | 10 | Bank connection through an aggregator with your own key. No project-run backend, ever | Planned |
