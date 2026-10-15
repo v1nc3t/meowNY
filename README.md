@@ -104,7 +104,7 @@ cd src-tauri
 cargo run --example api_demo
 ```
 
-It prints a read token, a write token and `curl` lines, and serves until Ctrl+C. The desktop app's Settings screen for turning the API on and making tokens comes later in the phase.
+It prints a read token, a write token and `curl` lines, and serves until Ctrl+C. In the desktop app, Settings, command line access, turns the API on (it is off by default) and makes the tokens.
 
 To load the demo data into a separate file instead, which the desktop app does not open:
 

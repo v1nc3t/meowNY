@@ -162,6 +162,11 @@ pub fn run() {
             commands::export_xlsx,
             commands::export_pdf,
             commands::export_preview,
+            commands::get_api_status,
+            commands::set_api_enabled,
+            commands::list_api_tokens,
+            commands::create_api_token,
+            commands::revoke_api_token,
         ])
         .build(tauri::generate_context!())
         .expect("error while building meowNY")

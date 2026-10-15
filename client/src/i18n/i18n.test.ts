@@ -81,3 +81,9 @@ test('the best supported language is picked from a preference list', () => {
   assert.equal(pickLanguage(['ja-JP']), 'en')
   assert.equal(pickLanguage([]), 'en')
 })
+
+test('the name of the token variable is never translated', () => {
+  for (const language of LANGUAGES) {
+    assert.match(language.messages['cli.tokenUse'], /MEOWNY_TOKEN/, language.code)
+  }
+})
