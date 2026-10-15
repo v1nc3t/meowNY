@@ -155,10 +155,9 @@ test('the page asks for nothing from anywhere else, and only reaches out with pl
   assert.ok(!/url\(|@import|https?:\/\//i.test(css), 'the stylesheet loads nothing')
 })
 
-test('the Markdown file says it is generated, and has one heading for the page and one for each section', () => {
+test('the Markdown file has one heading for the page and one for each section', () => {
   const { markdown, page } = build()
   assert.ok(markdown.startsWith('# meowny command line\n'))
-  assert.ok(markdown.includes('generated from the program'))
   // (a `# comment` inside a code block is not a heading)
   assert.equal((markdown.replace(/^```[\s\S]*?^```$/gm, '').match(/^# /gm) ?? []).length, 1)
   for (const s of page.sections) assert.ok(markdown.includes(`\n## ${s.title}\n`), s.title)

@@ -2,8 +2,6 @@
 
 Use your meowNY budget from a terminal, a script or an AI agent. The command line talks to the desktop app on the same computer; your data never leaves it.
 
-*This file is generated from the program by `node docs/build.mjs`. Do not edit it by hand.*
-
 ## Overview
 
 `meowny` is a small program that drives the meowNY desktop app, for scripts, for AI agents and for anyone who prefers a terminal. It never opens your data file. It asks the running app, over a connection only this computer can reach, and the app does the work with the same rules as its own screens: the same amounts, the same budgets, the same checks.

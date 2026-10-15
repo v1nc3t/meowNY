@@ -1,33 +1,128 @@
-# meowNY
+<h1 align="center">meowNY</h1>
 
-Local-first expense tracker. A Tauri desktop app (Rust) shows a React client and keeps all data in an encrypted SQLite file (SQLCipher) on your own machine. No server, no accounts, no telemetry. See `assets/PLAN.md` for the roadmap and `assets/data-inventory.md` for what data lives where.
+<p align="center">
+  A local-first expense tracker. Your data stays on your computer, encrypted, with no server, no account and no telemetry.
+</p>
 
-The desktop app has categories, transactions, budgets, recurring items, charts, encrypted backup and export (phases 0 to 6), and a command line for scripts and AI agents (phase 7) that works on the desktop only. Phone sync and the bank connection are still to come; see the plan. The old Express/Postgres server design is retired and only exists in git history.
+<p align="center">
+  <a href="https://github.com/v1nc3t/meowNY/actions/workflows/github-ci.yml"><img alt="CI" src="https://github.com/v1nc3t/meowNY/actions/workflows/github-ci.yml/badge.svg"></a>
+  <a href="https://github.com/v1nc3t/meowNY/actions/workflows/desktop.yml"><img alt="Desktop build" src="https://github.com/v1nc3t/meowNY/actions/workflows/desktop.yml/badge.svg"></a>
+  <a href="https://github.com/v1nc3t/meowNY/actions/workflows/security.yml"><img alt="Security" src="https://github.com/v1nc3t/meowNY/actions/workflows/security.yml/badge.svg"></a>
+  <a href="LICENSE"><img alt="License: AGPL-3.0" src="https://img.shields.io/badge/license-AGPL--3.0-blue"></a>
+  <img alt="Platforms: Linux, macOS, Windows" src="https://img.shields.io/badge/platforms-Linux%20%7C%20macOS%20%7C%20Windows-lightgrey">
+</p>
 
-## Requirements
+<p align="center">
+  <a href="#features">Features</a> ·
+  <a href="#getting-started">Getting started</a> ·
+  <a href="#command-line">Command line</a> ·
+  <a href="https://v1nc3t.github.io/meowNY/">CLI reference</a> ·
+  <a href="assets/PLAN.md">Roadmap</a>
+</p>
 
-- Node.js 22 or newer and npm
-- Rust (stable, 1.77 or newer) from https://rustup.rs
-- Tauri's system libraries for your OS: https://v2.tauri.app/start/prerequisites/
+---
+
+meowNY is a desktop app for tracking income and expenses against monthly budgets. A [Tauri](https://tauri.app) shell (Rust) shows a React client and keeps everything in one encrypted SQLite file ([SQLCipher](https://www.zetetic.net/sqlcipher/)) on your own machine. It also ships a command line program, `meowny`, so scripts and AI agents can use the running app without opening the data file.
+
+> **Status: pre-release (version 0.1.0).** The desktop app and the command line work, and are tested, but there are no installers yet: you build it from source (see [Getting started](#getting-started)). Phone sync, phone capture and the bank connection are planned; see the [roadmap](#roadmap).
+
+## Table of contents
+
+- [Features](#features)
+- [Privacy and security](#privacy-and-security)
+- [Getting started](#getting-started)
+  - [Requirements](#requirements)
+  - [Run the app](#run-the-app)
+  - [Build a bundle](#build-a-bundle)
+  - [Where the data lives](#where-the-data-lives)
+- [Usage](#usage)
+  - [Keyboard shortcuts](#keyboard-shortcuts)
+  - [Command line](#command-line)
+- [Documentation](#documentation)
+- [Project structure](#project-structure)
+- [Development](#development)
+  - [Tests and checks](#tests-and-checks)
+  - [Database](#database)
+  - [Demo data](#demo-data)
+  - [Continuous integration](#continuous-integration)
+- [Roadmap](#roadmap)
+- [Contributing](#contributing)
+- [Reporting a security problem](#reporting-a-security-problem)
+- [License](#license)
+
+## Features
+
+**Budgeting**
+
+- Categories, and transactions (income and expenses) with search and filters.
+- Monthly budgets with an amount per category. Budgets are dated, so changing a limit does not rewrite old months.
+- Recurring items (subscriptions, rent and the like): see what is due or overdue, pay it with one click to make a normal transaction, skip it, pause it or end it. Optional notifications for items that are due.
+- Statistics and charts: budget against spending, trends, a year view, top categories, upcoming commitments and planned payments.
+- Money is kept as whole minor units (cents), never as floating point numbers. Months and due dates follow the time zone you choose.
+- Seven languages: English, Deutsch, Español, Français, Italiano, Português and Română.
+- Keyboard shortcuts for the main actions.
+
+**Safety of your data**
+
+- The database is encrypted at rest. The key lives in your operating system's keychain, optionally combined with a passphrase.
+- A recovery key, shown once, so a forgotten passphrase or a lost keychain entry can be recovered.
+- The app locks itself when idle, and optionally when minimised or closed. Locking drops the key from memory.
+- Encrypted backups to a single file (`.meowbak`), restore, and scheduled backups to a folder you pick.
+- Export to JSON, CSV, Excel and PDF, for the period and categories you choose.
+- "Delete all my data" removes the database, its key and the app's own backups.
+
+**For scripts and AI agents (desktop only)**
+
+- A [command line program](#command-line), `meowny`, with a command for every feature, `--json` output and stable exit codes.
+- A local command API behind it that is off until you turn it on. Access needs a token that you make in the app, which can be read-only, expires and can be revoked.
+- Exports and backups started from a script need a yes from you, in a dialog in the app, each time.
+
+## Privacy and security
+
+- **Local-first.** There is no server and no account, so there is no one who could hold your data. Nothing is sent anywhere, and there is no telemetry.
+- **No network by default.** A CI check (`npm run check:outbound`) lists every place in the code that can open a connection and fails when a new one appears. The only optional network traffic planned is something you turn on yourself, such as the bank connection, update checks or sync.
+- **Hardened window.** A strict content security policy, no remote content, one permission per command, no shell access from the web view, and links open in the system browser.
+- **Safe logs.** Logs and crash reports never contain amounts, descriptions, tokens or keys.
+- **The command API is for you only.** It listens on `127.0.0.1` and nothing else, refuses requests from web pages, answers "locked" while the app is locked, and does not count as activity, so the idle lock still works. Restoring a backup, changing the currency and deleting everything cannot be done through it at all.
+
+What is stored, where, and who could see it is written down in [assets/data-inventory.md](assets/data-inventory.md). It is a technical note, not a privacy policy.
+
+## Getting started
+
+### Requirements
+
+- Node.js 22 or newer, and npm
+- Rust (stable, 1.77 or newer) from <https://rustup.rs>
+- Tauri's system libraries for your OS: <https://v2.tauri.app/start/prerequisites/>
   - Linux (Debian/Ubuntu): `sudo apt install libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev libssl-dev build-essential pkg-config`
   - macOS: Xcode command line tools
   - Windows: Microsoft C++ Build Tools and WebView2
-- A secret service for the key: macOS Keychain, Windows Credential Manager, or on Linux GNOME Keyring / KWallet running in your session. Without one, first run fails with "key unavailable".
+- A secret service for the key: macOS Keychain, Windows Credential Manager, or on Linux GNOME Keyring or KWallet running in your session. Without one, the first run fails with "key unavailable".
 
-## Run the app
+### Run the app
 
-From the repo root:
+From the repository root:
 
 ```bash
+git clone git@github.com:v1nc3t/meowNY.git
+cd meowNY
 npm install
 npm run tauri dev
 ```
 
-The first run compiles the Rust side (a few minutes). It starts the Vite dev server for the client and opens a window; edits to `client/src` hot-reload, edits to `src-tauri/src` rebuild and restart the app.
+The first run compiles the Rust side, which takes a few minutes. It starts the Vite dev server for the client and opens a window. Edits to `client/src` hot-reload; edits to `src-tauri/src` rebuild and restart the app.
 
-On first launch the app asks for a currency and an optional passphrase, then creates the encrypted data file. Settings (currency, locale, timezone, app lock, delete all data) are at `/app/settings`.
+On first launch the app asks for a currency and an optional passphrase, shows your recovery key, and creates the encrypted data file. Settings (currency, language, time zone, app lock, backup, command line access, delete all data) are at `/app/settings`.
 
-Running `npm run dev --workspace client` on its own opens the client in a browser, but there is no backend there: every screen talks to the Rust side, so it only works in the desktop window.
+`npm run dev --workspace client` on its own opens the client in a browser, but there is no backend there: every screen talks to the Rust side, so the client only works in the desktop window.
+
+### Build a bundle
+
+```bash
+npm run tauri build
+```
+
+This builds a release version of the app and the installer formats Tauri supports for your system. The result is not signed, and signed installers for all three systems are planned for the first release.
 
 ### Where the data lives
 
@@ -37,11 +132,13 @@ Running `npm run dev --workspace client` on its own opens the client in a browse
 | macOS | `~/Library/Application Support/org.meowny.app/` |
 | Windows | `%APPDATA%\org.meowny.app\` |
 
-It holds `meowny.db` (encrypted; while the app runs there are also `meowny.db-wal` and `meowny.db-shm`, encrypted too) and `vault.json` (lock settings, the wrapped keys and the passphrase salt). The key is in the OS keychain under the service name `org.meowny.app`.
+It holds `meowny.db` (encrypted; while the app runs there are also `meowny.db-wal` and `meowny.db-shm`, encrypted too) and `vault.json` (lock settings, the wrapped keys and the passphrase salt). While the command API is on, it also holds `api.json` (the API version and port, no secrets). The key is in the OS keychain under the service name `org.meowny.app`.
 
 To start over in development, use Settings, delete all my data. That removes the files and the keychain entry together. Deleting the folder by hand leaves a stale keychain entry, which is harmless and gets replaced on the next first run.
 
-## Keyboard shortcuts
+## Usage
+
+### Keyboard shortcuts
 
 Press `?` in the app to see them all. Hovering or focusing a control shows its shortcut. Shortcuts are ignored while typing in a field and inside dialogs.
 
@@ -58,21 +155,38 @@ Press `?` in the app to see them all. Hovering or focusing a control shows its s
 
 All shortcuts are defined in one table, `client/src/keys/shortcuts.ts`.
 
-## Command line
+### Command line
 
-`meowny` drives the running desktop app from a terminal, for scripts and AI agents. It is a small standalone program (under 1 MB, one dependency, `serde_json`) in `cli/`. It never opens the data file: it talks to the app over a local connection (`127.0.0.1` only) that is off until you turn it on, and every request needs a token. The desktop app's own program is also called `meowny`, so this one is built on its own.
+`meowny` drives the running desktop app from a terminal, for scripts and AI agents. It is a small standalone program (under 1 MB, one dependency, `serde_json`) in `cli/`. It never opens the data file: it talks to the app over a local connection (`127.0.0.1` only) that is off until you turn it on, and every request needs a token. The command line exists on the desktop only; the planned phone app has none.
+
+**Set it up**
+
+1. In the app, open Settings, then "command line access", and turn it on. Make a token: read-only unless a script has to change things, and choose how long it lasts. The secret (`mny_` and 64 hex characters) is shown once.
+2. Build the program. This puts `meowny` in cargo's bin folder (`~/.cargo/bin`), which must be on your `PATH`:
+
+   ```bash
+   cargo install --path cli
+   ```
+
+3. Give it the token, either once with `login` (read from standard input and saved readable only by you), or in the environment. There is deliberately no `--token` flag, because other users can read command lines:
+
+   ```bash
+   echo "$TOKEN" | meowny login
+   # or
+   export MEOWNY_TOKEN=mny_...
+   ```
+
+4. Check that it works. The app has to be running and unlocked for every command:
+
+   ```bash
+   meowny status
+   ```
+
+The desktop app's own program is also called `meowny`, so the command line is built on its own and not as part of the app.
+
+**Examples**
 
 ```bash
-# 1. In the app: Settings, command line access. Turn it on and make a token
-#    (read only, unless the script has to change things). It is shown once.
-# 2. Build the program; this puts `meowny` in cargo's bin folder
-cargo install --path cli
-# 3. Give it the token: in the environment, or once with `login` (read from standard input, saved
-#    readable only by you). There is deliberately no --token flag: command lines can be read by other users.
-export MEOWNY_TOKEN=mny_...
-echo "$TOKEN" | meowny login
-
-meowny status
 meowny transactions list --limit 5
 meowny transactions create --name Bread --amount 2.40 --payment-date 2026-10-14 --category-id 5
 meowny stats budget --month 2026-10 --json
@@ -83,7 +197,15 @@ meowny --help        # and meowny <command> --help
 meowny schema        # every command, flag and exit code as JSON, without the app
 ```
 
-The commands are `meowny <noun> <verb>`, worked out from the app's own list of routes. Data goes to standard output (`--json` for JSON, otherwise a plain table), messages and errors to standard error. It never asks anything: every input is a flag or standard input, commands that delete or end something need `--yes`, and a new transaction gets a fresh `--client-uuid` so a retry cannot record it twice. The app has to be running and unlocked.
+**How it behaves**
+
+- Commands are `meowny <noun> <verb>`, worked out from the app's own list of routes.
+- Data goes to standard output (`--json` for JSON on one line, otherwise a plain table). Messages and errors go to standard error. With `--json` an error is `{"code": "...", "message": "..."}`.
+- It never asks anything: every input is a flag or standard input. Commands that delete or end something need `--yes`. A new transaction gets a fresh `--client-uuid`, so a retry cannot record it twice.
+- Money stays a string end to end, and dates are ISO 8601.
+- The token is found in `--token-file`, then `MEOWNY_TOKEN`, then `MEOWNY_TOKEN_FILE`, then the file `login` saved (`~/.config/meowny/token` on Linux). A token file that other users can read is refused.
+- `MEOWNY_DATA_DIR` or `--data-dir` says where the app keeps its data (where it writes its port); `MEOWNY_PORT` or `--port` skips that.
+- Exports (`export json|csv|xlsx|pdf`) and backups (`backup create`) are not done on a token's say-so. Each one is described in a dialog in the app (which token, what, the exact file) and is written only if you click Allow. The file must have the right ending, be in a folder that exists, and not exist yet: nothing is ever overwritten. Asking again right after a "no" is refused for 30 seconds.
 
 | Exit code | Means |
 |---|---|
@@ -93,19 +215,22 @@ The commands are `meowny <noun> <verb>`, worked out from the app's own list of r
 | 3 | no token, a wrong or expired token, a token that may not do this, the person said no in the app, or the app is locked |
 | 4 | not found |
 
-With `--json` an error is `{"code": "...", "message": "..."}` on standard error. The token is found in `--token-file`, then `MEOWNY_TOKEN`, then `MEOWNY_TOKEN_FILE`, then the file `login` saved; a token file that other users can read is refused. `MEOWNY_DATA_DIR` or `--data-dir` says where the app keeps its data (where it writes its port), `MEOWNY_PORT` or `--port` skips that.
+**Try it without the app.** `cargo run --example api_demo` in `src-tauri/` serves demo data and prints a read token, a write token and a ready command line. There, the questions an export or a backup asks are answered in that terminal (y or n) instead of in a dialog.
 
-Exports (`export json|csv|xlsx|pdf`) and backups (`backup create`) are not done on a token's say-so: each one is described in a dialog in the app (which token, what, the exact file) and written only if you click Allow. The file must have the right ending, be in a folder that exists, and not exist yet; nothing is ever overwritten. Asking again right after a "no" is refused for 30 seconds. Restoring a backup, changing the currency and deleting everything are not available through the command line at all.
-
-Every command, flag and exit code is documented, with real output, in [docs/CLI.md](docs/CLI.md) (see Documentation below).
-
-To try it without the app, `cargo run --example api_demo` in `src-tauri/` serves demo data and prints the tokens and a ready command line. There, the questions an export or a backup asks are answered in that terminal (y or n) instead of in a dialog.
+Every command, flag and exit code is documented, with real output, in the [CLI reference](https://v1nc3t.github.io/meowNY/) and in [docs/CLI.md](docs/CLI.md).
 
 ## Documentation
 
-The command line has a reference site in `docs/`: one static page in the style of an API reference (a contents column, one card per command with its flags and a real example, the exit and error codes, a page for AI agents, and the HTTP API behind it). It is published to GitHub Pages at https://v1nc3t.github.io/meowNY/ once, in the repository's Settings, Pages, Source is set to "GitHub Actions" (`.github/workflows/pages.yml` does the rest on every push to `main` that touches `docs/`). The same text is in [docs/CLI.md](docs/CLI.md), which is easier to read in an editor or to give to an agent.
+| Document | What it is |
+|---|---|
+| [CLI reference site](https://v1nc3t.github.io/meowNY/) | One static page in the style of an API reference: a card per command with its flags and a real example, the exit and error codes, a page for AI agents, and the HTTP API behind the command line |
+| [docs/CLI.md](docs/CLI.md) | The same text in one Markdown file, easier to read in an editor or to give to an agent |
+| [assets/PLAN.md](assets/PLAN.md) | The build plan and roadmap, phase by phase, with what is done |
+| [assets/data-inventory.md](assets/data-inventory.md) | What data the app holds, where, which network calls exist, and who could see it |
 
-The page is made from the program, so it cannot say something the program does not do. `cli/tests/docs.rs` runs one tour of every command and every way to fail against a real app, records what came out (`docs/commands.json`, `docs/examples.json`), and fails when a command, a flag, a message or an example changes without the docs being redone. The prose around those facts is `docs/content.mjs`; the generator stops with an error if the program has a command, a group or an error code that the prose does not cover. There are no scripts, fonts or images, and the page asks nothing from anywhere else.
+The reference site is made from the program, so it cannot say something the program does not do. `cli/tests/docs.rs` runs one tour of every command and every way to fail against a real app, records what came out (`docs/commands.json`, `docs/examples.json`), and fails when a command, a flag, a message or an example changes without the docs being redone. The prose around those facts is `docs/content.mjs`; the generator stops with an error if the program has a command, a group or an error code that the prose does not cover. There are no scripts, fonts or images, and the page asks nothing from anywhere else.
+
+The site is published by `.github/workflows/pages.yml` on every push to `main` that touches `docs/`. It needs the repository's Settings, Pages, Source set to "GitHub Actions" once.
 
 ```bash
 # After the commands change: record them again, then rebuild the page
@@ -114,10 +239,33 @@ npm run docs                  # writes docs/CLI.md and the site in docs/_site/ (
 npm run check:docs            # what CI runs: the generator's tests, and that docs/CLI.md is up to date
 ```
 
-## Tests and checks
+## Project structure
+
+```text
+meowNY/
+├── client/            React client (Vite, TypeScript, Zod). Every screen talks to the Rust side
+│   └── src/           pages, components, i18n (7 languages), keyboard shortcuts, first-run and lock screens
+├── src-tauri/         The desktop app (Rust, Tauri 2)
+│   ├── src/           vault and keys, database, budgets, recurring items, statistics, backup, export,
+│   │                  the command API (api/) and the access tokens (tokens.rs)
+│   ├── migrations/    Schema changes as numbered SQL files
+│   ├── seeds/         Demo data
+│   └── examples/      dev_vault, seed and api_demo
+├── cli/               The `meowny` command line program (Rust, one dependency)
+├── docs/              Generator and output for the CLI reference site and CLI.md
+├── scripts/           check-outbound, the network call check and its allowlist
+├── assets/            PLAN.md, data-inventory.md and the original schema notes
+└── .github/workflows/ CI, desktop builds, security checks and the docs site
+```
+
+How the parts fit: the client calls Rust commands through Tauri; the Rust side owns the database, the keys and every rule. The command line is a client of the running app, through the local command API, and has no other way to the data. The list of API routes is one table in Rust, and `meowny schema`, the command line's commands and the docs are all made from it.
+
+## Development
+
+### Tests and checks
 
 ```bash
-# Rust: migrations, constraints, vault, key handling
+# Rust: migrations, constraints, vault, key handling, the command API
 cd src-tauri && cargo test
 
 # Timings of the main queries on 50,000 transactions (prints, does not assert)
@@ -141,9 +289,7 @@ npm run check:docs
 npm run check:outbound
 ```
 
-CI (`.github/workflows/desktop.yml`) runs the outbound check, `cargo test` for the app and for `cli/`, then builds the app. Pull requests build on Linux only (about 2.5 minutes); pushes to `main` also build on macOS and Windows, and you can run all three for any branch from the Actions tab with "Run workflow".
-
-## Database
+### Database
 
 Schema migrations are plain SQL in `src-tauri/migrations/`, embedded in the app and applied on startup. The version is stored in SQLite's `user_version`, and a database from a newer app version is refused. Add a change as the next numbered file and append it to `MIGRATIONS` in `src-tauri/src/migrate.rs`. Never edit a migration that has shipped.
 
@@ -151,7 +297,7 @@ Money is stored as integer minor units (`*_minor` columns). Constraint tests are
 
 ### Demo data
 
-Sixteen months of demo data, with dates relative to today (`src-tauri/seeds/dev.sql`): categories, budgets that change over time, recurring items that are paid, overdue, paused and ended, a deleted category and a few hundred transactions, including awkward text (accents, Romanian and Japanese letters, quotes, cells that look like formulas) for trying the exports.
+There are sixteen months of demo data, with dates relative to today (`src-tauri/seeds/dev.sql`): categories, budgets that change over time, recurring items that are paid, overdue, paused and ended, a deleted category and a few hundred transactions, including awkward text (accents, Romanian and Japanese letters, quotes, cells that look like formulas) for trying the exports.
 
 To put it in the desktop app, quit the app and run:
 
@@ -162,7 +308,7 @@ cargo run --example dev_vault -- ~/.local/share/org.meowny.app
 
 This **deletes the app's data** (the data file, its key in the OS keychain, the settings file and any backups in that folder, as "delete all my data" does), sets the app up again with the demo data and prints the new recovery key. The lock settings are kept. The data file has no passphrase unless you set `MEOWNY_DEV_PASSPHRASE` for the run. The folder above is where the app keeps its data on Linux. Run the command again to start over.
 
-To try the command API for the CLI (phase 7) on demo data, without the app or your own data:
+To try the command API for the command line on demo data, without the app or your own data:
 
 ```bash
 cd src-tauri
@@ -178,3 +324,48 @@ cargo run --example seed -- /path/to/dev.db <64-hex-character-key>
 ```
 
 It refuses a database that already has data.
+
+### Continuous integration
+
+| Workflow | What it does |
+|---|---|
+| `github-ci.yml` (CI) | Lints, builds and tests the client, and checks the documentation, on every push and pull request |
+| `desktop.yml` (Desktop) | Runs the outbound check and `cargo test` for the app and for `cli/`, then builds the app. Pull requests build on Linux only (about 2.5 minutes); pushes to `main` also build on macOS and Windows. You can run all three for any branch from the Actions tab with "Run workflow" |
+| `security.yml` (Security) | `npm audit`, `cargo audit` for the app and for `cli/`, and a secret scan, on pushes to `main`, pull requests and weekly |
+| `pages.yml` (Docs site) | Builds and publishes the CLI reference site |
+
+## Roadmap
+
+The full plan, with what is done in each phase, is in [assets/PLAN.md](assets/PLAN.md).
+
+| Phase | What | State |
+|---|---|---|
+| 0 to 2 | Setup, encrypted database, app security | Done |
+| 3 to 5 | Categories, transactions, budgets, recurring items, statistics and charts | Done |
+| 6 | Encrypted backup and export | Done |
+| 7 | Command line for scripts and AI agents (desktop only) | Done, except installing it together with the app (phase 11) |
+| 8 | Phone app that keeps an offline copy and syncs with the desktop | Planned |
+| 9 | Adding transactions from the phone without opening the app | Planned |
+| 10 | Bank connection through an aggregator with your own key. No project-run backend, ever | Planned |
+| 11 | Signed installers, updates, `SECURITY.md`, `CONTRIBUTING.md` and install guides | Planned |
+
+## Contributing
+
+Contributions are welcome. There is no `CONTRIBUTING.md` yet (it comes with phase 11), so until then:
+
+1. Open an issue before a large change, so the idea can be discussed first.
+2. Run the checks that apply to your change (see [Tests and checks](#tests-and-checks)). CI runs the same ones.
+3. Add tests with the change. A bug fix comes with a test that fails without it.
+4. Keep dependencies few. Add one only when there is no reasonable way without it, and say why in the pull request.
+5. Keep the app local-first. A new network call must be on purpose, off until the user turns it on, and listed in `scripts/outbound-allowlist.txt`.
+6. Every new desktop feature ships its command line commands in the same change. The phone app gets none.
+7. After a route changes, regenerate `cli/schema.json` and the docs (see [Documentation](#documentation)). Never edit a migration that has shipped.
+8. Update [assets/PLAN.md](assets/PLAN.md) and [assets/data-inventory.md](assets/data-inventory.md) when the change affects them.
+
+## Reporting a security problem
+
+Please do not post the details of a vulnerability in a public issue. A `SECURITY.md` with a private disclosure contact comes with the first release (phase 11). Until then, contact the maintainer privately through their GitHub profile, [@v1nc3t](https://github.com/v1nc3t).
+
+## License
+
+meowNY is free software under the [GNU Affero General Public License, version 3](LICENSE) (AGPL-3.0-only).

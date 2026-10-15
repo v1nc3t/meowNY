@@ -1866,6 +1866,15 @@ kbd {
   justify-self: start;
 }
 
+/* Its text looks like the text before a dropdown, and the box starts where the dropdowns start: the global rule for a
+   label with a checkbox sets its own colour, size and gap, which this one is more specific than. */
+.settings-block label:has(> input[type='checkbox']) {
+  gap: 0.5rem 1.5rem;
+  font-size: 0.75rem;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+
 @media (max-width: 40em) {
   .settings-block .pick.field,
   .settings-block label,

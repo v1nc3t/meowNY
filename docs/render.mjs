@@ -189,7 +189,7 @@ function blockMd(block) {
 }
 
 export function toMarkdown(page) {
-  const out = [`# ${page.title}`, page.lead, '*This file is generated from the program by `node docs/build.mjs`. Do not edit it by hand.*']
+  const out = [`# ${page.title}`, page.lead]
   for (const s of page.sections) {
     out.push(`## ${s.title}`)
     out.push(...s.blocks.map(blockMd))

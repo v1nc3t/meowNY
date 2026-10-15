@@ -286,7 +286,7 @@ Read-only account information through an Open Banking aggregator, with credentia
 - [ ] `CONTRIBUTING.md` and a short architecture note
 - [ ] Install, backup/restore and "move to a new PC" guides
 - [ ] Fresh-machine acceptance test: install, first run, add data, back up, restore on a second machine, pair a phone, sync
-- [ ] Review of the privacy-related claims in the README: no telemetry, no accounts, what leaves the device and when
+- [ ] Review of the privacy-related claims in the README: no telemetry, no accounts, what leaves the device and when (The README was rewritten after phase 7 with the usual sections: features, privacy and security, getting started, usage, project structure, development, roadmap, contributing, license. The claims to review are in its "Privacy and security" section. Still to write for it: screenshots, install steps for the signed installers, and links to `SECURITY.md` and `CONTRIBUTING.md`, which it says come in this phase.)
 
 **Done when:** a stranger can download the app, install it in a few minutes, and keep their data safe without reading the source.
 
