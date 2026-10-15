@@ -11,7 +11,7 @@ use crate::args::Globals;
 use crate::catalog::{Catalog, Command, API_VERSION};
 use crate::client::{has_token_shape, saved_token_path, Env};
 use crate::error::{CliError, ERROR_CODES, EXIT_CODES, exit_for};
-use crate::help::{ENVIRONMENT, GLOBAL_FLAGS};
+use crate::help::{hint, usage_line, ENVIRONMENT, GLOBAL_FLAGS};
 
 fn command_json(c: &Command) -> Value {
     let mut flags = Vec::new();
@@ -23,6 +23,7 @@ fn command_json(c: &Command) -> Value {
             "required": p.required,
             "nullable": p.nullable,
             "values": p.values,
+            "value": hint(p),
             "summary": p.summary,
         }));
         if p.nullable {
@@ -31,6 +32,7 @@ fn command_json(c: &Command) -> Value {
     }
     json!({
         "command": c.name(),
+        "usage": usage_line(c),
         "route": c.route,
         "scope": c.scope,
         "summary": c.summary,
@@ -164,6 +166,10 @@ mod tests {
         assert!(s["commands"].as_array().unwrap().iter().filter(|c| c["confirm"] != true).all(|c| c["confirm"] == false));
         assert_eq!(s["errorCodes"]["denied"], 3);
         assert_eq!(s["errorCodes"]["file_exists"], 1);
+        let create = s["commands"].as_array().unwrap().iter().find(|c| c["command"] == "transactions create").unwrap();
+        assert_eq!(create["usage"], "meowny transactions create --name <text> --amount <amount> --payment-date <date> --category-id <id> [--description <text>] [--client-uuid <uuid>]");
+        assert_eq!(create["flags"][1]["value"], "amount");
+        assert!(s["commands"].as_array().unwrap().iter().all(|c| c["usage"].as_str().unwrap().starts_with("meowny ")), "every command has a usage line");
         let top = s["commands"].as_array().unwrap().iter().find(|c| c["command"] == "categories list").unwrap();
         assert_eq!(top["flags"][0]["values"], json!(["INCOME", "EXPENSE"]));
     }

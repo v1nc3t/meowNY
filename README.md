@@ -97,7 +97,22 @@ With `--json` an error is `{"code": "...", "message": "..."}` on standard error.
 
 Exports (`export json|csv|xlsx|pdf`) and backups (`backup create`) are not done on a token's say-so: each one is described in a dialog in the app (which token, what, the exact file) and written only if you click Allow. The file must have the right ending, be in a folder that exists, and not exist yet; nothing is ever overwritten. Asking again right after a "no" is refused for 30 seconds. Restoring a backup, changing the currency and deleting everything are not available through the command line at all.
 
+Every command, flag and exit code is documented, with real output, in [docs/CLI.md](docs/CLI.md) (see Documentation below).
+
 To try it without the app, `cargo run --example api_demo` in `src-tauri/` serves demo data and prints the tokens and a ready command line. There, the questions an export or a backup asks are answered in that terminal (y or n) instead of in a dialog.
+
+## Documentation
+
+The command line has a reference site in `docs/`: one static page in the style of an API reference (a contents column, one card per command with its flags and a real example, the exit and error codes, a page for AI agents, and the HTTP API behind it). It is published to GitHub Pages at https://v1nc3t.github.io/meowNY/ once, in the repository's Settings, Pages, Source is set to "GitHub Actions" (`.github/workflows/pages.yml` does the rest on every push to `main` that touches `docs/`). The same text is in [docs/CLI.md](docs/CLI.md), which is easier to read in an editor or to give to an agent.
+
+The page is made from the program, so it cannot say something the program does not do. `cli/tests/docs.rs` runs one tour of every command and every way to fail against a real app, records what came out (`docs/commands.json`, `docs/examples.json`), and fails when a command, a flag, a message or an example changes without the docs being redone. The prose around those facts is `docs/content.mjs`; the generator stops with an error if the program has a command, a group or an error code that the prose does not cover. There are no scripts, fonts or images, and the page asks nothing from anywhere else.
+
+```bash
+# After the commands change: record them again, then rebuild the page
+cd cli && UPDATE_DOCS=1 cargo test --offline --test docs
+npm run docs                  # writes docs/CLI.md and the site in docs/_site/ (open docs/_site/index.html)
+npm run check:docs            # what CI runs: the generator's tests, and that docs/CLI.md is up to date
+```
 
 ## Tests and checks
 
@@ -117,6 +132,9 @@ npm run build --workspace client
 cd cli && cargo test
 # After a route is added or changed, regenerate the list of routes the command line embeds (a test fails until you do)
 cd cli && cargo run --example dump_schema > schema.json
+
+# The documentation: the generator's tests, and that docs/CLI.md is what it makes
+npm run check:docs
 
 # Lists every place that can make a network call and fails on new ones
 npm run check:outbound

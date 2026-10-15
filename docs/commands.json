@@ -1,0 +1,1586 @@
+{
+  "cli": {
+    "api": 1,
+    "name": "meowny",
+    "version": "0.1.0"
+  },
+  "commands": [
+    {
+      "command": "status",
+      "confirm": false,
+      "destructive": false,
+      "flags": [],
+      "positional": null,
+      "route": "status",
+      "scope": "read",
+      "summary": "The app version, the API version and the scope of the token used.",
+      "usage": "meowny status"
+    },
+    {
+      "command": "schema",
+      "confirm": false,
+      "destructive": false,
+      "flags": [],
+      "positional": null,
+      "route": "schema",
+      "scope": "read",
+      "summary": "Every route with its scope and arguments, so a client can discover them.",
+      "usage": "meowny schema"
+    },
+    {
+      "command": "today",
+      "confirm": false,
+      "destructive": false,
+      "flags": [],
+      "positional": null,
+      "route": "today",
+      "scope": "read",
+      "summary": "Today's date and the current month in the time zone set in the app.",
+      "usage": "meowny today"
+    },
+    {
+      "command": "settings get",
+      "confirm": false,
+      "destructive": false,
+      "flags": [],
+      "positional": null,
+      "route": "settings.get",
+      "scope": "read",
+      "summary": "The currency, number format, time zone and language set in the app.",
+      "usage": "meowny settings get"
+    },
+    {
+      "command": "categories list",
+      "confirm": false,
+      "destructive": false,
+      "flags": [
+        {
+          "flag": "--type",
+          "nullable": false,
+          "param": "type",
+          "required": false,
+          "summary": "INCOME or EXPENSE.",
+          "type": "string",
+          "value": "INCOME|EXPENSE",
+          "values": [
+            "INCOME",
+            "EXPENSE"
+          ]
+        }
+      ],
+      "positional": null,
+      "route": "categories.list",
+      "scope": "read",
+      "summary": "The categories that are in use, oldest first, with their ids.",
+      "usage": "meowny categories list [--type <INCOME|EXPENSE>]"
+    },
+    {
+      "command": "transactions list",
+      "confirm": false,
+      "destructive": false,
+      "flags": [
+        {
+          "flag": "--from",
+          "nullable": false,
+          "param": "from",
+          "required": false,
+          "summary": "Only on or after this date.",
+          "type": "date",
+          "value": "date",
+          "values": []
+        },
+        {
+          "flag": "--to",
+          "nullable": false,
+          "param": "to",
+          "required": false,
+          "summary": "Only on or before this date.",
+          "type": "date",
+          "value": "date",
+          "values": []
+        },
+        {
+          "flag": "--category-id",
+          "nullable": false,
+          "param": "categoryId",
+          "required": false,
+          "summary": "Only this category.",
+          "type": "id",
+          "value": "id",
+          "values": []
+        },
+        {
+          "flag": "--q",
+          "nullable": false,
+          "param": "q",
+          "required": false,
+          "summary": "Only transactions whose name or description contains this text.",
+          "type": "string",
+          "value": "text",
+          "values": []
+        },
+        {
+          "flag": "--limit",
+          "nullable": false,
+          "param": "limit",
+          "required": false,
+          "summary": "How many to return, 1 to 100. Default 50.",
+          "type": "integer",
+          "value": "number",
+          "values": []
+        },
+        {
+          "flag": "--offset",
+          "nullable": false,
+          "param": "offset",
+          "required": false,
+          "summary": "How many to skip, for the next page. Default 0.",
+          "type": "integer",
+          "value": "number",
+          "values": []
+        }
+      ],
+      "positional": null,
+      "route": "transactions.list",
+      "scope": "read",
+      "summary": "Transactions, newest first, with the total that match. Up to 100 a page, 50 unless limit says otherwise.",
+      "usage": "meowny transactions list [--from <date>] [--to <date>] [--category-id <id>] [--q <text>] [--limit <number>] [--offset <number>]"
+    },
+    {
+      "command": "budgets overview",
+      "confirm": false,
+      "destructive": false,
+      "flags": [
+        {
+          "flag": "--month",
+          "nullable": false,
+          "param": "month",
+          "required": true,
+          "summary": "The month, like 2026-10.",
+          "type": "month",
+          "value": "month",
+          "values": []
+        }
+      ],
+      "positional": null,
+      "route": "budgets.overview",
+      "scope": "read",
+      "summary": "For a month, per side (income, expense): the budget, how much of it is given to categories, what is left, and the actual so far.",
+      "usage": "meowny budgets overview --month <month>"
+    },
+    {
+      "command": "budgets history",
+      "confirm": false,
+      "destructive": false,
+      "flags": [],
+      "positional": null,
+      "route": "budgets.history",
+      "scope": "read",
+      "summary": "One row per month, newest first, from the first month that had a budget: the budget and the actual for each side.",
+      "usage": "meowny budgets history"
+    },
+    {
+      "command": "recurring list",
+      "confirm": false,
+      "destructive": false,
+      "flags": [],
+      "positional": null,
+      "route": "recurring.list",
+      "scope": "read",
+      "summary": "Every recurring item, with its schedule, its next due date and whether it is active.",
+      "usage": "meowny recurring list"
+    },
+    {
+      "command": "recurring dues",
+      "confirm": false,
+      "destructive": false,
+      "flags": [
+        {
+          "flag": "--within-days",
+          "nullable": false,
+          "param": "withinDays",
+          "required": false,
+          "summary": "How many days ahead count as upcoming, 0 to 366. Default 30.",
+          "type": "integer",
+          "value": "number",
+          "values": []
+        }
+      ],
+      "positional": null,
+      "route": "recurring.dues",
+      "scope": "read",
+      "summary": "Active recurring items that are overdue (due before today) and those due in the next days. Today is the date in the app's time zone.",
+      "usage": "meowny recurring dues [--within-days <number>]"
+    },
+    {
+      "command": "stats budget",
+      "confirm": false,
+      "destructive": false,
+      "flags": [
+        {
+          "flag": "--month",
+          "nullable": false,
+          "param": "month",
+          "required": true,
+          "summary": "The month, like 2026-10.",
+          "type": "month",
+          "value": "month",
+          "values": []
+        }
+      ],
+      "positional": null,
+      "route": "stats.budget",
+      "scope": "read",
+      "summary": "Budget against actual for a month: each category with its budget, what was spent or earned, what is left and the percent used, and the totals.",
+      "usage": "meowny stats budget --month <month>"
+    },
+    {
+      "command": "stats trend",
+      "confirm": false,
+      "destructive": false,
+      "flags": [
+        {
+          "flag": "--category-id",
+          "nullable": false,
+          "param": "categoryId",
+          "required": true,
+          "summary": "The category.",
+          "type": "id",
+          "value": "id",
+          "values": []
+        },
+        {
+          "flag": "--from",
+          "nullable": false,
+          "param": "from",
+          "required": true,
+          "summary": "The first month, like 2026-01.",
+          "type": "month",
+          "value": "month",
+          "values": []
+        },
+        {
+          "flag": "--to",
+          "nullable": false,
+          "param": "to",
+          "required": true,
+          "summary": "The last month, like 2026-10.",
+          "type": "month",
+          "value": "month",
+          "values": []
+        }
+      ],
+      "positional": null,
+      "route": "stats.trend",
+      "scope": "read",
+      "summary": "One category month by month, with its budget and actual for each month. At most 120 months.",
+      "usage": "meowny stats trend --category-id <id> --from <month> --to <month>"
+    },
+    {
+      "command": "stats year",
+      "confirm": false,
+      "destructive": false,
+      "flags": [
+        {
+          "flag": "--year",
+          "nullable": false,
+          "param": "year",
+          "required": true,
+          "summary": "The year, like 2026.",
+          "type": "year",
+          "value": "year",
+          "values": []
+        }
+      ],
+      "positional": null,
+      "route": "stats.year",
+      "scope": "read",
+      "summary": "Income, expense and savings for each month of a year.",
+      "usage": "meowny stats year --year <year>"
+    },
+    {
+      "command": "stats top",
+      "confirm": false,
+      "destructive": false,
+      "flags": [
+        {
+          "flag": "--month",
+          "nullable": false,
+          "param": "month",
+          "required": true,
+          "summary": "The month, like 2026-10.",
+          "type": "month",
+          "value": "month",
+          "values": []
+        },
+        {
+          "flag": "--type",
+          "nullable": false,
+          "param": "type",
+          "required": true,
+          "summary": "INCOME or EXPENSE.",
+          "type": "string",
+          "value": "INCOME|EXPENSE",
+          "values": [
+            "INCOME",
+            "EXPENSE"
+          ]
+        },
+        {
+          "flag": "--limit",
+          "nullable": false,
+          "param": "limit",
+          "required": false,
+          "summary": "How many categories, 1 to 50. Default 5.",
+          "type": "integer",
+          "value": "number",
+          "values": []
+        }
+      ],
+      "positional": null,
+      "route": "stats.top",
+      "scope": "read",
+      "summary": "The categories with the most spending, or income, in a month, biggest first, with their share of the month.",
+      "usage": "meowny stats top --month <month> --type <INCOME|EXPENSE> [--limit <number>]"
+    },
+    {
+      "command": "stats commitments",
+      "confirm": false,
+      "destructive": false,
+      "flags": [],
+      "positional": null,
+      "route": "stats.commitments",
+      "scope": "read",
+      "summary": "What the active recurring items cost, or bring in, in an average month. Items with no fixed amount are listed but not counted.",
+      "usage": "meowny stats commitments"
+    },
+    {
+      "command": "stats planned",
+      "confirm": false,
+      "destructive": false,
+      "flags": [
+        {
+          "flag": "--month",
+          "nullable": false,
+          "param": "month",
+          "required": true,
+          "summary": "The month, like 2026-10.",
+          "type": "month",
+          "value": "month",
+          "values": []
+        }
+      ],
+      "positional": null,
+      "route": "stats.planned",
+      "scope": "read",
+      "summary": "Planned against paid amounts of the recurring items that were paid in a month.",
+      "usage": "meowny stats planned --month <month>"
+    },
+    {
+      "command": "settings set",
+      "confirm": false,
+      "destructive": false,
+      "flags": [
+        {
+          "flag": "--locale",
+          "nullable": false,
+          "param": "locale",
+          "required": false,
+          "summary": "How numbers and dates are written, like en-IE.",
+          "type": "string",
+          "value": "text",
+          "values": []
+        },
+        {
+          "flag": "--timezone",
+          "nullable": false,
+          "param": "timezone",
+          "required": false,
+          "summary": "A time zone name, like Europe/Dublin.",
+          "type": "string",
+          "value": "text",
+          "values": []
+        },
+        {
+          "flag": "--language",
+          "nullable": false,
+          "param": "language",
+          "required": false,
+          "summary": "The language of the app, like en or ro.",
+          "type": "string",
+          "value": "text",
+          "values": []
+        }
+      ],
+      "positional": null,
+      "route": "settings.set",
+      "scope": "write",
+      "summary": "Changes the number and date format, the time zone or the language. Give at least one. The currency is changed in the app.",
+      "usage": "meowny settings set [--locale <text>] [--timezone <text>] [--language <text>]"
+    },
+    {
+      "command": "categories create",
+      "confirm": false,
+      "destructive": false,
+      "flags": [
+        {
+          "flag": "--name",
+          "nullable": false,
+          "param": "name",
+          "required": true,
+          "summary": "The name.",
+          "type": "string",
+          "value": "text",
+          "values": []
+        },
+        {
+          "flag": "--type",
+          "nullable": false,
+          "param": "type",
+          "required": true,
+          "summary": "INCOME or EXPENSE.",
+          "type": "string",
+          "value": "INCOME|EXPENSE",
+          "values": [
+            "INCOME",
+            "EXPENSE"
+          ]
+        }
+      ],
+      "positional": null,
+      "route": "categories.create",
+      "scope": "write",
+      "summary": "Makes a category. Its name is 1 to 50 characters and unique among the categories of that type.",
+      "usage": "meowny categories create --name <text> --type <INCOME|EXPENSE>"
+    },
+    {
+      "command": "categories rename",
+      "confirm": false,
+      "destructive": false,
+      "flags": [
+        {
+          "flag": "--id",
+          "nullable": false,
+          "param": "id",
+          "required": true,
+          "summary": "The category.",
+          "type": "id",
+          "value": "id",
+          "values": []
+        },
+        {
+          "flag": "--name",
+          "nullable": false,
+          "param": "name",
+          "required": true,
+          "summary": "The new name.",
+          "type": "string",
+          "value": "text",
+          "values": []
+        }
+      ],
+      "positional": "id",
+      "route": "categories.rename",
+      "scope": "write",
+      "summary": "Renames a category. Its type cannot change.",
+      "usage": "meowny categories rename <id> --name <text>"
+    },
+    {
+      "command": "categories delete",
+      "confirm": false,
+      "destructive": true,
+      "flags": [
+        {
+          "flag": "--id",
+          "nullable": false,
+          "param": "id",
+          "required": true,
+          "summary": "The category.",
+          "type": "id",
+          "value": "id",
+          "values": []
+        }
+      ],
+      "positional": "id",
+      "route": "categories.delete",
+      "scope": "write",
+      "summary": "Deletes a category: it is no longer offered or budgeted, and its transactions keep it.",
+      "usage": "meowny categories delete <id>"
+    },
+    {
+      "command": "transactions create",
+      "confirm": false,
+      "destructive": false,
+      "flags": [
+        {
+          "flag": "--name",
+          "nullable": false,
+          "param": "name",
+          "required": true,
+          "summary": "What it was, 1 to 50 characters.",
+          "type": "string",
+          "value": "text",
+          "values": []
+        },
+        {
+          "flag": "--amount",
+          "nullable": false,
+          "param": "amount",
+          "required": true,
+          "summary": "More than zero, like 12.50.",
+          "type": "money",
+          "value": "amount",
+          "values": []
+        },
+        {
+          "flag": "--payment-date",
+          "nullable": false,
+          "param": "paymentDate",
+          "required": true,
+          "summary": "The day it was paid.",
+          "type": "date",
+          "value": "date",
+          "values": []
+        },
+        {
+          "flag": "--category-id",
+          "nullable": false,
+          "param": "categoryId",
+          "required": true,
+          "summary": "The category. Its type decides whether this is income or an expense.",
+          "type": "id",
+          "value": "id",
+          "values": []
+        },
+        {
+          "flag": "--description",
+          "nullable": false,
+          "param": "description",
+          "required": false,
+          "summary": "A note.",
+          "type": "string",
+          "value": "text",
+          "values": []
+        },
+        {
+          "flag": "--client-uuid",
+          "nullable": false,
+          "param": "clientUuid",
+          "required": false,
+          "summary": "A fresh UUID per transaction, so a retry cannot record it twice.",
+          "type": "uuid",
+          "value": "uuid",
+          "values": []
+        }
+      ],
+      "positional": null,
+      "route": "transactions.create",
+      "scope": "write",
+      "summary": "Records a transaction. With a clientUuid, sending the same request again gives back the first transaction instead of making another.",
+      "usage": "meowny transactions create --name <text> --amount <amount> --payment-date <date> --category-id <id> [--description <text>] [--client-uuid <uuid>]"
+    },
+    {
+      "command": "transactions update",
+      "confirm": false,
+      "destructive": false,
+      "flags": [
+        {
+          "flag": "--id",
+          "nullable": false,
+          "param": "id",
+          "required": true,
+          "summary": "The transaction.",
+          "type": "id",
+          "value": "id",
+          "values": []
+        },
+        {
+          "flag": "--name",
+          "nullable": false,
+          "param": "name",
+          "required": false,
+          "summary": "The new name.",
+          "type": "string",
+          "value": "text",
+          "values": []
+        },
+        {
+          "flag": "--amount",
+          "nullable": false,
+          "param": "amount",
+          "required": false,
+          "summary": "The new amount, more than zero.",
+          "type": "money",
+          "value": "amount",
+          "values": []
+        },
+        {
+          "flag": "--payment-date",
+          "nullable": false,
+          "param": "paymentDate",
+          "required": false,
+          "summary": "The new date.",
+          "type": "date",
+          "value": "date",
+          "values": []
+        },
+        {
+          "flag": "--category-id",
+          "nullable": false,
+          "param": "categoryId",
+          "required": false,
+          "summary": "The new category.",
+          "type": "id",
+          "value": "id",
+          "values": []
+        },
+        {
+          "flag": "--description",
+          "nullable": true,
+          "param": "description",
+          "required": false,
+          "summary": "The new note, or null to clear it.",
+          "type": "string",
+          "value": "text",
+          "values": []
+        },
+        {
+          "clears": "description",
+          "flag": "--clear-description",
+          "summary": "Clears description."
+        }
+      ],
+      "positional": "id",
+      "route": "transactions.update",
+      "scope": "write",
+      "summary": "Changes a transaction. Fields left out stay as they are; a null description clears it.",
+      "usage": "meowny transactions update <id> [--name <text>] [--amount <amount>] [--payment-date <date>] [--category-id <id>] [--description <text>]"
+    },
+    {
+      "command": "transactions delete",
+      "confirm": false,
+      "destructive": true,
+      "flags": [
+        {
+          "flag": "--id",
+          "nullable": false,
+          "param": "id",
+          "required": true,
+          "summary": "The transaction.",
+          "type": "id",
+          "value": "id",
+          "values": []
+        }
+      ],
+      "positional": "id",
+      "route": "transactions.delete",
+      "scope": "write",
+      "summary": "Deletes a transaction. The change history keeps what it said.",
+      "usage": "meowny transactions delete <id>"
+    },
+    {
+      "command": "budgets set",
+      "confirm": false,
+      "destructive": false,
+      "flags": [
+        {
+          "flag": "--type",
+          "nullable": false,
+          "param": "type",
+          "required": true,
+          "summary": "INCOME or EXPENSE.",
+          "type": "string",
+          "value": "INCOME|EXPENSE",
+          "values": [
+            "INCOME",
+            "EXPENSE"
+          ]
+        },
+        {
+          "flag": "--month",
+          "nullable": false,
+          "param": "month",
+          "required": true,
+          "summary": "The month, like 2026-10.",
+          "type": "month",
+          "value": "month",
+          "values": []
+        },
+        {
+          "flag": "--amount-limit",
+          "nullable": false,
+          "param": "amountLimit",
+          "required": true,
+          "summary": "The most to spend, or the aim to earn, each month. Zero is allowed.",
+          "type": "money",
+          "value": "amount",
+          "values": []
+        },
+        {
+          "flag": "--category-id",
+          "nullable": false,
+          "param": "categoryId",
+          "required": false,
+          "summary": "The category. Leave out for the global budget of that side.",
+          "type": "id",
+          "value": "id",
+          "values": []
+        }
+      ],
+      "positional": null,
+      "route": "budgets.set",
+      "scope": "write",
+      "summary": "Sets a monthly budget: the global budget of a side, or one category's. A month that has already started changes only that month; this month and later ones carry the new amount forward. A category budget must match the category's type.",
+      "usage": "meowny budgets set --type <INCOME|EXPENSE> --month <month> --amount-limit <amount> [--category-id <id>]"
+    },
+    {
+      "command": "budgets remove",
+      "confirm": false,
+      "destructive": true,
+      "flags": [
+        {
+          "flag": "--type",
+          "nullable": false,
+          "param": "type",
+          "required": true,
+          "summary": "INCOME or EXPENSE.",
+          "type": "string",
+          "value": "INCOME|EXPENSE",
+          "values": [
+            "INCOME",
+            "EXPENSE"
+          ]
+        },
+        {
+          "flag": "--month",
+          "nullable": false,
+          "param": "month",
+          "required": true,
+          "summary": "The month, like 2026-10.",
+          "type": "month",
+          "value": "month",
+          "values": []
+        },
+        {
+          "flag": "--category-id",
+          "nullable": false,
+          "param": "categoryId",
+          "required": false,
+          "summary": "The category. Leave out for the global budget of that side.",
+          "type": "id",
+          "value": "id",
+          "values": []
+        }
+      ],
+      "positional": null,
+      "route": "budgets.remove",
+      "scope": "write",
+      "summary": "Removes a budget, with the same month rules as setting one. The months before keep it, and the history stays.",
+      "usage": "meowny budgets remove --type <INCOME|EXPENSE> --month <month> [--category-id <id>]"
+    },
+    {
+      "command": "recurring create",
+      "confirm": false,
+      "destructive": false,
+      "flags": [
+        {
+          "flag": "--name",
+          "nullable": false,
+          "param": "name",
+          "required": true,
+          "summary": "What it is, 1 to 50 characters.",
+          "type": "string",
+          "value": "text",
+          "values": []
+        },
+        {
+          "flag": "--amount",
+          "nullable": false,
+          "param": "amount",
+          "required": false,
+          "summary": "The planned amount. Leave out for a bill that changes every time.",
+          "type": "money",
+          "value": "amount",
+          "values": []
+        },
+        {
+          "flag": "--category-id",
+          "nullable": false,
+          "param": "categoryId",
+          "required": true,
+          "summary": "The category.",
+          "type": "id",
+          "value": "id",
+          "values": []
+        },
+        {
+          "flag": "--start-date",
+          "nullable": false,
+          "param": "startDate",
+          "required": true,
+          "summary": "The first due date. Later dates are worked out from it.",
+          "type": "date",
+          "value": "date",
+          "values": []
+        },
+        {
+          "flag": "--interval-unit",
+          "nullable": false,
+          "param": "intervalUnit",
+          "required": true,
+          "summary": "DAY, WEEK, MONTH or YEAR.",
+          "type": "string",
+          "value": "DAY|WEEK|MONTH|YEAR",
+          "values": [
+            "DAY",
+            "WEEK",
+            "MONTH",
+            "YEAR"
+          ]
+        },
+        {
+          "flag": "--interval-count",
+          "nullable": false,
+          "param": "intervalCount",
+          "required": true,
+          "summary": "Every how many units, 1 to 1000.",
+          "type": "integer",
+          "value": "number",
+          "values": []
+        },
+        {
+          "flag": "--end-date",
+          "nullable": false,
+          "param": "endDate",
+          "required": false,
+          "summary": "The last day it can fall due.",
+          "type": "date",
+          "value": "date",
+          "values": []
+        },
+        {
+          "flag": "--description",
+          "nullable": false,
+          "param": "description",
+          "required": false,
+          "summary": "A note.",
+          "type": "string",
+          "value": "text",
+          "values": []
+        }
+      ],
+      "positional": null,
+      "route": "recurring.create",
+      "scope": "write",
+      "summary": "Adds a recurring item: a bill or an income that comes back every so many days, weeks, months or years.",
+      "usage": "meowny recurring create --name <text> [--amount <amount>] --category-id <id> --start-date <date> --interval-unit <DAY|WEEK|MONTH|YEAR> --interval-count <number> [--end-date <date>] [--description <text>]"
+    },
+    {
+      "command": "recurring update",
+      "confirm": false,
+      "destructive": false,
+      "flags": [
+        {
+          "flag": "--id",
+          "nullable": false,
+          "param": "id",
+          "required": true,
+          "summary": "The recurring item.",
+          "type": "id",
+          "value": "id",
+          "values": []
+        },
+        {
+          "flag": "--name",
+          "nullable": false,
+          "param": "name",
+          "required": false,
+          "summary": "The new name.",
+          "type": "string",
+          "value": "text",
+          "values": []
+        },
+        {
+          "flag": "--amount",
+          "nullable": true,
+          "param": "amount",
+          "required": false,
+          "summary": "The new planned amount, or null for no fixed amount.",
+          "type": "money",
+          "value": "amount",
+          "values": []
+        },
+        {
+          "clears": "amount",
+          "flag": "--clear-amount",
+          "summary": "Clears amount."
+        },
+        {
+          "flag": "--category-id",
+          "nullable": false,
+          "param": "categoryId",
+          "required": false,
+          "summary": "The new category.",
+          "type": "id",
+          "value": "id",
+          "values": []
+        },
+        {
+          "flag": "--start-date",
+          "nullable": false,
+          "param": "startDate",
+          "required": false,
+          "summary": "The new first due date.",
+          "type": "date",
+          "value": "date",
+          "values": []
+        },
+        {
+          "flag": "--interval-unit",
+          "nullable": false,
+          "param": "intervalUnit",
+          "required": false,
+          "summary": "DAY, WEEK, MONTH or YEAR.",
+          "type": "string",
+          "value": "DAY|WEEK|MONTH|YEAR",
+          "values": [
+            "DAY",
+            "WEEK",
+            "MONTH",
+            "YEAR"
+          ]
+        },
+        {
+          "flag": "--interval-count",
+          "nullable": false,
+          "param": "intervalCount",
+          "required": false,
+          "summary": "Every how many units, 1 to 1000.",
+          "type": "integer",
+          "value": "number",
+          "values": []
+        },
+        {
+          "flag": "--end-date",
+          "nullable": true,
+          "param": "endDate",
+          "required": false,
+          "summary": "The new last day, or null for none.",
+          "type": "date",
+          "value": "date",
+          "values": []
+        },
+        {
+          "clears": "endDate",
+          "flag": "--clear-end-date",
+          "summary": "Clears endDate."
+        },
+        {
+          "flag": "--description",
+          "nullable": true,
+          "param": "description",
+          "required": false,
+          "summary": "The new note, or null to clear it.",
+          "type": "string",
+          "value": "text",
+          "values": []
+        },
+        {
+          "clears": "description",
+          "flag": "--clear-description",
+          "summary": "Clears description."
+        }
+      ],
+      "positional": "id",
+      "route": "recurring.update",
+      "scope": "write",
+      "summary": "Changes a recurring item. Fields left out stay as they are; null clears the end date or the description, and a null amount makes it a bill with no fixed amount.",
+      "usage": "meowny recurring update <id> [--name <text>] [--amount <amount>] [--category-id <id>] [--start-date <date>] [--interval-unit <DAY|WEEK|MONTH|YEAR>] [--interval-count <number>] [--end-date <date>] [--description <text>]"
+    },
+    {
+      "command": "recurring delete",
+      "confirm": false,
+      "destructive": true,
+      "flags": [
+        {
+          "flag": "--id",
+          "nullable": false,
+          "param": "id",
+          "required": true,
+          "summary": "The recurring item.",
+          "type": "id",
+          "value": "id",
+          "values": []
+        }
+      ],
+      "positional": "id",
+      "route": "recurring.delete",
+      "scope": "write",
+      "summary": "Deletes a recurring item. The transactions it already made stay.",
+      "usage": "meowny recurring delete <id>"
+    },
+    {
+      "command": "recurring pay",
+      "confirm": false,
+      "destructive": false,
+      "flags": [
+        {
+          "flag": "--id",
+          "nullable": false,
+          "param": "id",
+          "required": true,
+          "summary": "The recurring item.",
+          "type": "id",
+          "value": "id",
+          "values": []
+        },
+        {
+          "flag": "--amount",
+          "nullable": false,
+          "param": "amount",
+          "required": false,
+          "summary": "What was paid. Defaults to the planned amount.",
+          "type": "money",
+          "value": "amount",
+          "values": []
+        },
+        {
+          "flag": "--paid-on",
+          "nullable": false,
+          "param": "paidOn",
+          "required": false,
+          "summary": "The day it was paid. Defaults to today in the app's time zone.",
+          "type": "date",
+          "value": "date",
+          "values": []
+        }
+      ],
+      "positional": "id",
+      "route": "recurring.pay",
+      "scope": "write",
+      "summary": "Turns the current occurrence into a transaction and moves the item to the next one. A bill with no fixed amount needs the amount.",
+      "usage": "meowny recurring pay <id> [--amount <amount>] [--paid-on <date>]"
+    },
+    {
+      "command": "recurring skip",
+      "confirm": false,
+      "destructive": false,
+      "flags": [
+        {
+          "flag": "--id",
+          "nullable": false,
+          "param": "id",
+          "required": true,
+          "summary": "The recurring item.",
+          "type": "id",
+          "value": "id",
+          "values": []
+        }
+      ],
+      "positional": "id",
+      "route": "recurring.skip",
+      "scope": "write",
+      "summary": "Passes over the current occurrence without making a transaction.",
+      "usage": "meowny recurring skip <id>"
+    },
+    {
+      "command": "recurring pause",
+      "confirm": false,
+      "destructive": false,
+      "flags": [
+        {
+          "flag": "--id",
+          "nullable": false,
+          "param": "id",
+          "required": true,
+          "summary": "The recurring item.",
+          "type": "id",
+          "value": "id",
+          "values": []
+        }
+      ],
+      "positional": "id",
+      "route": "recurring.pause",
+      "scope": "write",
+      "summary": "Pauses a recurring item: it stops coming due until it is resumed.",
+      "usage": "meowny recurring pause <id>"
+    },
+    {
+      "command": "recurring resume",
+      "confirm": false,
+      "destructive": false,
+      "flags": [
+        {
+          "flag": "--id",
+          "nullable": false,
+          "param": "id",
+          "required": true,
+          "summary": "The recurring item.",
+          "type": "id",
+          "value": "id",
+          "values": []
+        }
+      ],
+      "positional": "id",
+      "route": "recurring.resume",
+      "scope": "write",
+      "summary": "Resumes a paused recurring item, unless its next date is past its end date.",
+      "usage": "meowny recurring resume <id>"
+    },
+    {
+      "command": "recurring end",
+      "confirm": false,
+      "destructive": true,
+      "flags": [
+        {
+          "flag": "--id",
+          "nullable": false,
+          "param": "id",
+          "required": true,
+          "summary": "The recurring item.",
+          "type": "id",
+          "value": "id",
+          "values": []
+        }
+      ],
+      "positional": "id",
+      "route": "recurring.end",
+      "scope": "write",
+      "summary": "Ends a recurring item for good: it becomes inactive and its end date is today. What it already paid stays.",
+      "usage": "meowny recurring end <id>"
+    },
+    {
+      "command": "export preview",
+      "confirm": false,
+      "destructive": false,
+      "flags": [
+        {
+          "flag": "--from",
+          "nullable": false,
+          "param": "from",
+          "required": false,
+          "summary": "Only transactions on or after this date.",
+          "type": "date",
+          "value": "date",
+          "values": []
+        },
+        {
+          "flag": "--to",
+          "nullable": false,
+          "param": "to",
+          "required": false,
+          "summary": "Only transactions on or before this date.",
+          "type": "date",
+          "value": "date",
+          "values": []
+        },
+        {
+          "flag": "--category-ids",
+          "nullable": false,
+          "param": "categoryIds",
+          "required": false,
+          "summary": "Only these categories and what belongs to them. Leave out for all of them.",
+          "type": "ids",
+          "value": "id,id,...",
+          "values": []
+        }
+      ],
+      "positional": null,
+      "route": "export.preview",
+      "scope": "read",
+      "summary": "What an export of this selection would contain: how many transactions, their dates, the income and expense totals, and the other records.",
+      "usage": "meowny export preview [--from <date>] [--to <date>] [--category-ids <id,id,...>]"
+    },
+    {
+      "command": "backup schedule",
+      "confirm": false,
+      "destructive": false,
+      "flags": [],
+      "positional": null,
+      "route": "backup.schedule",
+      "scope": "read",
+      "summary": "The scheduled backup, if one is set up: the folder, how often and how the last one went, or null. Its passphrase is never shown.",
+      "usage": "meowny backup schedule"
+    },
+    {
+      "command": "export json",
+      "confirm": true,
+      "destructive": false,
+      "flags": [
+        {
+          "flag": "--out",
+          "nullable": false,
+          "param": "out",
+          "required": true,
+          "summary": "Where to write the file: an absolute path ending in .json, in a folder that exists, that is not there yet.",
+          "type": "path",
+          "value": "path",
+          "values": []
+        },
+        {
+          "flag": "--from",
+          "nullable": false,
+          "param": "from",
+          "required": false,
+          "summary": "Only transactions on or after this date.",
+          "type": "date",
+          "value": "date",
+          "values": []
+        },
+        {
+          "flag": "--to",
+          "nullable": false,
+          "param": "to",
+          "required": false,
+          "summary": "Only transactions on or before this date.",
+          "type": "date",
+          "value": "date",
+          "values": []
+        },
+        {
+          "flag": "--category-ids",
+          "nullable": false,
+          "param": "categoryIds",
+          "required": false,
+          "summary": "Only these categories and what belongs to them. Leave out for all of them.",
+          "type": "ids",
+          "value": "id,id,...",
+          "values": []
+        }
+      ],
+      "positional": null,
+      "route": "export.json",
+      "scope": "read",
+      "summary": "Writes the data as a JSON file, after the person allows it in the app. An existing file is never replaced.",
+      "usage": "meowny export json --out <path> [--from <date>] [--to <date>] [--category-ids <id,id,...>]"
+    },
+    {
+      "command": "export csv",
+      "confirm": true,
+      "destructive": false,
+      "flags": [
+        {
+          "flag": "--out",
+          "nullable": false,
+          "param": "out",
+          "required": true,
+          "summary": "Where to write the file: an absolute path ending in .csv, in a folder that exists, that is not there yet.",
+          "type": "path",
+          "value": "path",
+          "values": []
+        },
+        {
+          "flag": "--from",
+          "nullable": false,
+          "param": "from",
+          "required": false,
+          "summary": "Only transactions on or after this date.",
+          "type": "date",
+          "value": "date",
+          "values": []
+        },
+        {
+          "flag": "--to",
+          "nullable": false,
+          "param": "to",
+          "required": false,
+          "summary": "Only transactions on or before this date.",
+          "type": "date",
+          "value": "date",
+          "values": []
+        },
+        {
+          "flag": "--category-ids",
+          "nullable": false,
+          "param": "categoryIds",
+          "required": false,
+          "summary": "Only these categories and what belongs to them. Leave out for all of them.",
+          "type": "ids",
+          "value": "id,id,...",
+          "values": []
+        }
+      ],
+      "positional": null,
+      "route": "export.csv",
+      "scope": "read",
+      "summary": "Writes the transactions as a CSV file, after the person allows it in the app. An existing file is never replaced.",
+      "usage": "meowny export csv --out <path> [--from <date>] [--to <date>] [--category-ids <id,id,...>]"
+    },
+    {
+      "command": "export xlsx",
+      "confirm": true,
+      "destructive": false,
+      "flags": [
+        {
+          "flag": "--out",
+          "nullable": false,
+          "param": "out",
+          "required": true,
+          "summary": "Where to write the file: an absolute path ending in .xlsx, in a folder that exists, that is not there yet.",
+          "type": "path",
+          "value": "path",
+          "values": []
+        },
+        {
+          "flag": "--from",
+          "nullable": false,
+          "param": "from",
+          "required": false,
+          "summary": "Only transactions on or after this date.",
+          "type": "date",
+          "value": "date",
+          "values": []
+        },
+        {
+          "flag": "--to",
+          "nullable": false,
+          "param": "to",
+          "required": false,
+          "summary": "Only transactions on or before this date.",
+          "type": "date",
+          "value": "date",
+          "values": []
+        },
+        {
+          "flag": "--category-ids",
+          "nullable": false,
+          "param": "categoryIds",
+          "required": false,
+          "summary": "Only these categories and what belongs to them. Leave out for all of them.",
+          "type": "ids",
+          "value": "id,id,...",
+          "values": []
+        }
+      ],
+      "positional": null,
+      "route": "export.xlsx",
+      "scope": "read",
+      "summary": "Writes a workbook (.xlsx) with sheets for transactions, categories, budgets, recurring items and a monthly summary, after the person allows it in the app. Dates are ISO and amounts plain numbers. An existing file is never replaced.",
+      "usage": "meowny export xlsx --out <path> [--from <date>] [--to <date>] [--category-ids <id,id,...>]"
+    },
+    {
+      "command": "export pdf",
+      "confirm": true,
+      "destructive": false,
+      "flags": [
+        {
+          "flag": "--out",
+          "nullable": false,
+          "param": "out",
+          "required": true,
+          "summary": "Where to write the file: an absolute path ending in .pdf, in a folder that exists, that is not there yet.",
+          "type": "path",
+          "value": "path",
+          "values": []
+        },
+        {
+          "flag": "--from-month",
+          "nullable": false,
+          "param": "fromMonth",
+          "required": true,
+          "summary": "The first month, like 2026-01.",
+          "type": "month",
+          "value": "month",
+          "values": []
+        },
+        {
+          "flag": "--to-month",
+          "nullable": false,
+          "param": "toMonth",
+          "required": true,
+          "summary": "The last month, like 2026-10. At most 120 months.",
+          "type": "month",
+          "value": "month",
+          "values": []
+        },
+        {
+          "flag": "--category-ids",
+          "nullable": false,
+          "param": "categoryIds",
+          "required": false,
+          "summary": "Only these categories and what belongs to them. Leave out for all of them.",
+          "type": "ids",
+          "value": "id,id,...",
+          "values": []
+        },
+        {
+          "flag": "--include-transactions",
+          "nullable": false,
+          "param": "includeTransactions",
+          "required": false,
+          "summary": "Also list the transactions. Up to 20,000.",
+          "type": "boolean",
+          "value": "boolean",
+          "values": []
+        },
+        {
+          "flag": "--show-descriptions",
+          "nullable": false,
+          "param": "showDescriptions",
+          "required": false,
+          "summary": "Show each transaction's description. Leave off to share the report without private details.",
+          "type": "boolean",
+          "value": "boolean",
+          "values": []
+        },
+        {
+          "flag": "--page",
+          "nullable": false,
+          "param": "page",
+          "required": false,
+          "summary": "A4 (the default) or LETTER.",
+          "type": "string",
+          "value": "A4|LETTER",
+          "values": [
+            "A4",
+            "LETTER"
+          ]
+        }
+      ],
+      "positional": null,
+      "route": "export.pdf",
+      "scope": "read",
+      "summary": "Writes a PDF report for whole months, in English, after the person allows it in the app: totals, charts and budget against actual, and the transactions if asked. An existing file is never replaced.",
+      "usage": "meowny export pdf --out <path> --from-month <month> --to-month <month> [--category-ids <id,id,...>] [--include-transactions <boolean>] [--show-descriptions <boolean>] [--page <A4|LETTER>]"
+    },
+    {
+      "command": "backup create",
+      "confirm": true,
+      "destructive": false,
+      "flags": [
+        {
+          "flag": "--out",
+          "nullable": false,
+          "param": "out",
+          "required": true,
+          "summary": "Where to write the file: an absolute path ending in .meowbak, in a folder that exists, that is not there yet.",
+          "type": "path",
+          "value": "path",
+          "values": []
+        },
+        {
+          "flag": "--passphrase",
+          "nullable": false,
+          "param": "passphrase",
+          "required": true,
+          "summary": "Locks the backup. At least 8 characters. Keep it: without it the backup cannot be opened.",
+          "type": "string",
+          "value": "text",
+          "values": []
+        }
+      ],
+      "positional": null,
+      "route": "backup.create",
+      "scope": "read",
+      "summary": "Writes an encrypted backup of all the data, after the person allows it in the app. It opens only with the passphrase given here, and only the app can restore it. An existing file is never replaced.",
+      "usage": "meowny backup create --out <path> --passphrase <text>"
+    },
+    {
+      "command": "login",
+      "confirm": false,
+      "destructive": false,
+      "flags": [],
+      "positional": null,
+      "route": null,
+      "scope": null,
+      "summary": "Saves a token, read from standard input, for the commands that follow.",
+      "usage": "meowny login"
+    },
+    {
+      "command": "logout",
+      "confirm": false,
+      "destructive": false,
+      "flags": [],
+      "positional": null,
+      "route": null,
+      "scope": null,
+      "summary": "Removes the saved token.",
+      "usage": "meowny logout"
+    }
+  ],
+  "environment": [
+    {
+      "name": "MEOWNY_TOKEN",
+      "summary": "The access token, made in the app (Settings, command line access)."
+    },
+    {
+      "name": "MEOWNY_TOKEN_FILE",
+      "summary": "A file holding the token. Same as --token-file."
+    },
+    {
+      "name": "MEOWNY_DATA_DIR",
+      "summary": "The app's data folder. Same as --data-dir."
+    },
+    {
+      "name": "MEOWNY_PORT",
+      "summary": "The port to connect to. Same as --port."
+    }
+  ],
+  "errorCodes": {
+    "app_unavailable": 1,
+    "bad_answer": 1,
+    "bad_token": 3,
+    "denied": 3,
+    "file_exists": 1,
+    "forbidden": 3,
+    "internal": 1,
+    "invalid_input": 2,
+    "locked": 3,
+    "method_not_allowed": 1,
+    "name_exists": 1,
+    "no_token": 3,
+    "not_found": 4,
+    "not_set_up": 1,
+    "timeout": 1,
+    "token_file_unsafe": 3,
+    "too_large": 1,
+    "unauthorized": 3,
+    "unknown_route": 1,
+    "usage": 2
+  },
+  "exitCodes": {
+    "0": "success",
+    "1": "error: the app is not reachable, the answer was not understood, or the request failed for another reason",
+    "2": "bad usage: a missing or unknown flag, or a value the app refused",
+    "3": "the token is missing, wrong, expired or may not do this, the person said no in the app, or the app is locked",
+    "4": "not found"
+  },
+  "globalFlags": [
+    {
+      "flag": "--json",
+      "summary": "Print JSON: the data on standard output, an error as {code, message} on standard error."
+    },
+    {
+      "flag": "--yes",
+      "summary": "Go ahead with a command that deletes or ends something."
+    },
+    {
+      "flag": "--token-file <path>",
+      "summary": "Read the token from this file. It must not be readable by other users."
+    },
+    {
+      "flag": "--data-dir <path>",
+      "summary": "The app's data folder, where it writes its port. Default: the app's usual folder."
+    },
+    {
+      "flag": "--port <number>",
+      "summary": "Connect to this port instead of reading it from the app's data folder."
+    },
+    {
+      "flag": "--timeout <seconds>",
+      "summary": "How long to wait for the app. Default 30."
+    },
+    {
+      "flag": "--app",
+      "summary": "For schema: ask the running app for its own list of routes."
+    },
+    {
+      "flag": "--help, -h",
+      "summary": "Show help. Also: meowny help <command>."
+    },
+    {
+      "flag": "--version, -V",
+      "summary": "Show the version."
+    }
+  ]
+}

@@ -23,7 +23,7 @@ pub const ENVIRONMENT: &[(&str, &str)] = &[
 ];
 
 /// What a value looks like in a usage line.
-fn hint(p: &Param) -> String {
+pub fn hint(p: &Param) -> String {
     if !p.values.is_empty() {
         return p.values.join("|");
     }
