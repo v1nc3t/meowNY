@@ -12,6 +12,7 @@ use super::stamp::{self, Stamp};
 use super::wire::{self, Marker, Message, Row, Table};
 use crate::budgets::{self, Scope, SetBudget};
 use crate::categories::{self, CategoryType};
+use crate::documents::library::{self as library, LinkTarget, TargetKind};
 use crate::recurring::{self, NewRecurring, Unit};
 use crate::transactions::{self, NewTransaction};
 use crate::{currency, migrate};
@@ -729,10 +730,11 @@ fn edit(conn: &mut Connection, rng: &mut Rng) {
     let kind = if rng.below(4) == 0 { CategoryType::Income } else { CategoryType::Expense };
     let categories_now = ids(conn, "SELECT id FROM categories WHERE deleted_at IS NULL AND type = 'EXPENSE'");
     let any_category = ids(conn, "SELECT id FROM categories WHERE deleted_at IS NULL");
-    match rng.below(14) {
+    match rng.below(21) {
         0 => {
             let _ = categories::create(conn, rng.pick(NAMES), kind);
         }
+        14..=20 => edit_documents(conn, rng),
         1 if !any_category.is_empty() => {
             let _ = categories::rename(conn, *rng.pick(&any_category), rng.pick(NAMES));
         }
@@ -831,6 +833,62 @@ fn edit(conn: &mut Connection, rng: &mut Rng) {
     }
 }
 
+/// Something a person might do with documents and their links. A document has a row and no file here: the rows are what the sync of
+/// this batch moves. Names are few, so devices often make the same one, and the hash comes from the name, so they often make the
+/// same file too; the choices of ids are what make two devices link the same two things.
+fn edit_documents(conn: &mut Connection, rng: &mut Rng) {
+    const DOCUMENTS: &[&str] = &["Warranty.pdf", "Receipt.png", "Contract.pdf", "Invoice.pdf"];
+    let all = ids(conn, "SELECT id FROM documents");
+    let transactions_now = ids(conn, "SELECT id FROM transactions");
+    let items = ids(conn, "SELECT id FROM recurring_transactions");
+    match rng.below(8) {
+        0 | 1 => {
+            let name = rng.pick(DOCUMENTS);
+            conn.execute(
+                "INSERT INTO documents (name, media_type, size_bytes, sha256, document_date, keep_on_phone) VALUES (?1, 'application/pdf', ?2, ?3, ?4, ?5)",
+                params![name, 100 + rng.below(3) as i64, sha_of(name), format!("2026-03-{:02}", 1 + rng.below(28)), rng.below(2) as i64],
+            )
+            .unwrap();
+        }
+        2 if !all.is_empty() => {
+            let _ = conn.execute("UPDATE documents SET name = ?2 WHERE id = ?1", params![rng.pick(&all), rng.pick(DOCUMENTS)]);
+        }
+        3 if !all.is_empty() => {
+            conn.execute("UPDATE documents SET keep_on_phone = ?2, document_date = ?3 WHERE id = ?1", params![rng.pick(&all), rng.below(2) as i64, format!("2026-04-{:02}", 1 + rng.below(28))]).unwrap();
+        }
+        4 if !all.is_empty() && rng.below(2) == 0 => {
+            conn.execute("DELETE FROM documents WHERE id = ?1", [rng.pick(&all)]).unwrap();
+        }
+        5 | 6 if !all.is_empty() => {
+            let doc = *rng.pick(&all);
+            let target = if !items.is_empty() && (transactions_now.is_empty() || rng.below(3) == 0) {
+                LinkTarget { kind: TargetKind::Recurring, id: rng.pick(&items).to_string() }
+            } else if !transactions_now.is_empty() {
+                LinkTarget { kind: TargetKind::Transaction, id: rng.pick(&transactions_now).to_string() }
+            } else {
+                return;
+            };
+            let _ = library::link(conn, doc, &target);
+        }
+        7 if !all.is_empty() => {
+            let links: Vec<(i64, Option<i64>, Option<i64>)> = {
+                let mut stmt = conn.prepare("SELECT document_id, transaction_id, recurring_transaction_id FROM document_links").unwrap();
+                stmt.query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?))).unwrap().map(Result::unwrap).collect()
+            };
+            if !links.is_empty() {
+                let (doc, tx, rec) = *rng.pick(&links);
+                let target = match (tx, rec) {
+                    (Some(id), _) => LinkTarget { kind: TargetKind::Transaction, id: id.to_string() },
+                    (_, Some(id)) => LinkTarget { kind: TargetKind::Recurring, id: id.to_string() },
+                    _ => return,
+                };
+                library::unlink(conn, doc, &target).unwrap();
+            }
+        }
+        _ => {}
+    }
+}
+
 /// How many random cases to run. `MEOWNY_SYNC_SEEDS=2000 cargo test sync::engine_tests::random` hunts for rare ones.
 fn seeds(default: u64) -> u64 {
     std::env::var("MEOWNY_SYNC_SEEDS").ok().and_then(|v| v.parse().ok()).unwrap_or(default)
@@ -916,7 +974,17 @@ fn random_edits_with_a_currency_change_in_between_still_converge() {
 // --- what stays on a device ---------------------------------------------------------------------------------------------
 
 /// Tables whose rows are sent to the other device (the settings only in their shared part), and tables that never are.
-const SHARED_TABLES: [&str; 7] = ["settings", "categories", "budgets", "recurring_transactions", "transactions", "sync_deleted", "currency_changes"];
+const SHARED_TABLES: [&str; 9] = [
+    "settings",
+    "categories",
+    "budgets",
+    "recurring_transactions",
+    "transactions",
+    "documents",
+    "document_links",
+    "sync_deleted",
+    "currency_changes",
+];
 const LOCAL_TABLES: [&str; 5] = ["audit_log", "api_tokens", "backup_schedule", "sync_clock", "sync_peers"];
 
 #[test]
@@ -934,8 +1002,8 @@ fn every_table_is_either_shared_or_stays_on_its_device() {
     for listed in SHARED_TABLES.iter().chain(LOCAL_TABLES.iter()) {
         assert!(names.iter().any(|n| n == listed), "{listed} is listed but there is no such table");
     }
-    // The sync can only name five tables of rows, so nothing else can be asked for or sent.
-    assert_eq!(wire::Table::ALL.len(), 5);
+    // The sync can only name seven tables of rows, so nothing else can be asked for or sent.
+    assert_eq!(wire::Table::ALL.len(), 7);
 }
 
 #[test]
@@ -1049,3 +1117,445 @@ fn the_choices_only_change_stamps_never_what_a_row_says() {
     assert_eq!(count(&conn, "SELECT applying FROM sync_clock"), 0);
 }
 
+
+
+// --- documents and their links ------------------------------------------------------------------------------------------------
+//
+// The rows only: the files of the documents are not here (docs/documents-design.md, sections 9 and 10).
+
+fn sha_of(name: &str) -> String {
+    use sha2::{Digest, Sha256};
+    crate::keys::hex_encode(&Sha256::digest(name.as_bytes()))
+}
+
+/// A document: its row, with the hash made from its name, so the same name on two devices is the same file.
+fn document(conn: &Connection, name: &str) -> i64 {
+    conn.execute(
+        "INSERT INTO documents (name, media_type, size_bytes, sha256, document_date) VALUES (?1, 'application/pdf', 1000, ?2, '2026-03-02')",
+        params![name, sha_of(name)],
+    )
+    .unwrap();
+    conn.last_insert_rowid()
+}
+
+fn to_transaction(id: i64) -> LinkTarget {
+    LinkTarget { kind: TargetKind::Transaction, id: id.to_string() }
+}
+
+fn to_item(id: i64) -> LinkTarget {
+    LinkTarget { kind: TargetKind::Recurring, id: id.to_string() }
+}
+
+fn attach(conn: &Connection, document_name: &str, target: LinkTarget) {
+    library::link(conn, id_of(conn, "documents", document_name), &target).unwrap();
+}
+
+fn links(conn: &Connection) -> i64 {
+    count(conn, "SELECT count(*) FROM document_links")
+}
+
+fn link_markers(conn: &Connection) -> i64 {
+    count(conn, "SELECT count(*) FROM sync_deleted WHERE kind = 'document_links'")
+}
+
+fn documents_named(conn: &Connection) -> Vec<String> {
+    let mut stmt = conn.prepare("SELECT name FROM documents ORDER BY name").unwrap();
+    stmt.query_map([], |r| r.get(0)).unwrap().map(Result::unwrap).collect()
+}
+
+#[test]
+fn documents_and_their_links_reach_a_new_phone_in_the_first_copy() {
+    let mut desktop = device("EUR");
+    let mut phone = new_phone(&desktop);
+    let food = category(&desktop, "Food", CategoryType::Expense);
+    let coffee = spend(&desktop, food, "Coffee", "3.50");
+    let item = rent(&desktop, category(&desktop, "Housing", CategoryType::Expense));
+    document(&desktop, "Warranty.pdf");
+    document(&desktop, "Rent contract.pdf");
+    document(&desktop, "Not linked.pdf");
+    attach(&desktop, "Warranty.pdf", to_transaction(coffee));
+    attach(&desktop, "Rent contract.pdf", to_item(item));
+    attach(&desktop, "Warranty.pdf", to_item(item));
+    desktop.execute("UPDATE documents SET keep_on_phone = 1, document_date = '2026-01-02' WHERE name = 'Warranty.pdf'", []).unwrap();
+
+    let outcome = sync_ok(&mut desktop, &mut phone);
+    assert_eq!(documents_named(&phone), ["Not linked.pdf", "Rent contract.pdf", "Warranty.pdf"]);
+    assert_eq!(links(&phone), 3);
+    assert!(outcome.second.added >= 3 + 3, "the three documents and the three links were taken: {outcome:?}");
+    let kept: (i64, String) = phone.query_row("SELECT keep_on_phone, document_date FROM documents WHERE name = 'Warranty.pdf'", [], |r| Ok((r.get(0)?, r.get(1)?))).unwrap();
+    assert_eq!(kept, (1, "2026-01-02".to_string()));
+    // a link is the same link: it names the same document and the same transaction on both
+    let pairs = |conn: &Connection| -> Vec<(String, String)> {
+        let mut stmt = conn
+            .prepare("SELECT d.name, COALESCE(t.name, r.name) FROM document_links l JOIN documents d ON d.id = l.document_id LEFT JOIN transactions t ON t.id = l.transaction_id LEFT JOIN recurring_transactions r ON r.id = l.recurring_transaction_id ORDER BY 1, 2")
+            .unwrap();
+        stmt.query_map([], |r| Ok((r.get(0)?, r.get(1)?))).unwrap().map(Result::unwrap).collect()
+    };
+    assert_eq!(pairs(&desktop), pairs(&phone));
+}
+
+#[test]
+fn a_document_added_on_both_devices_is_kept_both_times_even_with_the_same_file() {
+    let (mut desktop, mut phone) = paired();
+    document(&desktop, "Receipt.pdf");
+    document(&phone, "Receipt.pdf");
+    sync_ok(&mut desktop, &mut phone);
+    for conn in [&desktop, &phone] {
+        assert_eq!(count(conn, "SELECT count(*) FROM documents WHERE name = 'Receipt.pdf'"), 2, "two documents that happen to hold the same bytes");
+        assert_eq!(count(conn, "SELECT count(DISTINCT sha256) FROM documents"), 1);
+    }
+}
+
+#[test]
+fn a_rename_a_new_date_and_the_switch_follow_the_newer_change() {
+    let (mut desktop, mut phone) = paired();
+    document(&desktop, "Warranty.pdf");
+    document(&desktop, "Invoice.pdf");
+    sync_ok(&mut desktop, &mut phone);
+
+    pause();
+    desktop.execute("UPDATE documents SET name = 'Warranty (desktop).pdf' WHERE name = 'Warranty.pdf'", []).unwrap();
+    pause();
+    phone.execute("UPDATE documents SET name = 'Warranty (phone).pdf' WHERE name = 'Warranty.pdf'", []).unwrap();
+    pause();
+    desktop.execute("UPDATE documents SET keep_on_phone = 1, document_date = '2026-05-05' WHERE name = 'Invoice.pdf'", []).unwrap();
+    let outcome = sync_ok(&mut desktop, &mut phone);
+    assert!(outcome.first.updated >= 1 && outcome.second.updated >= 1, "{outcome:?}");
+    for conn in [&desktop, &phone] {
+        assert_eq!(documents_named(conn), ["Invoice.pdf", "Warranty (phone).pdf"], "the later rename wins");
+        let (keep, date): (i64, String) = conn.query_row("SELECT keep_on_phone, document_date FROM documents WHERE name = 'Invoice.pdf'", [], |r| Ok((r.get(0)?, r.get(1)?))).unwrap();
+        assert_eq!((keep, date.as_str()), (1, "2026-05-05"));
+    }
+    // and what was written to a row is the row: the contents did not move
+    for conn in [&desktop, &phone] {
+        assert_eq!(text(conn, "SELECT sha256 FROM documents WHERE name = 'Invoice.pdf'"), sha_of("Invoice.pdf"));
+    }
+}
+
+#[test]
+fn a_document_deleted_on_one_device_goes_from_the_other_with_its_links_and_leaves_no_marker_for_them() {
+    let (mut desktop, mut phone) = paired();
+    document(&desktop, "Warranty.pdf");
+    document(&desktop, "Keep.pdf");
+    attach(&desktop, "Warranty.pdf", to_transaction(id_of(&desktop, "transactions", "Coffee")));
+    attach(&desktop, "Warranty.pdf", to_item(id_of(&desktop, "recurring_transactions", "Rent")));
+    attach(&desktop, "Keep.pdf", to_transaction(id_of(&desktop, "transactions", "Tea")));
+    sync_ok(&mut desktop, &mut phone);
+    assert_eq!(links(&phone), 3);
+
+    pause();
+    library::delete(&phone, &files_of(&phone), id_of(&phone, "documents", "Warranty.pdf")).unwrap();
+    sync_ok(&mut desktop, &mut phone);
+    for conn in [&desktop, &phone] {
+        assert_eq!(documents_named(conn), ["Keep.pdf"]);
+        assert_eq!(links(conn), 1);
+        assert_eq!(count(conn, "SELECT count(*) FROM sync_deleted WHERE kind = 'documents'"), 1);
+        assert_eq!(link_markers(conn), 0, "the document's marker says it; its links need none");
+        assert_eq!(count(conn, "SELECT count(*) FROM transactions"), 3, "what it was linked to stays: Coffee, Tea and the payment of the rent");
+    }
+}
+
+/// The folder and keys of a device that has no files: `delete` removes a file that is not there, which is not an error.
+fn files_of(_conn: &Connection) -> library::Files<'static> {
+    use std::sync::OnceLock;
+    static STORE: OnceLock<(crate::documents::Store, crate::documents::DocKeys, tempfile::TempDir)> = OnceLock::new();
+    let (store, keys, _) = STORE.get_or_init(|| {
+        let dir = tempfile::tempdir().unwrap();
+        (crate::documents::Store::new(dir.path()), crate::documents::DocKeys::from_db_key(&crate::db::DbKey::from_bytes([1; 32])), dir)
+    });
+    library::Files { store, keys }
+}
+
+#[test]
+fn the_newer_of_an_edit_and_a_delete_of_a_document_wins_and_a_document_that_comes_back_brings_its_links() {
+    // the delete is newer: the document goes
+    let (mut desktop, mut phone) = paired();
+    document(&desktop, "Warranty.pdf");
+    attach(&desktop, "Warranty.pdf", to_transaction(id_of(&desktop, "transactions", "Coffee")));
+    sync_ok(&mut desktop, &mut phone);
+    pause();
+    desktop.execute("UPDATE documents SET name = 'Edited.pdf'", []).unwrap();
+    pause();
+    phone.execute("DELETE FROM documents", []).unwrap();
+    sync_ok(&mut desktop, &mut phone);
+    for conn in [&desktop, &phone] {
+        assert_eq!((count(conn, "SELECT count(*) FROM documents"), links(conn), link_markers(conn)), (0, 0, 0));
+    }
+
+    // the edit is newer: the document stays, and the phone's links come back with it
+    let (mut desktop, mut phone) = paired();
+    document(&desktop, "Warranty.pdf");
+    attach(&desktop, "Warranty.pdf", to_transaction(id_of(&desktop, "transactions", "Coffee")));
+    sync_ok(&mut desktop, &mut phone);
+    pause();
+    desktop.execute("DELETE FROM documents", []).unwrap();
+    pause();
+    phone.execute("UPDATE documents SET name = 'Edited.pdf'", []).unwrap();
+    sync_ok(&mut desktop, &mut phone);
+    for conn in [&desktop, &phone] {
+        assert_eq!(documents_named(conn), ["Edited.pdf"]);
+        assert_eq!(links(conn), 1, "the link the phone still held came back with the document");
+        assert_eq!(count(conn, "SELECT count(*) FROM sync_deleted WHERE kind = 'documents'"), 0, "the marker of the delete is gone");
+    }
+}
+
+#[test]
+fn a_link_made_on_one_device_reaches_the_other() {
+    let (mut desktop, mut phone) = paired();
+    document(&desktop, "Warranty.pdf");
+    sync_ok(&mut desktop, &mut phone);
+    pause();
+    attach(&phone, "Warranty.pdf", to_transaction(id_of(&phone, "transactions", "Tea")));
+    attach(&desktop, "Warranty.pdf", to_item(id_of(&desktop, "recurring_transactions", "Rent")));
+    let outcome = sync_ok(&mut desktop, &mut phone);
+    assert_eq!((outcome.first.added, outcome.second.added), (1, 1), "{outcome:?}");
+    assert_eq!((links(&desktop), links(&phone)), (2, 2));
+}
+
+#[test]
+fn the_same_link_made_on_both_devices_becomes_one_and_both_end_with_the_same_marker() {
+    let (mut desktop, mut phone) = paired();
+    document(&desktop, "Warranty.pdf");
+    sync_ok(&mut desktop, &mut phone);
+    pause();
+    attach(&desktop, "Warranty.pdf", to_transaction(id_of(&desktop, "transactions", "Coffee")));
+    pause();
+    attach(&phone, "Warranty.pdf", to_transaction(id_of(&phone, "transactions", "Coffee")));
+    let phone_link: String = text(&phone, "SELECT sync_id FROM document_links");
+    let outcome = sync_ok(&mut desktop, &mut phone);
+    for conn in [&desktop, &phone] {
+        assert_eq!(links(conn), 1);
+        assert_eq!(link_markers(conn), 1, "the loser left a marker, so the device that made it drops it too");
+        assert_eq!(text(conn, "SELECT sync_id FROM document_links"), phone_link, "the newer one stays");
+    }
+    assert!(outcome.first.dropped + outcome.second.dropped >= 1, "{outcome:?}");
+}
+
+#[test]
+fn a_link_that_a_person_removes_is_removed_on_the_other_device_and_can_be_made_again() {
+    let (mut desktop, mut phone) = paired();
+    document(&desktop, "Warranty.pdf");
+    attach(&desktop, "Warranty.pdf", to_transaction(id_of(&desktop, "transactions", "Coffee")));
+    sync_ok(&mut desktop, &mut phone);
+    let first: String = text(&desktop, "SELECT sync_id FROM document_links");
+
+    pause();
+    library::unlink(&phone, id_of(&phone, "documents", "Warranty.pdf"), &to_transaction(id_of(&phone, "transactions", "Coffee"))).unwrap();
+    sync_ok(&mut desktop, &mut phone);
+    for conn in [&desktop, &phone] {
+        assert_eq!((links(conn), link_markers(conn)), (0, 1), "removed on purpose: this is what a marker for a link means");
+    }
+
+    pause();
+    attach(&desktop, "Warranty.pdf", to_transaction(id_of(&desktop, "transactions", "Coffee")));
+    sync_ok(&mut desktop, &mut phone);
+    for conn in [&desktop, &phone] {
+        assert_eq!(links(conn), 1);
+        assert_ne!(text(conn, "SELECT sync_id FROM document_links"), first, "a new link, which the old marker does not touch");
+    }
+}
+
+/// What a device does when the parent of a link is deleted on one device while the other attaches a document to it, for every kind of
+/// parent and each way round. All of them must end the same after one sync, with no link and no marker for one.
+#[test]
+fn a_parent_deleted_on_one_device_while_the_other_attaches_to_it_ends_the_same_after_one_sync() {
+    for parent in ["document", "transaction", "recurring"] {
+        for desktop_deletes in [true, false] {
+            let (mut desktop, mut phone) = paired();
+            document(&desktop, "Warranty.pdf");
+            sync_ok(&mut desktop, &mut phone);
+            pause();
+            let (deleter, attacher) = if desktop_deletes { (&mut desktop, &mut phone) } else { (&mut phone, &mut desktop) };
+            let target = |conn: &Connection| match parent {
+                "recurring" => to_item(id_of(conn, "recurring_transactions", "Rent")),
+                _ => to_transaction(id_of(conn, "transactions", "Coffee")),
+            };
+            attach(attacher, "Warranty.pdf", target(attacher));
+            match parent {
+                "document" => {
+                    deleter.execute("DELETE FROM documents WHERE name = 'Warranty.pdf'", []).unwrap();
+                }
+                "transaction" => transactions::delete(deleter, id_of(deleter, "transactions", "Coffee")).unwrap(),
+                _ => recurring::delete(deleter, id_of(deleter, "recurring_transactions", "Rent")).unwrap(),
+            }
+            pause();
+            let label = format!("{parent}, deleted on the {}", if desktop_deletes { "desktop" } else { "phone" });
+            let outcome = sync(&mut desktop, &mut phone, TODAY, now(), None).unwrap_or_else(|e| panic!("{label}: {e}"));
+            assert!(!outcome.differences, "{label}: {outcome:?}");
+            assert_same(&desktop, &phone, &label);
+            for conn in [&desktop, &phone] {
+                assert_eq!((links(conn), link_markers(conn)), (0, 0), "{label}");
+                assert_eq!(count(conn, "SELECT count(*) FROM documents"), if parent == "document" { 0 } else { 1 }, "{label}");
+                assert_eq!(count(conn, "SELECT count(*) FROM pragma_foreign_key_check"), 0, "{label}");
+            }
+            let again = sync(&mut desktop, &mut phone, TODAY, now(), None).unwrap();
+            assert!(again.compared.is_empty() && again.first.is_empty() && again.second.is_empty(), "{label}: {again:?}");
+        }
+    }
+}
+
+#[test]
+fn a_link_to_a_document_this_device_deleted_is_not_taken_and_is_not_an_error() {
+    let (mut desktop, mut phone) = paired();
+    document(&desktop, "Warranty.pdf");
+    sync_ok(&mut desktop, &mut phone);
+    pause();
+    attach(&phone, "Warranty.pdf", to_transaction(id_of(&phone, "transactions", "Coffee")));
+    desktop.execute("DELETE FROM documents", []).unwrap();
+    let incoming = rows_to(&phone, &desktop);
+    assert_eq!(incoming.rows.get(&Table::DocumentLinks).map(Vec::len), Some(1));
+    let summary = engine::apply(&mut desktop, &incoming, now(), None).unwrap();
+    assert_eq!((summary.added, summary.kept_yours), (0, 1), "{summary:?}");
+    assert_eq!(links(&desktop), 0);
+}
+
+#[test]
+fn rows_that_point_at_nothing_this_device_ever_heard_of_stop_the_sync_and_change_nothing() {
+    let (desktop, mut phone) = paired();
+    let before = snapshot(&phone).unwrap();
+    // a link whose document is unknown, and then one whose transaction is
+    let mut source = desktop;
+    let mut unknown_document = Incoming::default();
+    unknown_document.rows.insert(
+        Table::DocumentLinks,
+        vec![Row::Link(wire::DocumentLinkRow {
+            sync_id: "ab".repeat(16),
+            stamp: stamp::tick(&source).unwrap().format(),
+            document: "cd".repeat(16),
+            transaction: Some(text(&source, "SELECT sync_id FROM transactions LIMIT 1")),
+            recurring: None,
+            created_at: "2026-03-01T10:00:00.000Z".into(),
+        })],
+    );
+    assert!(matches!(engine::apply(&mut phone, &unknown_document, now(), None), Err(SyncError::Invalid("reference"))));
+    assert_eq!(snapshot(&phone).unwrap(), before);
+
+    document(&source, "Warranty.pdf");
+    let mut unknown_target = rows_to(&source, &phone);
+    unknown_target.rows.remove(&Table::Transactions);
+    unknown_target.rows.insert(
+        Table::DocumentLinks,
+        vec![Row::Link(wire::DocumentLinkRow {
+            sync_id: "ab".repeat(16),
+            stamp: stamp::tick(&source).unwrap().format(),
+            document: text(&source, "SELECT sync_id FROM documents"),
+            transaction: Some("ef".repeat(16)),
+            recurring: None,
+            created_at: "2026-03-01T10:00:00.000Z".into(),
+        })],
+    );
+    assert!(matches!(engine::apply(&mut phone, &unknown_target, now(), None), Err(SyncError::Invalid("reference"))));
+    assert_eq!(snapshot(&phone).unwrap(), before, "nothing of it was applied, not even the document that was fine");
+    let _ = &mut source;
+}
+
+#[test]
+fn a_document_row_with_other_contents_under_a_known_id_is_refused() {
+    let (mut desktop, mut phone) = paired();
+    document(&desktop, "Warranty.pdf");
+    sync_ok(&mut desktop, &mut phone);
+    pause();
+    desktop.execute("UPDATE documents SET name = 'Renamed.pdf'", []).unwrap();
+    let before = snapshot(&phone).unwrap();
+    for (what, tamper) in [("hash", 0), ("size", 1), ("kind", 2)] {
+        let mut incoming = rows_to(&desktop, &phone);
+        let Some(Row::Document(row)) = incoming.rows.get_mut(&Table::Documents).and_then(|rows| rows.first_mut()) else { panic!("no document row") };
+        match tamper {
+            0 => row.sha256 = sha_of("another file"),
+            1 => row.size_bytes += 1,
+            _ => row.media_type = "text/plain".into(),
+        }
+        assert!(matches!(engine::apply(&mut phone, &incoming, now(), None), Err(SyncError::Invalid("document"))), "{what}");
+        assert_eq!(snapshot(&phone).unwrap(), before, "{what}: the rename that came with it was not applied either");
+    }
+    // the honest row is taken
+    let incoming = rows_to(&desktop, &phone);
+    engine::apply(&mut phone, &incoming, now(), None).unwrap();
+    assert_eq!(documents_named(&phone), ["Renamed.pdf"]);
+}
+
+#[test]
+fn a_link_row_that_names_another_document_or_target_under_a_known_id_is_refused() {
+    let (mut desktop, mut phone) = paired();
+    document(&desktop, "Warranty.pdf");
+    document(&desktop, "Other.pdf");
+    attach(&desktop, "Warranty.pdf", to_transaction(id_of(&desktop, "transactions", "Coffee")));
+    sync_ok(&mut desktop, &mut phone);
+    let before = snapshot(&phone).unwrap();
+    // the link as the desktop sends it (to a device that has none of it)
+    let Row::Link(mut link) = rows_to(&desktop, &device("EUR")).rows.remove(&Table::DocumentLinks).unwrap().remove(0) else { panic!("no link row") };
+    link.stamp = stamp::tick(&desktop).unwrap().format();
+    let mut elsewhere = link.clone();
+    elsewhere.document = text(&desktop, "SELECT sync_id FROM documents WHERE name = 'Other.pdf'");
+    let mut other_target = link.clone();
+    other_target.transaction = Some(text(&desktop, "SELECT sync_id FROM transactions WHERE name = 'Tea'"));
+    let mut recurring_instead = link;
+    recurring_instead.transaction = None;
+    recurring_instead.recurring = Some(text(&desktop, "SELECT sync_id FROM recurring_transactions"));
+    for (what, row) in [("another document", elsewhere), ("another transaction", other_target), ("a recurring item instead", recurring_instead)] {
+        let mut incoming = Incoming::default();
+        incoming.rows.insert(Table::DocumentLinks, vec![Row::Link(row)]);
+        assert!(matches!(engine::apply(&mut phone, &incoming, now(), None), Err(SyncError::Invalid("link"))), "{what}");
+        assert_eq!(snapshot(&phone).unwrap(), before, "{what}");
+    }
+}
+
+#[test]
+fn a_marker_for_a_document_this_device_never_had_is_remembered_so_the_row_cannot_come_back() {
+    let (mut desktop, mut phone) = paired();
+    document(&desktop, "Warranty.pdf");
+    let rows_before_delete = rows_to(&desktop, &phone);
+    desktop.execute("DELETE FROM documents", []).unwrap();
+    let markers = rows_to(&desktop, &phone);
+    engine::apply(&mut phone, &markers, now(), None).unwrap();
+    assert_eq!(count(&phone, "SELECT count(*) FROM sync_deleted WHERE kind = 'documents'"), 1);
+    // the row, older than the marker, arrives late: it is not taken
+    let summary = engine::apply(&mut phone, &rows_before_delete, now(), None).unwrap();
+    assert_eq!(count(&phone, "SELECT count(*) FROM documents"), 0);
+    assert_eq!(summary.added, 0);
+    sync_ok(&mut desktop, &mut phone);
+}
+
+#[test]
+fn a_device_with_only_documents_is_not_empty_so_a_phone_with_some_is_not_paired() {
+    let conn = device("EUR");
+    assert!(engine::is_empty(&conn).unwrap());
+    document(&conn, "Warranty.pdf");
+    assert!(!engine::is_empty(&conn).unwrap());
+}
+
+#[test]
+fn what_a_device_changed_in_documents_counts_as_waiting_for_the_next_sync() {
+    let (desktop, _phone) = paired();
+    let since = now();
+    pause();
+    assert_eq!(super::peers::changes_since(&desktop, since).unwrap(), 0);
+    document(&desktop, "Warranty.pdf");
+    attach(&desktop, "Warranty.pdf", to_transaction(id_of(&desktop, "transactions", "Coffee")));
+    assert_eq!(super::peers::changes_since(&desktop, since).unwrap(), 2, "the document and the link");
+    library::unlink(&desktop, id_of(&desktop, "documents", "Warranty.pdf"), &to_transaction(id_of(&desktop, "transactions", "Coffee"))).unwrap();
+    assert_eq!(super::peers::changes_since(&desktop, since).unwrap(), 2, "the document and the marker of the link");
+}
+
+#[test]
+fn a_big_library_of_documents_travels_in_frames_that_fit() {
+    let mut desktop = device("EUR");
+    let mut phone = new_phone(&desktop);
+    let food = category(&desktop, "Food", CategoryType::Expense);
+    let tx = spend(&desktop, food, "Shop", "1.00");
+    {
+        let tx_ = desktop.transaction().unwrap();
+        for i in 0..1500 {
+            tx_.execute(
+                "INSERT INTO documents (name, media_type, size_bytes, sha256, document_date) VALUES (?1, 'image/jpeg', ?2, ?3, '2026-03-02')",
+                params![format!("Photo {i:04}.jpg"), 1000 + i as i64, sha_of(&format!("photo {i}"))],
+            )
+            .unwrap();
+            tx_.execute("INSERT INTO document_links (document_id, transaction_id) VALUES (last_insert_rowid(), ?1)", [tx]).unwrap();
+        }
+        tx_.commit().unwrap();
+    }
+    let outcome = sync_ok(&mut desktop, &mut phone);
+    assert_eq!((count(&phone, "SELECT count(*) FROM documents"), links(&phone)), (1500, 1500));
+    assert!(outcome.messages > 10, "the rows did not fit one message: {}", outcome.messages);
+}

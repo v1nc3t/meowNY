@@ -25,6 +25,18 @@ export const SummaryView = z.object({
 })
 export type SummaryView = z.infer<typeof SummaryView>
 
+/** What happened to the documents' files, which move after the rows. */
+export const FilesView = z.object({
+  received: count,
+  sent: count,
+  failed: count,
+  waiting: count,
+  removed: count,
+  /** The connection broke before everything was moved; what is left carries on at the next sync. */
+  interrupted: z.boolean(),
+})
+export type FilesView = z.infer<typeof FilesView>
+
 export const WarningView = z.object({ kind: z.literal('clock_off'), seconds: count })
 export type WarningView = z.infer<typeof WarningView>
 
@@ -33,8 +45,8 @@ export const MODES = ['both', 'to_desktop', 'to_phone'] as const
 export const Mode = z.enum(MODES)
 export type Mode = z.infer<typeof Mode>
 
-export const TABLES = ['settings', 'categories', 'recurring_transactions', 'budgets', 'transactions'] as const
-export const FIELDS = ['name', 'amount', 'date', 'category', 'description', 'type', 'month', 'every', 'nextDue', 'endDate', 'active', 'locale', 'timezone'] as const
+export const TABLES = ['settings', 'categories', 'recurring_transactions', 'budgets', 'transactions', 'documents', 'document_links'] as const
+export const FIELDS = ['name', 'amount', 'date', 'category', 'description', 'type', 'month', 'every', 'nextDue', 'endDate', 'active', 'locale', 'timezone', 'keepOnPhone', 'document', 'target'] as const
 
 /** One thing that was changed on both devices since they last met: how its two versions differ. */
 export const Conflict = z.object({
@@ -67,6 +79,7 @@ export const Status = z.discriminatedUnion('state', [
     state: z.literal('done'),
     purpose: Purpose,
     summary: SummaryView,
+    files: FilesView,
     warnings: z.array(WarningView),
     /** True when the two sides still differ after the sync (it should never be, unless it went one way). */
     differences: z.boolean(),
@@ -201,6 +214,18 @@ export function summaryLines(summary: SummaryView): { key: MessageKey; count: nu
     { key: 'sync.sumDeleted', count: summary.deleted },
     { key: 'sync.sumMerged', count: summary.merged },
     { key: 'sync.sumDropped', count: summary.dropped },
+  ]
+  return lines.filter((line) => line.count > 0)
+}
+
+/** The lines about the documents' files: which text and how many. Counts of zero are left out. */
+export function filesLines(files: FilesView): { key: MessageKey; count: number }[] {
+  const lines: { key: MessageKey; count: number }[] = [
+    { key: 'sync.filesReceived', count: files.received },
+    { key: 'sync.filesSent', count: files.sent },
+    { key: 'sync.filesRemoved', count: files.removed },
+    { key: 'sync.filesFailed', count: files.failed },
+    { key: 'sync.filesWaiting', count: files.waiting },
   ]
   return lines.filter((line) => line.count > 0)
 }

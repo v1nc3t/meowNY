@@ -32,11 +32,17 @@ const LockPrefsShape = z.object({
 const BackupSchedule = z.object({
   folder: z.string(),
   everyDays: z.number().int(),
+  /** The files of the documents are in every backup, not only the rows. */
+  includeDocuments: z.boolean(),
   /** UTC, ISO 8601. */
   lastAttemptAt: z.string().nullable(),
   lastOk: z.boolean(),
 })
 export type BackupSchedule = z.infer<typeof BackupSchedule>
+
+/** What a backup holds of the documents: how many files are in it, and how many documents had no file on this device. */
+export const BackupDone = z.object({ documents: z.number().int().nonnegative(), missing: z.number().int().nonnegative() })
+export type BackupDone = z.infer<typeof BackupDone>
 
 const none = (passphrase: string) => (passphrase === '' ? null : passphrase)
 const done = <T>(promise: Promise<T>) => promise.then(() => undefined)
@@ -59,9 +65,11 @@ export const vault = {
   /** Replaces the recovery key; the old one stops working. */
   newRecoveryKey: (passphrase: string) => call('new_recovery_key', RecoveryKey, { passphrase: none(passphrase) }),
   /**
-   * Opens a save dialog and writes an encrypted backup locked with `passphrase`. False when the person cancels.
+   * Opens a save dialog and writes an encrypted backup locked with `passphrase`, with the files of the documents if asked. Null when
+   * the person cancels.
    */
-  createBackup: (passphrase: string) => call('create_backup', z.boolean(), { passphrase }),
+  createBackup: (passphrase: string, includeDocuments: boolean) =>
+    call('create_backup', BackupDone.nullable(), { passphrase, includeDocuments }),
   /**
    * Opens a file dialog and replaces all data with the backup the person picks. `confirmation` must be "RESTORE".
    * False when the person cancels.
@@ -74,11 +82,11 @@ export const vault = {
   /** The scheduled backup setup, never its passphrase. Null when there is none. */
   backupSchedule: () => call('get_backup_schedule', BackupSchedule.nullable()),
   /**
-   * Asks for a folder, makes a first backup there and then repeats every 1, 7 or 30 days while the app is open.
-   * False when the person cancels the folder dialog.
+   * Asks for a folder, makes a first backup there and then repeats every 1, 7 or 30 days while the app is open, with the files of the
+   * documents if asked. False when the person cancels the folder dialog.
    */
-  startBackupSchedule: (passphrase: string, everyDays: number) =>
-    call('set_backup_schedule', z.boolean(), { passphrase, everyDays }),
+  startBackupSchedule: (passphrase: string, everyDays: number, includeDocuments: boolean) =>
+    call('set_backup_schedule', z.boolean(), { passphrase, everyDays, includeDocuments }),
   stopBackupSchedule: () => done(call('clear_backup_schedule', Nothing)),
   unlock: (passphrase: string) => done(call('unlock_vault', Nothing, { passphrase: none(passphrase) })),
   lock: () => done(call('lock_vault', Nothing)),

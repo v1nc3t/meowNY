@@ -10,10 +10,12 @@ import PhoneSyncBlock from '../components/PhoneSyncBlock'
 import Dropdown from '../components/Dropdown'
 import PasswordField from '../vault/PasswordField'
 import RecoveryKeyPanel from '../vault/RecoveryKeyPanel'
-import { backupPassphraseProblem, lockChoices, nearestLockChoice, type Settings } from '../vault/rules'
+import { backupDoneLines, backupPassphraseProblem, BACKUPS_KEPT, includeDocumentsByDefault, lockChoices, nearestLockChoice, type Settings } from '../vault/rules'
 import { useNotice } from '../hooks/useNotice'
 import { useProfile } from '../hooks/profile'
 import { syncApi } from '../api/sync'
+import { documents, type LibrarySize } from '../api/documents'
+import { formatSize } from '../lib/bytes'
 
 const EVERY_CHOICES = [
   { days: 1, labelKey: 'settings.scheduleDaily' },
@@ -34,6 +36,10 @@ export default function SettingsPage() {
   const [busy, setBusy] = useState(false)
   const [schedule, setSchedule] = useState<BackupSchedule | null>(null)
   const [every, setEvery] = useState('7')
+  const [library, setLibrary] = useState<LibrarySize | null>(null)
+  // null until the person chooses: then the default for the size of the library applies
+  const [manualDocuments, setManualDocuments] = useState<boolean | null>(null)
+  const [scheduleDocuments, setScheduleDocuments] = useState<boolean | null>(null)
   const [newKey, setNewKey] = useState<string | null>(null)
   const [notifyDue, setNotifyDue] = useState<boolean | null>(null)
   const [lockAfter, setLockAfter] = useState('300')
@@ -62,6 +68,7 @@ export default function SettingsPage() {
     vault.notifyDue().then(setNotifyDue, (e) => setMessage(errorText(e)))
     vault.dataLocation().then(setLocation, () => undefined)
     vault.backupSchedule().then(setSchedule, (e) => setMessage(errorText(e)))
+    if (!phone) documents.size().then(setLibrary, () => undefined)
   }, [setMessage, phone])
 
   if (!inDesktopApp()) return <p>{t('settings.unavailable')}</p>
@@ -131,15 +138,31 @@ export default function SettingsPage() {
     if (problem) return setMessage(problem)
     setBusy(true)
     try {
-      if (await vault.createBackup(passphrase)) {
+      const done = await vault.createBackup(passphrase, includeManual)
+      if (done) {
         form.reset()
-        setMessage(t('settings.backupSaved'))
+        setMessage([t('settings.backupSaved'), ...backupDoneLines(done).map((line) => t(line.key, { count: line.count }))].join(' '))
       }
     } catch (error) {
       setMessage(errorText(error))
     }
     setBusy(false)
   }
+
+  // Documents go into a backup by default while the library is small; this device holds all of them, and the backup holds what is held.
+  const byDefault = library ? includeDocumentsByDefault(library.heldBytes) : true
+  const includeManual = manualDocuments ?? byDefault
+  const includeSchedule = scheduleDocuments ?? byDefault
+  const documentsChoice = (checked: boolean, onChange: (value: boolean) => void) =>
+    library && (
+      <>
+        <label className="check">
+          <input type="checkbox" checked={checked} onChange={(event) => onChange(event.target.checked)} />
+          {t('settings.backupDocuments', { count: library.heldCount, size: formatSize(library.heldBytes, settings?.locale ?? '') })}
+        </label>
+        <p className="hint">{t('settings.backupDocumentsHint')}</p>
+      </>
+    )
 
   const everyLabel = (days: number) => {
     const choice = EVERY_CHOICES.find((c) => c.days === days)
@@ -155,7 +178,7 @@ export default function SettingsPage() {
     if (problem) return setMessage(problem)
     setBusy(true)
     try {
-      if (await vault.startBackupSchedule(passphrase, Number(every))) {
+      if (await vault.startBackupSchedule(passphrase, Number(every), includeSchedule)) {
         form.reset()
         setSchedule(await vault.backupSchedule())
         setMessage(t('settings.scheduleStarted'))
@@ -327,6 +350,7 @@ export default function SettingsPage() {
             <form onSubmit={onBackup}>
               <PasswordField label={t('settings.backupPassphrase')} name="backup_passphrase" />
               <PasswordField label={t('settings.backupPassphraseRepeat')} name="backup_confirm" />
+              {documentsChoice(includeManual, setManualDocuments)}
               <div className="actions">
                 <button type="submit" disabled={busy}>
                   {t('settings.backupCreate')}
@@ -340,11 +364,15 @@ export default function SettingsPage() {
                   {schedule.lastAttemptAt &&
                     t(schedule.lastOk ? 'settings.scheduleLast' : 'settings.scheduleFailed', {
                       time: whenText(schedule.lastAttemptAt, locale, timezone),
-                    })}
+                    })}{' '}
+                  {schedule.includeDocuments
+                    ? t('settings.scheduleDocuments', { keep: BACKUPS_KEPT, size: formatSize((library?.heldBytes ?? 0) * BACKUPS_KEPT, locale) })
+                    : t('settings.scheduleNoDocuments')}
                 </p>
               )}
               <PasswordField label={t('settings.backupPassphrase')} name="schedule_passphrase" />
               <PasswordField label={t('settings.backupPassphraseRepeat')} name="schedule_confirm" />
+              {documentsChoice(includeSchedule, setScheduleDocuments)}
               <Dropdown
                 label={t('settings.scheduleEvery')}
                 value={every}

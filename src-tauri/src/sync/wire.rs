@@ -14,16 +14,24 @@ use serde_json::Value;
 
 use super::crypto::MAX_PLAINTEXT;
 use super::stamp::Stamp;
+use crate::documents::names::{is_clean_name, MediaType};
+use crate::documents::seal::CHUNK_SIZE;
+use crate::documents::MAX_DOCUMENT_BYTES;
 use crate::money::MAX_MINOR;
 use crate::{categories, transactions, vault};
 
 /// The version of this protocol, in `hello`.
-pub const PROTOCOL: u32 = 2;
+/// Protocol 3 adds the tables `documents` and `document_links`; a device that speaks 2 is told to update.
+pub const PROTOCOL: u32 = 3;
 /// Digest entries in one message, and rows in one message. Messages are also cut by size (`SOFT_MESSAGE_BYTES`).
 pub const MAX_ENTRIES_PER_MESSAGE: usize = 400;
 pub const MAX_ROWS_PER_MESSAGE: usize = 200;
 /// A message under construction is closed when it passes this size, so every message fits one frame.
 pub const SOFT_MESSAGE_BYTES: usize = 40 * 1024;
+/// Bytes of a file in one `chunk` message. As base64url text they are `MAX_CHUNK_TEXT` characters, which with the rest of the
+/// message fits one frame.
+pub const CHUNK_BYTES: usize = 24 * 1024;
+pub const MAX_CHUNK_TEXT: usize = CHUNK_BYTES / 3 * 4;
 /// More than this many rows of one table in a sync is not a budget of one person.
 pub const MAX_ROWS_PER_TABLE: usize = 2_000_000;
 
@@ -35,11 +43,21 @@ pub enum Table {
     RecurringTransactions,
     Budgets,
     Transactions,
+    Documents,
+    DocumentLinks,
 }
 
 impl Table {
     /// In the order they are sent and applied: a row's references always point at a table earlier in the list.
-    pub const ALL: [Table; 5] = [Table::Settings, Table::Categories, Table::RecurringTransactions, Table::Budgets, Table::Transactions];
+    pub const ALL: [Table; 7] = [
+        Table::Settings,
+        Table::Categories,
+        Table::RecurringTransactions,
+        Table::Budgets,
+        Table::Transactions,
+        Table::Documents,
+        Table::DocumentLinks,
+    ];
 
     pub fn name(self) -> &'static str {
         match self {
@@ -48,6 +66,8 @@ impl Table {
             Table::RecurringTransactions => "recurring_transactions",
             Table::Budgets => "budgets",
             Table::Transactions => "transactions",
+            Table::Documents => "documents",
+            Table::DocumentLinks => "document_links",
         }
     }
 }
@@ -87,6 +107,16 @@ pub enum Message {
     Digest(DigestMessage),
     Rows(RowsMessage),
     Done(DoneMessage),
+    /// The documents whose files this device holds.
+    Have(HaveMessage),
+    /// The files this device wants, and from where in each.
+    Need(NeedMessage),
+    /// The start of one file, or the word that it will not be sent.
+    File(FileMessage),
+    /// A piece of the file that was just announced.
+    Chunk(ChunkMessage),
+    /// The documents whose files the sender now holds, whole and checked.
+    Stored(StoredMessage),
     Error(ErrorMessage),
 }
 
@@ -153,6 +183,33 @@ impl Message {
                     Ok(())
                 } else {
                     Err(WireError::Invalid("hash"))
+                }
+            }
+            Message::Have(m) => ids_ok(&m.ids),
+            Message::Stored(m) => ids_ok(&m.ids),
+            Message::Need(m) => {
+                if m.files.len() > MAX_ENTRIES_PER_MESSAGE || !m.files.iter().all(|(id, offset)| sync_id_ok(id) && offset_ok(*offset)) {
+                    return Err(WireError::Invalid("request for files"));
+                }
+                Ok(())
+            }
+            Message::File(m) => {
+                let ok = if m.skipped {
+                    m.offset == 0 && m.size == 0
+                } else {
+                    (1..=MAX_DOCUMENT_BYTES).contains(&m.size) && m.offset < m.size && offset_ok(m.offset)
+                };
+                if sync_id_ok(&m.id) && ok {
+                    Ok(())
+                } else {
+                    Err(WireError::Invalid("file"))
+                }
+            }
+            Message::Chunk(m) => {
+                if !m.data.is_empty() && m.data.len() <= MAX_CHUNK_TEXT && m.data.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_') {
+                    Ok(())
+                } else {
+                    Err(WireError::Invalid("piece of a file"))
                 }
             }
             Message::Error(e) => {
@@ -300,6 +357,50 @@ pub struct DoneMessage {
     pub hash: String,
 }
 
+/// `ids` are `sync_id`s of documents. A list longer than one message is sent in several, the last marked.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct HaveMessage {
+    pub ids: Vec<String>,
+    pub last: bool,
+}
+
+/// `[sync_id, offset]`: the sender of this message has the first `offset` bytes of the file already (a whole number of sealed
+/// chunks) and wants the rest.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct NeedMessage {
+    pub files: Vec<(String, u64)>,
+    pub last: bool,
+}
+
+/// What comes before the pieces of a file: which, how big it is in all, and where the pieces start. `skipped` says there will be
+/// no pieces, because the file is not here or is not for the one who asked.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct FileMessage {
+    pub id: String,
+    pub offset: u64,
+    pub size: u64,
+    #[serde(default)]
+    pub skipped: bool,
+}
+
+/// Up to `CHUNK_BYTES` of the file in base64url; `last` on the final one.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ChunkMessage {
+    pub data: String,
+    pub last: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct StoredMessage {
+    pub ids: Vec<String>,
+    pub last: bool,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ErrorMessage {
@@ -309,6 +410,19 @@ pub struct ErrorMessage {
 
 fn is_hex(text: &str, length: usize) -> bool {
     text.len() == length && text.bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+}
+
+fn ids_ok(ids: &[String]) -> Result<(), WireError> {
+    if ids.len() <= MAX_ENTRIES_PER_MESSAGE && ids.iter().all(|id| sync_id_ok(id)) {
+        Ok(())
+    } else {
+        Err(WireError::Invalid("list of documents"))
+    }
+}
+
+/// Files start at a whole sealed chunk, and no file is bigger than the limit.
+fn offset_ok(offset: u64) -> bool {
+    offset.is_multiple_of(CHUNK_SIZE as u64) && offset < MAX_DOCUMENT_BYTES
 }
 
 fn is_hash(text: &str) -> bool {
@@ -456,6 +570,38 @@ pub struct TransactionRow {
     pub updated_at: String,
 }
 
+/// A document, without its file: the name, the kind, the size and the hash of the contents, the date of the paper and the switch.
+/// The contents of a document never change, so one `sync_id` always means the same bytes, and the hash is what the other device
+/// checks a file against when it arrives.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct DocumentRow {
+    pub sync_id: String,
+    pub stamp: String,
+    pub name: String,
+    pub media_type: String,
+    pub size_bytes: i64,
+    pub sha256: String,
+    pub document_date: String,
+    pub keep_on_phone: i64,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+/// One document linked to one transaction or one recurring item (exactly one of the two).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct DocumentLinkRow {
+    pub sync_id: String,
+    pub stamp: String,
+    /// The `sync_id` of the document.
+    pub document: String,
+    /// The `sync_id` of the transaction, or of the recurring item.
+    pub transaction: Option<String>,
+    pub recurring: Option<String>,
+    pub created_at: String,
+}
+
 /// A row of one table, read and checked.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Row {
@@ -464,6 +610,8 @@ pub enum Row {
     Recurring(RecurringRow),
     Budget(BudgetRow),
     Transaction(TransactionRow),
+    Document(DocumentRow),
+    Link(DocumentLinkRow),
 }
 
 impl Row {
@@ -474,6 +622,8 @@ impl Row {
             Row::Recurring(r) => &r.sync_id,
             Row::Budget(r) => &r.sync_id,
             Row::Transaction(r) => &r.sync_id,
+            Row::Document(r) => &r.sync_id,
+            Row::Link(r) => &r.sync_id,
         }
     }
 
@@ -484,6 +634,8 @@ impl Row {
             Row::Recurring(r) => &r.stamp,
             Row::Budget(r) => &r.stamp,
             Row::Transaction(r) => &r.stamp,
+            Row::Document(r) => &r.stamp,
+            Row::Link(r) => &r.stamp,
         }
     }
 }
@@ -497,6 +649,8 @@ pub fn parse_row(table: Table, value: &Value) -> Result<Row, WireError> {
         Table::RecurringTransactions => Row::Recurring(serde_json::from_value(value.clone()).map_err(|_| WireError::Format)?),
         Table::Budgets => Row::Budget(serde_json::from_value(value.clone()).map_err(|_| WireError::Format)?),
         Table::Transactions => Row::Transaction(serde_json::from_value(value.clone()).map_err(|_| WireError::Format)?),
+        Table::Documents => Row::Document(serde_json::from_value(value.clone()).map_err(|_| WireError::Format)?),
+        Table::DocumentLinks => Row::Link(serde_json::from_value(value.clone()).map_err(|_| WireError::Format)?),
     };
     if !Stamp::is_valid(row.stamp()) {
         return Err(bad);
@@ -563,6 +717,22 @@ pub fn parse_row(table: Table, value: &Value) -> Result<Row, WireError> {
                 && timestamp_ok(&r.created_at)
                 && timestamp_ok(&r.updated_at)
         }
+        Row::Document(r) => {
+            sync_id_ok(&r.sync_id)
+                && is_clean_name(&r.name)
+                && MediaType::parse(&r.media_type).is_some()
+                && (1..=MAX_DOCUMENT_BYTES as i64).contains(&r.size_bytes)
+                && is_hash(&r.sha256)
+                && date_ok(&r.document_date)
+                && [0, 1].contains(&r.keep_on_phone)
+                && timestamp_ok(&r.created_at)
+                && timestamp_ok(&r.updated_at)
+        }
+        Row::Link(r) => {
+            // exactly one target, and it is a real id
+            let one_target = matches!((&r.transaction, &r.recurring), (Some(_), None) | (None, Some(_)));
+            sync_id_ok(&r.sync_id) && sync_id_ok(&r.document) && one_target && option_sync_id(&r.transaction) && option_sync_id(&r.recurring) && timestamp_ok(&r.created_at)
+        }
     };
     if ok {
         Ok(row)
@@ -579,6 +749,8 @@ pub fn row_to_value(row: &Row) -> Value {
         Row::Recurring(r) => serde_json::to_value(r),
         Row::Budget(r) => serde_json::to_value(r),
         Row::Transaction(r) => serde_json::to_value(r),
+        Row::Document(r) => serde_json::to_value(r),
+        Row::Link(r) => serde_json::to_value(r),
     };
     value.expect("a row is always JSON")
 }
@@ -617,6 +789,17 @@ mod tests {
                "effectiveFrom": "2026-03-01", "createdAt": TS, "updatedAt": TS})
     }
 
+    const SHA: &str = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+
+    fn document() -> Value {
+        json!({"syncId": ID_B, "stamp": STAMP, "name": "Boiler warranty.pdf", "mediaType": "application/pdf", "sizeBytes": 48211, "sha256": SHA,
+               "documentDate": "2026-03-01", "keepOnPhone": 0, "createdAt": TS, "updatedAt": TS})
+    }
+
+    fn link() -> Value {
+        json!({"syncId": ID_B, "stamp": STAMP, "document": ID_A, "transaction": ID_A, "recurring": null, "createdAt": TS})
+    }
+
     fn changed(mut value: Value, key: &str, to: Value) -> Value {
         value[key] = to;
         value
@@ -631,6 +814,9 @@ mod tests {
             (Table::RecurringTransactions, recurring()),
             (Table::Budgets, budget()),
             (Table::Transactions, transaction()),
+            (Table::Documents, document()),
+            (Table::DocumentLinks, link()),
+            (Table::DocumentLinks, changed(changed(link(), "transaction", json!(null)), "recurring", json!(ID_B))),
         ] {
             let row = parse_row(table, &value).unwrap_or_else(|e| panic!("{table:?}: {e}"));
             assert_eq!(row_to_value(&row), value, "{table:?}");
@@ -648,6 +834,26 @@ mod tests {
         assert!(parse_row(Table::Categories, &json!([])).is_err());
         assert!(parse_row(Table::Categories, &json!(null)).is_err());
         assert!(parse_row(Table::Transactions, &category()).is_err(), "a row of another table");
+        assert!(parse_row(Table::DocumentLinks, &document()).is_err(), "a document is not a link");
+        let mut extra = document();
+        extra["file"] = json!("the bytes");
+        assert!(parse_row(Table::Documents, &extra).is_err(), "no way to smuggle a file in a row");
+    }
+
+    #[test]
+    fn there_is_a_table_for_every_kind_of_row_and_the_protocol_knows_it() {
+        assert_eq!(PROTOCOL, 3);
+        let names: Vec<&str> = Table::ALL.iter().map(|t| t.name()).collect();
+        assert_eq!(names, ["settings", "categories", "recurring_transactions", "budgets", "transactions", "documents", "document_links"]);
+        // what a row points at is always in an earlier table, so it is there when the row is applied
+        let position = |t: Table| Table::ALL.iter().position(|x| *x == t).unwrap();
+        assert!(position(Table::Documents) > position(Table::Transactions) && position(Table::DocumentLinks) > position(Table::Documents));
+        assert!(position(Table::DocumentLinks) > position(Table::RecurringTransactions));
+        // and each table has a name the digest messages accept
+        for table in Table::ALL.into_iter().filter(|t| *t != Table::Settings) {
+            let digest = format!(r#"{{"t":"digest","table":"{}","entries":[["{ID_A}","{STAMP}",0]],"last":true}}"#, table.name());
+            assert!(Message::from_bytes(digest.as_bytes()).is_ok(), "{table:?}");
+        }
     }
 
     #[test]
@@ -692,6 +898,31 @@ mod tests {
             (Table::Budgets, changed(budget(), "effectiveFrom", json!("2026-03-15"))),
             (Table::Budgets, changed(budget(), "amountLimitMinor", json!(-1))),
             (Table::Budgets, changed(budget(), "type", json!("x"))),
+            (Table::Documents, changed(document(), "name", json!(""))),
+            (Table::Documents, changed(document(), "name", json!("a/b.pdf"))),
+            (Table::Documents, changed(document(), "name", json!("..\\x.pdf"))),
+            (Table::Documents, changed(document(), "name", json!(" padded.pdf"))),
+            (Table::Documents, changed(document(), "name", json!("two  spaces.pdf"))),
+            (Table::Documents, changed(document(), "name", json!("hidden\u{202e}fdp.exe"))),
+            (Table::Documents, changed(document(), "name", json!("a".repeat(121)))),
+            (Table::Documents, changed(document(), "mediaType", json!("image/svg+xml"))),
+            (Table::Documents, changed(document(), "mediaType", json!("IMAGE/PNG"))),
+            (Table::Documents, changed(document(), "sizeBytes", json!(0))),
+            (Table::Documents, changed(document(), "sizeBytes", json!(26_214_401))),
+            (Table::Documents, changed(document(), "sizeBytes", json!(-1))),
+            (Table::Documents, changed(document(), "sizeBytes", json!(10.5))),
+            (Table::Documents, changed(document(), "sha256", json!(&SHA[1..]))),
+            (Table::Documents, changed(document(), "sha256", json!(SHA.to_uppercase()))),
+            (Table::Documents, changed(document(), "documentDate", json!("2026-02-30"))),
+            (Table::Documents, changed(document(), "keepOnPhone", json!(2))),
+            (Table::Documents, changed(document(), "keepOnPhone", json!(true))),
+            (Table::Documents, changed(document(), "syncId", json!("nope"))),
+            (Table::DocumentLinks, changed(link(), "document", json!("1"))),
+            (Table::DocumentLinks, changed(link(), "transaction", json!(null))),
+            (Table::DocumentLinks, changed(link(), "recurring", json!(ID_B))),
+            (Table::DocumentLinks, changed(link(), "transaction", json!("x"))),
+            (Table::DocumentLinks, changed(changed(link(), "transaction", json!(null)), "recurring", json!("x"))),
+            (Table::DocumentLinks, changed(link(), "createdAt", json!("2026-03-01"))),
             (Table::Settings, json!({"stamp": STAMP, "locale": "x", "timezone": "Europe/Dublin"})),
             (Table::Settings, json!({"stamp": STAMP, "locale": "en-IE", "timezone": "Mars/Base"})),
             (Table::Settings, json!({"stamp": STAMP, "locale": " en-IE", "timezone": "UTC"})),

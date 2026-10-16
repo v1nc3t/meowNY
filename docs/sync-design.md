@@ -39,6 +39,7 @@ scan the QR code
  digests: which rows each side has (id, stamp) ◀──▶
  rows: the rows the other side lacks or has older ◀──▶
  done: hash of the final state                ◀──▶
+ files: the documents' files, if any move     ◀──▶   (protocol 3, `docs/documents-design.md` section 9)
  close.  The listener closes and the OTS is gone.
 ```
 
@@ -137,9 +138,9 @@ There is no Diffie-Hellman step, so there is no forward secrecy beyond the OTS. 
 
 ## 8. What is sent, and how the two sides end up equal
 
-Messages are JSON objects with a `t` field, each sealed into one frame of at most 64 KiB, so a long list is cut into several messages and the last one of a table is marked `last`. Money is an integer in minor units, as in the database. The message types are `hello`, `currency`, `hashes`, `digest`, `rows`, `done` and `error`.
+Messages are JSON objects with a `t` field, each sealed into one frame of at most 64 KiB, so a long list is cut into several messages and the last one of a table is marked `last`. Money is an integer in minor units, as in the database. The message types are `hello`, `currency`, `hashes`, `digest`, `rows`, `done` and `error`; protocol 3 adds `have`, `need`, `file`, `chunk` and `stored` for the documents' files (see below, step 8).
 
-1. **`hello`** from both sides: device id and name, app version, schema version, protocol `2`, the clock (section 10), the currency generation (section 11), when this device last synced with the other one (`since`) and, in the desktop's, which way the sync goes (`mode`).
+1. **`hello`** from both sides: device id and name, app version, schema version, protocol `3` (`2` before documents: an app that speaks 2 is told to update), the clock (section 10), the currency generation (section 11), when this device last synced with the other one (`since`) and, in the desktop's, which way the sync goes (`mode`).
    - Different schema versions: the sync stops with "update the phone app" or "update the desktop app".
    - Clocks more than a minute apart: a warning. More than a day apart: the sync stops with "check the clock on the phone", because a clock far in the future would make its edits win forever.
 2. **`currency`**: the desktop sends the phone any currency changes it has not seen. The phone applies them first and converts its own rows, so both sides are in the same currency before anything is compared (section 11).
@@ -149,6 +150,8 @@ Messages are JSON objects with a `t` field, each sealed into one frame of at mos
    **Which way, and conflicts.** The desktop chooses before it shows the code: both ways, phone to computer, or computer to phone. In a one-way sync the device that only receives sends empty `rows` messages and refuses any rows from the other, so nothing goes back, and the two are not meant to end equal (`done` is not compared; the summary says the sync went one way). Before the rows, both sides look for **conflicts**: a row (or a deletion) that is on both devices, differs, and was changed on both after their last sync (the later of the two `since` values in the hellos; none when they never met, so a first copy has none). The device that takes the changes in reviews them (the desktop when both ways), up to 200 at a time, the rest being settled by the newer change and counted. The other device sends its version of each conflicting row (`rows` messages for just those ids) and waits; the reviewer shows both versions side by side, with the fields that differ, and the person chooses for each which is true. The choice is carried out as stamps only: the version meant to win gets a fresh stamp, or the reviewer's own version gets the oldest possible stamp so the other device's version, which the ordinary exchange brings in next, is the newer. The reviewer then sends `reviewed`, both compare their lists again from `hashes`, and the rest goes on as before. Giving up the review ends the sync with nothing changed. A change that only one device made is never a conflict and is taken without asking.
 6. The receiver collects everything, validates it (section 12), and applies it in one database transaction. It counts what it did for the summary: rows added, rows taken over from the other device, of those how many had also been changed here since the last sync (a change of yours that was replaced by a newer one there), rows deleted, categories merged, and duplicates removed. (A row that is newer here is never sent, so the other device is the one that counts it as replaced.)
 7. **`done`**: each side sends a hash of its final list of `(table, sync_id, stamp, deleted)`. If they are equal the sync is finished and both show a summary. If not, both say "differences remain, sync again", and nothing is thrown away.
+
+8. **The files of the documents** move after `done`, so the rows are finished and checked first and a connection that breaks while a file moves costs files, never the sync. The steps (`have`, `need`, `file` and `chunk`, `stored`), who may get which file, the budget and the resuming are in `docs/documents-design.md`, section 9. The sync reports them in their own lines ("documents received", "sent", "could not be moved", "waiting for the next sync", "taken off this phone"); a broken connection there is shown as a note, not as a failed sync.
 
 When both sides have a lot to send (the lists of a big database are megabytes), they must not both write at once, or neither would ever read. So the desktop always speaks first and the phone listens, and then the other way round: the lists, then the rows, then `done`. Each side works out what the other lacks from the lists, before it applies anything of what arrives.
 
@@ -161,7 +164,8 @@ This is a comparison of states, not a log of changes, so it needs no record of w
 | `sync_id` (random 128 bits, as 32 hex characters, unique) on `categories`, `budgets`, `recurring_transactions`, `transactions`. Existing rows get one in the migration | Integer ids would collide between devices. They stay as the local ids. `transactions.client_uuid` stays |
 | `stamp` (text, section 10) on the same tables and on the shared part of `settings` | Which change is newer |
 | `categories.merged_into` (a `sync_id`, may be empty) | Section 11, same-name categories |
-| `sync_deleted(sync_id, kind, stamp)`, filled by `DELETE` triggers on `transactions`, `budgets` and `recurring_transactions` | Those rows are hard-deleted today, so the other device needs a marker. Markers are kept for good (about 50 bytes each) |
+| `sync_deleted(sync_id, kind, stamp)`, filled by `DELETE` triggers on `transactions`, `budgets`, `recurring_transactions`, `documents` and `document_links` | Those rows are hard-deleted today, so the other device needs a marker. Markers are kept for good (about 50 bytes each). A link has one only when a person unlinked it; one that went with its document or its transaction has none |
+| `documents` and `document_links` (migrations `0010` and `0011`; phase 9) | Two more tables of rows, with a `sync_id` and a `stamp` like the others: a document (name, kind, size, hash, date, the switch "keep on phone") and a link from a document to one transaction or one recurring item. The rows travel here; the files of the documents travel after them (`docs/documents-design.md`, section 9) |
 | `sync_clock(id = 1, device_id, last_stamp, applying)` | The device id, the clock state, and a flag that stops the triggers from replacing a stamp while a sync is applying rows |
 | `sync_peers(device_id, name, secret, paired_at, last_sync_at)` | The paired devices and their PS. Left out of backups, exports, the CLI and sync, like `api_tokens` |
 | `currency_changes(generation, from_currency, to_currency, rate, stamp)` and `settings.currency_generation` | Section 11 |
@@ -194,6 +198,7 @@ For the same `sync_id` on both sides, the larger stamp wins as a whole row (a de
 | Category deleted on one, used on the other | It stays deleted. The new transactions stay attached to it, as old ones of a deleted category already are |
 | Recurring item edited or paid on both | The newer whole row wins. Then, if its next due date is not after the latest occurrence that has a transaction (`recurring_due_date`), the date moves forward by whole intervals, with the function the app uses after a payment, until it is. So an occurrence paid on the other device does not come due again. Known limit: an occurrence skipped on the losing side (a skip makes no transaction) can come due again, and the person can skip it again |
 | Shared settings (locale, time zone) | The newer wins |
+| Documents and their links | The rules are in `docs/documents-design.md`, section 10. In short: documents follow the newer-wins rule; the contents of a document never change, so a row that says otherwise is refused; a link is a row of its own, the same link made twice becomes one, and it goes with its document, transaction or recurring item without a marker of its own, so a parent deleted on one device while the other attaches to it ends the same in one sync |
 
 Stamps of the changes these rules make follow from the stamps involved, never from the clock, so both devices work out the same ones and a merge does not start another round of changes:
 
@@ -216,7 +221,7 @@ Rows from the other device are untrusted input, even from a paired one, so a bug
 - Only the synced tables can be named. A row has exactly the known fields, no more.
 - Every field passes the same checks as the screens and the command API: money range, dates, allowed words, lengths, the first-of-month rule for budgets, and so on. A row that fails is refused, and the sync stops with an error that names the table (never the content).
 - Rows are applied with bound parameters, never built into SQL text.
-- Order: shared settings, categories, recurring items, budgets, transactions, then deletion markers. References arrive as `sync_id`s and are turned into local ids; a reference to an unknown `sync_id` stops the sync.
+- Order: shared settings, categories, recurring items, budgets, transactions, documents, document links, then deletion markers. References arrive as `sync_id`s and are turned into local ids; a reference to an unknown `sync_id` stops the sync.
 - After applying, the database passes `foreign_key_check` and `integrity_check` before the transaction is committed.
 - Nothing from the sync (keys, rows, amounts, names) is written to a log.
 

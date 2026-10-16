@@ -32,6 +32,7 @@ pub fn hint(p: &Param) -> String {
         "integer" => "number",
         "money" => "amount",
         "ids" => "id,id,...",
+        "bytes" => "path",
         other => other,
     }
     .to_string()
@@ -40,7 +41,7 @@ pub fn hint(p: &Param) -> String {
 pub fn usage_line(c: &Command) -> String {
     let mut line = format!("meowny {}", c.name());
     if let Some(id) = c.positional() {
-        line.push_str(&format!(" <{}>", id.name));
+        line.push_str(&format!(" <{}>", id.flag));
     }
     for p in &c.params {
         if c.positional().is_some_and(|q| q.name == p.name) {

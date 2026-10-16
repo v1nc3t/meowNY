@@ -28,6 +28,8 @@ const RETRY_AFTER_FAILURE: Duration = Duration::hours(1);
 pub struct Schedule {
     pub folder: String,
     pub every_days: u32,
+    /// The files of the documents are in every backup, not only the rows.
+    pub include_documents: bool,
     /// UTC, ISO 8601.
     pub last_attempt_at: Option<String>,
     pub last_ok: bool,
@@ -36,12 +38,13 @@ pub struct Schedule {
 fn load(conn: &Connection) -> Result<Option<(Schedule, String)>, AppError> {
     Ok(conn
         .query_row(
-            "SELECT folder, every_days, last_attempt_at, last_ok, passphrase FROM backup_schedule WHERE id = 1",
+            "SELECT folder, every_days, last_attempt_at, last_ok, passphrase, include_documents FROM backup_schedule WHERE id = 1",
             [],
             |r| {
                 let schedule = Schedule {
                     folder: r.get(0)?,
                     every_days: r.get(1)?,
+                    include_documents: r.get::<_, i64>(5)? == 1,
                     last_attempt_at: r.get(2)?,
                     last_ok: r.get::<_, i64>(3)? == 1,
                 };
@@ -81,11 +84,11 @@ pub fn is_due(schedule: &Schedule, now: DateTime<Utc>) -> bool {
 }
 
 /// Makes one backup file in `folder` and trims old scheduled ones.
-fn write_one(vault: &Vault, folder: &Path, passphrase: &str, now: DateTime<Utc>) -> Result<(), AppError> {
+fn write_one(vault: &Vault, folder: &Path, passphrase: &str, include_documents: bool, now: DateTime<Utc>) -> Result<(), AppError> {
     let snapshot = vault.with_conn(|c| backup::dump(c))?;
-    let bytes = backup::seal(&snapshot, passphrase)?;
     let name = format!("{PREFIX}{}.{}", now.format("%Y-%m-%d-%H%M%S"), backup::EXTENSION);
-    backup::write_file(&folder.join(name), &bytes)?;
+    let mut files = backup::VaultFiles(vault);
+    backup::create_file(&folder.join(name), &snapshot, passphrase, include_documents.then_some(&mut files as &mut dyn backup::FileSource))?;
     prune(folder);
     Ok(())
 }
@@ -118,19 +121,19 @@ fn prune(folder: &Path) {
 
 /// Sets the schedule up. The first backup is made right away, so a folder that does not work is
 /// reported now and not at some later check; nothing is saved if it fails.
-pub fn start(vault: &Vault, folder: &Path, passphrase: &str, every_days: u32, now: DateTime<Utc>) -> Result<(), AppError> {
+pub fn start(vault: &Vault, folder: &Path, passphrase: &str, every_days: u32, include_documents: bool, now: DateTime<Utc>) -> Result<(), AppError> {
     backup::check_passphrase(passphrase)?;
     if !EVERY_DAYS.contains(&every_days) || !folder.is_absolute() || !folder.is_dir() {
         return Err(AppError::InvalidInput);
     }
     let folder_text = folder.to_str().ok_or(AppError::InvalidInput)?;
-    write_one(vault, folder, passphrase, now)?;
+    write_one(vault, folder, passphrase, include_documents, now)?;
     vault.with_conn(|c| {
         c.execute(
-            "INSERT INTO backup_schedule (id, folder, every_days, passphrase, last_attempt_at, last_ok)
-             VALUES (1, ?1, ?2, ?3, ?4, 1)
-             ON CONFLICT (id) DO UPDATE SET folder = ?1, every_days = ?2, passphrase = ?3, last_attempt_at = ?4, last_ok = 1",
-            params![folder_text, every_days, passphrase, stamp(now)],
+            "INSERT INTO backup_schedule (id, folder, every_days, passphrase, last_attempt_at, last_ok, include_documents)
+             VALUES (1, ?1, ?2, ?3, ?4, 1, ?5)
+             ON CONFLICT (id) DO UPDATE SET folder = ?1, every_days = ?2, passphrase = ?3, last_attempt_at = ?4, last_ok = 1, include_documents = ?5",
+            params![folder_text, every_days, passphrase, stamp(now), include_documents],
         )?;
         Ok(())
     })
@@ -143,7 +146,7 @@ pub fn run_if_due(vault: &Vault, now: DateTime<Utc>) {
     if !is_due(&schedule, now) {
         return;
     }
-    let result = write_one(vault, Path::new(&schedule.folder), &passphrase, now);
+    let result = write_one(vault, Path::new(&schedule.folder), &passphrase, schedule.include_documents, now);
     if result == Err(AppError::Locked) {
         return;
     }
@@ -187,6 +190,7 @@ mod tests {
     #[test]
     fn due_dates_follow_the_interval_and_a_failure_is_retried_sooner() {
         let s = |every_days, last: Option<&str>, last_ok| Schedule {
+            include_documents: false,
             folder: "/x".into(),
             every_days,
             last_attempt_at: last.map(str::to_string),
@@ -209,7 +213,7 @@ mod tests {
     fn starting_makes_a_first_backup_that_opens_with_the_passphrase() {
         let (data, folder) = (tempfile::tempdir().unwrap(), tempfile::tempdir().unwrap());
         let v = vault(data.path());
-        start(&v, folder.path(), PASS, 7, at("2026-10-14T09:30:00Z")).unwrap();
+        start(&v, folder.path(), PASS, 7, false, at("2026-10-14T09:30:00Z")).unwrap();
 
         assert_eq!(scheduled_files(folder.path()), ["meowny-auto-2026-10-14-093000.meowbak"]);
         let file = fs::read(folder.path().join("meowny-auto-2026-10-14-093000.meowbak")).unwrap();
@@ -220,6 +224,7 @@ mod tests {
             Schedule {
                 folder: folder.path().to_str().unwrap().into(),
                 every_days: 7,
+                include_documents: false,
                 last_attempt_at: Some("2026-10-14T09:30:00Z".into()),
                 last_ok: true,
             }
@@ -241,7 +246,7 @@ mod tests {
             (file, PASS, 7),
             (Path::new("relative/dir").to_path_buf(), PASS, 7),
         ] {
-            assert_eq!(start(&v, &path, pass, every, now), Err(AppError::InvalidInput), "{path:?} {pass} {every}");
+            assert_eq!(start(&v, &path, pass, every, false, now), Err(AppError::InvalidInput), "{path:?} {pass} {every}");
         }
         assert!(v.with_conn(|c| get(c)).unwrap().is_none());
         assert!(scheduled_files(folder.path()).is_empty());
@@ -251,8 +256,8 @@ mod tests {
     fn starting_again_replaces_the_schedule_and_stopping_removes_it() {
         let (data, a, b) = (tempfile::tempdir().unwrap(), tempfile::tempdir().unwrap(), tempfile::tempdir().unwrap());
         let v = vault(data.path());
-        start(&v, a.path(), PASS, 7, at("2026-10-14T09:30:00Z")).unwrap();
-        start(&v, b.path(), "another passphrase", 1, at("2026-10-15T09:30:00Z")).unwrap();
+        start(&v, a.path(), PASS, 7, false, at("2026-10-14T09:30:00Z")).unwrap();
+        start(&v, b.path(), "another passphrase", 1, false, at("2026-10-15T09:30:00Z")).unwrap();
         let now = state(&v);
         assert_eq!((now.folder.as_str(), now.every_days), (b.path().to_str().unwrap(), 1));
         let file = fs::read(b.path().join("meowny-auto-2026-10-15-093000.meowbak")).unwrap();
@@ -266,7 +271,7 @@ mod tests {
     fn the_timer_backs_up_when_due_and_only_then() {
         let (data, folder) = (tempfile::tempdir().unwrap(), tempfile::tempdir().unwrap());
         let v = vault(data.path());
-        start(&v, folder.path(), PASS, 1, at("2026-10-14T09:30:00Z")).unwrap();
+        start(&v, folder.path(), PASS, 1, false, at("2026-10-14T09:30:00Z")).unwrap();
 
         run_if_due(&v, at("2026-10-15T09:00:00Z"));
         assert_eq!(scheduled_files(folder.path()).len(), 1, "not due yet");
@@ -285,7 +290,7 @@ mod tests {
         let v = vault(data.path());
         let target = folder.path().join("backups");
         fs::create_dir(&target).unwrap();
-        start(&v, &target, PASS, 1, at("2026-10-14T09:30:00Z")).unwrap();
+        start(&v, &target, PASS, 1, false, at("2026-10-14T09:30:00Z")).unwrap();
         fs::remove_dir_all(&target).unwrap();
 
         run_if_due(&v, at("2026-10-15T09:30:00Z"));
@@ -306,7 +311,7 @@ mod tests {
     fn a_locked_app_makes_no_backup_and_records_nothing() {
         let (data, folder) = (tempfile::tempdir().unwrap(), tempfile::tempdir().unwrap());
         let v = vault(data.path());
-        start(&v, folder.path(), PASS, 1, at("2026-10-14T09:30:00Z")).unwrap();
+        start(&v, folder.path(), PASS, 1, false, at("2026-10-14T09:30:00Z")).unwrap();
         v.lock();
         run_if_due(&v, at("2026-10-20T09:30:00Z"));
         assert_eq!(scheduled_files(folder.path()).len(), 1);
@@ -351,7 +356,7 @@ mod tests {
     fn the_passphrase_stays_inside_the_database() {
         let (data, folder) = (tempfile::tempdir().unwrap(), tempfile::tempdir().unwrap());
         let v = vault(data.path());
-        start(&v, folder.path(), "unmistakable passphrase", 7, at("2026-10-14T09:30:00Z")).unwrap();
+        start(&v, folder.path(), "unmistakable passphrase", 7, false, at("2026-10-14T09:30:00Z")).unwrap();
 
         let shown = serde_json::to_string(&state(&v)).unwrap();
         assert!(!shown.contains("unmistakable"), "the UI is never told the passphrase");
@@ -371,7 +376,7 @@ mod tests {
         let (data, folder) = (tempfile::tempdir().unwrap(), tempfile::tempdir().unwrap());
         let v = vault(data.path());
         let file = backup::seal(&v.with_conn(|c| backup::dump(c)).unwrap(), PASS).unwrap();
-        start(&v, folder.path(), PASS, 7, at("2026-10-14T09:30:00Z")).unwrap();
+        start(&v, folder.path(), PASS, 7, false, at("2026-10-14T09:30:00Z")).unwrap();
         let before = state(&v);
 
         v.restore_backup(&file, PASS, "RESTORE").unwrap();
@@ -382,7 +387,7 @@ mod tests {
     fn wiping_removes_the_schedule_and_leaves_the_backup_files() {
         let (data, folder) = (tempfile::tempdir().unwrap(), tempfile::tempdir().unwrap());
         let v = vault(data.path());
-        start(&v, folder.path(), PASS, 7, at("2026-10-14T09:30:00Z")).unwrap();
+        start(&v, folder.path(), PASS, 7, false, at("2026-10-14T09:30:00Z")).unwrap();
         v.wipe("DELETE").unwrap();
         assert_eq!(scheduled_files(folder.path()).len(), 1, "the person's own files stay");
         let settings = Settings { currency: "EUR".into(), locale: "en-IE".into(), timezone: "UTC".into(), language: "en".into() };

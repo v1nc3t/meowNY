@@ -2403,6 +2403,19 @@ kbd {
   width: 100%;
 }
 
+/* "current month" and the unit of the range side by side, as on the transactions page. */
+.export-range {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.5rem 1.25rem;
+}
+
+.export-range > button {
+  flex: 0 0 auto;
+  padding: 0.625rem 0;
+}
+
 .export-date {
   display: grid;
   grid-template-columns: 4rem minmax(0, 1fr);
@@ -3416,4 +3429,183 @@ fieldset.conflict {
 
 .conflict-deleted {
   color: var(--text-muted);
+}
+
+/* Documents (phase 9). Text buttons and outlines like the rest; the phone's 44 px rule for buttons and fields already applies. */
+
+/* The attach area inside the dialog of a transaction or a recurring item: what is attached, and the ways to attach more. */
+.attach {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  width: 100%;
+  padding-top: 0.75rem;
+  border-top: 0.8px solid var(--border);
+}
+
+.attach h3 {
+  margin: 0;
+  font-size: 0.9375rem;
+  font-weight: normal;
+  color: var(--text-h);
+}
+
+.attach p.hint,
+.attach p.notice {
+  margin: 0;
+}
+
+.attach-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.attach-list > li {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.125rem 0.75rem;
+  padding: 0.125rem 0;
+  border-top: 0;
+  font-size: 0.8125rem;
+}
+
+.attach-name {
+  flex: 1 1 8rem;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  text-align: left;
+  color: var(--text-h);
+}
+
+button.attach-name {
+  padding: 0.25rem 0;
+}
+
+.attach-size {
+  color: var(--text-muted);
+}
+
+.attach-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 1.25rem;
+}
+
+.attach-pick {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+/* One document in a dialog: the picture, the facts, what it is linked to, and what can be done with the file. */
+.doc-preview {
+  display: block;
+  max-width: 100%;
+  max-height: min(50svh, 24rem);
+  margin: 0 auto;
+  object-fit: contain;
+  border: 0.8px solid var(--border);
+}
+
+.doc-facts {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 0.25rem 1rem;
+  margin: 0;
+  font-size: 0.8125rem;
+}
+
+.doc-facts dt {
+  color: var(--text-muted);
+}
+
+.doc-facts dd {
+  margin: 0;
+  color: var(--text-h);
+  overflow-wrap: anywhere;
+}
+
+.doc-links {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.doc-links > li {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.125rem 0.75rem;
+  padding: 0.125rem 0;
+  border-top: 0;
+}
+
+.doc-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 1.5rem;
+}
+
+/* The page of documents. */
+.doc-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+  margin: 0;
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+}
+
+.doc-summary p {
+  margin: 0;
+}
+
+.doc-page > p.hint {
+  margin: 0;
+}
+
+.doc-page > p.warn {
+  align-self: flex-start;
+  font-size: 0.8125rem;
+}
+
+.doc-page.is-dragging {
+  outline: 1px dashed var(--accent);
+  outline-offset: -0.25rem;
+}
+
+.doc-marks {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem 1rem;
+}
+
+/* The paper clip and a number, on a transaction or an item that has documents. */
+.clip {
+  display: inline-flex;
+  align-items: center;
+  align-self: flex-start;
+  gap: 0.25rem;
+  padding: 0.25rem 0;
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+}
+
+.clip-icon {
+  width: 1rem;
+  height: 1rem;
+  flex: 0 0 auto;
 }

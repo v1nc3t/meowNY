@@ -17,6 +17,7 @@ use serde::Serialize;
 
 use super::crypto::{Ikm, Kind, Secret};
 use super::engine::{Choice, ConflictView, Summary, SyncError, Warning};
+use super::files::FilesReport;
 use super::flow::{self, Db, Exchange, FlowError, PairingRequest, Prompts};
 use super::net::{self, Limits, NetError, Window};
 use super::peers::{self, Peer};
@@ -46,6 +47,24 @@ pub struct SummaryView {
 impl From<Summary> for SummaryView {
     fn from(s: Summary) -> Self {
         SummaryView { added: s.added, updated: s.updated, replaced: s.replaced, deleted: s.deleted, merged: s.merged, dropped: s.dropped }
+    }
+}
+
+/// What happened to the documents' files, which move after the rows.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct FilesView {
+    pub received: u32,
+    pub sent: u32,
+    pub failed: u32,
+    pub waiting: u32,
+    pub removed: u32,
+    pub interrupted: bool,
+}
+
+impl From<FilesReport> for FilesView {
+    fn from(f: FilesReport) -> Self {
+        FilesView { received: f.received, sent: f.sent, failed: f.failed, waiting: f.waiting, removed: f.removed, interrupted: f.interrupted }
     }
 }
 
@@ -111,7 +130,7 @@ pub enum Status {
     /// The other device is reviewing conflicts.
     WaitingReview { purpose: Purpose },
     #[serde(rename_all = "camelCase")]
-    Done { purpose: Purpose, summary: SummaryView, warnings: Vec<WarningView>, differences: bool, one_way: bool, peer: String },
+    Done { purpose: Purpose, summary: SummaryView, files: FilesView, warnings: Vec<WarningView>, differences: bool, one_way: bool, peer: String },
     Failed { purpose: Purpose, reason: &'static str },
 }
 
@@ -190,6 +209,7 @@ impl Inner {
             Ok(done) => Status::Done {
                 purpose,
                 summary: done.summary.into(),
+                files: done.files.into(),
                 warnings: done.warnings.iter().map(|Warning::ClockOff(seconds)| WarningView { kind: "clock_off", seconds: *seconds }).collect(),
                 differences: done.differences,
                 one_way: done.one_way,
@@ -767,6 +787,7 @@ mod tests {
         let done = Status::Done {
             purpose: Purpose::Sync,
             summary: SummaryView { added: 5, updated: 2, replaced: 1, deleted: 0, merged: 0, dropped: 0 },
+            files: FilesView { received: 2, sent: 0, failed: 1, waiting: 3, removed: 1, interrupted: false },
             warnings: vec![WarningView { kind: "clock_off", seconds: 75 }],
             differences: false,
             one_way: true,
@@ -774,7 +795,7 @@ mod tests {
         };
         assert_eq!(
             serde_json::to_string(&done).unwrap(),
-            r#"{"state":"done","purpose":"sync","summary":{"added":5,"updated":2,"replaced":1,"deleted":0,"merged":0,"dropped":0},"warnings":[{"kind":"clock_off","seconds":75}],"differences":false,"oneWay":true,"peer":"Phone"}"#
+            r#"{"state":"done","purpose":"sync","summary":{"added":5,"updated":2,"replaced":1,"deleted":0,"merged":0,"dropped":0},"files":{"received":2,"sent":0,"failed":1,"waiting":3,"removed":1,"interrupted":false},"warnings":[{"kind":"clock_off","seconds":75}],"differences":false,"oneWay":true,"peer":"Phone"}"#
         );
         assert_eq!(serde_json::to_string(&Status::Connecting { purpose: Purpose::Pair }).unwrap(), r#"{"state":"connecting","purpose":"pair"}"#);
         assert_eq!(serde_json::to_string(&Status::Running { purpose: Purpose::Sync }).unwrap(), r#"{"state":"running","purpose":"sync"}"#);

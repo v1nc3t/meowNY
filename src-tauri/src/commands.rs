@@ -12,6 +12,8 @@ use crate::budgets::{self, Budget, Overview, SetBudget};
 use crate::clock;
 use crate::currency::{self, Conversion};
 use crate::display::DisplayFormat;
+use crate::documents::library as docs;
+use crate::documents::names as doc_names;
 use crate::export::{self, Selection};
 use crate::report::{self, ReportOptions};
 use crate::recurring::{self, Dues, NewRecurring, Recurring, RecurringPatch};
@@ -42,6 +44,12 @@ mod ask {
         picked.map(|path| path.into_path().map_err(|_| AppError::Internal)).transpose()
     }
 
+    /// A place to save a file of any kind, as a copy of a document: no filter, since its type is whatever the person's file was.
+    pub fn save_any(app: &tauri::AppHandle, name: &str) -> Result<Option<PathBuf>, AppError> {
+        let picked = app.dialog().file().set_file_name(name).blocking_save_file();
+        picked.map(|path| path.into_path().map_err(|_| AppError::Internal)).transpose()
+    }
+
     pub fn pick(app: &tauri::AppHandle, kind: &str, extension: &str) -> Result<Option<PathBuf>, AppError> {
         let picked = app.dialog().file().add_filter(kind, &[extension]).blocking_pick_file();
         picked.map(|path| path.into_path().map_err(|_| AppError::Internal)).transpose()
@@ -60,6 +68,10 @@ mod ask {
     use crate::vault::AppError;
 
     pub fn save(_: &tauri::AppHandle, _: &str, _: &str, _: &str) -> Result<Option<PathBuf>, AppError> {
+        Err(AppError::InvalidInput)
+    }
+
+    pub fn save_any(_: &tauri::AppHandle, _: &str) -> Result<Option<PathBuf>, AppError> {
         Err(AppError::InvalidInput)
     }
 
@@ -147,6 +159,24 @@ pub const COMMANDS: &[&str] = &[
     "sync_acknowledge",
     "sync_devices",
     "sync_remove_device",
+    "list_documents",
+    "get_document",
+    "update_document",
+    "delete_document",
+    "link_document",
+    "unlink_document",
+    "document_links",
+    "document_library_size",
+    "document_counts",
+    "check_documents",
+    "read_document_image",
+    "open_document",
+    "save_document_copy",
+    "document_upload_begin",
+    "document_upload_chunk",
+    "document_upload_finish",
+    "document_upload_cancel",
+    "document_add_dropped",
 ];
 
 #[tauri::command]
@@ -457,15 +487,18 @@ fn pick_backup_file(app: &tauri::AppHandle) -> Result<Option<std::path::PathBuf>
 }
 
 /// Writes all data to one encrypted file in a place the person picks, locked with the passphrase
-/// they chose for this backup. Returns false if they cancel the save dialog.
+/// they chose for this backup, and the files of the documents too if `include_documents`. What it held of the documents, or None
+/// if they cancel the save dialog. The file is written as it is read, so a big library does not have to fit in memory.
 #[tauri::command]
-pub async fn create_backup(app: tauri::AppHandle, vault: Shared<'_>, passphrase: String) -> Result<bool, AppError> {
-    let snapshot = vault.with_conn(|c| backup::dump(c))?;
-    let bytes = backup::seal(&snapshot, &passphrase)?;
+pub async fn create_backup(app: tauri::AppHandle, vault: Shared<'_>, passphrase: String, include_documents: bool) -> Result<Option<backup::Written>, AppError> {
+    backup::check_passphrase(&passphrase)?;
     let name = format!("meowny-backup-{}.{}", today_text(&vault)?, backup::EXTENSION);
-    let Some(path) = ask::save(&app, &name, "meowNY backup", backup::EXTENSION)? else { return Ok(false) };
-    backup::write_file(&path, &bytes)?;
-    Ok(true)
+    let Some(path) = ask::save(&app, &name, "meowNY backup", backup::EXTENSION)? else { return Ok(None) };
+    // the rows are read after the person has chosen the place, so the backup is of this moment and not of the one before the dialog
+    let snapshot = vault.with_conn(|c| backup::dump(c))?;
+    let mut files = backup::VaultFiles(&vault);
+    let written = backup::create_file(&path, &snapshot, &passphrase, include_documents.then_some(&mut files as &mut dyn backup::FileSource))?;
+    Ok(Some(written))
 }
 
 /// Replaces all data with a backup the person picks. `confirmation` must be "RESTORE". Returns false
@@ -484,7 +517,7 @@ pub async fn restore_backup(
         return Err(AppError::Locked);
     }
     let Some(path) = pick_backup_file(&app)? else { return Ok(false) };
-    vault.restore_backup(&backup::read_file(&path)?, &passphrase, &confirmation)?;
+    vault.restore_backup(path.as_path(), &passphrase, &confirmation)?;
     Ok(true)
 }
 
@@ -502,7 +535,7 @@ pub async fn restore_backup_new_vault(
         return Err(AppError::AlreadySetUp);
     }
     let Some(path) = pick_backup_file(&app)? else { return Ok(None) };
-    let key = vault.create_from_backup(&backup::read_file(&path)?, &passphrase, vault_passphrase.as_deref())?;
+    let key = vault.create_from_backup(path.as_path(), &passphrase, vault_passphrase.as_deref())?;
     Ok(Some(key))
 }
 
@@ -513,19 +546,21 @@ pub fn get_backup_schedule(vault: Shared) -> Result<Option<Schedule>, AppError> 
 }
 
 /// Starts (or replaces) scheduled backups: asks for the folder, then makes the first backup there.
-/// `every_days` is 1, 7 or 30. Returns false if the person cancels the folder dialog.
+/// `every_days` is 1, 7 or 30; `include_documents` puts the files of the documents in every backup. Returns false if the person
+/// cancels the folder dialog.
 #[tauri::command]
 pub async fn set_backup_schedule(
     app: tauri::AppHandle,
     vault: Shared<'_>,
     passphrase: String,
     every_days: u32,
+    include_documents: bool,
 ) -> Result<bool, AppError> {
     backup::check_passphrase(&passphrase)?;
     // Scheduled backups are a desktop feature: a phone cannot pick a folder for the app to write into, and its data is on the
     // desktop too (`ask::folder` refuses there).
     let Some(folder) = ask::folder(&app)? else { return Ok(false) };
-    schedule::start(&vault, &folder, &passphrase, every_days, chrono::Utc::now())?;
+    schedule::start(&vault, &folder, &passphrase, every_days, include_documents, chrono::Utc::now())?;
     Ok(true)
 }
 
@@ -735,6 +770,145 @@ pub fn sync_remove_device(syncing: Syncing, device_id: String) -> Result<bool, A
     syncing.remove_device(&device_id).map_err(sync_error)
 }
 
+// -- documents ------------------------------------------------------------------------------------------------------------
+
+#[tauri::command]
+pub fn list_documents(vault: Shared, filter: docs::Filter) -> Result<docs::Page, AppError> {
+    vault.with_files(|conn, files| docs::list(conn, files, &filter))
+}
+
+#[tauri::command]
+pub fn get_document(vault: Shared, id: String) -> Result<docs::Document, AppError> {
+    let id = categories::parse_id(&id)?;
+    vault.with_files(|conn, files| docs::get(conn, files, id))
+}
+
+#[tauri::command]
+pub fn update_document(vault: Shared, id: String, patch: docs::DocumentPatch) -> Result<docs::Document, AppError> {
+    let id = categories::parse_id(&id)?;
+    vault.with_files(|conn, files| docs::update(conn, files, id, &patch))
+}
+
+/// Deletes the document, its links and its file. The transactions it was linked to stay.
+#[tauri::command]
+pub fn delete_document(vault: Shared, id: String) -> Result<(), AppError> {
+    let id = categories::parse_id(&id)?;
+    vault.with_files(|conn, files| docs::delete(conn, files, id))
+}
+
+#[tauri::command]
+pub fn link_document(vault: Shared, id: String, target: docs::LinkTarget) -> Result<(), AppError> {
+    let id = categories::parse_id(&id)?;
+    vault.with_files(|conn, _| docs::link(conn, id, &target))
+}
+
+#[tauri::command]
+pub fn unlink_document(vault: Shared, id: String, target: docs::LinkTarget) -> Result<(), AppError> {
+    let id = categories::parse_id(&id)?;
+    vault.with_files(|conn, _| docs::unlink(conn, id, &target))
+}
+
+/// What a document is linked to.
+#[tauri::command]
+pub fn document_links(vault: Shared, id: String) -> Result<Vec<docs::LinkView>, AppError> {
+    let id = categories::parse_id(&id)?;
+    vault.with_files(|conn, _| docs::links_of(conn, id))
+}
+
+/// How many documents there are and how much they hold, and how much of it is on this device.
+#[tauri::command]
+pub fn document_library_size(vault: Shared) -> Result<docs::Size, AppError> {
+    vault.with_files(docs::library_size)
+}
+
+/// How many documents are linked to each of these transactions (or recurring items), for the mark on a list.
+#[tauri::command]
+pub fn document_counts(vault: Shared, kind: docs::TargetKind, ids: Vec<String>) -> Result<std::collections::BTreeMap<String, u32>, AppError> {
+    vault.with_files(|conn, _| docs::link_counts(conn, kind, &ids))
+}
+
+/// Compares the folder of the files with the documents (removing what no document names) and says how many have no file here.
+#[tauri::command]
+pub fn check_documents(vault: Shared) -> Result<docs::Report, AppError> {
+    vault.check_documents()
+}
+
+/// An image for the page to draw, if the app may draw it (see `documents::library::read_image`). Anything else is invalid input,
+/// and the page offers the system's viewer.
+#[tauri::command]
+pub fn read_document_image(vault: Shared, id: String) -> Result<docs::ImageData, AppError> {
+    let id = categories::parse_id(&id)?;
+    vault.with_files(|conn, files| docs::read_image(conn, files, id))
+}
+
+/// Opens a document in the system's own viewer, from a plain copy that is removed when the app locks or closes. Not for a kind of
+/// file the app could not identify. The copy is made inside the call that holds the vault, so a lock that comes next removes it.
+#[tauri::command]
+pub fn open_document(app: tauri::AppHandle, vault: Shared, id: String) -> Result<(), AppError> {
+    use tauri_plugin_opener::OpenerExt;
+    let id = categories::parse_id(&id)?;
+    let opened = vault.opened();
+    let path = vault.with_files(|conn, files| docs::open_copy(conn, files, &opened, id))?;
+    app.opener().open_path(path.to_string_lossy(), None::<&str>).map_err(|_| AppError::Internal)
+}
+
+/// Saves a copy of the file where the person chooses. Returns false if they cancel. The copy is not encrypted. The phone has no
+/// file dialogs, so there it is refused.
+#[tauri::command]
+pub async fn save_document_copy(app: tauri::AppHandle, vault: Shared<'_>, id: String) -> Result<bool, AppError> {
+    let id = categories::parse_id(&id)?;
+    let (name, bytes) = vault.with_files(|conn, files| {
+        let document = docs::get(conn, files, id)?;
+        Ok((document.name, docs::read(conn, files, id)?))
+    })?;
+    let Some(path) = ask::save_any(&app, &doc_names::disk_name(&name))? else { return Ok(false) };
+    backup::write_file(&path, &bytes)?;
+    Ok(true)
+}
+
+/// Starts sending a file in: what to call it, which date, which links, and how many bytes it has. The file follows in pieces
+/// (`document_upload_chunk`), because a request with raw bytes does not work on Android, and ends with `document_upload_finish`.
+#[tauri::command]
+pub fn document_upload_begin(vault: Shared, input: docs::NewDocument, size: u64) -> Result<(), AppError> {
+    if vault.status() != VaultStatus::Unlocked {
+        return Err(AppError::Locked);
+    }
+    vault.uploads().begin(input, size)
+}
+
+/// The next piece of the file as base64url text, which must start where the last one ended (`offset`). Returns how many bytes there
+/// are now.
+#[tauri::command]
+pub fn document_upload_chunk(vault: Shared, offset: u64, data: String) -> Result<u64, AppError> {
+    vault.uploads().push(offset, &data)
+}
+
+/// The file is all here: stores it. If the same bytes are in the library already, the answer says so and nothing is stored twice.
+#[tauri::command]
+pub fn document_upload_finish(vault: Shared) -> Result<docs::AddOutcome, AppError> {
+    let today = today_text(&vault)?;
+    let (input, bytes) = vault.uploads().finish()?;
+    vault.with_files(|conn, files| docs::add(conn, files, &input, &bytes, &today))
+}
+
+#[tauri::command]
+pub fn document_upload_cancel(vault: Shared) {
+    vault.uploads().clear();
+}
+
+/// Adds the files that were just dropped on the window, each as a document of its own named after the file. The page does not name a
+/// path: the window took the drop (the web view cannot be relied on to give a page the files) and Rust remembers which files they were.
+/// What each came to is in the answer, and one that cannot be added does not stop the others.
+#[tauri::command]
+pub async fn document_add_dropped(vault: Shared<'_>) -> Result<crate::documents::dropped::DroppedResult, AppError> {
+    if vault.status() != VaultStatus::Unlocked {
+        return Err(AppError::Locked);
+    }
+    let today = today_text(&vault)?;
+    let pending = vault.dropped().take();
+    Ok(crate::documents::dropped::add_all(pending, |input, bytes| vault.with_files(|conn, files| docs::add(conn, files, input, bytes, &today))))
+}
+
 #[cfg(test)]
 mod tests {
     use super::{typed_address, COMMANDS};
@@ -765,6 +939,15 @@ mod tests {
         for name in COMMANDS {
             let permission = format!("allow-{}", name.replace('_', "-"));
             assert!(capability.contains(&permission), "capability is missing {permission}");
+        }
+    }
+
+    #[test]
+    fn every_command_is_handed_to_the_app() {
+        // a command that is defined, listed and permitted but missing from the handler cannot be called, and nothing else notices
+        let app = include_str!("lib.rs");
+        for name in COMMANDS {
+            assert!(app.contains(&format!("commands::{name},")), "lib.rs does not register {name}");
         }
     }
 

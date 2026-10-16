@@ -65,13 +65,22 @@ meowNY is a desktop app for tracking income and expenses against monthly budgets
 - Seven languages: English, Deutsch, Español, Français, Italiano, Português and Română.
 - Keyboard shortcuts for the main actions.
 
+**Documents (phase 9: built; not yet tried on a real phone)**
+
+- Attach receipts, invoices and contracts to transactions and recurring items, on the computer and on the phone (from its file chooser or its camera). A file is kept **encrypted** next to your database, up to 25 MiB each, and is readable only while the app is unlocked. [A guide](docs/documents.md).
+- Each document has a name, a date and the things it is attached to. The type is found from the file's first bytes, never from its name, and a file of no known type is never opened from the app, only saved.
+- Opening a PDF or a large picture hands a plain copy to your system's viewer; the copy is removed when you lock the app or close it, and the screen says so first.
+- **Keep on phone** is a switch on each document. A document you did not switch on never leaves the computer; one added on the phone goes to the computer and leaves the phone only once the computer has confirmed it holds a good copy.
+- Backups can include the files (a choice, on by default under 100 MB), as one encrypted file written as it is read. Exports list the documents by name and what they are attached to and never contain a file.
+- From a script: `meowny documents add|list|show|update|link|unlink|delete|get`. A read-only token sees names, never a file; a copy comes out only when you allow it in the app.
+
 **Safety of your data**
 
 - The database is encrypted at rest. The key lives in your operating system's keychain, optionally combined with a passphrase.
 - A recovery key, shown once, so a forgotten passphrase or a lost keychain entry can be recovered.
 - The app locks itself when idle, and optionally when minimised or closed. Locking drops the key from memory.
 - Encrypted backups to a single file (`.meowbak`), restore, and scheduled backups to a folder you pick.
-- Export to JSON, CSV, Excel and PDF, for the period and categories you choose.
+- Export to JSON, CSV, Excel and PDF, for the period and categories you choose (documents are listed by name, never their files).
 - "Delete all my data" removes the database, its key and the app's own backups.
 
 **Your phone (phase 8: the sync, the screens and the Android app are built and have been reviewed on a real phone)**
@@ -89,7 +98,7 @@ meowNY is a desktop app for tracking income and expenses against monthly budgets
 
 - A [command line program](#command-line), `meowny`, with a command for every feature, `--json` output and stable exit codes.
 - A local command API behind it that is off until you turn it on. Access needs a token that you make in the app, which can be read-only, expires and can be revoked.
-- Exports and backups started from a script need a yes from you, in a dialog in the app, each time.
+- Exports, backups and copies of documents started from a script need a yes from you, in a dialog in the app, each time.
 
 ## Privacy and security
 
@@ -177,7 +186,7 @@ The APK is signed with a debug key, which is enough to install it by hand ("inst
 | macOS | `~/Library/Application Support/org.meowny.app/` |
 | Windows | `%APPDATA%\org.meowny.app\` |
 
-It holds `meowny.db` (encrypted; while the app runs there are also `meowny.db-wal` and `meowny.db-shm`, encrypted too) and `vault.json` (lock settings, the wrapped keys and the passphrase salt). While the command API is on, it also holds `api.json` (the API version and port, no secrets). The key is in the OS keychain under the service name `org.meowny.app`.
+It holds `meowny.db` (encrypted; while the app runs there are also `meowny.db-wal` and `meowny.db-shm`, encrypted too) and `vault.json` (lock settings, the wrapped keys and the passphrase salt). Documents add a folder `documents/` (one sealed file per document, with names that say nothing about it) and, only while a file is open in another program, `open/` (plain copies for the system's viewer, removed when you lock the app or close it). While the command API is on, it also holds `api.json` (the API version and port, no secrets). The key is in the OS keychain under the service name `org.meowny.app`.
 
 To start over in development, use Settings, delete all my data. That removes the files and the keychain entry together. Deleting the folder by hand leaves a stale keychain entry, which is harmless and gets replaced on the next first run.
 
@@ -237,6 +246,8 @@ meowny transactions create --name Bread --amount 2.40 --payment-date 2026-10-14 
 meowny stats budget --month 2026-10 --json
 meowny transactions delete 42 --yes
 meowny export csv --out ~/budget-2026.csv --from 2026-01-01
+meowny documents add ~/Downloads/boiler-receipt.pdf --transaction-ids 42   # the program reads the file and sends it
+meowny documents get 7 --out ~/boiler-receipt.pdf                          # you allow this in the app
 meowny backup create --out ~/meowny.meowbak --passphrase -   # the passphrase on standard input
 meowny --help        # and meowny <command> --help
 meowny schema        # every command, flag and exit code as JSON, without the app
@@ -250,7 +261,7 @@ meowny schema        # every command, flag and exit code as JSON, without the ap
 - Money stays a string end to end, and dates are ISO 8601.
 - The token is found in `--token-file`, then `MEOWNY_TOKEN`, then `MEOWNY_TOKEN_FILE`, then the file `login` saved (`~/.config/meowny/token` on Linux). A token file that other users can read is refused.
 - `MEOWNY_DATA_DIR` or `--data-dir` says where the app keeps its data (where it writes its port); `MEOWNY_PORT` or `--port` skips that.
-- Exports (`export json|csv|xlsx|pdf`) and backups (`backup create`) are not done on a token's say-so. Each one is described in a dialog in the app (which token, what, the exact file) and is written only if you click Allow. The file must have the right ending, be in a folder that exists, and not exist yet: nothing is ever overwritten. Asking again right after a "no" is refused for 30 seconds.
+- Exports (`export json|csv|xlsx|pdf`), backups (`backup create`) and copies of documents (`documents get`) are not done on a token's say-so. Each one is described in a dialog in the app (which token, what, the exact file) and is written only if you click Allow. The file must have the right ending, be in a folder that exists, and not exist yet: nothing is ever overwritten. Asking again right after a "no" is refused for 30 seconds.
 
 | Exit code | Means |
 |---|---|
@@ -273,6 +284,8 @@ Every command, flag and exit code is documented, with real output, in the [CLI r
 | [docs/PLAN.md](docs/PLAN.md) | The build plan and roadmap, phase by phase, with what is done |
 | [docs/data-inventory.md](docs/data-inventory.md) | What data the app holds, where, which network calls exist, and who could see it |
 | [docs/sync-design.md](docs/sync-design.md) | How the phone syncs with the desktop: the QR codes, the encryption, the merge rules, the screens (phase 8) |
+| [docs/documents.md](docs/documents.md) | A guide to documents: adding, attaching, opening, keeping on the phone, backups, exports and scripts (phase 9) |
+| [docs/documents-design.md](docs/documents-design.md) | How documents are built: the sealed file format, keys, names and types, the sync of the bytes, the backup format, the screens and the checklist for the real phone |
 
 The reference site is made from the program, so it cannot say something the program does not do. `cli/tests/docs.rs` runs one tour of every command and every way to fail against a real app, records what came out (`docs/site/commands.json`, `docs/site/examples.json`), and fails when a command, a flag, a message or an example changes without the docs being redone. The prose around those facts is `docs/site/content.mjs`; the generator stops with an error if the program has a command, a group or an error code that the prose does not cover. There are no scripts, fonts or images, and the page asks nothing from anywhere else.
 
@@ -293,12 +306,13 @@ meowNY/
 │   └── src/           pages, components, hooks, lib, api, and the vault, i18n and keys features
 ├── src-tauri/         The desktop app, `meowny-desktop` (Rust, Tauri 2)
 │   ├── src/           vault and keys, database, budgets, recurring items, statistics, backup, export,
-│   │                  the command API (api/) and the access tokens (tokens.rs), and the phone sync (sync/)
+│   │                  the command API (api/) and the access tokens (tokens.rs), the phone sync (sync/)
+│   │                  and the documents (documents/: sealed files, names and types, the library)
 │   ├── migrations/    Schema changes as numbered SQL files
 │   ├── seeds/         Demo data
 │   └── examples/      dev_vault, seed and api_demo
 ├── cli/               The `meowny` command line program (Rust, one dependency)
-├── docs/              Everything written for people: PLAN.md, data-inventory.md, sync-design.md, CLI.md, postgres-schema.txt
+├── docs/              Everything written for people: PLAN.md, data-inventory.md, sync-design.md, documents.md, documents-design.md, CLI.md, postgres-schema.txt
 │   └── site/          Generator of the CLI reference site and CLI.md (plain Node, no dependencies)
 ├── scripts/           Checks CI runs on the whole repo: check-outbound and its allowlist
 └── .github/workflows/ ci.yml, desktop.yml, security.yml and pages.yml
@@ -423,7 +437,7 @@ The full plan, with what is done in each phase, is in [docs/PLAN.md](docs/PLAN.m
 | 6 | Encrypted backup and export | Done |
 | 7 | Command line for scripts and AI agents (desktop only) | Done. Installing it together with the app is part of phase 11 |
 | 8 | Android app that keeps a full offline copy and syncs with the desktop at home by scanning a QR code (iOS comes later) | In progress: the sync, the phone vault, the screens and the Android app are built and have been tried between a real phone and a desktop at home; reviewed on a real phone; the CI job has not run on GitHub yet, and nobody outside the project has gone through the protocol |
-| 9 | Documents: attach receipts and invoices to transactions, stored encrypted, and choose which ones go to the phone | Planned |
+| 9 | Documents: attach receipts and invoices to transactions, stored encrypted, and choose which ones go to the phone | Built: sealed files, the sync of their bytes, backups and exports, the screens, the command line. Not yet tried on a real phone (the camera, the file chooser, opening a PDF there) |
 | 10 | Debts and expense splitting: who owes you and whom you owe, and bills shared with other people, in your own ledger | Planned |
 | 11 | Signed installers, updates, `SECURITY.md`, `CONTRIBUTING.md` and install guides | Planned |
 

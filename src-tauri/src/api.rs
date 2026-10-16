@@ -26,6 +26,7 @@
 //! The server logs nothing and keeps nothing: tokens and bodies exist only for the length of a call.
 
 mod confirmed;
+mod documents;
 mod files;
 mod http;
 mod prompt;
@@ -120,6 +121,8 @@ impl From<AppError> for ApiError {
             AppError::InvalidInput => Self::INVALID_INPUT,
             AppError::NotFound => Self::NOT_FOUND,
             AppError::NameExists => Self::NAME_EXISTS,
+            AppError::TooLarge => Self::TOO_LARGE,
+            AppError::FileMissing => Self::NOT_FOUND,
             AppError::AlreadySetUp
             | AppError::WrongCredentials
             | AppError::WrongRecoveryKey
@@ -127,6 +130,7 @@ impl From<AppError> for ApiError {
             | AppError::DatabaseTooNew
             | AppError::InvalidBackup
             | AppError::Erased
+            | AppError::FileDamaged
             | AppError::Internal => Self::INTERNAL,
         }
     }
@@ -257,7 +261,8 @@ fn accept_loop(
 
 fn serve(mut stream: TcpStream, vault: &Vault, routes: &'static [Route], port: u16, limits: Limits, prompter: Option<&Prompter>, panics: &AtomicUsize) {
     let _ = stream.set_write_timeout(Some(limits.request_time));
-    let request = match http::read_request(&mut stream, Instant::now() + limits.request_time) {
+    let admit = |head: &http::Request, length: usize| admit_large(vault, routes, port, head, length, Utc::now());
+    let request = match http::read_request(&mut stream, Instant::now() + limits.request_time, &admit) {
         Ok(request) => Ok(request),
         Err(http::ReadError::Dropped) => return,
         Err(http::ReadError::Refused(e)) => Err(e),
@@ -306,6 +311,33 @@ fn authenticate(vault: &Vault, token: &str, now: DateTime<Utc>) -> Result<Grant,
         Err(AppError::Locked) if vault.status() == VaultStatus::NotSetUp => Err(ApiError::NOT_SET_UP),
         Err(e) => Err(e.into()),
     }
+}
+
+/// Whether a body over the usual limit may be read: only for a route that takes one, at most as big as that route allows, from a
+/// caller that gets in anyway. The checks are the first ones `handle` makes, so a caller that would be refused is refused before it has
+/// sent the body; and anything else that is too large is refused as it always was.
+fn admit_large(vault: &Vault, routes: &'static [Route], port: u16, head: &http::Request, length: usize, now: DateTime<Utc>) -> Result<(), ApiError> {
+    let route = head
+        .target
+        .strip_prefix("/v1/")
+        .and_then(|name| routes.iter().find(|r| r.name == name))
+        .filter(|route| routes::body_limit(route.name) >= length)
+        .ok_or(ApiError::TOO_LARGE)?;
+    if !host_allowed(head.header("host"), port) {
+        return Err(ApiError::FORBIDDEN_HOST);
+    }
+    if head.header("origin").is_some() {
+        return Err(ApiError::FORBIDDEN_ORIGIN);
+    }
+    if head.method != "POST" {
+        return Err(ApiError::METHOD_NOT_ALLOWED);
+    }
+    let token = bearer(head.header("authorization")).ok_or(ApiError::UNAUTHORIZED)?;
+    let grant = authenticate(vault, token, now)?;
+    if !grant.scope.allows(route.scope) {
+        return Err(ApiError::FORBIDDEN_SCOPE);
+    }
+    Ok(())
 }
 
 fn parse_body(body: &[u8]) -> Result<Map<String, Value>, ApiError> {
@@ -434,6 +466,8 @@ impl Host {
 
 #[cfg(test)]
 mod confirmed_tests;
+#[cfg(test)]
+mod documents_tests;
 #[cfg(test)]
 mod robust_tests;
 #[cfg(test)]

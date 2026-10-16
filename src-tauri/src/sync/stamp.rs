@@ -16,7 +16,7 @@ pub const DEVICE_CHARS: usize = 8;
 pub const STAMP_LEN: usize = 13 + 1 + 4 + 1 + DEVICE_CHARS;
 
 /// The tables that carry a `stamp` (and, except `settings`, a `sync_id`).
-pub const STAMPED_TABLES: &[&str] = &["settings", "categories", "budgets", "recurring_transactions", "transactions"];
+pub const STAMPED_TABLES: &[&str] = &["settings", "categories", "budgets", "recurring_transactions", "transactions", "documents", "document_links"];
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Stamp {

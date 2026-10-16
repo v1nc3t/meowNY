@@ -43,6 +43,20 @@ fn seeded_server(limits: Limits) -> (tempfile::TempDir, Arc<Vault>, ApiServer, S
     let dir = tempfile::tempdir().unwrap();
     let vault = new_vault(dir.path());
     vault.with_conn(|c| crate::seed::run_for(c, "2026-10-14").map_err(|_| AppError::Internal)).unwrap();
+    // a few documents, so the routes that work on one have something to find
+    vault
+        .with_files(|conn, files| {
+            for (n, bytes) in [(1, b"%PDF-1.4 a receipt".to_vec()), (2, b"plain notes".to_vec()), (3, vec![7u8; 3000])] {
+                let input = crate::documents::library::NewDocument {
+                    name: format!("scan {n}"),
+                    links: vec![crate::documents::library::LinkTarget { kind: crate::documents::library::TargetKind::Transaction, id: n.to_string() }],
+                    ..Default::default()
+                };
+                crate::documents::library::add(conn, files, &input, &bytes, "2026-10-14")?;
+            }
+            Ok(())
+        })
+        .unwrap();
     let token = make_token(&vault, Scope::Write);
     // No prompter: a route that needs the person's yes can only be refused, which is the point here.
     let server = ApiServer::start(vault.clone(), routes::ALL, limits).unwrap();
@@ -198,6 +212,7 @@ fn plausible(rng: &mut Rng, param: &Param) -> Value {
         Kind::Uuid => pick(rng, &["123e4567-e89b-12d3-a456-426614174000", "9b2f5d44-6e1a-4c3b-8f2d-1a2b3c4d5e6f", "not-a-uuid"]),
         Kind::Ids => Value::Array((0..rng.below(4)).map(|_| json!((rng.below(30) + 1).to_string())).collect()),
         Kind::Path => pick(rng, &["/", "/tmp", "relative.json", "/nonexistent/folder/x.json", "C:\\x.json", "/tmp/a.json/../b.json", ""]),
+        Kind::Bytes => pick(rng, &["JVBERi0xLjQK", "iVBORw0KGgo", "AAAA", "-_-_", "not base64url!", "AA==", "x", "aGVsbG8gd29ybGQ"]),
     }
 }
 
@@ -264,13 +279,13 @@ fn a_route_cannot_be_made_to_write_a_file_without_the_person() {
     let files = tempfile::tempdir().unwrap();
     let mut rng = Rng(0xDEAD_BEEF_CAFE_F00D);
     let writers: Vec<&Route> = routes::ALL.iter().filter(|r| r.confirm.is_some()).collect();
-    assert_eq!(writers.len(), 5);
+    assert_eq!(writers.len(), 6, "the exports, the backup and the copy of a document");
     for i in 0..400 {
         let route = writers[i % writers.len()];
         let mut body = body_for(&mut rng, route);
         // Often a path that would really work: absolute, the right ending, in a folder that exists.
         if rng.chance(70) {
-            let ext = route.name.split('.').nth(1).map(|v| if v == "create" { "meowbak" } else { v }).unwrap();
+            let ext = route.name.split('.').nth(1).map(|v| if v == "create" { "meowbak" } else if v == "get" { "pdf" } else { v }).unwrap();
             body["out"] = json!(files.path().join(format!("f{i}.{ext}")).to_str().unwrap());
         }
         let reply = call(port, Some(&token), route.name, &body.to_string());
@@ -280,6 +295,6 @@ fn a_route_cannot_be_made_to_write_a_file_without_the_person() {
     // And nothing appeared next to the app's own data either.
     let mut names: Vec<String> = std::fs::read_dir(dir.path()).unwrap().map(|e| e.unwrap().file_name().into_string().unwrap()).collect();
     names.sort();
-    assert!(names.iter().all(|n| n == "meowny.db" || n == "vault.json" || n == "api.json" || n.starts_with("meowny.db-")), "{names:?}");
+    assert!(names.iter().all(|n| n == "meowny.db" || n == "vault.json" || n == "api.json" || n == "documents" || n.starts_with("meowny.db-")), "{names:?}");
     whole(&vault);
 }

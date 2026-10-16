@@ -11,6 +11,7 @@ import {
   cleanDeviceName,
   clockGapText,
   countdownText,
+  filesLines,
   isBusy,
   isFinished,
   locksAfterBackground,
@@ -43,6 +44,7 @@ const done = {
   state: 'done',
   purpose: 'sync',
   summary: { added: 5, updated: 2, replaced: 1, deleted: 0, merged: 0, dropped: 0 },
+  files: { received: 2, sent: 0, failed: 1, waiting: 3, removed: 1, interrupted: false },
   warnings: [{ kind: 'clock_off', seconds: 75 }],
   differences: false,
   oneWay: true,
@@ -82,6 +84,9 @@ test('a status the app would never send is refused', () => {
     { ...reviewing, more: -1 },
     { ...done, oneWay: undefined },
     { ...done, summary: { ...done.summary, added: -1 } },
+    { ...done, files: undefined },
+    { ...done, files: { ...done.files, waiting: -1 } },
+    { ...done, files: { ...done.files, interrupted: undefined } },
     { ...done, warnings: [{ kind: 'other', seconds: 1 }] },
     { state: 'failed', purpose: 'sync', reason: 'Not A Word' },
     { state: 'failed', purpose: 'sync' },
@@ -157,6 +162,18 @@ test('a summary lists only what happened', () => {
   assert.equal(nothingChanged(none), true)
   assert.equal(nothingChanged({ ...none, merged: 1 }), false)
   for (const line of summaryLines({ added: 1, updated: 1, replaced: 1, deleted: 1, merged: 1, dropped: 1 })) assert.ok(line.key in en, line.key)
+})
+
+test('the lines about documents list only what happened, and every text exists', () => {
+  assert.deepEqual(filesLines({ received: 2, sent: 0, failed: 1, waiting: 3, removed: 1, interrupted: false }), [
+    { key: 'sync.filesReceived', count: 2 },
+    { key: 'sync.filesRemoved', count: 1 },
+    { key: 'sync.filesFailed', count: 1 },
+    { key: 'sync.filesWaiting', count: 3 },
+  ])
+  assert.deepEqual(filesLines({ received: 0, sent: 0, failed: 0, waiting: 0, removed: 0, interrupted: true }), [])
+  for (const line of filesLines({ received: 1, sent: 1, failed: 1, waiting: 1, removed: 1, interrupted: false })) assert.ok(line.key in en, line.key)
+  assert.ok('sync.filesInterrupted' in en)
 })
 
 test('a device name follows the rule of the app', () => {

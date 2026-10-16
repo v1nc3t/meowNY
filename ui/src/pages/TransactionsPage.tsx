@@ -1,13 +1,19 @@
-import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import AddCategoryModal from '../components/AddCategoryModal'
+import AttachArea from '../components/AttachArea'
+import ClipMark from '../components/ClipMark'
 import Dropdown from '../components/Dropdown'
 import Modal, { modalFormId } from '../components/Modal'
+import Pick, { PickOption } from '../components/Pick'
 import DatePicker from '../components/DatePicker'
 import { categories as categoriesApi, type Category } from '../api/categories'
 import { errorText } from '../api/invoke'
 import { useToday, type Today } from '../api/today'
 import { transactions as transactionsApi, type Transaction, type TransactionPage } from '../api/transactions'
 import { amountString, formatDate, formatMoney } from '../lib/money'
+import { apiBound, shiftBound, type RangeMode } from '../lib/range'
+import { useAttachments, type Attachments } from '../hooks/useAttachments'
+import { useClipCounts } from '../hooks/useClipCounts'
 import { useMoneySettings, type MoneySettings } from '../hooks/useMoneySettings'
 import { useProfile } from '../hooks/profile'
 import { useNotice } from '../hooks/useNotice'
@@ -18,7 +24,6 @@ import { tip } from '../keys/tip'
 import { useRowNavigation } from '../keys/useRowNavigation'
 
 type TransactionList = TransactionPage
-type RangeMode = 'date' | 'month' | 'year'
 type MenuName = 'range' | 'show' | 'category'
 type Filters = {
   mode: RangeMode
@@ -57,6 +62,9 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
   const [draftMessage, setDraftMessage] = useNotice()
   const [editing, setEditing] = useState<Transaction | null>(null)
   const [message, setMessage] = useNotice()
+  // The documents of the transaction being edited are stored and linked at once; those of one being made wait for it to be saved.
+  const attachments = useAttachments(editing ? { kind: 'transaction', id: editing.id } : null)
+  const clips = useClipCounts('transaction', page?.transactions.map((transaction) => transaction.id) ?? [], reload)
   // The list waits for a short pause in typing instead of asking the database on every key.
   const searchText = useDebounced(filters.q, 200)
   const categoryNames = useMemo(() => new Map(categories.map((category) => [category.id, category.name])), [categories])
@@ -128,6 +136,7 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
   function openAdd() {
     setMenu(null)
     setDraftMessage('')
+    attachments.reset()
     setEditing(null)
     setAdding(true)
   }
@@ -135,11 +144,14 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
   function openEdit(transaction: Transaction) {
     setMenu(null)
     setDraftMessage('')
+    attachments.reset()
     setAdding(false)
     setEditing(transaction)
   }
 
   function closeModal() {
+    // documents may have been attached or removed in the dialog, so the marks on the list are asked for again
+    if (adding || editing) setReload((value) => value + 1)
     setAdding(false)
     setEditing(null)
   }
@@ -170,9 +182,14 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
     }
     const body = { name, amount, paymentDate, categoryId, description: description.length > 0 ? description : null }
     setPending(true)
+    // what could not be attached to a new transaction: it is saved all the same, and the notice names the files
+    let notAttached: string[] = []
     try {
       if (editing) await transactionsApi.update(editing.id, body)
-      else await transactionsApi.create({ ...body, clientUuid })
+      else {
+        const created = await transactionsApi.create({ ...body, clientUuid })
+        notAttached = await attachments.commit({ kind: 'transaction', id: created.id })
+      }
     } catch (failure) {
       setDraftMessage(errorText(failure))
       return
@@ -180,7 +197,7 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
       setPending(false)
     }
     setDraftMessage('')
-    setMessage('')
+    setMessage(notAttached.length > 0 ? t('docs.attachFailed', { names: notAttached.join(', ') }) : '')
     if (!editing) setClientUuid(crypto.randomUUID())
     closeModal()
     setReload((value) => value + 1)
@@ -356,6 +373,7 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
           categories={categories}
           pending={pending}
           message={draftMessage}
+          attachments={attachments}
           onSubmit={(event) => void onSave(event)}
           onClose={closeModal}
           onCategoryAdded={(category) => setCategories((current) => [...current, category])}
@@ -380,6 +398,7 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
                         .map((part) => ` \u00b7 ${part}`)
                         .join('')}
                     </p>
+                    {clips[transaction.id] ? <ClipMark count={clips[transaction.id] ?? 0} onClick={() => openEdit(transaction)} /> : null}
                     {transaction.description?.trim() ? (
                       <button
                         type="button"
@@ -431,6 +450,7 @@ function TransactionModal({
   categories,
   pending,
   message,
+  attachments,
   onSubmit,
   onClose,
   onCategoryAdded,
@@ -440,6 +460,7 @@ function TransactionModal({
   categories: Category[]
   pending: boolean
   message: string
+  attachments: Attachments
   onSubmit: (event: FormEvent<HTMLFormElement>) => void
   onClose: () => void
   onCategoryAdded: (category: Category) => void
@@ -485,6 +506,7 @@ function TransactionModal({
             <input name="description" maxLength={255} defaultValue={transaction?.description ?? ''} autoComplete="off" />
           </label>
         </form>
+        <AttachArea attachments={attachments} />
       </Modal>
       {addingCategory ? (
         <AddCategoryModal
@@ -516,101 +538,4 @@ function PaymentDate({ defaultValue }: { defaultValue: string }) {
       />
     </div>
   )
-}
-
-function Pick({
-  label,
-  inline = false,
-  className,
-  text,
-  open,
-  onToggle,
-  onClose,
-  children,
-}: {
-  label: string
-  /** Beside other buttons: the label is for screen readers only. */
-  inline?: boolean
-  className?: string
-  text: string
-  open: boolean
-  onToggle: () => void
-  onClose: () => void
-  children: ReactNode
-}) {
-  const ref = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    if (!open) return
-    function onPointerDown(event: PointerEvent) {
-      if (!ref.current?.contains(event.target as Node)) onClose()
-    }
-    function onKey(event: KeyboardEvent) {
-      if (event.key === 'Escape') onClose()
-    }
-    document.addEventListener('pointerdown', onPointerDown)
-    document.addEventListener('keydown', onKey)
-    return () => {
-      document.removeEventListener('pointerdown', onPointerDown)
-      document.removeEventListener('keydown', onKey)
-    }
-  }, [open, onClose])
-
-  return (
-    <div className={className ? `pick ${className}` : 'pick'} ref={ref}>
-      <span className={inline ? 'sr-only' : undefined}>{label}</span>
-      <button type="button" className="pick-button" aria-expanded={open} aria-haspopup="listbox" onClick={onToggle}>
-        {text}
-      </button>
-      {open ? (
-        <ul className="pick-list" role="listbox">
-          {children}
-        </ul>
-      ) : null}
-    </div>
-  )
-}
-
-function PickOption({ selected, onClick, children }: { selected: boolean; onClick: () => void; children: string }) {
-  return (
-    <li>
-      <button type="button" role="option" aria-selected={selected} onClick={onClick}>
-        {children}
-      </button>
-    </li>
-  )
-}
-
-function apiBound(mode: RangeMode, value: string, edge: 'from' | 'to'): string {
-  if (mode === 'date') return /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : ''
-  if (mode === 'month') {
-    if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(value)) return ''
-    return edge === 'from' ? `${value}-01` : lastDay(value)
-  }
-  if (!/^\d{4}$/.test(value)) return ''
-  return edge === 'from' ? `${value}-01-01` : `${value}-12-31`
-}
-
-function shiftBound(value: string, fromMode: RangeMode, toMode: RangeMode, edge: 'from' | 'to'): string {
-  if (!value || fromMode === toMode) return fromMode === toMode ? value : ''
-  if (fromMode === 'date' && /^\d{4}-\d{2}-\d{2}$/.test(value)) {
-    if (toMode === 'month') return value.slice(0, 7)
-    return value.slice(0, 4)
-  }
-  if (fromMode === 'month' && /^\d{4}-(0[1-9]|1[0-2])$/.test(value)) {
-    if (toMode === 'year') return value.slice(0, 4)
-    return edge === 'from' ? `${value}-01` : lastDay(value)
-  }
-  if (fromMode === 'year' && /^\d{4}$/.test(value)) {
-    if (toMode === 'month') return edge === 'from' ? `${value}-01` : `${value}-12`
-    return edge === 'from' ? `${value}-01-01` : `${value}-12-31`
-  }
-  return ''
-}
-
-function lastDay(yearMonth: string): string {
-  const year = Number(yearMonth.slice(0, 4))
-  const month = Number(yearMonth.slice(5, 7))
-  const day = new Date(Date.UTC(year, month, 0)).getUTCDate()
-  return `${yearMonth}-${String(day).padStart(2, '0')}`
 }

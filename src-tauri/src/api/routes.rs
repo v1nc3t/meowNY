@@ -10,7 +10,7 @@ use serde::de::DeserializeOwned;
 use serde::Serialize;
 use serde_json::{json, Map, Value};
 
-use super::{confirmed, read, write, Approval, ApiError, API_VERSION};
+use super::{confirmed, documents, read, write, Approval, ApiError, API_VERSION};
 use crate::clock;
 use crate::migrate;
 use crate::tokens::{Grant, Scope};
@@ -50,6 +50,9 @@ pub enum Kind {
     /// A file path as text: absolute, up to 400 characters, no control or direction-changing characters. The
     /// route says what else it must be (an extension, a folder that exists, a file that does not).
     Path,
+    /// The bytes of a file, as base64url text (letters, digits, `-` and `_`, no padding). Only a route that takes a file has one,
+    /// and its request may be bigger than the others (`body_limit`).
+    Bytes,
 }
 
 fn all_digits(text: &str) -> bool {
@@ -100,6 +103,7 @@ impl Kind {
             Kind::Uuid => "a UUID like 123e4567-e89b-12d3-a456-426614174000",
             Kind::Ids => "a list of ids as the app lists them",
             Kind::Path => "a file path",
+            Kind::Bytes => "the bytes of a file as base64url text",
         }
     }
 
@@ -116,6 +120,7 @@ impl Kind {
             (Kind::Uuid, Value::String(text)) => is_uuid(text),
             (Kind::Ids, Value::Array(items)) => items.len() <= 500 && items.iter().all(|i| i.as_str().is_some_and(is_id)),
             (Kind::Path, Value::String(text)) => (1..=400).contains(&text.chars().count()) && is_plain_text(text),
+            (Kind::Bytes, Value::String(text)) => !text.is_empty() && text.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_'),
             _ => false,
         }
     }
@@ -224,6 +229,14 @@ fn printable(key: &str) -> String {
 
 /// The request body as the route's own input type. A value that does not fit says what was wrong with it
 /// (the message quotes only what the caller sent).
+/// The most a request to this route may hold in its body. Every route takes at most 1 MiB, except the one that takes a file.
+pub fn body_limit(route: &str) -> usize {
+    match route {
+        "documents.add" => super::http::MAX_UPLOAD_BODY,
+        _ => super::http::MAX_BODY,
+    }
+}
+
 pub fn parse<T: DeserializeOwned>(args: Map<String, Value>) -> Result<T, ApiError> {
     serde_json::from_value(Value::Object(args)).map_err(|e| ApiError::invalid(e.to_string()))
 }
@@ -318,6 +331,14 @@ pub static ALL: &[Route] = &[
     confirmed::EXPORT_XLSX,
     confirmed::EXPORT_PDF,
     confirmed::BACKUP_CREATE,
+    documents::LIST,
+    documents::SHOW,
+    documents::ADD,
+    documents::UPDATE,
+    documents::DELETE,
+    documents::LINK,
+    documents::UNLINK,
+    documents::GET,
 ];
 
 #[cfg(test)]

@@ -201,6 +201,18 @@ pub fn base64url_encode(bytes: &[u8]) -> String {
     out
 }
 
+/// The value of each byte of the alphabet, and 255 for every other byte. Made at compile time: a document is decoded from text of
+/// megabytes, and looking each character up in the alphabet would be slow.
+const VALUES: [u8; 256] = {
+    let mut table = [255u8; 256];
+    let mut i = 0;
+    while i < 64 {
+        table[ALPHABET[i] as usize] = i as u8;
+        i += 1;
+    }
+    table
+};
+
 /// The strict reverse: only the alphabet, no padding, and no unused bits left set, so each byte string has one text.
 pub fn base64url_decode(text: &str) -> Option<Vec<u8>> {
     if text.len() % 4 == 1 {
@@ -208,7 +220,10 @@ pub fn base64url_decode(text: &str) -> Option<Vec<u8>> {
     }
     let mut values = Vec::with_capacity(text.len());
     for byte in text.bytes() {
-        values.push(ALPHABET.iter().position(|&c| c == byte)? as u32);
+        match VALUES[byte as usize] {
+            255 => return None,
+            value => values.push(u32::from(value)),
+        }
     }
     let mut out = Vec::with_capacity(values.len() * 3 / 4);
     for group in values.chunks(4) {

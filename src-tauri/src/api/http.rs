@@ -11,6 +11,9 @@ use super::ApiError;
 /// Request line and headers together.
 pub const MAX_HEAD: usize = 16 * 1024;
 pub const MAX_BODY: usize = 1024 * 1024;
+/// The body of the one route that takes a file: the largest file (25 MiB) as base64url text is 34,952,534 characters, and the
+/// other arguments are a few kilobytes at most.
+pub const MAX_UPLOAD_BODY: usize = 35 * 1024 * 1024;
 const MAX_TARGET: usize = 200;
 /// Headers that may appear once. A repeated one is how two parsers end up disagreeing.
 const SINGLE: &[&str] = &["host", "content-length", "authorization", "origin", "expect"];
@@ -67,7 +70,9 @@ fn fill(stream: &mut TcpStream, buf: &mut Vec<u8>, deadline: Instant) -> Result<
     }
 }
 
-pub fn read_request(stream: &mut TcpStream, deadline: Instant) -> Result<Request, ReadError> {
+/// Reads one request. A body over `MAX_BODY` is read only if `admit` says so, which it is asked after the head is read and before
+/// a byte of the body: it is where a route that takes a big body is let through, and only for a caller that has been let in.
+pub fn read_request(stream: &mut TcpStream, deadline: Instant, admit: &dyn Fn(&Request, usize) -> Result<(), ApiError>) -> Result<Request, ReadError> {
     let mut buf = Vec::with_capacity(1024);
     let head_end = loop {
         if let Some(at) = find(&buf, b"\r\n\r\n") {
@@ -86,7 +91,7 @@ pub fn read_request(stream: &mut TcpStream, deadline: Instant) -> Result<Request
 
     let length = content_length(&request)?;
     if length > MAX_BODY {
-        return Err(ApiError::TOO_LARGE.into());
+        admit(&request, length)?;
     }
     if length > 0 && request.header("expect").is_some_and(|v| v.eq_ignore_ascii_case("100-continue")) {
         stream.write_all(b"HTTP/1.1 100 Continue\r\n\r\n").map_err(|_| ReadError::Dropped)?;

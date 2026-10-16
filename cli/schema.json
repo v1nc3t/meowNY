@@ -887,6 +887,236 @@
       ],
       "scope": "read",
       "summary": "Writes an encrypted backup of all the data, after the person allows it in the app. It opens only with the passphrase given here, and only the app can restore it. An existing file is never replaced."
+    },
+    {
+      "name": "documents.list",
+      "params": [
+        {
+          "name": "q",
+          "required": false,
+          "summary": "Only documents whose name contains this text, ignoring case.",
+          "type": "string"
+        },
+        {
+          "name": "kind",
+          "required": false,
+          "summary": "Only images, only PDF files, or only other files.",
+          "type": "string",
+          "values": [
+            "image",
+            "pdf",
+            "other"
+          ]
+        },
+        {
+          "name": "from",
+          "required": false,
+          "summary": "Only documents dated on or after this date (the day of the paper).",
+          "type": "date"
+        },
+        {
+          "name": "to",
+          "required": false,
+          "summary": "Only documents dated on or before this date.",
+          "type": "date"
+        },
+        {
+          "name": "transactionId",
+          "required": false,
+          "summary": "A transaction.",
+          "type": "id"
+        },
+        {
+          "name": "recurringId",
+          "required": false,
+          "summary": "A recurring item.",
+          "type": "id"
+        },
+        {
+          "name": "limit",
+          "required": false,
+          "summary": "How many to return, 1 to 100.",
+          "type": "integer"
+        },
+        {
+          "name": "offset",
+          "required": false,
+          "summary": "How many to skip.",
+          "type": "integer"
+        }
+      ],
+      "scope": "read",
+      "summary": "Documents, newest paper first, with the total that match: names, dates, types, sizes and hashes, never the files. Up to 100 a page, 50 unless limit says otherwise."
+    },
+    {
+      "name": "documents.show",
+      "params": [
+        {
+          "name": "id",
+          "required": true,
+          "summary": "The document.",
+          "type": "id"
+        }
+      ],
+      "scope": "read",
+      "summary": "One document: its name, date, type, size and hash, whether this computer holds its file, and in `links` what it is attached to. Never the file."
+    },
+    {
+      "name": "documents.add",
+      "params": [
+        {
+          "name": "data",
+          "required": true,
+          "summary": "The bytes of the file, as base64url text. The command line reads the file and does this.",
+          "type": "bytes"
+        },
+        {
+          "name": "name",
+          "required": true,
+          "summary": "The name to keep it under, up to 120 characters. The command line uses the name of the file.",
+          "type": "string"
+        },
+        {
+          "name": "date",
+          "required": false,
+          "summary": "The day of the paper. Today if left out.",
+          "type": "date"
+        },
+        {
+          "name": "keepOnPhone",
+          "required": false,
+          "summary": "Keep the file on the phone too. Off if left out.",
+          "type": "boolean"
+        },
+        {
+          "name": "transactionIds",
+          "required": false,
+          "summary": "Attach it to these transactions.",
+          "type": "ids"
+        },
+        {
+          "name": "recurringIds",
+          "required": false,
+          "summary": "Attach it to these recurring items.",
+          "type": "ids"
+        }
+      ],
+      "scope": "write",
+      "summary": "Stores a file as a document, encrypted, and attaches it where asked. The answer is the document and `alreadyThere`: the same file added again is not stored twice, and the attachments are added to the document that is there. At most 25 MiB."
+    },
+    {
+      "name": "documents.update",
+      "params": [
+        {
+          "name": "id",
+          "required": true,
+          "summary": "The document.",
+          "type": "id"
+        },
+        {
+          "name": "name",
+          "required": false,
+          "summary": "The new name, up to 120 characters.",
+          "type": "string"
+        },
+        {
+          "name": "date",
+          "required": false,
+          "summary": "The new day of the paper.",
+          "type": "date"
+        },
+        {
+          "name": "keepOnPhone",
+          "required": false,
+          "summary": "Whether the phone keeps the file.",
+          "type": "boolean"
+        }
+      ],
+      "scope": "write",
+      "summary": "Renames a document, changes its date, or switches whether the phone keeps its file. Give at least one. The contents cannot be changed."
+    },
+    {
+      "name": "documents.delete",
+      "params": [
+        {
+          "name": "id",
+          "required": true,
+          "summary": "The document.",
+          "type": "id"
+        }
+      ],
+      "scope": "write",
+      "summary": "Deletes a document, its file and its attachments. The transactions it was attached to stay."
+    },
+    {
+      "name": "documents.link",
+      "params": [
+        {
+          "name": "id",
+          "required": true,
+          "summary": "The document.",
+          "type": "id"
+        },
+        {
+          "name": "transactionId",
+          "required": false,
+          "summary": "A transaction.",
+          "type": "id"
+        },
+        {
+          "name": "recurringId",
+          "required": false,
+          "summary": "A recurring item.",
+          "type": "id"
+        }
+      ],
+      "scope": "write",
+      "summary": "Attaches a document to a transaction or to a recurring item. Giving one that is attached already changes nothing."
+    },
+    {
+      "name": "documents.unlink",
+      "params": [
+        {
+          "name": "id",
+          "required": true,
+          "summary": "The document.",
+          "type": "id"
+        },
+        {
+          "name": "transactionId",
+          "required": false,
+          "summary": "A transaction.",
+          "type": "id"
+        },
+        {
+          "name": "recurringId",
+          "required": false,
+          "summary": "A recurring item.",
+          "type": "id"
+        }
+      ],
+      "scope": "write",
+      "summary": "Detaches a document from a transaction or a recurring item. The document and the transaction stay."
+    },
+    {
+      "confirm": true,
+      "name": "documents.get",
+      "params": [
+        {
+          "name": "id",
+          "required": true,
+          "summary": "The document.",
+          "type": "id"
+        },
+        {
+          "name": "out",
+          "required": true,
+          "summary": "Where to write the file: an absolute path in a folder that exists, that is not there yet, ending in the extension of the kind of file (.pdf, .png, .jpg, .gif, .webp, .txt, .html, .csv, or .bin for a file of no known kind).",
+          "type": "path"
+        }
+      ],
+      "scope": "write",
+      "summary": "Writes a copy of a document's file, after the person allows it in the app. It is not encrypted. An existing file is never replaced."
     }
   ]
 }

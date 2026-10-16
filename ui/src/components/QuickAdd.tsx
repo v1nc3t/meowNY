@@ -3,12 +3,14 @@ import { categories as categoriesApi, type Category, type CategoryType } from '.
 import { errorText } from '../api/invoke'
 import { useToday } from '../api/today'
 import { transactions as transactionsApi } from '../api/transactions'
+import { useAttachments } from '../hooks/useAttachments'
 import { useDataChanged } from '../hooks/dataVersion'
 import { useMoneySettings } from '../hooks/useMoneySettings'
 import { useNotice } from '../hooks/useNotice'
 import { useT } from '../i18n/context'
 import { amountString, formatMoney } from '../lib/money'
 import { quickName, recentCategories } from '../lib/quickAdd'
+import AttachArea from './AttachArea'
 import DatePicker from './DatePicker'
 import Dropdown from './Dropdown'
 import Icon from './NavIcon'
@@ -72,6 +74,8 @@ function QuickForm({
   const [pending, setPending] = useState(false)
   const [message, setMessage] = useNotice()
   const [clientUuid] = useState(() => crypto.randomUUID())
+  // a photo of the receipt, taken now: it is stored and linked when the transaction is saved
+  const attachments = useAttachments(null)
 
   useEffect(() => {
     let cancelled = false
@@ -112,8 +116,9 @@ function QuickForm({
     if (!amount) return setMessage(t('tx.errorAmount'))
     if (!chosen) return setMessage(t('quick.errorCategory'))
     setPending(true)
+    let notAttached: string[] = []
     try {
-      await transactionsApi.create({
+      const created = await transactionsApi.create({
         name: quickName(String(form.get('name') ?? ''), chosen.name),
         amount,
         paymentDate: date || now.date,
@@ -121,12 +126,14 @@ function QuickForm({
         description: null,
         clientUuid,
       })
+      notAttached = await attachments.commit({ kind: 'transaction', id: created.id })
     } catch (failure) {
       setMessage(errorText(failure))
       setPending(false)
       return
     }
-    onAdded(t('quick.added', { amount: formatMoney(amount, currency, locale), category: chosen.name }))
+    const added = t('quick.added', { amount: formatMoney(amount, currency, locale), category: chosen.name })
+    onAdded(notAttached.length > 0 ? `${added} ${t('docs.attachFailed', { names: notAttached.join(', ') })}` : added)
   }
 
   return (
@@ -176,6 +183,7 @@ function QuickForm({
           </div>
         ) : null}
       </form>
+      <AttachArea attachments={attachments} compact />
     </Modal>
   )
 }

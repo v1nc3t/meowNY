@@ -23,13 +23,13 @@ use crate::recurring::{self, NewRecurring, Unit};
 use crate::transactions::{self, NewTransaction};
 use crate::{currency, migrate};
 
-const LOOPBACK: IpAddr = IpAddr::V4(Ipv4Addr::LOCALHOST);
+pub(super) const LOOPBACK: IpAddr = IpAddr::V4(Ipv4Addr::LOCALHOST);
 
 type Chooser = Box<dyn Fn(&[ConflictView]) -> Option<Vec<Choice>> + Send>;
 
 /// The person at one device: what they type, what they choose, and what they were shown.
 #[derive(Default)]
-struct Person {
+pub(super) struct Person {
     /// Types the digits the desktop shows (on a phone).
     types_right_digits: bool,
     /// Chooses for the conflicts; none means they never answer, which ends the sync.
@@ -67,7 +67,7 @@ fn always(choice: Choice) -> Option<Chooser> {
 }
 
 /// Times that are short enough for a refusal to show fast and long enough for a big database to be worked out.
-fn limits() -> Limits {
+pub(super) fn limits() -> Limits {
     Limits {
         connect: Duration::from_secs(2),
         handshake: Duration::from_millis(400),
@@ -80,7 +80,7 @@ fn limits() -> Limits {
     }
 }
 
-fn db(currency: &str) -> Arc<LocalDb> {
+pub(super) fn db(currency: &str) -> Arc<LocalDb> {
     let mut conn = Connection::open_in_memory().unwrap();
     conn.execute_batch("PRAGMA foreign_keys = ON;").unwrap();
     migrate::run(&mut conn).unwrap();
@@ -98,7 +98,7 @@ fn spend(conn: &Connection, category: i64, name: &str, amount: &str) -> i64 {
 }
 
 /// A desktop with a bit of everything.
-fn desktop_with_data() -> Arc<LocalDb> {
+pub(super) fn desktop_with_data() -> Arc<LocalDb> {
     let desktop = db("EUR");
     {
         let conn = desktop.conn.lock().unwrap();
@@ -123,11 +123,11 @@ fn desktop_with_data() -> Arc<LocalDb> {
     desktop
 }
 
-fn count(db: &LocalDb, sql: &str) -> i64 {
+pub(super) fn count(db: &LocalDb, sql: &str) -> i64 {
     db.conn.lock().unwrap().query_row(sql, [], |r| r.get(0)).unwrap()
 }
 
-fn same(a: &LocalDb, b: &LocalDb) {
+pub(super) fn same(a: &LocalDb, b: &LocalDb) {
     let (x, y) = (snapshot(&a.conn.lock().unwrap()).unwrap(), snapshot(&b.conn.lock().unwrap()).unwrap());
     if x != y {
         let short = |l: &String| l.chars().take(300).collect::<String>();
@@ -137,20 +137,20 @@ fn same(a: &LocalDb, b: &LocalDb) {
     }
 }
 
-struct Paired {
-    desktop: Result<Exchange, FlowError>,
-    phone: Result<Exchange, FlowError>,
+pub(super) struct Paired {
+    pub(super) desktop: Result<Exchange, FlowError>,
+    pub(super) phone: Result<Exchange, FlowError>,
     /// What the desktop showed, and the digits the phone was asked for.
     asked: Option<PairingRequest>,
     shown: Option<String>,
 }
 
-fn new_secret(byte: u8) -> Zeroizing<[u8; SECRET_LEN]> {
+pub(super) fn new_secret(byte: u8) -> Zeroizing<[u8; SECRET_LEN]> {
     Zeroizing::new([byte; SECRET_LEN])
 }
 
 /// Pairs `phone` with `desktop`. `yes` is whether the person types the right digits on the phone.
-fn pair(desktop: &Arc<LocalDb>, phone: &Arc<LocalDb>, yes: bool) -> Paired {
+pub(super) fn pair(desktop: &Arc<LocalDb>, phone: &Arc<LocalDb>, yes: bool) -> Paired {
     pair_with(desktop, phone, Person::default(), Person { types_right_digits: yes, ..Person::default() })
 }
 
@@ -179,15 +179,15 @@ fn sync_with(desktop: &Arc<LocalDb>, phone: &Arc<LocalDb>, one_time: u8, phone_u
     (run.desktop, run.phone)
 }
 
-struct Run {
-    desktop: Result<(Exchange, String), FlowError>,
-    phone: Result<Exchange, FlowError>,
+pub(super) struct Run {
+    pub(super) desktop: Result<(Exchange, String), FlowError>,
+    pub(super) phone: Result<Exchange, FlowError>,
     desktop_person: Person,
     phone_person: Person,
 }
 
 /// A sync that goes the way `mode` says, with the two people answering as `desktop_person` and `phone_person` do.
-fn sync_run(desktop: &Arc<LocalDb>, phone: &Arc<LocalDb>, one_time: u8, phone_uses: u8, mode: Mode, desktop_person: Person, mut phone_person: Person) -> Run {
+pub(super) fn sync_run(desktop: &Arc<LocalDb>, phone: &Arc<LocalDb>, one_time: u8, phone_uses: u8, mode: Mode, desktop_person: Person, mut phone_person: Person) -> Run {
     let paired = desktop.with(|c| peers::secrets(c)).unwrap();
     let ids: Vec<String> = paired.iter().map(|(id, _)| id.clone()).collect();
     let ikms: Vec<Ikm> = paired.iter().map(|(_, ps)| Ikm::for_sync(ps, &[one_time; SECRET_LEN])).collect();
@@ -412,7 +412,7 @@ fn a_phone_with_data_from_another_desktop_is_turned_down_and_the_desktop_keeps_n
 
 // --- the same thing changed on both devices -----------------------------------------------------------------------------
 
-fn pause() {
+pub(super) fn pause() {
     thread::sleep(Duration::from_millis(5));
 }
 
@@ -432,7 +432,7 @@ fn add(db: &LocalDb, name: &str, minor: &str) {
 }
 
 /// A desktop and a phone that have met, with Coffee (3.50) and Tea (2.00) on both, and a moment after it.
-fn met() -> (Arc<LocalDb>, Arc<LocalDb>) {
+pub(super) fn met() -> (Arc<LocalDb>, Arc<LocalDb>) {
     let desktop = desktop_with_data();
     let phone = db("EUR");
     pair(&desktop, &phone, true).phone.unwrap();
@@ -738,4 +738,56 @@ fn big_databases_in_both_directions_cross_a_real_connection_without_a_standstill
     assert_eq!(count(&desktop, "SELECT count(*) FROM transactions"), 10_000);
     same(&desktop, &phone);
     assert_eq!(a.compared, vec![Table::Transactions]);
+}
+
+// --- documents ------------------------------------------------------------------------------------------------------------
+
+fn document_name(db: &LocalDb) -> String {
+    db.conn.lock().unwrap().query_row("SELECT name FROM documents", [], |r| r.get(0)).unwrap()
+}
+
+#[test]
+fn a_document_renamed_on_both_devices_is_put_to_the_desktop_with_what_differs_and_the_choice_holds_on_both() {
+    for (choice, expected) in [(Choice::Theirs, "Warranty (phone).pdf"), (Choice::Mine, "Warranty (desktop).pdf")] {
+        let (desktop, phone) = met();
+        // a document the desktop made, which both now hold; its file is not part of this sync
+        desktop.conn.lock().unwrap().execute(
+            "INSERT INTO documents (name, media_type, size_bytes, sha256, document_date) VALUES ('Warranty.pdf', 'application/pdf', 1000, ?1, '2026-03-02')",
+            ["ab".repeat(32)],
+        )
+        .unwrap();
+        let first = sync_run(&desktop, &phone, 0x51, 0x51, Mode::Both, Person::default(), Person::default());
+        first.desktop.unwrap();
+        first.phone.unwrap();
+        assert_eq!(document_name(&phone), "Warranty.pdf");
+        pause();
+
+        phone.conn.lock().unwrap().execute("UPDATE documents SET name = 'Warranty (phone).pdf', keep_on_phone = 1", []).unwrap();
+        pause();
+        desktop.conn.lock().unwrap().execute("UPDATE documents SET name = 'Warranty (desktop).pdf'", []).unwrap();
+        let run = sync_run(&desktop, &phone, 0x52, 0x52, Mode::Both, Person { choose: always(choice), ..Person::default() }, Person::default());
+        let (on_desktop, on_phone) = (run.desktop.unwrap().0, run.phone.unwrap());
+        assert!(!on_desktop.differences && !on_phone.differences);
+
+        let (asked, more) = &run.desktop_person.reviewed[0];
+        assert_eq!((asked.len(), *more), (1, 0));
+        let view = &asked[0];
+        assert_eq!(view.table, Table::Documents);
+        assert_eq!(view.title, "Warranty (desktop).pdf", "the title is the name of this device's version");
+        let fields: Vec<(&str, &str, &str)> = view.fields.iter().map(|f| (f.field, f.mine.as_str(), f.theirs.as_str())).collect();
+        assert_eq!(fields, [("name", "Warranty (desktop).pdf", "Warranty (phone).pdf"), ("keepOnPhone", "no", "yes")], "{choice:?}");
+
+        // the true version is on both, as a whole (the switch goes with the name)
+        assert_eq!(document_name(&desktop), expected, "{choice:?}");
+        assert_eq!(document_name(&phone), expected, "{choice:?}");
+        let keep = |db: &LocalDb| db.conn.lock().unwrap().query_row("SELECT keep_on_phone FROM documents", [], |r| r.get::<_, i64>(0)).unwrap();
+        assert_eq!(keep(&desktop), keep(&phone));
+        same(&desktop, &phone);
+        // and it stays so
+        pause();
+        let again = sync_run(&desktop, &phone, 0x53, 0x53, Mode::Both, Person::default(), Person::default());
+        again.desktop.unwrap();
+        assert!(again.desktop_person.reviewed.is_empty());
+        assert_eq!(document_name(&phone), expected);
+    }
 }

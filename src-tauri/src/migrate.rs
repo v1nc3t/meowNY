@@ -14,6 +14,8 @@ const MIGRATIONS: &[&str] = &[
     include_str!("../migrations/0007_api_tokens.sql"),
     include_str!("../migrations/0008_sync.sql"),
     include_str!("../migrations/0009_updated_at_and_sync.sql"),
+    include_str!("../migrations/0010_documents.sql"),
+    include_str!("../migrations/0011_document_link_markers.sql"),
 ];
 
 #[derive(Debug)]

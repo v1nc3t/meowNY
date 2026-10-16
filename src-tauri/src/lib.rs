@@ -7,6 +7,7 @@ pub mod commands;
 pub mod currency;
 pub mod db;
 pub mod display;
+pub mod documents;
 pub mod export;
 pub mod keys;
 pub mod migrate;
@@ -142,6 +143,8 @@ pub fn run() {
             let dir = app.path().app_data_dir()?;
             let vault = Arc::new(make_vault(dir));
             app.manage(vault.clone());
+            // Plain copies for the system's viewer are removed at every lock and exit; a crash may have left some.
+            vault.clear_open_copies();
 
             // Syncing with the phone: a window on the home network for a minute or two, only while the app is unlocked.
             let syncing = Arc::new(SyncService::new(vault.clone()));
@@ -177,6 +180,13 @@ pub fn run() {
         })
         .on_window_event(|window, event| {
             let vault = window.state::<Arc<Vault>>();
+            // Files dropped on the window: the web view cannot be relied on to hand them to the page, so the window takes them.
+            if let WindowEvent::DragDrop(drag) = event {
+                for (name, payload) in documents::dropped::on_drag(&vault, drag) {
+                    let _ = window.emit(name, payload);
+                }
+                return;
+            }
             let Ok(prefs) = vault.lock_prefs() else { return };
             match event {
                 WindowEvent::CloseRequested { .. } if prefs.lock_on_close => {
@@ -265,6 +275,24 @@ pub fn run() {
             commands::sync_acknowledge,
             commands::sync_devices,
             commands::sync_remove_device,
+            commands::list_documents,
+            commands::get_document,
+            commands::update_document,
+            commands::delete_document,
+            commands::link_document,
+            commands::unlink_document,
+            commands::document_links,
+            commands::document_library_size,
+            commands::document_counts,
+            commands::check_documents,
+            commands::read_document_image,
+            commands::open_document,
+            commands::save_document_copy,
+            commands::document_upload_begin,
+            commands::document_upload_chunk,
+            commands::document_upload_finish,
+            commands::document_upload_cancel,
+            commands::document_add_dropped,
         ])
         .build(tauri::generate_context!())
         .expect("error while building meowNY")
@@ -273,6 +301,9 @@ pub fn run() {
             if let tauri::RunEvent::Exit = event {
                 if let Some(host) = handle.try_state::<Arc<api::Host>>() {
                     host.stop();
+                }
+                if let Some(vault) = handle.try_state::<Arc<Vault>>() {
+                    vault.clear_open_copies();
                 }
             }
         });

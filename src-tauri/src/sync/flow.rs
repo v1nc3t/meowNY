@@ -13,16 +13,21 @@ use rusqlite::Connection;
 
 use super::crypto::{Ikm, Kind, Secret};
 use super::engine::{self, Choice, Conflict, ConflictView, Digest, DigestCollector, RowsCollector, Summary, SyncError, Warning};
+use super::files::{self, FilesReport};
 use super::net::{self, Channel, Limits, NetError, Window};
 use super::peers;
 use super::qr::Payload;
 use super::stamp;
+use crate::documents::library::Files;
 use super::wire::{AcceptMessage, CurrencyMessage, DoneMessage, ErrorMessage, HashesMessage, Hello, Message, Mode, ReviewedMessage, RowsMessage, Table};
 
 /// Where the sync reads and writes. The app's is the vault (it fails with `Locked` when the app is locked); the tests' is a
 /// database in memory. The closure runs with the database for as long as it takes, and never while waiting for the network.
 pub trait Db: Send + Sync {
     fn with<R>(&self, f: impl FnOnce(&mut Connection) -> Result<R, SyncError>) -> Result<R, SyncError>;
+
+    /// The same, together with the folder of the documents' files and their keys. Fails with `Locked` when there are no keys.
+    fn with_documents<R>(&self, f: impl FnOnce(&Connection, &Files) -> Result<R, SyncError>) -> Result<R, SyncError>;
 }
 
 impl Db for crate::vault::Vault {
@@ -30,6 +35,16 @@ impl Db for crate::vault::Vault {
         let mut outcome = None;
         self.with_conn(|conn| {
             outcome = Some(f(conn));
+            Ok(())
+        })
+        .map_err(|_| SyncError::Locked)?;
+        outcome.unwrap_or(Err(SyncError::Internal))
+    }
+
+    fn with_documents<R>(&self, f: impl FnOnce(&Connection, &Files) -> Result<R, SyncError>) -> Result<R, SyncError> {
+        let mut outcome = None;
+        self.with_files(|conn, files| {
+            outcome = Some(f(conn, files));
             Ok(())
         })
         .map_err(|_| SyncError::Locked)?;
@@ -114,6 +129,8 @@ pub struct Exchange {
     pub peer: Hello,
     /// The sync went one way only, so the two are not meant to end equal.
     pub one_way: bool,
+    /// What happened to the documents' files, which move after the rows.
+    pub files: FilesReport,
 }
 
 /// The two things the desktop shows the person when a phone asks to be paired.
@@ -136,7 +153,7 @@ fn hello_of<D: Db>(db: &D, name: &str) -> Result<Hello, SyncError> {
 }
 
 /// The next message; an error message from the other device ends the conversation here.
-fn next(channel: &mut Channel) -> Result<Message, FlowError> {
+pub(super) fn next(channel: &mut Channel) -> Result<Message, FlowError> {
     match channel.receive()? {
         Message::Error(e) if e.code == "cancelled" => Err(FlowError::Declined),
         Message::Error(e) => Err(FlowError::Peer { code: e.code, message: e.message }),
@@ -228,7 +245,7 @@ fn reviewer(mode: Mode) -> Role {
 }
 
 /// Whether this device sends its changes in a sync that goes this way.
-fn sends(role: Role, mode: Mode) -> bool {
+pub(super) fn sends(role: Role, mode: Mode) -> bool {
     match mode {
         Mode::Both => true,
         Mode::ToDesktop => role == Role::Phone,
@@ -237,7 +254,7 @@ fn sends(role: Role, mode: Mode) -> bool {
 }
 
 /// Whether this device takes the other's changes in.
-fn receives(role: Role, mode: Mode) -> bool {
+pub(super) fn receives(role: Role, mode: Mode) -> bool {
     match mode {
         Mode::Both => true,
         Mode::ToDesktop => role == Role::Desktop,
@@ -253,7 +270,12 @@ fn nothing_to_send(tables: &[Table]) -> Vec<Message> {
 /// Everything after the two hellos: the currency, the lists, the conflicts, the rows, and the check that both end equal.
 #[allow(clippy::too_many_arguments)]
 pub fn exchange<D: Db>(channel: &mut Channel, db: &D, role: Role, mine: &Hello, theirs: &Hello, mode: Mode, prompts: &mut dyn Prompts) -> Result<Exchange, FlowError> {
-    let result = exchange_steps(channel, db, role, mine, theirs, mode, prompts);
+    // The rows first, all the way to the check that they end equal; the files after, which a broken connection can cut short
+    // without undoing any of that.
+    let result = exchange_steps(channel, db, role, mine, theirs, mode, prompts).and_then(|mut done| {
+        done.files = files::run(channel, db, role, mode)?;
+        Ok(done)
+    });
     if let Err(error) = &result {
         tell_peer(channel, error);
     }
@@ -351,7 +373,7 @@ fn exchange_steps<D: Db>(channel: &mut Channel, db: &D, role: Role, mine: &Hello
     let mut reviewed = false;
     let (digest_mine, digest_theirs, tables) = loop {
         let Some((digest_mine, digest_theirs, tables)) = compare(channel, db, role)? else {
-            return Ok(Exchange { summary: Summary::default(), warnings, differences: false, compared: Vec::new(), peer: theirs.clone(), one_way: mode != Mode::Both });
+            return Ok(Exchange { summary: Summary::default(), warnings, differences: false, compared: Vec::new(), peer: theirs.clone(), one_way: mode != Mode::Both, files: FilesReport::default() });
         };
         if !reviewed {
             let threshold = engine::conflict_threshold(mine.since, theirs.since);
@@ -405,7 +427,7 @@ fn exchange_steps<D: Db>(channel: &mut Channel, db: &D, role: Role, mine: &Hello
         Message::Done(d) => mode == Mode::Both && d.hash != hash,
         _ => return Err(FlowError::Protocol("message instead of the end of the sync")),
     };
-    Ok(Exchange { summary, warnings, differences, compared: tables, peer: theirs.clone(), one_way: mode != Mode::Both })
+    Ok(Exchange { summary, warnings, differences, compared: tables, peer: theirs.clone(), one_way: mode != Mode::Both, files: FilesReport::default() })
 }
 
 // ---------------------------------------------------------------------------------------------------------------
@@ -612,15 +634,30 @@ pub(crate) mod test_support {
     use super::*;
     use std::sync::Mutex;
 
-    /// A database in memory behind a lock, as the vault is; it can be "locked".
+    /// A database in memory behind a lock, as the vault is; it can be "locked". It has a folder for the documents' files and keys of
+    /// its own, so two of them hold the same file sealed in two ways, as two devices do.
     pub struct LocalDb {
         pub conn: Mutex<Connection>,
         pub locked: std::sync::atomic::AtomicBool,
+        pub dir: tempfile::TempDir,
+        pub keys: crate::documents::DocKeys,
     }
 
     impl LocalDb {
         pub fn new(conn: Connection) -> LocalDb {
-            LocalDb { conn: Mutex::new(conn), locked: std::sync::atomic::AtomicBool::new(false) }
+            use std::sync::atomic::{AtomicU8, Ordering};
+            static NEXT_KEY: AtomicU8 = AtomicU8::new(1);
+            let seed = NEXT_KEY.fetch_add(1, Ordering::Relaxed);
+            LocalDb {
+                conn: Mutex::new(conn),
+                locked: std::sync::atomic::AtomicBool::new(false),
+                dir: tempfile::tempdir().expect("a folder for the files"),
+                keys: crate::documents::DocKeys::from_db_key(&crate::db::DbKey::from_bytes([seed; 32])),
+            }
+        }
+
+        pub fn store(&self) -> crate::documents::Store {
+            crate::documents::Store::new(self.dir.path())
         }
     }
 
@@ -630,6 +667,14 @@ pub(crate) mod test_support {
                 return Err(SyncError::Locked);
             }
             f(&mut self.conn.lock().unwrap_or_else(|e| e.into_inner()))
+        }
+
+        fn with_documents<R>(&self, f: impl FnOnce(&Connection, &Files) -> Result<R, SyncError>) -> Result<R, SyncError> {
+            if self.locked.load(std::sync::atomic::Ordering::Relaxed) {
+                return Err(SyncError::Locked);
+            }
+            let store = self.store();
+            f(&self.conn.lock().unwrap_or_else(|e| e.into_inner()), &Files { store: &store, keys: &self.keys })
         }
     }
 }

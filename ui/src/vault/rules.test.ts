@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { backupPassphraseProblem, isCurrency, lockChoices, nearestLockChoice, normalizeCurrency, passphraseProblem, phonePassphraseProblem } from './rules.ts'
+import { backupDoneLines, backupPassphraseProblem, DOCUMENTS_BY_DEFAULT_UNDER, includeDocumentsByDefault, isCurrency, lockChoices, nearestLockChoice, normalizeCurrency, passphraseProblem, phonePassphraseProblem } from './rules.ts'
 
 test('currency codes are three letters, any case', () => {
   assert.equal(normalizeCurrency(' eur '), 'EUR')
@@ -53,3 +53,20 @@ test('a phone never offers "never lock", and a stored never becomes the longest 
   assert.equal(nearestLockChoice(900, lockChoices(true)), 900)
 })
 
+
+test('documents go into a backup by default only while the library is under 100 MB', () => {
+  assert.equal(includeDocumentsByDefault(0), true)
+  assert.equal(includeDocumentsByDefault(DOCUMENTS_BY_DEFAULT_UNDER - 1), true)
+  assert.equal(includeDocumentsByDefault(DOCUMENTS_BY_DEFAULT_UNDER), false)
+  assert.equal(DOCUMENTS_BY_DEFAULT_UNDER, 104857600)
+})
+
+test('after a backup the person is told how many documents it holds and how many were left out', () => {
+  assert.deepEqual(backupDoneLines({ documents: 0, missing: 0 }), [])
+  assert.deepEqual(backupDoneLines({ documents: 3, missing: 0 }), [{ key: 'settings.backupHolds', count: 3 }])
+  assert.deepEqual(backupDoneLines({ documents: 3, missing: 2 }), [
+    { key: 'settings.backupHolds', count: 3 },
+    { key: 'settings.backupMissing', count: 2 },
+  ])
+  assert.deepEqual(backupDoneLines({ documents: 0, missing: 1 }), [{ key: 'settings.backupMissing', count: 1 }])
+})

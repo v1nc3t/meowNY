@@ -1,28 +1,48 @@
 //! Encrypted backups: one file with a full copy of the data, locked with a passphrase chosen for
 //! the backup.
 //!
-//! The file is not the database file. It holds every row as JSON, sealed with ChaCha20-Poly1305
-//! under a key stretched from the passphrase with Argon2id. A backup is therefore independent of
-//! the vault's keys and of the SQLCipher file layout, and opens on a clean install with a new
-//! keychain entry. The header (magic, format, schema version of the app that wrote it, Argon2
-//! cost, salt, nonce) is authenticated but not secret.
+//! The file is not the database file. It holds every row as JSON, and the files of the documents if the person asked for them, sealed
+//! with ChaCha20-Poly1305 under a key stretched from the passphrase with Argon2id. A backup is therefore independent of the vault's
+//! keys and of the SQLCipher file layout, and opens on a clean install with a new keychain entry. The header (magic, format,
+//! schema version of the app that wrote it, Argon2 cost, salt, nonce) is authenticated but not secret.
 //!
 //! ```text
 //!  0..8   magic "MEOWNYBK"        26..42  salt
-//!  8..10  format version (u16)    42..54  nonce
-//! 10..14  schema version (u32)    54..    ciphertext + 16 byte tag
+//!  8..10  format version (u16)    42..54  nonce (version 1; filler in version 2)
+//! 10..14  schema version (u32)    54..    what is sealed
 //! 14..26  Argon2 memory KiB, iterations, lanes (u32 each)
 //! ```
 //!
+//! **Version 1** seals the rows as one message (ciphertext and a 16 byte tag). It cannot hold files, and is still read.
+//!
+//! **Version 2**, what is written now, seals a stream of chunks of 64 KiB (`stream.rs`) that holds records:
+//!
+//! ```text
+//! S  u64 length, the rows as JSON     once, first
+//! F  document id (16), u64 size, SHA-256 (32), the bytes     0 to many
+//! E  the end                          once, last
+//! ```
+//!
+//! Neither writing nor reading holds more than a chunk and one file at a time, so a library of many gigabytes is a backup like any other.
+//! A backup made without documents has only `S` and `E`.
+//!
 //! Restoring replaces all data. The rows go into a scratch in-memory database built at the
 //! backup's schema version, so every constraint is checked before the real data is touched; the
-//! scratch is then migrated forward, which is how a backup from an older app version is read, and
-//! only then written to the real database in one transaction. A backup from a newer app version is
-//! refused.
+//! scratch is then migrated forward, which is how a backup from an older app version is read. Then the files are read from the stream
+//! and sealed into the vault's folder under its own key (each only if a row of the backup names it, with that size and hash), and
+//! only when the stream has ended whole are the rows written to the real database in one transaction. A backup from a newer app
+//! version is refused.
 
-use std::collections::BTreeMap;
+mod stream;
+
+#[cfg(test)]
+mod stream_tests;
+#[cfg(test)]
+mod documents_tests;
+
+use std::collections::{BTreeMap, HashSet};
 use std::fs;
-use std::io::Write;
+use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 
 use argon2::{Algorithm, Argon2, Params, Version};
@@ -30,13 +50,17 @@ use chacha20poly1305::aead::{Aead, KeyInit, Payload};
 use chacha20poly1305::{ChaCha20Poly1305, Key, Nonce};
 use rusqlite::types::{Value as Sql, ValueRef};
 use rusqlite::Connection;
+use serde::Serialize;
 use serde_json::{Map, Value};
 use zeroize::Zeroizing;
 
+use self::stream::{ChunkReader, ChunkWriter, CHUNK};
+use crate::documents::library::Files;
+use crate::documents::{DocId, MAX_DOCUMENT_BYTES};
 use crate::keys::{self, SALT_LEN};
 use crate::migrate;
 use crate::sync;
-use crate::vault::{AppError, MIN_PASSPHRASE_CHARS};
+use crate::vault::{AppError, Vault, MIN_PASSPHRASE_CHARS};
 
 /// File extension of a backup, without the dot.
 pub const EXTENSION: &str = "meowbak";
@@ -49,6 +73,8 @@ const TABLES: &[&str] = &[
     "budgets",
     "recurring_transactions",
     "transactions",
+    "documents",
+    "document_links",
     "audit_log",
     "sync_deleted",
     "currency_changes",
@@ -66,12 +92,21 @@ const EXCLUDED_TABLES: &[&str] = &["backup_schedule", "api_tokens", "sync_clock"
 const HISTORY_TABLE: &str = "audit_log";
 
 const MAGIC: &[u8; 8] = b"MEOWNYBK";
-const FORMAT: u16 = 1;
+/// The rows sealed as one message. Still read, no longer written.
+const FORMAT_1: u16 = 1;
+/// A stream of sealed chunks that holds the rows and, if the person wanted them, the files.
+const FORMAT: u16 = 2;
 const NONCE_LEN: usize = 12;
 const TAG_LEN: usize = 16;
 const HEADER_LEN: usize = 8 + 2 + 4 + 12 + SALT_LEN + NONCE_LEN;
-/// A bigger file is not a backup of one person's budget; refusing it keeps a wrong pick from filling memory.
+/// A version 1 file this big is not a backup of one person's budget; refusing it keeps a wrong pick from filling memory. (A version 2
+/// file has no such ceiling: it is never held in memory.)
 const MAX_FILE_BYTES: u64 = 512 * 1024 * 1024;
+/// The rows of version 2 are held in memory while they are read, so they have a ceiling of their own.
+const MAX_SNAPSHOT_BYTES: u64 = 512 * 1024 * 1024;
+const RECORD_SNAPSHOT: u8 = b'S';
+const RECORD_FILE: u8 = b'F';
+const RECORD_END: u8 = b'E';
 
 /// Argon2id cost, written into the header so it can change later without breaking old backups.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -222,8 +257,9 @@ fn replace_all(conn: &mut Connection, tables: &BTreeMap<String, Vec<Row>>) -> Re
     Ok(())
 }
 
-/// Replaces everything in `target` with the snapshot. An older snapshot is migrated forward first.
-pub fn restore_snapshot(target: &mut Connection, snapshot: &Snapshot) -> Result<(), AppError> {
+/// Checks the snapshot in a scratch database at its own schema version, which tests every constraint, and brings it to the
+/// current one. Nothing real is touched. The result is what `commit` writes, and what the files of a backup are matched against.
+pub fn prepare(snapshot: &Snapshot) -> Result<Snapshot, AppError> {
     if snapshot.schema_version == 0 || snapshot.schema_version > migrate::latest_version() {
         return Err(AppError::DatabaseTooNew);
     }
@@ -232,10 +268,20 @@ pub fn restore_snapshot(target: &mut Connection, snapshot: &Snapshot) -> Result<
     migrate::run_up_to(&mut scratch, snapshot.schema_version).map_err(|_| AppError::Internal)?;
     replace_all(&mut scratch, &snapshot.tables)?;
     migrate::run(&mut scratch).map_err(|_| AppError::Internal)?;
-    let current = dump(&scratch)?;
-    replace_all(target, &current.tables)?;
+    dump(&scratch)
+}
+
+/// Replaces everything in `target` with a prepared snapshot, in one transaction.
+pub fn commit(target: &mut Connection, prepared: &Snapshot) -> Result<(), AppError> {
+    replace_all(target, &prepared.tables)?;
     // The data is another device's history now: see `after_restore`.
     sync::stamp::after_restore(target)
+}
+
+/// Replaces everything in `target` with the snapshot. An older snapshot is migrated forward first. (The rows only; the files of a
+/// backup are read from the stream by `Backup::restore_files` between the two steps.)
+pub fn restore_snapshot(target: &mut Connection, snapshot: &Snapshot) -> Result<(), AppError> {
+    commit(target, &prepare(snapshot)?)
 }
 
 pub(crate) fn check_passphrase(passphrase: &str) -> Result<(), AppError> {
@@ -255,10 +301,10 @@ fn stretch(passphrase: &str, salt: &[u8], kdf: Kdf) -> Result<Zeroizing<[u8; 32]
     Ok(key)
 }
 
-fn header(schema_version: u32, kdf: Kdf, salt: &[u8; SALT_LEN], nonce: &[u8; NONCE_LEN]) -> Vec<u8> {
+fn header(format: u16, schema_version: u32, kdf: Kdf, salt: &[u8; SALT_LEN], nonce: &[u8; NONCE_LEN]) -> Vec<u8> {
     let mut out = Vec::with_capacity(HEADER_LEN);
     out.extend_from_slice(MAGIC);
-    out.extend_from_slice(&FORMAT.to_be_bytes());
+    out.extend_from_slice(&format.to_be_bytes());
     out.extend_from_slice(&schema_version.to_be_bytes());
     for part in [kdf.memory_kib, kdf.iterations, kdf.lanes] {
         out.extend_from_slice(&part.to_be_bytes());
@@ -268,83 +314,99 @@ fn header(schema_version: u32, kdf: Kdf, salt: &[u8; SALT_LEN], nonce: &[u8; NON
     out
 }
 
-/// Encrypts a snapshot under the passphrase. The passphrase is the one chosen for this backup,
-/// not the app's.
-pub fn seal(snapshot: &Snapshot, passphrase: &str) -> Result<Vec<u8>, AppError> {
+// ---------------------------------------------------------------------------------------------------------------
+// writing
+
+/// Where the files of the documents come from when a backup is written.
+pub trait FileSource {
+    /// The bytes of the file of a document, if this device holds a whole one that matches the row (`size` and `sha256`); otherwise
+    /// None, and the document is left out of the backup's files and counted. An error stops the backup.
+    fn file(&mut self, id: &DocId, size: u64, sha256: &[u8; 32]) -> Result<Option<Zeroizing<Vec<u8>>>, AppError>;
+}
+
+/// The files of the vault, read one at a time, each under a short hold of the vault, so the app stays usable while a big backup is
+/// written.
+pub struct VaultFiles<'a>(pub &'a Vault);
+
+impl FileSource for VaultFiles<'_> {
+    fn file(&mut self, id: &DocId, size: u64, sha256: &[u8; 32]) -> Result<Option<Zeroizing<Vec<u8>>>, AppError> {
+        self.0.with_files(|_, files| Ok(files.store.get(files.keys, id, size, sha256).ok()))
+    }
+}
+
+/// What a backup holds of the documents.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Written {
+    /// Documents whose file is in the backup.
+    pub documents: u32,
+    /// Documents that have a row in it and no file: this device has none, or its file does not match the row.
+    pub missing: u32,
+}
+
+/// The documents of a snapshot: the id, the size and the hash of each file, in the order of the ids.
+fn document_rows(snapshot: &Snapshot) -> Result<Vec<(DocId, u64, [u8; 32])>, AppError> {
+    let mut rows = Vec::new();
+    for row in snapshot.rows("documents") {
+        let text = |key: &str| row.get(key).and_then(Value::as_str);
+        let id = text("sync_id").and_then(|t| DocId::parse(t).ok());
+        let size = row.get("size_bytes").and_then(Value::as_u64).filter(|n| (1..=MAX_DOCUMENT_BYTES).contains(n));
+        let sha = text("sha256").and_then(keys::hex_decode::<32>);
+        let (Some(id), Some(size), Some(sha)) = (id, size, sha) else { return Err(AppError::InvalidBackup) };
+        rows.push((id, size, sha));
+    }
+    rows.sort_by_key(|(id, _, _)| *id.bytes());
+    Ok(rows)
+}
+
+/// Writes a version 2 backup to `out`: the rows, then (if `files` is given) the file of each document that has one, then the end.
+pub fn write_stream<W: Write>(mut out: W, snapshot: &Snapshot, passphrase: &str, files: Option<&mut dyn FileSource>) -> Result<(W, Written), AppError> {
     check_passphrase(passphrase)?;
-    let plain = Zeroizing::new(serde_json::to_vec(&snapshot.tables).map_err(|_| AppError::Internal)?);
+    let rows = Zeroizing::new(serde_json::to_vec(&snapshot.tables).map_err(|_| AppError::Internal)?);
+    if rows.len() as u64 > MAX_SNAPSHOT_BYTES {
+        return Err(AppError::TooLarge);
+    }
+    let documents = if files.is_some() { document_rows(snapshot)? } else { Vec::new() };
+
     let kdf = Kdf::DEFAULT;
     let salt = keys::random_bytes::<SALT_LEN>()?;
-    let nonce = keys::random_bytes::<NONCE_LEN>()?;
-    let mut out = header(snapshot.schema_version, kdf, &salt, &nonce);
+    // version 2 has no use for a nonce of its own (the chunks have theirs); the field keeps the layout of version 1
+    let filler = keys::random_bytes::<NONCE_LEN>()?;
+    let head = header(FORMAT, snapshot.schema_version, kdf, &salt, &filler);
+    out.write_all(&head).map_err(|_| AppError::Internal)?;
     let key = stretch(passphrase, &salt, kdf)?;
-    let sealed = ChaCha20Poly1305::new(Key::from_slice(key.as_ref()))
-        .encrypt(Nonce::from_slice(&nonce), Payload { msg: &plain, aad: &out })
-        .map_err(|_| AppError::Internal)?;
-    out.extend_from_slice(&sealed);
-    Ok(out)
+
+    let mut stream = ChunkWriter::new(out, &key, head);
+    stream.write(&[RECORD_SNAPSHOT])?;
+    stream.write(&(rows.len() as u64).to_be_bytes())?;
+    stream.write(&rows)?;
+    let mut written = Written::default();
+    if let Some(source) = files {
+        for (id, size, sha256) in documents {
+            match source.file(&id, size, &sha256)? {
+                Some(bytes) if bytes.len() as u64 == size => {
+                    stream.write(&[RECORD_FILE])?;
+                    stream.write(id.bytes())?;
+                    stream.write(&size.to_be_bytes())?;
+                    stream.write(&sha256)?;
+                    stream.write(&bytes)?;
+                    written.documents += 1;
+                }
+                _ => written.missing += 1,
+            }
+        }
+    }
+    stream.write(&[RECORD_END])?;
+    Ok((stream.finish()?, written))
 }
 
-fn be_u32(bytes: &[u8], at: usize) -> u32 {
-    u32::from_be_bytes(bytes[at..at + 4].try_into().expect("four bytes"))
+/// Encrypts a snapshot under the passphrase, without documents. The passphrase is the one chosen for this backup, not the app's.
+pub fn seal(snapshot: &Snapshot, passphrase: &str) -> Result<Vec<u8>, AppError> {
+    Ok(write_stream(Vec::new(), snapshot, passphrase, None)?.0)
 }
 
-/// Checks the version, decrypts and parses. Fails with `InvalidBackup` for a file that is not a
-/// backup, `DatabaseTooNew` for one a newer app wrote, and `WrongCredentials` for a wrong passphrase
-/// or a file changed after it was written (those cannot be told apart).
-pub fn open(bytes: &[u8], passphrase: &str) -> Result<Snapshot, AppError> {
-    if bytes.len() < HEADER_LEN + TAG_LEN || &bytes[..8] != MAGIC {
-        return Err(AppError::InvalidBackup);
-    }
-    let format = u16::from_be_bytes([bytes[8], bytes[9]]);
-    if format > FORMAT {
-        return Err(AppError::DatabaseTooNew);
-    }
-    if format == 0 {
-        return Err(AppError::InvalidBackup);
-    }
-    let schema_version = be_u32(bytes, 10);
-    if schema_version > migrate::latest_version() {
-        return Err(AppError::DatabaseTooNew);
-    }
-    if schema_version == 0 {
-        return Err(AppError::InvalidBackup);
-    }
-    let kdf = Kdf { memory_kib: be_u32(bytes, 14), iterations: be_u32(bytes, 18), lanes: be_u32(bytes, 22) };
-    if !kdf.in_bounds() {
-        return Err(AppError::InvalidBackup);
-    }
-
-    let (head, sealed) = bytes.split_at(HEADER_LEN);
-    let key = stretch(passphrase, &head[26..26 + SALT_LEN], kdf)?;
-    let plain = ChaCha20Poly1305::new(Key::from_slice(key.as_ref()))
-        .decrypt(Nonce::from_slice(&head[26 + SALT_LEN..]), Payload { msg: sealed, aad: head })
-        .map(Zeroizing::new)
-        .map_err(|_| AppError::WrongCredentials)?;
-
-    let tables: BTreeMap<String, Vec<Row>> = serde_json::from_slice(&plain).map_err(|_| AppError::InvalidBackup)?;
-    if tables.keys().any(|name| !TABLES.contains(&name.as_str())) {
-        return Err(AppError::InvalidBackup);
-    }
-    Ok(Snapshot { schema_version, tables })
-}
-
-/// Reads a backup file. A file far bigger than any real backup is refused before it is read.
-pub fn read_file(path: &Path) -> Result<Vec<u8>, AppError> {
-    let length = fs::metadata(path).map_err(|_| AppError::NotFound)?.len();
-    if length > MAX_FILE_BYTES {
-        return Err(AppError::InvalidBackup);
-    }
-    fs::read(path).map_err(|_| AppError::Internal)
-}
-
-/// Writes a backup readable by the owner only. It goes through a temporary file, so a crash or a
-/// full disk never leaves a half-written backup under the real name.
-pub fn write_file(path: &Path, bytes: &[u8]) -> Result<(), AppError> {
-    let mut tmp = path.as_os_str().to_owned();
-    tmp.push(".tmp");
-    let tmp = PathBuf::from(tmp);
-
+/// What a file for a backup is opened with: owner only.
+fn private_options() -> fs::OpenOptions {
     let mut options = fs::OpenOptions::new();
     options.write(true).create(true).truncate(true);
     #[cfg(unix)]
@@ -352,7 +414,272 @@ pub fn write_file(path: &Path, bytes: &[u8]) -> Result<(), AppError> {
         use std::os::unix::fs::OpenOptionsExt;
         options.mode(0o600);
     }
-    let written = options.open(&tmp).and_then(|mut f| f.write_all(bytes).and_then(|_| f.sync_all()));
+    options
+}
+
+/// Writes a backup to `path`, streamed, readable by the owner only. It goes through a temporary file, so a crash, a full disk or a
+/// vault that locks half way never leaves a half-written backup under the real name.
+pub fn create_file(path: &Path, snapshot: &Snapshot, passphrase: &str, files: Option<&mut dyn FileSource>) -> Result<Written, AppError> {
+    let mut tmp = path.as_os_str().to_owned();
+    tmp.push(".tmp");
+    let tmp = PathBuf::from(tmp);
+    let file = private_options().open(&tmp).map_err(|_| AppError::Internal)?;
+    let written = write_stream(std::io::BufWriter::new(file), snapshot, passphrase, files).and_then(|(out, written)| {
+        let file = out.into_inner().map_err(|_| AppError::Internal)?;
+        file.sync_all().map_err(|_| AppError::Internal)?;
+        Ok(written)
+    });
+    match written {
+        Ok(written) => {
+            fs::rename(&tmp, path).map_err(|_| {
+                let _ = fs::remove_file(&tmp);
+                AppError::Internal
+            })?;
+            Ok(written)
+        }
+        Err(e) => {
+            let _ = fs::remove_file(&tmp);
+            Err(e)
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// reading
+
+/// Where a backup is read from.
+#[derive(Debug, Clone, Copy)]
+pub enum Source<'a> {
+    Bytes(&'a [u8]),
+    File(&'a Path),
+}
+
+impl<'a> From<&'a [u8]> for Source<'a> {
+    fn from(bytes: &'a [u8]) -> Self {
+        Source::Bytes(bytes)
+    }
+}
+
+impl<'a> From<&'a Vec<u8>> for Source<'a> {
+    fn from(bytes: &'a Vec<u8>) -> Self {
+        Source::Bytes(bytes)
+    }
+}
+
+impl<'a> From<&'a Path> for Source<'a> {
+    fn from(path: &'a Path) -> Self {
+        Source::File(path)
+    }
+}
+
+impl<'a> From<&'a PathBuf> for Source<'a> {
+    fn from(path: &'a PathBuf) -> Self {
+        Source::File(path)
+    }
+}
+
+/// What the header says, checked.
+struct Head {
+    format: u16,
+    schema_version: u32,
+    kdf: Kdf,
+    salt: [u8; SALT_LEN],
+}
+
+fn be_u32(bytes: &[u8], at: usize) -> u32 {
+    u32::from_be_bytes(bytes[at..at + 4].try_into().expect("four bytes"))
+}
+
+/// Checks the magic and the versions, and the cost settings, which are untrusted: `InvalidBackup` for a file that is not a backup,
+/// `DatabaseTooNew` for one a newer app wrote.
+fn parse_header(head: &[u8]) -> Result<Head, AppError> {
+    if head.len() < HEADER_LEN || &head[..8] != MAGIC {
+        return Err(AppError::InvalidBackup);
+    }
+    let format = u16::from_be_bytes([head[8], head[9]]);
+    if format > FORMAT {
+        return Err(AppError::DatabaseTooNew);
+    }
+    if format == 0 {
+        return Err(AppError::InvalidBackup);
+    }
+    let schema_version = be_u32(head, 10);
+    if schema_version > migrate::latest_version() {
+        return Err(AppError::DatabaseTooNew);
+    }
+    if schema_version == 0 {
+        return Err(AppError::InvalidBackup);
+    }
+    let kdf = Kdf { memory_kib: be_u32(head, 14), iterations: be_u32(head, 18), lanes: be_u32(head, 22) };
+    if !kdf.in_bounds() {
+        return Err(AppError::InvalidBackup);
+    }
+    Ok(Head { format, schema_version, kdf, salt: head[26..26 + SALT_LEN].try_into().expect("a salt") })
+}
+
+fn parse_tables(plain: &[u8]) -> Result<BTreeMap<String, Vec<Row>>, AppError> {
+    let tables: BTreeMap<String, Vec<Row>> = serde_json::from_slice(plain).map_err(|_| AppError::InvalidBackup)?;
+    if tables.keys().any(|name| !TABLES.contains(&name.as_str())) {
+        return Err(AppError::InvalidBackup);
+    }
+    Ok(tables)
+}
+
+/// A backup that is open: the passphrase was right and the rows are read. The files, if there are any, are still in the stream.
+pub struct Backup {
+    snapshot: Snapshot,
+    /// The rest of a version 2 stream; none for version 1, and none once the end has been read.
+    records: Option<ChunkReader<Box<dyn Read>>>,
+}
+
+impl Backup {
+    /// Checks the version, stretches the passphrase (slowly), opens the stream and reads the rows. Fails with `InvalidBackup` for a
+    /// file that is not a backup, `DatabaseTooNew` for one a newer app wrote, and `WrongCredentials` for a wrong passphrase or a
+    /// file changed at its start (those cannot be told apart).
+    pub fn open<'a>(source: impl Into<Source<'a>>, passphrase: &str) -> Result<Backup, AppError> {
+        match source.into() {
+            Source::Bytes(bytes) => Backup::from_reader(Box::new(std::io::Cursor::new(bytes.to_vec())), bytes.len() as u64, passphrase),
+            Source::File(path) => {
+                let file = fs::File::open(path).map_err(|_| AppError::NotFound)?;
+                let length = file.metadata().map_err(|_| AppError::Internal)?.len();
+                Backup::from_reader(Box::new(std::io::BufReader::new(file)), length, passphrase)
+            }
+        }
+    }
+
+    fn from_reader(mut input: Box<dyn Read>, length: u64, passphrase: &str) -> Result<Backup, AppError> {
+        if length < (HEADER_LEN + TAG_LEN) as u64 {
+            return Err(AppError::InvalidBackup);
+        }
+        let mut head_bytes = vec![0u8; HEADER_LEN];
+        input.read_exact(&mut head_bytes).map_err(|_| AppError::InvalidBackup)?;
+        let head = parse_header(&head_bytes)?;
+        let key = stretch(passphrase, &head.salt, head.kdf)?;
+        let sealed_len = length - HEADER_LEN as u64;
+
+        if head.format == FORMAT_1 {
+            if length > MAX_FILE_BYTES {
+                return Err(AppError::InvalidBackup);
+            }
+            let mut sealed = Vec::new();
+            input.read_to_end(&mut sealed).map_err(|_| AppError::Internal)?;
+            let plain = ChaCha20Poly1305::new(Key::from_slice(key.as_ref()))
+                .decrypt(Nonce::from_slice(&head_bytes[26 + SALT_LEN..]), Payload { msg: &sealed, aad: &head_bytes })
+                .map(Zeroizing::new)
+                .map_err(|_| AppError::WrongCredentials)?;
+            let tables = parse_tables(&plain)?;
+            return Ok(Backup { snapshot: Snapshot { schema_version: head.schema_version, tables }, records: None });
+        }
+
+        let mut reader = ChunkReader::new(input, &key, head_bytes, sealed_len);
+        let mut tag = [0u8; 1];
+        reader.take(&mut tag)?;
+        if tag[0] != RECORD_SNAPSHOT {
+            return Err(AppError::InvalidBackup);
+        }
+        let mut size = [0u8; 8];
+        reader.take(&mut size)?;
+        let size = u64::from_be_bytes(size);
+        if size > MAX_SNAPSHOT_BYTES {
+            return Err(AppError::InvalidBackup);
+        }
+        let rows = reader.take_vec(size)?;
+        let tables = parse_tables(&rows)?;
+        Ok(Backup { snapshot: Snapshot { schema_version: head.schema_version, tables }, records: Some(reader) })
+    }
+
+    pub fn snapshot(&self) -> &Snapshot {
+        &self.snapshot
+    }
+
+    /// Goes through the records that follow the rows. `on_file` is given the stream, the document and the size and hash the record
+    /// announces, and must read exactly `size` bytes. Ends at the end record, which must be the last thing in the stream.
+    fn each_file(&mut self, mut on_file: impl FnMut(&mut ChunkReader<Box<dyn Read>>, DocId, u64, [u8; 32]) -> Result<(), AppError>) -> Result<(), AppError> {
+        let Some(reader) = self.records.as_mut() else { return Ok(()) };
+        loop {
+            let mut tag = [0u8; 1];
+            reader.take(&mut tag)?;
+            match tag[0] {
+                RECORD_END => {
+                    reader.finish()?;
+                    self.records = None;
+                    return Ok(());
+                }
+                RECORD_FILE => {
+                    let mut head = [0u8; 16 + 8 + 32];
+                    reader.take(&mut head)?;
+                    let id = DocId::from_bytes(head[..16].try_into().expect("16 bytes"));
+                    let size = u64::from_be_bytes(head[16..24].try_into().expect("8 bytes"));
+                    let sha256: [u8; 32] = head[24..].try_into().expect("32 bytes");
+                    if !(1..=MAX_DOCUMENT_BYTES).contains(&size) {
+                        return Err(AppError::InvalidBackup);
+                    }
+                    on_file(reader, id, size, sha256)?;
+                }
+                _ => return Err(AppError::InvalidBackup),
+            }
+        }
+    }
+
+    /// Reads the files out of the stream and seals each into the vault's folder under its own key, to the end of the stream. A file is
+    /// taken only if a row of `prepared` names it with this size and hash, and only once; it is checked against its hash as it is
+    /// written and not kept if it does not match. Returns how many were written. Call it before `commit`: if it fails the data has not
+    /// been touched, and what it wrote is for the next check of the folder to remove.
+    pub fn restore_files(&mut self, files: &Files, prepared: &Snapshot) -> Result<u32, AppError> {
+        let expected: BTreeMap<[u8; 16], (u64, [u8; 32])> = document_rows(prepared)?.into_iter().map(|(id, size, sha)| (*id.bytes(), (size, sha))).collect();
+        let mut seen = HashSet::new();
+        let mut count = 0;
+        self.each_file(|reader, id, size, sha256| {
+            if expected.get(id.bytes()) != Some(&(size, sha256)) || !seen.insert(*id.bytes()) {
+                return Err(AppError::InvalidBackup);
+            }
+            // from the first byte: what an earlier, stopped transfer left of this file is not used
+            files.store.discard_unfinished(files.keys, &id);
+            let result = (|| {
+                let mut incoming = files.store.begin_incoming(files.keys, &id, size)?;
+                let mut piece = Zeroizing::new(vec![0u8; CHUNK]);
+                let mut left = size;
+                while left > 0 {
+                    let step = left.min(CHUNK as u64) as usize;
+                    reader.take(&mut piece[..step])?;
+                    incoming.write(&piece[..step])?;
+                    left -= step as u64;
+                }
+                incoming.finish(&sha256).map_err(|e| match e {
+                    crate::documents::DocError::Mismatch => AppError::InvalidBackup,
+                    other => other.into(),
+                })
+            })();
+            if result.is_err() {
+                files.store.discard_unfinished(files.keys, &id);
+            }
+            result?;
+            count += 1;
+            Ok(())
+        })?;
+        Ok(count)
+    }
+
+    /// Reads to the end without keeping the files, so a cut or damaged backup is found. Gives the rows back.
+    pub fn finish(mut self) -> Result<Snapshot, AppError> {
+        self.each_file(|reader, _, size, _| reader.skip(size))?;
+        Ok(self.snapshot)
+    }
+}
+
+/// Decrypts a backup that is in memory and gives its rows; the stream is read to its end, so a damaged one is refused.
+pub fn open(bytes: &[u8], passphrase: &str) -> Result<Snapshot, AppError> {
+    Backup::open(bytes, passphrase)?.finish()
+}
+
+/// Writes bytes that are not a backup (an export, a copy of a document, the port file of the API) readable by the owner only. It goes
+/// through a temporary file, so a crash or a full disk never leaves a half-written file under the real name.
+pub fn write_file(path: &Path, bytes: &[u8]) -> Result<(), AppError> {
+    let mut tmp = path.as_os_str().to_owned();
+    tmp.push(".tmp");
+    let tmp = PathBuf::from(tmp);
+
+    let written = private_options().open(&tmp).and_then(|mut f| f.write_all(bytes).and_then(|_| f.sync_all()));
     if written.is_err() {
         let _ = fs::remove_file(&tmp);
         return Err(AppError::Internal);
@@ -363,26 +690,43 @@ pub fn write_file(path: &Path, bytes: &[u8]) -> Result<(), AppError> {
     })
 }
 
+/// A version 1 backup, as the app used to write it: the rows as one sealed message. Kept to test that old files still open.
+#[cfg(test)]
+pub(crate) fn seal_v1(snapshot: &Snapshot, passphrase: &str) -> Result<Vec<u8>, AppError> {
+    check_passphrase(passphrase)?;
+    let plain = Zeroizing::new(serde_json::to_vec(&snapshot.tables).map_err(|_| AppError::Internal)?);
+    let kdf = Kdf::DEFAULT;
+    let salt = keys::random_bytes::<SALT_LEN>()?;
+    let nonce = keys::random_bytes::<NONCE_LEN>()?;
+    let mut out = header(FORMAT_1, snapshot.schema_version, kdf, &salt, &nonce);
+    let key = stretch(passphrase, &salt, kdf)?;
+    let sealed = ChaCha20Poly1305::new(Key::from_slice(key.as_ref()))
+        .encrypt(Nonce::from_slice(&nonce), Payload { msg: &plain, aad: &out })
+        .map_err(|_| AppError::Internal)?;
+    out.extend_from_slice(&sealed);
+    Ok(out)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::categories::{self, CategoryType};
     use crate::{budgets, recurring, transactions};
 
-    fn db_at(version: u32) -> Connection {
+    pub(super) fn db_at(version: u32) -> Connection {
         let mut conn = Connection::open_in_memory().unwrap();
         conn.execute_batch("PRAGMA foreign_keys = ON;").unwrap();
         migrate::run_up_to(&mut conn, version).unwrap();
         conn
     }
 
-    fn db() -> Connection {
+    pub(super) fn db() -> Connection {
         db_at(migrate::latest_version())
     }
 
     /// A database with a bit of everything: every table has rows, text has awkward characters,
     /// there are edits and a deleted category so the history is not trivial.
-    fn lived_in() -> Connection {
+    pub(super) fn lived_in() -> Connection {
         let conn = db();
         conn.execute(
             "INSERT INTO settings (id, currency, locale, timezone, language) VALUES (1, 'EUR', 'en-IE', 'Europe/Dublin', 'ro')",
@@ -440,6 +784,14 @@ mod tests {
             .unwrap();
         }
         categories::rename(&conn, rent.id, "Housing").unwrap();
+        // a document linked to the recurring item (the file itself is not in the database, and so not in this backup)
+        conn.execute(
+            "INSERT INTO documents (name, media_type, size_bytes, sha256, document_date, keep_on_phone)
+             VALUES ('Contract “Maple” 日本語.pdf', 'application/pdf', 1234, ?1, '2026-01-02', 1)",
+            ["ab".repeat(32)],
+        )
+        .unwrap();
+        conn.execute("INSERT INTO document_links (document_id, recurring_transaction_id) VALUES (1, ?1)", [plan.id]).unwrap();
         let mut conn = conn;
         categories::delete(&mut conn, gym.id, chrono::Utc::now()).unwrap();
         // a deletion (it leaves a marker for sync) and a change of currency (it is recorded for sync)
@@ -600,12 +952,28 @@ mod tests {
         }
     }
 
-    /// Builds a backup whose JSON the app would never write, to check what a hostile or damaged file can do.
-    fn forged(tables: Value) -> Vec<u8> {
+    /// Builds a backup (version 2) whose JSON the app would never write, to check what a hostile or damaged file can do.
+    pub(super) fn forged(tables: Value) -> Vec<u8> {
         let kdf = Kdf::DEFAULT;
         let salt = [3u8; SALT_LEN];
         let nonce = [4u8; NONCE_LEN];
-        let mut out = header(migrate::latest_version(), kdf, &salt, &nonce);
+        let head = header(FORMAT, migrate::latest_version(), kdf, &salt, &nonce);
+        let key = stretch("correct horse", &salt, kdf).unwrap();
+        let rows = tables.to_string().into_bytes();
+        let mut stream = ChunkWriter::new(head.clone(), &key, head);
+        stream.write(&[RECORD_SNAPSHOT]).unwrap();
+        stream.write(&(rows.len() as u64).to_be_bytes()).unwrap();
+        stream.write(&rows).unwrap();
+        stream.write(&[RECORD_END]).unwrap();
+        stream.finish().unwrap()
+    }
+
+    /// The same in the layout of version 1.
+    fn forged_v1(tables: Value) -> Vec<u8> {
+        let kdf = Kdf::DEFAULT;
+        let salt = [3u8; SALT_LEN];
+        let nonce = [4u8; NONCE_LEN];
+        let mut out = header(FORMAT_1, migrate::latest_version(), kdf, &salt, &nonce);
         let key = stretch("correct horse", &salt, kdf).unwrap();
         let sealed = ChaCha20Poly1305::new(Key::from_slice(key.as_ref()))
             .encrypt(Nonce::from_slice(&nonce), Payload { msg: tables.to_string().as_bytes(), aad: &out })
@@ -644,10 +1012,11 @@ mod tests {
                 { "id": 1, "category_id": 1, "name": "x", "amount_minor": -5, "payment_date": "2026-01-01" }] }),
         ];
         for case in cases {
-            let file = forged(case.clone());
-            let outcome = open(&file, "correct horse").and_then(|s| restore_snapshot(&mut target, &s));
-            assert_eq!(outcome, Err(AppError::InvalidBackup), "{case}");
-            assert_eq!(dump(&target).unwrap(), before, "{case}");
+            for file in [forged(case.clone()), forged_v1(case.clone())] {
+                let outcome = open(&file, "correct horse").and_then(|s| restore_snapshot(&mut target, &s));
+                assert_eq!(outcome, Err(AppError::InvalidBackup), "{case}");
+                assert_eq!(dump(&target).unwrap(), before, "{case}");
+            }
         }
     }
 
@@ -763,14 +1132,14 @@ mod tests {
         let path = dir.path().join("a.meowbak");
         write_file(&path, b"first").unwrap();
         write_file(&path, b"second, longer").unwrap();
-        assert_eq!(read_file(&path).unwrap(), b"second, longer");
+        assert_eq!(fs::read(&path).unwrap(), b"second, longer");
         assert!(!dir.path().join("a.meowbak.tmp").exists(), "no temporary file is left behind");
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
             assert_eq!(fs::metadata(&path).unwrap().permissions().mode() & 0o777, 0o600);
         }
-        assert_eq!(read_file(&dir.path().join("missing.meowbak")), Err(AppError::NotFound));
+        assert_eq!(Backup::open(dir.path().join("missing.meowbak").as_path(), "correct horse").err(), Some(AppError::NotFound));
     }
 
     #[test]

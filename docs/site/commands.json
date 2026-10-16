@@ -1476,6 +1476,386 @@
       "usage": "meowny backup create --out <path> --passphrase <text>"
     },
     {
+      "command": "documents list",
+      "confirm": false,
+      "destructive": false,
+      "flags": [
+        {
+          "flag": "--q",
+          "nullable": false,
+          "param": "q",
+          "required": false,
+          "summary": "Only documents whose name contains this text, ignoring case.",
+          "type": "string",
+          "value": "text",
+          "values": []
+        },
+        {
+          "flag": "--kind",
+          "nullable": false,
+          "param": "kind",
+          "required": false,
+          "summary": "Only images, only PDF files, or only other files.",
+          "type": "string",
+          "value": "image|pdf|other",
+          "values": [
+            "image",
+            "pdf",
+            "other"
+          ]
+        },
+        {
+          "flag": "--from",
+          "nullable": false,
+          "param": "from",
+          "required": false,
+          "summary": "Only documents dated on or after this date (the day of the paper).",
+          "type": "date",
+          "value": "date",
+          "values": []
+        },
+        {
+          "flag": "--to",
+          "nullable": false,
+          "param": "to",
+          "required": false,
+          "summary": "Only documents dated on or before this date.",
+          "type": "date",
+          "value": "date",
+          "values": []
+        },
+        {
+          "flag": "--transaction-id",
+          "nullable": false,
+          "param": "transactionId",
+          "required": false,
+          "summary": "A transaction.",
+          "type": "id",
+          "value": "id",
+          "values": []
+        },
+        {
+          "flag": "--recurring-id",
+          "nullable": false,
+          "param": "recurringId",
+          "required": false,
+          "summary": "A recurring item.",
+          "type": "id",
+          "value": "id",
+          "values": []
+        },
+        {
+          "flag": "--limit",
+          "nullable": false,
+          "param": "limit",
+          "required": false,
+          "summary": "How many to return, 1 to 100.",
+          "type": "integer",
+          "value": "number",
+          "values": []
+        },
+        {
+          "flag": "--offset",
+          "nullable": false,
+          "param": "offset",
+          "required": false,
+          "summary": "How many to skip.",
+          "type": "integer",
+          "value": "number",
+          "values": []
+        }
+      ],
+      "positional": null,
+      "route": "documents.list",
+      "scope": "read",
+      "summary": "Documents, newest paper first, with the total that match: names, dates, types, sizes and hashes, never the files. Up to 100 a page, 50 unless limit says otherwise.",
+      "usage": "meowny documents list [--q <text>] [--kind <image|pdf|other>] [--from <date>] [--to <date>] [--transaction-id <id>] [--recurring-id <id>] [--limit <number>] [--offset <number>]"
+    },
+    {
+      "command": "documents show",
+      "confirm": false,
+      "destructive": false,
+      "flags": [
+        {
+          "flag": "--id",
+          "nullable": false,
+          "param": "id",
+          "required": true,
+          "summary": "The document.",
+          "type": "id",
+          "value": "id",
+          "values": []
+        }
+      ],
+      "positional": "id",
+      "route": "documents.show",
+      "scope": "read",
+      "summary": "One document: its name, date, type, size and hash, whether this computer holds its file, and in `links` what it is attached to. Never the file.",
+      "usage": "meowny documents show <id>"
+    },
+    {
+      "command": "documents add",
+      "confirm": false,
+      "destructive": false,
+      "flags": [
+        {
+          "flag": "--file",
+          "nullable": false,
+          "param": "data",
+          "required": true,
+          "summary": "The bytes of the file, as base64url text. The command line reads the file and does this.",
+          "type": "bytes",
+          "value": "path",
+          "values": []
+        },
+        {
+          "flag": "--name",
+          "nullable": false,
+          "param": "name",
+          "required": false,
+          "summary": "The name to keep it under, up to 120 characters. The name of the file if left out.",
+          "type": "string",
+          "value": "text",
+          "values": []
+        },
+        {
+          "flag": "--date",
+          "nullable": false,
+          "param": "date",
+          "required": false,
+          "summary": "The day of the paper. Today if left out.",
+          "type": "date",
+          "value": "date",
+          "values": []
+        },
+        {
+          "flag": "--keep-on-phone",
+          "nullable": false,
+          "param": "keepOnPhone",
+          "required": false,
+          "summary": "Keep the file on the phone too. Off if left out.",
+          "type": "boolean",
+          "value": "boolean",
+          "values": []
+        },
+        {
+          "flag": "--transaction-ids",
+          "nullable": false,
+          "param": "transactionIds",
+          "required": false,
+          "summary": "Attach it to these transactions.",
+          "type": "ids",
+          "value": "id,id,...",
+          "values": []
+        },
+        {
+          "flag": "--recurring-ids",
+          "nullable": false,
+          "param": "recurringIds",
+          "required": false,
+          "summary": "Attach it to these recurring items.",
+          "type": "ids",
+          "value": "id,id,...",
+          "values": []
+        }
+      ],
+      "positional": "data",
+      "route": "documents.add",
+      "scope": "write",
+      "summary": "Stores a file as a document, encrypted, and attaches it where asked. The answer is the document and `alreadyThere`: the same file added again is not stored twice, and the attachments are added to the document that is there. At most 25 MiB.",
+      "usage": "meowny documents add <file> [--name <text>] [--date <date>] [--keep-on-phone <boolean>] [--transaction-ids <id,id,...>] [--recurring-ids <id,id,...>]"
+    },
+    {
+      "command": "documents update",
+      "confirm": false,
+      "destructive": false,
+      "flags": [
+        {
+          "flag": "--id",
+          "nullable": false,
+          "param": "id",
+          "required": true,
+          "summary": "The document.",
+          "type": "id",
+          "value": "id",
+          "values": []
+        },
+        {
+          "flag": "--name",
+          "nullable": false,
+          "param": "name",
+          "required": false,
+          "summary": "The new name, up to 120 characters.",
+          "type": "string",
+          "value": "text",
+          "values": []
+        },
+        {
+          "flag": "--date",
+          "nullable": false,
+          "param": "date",
+          "required": false,
+          "summary": "The new day of the paper.",
+          "type": "date",
+          "value": "date",
+          "values": []
+        },
+        {
+          "flag": "--keep-on-phone",
+          "nullable": false,
+          "param": "keepOnPhone",
+          "required": false,
+          "summary": "Whether the phone keeps the file.",
+          "type": "boolean",
+          "value": "boolean",
+          "values": []
+        }
+      ],
+      "positional": "id",
+      "route": "documents.update",
+      "scope": "write",
+      "summary": "Renames a document, changes its date, or switches whether the phone keeps its file. Give at least one. The contents cannot be changed.",
+      "usage": "meowny documents update <id> [--name <text>] [--date <date>] [--keep-on-phone <boolean>]"
+    },
+    {
+      "command": "documents delete",
+      "confirm": false,
+      "destructive": true,
+      "flags": [
+        {
+          "flag": "--id",
+          "nullable": false,
+          "param": "id",
+          "required": true,
+          "summary": "The document.",
+          "type": "id",
+          "value": "id",
+          "values": []
+        }
+      ],
+      "positional": "id",
+      "route": "documents.delete",
+      "scope": "write",
+      "summary": "Deletes a document, its file and its attachments. The transactions it was attached to stay.",
+      "usage": "meowny documents delete <id>"
+    },
+    {
+      "command": "documents link",
+      "confirm": false,
+      "destructive": false,
+      "flags": [
+        {
+          "flag": "--id",
+          "nullable": false,
+          "param": "id",
+          "required": true,
+          "summary": "The document.",
+          "type": "id",
+          "value": "id",
+          "values": []
+        },
+        {
+          "flag": "--transaction-id",
+          "nullable": false,
+          "param": "transactionId",
+          "required": false,
+          "summary": "A transaction.",
+          "type": "id",
+          "value": "id",
+          "values": []
+        },
+        {
+          "flag": "--recurring-id",
+          "nullable": false,
+          "param": "recurringId",
+          "required": false,
+          "summary": "A recurring item.",
+          "type": "id",
+          "value": "id",
+          "values": []
+        }
+      ],
+      "positional": "id",
+      "route": "documents.link",
+      "scope": "write",
+      "summary": "Attaches a document to a transaction or to a recurring item. Giving one that is attached already changes nothing.",
+      "usage": "meowny documents link <id> [--transaction-id <id>] [--recurring-id <id>]"
+    },
+    {
+      "command": "documents unlink",
+      "confirm": false,
+      "destructive": false,
+      "flags": [
+        {
+          "flag": "--id",
+          "nullable": false,
+          "param": "id",
+          "required": true,
+          "summary": "The document.",
+          "type": "id",
+          "value": "id",
+          "values": []
+        },
+        {
+          "flag": "--transaction-id",
+          "nullable": false,
+          "param": "transactionId",
+          "required": false,
+          "summary": "A transaction.",
+          "type": "id",
+          "value": "id",
+          "values": []
+        },
+        {
+          "flag": "--recurring-id",
+          "nullable": false,
+          "param": "recurringId",
+          "required": false,
+          "summary": "A recurring item.",
+          "type": "id",
+          "value": "id",
+          "values": []
+        }
+      ],
+      "positional": "id",
+      "route": "documents.unlink",
+      "scope": "write",
+      "summary": "Detaches a document from a transaction or a recurring item. The document and the transaction stay.",
+      "usage": "meowny documents unlink <id> [--transaction-id <id>] [--recurring-id <id>]"
+    },
+    {
+      "command": "documents get",
+      "confirm": true,
+      "destructive": false,
+      "flags": [
+        {
+          "flag": "--id",
+          "nullable": false,
+          "param": "id",
+          "required": true,
+          "summary": "The document.",
+          "type": "id",
+          "value": "id",
+          "values": []
+        },
+        {
+          "flag": "--out",
+          "nullable": false,
+          "param": "out",
+          "required": true,
+          "summary": "Where to write the file: an absolute path in a folder that exists, that is not there yet, ending in the extension of the kind of file (.pdf, .png, .jpg, .gif, .webp, .txt, .html, .csv, or .bin for a file of no known kind).",
+          "type": "path",
+          "value": "path",
+          "values": []
+        }
+      ],
+      "positional": "id",
+      "route": "documents.get",
+      "scope": "write",
+      "summary": "Writes a copy of a document's file, after the person allows it in the app. It is not encrypted. An existing file is never replaced.",
+      "usage": "meowny documents get <id> --out <path>"
+    },
+    {
       "command": "login",
       "confirm": false,
       "destructive": false,
