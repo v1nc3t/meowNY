@@ -6,11 +6,15 @@
 //!   can be carried on, and the check of the folder against the rows.
 //! * `names`: how a document is named and what kind of file it is, decided from the name and the first bytes.
 //! * `library`: the documents and their links in the database, together with their files.
+//! * `opened`: the plain copies handed to the system's viewer, in a folder that is emptied on lock and exit.
+//! * `upload`: a file arriving from the page in pieces of text, gathered in memory.
 
 pub mod library;
 pub mod names;
+pub mod opened;
 pub mod seal;
 pub mod store;
+pub mod upload;
 
 pub use seal::{DocError, DocId, DocKeys, MAX_DOCUMENT_BYTES};
 pub use store::Store;
@@ -29,12 +33,18 @@ impl From<DocError> for AppError {
 }
 
 #[cfg(test)]
+mod command_tests;
+#[cfg(test)]
 mod library_tests;
 #[cfg(test)]
 mod names_tests;
+#[cfg(test)]
+mod opened_tests;
 #[cfg(test)]
 mod seal_tests;
 #[cfg(test)]
 mod store_tests;
 #[cfg(test)]
 mod table_tests;
+#[cfg(test)]
+mod upload_tests;

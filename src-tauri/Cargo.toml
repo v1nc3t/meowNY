@@ -33,6 +33,8 @@ zeroize = { version = "1.8.2", features = ["derive"] }
 [dev-dependencies]
 flate2 = "1"
 tempfile = "3.27.0"
+# The mock runtime, to call the commands through the same message layer the page uses.
+tauri = { version = "2", features = ["test"] }
 
 # Excel and PDF exports, and the fonts they need, and the file dialogs that say where a file goes. The phone has none of these
 # (it cannot save a file for the person yet, and the desktop keeps the backups and exports), so they and the two embedded fonts

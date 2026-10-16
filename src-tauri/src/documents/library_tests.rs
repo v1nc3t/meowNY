@@ -33,6 +33,10 @@ impl Env {
         Env { conn, _dir: dir, store, keys }
     }
 
+    fn dir_path(&self) -> &std::path::Path {
+        self._dir.path()
+    }
+
     fn files(&self) -> Files<'_> {
         Files { store: &self.store, keys: &self.keys }
     }
@@ -567,4 +571,126 @@ fn what_is_sent_to_the_screens_has_the_fields_they_expect() {
     assert_eq!(json.as_object().unwrap().len(), 10, "no sync id and nothing else leaves");
     assert!(serde_json::from_str::<NewDocument>(r#"{"name":"x","unknown":1}"#).is_err());
     assert!(serde_json::from_str::<Filter>(r#"{"kind":"video"}"#).is_err());
+}
+
+// -- what the screens and the commands lean on --------------------------------------------------------------------------
+
+#[test]
+fn the_report_counts_what_is_missing_and_on_the_phone_only_what_should_be_there() {
+    let env = Env::new();
+    let on_pc = env.add("Only on the computer.pdf", b"%PDF-1.7 pc").document;
+    let kept = add(
+        &env.conn,
+        &env.files(),
+        &NewDocument { name: "Kept on the phone.pdf".into(), keep_on_phone: true, ..Default::default() },
+        b"%PDF-1.7 kept",
+        TODAY,
+    )
+    .unwrap()
+    .document;
+    env.store.put(&env.keys, &DocId::from_bytes([9; 16]), b"stray").unwrap();
+    fs::remove_file(env.path_of(&on_pc)).unwrap();
+    fs::remove_file(env.path_of(&kept)).unwrap();
+
+    let desktop = check_report(&env.conn, &env.files(), false).unwrap();
+    assert_eq!(desktop, Report { missing: 2, damaged: 0, cleaned: 1 });
+    // a phone does not miss the file of a document it was not asked to keep
+    let phone = check_report(&env.conn, &env.files(), true).unwrap();
+    assert_eq!(phone, Report { missing: 1, damaged: 0, cleaned: 0 });
+}
+
+#[test]
+fn a_cut_file_is_reported_as_damaged() {
+    let env = Env::new();
+    let doc = env.add("Receipt.pdf", PDF).document;
+    let path = env.path_of(&doc);
+    let sealed = fs::read(&path).unwrap();
+    fs::write(&path, &sealed[..sealed.len() - 3]).unwrap();
+    let report = check_report(&env.conn, &env.files(), false).unwrap();
+    assert_eq!((report.missing, report.damaged), (0, 1));
+}
+
+#[test]
+fn an_image_is_given_to_the_page_as_text_and_only_when_the_app_may_draw_it() {
+    let env = Env::new();
+    let image = env.add("photo.png", &png()).document;
+    let given = read_image(&env.conn, &env.files(), image.id).unwrap();
+    assert_eq!(given.media_type, "image/png");
+    assert_eq!(crate::sync::qr::base64url_decode(&given.data).unwrap(), png());
+
+    // not an image, an image the system should open, and an image that says it is enormous
+    let pdf = env.add("Receipt.pdf", PDF).document;
+    assert_eq!(read_image(&env.conn, &env.files(), pdf.id).err(), Some(AppError::InvalidInput));
+    let mut huge = png();
+    huge[16..20].copy_from_slice(&20_000u32.to_be_bytes());
+    huge[20..24].copy_from_slice(&20_000u32.to_be_bytes());
+    let enormous = env.add("huge.png", &huge).document;
+    assert_eq!(enormous.media_type, "image/png", "it is an image, only not one to draw");
+    assert_eq!(read_image(&env.conn, &env.files(), enormous.id).err(), Some(AppError::InvalidInput));
+    let mut heavy = png();
+    heavy.resize(MAX_DRAW_BYTES as usize + 1, 7);
+    let heavy = env.add("heavy.png", &heavy).document;
+    assert_eq!(read_image(&env.conn, &env.files(), heavy.id).err(), Some(AppError::InvalidInput));
+    assert_eq!(read_image(&env.conn, &env.files(), 999).err(), Some(AppError::NotFound));
+}
+
+#[test]
+fn an_image_whose_file_is_gone_or_changed_is_not_given() {
+    let env = Env::new();
+    let image = env.add("photo.png", &png()).document;
+    let path = env.path_of(&image);
+    let sealed = fs::read(&path).unwrap();
+    fs::remove_file(&path).unwrap();
+    assert_eq!(read_image(&env.conn, &env.files(), image.id).err(), Some(AppError::FileMissing));
+    let mut changed = sealed;
+    let at = changed.len() - 5;
+    changed[at] ^= 1;
+    fs::write(&path, changed).unwrap();
+    assert_eq!(read_image(&env.conn, &env.files(), image.id).err(), Some(AppError::FileDamaged));
+}
+
+#[test]
+fn the_copy_for_the_viewer_is_named_for_what_the_file_is() {
+    let env = Env::new();
+    let opened = super::opened::Opened::new(env.dir_path());
+    let cases: [(&str, Vec<u8>, &str); 4] = [
+        ("Receipt March.pdf", PDF.to_vec(), "Receipt March.pdf"),
+        ("holiday.bat", png(), "holiday.png"),
+        ("invoice.pdf.exe", [PDF, b"% a second file, not the same bytes\n"].concat(), "invoice.pdf.pdf"),
+        ("notes.html", b"<html>hi</html>".to_vec(), "notes.html"),
+    ];
+    for (name, bytes, expected) in cases {
+        let doc = env.add(name, &bytes).document;
+        let path = open_copy(&env.conn, &env.files(), &opened, doc.id).unwrap();
+        assert_eq!(path.file_name().unwrap().to_string_lossy(), expected, "{name}");
+        assert_eq!(fs::read(&path).unwrap(), bytes);
+        assert!(path.starts_with(env.dir_path().join("open")));
+    }
+    assert!(opened.clear());
+    assert!(!env.dir_path().join("open").exists());
+}
+
+#[test]
+fn a_file_that_is_not_known_is_never_opened_from_the_app() {
+    let env = Env::new();
+    let opened = super::opened::Opened::new(env.dir_path());
+    for name in ["setup.exe", "run.sh", "holiday.jpg", "Receipt.pdf"] {
+        let doc = env.add(name, &[b"MZ\x90\x00 not a thing ".as_slice(), name.as_bytes()].concat()).document;
+        assert_eq!(doc.media_type, "application/octet-stream", "{name}");
+        assert_eq!(open_copy(&env.conn, &env.files(), &opened, doc.id).err(), Some(AppError::InvalidInput), "{name}");
+    }
+    assert!(!env.dir_path().join("open").exists(), "no copy was made");
+    // it can still be read, to be saved as a copy by the person
+    let doc = env.add("keep.bin", b"MZ\x90\x00 keep me").document;
+    assert_eq!(read(&env.conn, &env.files(), doc.id).unwrap().as_slice(), b"MZ\x90\x00 keep me");
+}
+
+#[test]
+fn a_description_is_checked_without_a_file() {
+    assert!(check_input(&Env::input("x.pdf")).is_ok());
+    let dated = |d: &str| NewDocument { document_date: Some(d.into()), ..Env::input("x") };
+    assert!(check_input(&dated("2026-10-16")).is_ok());
+    for bad in ["", "yesterday", "2026-1-1", "2026-02-30"] {
+        assert_eq!(check_input(&dated(bad)), Err(AppError::InvalidInput), "{bad:?}");
+    }
 }

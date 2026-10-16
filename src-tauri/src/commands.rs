@@ -12,6 +12,8 @@ use crate::budgets::{self, Budget, Overview, SetBudget};
 use crate::clock;
 use crate::currency::{self, Conversion};
 use crate::display::DisplayFormat;
+use crate::documents::library as docs;
+use crate::documents::names as doc_names;
 use crate::export::{self, Selection};
 use crate::report::{self, ReportOptions};
 use crate::recurring::{self, Dues, NewRecurring, Recurring, RecurringPatch};
@@ -42,6 +44,12 @@ mod ask {
         picked.map(|path| path.into_path().map_err(|_| AppError::Internal)).transpose()
     }
 
+    /// A place to save a file of any kind, as a copy of a document: no filter, since its type is whatever the person's file was.
+    pub fn save_any(app: &tauri::AppHandle, name: &str) -> Result<Option<PathBuf>, AppError> {
+        let picked = app.dialog().file().set_file_name(name).blocking_save_file();
+        picked.map(|path| path.into_path().map_err(|_| AppError::Internal)).transpose()
+    }
+
     pub fn pick(app: &tauri::AppHandle, kind: &str, extension: &str) -> Result<Option<PathBuf>, AppError> {
         let picked = app.dialog().file().add_filter(kind, &[extension]).blocking_pick_file();
         picked.map(|path| path.into_path().map_err(|_| AppError::Internal)).transpose()
@@ -60,6 +68,10 @@ mod ask {
     use crate::vault::AppError;
 
     pub fn save(_: &tauri::AppHandle, _: &str, _: &str, _: &str) -> Result<Option<PathBuf>, AppError> {
+        Err(AppError::InvalidInput)
+    }
+
+    pub fn save_any(_: &tauri::AppHandle, _: &str) -> Result<Option<PathBuf>, AppError> {
         Err(AppError::InvalidInput)
     }
 
@@ -147,6 +159,22 @@ pub const COMMANDS: &[&str] = &[
     "sync_acknowledge",
     "sync_devices",
     "sync_remove_device",
+    "list_documents",
+    "get_document",
+    "update_document",
+    "delete_document",
+    "link_document",
+    "unlink_document",
+    "document_links",
+    "document_library_size",
+    "check_documents",
+    "read_document_image",
+    "open_document",
+    "save_document_copy",
+    "document_upload_begin",
+    "document_upload_chunk",
+    "document_upload_finish",
+    "document_upload_cancel",
 ];
 
 #[tauri::command]
@@ -735,6 +763,126 @@ pub fn sync_remove_device(syncing: Syncing, device_id: String) -> Result<bool, A
     syncing.remove_device(&device_id).map_err(sync_error)
 }
 
+// -- documents ------------------------------------------------------------------------------------------------------------
+
+#[tauri::command]
+pub fn list_documents(vault: Shared, filter: docs::Filter) -> Result<docs::Page, AppError> {
+    vault.with_files(|conn, files| docs::list(conn, files, &filter))
+}
+
+#[tauri::command]
+pub fn get_document(vault: Shared, id: String) -> Result<docs::Document, AppError> {
+    let id = categories::parse_id(&id)?;
+    vault.with_files(|conn, files| docs::get(conn, files, id))
+}
+
+#[tauri::command]
+pub fn update_document(vault: Shared, id: String, patch: docs::DocumentPatch) -> Result<docs::Document, AppError> {
+    let id = categories::parse_id(&id)?;
+    vault.with_files(|conn, files| docs::update(conn, files, id, &patch))
+}
+
+/// Deletes the document, its links and its file. The transactions it was linked to stay.
+#[tauri::command]
+pub fn delete_document(vault: Shared, id: String) -> Result<(), AppError> {
+    let id = categories::parse_id(&id)?;
+    vault.with_files(|conn, files| docs::delete(conn, files, id))
+}
+
+#[tauri::command]
+pub fn link_document(vault: Shared, id: String, target: docs::LinkTarget) -> Result<(), AppError> {
+    let id = categories::parse_id(&id)?;
+    vault.with_files(|conn, _| docs::link(conn, id, &target))
+}
+
+#[tauri::command]
+pub fn unlink_document(vault: Shared, id: String, target: docs::LinkTarget) -> Result<(), AppError> {
+    let id = categories::parse_id(&id)?;
+    vault.with_files(|conn, _| docs::unlink(conn, id, &target))
+}
+
+/// What a document is linked to.
+#[tauri::command]
+pub fn document_links(vault: Shared, id: String) -> Result<Vec<docs::LinkView>, AppError> {
+    let id = categories::parse_id(&id)?;
+    vault.with_files(|conn, _| docs::links_of(conn, id))
+}
+
+/// How many documents there are and how much they hold.
+#[tauri::command]
+pub fn document_library_size(vault: Shared) -> Result<docs::Size, AppError> {
+    vault.with_files(|conn, _| docs::library_size(conn))
+}
+
+/// Compares the folder of the files with the documents (removing what no document names) and says how many have no file here.
+#[tauri::command]
+pub fn check_documents(vault: Shared) -> Result<docs::Report, AppError> {
+    vault.check_documents()
+}
+
+/// An image for the page to draw, if the app may draw it (see `documents::library::read_image`). Anything else is invalid input,
+/// and the page offers the system's viewer.
+#[tauri::command]
+pub fn read_document_image(vault: Shared, id: String) -> Result<docs::ImageData, AppError> {
+    let id = categories::parse_id(&id)?;
+    vault.with_files(|conn, files| docs::read_image(conn, files, id))
+}
+
+/// Opens a document in the system's own viewer, from a plain copy that is removed when the app locks or closes. Not for a kind of
+/// file the app could not identify. The copy is made inside the call that holds the vault, so a lock that comes next removes it.
+#[tauri::command]
+pub fn open_document(app: tauri::AppHandle, vault: Shared, id: String) -> Result<(), AppError> {
+    use tauri_plugin_opener::OpenerExt;
+    let id = categories::parse_id(&id)?;
+    let opened = vault.opened();
+    let path = vault.with_files(|conn, files| docs::open_copy(conn, files, &opened, id))?;
+    app.opener().open_path(path.to_string_lossy(), None::<&str>).map_err(|_| AppError::Internal)
+}
+
+/// Saves a copy of the file where the person chooses. Returns false if they cancel. The copy is not encrypted. The phone has no
+/// file dialogs, so there it is refused.
+#[tauri::command]
+pub async fn save_document_copy(app: tauri::AppHandle, vault: Shared<'_>, id: String) -> Result<bool, AppError> {
+    let id = categories::parse_id(&id)?;
+    let (name, bytes) = vault.with_files(|conn, files| {
+        let document = docs::get(conn, files, id)?;
+        Ok((document.name, docs::read(conn, files, id)?))
+    })?;
+    let Some(path) = ask::save_any(&app, &doc_names::disk_name(&name))? else { return Ok(false) };
+    backup::write_file(&path, &bytes)?;
+    Ok(true)
+}
+
+/// Starts sending a file in: what to call it, which date, which links, and how many bytes it has. The file follows in pieces
+/// (`document_upload_chunk`), because a request with raw bytes does not work on Android, and ends with `document_upload_finish`.
+#[tauri::command]
+pub fn document_upload_begin(vault: Shared, input: docs::NewDocument, size: u64) -> Result<(), AppError> {
+    if vault.status() != VaultStatus::Unlocked {
+        return Err(AppError::Locked);
+    }
+    vault.uploads().begin(input, size)
+}
+
+/// The next piece of the file as base64url text, which must start where the last one ended (`offset`). Returns how many bytes there
+/// are now.
+#[tauri::command]
+pub fn document_upload_chunk(vault: Shared, offset: u64, data: String) -> Result<u64, AppError> {
+    vault.uploads().push(offset, &data)
+}
+
+/// The file is all here: stores it. If the same bytes are in the library already, the answer says so and nothing is stored twice.
+#[tauri::command]
+pub fn document_upload_finish(vault: Shared) -> Result<docs::AddOutcome, AppError> {
+    let today = today_text(&vault)?;
+    let (input, bytes) = vault.uploads().finish()?;
+    vault.with_files(|conn, files| docs::add(conn, files, &input, &bytes, &today))
+}
+
+#[tauri::command]
+pub fn document_upload_cancel(vault: Shared) {
+    vault.uploads().clear();
+}
+
 #[cfg(test)]
 mod tests {
     use super::{typed_address, COMMANDS};
@@ -765,6 +913,15 @@ mod tests {
         for name in COMMANDS {
             let permission = format!("allow-{}", name.replace('_', "-"));
             assert!(capability.contains(&permission), "capability is missing {permission}");
+        }
+    }
+
+    #[test]
+    fn every_command_is_handed_to_the_app() {
+        // a command that is defined, listed and permitted but missing from the handler cannot be called, and nothing else notices
+        let app = include_str!("lib.rs");
+        for name in COMMANDS {
+            assert!(app.contains(&format!("commands::{name},")), "lib.rs does not register {name}");
         }
     }
 

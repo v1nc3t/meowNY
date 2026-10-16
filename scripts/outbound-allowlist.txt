@@ -5,6 +5,7 @@
 
 # Test-only strings that check the navigation guard refuses remote URLs.
 url-literal src-tauri/src/lib.rs  # URLs in unit tests for the navigation guard
+url-literal src-tauri/src/documents/command_tests.rs  # a test: the page's own address on Windows, from which the mock runtime takes a command call to come from the app itself
 
 # The command API for the CLI (phase 7). It only listens: on 127.0.0.1, off unless the person turns it on in
 # Settings, and every request needs a token. Nothing here connects out.

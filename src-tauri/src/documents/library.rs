@@ -15,13 +15,18 @@ use crate::keys;
 use crate::transactions::clean_date;
 use crate::vault::AppError;
 
-use super::names::{clean_file_name, clean_title, sniff, MediaType};
+use super::names::{clean_file_name, clean_title, drawable, open_name, sniff, MediaType};
+use super::opened::Opened;
 use super::seal::{DocId, DocKeys, MAX_DOCUMENT_BYTES};
 use super::store::{sha256, Check, Store};
+use crate::sync::qr::base64url_encode;
 
 pub const DEFAULT_LIMIT: u32 = 50;
 pub const MAX_LIMIT: u32 = 100;
 const SEARCH_MAX_CHARS: usize = 120;
+/// An image bigger than this (in bytes) is not drawn by the app but handed to the system's viewer: the page gets it as text, a
+/// third larger, and has to decode it.
+pub const MAX_DRAW_BYTES: u64 = 10 * 1024 * 1024;
 /// How many things one new document may be linked to when it is added.
 const MAX_LINKS_AT_ADD: usize = 50;
 
@@ -252,6 +257,18 @@ fn find_by_hash(conn: &Connection, hash: &str) -> Result<Option<(i64, String)>, 
         .optional()?)
 }
 
+/// What is wrong with a description of a new document, apart from the file itself: the date, the number of links and their ids.
+/// Said before a file is sent, so nobody waits for 25 MiB to learn that a date was mistyped.
+pub fn check_input(input: &NewDocument) -> Result<(), AppError> {
+    if input.links.len() > MAX_LINKS_AT_ADD {
+        return Err(AppError::InvalidInput);
+    }
+    if let Some(date) = &input.document_date {
+        clean_date(date)?;
+    }
+    input.links.iter().try_for_each(|target| parse_target(target).map(|_| ()))
+}
+
 /// Stores a file and makes its document. `bytes` is the whole file, `today` the date to use when none is given.
 ///
 /// If the same bytes are in the library already nothing is stored again: the links are added to the document that is there, and
@@ -263,9 +280,7 @@ pub fn add(conn: &Connection, files: &Files, input: &NewDocument, bytes: &[u8], 
     if bytes.len() as u64 > MAX_DOCUMENT_BYTES {
         return Err(AppError::TooLarge);
     }
-    if input.links.len() > MAX_LINKS_AT_ADD {
-        return Err(AppError::InvalidInput);
-    }
+    check_input(input)?;
     let name = clean_file_name(&input.name);
     let date = clean_date(input.document_date.as_deref().unwrap_or(today))?;
     let targets = input.links.iter().map(parse_target).collect::<Result<Vec<_>, _>>()?;
@@ -491,7 +506,72 @@ pub fn check(conn: &Connection, files: &Files) -> Result<Check, AppError> {
     Ok(files.store.check(files.keys, &docs)?)
 }
 
+/// What the check of the folder found, for the screen that lists the documents.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct Report {
+    /// Documents with no file here. On the phone only those it should hold (the switch is on): the rest are not missing, they are
+    /// on the computer.
+    pub missing: u32,
+    /// Documents whose file has a length that its row cannot give.
+    pub damaged: u32,
+    /// Files and leftovers that no row names, removed.
+    pub cleaned: u32,
+}
+
+/// The check of the folder, as the screens want to hear of it. `phone` is whether this is the phone's app.
+pub fn check_report(conn: &Connection, files: &Files, phone: bool) -> Result<Report, AppError> {
+    let found = check(conn, files)?;
+    let missing = if phone {
+        let mut stmt = conn.prepare("SELECT sync_id FROM documents WHERE keep_on_phone = 1")?;
+        let kept: HashSet<String> = stmt.query_map([], |r| r.get(0))?.collect::<Result<_, _>>()?;
+        found.missing.iter().filter(|id| kept.contains(&id.to_hex())).count()
+    } else {
+        found.missing.len()
+    };
+    Ok(Report {
+        missing: missing as u32,
+        damaged: found.damaged.len() as u32,
+        cleaned: (found.strays_removed + found.temp_removed + found.parts_removed) as u32,
+    })
+}
+
 /// The kind of file a row says, for code that decides whether to draw, open or only save it.
 pub fn media_type_of(document: &Document) -> MediaType {
     MediaType::parse(&document.media_type).unwrap_or(MediaType::Other)
+}
+
+/// An image for the page to draw, as base64url text. The page turns it into a `data:` address, which its content policy already
+/// allows, so nothing about the policy had to loosen.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ImageData {
+    pub media_type: String,
+    pub data: String,
+}
+
+/// The contents of an image document for the screen, if the app may draw it: it is one of the four image kinds, not bigger than
+/// `MAX_DRAW_BYTES`, its file opens and matches its row, and its header gives a size of at most 64 megapixels. Anything else is
+/// `InvalidInput`, which the page answers by offering the system's viewer.
+pub fn read_image(conn: &Connection, files: &Files, id: i64) -> Result<ImageData, AppError> {
+    let document = get(conn, files, id)?;
+    let media = media_type_of(&document);
+    if !media.is_image() || document.size_bytes > MAX_DRAW_BYTES {
+        return Err(AppError::InvalidInput);
+    }
+    let bytes = read(conn, files, id)?;
+    if !drawable(&bytes, media) {
+        return Err(AppError::InvalidInput);
+    }
+    Ok(ImageData { media_type: media.as_str().to_string(), data: base64url_encode(&bytes) })
+}
+
+/// Makes the plain copy that the system's viewer is given and says where it is. A kind of file that is not opened from the app
+/// (everything that is not an image, a PDF, text, CSV or HTML) is `InvalidInput`: it can only be saved. The copy is named for the
+/// kind the app found and not for the name (see `names::open_name`).
+pub fn open_copy(conn: &Connection, files: &Files, opened: &Opened, id: i64) -> Result<std::path::PathBuf, AppError> {
+    let document = get(conn, files, id)?;
+    let name = open_name(&document.name, media_type_of(&document)).ok_or(AppError::InvalidInput)?;
+    let bytes = read(conn, files, id)?;
+    Ok(opened.make_copy(&name, &bytes)?)
 }

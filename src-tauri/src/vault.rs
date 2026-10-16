@@ -15,6 +15,10 @@ use serde::{Deserialize, Serialize};
 
 use crate::backup::{self, Snapshot};
 use crate::db::{self, DbError};
+use crate::documents::library::{self, Files, Report};
+use crate::documents::opened::Opened;
+use crate::documents::upload::Uploads;
+use crate::documents::{DocKeys, Store};
 use crate::keys::{self, KeyError, Purpose, RecoveryKey, SecretStore, SALT_LEN};
 use crate::migrate::MigrateError;
 
@@ -169,6 +173,9 @@ fn default_language() -> String {
 
 struct State {
     conn: Option<Connection>,
+    /// What seals and opens the files of the documents, made from the database key when the vault opens and dropped (and zeroed) with
+    /// the connection, so a locked app cannot read a file.
+    docs: Option<DocKeys>,
     last_activity: Instant,
 }
 
@@ -200,6 +207,8 @@ pub struct Vault {
     dir: PathBuf,
     store: Box<dyn SecretStore>,
     state: Mutex<State>,
+    /// The file that is being sent in by the page, if any. Locking drops it.
+    uploads: Uploads,
     policy: Policy,
     /// One unlock at a time, so two at once cannot both read the counter before either writes it.
     unlock_guard: Mutex<()>,
@@ -211,7 +220,14 @@ impl Vault {
     }
 
     pub fn with_policy(dir: PathBuf, store: Box<dyn SecretStore>, policy: Policy) -> Self {
-        Self { dir, store, state: Mutex::new(State { conn: None, last_activity: Instant::now() }), policy, unlock_guard: Mutex::new(()) }
+        Self {
+            dir,
+            store,
+            state: Mutex::new(State { conn: None, docs: None, last_activity: Instant::now() }),
+            uploads: Uploads::default(),
+            policy,
+            unlock_guard: Mutex::new(()),
+        }
     }
 
     pub fn policy(&self) -> Policy {
@@ -296,6 +312,7 @@ impl Vault {
 
         let mut state = self.lock_state();
         state.conn = Some(conn);
+        state.docs = Some(DocKeys::from_db_key(&db_key));
         state.last_activity = Instant::now();
         Ok(recovery.to_display())
     }
@@ -336,7 +353,10 @@ impl Vault {
                 let conn = db::open_and_migrate(&self.db_path(), &key)?;
                 let mut state = self.lock_state();
                 state.conn = Some(conn);
+                state.docs = Some(DocKeys::from_db_key(&key));
                 state.last_activity = Instant::now();
+                drop(state);
+                self.tidy_documents();
                 Ok(())
             }
             Err(AppError::WrongCredentials) if counting => {
@@ -418,7 +438,10 @@ impl Vault {
 
         let mut state = self.lock_state();
         state.conn = Some(conn);
+        state.docs = Some(DocKeys::from_db_key(&key));
         state.last_activity = Instant::now();
+        drop(state);
+        self.tidy_documents();
         Ok(())
     }
 
@@ -453,6 +476,8 @@ impl Vault {
         // The slow key stretching happens before the connection is borrowed.
         let snapshot = backup::open(bytes, backup_passphrase)?;
         self.with_conn(|c| backup::restore_snapshot(c, &snapshot))?;
+        // The rows are another set now: files that no row names any more go, and rows whose file is not here are counted.
+        self.tidy_documents();
         self.touch();
         Ok(())
     }
@@ -482,9 +507,20 @@ impl Vault {
         Ok(recovery)
     }
 
-    /// Closes the database. The connection owned the only copy of the key.
+    /// Closes the database. The connection owned the only copy of the key. The key of the documents goes with it, and so do the
+    /// plain copies that were made for the system's viewer and a file that was being sent in.
     pub fn lock(&self) {
-        self.lock_state().conn = None;
+        {
+            let mut state = self.lock_state();
+            state.conn = None;
+            state.docs = None;
+        }
+        self.after_lock();
+    }
+
+    fn after_lock(&self) {
+        self.uploads.clear();
+        self.clear_open_copies();
     }
 
     /// Records user activity for the idle timer.
@@ -501,6 +537,9 @@ impl Vault {
         let mut state = self.lock_state();
         if state.conn.is_some() && now.saturating_duration_since(state.last_activity) >= limit {
             state.conn = None;
+            state.docs = None;
+            drop(state);
+            self.after_lock();
             return true;
         }
         false
@@ -511,6 +550,42 @@ impl Vault {
         let mut state = self.lock_state();
         let conn = state.conn.as_mut().ok_or(AppError::Locked)?;
         f(conn)
+    }
+
+    /// Runs `f` on the open database together with the folder of the documents and their keys, or fails with `Locked`. The state is
+    /// held for the whole call, so the app cannot lock in the middle of it, and a copy made inside it for the system's viewer is
+    /// still there to be removed by the lock that comes after.
+    pub fn with_files<R>(&self, f: impl FnOnce(&Connection, &Files) -> Result<R, AppError>) -> Result<R, AppError> {
+        let state = self.lock_state();
+        let (Some(conn), Some(keys)) = (state.conn.as_ref(), state.docs.as_ref()) else { return Err(AppError::Locked) };
+        let store = Store::new(&self.dir);
+        f(conn, &Files { store: &store, keys })
+    }
+
+    /// The file being sent in by the page.
+    pub fn uploads(&self) -> &Uploads {
+        &self.uploads
+    }
+
+    /// Removes the plain copies made for the system's viewer. Says whether they are all gone.
+    pub fn clear_open_copies(&self) -> bool {
+        Opened::new(&self.dir).clear()
+    }
+
+    /// Where the plain copies for the system's viewer are made.
+    pub fn opened(&self) -> Opened {
+        Opened::new(&self.dir)
+    }
+
+    /// Compares the folder of the documents with the rows (see `library::check_report`). It removes what no row names.
+    pub fn check_documents(&self) -> Result<Report, AppError> {
+        let phone = self.policy == Policy::PHONE;
+        self.with_files(|conn, files| library::check_report(conn, files, phone))
+    }
+
+    /// Done when the data has just been opened or replaced. A failure is not the person's business here: the next check tries again.
+    fn tidy_documents(&self) {
+        let _ = self.check_documents();
     }
 
     pub fn settings(&self) -> Result<Settings, AppError> {
@@ -623,6 +698,9 @@ impl Vault {
         if backups.exists() {
             ok &= fs::remove_dir_all(&backups).is_ok();
         }
+        // The sealed files cannot be read without the key that is deleted below, but they take room and show how many there were.
+        ok &= Store::new(&self.dir).remove_all().is_ok();
+        ok &= self.clear_open_copies();
         ok &= self.store.delete().is_ok();
         ok
     }
@@ -1447,6 +1525,232 @@ mod tests {
         let file = backup::seal(&broken, "backup passphrase").unwrap();
         assert_eq!(v.restore_backup(&file, "backup passphrase", "RESTORE"), Err(AppError::InvalidBackup));
         assert_eq!(snapshot_of(&v), before);
+    }
+
+    // -- documents ----------------------------------------------------------------------------------------------------------
+
+    use crate::documents::library::{self, NewDocument};
+    use crate::documents::seal::DocId;
+
+    const RECEIPT: &[u8] = b"%PDF-1.7 a receipt";
+
+    fn add_document(v: &Vault, name: &str, bytes: &[u8]) -> i64 {
+        let input = NewDocument { name: name.into(), ..Default::default() };
+        v.with_files(|c, f| library::add(c, f, &input, bytes, "2026-10-16")).unwrap().document.id
+    }
+
+    fn read_document(v: &Vault, id: i64) -> Result<Vec<u8>, AppError> {
+        v.with_files(|c, f| library::read(c, f, id).map(|b| b.to_vec()))
+    }
+
+    fn documents_dir(dir: &Path) -> PathBuf {
+        dir.join("documents")
+    }
+
+    fn files_in(dir: &Path) -> usize {
+        fs::read_dir(dir).map(|e| e.count()).unwrap_or(0)
+    }
+
+    #[test]
+    fn documents_can_be_reached_only_while_the_app_is_unlocked() {
+        let dir = tempfile::tempdir().unwrap();
+        let v = vault(dir.path());
+        assert_eq!(v.with_files(|_, _| Ok(())).err(), Some(AppError::Locked), "not even set up");
+        v.create(&settings(), None).unwrap();
+        let id = add_document(&v, "Receipt.pdf", RECEIPT);
+        assert_eq!(read_document(&v, id).unwrap(), RECEIPT);
+
+        v.lock();
+        assert!(v.lock_state().docs.is_none(), "the key of the files goes with the connection");
+        assert_eq!(read_document(&v, id).err(), Some(AppError::Locked));
+        assert_eq!(v.check_documents().err(), Some(AppError::Locked));
+        assert!(v.uploads().is_empty());
+    }
+
+    #[test]
+    fn the_same_key_comes_back_at_every_unlock_so_files_outlive_a_lock() {
+        let dir = tempfile::tempdir().unwrap();
+        let v = vault(dir.path());
+        v.create(&settings(), Some("long enough pass")).unwrap();
+        let id = add_document(&v, "Receipt.pdf", RECEIPT);
+        for _ in 0..3 {
+            v.lock();
+            v.unlock(Some("long enough pass")).unwrap();
+            assert_eq!(read_document(&v, id).unwrap(), RECEIPT);
+        }
+        assert_eq!(files_in(&documents_dir(dir.path())), 1);
+    }
+
+    #[test]
+    fn files_are_still_readable_after_the_passphrase_is_reset_with_the_recovery_key() {
+        let dir = tempfile::tempdir().unwrap();
+        let v = vault(dir.path());
+        let recovery = v.create(&settings(), Some("long enough pass")).unwrap();
+        let id = add_document(&v, "Receipt.pdf", RECEIPT);
+        v.lock();
+        v.recover(&recovery, Some("a different pass")).unwrap();
+        assert_eq!(read_document(&v, id).unwrap(), RECEIPT, "the database key did not change, so neither did the files' key");
+        v.lock();
+        v.unlock(Some("a different pass")).unwrap();
+        assert_eq!(read_document(&v, id).unwrap(), RECEIPT);
+    }
+
+    #[test]
+    fn another_vault_cannot_read_the_files_of_this_one() {
+        let (a, b) = (tempfile::tempdir().unwrap(), tempfile::tempdir().unwrap());
+        let (va, vb) = (vault(a.path()), vault(b.path()));
+        va.create(&settings(), None).unwrap();
+        vb.create(&settings(), None).unwrap();
+        let id = add_document(&va, "Receipt.pdf", RECEIPT);
+        // the same file, the same row, copied to a vault with a different database key
+        let name = fs::read_dir(documents_dir(a.path())).unwrap().next().unwrap().unwrap().file_name();
+        fs::create_dir_all(documents_dir(b.path())).unwrap();
+        fs::copy(documents_dir(a.path()).join(&name), documents_dir(b.path()).join(&name)).unwrap();
+        vb.with_conn(|c| {
+            let (sync_id, hash): (String, String) =
+                va.with_conn(|ca| Ok(ca.query_row("SELECT sync_id, sha256 FROM documents WHERE id = ?1", [id], |r| Ok((r.get(0)?, r.get(1)?)))?))?;
+            c.execute(
+                "INSERT INTO documents (sync_id, name, media_type, size_bytes, sha256, document_date) VALUES (?1, 'Receipt.pdf', 'application/pdf', ?2, ?3, '2026-10-16')",
+                rusqlite::params![sync_id, RECEIPT.len() as i64, hash],
+            )?;
+            Ok(())
+        })
+        .unwrap();
+        // the name is derived from the key, so the copied file is not even found under the other vault's name
+        assert_eq!(read_document(&vb, 1).err(), Some(AppError::FileMissing));
+        assert_eq!(read_document(&va, id).unwrap(), RECEIPT);
+    }
+
+    fn make_copy(v: &Vault) -> PathBuf {
+        v.opened().make_copy("Receipt.pdf", RECEIPT).unwrap()
+    }
+
+    #[test]
+    fn every_way_of_locking_removes_the_copies_made_for_the_viewer() {
+        let dir = tempfile::tempdir().unwrap();
+        let v = vault(dir.path());
+        v.create(&settings(), None).unwrap();
+        let open = dir.path().join("open");
+
+        let copy = make_copy(&v);
+        assert!(copy.exists());
+        v.lock();
+        assert!(!open.exists(), "the lock button, the window closing and minimising all come here");
+
+        v.unlock(None).unwrap();
+        make_copy(&v);
+        v.save_lock_prefs(&LockPrefs { lock_after_secs: 60, lock_on_minimize: true, lock_on_close: true }).unwrap();
+        assert!(!v.lock_if_idle(Instant::now()), "not idle yet");
+        assert!(open.exists());
+        assert!(v.lock_if_idle(Instant::now() + Duration::from_secs(61)));
+        assert!(!open.exists(), "the idle lock too");
+
+        v.unlock(None).unwrap();
+        make_copy(&v);
+        v.wipe("DELETE").unwrap();
+        assert!(!open.exists(), "and so does deleting everything");
+    }
+
+    #[test]
+    fn locking_drops_a_file_that_was_half_sent() {
+        let dir = tempfile::tempdir().unwrap();
+        let v = vault(dir.path());
+        v.create(&settings(), None).unwrap();
+        v.uploads().begin(NewDocument { name: "x.pdf".into(), ..Default::default() }, 10).unwrap();
+        v.uploads().push(0, &crate::sync::qr::base64url_encode(b"half")).unwrap();
+        assert!(!v.uploads().is_empty());
+        v.lock();
+        assert!(v.uploads().is_empty());
+        v.unlock(None).unwrap();
+        assert_eq!(v.uploads().finish().err(), Some(AppError::InvalidInput));
+    }
+
+    #[test]
+    fn the_copies_are_removed_when_the_app_starts_again_after_a_crash() {
+        let dir = tempfile::tempdir().unwrap();
+        let v = vault(dir.path());
+        v.create(&settings(), None).unwrap();
+        make_copy(&v);
+        // the app died without locking; the next start calls this before anything else
+        assert!(vault(dir.path()).clear_open_copies());
+        assert!(!dir.path().join("open").exists());
+    }
+
+    #[test]
+    fn deleting_all_data_removes_the_files() {
+        let dir = tempfile::tempdir().unwrap();
+        let v = vault(dir.path());
+        v.create(&settings(), None).unwrap();
+        add_document(&v, "Receipt.pdf", RECEIPT);
+        add_document(&v, "Another.pdf", b"%PDF-1.7 another");
+        assert_eq!(files_in(&documents_dir(dir.path())), 2);
+        v.wipe("DELETE").unwrap();
+        assert!(!documents_dir(dir.path()).exists());
+        assert_eq!(v.status(), VaultStatus::NotSetUp);
+    }
+
+    #[test]
+    fn a_phone_that_erases_itself_leaves_no_documents_and_no_copies() {
+        let dir = tempfile::tempdir().unwrap();
+        let v = phone(dir.path());
+        v.create(&settings(), Some(PHONE_PASS)).unwrap();
+        add_document(&v, "Receipt.pdf", RECEIPT);
+        make_copy(&v);
+        v.lock();
+        for _ in 0..4 {
+            assert_eq!(v.unlock(Some("wrong wrong wrong")), Err(AppError::WrongCredentials));
+        }
+        assert!(documents_dir(dir.path()).exists());
+        assert_eq!(v.unlock(Some("wrong wrong wrong")), Err(AppError::Erased));
+        assert!(!documents_dir(dir.path()).exists() && !dir.path().join("open").exists());
+    }
+
+    #[test]
+    fn opening_the_vault_removes_files_that_no_document_names() {
+        let dir = tempfile::tempdir().unwrap();
+        let v = vault(dir.path());
+        v.create(&settings(), None).unwrap();
+        let id = add_document(&v, "Receipt.pdf", RECEIPT);
+        // what a crash between writing a file and committing its row leaves
+        let stray = v.with_files(|_, f| {
+            f.store.put(f.keys, &DocId::from_bytes([7; 16]), b"a stray").unwrap();
+            Ok(f.keys.file_name(&DocId::from_bytes([7; 16])))
+        });
+        let stray = documents_dir(dir.path()).join(stray.unwrap());
+        assert!(stray.exists());
+        v.lock();
+        v.unlock(None).unwrap();
+        assert!(!stray.exists());
+        assert_eq!(read_document(&v, id).unwrap(), RECEIPT);
+    }
+
+    #[test]
+    fn the_report_counts_missing_files_and_a_phone_counts_only_the_ones_it_should_hold() {
+        for (is_phone, expected) in [(false, 1), (true, 0)] {
+            let dir = tempfile::tempdir().unwrap();
+            let v = if is_phone { phone(dir.path()) } else { vault(dir.path()) };
+            v.create(&settings(), if is_phone { Some(PHONE_PASS) } else { None }).unwrap();
+            add_document(&v, "Receipt.pdf", RECEIPT);
+            for entry in fs::read_dir(documents_dir(dir.path())).unwrap() {
+                fs::remove_file(entry.unwrap().path()).unwrap();
+            }
+            assert_eq!(v.check_documents().unwrap().missing, expected, "phone: {is_phone}");
+        }
+    }
+
+    #[test]
+    fn restoring_a_backup_removes_the_files_of_documents_it_does_not_have() {
+        let dir = tempfile::tempdir().unwrap();
+        let v = vault(dir.path());
+        v.create(&settings(), None).unwrap();
+        let before = snapshot_of(&v);
+        let file = backup::seal(&before, "backup passphrase").unwrap();
+
+        let id = add_document(&v, "Receipt.pdf", RECEIPT);
+        assert_eq!(files_in(&documents_dir(dir.path())), 1);
+        v.restore_backup(&file, "backup passphrase", "RESTORE").unwrap();
+        assert_eq!(read_document(&v, id).err(), Some(AppError::NotFound), "the document is not in the backup");
+        assert_eq!(files_in(&documents_dir(dir.path())), 0, "so its file is not kept either");
     }
 
     #[test]
