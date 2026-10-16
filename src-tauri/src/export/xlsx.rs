@@ -407,7 +407,7 @@ mod tests {
                             _ => {}
                         }
                     }
-                    bare.contains('y') || (id >= 14 && id <= 22 && !formats.contains_key(&id))
+                    bare.contains('y') || ((14..=22).contains(&id) && !formats.contains_key(&id))
                 })
                 .collect()
         }

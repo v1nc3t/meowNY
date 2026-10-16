@@ -236,10 +236,6 @@ impl Window {
         self.address
     }
 
-    pub fn ends_at(&self) -> Instant {
-        self.ends
-    }
-
     /// Waits for the one connection that proves itself, and closes the window. Everything else is closed without a word.
     pub fn accept(self, cancel: &Arc<AtomicBool>) -> Result<(Channel, usize), NetError> {
         let mut connections = 0u32;

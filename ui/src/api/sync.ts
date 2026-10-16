@@ -77,7 +77,6 @@ export const Status = z.discriminatedUnion('state', [
   z.object({ state: z.literal('failed'), purpose: Purpose, reason: z.string().regex(/^[a-z_]+$/) }),
 ])
 export type Status = z.infer<typeof Status>
-export type State = Status['state']
 
 const stamp = z.string().regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{3})?Z$/)
 

@@ -11,7 +11,13 @@
 //! Budget against actual for a range compares each category over the months in which it had a budget;
 //! for a single month that is exactly what the budget screen shows.
 
+// What a report reads is only used by the PDF, which the phone's build leaves out.
+#![cfg_attr(mobile, allow(dead_code))]
+
+// The PDF is made on the desktop only: the phone's build has neither the PDF writer nor the fonts (see `Cargo.toml`).
+#[cfg(desktop)]
 mod layout;
+#[cfg(desktop)]
 mod render;
 
 use std::collections::HashMap;
@@ -334,13 +340,19 @@ impl Report {
         self.pdf_with(options, true)
     }
 
+    #[cfg(desktop)]
     fn pdf_with(&self, options: &ReportOptions, compress: bool) -> Result<Vec<u8>, AppError> {
         let doc = layout::build(&self.0, options)?;
         render::pdf(&doc, &options.labels.title, compress)
     }
+
+    #[cfg(mobile)]
+    fn pdf_with(&self, _: &ReportOptions, _: bool) -> Result<Vec<u8>, AppError> {
+        Err(AppError::InvalidInput)
+    }
 }
 
-#[cfg(test)]
+#[cfg(all(test, desktop))]
 mod tests {
     use super::layout::{axis_top, donut_slices, label_stride, Metrics, Op};
     use super::*;
@@ -702,7 +714,7 @@ mod tests {
         assert_eq!(axis_top(320_000), (400_000, 100_000));
         assert_eq!(axis_top(100_000), (100_000, 25_000), "1000.00 fits four steps of 250");
         assert_eq!(axis_top(1_234_567), (2_000_000, 500_000));
-        assert_eq!(axis_top(999_999_999_999), (10_000_000_000_00, 2_500_000_000_00));
+        assert_eq!(axis_top(999_999_999_999), (1_000_000_000_000, 250_000_000_000));
         for max in [1, 99, 100, 101, 12_345, 9_999_999, 123_456_789_012] {
             let (top, step) = axis_top(max);
             assert!(top >= max && top == step * 4, "{max}: {top} {step}");

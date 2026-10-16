@@ -834,7 +834,7 @@ mod tests {
         assert_eq!(v.unlock(Some("wrong wrong wrong")), Err(AppError::Erased));
         assert_eq!(v.status(), VaultStatus::NotSetUp);
         assert!(!v.db_path().exists() && !v.config_path().exists(), "the database, with the pairing secret in it, and the config are gone");
-        assert_eq!(v.store.get().unwrap().is_none(), true, "and so is the secret");
+        assert!(v.store.get().unwrap().is_none(), "and so is the secret");
         // and the right passphrase now opens nothing
         assert_eq!(v.unlock(Some(PHONE_PASS)), Err(AppError::NotSetUp));
         assert_eq!(v.attempts().unwrap(), None);

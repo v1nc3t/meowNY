@@ -18,11 +18,6 @@ impl DbKey {
         &self.0
     }
 
-    #[cfg(test)]
-    pub fn pragma_value_for_tests(&self) -> String {
-        self.pragma_value()
-    }
-
     /// SQLCipher raw-key syntax: skips the passphrase KDF, so the key must be random.
     fn pragma_value(&self) -> String {
         let hex: String = self.0.iter().map(|b| format!("{b:02x}")).collect();

@@ -358,7 +358,7 @@ fn a_clock_that_is_behind_the_data_catches_up() {
 
     let t = transaction(&conn, c, "after");
     assert!(Stamp::parse(&stamp_of(&conn, "transactions", t)).unwrap() > future, "the next change is newer than everything seen");
-    assert_eq!(stamp::max_stamp(&conn).unwrap().unwrap().ms, future.ms + 0);
+    assert_eq!(stamp::max_stamp(&conn).unwrap().unwrap().ms, future.ms);
 }
 
 #[test]
@@ -523,7 +523,7 @@ fn the_backup_file_carries_the_ids_but_not_the_pairings_or_the_device() {
         .execute("INSERT INTO sync_peers (device_id, name, secret, paired_at) VALUES (?1, 'Phone', ?2, 'now')", params!["ab".repeat(16), "cd".repeat(32)])
         .unwrap();
     let snapshot = backup::dump(&source).unwrap();
-    assert!(snapshot.tables.get("sync_peers").is_none() && snapshot.tables.get("sync_clock").is_none());
+    assert!(!snapshot.tables.contains_key("sync_peers") && !snapshot.tables.contains_key("sync_clock"));
     let json = serde_json::to_string(&snapshot.tables).unwrap();
     assert!(!json.contains(&"cd".repeat(32)), "the pairing secret is not in the file");
     assert!(!json.contains(&stamp::device_id(&source).unwrap()), "nor is the device id");

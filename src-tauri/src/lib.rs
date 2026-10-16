@@ -39,6 +39,7 @@ const SCHEDULE_CHECK_EVERY: Duration = Duration::from_secs(60);
 
 /// Whether this is the phone's app: always on a phone, and in a debug build when `MEOWNY_PROFILE=phone` is set, so the phone's
 /// screens can be tried in a window on a computer (with a separate data folder; the vault is of another kind).
+#[cfg(not(target_os = "android"))]
 fn is_phone() -> bool {
     cfg!(any(target_os = "android", target_os = "ios")) || (cfg!(debug_assertions) && std::env::var("MEOWNY_PROFILE").is_ok_and(|v| v == "phone"))
 }
@@ -72,6 +73,8 @@ fn install_safe_panic_hook() {
 
 /// The webview may only show the app itself. Anything else is refused; links to the outside
 /// go through the opener plugin, which hands them to the system browser.
+// The local server of `tauri dev` is allowed in a debug build only; clippy sees that `cfg!` as a plain `true`.
+#[allow(clippy::match_like_matches_macro)]
 fn is_app_url(url: &tauri::Url) -> bool {
     match url.scheme() {
         "tauri" | "about" => true,
@@ -87,12 +90,11 @@ fn is_app_url(url: &tauri::Url) -> bool {
 /// Asks the person to allow something a token wants to do, in a native dialog over the app's window.
 struct AllowDialog(tauri::AppHandle);
 
+#[cfg(desktop)]
 impl api::Show for AllowDialog {
     fn show(&self, approval: &api::Approval) -> bool {
         use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
-        // The window may be behind others or minimised; the question must not wait unseen. (Only a computer has windows to
-        // bring forward, and only a computer has the command API that asks.)
-        #[cfg(desktop)]
+        // The window may be behind others or minimised; the question must not wait unseen.
         if let Some(window) = self.0.get_webview_window("main") {
             let _ = window.show();
             let _ = window.unminimize();
@@ -108,6 +110,15 @@ impl api::Show for AllowDialog {
     }
 }
 
+/// Only a computer has the command API that asks; a phone never starts it, so on a phone the answer is always no.
+#[cfg(mobile)]
+impl api::Show for AllowDialog {
+    fn show(&self, _: &api::Approval) -> bool {
+        let _ = &self.0;
+        false
+    }
+}
+
 // On a phone the app starts through this entry point (Tauri's generated Android project calls it); on a computer `main` does.
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -115,13 +126,16 @@ pub fn run() {
 
     let builder = tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
-        .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri::plugin::Builder::<tauri::Wry>::new("navigation-guard").on_navigation(|_, url| is_app_url(url)).build());
 
     // The camera that reads the code of the desktop, on a phone only.
     #[cfg(mobile)]
     let builder = builder.plugin(tauri_plugin_barcode_scanner::init());
+
+    // The file dialogs, on a computer only (the phone has no backups or exports to save and load).
+    #[cfg(desktop)]
+    let builder = builder.plugin(tauri_plugin_dialog::init());
 
     builder
         .setup(|app| {

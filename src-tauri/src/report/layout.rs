@@ -227,6 +227,7 @@ impl Builder<'_> {
     }
 
     /// Text that is cut to `max` wide.
+    #[allow(clippy::too_many_arguments)] // a position, a size, a style, the text and a width: one call draws one piece of text
     fn text_fit(&mut self, x: f32, y: f32, size: f32, bold: bool, color: Color, text: &str, max: f32) {
         let text = self.m.fit(text, size, bold, max);
         self.text(x, y, size, bold, color, &text);

@@ -11,8 +11,12 @@ What it changes, and why (docs/sync-design.md section 13):
 Both changes are made once: running the script again changes nothing. It stops with an error when a file is not what it expects,
 so a build never goes on with the protection missing.
 
+For a build that is only for trying things on a test phone over adb (screenshots of the screen, and a field to paste a code), set
+MEOWNY_ALLOW_SCREENSHOTS=1: the window is then left open to screenshots. Never use it for a build that holds anyone's data.
+
 Usage: python3 scripts/android-patch.py [path to src-tauri/gen/android]
 """
+import os
 import re
 import sys
 from pathlib import Path
@@ -68,6 +72,16 @@ def patch_activity(path: Path) -> bool:
     return True
 
 
+def unpatch_activity(path: Path) -> bool:
+    """Takes the secure window off again (for a test build only). Returns whether the file changed."""
+    text = path.read_text(encoding="utf-8")
+    kept = [line for line in text.split("\n") if "FLAG_SECURE" not in line]
+    if len(kept) == len(text.split("\n")):
+        return False
+    path.write_text("\n".join(kept), encoding="utf-8")
+    return True
+
+
 def find_one(root: Path, pattern: str) -> Path:
     found = sorted(root.glob(pattern))
     if len(found) != 1:
@@ -82,7 +96,11 @@ def main(argv: list[str]) -> None:
     manifest = find_one(root, "app/src/main/AndroidManifest.xml")
     activity = find_one(root, "app/src/main/java/**/MainActivity.kt")
     print(f"{manifest}: {'changed' if patch_manifest(manifest) else 'already done'}")
-    print(f"{activity}: {'changed' if patch_activity(activity) else 'already done'}")
+    if os.environ.get("MEOWNY_ALLOW_SCREENSHOTS") == "1":
+        print("WARNING: the window is open to screenshots. This build is for a test phone only.")
+        print(f"{activity}: {'changed' if unpatch_activity(activity) else 'already open'}")
+    else:
+        print(f"{activity}: {'changed' if patch_activity(activity) else 'already done'}")
 
 
 if __name__ == "__main__":

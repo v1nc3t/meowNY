@@ -2,7 +2,7 @@
 
 use std::net::{IpAddr, Ipv4Addr};
 use std::sync::atomic::AtomicBool;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
 
@@ -143,8 +143,6 @@ struct Paired {
     /// What the desktop showed, and the digits the phone was asked for.
     asked: Option<PairingRequest>,
     shown: Option<String>,
-    desktop_person: Person,
-    phone_person: Person,
 }
 
 fn new_secret(byte: u8) -> Zeroizing<[u8; SECRET_LEN]> {
@@ -172,7 +170,7 @@ fn pair_with(desktop: &Arc<LocalDb>, phone: &Arc<LocalDb>, desktop_person: Perso
     };
     let phone_result = flow::pair_as_phone(&payload, &**phone, "Phone", limits(), Arc::new(AtomicBool::new(false)), &mut phone_person);
     let (desktop_result, desktop_person) = handle.join().unwrap();
-    Paired { desktop: desktop_result, phone: phone_result, asked: desktop_person.shown.clone(), shown: phone_person.asked_for.clone(), desktop_person, phone_person }
+    Paired { desktop: desktop_result, phone: phone_result, asked: desktop_person.shown.clone(), shown: phone_person.asked_for.clone() }
 }
 
 /// One sync with a fresh code. `one_time` is the secret the desktop shows; `phone_uses` is the one the phone scanned.

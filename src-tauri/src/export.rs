@@ -7,6 +7,7 @@
 //! The device-specific scheduled-backup setup, which holds a passphrase, and the access tokens of the
 //! command-line client are never exported.
 
+#[cfg(desktop)]
 mod xlsx;
 
 use std::borrow::Cow;
@@ -22,7 +23,14 @@ use crate::recurring;
 use crate::transactions::clean_date;
 use crate::vault::AppError;
 
+#[cfg(desktop)]
 pub use xlsx::workbook;
+
+/// The phone has no Excel export (see `Cargo.toml`): the writer is not part of its build, so asking for one is refused.
+#[cfg(mobile)]
+pub fn workbook(_: &Connection, _: &Selection, _: &crate::display::DisplayFormat) -> Result<Vec<u8>, AppError> {
+    Err(AppError::InvalidInput)
+}
 
 #[derive(Debug, Clone, Default, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -633,7 +641,8 @@ mod tests {
         assert_eq!(file["categories"].as_array().unwrap().len(), 1);
         let budgets = file["budgets"].as_array().unwrap();
         assert!(!budgets.is_empty());
-        assert!(budgets.iter().all(|b| b["categoryId"] == rent.to_string()), "no global budget, no other category's budget");
+        let rent_id = rent.to_string();
+        assert!(budgets.iter().all(|b| b["categoryId"] == rent_id.as_str()), "no global budget, no other category's budget");
         assert_eq!(file["recurring"].as_array().unwrap().len(), 1);
         assert_eq!(file["transactions"].as_array().unwrap().len(), 2);
         assert!(file.get("history").is_none(), "history mentions every category");

@@ -258,7 +258,7 @@ fn budgets_are_set_from_a_month_and_removed_the_same_way() {
 fn a_budget_must_fit_its_category_and_its_amount() {
     let (_dir, vault) = seeded();
     let groceries = category_id(&vault, "EXPENSE", "Groceries");
-    let salary = category_id(&vault, "INCOME", &ok(&vault, "categories.list", json!({ "type": "INCOME" }))[0]["name"].as_str().unwrap().to_string());
+    let salary = category_id(&vault, "INCOME", ok(&vault, "categories.list", json!({ "type": "INCOME" }))[0]["name"].as_str().unwrap());
     // An expense category cannot get an income budget, and the reverse.
     assert_eq!(refused(&vault, "budgets.set", json!({ "type": "INCOME", "month": "2026-12", "amountLimit": "10.00", "categoryId": groceries })).0, 400);
     assert_eq!(refused(&vault, "budgets.set", json!({ "type": "EXPENSE", "month": "2026-12", "amountLimit": "10.00", "categoryId": salary })).0, 400);

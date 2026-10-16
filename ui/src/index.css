@@ -518,7 +518,6 @@ body:has(.app-shell.is-locked) {
   gap: 0.5rem;
 }
 
-.page-actions,
 .page-numbers {
   display: flex;
   flex-wrap: wrap;
@@ -818,61 +817,6 @@ body:has(.app-shell.is-locked) {
   color: rgba(255, 255, 255, 0.35);
 }
 
-.date-scroll {
-  display: flex;
-  flex-direction: row;
-  flex-wrap: nowrap;
-  align-items: center;
-  gap: 0.375rem;
-  width: max-content;
-  max-width: 100%;
-}
-
-.date-part {
-  display: flex;
-  flex: 0 0 auto;
-}
-
-.date-scroll input,
-.toolbar.tx-bar .date-scroll input,
-.tx-title .date-scroll input {
-  width: 4.5ch;
-  min-width: 4.5ch;
-  max-width: 4.5ch;
-  flex: 0 0 auto;
-  text-align: center;
-  padding: 0.375rem 0.5rem;
-}
-
-.date-scroll input.date-month,
-.toolbar.tx-bar .date-scroll input.date-month,
-.tx-title .date-scroll input.date-month {
-  width: 8ch;
-  min-width: 8ch;
-  max-width: 8ch;
-  cursor: pointer;
-  caret-color: transparent;
-}
-
-.date-scroll input.date-year,
-.toolbar.tx-bar .date-scroll input.date-year,
-.tx-title .date-scroll input.date-year {
-  width: 6.5ch;
-  min-width: 6.5ch;
-  max-width: 6.5ch;
-}
-
-.pick-list.date-part-list {
-  width: max-content;
-  min-width: 4.5ch;
-  max-height: calc(4 * 2rem);
-}
-
-.pick-list.date-part-list button {
-  min-width: 4.5ch;
-  text-align: center;
-}
-
 .tx-desc {
   font-family: var(--font);
   font-size: 0.875rem;
@@ -903,18 +847,6 @@ body:has(.app-shell.is-locked) {
   min-height: 0;
   overflow: auto;
   width: 100%;
-}
-
-.stack {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 1rem;
-  min-width: 0;
-}
-
-.stack form {
-  margin: 0;
 }
 
 .tx-page > :not(.tx-pane) {

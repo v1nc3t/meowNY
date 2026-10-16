@@ -27,6 +27,51 @@ use crate::vault::{AppError, Attempts, LockPrefs, Policy, Settings, Vault, Vault
 type Shared<'a> = State<'a, Arc<Vault>>;
 type Syncing<'a> = State<'a, Arc<SyncService<Vault>>>;
 
+/// Asking the person for a file or a folder. Only the desktop does it: the phone has no backup, export or recovery key file
+/// to save or load, so its build has neither these dialogs nor the dialog plugin (see `Cargo.toml`), and asking is refused.
+#[cfg(desktop)]
+mod ask {
+    use std::path::PathBuf;
+
+    use tauri_plugin_dialog::DialogExt;
+
+    use crate::vault::AppError;
+
+    pub fn save(app: &tauri::AppHandle, name: &str, kind: &str, extension: &str) -> Result<Option<PathBuf>, AppError> {
+        let picked = app.dialog().file().set_file_name(name).add_filter(kind, &[extension]).blocking_save_file();
+        picked.map(|path| path.into_path().map_err(|_| AppError::Internal)).transpose()
+    }
+
+    pub fn pick(app: &tauri::AppHandle, kind: &str, extension: &str) -> Result<Option<PathBuf>, AppError> {
+        let picked = app.dialog().file().add_filter(kind, &[extension]).blocking_pick_file();
+        picked.map(|path| path.into_path().map_err(|_| AppError::Internal)).transpose()
+    }
+
+    pub fn folder(app: &tauri::AppHandle) -> Result<Option<PathBuf>, AppError> {
+        let picked = app.dialog().file().blocking_pick_folder();
+        picked.map(|path| path.into_path().map_err(|_| AppError::Internal)).transpose()
+    }
+}
+
+#[cfg(mobile)]
+mod ask {
+    use std::path::PathBuf;
+
+    use crate::vault::AppError;
+
+    pub fn save(_: &tauri::AppHandle, _: &str, _: &str, _: &str) -> Result<Option<PathBuf>, AppError> {
+        Err(AppError::InvalidInput)
+    }
+
+    pub fn pick(_: &tauri::AppHandle, _: &str, _: &str) -> Result<Option<PathBuf>, AppError> {
+        Err(AppError::InvalidInput)
+    }
+
+    pub fn folder(_: &tauri::AppHandle) -> Result<Option<PathBuf>, AppError> {
+        Err(AppError::InvalidInput)
+    }
+}
+
 /// Names of every command, used by the build script to generate one permission each.
 pub const COMMANDS: &[&str] = &[
     "vault_status",
@@ -124,18 +169,8 @@ pub fn recover_vault(vault: Shared, recovery_key: String, new_passphrase: Option
 /// Only a valid recovery key can be written, so this cannot be used to write other content to disk.
 #[tauri::command]
 pub async fn save_recovery_key(app: tauri::AppHandle, code: String) -> Result<bool, AppError> {
-    use tauri_plugin_dialog::DialogExt;
     let text = crate::recovery_file::text(&code)?;
-    let Some(path) = app
-        .dialog()
-        .file()
-        .set_file_name("meowny-recovery-key.txt")
-        .add_filter("Text file", &["txt"])
-        .blocking_save_file()
-    else {
-        return Ok(false);
-    };
-    let path = path.into_path().map_err(|_| AppError::Internal)?;
+    let Some(path) = ask::save(&app, "meowny-recovery-key.txt", "Text file", "txt")? else { return Ok(false) };
     crate::recovery_file::write(&path, &text)?;
     Ok(true)
 }
@@ -418,36 +453,17 @@ pub fn recurring_planned_vs_paid(vault: Shared, month: String) -> Result<Vec<Pla
 
 /// Asks the person to pick a backup file. None if they cancel.
 fn pick_backup_file(app: &tauri::AppHandle) -> Result<Option<std::path::PathBuf>, AppError> {
-    use tauri_plugin_dialog::DialogExt;
-    let Some(path) = app
-        .dialog()
-        .file()
-        .add_filter("meowNY backup", &[backup::EXTENSION])
-        .blocking_pick_file()
-    else {
-        return Ok(None);
-    };
-    Ok(Some(path.into_path().map_err(|_| AppError::Internal)?))
+    ask::pick(app, "meowNY backup", backup::EXTENSION)
 }
 
 /// Writes all data to one encrypted file in a place the person picks, locked with the passphrase
 /// they chose for this backup. Returns false if they cancel the save dialog.
 #[tauri::command]
 pub async fn create_backup(app: tauri::AppHandle, vault: Shared<'_>, passphrase: String) -> Result<bool, AppError> {
-    use tauri_plugin_dialog::DialogExt;
     let snapshot = vault.with_conn(|c| backup::dump(c))?;
     let bytes = backup::seal(&snapshot, &passphrase)?;
     let name = format!("meowny-backup-{}.{}", today_text(&vault)?, backup::EXTENSION);
-    let Some(path) = app
-        .dialog()
-        .file()
-        .set_file_name(name)
-        .add_filter("meowNY backup", &[backup::EXTENSION])
-        .blocking_save_file()
-    else {
-        return Ok(false);
-    };
-    let path = path.into_path().map_err(|_| AppError::Internal)?;
+    let Some(path) = ask::save(&app, &name, "meowNY backup", backup::EXTENSION)? else { return Ok(false) };
     backup::write_file(&path, &bytes)?;
     Ok(true)
 }
@@ -506,21 +522,11 @@ pub async fn set_backup_schedule(
     every_days: u32,
 ) -> Result<bool, AppError> {
     backup::check_passphrase(&passphrase)?;
-    // A phone cannot pick a folder for the app to write into (the dialog has no such call there), and its data is on the
-    // desktop too; scheduled backups are a desktop feature.
-    #[cfg(mobile)]
-    {
-        let _ = (&app, &vault, every_days);
-        Err(AppError::InvalidInput)
-    }
-    #[cfg(desktop)]
-    {
-        use tauri_plugin_dialog::DialogExt;
-        let Some(folder) = app.dialog().file().blocking_pick_folder() else { return Ok(false) };
-        let folder = folder.into_path().map_err(|_| AppError::Internal)?;
-        schedule::start(&vault, &folder, &passphrase, every_days, chrono::Utc::now())?;
-        Ok(true)
-    }
+    // Scheduled backups are a desktop feature: a phone cannot pick a folder for the app to write into, and its data is on the
+    // desktop too (`ask::folder` refuses there).
+    let Some(folder) = ask::folder(&app)? else { return Ok(false) };
+    schedule::start(&vault, &folder, &passphrase, every_days, chrono::Utc::now())?;
+    Ok(true)
 }
 
 #[tauri::command]
@@ -531,11 +537,7 @@ pub fn clear_backup_schedule(vault: Shared) -> Result<(), AppError> {
 /// Asks where to save `text`, then writes it there readable by the owner only. False if the person cancels.
 /// These files are not encrypted; the export screen says so.
 fn save_export(app: &tauri::AppHandle, name: String, kind: &str, extension: &str, bytes: &[u8]) -> Result<bool, AppError> {
-    use tauri_plugin_dialog::DialogExt;
-    let Some(path) = app.dialog().file().set_file_name(name).add_filter(kind, &[extension]).blocking_save_file() else {
-        return Ok(false);
-    };
-    let path = path.into_path().map_err(|_| AppError::Internal)?;
+    let Some(path) = ask::save(app, &name, kind, extension)? else { return Ok(false) };
     backup::write_file(&path, bytes)?;
     Ok(true)
 }

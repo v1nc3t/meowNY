@@ -117,6 +117,18 @@ class ActivityTests(unittest.TestCase):
         self.assertEqual(once.count("import android.os.Bundle"), 1, "an import that is there is not added twice")
         self.assertLess(once.index("super.onCreate"), once.index("FLAG_SECURE"))
 
+    def test_a_test_build_can_take_the_secure_window_off_and_it_can_be_put_back(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "MainActivity.kt"
+            path.write_text(PLAIN_ACTIVITY, encoding="utf-8")
+            self.assertTrue(patch.patch_activity(path))
+            self.assertIn("FLAG_SECURE", path.read_text(encoding="utf-8"))
+            self.assertTrue(patch.unpatch_activity(path))
+            self.assertNotIn("FLAG_SECURE", path.read_text(encoding="utf-8"))
+            self.assertFalse(patch.unpatch_activity(path), "nothing more to take off")
+            self.assertTrue(patch.patch_activity(path), "and it goes back on")
+            self.assertEqual(path.read_text(encoding="utf-8").count("FLAG_SECURE"), 2, "the line and the name in it")
+
     def test_an_activity_that_is_not_what_we_expect_stops_the_build(self):
         with self.assertRaises(SystemExit):
             self.run_on("package org.meowny.app\n\nclass Something\n")

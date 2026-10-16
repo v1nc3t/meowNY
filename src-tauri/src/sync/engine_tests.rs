@@ -731,10 +731,10 @@ fn edit(conn: &mut Connection, rng: &mut Rng) {
     let any_category = ids(conn, "SELECT id FROM categories WHERE deleted_at IS NULL");
     match rng.below(14) {
         0 => {
-            let _ = categories::create(conn, *rng.pick(NAMES), kind);
+            let _ = categories::create(conn, rng.pick(NAMES), kind);
         }
         1 if !any_category.is_empty() => {
-            let _ = categories::rename(conn, *rng.pick(&any_category), *rng.pick(NAMES));
+            let _ = categories::rename(conn, *rng.pick(&any_category), rng.pick(NAMES));
         }
         2 if !any_category.is_empty() && rng.below(3) == 0 => {
             let _ = categories::delete(conn, *rng.pick(&any_category), chrono::Utc::now());

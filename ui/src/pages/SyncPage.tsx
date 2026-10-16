@@ -123,7 +123,7 @@ function PhoneSync() {
                   {t('phone.scan')}
                 </button>
               </div>
-              {import.meta.env.DEV && (
+              {(import.meta.env.DEV || import.meta.env.VITE_MEOWNY_TEST_PASTE === '1') && (
                 <>
                   <label>
                     {t('phone.paste')}

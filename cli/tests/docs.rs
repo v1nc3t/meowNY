@@ -85,6 +85,7 @@ impl Tour<'_> {
 
     /// Runs a command for the docs. `human` and `json` say which of its two outputs to show. Returns the data
     /// the command printed as JSON, if it was run that way, so later steps can use the ids it made.
+    #[allow(clippy::too_many_arguments)] // one call per documented example, each part is a separate thing to show
     fn example(&mut self, name: &str, who: Who, shown: &str, args: &[&str], human: bool, json_too: bool, stdin: Option<&str>) -> Value {
         let mut entry = Map::new();
         entry.insert("command".into(), json!(shown));

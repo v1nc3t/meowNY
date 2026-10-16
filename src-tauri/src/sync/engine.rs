@@ -566,23 +566,34 @@ struct Applier<'a> {
 
 type Found = (i64, String);
 
+/// What `check_recurring` reads of a recurring item: start date, unit, next due date, stamp, count, end date, active flag, sync id.
+type RecurringItem = (String, String, String, String, i64, Option<String>, i64, String);
+
 impl<'a> Applier<'a> {
+    // One apply runs the same few statements for every row, so they are prepared once and kept (`prepare_cached`): parsing
+    // them again for each of 60 000 transactions took most of the time of a first copy.
+    fn row<T, P: rusqlite::Params, F: FnOnce(&rusqlite::Row<'_>) -> rusqlite::Result<T>>(&self, sql: &str, params: P, map: F) -> rusqlite::Result<T> {
+        self.tx.prepare_cached(sql)?.query_row(params, map)
+    }
+
+    fn run<P: rusqlite::Params>(&self, sql: &str, params: P) -> rusqlite::Result<usize> {
+        self.tx.prepare_cached(sql)?.execute(params)
+    }
+
     fn find(&self, table: Table, sync_id: &str) -> Result<Option<Found>, SyncError> {
-        Ok(self
-            .tx
-            .query_row(&format!("SELECT id, stamp FROM {} WHERE sync_id = ?1", table.name()), [sync_id], |r| Ok((r.get(0)?, r.get(1)?)))
+        Ok(self.row(&format!("SELECT id, stamp FROM {} WHERE sync_id = ?1", table.name()), [sync_id], |r| Ok((r.get(0)?, r.get(1)?)))
             .optional()?)
     }
 
     fn marker(&self, sync_id: &str) -> Result<Option<String>, SyncError> {
-        Ok(self.tx.query_row("SELECT stamp FROM sync_deleted WHERE sync_id = ?1", [sync_id], |r| r.get(0)).optional()?)
+        Ok(self.row("SELECT stamp FROM sync_deleted WHERE sync_id = ?1", [sync_id], |r| r.get(0)).optional()?)
     }
 
     fn put_marker(&self, table: Table, sync_id: &str, stamp: &str) -> Result<(), SyncError> {
         if self.marker(sync_id)?.is_some_and(|existing| existing.as_str() >= stamp) {
             return Ok(());
         }
-        self.tx.execute("INSERT OR REPLACE INTO sync_deleted (sync_id, kind, stamp) VALUES (?1, ?2, ?3)", params![sync_id, table.name(), stamp])?;
+        self.run("INSERT OR REPLACE INTO sync_deleted (sync_id, kind, stamp) VALUES (?1, ?2, ?3)", params![sync_id, table.name(), stamp])?;
         Ok(())
     }
 
@@ -598,7 +609,7 @@ impl<'a> Applier<'a> {
     }
 
     fn remove_marker(&self, sync_id: &str) -> Result<(), SyncError> {
-        self.tx.execute("DELETE FROM sync_deleted WHERE sync_id = ?1", [sync_id])?;
+        self.run("DELETE FROM sync_deleted WHERE sync_id = ?1", [sync_id])?;
         Ok(())
     }
 
@@ -615,9 +626,9 @@ impl<'a> Applier<'a> {
     /// After a write that the `updated_at` trigger may have touched: puts back the value this change is meant to have.
     fn set_updated_at(&self, table: Table, id: i64, wanted: &str) -> Result<(), SyncError> {
         let table = table.name();
-        let current: String = self.tx.query_row(&format!("SELECT updated_at FROM {table} WHERE id = ?1"), [id], |r| r.get(0))?;
+        let current: String = self.row(&format!("SELECT updated_at FROM {table} WHERE id = ?1"), [id], |r| r.get(0))?;
         if current != wanted {
-            self.tx.execute(&format!("UPDATE {table} SET updated_at = ?2 WHERE id = ?1"), params![id, wanted])?;
+            self.run(&format!("UPDATE {table} SET updated_at = ?2 WHERE id = ?1"), params![id, wanted])?;
         }
         Ok(())
     }
@@ -628,9 +639,7 @@ impl<'a> Applier<'a> {
         let mut current = sync_id.to_string();
         let mut moved = false;
         for _ in 0..8 {
-            let row: Option<(i64, Option<String>, String)> = self
-                .tx
-                .query_row("SELECT id, merged_into, stamp FROM categories WHERE sync_id = ?1", [&current], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))
+            let row: Option<(i64, Option<String>, String)> = self.row("SELECT id, merged_into, stamp FROM categories WHERE sync_id = ?1", [&current], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))
                 .optional()?;
             let (id, merged_into, _) = row.ok_or(SyncError::Invalid("reference"))?;
             match merged_into {
@@ -647,7 +656,7 @@ impl<'a> Applier<'a> {
     fn settings(&mut self, rows: &[Row]) -> Result<(), SyncError> {
         for row in rows {
             let Row::Settings(r) = row else { return Err(SyncError::Invalid("row")) };
-            let local: Option<String> = self.tx.query_row("SELECT stamp FROM settings WHERE id = 1", [], |r| r.get(0)).optional()?;
+            let local: Option<String> = self.row("SELECT stamp FROM settings WHERE id = 1", [], |r| r.get(0)).optional()?;
             match local {
                 Some(local) if r.stamp <= local => {
                     if r.stamp < local {
@@ -656,11 +665,11 @@ impl<'a> Applier<'a> {
                 }
                 Some(local) => {
                     self.note_overwrite(&local);
-                    self.tx.execute("UPDATE settings SET locale = ?1, timezone = ?2, stamp = ?3 WHERE id = 1", params![r.locale, r.timezone, r.stamp])?;
+                    self.run("UPDATE settings SET locale = ?1, timezone = ?2, stamp = ?3 WHERE id = 1", params![r.locale, r.timezone, r.stamp])?;
                     let wanted = iso(parse(&r.stamp)?.ms);
-                    let current: String = self.tx.query_row("SELECT updated_at FROM settings WHERE id = 1", [], |r| r.get(0))?;
+                    let current: String = self.row("SELECT updated_at FROM settings WHERE id = 1", [], |r| r.get(0))?;
                     if current != wanted {
-                        self.tx.execute("UPDATE settings SET updated_at = ?1 WHERE id = 1", [&wanted])?;
+                        self.run("UPDATE settings SET updated_at = ?1 WHERE id = 1", [&wanted])?;
                     }
                     self.summary.updated += 1;
                 }
@@ -676,11 +685,11 @@ impl<'a> Applier<'a> {
     fn write_category(&mut self, existing: Option<&Found>, r: &CategoryRow) -> Result<i64, SyncError> {
         match existing {
             Some((id, _)) => {
-                let kind: String = self.tx.query_row("SELECT type FROM categories WHERE id = ?1", [id], |r| r.get(0))?;
+                let kind: String = self.row("SELECT type FROM categories WHERE id = ?1", [id], |r| r.get(0))?;
                 if kind != r.kind {
                     return Err(SyncError::Invalid("category"));
                 }
-                self.tx.execute(
+                self.run(
                     "UPDATE categories SET name = ?2, deleted_at = ?3, merged_into = ?4, stamp = ?5, created_at = ?6 WHERE id = ?1",
                     params![id, r.name, r.deleted_at, r.merged_into, r.stamp, r.created_at],
                 )?;
@@ -688,7 +697,7 @@ impl<'a> Applier<'a> {
                 Ok(*id)
             }
             None => {
-                self.tx.execute(
+                self.run(
                     "INSERT INTO categories (sync_id, stamp, type, name, deleted_at, merged_into, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
                     params![r.sync_id, r.stamp, r.kind, r.name, r.deleted_at, r.merged_into, r.created_at, r.updated_at],
                 )?;
@@ -700,7 +709,7 @@ impl<'a> Applier<'a> {
     /// Marks a local category as merged into another (the same type and name), with the stamp both devices work out.
     fn merge_away(&mut self, loser_id: i64, winner_sync_id: &str, star: &Stamp) -> Result<(), SyncError> {
         let when = iso(star.ms);
-        self.tx.execute(
+        self.run(
             "UPDATE categories SET deleted_at = ?2, merged_into = ?3, stamp = ?4 WHERE id = ?1",
             params![loser_id, when, winner_sync_id, star.format()],
         )?;
@@ -712,14 +721,12 @@ impl<'a> Applier<'a> {
     /// Moves everything that belongs to a category that was merged away to the one it was merged into.
     fn repoint(&mut self, loser: i64, winner: i64) -> Result<(), SyncError> {
         for (table, name) in [(Table::RecurringTransactions, "recurring_transactions"), (Table::Transactions, "transactions")] {
-            let rows: Vec<(i64, String)> = self
-                .tx
-                .prepare(&format!("SELECT id, stamp FROM {name} WHERE category_id = ?1"))?
+            let rows: Vec<(i64, String)> = self.tx.prepare_cached(&format!("SELECT id, stamp FROM {name} WHERE category_id = ?1"))?
                 .query_map([loser], |r| Ok((r.get(0)?, r.get(1)?)))?
                 .collect::<Result<_, _>>()?;
             for (id, stamp) in rows {
                 let new = moved(&parse(&stamp)?);
-                self.tx.execute(&format!("UPDATE {name} SET category_id = ?2, stamp = ?3 WHERE id = ?1"), params![id, winner, new.format()])?;
+                self.run(&format!("UPDATE {name} SET category_id = ?2, stamp = ?3 WHERE id = ?1"), params![id, winner, new.format()])?;
                 self.set_updated_at(table, id, &iso(new.ms))?;
                 if table == Table::RecurringTransactions {
                 }
@@ -736,27 +743,23 @@ impl<'a> Applier<'a> {
     fn settle_budgets(&mut self) -> Result<(), SyncError> {
         let losers = std::mem::take(&mut self.merged_away);
         for loser in losers {
-            let sync_id: String = self.tx.query_row("SELECT sync_id FROM categories WHERE id = ?1", [loser], |r| r.get(0))?;
+            let sync_id: String = self.row("SELECT sync_id FROM categories WHERE id = ?1", [loser], |r| r.get(0))?;
             let (winner, _) = self.category(&sync_id)?;
             if winner == loser {
                 continue;
             }
-        let budgets: Vec<(i64, String, String, String)> = self
-            .tx
-            .prepare("SELECT id, sync_id, stamp, effective_from FROM budgets WHERE category_id = ?1")?
+        let budgets: Vec<(i64, String, String, String)> = self.tx.prepare_cached("SELECT id, sync_id, stamp, effective_from FROM budgets WHERE category_id = ?1")?
             .query_map([loser], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)))?
             .collect::<Result<_, _>>()?;
         for (id, sync_id, stamp, month) in budgets {
-            let other: Option<(i64, String, String)> = self
-                .tx
-                .query_row("SELECT id, sync_id, stamp FROM budgets WHERE category_id = ?1 AND effective_from = ?2", params![winner, month], |r| {
+            let other: Option<(i64, String, String)> = self.row("SELECT id, sync_id, stamp FROM budgets WHERE category_id = ?1 AND effective_from = ?2", params![winner, month], |r| {
                     Ok((r.get(0)?, r.get(1)?, r.get(2)?))
                 })
                 .optional()?;
             match other {
                 None => {
                     let new = moved(&parse(&stamp)?);
-                    self.tx.execute("UPDATE budgets SET category_id = ?2, stamp = ?3 WHERE id = ?1", params![id, winner, new.format()])?;
+                    self.run("UPDATE budgets SET category_id = ?2, stamp = ?3 WHERE id = ?1", params![id, winner, new.format()])?;
                     self.set_updated_at(Table::Budgets, id, &iso(new.ms))?;
                 }
                 Some((other_id, other_sync_id, other_stamp)) => {
@@ -764,14 +767,14 @@ impl<'a> Applier<'a> {
                     let moved_wins = (stamp.as_str(), std::cmp::Reverse(sync_id.as_str())) > (other_stamp.as_str(), std::cmp::Reverse(other_sync_id.as_str()));
                     if moved_wins {
                         let marker = self.loser_marker(&other_sync_id, &other_stamp);
-                        self.tx.execute("DELETE FROM budgets WHERE id = ?1", [other_id])?;
+                        self.run("DELETE FROM budgets WHERE id = ?1", [other_id])?;
                         self.put_marker(Table::Budgets, &other_sync_id, &marker)?;
                         let new = moved(&parse(&stamp)?);
-                        self.tx.execute("UPDATE budgets SET category_id = ?2, stamp = ?3 WHERE id = ?1", params![id, winner, new.format()])?;
+                        self.run("UPDATE budgets SET category_id = ?2, stamp = ?3 WHERE id = ?1", params![id, winner, new.format()])?;
                         self.set_updated_at(Table::Budgets, id, &iso(new.ms))?;
                     } else {
                         let marker = self.loser_marker(&sync_id, &stamp);
-                        self.tx.execute("DELETE FROM budgets WHERE id = ?1", [id])?;
+                        self.run("DELETE FROM budgets WHERE id = ?1", [id])?;
                         self.put_marker(Table::Budgets, &sync_id, &marker)?;
                     }
                     self.summary.dropped += 1;
@@ -794,9 +797,7 @@ impl<'a> Applier<'a> {
         }
         let active = r.deleted_at.is_none() && r.merged_into.is_none();
         if active {
-            let rival: Option<(i64, String, String)> = self
-                .tx
-                .query_row(
+            let rival: Option<(i64, String, String)> = self.row(
                     "SELECT id, sync_id, stamp FROM categories WHERE type = ?1 AND name = ?2 AND deleted_at IS NULL AND sync_id != ?3",
                     params![r.kind, r.name, r.sync_id],
                     |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
@@ -840,9 +841,7 @@ impl<'a> Applier<'a> {
 
     /// The local active category that has the name this incoming row wants, if any: a collision (or the first sign of one).
     fn rival_of(&self, r: &CategoryRow) -> Result<Option<(i64, String, String)>, SyncError> {
-        Ok(self
-            .tx
-            .query_row(
+        Ok(self.row(
                 "SELECT id, sync_id, stamp FROM categories WHERE type = ?1 AND name = ?2 AND deleted_at IS NULL AND sync_id != ?3",
                 params![r.kind, r.name, r.sync_id],
                 |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
@@ -884,7 +883,7 @@ impl<'a> Applier<'a> {
                 // no person can type (it gets its real name from its own row before this is over)
                 let r = deferred.remove(0);
                 if let Some((rival_id, rival, _)) = self.rival_of(r)? {
-                    self.tx.execute("UPDATE categories SET name = ?2 WHERE id = ?1", params![rival_id, format!("\u{1}{rival}")])?;
+                    self.run("UPDATE categories SET name = ?2 WHERE id = ?1", params![rival_id, format!("\u{1}{rival}")])?;
                 }
                 waiting.remove(&r.sync_id);
                 self.category_row(r)?;
@@ -931,7 +930,7 @@ impl<'a> Applier<'a> {
             match &existing {
                 Some((id, local)) => {
                     self.note_overwrite(local);
-                    self.tx.execute(
+                    self.run(
                         "UPDATE recurring_transactions SET stamp = ?2, category_id = ?3, name = ?4, description = ?5, amount_minor = ?6, start_date = ?7,
                          interval_unit = ?8, interval_count = ?9, next_due_date = ?10, end_date = ?11, is_active = ?12, created_at = ?13 WHERE id = ?1",
                         params![id, stamp, category, r.name, r.description, r.amount_minor, r.start_date, r.interval_unit, r.interval_count, r.next_due_date, r.end_date, r.is_active, r.created_at],
@@ -940,7 +939,7 @@ impl<'a> Applier<'a> {
                     self.summary.updated += 1;
                 }
                 None => {
-                    self.tx.execute(
+                    self.run(
                         "INSERT INTO recurring_transactions (sync_id, stamp, category_id, name, description, amount_minor, start_date, interval_unit,
                          interval_count, next_due_date, end_date, is_active, created_at, updated_at)
                          VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)",
@@ -994,12 +993,12 @@ impl<'a> Applier<'a> {
             }
             // another budget for the same month and category (made on the other device) is the same fact twice
             let rival: Option<(i64, String, String)> = match category {
-                Some(c) => self.tx.query_row(
+                Some(c) => self.row(
                     "SELECT id, sync_id, stamp FROM budgets WHERE category_id = ?1 AND effective_from = ?2 AND sync_id != ?3",
                     params![c, r.effective_from, r.sync_id],
                     |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
                 ),
-                None => self.tx.query_row(
+                None => self.row(
                     "SELECT id, sync_id, stamp FROM budgets WHERE scope = 'GLOBAL' AND type = ?1 AND effective_from = ?2 AND sync_id != ?3",
                     params![r.kind, r.effective_from, r.sync_id],
                     |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
@@ -1011,11 +1010,11 @@ impl<'a> Applier<'a> {
                 self.summary.dropped += 1;
                 if incoming_wins {
                     let marker = self.loser_marker(&rival_sync_id, &rival_stamp);
-                    self.tx.execute("DELETE FROM budgets WHERE id = ?1", [rival_id])?;
+                    self.run("DELETE FROM budgets WHERE id = ?1", [rival_id])?;
                     self.put_marker(Table::Budgets, &rival_sync_id, &marker)?;
                 } else {
                     if let Some((id, _)) = &existing {
-                        self.tx.execute("DELETE FROM budgets WHERE id = ?1", [id])?;
+                        self.run("DELETE FROM budgets WHERE id = ?1", [id])?;
                     }
                     self.put_marker(Table::Budgets, &r.sync_id, &after(&parse(&stamp)?).format())?;
                     continue;
@@ -1025,7 +1024,7 @@ impl<'a> Applier<'a> {
             match &existing {
                 Some((id, local)) => {
                     self.note_overwrite(local);
-                    self.tx.execute(
+                    self.run(
                         "UPDATE budgets SET stamp = ?2, type = ?3, scope = ?4, category_id = ?5, amount_limit_minor = ?6, effective_from = ?7, created_at = ?8 WHERE id = ?1",
                         params![id, stamp, r.kind, r.scope, category, r.amount_limit_minor, r.effective_from, r.created_at],
                     )?;
@@ -1033,7 +1032,7 @@ impl<'a> Applier<'a> {
                     self.summary.updated += 1;
                 }
                 None => {
-                    self.tx.execute(
+                    self.run(
                         "INSERT INTO budgets (sync_id, stamp, type, scope, category_id, amount_limit_minor, effective_from, created_at, updated_at)
                          VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
                         params![r.sync_id, stamp, r.kind, r.scope, category, r.amount_limit_minor, r.effective_from, r.created_at, when],
@@ -1102,13 +1101,13 @@ impl<'a> Applier<'a> {
             let mut rivals: Vec<(i64, String, String)> = Vec::new();
             let existing_id = existing.as_ref().map(|(id, _)| *id).unwrap_or(0);
             if let Some(uuid) = &r.client_uuid {
-                let mut stmt = self.tx.prepare("SELECT id, sync_id, stamp FROM transactions WHERE client_uuid = ?1 AND sync_id != ?2")?;
+                let mut stmt = self.tx.prepare_cached("SELECT id, sync_id, stamp FROM transactions WHERE client_uuid = ?1 AND sync_id != ?2")?;
                 for rival in stmt.query_map(params![uuid, r.sync_id], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))? {
                     rivals.push(rival?);
                 }
             }
             if let (Some(item), Some(due)) = (recurring, &r.recurring_due_date) {
-                let mut stmt = self.tx.prepare("SELECT id, sync_id, stamp FROM transactions WHERE recurring_transaction_id = ?1 AND recurring_due_date = ?2 AND sync_id != ?3")?;
+                let mut stmt = self.tx.prepare_cached("SELECT id, sync_id, stamp FROM transactions WHERE recurring_transaction_id = ?1 AND recurring_due_date = ?2 AND sync_id != ?3")?;
                 for rival in stmt.query_map(params![item, due, r.sync_id], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))? {
                     let rival = rival?;
                     if !rivals.iter().any(|(id, _, _)| *id == rival.0) {
@@ -1122,7 +1121,7 @@ impl<'a> Applier<'a> {
             if incoming_loses {
                 let marker = after(&parse(&stamp)?).format();
                 if existing_id != 0 {
-                    self.tx.execute("DELETE FROM transactions WHERE id = ?1", [existing_id])?;
+                    self.run("DELETE FROM transactions WHERE id = ?1", [existing_id])?;
                 }
                 self.put_marker(Table::Transactions, &r.sync_id, &marker)?;
                 self.summary.dropped += 1;
@@ -1130,14 +1129,14 @@ impl<'a> Applier<'a> {
             }
             for (rival_id, rival_sync_id, rival_stamp) in &rivals {
                 let marker = self.loser_marker(rival_sync_id, rival_stamp);
-                self.tx.execute("DELETE FROM transactions WHERE id = ?1", [rival_id])?;
+                self.run("DELETE FROM transactions WHERE id = ?1", [rival_id])?;
                 self.put_marker(Table::Transactions, rival_sync_id, &marker)?;
                 self.summary.dropped += 1;
             }
             match &existing {
                 Some((id, local)) => {
                     self.note_overwrite(local);
-                    self.tx.execute(
+                    self.run(
                         "UPDATE transactions SET stamp = ?2, category_id = ?3, recurring_transaction_id = ?4, recurring_due_date = ?5, client_uuid = ?6,
                          name = ?7, amount_minor = ?8, planned_amount_minor = ?9, payment_date = ?10, description = ?11, created_at = ?12 WHERE id = ?1",
                         params![id, stamp, category, recurring, r.recurring_due_date, r.client_uuid, r.name, r.amount_minor, r.planned_amount_minor, r.payment_date, r.description, r.created_at],
@@ -1146,7 +1145,7 @@ impl<'a> Applier<'a> {
                     self.summary.updated += 1;
                 }
                 None => {
-                    self.tx.execute(
+                    self.run(
                         "INSERT INTO transactions (sync_id, stamp, category_id, recurring_transaction_id, recurring_due_date, client_uuid, name,
                          amount_minor, planned_amount_minor, payment_date, description, created_at, updated_at)
                          VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
@@ -1163,7 +1162,7 @@ impl<'a> Applier<'a> {
 
     fn delete_row(&mut self, table: Table, id: i64) -> Result<(), SyncError> {
         // deleting a recurring item clears the link of its payments by itself (ON DELETE SET NULL), as on the device that deleted it
-        self.tx.execute(&format!("DELETE FROM {} WHERE id = ?1", table.name()), [id])?;
+        self.run(&format!("DELETE FROM {} WHERE id = ?1", table.name()), [id])?;
         Ok(())
     }
 
@@ -1176,7 +1175,7 @@ impl<'a> Applier<'a> {
                     if m.stamp > stamp {
                         if table == Table::RecurringTransactions {
                             // the payments lose their link to the item and take the stamp of the deletion, as on the device that deleted it
-                            self.tx.execute("UPDATE transactions SET stamp = ?1 WHERE recurring_transaction_id = ?2 AND stamp < ?1", params![m.stamp, id])?;
+                            self.run("UPDATE transactions SET stamp = ?1 WHERE recurring_transaction_id = ?2 AND stamp < ?1", params![m.stamp, id])?;
                         }
                         self.delete_row(table, id)?;
                         self.put_marker(table, &m.sync_id, &m.stamp)?;
@@ -1198,11 +1197,9 @@ impl<'a> Applier<'a> {
     fn check_recurring(&mut self) -> Result<(), SyncError> {
         // every active item, touched by this sync or not: the answer depends only on the rows as they are once everything is in, so
         // both devices come to the same one
-        let ids: Vec<i64> = self.tx.prepare("SELECT id FROM recurring_transactions WHERE is_active = 1 ORDER BY id")?.query_map([], |r| r.get(0))?.collect::<Result<_, _>>()?;
+        let ids: Vec<i64> = self.tx.prepare_cached("SELECT id FROM recurring_transactions WHERE is_active = 1 ORDER BY id")?.query_map([], |r| r.get(0))?.collect::<Result<_, _>>()?;
         for id in ids {
-            let item: Option<(String, String, String, String, i64, Option<String>, i64, String)> = self
-                .tx
-                .query_row(
+            let item: Option<RecurringItem> = self.row(
                     "SELECT start_date, interval_unit, next_due_date, stamp, interval_count, end_date, is_active, sync_id FROM recurring_transactions WHERE id = ?1",
                     [id],
                     |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?, r.get(5)?, r.get(6)?, r.get(7)?)),
@@ -1212,9 +1209,7 @@ impl<'a> Applier<'a> {
             if active == 0 {
                 continue;
             }
-            let latest: Option<(String, String)> = self
-                .tx
-                .query_row(
+            let latest: Option<(String, String)> = self.row(
                     "SELECT recurring_due_date, stamp FROM transactions WHERE recurring_transaction_id = ?1 AND recurring_due_date IS NOT NULL
                      ORDER BY recurring_due_date DESC LIMIT 1",
                     [id],
@@ -1239,7 +1234,7 @@ impl<'a> Applier<'a> {
                 None => (due.clone(), false),
             };
             let star = derive(&parse(&stamp)?, &parse(&paid_stamp)?);
-            self.tx.execute(
+            self.run(
                 "UPDATE recurring_transactions SET next_due_date = ?2, is_active = ?3, stamp = ?4 WHERE id = ?1",
                 params![id, next_text, still_active, star.format()],
             )?;
@@ -1265,6 +1260,7 @@ pub fn apply(conn: &mut Connection, incoming: &Incoming, now_ms: u64, since_ms: 
     }
 
     let tx = conn.transaction()?;
+    tx.set_prepared_statement_cache_capacity(64);
     stamp::set_applying(&tx, true)?;
     let batch_markers = incoming.markers.values().flatten().map(|m| (m.sync_id.clone(), m.stamp.clone())).collect();
     let mut applier = Applier { tx: &tx, since: since_ms, batch_markers, merged_away: Vec::new(), summary: Summary::default() };
