@@ -3,8 +3,11 @@ import { readFileSync } from 'node:fs'
 import { test } from 'node:test'
 import { en } from '../i18n/en.ts'
 import {
+  allChosen,
   Attempts,
   checkCodeText,
+  choicesInOrder,
+  cleanDigits,
   cleanDeviceName,
   clockGapText,
   countdownText,
@@ -12,6 +15,7 @@ import {
   isFinished,
   locksAfterBackground,
   nothingChanged,
+  parseEvery,
   Peer,
   PHONE_PASSPHRASE_GOOD,
   reasonKey,
@@ -24,13 +28,24 @@ import {
 
 // What the Rust side sends, as its own tests show it (sync/service.rs, sync/peers.rs, vault.rs).
 const waiting = { state: 'waiting', purpose: 'sync', qr: 'MNY1:x', address: '192.168.1.2:5000', expiresInSecs: 120 }
-const checkCode = { state: 'checkCode', purpose: 'pair', code: '123456', peer: 'Phone', needsAnswer: true }
+const showCode = { state: 'showCode', purpose: 'pair', code: '123456', peer: 'Phone' }
+const enterCode = { state: 'enterCode', purpose: 'pair', triesLeft: 2, wrong: true }
+const reviewing = {
+  state: 'reviewing',
+  purpose: 'sync',
+  conflicts: [
+    { table: 'transactions', id: 'ab'.repeat(16), title: 'Coffee', mineDeleted: false, theirsDeleted: false, fields: [{ field: 'amount', mine: '3.50', theirs: '4.00' }] },
+    { table: 'categories', id: 'cd'.repeat(16), title: 'Food', mineDeleted: true, theirsDeleted: false, fields: [{ field: 'name', mine: '', theirs: 'Food' }] },
+  ],
+  more: 3,
+}
 const done = {
   state: 'done',
   purpose: 'sync',
   summary: { added: 5, updated: 2, replaced: 1, deleted: 0, merged: 0, dropped: 0 },
   warnings: [{ kind: 'clock_off', seconds: 75 }],
   differences: false,
+  oneWay: true,
   peer: 'Phone',
 }
 
@@ -39,9 +54,11 @@ test('every status the app sends is accepted', () => {
     { state: 'idle' },
     waiting,
     { state: 'connecting', purpose: 'pair' },
-    checkCode,
-    { ...checkCode, peer: '', needsAnswer: false },
+    showCode,
+    enterCode,
     { state: 'running', purpose: 'sync' },
+    reviewing,
+    { state: 'waitingReview', purpose: 'sync' },
     done,
     { state: 'failed', purpose: 'sync', reason: 'expired' },
   ]) {
@@ -56,8 +73,14 @@ test('a status the app would never send is refused', () => {
     { ...waiting, purpose: 'both' },
     { ...waiting, qr: '' },
     { ...waiting, expiresInSecs: -1 },
-    { ...checkCode, code: '12345' },
-    { ...checkCode, code: '12345a' },
+    { ...showCode, code: '12345' },
+    { ...showCode, code: '12345a' },
+    { ...enterCode, triesLeft: -1 },
+    { state: 'checkCode', purpose: 'pair', code: '123456', peer: 'Phone', needsAnswer: true },
+    { ...reviewing, conflicts: [{ ...reviewing.conflicts[0], table: 'sync_peers' }] },
+    { ...reviewing, conflicts: [{ ...reviewing.conflicts[0], fields: [{ field: 'secret', mine: 'a', theirs: 'b' }] }] },
+    { ...reviewing, more: -1 },
+    { ...done, oneWay: undefined },
     { ...done, summary: { ...done.summary, added: -1 } },
     { ...done, warnings: [{ kind: 'other', seconds: 1 }] },
     { state: 'failed', purpose: 'sync', reason: 'Not A Word' },
@@ -102,7 +125,10 @@ test('every reason has a text, and one that is not known shows as an internal er
 test('busy and finished statuses are told apart', () => {
   assert.equal(isBusy(Status.parse({ state: 'idle' })), false)
   assert.equal(isBusy(Status.parse(waiting)), true)
-  assert.equal(isBusy(Status.parse(checkCode)), true)
+  assert.equal(isBusy(Status.parse(showCode)), true)
+  assert.equal(isBusy(Status.parse(enterCode)), true)
+  assert.equal(isBusy(Status.parse(reviewing)), true)
+  assert.equal(isBusy(Status.parse({ state: 'waitingReview', purpose: 'sync' })), true)
   assert.equal(isBusy(Status.parse(done)), false)
   assert.equal(isFinished(Status.parse(done)), true)
   assert.equal(isFinished(Status.parse({ state: 'failed', purpose: 'pair', reason: 'declined' })), true)
@@ -159,3 +185,28 @@ test('the phone locks when it was away for the time chosen, and never when the c
   assert.equal(locksAfterBackground(10 * 60_000, 300), true)
   assert.equal(locksAfterBackground(10 * 3_600_000, 0), false)
 })
+
+test('the digits are kept to six numbers, whatever was typed or pasted', () => {
+  assert.equal(cleanDigits('048 213'), '048213')
+  assert.equal(cleanDigits('04a8-2b13'), '048213')
+  assert.equal(cleanDigits('1234567890'), '123456')
+  assert.equal(cleanDigits(''), '')
+})
+
+test('every conflict needs an answer, and the answers go out in the order of the conflicts', () => {
+  const conflicts = Status.parse(reviewing).state === 'reviewing' ? (Status.parse(reviewing) as { conflicts: Parameters<typeof allChosen>[0] }).conflicts : []
+  const [a, b] = [conflicts[0].id, conflicts[1].id]
+  assert.equal(allChosen(conflicts, {}), false)
+  assert.equal(allChosen(conflicts, { [a]: 'mine' }), false)
+  assert.equal(allChosen(conflicts, { [a]: 'mine', [b]: 'theirs' }), true)
+  assert.equal(allChosen([], {}), false, 'nothing to choose is not an answer')
+  assert.deepEqual(choicesInOrder(conflicts, { [b]: 'theirs', [a]: 'mine' }), ['mine', 'theirs'])
+  assert.equal(choicesInOrder(conflicts, { [a]: 'mine' }), null)
+})
+
+test('"every" arrives as a number and a unit', () => {
+  assert.deepEqual(parseEvery('1 MONTH'), { count: 1, unit: 'MONTH' })
+  assert.deepEqual(parseEvery('12 WEEK'), { count: 12, unit: 'WEEK' })
+  for (const bad of ['', 'MONTH', '0 MONTH', '1 FORTNIGHT', '1 month', '1  MONTH']) assert.equal(parseEvery(bad), null, bad)
+})
+

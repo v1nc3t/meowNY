@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useState } from 'react'
 import { whenText } from '../api/locales'
 import { ApiError, errorText } from '../api/invoke'
-import { cleanDeviceName, DEVICE_NAME_MAX, syncApi, type Peer } from '../api/sync'
+import { cleanDeviceName, DEVICE_NAME_MAX, MODES, syncApi, type Mode, type Peer } from '../api/sync'
 import { useDeviceName } from '../hooks/useDeviceName'
 import { useNotice } from '../hooks/useNotice'
 import { useSyncStatus } from '../hooks/useSyncStatus'
+import Dropdown from './Dropdown'
 import { useT } from '../i18n/context'
 import SyncStatusPanel from './SyncStatusPanel'
 
@@ -18,6 +19,7 @@ export default function PhoneSyncBlock({ locale, timezone }: { locale: string; t
   const [devices, setDevices] = useState<Peer[] | null>(null)
   const [name, setName] = useDeviceName('desktop')
   const [address, setAddress] = useState('')
+  const [mode, setMode] = useState<Mode>('both')
   const [removing, setRemoving] = useState<string | null>(null)
   const [message, setMessage] = useNotice()
 
@@ -39,7 +41,7 @@ export default function PhoneSyncBlock({ locale, timezone }: { locale: string; t
     const clean = cleanDeviceName(name)
     if (!clean) return setMessage(t('sync.errorName'))
     try {
-      await (pair ? syncApi.startPairing(clean, address) : syncApi.start(clean, address))
+      await (pair ? syncApi.startPairing(clean, address) : syncApi.start(clean, address, mode))
     } catch (error) {
       setMessage(error instanceof ApiError && error.code === 'invalid_input' && address.trim() !== '' ? t('sync.errorAddress') : errorText(error))
     }
@@ -119,6 +121,12 @@ export default function PhoneSyncBlock({ locale, timezone }: { locale: string; t
               <input value={address} onChange={(e) => setAddress(e.target.value)} placeholder="192.168.1.20" inputMode="decimal" autoComplete="off" spellCheck={false} />
             </label>
           </details>
+          <Dropdown
+            label={t('sync.mode')}
+            value={mode}
+            options={MODES.map((value) => ({ value, label: t(value === 'both' ? 'sync.modeBoth' : value === 'to_desktop' ? 'sync.modeToDesktop' : 'sync.modeToPhone') }))}
+            onChange={(value) => setMode(MODES.find((m) => m === value) ?? 'both')}
+          />
           <div className="actions">
             <button type="button" onClick={() => void begin(true)}>
               {t('sync.add')}
@@ -131,7 +139,9 @@ export default function PhoneSyncBlock({ locale, timezone }: { locale: string; t
       ) : (
         <SyncStatusPanel
           status={status}
-          onAnswer={(yes) => void syncApi.answerPairing(yes).then(refresh, (e) => setMessage(errorText(e)))}
+          side="desktop"
+          onEnterCode={() => undefined}
+          onDecide={(choices) => void syncApi.decide(choices).then(refresh, (e) => setMessage(errorText(e)))}
           onCancel={() => void cancel()}
           onDone={() => void acknowledge()}
         />

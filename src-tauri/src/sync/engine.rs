@@ -382,9 +382,16 @@ fn load_markers(conn: &Connection, table: Table, wanted: &HashSet<&String>) -> R
 /// The rows message(s) for `tables`: exactly what the other side lacks or has older. Every table gets at least one
 /// message and the last one of each is marked, so the other side knows when a table is complete.
 pub fn outgoing(conn: &Connection, mine: &Digest, theirs: &Digest, tables: &[Table]) -> Result<Vec<Message>, SyncError> {
+    let ids: BTreeMap<Table, Vec<String>> = tables.iter().map(|table| (*table, to_send(mine, theirs, *table))).collect();
+    rows_messages(conn, tables, &ids)
+}
+
+/// The rows messages that carry exactly the rows (and deletion markers) with these ids, for each of `tables`.
+fn rows_messages(conn: &Connection, tables: &[Table], ids: &BTreeMap<Table, Vec<String>>) -> Result<Vec<Message>, SyncError> {
     let mut out = Vec::new();
+    let none = Vec::new();
     for table in tables {
-        let ids = to_send(mine, theirs, *table);
+        let ids = ids.get(table).unwrap_or(&none);
         let wanted: HashSet<&String> = ids.iter().collect();
         let rows = load_rows(conn, *table, &wanted)?;
         let markers = if *table == Table::Settings { Vec::new() } else { load_markers(conn, *table, &wanted)? };
@@ -426,6 +433,12 @@ pub fn outgoing(conn: &Connection, mine: &Digest, theirs: &Digest, tables: &[Tab
 pub struct Incoming {
     pub rows: BTreeMap<Table, Vec<Row>>,
     pub markers: BTreeMap<Table, Vec<Marker>>,
+}
+
+impl Incoming {
+    pub fn is_empty(&self) -> bool {
+        self.rows.values().all(Vec::is_empty) && self.markers.values().all(Vec::is_empty)
+    }
 }
 
 /// Collects the rows messages of the other side.
@@ -1331,6 +1344,8 @@ pub fn hello(conn: &Connection, name: &str, app_version: &str) -> Result<wire::H
         clock: Stamp::new(ms as u64, counter as u16, &device_id[..stamp::DEVICE_CHARS]).format(),
         currency,
         generation,
+        since: None,
+        mode: wire::Mode::Both,
     })
 }
 
@@ -1401,6 +1416,211 @@ pub fn apply_currency(conn: &mut Connection, changes: &[wire::CurrencyChange], t
     }
     stamp::set_applying(&tx, false)?;
     stamp::catch_up(&tx).map_err(|_| SyncError::Internal)?;
+    tx.commit()?;
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// conflicts: the same thing changed on both devices since they last met
+
+/// How many conflicts one sync asks the person about. The rest are settled by the newer change, and the screen says how many.
+pub const MAX_CONFLICTS: usize = 200;
+
+/// A row (or deletion) that both devices changed, differently, after their last sync.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Conflict {
+    pub table: Table,
+    pub id: String,
+    pub mine_stamp: String,
+    pub mine_deleted: bool,
+    pub theirs_stamp: String,
+    pub theirs_deleted: bool,
+}
+
+/// After which moment a change counts as a change since the last sync: the later of the two devices' last syncs, or none when
+/// they never met (a first copy has nothing to fight over).
+pub fn conflict_threshold(mine: Option<u64>, theirs: Option<u64>) -> Option<u64> {
+    match (mine, theirs) {
+        (Some(a), Some(b)) => Some(a.max(b)),
+        (Some(a), None) | (None, Some(a)) => Some(a),
+        (None, None) => None,
+    }
+}
+
+/// The rows that both sides changed after `threshold` and that now differ, in the same order on both sides. At most
+/// `MAX_CONFLICTS`; the second value is how many more there were.
+pub fn conflicts(mine: &Digest, theirs: &Digest, tables: &[Table], threshold: Option<u64>) -> (Vec<Conflict>, usize) {
+    let Some(threshold) = threshold else { return (Vec::new(), 0) };
+    let after = |stamp: &str| Stamp::parse(stamp).is_some_and(|s| s.ms > threshold);
+    let empty = Entries::new();
+    let mut found = Vec::new();
+    for table in Table::ALL {
+        if !tables.contains(&table) {
+            continue;
+        }
+        let (a, b) = (mine.0.get(&table).unwrap_or(&empty), theirs.0.get(&table).unwrap_or(&empty));
+        for (id, (mine_stamp, mine_deleted)) in a {
+            let Some((theirs_stamp, theirs_deleted)) = b.get(id) else { continue };
+            if (mine_stamp, mine_deleted) == (theirs_stamp, theirs_deleted) || (*mine_deleted && *theirs_deleted) {
+                continue;
+            }
+            if after(mine_stamp) && after(theirs_stamp) {
+                found.push(Conflict {
+                    table,
+                    id: id.clone(),
+                    mine_stamp: mine_stamp.clone(),
+                    mine_deleted: *mine_deleted,
+                    theirs_stamp: theirs_stamp.clone(),
+                    theirs_deleted: *theirs_deleted,
+                });
+            }
+        }
+    }
+    let more = found.len().saturating_sub(MAX_CONFLICTS);
+    found.truncate(MAX_CONFLICTS);
+    (found, more)
+}
+
+/// The tables the conflicts are in, in sending order.
+pub fn conflict_tables(conflicts: &[Conflict]) -> Vec<Table> {
+    Table::ALL.iter().copied().filter(|t| conflicts.iter().any(|c| c.table == *t)).collect()
+}
+
+/// This device's version of each conflicting row, for the other device to show next to its own.
+pub fn conflict_rows(conn: &Connection, conflicts: &[Conflict]) -> Result<Vec<Message>, SyncError> {
+    let mut ids: BTreeMap<Table, Vec<String>> = BTreeMap::new();
+    for c in conflicts {
+        ids.entry(c.table).or_default().push(c.id.clone());
+    }
+    rows_messages(conn, &conflict_tables(conflicts), &ids)
+}
+
+/// One field that differs between the two versions, as text. The name is a fixed word the screens translate.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FieldDiff {
+    pub field: &'static str,
+    pub mine: String,
+    pub theirs: String,
+}
+
+/// What the person is shown for one conflict.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ConflictView {
+    pub table: Table,
+    pub id: String,
+    pub title: String,
+    pub mine_deleted: bool,
+    pub theirs_deleted: bool,
+    pub fields: Vec<FieldDiff>,
+}
+
+/// What the person chooses for a conflict: this device's version, or the other's.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Choice {
+    Mine,
+    Theirs,
+}
+
+fn category_name(conn: &Connection, sync_id: &str) -> String {
+    conn.query_row("SELECT name FROM categories WHERE sync_id = ?1", [sync_id], |r| r.get::<_, String>(0)).unwrap_or_default()
+}
+
+fn money_text(minor: Option<i64>) -> String {
+    minor.map(crate::money::format_amount).unwrap_or_default()
+}
+
+/// The facts of a row worth comparing, as (field, text).
+fn facts(conn: &Connection, row: &Row) -> Vec<(&'static str, String)> {
+    let some = |v: &Option<String>| v.clone().unwrap_or_default();
+    match row {
+        Row::Settings(r) => vec![("locale", r.locale.clone()), ("timezone", r.timezone.clone())],
+        Row::Category(r) => vec![("name", r.name.clone()), ("type", r.kind.clone())],
+        Row::Transaction(r) => vec![
+            ("name", r.name.clone()),
+            ("amount", money_text(Some(r.amount_minor))),
+            ("date", r.payment_date.clone()),
+            ("category", category_name(conn, &r.category)),
+            ("description", some(&r.description)),
+        ],
+        Row::Budget(r) => vec![("amount", money_text(r.amount_limit_minor)), ("month", r.effective_from.clone()), ("type", r.kind.clone())],
+        Row::Recurring(r) => vec![
+            ("name", r.name.clone()),
+            ("amount", money_text(r.amount_minor)),
+            ("every", format!("{} {}", r.interval_count, r.interval_unit)),
+            ("nextDue", r.next_due_date.clone()),
+            ("endDate", some(&r.end_date)),
+            ("active", if r.is_active == 1 { "yes" } else { "no" }.to_string()),
+            ("category", category_name(conn, &r.category)),
+            ("description", some(&r.description)),
+        ],
+    }
+}
+
+fn find_row<'a>(rows: &'a [Row], id: &str) -> Option<&'a Row> {
+    rows.iter().find(|r| r.sync_id() == id)
+}
+
+/// Puts the two versions of each conflict side by side. `theirs` is what the other device sent for these ids.
+pub fn describe(conn: &Connection, conflicts: &[Conflict], theirs: &Incoming) -> Result<Vec<ConflictView>, SyncError> {
+    let mut out = Vec::new();
+    for c in conflicts {
+        let wanted: HashSet<&String> = std::iter::once(&c.id).collect();
+        let mine_rows = if c.mine_deleted { Vec::new() } else { load_rows(conn, c.table, &wanted)? };
+        let mine = mine_rows.first();
+        let other = if c.theirs_deleted { None } else { theirs.rows.get(&c.table).and_then(|rows| find_row(rows, &c.id)) };
+        let mine_facts = mine.map(|r| facts(conn, r)).unwrap_or_default();
+        let their_facts = other.map(|r| facts(conn, r)).unwrap_or_default();
+        let mut fields = Vec::new();
+        if !c.mine_deleted && !c.theirs_deleted {
+            for (field, a) in &mine_facts {
+                let b = their_facts.iter().find(|(f, _)| f == field).map(|(_, v)| v.clone()).unwrap_or_default();
+                if *a != b {
+                    fields.push(FieldDiff { field, mine: a.clone(), theirs: b });
+                }
+            }
+        } else if c.mine_deleted != c.theirs_deleted {
+            // One side deleted it: show what the other side still has, so the person knows what they would keep.
+            for (field, value) in mine_facts.iter().chain(their_facts.iter()) {
+                let (mine, theirs) = if c.mine_deleted { (String::new(), value.clone()) } else { (value.clone(), String::new()) };
+                fields.push(FieldDiff { field, mine, theirs });
+            }
+        }
+        let title = [mine_facts.iter(), their_facts.iter()]
+            .into_iter()
+            .flatten()
+            .find(|(f, v)| *f == "name" && !v.is_empty())
+            .map(|(_, v)| v.clone())
+            .or_else(|| mine_facts.iter().chain(their_facts.iter()).find(|(f, v)| *f == "month" && !v.is_empty()).map(|(_, v)| v.clone()))
+            .unwrap_or_default();
+        out.push(ConflictView { table: c.table, id: c.id.clone(), title, mine_deleted: c.mine_deleted, theirs_deleted: c.theirs_deleted, fields });
+    }
+    Ok(out)
+}
+
+/// Carries out the person's choices on this device. The version that is meant to win is made the newer one: this device's gets a
+/// fresh stamp, or its stamp is set to the oldest possible one so that the other device's version, which the exchange that
+/// follows brings in the ordinary way, is the newer. Only stamps change here, never what a row says.
+pub fn decide(conn: &mut Connection, conflicts: &[Conflict], choices: &[Choice]) -> Result<(), SyncError> {
+    if conflicts.len() != choices.len() {
+        return Err(SyncError::Invalid("choices"));
+    }
+    let tx = conn.transaction()?;
+    stamp::set_applying(&tx, true)?;
+    for (c, choice) in conflicts.iter().zip(choices) {
+        let new = match choice {
+            Choice::Mine => stamp::tick(&tx).map_err(|_| SyncError::Internal)?.format(),
+            Choice::Theirs => UNSET_STAMP.to_string(),
+        };
+        if c.mine_deleted {
+            tx.execute("UPDATE sync_deleted SET stamp = ?1 WHERE sync_id = ?2 AND kind = ?3", params![new, c.id, c.table.name()])?;
+        } else if c.table == Table::Settings {
+            tx.execute("UPDATE settings SET stamp = ?1 WHERE id = 1", [&new])?;
+        } else {
+            tx.execute(&format!("UPDATE {} SET stamp = ?1 WHERE sync_id = ?2", c.table.name()), params![new, c.id])?;
+        }
+    }
+    stamp::set_applying(&tx, false)?;
     tx.commit()?;
     Ok(())
 }

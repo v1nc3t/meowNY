@@ -138,7 +138,14 @@ function PhoneSync() {
               )}
             </>
           ) : (
-            <SyncStatusPanel status={status} onAnswer={() => undefined} onCancel={() => void cancel()} onDone={() => void acknowledge()} />
+            <SyncStatusPanel
+              status={status}
+              side="phone"
+              onEnterCode={(code) => void syncApi.enterCode(code).then(refresh, (e) => setMessage(errorText(e)))}
+              onDecide={(choices) => void syncApi.decide(choices).then(refresh, (e) => setMessage(errorText(e)))}
+              onCancel={() => void cancel()}
+              onDone={() => void acknowledge()}
+            />
           )}
         </div>
       </div>

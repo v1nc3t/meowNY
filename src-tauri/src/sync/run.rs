@@ -21,11 +21,16 @@ pub struct Outcome {
     pub differences: bool,
     pub messages: usize,
     pub bytes: usize,
+    /// Every byte that crossed, for the tests that look for what must never be sent.
+    #[cfg(test)]
+    pub transcript: Vec<u8>,
 }
 
 struct Wire {
     messages: usize,
     bytes: usize,
+    #[cfg(test)]
+    transcript: Vec<u8>,
 }
 
 impl Wire {
@@ -34,6 +39,8 @@ impl Wire {
         let bytes = message.to_bytes()?;
         self.messages += 1;
         self.bytes += bytes.len();
+        #[cfg(test)]
+        self.transcript.extend_from_slice(&bytes);
         Ok(Message::from_bytes(&bytes)?)
     }
 }
@@ -63,7 +70,7 @@ fn rows_of(wire: &mut Wire, messages: Vec<Message>, tables: &[Table]) -> Result<
 /// Syncs `a` with `b`. `today` is the date for the history entries of a currency change, `now_ms` the wall clock, and
 /// `since_ms` the time of their last sync.
 pub fn sync(a: &mut Connection, b: &mut Connection, today: &str, now_ms: u64, since_ms: Option<u64>) -> Result<Outcome, SyncError> {
-    let mut wire = Wire { messages: 0, bytes: 0 };
+    let mut wire = Wire { messages: 0, bytes: 0, #[cfg(test)] transcript: Vec::new() };
     let mut outcome = Outcome::default();
 
     // hello
@@ -129,5 +136,9 @@ pub fn sync(a: &mut Connection, b: &mut Connection, today: &str, now_ms: u64, si
     outcome.differences = done_a != done_b;
     outcome.messages = wire.messages;
     outcome.bytes = wire.bytes;
+    #[cfg(test)]
+    {
+        outcome.transcript = wire.transcript;
+    }
     Ok(outcome)
 }

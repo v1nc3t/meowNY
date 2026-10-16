@@ -94,7 +94,8 @@ pub const COMMANDS: &[&str] = &[
     "unlock_attempts",
     "sync_status",
     "sync_start_pairing",
-    "sync_answer_pairing",
+    "sync_enter_code",
+    "sync_decide",
     "sync_start",
     "sync_scan",
     "sync_cancel",
@@ -675,24 +676,31 @@ pub fn sync_start_pairing(vault: Shared, syncing: Syncing, name: String, address
     syncing.start_pairing(&name, address).map_err(sync_error)
 }
 
-/// Desktop: the person compared the six digits and said yes or no.
+/// Phone: the person typed the six digits that the desktop shows. Checked here; three wrong tries end the pairing.
 #[tauri::command]
-pub fn sync_answer_pairing(vault: Shared, syncing: Syncing, yes: bool) -> Result<(), AppError> {
-    if is_phone(&vault) {
+pub fn sync_enter_code(vault: Shared, syncing: Syncing, code: String) -> Result<(), AppError> {
+    if !is_phone(&vault) {
         return Err(AppError::InvalidInput);
     }
-    syncing.answer_pairing(yes);
+    syncing.enter_code(&code);
     Ok(())
 }
 
-/// Desktop: opens a window for a paired phone and shows its code. `address` is optional.
+/// The person chose, for each conflict in the order it was shown, which version is true (`mine` or `theirs`).
 #[tauri::command]
-pub fn sync_start(vault: Shared, syncing: Syncing, name: String, address: Option<String>) -> Result<(), AppError> {
+pub fn sync_decide(syncing: Syncing, choices: Vec<crate::sync::engine::Choice>) -> Result<(), AppError> {
+    syncing.decide(choices).map_err(sync_error)
+}
+
+/// Desktop: opens a window for a paired phone and shows its code. `address` is optional. `mode` says which way the sync goes:
+/// both ways, the phone's changes to the desktop only, or the desktop's changes to the phone only.
+#[tauri::command]
+pub fn sync_start(vault: Shared, syncing: Syncing, name: String, address: Option<String>, mode: Option<crate::sync::wire::Mode>) -> Result<(), AppError> {
     if is_phone(&vault) {
         return Err(AppError::InvalidInput);
     }
     let address = typed_address(address.as_deref())?;
-    syncing.start_sync(&name, address).map_err(sync_error)
+    syncing.start_sync(&name, address, mode.unwrap_or_default()).map_err(sync_error)
 }
 
 /// Phone: the text of a scanned code. A pairing code pairs, a sync code syncs.

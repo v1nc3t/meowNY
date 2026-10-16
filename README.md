@@ -78,7 +78,8 @@ meowNY is a desktop app for tracking income and expenses against monthly budgets
 
 - The phone keeps a full copy of your data, works on its own when you are away, and can change everything the desktop can. Back home, the two sync.
 - There is no server of any kind. The desktop shows a QR code, the phone scans it, and the phone connects straight to the desktop on your home network. Every sync starts that way, and the code works once and only for a couple of minutes. Both devices must be on the same wifi network (a network that stops devices from talking to each other, such as many hotels, does not work; connect the desktop to the phone's hotspot there).
-- Pairing shows six digits on both screens that you compare before the desktop accepts the phone. Everything that is sent is encrypted with keys made from the pairing secret and that one-time code.
+- Pairing shows six digits on the desktop that you type on the phone, so the check cannot be skipped by tapping "yes". Everything that is sent is encrypted with keys made from the pairing secret and that one-time code.
+- Each sync can go both ways, from the phone to the computer only, or from the computer to the phone only. If the same thing was changed on both devices since they last met, the device that takes the changes in shows both versions side by side and you choose which one is true.
 - On the phone the data is locked by a passphrase, and the phone erases itself after 5 wrong ones. The data comes back by pairing again with the desktop.
 - The currency is changed on the desktop only, and the desktop reminds you to sync the phone.
 - The first time the desktop listens, Windows or macOS may ask whether meowNY may accept connections on the network. Allow it for private networks only; nothing outside your home network is ever involved.

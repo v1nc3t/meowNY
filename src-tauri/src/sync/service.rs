@@ -2,7 +2,9 @@
 //! going on (`docs/sync-design.md`, sections 3, 5 and 6).
 //!
 //! At most one thing runs at a time. The desktop opens a window and shows its QR code (`Waiting`); the phone is handed the text of a
-//! scanned code (`scan`). A pairing stops at `CheckCode` until the person has compared the six digits and answered on the desktop.
+//! scanned code (`scan`). A pairing stops at `ShowCode` (desktop) and `EnterCode` (phone) until the person has typed the six digits that
+//! the desktop shows on the phone. A sync that finds the same thing changed on both devices stops at `Reviewing` on the device that
+//! takes the changes in, until the person has chosen which version is true.
 //! Everything ends in `Done` (with a summary) or `Failed` (with a reason the screens can put in words), and stays so until the
 //! screen has seen it (`acknowledge`). Locking the app cancels what is running, and nothing here runs while the app is locked.
 
@@ -14,11 +16,12 @@ use std::time::{Duration, Instant};
 use serde::Serialize;
 
 use super::crypto::{Ikm, Kind, Secret};
-use super::engine::{Summary, SyncError, Warning};
-use super::flow::{self, Db, Exchange, FlowError, PairingRequest};
+use super::engine::{Choice, ConflictView, Summary, SyncError, Warning};
+use super::flow::{self, Db, Exchange, FlowError, PairingRequest, Prompts};
 use super::net::{self, Limits, NetError, Window};
 use super::peers::{self, Peer};
 use super::qr::Payload;
+use super::wire::Mode;
 use crate::keys;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -53,6 +56,39 @@ pub struct WarningView {
     pub seconds: u64,
 }
 
+/// One conflict as the screen shows it: what it is, and how the two versions differ.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ConflictItem {
+    /// The table it is in (`categories`, `transactions`, ...), which the screen names in the person's language.
+    pub table: &'static str,
+    pub id: String,
+    pub title: String,
+    pub mine_deleted: bool,
+    pub theirs_deleted: bool,
+    pub fields: Vec<FieldItem>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct FieldItem {
+    pub field: &'static str,
+    pub mine: String,
+    pub theirs: String,
+}
+
+impl From<&ConflictView> for ConflictItem {
+    fn from(v: &ConflictView) -> Self {
+        ConflictItem {
+            table: v.table.name(),
+            id: v.id.clone(),
+            title: v.title.clone(),
+            mine_deleted: v.mine_deleted,
+            theirs_deleted: v.theirs_deleted,
+            fields: v.fields.iter().map(|f| FieldItem { field: f.field, mine: f.mine.clone(), theirs: f.theirs.clone() }).collect(),
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(tag = "state", rename_all = "camelCase")]
 pub enum Status {
@@ -62,12 +98,20 @@ pub enum Status {
     Waiting { purpose: Purpose, qr: String, address: String, expires_in_secs: u64 },
     /// The phone is dialling the desktop.
     Connecting { purpose: Purpose },
-    /// Both screens show `code`. The desktop (`needs_answer`) asks the person whether the two agree.
+    /// Desktop, pairing: the six digits to type on the phone.
     #[serde(rename_all = "camelCase")]
-    CheckCode { purpose: Purpose, code: String, peer: String, needs_answer: bool },
+    ShowCode { purpose: Purpose, code: String, peer: String },
+    /// Phone, pairing: the person types the six digits that the desktop shows. `wrong` after a try that was not right.
+    #[serde(rename_all = "camelCase")]
+    EnterCode { purpose: Purpose, tries_left: u32, wrong: bool },
     Running { purpose: Purpose },
+    /// This device has conflicts to review: the same things were changed on both devices since they last met. `more` conflicts
+    /// beyond these are settled by the newer change.
+    Reviewing { purpose: Purpose, conflicts: Vec<ConflictItem>, more: usize },
+    /// The other device is reviewing conflicts.
+    WaitingReview { purpose: Purpose },
     #[serde(rename_all = "camelCase")]
-    Done { purpose: Purpose, summary: SummaryView, warnings: Vec<WarningView>, differences: bool, peer: String },
+    Done { purpose: Purpose, summary: SummaryView, warnings: Vec<WarningView>, differences: bool, one_way: bool, peer: String },
     Failed { purpose: Purpose, reason: &'static str },
 }
 
@@ -113,7 +157,10 @@ struct Shared {
     status: Status,
     busy: bool,
     cancel: Arc<AtomicBool>,
-    decision: Option<bool>,
+    /// What the person typed on the phone, waiting to be checked.
+    typed: Option<String>,
+    /// What the person chose for the conflicts, waiting to be carried out.
+    choices: Option<Vec<Choice>>,
     run: u64,
 }
 
@@ -145,6 +192,7 @@ impl Inner {
                 summary: done.summary.into(),
                 warnings: done.warnings.iter().map(|Warning::ClockOff(seconds)| WarningView { kind: "clock_off", seconds: *seconds }).collect(),
                 differences: done.differences,
+                one_way: done.one_way,
                 peer: done.peer.name,
             },
             Err(error) => Status::Failed { purpose, reason: reason(&error) },
@@ -161,6 +209,90 @@ impl Inner {
     }
 }
 
+/// How many times the person may type the six digits on the phone before the pairing stops.
+pub const CODE_TRIES: u32 = 3;
+
+/// What the screens do and ask during a run, by way of the status: the flow calls these, the screens answer through the commands.
+struct ServicePrompts {
+    inner: Arc<Inner>,
+    run: u64,
+    purpose: Purpose,
+}
+
+impl ServicePrompts {
+    /// Waits for `take` to find an answer, up to `limit`. None when the run was cancelled or replaced, or the time ran out.
+    fn wait<T>(&self, limit: Duration, mut take: impl FnMut(&mut Shared) -> Option<T>) -> Option<T> {
+        let until = Instant::now() + limit;
+        let mut shared = self.inner.lock();
+        loop {
+            if shared.run != self.run {
+                return None;
+            }
+            if let Some(found) = take(&mut shared) {
+                return Some(found);
+            }
+            if shared.cancel.load(Ordering::Relaxed) || Instant::now() >= until {
+                return None;
+            }
+            shared = self.inner.answered.wait_timeout(shared, Duration::from_millis(200)).unwrap_or_else(|e| e.into_inner()).0;
+        }
+    }
+}
+
+impl Prompts for ServicePrompts {
+    fn show_code(&mut self, request: &PairingRequest) {
+        self.inner.set(self.run, Status::ShowCode { purpose: self.purpose, code: request.check_code.clone(), peer: request.peer_name.clone() });
+    }
+
+    fn enter_code(&mut self, expected: &str) -> bool {
+        let (mut tries_left, mut wrong) = (CODE_TRIES, false);
+        loop {
+            {
+                let mut shared = self.inner.lock();
+                if shared.run != self.run {
+                    return false;
+                }
+                shared.typed = None;
+                shared.status = Status::EnterCode { purpose: self.purpose, tries_left, wrong };
+            }
+            let Some(typed) = self.wait(flow::CONFIRM_WAIT, |s| s.typed.take()) else { return false };
+            if typed == expected {
+                self.inner.set(self.run, Status::Running { purpose: self.purpose });
+                return true;
+            }
+            tries_left -= 1;
+            wrong = true;
+            if tries_left == 0 {
+                return false;
+            }
+        }
+    }
+
+    fn running(&mut self) {
+        self.inner.set(self.run, Status::Running { purpose: self.purpose });
+    }
+
+    fn review(&mut self, conflicts: &[ConflictView], more: usize) -> Option<Vec<Choice>> {
+        {
+            let mut shared = self.inner.lock();
+            if shared.run != self.run {
+                return None;
+            }
+            shared.choices = None;
+            shared.status = Status::Reviewing { purpose: self.purpose, conflicts: conflicts.iter().map(ConflictItem::from).collect(), more };
+        }
+        let choices = self.wait(flow::REVIEW_WAIT, |s| s.choices.take());
+        if choices.is_some() {
+            self.inner.set(self.run, Status::Running { purpose: self.purpose });
+        }
+        choices
+    }
+
+    fn waiting_review(&mut self) {
+        self.inner.set(self.run, Status::WaitingReview { purpose: self.purpose });
+    }
+}
+
 pub struct SyncService<D: Db + 'static> {
     db: Arc<D>,
     limits: Limits,
@@ -173,7 +305,7 @@ impl<D: Db + 'static> SyncService<D> {
     }
 
     pub fn with_limits(db: Arc<D>, limits: Limits) -> SyncService<D> {
-        let shared = Shared { status: Status::Idle, busy: false, cancel: Arc::new(AtomicBool::new(false)), decision: None, run: 0 };
+        let shared = Shared { status: Status::Idle, busy: false, cancel: Arc::new(AtomicBool::new(false)), typed: None, choices: None, run: 0 };
         SyncService { db, limits, inner: Arc::new(Inner { shared: Mutex::new(shared), answered: Condvar::new() }) }
     }
 
@@ -190,17 +322,32 @@ impl<D: Db + 'static> SyncService<D> {
         shared.busy = true;
         shared.run += 1;
         shared.cancel = Arc::new(AtomicBool::new(false));
-        shared.decision = None;
+        shared.typed = None;
+        shared.choices = None;
         shared.status = Status::Idle;
         Ok((shared.run, shared.cancel.clone()))
     }
 
-    /// The person said no (or yes) on the desktop. Does nothing if no pairing is waiting for an answer.
-    pub fn answer_pairing(&self, yes: bool) {
+    /// Phone: the person typed the six digits. Does nothing if no pairing is waiting for them.
+    pub fn enter_code(&self, code: &str) {
         let mut shared = self.inner.lock();
-        if matches!(shared.status, Status::CheckCode { needs_answer: true, .. }) {
-            shared.decision = Some(yes);
+        if matches!(shared.status, Status::EnterCode { .. }) {
+            shared.typed = Some(code.trim().to_string());
             self.inner.answered.notify_all();
+        }
+    }
+
+    /// The person chose, for each conflict in the order shown, which version is true. Refused unless this device is reviewing and the
+    /// number of choices is the number of conflicts.
+    pub fn decide(&self, choices: Vec<Choice>) -> Result<(), SyncError> {
+        let mut shared = self.inner.lock();
+        match &shared.status {
+            Status::Reviewing { conflicts, .. } if conflicts.len() == choices.len() => {
+                shared.choices = Some(choices);
+                self.inner.answered.notify_all();
+                Ok(())
+            }
+            _ => Err(SyncError::Invalid("choices")),
         }
     }
 
@@ -259,36 +406,15 @@ impl<D: Db + 'static> SyncService<D> {
 
         let (inner, db) = (self.inner.clone(), self.db.clone());
         std::thread::spawn(move || {
-            let mut decide = |request: &PairingRequest| -> bool {
-                let mut shared = inner.lock();
-                if shared.run != run {
-                    return false;
-                }
-                shared.status = Status::CheckCode { purpose, code: request.check_code.clone(), peer: request.peer_name.clone(), needs_answer: true };
-                shared.decision = None;
-                let until = Instant::now() + flow::CONFIRM_WAIT;
-                let answer = loop {
-                    if let Some(answer) = shared.decision.take() {
-                        break answer;
-                    }
-                    if shared.cancel.load(Ordering::Relaxed) || Instant::now() >= until {
-                        break false;
-                    }
-                    shared = inner.answered.wait_timeout(shared, Duration::from_millis(200)).unwrap_or_else(|e| e.into_inner()).0;
-                };
-                if answer {
-                    shared.status = Status::Running { purpose };
-                }
-                answer
-            };
-            let result = flow::pair_as_desktop(window, &secret, &cancel, &*db, &name, &mut decide);
+            let mut prompts = ServicePrompts { inner: inner.clone(), run, purpose };
+            let result = flow::pair_as_desktop(window, &secret, &cancel, &*db, &name, &mut prompts);
             inner.finish(run, purpose, result);
         });
         Ok(())
     }
 
     /// Opens a window for a sync with the paired phones and shows its code.
-    pub fn start_sync(&self, name: &str, address: Option<IpAddr>) -> Result<(), SyncError> {
+    pub fn start_sync(&self, name: &str, address: Option<IpAddr>, mode: Mode) -> Result<(), SyncError> {
         let name = peers::clean_name(name)?;
         let (run, cancel) = self.begin()?;
         let purpose = Purpose::Sync;
@@ -326,7 +452,8 @@ impl<D: Db + 'static> SyncService<D> {
 
         let (inner, db) = (self.inner.clone(), self.db.clone());
         std::thread::spawn(move || {
-            let result = flow::sync_as_desktop(window, &cancel, &*db, &name, &ids, &mut || inner.set(run, Status::Running { purpose }));
+            let mut prompts = ServicePrompts { inner: inner.clone(), run, purpose };
+            let result = flow::sync_as_desktop(window, &cancel, &*db, &name, &ids, mode, &mut prompts);
             inner.finish(run, purpose, result.map(|(done, _)| done));
         });
         Ok(())
@@ -343,11 +470,10 @@ impl<D: Db + 'static> SyncService<D> {
         self.inner.set(run, Status::Connecting { purpose });
         let (inner, db, limits) = (self.inner.clone(), self.db.clone(), self.limits);
         std::thread::spawn(move || {
+            let mut prompts = ServicePrompts { inner: inner.clone(), run, purpose };
             let result = match payload.kind {
-                Kind::Pair => flow::pair_as_phone(&payload, &*db, &name, limits, cancel, &mut |code| {
-                    inner.set(run, Status::CheckCode { purpose, code: code.to_string(), peer: String::new(), needs_answer: false });
-                }),
-                Kind::Sync => flow::sync_as_phone(&payload, &*db, &name, limits, cancel, &mut || inner.set(run, Status::Running { purpose })),
+                Kind::Pair => flow::pair_as_phone(&payload, &*db, &name, limits, cancel, &mut prompts),
+                Kind::Sync => flow::sync_as_phone(&payload, &*db, &name, limits, cancel, &mut prompts),
             };
             inner.finish(run, purpose, result);
         });
@@ -420,28 +546,37 @@ mod tests {
         }
     }
 
+    /// Starts a pairing and goes as far as the digits: the desktop shows them, the phone asks for them.
     fn pair(desktop: &SyncService<LocalDb>, phone: &SyncService<LocalDb>) -> (Status, Status) {
         desktop.start_pairing("Desktop", Some(LOOPBACK)).unwrap();
         let qr = qr_of(&wait_for(desktop, "the code", |s| matches!(s, Status::Waiting { .. })));
         phone.scan(&qr, "Phone").unwrap();
-        let on_desktop = wait_for(desktop, "the check code", |s| matches!(s, Status::CheckCode { .. }));
-        let on_phone = wait_for(phone, "the check code", |s| matches!(s, Status::CheckCode { .. }));
+        let on_desktop = wait_for(desktop, "the digits", |s| matches!(s, Status::ShowCode { .. }));
+        let on_phone = wait_for(phone, "the field for the digits", |s| matches!(s, Status::EnterCode { .. }));
         (on_desktop, on_phone)
     }
 
+    /// The digits that the desktop shows.
+    fn digits(status: &Status) -> String {
+        match status {
+            Status::ShowCode { code, .. } => code.clone(),
+            other => panic!("no digits in {other:?}"),
+        }
+    }
+
     #[test]
-    fn a_pairing_goes_through_waiting_the_check_code_and_done_on_both_screens() {
+    fn a_pairing_goes_through_waiting_the_digits_and_done_on_both_screens() {
         let (d, p) = (db(), db());
         with_data(&d);
         let (desktop, phone) = (service(&d), service(&p));
         assert_eq!(desktop.status(), Status::Idle);
 
         let (on_desktop, on_phone) = pair(&desktop, &phone);
-        let (Status::CheckCode { code: a, peer, needs_answer: true, .. }, Status::CheckCode { code: b, needs_answer: false, .. }) = (on_desktop, on_phone) else { panic!() };
-        assert_eq!((a.len(), peer.as_str()), (6, "Phone"));
-        assert_eq!(a, b, "the same six digits on both");
+        let Status::ShowCode { code, peer, .. } = on_desktop else { panic!() };
+        assert_eq!((code.len(), peer.as_str()), (6, "Phone"));
+        assert_eq!(on_phone, Status::EnterCode { purpose: Purpose::Pair, tries_left: CODE_TRIES, wrong: false });
 
-        desktop.answer_pairing(true);
+        phone.enter_code(&code);
         let done = wait_for(&desktop, "done", |s| matches!(s, Status::Done { .. }));
         wait_for(&phone, "done on the phone", |s| matches!(s, Status::Done { .. }));
         let Status::Done { purpose, differences, peer, summary, .. } = done else { panic!() };
@@ -458,15 +593,37 @@ mod tests {
     }
 
     #[test]
-    fn a_no_ends_both_with_declined_and_stores_nothing() {
+    fn three_wrong_tries_on_the_phone_end_both_with_declined_and_store_nothing() {
         let (d, p) = (db(), db());
         with_data(&d);
         let (desktop, phone) = (service(&d), service(&p));
-        pair(&desktop, &phone);
-        desktop.answer_pairing(false);
+        let (on_desktop, _) = pair(&desktop, &phone);
+        let right = digits(&on_desktop);
+        let wrong = if right == "000000" { "111111" } else { "000000" };
+        phone.enter_code(wrong);
+        let second = wait_for(&phone, "a second try", |s| matches!(s, Status::EnterCode { wrong: true, .. }));
+        assert_eq!(second, Status::EnterCode { purpose: Purpose::Pair, tries_left: CODE_TRIES - 1, wrong: true });
+        phone.enter_code(wrong);
+        wait_for(&phone, "a third try", |s| matches!(s, Status::EnterCode { tries_left: 1, .. }));
+        phone.enter_code(wrong);
         assert_eq!(wait_for(&desktop, "failed", |s| matches!(s, Status::Failed { .. })), Status::Failed { purpose: Purpose::Pair, reason: "declined" });
         assert_eq!(wait_for(&phone, "failed", |s| matches!(s, Status::Failed { .. })), Status::Failed { purpose: Purpose::Pair, reason: "declined" });
         assert_eq!(desktop.devices().unwrap().len() + phone.devices().unwrap().len(), 0);
+    }
+
+    #[test]
+    fn a_typo_is_forgiven_and_the_right_digits_go_through() {
+        let (d, p) = (db(), db());
+        with_data(&d);
+        let (desktop, phone) = (service(&d), service(&p));
+        let (on_desktop, _) = pair(&desktop, &phone);
+        let right = digits(&on_desktop);
+        phone.enter_code("12");
+        wait_for(&phone, "another try", |s| matches!(s, Status::EnterCode { wrong: true, .. }));
+        phone.enter_code(&format!(" {right} "));
+        wait_for(&desktop, "done", |s| matches!(s, Status::Done { .. }));
+        wait_for(&phone, "done on the phone", |s| matches!(s, Status::Done { .. }));
+        assert_eq!(desktop.devices().unwrap().len(), 1);
     }
 
     #[test]
@@ -474,8 +631,8 @@ mod tests {
         let (d, p) = (db(), db());
         with_data(&d);
         let (desktop, phone) = (service(&d), service(&p));
-        pair(&desktop, &phone);
-        desktop.answer_pairing(true);
+        let (on_desktop, _) = pair(&desktop, &phone);
+        phone.enter_code(&digits(&on_desktop));
         wait_for(&desktop, "done", |s| matches!(s, Status::Done { .. }));
         wait_for(&phone, "done", |s| matches!(s, Status::Done { .. }));
         desktop.acknowledge();
@@ -490,7 +647,7 @@ mod tests {
             )
             .unwrap();
         }
-        desktop.start_sync("Desktop", Some(LOOPBACK)).unwrap();
+        desktop.start_sync("Desktop", Some(LOOPBACK), Mode::Both).unwrap();
         let qr = qr_of(&wait_for(&desktop, "the sync code", |s| matches!(s, Status::Waiting { purpose: Purpose::Sync, .. })));
         phone.scan(&qr, "Phone").unwrap();
         let done = wait_for(&desktop, "done", |s| matches!(s, Status::Done { .. }));
@@ -507,7 +664,7 @@ mod tests {
         desktop.start_pairing("Desktop", Some(LOOPBACK)).unwrap();
         wait_for(&desktop, "the code", |s| matches!(s, Status::Waiting { .. }));
         assert!(desktop.start_pairing("Desktop", Some(LOOPBACK)).is_err(), "a second window is refused");
-        assert!(desktop.start_sync("Desktop", Some(LOOPBACK)).is_err());
+        assert!(desktop.start_sync("Desktop", Some(LOOPBACK), Mode::Both).is_err());
         let started = Instant::now();
         desktop.cancel();
         assert_eq!(wait_for(&desktop, "cancelled", |s| matches!(s, Status::Failed { .. })), Status::Failed { purpose: Purpose::Pair, reason: "cancelled" });
@@ -531,7 +688,7 @@ mod tests {
     fn a_sync_with_nobody_paired_or_a_locked_app_fails_without_opening_anything() {
         let d = db();
         let desktop = service(&d);
-        desktop.start_sync("Desktop", Some(LOOPBACK)).unwrap();
+        desktop.start_sync("Desktop", Some(LOOPBACK), Mode::Both).unwrap();
         assert_eq!(desktop.status(), Status::Failed { purpose: Purpose::Sync, reason: "nobody_paired" });
         desktop.acknowledge();
         d.locked.store(true, Ordering::Relaxed);
@@ -567,14 +724,14 @@ mod tests {
         let (d, p) = (db(), db());
         with_data(&d);
         let (desktop, phone) = (service(&d), service(&p));
-        pair(&desktop, &phone);
-        desktop.answer_pairing(true);
+        let (on_desktop, _) = pair(&desktop, &phone);
+        phone.enter_code(&digits(&on_desktop));
         wait_for(&desktop, "done", |s| matches!(s, Status::Done { .. }));
         let id = desktop.devices().unwrap()[0].device_id.clone();
         assert!(desktop.remove_device(&id).unwrap());
         assert!(!desktop.remove_device(&id).unwrap());
         desktop.acknowledge();
-        desktop.start_sync("Desktop", Some(LOOPBACK)).unwrap();
+        desktop.start_sync("Desktop", Some(LOOPBACK), Mode::Both).unwrap();
         assert_eq!(desktop.status(), Status::Failed { purpose: Purpose::Sync, reason: "nobody_paired" }, "nobody is left to sync with");
     }
 
@@ -585,19 +742,39 @@ mod tests {
             serde_json::to_string(&status).unwrap(),
             r#"{"state":"waiting","purpose":"sync","qr":"MNY1:x","address":"192.168.1.2:5000","expiresInSecs":120}"#
         );
-        let code = Status::CheckCode { purpose: Purpose::Pair, code: "123456".into(), peer: "Phone".into(), needs_answer: true };
-        assert_eq!(serde_json::to_string(&code).unwrap(), r#"{"state":"checkCode","purpose":"pair","code":"123456","peer":"Phone","needsAnswer":true}"#);
+        let shown = Status::ShowCode { purpose: Purpose::Pair, code: "123456".into(), peer: "Phone".into() };
+        assert_eq!(serde_json::to_string(&shown).unwrap(), r#"{"state":"showCode","purpose":"pair","code":"123456","peer":"Phone"}"#);
+        let asked = Status::EnterCode { purpose: Purpose::Pair, tries_left: 2, wrong: true };
+        assert_eq!(serde_json::to_string(&asked).unwrap(), r#"{"state":"enterCode","purpose":"pair","triesLeft":2,"wrong":true}"#);
+        let review = Status::Reviewing {
+            purpose: Purpose::Sync,
+            conflicts: vec![ConflictItem {
+                table: "transactions",
+                id: "ab".repeat(16),
+                title: "Coffee".into(),
+                mine_deleted: false,
+                theirs_deleted: false,
+                fields: vec![FieldItem { field: "amount", mine: "3.50".into(), theirs: "4.00".into() }],
+            }],
+            more: 3,
+        };
+        assert_eq!(
+            serde_json::to_string(&review).unwrap(),
+            format!(r#"{{"state":"reviewing","purpose":"sync","conflicts":[{{"table":"transactions","id":"{}","title":"Coffee","mineDeleted":false,"theirsDeleted":false,"fields":[{{"field":"amount","mine":"3.50","theirs":"4.00"}}]}}],"more":3}}"#, "ab".repeat(16))
+        );
+        assert_eq!(serde_json::to_string(&Status::WaitingReview { purpose: Purpose::Sync }).unwrap(), r#"{"state":"waitingReview","purpose":"sync"}"#);
         assert_eq!(serde_json::to_string(&Status::Idle).unwrap(), r#"{"state":"idle"}"#);
         let done = Status::Done {
             purpose: Purpose::Sync,
             summary: SummaryView { added: 5, updated: 2, replaced: 1, deleted: 0, merged: 0, dropped: 0 },
             warnings: vec![WarningView { kind: "clock_off", seconds: 75 }],
             differences: false,
+            one_way: true,
             peer: "Phone".into(),
         };
         assert_eq!(
             serde_json::to_string(&done).unwrap(),
-            r#"{"state":"done","purpose":"sync","summary":{"added":5,"updated":2,"replaced":1,"deleted":0,"merged":0,"dropped":0},"warnings":[{"kind":"clock_off","seconds":75}],"differences":false,"peer":"Phone"}"#
+            r#"{"state":"done","purpose":"sync","summary":{"added":5,"updated":2,"replaced":1,"deleted":0,"merged":0,"dropped":0},"warnings":[{"kind":"clock_off","seconds":75}],"differences":false,"oneWay":true,"peer":"Phone"}"#
         );
         assert_eq!(serde_json::to_string(&Status::Connecting { purpose: Purpose::Pair }).unwrap(), r#"{"state":"connecting","purpose":"pair"}"#);
         assert_eq!(serde_json::to_string(&Status::Running { purpose: Purpose::Sync }).unwrap(), r#"{"state":"running","purpose":"sync"}"#);

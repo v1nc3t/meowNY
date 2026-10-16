@@ -28,6 +28,25 @@ export type SummaryView = z.infer<typeof SummaryView>
 export const WarningView = z.object({ kind: z.literal('clock_off'), seconds: count })
 export type WarningView = z.infer<typeof WarningView>
 
+/** Which way a sync goes. The desktop chooses. */
+export const MODES = ['both', 'to_desktop', 'to_phone'] as const
+export const Mode = z.enum(MODES)
+export type Mode = z.infer<typeof Mode>
+
+export const TABLES = ['settings', 'categories', 'recurring_transactions', 'budgets', 'transactions'] as const
+export const FIELDS = ['name', 'amount', 'date', 'category', 'description', 'type', 'month', 'every', 'nextDue', 'endDate', 'active', 'locale', 'timezone'] as const
+
+/** One thing that was changed on both devices since they last met: how its two versions differ. */
+export const Conflict = z.object({
+  table: z.enum(TABLES),
+  id: z.string(),
+  title: z.string(),
+  mineDeleted: z.boolean(),
+  theirsDeleted: z.boolean(),
+  fields: z.array(z.object({ field: z.enum(FIELDS), mine: z.string(), theirs: z.string() })),
+})
+export type Conflict = z.infer<typeof Conflict>
+
 /** One of the states of a pairing or a sync, in the order they happen. */
 export const Status = z.discriminatedUnion('state', [
   z.object({ state: z.literal('idle') }),
@@ -35,16 +54,24 @@ export const Status = z.discriminatedUnion('state', [
   z.object({ state: z.literal('waiting'), purpose: Purpose, qr: z.string().min(1), address: z.string(), expiresInSecs: count }),
   /** The phone is dialling the desktop. */
   z.object({ state: z.literal('connecting'), purpose: Purpose }),
-  /** Both screens show `code`; the desktop (`needsAnswer`) asks the person whether the two agree. */
-  z.object({ state: z.literal('checkCode'), purpose: Purpose, code: z.string().regex(/^\d{6}$/), peer: z.string(), needsAnswer: z.boolean() }),
+  /** Desktop, pairing: the six digits to type on the phone. */
+  z.object({ state: z.literal('showCode'), purpose: Purpose, code: z.string().regex(/^\d{6}$/), peer: z.string() }),
+  /** Phone, pairing: the person types the six digits that the desktop shows. */
+  z.object({ state: z.literal('enterCode'), purpose: Purpose, triesLeft: count, wrong: z.boolean() }),
   z.object({ state: z.literal('running'), purpose: Purpose }),
+  /** This device has conflicts to review; `more` further ones are settled by the newer change. */
+  z.object({ state: z.literal('reviewing'), purpose: Purpose, conflicts: z.array(Conflict), more: count }),
+  /** The other device is reviewing. */
+  z.object({ state: z.literal('waitingReview'), purpose: Purpose }),
   z.object({
     state: z.literal('done'),
     purpose: Purpose,
     summary: SummaryView,
     warnings: z.array(WarningView),
-    /** True when the two sides still differ after the sync (it should never be). */
+    /** True when the two sides still differ after the sync (it should never be, unless it went one way). */
     differences: z.boolean(),
+    /** The sync went one way, so the other device was not changed. */
+    oneWay: z.boolean(),
     peer: z.string(),
   }),
   z.object({ state: z.literal('failed'), purpose: Purpose, reason: z.string().regex(/^[a-z_]+$/) }),
@@ -91,10 +118,13 @@ export const syncApi = {
    * `address` is another address of this computer on the home network, for one that is on several networks; empty is the system's choice.
    */
   startPairing: (name: string, address = '') => call('sync_start_pairing', z.null(), { name, address: address.trim() || null }).then(() => undefined),
-  /** Desktop: the person compared the two codes. */
-  answerPairing: (yes: boolean) => call('sync_answer_pairing', z.null(), { yes }).then(() => undefined),
-  /** Desktop: opens a window for the paired phones. */
-  start: (name: string, address = '') => call('sync_start', z.null(), { name, address: address.trim() || null }).then(() => undefined),
+  /** Phone: the person typed the six digits that the desktop shows. Three wrong tries end the pairing. */
+  enterCode: (code: string) => call('sync_enter_code', z.null(), { code }).then(() => undefined),
+  /** The person chose, for each conflict in the order shown, which version is true. */
+  decide: (choices: Choice[]) => call('sync_decide', z.null(), { choices }).then(() => undefined),
+  /** Desktop: opens a window for the paired phones. `mode` says which way the sync goes. */
+  start: (name: string, address = '', mode: Mode = 'both') =>
+    call('sync_start', z.null(), { name, address: address.trim() || null, mode }).then(() => undefined),
   /** Phone: the text of a scanned code. A pairing code pairs and a sync code syncs. */
   scan: (text: string, name: string) => call('sync_scan', z.null(), { text, name }).then(() => undefined),
   cancel: () => call('sync_cancel', z.null()).then(() => undefined),
@@ -106,7 +136,7 @@ export const syncApi = {
 
 /** True while something is going on that the person can stop. */
 export function isBusy(status: Status): boolean {
-  return status.state === 'waiting' || status.state === 'connecting' || status.state === 'checkCode' || status.state === 'running'
+  return !(status.state === 'idle' || status.state === 'done' || status.state === 'failed')
 }
 
 /** True when the status is an end that the screen has to show once and then acknowledge. */
@@ -206,4 +236,35 @@ export const PHONE_PLACEHOLDER_CURRENCY = 'EUR'
  */
 export function locksAfterBackground(hiddenMs: number, lockAfterSecs: number): boolean {
   return lockAfterSecs > 0 && hiddenMs >= lockAfterSecs * 1000
+}
+
+
+/** What the person decides for one conflict: the version on this device, or the one on the other. */
+export type Choice = 'mine' | 'theirs'
+
+/** The six digits as typed: spaces and anything that is not a digit are left out. */
+export function cleanDigits(text: string): string {
+  return text.replace(/\D/g, '').slice(0, 6)
+}
+
+/** Whether the choices cover every conflict (the person has to say for each one). */
+export function allChosen(conflicts: readonly Conflict[], chosen: Readonly<Record<string, Choice | undefined>>): boolean {
+  return conflicts.length > 0 && conflicts.every((conflict) => chosen[conflict.id] !== undefined)
+}
+
+/** The choices in the order of the conflicts, ready to send; null while one is missing. */
+export function choicesInOrder(conflicts: readonly Conflict[], chosen: Readonly<Record<string, Choice | undefined>>): Choice[] | null {
+  const out: Choice[] = []
+  for (const conflict of conflicts) {
+    const choice = chosen[conflict.id]
+    if (choice === undefined) return null
+    out.push(choice)
+  }
+  return out
+}
+
+/** "1 MONTH" as the number and the unit, for the words "every month" and "every 3 weeks". */
+export function parseEvery(text: string): { count: number; unit: string } | null {
+  const match = /^([1-9]\d{0,5}) (DAY|WEEK|MONTH|YEAR)$/.exec(text)
+  return match ? { count: Number(match[1]), unit: match[2] } : null
 }

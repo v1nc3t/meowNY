@@ -18,7 +18,7 @@ use crate::money::MAX_MINOR;
 use crate::{categories, transactions, vault};
 
 /// The version of this protocol, in `hello`.
-pub const PROTOCOL: u32 = 1;
+pub const PROTOCOL: u32 = 2;
 /// Digest entries in one message, and rows in one message. Messages are also cut by size (`SOFT_MESSAGE_BYTES`).
 pub const MAX_ENTRIES_PER_MESSAGE: usize = 400;
 pub const MAX_ROWS_PER_MESSAGE: usize = 200;
@@ -78,8 +78,10 @@ impl std::error::Error for WireError {}
 #[serde(tag = "t", rename_all = "camelCase")]
 pub enum Message {
     Hello(Hello),
-    /// The desktop's answer to a pairing: the person said yes.
+    /// The phone's answer to a pairing: the person typed the six digits and they were right.
     Accept(AcceptMessage),
+    /// The device that reviewed the conflicts has made its choices; the lists are compared again.
+    Reviewed(ReviewedMessage),
     Currency(CurrencyMessage),
     Hashes(HashesMessage),
     Digest(DigestMessage),
@@ -110,7 +112,7 @@ impl Message {
     pub fn validate(&self) -> Result<(), WireError> {
         match self {
             Message::Hello(h) => h.validate(),
-            Message::Accept(_) => Ok(()),
+            Message::Accept(_) | Message::Reviewed(_) => Ok(()),
             Message::Currency(c) => {
                 if c.changes.len() > 1000 {
                     return Err(WireError::Invalid("number of currency changes"));
@@ -178,6 +180,26 @@ pub struct Hello {
     pub clock: String,
     pub currency: String,
     pub generation: i64,
+    /// When this device last synced with the other one, in milliseconds since 1970 (none if it never did). Rows that both
+    /// devices changed after both of their last syncs are conflicts.
+    #[serde(default)]
+    pub since: Option<u64>,
+    /// Which way this sync goes. The desktop says; the phone's is ignored.
+    #[serde(default)]
+    pub mode: Mode,
+}
+
+/// Which way a sync goes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Mode {
+    /// Each takes what the other has newer.
+    #[default]
+    Both,
+    /// The phone's changes go to the desktop and nothing goes back. The desktop reviews conflicts.
+    ToDesktop,
+    /// The desktop's changes go to the phone and nothing goes back. The phone reviews conflicts.
+    ToPhone,
 }
 
 impl Hello {
@@ -197,6 +219,10 @@ impl Hello {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct AcceptMessage {}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ReviewedMessage {}
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -705,11 +731,13 @@ mod tests {
             clock: STAMP.into(),
             currency: "EUR".into(),
             generation: 2,
+            since: Some(1_700_000_000_000),
+            mode: Mode::ToPhone,
         });
         let bytes = hello.to_bytes().unwrap();
         assert!(std::str::from_utf8(&bytes).unwrap().starts_with("{\"t\":\"hello\""));
         match Message::from_bytes(&bytes).unwrap() {
-            Message::Hello(h) => assert_eq!((h.schema, h.generation, h.name.as_str()), (8, 2, "Vincent's phone")),
+            Message::Hello(h) => assert_eq!((h.schema, h.generation, h.name.as_str(), h.since, h.mode), (8, 2, "Vincent's phone", Some(1_700_000_000_000), Mode::ToPhone)),
             other => panic!("{other:?}"),
         }
         let accept = Message::Accept(AcceptMessage {});
@@ -762,6 +790,26 @@ mod tests {
     }
 
     #[test]
+    fn a_hello_without_since_and_mode_means_never_met_and_both_ways() {
+        let text = format!(
+            r#"{{"t":"hello","deviceId":"{ID_A}","name":"Phone","appVersion":"0.1.0","schema":8,"protocol":{PROTOCOL},"clock":"{STAMP}","currency":"EUR","generation":0}}"#
+        );
+        match Message::from_bytes(text.as_bytes()).unwrap() {
+            Message::Hello(h) => assert_eq!((h.since, h.mode), (None, Mode::Both)),
+            other => panic!("{other:?}"),
+        }
+        let odd = text.replace("\"generation\":0", "\"generation\":0,\"mode\":\"sideways\"");
+        assert!(Message::from_bytes(odd.as_bytes()).is_err(), "a way that does not exist is refused");
+    }
+
+    #[test]
+    fn the_messages_of_a_review_are_small_and_strict() {
+        assert_eq!(Message::Reviewed(ReviewedMessage {}).to_bytes().unwrap(), br#"{"t":"reviewed"}"#);
+        assert!(Message::from_bytes(br#"{"t":"reviewed"}"#).is_ok());
+        assert!(Message::from_bytes(br#"{"t":"reviewed","choices":[]}"#).is_err());
+    }
+
+    #[test]
     fn a_hello_from_a_stranger_is_checked_field_by_field() {
         let good = Hello {
             device_id: ID_A.into(),
@@ -772,6 +820,8 @@ mod tests {
             clock: STAMP.into(),
             currency: "EUR".into(),
             generation: 0,
+            since: None,
+            mode: Mode::Both,
         };
         assert!(Message::Hello(good.clone()).validate().is_ok());
         let bad = |f: &dyn Fn(&mut Hello)| {

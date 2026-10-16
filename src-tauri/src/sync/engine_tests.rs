@@ -912,3 +912,140 @@ fn random_edits_with_a_currency_change_in_between_still_converge() {
         }
     }
 }
+
+// --- what stays on a device ---------------------------------------------------------------------------------------------
+
+/// Tables whose rows are sent to the other device (the settings only in their shared part), and tables that never are.
+const SHARED_TABLES: [&str; 7] = ["settings", "categories", "budgets", "recurring_transactions", "transactions", "sync_deleted", "currency_changes"];
+const LOCAL_TABLES: [&str; 5] = ["audit_log", "api_tokens", "backup_schedule", "sync_clock", "sync_peers"];
+
+#[test]
+fn every_table_is_either_shared_or_stays_on_its_device() {
+    let conn = device("EUR");
+    let mut stmt = conn.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name").unwrap();
+    let names: Vec<String> = stmt.query_map([], |r| r.get(0)).unwrap().map(Result::unwrap).collect();
+    assert!(names.len() >= 12, "the tables were not found: {names:?}");
+    for name in &names {
+        let shared = SHARED_TABLES.contains(&name.as_str());
+        let local = LOCAL_TABLES.contains(&name.as_str());
+        assert!(shared || local, "the table {name} is new: decide whether the sync sends it (SHARED_TABLES) or it stays on its device (LOCAL_TABLES), and say so in docs/sync-design.md section 9");
+        assert!(!(shared && local), "{name} is in both lists");
+    }
+    for listed in SHARED_TABLES.iter().chain(LOCAL_TABLES.iter()) {
+        assert!(names.iter().any(|n| n == listed), "{listed} is listed but there is no such table");
+    }
+    // The sync can only name five tables of rows, so nothing else can be asked for or sent.
+    assert_eq!(wire::Table::ALL.len(), 5);
+}
+
+#[test]
+fn nothing_that_stays_on_a_device_is_ever_sent() {
+    let (mut desktop, mut phone) = paired();
+    let sentinel = |tag: &str| format!("SECRET-{tag}-9f3a1c");
+    for (conn, tag) in [(&desktop, "DESKTOP"), (&phone, "PHONE")] {
+        let s = sentinel(tag);
+        conn.execute("INSERT INTO audit_log (entity_type, entity_id, action, old_values, new_values) VALUES ('thing', '1', 'UPDATE', ?1, ?1)", [&s]).unwrap();
+        conn.execute("INSERT INTO api_tokens (name, scope, token_hash, created_at, expires_at) VALUES (?1, 'READ', ?2, '2026-01-01T00:00:00Z', '2027-01-01T00:00:00Z')", params![s, "ab".repeat(32)]).unwrap();
+        conn.execute("INSERT INTO backup_schedule (id, folder, every_days, passphrase) VALUES (1, ?1, 7, ?1)", [&s]).unwrap();
+        let id = if tag == "DESKTOP" { "aa".repeat(16) } else { "bb".repeat(16) };
+        conn.execute("INSERT INTO sync_peers (device_id, name, secret, paired_at) VALUES (?1, ?2, ?3, '2026-01-01T00:00:00.000Z')", params![id, s, "cd".repeat(32)]).unwrap();
+    }
+    // The language belongs to the device too.
+    desktop.execute("UPDATE settings SET language = 'de'", []).unwrap();
+    phone.execute("UPDATE settings SET language = 'ro'", []).unwrap();
+    // Something to send in both directions, so that a transcript is there to look through.
+    let food = id_of(&desktop, "categories", "Food");
+    spend(&desktop, food, "From the desktop", "4.00");
+    let phone_food = id_of(&phone, "categories", "Food");
+    spend(&phone, phone_food, "From the phone", "5.00");
+
+    let outcome = sync(&mut desktop, &mut phone, TODAY, now(), None).unwrap();
+    assert!(!outcome.differences);
+    let said = String::from_utf8_lossy(&outcome.transcript).to_string();
+    assert!(said.contains("From the desktop") && said.contains("From the phone"), "the transcript has nothing in it: {} bytes", outcome.transcript.len());
+    for tag in ["DESKTOP", "PHONE"] {
+        assert!(!said.contains(&sentinel(tag)), "something that stays on the {tag} was sent");
+    }
+    assert!(!said.contains(&"ab".repeat(32)), "a token hash was sent");
+    assert!(!said.contains(&"cd".repeat(32)), "a pairing secret was sent");
+    // And nothing arrived in the tables of the other side.
+    assert_eq!(count(&desktop, "SELECT count(*) FROM audit_log WHERE new_values LIKE '%SECRET-PHONE%'"), 0);
+    assert_eq!(count(&phone, "SELECT count(*) FROM audit_log WHERE new_values LIKE '%SECRET-DESKTOP%'"), 0);
+    assert_eq!(count(&desktop, "SELECT count(*) FROM api_tokens WHERE name LIKE '%PHONE%'"), 0);
+    assert_eq!(count(&phone, "SELECT count(*) FROM api_tokens WHERE name LIKE '%DESKTOP%'"), 0);
+    assert_eq!(text(&desktop, "SELECT language FROM settings"), "de");
+    assert_eq!(text(&phone, "SELECT language FROM settings"), "ro");
+}
+
+// --- finding the conflicts ----------------------------------------------------------------------------------------------
+
+fn listed(entries: &[(&str, &str, bool)]) -> engine::Digest {
+    let mut digest = engine::Digest::default();
+    let mut table = wire::Entries::new();
+    for (id, stamp, deleted) in entries {
+        table.insert(format!("{:0>32}", id), (stamp.to_string(), *deleted));
+    }
+    digest.0.insert(Table::Transactions, table);
+    digest
+}
+
+fn at(ms: u64, device: &str) -> String {
+    format!("{ms:013}-0000-{device}")
+}
+
+#[test]
+fn only_what_both_sides_changed_after_they_last_met_is_a_conflict() {
+    let tables = [Table::Transactions];
+    let met = Some(1_000);
+    let found = |a: &[(&str, &str, bool)], b: &[(&str, &str, bool)], threshold| engine::conflicts(&listed(a), &listed(b), &tables, threshold).0.len();
+    let (old_a, old_b) = (at(500, "aaaaaaaa"), at(600, "bbbbbbbb"));
+    let (new_a, new_b) = (at(2_000, "aaaaaaaa"), at(3_000, "bbbbbbbb"));
+    assert_eq!(found(&[("1", &new_a, false)], &[("1", &new_b, false)], met), 1, "changed on both after the last sync");
+    assert_eq!(found(&[("1", &new_a, false)], &[("1", &old_b, false)], met), 0, "only one side changed it");
+    assert_eq!(found(&[("1", &old_a, false)], &[("1", &old_b, false)], met), 0, "neither changed it since");
+    assert_eq!(found(&[("1", &new_a, false)], &[("1", &new_a, false)], met), 0, "the same version on both");
+    assert_eq!(found(&[("1", &new_a, true)], &[("1", &new_b, true)], met), 0, "deleted on both");
+    assert_eq!(found(&[("1", &new_a, true)], &[("1", &new_b, false)], met), 1, "deleted on one side and changed on the other");
+    assert_eq!(found(&[("1", &new_a, false)], &[], met), 0, "a row only one side has is not a conflict");
+    assert_eq!(found(&[("1", &new_a, false)], &[("1", &new_b, false)], None), 0, "devices that never met have nothing to fight over");
+    assert_eq!(engine::conflict_threshold(Some(5), Some(9)), Some(9));
+    assert_eq!(engine::conflict_threshold(None, Some(9)), Some(9));
+    assert_eq!(engine::conflict_threshold(None, None), None);
+}
+
+#[test]
+fn a_huge_number_of_conflicts_is_cut_short_and_the_rest_is_counted() {
+    let many = engine::MAX_CONFLICTS + 37;
+    let (mut a, mut b) = (Vec::new(), Vec::new());
+    let (sa, sb) = (at(2_000, "aaaaaaaa"), at(3_000, "bbbbbbbb"));
+    let ids: Vec<String> = (0..many).map(|i| format!("{i:x}")).collect();
+    for id in &ids {
+        a.push((id.as_str(), sa.as_str(), false));
+        b.push((id.as_str(), sb.as_str(), false));
+    }
+    let (found, more) = engine::conflicts(&listed(&a), &listed(&b), &[Table::Transactions], Some(1_000));
+    assert_eq!((found.len(), more), (engine::MAX_CONFLICTS, 37));
+    // both sides work out the same list, in the same order
+    let (again, _) = engine::conflicts(&listed(&b), &listed(&a), &[Table::Transactions], Some(1_000));
+    assert_eq!(found.iter().map(|c| c.id.clone()).collect::<Vec<_>>(), again.iter().map(|c| c.id.clone()).collect::<Vec<_>>());
+}
+
+#[test]
+fn the_choices_only_change_stamps_never_what_a_row_says() {
+    let mut conn = device("EUR");
+    let food = category(&conn, "Food", CategoryType::Expense);
+    let id = spend(&conn, food, "Coffee", "3.50");
+    let sync_id: String = conn.query_row("SELECT sync_id FROM transactions WHERE id = ?1", [id], |r| r.get(0)).unwrap();
+    let before = text(&conn, "SELECT stamp FROM transactions");
+    let conflict = |deleted| engine::Conflict { table: Table::Transactions, id: sync_id.clone(), mine_stamp: before.clone(), mine_deleted: deleted, theirs_stamp: String::new(), theirs_deleted: false };
+    engine::decide(&mut conn, &[conflict(false)], &[engine::Choice::Mine]).unwrap();
+    let mine = text(&conn, "SELECT stamp FROM transactions");
+    assert!(mine > before, "the chosen version got a newer stamp");
+    engine::decide(&mut conn, &[conflict(false)], &[engine::Choice::Theirs]).unwrap();
+    assert_eq!(text(&conn, "SELECT stamp FROM transactions"), engine::UNSET_STAMP, "the other version will be the newer one");
+    assert_eq!(count(&conn, "SELECT amount_minor FROM transactions"), 350);
+    assert!(engine::decide(&mut conn, &[conflict(false)], &[]).is_err(), "one choice for each conflict");
+    // the changes of a decision are not changes of the person's: no row is marked as changed on this device by it
+    assert_eq!(count(&conn, "SELECT applying FROM sync_clock"), 0);
+}
+

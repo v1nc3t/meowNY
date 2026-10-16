@@ -49,7 +49,7 @@ export function useSyncStatus(): {
   useEffect(
     () => () => {
       const { state } = latest.current
-      if (state === 'waiting' || state === 'checkCode') void syncApi.cancel().catch(() => undefined)
+      if (state === 'waiting' || state === 'showCode' || state === 'enterCode' || state === 'reviewing') void syncApi.cancel().catch(() => undefined)
     },
     [],
   )
