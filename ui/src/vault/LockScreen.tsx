@@ -98,7 +98,6 @@ export default function LockScreen({ onUnlocked }: { onUnlocked: () => void }) {
           </label>
           <PasswordField label={t('recovery.newPassphrase')} name="passphrase" />
           <PasswordField label={t('recovery.newPassphraseRepeat')} name="confirm" />
-          <p className="hint">{t('recovery.emptyHint')}</p>
           <button type="submit" disabled={busy}>
             {t('common.unlock')}
           </button>

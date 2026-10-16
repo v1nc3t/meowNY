@@ -234,7 +234,8 @@ function YearCharts({ year, month, onPick, settings }: { year: YearPoint[]; mont
   const plotW = Math.max(0, width - PAD.left - PAD.right)
   const slot = plotW / 12
   const x = (i: number) => PAD.left + (i + 0.5) * slot
-  const short = (i: number) => (slot < 30 ? (names[i] ?? '').slice(0, 1) : (names[i] ?? '').slice(0, 3))
+  // A narrow chart (a phone) has no room for names, and one letter is not enough to tell June from July: the month numbers.
+  const short = (i: number) => (slot < 30 ? String(i + 1) : (names[i] ?? '').slice(0, 3))
 
   // Lines: 0 at the bottom, a round amount at the top.
   const lineH = width < 500 ? 150 : 200

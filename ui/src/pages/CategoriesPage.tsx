@@ -1,19 +1,28 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import AddCategoryModal from '../components/AddCategoryModal'
+import SectionTabs from '../components/SectionTabs'
 import { visibleCategories, type Category, type Kind } from '../lib/categoriesView'
 import { categories as categoriesApi, cleanCategoryName } from '../api/categories'
 import { errorText } from '../api/invoke'
+import { useProfile } from '../hooks/profile'
+import { useSwipeHandler } from '../hooks/swipe'
 import { useNotice } from '../hooks/useNotice'
 import { useT } from '../i18n/context'
 import { useShortcut } from '../keys/registry'
 import { tip } from '../keys/tip'
 import { useRowNavigation } from '../keys/useRowNavigation'
+import { step } from '../lib/swipe'
+
+const PHONE_TABS = ['EXPENSE', 'INCOME'] as const
 
 export default function CategoriesPage() {
   const t = useT()
   const kindLabel = (kind: Kind) => (kind === 'INCOME' ? t('common.income') : kind === 'EXPENSE' ? t('common.expense') : t('categories.all'))
   const [categories, setCategories] = useState<Category[]>([])
+  const phone = useProfile() === 'phone'
   const [kind, setKind] = useState<Kind>('ALL')
+  // On a phone the two types are tabs (and a swipe moves between them) instead of a filter.
+  const [tab, setTab] = useState<(typeof PHONE_TABS)[number]>('EXPENSE')
   const [typeOpen, setTypeOpen] = useState(false)
   const typeRef = useRef<HTMLDivElement>(null)
   const [query, setQuery] = useState('')
@@ -51,7 +60,13 @@ export default function CategoriesPage() {
     void load()
   }, [])
 
-  const shown = visibleCategories(categories, kind, query)
+  const shown = visibleCategories(categories, phone ? tab : kind, query)
+  useSwipeHandler((direction) => {
+    const next = step(PHONE_TABS, tab, direction)
+    if (next === null) return false
+    setTab(next)
+    return true
+  }, phone)
 
   // Keyboard: n adds, / searches, j and k move between rows.
   useShortcut('new', () => setAdding(true))
@@ -82,38 +97,51 @@ export default function CategoriesPage() {
             onChange={(event) => setQuery(event.target.value)}
           />
         </label>
-        <div className="pick fit type" ref={typeRef}>
-          <span>{t('common.type')}</span>
-          <button
-            type="button"
-            className="pick-button"
-            aria-expanded={typeOpen}
-            aria-haspopup="listbox"
-            onClick={() => setTypeOpen((open) => !open)}
-          >
-            {kindLabel(kind)}
-          </button>
-          {typeOpen ? (
-            <ul className="pick-list" role="listbox">
-              {(['ALL', 'INCOME', 'EXPENSE'] as const).map((value) => (
-                <li key={value}>
-                  <button
-                    type="button"
-                    role="option"
-                    aria-selected={kind === value}
-                    onClick={() => {
-                      setKind(value)
-                      setTypeOpen(false)
-                    }}
-                  >
-                    {kindLabel(value)}
-                  </button>
-                </li>
-              ))}
-            </ul>
-          ) : null}
-        </div>
+        {phone ? null : (
+          <div className="pick fit type" ref={typeRef}>
+            <span>{t('common.type')}</span>
+            <button
+              type="button"
+              className="pick-button"
+              aria-expanded={typeOpen}
+              aria-haspopup="listbox"
+              onClick={() => setTypeOpen((open) => !open)}
+            >
+              {kindLabel(kind)}
+            </button>
+            {typeOpen ? (
+              <ul className="pick-list" role="listbox">
+                {(['ALL', 'INCOME', 'EXPENSE'] as const).map((value) => (
+                  <li key={value}>
+                    <button
+                      type="button"
+                      role="option"
+                      aria-selected={kind === value}
+                      onClick={() => {
+                        setKind(value)
+                        setTypeOpen(false)
+                      }}
+                    >
+                      {kindLabel(value)}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+          </div>
+        )}
       </div>
+      {phone ? (
+        <SectionTabs
+          label={t('categories.title')}
+          value={tab}
+          onChange={setTab}
+          tabs={[
+            { id: 'EXPENSE', label: t('common.expense') },
+            { id: 'INCOME', label: t('common.income') },
+          ]}
+        />
+      ) : null}
       <p className="notice">{message}</p>
       {adding ? (
         <AddCategoryModal
@@ -132,6 +160,7 @@ export default function CategoriesPage() {
             <CategoryEditor
               key={`${category.id}:${category.name}`}
               category={category}
+              showType={!phone}
               onDone={load}
               onError={setMessage}
             />
@@ -144,10 +173,13 @@ export default function CategoriesPage() {
 
 function CategoryEditor({
   category,
+  showType,
   onDone,
   onError,
 }: {
   category: Category
+  /** False when the page already says which type this is (the tabs of a phone). */
+  showType: boolean
   onDone: () => Promise<void>
   onError: (message: string) => void
 }) {
@@ -209,7 +241,7 @@ function CategoryEditor({
     <li className="card-item">
       <div className="card-body">
         <p className="card-name">{category.name}</p>
-        <p className="card-meta">{typeLabel}</p>
+        {showType ? <p className="card-meta">{typeLabel}</p> : null}
       </div>
       <div className="card-actions">
         <button type="button" data-row-focus onClick={() => setRenaming(true)}>

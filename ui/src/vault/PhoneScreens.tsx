@@ -42,13 +42,11 @@ export function PhoneFirstRun({ onDone }: { onDone: () => void }) {
       <form onSubmit={onSubmit}>
         <p className="brand-mark">meowny</p>
         <h1>{t('phone.welcomeTitle')}</h1>
-        <p className="hint">{t('phone.welcomeIntro')}</p>
 
         <Dropdown label={t('welcome.language')} value={language} options={languageOptions} onChange={setLanguage} />
 
         <PasswordField label={t('phone.passphrase')} name="passphrase" onChange={setTyped} />
         <PasswordField label={t('phone.passphraseRepeat')} name="confirm" />
-        <p className="hint">{t('phone.passphraseHint')}</p>
         {wantsLongerPassphrase(typed) ? (
           <p className="warning" role="note">
             {t('phone.passphraseLonger')}

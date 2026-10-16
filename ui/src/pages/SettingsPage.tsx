@@ -311,7 +311,6 @@ export default function SettingsPage() {
               <RecoveryKeyPanel code={newKey} inline doneLabel={t('common.done')} onDone={() => setNewKey(null)} />
             ) : (
               <form onSubmit={onRecoveryKey}>
-                <p className="hint">{t('settings.recoveryHint')}</p>
                 <PasswordField label={t('settings.recoveryPassphrase')} name="passphrase" current />
                 <div className="actions">
                   <button type="submit">{t('settings.recoveryNew')}</button>
@@ -326,7 +325,6 @@ export default function SettingsPage() {
           <div className="settings-block">
             <h2>{t('settings.backup')}</h2>
             <form onSubmit={onBackup}>
-              <p className="hint">{t('settings.backupHint')}</p>
               <PasswordField label={t('settings.backupPassphrase')} name="backup_passphrase" />
               <PasswordField label={t('settings.backupPassphraseRepeat')} name="backup_confirm" />
               <div className="actions">
@@ -336,7 +334,6 @@ export default function SettingsPage() {
               </div>
             </form>
             <form onSubmit={onSchedule}>
-              <p className="hint">{t('settings.scheduleHint')}</p>
               {schedule && (
                 <p className="hint">
                   {t('settings.scheduleOn', { every: everyLabel(schedule.everyDays), folder: schedule.folder })}{' '}

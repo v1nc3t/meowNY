@@ -10,7 +10,7 @@ export default function NavIcon({ name, className = 'nav-icon' }: { name: string
       {name === 'export' ? <path d="M12 15V4M8 8l4-4 4 4M5 14v5h14v-5" /> : null}
       {name === 'help' ? <path d="M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM9.6 9.3a2.4 2.4 0 1 1 3.4 2.2c-.7.4-1 .9-1 1.7M12 16.8h.01" /> : null}
       {name === 'settings' ? <path d="M4 7h10M18 7h2M4 17h2M10 17h10M14 4v6M6 14v6" /> : null}
-      {name === 'sync' ? <path d="M5 9a7 7 0 0 1 12-3l2 2M19 4v4h-4M19 15a7 7 0 0 1-12 3l-2-2M5 20v-4h4" /> : null}
+      {name === 'sync' ? <path d="M4 8h14M14 4l4 4-4 4M20 16H6M10 12l-4 4 4 4" /> : null}
       {name === 'more' ? <path d="M5 12h.01M12 12h.01M19 12h.01" strokeWidth="2.4" strokeLinecap="round" /> : null}
       {name === 'add' ? <path d="M12 5v14M5 12h14" /> : null}
       {name === 'account' ? <path d="M12 12a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7zM6.5 19a5.5 5.5 0 0 1 11 0" /> : null}

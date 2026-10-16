@@ -136,7 +136,6 @@ function PhoneSync() {
                   </div>
                 </>
               )}
-              <p className="hint">{t('phone.network')}</p>
             </>
           ) : (
             <SyncStatusPanel status={status} onAnswer={() => undefined} onCancel={() => void cancel()} onDone={() => void acknowledge()} />

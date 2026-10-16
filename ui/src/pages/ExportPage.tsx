@@ -176,7 +176,6 @@ function ExportForm({ today, settings, categories }: { today: Today; settings: M
             </label>
             {!choice.allCategories && (
               <>
-                <p className="hint">{t('export.categoriesHint')}</p>
                 <div className="export-groups">
                   {groups.map((group) => {
                     const shown = categories.filter((category) => category.type === group.type)
@@ -219,7 +218,6 @@ function ExportForm({ today, settings, categories }: { today: Today; settings: M
                   onChange={(e) => setShowDescriptions(e.target.checked)}
                 />
               </label>
-              <p className="hint">{t('export.descriptionsHint')}</p>
             </div>
           )}
         </div>

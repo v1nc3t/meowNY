@@ -9,6 +9,7 @@ import { useToday, type Today } from '../api/today'
 import { transactions as transactionsApi, type Transaction, type TransactionPage } from '../api/transactions'
 import { amountString, formatDate, formatMoney } from '../lib/money'
 import { useMoneySettings, type MoneySettings } from '../hooks/useMoneySettings'
+import { useProfile } from '../hooks/profile'
 import { useNotice } from '../hooks/useNotice'
 import { useT } from '../i18n/context'
 import { useDebounced } from '../hooks/useDebounced'
@@ -37,6 +38,7 @@ export default function TransactionsPage() {
 
 function TransactionsView({ settings, now }: { settings: MoneySettings; now: Today }) {
   const t = useT()
+  const phone = useProfile() === 'phone'
   const [categories, setCategories] = useState<Category[]>([])
   const [categoriesReady, setCategoriesReady] = useState(false)
   const [filters, setFilters] = useState<Filters>(() => {
@@ -206,6 +208,42 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
   const pageCount = page && page.limit > 0 ? Math.max(1, Math.ceil(page.total / page.limit)) : 0
   const currentPage = page && page.limit > 0 ? Math.floor(page.offset / page.limit) + 1 : 1
 
+  // The current-month button and the range: beside "add" on a phone, where room is short, and first in the filters elsewhere.
+  const rangeControls = (
+    <>
+      <button
+        type="button"
+        disabled={filters.mode === 'month' && filters.from === now.month && filters.to === now.month}
+        onClick={goCurrentMonth}
+        {...tip('today', t('tx.currentMonth'))}
+      >
+        {t('tx.currentMonth')}
+      </button>
+      <Pick
+        label={t('tx.range')}
+        className="mode"
+        inline={phone}
+        text={modeLabel(filters.mode)}
+        open={menu === 'range'}
+        onToggle={() => setMenu((current) => (current === 'range' ? null : 'range'))}
+        onClose={() => setMenu(null)}
+      >
+        {(['date', 'month', 'year'] as const).map((mode) => (
+          <PickOption
+            key={mode}
+            selected={filters.mode === mode}
+            onClick={() => {
+              onMode(mode)
+              setMenu(null)
+            }}
+          >
+            {modeLabel(mode)}
+          </PickOption>
+        ))}
+      </Pick>
+    </>
+  )
+
   return (
     <section className="tx-page">
       <div className="tx-title">
@@ -214,6 +252,7 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
           <button type="button" onClick={openAdd} {...tip('new', t('tx.add'))}>
             {t('tx.add')}
           </button>
+          {phone ? rangeControls : null}
         </div>
       </div>
       <div className="toolbar wide tx-bar">
@@ -282,28 +321,8 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
             </PickOption>
           ))}
         </Pick>
-        <div className="tx-range">
-          <Pick
-            label={t('tx.range')}
-            className="mode"
-            text={modeLabel(filters.mode)}
-            open={menu === 'range'}
-            onToggle={() => setMenu((current) => (current === 'range' ? null : 'range'))}
-            onClose={() => setMenu(null)}
-          >
-            {(['date', 'month', 'year'] as const).map((mode) => (
-              <PickOption
-                key={mode}
-                selected={filters.mode === mode}
-                onClick={() => {
-                  onMode(mode)
-                  setMenu(null)
-                }}
-              >
-                {modeLabel(mode)}
-              </PickOption>
-            ))}
-          </Pick>
+        <div className="tx-range" data-mode={filters.mode}>
+          {phone ? null : rangeControls}
           <div className="tx-date-group">
             <span>{t('tx.from')}</span>
             <DatePicker
@@ -326,14 +345,6 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
               onChange={(to) => patchFilters({ to })}
             />
           </div>
-          <button
-            type="button"
-            disabled={filters.mode === 'month' && filters.from === now.month && filters.to === now.month}
-            onClick={goCurrentMonth}
-            {...tip('today', t('tx.currentMonth'))}
-          >
-            {t('tx.currentMonth')}
-          </button>
         </div>
       </div>
       <p className="notice">{message}</p>
@@ -509,6 +520,7 @@ function PaymentDate({ defaultValue }: { defaultValue: string }) {
 
 function Pick({
   label,
+  inline = false,
   className,
   text,
   open,
@@ -517,6 +529,8 @@ function Pick({
   children,
 }: {
   label: string
+  /** Beside other buttons: the label is for screen readers only. */
+  inline?: boolean
   className?: string
   text: string
   open: boolean
@@ -544,7 +558,7 @@ function Pick({
 
   return (
     <div className={className ? `pick ${className}` : 'pick'} ref={ref}>
-      <span>{label}</span>
+      <span className={inline ? 'sr-only' : undefined}>{label}</span>
       <button type="button" className="pick-button" aria-expanded={open} aria-haspopup="listbox" onClick={onToggle}>
         {text}
       </button>

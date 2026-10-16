@@ -26,7 +26,7 @@ export default function SyncStatusPanel({
   if (status.state === 'waiting') {
     return (
       <div className="panel sync-panel">
-        <p className="hint">{t(status.purpose === 'pair' ? 'sync.waitingPair' : 'sync.waitingSync')}</p>
+        <p className="hint">{t('sync.scanThis')}</p>
         <QrCode text={status.qr} label={t('sync.qrLabel')} />
         <p className="hint">{t('sync.address', { address: status.address })}</p>
         <p className="sync-countdown" role="timer">

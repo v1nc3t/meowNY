@@ -97,7 +97,6 @@ export default function CommandApiBlock({ locale, timezone }: { locale: string; 
   return (
     <div className="settings-block">
       <h2>{t('cli.title')}</h2>
-      <p className="hint">{t('cli.hint')}</p>
       <p className="notice" role="status">
         {message}
       </p>
@@ -134,7 +133,6 @@ export default function CommandApiBlock({ locale, timezone }: { locale: string; 
           <p className="recovery-code" aria-label={t('cli.tokenLabel')}>
             {created.token}
           </p>
-          <p className="hint">{t('cli.tokenUse')}</p>
           <div className="actions">
             <button type="button" onClick={() => void copy(created.token)}>
               {copied ? t('common.copied') : t('common.copy')}
@@ -146,7 +144,6 @@ export default function CommandApiBlock({ locale, timezone }: { locale: string; 
         </div>
       ) : (
         <form onSubmit={onCreate}>
-          <p className="hint">{t('cli.tokenHint')}</p>
           <label>
             {t('common.name')}
             <input value={name} onChange={(e) => setName(e.target.value)} maxLength={TOKEN_NAME_MAX} autoComplete="off" />

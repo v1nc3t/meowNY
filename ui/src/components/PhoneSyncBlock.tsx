@@ -62,7 +62,6 @@ export default function PhoneSyncBlock({ locale, timezone }: { locale: string; t
   return (
     <div className="settings-block">
       <h2>{t('sync.title')}</h2>
-      <p className="hint">{t('sync.hint')}</p>
       <p className="notice" role="status">
         {message}
       </p>
@@ -113,14 +112,12 @@ export default function PhoneSyncBlock({ locale, timezone }: { locale: string; t
             {t('sync.thisComputer')}
             <input value={name} onChange={(e) => setName(e.target.value)} maxLength={DEVICE_NAME_MAX} autoComplete="off" />
           </label>
-          <p className="hint">{t('sync.nameHint')}</p>
           <details className="more-options">
             <summary>{t('sync.addressToggle')}</summary>
             <label>
               {t('sync.addressLabel')}
               <input value={address} onChange={(e) => setAddress(e.target.value)} placeholder="192.168.1.20" inputMode="decimal" autoComplete="off" spellCheck={false} />
             </label>
-            <p className="hint">{t('sync.addressHint')}</p>
           </details>
           <div className="actions">
             <button type="button" onClick={() => void begin(true)}>
@@ -130,7 +127,6 @@ export default function PhoneSyncBlock({ locale, timezone }: { locale: string; t
               {t('sync.start')}
             </button>
           </div>
-          <p className="hint">{t('sync.firewall')}</p>
         </>
       ) : (
         <SyncStatusPanel

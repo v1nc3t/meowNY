@@ -3,12 +3,14 @@ import { budgets as budgetsApi, MONTH, type MonthHistory, type Overview } from '
 import { categories as categoriesApi, type Category } from '../api/categories'
 import { errorText } from '../api/invoke'
 import { monthLabel, shiftMonth } from '../api/months'
-import Collapsible from '../components/Collapsible'
 import MonthNav from '../components/MonthNav'
+import SectionTabs from '../components/SectionTabs'
 import { useToday } from '../api/today'
 import { amountString, formatMoney } from '../lib/money'
 import { useMoneySettings, type MoneySettings } from '../hooks/useMoneySettings'
 import { useProfile } from '../hooks/profile'
+import { useSwipeHandler } from '../hooks/swipe'
+import { step } from '../lib/swipe'
 import { useNotice } from '../hooks/useNotice'
 import { useI18n, useT } from '../i18n/context'
 import { useShortcut } from '../keys/registry'
@@ -147,6 +149,17 @@ function BudgetsView({ settings, thisMonth }: { settings: MoneySettings; thisMon
   const expenseCategories = categories?.filter((category) => category.type === 'EXPENSE') ?? null
   const incomeCategories = categories?.filter((category) => category.type === 'INCOME') ?? null
 
+  // On a phone the three parts of the page are tabs, and a swipe moves between them before it moves to another page.
+  const tabs = history && history.length > 0 ? (['EXPENSE', 'INCOME', 'HISTORY'] as const) : (['EXPENSE', 'INCOME'] as const)
+  const [chosenTab, setTab] = useState<'EXPENSE' | 'INCOME' | 'HISTORY'>('EXPENSE')
+  const tab = (tabs as readonly string[]).includes(chosenTab) ? chosenTab : 'EXPENSE'
+  useSwipeHandler((direction) => {
+    const next = step(tabs as readonly ('EXPENSE' | 'INCOME' | 'HISTORY')[], tab, direction)
+    if (next === null) return false
+    setTab(next)
+    return true
+  }, phone)
+
   const halves = [
     <BudgetHalf
       key="EXPENSE"
@@ -222,32 +235,35 @@ function BudgetsView({ settings, thisMonth }: { settings: MoneySettings; thisMon
         <MonthNav month={month} thisMonth={thisMonth} onChange={setMonth} />
       </div>
       <p className="notice">{message}</p>
-      <div className="budget-split wide">
-        {phone ? (
-          <>
-            <Collapsible title={t('budgets.expenses')} defaultOpen>
-              {halves[0]}
-            </Collapsible>
-            <Collapsible title={t('budgets.income')}>{halves[1]}</Collapsible>
-          </>
-        ) : (
-          halves
-        )}
-      </div>
-      {history && history.length > 0 ? (
-        phone ? (
-          <Collapsible title={t('budgets.history')}>
-            <div className="budget-history">
+      {phone ? (
+        <>
+          <SectionTabs
+            label={t('budgets.title')}
+            value={tab}
+            onChange={setTab}
+            tabs={tabs.map((name) => ({ id: name, label: t(name === 'EXPENSE' ? 'budgets.expenses' : name === 'INCOME' ? 'budgets.income' : 'budgets.history') }))}
+          />
+          <div className="tx-pane wide budget-view" role="tabpanel">
+            {tab === 'EXPENSE' ? halves[0] : null}
+            {tab === 'INCOME' ? halves[1] : null}
+            {tab === 'HISTORY' ? (
+              <div className="budget-history">
+                <div className="budget-history-scroll">{historyTable}</div>
+              </div>
+            ) : null}
+          </div>
+        </>
+      ) : (
+        <>
+          <div className="budget-split wide">{halves}</div>
+          {history && history.length > 0 ? (
+            <section className="budget-history">
+              <h2>{t('budgets.history')}</h2>
               <div className="budget-history-scroll">{historyTable}</div>
-            </div>
-          </Collapsible>
-        ) : (
-          <section className="budget-history">
-            <h2>{t('budgets.history')}</h2>
-            <div className="budget-history-scroll">{historyTable}</div>
-          </section>
-        )
-      ) : null}
+            </section>
+          ) : null}
+        </>
+      )}
     </section>
   )
 }

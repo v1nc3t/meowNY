@@ -90,7 +90,9 @@ struct AllowDialog(tauri::AppHandle);
 impl api::Show for AllowDialog {
     fn show(&self, approval: &api::Approval) -> bool {
         use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
-        // The window may be behind others or minimised; the question must not wait unseen.
+        // The window may be behind others or minimised; the question must not wait unseen. (Only a computer has windows to
+        // bring forward, and only a computer has the command API that asks.)
+        #[cfg(desktop)]
         if let Some(window) = self.0.get_webview_window("main") {
             let _ = window.show();
             let _ = window.unminimize();

@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from 'react'
+import { useState, type FormEvent } from 'react'
 import { currencyOptions } from '../api/currencies'
 import { formatExample, localeOptions, zoneOptions } from '../api/locales'
 import Dropdown from '../components/Dropdown'
@@ -14,7 +14,6 @@ import { defaultSettings, isCurrency, normalizeCurrency, passphraseProblem } fro
 /** First run: language, region, currency and security, all in one place, each starting from what the system suggests. */
 export default function FirstRunScreen({ onDone }: { onDone: () => void }) {
   const { t, language, setLanguage } = useI18n()
-  const [location, setLocation] = useState('')
   const [message, setMessage] = useNotice()
   const [busy, setBusy] = useState(false)
   const [recoveryKey, setRecoveryKey] = useState<string | null>(null)
@@ -23,10 +22,6 @@ export default function FirstRunScreen({ onDone }: { onDone: () => void }) {
   const [currency, setCurrency] = useState('')
   const [locale, setLocale] = useState(suggested.locale)
   const [timezone, setTimezone] = useState(suggested.timezone)
-
-  useEffect(() => {
-    vault.dataLocation().then(setLocation, () => setLocation(''))
-  }, [])
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -63,7 +58,6 @@ export default function FirstRunScreen({ onDone }: { onDone: () => void }) {
       <form onSubmit={onSubmit}>
         <p className="brand-mark">meowny</p>
         <h1>{t('welcome.title')}</h1>
-        <p className="hint">{t('welcome.intro')}</p>
 
         <Dropdown
           label={t('welcome.language')}
@@ -71,7 +65,6 @@ export default function FirstRunScreen({ onDone }: { onDone: () => void }) {
           options={languageOptions}
           onChange={setLanguage}
         />
-        <p className="hint">{t('welcome.languageHint')}</p>
 
         <Dropdown
           label={t('welcome.format')}
@@ -80,7 +73,6 @@ export default function FirstRunScreen({ onDone }: { onDone: () => void }) {
           onChange={setLocale}
         />
         <p className="hint">{formatExample(locale, currency || 'EUR')}</p>
-        <p className="hint">{t('welcome.formatHint')}</p>
 
         <Dropdown label={t('welcome.timezone')} value={timezone} options={zoneOptions(timezone)} onChange={setTimezone} />
 
@@ -91,21 +83,13 @@ export default function FirstRunScreen({ onDone }: { onDone: () => void }) {
           onChange={setCurrency}
           placeholder={t('welcome.currencyChoose')}
         />
-        <p className="hint">{t('welcome.currencyHint')}</p>
 
         <PasswordField label={t('welcome.passphrase')} name="passphrase" />
         <PasswordField label={t('welcome.passphraseRepeat')} name="confirm" />
-        <p className="hint">{t('welcome.passphraseHint')}</p>
 
         <p className="warning" role="note">
           {t('welcome.warning')}
         </p>
-
-        {location && (
-          <p className="hint">
-            {t('welcome.location')} <code>{location}</code>
-          </p>
-        )}
 
         <button type="submit" disabled={busy}>
           {t('welcome.create')}

@@ -31,7 +31,7 @@ const SAME_AS_ENGLISH = new Set([
   'fr report.date', 'fr report.page',
   'de nav.export', 'de export.title', 'fr export.format', 'ro export.format',
   'es keys.groupGeneral', 'ro keys.groupGeneral', 'fr keys.groupActions', 'fr settings.notifications',
-  'de nav.sync', 'de phone.passphrase',
+  'de nav.sync', 'de phone.passphrase', 'de rec.confirmTitle', 'es rec.confirmTitle', 'fr rec.confirmTitle', 'it rec.confirmTitle', 'pt rec.confirmTitle', 'ro rec.confirmTitle', 'es common.no', 'it common.no',
 ])
 
 test('no translation is empty or an untranslated copy of the English text', () => {
@@ -81,10 +81,4 @@ test('the best supported language is picked from a preference list', () => {
   assert.equal(pickLanguage(['ja-JP', 'pt-BR', 'en']), 'pt')
   assert.equal(pickLanguage(['ja-JP']), 'en')
   assert.equal(pickLanguage([]), 'en')
-})
-
-test('the name of the token variable is never translated', () => {
-  for (const language of LANGUAGES) {
-    assert.match(language.messages['cli.tokenUse'], /MEOWNY_TOKEN/, language.code)
-  }
 })

@@ -82,7 +82,7 @@ meowNY is a desktop app for tracking income and expenses against monthly budgets
 - On the phone the data is locked by a passphrase, and the phone erases itself after 5 wrong ones. The data comes back by pairing again with the desktop.
 - The currency is changed on the desktop only, and the desktop reminds you to sync the phone.
 - The first time the desktop listens, Windows or macOS may ask whether meowNY may accept connections on the network. Allow it for private networks only; nothing outside your home network is ever involved.
-- On the phone there is a bottom bar with the main pages, and a round "+" on every page to add a transaction in a few taps: the amount first, then the category from the ones you used lately. There is no export and no backup file on the phone, because the desktop keeps those; and Android's own cloud backup of the app is turned off, so the data never leaves your phone except by syncing with your computer.
+- On the phone there is a bar at the top (sync, settings, lock), tabs at the bottom that you can also swipe between, and a round "+" on every page to add a transaction in a few taps: the amount first, then the category from the ones you used lately. There is no export and no backup file on the phone, because the desktop keeps those; and Android's own cloud backup of the app is turned off, so the data never leaves your phone except by syncing with your computer.
 
 **For scripts and AI agents (desktop only)**
 

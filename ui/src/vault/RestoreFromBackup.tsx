@@ -32,11 +32,9 @@ export default function RestoreFromBackup({ onKey, onBack }: { onKey: (recoveryK
       <form onSubmit={onSubmit}>
         <p className="brand-mark">meowny</p>
         <h1>{t('welcome.restore')}</h1>
-        <p className="hint">{t('welcome.restoreIntro')}</p>
         <PasswordField label={t('settings.backupPassphrase')} name="backup_passphrase" current autoFocus />
         <PasswordField label={t('welcome.passphrase')} name="passphrase" />
         <PasswordField label={t('welcome.passphraseRepeat')} name="confirm" />
-        <p className="hint">{t('welcome.passphraseHint')}</p>
         <button type="submit" disabled={busy}>
           {t('welcome.restoreSubmit')}
         </button>

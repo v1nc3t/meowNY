@@ -9,12 +9,18 @@ export default function Modal({
   onClose,
   pending = false,
   formId = modalFormId,
+  doneLabel,
+  cancelLabel,
   children,
 }: {
   title: string
   onClose: () => void
   pending?: boolean
   formId?: string
+  /** The words on the button that submits; "done" when left out. */
+  doneLabel?: string
+  /** The words on the button that closes without doing anything; "cancel" when left out. */
+  cancelLabel?: string
   children: ReactNode
 }) {
   const t = useT()
@@ -54,10 +60,10 @@ export default function Modal({
         {children}
         <div className="modal-actions">
           <button type="button" onClick={onClose}>
-            {t('common.cancel')}
+            {cancelLabel ?? t('common.cancel')}
           </button>
           <button type="submit" form={formId} disabled={pending}>
-            {t('common.done')}
+            {doneLabel ?? t('common.done')}
           </button>
         </div>
       </div>

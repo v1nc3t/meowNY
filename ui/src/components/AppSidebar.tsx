@@ -31,16 +31,33 @@ export default function AppSidebar({
   const phone = useProfile() === 'phone'
   const lock = () => void vault.lock().then(() => window.location.reload(), () => undefined)
   if (phone) {
-    // A phone has a bar at the top (the name, and the lock beside it, where a thumb finds it first) and tabs at the bottom.
+    // A phone has a bar at the top: the name on the left, and sync, settings and lock on the right (the other pages are tabs).
     return (
       <header className="phone-header">
         <Link to="/app/dashboard" className="app-logo">
           meowny
         </Link>
-        <button type="button" className="phone-lock" aria-label={t('nav.lockTitle')} onClick={lock}>
-          <Icon name="exit" className="tab-icon" />
-          <span>{t('nav.lock')}</span>
-        </button>
+        <nav className="phone-actions" aria-label={t('nav.settings')}>
+          <NavLink
+            to="/app/sync"
+            aria-label={t('nav.sync')}
+            onPointerDown={() => preloadPage('sync')}
+            className={({ isActive }) => (isActive ? 'phone-action active' : 'phone-action')}
+          >
+            <Icon name="sync" className="tab-icon" />
+          </NavLink>
+          <NavLink
+            to="/app/settings"
+            aria-label={t('nav.settings')}
+            onPointerDown={() => preloadPage('settings')}
+            className={({ isActive }) => (isActive ? 'phone-action active' : 'phone-action')}
+          >
+            <Icon name="settings" className="tab-icon" />
+          </NavLink>
+          <button type="button" className="phone-action" aria-label={t('nav.lockTitle')} onClick={lock}>
+            <Icon name="exit" className="tab-icon" />
+          </button>
+        </nav>
       </header>
     )
   }

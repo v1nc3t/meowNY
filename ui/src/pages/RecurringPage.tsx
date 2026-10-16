@@ -2,6 +2,7 @@ import { Fragment, useEffect, useMemo, useRef, useState, type FormEvent } from '
 import AddCategoryModal from '../components/AddCategoryModal'
 import DatePicker from '../components/DatePicker'
 import Dropdown from '../components/Dropdown'
+import ConfirmModal from '../components/ConfirmModal'
 import Modal, { modalFormId } from '../components/Modal'
 import { categories as categoriesApi, type Category } from '../api/categories'
 import { errorText } from '../api/invoke'
@@ -29,6 +30,17 @@ function statusOf(item: Recurring, today: string): Status {
   return item.endDate !== null && (item.endDate < today || item.nextDueDate > item.endDate) ? 'ended' : 'paused'
 }
 
+type ConfirmKind = 'skip' | 'pause' | 'end' | 'delete'
+
+/** What each confirmed action does, and the word that names it. */
+const CONFIRMED: Record<ConfirmKind, (item: Recurring) => Promise<unknown>> = {
+  skip: (item) => recurringApi.skip(item.id),
+  pause: (item) => recurringApi.setActive(item.id, false),
+  end: (item) => recurringApi.end(item.id),
+  delete: (item) => recurringApi.remove(item.id),
+}
+const CONFIRM_TITLE = { skip: 'rec.skip', pause: 'rec.pause', end: 'rec.end', delete: 'common.delete' } as const
+
 export default function RecurringPage() {
   const { settings, error } = useMoneySettings()
   const now = useToday()
@@ -45,6 +57,7 @@ function RecurringView({ settings, now }: { settings: MoneySettings; now: Today 
   const [adding, setAdding] = useState(false)
   const [editing, setEditing] = useState<Recurring | null>(null)
   const [paying, setPaying] = useState<Recurring | null>(null)
+  const [confirming, setConfirming] = useState<{ kind: ConfirmKind; item: Recurring } | null>(null)
   const [pending, setPending] = useState(false)
   const [draftMessage, setDraftMessage] = useNotice()
   const [message, setMessage] = useNotice()
@@ -80,6 +93,7 @@ function RecurringView({ settings, now }: { settings: MoneySettings; now: Today 
     setAdding(false)
     setEditing(null)
     setPaying(null)
+    setConfirming(null)
   }
 
   function openAdd() {
@@ -103,6 +117,16 @@ function RecurringView({ settings, now }: { settings: MoneySettings; now: Today 
   // Keyboard: n adds, j and k move between rows.
   useShortcut('new', openAdd)
   useRowNavigation()
+
+  // Skipping, pausing, ending and deleting ask first; the question names the item.
+  async function onConfirm() {
+    if (!confirming) return
+    const { kind, item } = confirming
+    setPending(true)
+    await run(() => CONFIRMED[kind](item))
+    setPending(false)
+    setConfirming(null)
+  }
 
   // Runs one change, then reloads the list. Failures show as a notice.
   async function run(action: () => Promise<unknown>) {
@@ -233,6 +257,14 @@ function RecurringView({ settings, now }: { settings: MoneySettings; now: Today 
           onCategoryAdded={(category) => setCategories((current) => [...current, category])}
         />
       ) : null}
+      {confirming ? (
+        <ConfirmModal
+          title={t('rec.confirmTitle', { action: t(CONFIRM_TITLE[confirming.kind]), name: confirming.item.name })}
+          pending={pending}
+          onConfirm={() => void onConfirm()}
+          onClose={() => setConfirming(null)}
+        />
+      ) : null}
       {paying ? (
         <Modal title={t('rec.payTitle')} pending={pending} onClose={closeModals}>
           <p className="notice">{draftMessage}</p>
@@ -279,10 +311,10 @@ function RecurringView({ settings, now }: { settings: MoneySettings; now: Today 
                             <button type="button" className="rec-pay" data-row-focus onClick={() => openPay(item)}>
                               {t('rec.pay')}
                             </button>
-                            <button type="button" className="rec-act" onClick={() => void run(() => recurringApi.skip(item.id))}>
+                            <button type="button" className="rec-act" onClick={() => setConfirming({ kind: 'skip', item })}>
                               {t('rec.skip')}
                             </button>
-                            <button type="button" className="rec-act" onClick={() => void run(() => recurringApi.setActive(item.id, false))}>
+                            <button type="button" className="rec-act" onClick={() => setConfirming({ kind: 'pause', item })}>
                               {t('rec.pause')}
                             </button>
                           </span>
@@ -299,11 +331,11 @@ function RecurringView({ settings, now }: { settings: MoneySettings; now: Today 
                           {t('common.edit')}
                         </button>
                         {status !== 'ended' ? (
-                          <button type="button" onClick={() => void run(() => recurringApi.end(item.id))}>
+                          <button type="button" onClick={() => setConfirming({ kind: 'end', item })}>
                             {t('rec.end')}
                           </button>
                         ) : null}
-                        <button type="button" onClick={() => void run(() => recurringApi.remove(item.id))}>
+                        <button type="button" onClick={() => setConfirming({ kind: 'delete', item })}>
                           {t('common.delete')}
                         </button>
                       </div>
