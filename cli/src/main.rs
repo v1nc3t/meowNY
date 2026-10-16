@@ -5,6 +5,7 @@ mod args;
 mod catalog;
 mod client;
 mod error;
+mod file;
 mod help;
 mod local;
 mod output;

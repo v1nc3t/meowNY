@@ -8,6 +8,7 @@ Use your meowNY budget from a terminal, a script or an AI agent. The command lin
 
 - **Look:** list transactions, budgets and recurring items; see budget against actual, the year, the top categories.
 - **Change:** record a transaction, set a budget, pay a recurring bill.
+- **Documents:** add a receipt or a contract from a file, attach it to a transaction, list what is there and, with your yes, get a copy back.
 - **Take data out:** export to JSON, CSV, Excel or PDF, or make an encrypted backup, each only when you allow it in the app.
 
 > **Note:** The app has to be running and unlocked, and command line access has to be turned on in its Settings. It is off by default. The phone app has no command line.
@@ -53,9 +54,9 @@ There is deliberately no `--token` flag: a command line can be read by other use
 
 ### Files need your yes
 
-An export or a backup writes a file on your computer, so a token alone is not enough. Each request shows a dialog in the app: which token is asking, what it will write, the exact file, and how many transactions are in it. Nothing is written until you click Allow.
+An export, a backup or a copy of a document writes a file on your computer, so a token alone is not enough. Each request shows a dialog in the app: which token is asking, what it will write, the exact file, and what is in it (how many transactions, or which document). Nothing is written until you click Allow.
 
-- The file must have the right ending (`.json`, `.csv`, `.xlsx`, `.pdf`, `.meowbak`), be in a folder that exists, and **not exist yet**. A file is never replaced.
+- The file must have the right ending (`.json`, `.csv`, `.xlsx`, `.pdf`, `.meowbak`, or for a document the extension of its kind), be in a folder that exists, and **not exist yet**. A file is never replaced.
 - A relative `--out` is made absolute from where you run the program, and the dialog shows the full path.
 - One question at a time. After a No, the same token is refused for 30 seconds, so a script cannot wear you down. No answer in two minutes counts as No.
 - On Linux and macOS the files are readable only by you. They are not encrypted, except a backup, which is locked with the passphrase you give.
@@ -81,7 +82,7 @@ Without `--json` you get a plain table or `key: value` lines, and messages (such
 
 ## Commands
 
-Every command is `meowny <noun> <verb>`, or a single word, with its flags after it. `--help` works at every level, with no app running. There are 42 commands; each is listed here with what it prints.
+Every command is `meowny <noun> <verb>`, or a single word, with its flags after it. `--help` works at every level, with no app running. There are 50 commands; each is listed here with what it prints.
 
 | Command | What it does | Needs |
 | --- | --- | --- |
@@ -125,6 +126,14 @@ Every command is `meowny <noun> <verb>`, or a single word, with its flags after 
 | [`export xlsx`](#cmd-export-xlsx) | Writes a workbook (.xlsx) with sheets for transactions, categories, budgets, recurring items and a monthly summary, after the person allows it in the app. Dates are ISO and amounts plain numbers. An existing file is never replaced. | read token, and your yes |
 | [`export pdf`](#cmd-export-pdf) | Writes a PDF report for whole months, in English, after the person allows it in the app: totals, charts and budget against actual, and the transactions if asked. An existing file is never replaced. | read token, and your yes |
 | [`backup create`](#cmd-backup-create) | Writes an encrypted backup of all the data, after the person allows it in the app. It opens only with the passphrase given here, and only the app can restore it. An existing file is never replaced. | read token, and your yes |
+| [`documents list`](#cmd-documents-list) | Documents, newest paper first, with the total that match: names, dates, types, sizes and hashes, never the files. Up to 100 a page, 50 unless limit says otherwise. | read token |
+| [`documents show`](#cmd-documents-show) | One document: its name, date, type, size and hash, whether this computer holds its file, and in `links` what it is attached to. Never the file. | read token |
+| [`documents add`](#cmd-documents-add) | Stores a file as a document, encrypted, and attaches it where asked. The answer is the document and `alreadyThere`: the same file added again is not stored twice, and the attachments are added to the document that is there. At most 25 MiB. | write token |
+| [`documents update`](#cmd-documents-update) | Renames a document, changes its date, or switches whether the phone keeps its file. Give at least one. The contents cannot be changed. | write token |
+| [`documents delete`](#cmd-documents-delete) | Deletes a document, its file and its attachments. The transactions it was attached to stay. | write token |
+| [`documents link`](#cmd-documents-link) | Attaches a document to a transaction or to a recurring item. Giving one that is attached already changes nothing. | write token |
+| [`documents unlink`](#cmd-documents-unlink) | Detaches a document from a transaction or a recurring item. The document and the transaction stay. | write token |
+| [`documents get`](#cmd-documents-get) | Writes a copy of a document's file, after the person allows it in the app. It is not encrypted. An existing file is never replaced. | write token |
 | [`login`](#cmd-login) | Saves a token, read from standard input, for the commands that follow. | this computer |
 | [`logout`](#cmd-logout) | Removes the saved token. | this computer |
 
@@ -145,7 +154,7 @@ $ meowny status
 
 api: 1
 app: meowny
-schemaVersion: 9
+schemaVersion: 11
 scope: read
 version: 0.1.0
 ```
@@ -156,7 +165,7 @@ With `--json` (one line; shown indented):
 {
   "api": 1,
   "app": "meowny",
-  "schemaVersion": 9,
+  "schemaVersion": 11,
   "scope": "read",
   "version": "0.1.0"
 }
@@ -175,7 +184,7 @@ meowny today
 ```console
 $ meowny today
 
-date: 2026-10-15
+date: 2026-10-16
 month: 2026-10
 ```
 
@@ -183,7 +192,7 @@ With `--json` (one line; shown indented):
 
 ```json
 {
-  "date": "2026-10-15",
+  "date": "2026-10-16",
   "month": "2026-10"
 }
 ```
@@ -1648,6 +1657,7 @@ $ meowny export preview --from 2026-01-01 --to 2026-09-30
 
 budgets: 14
 categories: 15
+documents: 0
 expense: 20434.70
 firstDate: 2026-01-01
 history: 0
@@ -1663,6 +1673,7 @@ With `--json` (one line; shown indented):
 {
   "budgets": 14,
   "categories": 15,
+  "documents": 0,
   "expense": "20434.70",
   "firstDate": "2026-01-01",
   "history": 0,
@@ -1690,14 +1701,14 @@ meowny export json --out <path> [--from <date>] [--to <date>] [--category-ids <i
 | `--to` | date | Only transactions on or before this date. |
 | `--category-ids` | id,id,... | Only these categories and what belongs to them. Leave out for all of them. |
 
-The whole data as one file, including the change history unless you chose categories. It is not encrypted.
+The whole data as one file, including the change history unless you chose categories. Documents are listed by name, date, type, size, hash and what they are attached to, never their files. It is not encrypted.
 
 The app asks you to allow this each time, in a dialog; nothing is written until you do. See [Files need your yes](#files).
 
 ```console
 $ meowny export json --out /home/you/everything.json
 
-bytes: 135767
+bytes: 138233
 path: /home/you/everything.json
 ```
 
@@ -1718,14 +1729,14 @@ meowny export csv --out <path> [--from <date>] [--to <date>] [--category-ids <id
 | `--to` | date | Only transactions on or before this date. |
 | `--category-ids` | id,id,... | Only these categories and what belongs to them. Leave out for all of them. |
 
-One row per transaction, with a byte order mark so Excel reads the accents. Text that starts like a formula is written as text, so opening the file cannot run anything.
+One row per transaction, with a byte order mark so Excel reads the accents, and a last column with the names of the documents attached to it. Text that starts like a formula is written as text, so opening the file cannot run anything.
 
 The app asks you to allow this each time, in a dialog; nothing is written until you do. See [Files need your yes](#files).
 
 ```console
 $ meowny export csv --out /home/you/budget-2026.csv --from 2026-01-01
 
-bytes: 15551
+bytes: 15822
 path: /home/you/budget-2026.csv
 ```
 
@@ -1746,14 +1757,14 @@ meowny export xlsx --out <path> [--from <date>] [--to <date>] [--category-ids <i
 | `--to` | date | Only transactions on or before this date. |
 | `--category-ids` | id,id,... | Only these categories and what belongs to them. Leave out for all of them. |
 
-Sheets for transactions, categories, budgets, recurring items and a monthly summary. Dates are real dates and amounts are numbers.
+Sheets for transactions, categories, budgets, recurring items, a monthly summary and the documents (listed, never the files). Dates are real dates and amounts are numbers.
 
 The app asks you to allow this each time, in a dialog; nothing is written until you do. See [Files need your yes](#files).
 
 ```console
 $ meowny export xlsx --out /home/you/budget.xlsx
 
-bytes: 21864
+bytes: 22568
 path: /home/you/budget.xlsx
 ```
 
@@ -1829,7 +1840,7 @@ meowny backup create --out <path> --passphrase <text>
 | `--out` (required) | path | Where to write the file: an absolute path ending in .meowbak, in a folder that exists, that is not there yet. |
 | `--passphrase` (required) | text | Locks the backup. At least 8 characters. Keep it: without it the backup cannot be opened. |
 
-Everything in one encrypted file. Give `--passphrase -` to read the passphrase from standard input so it does not show in the list of running programs. Keep it: without it the backup cannot be opened.
+Everything in one encrypted file, except the files of the documents: their names, dates and links are in it, the files are not. A backup made in the app can include them. Give `--passphrase -` to read the passphrase from standard input so it does not show in the list of running programs. Keep it: without it the backup cannot be opened.
 
 Restoring a backup is done in the app, never with a token.
 
@@ -1838,10 +1849,322 @@ The app asks you to allow this each time, in a dialog; nothing is written until 
 ```console
 $ echo "correct horse battery staple" | meowny backup create --out /home/you/meowny.meowbak --passphrase -
 
-bytes: 181029
+bytes: 183253
 path: /home/you/meowny.meowbak
 
 waiting for you to allow this in the meowNY app...
+```
+
+### Documents
+
+#### `documents list`
+
+*read token*
+
+Documents, newest paper first, with the total that match: names, dates, types, sizes and hashes, never the files. Up to 100 a page, 50 unless limit says otherwise.
+
+```text
+meowny documents list [--q <text>] [--kind <image|pdf|other>] [--from <date>] [--to <date>] [--transaction-id <id>] [--recurring-id <id>] [--limit <number>] [--offset <number>]
+```
+
+| Flag | Type | Description |
+| --- | --- | --- |
+| `--q` | text | Only documents whose name contains this text, ignoring case. |
+| `--kind` | one of image, pdf, other | Only images, only PDF files, or only other files. |
+| `--from` | date | Only documents dated on or after this date (the day of the paper). |
+| `--to` | date | Only documents dated on or before this date. |
+| `--transaction-id` | id | A transaction. |
+| `--recurring-id` | id | A recurring item. |
+| `--limit` | number | How many to return, 1 to 100. |
+| `--offset` | number | How many to skip. |
+
+Names, dates, types, sizes and hashes of the documents, newest paper first, never the files. `--transaction-id` and `--recurring-id` show what is attached to one thing. A read-only token can do this.
+
+```console
+$ meowny documents list --q boiler
+
+limit: 50
+offset: 0
+total: 1
+
+documents
+id  name                createdAt                 documentDate  hasFile  keepOnPhone  linkCount  mediaType        sha256                                                        sizeBytes
+ 1  boiler-receipt.pdf  2026-10-16T16:14:41.036Z  2026-10-01    true     false                0  application/pdf  735a7713978716d1e65eb6bf069e2f410eb72ec5b285861be417aeca0fe…         45
+```
+
+With `--json` (one line; shown indented):
+
+```json
+{
+  "documents": [
+    {
+      "createdAt": "2026-10-16T16:14:41.036Z",
+      "documentDate": "2026-10-01",
+      "hasFile": true,
+      "id": "1",
+      "keepOnPhone": false,
+      "linkCount": 0,
+      "mediaType": "application/pdf",
+      "name": "boiler-receipt.pdf",
+      "sha256": "735a7713978716d1e65eb6bf069e2f410eb72ec5b285861be417aeca0feeb935",
+      "sizeBytes": 45
+    }
+  ],
+  "limit": 50,
+  "offset": 0,
+  "total": 1
+}
+```
+
+#### `documents show`
+
+*read token*
+
+One document: its name, date, type, size and hash, whether this computer holds its file, and in `links` what it is attached to. Never the file.
+
+```text
+meowny documents show <id>
+```
+
+| Flag | Type | Description |
+| --- | --- | --- |
+| `--id` (required) | id | The document. |
+
+One document, and the transactions and recurring items it is attached to. Never the file. `has_file` says whether this computer holds the file. A read-only token can do this.
+
+The id can be given as a plain word, as in `meowny documents show 42`, or with `--id`.
+
+```console
+$ meowny documents show 1
+
+createdAt: 2026-10-16T16:14:41.036Z
+documentDate: 2026-10-01
+hasFile: true
+id: 1
+keepOnPhone: false
+linkCount: 0
+mediaType: application/pdf
+name: boiler-receipt.pdf
+sha256: 735a7713978716d1e65eb6bf069e2f410eb72ec5b285861be417aeca0feeb935
+sizeBytes: 45
+
+links
+(none)
+```
+
+With `--json` (one line; shown indented):
+
+```json
+{
+  "createdAt": "2026-10-16T16:14:41.036Z",
+  "documentDate": "2026-10-01",
+  "hasFile": true,
+  "id": "1",
+  "keepOnPhone": false,
+  "linkCount": 0,
+  "links": [],
+  "mediaType": "application/pdf",
+  "name": "boiler-receipt.pdf",
+  "sha256": "735a7713978716d1e65eb6bf069e2f410eb72ec5b285861be417aeca0feeb935",
+  "sizeBytes": 45
+}
+```
+
+#### `documents add`
+
+*write token*
+
+Stores a file as a document, encrypted, and attaches it where asked. The answer is the document and `alreadyThere`: the same file added again is not stored twice, and the attachments are added to the document that is there. At most 25 MiB.
+
+```text
+meowny documents add <file> [--name <text>] [--date <date>] [--keep-on-phone <boolean>] [--transaction-ids <id,id,...>] [--recurring-ids <id,id,...>]
+```
+
+| Flag | Type | Description |
+| --- | --- | --- |
+| `--file` (required) | path | The bytes of the file, as base64url text. The command line reads the file and does this. |
+| `--name` | text | The name to keep it under, up to 120 characters. The name of the file if left out. |
+| `--date` | date | The day of the paper. Today if left out. |
+| `--keep-on-phone` | boolean | Keep the file on the phone too. Off if left out. |
+| `--transaction-ids` | id,id,... | Attach it to these transactions. |
+| `--recurring-ids` | id,id,... | Attach it to these recurring items. |
+
+The program reads the file itself, as you, and sends its bytes to the app, which stores it encrypted. The app never opens a path on a token's behalf. The name is the name of the file unless you give `--name`. A file of at most 25 MiB; the same file added again is not stored twice: the answer says `alreadyThere` and the attachments are added to the document that is there.
+
+`--transaction-ids` and `--recurring-ids` attach it to what it belongs to, as comma-separated ids. `--keep-on-phone` also keeps the file on the phone after a sync.
+
+The data can be given as a plain word, as in `meowny documents add 42`, or with `--data`.
+
+```console
+$ meowny documents add /home/you/boiler-receipt.pdf --date 2026-10-01
+```
+
+With `--json` (one line; shown indented):
+
+```json
+{
+  "alreadyThere": false,
+  "createdAt": "2026-10-16T16:14:41.036Z",
+  "documentDate": "2026-10-01",
+  "hasFile": true,
+  "id": "1",
+  "keepOnPhone": false,
+  "linkCount": 0,
+  "mediaType": "application/pdf",
+  "name": "boiler-receipt.pdf",
+  "sha256": "735a7713978716d1e65eb6bf069e2f410eb72ec5b285861be417aeca0feeb935",
+  "sizeBytes": 45
+}
+```
+
+#### `documents update`
+
+*write token*
+
+Renames a document, changes its date, or switches whether the phone keeps its file. Give at least one. The contents cannot be changed.
+
+```text
+meowny documents update <id> [--name <text>] [--date <date>] [--keep-on-phone <boolean>]
+```
+
+| Flag | Type | Description |
+| --- | --- | --- |
+| `--id` (required) | id | The document. |
+| `--name` | text | The new name, up to 120 characters. |
+| `--date` | date | The new day of the paper. |
+| `--keep-on-phone` | boolean | Whether the phone keeps the file. |
+
+Only the flags you give change. The contents of a document cannot be changed: add the new file and delete the old one.
+
+The id can be given as a plain word, as in `meowny documents update 42`, or with `--id`.
+
+```console
+$ meowny documents update 1 --name "Boiler repair" --keep-on-phone
+```
+
+With `--json` (one line; shown indented):
+
+```json
+{
+  "createdAt": "2026-10-16T16:14:41.036Z",
+  "documentDate": "2026-10-01",
+  "hasFile": true,
+  "id": "1",
+  "keepOnPhone": true,
+  "linkCount": 0,
+  "mediaType": "application/pdf",
+  "name": "Boiler repair",
+  "sha256": "735a7713978716d1e65eb6bf069e2f410eb72ec5b285861be417aeca0feeb935",
+  "sizeBytes": 45
+}
+```
+
+#### `documents delete`
+
+*write token · needs --yes*
+
+Deletes a document, its file and its attachments. The transactions it was attached to stay.
+
+```text
+meowny documents delete <id>
+```
+
+| Flag | Type | Description |
+| --- | --- | --- |
+| `--id` (required) | id | The document. |
+
+Deletes the document, its file and its attachments. The transactions it was attached to stay.
+
+The id can be given as a plain word, as in `meowny documents delete 42`, or with `--id`.
+
+This cannot be undone, so it needs `--yes`.
+
+```console
+$ meowny documents delete 1 --yes
+
+done.
+```
+
+#### `documents link`
+
+*write token*
+
+Attaches a document to a transaction or to a recurring item. Giving one that is attached already changes nothing.
+
+```text
+meowny documents link <id> [--transaction-id <id>] [--recurring-id <id>]
+```
+
+| Flag | Type | Description |
+| --- | --- | --- |
+| `--id` (required) | id | The document. |
+| `--transaction-id` | id | A transaction. |
+| `--recurring-id` | id | A recurring item. |
+
+Give exactly one of `--transaction-id` and `--recurring-id`. Attaching what is attached already changes nothing.
+
+The id can be given as a plain word, as in `meowny documents link 42`, or with `--id`.
+
+```console
+$ meowny documents link 1 --transaction-id 404
+
+done.
+```
+
+#### `documents unlink`
+
+*write token*
+
+Detaches a document from a transaction or a recurring item. The document and the transaction stay.
+
+```text
+meowny documents unlink <id> [--transaction-id <id>] [--recurring-id <id>]
+```
+
+| Flag | Type | Description |
+| --- | --- | --- |
+| `--id` (required) | id | The document. |
+| `--transaction-id` | id | A transaction. |
+| `--recurring-id` | id | A recurring item. |
+
+Detaches it. The document and the transaction stay.
+
+The id can be given as a plain word, as in `meowny documents unlink 42`, or with `--id`.
+
+```console
+$ meowny documents unlink 1 --transaction-id 404
+
+done.
+```
+
+#### `documents get`
+
+*write token · asks you in the app*
+
+Writes a copy of a document's file, after the person allows it in the app. It is not encrypted. An existing file is never replaced.
+
+```text
+meowny documents get <id> --out <path>
+```
+
+| Flag | Type | Description |
+| --- | --- | --- |
+| `--id` (required) | id | The document. |
+| `--out` (required) | path | Where to write the file: an absolute path in a folder that exists, that is not there yet, ending in the extension of the kind of file (.pdf, .png, .jpg, .gif, .webp, .txt, .html, .csv, or .bin for a file of no known kind). |
+
+The only command that gives a file back, so it needs a token that can write **and your yes**: the app shows which token, which document, its size and the exact file, and writes it only if you click Allow. The copy is **not encrypted**.
+
+The file name must end in the extension of the kind of file the app found, never one the caller picks: `.pdf`, `.png`, `.jpg`, `.gif`, `.webp`, `.txt`, `.html`, `.csv`, or `.bin` for a file of no known kind. So a copy cannot be given a name a system would run (`.sh`, `.bat`, `.desktop`). A file that exists is never replaced.
+
+The id can be given as a plain word, as in `meowny documents get 42`, or with `--id`.
+
+The app asks you to allow this each time, in a dialog; nothing is written until you do. See [Files need your yes](#files).
+
+```console
+$ meowny documents get 1 --out /home/you/boiler-receipt-copy.pdf
+
+bytes: 45
+path: /home/you/boiler-receipt-copy.pdf
 ```
 
 ## Global flags and settings
@@ -1910,7 +2233,7 @@ With `--json`, an error is one line on standard error, `{"code": "...", "message
 | `not_set_up` | 1 | The app has no data yet. Open it and finish the first-run screen. |
 | `timeout` | 1 | The app did not answer in time (30 seconds, or 3 minutes for a command you have to allow). Raise it with `--timeout`. |
 | `token_file_unsafe` | 3 | The token file can be read by other users of the computer, so it is not used. Run `chmod 600` on it. |
-| `too_large` | 1 | The request is too large (over 1 MiB). |
+| `too_large` | 1 | The request is too large (over 1 MiB), or the file is over 25 MiB, the most the app keeps. |
 | `unauthorized` | 3 | The app does not accept the token: it is unknown, expired or revoked. Make a new one in Settings. |
 | `unknown_route` | 1 | This app has no such command: the program is newer than the app. Update the app. |
 | `usage` | 2 | The command line is wrong: a flag is missing or unknown, or a delete has no `--yes`. Nothing was sent. Run the command with `--help`. |
@@ -1971,6 +2294,20 @@ error: transactions delete cannot be undone; add --yes to go ahead
 ```
 $ meowny transactions delete 999999 --yes
 error: not found
+```
+
+*A file the program cannot read (exit code 2)*
+
+```
+$ meowny documents add /home/you/missing.pdf
+error: --file: cannot read "/home/you/missing.pdf": there is no such file
+```
+
+*A name for a copy that a system could run (exit code 2)*
+
+```
+$ meowny documents get 1 --out /home/you/copy.sh
+error: the file name must end in .pdf
 ```
 
 *A name that is taken (exit code 1)*
@@ -2037,7 +2374,7 @@ Everything above holds for a script, and a few things make an agent's life easy.
 2. Run `meowny schema` once. It prints, offline and as JSON, every command with its flags, types, whether it needs a token that can write, whether it needs `--yes`, and every exit code and error code.
 3. Always pass `--json`. Read data from standard output; read errors, as `{code, message}`, from standard error. Branch on the **exit code** (0 done, 1 error, 2 bad usage, 3 token or locked, 4 not found).
 4. Create a transaction with a fixed `--client-uuid` of your own. If anything goes wrong, run the same command again: it cannot record the transaction twice.
-5. Exports and backups wait for the person to allow them in the app. Tell the user to look at the app, and do not retry in a loop: after a No the token is refused for 30 seconds. Exit code 3 with `denied` means no.
+5. Exports, backups and copies of documents wait for the person to allow them in the app. Tell the user to look at the app, and do not retry in a loop: after a No the token is refused for 30 seconds. Exit code 3 with `denied` means no.
 6. Never print the token, and do not put it in a command line, a file in a shared folder or a chat.
 
 *A paragraph to paste into the agent's instructions*
@@ -2048,7 +2385,7 @@ The token is in $MEOWNY_TOKEN. Run `meowny schema` once to learn the commands an
 Always add --json. Data is on stdout; errors are JSON {code, message} on stderr; the exit code is 0 ok,
 1 error, 2 bad usage, 3 token refused or app locked, 4 not found. Amounts are strings like "12.50".
 Create transactions with your own --client-uuid so a retry cannot duplicate them. Deleting needs --yes: only
-do it when the user asked. Exports and backups need the user to click Allow in the app: ask them to, and
+do it when the user asked. Exports, backups and copies of documents need the user to click Allow in the app: ask them to, and
 do not retry after a denial. Never reveal the token.
 ```
 
@@ -2063,6 +2400,7 @@ The command line is a thin client. Anything it does you can do yourself with `cu
 - The `Host` header must be `127.0.0.1:<port>` or `localhost:<port>`, and a request with an `Origin` header is refused, so a web page in your browser cannot use it.
 - Money is text with two decimals (`"12.50"`), ids are text, dates are `YYYY-MM-DD`, months `YYYY-MM`. Unknown or mistyped arguments are a 400 that names them.
 - Routes marked "and your yes" wait (up to two minutes) for you to allow them in the app, and answer `denied` if you do not.
+- A body is at most 1 MiB, except for `documents.add`: it takes the file as base64url text in the argument `data` (the command line does this for you), so its body may be up to 35 MiB, and is read only after the token and its scope have been checked from the request's head.
 
 *Ask the app for its status*
 
@@ -2070,7 +2408,7 @@ The command line is a thin client. Anything it does you can do yourself with `cu
 curl -s -X POST "http://127.0.0.1:$PORT/v1/status" \
   -H "Authorization: Bearer $MEOWNY_TOKEN"
 
-{"data":{"api":1,"app":"meowny","schemaVersion":9,"scope":"read","version":"0.1.0"},"ok":true}
+{"data":{"api":1,"app":"meowny","schemaVersion":11,"scope":"read","version":"0.1.0"},"ok":true}
 ```
 
 The port is in `api.json`. `meowny schema --app` prints every route with its arguments as JSON.
@@ -2117,6 +2455,14 @@ The port is in `api.json`. `meowny schema --app` prints every route with its arg
 | `export.xlsx` | read, and your yes | `out` (required), `from`, `to`, `categoryIds` | Writes a workbook (.xlsx) with sheets for transactions, categories, budgets, recurring items and a monthly summary, after the person allows it in the app. Dates are ISO and amounts plain numbers. An existing file is never replaced. |
 | `export.pdf` | read, and your yes | `out` (required), `fromMonth` (required), `toMonth` (required), `categoryIds`, `includeTransactions`, `showDescriptions`, `page` | Writes a PDF report for whole months, in English, after the person allows it in the app: totals, charts and budget against actual, and the transactions if asked. An existing file is never replaced. |
 | `backup.create` | read, and your yes | `out` (required), `passphrase` (required) | Writes an encrypted backup of all the data, after the person allows it in the app. It opens only with the passphrase given here, and only the app can restore it. An existing file is never replaced. |
+| `documents.list` | read | `q`, `kind`, `from`, `to`, `transactionId`, `recurringId`, `limit`, `offset` | Documents, newest paper first, with the total that match: names, dates, types, sizes and hashes, never the files. Up to 100 a page, 50 unless limit says otherwise. |
+| `documents.show` | read | `id` (required) | One document: its name, date, type, size and hash, whether this computer holds its file, and in `links` what it is attached to. Never the file. |
+| `documents.add` | write | `data` (required), `name` (required), `date`, `keepOnPhone`, `transactionIds`, `recurringIds` | Stores a file as a document, encrypted, and attaches it where asked. The answer is the document and `alreadyThere`: the same file added again is not stored twice, and the attachments are added to the document that is there. At most 25 MiB. |
+| `documents.update` | write | `id` (required), `name`, `date`, `keepOnPhone` | Renames a document, changes its date, or switches whether the phone keeps its file. Give at least one. The contents cannot be changed. |
+| `documents.delete` | write | `id` (required) | Deletes a document, its file and its attachments. The transactions it was attached to stay. |
+| `documents.link` | write | `id` (required), `transactionId`, `recurringId` | Attaches a document to a transaction or to a recurring item. Giving one that is attached already changes nothing. |
+| `documents.unlink` | write | `id` (required), `transactionId`, `recurringId` | Detaches a document from a transaction or a recurring item. The document and the transaction stay. |
+| `documents.get` | write, and your yes | `id` (required), `out` (required) | Writes a copy of a document's file, after the person allows it in the app. It is not encrypted. An existing file is never replaced. |
 
 ## Security
 

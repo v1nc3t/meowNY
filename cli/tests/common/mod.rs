@@ -160,6 +160,18 @@ pub fn failed(app: &App, token: &str, args: &[&str]) -> (i32, String) {
     (out.code, out.error()["code"].as_str().unwrap_or("").to_string())
 }
 
+/// A document made the way the screens make one, attached to the transaction with this id if one is given. Returns its id.
+pub fn document(app: &App, name: &str, bytes: &[u8], transaction: Option<&str>) -> String {
+    use meowny_lib::documents::library::{self, LinkTarget, NewDocument, TargetKind};
+    app.vault
+        .with_files(|conn, files| {
+            let links = transaction.map(|id| LinkTarget { kind: TargetKind::Transaction, id: id.into() }).into_iter().collect();
+            let input = NewDocument { name: name.into(), links, ..Default::default() };
+            Ok(library::add(conn, files, &input, bytes, "2026-10-14")?.document.id.to_string())
+        })
+        .unwrap()
+}
+
 pub fn snapshot(app: &App) -> meowny_lib::backup::Snapshot {
     app.vault.with_conn(|c| meowny_lib::backup::dump(c)).unwrap()
 }

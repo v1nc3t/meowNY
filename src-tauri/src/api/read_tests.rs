@@ -36,6 +36,8 @@ const READ_ROUTES: &[&str] = &[
     "stats.planned",
     "export.preview",
     "backup.schedule",
+    "documents.list",
+    "documents.show",
 ];
 
 pub(super) fn at(text: &str) -> DateTime<Utc> {
@@ -343,6 +345,7 @@ fn a_locked_app_gives_no_data_from_any_read_route() {
         "stats.trend" => json!({ "categoryId": id, "from": "2026-01", "to": "2026-10" }),
         "stats.year" => json!({ "year": "2026" }),
         "stats.top" => json!({ "month": "2026-10", "type": "EXPENSE" }),
+        "documents.show" => json!({ "id": "1" }),
         _ => json!({}),
     };
     for name in READ_ROUTES {
@@ -362,8 +365,17 @@ fn money_and_ids_are_strings_and_the_only_numbers_are_counts_and_percentages() {
         "stats.year" => json!({ "year": "2026" }),
         "stats.top" => json!({ "month": "2026-09", "type": "EXPENSE" }),
         "transactions.list" => json!({ "limit": 100 }),
+        "documents.show" => json!({ "id": "1" }),
         _ => json!({}),
     };
+    // a document, so that its answers are walked too
+    vault
+        .with_files(|conn, files| {
+            let input = crate::documents::library::NewDocument { name: "receipt.pdf".into(), ..Default::default() };
+            crate::documents::library::add(conn, files, &input, b"%PDF-1.4 receipt", TODAY)?;
+            Ok(())
+        })
+        .unwrap();
     let mut numbers = BTreeSet::new();
     fn walk(value: &Value, key: &str, numbers: &mut BTreeSet<String>) {
         match value {
@@ -379,9 +391,9 @@ fn money_and_ids_are_strings_and_the_only_numbers_are_counts_and_percentages() {
         walk(&ok(&vault, name, args(name)), name, &mut numbers);
     }
     // Counts: `limit`, `offset`, `total` (a page), `intervalCount` (every 2 weeks), `paidCount`, and what an export
-    // would contain (`transactions`, `categories`, `budgets`, `recurring`, `history`), `everyDays` (a backup schedule). Percentages: `pctUsed`,
+    // would contain (`transactions`, `categories`, `budgets`, `recurring`, `documents`, `history`), the size of a file in bytes and the number of things it is attached to (`sizeBytes`, `linkCount`), `everyDays` (a backup schedule). Percentages: `pctUsed`,
     // `share`, `savingsRate`. Everything else, money above all, is a string.
-    let allowed: BTreeSet<String> = ["intervalCount", "limit", "offset", "paidCount", "pctUsed", "savingsRate", "share", "total", "transactions", "categories", "budgets", "recurring", "history", "everyDays"]
+    let allowed: BTreeSet<String> = ["intervalCount", "limit", "offset", "paidCount", "pctUsed", "savingsRate", "share", "total", "transactions", "categories", "budgets", "recurring", "documents", "history", "everyDays", "sizeBytes", "linkCount"]
         .into_iter()
         .map(String::from)
         .collect();

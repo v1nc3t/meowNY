@@ -1,5 +1,5 @@
 //! The Excel export: one workbook with a sheet each for transactions, categories, budgets,
-//! recurring items and a monthly summary.
+//! recurring items, a monthly summary and the documents (listed, never the files).
 //!
 //! Dates are real dates and money is real numbers with a currency number format, so the sheets sort,
 //! filter and sum in Excel. Amounts are stored as whole minor units and divided by 100 only when a cell
@@ -16,8 +16,8 @@ use rusqlite::Connection;
 use rust_xlsxwriter::{ExcelDateTime, Format, Workbook, Worksheet, XlsxError};
 
 use super::{
-    budget_rows, category_rows, currency, monthly_sums, neutralise, parse, recurring_rows, transactions, BudgetRow,
-    CategoryRow, Parsed, Selection, Tx,
+    budget_rows, category_rows, currency, document_names_by_transaction, documents, join_names, monthly_sums, neutralise, parse,
+    recurring_rows, transactions, BudgetRow, CategoryRow, DocRow, Parsed, Selection, Tx,
 };
 use crate::display::{DateOrder, DateSeparator, DisplayFormat};
 use crate::recurring::Recurring;
@@ -71,6 +71,9 @@ struct Data {
     names: HashMap<i64, (String, String)>,
     /// (month "YYYY-MM", income, expense) in minor units, every month from the first to the last.
     summary: Vec<(String, i64, i64)>,
+    documents: Vec<DocRow>,
+    /// The names of the documents attached to each transaction.
+    attached: HashMap<i64, Vec<String>>,
 }
 
 fn next_month(month: &str) -> Option<String> {
@@ -114,8 +117,10 @@ fn load(conn: &Connection, sel: &Parsed) -> Result<Data, AppError> {
         recurring: recurring_rows(conn, sel)?,
         names: category_rows(conn, &everything)?.into_iter().map(|c| (c.id, (c.name, c.kind))).collect(),
         summary: summary(conn, sel)?,
+        documents: documents(conn, sel)?,
+        attached: document_names_by_transaction(conn)?,
     };
-    if data.transactions.len() > MAX_ROWS {
+    if data.transactions.len() > MAX_ROWS || data.documents.len() > MAX_ROWS {
         return Err(AppError::InvalidInput);
     }
     Ok(data)
@@ -182,7 +187,7 @@ fn write(data: &Data, codes: &Codes) -> Result<Vec<u8>, XlsxError> {
     let s = sheet(
         &mut book,
         "Transactions",
-        &[("Date", 12.0), ("Type", 10.0), ("Category", 22.0), ("Name", 30.0), (&amount, 14.0), ("Description", 44.0)],
+        &[("Date", 12.0), ("Type", 10.0), ("Category", 22.0), ("Name", 30.0), (&amount, 14.0), ("Description", 44.0), ("Documents", 40.0)],
     )?;
     for (i, t) in data.transactions.iter().enumerate() {
         let row = i as u32 + 1;
@@ -192,6 +197,9 @@ fn write(data: &Data, codes: &Codes) -> Result<Vec<u8>, XlsxError> {
         text(s, row, 3, &t.name)?;
         money(s, row, 4, t.amount, &cash)?;
         text(s, row, 5, t.description.as_deref().unwrap_or(""))?;
+        if let Some(names) = data.attached.get(&t.id) {
+            text(s, row, 6, &join_names(names))?;
+        }
     }
 
     let s = sheet(&mut book, "Categories", &[("Name", 26.0), ("Type", 10.0), ("Deleted", 10.0)])?;
@@ -267,6 +275,30 @@ fn write(data: &Data, codes: &Codes) -> Result<Vec<u8>, XlsxError> {
         if *earned > 0 {
             s.write_number_with_format(row, 4, (earned - spent) as f64 / *earned as f64, &percent)?;
         }
+    }
+
+    // The documents: what each is and what it is attached to. The files are never in an export.
+    let s = sheet(
+        &mut book,
+        "Documents",
+        &[("Name", 36.0), ("Date", 12.0), ("Type", 22.0), ("Size (bytes)", 14.0), ("SHA-256", 66.0), ("Attached to", 60.0)],
+    )?;
+    for (i, d) in data.documents.iter().enumerate() {
+        let row = i as u32 + 1;
+        text(s, row, 0, &d.name)?;
+        date(s, row, 1, &d.date, &day)?;
+        text(s, row, 2, &d.media_type)?;
+        s.write_number(row, 3, d.size as f64)?;
+        text(s, row, 4, &d.sha256)?;
+        let attached: Vec<String> = d
+            .links
+            .iter()
+            .map(|l| match &l.date {
+                Some(day) => format!("{} ({day})", l.name),
+                None => format!("{} (recurring)", l.name),
+            })
+            .collect();
+        text(s, row, 5, &join_names(&attached))?;
     }
 
     book.save_to_buffer()
@@ -492,11 +524,11 @@ mod tests {
     }
 
     #[test]
-    fn the_workbook_has_the_five_sheets() {
+    fn the_workbook_has_the_six_sheets() {
         let (conn, ..) = lived_in();
         let bytes = build(&conn, &Selection::default(), &DisplayFormat::default());
         assert!(bytes.starts_with(b"PK"), "an .xlsx file is a zip");
-        assert_eq!(open(&bytes).sheet_names(), ["Transactions", "Categories", "Budgets", "Recurring", "Monthly summary"]);
+        assert_eq!(open(&bytes).sheet_names(), ["Transactions", "Categories", "Budgets", "Recurring", "Monthly summary", "Documents"]);
     }
 
     #[test]
@@ -581,7 +613,7 @@ mod tests {
         spend(&conn, rent, "@SUM(1)", "2.00", "2026-04-02", Some("-5% promo"));
         let bytes = build(&conn, &Selection::default(), &DisplayFormat::default());
         let mut book = open(&bytes);
-        for name in ["Transactions", "Categories", "Budgets", "Recurring", "Monthly summary"] {
+        for name in ["Transactions", "Categories", "Budgets", "Recurring", "Monthly summary", "Documents"] {
             for cell in strings(&rows(&mut book, name)) {
                 assert!(!cell.starts_with(['=', '+', '-', '@', '\t', '\r']), "{name}: {cell:?}");
             }
@@ -591,7 +623,7 @@ mod tests {
         assert_eq!((&evil[3], &evil[5]), (&Cell::Text("'=cmd|' /C calc'!A0".into()), &Cell::Text("'+1+1".into())));
         // No cell is a formula: the file has no <f> elements at all.
         let sheets: Vec<String> = Book::open(&bytes).parts.keys().filter(|n| n.starts_with("xl/worksheets/sheet")).cloned().collect();
-        assert_eq!(sheets.len(), 5);
+        assert_eq!(sheets.len(), 6);
         for name in sheets {
             let part = Book::open(&bytes).part(&name);
             assert!(!part.contains("<f>") && !part.contains("<f "), "{name} has a formula");
@@ -737,5 +769,78 @@ mod tests {
         build(&conn, &Selection::default(), &DisplayFormat::default());
         let after: i64 = conn.query_row("SELECT count(*) FROM audit_log", [], |r| r.get(0)).unwrap();
         assert_eq!(before, after);
+    }
+
+    #[test]
+    fn the_documents_sheet_lists_each_document_and_what_it_is_attached_to() {
+        use super::super::documents_tests::with_documents;
+        let (conn, ..) = with_documents();
+        let mut book = open(&build(&conn, &Selection::default(), &DisplayFormat::default()));
+        let sheet = rows(&mut book, "Documents");
+        assert_eq!(sheet.len(), 1 + 6, "the heading and six documents");
+        assert_eq!(strings(&sheet[..1]), ["Name", "Date", "Type", "Size (bytes)", "SHA-256", "Attached to"]);
+        // oldest paper first, as in the JSON
+        assert_eq!(sheet[1][0], Cell::Text("Lease.pdf".into()));
+        assert_eq!(sheet[1][1], Cell::Date(serial(2026, 1, 2)), "a real date");
+        assert_eq!(sheet[1][2], Cell::Text("application/pdf".into()));
+        assert_eq!(sheet[1][3], Cell::Number(1234.0));
+        assert_eq!(sheet[1][4], Cell::Text(crate::keys::hex_encode(&crate::documents::store::sha256(b"Lease.pdf"))));
+        assert_eq!(sheet[1][5], Cell::Text("Rent (2026-02-01); Rent (recurring)".into()));
+        let shared = sheet.iter().find(|r| r[0] == Cell::Text("Shared scan.pdf".into())).unwrap();
+        assert_eq!(shared[5], Cell::Text("Pay (2026-01-25); Session (2026-02-10)".into()));
+        let loose = sheet.iter().find(|r| r[0] == Cell::Text("Loose receipt.pdf".into())).unwrap();
+        let nothing = |cell: Option<&Cell>| matches!(cell, None | Some(Cell::Empty)) || cell == Some(&Cell::Text(String::new()));
+        assert!(nothing(loose.get(5)), "a document attached to nothing has an empty cell: {:?}", loose.get(5));
+    }
+
+    #[test]
+    fn the_transactions_sheet_has_a_column_of_document_names() {
+        use super::super::documents_tests::with_documents;
+        let (conn, ..) = with_documents();
+        let mut book = open(&build(&conn, &Selection::default(), &DisplayFormat::default()));
+        let sheet = rows(&mut book, "Transactions");
+        assert_eq!(sheet[0][6], Cell::Text("Documents".into()));
+        let pay = sheet.iter().find(|r| r[3] == Cell::Text("Pay".into())).unwrap();
+        assert_eq!(pay[6], Cell::Text("Pay slip.pdf; Shared scan.pdf".into()));
+        let march = sheet.iter().find(|r| r[3] == Cell::Text("Rent".into()) && r[4] == Cell::Number(905.5)).unwrap();
+        assert!(matches!(march.get(6), None | Some(Cell::Empty)), "a transaction with no document has an empty cell");
+    }
+
+    #[test]
+    fn a_selection_limits_the_documents_sheet_and_the_names_in_the_transactions_sheet() {
+        use super::super::documents_tests::with_documents;
+        let (conn, salary, rent, _) = with_documents();
+        let selection = Selection { category_ids: Some(vec![salary.to_string(), rent.to_string()]), ..Default::default() };
+        let bytes = build(&conn, &selection, &DisplayFormat::default());
+        let mut book = open(&bytes);
+        let documents = strings(&rows(&mut book, "Documents"));
+        for kept in ["Lease.pdf", "Pay slip.pdf", "Shared scan.pdf"] {
+            assert!(documents.contains(&kept.to_string()), "{kept}");
+        }
+        let everything: String = ["Documents", "Transactions", "Categories", "Budgets", "Recurring"]
+            .iter()
+            .flat_map(|name| strings(&rows(&mut book, name)))
+            .collect::<Vec<_>>()
+            .join("|");
+        for left_out in ["Therapy", "Session", "Dr. Private", "Loose receipt"] {
+            assert!(!everything.contains(left_out), "{left_out} is in an export that left it out");
+        }
+        let shared = rows(&mut book, "Documents").into_iter().find(|r| r[0] == Cell::Text("Shared scan.pdf".into())).unwrap();
+        assert_eq!(shared[5], Cell::Text("Pay (2026-01-25)".into()), "only the attachment that is in the export");
+    }
+
+    #[test]
+    fn a_document_name_that_looks_like_a_formula_is_written_as_text() {
+        use super::super::documents_tests::{add_doc, attach_transaction};
+        let (conn, ..) = lived_in();
+        let doc = add_doc(&conn, "=cmd|' /C calc'!A0", "2026-02-01");
+        attach_transaction(&conn, doc, "Rent", "2026-02-01");
+        let bytes = build(&conn, &Selection::default(), &DisplayFormat::default());
+        let mut book = open(&bytes);
+        let sheet = rows(&mut book, "Documents");
+        assert_eq!(sheet[1][0], Cell::Text("'=cmd|' /C calc'!A0".into()));
+        let transactions = rows(&mut book, "Transactions");
+        let rent = transactions.iter().find(|r| r[3] == Cell::Text("Rent".into()) && matches!(&r[0], Cell::Date(d) if *d == serial(2026, 2, 1))).unwrap();
+        assert_eq!(rent[6], Cell::Text("'=cmd|' /C calc'!A0".into()));
     }
 }

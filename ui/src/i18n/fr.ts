@@ -304,6 +304,8 @@ export const fr: Messages = {
   'export.pdfWholeMonths': "un rapport couvre des mois entiers, il n'y a donc pas de choix par jour.",
   'export.noTransactions': 'aucune transaction dans cette sélection.',
   'export.history': 'historique des modifications',
+  'export.documentsListed': 'les documents sont listés par nom, jamais leurs fichiers. une sauvegarde chiffrée peut inclure les fichiers.',
+  'export.documentsColumn': 'la dernière colonne nomme les documents de chaque opération, jamais leurs fichiers. une sauvegarde chiffrée peut inclure les fichiers.',
   'export.warning': "ce fichier n'est pas chiffré. toute personne qui le reçoit peut le lire.",
   'export.backupLink': 'faire une sauvegarde chiffrée',
   'export.go': 'exporter',

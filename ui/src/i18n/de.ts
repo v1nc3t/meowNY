@@ -305,6 +305,8 @@ export const de: Messages = {
   'export.pdfWholeMonths': 'ein bericht umfasst ganze monate, deshalb gibt es keine auswahl nach tagen.',
   'export.noTransactions': 'keine buchungen in dieser auswahl.',
   'export.history': 'änderungsverlauf',
+  'export.documentsListed': 'dokumente werden mit ihrem namen aufgeführt, nie ihre dateien. eine verschlüsselte sicherung kann die dateien enthalten.',
+  'export.documentsColumn': 'die letzte spalte nennt die dokumente jeder buchung, nie ihre dateien. eine verschlüsselte sicherung kann die dateien enthalten.',
   'export.warning': 'diese datei ist nicht verschlüsselt. jeder, der sie bekommt, kann sie lesen.',
   'export.backupLink': 'verschlüsseltes backup erstellen',
   'export.go': 'exportieren',

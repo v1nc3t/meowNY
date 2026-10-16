@@ -4,6 +4,10 @@
 //! A `Selection` narrows what goes in: a date range for transactions, and a set of categories for
 //! everything that belongs to a category. With categories chosen, other category names, global
 //! budgets and the change history are left out, so a limited export reveals nothing about the rest.
+//!
+//! Documents are listed by name, date, type, size, hash and what they are attached to, and a file is never in an export (the
+//! encrypted backup is where the files go). A limited export lists only the documents attached to something that is in it, and for
+//! each only the attachments that are in it, so the name of a document attached to something left out is not revealed.
 //! The device-specific scheduled-backup setup, which holds a passphrase, and the access tokens of the
 //! command-line client are never exported.
 
@@ -178,13 +182,16 @@ fn csv_field(cell: &str) -> String {
 }
 
 /// Transactions as CSV: a header row, then one row per transaction, oldest first. Amounts are
-/// positive; `type` says whether it was income or an expense. The file starts with a byte order
+/// positive; `type` says whether it was income or an expense. The last column names the documents attached to the transaction. The file starts with a byte order
 /// mark so Excel reads the UTF-8 text correctly, and rows end with CRLF as the format says.
 pub fn csv(conn: &Connection, selection: &Selection) -> Result<String, AppError> {
     let sel = parse(selection)?;
-    let currency = currency(conn)?;
-    let mut out = String::from("\u{feff}date,type,category,name,amount,currency,description\r\n");
-    for t in transactions(conn, &sel)? {
+    let tx = conn.unchecked_transaction()?;
+    let currency = currency(&tx)?;
+    let attached = document_names_by_transaction(&tx)?;
+    let mut out = String::from("\u{feff}date,type,category,name,amount,currency,description,documents\r\n");
+    for t in transactions(&tx, &sel)? {
+        let documents = attached.get(&t.id).map(|names| join_names(names)).unwrap_or_default();
         let cells = [
             t.date.as_str(),
             t.kind.as_str(),
@@ -193,6 +200,7 @@ pub fn csv(conn: &Connection, selection: &Selection) -> Result<String, AppError>
             &format_amount(t.amount),
             currency.as_str(),
             t.description.as_deref().unwrap_or(""),
+            documents.as_str(),
         ];
         let row: Vec<String> = cells.iter().map(|c| csv_field(c)).collect();
         out.push_str(&row.join(","));
@@ -298,6 +306,139 @@ fn history_json(conn: &Connection) -> Result<Vec<Value>, AppError> {
     Ok(rows.collect::<Result<Vec<_>, _>>()?)
 }
 
+/// What a document is attached to, as an export names it.
+pub(crate) struct DocLink {
+    /// "transaction" or "recurring".
+    pub(crate) kind: &'static str,
+    pub(crate) id: i64,
+    pub(crate) name: String,
+    /// The payment date of a transaction; none for a recurring item.
+    pub(crate) date: Option<String>,
+}
+
+/// A document as an export lists it. Never the file.
+pub(crate) struct DocRow {
+    pub(crate) id: i64,
+    pub(crate) name: String,
+    pub(crate) media_type: String,
+    pub(crate) size: i64,
+    pub(crate) sha256: String,
+    /// The day of the paper.
+    pub(crate) date: String,
+    pub(crate) links: Vec<DocLink>,
+}
+
+impl Parsed {
+    fn has_transaction(&self, date: &str, category_id: i64) -> bool {
+        self.from.as_deref().is_none_or(|from| date >= from)
+            && self.to.as_deref().is_none_or(|to| date <= to)
+            && self.categories.as_ref().is_none_or(|ids| ids.contains(&category_id))
+    }
+
+    fn has_recurring(&self, category_id: i64) -> bool {
+        self.categories.as_ref().is_none_or(|ids| ids.contains(&category_id))
+    }
+}
+
+/// The documents an export with this selection lists. With no selection every document, attached or not. With one, a document only if
+/// it is attached to a transaction or a recurring item that the export contains, and then only those attachments.
+pub(crate) fn documents(conn: &Connection, sel: &Parsed) -> Result<Vec<DocRow>, AppError> {
+    let mut statement = conn.prepare(
+        "SELECT d.id, d.name, d.media_type, d.size_bytes, d.sha256, d.document_date,
+                l.transaction_id, t.name, t.payment_date, t.category_id,
+                l.recurring_transaction_id, r.name, r.category_id
+         FROM documents d
+         LEFT JOIN document_links l ON l.document_id = d.id
+         LEFT JOIN transactions t ON t.id = l.transaction_id
+         LEFT JOIN recurring_transactions r ON r.id = l.recurring_transaction_id
+         ORDER BY d.document_date, d.id, l.transaction_id IS NULL, t.payment_date, l.transaction_id, r.name, l.recurring_transaction_id",
+    )?;
+    let mut rows = statement.query([])?;
+    let everything = sel.everything();
+    let mut out: Vec<DocRow> = Vec::new();
+    // the document being read, kept only once it is known to have an attachment in the export (or the export is of everything)
+    let mut current: Option<DocRow> = None;
+    let keep = |doc: Option<DocRow>, out: &mut Vec<DocRow>| {
+        if let Some(doc) = doc {
+            if everything || !doc.links.is_empty() {
+                out.push(doc);
+            }
+        }
+    };
+    while let Some(r) = rows.next()? {
+        let id: i64 = r.get(0)?;
+        if current.as_ref().is_none_or(|d| d.id != id) {
+            keep(current.take(), &mut out);
+            current = Some(DocRow {
+                id,
+                name: r.get(1)?,
+                media_type: r.get(2)?,
+                size: r.get(3)?,
+                sha256: r.get(4)?,
+                date: r.get(5)?,
+                links: Vec::new(),
+            });
+        }
+        let doc = current.as_mut().expect("a document is being read");
+        if let Some(transaction) = r.get::<_, Option<i64>>(6)? {
+            let (name, date, category): (String, String, i64) = (r.get(7)?, r.get(8)?, r.get(9)?);
+            if sel.has_transaction(&date, category) {
+                doc.links.push(DocLink { kind: "transaction", id: transaction, name, date: Some(date) });
+            }
+        } else if let Some(item) = r.get::<_, Option<i64>>(10)? {
+            let (name, category): (String, i64) = (r.get(11)?, r.get(12)?);
+            if sel.has_recurring(category) {
+                doc.links.push(DocLink { kind: "recurring", id: item, name, date: None });
+            }
+        }
+    }
+    keep(current.take(), &mut out);
+    Ok(out)
+}
+
+/// For each transaction, the names of the documents attached to it, for the column of the CSV and of the Excel sheet. The names are
+/// in the order of the names.
+pub(crate) fn document_names_by_transaction(conn: &Connection) -> Result<std::collections::HashMap<i64, Vec<String>>, AppError> {
+    let mut statement = conn.prepare(
+        "SELECT l.transaction_id, d.name FROM document_links l JOIN documents d ON d.id = l.document_id
+         WHERE l.transaction_id IS NOT NULL ORDER BY l.transaction_id, d.name, d.id",
+    )?;
+    let mut names: std::collections::HashMap<i64, Vec<String>> = Default::default();
+    for row in statement.query_map([], |r| Ok((r.get::<_, i64>(0)?, r.get::<_, String>(1)?)))? {
+        let (transaction, name) = row?;
+        names.entry(transaction).or_default().push(name);
+    }
+    Ok(names)
+}
+
+/// Names in one cell. A semicolon and a space between them; a name that has one itself cannot be told apart, which is the price of a
+/// single cell (the JSON file lists them one by one).
+pub(crate) fn join_names(names: &[String]) -> String {
+    names.join("; ")
+}
+
+fn documents_json(conn: &Connection, sel: &Parsed) -> Result<Vec<Value>, AppError> {
+    Ok(documents(conn, sel)?
+        .into_iter()
+        .map(|d| {
+            let links: Vec<Value> = d
+                .links
+                .into_iter()
+                .map(|l| json!({ "kind": l.kind, "id": l.id.to_string(), "name": l.name, "date": l.date }))
+                .collect();
+            json!({
+                "id": d.id.to_string(),
+                "name": d.name,
+                "date": d.date,
+                "type": d.media_type,
+                "sizeBytes": d.size,
+                "sha256": d.sha256,
+                "links": links,
+            })
+        })
+        .collect())
+}
+
 /// What an export with this selection would contain, so the screen can say so before anything is saved.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -312,6 +453,8 @@ pub struct Preview {
     pub categories: u32,
     pub budgets: u32,
     pub recurring: u32,
+    /// Documents listed by name (never their files).
+    pub documents: u32,
     /// Entries of the change history. Only a JSON file with no selection carries them; with any
     /// selection this is 0.
     pub history: u32,
@@ -341,6 +484,7 @@ pub fn preview(conn: &Connection, selection: &Selection) -> Result<Preview, AppE
         categories: category_rows(&tx, &sel)?.len() as u32,
         budgets: budget_rows(&tx, &sel)?.len() as u32,
         recurring: recurring_rows(&tx, &sel)?.len() as u32,
+        documents: documents(&tx, &sel)?.len() as u32,
         history,
     })
 }
@@ -384,12 +528,16 @@ pub fn json(conn: &Connection, selection: &Selection, now: DateTime<Utc>) -> Res
         "budgets": budgets_json(&tx, &sel)?,
         "recurring": recurring_json(&tx, &sel)?,
         "transactions": transactions,
+        "documents": documents_json(&tx, &sel)?,
     });
     if sel.everything() {
         file["history"] = Value::Array(history_json(&tx)?);
     }
     serde_json::to_string_pretty(&file).map_err(|_| AppError::Internal)
 }
+
+#[cfg(test)]
+mod documents_tests;
 
 #[cfg(test)]
 mod tests {
@@ -474,7 +622,7 @@ mod tests {
     }
 
     /// A small reader for the CSV the app writes, to check the quoting by reading it back.
-    fn read_csv(text: &str) -> Vec<Vec<String>> {
+    pub(super) fn read_csv(text: &str) -> Vec<Vec<String>> {
         let text = text.strip_prefix('\u{feff}').unwrap();
         let (mut rows, mut row, mut cell, mut quoted) = (Vec::new(), Vec::new(), String::new(), false);
         let mut chars = text.chars().peekable();
@@ -512,11 +660,11 @@ mod tests {
     fn the_csv_has_one_row_per_transaction_oldest_first() {
         let (conn, ..) = lived_in();
         let text = csv(&conn, &Selection::default()).unwrap();
-        assert!(text.starts_with("\u{feff}date,type,category,name,amount,currency,description\r\n"));
+        assert!(text.starts_with("\u{feff}date,type,category,name,amount,currency,description,documents\r\n"));
         let rows = read_csv(&text);
         assert_eq!(rows.len(), 5, "header and four transactions");
-        assert_eq!(rows[1], ["2026-01-25", "INCOME", "Salary", "Pay", "3200.00", "EUR", "Monthly pay"]);
-        assert_eq!(rows[2], ["2026-02-01", "EXPENSE", "Rent", "Rent", "900.00", "EUR", ""]);
+        assert_eq!(rows[1], ["2026-01-25", "INCOME", "Salary", "Pay", "3200.00", "EUR", "Monthly pay", ""]);
+        assert_eq!(rows[2], ["2026-02-01", "EXPENSE", "Rent", "Rent", "900.00", "EUR", "", ""]);
         assert_eq!(rows[3][3..5], ["Session", "80.00"]);
         assert_eq!(rows[4][4], "905.50");
     }

@@ -41,7 +41,9 @@ fn every_route_has_a_command_that_answers_help_and_names_all_its_flags() {
         for param in route.params {
             let flag = command["flags"].as_array().unwrap().iter().find(|f| f["param"] == param.name).unwrap_or_else(|| panic!("{} has no flag for {}", route.name, param.name));
             assert!(help.out.contains(flag["flag"].as_str().unwrap()) || command["positional"] == param.name, "{} {}", route.name, param.name);
-            assert_eq!(flag["required"], param.required, "{} {}", route.name, param.name);
+            // a command that reads a file for the person gives the document the name of the file unless told another
+            let named_by_the_file = param.name == "name" && route.params.iter().any(|p| p.kind == meowny_lib::api::routes::Kind::Bytes);
+            assert_eq!(flag["required"], param.required && !named_by_the_file, "{} {}", route.name, param.name);
         }
         assert_eq!(command["scope"], serde_json::to_value(route.scope).unwrap());
     }
@@ -110,6 +112,7 @@ fn sample(command: &str, category: &str) -> Vec<String> {
         "transactions list" => &["--limit", "5"],
         "categories list" => &["--type", "expense"],
         "recurring dues" => &["--within-days", "10"],
+        "documents show" => &["1"],
         _ => &[],
     };
     let mut out: Vec<String> = command.split(' ').map(String::from).collect();
@@ -123,6 +126,7 @@ fn sample(command: &str, category: &str) -> Vec<String> {
 #[test]
 fn every_read_command_runs_and_prints_what_the_app_returns() {
     let app = app(true);
+    document(&app, "Receipt.pdf", b"%PDF-1.4 a receipt", Some("1"));
     let category = category(&app, "EXPENSE", "Groceries");
     let schema = run(&app, "", &["schema"]).json();
     let mut tried = 0;
@@ -376,6 +380,9 @@ fn a_read_token_cannot_change_anything_and_the_cli_says_so() {
     let before = snapshot(&app);
     let schema = run(&app, "", &["schema"]).json();
     let mut tried = 0;
+    // a file that can be sent, for the command that takes one
+    let sample_file = app.out("sample.bin");
+    std::fs::write(&sample_file, b"a file").unwrap();
     for command in schema["commands"].as_array().unwrap().iter().filter(|c| c["scope"] == "write") {
         let words: Vec<&str> = command["command"].as_str().unwrap().split(' ').collect();
         // Every required flag with a plausible value, so the request is valid in everything but the token.
@@ -387,6 +394,7 @@ fn a_read_token_cannot_change_anything_and_the_cli_says_so() {
                 "month" => "2026-10".to_string(),
                 "id" => groceries.clone(),
                 "integer" => "1".to_string(),
+                "bytes" => sample_file.clone(),
                 _ if !flag["values"].as_array().unwrap().is_empty() => flag["values"][0].as_str().unwrap().to_string(),
                 _ => "x".to_string(),
             };
@@ -398,7 +406,7 @@ fn a_read_token_cannot_change_anything_and_the_cli_says_so() {
         assert_eq!(failed(&app, &app.read, &args), (3, "forbidden".into()), "{args:?}");
         tried += 1;
     }
-    assert!(tried >= 17, "only {tried} write commands were tried");
+    assert!(tried >= 23, "only {tried} write commands were tried");
     assert_eq!(snapshot(&app), before, "a read token changed something");
 }
 
@@ -860,6 +868,24 @@ fn every_command_runs_against_a_real_app_and_a_new_one_without_a_test_fails_this
     assert_eq!(t.go(&w, &["recurring", "end", &item, "--yes"])["isActive"], false);
     assert!(t.go(&w, &["recurring", "delete", &item, "--yes"]).is_null());
 
+    // Documents: the program reads the file itself and sends its bytes; a read token sees names only; getting a file out is allowed
+    // in the app.
+    let source = app.out("Boiler receipt.pdf");
+    std::fs::write(&source, b"%PDF-1.4 the boiler was repaired").unwrap();
+    let added = t.go(&w, &["documents", "add", &source, "--date", "2026-10-01", "--transaction-ids", "1"]);
+    let doc = id_of(&added);
+    assert_eq!((added["alreadyThere"].clone(), added["name"].clone(), added["linkCount"].clone()), (json!(false), json!("Boiler receipt.pdf"), json!(1)));
+    assert_eq!(t.go(&r, &["documents", "list", "--q", "boiler"])["total"], 1);
+    assert_eq!(t.go(&r, &["documents", "show", &doc])["links"][0]["kind"], "transaction");
+    assert_eq!(t.go(&w, &["documents", "update", &doc, "--name", "Boiler", "--keep-on-phone"])["keepOnPhone"], true);
+    assert!(t.go(&w, &["documents", "link", &doc, "--recurring-id", "1"]).is_null());
+    assert!(t.go(&w, &["documents", "unlink", &doc, "--transaction-id", "1"]).is_null());
+    let copy = app.out("copy.pdf");
+    assert_eq!(t.go(&w, &["documents", "get", &doc, "--out", &copy])["bytes"], 32);
+    assert_eq!(std::fs::read(&copy).unwrap(), b"%PDF-1.4 the boiler was repaired");
+    assert!(t.go(&w, &["documents", "delete", &doc, "--yes"]).is_null());
+    assert_eq!(t.go(&r, &["documents", "list"])["total"], 0);
+
     // Statistics.
     assert!(t.go(&r, &["stats", "budget", "--month", "2026-09"])["categories"].is_array());
     assert!(t.go(&r, &["stats", "trend", "--category-id", &pets, "--from", "2026-01", "--to", "2026-03"])["points"].is_array());
@@ -914,4 +940,82 @@ fn every_command_runs_against_a_real_app_and_a_new_one_without_a_test_fails_this
     assert!(missing.is_empty(), "these commands have no test here: {missing:?}");
     let unknown: Vec<&String> = t.used.difference(&known).collect();
     assert!(unknown.is_empty(), "{unknown:?}");
+}
+
+// ---- documents --------------------------------------------------------------------------------
+
+#[test]
+fn a_file_goes_in_through_the_program_whole_and_comes_out_only_when_the_person_allows_it() {
+    let app = app(true);
+    // several megabytes: a request far over the usual limit, read because the token has been let in
+    let bytes: Vec<u8> = (0..6 * 1024 * 1024).map(|i: usize| ((i * 31 + i / 251) % 251) as u8).collect();
+    let source = app.out("scan.bin");
+    std::fs::write(&source, &bytes).unwrap();
+    let added = ok(&app, &app.write, &["documents", "add", &source, "--transaction-ids", "1,2"]);
+    assert_eq!((added["alreadyThere"].clone(), added["name"].clone(), added["sizeBytes"].clone()), (json!(false), json!("scan.bin"), json!(bytes.len())));
+    let id = id_of(&added);
+    assert_eq!(added["linkCount"], 2);
+
+    // the same file again is not stored twice
+    let again = ok(&app, &app.write, &["documents", "add", &source, "--name", "Another name"]);
+    assert_eq!((again["alreadyThere"].clone(), id_of(&again)), (json!(true), id.clone()));
+    assert_eq!(ok(&app, &app.read, &["documents", "list"])["total"], 1);
+
+    // a read-only token sees the names and the hash, never the bytes
+    let shown = ok(&app, &app.read, &["documents", "show", &id]);
+    assert_eq!(shown["sha256"].as_str().unwrap().len(), 64);
+    assert!(!shown.to_string().contains("data"), "{shown}");
+    assert_eq!(failed(&app, &app.read, &["documents", "get", &id, "--out", &app.out("x.bin")]), (3, "forbidden".into()));
+    assert!(!app.files.path().join("x.bin").exists());
+
+    // out: the person is asked, and the file is exactly what went in
+    let copy = app.out("copy.bin");
+    let before = app.asked();
+    let got = ok(&app, &app.write, &["documents", "get", &id, "--out", &copy]);
+    assert_eq!(got["bytes"], bytes.len());
+    assert_eq!(app.asked(), before + 1);
+    assert!(std::fs::read(&copy).unwrap() == bytes, "the copy is not the file");
+    let text = app.shown.lock().unwrap().last().unwrap().text.clone();
+    assert!(text.contains("scan.bin") && text.contains(&copy) && text.contains("not encrypted"), "{text}");
+
+    // a no writes nothing; a name of another kind is refused before the person is asked; a file that is there is never replaced
+    *app.answer.lock().unwrap() = false;
+    let refused = app.out("refused.bin");
+    assert_eq!(failed(&app, &app.write, &["documents", "get", &id, "--out", &refused]), (3, "denied".into()));
+    assert!(!std::path::Path::new(&refused).exists());
+    *app.answer.lock().unwrap() = true;
+    let asked = app.asked();
+    assert_eq!(failed(&app, &app.write, &["documents", "get", &id, "--out", &app.out("run.sh")]), (2, "invalid_input".into()));
+    assert_eq!(failed(&app, &app.write, &["documents", "get", &id, "--out", &copy]), (1, "file_exists".into()));
+    assert_eq!(app.asked(), asked, "a request that could never work does not ask");
+}
+
+#[test]
+fn a_file_that_cannot_be_read_is_exit_2_and_nothing_reaches_the_app() {
+    let app = app(true);
+    let before = snapshot(&app);
+    let (code, _) = failed(&app, &app.write, &["documents", "add", &app.out("missing.pdf")]);
+    assert_eq!(code, 2);
+    std::fs::write(app.out("empty.pdf"), b"").unwrap();
+    assert_eq!(failed(&app, &app.write, &["documents", "add", &app.out("empty.pdf")]), (2, "usage".into()));
+    assert_eq!(failed(&app, &app.write, &["documents", "add", app.files.path().to_str().unwrap()]), (2, "usage".into()));
+    assert_eq!(failed(&app, &app.write, &["documents", "add"]), (2, "usage".into()));
+    // the app refuses what the program let through, such as an attachment to something that is not there
+    std::fs::write(app.out("a.pdf"), b"%PDF-1.4 x").unwrap();
+    assert_eq!(failed(&app, &app.write, &["documents", "add", &app.out("a.pdf"), "--transaction-ids", "999999"]), (4, "not_found".into()));
+    assert_eq!(snapshot(&app), before);
+}
+
+#[test]
+fn the_plain_form_of_the_document_commands_is_text_a_person_can_read() {
+    let app = app(true);
+    std::fs::write(app.out("Boiler receipt.pdf"), b"%PDF-1.4 the boiler").unwrap();
+    let added = run(&app, &app.write, &["documents", "add", &app.out("Boiler receipt.pdf"), "--date", "2026-10-01"]);
+    assert_eq!(added.code, 0, "{}", added.err);
+    assert!(added.out.contains("Boiler receipt.pdf") && !added.out.starts_with('{') && !added.out.contains('\u{1b}'), "{}", added.out);
+    let list = run(&app, &app.read, &["documents", "list"]);
+    assert_eq!(list.code, 0, "{}", list.err);
+    assert!(list.out.contains("Boiler receipt.pdf") && list.out.contains("2026-10-01"), "{}", list.out);
+    let help = run(&app, "", &["documents", "add", "--help"]);
+    assert!(help.out.contains("usage: meowny documents add <file>") && help.out.contains("--file <path>") && help.out.contains("name of the file"), "{}", help.out);
 }

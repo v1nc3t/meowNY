@@ -906,6 +906,7 @@ fn sample_args(name: &str, category: &str) -> String {
         "transactions.list" => r#"{"limit":5}"#.into(),
         "categories.list" => r#"{"type":"EXPENSE"}"#.into(),
         "recurring.dues" => r#"{"withinDays":10}"#.into(),
+        "documents.show" => r#"{"id":"1"}"#.into(),
         _ => "{}".into(),
     }
 }
@@ -915,6 +916,13 @@ fn a_read_token_uses_every_read_route_over_http_and_gets_what_the_screens_get() 
     let dir = tempfile::tempdir().unwrap();
     let vault = new_vault(dir.path());
     vault.with_conn(|c| crate::seed::run_for(c, "2026-10-14").map_err(|_| AppError::Internal)).unwrap();
+    vault
+        .with_files(|conn, files| {
+            let input = crate::documents::library::NewDocument { name: "receipt.pdf".into(), ..Default::default() };
+            crate::documents::library::add(conn, files, &input, b"%PDF-1.4 receipt", "2026-10-14")?;
+            Ok(())
+        })
+        .unwrap();
     let token = make_token(&vault, Scope::Read);
     let server = ApiServer::start(vault.clone(), routes::ALL, Limits::default()).unwrap();
     let port = server.port();

@@ -302,6 +302,8 @@ export const ro: Messages = {
   'export.pdfWholeMonths': 'un raport acoperă luni întregi, deci nu se poate alege pe zile.',
   'export.noTransactions': 'nicio tranzacție în această selecție.',
   'export.history': 'istoricul modificărilor',
+  'export.documentsListed': 'documentele sunt listate după nume, niciodată fișierele lor. o copie criptată poate include fișierele.',
+  'export.documentsColumn': 'ultima coloană numește documentele fiecărei tranzacții, niciodată fișierele lor. o copie criptată poate include fișierele.',
   'export.warning': 'acest fișier nu este criptat. oricine îl primește îl poate citi.',
   'export.backupLink': 'fă o copie de rezervă criptată',
   'export.go': 'exportă',

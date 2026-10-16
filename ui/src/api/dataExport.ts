@@ -24,6 +24,8 @@ export const Preview = z.object({
   categories: count,
   budgets: count,
   recurring: count,
+  /** Documents listed by name, date, type, size and what they are attached to; never their files. */
+  documents: count,
   /** Entries of the change history; only a JSON file with no limits carries them. */
   history: count,
 })

@@ -28,7 +28,7 @@ const HOME: &str = "/home/you";
 
 /// Outputs that legitimately differ from run to run (the clock, file sizes, timestamps inside files). They are
 /// compared by exit code, by the shape of their JSON and by the frame of their plain output, not word for word.
-const MOVES: &[&str] = &["today", "recurring dues", "budgets history", "recurring end", "export json", "export csv", "export xlsx", "export pdf", "backup create", "schema"];
+const MOVES: &[&str] = &["today", "recurring dues", "budgets history", "recurring end", "documents add", "documents list", "documents show", "documents update", "export json", "export csv", "export xlsx", "export pdf", "backup create", "schema"];
 
 #[derive(Clone, Copy)]
 enum Who {
@@ -181,6 +181,34 @@ fn tour(app: &App) -> (Map<String, Value>, Vec<Value>) {
     t.example("recurring end", write, &format!("meowny recurring end {plan} --yes"), &["recurring", "end", &plan, "--yes"], false, true, None);
     t.example("recurring delete", write, &format!("meowny recurring delete {plan} --yes"), &["recurring", "delete", &plan, "--yes"], true, false, None);
 
+    // Documents: the program reads the file and sends it; a read-only token can look; the person allows a copy out.
+    std::fs::write(path("boiler-receipt.pdf"), b"%PDF-1.4 the boiler was repaired, 180.00 paid").unwrap();
+    let added = t.example(
+        "documents add",
+        write,
+        "meowny documents add /home/you/boiler-receipt.pdf --date 2026-10-01",
+        &["documents", "add", &path("boiler-receipt.pdf"), "--date", "2026-10-01"],
+        false,
+        true,
+        None,
+    );
+    let receipt = Tour::id(&added);
+    t.example("documents list", read, "meowny documents list --q boiler", &["documents", "list", "--q", "boiler"], true, true, None);
+    t.example("documents show", read, &format!("meowny documents show {receipt}"), &["documents", "show", &receipt], true, true, None);
+    t.example("documents update", write, &format!("meowny documents update {receipt} --name \"Boiler repair\" --keep-on-phone"), &["documents", "update", &receipt, "--name", "Boiler repair", "--keep-on-phone"], false, true, None);
+    t.example("documents link", write, &format!("meowny documents link {receipt} --transaction-id {bread}"), &["documents", "link", &receipt, "--transaction-id", &bread], true, false, None);
+    t.example("documents unlink", write, &format!("meowny documents unlink {receipt} --transaction-id {bread}"), &["documents", "unlink", &receipt, "--transaction-id", &bread], true, false, None);
+    t.example(
+        "documents get",
+        write,
+        &format!("meowny documents get {receipt} --out /home/you/boiler-receipt-copy.pdf"),
+        &["documents", "get", &receipt, "--out", &path("boiler-receipt-copy.pdf")],
+        true,
+        false,
+        None,
+    );
+    t.example("documents delete", write, &format!("meowny documents delete {receipt} --yes"), &["documents", "delete", &receipt, "--yes"], true, false, None);
+
     // Files, which the person allows in the app.
     t.example("export json", read, "meowny export json --out /home/you/everything.json", &["export", "json", "--out", &path("everything.json")], true, false, None);
     t.example("export csv", read, "meowny export csv --out /home/you/budget-2026.csv --from 2026-01-01", &["export", "csv", "--out", &path("budget-2026.csv"), "--from", "2026-01-01"], true, false, None);
@@ -216,6 +244,9 @@ fn tour(app: &App) -> (Map<String, Value>, Vec<Value>) {
     t.error("A missing flag", "meowny transactions create --name Bread", write, &["transactions", "create", "--name", "Bread"], &[]);
     t.error("Deleting without --yes", "meowny transactions delete 5", write, &["transactions", "delete", "5"], &[]);
     t.error("Something that is not there", "meowny transactions delete 999999 --yes", write, &["transactions", "delete", "999999", "--yes"], &[]);
+    t.error("A file the program cannot read", "meowny documents add /home/you/missing.pdf", write, &["documents", "add", &path("missing.pdf")], &[]);
+    let lease = document(app, "Lease.pdf", b"%PDF-1.4 the lease", None);
+    t.error("A name for a copy that a system could run", &format!("meowny documents get {lease} --out /home/you/copy.sh"), write, &["documents", "get", &lease, "--out", &path("copy.sh")], &[]);
     t.error("A name that is taken", "meowny categories create --name Groceries --type expense", write, &["categories", "create", "--name", "Groceries", "--type", "expense"], &[]);
     t.error("A command that does not exist", "meowny backup restore", write, &["backup", "restore"], &[]);
     app.vault.lock();

@@ -183,10 +183,16 @@ fn absolute(flag: &str, raw: &str) -> Result<String, CliError> {
     out.to_str().map(str::to_string).ok_or_else(|| CliError::usage(format!("{flag} must be text")))
 }
 
-fn convert(p: &Param, raw: String, stdin: &mut dyn BufRead, stdin_used: &mut bool) -> Result<Value, CliError> {
+/// `file_name` receives the name of a file that was read, for the argument that carries one.
+fn convert(p: &Param, raw: String, stdin: &mut dyn BufRead, stdin_used: &mut bool, file_name: &mut Option<String>) -> Result<Value, CliError> {
     let flag = format!("--{}", p.flag);
     match p.kind.as_str() {
         "path" => absolute(&flag, &raw).map(Value::String),
+        "bytes" => {
+            let (data, name) = crate::file::load(&flag, &raw)?;
+            *file_name = Some(name);
+            Ok(Value::String(data))
+        }
         "ids" => {
             let ids: Vec<&str> = raw.split(',').map(str::trim).collect();
             if ids.iter().any(|id| id.is_empty()) {
@@ -224,6 +230,7 @@ fn fill(command: &Command, tokens: &[Tok], stdin: &mut dyn BufRead) -> Result<Ma
         }
     }
     let (mut body, mut seen, mut stdin_used) = (Map::new(), HashSet::new(), false);
+    let mut file_name: Option<String> = None;
     let mut positionals: Vec<&str> = Vec::new();
     let mut i = 0;
     while i < tokens.len() {
@@ -262,7 +269,7 @@ fn fill(command: &Command, tokens: &[Tok], stdin: &mut dyn BufRead) -> Result<Ma
                     next.text.clone()
                 }
             };
-            convert(param, raw, stdin, &mut stdin_used)?
+            convert(param, raw, stdin, &mut stdin_used, &mut file_name)?
         };
         body.insert(param.name.clone(), value);
     }
@@ -273,16 +280,20 @@ fn fill(command: &Command, tokens: &[Tok], stdin: &mut dyn BufRead) -> Result<Ma
             if body.contains_key(&p.name) {
                 return Err(CliError::usage(format!("the {0} was given twice: as a plain word and as --{0}", p.flag)));
             }
-            body.insert(p.name.clone(), convert(p, one.to_string(), stdin, &mut stdin_used)?);
+            body.insert(p.name.clone(), convert(p, one.to_string(), stdin, &mut stdin_used, &mut file_name)?);
         }
         // The first plain word is the id when there is one; whatever comes after it is the unexpected one.
         (Some(_), [_, extra, ..]) => return Err(CliError::usage(format!("unexpected argument {}", shown(extra)))),
         (None, [first, ..]) => return Err(CliError::usage(format!("unexpected argument {}", shown(first)))),
     }
+    // a file that was read gives its name to the document, unless the person chose another
+    if let Some(name) = file_name {
+        body.entry("name".to_string()).or_insert(Value::String(name));
+    }
     for p in command.params.iter().filter(|p| p.required) {
         if !body.contains_key(&p.name) {
             return Err(CliError::usage(if command.positional().is_some_and(|q| q.name == p.name) {
-                format!("give the id: meowny {} <id>", command.name())
+                format!("give the {0}: meowny {1} <{0}>", p.flag, command.name())
             } else {
                 format!("missing --{}", p.flag)
             }));
@@ -562,5 +573,67 @@ mod tests {
         let message = usage(&format!("status {long}"));
         assert!(message.len() < 100, "{message}");
         assert!(message.contains('"'));
+    }
+
+    // ---- a file to send -------------------------------------------------------------------------------
+
+    fn parsed_in(dir: &std::path::Path, line: &str) -> Result<Parsed, CliError> {
+        let mut words: Vec<String> = line.split_whitespace().map(String::from).collect();
+        for word in &mut words {
+            *word = word.replace("DIR", dir.to_str().unwrap());
+        }
+        parse(&words, &Catalog::embedded(), &mut std::io::empty())
+    }
+
+    fn body_in(dir: &std::path::Path, line: &str) -> Map<String, Value> {
+        match parsed_in(dir, line) {
+            Ok(Parsed::Run(i)) => i.body,
+            other => panic!("{line}: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn a_file_is_read_by_this_program_and_sent_as_text_under_its_own_name() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("Boiler.pdf"), b"%PDF-1.4 hello").unwrap();
+        // as the plain word, and as --file
+        for line in ["documents add DIR/Boiler.pdf", "documents add --file DIR/Boiler.pdf"] {
+            let body = body_in(dir.path(), line);
+            assert_eq!(body["data"], "JVBERi0xLjQgaGVsbG8", "{line}");
+            assert_eq!(body["name"], "Boiler.pdf", "{line}: the name of the file");
+        }
+        // another name, a date, the phone switch and what it is attached to
+        let body = body_in(dir.path(), "documents add DIR/Boiler.pdf --name Receipt --date 2026-10-01 --keep-on-phone --transaction-ids 3,7 --recurring-ids 2");
+        assert_eq!(body["name"], "Receipt");
+        assert_eq!((body["date"].clone(), body["keepOnPhone"].clone()), (json!("2026-10-01"), json!(true)));
+        assert_eq!((body["transactionIds"].clone(), body["recurringIds"].clone()), (json!(["3", "7"]), json!(["2"])));
+    }
+
+    #[test]
+    fn a_file_that_cannot_be_sent_is_a_usage_error_before_anything_is_asked() {
+        let dir = tempfile::tempdir().unwrap();
+        let message = |line: &str| match parsed_in(dir.path(), line) {
+            Err(e) => (e.code, e.message),
+            Ok(_) => panic!("{line} was accepted"),
+        };
+        let (code, text) = message("documents add DIR/missing.pdf");
+        assert_eq!(code, "usage");
+        assert!(text.contains("there is no such file"), "{text}");
+        assert!(message("documents add DIR").1.contains("is not a file"));
+        let (code, text) = message("documents add");
+        assert_eq!((code.as_str(), text.as_str()), ("usage", "give the file: meowny documents add <file>"));
+        std::fs::write(dir.path().join("a.pdf"), b"x").unwrap();
+        assert!(message("documents add DIR/a.pdf --file DIR/a.pdf").1.contains("given twice"));
+    }
+
+    #[test]
+    fn the_other_document_commands_take_an_id_as_the_plain_word() {
+        let dir = tempfile::tempdir().unwrap();
+        let body = body_in(dir.path(), "documents link 5 --transaction-id 9");
+        assert_eq!((body["id"].clone(), body["transactionId"].clone()), (json!("5"), json!("9")));
+        let body = body_in(dir.path(), "documents get 5 --out /tmp/x.pdf");
+        assert_eq!((body["id"].clone(), body["out"].clone()), (json!("5"), json!("/tmp/x.pdf")));
+        assert!(matches!(parsed_in(dir.path(), "documents delete 5"), Err(e) if e.message.contains("--yes")), "deleting asks for --yes");
+        assert!(parsed_in(dir.path(), "documents delete 5 --yes").is_ok());
     }
 }

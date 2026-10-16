@@ -37,18 +37,18 @@ impl Show for Dialog {
     }
 }
 
-struct Rig {
+pub(super) struct Rig {
     _app: tempfile::TempDir,
-    files: tempfile::TempDir,
-    vault: Arc<Vault>,
-    server: ApiServer,
-    read: String,
-    write: String,
-    shown: Arc<Mutex<Vec<Approval>>>,
+    pub(super) files: tempfile::TempDir,
+    pub(super) vault: Arc<Vault>,
+    pub(super) server: ApiServer,
+    pub(super) read: String,
+    pub(super) write: String,
+    pub(super) shown: Arc<Mutex<Vec<Approval>>>,
 }
 
 /// An app with the demo data, and a person who answers `answer` after `delay_ms`.
-fn rig_with(answer: bool, delay_ms: u64, wait_ms: u64, lock_when_open: bool, prompt: bool) -> Rig {
+pub(super) fn rig_with(answer: bool, delay_ms: u64, wait_ms: u64, lock_when_open: bool, prompt: bool) -> Rig {
     let app = tempfile::tempdir().unwrap();
     let vault = new_vault(app.path());
     vault.with_conn(|c| crate::seed::run_for(c, "2026-10-14").map_err(|_| AppError::Internal)).unwrap();
@@ -60,35 +60,35 @@ fn rig_with(answer: bool, delay_ms: u64, wait_ms: u64, lock_when_open: bool, pro
     Rig { _app: app, files: tempfile::tempdir().unwrap(), vault, server, read, write, shown }
 }
 
-fn rig(answer: bool) -> Rig {
+pub(super) fn rig(answer: bool) -> Rig {
     rig_with(answer, 0, 3000, false, true)
 }
 
 impl Rig {
-    fn path(&self, name: &str) -> String {
+    pub(super) fn path(&self, name: &str) -> String {
         self.files.path().join(name).to_str().unwrap().to_string()
     }
 
-    fn post(&self, route: &str, body: Value) -> Reply {
+    pub(super) fn post(&self, route: &str, body: Value) -> Reply {
         call(self.server.port(), Some(&self.write), route, &body.to_string())
     }
 
-    fn asked(&self) -> usize {
+    pub(super) fn asked(&self) -> usize {
         self.shown.lock().unwrap().len()
     }
 
-    fn last(&self) -> String {
+    pub(super) fn last(&self) -> String {
         self.shown.lock().unwrap().last().expect("the person was asked nothing").text.clone()
     }
 
-    fn written(&self) -> Vec<String> {
+    pub(super) fn written(&self) -> Vec<String> {
         let mut names: Vec<String> = std::fs::read_dir(self.files.path()).unwrap().map(|e| e.unwrap().file_name().into_string().unwrap()).collect();
         names.sort();
         names
     }
 }
 
-fn denied(reply: &Reply) -> String {
+pub(super) fn denied(reply: &Reply) -> String {
     assert_eq!((reply.status, reply.code().as_str()), (403, "denied"), "{}", reply.body);
     reply.message()
 }
@@ -98,7 +98,7 @@ fn denied(reply: &Reply) -> String {
 #[test]
 fn exactly_the_routes_that_write_files_ask_the_person() {
     let asking: BTreeSet<&str> = routes::ALL.iter().filter(|r| r.confirm.is_some()).map(|r| r.name).collect();
-    assert_eq!(asking, BTreeSet::from(["export.json", "export.csv", "export.xlsx", "export.pdf", "backup.create"]));
+    assert_eq!(asking, BTreeSet::from(["export.json", "export.csv", "export.xlsx", "export.pdf", "backup.create", "documents.get"]));
     // And the schema says so, so a client can tell the person to look at the app.
     let r = rig(true);
     let schema = call(r.server.port(), Some(&r.read), "schema", "").data();
@@ -140,6 +140,32 @@ fn a_yes_writes_the_file_and_the_person_was_told_what_it_was() {
     assert!(said.contains("JSON") && said.contains("not encrypted") && said.contains("Allow this?"), "{said}");
     assert!(said.contains(&format!("Transactions: {total}")) && said.contains("change history"), "what is in it: {said}");
     assert_eq!(r.shown.lock().unwrap()[0].title, "meowNY: a program wants to write a file");
+}
+
+#[test]
+fn exports_say_in_the_approval_that_documents_are_listed_by_name_and_never_as_files() {
+    let r = rig(true);
+    r.vault
+        .with_conn(|c| {
+            c.execute(
+                "INSERT INTO documents (name, media_type, size_bytes, sha256, document_date) VALUES ('Warranty.pdf', 'application/pdf', 10, ?1, '2026-03-01')",
+                ["ab".repeat(32)],
+            )?;
+            Ok(())
+        })
+        .unwrap();
+    let json_file = r.path("d.json");
+    assert_eq!(r.post("export.json", json!({ "out": json_file })).status, 200);
+    let said = r.last();
+    assert!(said.contains("1 documents, by name") && said.contains("Never the files"), "{said}");
+    let file: Value = serde_json::from_str(&std::fs::read_to_string(&json_file).unwrap()).unwrap();
+    assert_eq!(file["documents"][0]["name"], "Warranty.pdf");
+
+    assert_eq!(r.post("export.csv", json!({ "out": r.path("d.csv") })).status, 200);
+    assert!(r.last().contains("names of the documents attached to each transaction"), "{}", r.last());
+    assert!(!r.last().contains("1 documents, by name"));
+    assert_eq!(r.post("export.xlsx", json!({ "out": r.path("d.xlsx") })).status, 200);
+    assert!(r.last().contains("1 documents, by name"));
 }
 
 #[test]
@@ -274,7 +300,7 @@ fn every_route_writes_a_real_file_of_its_kind() {
     let csv = r.path("t.csv");
     assert_eq!(r.post("export.csv", json!({ "out": csv })).status, 200);
     let text = std::fs::read_to_string(&csv).unwrap();
-    assert!(text.starts_with("\u{feff}date,type,category,name,amount,currency,description\r\n"), "{}", &text[..80]);
+    assert!(text.starts_with("\u{feff}date,type,category,name,amount,currency,description,documents\r\n"), "{}", &text[..80]);
     assert!(!r.last().contains("budget entries"), "a CSV is only transactions: {}", r.last());
     // Excel: a zip.
     let xlsx = r.path("w.xlsx");

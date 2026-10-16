@@ -304,6 +304,8 @@ export const es: Messages = {
   'export.pdfWholeMonths': 'un informe abarca meses completos, por eso no se elige por día.',
   'export.noTransactions': 'no hay transacciones en esta selección.',
   'export.history': 'historial de cambios',
+  'export.documentsListed': 'los documentos se listan por nombre, nunca sus archivos. una copia cifrada puede incluir los archivos.',
+  'export.documentsColumn': 'la última columna nombra los documentos de cada movimiento, nunca sus archivos. una copia cifrada puede incluir los archivos.',
   'export.warning': 'este archivo no está cifrado. quien lo reciba puede leerlo.',
   'export.backupLink': 'hacer una copia de seguridad cifrada',
   'export.go': 'exportar',

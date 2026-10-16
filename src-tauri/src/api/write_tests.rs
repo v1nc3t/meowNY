@@ -28,6 +28,12 @@ const WRITE_ROUTES: &[&str] = &[
     "recurring.pause",
     "recurring.resume",
     "recurring.end",
+    "documents.add",
+    "documents.update",
+    "documents.delete",
+    "documents.link",
+    "documents.unlink",
+    "documents.get",
 ];
 
 const UUID: &str = "123e4567-e89b-12d3-a456-426614174000";
@@ -479,6 +485,12 @@ fn a_locked_app_refuses_every_write_and_nothing_changes() {
         ("recurring.pause", json!({ "id": "1" })),
         ("recurring.resume", json!({ "id": "1" })),
         ("recurring.end", json!({ "id": "1" })),
+        ("documents.add", json!({ "name": "a.pdf", "data": "JVBERi0xLjQK" })),
+        ("documents.update", json!({ "id": "1", "name": "X" })),
+        ("documents.delete", json!({ "id": "1" })),
+        ("documents.link", json!({ "id": "1", "transactionId": "1" })),
+        ("documents.unlink", json!({ "id": "1", "transactionId": "1" })),
+        ("documents.get", json!({ "id": "1", "out": "/tmp/x.pdf" })),
     ];
     let mut covered: Vec<&str> = cases.iter().map(|(name, _)| *name).collect();
     covered.sort_unstable();

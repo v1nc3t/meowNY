@@ -17,9 +17,9 @@ pub const API_VERSION: u64 = 1;
 pub struct Param {
     /// As in the request body, camelCase.
     pub name: String,
-    /// `--kebab-case`, without the dashes.
+    /// `--kebab-case`, without the dashes. The argument that carries the bytes of a file is `--file`, whatever it is called in the body.
     pub flag: String,
-    /// string, integer, boolean, date, month, year, id, money or uuid.
+    /// string, integer, boolean, date, month, year, id, money, uuid, ids, path or bytes.
     pub kind: String,
     pub required: bool,
     pub nullable: bool,
@@ -68,9 +68,9 @@ impl Command {
         self.route.is_some() && matches!(self.verb(), "delete" | "remove" | "end")
     }
 
-    /// The `id` argument, which may be given without a flag.
+    /// The `id` argument, or for a command that sends a file the file, which may be given without a flag.
     pub fn positional(&self) -> Option<&Param> {
-        self.params.iter().find(|p| p.name == "id" && p.required)
+        self.params.iter().find(|p| p.name == "id" && p.required).or_else(|| self.params.iter().find(|p| p.kind == "bytes" && p.required))
     }
 }
 
@@ -117,10 +117,11 @@ impl Catalog {
             let mut params = Vec::new();
             for p in route.get("params").and_then(Value::as_array).ok_or("a route has no params")? {
                 let pname = text(p, "name")?;
+                let kind = text(p, "type")?;
                 params.push(Param {
-                    flag: kebab(&pname),
+                    flag: if kind == "bytes" { "file".to_string() } else { kebab(&pname) },
                     name: pname,
-                    kind: text(p, "type")?,
+                    kind,
                     required: p.get("required").and_then(Value::as_bool).unwrap_or(false),
                     nullable: p.get("nullable").and_then(Value::as_bool).unwrap_or(false),
                     summary: text(p, "summary")?,
@@ -130,6 +131,13 @@ impl Catalog {
                         .map(|v| v.iter().filter_map(Value::as_str).map(str::to_string).collect())
                         .unwrap_or_default(),
                 });
+            }
+            // A command that sends a file reads it itself, and keeps it under the name of the file unless told another.
+            if params.iter().any(|p| p.kind == "bytes") {
+                for p in params.iter_mut().filter(|p| p.name == "name") {
+                    p.required = false;
+                    p.summary = "The name to keep it under, up to 120 characters. The name of the file if left out.".into();
+                }
             }
             // `schema` is the one route that is also answered here, without the app.
             let action = if name == "schema" { Action::Schema } else { Action::Route };
@@ -223,7 +231,7 @@ mod tests {
         let destructive: Vec<String> = catalog.commands.iter().filter(|c| c.destructive()).map(Command::name).collect();
         assert_eq!(
             destructive,
-            ["categories delete", "transactions delete", "budgets remove", "recurring delete", "recurring end"]
+            ["categories delete", "transactions delete", "budgets remove", "recurring delete", "recurring end", "documents delete"]
         );
         assert!(!catalog.find(&["login"]).unwrap().destructive());
         assert!(!catalog.find(&["logout"]).unwrap().destructive());
@@ -250,7 +258,7 @@ mod tests {
     fn the_commands_that_write_files_are_the_ones_the_person_must_allow() {
         let catalog = Catalog::embedded();
         let asking: Vec<String> = catalog.commands.iter().filter(|c| c.confirm).map(Command::name).collect();
-        assert_eq!(asking, ["export json", "export csv", "export xlsx", "export pdf", "backup create"]);
+        assert_eq!(asking, ["export json", "export csv", "export xlsx", "export pdf", "backup create", "documents get"]);
         let verbs: Vec<&str> = catalog.verbs("export").iter().map(|c| c.verb()).collect();
         assert_eq!(verbs, ["preview", "json", "csv", "xlsx", "pdf"]);
         assert_eq!(catalog.verbs("backup").iter().map(|c| c.verb()).collect::<Vec<_>>(), ["schedule", "create"]);
@@ -279,5 +287,30 @@ mod tests {
         assert!(Catalog::from_json(r#"{"api":2,"routes":[]}"#).is_err(), "another API version");
         assert!(Catalog::from_json(r#"{"api":1}"#).is_err());
         assert!(Catalog::from_json(r#"{"api":1,"routes":[{"name":"x"}]}"#).is_err());
+    }
+
+    #[test]
+    fn the_document_commands_follow_the_routes_and_the_file_is_the_plain_word() {
+        let catalog = Catalog::embedded();
+        let verbs: Vec<&str> = catalog.verbs("documents").iter().map(|c| c.verb()).collect();
+        assert_eq!(verbs, ["list", "show", "add", "update", "delete", "link", "unlink", "get"]);
+        let scopes: Vec<(&str, &str)> = catalog.verbs("documents").iter().map(|c| (c.verb(), c.scope.as_deref().unwrap())).collect();
+        assert_eq!(
+            scopes,
+            [("list", "read"), ("show", "read"), ("add", "write"), ("update", "write"), ("delete", "write"), ("link", "write"), ("unlink", "write"), ("get", "write")],
+            "a read-only token can list and show, and nothing else"
+        );
+        let add = catalog.find(&["documents", "add"]).unwrap();
+        // the bytes are given as a path: the flag is --file, it may be the plain word, and the name has a default
+        let file = add.params.iter().find(|p| p.kind == "bytes").unwrap();
+        assert_eq!((file.name.as_str(), file.flag.as_str(), file.required), ("data", "file", true));
+        assert_eq!(add.positional().map(|p| p.flag.as_str()), Some("file"));
+        let name = add.params.iter().find(|p| p.name == "name").unwrap();
+        assert!(!name.required && name.summary.contains("name of the file"));
+        // the other commands keep the id as the plain word
+        assert_eq!(catalog.find(&["documents", "show"]).unwrap().positional().unwrap().name, "id");
+        assert_eq!(catalog.find(&["documents", "get"]).unwrap().positional().unwrap().name, "id");
+        let flags: Vec<&str> = add.params.iter().map(|p| p.flag.as_str()).collect();
+        assert_eq!(flags, ["file", "name", "date", "keep-on-phone", "transaction-ids", "recurring-ids"]);
     }
 }

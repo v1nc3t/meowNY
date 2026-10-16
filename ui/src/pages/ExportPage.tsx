@@ -319,6 +319,12 @@ function ExportForm({ today, settings, categories }: { today: Today; settings: M
                     <Row label={t('nav.recurring')} value={String(preview.recurring)} />
                   </>
                 )}
+                {format !== 'pdf' && preview.documents > 0 && (
+                  <>
+                    {format !== 'csv' && <Row label={t('nav.documents')} value={String(preview.documents)} />}
+                    <p className="hint">{t(format === 'csv' ? 'export.documentsColumn' : 'export.documentsListed')}</p>
+                  </>
+                )}
                 {format === 'json' && preview.history > 0 && <Row label={t('export.history')} value={String(preview.history)} />}
               </div>
             )

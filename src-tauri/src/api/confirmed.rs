@@ -27,14 +27,14 @@ const NOT_ENCRYPTED: &str = "The file is not encrypted: whoever gets it can read
 const PAGES: &[&str] = &["A4", "LETTER"];
 
 /// The path argument, checked, and the rest of the arguments.
-fn split(args: &Map<String, Value>, extension: &str) -> Result<(PathBuf, Map<String, Value>), ApiError> {
+pub(super) fn split(args: &Map<String, Value>, extension: &str) -> Result<(PathBuf, Map<String, Value>), ApiError> {
     let mut rest = args.clone();
     let out = rest.remove("out").and_then(|v| v.as_str().map(str::to_string)).ok_or(ApiError::INVALID_INPUT)?;
     Ok((checked(&out, extension)?, rest))
 }
 
 /// What the person reads. It names the token, says what is about to be written and where, and ends with the question.
-fn approval(ctx: &Ctx, what: &str, path: &Path, details: Vec<String>) -> Approval {
+pub(super) fn approval(ctx: &Ctx, what: &str, path: &Path, details: Vec<String>) -> Approval {
     let who = ctx
         .vault
         .with_conn(|c| tokens::name_of(c, ctx.grant.id))
@@ -56,6 +56,11 @@ fn counts(p: &Preview, with_other_records: bool) -> Vec<String> {
     let mut lines = vec![format!("Transactions: {}{span}", p.transactions), format!("Income {} and expenses {} in them", p.income, p.expense)];
     if with_other_records {
         lines.push(format!("Also {} categories, {} budget entries and {} recurring items", p.categories, p.budgets, p.recurring));
+        if p.documents > 0 {
+            lines.push(format!("And {} documents, by name, date, type, size and what they are attached to. Never the files themselves", p.documents));
+        }
+    } else if p.documents > 0 {
+        lines.push("A column with the names of the documents attached to each transaction. Never the files themselves".to_string());
     }
     lines
 }

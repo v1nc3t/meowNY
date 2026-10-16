@@ -317,6 +317,8 @@ export const en = {
   'export.pdfWholeMonths': 'a report covers whole months, so there is no choice by day.',
   'export.noTransactions': 'no transactions in this selection.',
   'export.history': 'change history',
+  'export.documentsListed': 'documents are listed by name, never their files. an encrypted backup can include the files.',
+  'export.documentsColumn': 'the last column names the documents of each transaction, never their files. an encrypted backup can include the files.',
   'export.warning': 'this file is not encrypted. anyone who gets it can read it.',
   'export.backupLink': 'make an encrypted backup',
   'export.go': 'export',
