@@ -39,6 +39,7 @@ scan the QR code
  digests: which rows each side has (id, stamp) ◀──▶
  rows: the rows the other side lacks or has older ◀──▶
  done: hash of the final state                ◀──▶
+ files: the documents' files, if any move     ◀──▶   (protocol 3, `docs/documents-design.md` section 9)
  close.  The listener closes and the OTS is gone.
 ```
 
@@ -137,7 +138,7 @@ There is no Diffie-Hellman step, so there is no forward secrecy beyond the OTS. 
 
 ## 8. What is sent, and how the two sides end up equal
 
-Messages are JSON objects with a `t` field, each sealed into one frame of at most 64 KiB, so a long list is cut into several messages and the last one of a table is marked `last`. Money is an integer in minor units, as in the database. The message types are `hello`, `currency`, `hashes`, `digest`, `rows`, `done` and `error`.
+Messages are JSON objects with a `t` field, each sealed into one frame of at most 64 KiB, so a long list is cut into several messages and the last one of a table is marked `last`. Money is an integer in minor units, as in the database. The message types are `hello`, `currency`, `hashes`, `digest`, `rows`, `done` and `error`; protocol 3 adds `have`, `need`, `file`, `chunk` and `stored` for the documents' files (see below, step 8).
 
 1. **`hello`** from both sides: device id and name, app version, schema version, protocol `3` (`2` before documents: an app that speaks 2 is told to update), the clock (section 10), the currency generation (section 11), when this device last synced with the other one (`since`) and, in the desktop's, which way the sync goes (`mode`).
    - Different schema versions: the sync stops with "update the phone app" or "update the desktop app".
@@ -149,6 +150,8 @@ Messages are JSON objects with a `t` field, each sealed into one frame of at mos
    **Which way, and conflicts.** The desktop chooses before it shows the code: both ways, phone to computer, or computer to phone. In a one-way sync the device that only receives sends empty `rows` messages and refuses any rows from the other, so nothing goes back, and the two are not meant to end equal (`done` is not compared; the summary says the sync went one way). Before the rows, both sides look for **conflicts**: a row (or a deletion) that is on both devices, differs, and was changed on both after their last sync (the later of the two `since` values in the hellos; none when they never met, so a first copy has none). The device that takes the changes in reviews them (the desktop when both ways), up to 200 at a time, the rest being settled by the newer change and counted. The other device sends its version of each conflicting row (`rows` messages for just those ids) and waits; the reviewer shows both versions side by side, with the fields that differ, and the person chooses for each which is true. The choice is carried out as stamps only: the version meant to win gets a fresh stamp, or the reviewer's own version gets the oldest possible stamp so the other device's version, which the ordinary exchange brings in next, is the newer. The reviewer then sends `reviewed`, both compare their lists again from `hashes`, and the rest goes on as before. Giving up the review ends the sync with nothing changed. A change that only one device made is never a conflict and is taken without asking.
 6. The receiver collects everything, validates it (section 12), and applies it in one database transaction. It counts what it did for the summary: rows added, rows taken over from the other device, of those how many had also been changed here since the last sync (a change of yours that was replaced by a newer one there), rows deleted, categories merged, and duplicates removed. (A row that is newer here is never sent, so the other device is the one that counts it as replaced.)
 7. **`done`**: each side sends a hash of its final list of `(table, sync_id, stamp, deleted)`. If they are equal the sync is finished and both show a summary. If not, both say "differences remain, sync again", and nothing is thrown away.
+
+8. **The files of the documents** move after `done`, so the rows are finished and checked first and a connection that breaks while a file moves costs files, never the sync. The steps (`have`, `need`, `file` and `chunk`, `stored`), who may get which file, the budget and the resuming are in `docs/documents-design.md`, section 9. The sync reports them in their own lines ("documents received", "sent", "could not be moved", "waiting for the next sync", "taken off this phone"); a broken connection there is shown as a note, not as a failed sync.
 
 When both sides have a lot to send (the lists of a big database are megabytes), they must not both write at once, or neither would ever read. So the desktop always speaks first and the phone listens, and then the other way round: the lists, then the rows, then `done`. Each side works out what the other lacks from the lists, before it applies anything of what arrives.
 

@@ -1,4 +1,4 @@
-import { checkCodeText, cleanDigits, clockGapText, countdownText, nothingChanged, reasonKey, summaryLines, type Choice, type Status } from '../api/sync'
+import { checkCodeText, cleanDigits, clockGapText, countdownText, filesLines, nothingChanged, reasonKey, summaryLines, type Choice, type Status } from '../api/sync'
 import { useState, type FormEvent } from 'react'
 import { useT } from '../i18n/context'
 import QrCode from './QrCode'
@@ -150,15 +150,20 @@ export default function SyncStatusPanel({
       <div className="panel sync-panel">
         <p role="status">{t(status.purpose === 'pair' ? 'sync.donePair' : 'sync.doneSync', { peer: status.peer })}</p>
         {status.oneWay ? <p className="hint">{t('sync.oneWayDone')}</p> : null}
-        {nothingChanged(status.summary) ? (
+        {nothingChanged(status.summary) && filesLines(status.files).length === 0 ? (
           <p className="hint">{t('sync.sumNothing')}</p>
         ) : (
           <div className="sync-summary">
-            {summaryLines(status.summary).map((line) => (
+            {[...summaryLines(status.summary), ...filesLines(status.files)].map((line) => (
               <p key={line.key}>{t(line.key, { count: line.count })}</p>
             ))}
           </div>
         )}
+        {status.files.interrupted ? (
+          <p className="warning" role="note">
+            {t('sync.filesInterrupted')}
+          </p>
+        ) : null}
         {status.warnings.map((warning) => (
           <p className="warning" role="note" key={warning.kind}>
             {t('sync.warnClock', { gap: clockGapText(warning.seconds) })}

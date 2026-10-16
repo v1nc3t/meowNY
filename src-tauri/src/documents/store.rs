@@ -215,6 +215,18 @@ impl Store {
         }
     }
 
+    /// How many bytes of the file of this document are already here as the good start of an unfinished transfer, which is where the
+    /// next one can begin (a multiple of the chunk size, and less than `size`), or 0. Only looks: nothing is created, cut or removed.
+    pub fn resume_offset(&self, keys: &DocKeys, id: &DocId, size: u64) -> u64 {
+        let part = self.path(keys, id, "part");
+        let Ok(meta) = fs::metadata(&part) else { return 0 };
+        let Ok(file) = File::open(&part) else { return 0 };
+        match read_prefix(file, meta.len(), keys, id, |_| {}) {
+            Ok((_, chunks)) if meta.is_file() && chunks * (CHUNK_SIZE as u64) < size => chunks * CHUNK_SIZE as u64,
+            _ => 0,
+        }
+    }
+
     /// Compares the folder with the rows: `docs` is every document with its size. Removes what no row names and what a crash
     /// left, and reports the rows that have no file or a file of the wrong length. Only things that are ours are touched.
     pub fn check(&self, keys: &DocKeys, docs: &[(DocId, u64)]) -> Result<Check, DocError> {

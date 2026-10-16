@@ -15,6 +15,7 @@ use serde_json::Value;
 use super::crypto::MAX_PLAINTEXT;
 use super::stamp::Stamp;
 use crate::documents::names::{is_clean_name, MediaType};
+use crate::documents::seal::CHUNK_SIZE;
 use crate::documents::MAX_DOCUMENT_BYTES;
 use crate::money::MAX_MINOR;
 use crate::{categories, transactions, vault};
@@ -27,6 +28,10 @@ pub const MAX_ENTRIES_PER_MESSAGE: usize = 400;
 pub const MAX_ROWS_PER_MESSAGE: usize = 200;
 /// A message under construction is closed when it passes this size, so every message fits one frame.
 pub const SOFT_MESSAGE_BYTES: usize = 40 * 1024;
+/// Bytes of a file in one `chunk` message. As base64url text they are `MAX_CHUNK_TEXT` characters, which with the rest of the
+/// message fits one frame.
+pub const CHUNK_BYTES: usize = 24 * 1024;
+pub const MAX_CHUNK_TEXT: usize = CHUNK_BYTES / 3 * 4;
 /// More than this many rows of one table in a sync is not a budget of one person.
 pub const MAX_ROWS_PER_TABLE: usize = 2_000_000;
 
@@ -102,6 +107,16 @@ pub enum Message {
     Digest(DigestMessage),
     Rows(RowsMessage),
     Done(DoneMessage),
+    /// The documents whose files this device holds.
+    Have(HaveMessage),
+    /// The files this device wants, and from where in each.
+    Need(NeedMessage),
+    /// The start of one file, or the word that it will not be sent.
+    File(FileMessage),
+    /// A piece of the file that was just announced.
+    Chunk(ChunkMessage),
+    /// The documents whose files the sender now holds, whole and checked.
+    Stored(StoredMessage),
     Error(ErrorMessage),
 }
 
@@ -168,6 +183,33 @@ impl Message {
                     Ok(())
                 } else {
                     Err(WireError::Invalid("hash"))
+                }
+            }
+            Message::Have(m) => ids_ok(&m.ids),
+            Message::Stored(m) => ids_ok(&m.ids),
+            Message::Need(m) => {
+                if m.files.len() > MAX_ENTRIES_PER_MESSAGE || !m.files.iter().all(|(id, offset)| sync_id_ok(id) && offset_ok(*offset)) {
+                    return Err(WireError::Invalid("request for files"));
+                }
+                Ok(())
+            }
+            Message::File(m) => {
+                let ok = if m.skipped {
+                    m.offset == 0 && m.size == 0
+                } else {
+                    (1..=MAX_DOCUMENT_BYTES).contains(&m.size) && m.offset < m.size && offset_ok(m.offset)
+                };
+                if sync_id_ok(&m.id) && ok {
+                    Ok(())
+                } else {
+                    Err(WireError::Invalid("file"))
+                }
+            }
+            Message::Chunk(m) => {
+                if !m.data.is_empty() && m.data.len() <= MAX_CHUNK_TEXT && m.data.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_') {
+                    Ok(())
+                } else {
+                    Err(WireError::Invalid("piece of a file"))
                 }
             }
             Message::Error(e) => {
@@ -315,6 +357,50 @@ pub struct DoneMessage {
     pub hash: String,
 }
 
+/// `ids` are `sync_id`s of documents. A list longer than one message is sent in several, the last marked.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct HaveMessage {
+    pub ids: Vec<String>,
+    pub last: bool,
+}
+
+/// `[sync_id, offset]`: the sender of this message has the first `offset` bytes of the file already (a whole number of sealed
+/// chunks) and wants the rest.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct NeedMessage {
+    pub files: Vec<(String, u64)>,
+    pub last: bool,
+}
+
+/// What comes before the pieces of a file: which, how big it is in all, and where the pieces start. `skipped` says there will be
+/// no pieces, because the file is not here or is not for the one who asked.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct FileMessage {
+    pub id: String,
+    pub offset: u64,
+    pub size: u64,
+    #[serde(default)]
+    pub skipped: bool,
+}
+
+/// Up to `CHUNK_BYTES` of the file in base64url; `last` on the final one.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ChunkMessage {
+    pub data: String,
+    pub last: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct StoredMessage {
+    pub ids: Vec<String>,
+    pub last: bool,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ErrorMessage {
@@ -324,6 +410,19 @@ pub struct ErrorMessage {
 
 fn is_hex(text: &str, length: usize) -> bool {
     text.len() == length && text.bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+}
+
+fn ids_ok(ids: &[String]) -> Result<(), WireError> {
+    if ids.len() <= MAX_ENTRIES_PER_MESSAGE && ids.iter().all(|id| sync_id_ok(id)) {
+        Ok(())
+    } else {
+        Err(WireError::Invalid("list of documents"))
+    }
+}
+
+/// Files start at a whole sealed chunk, and no file is bigger than the limit.
+fn offset_ok(offset: u64) -> bool {
+    offset.is_multiple_of(CHUNK_SIZE as u64) && offset < MAX_DOCUMENT_BYTES
 }
 
 fn is_hash(text: &str) -> bool {

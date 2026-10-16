@@ -409,3 +409,26 @@ fn with_no_folder_every_row_is_missing() {
     assert_eq!(report.missing, vec![id(1), id(2)]);
     assert!(!store.dir().exists(), "checking does not make the folder");
 }
+
+#[test]
+fn how_far_an_unfinished_transfer_got_can_be_asked_without_touching_it() {
+    let (_dir, store) = store();
+    let keys = doc_keys();
+    let plain = pattern(3 * CHUNK_SIZE + 1000);
+    assert_eq!(store.resume_offset(&keys, &id(1), plain.len() as u64), 0, "nothing yet");
+    assert!(!store.dir().exists(), "asking made no folder");
+    {
+        let mut incoming = store.begin_incoming(&keys, &id(1), plain.len() as u64).unwrap();
+        incoming.write(&plain[..2 * CHUNK_SIZE + CHUNK_SIZE / 2]).unwrap();
+    }
+    let part = store.dir().join(format!("{}.part", keys.stem(&id(1))));
+    let before = fs::read(&part).unwrap();
+    assert_eq!(store.resume_offset(&keys, &id(1), plain.len() as u64), 2 * CHUNK_SIZE as u64);
+    assert_eq!(fs::read(&part).unwrap(), before, "the file was left as it was");
+    // a row that now says the file is smaller than what is kept, a file that is not ours, and another document: no start
+    assert_eq!(store.resume_offset(&keys, &id(1), CHUNK_SIZE as u64), 0);
+    assert_eq!(store.resume_offset(&keys, &id(2), plain.len() as u64), 0);
+    fs::write(&part, b"not a sealed file").unwrap();
+    assert_eq!(store.resume_offset(&keys, &id(1), plain.len() as u64), 0);
+    assert!(part.exists(), "even a bad one is left for the transfer to deal with");
+}
