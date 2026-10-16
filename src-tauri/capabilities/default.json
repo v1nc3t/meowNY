@@ -85,6 +85,7 @@
     "allow-unlink-document",
     "allow-document-links",
     "allow-document-library-size",
+    "allow-document-counts",
     "allow-check-documents",
     "allow-read-document-image",
     "allow-open-document",

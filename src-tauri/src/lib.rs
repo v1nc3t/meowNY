@@ -276,6 +276,7 @@ pub fn run() {
             commands::unlink_document,
             commands::document_links,
             commands::document_library_size,
+            commands::document_counts,
             commands::check_documents,
             commands::read_document_image,
             commands::open_document,

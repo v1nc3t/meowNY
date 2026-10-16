@@ -16,6 +16,7 @@ const items = [
   { to: '/app/categories', label: 'nav.categories', icon: 'categories', page: 'categories', shortcut: 'goCategories' },
   { to: '/app/budgets', label: 'nav.budgets', icon: 'budgets', page: 'budgets', shortcut: 'goBudgets' },
   { to: '/app/recurring', label: 'nav.recurring', icon: 'recurring', page: 'recurring', shortcut: 'goRecurring' },
+  { to: '/app/documents', label: 'nav.documents', icon: 'documents', page: 'documents', shortcut: 'goDocuments' },
   { to: '/app/export', label: 'nav.export', icon: 'export', page: 'export', shortcut: 'goExport' },
   { to: '/app/settings', label: 'nav.settings', icon: 'settings', page: 'settings', shortcut: 'goSettings' },
 ] as const satisfies readonly { to: string; label: string; icon: string; page: PageName; shortcut: ShortcutId }[]
@@ -38,6 +39,14 @@ export default function AppSidebar({
           meowny
         </Link>
         <nav className="phone-actions" aria-label={t('nav.settings')}>
+          <NavLink
+            to="/app/documents"
+            aria-label={t('nav.documents')}
+            onPointerDown={() => preloadPage('documents')}
+            className={({ isActive }) => (isActive ? 'phone-action active' : 'phone-action')}
+          >
+            <Icon name="documents" className="tab-icon" />
+          </NavLink>
           <NavLink
             to="/app/sync"
             aria-label={t('nav.sync')}

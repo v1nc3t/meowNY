@@ -46,6 +46,7 @@ fn harness() -> Harness {
             commands::unlink_document,
             commands::document_links,
             commands::document_library_size,
+            commands::document_counts,
             commands::check_documents,
             commands::read_document_image,
             commands::document_upload_begin,
@@ -133,7 +134,15 @@ fn a_file_goes_in_in_pieces_and_comes_back_listed_linked_and_readable() {
     assert_eq!((links[0]["kind"].as_str(), links[0]["id"].as_str(), links[0]["name"].as_str()), (Some("transaction"), Some(tx.as_str()), Some("Weekly shop")));
     let found = h.call("list_documents", json!({ "filter": { "transactionId": tx } })).unwrap();
     assert_eq!(found["total"], 1);
-    assert_eq!(h.call("document_library_size", json!({})).unwrap(), json!({ "count": 1, "bytes": PDF.len() }));
+    assert_eq!(
+        h.call("document_library_size", json!({})).unwrap(),
+        json!({ "count": 1, "bytes": PDF.len(), "heldCount": 1, "heldBytes": PDF.len() })
+    );
+    // the mark on the list of transactions
+    let counts = h.call("document_counts", json!({ "kind": "transaction", "ids": [tx, "999"] })).unwrap();
+    assert_eq!(counts, json!({ tx.clone(): 1 }));
+    assert_eq!(h.call("document_counts", json!({ "kind": "recurring", "ids": [tx] })).unwrap(), json!({}));
+    assert_eq!(h.code("document_counts", json!({ "kind": "transaction", "ids": ["x"] })), "invalid_input");
 }
 
 #[test]

@@ -33,6 +33,7 @@ const SAME_AS_ENGLISH = new Set([
   'es keys.groupGeneral', 'ro keys.groupGeneral', 'fr keys.groupActions', 'fr settings.notifications',
   'de nav.sync', 'de phone.passphrase', 'de rec.confirmTitle', 'es rec.confirmTitle', 'fr rec.confirmTitle', 'it rec.confirmTitle', 'pt rec.confirmTitle', 'ro rec.confirmTitle', 'es common.no', 'it common.no',
   'de sync.table.budgets', 'de sync.field.name', 'de sync.field.locale', 'fr sync.table.transactions', 'fr sync.table.budgets', 'fr sync.field.date', 'fr sync.field.description', 'fr sync.field.type', 'fr sync.field.locale', 'it sync.table.budgets', 'ro sync.field.locale',
+  'fr nav.documents', 'fr docs.title', 'fr docs.kindImage', 'fr docs.kindTransaction',
 ])
 
 test('no translation is empty or an untranslated copy of the English text', () => {

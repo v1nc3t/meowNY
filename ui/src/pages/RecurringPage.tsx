@@ -1,5 +1,7 @@
 import { Fragment, useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import AddCategoryModal from '../components/AddCategoryModal'
+import AttachArea from '../components/AttachArea'
+import ClipMark from '../components/ClipMark'
 import DatePicker from '../components/DatePicker'
 import Dropdown from '../components/Dropdown'
 import ConfirmModal from '../components/ConfirmModal'
@@ -9,6 +11,8 @@ import { errorText } from '../api/invoke'
 import { INTERVAL_UNITS, recurring as recurringApi, type IntervalUnit, type Recurring } from '../api/recurring'
 import { useToday, type Today } from '../api/today'
 import { amountString, formatDate, formatMoney } from '../lib/money'
+import { useAttachments, type Attachments } from '../hooks/useAttachments'
+import { useClipCounts } from '../hooks/useClipCounts'
 import { useMoneySettings, type MoneySettings } from '../hooks/useMoneySettings'
 import { useNotice } from '../hooks/useNotice'
 import { useT } from '../i18n/context'
@@ -61,6 +65,9 @@ function RecurringView({ settings, now }: { settings: MoneySettings; now: Today 
   const [pending, setPending] = useState(false)
   const [draftMessage, setDraftMessage] = useNotice()
   const [message, setMessage] = useNotice()
+  // The documents of the item being edited are stored and linked at once; those of one being made wait for it to be saved.
+  const attachments = useAttachments(editing ? { kind: 'recurring', id: editing.id } : null)
+  const clips = useClipCounts('recurring', items?.map((item) => item.id) ?? [], reload)
   const categoryNames = useMemo(() => new Map(categories.map((category) => [category.id, category.name])), [categories])
 
   // One group per category, in the category list's order; items of a deleted category go last.
@@ -90,6 +97,8 @@ function RecurringView({ settings, now }: { settings: MoneySettings; now: Today 
   }, [reload, setMessage])
 
   function closeModals() {
+    // documents may have been attached or removed in the dialog, so the marks on the list are asked for again
+    if (adding || editing) setReload((value) => value + 1)
     setAdding(false)
     setEditing(null)
     setPaying(null)
@@ -99,12 +108,14 @@ function RecurringView({ settings, now }: { settings: MoneySettings; now: Today 
   function openAdd() {
     setDraftMessage('')
     closeModals()
+    attachments.reset()
     setAdding(true)
   }
 
   function openEdit(item: Recurring) {
     setDraftMessage('')
     closeModals()
+    attachments.reset()
     setEditing(item)
   }
 
@@ -178,9 +189,14 @@ function RecurringView({ settings, now }: { settings: MoneySettings; now: Today 
       description: description || null,
     }
     setPending(true)
+    // what could not be attached to a new item: it is saved all the same, and the notice names the files
+    let notAttached: string[] = []
     try {
       if (editing) await recurringApi.update(editing.id, body)
-      else await recurringApi.create(body)
+      else {
+        const created = await recurringApi.create(body)
+        notAttached = await attachments.commit({ kind: 'recurring', id: created.id })
+      }
     } catch (failure) {
       setDraftMessage(errorText(failure))
       return
@@ -188,7 +204,7 @@ function RecurringView({ settings, now }: { settings: MoneySettings; now: Today 
       setPending(false)
     }
     setDraftMessage('')
-    setMessage('')
+    setMessage(notAttached.length > 0 ? t('docs.attachFailed', { names: notAttached.join(', ') }) : '')
     closeModals()
     setReload((value) => value + 1)
   }
@@ -252,6 +268,7 @@ function RecurringView({ settings, now }: { settings: MoneySettings; now: Today 
           categories={categories}
           pending={pending}
           message={draftMessage}
+          attachments={attachments}
           onSubmit={(event) => void onSave(event)}
           onClose={closeModals}
           onCategoryAdded={(category) => setCategories((current) => [...current, category])}
@@ -300,6 +317,7 @@ function RecurringView({ settings, now }: { settings: MoneySettings; now: Today 
                           {' \u00b7 '}
                           {everyText(item)}
                         </p>
+                        {clips[item.id] ? <ClipMark count={clips[item.id] ?? 0} onClick={() => openEdit(item)} /> : null}
                       </div>
                       <div className="rec-due">
                         <span className="rec-badge" data-status={status}>
@@ -358,6 +376,7 @@ function RecurringModal({
   categories,
   pending,
   message,
+  attachments,
   onSubmit,
   onClose,
   onCategoryAdded,
@@ -367,6 +386,7 @@ function RecurringModal({
   categories: Category[]
   pending: boolean
   message: string
+  attachments: Attachments
   onSubmit: (event: FormEvent<HTMLFormElement>) => void
   onClose: () => void
   onCategoryAdded: (category: Category) => void
@@ -421,6 +441,7 @@ function RecurringModal({
             <input name="description" maxLength={255} defaultValue={item?.description ?? ''} autoComplete="off" />
           </label>
         </form>
+        <AttachArea attachments={attachments} />
       </Modal>
       {addingCategory ? (
         <AddCategoryModal

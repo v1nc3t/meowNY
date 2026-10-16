@@ -162,8 +162,12 @@ pub struct LinkView {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Size {
+    /// All the documents there are, and what their files add up to.
     pub count: u32,
     pub bytes: u64,
+    /// The ones whose file is on this device. On the phone, that is what it holds.
+    pub held_count: u32,
+    pub held_bytes: u64,
 }
 
 #[derive(Clone, Copy)]
@@ -477,11 +481,48 @@ pub fn list(conn: &Connection, files: &Files, filter: &Filter) -> Result<Page, A
     Ok(Page { documents: with_presence(rows, files)?, total, limit, offset })
 }
 
-/// How many documents there are and how much they hold, for the page that lists them.
-pub fn library_size(conn: &Connection) -> Result<Size, AppError> {
-    Ok(conn.query_row("SELECT count(*), COALESCE(sum(size_bytes), 0) FROM documents", [], |r| {
-        Ok(Size { count: r.get(0)?, bytes: r.get::<_, i64>(1)? as u64 })
-    })?)
+/// How many documents there are and how much they hold, and how many of them this device holds the file of, for the page that
+/// lists them. The folder is looked at once.
+pub fn library_size(conn: &Connection, files: &Files) -> Result<Size, AppError> {
+    let present: HashSet<String> = files.store.present_stems()?;
+    let mut stmt = conn.prepare("SELECT sync_id, size_bytes FROM documents")?;
+    let rows = stmt.query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)? as u64)))?.collect::<Result<Vec<_>, _>>()?;
+    let mut size = Size { count: 0, bytes: 0, held_count: 0, held_bytes: 0 };
+    for (sync_id, bytes) in rows {
+        size.count += 1;
+        size.bytes += bytes;
+        if present.contains(&files.keys.stem(&DocId::parse(&sync_id)?)) {
+            size.held_count += 1;
+            size.held_bytes += bytes;
+        }
+    }
+    Ok(size)
+}
+
+/// How many documents are linked to each of these transactions (or recurring items), for the mark on a list. Only ids with at least
+/// one are in the answer.
+pub fn link_counts(conn: &Connection, kind: TargetKind, ids: &[String]) -> Result<std::collections::BTreeMap<String, u32>, AppError> {
+    if ids.len() > MAX_LIMIT as usize * 2 {
+        return Err(AppError::InvalidInput);
+    }
+    let ids = ids.iter().map(|id| parse_id(id)).collect::<Result<Vec<_>, _>>()?;
+    let mut counts = std::collections::BTreeMap::new();
+    if ids.is_empty() {
+        return Ok(counts);
+    }
+    let column = match kind {
+        TargetKind::Transaction => "transaction_id",
+        TargetKind::Recurring => "recurring_transaction_id",
+    };
+    // The column is one of two fixed names; the ids are bound.
+    let marks = vec!["?"; ids.len()].join(", ");
+    let mut stmt = conn.prepare(&format!("SELECT {column}, count(*) FROM document_links WHERE {column} IN ({marks}) GROUP BY {column}"))?;
+    let rows = stmt.query_map(rusqlite::params_from_iter(ids.iter()), |r| Ok((r.get::<_, i64>(0)?, r.get::<_, u32>(1)?)))?;
+    for row in rows {
+        let (id, count) = row?;
+        counts.insert(id.to_string(), count);
+    }
+    Ok(counts)
 }
 
 /// The contents of a document, opened and proved to be what its row says. For showing, opening and saving a copy.

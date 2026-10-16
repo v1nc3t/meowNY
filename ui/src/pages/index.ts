@@ -9,6 +9,7 @@ export const pageLoaders = {
   categories: () => import('./CategoriesPage'),
   budgets: () => import('./BudgetsPage'),
   recurring: () => import('./RecurringPage'),
+  documents: () => import('./DocumentsPage'),
   export: () => import('./ExportPage'),
   settings: () => import('./SettingsPage'),
   sync: () => import('./SyncPage'),

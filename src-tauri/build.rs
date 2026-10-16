@@ -83,6 +83,7 @@ const COMMANDS: &[&str] = &[
     "unlink_document",
     "document_links",
     "document_library_size",
+    "document_counts",
     "check_documents",
     "read_document_image",
     "open_document",

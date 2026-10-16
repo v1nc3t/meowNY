@@ -167,6 +167,7 @@ pub const COMMANDS: &[&str] = &[
     "unlink_document",
     "document_links",
     "document_library_size",
+    "document_counts",
     "check_documents",
     "read_document_image",
     "open_document",
@@ -808,10 +809,16 @@ pub fn document_links(vault: Shared, id: String) -> Result<Vec<docs::LinkView>, 
     vault.with_files(|conn, _| docs::links_of(conn, id))
 }
 
-/// How many documents there are and how much they hold.
+/// How many documents there are and how much they hold, and how much of it is on this device.
 #[tauri::command]
 pub fn document_library_size(vault: Shared) -> Result<docs::Size, AppError> {
-    vault.with_files(|conn, _| docs::library_size(conn))
+    vault.with_files(docs::library_size)
+}
+
+/// How many documents are linked to each of these transactions (or recurring items), for the mark on a list.
+#[tauri::command]
+pub fn document_counts(vault: Shared, kind: docs::TargetKind, ids: Vec<String>) -> Result<std::collections::BTreeMap<String, u32>, AppError> {
+    vault.with_files(|conn, _| docs::link_counts(conn, kind, &ids))
 }
 
 /// Compares the folder of the files with the documents (removing what no document names) and says how many have no file here.

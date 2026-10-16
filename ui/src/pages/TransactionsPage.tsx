@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react'
 import AddCategoryModal from '../components/AddCategoryModal'
+import AttachArea from '../components/AttachArea'
+import ClipMark from '../components/ClipMark'
 import Dropdown from '../components/Dropdown'
 import Modal, { modalFormId } from '../components/Modal'
 import DatePicker from '../components/DatePicker'
@@ -8,6 +10,8 @@ import { errorText } from '../api/invoke'
 import { useToday, type Today } from '../api/today'
 import { transactions as transactionsApi, type Transaction, type TransactionPage } from '../api/transactions'
 import { amountString, formatDate, formatMoney } from '../lib/money'
+import { useAttachments, type Attachments } from '../hooks/useAttachments'
+import { useClipCounts } from '../hooks/useClipCounts'
 import { useMoneySettings, type MoneySettings } from '../hooks/useMoneySettings'
 import { useProfile } from '../hooks/profile'
 import { useNotice } from '../hooks/useNotice'
@@ -57,6 +61,9 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
   const [draftMessage, setDraftMessage] = useNotice()
   const [editing, setEditing] = useState<Transaction | null>(null)
   const [message, setMessage] = useNotice()
+  // The documents of the transaction being edited are stored and linked at once; those of one being made wait for it to be saved.
+  const attachments = useAttachments(editing ? { kind: 'transaction', id: editing.id } : null)
+  const clips = useClipCounts('transaction', page?.transactions.map((transaction) => transaction.id) ?? [], reload)
   // The list waits for a short pause in typing instead of asking the database on every key.
   const searchText = useDebounced(filters.q, 200)
   const categoryNames = useMemo(() => new Map(categories.map((category) => [category.id, category.name])), [categories])
@@ -128,6 +135,7 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
   function openAdd() {
     setMenu(null)
     setDraftMessage('')
+    attachments.reset()
     setEditing(null)
     setAdding(true)
   }
@@ -135,11 +143,14 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
   function openEdit(transaction: Transaction) {
     setMenu(null)
     setDraftMessage('')
+    attachments.reset()
     setAdding(false)
     setEditing(transaction)
   }
 
   function closeModal() {
+    // documents may have been attached or removed in the dialog, so the marks on the list are asked for again
+    if (adding || editing) setReload((value) => value + 1)
     setAdding(false)
     setEditing(null)
   }
@@ -170,9 +181,14 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
     }
     const body = { name, amount, paymentDate, categoryId, description: description.length > 0 ? description : null }
     setPending(true)
+    // what could not be attached to a new transaction: it is saved all the same, and the notice names the files
+    let notAttached: string[] = []
     try {
       if (editing) await transactionsApi.update(editing.id, body)
-      else await transactionsApi.create({ ...body, clientUuid })
+      else {
+        const created = await transactionsApi.create({ ...body, clientUuid })
+        notAttached = await attachments.commit({ kind: 'transaction', id: created.id })
+      }
     } catch (failure) {
       setDraftMessage(errorText(failure))
       return
@@ -180,7 +196,7 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
       setPending(false)
     }
     setDraftMessage('')
-    setMessage('')
+    setMessage(notAttached.length > 0 ? t('docs.attachFailed', { names: notAttached.join(', ') }) : '')
     if (!editing) setClientUuid(crypto.randomUUID())
     closeModal()
     setReload((value) => value + 1)
@@ -356,6 +372,7 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
           categories={categories}
           pending={pending}
           message={draftMessage}
+          attachments={attachments}
           onSubmit={(event) => void onSave(event)}
           onClose={closeModal}
           onCategoryAdded={(category) => setCategories((current) => [...current, category])}
@@ -380,6 +397,7 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
                         .map((part) => ` \u00b7 ${part}`)
                         .join('')}
                     </p>
+                    {clips[transaction.id] ? <ClipMark count={clips[transaction.id] ?? 0} onClick={() => openEdit(transaction)} /> : null}
                     {transaction.description?.trim() ? (
                       <button
                         type="button"
@@ -431,6 +449,7 @@ function TransactionModal({
   categories,
   pending,
   message,
+  attachments,
   onSubmit,
   onClose,
   onCategoryAdded,
@@ -440,6 +459,7 @@ function TransactionModal({
   categories: Category[]
   pending: boolean
   message: string
+  attachments: Attachments
   onSubmit: (event: FormEvent<HTMLFormElement>) => void
   onClose: () => void
   onCategoryAdded: (category: Category) => void
@@ -485,6 +505,7 @@ function TransactionModal({
             <input name="description" maxLength={255} defaultValue={transaction?.description ?? ''} autoComplete="off" />
           </label>
         </form>
+        <AttachArea attachments={attachments} />
       </Modal>
       {addingCategory ? (
         <AddCategoryModal

@@ -477,10 +477,13 @@ fn the_list_says_which_documents_have_no_file_on_this_device() {
 #[test]
 fn the_size_of_the_library_is_the_sum_of_the_files() {
     let env = Env::new();
-    assert_eq!(library_size(&env.conn).unwrap(), Size { count: 0, bytes: 0 });
+    assert_eq!(library_size(&env.conn, &env.files()).unwrap(), Size { count: 0, bytes: 0, held_count: 0, held_bytes: 0 });
     env.add("a.pdf", b"%PDF-1.7 one");
-    env.add("b.pdf", b"%PDF-1.7 and two");
-    assert_eq!(library_size(&env.conn).unwrap(), Size { count: 2, bytes: 12 + 16 });
+    let lost = env.add("b.pdf", b"%PDF-1.7 and two").document;
+    assert_eq!(library_size(&env.conn, &env.files()).unwrap(), Size { count: 2, bytes: 12 + 16, held_count: 2, held_bytes: 12 + 16 });
+    // a phone that keeps only some: what it holds is not what there is
+    fs::remove_file(env.path_of(&lost)).unwrap();
+    assert_eq!(library_size(&env.conn, &env.files()).unwrap(), Size { count: 2, bytes: 12 + 16, held_count: 1, held_bytes: 12 });
 }
 
 // -- reading and checking ------------------------------------------------------------------------------------------------
@@ -693,4 +696,26 @@ fn a_description_is_checked_without_a_file() {
     for bad in ["", "yesterday", "2026-1-1", "2026-02-30"] {
         assert_eq!(check_input(&dated(bad)), Err(AppError::InvalidInput), "{bad:?}");
     }
+}
+
+#[test]
+fn the_documents_linked_to_each_item_of_a_list_are_counted() {
+    let env = Env::new();
+    let (t1, t2, t3, rec) = (env.transaction("One"), env.transaction("Two"), env.transaction("Three"), env.recurring("Rent"));
+    let linked = |name: &str, bytes: &[u8], targets: Vec<LinkTarget>| {
+        add(&env.conn, &env.files(), &NewDocument { name: name.into(), links: targets, ..Default::default() }, bytes, TODAY).unwrap();
+    };
+    linked("a.pdf", b"%PDF-1.7 a", vec![transaction_target(t1), transaction_target(t2), recurring_target(rec)]);
+    linked("b.pdf", b"%PDF-1.7 b", vec![transaction_target(t1)]);
+    linked("c.pdf", b"%PDF-1.7 c", vec![]);
+    let ids = |list: &[i64]| list.iter().map(i64::to_string).collect::<Vec<_>>();
+
+    let counts = link_counts(&env.conn, TargetKind::Transaction, &ids(&[t1, t2, t3])).unwrap();
+    assert_eq!(counts.len(), 2, "an item with no document is not in the answer");
+    assert_eq!((counts[&t1.to_string()], counts[&t2.to_string()]), (2, 1));
+    let counts = link_counts(&env.conn, TargetKind::Recurring, &ids(&[rec, t1])).unwrap();
+    assert_eq!(counts.into_iter().collect::<Vec<_>>(), vec![(rec.to_string(), 1)], "a transaction id is not a recurring id");
+    assert!(link_counts(&env.conn, TargetKind::Transaction, &[]).unwrap().is_empty());
+    assert_eq!(link_counts(&env.conn, TargetKind::Transaction, &["abc".to_string()]).err(), Some(AppError::InvalidInput));
+    assert_eq!(link_counts(&env.conn, TargetKind::Transaction, &vec!["1".to_string(); 201]).err(), Some(AppError::InvalidInput));
 }
