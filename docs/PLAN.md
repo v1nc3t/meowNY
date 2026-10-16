@@ -11,7 +11,8 @@ Companion to `postgres-schema.txt` (schema v3, written for Postgres; it is porte
 - **Secure by design.** No network attack surface. Encrypted at rest, locked app, signed releases.
 - **Phone copy that syncs.** The phone (Android first) keeps a full offline copy and syncs with the desktop on the home network, started by a QR code. Away from home it works alone. No server of any kind.
 - **CLI for AI agents.** Ships with the desktop app, client side only.
-- **Optional bank connection** with your own aggregator key. No project-run backend, ever.
+- **Documents with the numbers.** Receipts and invoices stored encrypted and linked to transactions; the phone gets the ones you choose.
+- **Who owes whom.** Debts, and bills shared with other people, kept in your own ledger. The other people do not need the app.
 
 ## Order and why
 
@@ -19,7 +20,7 @@ Companion to `postgres-schema.txt` (schema v3, written for Postgres; it is porte
 2. **Core budgeting loop next**: categories, transactions, budgets. This is the product.
 3. **Recurring, then charts**: both build on the core.
 4. **Backup and export before anything that spreads your data to other devices.**
-5. **CLI, then phone sync and capture, then bank connection.** Packaging and release is a gate before sharing the app with anyone else.
+5. **CLI, then phone sync, then documents, then debts and splitting.** Packaging and release is a gate before sharing the app with anyone else.
 
 Phone sync (phase 8) can move ahead of the CLI (phase 7) if you mostly use the app on your phone.
 
@@ -42,7 +43,8 @@ Kept: the React UI (`ui/src`), Zod schemas, money and date logic, and the schema
 - Every new desktop feature ships its CLI commands in the same change. The phone app (phases 8 and 9) gets none.
 - Program names: the desktop app is `meowny-desktop` (`src-tauri/`), the command line is `meowny` (`cli/`), so both can be on the PATH.
 - Phone app: Tauri mobile (same `ui/` and Rust core), Android first, iOS later (phase 12). Sync is a direct connection on the home network, started by a QR code the desktop shows and the phone scans. No server, relay or remote reach; the phone works alone away from home. Details in phase 8.
-- No telemetry. The only optional network traffic is the bank aggregator (phase 10) and update checks. The sync connection never leaves the home network.
+- No telemetry. The only optional network traffic is update checks. The sync connection never leaves the home network.
+- Dropped on 2026-10-16: the bank connection through an aggregator (a read key to the whole bank history and a network client in the app) and phone capture from payment notifications (fragile, little use). Nothing in the app talks to a bank or to a service that holds bank data. Phases 9 and 10 now hold documents, and debts and splitting.
 
 ## Open decisions (decide when you reach the phase)
 
@@ -55,7 +57,6 @@ Kept: the React UI (`ui/src`), Zod schemas, money and date logic, and the schema
 | CLI transport (local socket or loopback HTTP) and token mechanism | Phase 7 | Tokens must be revocable and stored hashed. Decided: loopback HTTP and hashed, scoped, expiring tokens (see phase 7) |
 | Phone app shape: PWA with WASM SQLite, or Tauri mobile / Capacitor | Phase 8 | Decided 2026-10-15: Tauri mobile, Android first. A PWA cannot reach a plain-http address on the home network, needs HTTPS for the camera, and its storage can be evicted |
 | Which sync transports, in which order | Phase 8 | Decided 2026-10-15: one only, a direct connection on the home network started by a QR code. No Tailscale, WebRTC, shared folder or relay (no server, fewer dependencies) |
-| Bank aggregator | Phase 10 | Do a spike first |
 
 ---
 
@@ -306,40 +307,58 @@ Decided with the maintainer on 2026-10-15:
 
 **Done when:** you can add an expense on the phone with no connection, later sync it to the desktop at home by scanning the QR code, and both show the same budget numbers. An edit made on both devices while apart ends the same on both.
 
-## Phase 9: Phone capture (S to M)
+## Phase 9: Documents (M to L)
 
-Adds transactions without opening the app.
+Keep the paper trail next to the numbers: the receipt of an online purchase, the invoice for the rent, a contract, a warranty. A document is a file stored encrypted on the device, linked to the transactions or recurring items it belongs to, and kept on the phone only when you choose. (This phase replaces the phone capture that was planned here: reading payment notifications is fragile and was judged not worth it.)
 
-- [ ] iOS (later, with the iOS app in phase 12): a documented Shortcuts automation that fires on each Wallet/Apple Pay transaction and sends amount and merchant to the app
-- [ ] Android: a notification listener (opt-in permission) that reads bank and wallet notifications and extracts amount and merchant
-- [ ] Captured items land as PENDING in a pending list, never straight in the books. (Phase 6 no longer builds a review queue, so this phase builds the small pending list: accept, edit, ignore, set a category.)
-- [ ] Parsing is local; notification text is untrusted and never executed or logged
-- [ ] Docs: setup guide for Android (iOS joins when the iOS app does), and what is not captured (transfers, direct debits, anything not paid with the phone)
-- [ ] Tests: sample notifications parse correctly; duplicates from the same payment are merged
+Decided with the maintainer on 2026-10-16:
 
-**Done when:** paying with the phone creates a pending item you can accept with one tap.
+- **A library with links.** A document exists on its own (a contract, a warranty) and can be linked to any number of transactions and recurring items (the rent invoice to each month's payment). Deleting a transaction never deletes a document, and a document with no links stays in the library.
+- **Encrypted files next to the database, not blobs in it.** Each file is stored in a folder next to the database under a random name, sealed with ChaCha20-Poly1305 in chunks, with a key derived from the database key, so locking the app drops access to the files too. The database holds only the name, type, size, date, a hash of the contents and the links, so it stays small and fast after ten years of receipts.
+- **To the phone only when chosen.** Every document has a "keep on phone" switch, off when it is added. The phone always has the list (name, date, links) and gets the file itself only when the switch is on. A document added on the phone is kept there until the desktop has it, and then dropped from the phone if the switch is off.
+- **The phone can add documents too**: a photo of a paper receipt, or a file, attached to a transaction on the phone and synced to the desktop like any other change.
+- **Every file is untrusted.** Nothing is run, and nothing is shown with scripts or remote content. Images are shown in the app after a size check. Every other type (PDF, HTML receipt, text) is opened by the system's own viewer from a private temporary folder that is emptied when the app locks or closes, with a warning that the copy is not encrypted while it is open. Saving a copy somewhere is an export and gets the usual warning. File names are cleaned (no folders, no control characters).
+- **Limits.** 25 MB per file (a bigger one is refused with a message). The library shows its total size, and the phone shows how much it holds.
 
-## Phase 10: Bank connection with your own aggregator key (L)
+- [ ] **Design first** (`docs/documents-design.md`, reviewed before the code, like the sync design): the sealed file format (header, chunk size, tags), the key derivation, where the folder is on each system, the sync of rows and of bytes, the merge rules of the new tables, restore and wipe, and the temporary-copy rules.
+- [ ] **Spike (S)**, on the real phone: does a file field in the web view open Android's chooser, can it take a photo, and can the app read the result (no new dependency if it can); and can an image be shown without writing a temporary copy.
+- [ ] Database: a migration for `documents` and `document_links` with `sync_id`, `stamp` and deletion markers; the file store with the sealed format, atomic writes, and a check that rows and files agree (a file without a row is removed, a row without a file is reported).
+- [ ] Screens: a documents page (search by name, type and date, with the total size); an "attach" area in the transaction and recurring dialogs (from a file, and from the camera on the phone); open, save a copy, the "keep on phone" switch, and delete with a confirmation. Texts in all 7 languages.
+- [ ] Sync: the rows follow the usual merge rules (the new tables make a new protocol version, and an older app is told to update); the bytes go in chunks over the same sealed connection, each file checked against its hash, resumable, only for documents with the switch on (and always from the phone to the desktop for a new one), with a line in the summary ("documents: 3 sent, 1 received").
+- [ ] Backup and restore include the documents (a choice, since they can be big; a backup stays one encrypted file); scheduled backups follow the same choice; "Delete all my data" removes the folder.
+- [ ] Export: JSON, CSV and Excel list the documents (name, date, links) and never contain the files.
+- [ ] CLI and API: list, show, add (from a path), link, unlink, delete. Reading a file's contents needs the person's yes in the app, like the commands that write files; a read-only token sees names only.
+- [ ] Docs: a user guide, the data inventory (the files folder and the temporary folder), the README.
+- [ ] Tests: sealing and opening with known answers and tamper tests (a changed, cut or reordered chunk is refused); two devices converge with documents added and deleted on both; bytes cross only for documents with the switch on; the temporary folder is empty after a lock; hostile file names; an empty file and a file of the largest size; a file without a row is cleaned up.
 
-Read-only account information through an Open Banking aggregator, with credentials the user owns. The app talks to the aggregator directly. There is no project-run backend and no shared API key in the source. The user logs in at the bank or in the aggregator's hosted page; the app never sees bank usernames, passwords, MFA codes or card numbers. It holds only a scoped, read-only, revocable token. This feature is optional and off by default.
+**Done when:** you can attach a receipt to a transaction on either device, open it, mark it "keep on phone", and see it on the phone after the next sync, while documents you did not mark never leave the desktop.
 
-- [ ] **Spike first** (S): choose which aggregators to support for your country and bank(s). Candidates: Enable Banking (free personal tier in the EU), SimpleFIN Bridge (US and Canada, small yearly fee), others. GoCardless may have stopped accepting new signups. Verify current terms, cost, bank coverage, consent length and what a personal, non-commercial project needs before building.
-- [ ] Settings screen to paste aggregator credentials. They are stored encrypted in the OS keychain, never in the plain database, never logged, and not included in exports, CLI output or sync. They are included in backups only when the backup is encrypted.
-- [ ] Requests are signed locally on the user's machine. Only the desktop app talks to the aggregator (not the phone), and synced data arrives on the phone through normal sync.
-- [ ] Connect flow: the app opens the aggregator's hosted bank-login page in the system browser; the redirect returns to the app through a loopback address (`127.0.0.1`) or a custom URI scheme. A one-time `state` value is checked on return. Bank credentials are never accepted in the app's own forms.
-- [ ] Least scope: read-only accounts and transactions, no payment initiation
-- [ ] Consent: show status and expiry, remind before it runs out (EU consent lasts roughly 90 to 180 days), and make renewal one click
-- [ ] Disconnect: revokes the token at the aggregator first, then deletes it locally. "Delete all my data" does the same.
-- [ ] Import job: fetch, deduplicate by provider transaction id, put into the pending list from phase 9. Token expiry or aggregator errors mark the connection `NEEDS_REAUTH` and notify the user.
-- [ ] Currency: accounts in a currency other than yours store the original currency and amount; no silent conversion
-- [ ] Imported merchant names and descriptions are untrusted text: escape on render, neutralise in CSV export
-- [ ] Tables for connections, accounts and imported transactions; additive columns on `transactions`
-- [ ] CLI: commands for connections, the pending list (list, accept, ignore) and disconnect. Credentials are never readable through the CLI.
-- [ ] Docs: a step-by-step "get your key" guide for each supported aggregator, and a clear note that the aggregator is the only external service involved
-- [ ] Update the data inventory (aggregator as an optional external processor chosen by the user)
-- [ ] Tests: no duplicates on re-import, disconnect revokes and deletes the token, expired consent stops imports, credentials never appear in logs, exports, CLI output or unencrypted backups
+## Phase 10: Debts and expense splitting (L)
 
-**Done when:** a connected account brings new transactions into the pending list, accepted ones show up in budgets, and disconnecting revokes the token at the aggregator and removes it from the machine.
+Keep track of money that is owed, in both directions, and of bills shared with other people. The other people do not use the app: they are names in your own ledger, so nothing needs a server and nothing is shared with anyone except a summary you choose to send them yourself. (This phase replaces the bank connection that was planned here, which was dropped on 2026-10-16: a read key to the whole bank history and a network client are not worth the convenience.)
+
+Decided with the maintainer on 2026-10-16:
+
+- **People are names.** A person has a name and a note. No accounts, no contact import, nothing leaves the device.
+- **A ledger for each person.** Entries are "I lent", "I borrowed", "they paid me back" and "I paid them back", each with a date, an amount in the app's currency, a note, and optional links to a transaction and to documents (a loan note, an invoice). The balance of a person is the sum: who owes whom, and how much. "Settle up" adds the entry that brings a balance to zero.
+- **Repayments and loans are not transactions.** They live only in the ledger and never count as income or expense, so they cannot inflate your income or hide a real cost, and they never touch the budgets.
+- **Splitting.** A transaction can be split between you and some people: equally, by shares, by percent or by exact amounts, paid by you (they owe you their parts) or paid by someone else (you owe them your part). The amount of the transaction stays what was paid, the parts add up to it to the cent, and the ledger entries follow the split.
+- **Budgets and statistics count only your share.** Pay 100 for a dinner shared by four, and the month shows 25. One definition of "what this transaction costs me" (your share, or the whole amount when it is not split) is used by every sum: the budgets, the dashboard, the trends, the PDF report, the exports and the CLI.
+- **It follows the rest of the app.** People, ledger entries and splits sync like everything else (stamps, deletion markers, written merge rules; a new protocol version), a currency change converts them with the same rate, and the backup, the exports, the CLI and "Delete all my data" include them.
+- **A summary to send.** "Who owes what" can be saved as text, CSV or PDF for you to send yourself; the app opens no connection to anyone.
+
+- [ ] **Design first** (`docs/debts-design.md`): the data model (people, ledger entries, split lines, your share of a transaction), the rounding rule for the last cent, what editing or deleting a split transaction does to its ledger entries (the entries that a split made follow it; an entry typed by hand is never changed by it), the merge rules of the new tables, and the list of every query that sums amounts.
+- [ ] Database: a migration for `people`, `ledger_entries` and `transaction_splits` with `sync_id`, `stamp` and deletion markers; money columns in minor units; your share of a transaction stored in one place.
+- [ ] One definition of cost, used by the budgets, the statistics, the report, the exports, the API and the CLI. A test fails when a query sums the plain amount of a transaction instead.
+- [ ] Screens: a people page with balances; a person's ledger; add a loan or a repayment; settle up; a split dialog on a transaction (who, how, a preview of every amount); a mark on split transactions; a dashboard card "owed to you / you owe". Texts in all 7 languages.
+- [ ] Sync: the three tables with their merge rules, convergence tests extended to them, and the phone showing and editing everything the desktop does.
+- [ ] Currency change: ledger entries and splits are converted with the same rule as transactions, and the sync's currency generations cover them.
+- [ ] Backup and restore, "Delete all my data", the exports (the summary of who owes what, and the ledger in JSON and CSV) and the CLI and API (people, ledger, split, settle).
+- [ ] Documents: a document can be linked to a ledger entry (needs phase 9).
+- [ ] Docs: a user guide and the data inventory.
+- [ ] Tests: the parts of a split always add up (random amounts, shares and percentages); every sum uses your share; balances after edits, deletes and a settle up; two devices converge with people and ledger edits on both; a currency change keeps balances consistent; nothing from the ledger ever appears as income or in a budget.
+
+**Done when:** you can split a dinner between three friends, see only your quarter in the month's budget, see what each friend owes you, record that one paid it back, and see the same on the phone after a sync.
 
 ## Phase 11: Packaging and release (M). Gate before sharing the app
 
@@ -358,8 +377,7 @@ Read-only account information through an Open Banking aggregator, with credentia
 ## Phase 12: Later (optional)
 
 - [ ] **iOS app**, after the Android app works. It is the same Tauri mobile code and the same sync, so the work is packaging and platform details: `tauri ios init`, the local network and camera permission texts, the passphrase vault (already planned, so no keychain crate), a build on a macOS runner in CI, and tests on a real iPhone. It needs a Mac with Xcode. Installing it for anyone but yourself needs an Apple developer account (99 USD a year); with a free Apple ID an app installs only on your own iPhone and stops working after 7 days until it is installed again (rules as known on 2026-10-15, check them again). Then the iOS capture of phase 9 (Shortcuts) can be done.
-- [ ] More aggregators
-- [ ] Expense splitting. It is hard without a server because both sides need the same group data. Options: peer-to-peer groups over the sync transports, or leave it out.
+- [ ] Bills shared between people who each use the app. Phase 10 keeps the ledger of one person only; the same group data on every side needs a way to share it without a server.
 - [ ] Home-screen widgets, shared budgets between two devices of the same household
 
 ---
@@ -376,11 +394,13 @@ Read-only account information through an Open Banking aggregator, with credentia
 | Sync blocked on a network that isolates devices | Accepted: no server by design. The app says so and suggests the phone's hotspot; away from home the phone works alone |
 | Phone lost or stolen | Passphrase vault, auto-lock, erase after 5 wrong tries, revoke from the desktop; no remote wipe without a server, so the passphrase must be long |
 | A flaw in the sync protocol made here | Only standard parts (HKDF, ChaCha20-Poly1305), known-answer, tamper, replay and reflection tests, a review by someone else before release |
-| Aggregator credentials stolen | OS keychain only, read-only scope, revoke on disconnect, never in logs, exports or sync |
-| Bank consent expires unnoticed | Expiry shown, reminders, one-click renewal, `NEEDS_REAUTH` state |
 | CLI token leaked or over-privileged | Read-only default scope, expiry, hashed storage, destructive actions require the app |
 | Malware on the machine reads unlocked data | Lock timeout, key dropped from memory on lock, minimal permissions; this cannot be fully removed |
-| Malicious imported text | Escape on render, neutralise in CSV, treat all import and notification text as untrusted |
+| Malicious imported text | Escape on render, neutralise in CSV, treat every imported text and every document as untrusted |
+| A document is malicious (a PDF, HTML or image from the internet) | Nothing is run or shown with scripts; only images are shown in the app, after a size check; everything else opens in the system's viewer; file names are cleaned |
+| Documents leak through temporary copies | A private temporary folder, emptied when the app locks or closes; a warning that the open copy is not encrypted |
+| Documents fill the phone | "Keep on phone" is off by default and per document, a size limit per file, and the phone shows what it holds |
+| Wrong sums with split bills | One definition of what a transaction costs you for every query, a test that fails when a query uses the plain amount, random tests that the parts of a split add up |
 | Tampered release or update | Signed installers and updates, checksums, SBOM |
 | Money rounding bugs | Strings/decimals or integer minor units only, constraint tests, no float math |
 | Scope creep | Finish and release phases 0 to 11 before starting phase 12 |

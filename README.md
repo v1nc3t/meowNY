@@ -24,7 +24,7 @@
 
 meowNY is a desktop app for tracking income and expenses against monthly budgets. A [Tauri](https://tauri.app) shell (Rust) shows a React UI and keeps everything in one encrypted SQLite file ([SQLCipher](https://www.zetetic.net/sqlcipher/)) on your own machine. It also ships a command line program, `meowny`, so scripts and AI agents can use the running app without opening the data file.
 
-> **Status: pre-release (version 0.1.0).** The desktop app and the command line work, and are tested, but there are no installers yet: you build it from source (see [Getting started](#getting-started)). Phone sync, phone capture and the bank connection are planned; see the [roadmap](#roadmap).
+> **Status: pre-release (version 0.1.0).** The desktop app and the command line work, and are tested, but there are no installers yet: you build it from source (see [Getting started](#getting-started)). The phone app and its sync are built and being tested; documents, and debts and expense splitting are planned; see the [roadmap](#roadmap).
 
 ## Table of contents
 
@@ -94,7 +94,7 @@ meowNY is a desktop app for tracking income and expenses against monthly budgets
 ## Privacy and security
 
 - **Local-first.** There is no server and no account, so there is no one who could hold your data. Nothing is sent anywhere, and there is no telemetry.
-- **No network by default.** A CI check (`npm run check:outbound`) lists every place in the code that can open a connection and fails when a new one appears. The only optional network traffic planned is something you turn on yourself, such as the bank connection or update checks. Syncing with your phone stays on your home network.
+- **No network by default.** A CI check (`npm run check:outbound`) lists every place in the code that can open a connection and fails when a new one appears. The only optional network traffic planned is update checks, which you turn on yourself. Syncing with your phone stays on your home network.
 - **Hardened window.** A strict content security policy, no remote content, one permission per command, no shell access from the web view, and links open in the system browser.
 - **Safe logs.** Logs and crash reports never contain amounts, descriptions, tokens or keys.
 - **The command API is for you only.** It listens on `127.0.0.1` and nothing else, refuses requests from web pages, answers "locked" while the app is locked, and does not count as activity, so the idle lock still works. Restoring a backup, changing the currency and deleting everything cannot be done through it at all.
@@ -423,8 +423,8 @@ The full plan, with what is done in each phase, is in [docs/PLAN.md](docs/PLAN.m
 | 6 | Encrypted backup and export | Done |
 | 7 | Command line for scripts and AI agents (desktop only) | Done. Installing it together with the app is part of phase 11 |
 | 8 | Android app that keeps a full offline copy and syncs with the desktop at home by scanning a QR code (iOS comes later) | In progress: the sync, the phone vault, the screens and the Android app are built and have been tried between a real phone and a desktop at home; reviewed on a real phone; the CI job has not run on GitHub yet, and nobody outside the project has gone through the protocol |
-| 9 | Adding transactions from the phone without opening the app | Planned |
-| 10 | Bank connection through an aggregator with your own key. No project-run backend, ever | Planned |
+| 9 | Documents: attach receipts and invoices to transactions, stored encrypted, and choose which ones go to the phone | Planned |
+| 10 | Debts and expense splitting: who owes you and whom you owe, and bills shared with other people, in your own ledger | Planned |
 | 11 | Signed installers, updates, `SECURITY.md`, `CONTRIBUTING.md` and install guides | Planned |
 
 ## Contributing
