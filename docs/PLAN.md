@@ -12,7 +12,7 @@ Companion to `postgres-schema.txt` (schema v3, written for Postgres; it is porte
 - **Phone copy that syncs.** The phone (Android first) keeps a full offline copy and syncs with the desktop on the home network, started by a QR code. Away from home it works alone. No server of any kind.
 - **CLI for AI agents.** Ships with the desktop app, client side only.
 - **Documents with the numbers.** Receipts and invoices stored encrypted and linked to transactions; the phone gets the ones you choose.
-- **Who owes whom.** Debts, and bills shared with other people, kept in your own ledger. The other people do not need the app.
+- **Who owes whom.** Debts, and bills shared with other people, kept in your own ledger. The other people do not need the app, but one who has it can take a bill from a QR code.
 
 ## Order and why
 
@@ -340,30 +340,42 @@ Decided with the maintainer on 2026-10-16:
 
 ## Phase 10: Debts and expense splitting (L)
 
-Keep track of money that is owed, in both directions, and of bills shared with other people. The other people do not use the app: they are names in your own ledger, so nothing needs a server and nothing is shared with anyone except a summary you choose to send them yourself. (This phase replaces the bank connection that was planned here, which was dropped on 2026-10-16: a read key to the whole bank history and a network client are not worth the convenience.)
+Keep track of money that is owed, in both directions, and of bills shared with other people. A friend is a name in your own ledger and does not need the app; a friend who has it can take a bill from a QR code. Nothing needs a server, and nothing leaves the device except a summary you save and send yourself or a code you show. (This phase replaces the bank connection that was planned here, which was dropped on 2026-10-16: a read key to the whole bank history and a network client are not worth the convenience.) The design is in `docs/debts-design.md`.
 
 Decided with the maintainer on 2026-10-16:
 
-- **People are names.** A person has a name and a note. No accounts, no contact import, nothing leaves the device.
-- **A ledger for each person.** Entries are "I lent", "I borrowed", "they paid me back" and "I paid them back", each with a date, an amount in the app's currency, a note, and optional links to a transaction and to documents (a loan note, an invoice). The balance of a person is the sum: who owes whom, and how much. "Settle up" adds the entry that brings a balance to zero.
+- **Friends are names.** A friend has a name, and optionally a reminder. No accounts, no contact import, no phone number, email or address: nothing about a friend is stored but the name. There is no chat either (decided on 2026-10-16: a chat over the internet needs a server somebody runs, and people already have one); a bill code, and a summary you copy into the chat you already use, are the whole of the contact. Nothing leaves the device. A friend is archived, never deleted. A bill can also have a **guest**: a name typed for someone you do not track. Their part leaves your cost and makes no debt.
+- **A ledger for each friend.** Entries are "I lent", "I borrowed", "they paid me back" and "I paid them back", each with a date, an amount in the app's currency, a note, and optional links to a transaction and to documents (a loan note, an invoice). The balance of a friend is the sum of the entries and of their parts of split bills: who owes whom, and how much. It is a running balance; a repayment is not matched to one bill.
+- **Mark as paid** opens a dialog for the amount. An amount larger than the debt is accepted: the balance turns around and you now owe them the rest (the dialog says so before it is confirmed).
 - **Repayments and loans are not transactions.** They live only in the ledger and never count as income or expense, so they cannot inflate your income or hide a real cost, and they never touch the budgets.
-- **Splitting.** A transaction can be split between you and some people: equally, by shares, by percent or by exact amounts, paid by you (they owe you their parts) or paid by someone else (you owe them your part). The amount of the transaction stays what was paid, the parts add up to it to the cent, and the ledger entries follow the split.
-- **Budgets and statistics count only your share.** Pay 100 for a dinner shared by four, and the month shows 25. One definition of "what this transaction costs me" (your share, or the whole amount when it is not split) is used by every sum: the budgets, the dashboard, the trends, the PDF report, the exports and the CLI.
-- **It follows the rest of the app.** People, ledger entries and splits sync like everything else (stamps, deletion markers, written merge rules; a new protocol version), a currency change converts them with the same rate, and the backup, the exports, the CLI and "Delete all my data" include them.
-- **A summary to send.** "Who owes what" can be saved as text, CSV or PDF for you to send yourself; the app opens no connection to anyone.
+- **Splitting.** A bill you paid is split between you and some people, starting from an equal split, then by percent, by shares or by exact amounts. The amount of the transaction stays what was paid; the parts add up to it to the cent; **your part is never stored, it is the amount minus the others' parts.** A recurring item can carry a split template (kept as proportions), and every payment of it is then split by itself.
+- **Budgets and statistics count only your part.** Pay 100 for a dinner shared by four, and the month shows 25, and so does the transaction list (with a mark that it was split). One definition of "what this transaction costs me" is used by every sum: the budgets, the dashboard, the trends, the PDF report, the exports, the API and the CLI.
+- **Someone else paid.** The "I borrowed" form can add your part to your expenses at the same time. You owe them a debt; paying them back later is a ledger entry and never a second expense.
+- **Bill codes (QR).** For each friend on a split bill the app can show a QR code of that friend's part (or the same text, to copy). A friend with the app scans it (phone) or pastes it (desktop), sees the details in a dialog, and accepts or denies. Accepting makes a debt in their ledger and, with a box ticked by default, an expense of their part; in another currency the dialog asks for a rate and shows the converted amount. No digits to type, no server, no inbox kept: a code is accepted on the spot or dropped. It is a notice and not a link: later edits do not follow, and the sender is not told.
+- **Reminders.** A reminder is set per friend (a date, optionally repeating every N days) and rings while the balance is not 0. The time of day is a setting of each device. On the phone the system schedules it, so it rings with the app closed; on the desktop it rings while the app is open and unlocked, and what was missed is listed on the debts page. The text holds no name and no amount.
+- **It follows the rest of the app.** Friends, entries and splits sync like everything else (stamps, deletion markers, written merge rules; a new protocol version), a currency change converts them with the same rate, and the backup, the exports, the CLI and "Delete all my data" include them.
+- **A summary to send.** "Who owes what", or the statement of one friend, can be saved as text, CSV or PDF for you to send yourself; the app opens no connection to anyone.
 
-- [ ] **Design first** (`docs/debts-design.md`): the data model (people, ledger entries, split lines, your share of a transaction), the rounding rule for the last cent, what editing or deleting a split transaction does to its ledger entries (the entries that a split made follow it; an entry typed by hand is never changed by it), the merge rules of the new tables, and the list of every query that sums amounts.
-- [ ] Database: a migration for `people`, `ledger_entries` and `transaction_splits` with `sync_id`, `stamp` and deletion markers; money columns in minor units; your share of a transaction stored in one place.
-- [ ] One definition of cost, used by the budgets, the statistics, the report, the exports, the API and the CLI. A test fails when a query sums the plain amount of a transaction instead.
-- [ ] Screens: a people page with balances; a person's ledger; add a loan or a repayment; settle up; a split dialog on a transaction (who, how, a preview of every amount); a mark on split transactions; a dashboard card "owed to you / you owe". Texts in all 7 languages.
-- [ ] Sync: the three tables with their merge rules, convergence tests extended to them, and the phone showing and editing everything the desktop does.
-- [ ] Currency change: ledger entries and splits are converted with the same rule as transactions, and the sync's currency generations cover them.
-- [ ] Backup and restore, "Delete all my data", the exports (the summary of who owes what, and the ledger in JSON and CSV) and the CLI and API (people, ledger, split, settle).
-- [ ] Documents: a document can be linked to a ledger entry (needs phase 9).
-- [ ] Docs: a user guide and the data inventory.
-- [ ] Tests: the parts of a split always add up (random amounts, shares and percentages); every sum uses your share; balances after edits, deletes and a settle up; two devices converge with people and ledger edits on both; a currency change keeps balances consistent; nothing from the ledger ever appears as income or in a budget.
+Three batches, one commit each (the maintainer asked for few):
 
-**Done when:** you can split a dinner between three friends, see only your quarter in the month's budget, see what each friend owes you, record that one paid it back, and see the same on the phone after a sync.
+- [x] **Design first** (`docs/debts-design.md`, written on 2026-10-16): the rows, the rounding rule for the last cent, what editing or deleting a split transaction does, the merge rules, the list of every query that sums amounts, the bill code, the reminders, the threats and the tests.
+- [ ] **Batch 1: the numbers.** No screens.
+  - [ ] Database: migration `0012` for `people`, `ledger_entries`, `transaction_split_lines` and `recurring_split_lines` (stamps, markers, audit, constraints and triggers) and the views `transaction_costs` and `person_balances`; `document_links` gets a ledger entry as a third target.
+  - [ ] `splits.rs`: `allocate` and the dialog's preview; people, ledger, mark as paid, the borrowing with an expense, the split template of a recurring item and the split of its payments.
+  - [ ] One definition of cost, used by the budgets, the statistics, the report, the exports, the API and the CLI. A test fails when a query sums the plain amount of a transaction instead.
+  - [ ] Currency change: ledger entries and splits are converted, a split by re-allocating to the converted amount.
+  - [ ] Backup and restore, the exports (the summary of who owes what, the statement of a friend, and the ledger in JSON and CSV) and the CLI and API (people, ledger, split, settle).
+  - [ ] Tests: the parts of a split always add up (random amounts, shares and percentages); every sum uses your part; balances after edits, deletes, a repayment above the debt and a conversion; nothing from the ledger ever appears as income or in a budget.
+- [ ] **Batch 2: the screens and the sync.**
+  - [ ] Screens: a debts page with balances; a friend's page with the ledger; add a loan or a borrowing; mark as paid; the bill dialog on a transaction (who, which mode, a preview of every amount); a mark on split transactions; the same dialog in the recurring form; a dashboard card "owed to you / you owe"; documents on ledger entries (needs phase 9). Texts in all 7 languages.
+  - [ ] Sync: protocol 4, the new tables and the lines inside their transaction with their merge rules, convergence tests extended to them, and the phone showing and editing everything the desktop does.
+- [ ] **Batch 3: bill codes and reminders.**
+  - [ ] The code (show, copy), scan on the phone, paste on the desktop, the dialog with the currency rate, accept and deny. Tests, including a fuzz run of the parser.
+  - [ ] Reminders on the desktop and on the phone.
+  - [ ] Docs: a user guide and the data inventory.
+  - [ ] By hand on a real phone: a code scanned by a second phone, and a reminder that rings with the app closed (the notification plugin's scheduling on Android is not known to work until it has run).
+
+**Done when:** you can split a dinner between three friends, see only your quarter in the month's budget, see what each friend owes you, show a friend a code that they accept on their phone, record that one paid it back, get a reminder about the one who has not, and see the same on the phone after a sync.
 
 ## Phase 11: Packaging and release (M). Gate before sharing the app
 
@@ -382,7 +394,7 @@ Decided with the maintainer on 2026-10-16:
 ## Phase 12: Later (optional)
 
 - [ ] **iOS app**, after the Android app works. It is the same Tauri mobile code and the same sync, so the work is packaging and platform details: `tauri ios init`, the local network and camera permission texts, the passphrase vault (already planned, so no keychain crate), a build on a macOS runner in CI, and tests on a real iPhone. It needs a Mac with Xcode. Installing it for anyone but yourself needs an Apple developer account (99 USD a year); with a free Apple ID an app installs only on your own iPhone and stops working after 7 days until it is installed again (rules as known on 2026-10-15, check them again). Then the iOS capture of phase 9 (Shortcuts) can be done.
-- [ ] Bills shared between people who each use the app. Phase 10 keeps the ledger of one person only; the same group data on every side needs a way to share it without a server.
+- [ ] Bills shared between people who each use the app. Phase 10 keeps the ledger of one person only and lets a friend take a bill from a QR code as a one-way notice; the same group data on every side, kept in step, needs a way to share it without a server.
 - [ ] Home-screen widgets, shared budgets between two devices of the same household
 
 ---
