@@ -49,6 +49,8 @@ const TABLES: &[&str] = &[
     "budgets",
     "recurring_transactions",
     "transactions",
+    "documents",
+    "document_links",
     "audit_log",
     "sync_deleted",
     "currency_changes",
@@ -440,6 +442,14 @@ mod tests {
             .unwrap();
         }
         categories::rename(&conn, rent.id, "Housing").unwrap();
+        // a document linked to the recurring item (the file itself is not in the database, and so not in this backup)
+        conn.execute(
+            "INSERT INTO documents (name, media_type, size_bytes, sha256, document_date, keep_on_phone)
+             VALUES ('Contract “Maple” 日本語.pdf', 'application/pdf', 1234, ?1, '2026-01-02', 1)",
+            ["ab".repeat(32)],
+        )
+        .unwrap();
+        conn.execute("INSERT INTO document_links (document_id, recurring_transaction_id) VALUES (1, ?1)", [plan.id]).unwrap();
         let mut conn = conn;
         categories::delete(&mut conn, gym.id, chrono::Utc::now()).unwrap();
         // a deletion (it leaves a marker for sync) and a change of currency (it is recorded for sync)

@@ -18,6 +18,9 @@ const ERROR_CODES = [
   'invalid_backup',
   'not_found',
   'name_exists',
+  'too_large',
+  'file_missing',
+  'file_damaged',
   'erased',
   'internal',
 ] as const

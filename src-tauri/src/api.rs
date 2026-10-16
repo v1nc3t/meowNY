@@ -120,6 +120,8 @@ impl From<AppError> for ApiError {
             AppError::InvalidInput => Self::INVALID_INPUT,
             AppError::NotFound => Self::NOT_FOUND,
             AppError::NameExists => Self::NAME_EXISTS,
+            AppError::TooLarge => Self::TOO_LARGE,
+            AppError::FileMissing => Self::NOT_FOUND,
             AppError::AlreadySetUp
             | AppError::WrongCredentials
             | AppError::WrongRecoveryKey
@@ -127,6 +129,7 @@ impl From<AppError> for ApiError {
             | AppError::DatabaseTooNew
             | AppError::InvalidBackup
             | AppError::Erased
+            | AppError::FileDamaged
             | AppError::Internal => Self::INTERNAL,
         }
     }

@@ -916,7 +916,19 @@ fn random_edits_with_a_currency_change_in_between_still_converge() {
 // --- what stays on a device ---------------------------------------------------------------------------------------------
 
 /// Tables whose rows are sent to the other device (the settings only in their shared part), and tables that never are.
-const SHARED_TABLES: [&str; 7] = ["settings", "categories", "budgets", "recurring_transactions", "transactions", "sync_deleted", "currency_changes"];
+/// `documents` and `document_links` are shared too (phase 9), but the engine learns them in a later batch of that phase: until then
+/// they are listed here and not yet sent, and the count of tables the sync can name below stays at five.
+const SHARED_TABLES: [&str; 9] = [
+    "settings",
+    "categories",
+    "budgets",
+    "recurring_transactions",
+    "transactions",
+    "documents",
+    "document_links",
+    "sync_deleted",
+    "currency_changes",
+];
 const LOCAL_TABLES: [&str; 5] = ["audit_log", "api_tokens", "backup_schedule", "sync_clock", "sync_peers"];
 
 #[test]

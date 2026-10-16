@@ -39,6 +39,12 @@ pub enum AppError {
     InvalidBackup,
     NotFound,
     NameExists,
+    /// A document over the limit (25 MiB).
+    TooLarge,
+    /// This device does not hold the file of a document that exists.
+    FileMissing,
+    /// A file that does not open: changed, cut, or not what its row says.
+    FileDamaged,
     /// The wrong passphrase was typed too many times in a row and the vault erased itself (see `Policy`).
     Erased,
     Internal,
@@ -58,6 +64,9 @@ impl std::fmt::Display for AppError {
             AppError::InvalidBackup => "that is not a meowNY backup, or it is damaged",
             AppError::NotFound => "not found",
             AppError::NameExists => "that name already exists",
+            AppError::TooLarge => "that file is too large",
+            AppError::FileMissing => "this device does not have that file",
+            AppError::FileDamaged => "that file is damaged",
             AppError::Erased => "the data on this device was erased after too many wrong passphrases",
             AppError::Internal => "something went wrong",
         };
