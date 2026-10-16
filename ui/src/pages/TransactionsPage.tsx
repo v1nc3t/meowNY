@@ -1,15 +1,17 @@
-import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import AddCategoryModal from '../components/AddCategoryModal'
 import AttachArea from '../components/AttachArea'
 import ClipMark from '../components/ClipMark'
 import Dropdown from '../components/Dropdown'
 import Modal, { modalFormId } from '../components/Modal'
+import Pick, { PickOption } from '../components/Pick'
 import DatePicker from '../components/DatePicker'
 import { categories as categoriesApi, type Category } from '../api/categories'
 import { errorText } from '../api/invoke'
 import { useToday, type Today } from '../api/today'
 import { transactions as transactionsApi, type Transaction, type TransactionPage } from '../api/transactions'
 import { amountString, formatDate, formatMoney } from '../lib/money'
+import { apiBound, shiftBound, type RangeMode } from '../lib/range'
 import { useAttachments, type Attachments } from '../hooks/useAttachments'
 import { useClipCounts } from '../hooks/useClipCounts'
 import { useMoneySettings, type MoneySettings } from '../hooks/useMoneySettings'
@@ -22,7 +24,6 @@ import { tip } from '../keys/tip'
 import { useRowNavigation } from '../keys/useRowNavigation'
 
 type TransactionList = TransactionPage
-type RangeMode = 'date' | 'month' | 'year'
 type MenuName = 'range' | 'show' | 'category'
 type Filters = {
   mode: RangeMode
@@ -537,101 +538,4 @@ function PaymentDate({ defaultValue }: { defaultValue: string }) {
       />
     </div>
   )
-}
-
-function Pick({
-  label,
-  inline = false,
-  className,
-  text,
-  open,
-  onToggle,
-  onClose,
-  children,
-}: {
-  label: string
-  /** Beside other buttons: the label is for screen readers only. */
-  inline?: boolean
-  className?: string
-  text: string
-  open: boolean
-  onToggle: () => void
-  onClose: () => void
-  children: ReactNode
-}) {
-  const ref = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    if (!open) return
-    function onPointerDown(event: PointerEvent) {
-      if (!ref.current?.contains(event.target as Node)) onClose()
-    }
-    function onKey(event: KeyboardEvent) {
-      if (event.key === 'Escape') onClose()
-    }
-    document.addEventListener('pointerdown', onPointerDown)
-    document.addEventListener('keydown', onKey)
-    return () => {
-      document.removeEventListener('pointerdown', onPointerDown)
-      document.removeEventListener('keydown', onKey)
-    }
-  }, [open, onClose])
-
-  return (
-    <div className={className ? `pick ${className}` : 'pick'} ref={ref}>
-      <span className={inline ? 'sr-only' : undefined}>{label}</span>
-      <button type="button" className="pick-button" aria-expanded={open} aria-haspopup="listbox" onClick={onToggle}>
-        {text}
-      </button>
-      {open ? (
-        <ul className="pick-list" role="listbox">
-          {children}
-        </ul>
-      ) : null}
-    </div>
-  )
-}
-
-function PickOption({ selected, onClick, children }: { selected: boolean; onClick: () => void; children: string }) {
-  return (
-    <li>
-      <button type="button" role="option" aria-selected={selected} onClick={onClick}>
-        {children}
-      </button>
-    </li>
-  )
-}
-
-function apiBound(mode: RangeMode, value: string, edge: 'from' | 'to'): string {
-  if (mode === 'date') return /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : ''
-  if (mode === 'month') {
-    if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(value)) return ''
-    return edge === 'from' ? `${value}-01` : lastDay(value)
-  }
-  if (!/^\d{4}$/.test(value)) return ''
-  return edge === 'from' ? `${value}-01-01` : `${value}-12-31`
-}
-
-function shiftBound(value: string, fromMode: RangeMode, toMode: RangeMode, edge: 'from' | 'to'): string {
-  if (!value || fromMode === toMode) return fromMode === toMode ? value : ''
-  if (fromMode === 'date' && /^\d{4}-\d{2}-\d{2}$/.test(value)) {
-    if (toMode === 'month') return value.slice(0, 7)
-    return value.slice(0, 4)
-  }
-  if (fromMode === 'month' && /^\d{4}-(0[1-9]|1[0-2])$/.test(value)) {
-    if (toMode === 'year') return value.slice(0, 4)
-    return edge === 'from' ? `${value}-01` : lastDay(value)
-  }
-  if (fromMode === 'year' && /^\d{4}$/.test(value)) {
-    if (toMode === 'month') return edge === 'from' ? `${value}-01` : `${value}-12`
-    return edge === 'from' ? `${value}-01-01` : `${value}-12-31`
-  }
-  return ''
-}
-
-function lastDay(yearMonth: string): string {
-  const year = Number(yearMonth.slice(0, 4))
-  const month = Number(yearMonth.slice(5, 7))
-  const day = new Date(Date.UTC(year, month, 0)).getUTCDate()
-  return `${yearMonth}-${String(day).padStart(2, '0')}`
 }

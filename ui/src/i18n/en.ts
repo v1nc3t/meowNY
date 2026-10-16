@@ -308,7 +308,7 @@ export const en = {
   'export.includeTransactions': 'list the transactions',
   'export.showDescriptions': 'show descriptions',
   'export.contains': 'what the file will contain',
-  'export.pdfMonths': 'whole months: {period}.',
+  'export.pdfWholeMonths': 'a report covers whole months, so there is no choice by day.',
   'export.noTransactions': 'no transactions in this selection.',
   'export.history': 'change history',
   'export.warning': 'this file is not encrypted. anyone who gets it can read it.',
@@ -532,12 +532,11 @@ export const en = {
   'docs.tooBigToShow': 'this image is too large to show here. open it instead.',
   'docs.preview': 'preview of {name}',
   'docs.attachNone': 'no documents attached.',
-  'docs.attachExisting': 'attach one from the library',
+  'docs.attachExisting': 'attach',
   'docs.attachThis': 'attach',
   'docs.attachPending': 'will be attached when you save.',
   'docs.attachFailed': 'saved, but these files could not be attached: {names}',
   'docs.clip': 'documents attached: {count}',
-  'docs.dateRange': 'filter by date',
 } as const
 
 export type MessageKey = keyof typeof en

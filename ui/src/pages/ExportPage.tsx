@@ -8,12 +8,27 @@ import { periodLabel, reportLabels } from '../api/reportLabels'
 import { useToday, type Today } from '../api/today'
 import DatePicker from '../components/DatePicker'
 import Dropdown from '../components/Dropdown'
+import Pick, { PickOption } from '../components/Pick'
 import { useI18n } from '../i18n/context'
 import { formatDate, formatMoney } from '../lib/money'
+import { thisPeriod, type RangeMode } from '../lib/range'
 import { useDebounced } from '../hooks/useDebounced'
 import { useMoneySettings, type MoneySettings } from '../hooks/useMoneySettings'
 import { useNotice } from '../hooks/useNotice'
-import { FORMATS, monthsBetween, problemWith, reportMonths, selectionFor, type Choice, type ExportFormat } from './exportPlan'
+import {
+  bounds,
+  defaultChoice,
+  fitFormat,
+  FORMATS,
+  modesFor,
+  monthsBetween,
+  problemWith,
+  reportMonths,
+  selectionFor,
+  withMode,
+  type Choice,
+  type ExportFormat,
+} from './exportPlan'
 
 const FORMAT_NAMES: Record<ExportFormat, string> = { json: 'JSON', csv: 'CSV', xlsx: 'Excel', pdf: 'PDF' }
 const PAGE_SIZES = [
@@ -45,13 +60,8 @@ function ExportForm({ today, settings, categories }: { today: Today; settings: M
   const [message, setMessage] = useNotice()
   const [busy, setBusy] = useState(false)
   const [format, setFormat] = useState<ExportFormat>('json')
-  const [choice, setChoice] = useState<Choice>({
-    limitDates: false,
-    from: `${today.date.slice(0, 4)}-01-01`,
-    to: today.date,
-    allCategories: true,
-    categoryIds: [],
-  })
+  const [choice, setChoice] = useState<Choice>(() => defaultChoice(today))
+  const [modeMenu, setModeMenu] = useState(false)
   const [page, setPage] = useState<'A4' | 'LETTER'>('A4')
   const [includeTransactions, setIncludeTransactions] = useState(false)
   const [showDescriptions, setShowDescriptions] = useState(false)
@@ -59,9 +69,9 @@ function ExportForm({ today, settings, categories }: { today: Today; settings: M
 
   const selection = useMemo(() => selectionFor(format, choice), [format, choice])
   const settled = useDebounced(selection, 250)
-  const datesOk = !(choice.limitDates && choice.from > choice.to)
   const months = reportMonths(choice, preview ?? { firstDate: null, lastDate: null }, today.month)
   const problem = problemWith(format, choice, monthsBetween(months.fromMonth, months.toMonth))
+  const datesOk = problem !== 'dates'
 
   // What the file would contain follows the choice, a moment after it stops changing.
   useEffect(() => {
@@ -81,6 +91,13 @@ function ExportForm({ today, settings, categories }: { today: Today; settings: M
   }, [settled, datesOk, setMessage])
 
   const update = (patch: Partial<Choice>) => setChoice((current) => ({ ...current, ...patch }))
+  // A report is made of whole months, so choosing it turns a range by day into the months it touches.
+  const chooseFormat = (next: ExportFormat) => {
+    setFormat(next)
+    setChoice((current) => fitFormat(next, current))
+  }
+  const modeLabel = (mode: RangeMode) => (mode === 'date' ? t('common.day') : mode === 'month' ? t('common.month') : t('common.year'))
+  const goCurrentMonth = () => update({ mode: 'month', from: thisPeriod('month', today), to: thisPeriod('month', today) })
   const toggleCategory = (id: string, on: boolean) =>
     update({ categoryIds: on ? [...choice.categoryIds, id] : choice.categoryIds.filter((other) => other !== id) })
 
@@ -120,7 +137,21 @@ function ExportForm({ today, settings, categories }: { today: Today; settings: M
         ? day(preview.firstDate)
         : `${day(preview.firstDate)} \u2013 ${day(preview.lastDate)}`
       : ''
-  const period = format === 'pdf' ? periodLabel(months.fromMonth, months.toMonth, language) : span
+  // The period on the receipt is the range as it was chosen, by day, month or year; with every date it is what the data spans (a
+  // report, being whole months, says the months).
+  const range = bounds(choice)
+  const joined = (from: string, to: string) => (from === to ? from : `${from} \u2013 ${to}`)
+  const period = !choice.limitDates
+    ? format === 'pdf'
+      ? periodLabel(months.fromMonth, months.toMonth, language)
+      : span
+    : !range.from || !range.to
+      ? ''
+      : choice.mode === 'date'
+        ? joined(day(range.from), day(range.to))
+        : choice.mode === 'month'
+          ? periodLabel(range.from.slice(0, 7), range.to.slice(0, 7), language)
+          : joined(range.from.slice(0, 4), range.to.slice(0, 4))
   const groups = [
     { type: 'EXPENSE', title: t('budgets.expenses') },
     { type: 'INCOME', title: t('budgets.income') },
@@ -140,7 +171,7 @@ function ExportForm({ today, settings, categories }: { today: Today; settings: M
           <fieldset className="export-formats" aria-label={t('export.format')}>
             {FORMATS.map((value) => (
               <label className="export-format" key={value}>
-                <input type="radio" name="format" value={value} checked={format === value} onChange={() => setFormat(value)} />
+                <input type="radio" name="format" value={value} checked={format === value} onChange={() => chooseFormat(value)} />
                 <span className="export-format-name">{FORMAT_NAMES[value]}</span>
                 <span className="export-format-hint">{t(`export.${value}Hint`)}</span>
               </label>
@@ -155,17 +186,57 @@ function ExportForm({ today, settings, categories }: { today: Today; settings: M
             </label>
             {choice.limitDates && (
               <>
+                <div className="export-range">
+                  <button type="button" onClick={goCurrentMonth}>
+                    {t('tx.currentMonth')}
+                  </button>
+                  <Pick
+                    label={t('tx.range')}
+                    className="mode"
+                    text={modeLabel(choice.mode)}
+                    open={modeMenu}
+                    onToggle={() => setModeMenu((open) => !open)}
+                    onClose={() => setModeMenu(false)}
+                  >
+                    {modesFor(format).map((mode) => (
+                      <PickOption
+                        key={mode}
+                        selected={choice.mode === mode}
+                        onClick={() => {
+                          setChoice((current) => withMode(current, mode))
+                          setModeMenu(false)
+                        }}
+                      >
+                        {modeLabel(mode)}
+                      </PickOption>
+                    ))}
+                  </Pick>
+                </div>
                 <div className="export-date">
                   <span>{t('export.from')}</span>
-                  <DatePicker kind="date" label={t('export.from')} value={choice.from} today={today.date} onChange={(from) => update({ from })} />
+                  <DatePicker
+                    key={`from-${choice.mode}`}
+                    kind={choice.mode}
+                    label={t('export.from')}
+                    value={choice.from}
+                    today={today.date}
+                    onChange={(from) => update({ from })}
+                  />
                 </div>
                 <div className="export-date">
                   <span>{t('export.to')}</span>
-                  <DatePicker kind="date" label={t('export.to')} value={choice.to} today={today.date} onChange={(to) => update({ to })} />
+                  <DatePicker
+                    key={`to-${choice.mode}`}
+                    kind={choice.mode}
+                    label={t('export.to')}
+                    value={choice.to}
+                    today={today.date}
+                    onChange={(to) => update({ to })}
+                  />
                 </div>
+                {format === 'pdf' && <p className="hint">{t('export.pdfWholeMonths')}</p>}
               </>
             )}
-            {format === 'pdf' && <p className="hint">{t('export.pdfMonths', { period: periodLabel(months.fromMonth, months.toMonth, language) })}</p>}
           </div>
 
           <div className="export-card">

@@ -1,37 +1,91 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { MAX_REPORT_MONTHS, monthEnd, monthsBetween, problemWith, reportMonths, selectionFor, type Choice } from './exportPlan.ts'
+import {
+  bounds,
+  defaultChoice,
+  fitFormat,
+  FORMATS,
+  MAX_REPORT_MONTHS,
+  modesFor,
+  monthEnd,
+  monthsBetween,
+  problemWith,
+  reportMonths,
+  selectionFor,
+  withMode,
+  type Choice,
+} from './exportPlan.ts'
 
-const all: Choice = { limitDates: false, from: '2026-01-01', to: '2026-12-31', allCategories: true, categoryIds: [] }
+const all: Choice = { limitDates: false, mode: 'date', from: '2026-01-01', to: '2026-12-31', allCategories: true, categoryIds: [] }
+const days = (from: string, to: string): Choice => ({ ...all, limitDates: true, mode: 'date', from, to })
+const months = (from: string, to: string): Choice => ({ ...all, limitDates: true, mode: 'month', from, to })
+const years = (from: string, to: string): Choice => ({ ...all, limitDates: true, mode: 'year', from, to })
+
+test('the first choice is every date and every category, with this month ready for a range', () => {
+  const choice = defaultChoice({ date: '2026-10-16', month: '2026-10' })
+  assert.deepEqual(choice, { limitDates: false, mode: 'month', from: '2026-10', to: '2026-10', allCategories: true, categoryIds: [] })
+})
 
 test('every date and every category means no limits', () => {
-  for (const format of ['json', 'csv', 'xlsx', 'pdf'] as const) {
+  for (const format of FORMATS) {
     assert.deepEqual(selectionFor(format, all), { from: null, to: null, categoryIds: null })
   }
 })
 
-test('chosen dates and categories are sent as they are', () => {
-  const choice: Choice = { ...all, limitDates: true, from: '2026-03-10', to: '2026-05-20', allCategories: false, categoryIds: ['4', '7'] }
-  assert.deepEqual(selectionFor('csv', choice), { from: '2026-03-10', to: '2026-05-20', categoryIds: ['4', '7'] })
+test('a range by day, by month and by year is sent as the days it covers, the same for every format but a report', () => {
+  const picks: [Choice, { from: string; to: string }][] = [
+    [days('2026-03-10', '2026-05-20'), { from: '2026-03-10', to: '2026-05-20' }],
+    [months('2026-03', '2026-05'), { from: '2026-03-01', to: '2026-05-31' }],
+    [years('2025', '2026'), { from: '2025-01-01', to: '2026-12-31' }],
+  ]
+  for (const [choice, expected] of picks) {
+    for (const format of ['json', 'csv', 'xlsx'] as const) {
+      assert.deepEqual(selectionFor(format, choice), { ...expected, categoryIds: null }, `${format} ${choice.mode}`)
+    }
+    assert.deepEqual(bounds(choice), expected)
+  }
+})
+
+test('chosen categories go with the range', () => {
+  const choice: Choice = { ...months('2026-03', '2026-05'), allCategories: false, categoryIds: ['4', '7'] }
+  assert.deepEqual(selectionFor('csv', choice), { from: '2026-03-01', to: '2026-05-31', categoryIds: ['4', '7'] })
   assert.deepEqual(selectionFor('json', choice), selectionFor('xlsx', choice))
 })
 
-test('a PDF covers whole months, so its dates are widened to them', () => {
-  const choice: Choice = { ...all, limitDates: true, from: '2026-03-10', to: '2026-05-20' }
-  assert.deepEqual(selectionFor('pdf', choice), { from: '2026-03-01', to: '2026-05-31', categoryIds: null })
+test('a report is made of whole months, so it has no choice by day and a range by day becomes its months', () => {
+  assert.deepEqual(modesFor('pdf'), ['month', 'year'])
+  for (const format of ['json', 'csv', 'xlsx'] as const) assert.deepEqual(modesFor(format), ['date', 'month', 'year'])
+  const fitted = fitFormat('pdf', days('2026-03-10', '2026-05-20'))
+  assert.deepEqual([fitted.mode, fitted.from, fitted.to], ['month', '2026-03', '2026-05'])
+  // what already fits is left alone, for a report and for the others
+  assert.equal(fitFormat('pdf', months('2026-03', '2026-05')).mode, 'month')
+  assert.equal(fitFormat('pdf', years('2025', '2026')).mode, 'year')
+  const unchanged = days('2026-03-10', '2026-05-20')
+  assert.equal(fitFormat('csv', unchanged), unchanged)
+  // a report asked for by day despite that (it cannot be, on the screen) is still widened to the months, never cut short
+  assert.deepEqual(selectionFor('pdf', days('2026-03-10', '2026-05-20')), { from: '2026-03-01', to: '2026-05-31', categoryIds: null })
   assert.equal(monthEnd('2026-02'), '2026-02-28')
   assert.equal(monthEnd('2024-02'), '2024-02-29', 'leap year')
   assert.equal(monthEnd('2026-12'), '2026-12-31')
 })
 
-test('the months of a report come from the dates, the data or the current month', () => {
+test('changing the unit keeps what the range covers as far as it can', () => {
+  const changed = withMode(days('2026-03-10', '2026-05-20'), 'month')
+  assert.deepEqual([changed.mode, changed.from, changed.to], ['month', '2026-03', '2026-05'])
+  const finer = withMode(months('2026-03', '2026-05'), 'date')
+  assert.deepEqual([finer.mode, finer.from, finer.to], ['date', '2026-03-01', '2026-05-31'])
+  const yearly = withMode(months('2026-03', '2026-05'), 'year')
+  assert.deepEqual([yearly.mode, yearly.from, yearly.to], ['year', '2026', '2026'])
+})
+
+test('the months of a report come from the range, the data or the current month', () => {
   const span = { firstDate: '2026-02-11', lastDate: '2026-04-30' }
-  assert.deepEqual(reportMonths({ ...all, limitDates: true, from: '2026-06-15', to: '2026-08-02' }, span, '2026-10'), {
-    fromMonth: '2026-06',
-    toMonth: '2026-08',
-  })
+  assert.deepEqual(reportMonths(days('2026-06-15', '2026-08-02'), span, '2026-10'), { fromMonth: '2026-06', toMonth: '2026-08' })
+  assert.deepEqual(reportMonths(months('2026-06', '2026-08'), span, '2026-10'), { fromMonth: '2026-06', toMonth: '2026-08' })
+  assert.deepEqual(reportMonths(years('2025', '2026'), span, '2026-10'), { fromMonth: '2025-01', toMonth: '2026-12' })
   assert.deepEqual(reportMonths(all, span, '2026-10'), { fromMonth: '2026-02', toMonth: '2026-04' })
   assert.deepEqual(reportMonths(all, { firstDate: null, lastDate: null }, '2026-10'), { fromMonth: '2026-10', toMonth: '2026-10' })
+  assert.deepEqual(reportMonths(months('', '2026-08'), span, '2026-10'), { fromMonth: '2026-10', toMonth: '2026-08' }, 'an unfinished end falls back to this month')
 })
 
 test('months are counted from the first to the last, both included', () => {
@@ -41,10 +95,15 @@ test('months are counted from the first to the last, both included', () => {
   assert.equal(monthsBetween('2016-01', '2026-01'), MAX_REPORT_MONTHS + 1)
 })
 
-test('a choice with an end before its start, no categories or too long a report is refused', () => {
+test('an end before its start, an unfinished range, no categories or too long a report is refused', () => {
   assert.equal(problemWith('csv', all, 1), null)
-  assert.equal(problemWith('csv', { ...all, limitDates: true, from: '2026-05-01', to: '2026-04-30' }, 1), 'dates')
-  assert.equal(problemWith('csv', { ...all, limitDates: true, from: '2026-05-01', to: '2026-05-01' }, 1), null, 'one day is fine')
+  assert.equal(problemWith('csv', days('2026-05-01', '2026-04-30'), 1), 'dates')
+  assert.equal(problemWith('csv', days('2026-05-01', '2026-05-01'), 1), null, 'one day is fine')
+  assert.equal(problemWith('csv', months('2026-05', '2026-04'), 1), 'dates')
+  assert.equal(problemWith('csv', months('2026-05', '2026-05'), 1), null, 'one month is fine')
+  assert.equal(problemWith('csv', years('2027', '2026'), 1), 'dates')
+  assert.equal(problemWith('csv', months('', '2026-05'), 1), 'dates', 'a range with no start')
+  assert.equal(problemWith('csv', days('2026-05', '2026-05-02'), 1), 'dates', 'a month where a day is wanted')
   assert.equal(problemWith('json', { ...all, allCategories: false, categoryIds: [] }, 1), 'categories')
   assert.equal(problemWith('json', { ...all, allCategories: false, categoryIds: ['3'] }, 1), null)
   assert.equal(problemWith('pdf', all, MAX_REPORT_MONTHS + 1), 'months')

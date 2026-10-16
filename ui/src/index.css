@@ -2403,6 +2403,19 @@ kbd {
   width: 100%;
 }
 
+/* "current month" and the unit of the range side by side, as on the transactions page. */
+.export-range {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.5rem 1.25rem;
+}
+
+.export-range > button {
+  flex: 0 0 auto;
+  padding: 0.625rem 0;
+}
+
 .export-date {
   display: grid;
   grid-template-columns: 4rem minmax(0, 1fr);
@@ -3564,16 +3577,6 @@ button.attach-name {
 .doc-page.is-dragging {
   outline: 1px dashed var(--accent);
   outline-offset: -0.25rem;
-}
-
-.toolbar .doc-by-date {
-  width: auto;
-  flex: 0 0 auto;
-  padding-bottom: 0.5rem;
-}
-
-.toolbar .doc-by-date input {
-  width: 1.125rem;
 }
 
 .doc-marks {

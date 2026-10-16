@@ -1,11 +1,10 @@
 import { useCallback, useEffect, useRef, useState, type ChangeEvent, type DragEvent } from 'react'
 import ConfirmModal from '../components/ConfirmModal'
-import DatePicker from '../components/DatePicker'
 import DocumentModal from '../components/DocumentModal'
 import Icon from '../components/NavIcon'
+import Pick, { PickOption } from '../components/Pick'
 import { documents, type Doc, type DocPage, type LibrarySize, type Report } from '../api/documents'
 import { errorText } from '../api/invoke'
-import { useToday, type Today } from '../api/today'
 import { useMoneySettings, type MoneySettings } from '../hooks/useMoneySettings'
 import { useProfile } from '../hooks/profile'
 import { useDebounced } from '../hooks/useDebounced'
@@ -22,21 +21,18 @@ const LIMIT = 50
 
 export default function DocumentsPage() {
   const { settings, error } = useMoneySettings()
-  const now = useToday()
   if (error) return <p className="notice">{error}</p>
-  if (!settings || !now) return null
-  return <DocumentsView settings={settings} now={now} />
+  if (!settings) return null
+  return <DocumentsView settings={settings} />
 }
 
-function DocumentsView({ settings, now }: { settings: MoneySettings; now: Today }) {
+function DocumentsView({ settings }: { settings: MoneySettings }) {
   const t = useT()
   const phone = useProfile() === 'phone'
   const locale = settings.locale
   const [q, setQ] = useState('')
   const [kind, setKind] = useState<KindChoice>('')
-  const [byDate, setByDate] = useState(false)
-  const [from, setFrom] = useState(now.date)
-  const [to, setTo] = useState(now.date)
+  const [kindMenu, setKindMenu] = useState(false)
   const [offset, setOffset] = useState(0)
   const [reload, setReload] = useState(0)
   const [page, setPage] = useState<DocPage | null>(null)
@@ -58,7 +54,6 @@ function DocumentsView({ settings, now }: { settings: MoneySettings; now: Today 
       .list({
         ...(search ? { q: search } : {}),
         ...(kind ? { kind } : {}),
-        ...(byDate ? { from, to } : {}),
         limit: LIMIT,
         offset,
       })
@@ -73,7 +68,7 @@ function DocumentsView({ settings, now }: { settings: MoneySettings; now: Today 
     return () => {
       cancelled = true
     }
-  }, [search, kind, byDate, from, to, offset, reload, setMessage])
+  }, [search, kind, offset, reload, setMessage])
 
   // How many documents there are and what is wrong with the files. Asking also removes files that belong to no document.
   useEffect(() => {
@@ -210,45 +205,28 @@ function DocumentsView({ settings, now }: { settings: MoneySettings; now: Today 
             }}
           />
         </label>
-        <label>
-          {t('common.type')}
-          <select
-            value={kind}
-            onChange={(event) => {
-              setKind(event.target.value as KindChoice)
-              setOffset(0)
-            }}
-          >
-            {KIND_CHOICES.map((choice) => (
-              <option key={choice.value} value={choice.value}>
-                {t(choice.label)}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="doc-by-date">
-          <input
-            type="checkbox"
-            checked={byDate}
-            onChange={(event) => {
-              setByDate(event.target.checked)
-              setOffset(0)
-            }}
-          />
-          {t('docs.dateRange')}
-        </label>
-        {byDate ? (
-          <div className="tx-range" data-mode="date">
-            <div className="tx-date-group">
-              <span>{t('tx.from')}</span>
-              <DatePicker kind="date" value={from} label={t('tx.from')} today={now.date} onChange={(value) => { setFrom(value); setOffset(0) }} />
-            </div>
-            <div className="tx-date-group">
-              <span>{t('tx.to')}</span>
-              <DatePicker kind="date" value={to} label={t('tx.to')} today={now.date} onChange={(value) => { setTo(value); setOffset(0) }} />
-            </div>
-          </div>
-        ) : null}
+        <Pick
+          label={t('common.type')}
+          className="scope"
+          text={t(KIND_CHOICES.find((choice) => choice.value === kind)?.label ?? 'common.all')}
+          open={kindMenu}
+          onToggle={() => setKindMenu((open) => !open)}
+          onClose={() => setKindMenu(false)}
+        >
+          {KIND_CHOICES.map((choice) => (
+            <PickOption
+              key={choice.value}
+              selected={kind === choice.value}
+              onClick={() => {
+                setKind(choice.value)
+                setKindMenu(false)
+                setOffset(0)
+              }}
+            >
+              {t(choice.label)}
+            </PickOption>
+          ))}
+        </Pick>
       </div>
       <p className="notice" role="status">
         {message}
@@ -260,7 +238,7 @@ function DocumentsView({ settings, now }: { settings: MoneySettings; now: Today 
       {page ? (
         <>
           <div className="tx-pane wide">
-            {page.documents.length === 0 ? <p>{search || kind || byDate ? t('docs.noMatch') : t('docs.empty')}</p> : null}
+            {page.documents.length === 0 ? <p>{search || kind ? t('docs.noMatch') : t('docs.empty')}</p> : null}
             <ul className="card-list">
               {page.documents.map((doc) => {
                 const state = fileStateText(fileState(doc, phone))
