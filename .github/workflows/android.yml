@@ -53,15 +53,19 @@ jobs:
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: 17
+          # The version the project builds with by hand (the Android Gradle plugin the template uses needs 17 or newer).
+          java-version: 21
 
       - name: Set up the Android SDK
         uses: android-actions/setup-android@v3
+        with:
+          # The action's default list names a package, `tools`, that Google no longer has, and the job stops there.
+          packages: platform-tools
 
       # SQLCipher is built with its own OpenSSL, which needs the NDK compilers on the PATH (see OpenSSL's NOTES-ANDROID).
       - name: Install the NDK
         run: |
-          sdkmanager "ndk;${NDK_VERSION}"
+          sdkmanager "ndk;${NDK_VERSION}" "platforms;android-37.0"
           echo "NDK_HOME=${ANDROID_HOME}/ndk/${NDK_VERSION}" >> "$GITHUB_ENV"
           echo "ANDROID_NDK_HOME=${ANDROID_HOME}/ndk/${NDK_VERSION}" >> "$GITHUB_ENV"
           echo "ANDROID_NDK_ROOT=${ANDROID_HOME}/ndk/${NDK_VERSION}" >> "$GITHUB_ENV"

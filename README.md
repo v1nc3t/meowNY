@@ -153,7 +153,7 @@ This builds a release version of the app and the installer formats Tauri support
 
 The phone app is the same UI and the same Rust core, packaged by Tauri mobile. It has been built, installed and tried on one phone at home (see [docs/PLAN.md](docs/PLAN.md), phase 8). The CI job `.github/workflows/android.yml` builds a debug-signed APK on every change to the app, and keeps it as a download; building it by hand needs:
 
-- Java 17, the Android SDK, and the Android NDK 27 (`sdkmanager "ndk;27.2.12479018"`), with `ANDROID_HOME`, `NDK_HOME` and `ANDROID_NDK_HOME` set, and the NDK's `toolchains/llvm/prebuilt/<system>/bin` folder on your `PATH` (SQLCipher is built with its own OpenSSL, which needs the NDK compilers)
+- Java 21, the Android SDK, and the Android NDK 27 (`sdkmanager "ndk;27.2.12479018"`), with `ANDROID_HOME`, `NDK_HOME` and `ANDROID_NDK_HOME` set, and the NDK's `toolchains/llvm/prebuilt/<system>/bin` folder on your `PATH` (SQLCipher is built with its own OpenSSL, which needs the NDK compilers)
 - The Rust target for the phone: `rustup target add aarch64-linux-android`
 
 ```bash
