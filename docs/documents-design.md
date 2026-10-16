@@ -59,7 +59,7 @@ This is the usual STREAM layout. Every chunk except the last holds exactly 65,53
 | Chunks swapped or one dropped from the middle | The counter is in the nonce, so every later chunk fails |
 | Another document's file under this name | The sync id is in the key |
 
-The reader also checks the plaintext size against the row (`size_bytes`) and the SHA-256 of what came out against the row (`sha256`) before it hands anything over. A file that fails any of these is reported as damaged and nothing from it is shown or sent.
+A file whose last chunk is empty but which has other chunks is refused too: the sealer never writes one, so it can only be someone's attempt to extend a file. The reader also checks the plaintext size against the row (`size_bytes`) and the SHA-256 of what came out against the row (`sha256`) before it hands anything over. A file that fails any of these is reported as damaged and nothing from it is shown or sent.
 
 **Writing** is atomic: the sealed bytes go to `name.tmp` in the same folder, are flushed to disk, and are renamed over the final name; on Unix the folder is flushed too. Files are created owner-only. A file arriving from the other device is first built as `name.part` (a valid prefix: its chunks are all sealed as non-final), and renamed only after the hash matches; that is what makes a transfer resumable (section 9).
 
@@ -140,6 +140,8 @@ If the file is written and the row insert fails, the file is removed. If the pro
 A check runs after every unlock, after a restore, and after a sync:
 
 - A file in `documents/` whose name no row derives (leftovers, a document deleted on another device) is removed. The `.tmp` files are removed; `.part` files are kept when their row exists and removed when it does not.
+- A row whose file has a length that its size cannot give (a cut or extended file) is reported as damaged and left where it is; the check reads no file, it only looks at lengths, so it stays fast with thousands of documents. Opening a file proves the rest.
+- Only things that are ours are touched: names of 32 lowercase hex characters with the extensions `.mnd`, `.tmp` and `.part`. Anything else in the folder (another name, a folder, a link) is left alone and counted.
 - A row whose file is missing is counted, not repaired, and the documents page says how many ("3 documents have no file on this computer"). On the phone only rows with the switch on count.
 - Nothing is ever written to a log with a name or a hash in it.
 
@@ -262,7 +264,7 @@ The answers go into this file. If 1 or 2 fail, a small plugin or a patch in `scr
 
 ## 17. Tests
 
-- **Sealed format**: known-answer vectors from `scripts/doc-vectors.py`, a second implementation written from RFC 8439 and RFC 5869 (the same method as `sync-vectors.py`), that prints the keys and the bytes of small files (empty, 1 byte, exactly one chunk, one chunk and a byte, three chunks); a changed byte in the header or in any chunk, a cut file (at every chunk boundary and inside a chunk), an appended chunk, swapped chunks, a chunk of another file, a file under another document's name: all refused; the largest file; round trips for every size from 0 to 3 chunks and a few random ones; the key is dropped when the vault locks.
+- **Sealed format**: known-answer vectors from `scripts/doc-vectors.py`, a second implementation that takes the ChaCha20-Poly1305 and HKDF written from RFC 8439 and RFC 5869 in `sync-vectors.py` (which checks them against the RFCs' own vectors) and builds the keys, the names and the files on top of them, that prints the keys and the bytes of small files (empty, 1 byte, exactly one chunk, one chunk and a byte, three chunks); a changed byte in the header or in any chunk, a cut file (at every chunk boundary and inside a chunk), an appended chunk, swapped chunks, a chunk of another file, a file under another document's name: all refused; the largest file; round trips for every size from 0 to 3 chunks and a few random ones; the key is dropped when the vault locks.
 - **Names and types**: a list of hostile names (path parts, control and direction characters, long names, reserved Windows names, only dots), checked for what is stored and for `disk_name()`; the media type from bytes against lying extensions; an image whose header claims a huge size is not drawn.
 - **Rows**: constraint tests for both tables (one target, uniqueness, foreign keys, the check on size and hash), the triggers (stamps, markers, audit), a deleted transaction removes its links and no document, a deleted document removes its links and its file.
 - **Agreement**: a file without a row is removed, a row without a file is counted, `.tmp` and old `.part` files are cleaned, the check is quiet when everything agrees.

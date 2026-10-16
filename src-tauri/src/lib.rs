@@ -7,6 +7,7 @@ pub mod commands;
 pub mod currency;
 pub mod db;
 pub mod display;
+pub mod documents;
 pub mod export;
 pub mod keys;
 pub mod migrate;
