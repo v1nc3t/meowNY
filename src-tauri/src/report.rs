@@ -11,7 +11,13 @@
 //! Budget against actual for a range compares each category over the months in which it had a budget;
 //! for a single month that is exactly what the budget screen shows.
 
+// What a report reads is only used by the PDF, which the phone's build leaves out.
+#![cfg_attr(mobile, allow(dead_code))]
+
+// The PDF is made on the desktop only: the phone's build has neither the PDF writer nor the fonts (see `Cargo.toml`).
+#[cfg(desktop)]
 mod layout;
+#[cfg(desktop)]
 mod render;
 
 use std::collections::HashMap;
@@ -334,13 +340,19 @@ impl Report {
         self.pdf_with(options, true)
     }
 
+    #[cfg(desktop)]
     fn pdf_with(&self, options: &ReportOptions, compress: bool) -> Result<Vec<u8>, AppError> {
         let doc = layout::build(&self.0, options)?;
         render::pdf(&doc, &options.labels.title, compress)
     }
+
+    #[cfg(mobile)]
+    fn pdf_with(&self, _: &ReportOptions, _: bool) -> Result<Vec<u8>, AppError> {
+        Err(AppError::InvalidInput)
+    }
 }
 
-#[cfg(test)]
+#[cfg(all(test, desktop))]
 mod tests {
     use super::layout::{axis_top, donut_slices, label_stride, Metrics, Op};
     use super::*;
@@ -702,7 +714,7 @@ mod tests {
         assert_eq!(axis_top(320_000), (400_000, 100_000));
         assert_eq!(axis_top(100_000), (100_000, 25_000), "1000.00 fits four steps of 250");
         assert_eq!(axis_top(1_234_567), (2_000_000, 500_000));
-        assert_eq!(axis_top(999_999_999_999), (10_000_000_000_00, 2_500_000_000_00));
+        assert_eq!(axis_top(999_999_999_999), (1_000_000_000_000, 250_000_000_000));
         for max in [1, 99, 100, 101, 12_345, 9_999_999, 123_456_789_012] {
             let (top, step) = axis_top(max);
             assert!(top >= max && top == step * 4, "{max}: {top} {step}");
@@ -1030,15 +1042,15 @@ mod tests {
 
     // ---- the English texts the command line asks for ----
 
-    const CLIENT_ENGLISH: &str = include_str!("../../client/src/i18n/en.ts");
-    const CLIENT_LABELS: &str = include_str!("../../client/src/api/reportLabels.ts");
+    const UI_ENGLISH: &str = include_str!("../../ui/src/i18n/en.ts");
+    const UI_LABELS: &str = include_str!("../../ui/src/api/reportLabels.ts");
 
-    /// The English text of a screen text, read from the client's dictionary.
-    fn client_text(key: &str) -> String {
+    /// The English text of a screen text, read from the UI's dictionary.
+    fn ui_text(key: &str) -> String {
         // On Windows, git may have checked the file out with CRLF line ends.
-        let english = CLIENT_ENGLISH.replace("\r\n", "\n");
+        let english = UI_ENGLISH.replace("\r\n", "\n");
         let marker = format!("'{key}': '");
-        let start = english.find(&marker).unwrap_or_else(|| panic!("no text {key} in the client")) + marker.len();
+        let start = english.find(&marker).unwrap_or_else(|| panic!("no text {key} in the UI")) + marker.len();
         let end = english[start..].find("',\n").expect("the text ends");
         english[start..start + end].to_string()
     }
@@ -1068,17 +1080,17 @@ mod tests {
             "amount" => &labels.amount,
             "page" => &labels.page,
             "noData" => &labels.no_data,
-            other => panic!("the client has a label the app does not know: {other}"),
+            other => panic!("the UI has a label the app does not know: {other}"),
         }
     }
 
     /// The command line writes a report in English without the window's help. Its texts are the ones the
-    /// window would give in English: this reads the client's own recipe for each label and compares.
+    /// window would give in English: this reads the UI's own recipe for each label and compares.
     #[test]
-    fn the_english_labels_are_the_texts_the_client_builds_in_english() {
+    fn the_english_labels_are_the_texts_the_ui_builds_in_english() {
         let labels = ReportLabels::english("2026-01", "2026-03").unwrap();
         let mut seen = Vec::new();
-        for line in CLIENT_LABELS.lines().map(str::trim) {
+        for line in UI_LABELS.lines().map(str::trim) {
             let Some((name, recipe)) = line.split_once(": ") else { continue };
             let recipe = recipe.trim_end_matches(',');
             let (capitalised, key) = if let Some(inner) = recipe.strip_prefix("capital(t('").and_then(|r| r.strip_suffix("'))")) {
@@ -1088,9 +1100,9 @@ mod tests {
             } else {
                 continue;
             };
-            let english = client_text(key);
+            let english = ui_text(key);
             let expected = if capitalised { capital(&english) } else { english };
-            assert_eq!(field(&labels, name), expected, "the label {name} (client text {key})");
+            assert_eq!(field(&labels, name), expected, "the label {name} (UI text {key})");
             seen.push(name.to_string());
         }
         // Every label but the period comes from a text; none was skipped by the reader above.

@@ -18,11 +18,6 @@ impl DbKey {
         &self.0
     }
 
-    #[cfg(test)]
-    pub fn pragma_value_for_tests(&self) -> String {
-        self.pragma_value()
-    }
-
     /// SQLCipher raw-key syntax: skips the passphrase KDF, so the key must be random.
     fn pragma_value(&self) -> String {
         let hex: String = self.0.iter().map(|b| format!("{b:02x}")).collect();
@@ -65,6 +60,8 @@ impl From<rusqlite::Error> for DbError {
 pub fn open_and_migrate(path: &Path, key: &DbKey) -> Result<Connection, DbError> {
     let mut conn = open(path, key)?;
     crate::migrate::run(&mut conn).map_err(DbError::Migrate)?;
+    // The clock must not be behind any stamp in the data (a clock that was set back, a file copied from another machine).
+    crate::sync::stamp::catch_up(&conn).map_err(|_| DbError::Unreadable)?;
     Ok(conn)
 }
 

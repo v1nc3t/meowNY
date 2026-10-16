@@ -5,7 +5,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/v1nc3t/meowNY/actions/workflows/github-ci.yml"><img alt="CI" src="https://github.com/v1nc3t/meowNY/actions/workflows/github-ci.yml/badge.svg"></a>
+  <a href="https://github.com/v1nc3t/meowNY/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/v1nc3t/meowNY/actions/workflows/ci.yml/badge.svg"></a>
   <a href="https://github.com/v1nc3t/meowNY/actions/workflows/desktop.yml"><img alt="Desktop build" src="https://github.com/v1nc3t/meowNY/actions/workflows/desktop.yml/badge.svg"></a>
   <a href="https://github.com/v1nc3t/meowNY/actions/workflows/security.yml"><img alt="Security" src="https://github.com/v1nc3t/meowNY/actions/workflows/security.yml/badge.svg"></a>
   <a href="LICENSE"><img alt="License: AGPL-3.0" src="https://img.shields.io/badge/license-AGPL--3.0-blue"></a>
@@ -17,14 +17,14 @@
   <a href="#getting-started">Getting started</a> ·
   <a href="#command-line">Command line</a> ·
   <a href="https://v1nc3t.github.io/meowNY/">CLI reference</a> ·
-  <a href="assets/PLAN.md">Roadmap</a>
+  <a href="docs/PLAN.md">Roadmap</a>
 </p>
 
 ---
 
-meowNY is a desktop app for tracking income and expenses against monthly budgets. A [Tauri](https://tauri.app) shell (Rust) shows a React client and keeps everything in one encrypted SQLite file ([SQLCipher](https://www.zetetic.net/sqlcipher/)) on your own machine. It also ships a command line program, `meowny`, so scripts and AI agents can use the running app without opening the data file.
+meowNY is a desktop app for tracking income and expenses against monthly budgets. A [Tauri](https://tauri.app) shell (Rust) shows a React UI and keeps everything in one encrypted SQLite file ([SQLCipher](https://www.zetetic.net/sqlcipher/)) on your own machine. It also ships a command line program, `meowny`, so scripts and AI agents can use the running app without opening the data file.
 
-> **Status: pre-release (version 0.1.0).** The desktop app and the command line work, and are tested, but there are no installers yet: you build it from source (see [Getting started](#getting-started)). Phone sync, phone capture and the bank connection are planned; see the [roadmap](#roadmap).
+> **Status: pre-release (version 0.1.0).** The desktop app and the command line work, and are tested, but there are no installers yet: you build it from source (see [Getting started](#getting-started)). The phone app and its sync are built and being tested; documents, and debts and expense splitting are planned; see the [roadmap](#roadmap).
 
 ## Table of contents
 
@@ -32,14 +32,17 @@ meowNY is a desktop app for tracking income and expenses against monthly budgets
 - [Privacy and security](#privacy-and-security)
 - [Getting started](#getting-started)
   - [Requirements](#requirements)
+  - [Program names](#program-names)
   - [Run the app](#run-the-app)
   - [Build a bundle](#build-a-bundle)
+  - [Build the Android app](#build-the-android-app)
   - [Where the data lives](#where-the-data-lives)
 - [Usage](#usage)
   - [Keyboard shortcuts](#keyboard-shortcuts)
   - [Command line](#command-line)
 - [Documentation](#documentation)
 - [Project structure](#project-structure)
+  - [Naming and layout](#naming-and-layout)
 - [Development](#development)
   - [Tests and checks](#tests-and-checks)
   - [Database](#database)
@@ -71,6 +74,17 @@ meowNY is a desktop app for tracking income and expenses against monthly budgets
 - Export to JSON, CSV, Excel and PDF, for the period and categories you choose.
 - "Delete all my data" removes the database, its key and the app's own backups.
 
+**Your phone (phase 8: the sync, the screens and the Android app are built and have been reviewed on a real phone)**
+
+- The phone keeps a full copy of your data, works on its own when you are away, and can change everything the desktop can. Back home, the two sync.
+- There is no server of any kind. The desktop shows a QR code, the phone scans it, and the phone connects straight to the desktop on your home network. Every sync starts that way, and the code works once and only for a couple of minutes. Both devices must be on the same wifi network (a network that stops devices from talking to each other, such as many hotels, does not work; connect the desktop to the phone's hotspot there).
+- Pairing shows six digits on the desktop that you type on the phone, so the check cannot be skipped by tapping "yes". Everything that is sent is encrypted with keys made from the pairing secret and that one-time code.
+- Each sync can go both ways, from the phone to the computer only, or from the computer to the phone only. If the same thing was changed on both devices since they last met, the device that takes the changes in shows both versions side by side and you choose which one is true.
+- On the phone the data is locked by a passphrase, and the phone erases itself after 5 wrong ones. The data comes back by pairing again with the desktop.
+- The currency is changed on the desktop only, and the desktop reminds you to sync the phone.
+- The first time the desktop listens, Windows or macOS may ask whether meowNY may accept connections on the network. Allow it for private networks only; nothing outside your home network is ever involved.
+- On the phone there is a bar at the top (sync, settings, lock), tabs at the bottom that you can also swipe between, and a round "+" on every page to add a transaction in a few taps: the amount first, then the category from the ones you used lately. There is no export and no backup file on the phone, because the desktop keeps those; and Android's own cloud backup of the app is turned off, so the data never leaves your phone except by syncing with your computer.
+
 **For scripts and AI agents (desktop only)**
 
 - A [command line program](#command-line), `meowny`, with a command for every feature, `--json` output and stable exit codes.
@@ -80,12 +94,12 @@ meowNY is a desktop app for tracking income and expenses against monthly budgets
 ## Privacy and security
 
 - **Local-first.** There is no server and no account, so there is no one who could hold your data. Nothing is sent anywhere, and there is no telemetry.
-- **No network by default.** A CI check (`npm run check:outbound`) lists every place in the code that can open a connection and fails when a new one appears. The only optional network traffic planned is something you turn on yourself, such as the bank connection, update checks or sync.
+- **No network by default.** A CI check (`npm run check:outbound`) lists every place in the code that can open a connection and fails when a new one appears. The only optional network traffic planned is update checks, which you turn on yourself. Syncing with your phone stays on your home network.
 - **Hardened window.** A strict content security policy, no remote content, one permission per command, no shell access from the web view, and links open in the system browser.
 - **Safe logs.** Logs and crash reports never contain amounts, descriptions, tokens or keys.
 - **The command API is for you only.** It listens on `127.0.0.1` and nothing else, refuses requests from web pages, answers "locked" while the app is locked, and does not count as activity, so the idle lock still works. Restoring a backup, changing the currency and deleting everything cannot be done through it at all.
 
-What is stored, where, and who could see it is written down in [assets/data-inventory.md](assets/data-inventory.md). It is a technical note, not a privacy policy.
+What is stored, where, and who could see it is written down in [docs/data-inventory.md](docs/data-inventory.md). It is a technical note, not a privacy policy.
 
 ## Getting started
 
@@ -99,6 +113,17 @@ What is stored, where, and who could see it is written down in [assets/data-inve
   - Windows: Microsoft C++ Build Tools and WebView2
 - A secret service for the key: macOS Keychain, Windows Credential Manager, or on Linux GNOME Keyring or KWallet running in your session. Without one, the first run fails with "key unavailable".
 
+### Program names
+
+The project has two programs, and they do not share a name, so both can be on your `PATH`:
+
+| Program | Name | Source |
+|---|---|---|
+| Desktop app | `meowny-desktop` | `src-tauri/` |
+| Command line | `meowny` | `cli/` |
+
+The window and the installers are still called meowNY. Only the name of the program file differs. The data folder (`org.meowny.app`) is the same, so nothing moves.
+
 ### Run the app
 
 From the repository root:
@@ -110,11 +135,11 @@ npm install
 npm run tauri dev
 ```
 
-The first run compiles the Rust side, which takes a few minutes. It starts the Vite dev server for the client and opens a window. Edits to `client/src` hot-reload; edits to `src-tauri/src` rebuild and restart the app.
+The first run compiles the Rust side, which takes a few minutes. It starts the Vite dev server for the UI and opens a window. Edits to `ui/src` hot-reload; edits to `src-tauri/src` rebuild and restart the app.
 
 On first launch the app asks for a currency and an optional passphrase, shows your recovery key, and creates the encrypted data file. Settings (currency, language, time zone, app lock, backup, command line access, delete all data) are at `/app/settings`.
 
-`npm run dev --workspace client` on its own opens the client in a browser, but there is no backend there: every screen talks to the Rust side, so the client only works in the desktop window.
+`npm run dev --workspace ui` on its own opens the UI in a browser, but there is no backend there: every screen talks to the Rust side, so the UI only works in the desktop window.
 
 ### Build a bundle
 
@@ -123,6 +148,26 @@ npm run tauri build
 ```
 
 This builds a release version of the app and the installer formats Tauri supports for your system. The result is not signed, and signed installers for all three systems are planned for the first release.
+
+### Build the Android app
+
+The phone app is the same UI and the same Rust core, packaged by Tauri mobile. It has been built, installed and tried on one phone at home (see [docs/PLAN.md](docs/PLAN.md), phase 8). The CI job `.github/workflows/android.yml` builds a debug-signed APK on every change to the app, and keeps it as a download; building it by hand needs:
+
+- Java 21, the Android SDK, and the Android NDK 27 (`sdkmanager "ndk;27.2.12479018"`), with `ANDROID_HOME`, `NDK_HOME` and `ANDROID_NDK_HOME` set, and the NDK's `toolchains/llvm/prebuilt/<system>/bin` folder on your `PATH` (SQLCipher is built with its own OpenSSL, which needs the NDK compilers)
+- The Rust target for the phone: `rustup target add aarch64-linux-android`
+
+```bash
+npx tauri android init                        # makes src-tauri/gen/android, which is not kept in git
+python3 scripts/android-patch.py              # no Android backup of the app's folder, no screenshots of it
+npx tauri android build --apk --target aarch64 --debug
+adb install src-tauri/gen/android/app/build/outputs/apk/universal/debug/app-universal-debug.apk
+```
+
+To try the phone against a desktop without a window (dev only), `cargo run --example sync_desktop -- <folder> setup`, then `pair` or `sync both|to_desktop|to_phone`; it prints the code and the six digits. A build for testing leaves out the screenshot block and adds a field to paste the code in: `MEOWNY_ALLOW_SCREENSHOTS=1 python3 scripts/android-patch.py` and `VITE_MEOWNY_TEST_PASTE=1 npx tauri android build ...`. Never install that build for real use.
+
+The phone build leaves out the Excel and PDF export and the file dialogs (the phone has no export or backup file), so it has fewer dependencies and is smaller than a computer build with the same code. `cargo run --release --example bench` times the usual work with ten years of data (dev only).
+
+The APK is signed with a debug key, which is enough to install it by hand ("install unknown apps" on the phone, or `adb install`). A release key and a store listing belong to the release phase. Run `python3 scripts/android-patch.py` again after every `tauri android init`: it keeps Android's backup from copying the encrypted data and its secret to a Google account, and it makes the app's window secure.
 
 ### Where the data lives
 
@@ -153,7 +198,7 @@ Press `?` in the app to see them all. Hovering or focusing a control shows its s
 | `Ctrl+L` / `Cmd+L` | lock the app |
 | `Ctrl+B` / `Cmd+B` | show or hide the sidebar |
 
-All shortcuts are defined in one table, `client/src/keys/shortcuts.ts`.
+All shortcuts are defined in one table, `ui/src/keys/shortcuts.ts`.
 
 ### Command line
 
@@ -182,7 +227,7 @@ All shortcuts are defined in one table, `client/src/keys/shortcuts.ts`.
    meowny status
    ```
 
-The desktop app's own program is also called `meowny`, so the command line is built on its own and not as part of the app.
+The desktop app's program is `meowny-desktop` (see [Program names](#program-names)), so the two never clash on your `PATH`. The command line is still built on its own and not as part of the app.
 
 **Examples**
 
@@ -225,17 +270,18 @@ Every command, flag and exit code is documented, with real output, in the [CLI r
 |---|---|
 | [CLI reference site](https://v1nc3t.github.io/meowNY/) | One static page in the style of an API reference: a card per command with its flags and a real example, the exit and error codes, a page for AI agents, and the HTTP API behind the command line |
 | [docs/CLI.md](docs/CLI.md) | The same text in one Markdown file, easier to read in an editor or to give to an agent |
-| [assets/PLAN.md](assets/PLAN.md) | The build plan and roadmap, phase by phase, with what is done |
-| [assets/data-inventory.md](assets/data-inventory.md) | What data the app holds, where, which network calls exist, and who could see it |
+| [docs/PLAN.md](docs/PLAN.md) | The build plan and roadmap, phase by phase, with what is done |
+| [docs/data-inventory.md](docs/data-inventory.md) | What data the app holds, where, which network calls exist, and who could see it |
+| [docs/sync-design.md](docs/sync-design.md) | How the phone syncs with the desktop: the QR codes, the encryption, the merge rules, the screens (phase 8) |
 
-The reference site is made from the program, so it cannot say something the program does not do. `cli/tests/docs.rs` runs one tour of every command and every way to fail against a real app, records what came out (`docs/commands.json`, `docs/examples.json`), and fails when a command, a flag, a message or an example changes without the docs being redone. The prose around those facts is `docs/content.mjs`; the generator stops with an error if the program has a command, a group or an error code that the prose does not cover. There are no scripts, fonts or images, and the page asks nothing from anywhere else.
+The reference site is made from the program, so it cannot say something the program does not do. `cli/tests/docs.rs` runs one tour of every command and every way to fail against a real app, records what came out (`docs/site/commands.json`, `docs/site/examples.json`), and fails when a command, a flag, a message or an example changes without the docs being redone. The prose around those facts is `docs/site/content.mjs`; the generator stops with an error if the program has a command, a group or an error code that the prose does not cover. There are no scripts, fonts or images, and the page asks nothing from anywhere else.
 
 The site is published by `.github/workflows/pages.yml` on every push to `main` that touches `docs/`. It needs the repository's Settings, Pages, Source set to "GitHub Actions" once.
 
 ```bash
 # After the commands change: record them again, then rebuild the page
 cd cli && UPDATE_DOCS=1 cargo test --offline --test docs
-npm run docs                  # writes docs/CLI.md and the site in docs/_site/ (open docs/_site/index.html)
+npm run docs                  # writes docs/CLI.md and the site in docs/site/_site/ (open docs/site/_site/index.html)
 npm run check:docs            # what CI runs: the generator's tests, and that docs/CLI.md is up to date
 ```
 
@@ -243,22 +289,54 @@ npm run check:docs            # what CI runs: the generator's tests, and that do
 
 ```text
 meowNY/
-├── client/            React client (Vite, TypeScript, Zod). Every screen talks to the Rust side
-│   └── src/           pages, components, i18n (7 languages), keyboard shortcuts, first-run and lock screens
-├── src-tauri/         The desktop app (Rust, Tauri 2)
+├── ui/                React UI (Vite, TypeScript, Zod). Every screen talks to the Rust side
+│   └── src/           pages, components, hooks, lib, api, and the vault, i18n and keys features
+├── src-tauri/         The desktop app, `meowny-desktop` (Rust, Tauri 2)
 │   ├── src/           vault and keys, database, budgets, recurring items, statistics, backup, export,
-│   │                  the command API (api/) and the access tokens (tokens.rs)
+│   │                  the command API (api/) and the access tokens (tokens.rs), and the phone sync (sync/)
 │   ├── migrations/    Schema changes as numbered SQL files
 │   ├── seeds/         Demo data
 │   └── examples/      dev_vault, seed and api_demo
 ├── cli/               The `meowny` command line program (Rust, one dependency)
-├── docs/              Generator and output for the CLI reference site and CLI.md
-├── scripts/           check-outbound, the network call check and its allowlist
-├── assets/            PLAN.md, data-inventory.md and the original schema notes
-└── .github/workflows/ CI, desktop builds, security checks and the docs site
+├── docs/              Everything written for people: PLAN.md, data-inventory.md, sync-design.md, CLI.md, postgres-schema.txt
+│   └── site/          Generator of the CLI reference site and CLI.md (plain Node, no dependencies)
+├── scripts/           Checks CI runs on the whole repo: check-outbound and its allowlist
+└── .github/workflows/ ci.yml, desktop.yml, security.yml and pages.yml
 ```
 
-How the parts fit: the client calls Rust commands through Tauri; the Rust side owns the database, the keys and every rule. The command line is a client of the running app, through the local command API, and has no other way to the data. The list of API routes is one table in Rust, and `meowny schema`, the command line's commands and the docs are all made from it.
+### Naming and layout
+
+Where things go:
+
+- A top-level folder is one thing you build or run (`ui`, `src-tauri`, `cli`) or one kind of support file (`docs`, `scripts`, `.github`). `src-tauri` keeps its name because the Tauri tools look for it.
+- Anything written for people goes in `docs/`. Code that makes a document goes next to it, in `docs/site/`. Checks that run over the whole repo go in `scripts/`.
+- Nothing is named after a design that is gone. The old server and its Postgres setup are only in git history.
+
+Inside `ui/src/`:
+
+| Folder | Holds |
+|---|---|
+| `pages/` | One screen per route, `NamePage.tsx`. Helpers that only that page uses sit beside it (`dashboardMath.ts`) |
+| `components/` | Pieces of UI that are not a whole screen: modals, dropdowns, the sidebar |
+| `layouts/` | The frame around the pages |
+| `hooks/` | React hooks, `useName.ts` |
+| `lib/` | Plain TypeScript with no React: money, caches, list helpers |
+| `api/` | The calls into the Rust side, one file per area. `invoke.ts` is the one place that calls Tauri |
+| `vault/`, `i18n/`, `keys/` | A feature that keeps its own screens, logic and tests together |
+
+File names:
+
+| What | Rule | Example |
+|---|---|---|
+| Folders | Lowercase, one word where possible, `kebab-case` otherwise | `ui`, `src-tauri` |
+| Rust files | `snake_case`. A module with children is `x.rs` plus a folder `x/`, never `mod.rs` (only `cli/tests/common/mod.rs`, which Cargo needs). The tests of `x` sit beside it in `x_tests.rs` | `recovery_file.rs`, `api/read_tests.rs` |
+| Migrations | `NNNN_name.sql`, numbered, never edited once shipped | `0001_tables.sql` |
+| React components and pages | `PascalCase.tsx`, one component per file | `DashboardPage.tsx` |
+| Other TypeScript | `camelCase.ts`. A test sits beside its file as `name.test.ts` | `displayFormat.ts`, `money.test.ts` |
+| Markdown and text | `kebab-case`. The few files people open first are UPPERCASE | `data-inventory.md`, `README.md`, `PLAN.md` |
+| Workflows | Named for what they do, not for the host | `ci.yml`, `pages.yml` |
+
+How the parts fit: the UI calls Rust commands through Tauri; the Rust side owns the database, the keys and every rule. The command line is a client of the running app, through the local command API, and has no other way to the data. The list of API routes is one table in Rust, and `meowny schema`, the command line's commands and the docs are all made from it.
 
 ## Development
 
@@ -271,10 +349,10 @@ cd src-tauri && cargo test
 # Timings of the main queries on 50,000 transactions (prints, does not assert)
 cd src-tauri && cargo test bench -- --ignored --nocapture
 
-# Client
-npm run lint --workspace client
-npm test --workspace client
-npm run build --workspace client
+# UI
+npm run lint --workspace ui
+npm test --workspace ui
+npm run build --workspace ui
 
 # The command line: unit tests, and tests that run the real binary against the app's own server code
 # (the docs test and the login test assume Linux paths and run only there)
@@ -329,24 +407,24 @@ It refuses a database that already has data.
 
 | Workflow | What it does |
 |---|---|
-| `github-ci.yml` (CI) | Lints, builds and tests the client, and checks the documentation, on every push and pull request |
+| `ci.yml` (CI) | Lints, builds and tests the UI, and checks the documentation, on every push and pull request |
 | `desktop.yml` (Desktop) | Runs the outbound check and `cargo test` for the app and for `cli/`, then builds the app. Pull requests build on Linux only (about 2.5 minutes); pushes to `main` also build on macOS and Windows. You can run all three for any branch from the Actions tab with "Run workflow" |
 | `security.yml` (Security) | `npm audit`, `cargo audit` for the app and for `cli/`, and a secret scan, on pushes to `main`, pull requests and weekly |
 | `pages.yml` (Docs site) | Builds and publishes the CLI reference site |
 
 ## Roadmap
 
-The full plan, with what is done in each phase, is in [assets/PLAN.md](assets/PLAN.md).
+The full plan, with what is done in each phase, is in [docs/PLAN.md](docs/PLAN.md).
 
 | Phase | What | State |
 |---|---|---|
 | 0 to 2 | Setup, encrypted database, app security | Done |
 | 3 to 5 | Categories, transactions, budgets, recurring items, statistics and charts | Done |
 | 6 | Encrypted backup and export | Done |
-| 7 | Command line for scripts and AI agents (desktop only) | Done, except installing it together with the app (phase 11) |
-| 8 | Phone app that keeps an offline copy and syncs with the desktop | Planned |
-| 9 | Adding transactions from the phone without opening the app | Planned |
-| 10 | Bank connection through an aggregator with your own key. No project-run backend, ever | Planned |
+| 7 | Command line for scripts and AI agents (desktop only) | Done. Installing it together with the app is part of phase 11 |
+| 8 | Android app that keeps a full offline copy and syncs with the desktop at home by scanning a QR code (iOS comes later) | In progress: the sync, the phone vault, the screens and the Android app are built and have been tried between a real phone and a desktop at home; reviewed on a real phone; the CI job has not run on GitHub yet, and nobody outside the project has gone through the protocol |
+| 9 | Documents: attach receipts and invoices to transactions, stored encrypted, and choose which ones go to the phone | Planned |
+| 10 | Debts and expense splitting: who owes you and whom you owe, and bills shared with other people, in your own ledger | Planned |
 | 11 | Signed installers, updates, `SECURITY.md`, `CONTRIBUTING.md` and install guides | Planned |
 
 ## Contributing
@@ -360,7 +438,7 @@ Contributions are welcome. There is no `CONTRIBUTING.md` yet (it comes with phas
 5. Keep the app local-first. A new network call must be on purpose, off until the user turns it on, and listed in `scripts/outbound-allowlist.txt`.
 6. Every new desktop feature ships its command line commands in the same change. The phone app gets none.
 7. After a route changes, regenerate `cli/schema.json` and the docs (see [Documentation](#documentation)). Never edit a migration that has shipped.
-8. Update [assets/PLAN.md](assets/PLAN.md) and [assets/data-inventory.md](assets/data-inventory.md) when the change affects them.
+8. Update [docs/PLAN.md](docs/PLAN.md) and [docs/data-inventory.md](docs/data-inventory.md) when the change affects them.
 
 ## Reporting a security problem
 

@@ -1,0 +1,107 @@
+name: Android
+
+# The phone app: the same UI and the same Rust core as the desktop, packaged by Tauri mobile. The result is a debug-signed APK
+# for sideloading (adb install, or opening the file on the phone). The release signing key and any store listing belong to the
+# release phase, so nothing here has a secret.
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - 'src-tauri/**'
+      - 'ui/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'scripts/android-patch.py'
+      - 'scripts/android-patch.test.py'
+      - '.github/workflows/android.yml'
+  pull_request:
+    paths:
+      - 'src-tauri/**'
+      - 'ui/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'scripts/android-patch.py'
+      - 'scripts/android-patch.test.py'
+      - '.github/workflows/android.yml'
+
+concurrency:
+  group: android-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_INCREMENTAL: 0
+  NDK_VERSION: 27.2.12479018
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          # The version the project builds with by hand (the Android Gradle plugin the template uses needs 17 or newer).
+          java-version: 21
+
+      - name: Set up the Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          # The action's default list names a package, `tools`, that Google no longer has, and the job stops there.
+          packages: platform-tools
+
+      # SQLCipher is built with its own OpenSSL, which needs the NDK compilers on the PATH (see OpenSSL's NOTES-ANDROID).
+      - name: Install the NDK
+        run: |
+          sdkmanager "ndk;${NDK_VERSION}" "platforms;android-37.0"
+          echo "NDK_HOME=${ANDROID_HOME}/ndk/${NDK_VERSION}" >> "$GITHUB_ENV"
+          echo "ANDROID_NDK_HOME=${ANDROID_HOME}/ndk/${NDK_VERSION}" >> "$GITHUB_ENV"
+          echo "ANDROID_NDK_ROOT=${ANDROID_HOME}/ndk/${NDK_VERSION}" >> "$GITHUB_ENV"
+          echo "${ANDROID_HOME}/ndk/${NDK_VERSION}/toolchains/llvm/prebuilt/linux-x86_64/bin" >> "$GITHUB_PATH"
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android
+
+      - name: Cache Rust build
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+          cache-on-failure: true
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+
+      - name: Install
+        run: npm ci
+
+      - name: Tests of the hardening script
+        run: python3 scripts/android-patch.test.py
+
+      # The Android project is generated, not kept in git. The script then turns off Android's backup of the app's folder and
+      # makes the window secure (no screenshots, a blank picture in the list of recent apps).
+      - name: Make the Android project
+        run: |
+          npx tauri android init --ci
+          python3 scripts/android-patch.py src-tauri/gen/android
+
+      - name: Build the APK
+        run: npx tauri android build --apk --target aarch64 --debug
+
+      - name: Keep the APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: meowny-android-debug
+          path: src-tauri/gen/android/app/build/outputs/apk/**/*.apk
+          if-no-files-found: error

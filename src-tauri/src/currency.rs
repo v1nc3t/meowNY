@@ -11,6 +11,7 @@ use rusqlite::{params, Connection};
 use serde::Serialize;
 
 use crate::money::MAX_MINOR;
+use crate::sync;
 use crate::vault::AppError;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Default)]
@@ -77,6 +78,9 @@ pub fn change(conn: &mut Connection, new_currency: &str, rate: Option<&str>, tod
         return Err(AppError::InvalidInput);
     }
 
+    // A conversion is not an edit: no row gets a new stamp, and the phone converts its own rows the same way when it
+    // learns of the change (docs/sync-design.md, section 11).
+    sync::stamp::set_applying(&tx, true)?;
     let mut done = Conversion::default();
     if let Some(rate) = rate {
         done.transactions = convert_transactions(&tx, rate)?;
@@ -84,7 +88,14 @@ pub fn change(conn: &mut Connection, new_currency: &str, rate: Option<&str>, tod
         done.budgets = convert_budgets(&tx, rate)?;
     }
 
-    tx.execute("UPDATE settings SET currency = ?1 WHERE id = 1", [&new_currency])?;
+    tx.execute("UPDATE settings SET currency = ?1, currency_generation = currency_generation + 1 WHERE id = 1", [&new_currency])?;
+    let generation: i64 = tx.query_row("SELECT currency_generation FROM settings WHERE id = 1", [], |r| r.get(0))?;
+    let stamp = sync::stamp::tick(&tx)?.format();
+    tx.execute(
+        "INSERT INTO currency_changes (id, from_currency, to_currency, rate, stamp) VALUES (?1, ?2, ?3, ?4, ?5)",
+        params![generation, old_currency, new_currency, rate_text, stamp],
+    )?;
+    sync::stamp::set_applying(&tx, false)?;
     tx.execute(
         "INSERT INTO audit_log (entity_type, entity_id, action, old_values, new_values)
          VALUES ('currency_change', '1', 'UPDATE', json_object('currency', ?1),
@@ -92,6 +103,45 @@ pub fn change(conn: &mut Connection, new_currency: &str, rate: Option<&str>, tod
         params![old_currency, new_currency, rate_text, today, rate_text.is_some()],
     )?;
     tx.commit()?;
+    Ok(done)
+}
+
+/// A change of currency made on the desktop, as it reaches another device (docs/sync-design.md, section 11).
+pub(crate) struct Recorded<'a> {
+    pub generation: i64,
+    pub from: &'a str,
+    pub to: &'a str,
+    pub rate: Option<&'a str>,
+    pub stamp: &'a str,
+}
+
+/// Applies a change that another device made: the same conversion with the same rate and rounding, the same record, and
+/// the generation moves up by one. It must be the next generation, and from the currency this device has now. The caller
+/// has turned `applying` on, so no row gets a new stamp. Either everything changes or nothing does.
+pub(crate) fn apply_recorded(tx: &rusqlite::Transaction, change: &Recorded, today: &str) -> Result<Conversion, AppError> {
+    let (current, generation): (String, i64) =
+        tx.query_row("SELECT currency, currency_generation FROM settings WHERE id = 1", [], |r| Ok((r.get(0)?, r.get(1)?)))?;
+    if change.generation != generation + 1 || current != change.from || change.from == change.to || normalize_code(change.to)? != change.to {
+        return Err(AppError::InvalidInput);
+    }
+    let rate = change.rate.map(parse_rate).transpose()?;
+    let mut done = Conversion::default();
+    if let Some(rate) = rate {
+        done.transactions = convert_transactions(tx, rate)?;
+        done.recurring = convert_recurring(tx, rate)?;
+        done.budgets = convert_budgets(tx, rate)?;
+    }
+    tx.execute("UPDATE settings SET currency = ?1, currency_generation = ?2 WHERE id = 1", params![change.to, change.generation])?;
+    tx.execute(
+        "INSERT INTO currency_changes (id, from_currency, to_currency, rate, stamp) VALUES (?1, ?2, ?3, ?4, ?5)",
+        params![change.generation, change.from, change.to, change.rate, change.stamp],
+    )?;
+    tx.execute(
+        "INSERT INTO audit_log (entity_type, entity_id, action, old_values, new_values)
+         VALUES ('currency_change', '1', 'UPDATE', json_object('currency', ?1),
+                 json_object('currency', ?2, 'rate', ?3, 'date', ?4, 'converted', ?5, 'from_sync', 1))",
+        params![change.from, change.to, change.rate, today, change.rate.is_some()],
+    )?;
     Ok(done)
 }
 

@@ -3,7 +3,7 @@
   "private": true,
   "license": "AGPL-3.0-only",
   "workspaces": [
-    "client"
+    "ui"
   ],
   "engines": {
     "node": ">=22"
@@ -18,7 +18,7 @@
   "scripts": {
     "tauri": "tauri",
     "check:outbound": "node scripts/check-outbound.mjs",
-    "docs": "node docs/build.mjs",
-    "check:docs": "node docs/build.mjs --check && node --test docs/build.test.mjs"
+    "docs": "node docs/site/build.mjs",
+    "check:docs": "node docs/site/build.mjs --check && node --test docs/site/build.test.mjs"
   }
 }

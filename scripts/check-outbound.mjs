@@ -55,7 +55,7 @@ function scan(files, rules) {
 }
 
 scan(
-  walk(join(root, 'client', 'src'), (n) => /\.(ts|tsx)$/.test(n) && !/\.test\.tsx?$/.test(n)),
+  walk(join(root, 'ui', 'src'), (n) => /\.(ts|tsx)$/.test(n) && !/\.test\.tsx?$/.test(n)),
   SOURCE_RULES,
 )
 scan(walk(join(root, 'src-tauri', 'src'), (n) => n.endsWith('.rs')), RUST_RULES)

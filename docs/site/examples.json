@@ -1,0 +1,531 @@
+{
+  "errors": [
+    {
+      "command": "meowny status",
+      "exit": 3,
+      "stderr": "error: no token: set MEOWNY_TOKEN, give --token-file, or save one with: meowny login  (make a token in the app, Settings, command line access)\n",
+      "title": "There is no token"
+    },
+    {
+      "command": "MEOWNY_TOKEN=hello meowny status",
+      "exit": 3,
+      "stderr": "error: the token is not in the right form (mny_ and 64 letters and digits); copy it again from the app\n",
+      "title": "The token is not the right form"
+    },
+    {
+      "command": "meowny status",
+      "exit": 3,
+      "stderr": "error: the token is missing, unknown, expired or revoked. Make a new token in the app if this one has expired or was revoked.\n",
+      "title": "The app does not know the token"
+    },
+    {
+      "command": "meowny categories create --name Pets --type expense",
+      "exit": 3,
+      "stderr": "error: this token is read-only; make a token that can write in the app\n",
+      "title": "A read-only token tries to change something"
+    },
+    {
+      "command": "meowny transactions create --name Bread --amount 2.4 --payment-date 2026-10-14 --category-id 5",
+      "exit": 2,
+      "stderr": "error: `amount` must be an amount as text with two decimals, like \"12.50\"\n",
+      "title": "A value the app refuses"
+    },
+    {
+      "command": "meowny transactions create --name Bread",
+      "exit": 2,
+      "stderr": "error: missing --amount\n",
+      "title": "A missing flag"
+    },
+    {
+      "command": "meowny transactions delete 5",
+      "exit": 2,
+      "stderr": "error: transactions delete cannot be undone; add --yes to go ahead\n",
+      "title": "Deleting without --yes"
+    },
+    {
+      "command": "meowny transactions delete 999999 --yes",
+      "exit": 4,
+      "stderr": "error: not found\n",
+      "title": "Something that is not there"
+    },
+    {
+      "command": "meowny categories create --name Groceries --type expense",
+      "exit": 1,
+      "stderr": "error: that name already exists\n",
+      "title": "A name that is taken"
+    },
+    {
+      "command": "meowny backup restore",
+      "exit": 2,
+      "stderr": "error: backup needs one of: schedule, create\n",
+      "title": "A command that does not exist"
+    },
+    {
+      "command": "meowny categories list",
+      "exit": 3,
+      "stderr": "error: the app is locked. Unlock it in the app, then try again.\n",
+      "title": "The app is locked"
+    },
+    {
+      "command": "meowny status",
+      "exit": 1,
+      "stderr": "error: the app is not running, or command line access is off (turn it on in Settings, command line access)\n",
+      "title": "The app is not running, or command line access is off"
+    },
+    {
+      "command": "meowny export csv --out /home/you/taken.csv",
+      "exit": 1,
+      "stderr": "error: that file already exists; choose a name that does not\n",
+      "title": "A file that already exists"
+    },
+    {
+      "command": "meowny export json --out /home/you/data.txt",
+      "exit": 2,
+      "stderr": "error: the file name must end in .json\n",
+      "title": "A file name that is not an export"
+    },
+    {
+      "command": "meowny export json --out /home/you/second.json",
+      "exit": 3,
+      "stderr": "error: the person did not allow this in the app\n",
+      "title": "You click Deny in the app"
+    },
+    {
+      "command": "meowny export json --out /home/you/second.json",
+      "exit": 3,
+      "stderr": "error: the person said no to this token a moment ago; try again later\n",
+      "title": "Asking again at once after a Deny"
+    }
+  ],
+  "examples": {
+    "backup create": {
+      "command": "echo \"correct horse battery staple\" | meowny backup create --out /home/you/meowny.meowbak --passphrase -",
+      "human": {
+        "exit": 0,
+        "stderr": "waiting for you to allow this in the meowNY app...\n",
+        "stdout": "bytes: 181029\npath: /home/you/meowny.meowbak\n"
+      }
+    },
+    "backup schedule": {
+      "command": "meowny backup schedule",
+      "human": {
+        "exit": 0,
+        "stderr": "there is nothing to show.\n",
+        "stdout": ""
+      },
+      "json": {
+        "exit": 0,
+        "stderr": "",
+        "stdout": "null\n"
+      }
+    },
+    "budgets history": {
+      "command": "meowny budgets history",
+      "human": {
+        "exit": 0,
+        "stderr": "",
+        "stdout": "month    expenseActual  expenseBudget  incomeActual  incomeBudget\n2026-10        1516.50        2450.00          0.00       3600.00\n2026-09        1913.64        2450.00       3690.00       3600.00\n2026-08        3912.69        2450.00       3240.00       3600.00\n2026-07        1904.70        2450.00       3253.11       3600.00\n2026-06        1905.88        2450.00       3520.00       3600.00\n2026-05        2792.37        2450.00       3240.00       3600.00\n2026-04        1872.86        2450.00       3214.22       3600.00\n2026-03        2079.23        2300.00       3520.00       3600.00\n2026-02        2162.65        2300.00       3200.00       3600.00\n2026-01        1890.68        2300.00   …",
+        "truncated": true
+      },
+      "json": {
+        "exit": 0,
+        "stderr": "",
+        "stdout": "[{\"expenseActual\":\"1516.50\",\"expenseBudget\":\"2450.00\",\"incomeActual\":\"0.00\",\"incomeBudget\":\"3600.00\",\"month\":\"2026-10\"},{\"expenseActual\":\"1913.64\",\"expenseBudget\":\"2450.00\",\"incomeActual\":\"3690.00\",\"incomeBudget\":\"3600.00\",\"month\":\"2026-09\"},{\"expenseActual\":\"3912.69\",\"expenseBudget\":\"2450.00\",\"incomeActual\":\"3240.00\",\"incomeBudget\":\"3600.00\",\"month\":\"2026-08\"},{\"expenseActual\":\"1904.70\",\"expenseBudget\":\"2450.00\",\"incomeActual\":\"3253.11\",\"incomeBudget\":\"3600.00\",\"month\":\"2026-07\"},{\"expenseActual\":\"1905.88\",\"expenseBudget\":\"2450.00\",\"incomeActual\":\"3520.00\",\"incomeBudget\":\"3600.00\",\"month\":\"2026-06\"},{\"expenseActual\":\"2792.37\",\"expenseBudget\":\"2450.00\",\"incomeActual\":\"3240.00\",\"incomeBudget\"…",
+        "truncated": true
+      }
+    },
+    "budgets overview": {
+      "command": "meowny budgets overview --month 2026-09",
+      "human": {
+        "exit": 0,
+        "stderr": "",
+        "stdout": "type     budgeted   actual  remaining  allocated  overAllocated  unallocated\nINCOME    3600.00  3690.00     -90.00    3200.00  false               400.00\nEXPENSE   2450.00  1913.64     536.36    2015.00  false               435.00\n"
+      },
+      "json": {
+        "exit": 0,
+        "stderr": "",
+        "stdout": "[{\"actual\":\"3690.00\",\"allocated\":\"3200.00\",\"budgeted\":\"3600.00\",\"categories\":[{\"amountLimit\":\"3200.00\",\"categoryId\":\"1\"}],\"overAllocated\":false,\"remaining\":\"-90.00\",\"type\":\"INCOME\",\"unallocated\":\"400.00\"},{\"actual\":\"1913.64\",\"allocated\":\"2015.00\",\"budgeted\":\"2450.00\",\"categories\":[{\"amountLimit\":\"950.00\",\"categoryId\":\"4\"},{\"amountLimit\":\"500.00\",\"categoryId\":\"5\"},{\"amountLimit\":\"70.00\",\"categoryId\":\"6\"},{\"amountLimit\":\"200.00\",\"categoryId\":\"7\"},{\"amountLimit\":\"45.00\",\"categoryId\":\"9\"},{\"amountLimit\":\"250.00\",\"categoryId\":\"10\"}],\"overAllocated\":false,\"remaining\":\"536.36\",\"type\":\"EXPENSE\",\"unallocated\":\"435.00\"}]\n"
+      }
+    },
+    "budgets remove": {
+      "command": "meowny budgets remove --type expense --month 2027-01 --category-id 16 --yes",
+      "json": {
+        "exit": 0,
+        "stderr": "",
+        "stdout": "{\"amountLimit\":null,\"categoryId\":\"16\",\"effectiveFrom\":\"2027-01-01\",\"id\":\"16\",\"scope\":\"CATEGORY\",\"type\":\"EXPENSE\"}\n"
+      }
+    },
+    "budgets set": {
+      "command": "meowny budgets set --type expense --month 2026-12 --amount-limit 100.00 --category-id 16",
+      "json": {
+        "exit": 0,
+        "stderr": "",
+        "stdout": "{\"amountLimit\":\"100.00\",\"categoryId\":\"16\",\"effectiveFrom\":\"2026-12-01\",\"id\":\"15\",\"scope\":\"CATEGORY\",\"type\":\"EXPENSE\"}\n"
+      }
+    },
+    "categories create": {
+      "command": "meowny categories create --name Pets --type expense",
+      "json": {
+        "exit": 0,
+        "stderr": "",
+        "stdout": "{\"id\":\"16\",\"name\":\"Pets\",\"type\":\"EXPENSE\"}\n"
+      }
+    },
+    "categories delete": {
+      "command": "meowny categories delete 16 --yes",
+      "human": {
+        "exit": 0,
+        "stderr": "done.\n",
+        "stdout": ""
+      }
+    },
+    "categories list": {
+      "command": "meowny categories list --type expense",
+      "human": {
+        "exit": 0,
+        "stderr": "",
+        "stdout": "id  name                 type\n 4  Rent                 EXPENSE\n 5  Groceries            EXPENSE\n 6  Transport            EXPENSE\n 7  Eating out           EXPENSE\n 8  Entertainment        EXPENSE\n 9  Subscriptions        EXPENSE\n10  Utilities            EXPENSE\n11  Health               EXPENSE\n12  Travel               EXPENSE\n13  Gifts                EXPENSE\n14  Școală și hobby-uri  EXPENSE\n"
+      },
+      "json": {
+        "exit": 0,
+        "stderr": "",
+        "stdout": "[{\"id\":\"4\",\"name\":\"Rent\",\"type\":\"EXPENSE\"},{\"id\":\"5\",\"name\":\"Groceries\",\"type\":\"EXPENSE\"},{\"id\":\"6\",\"name\":\"Transport\",\"type\":\"EXPENSE\"},{\"id\":\"7\",\"name\":\"Eating out\",\"type\":\"EXPENSE\"},{\"id\":\"8\",\"name\":\"Entertainment\",\"type\":\"EXPENSE\"},{\"id\":\"9\",\"name\":\"Subscriptions\",\"type\":\"EXPENSE\"},{\"id\":\"10\",\"name\":\"Utilities\",\"type\":\"EXPENSE\"},{\"id\":\"11\",\"name\":\"Health\",\"type\":\"EXPENSE\"},{\"id\":\"12\",\"name\":\"Travel\",\"type\":\"EXPENSE\"},{\"id\":\"13\",\"name\":\"Gifts\",\"type\":\"EXPENSE\"},{\"id\":\"14\",\"name\":\"Școală și hobby-uri\",\"type\":\"EXPENSE\"}]\n"
+      }
+    },
+    "categories rename": {
+      "command": "meowny categories rename 16 --name Animals",
+      "json": {
+        "exit": 0,
+        "stderr": "",
+        "stdout": "{\"id\":\"16\",\"name\":\"Animals\",\"type\":\"EXPENSE\"}\n"
+      }
+    },
+    "export csv": {
+      "command": "meowny export csv --out /home/you/budget-2026.csv --from 2026-01-01",
+      "human": {
+        "exit": 0,
+        "stderr": "",
+        "stdout": "bytes: 15551\npath: /home/you/budget-2026.csv\n"
+      }
+    },
+    "export json": {
+      "command": "meowny export json --out /home/you/everything.json",
+      "human": {
+        "exit": 0,
+        "stderr": "",
+        "stdout": "bytes: 135767\npath: /home/you/everything.json\n"
+      }
+    },
+    "export pdf": {
+      "command": "meowny export pdf --out /home/you/report.pdf --from-month 2026-01 --to-month 2026-03 --include-transactions",
+      "human": {
+        "exit": 0,
+        "stderr": "",
+        "stdout": "bytes: 44345\npath: /home/you/report.pdf\n"
+      }
+    },
+    "export preview": {
+      "command": "meowny export preview --from 2026-01-01 --to 2026-09-30",
+      "human": {
+        "exit": 0,
+        "stderr": "",
+        "stdout": "budgets: 14\ncategories: 15\nexpense: 20434.70\nfirstDate: 2026-01-01\nhistory: 0\nincome: 31592.66\nlastDate: 2026-09-29\nrecurring: 9\ntransactions: 239\n"
+      },
+      "json": {
+        "exit": 0,
+        "stderr": "",
+        "stdout": "{\"budgets\":14,\"categories\":15,\"expense\":\"20434.70\",\"firstDate\":\"2026-01-01\",\"history\":0,\"income\":\"31592.66\",\"lastDate\":\"2026-09-29\",\"recurring\":9,\"transactions\":239}\n"
+      }
+    },
+    "export xlsx": {
+      "command": "meowny export xlsx --out /home/you/budget.xlsx",
+      "human": {
+        "exit": 0,
+        "stderr": "",
+        "stdout": "bytes: 21864\npath: /home/you/budget.xlsx\n"
+      }
+    },
+    "login": {
+      "command": "echo \"$MEOWNY_TOKEN\" | meowny login",
+      "human": {
+        "exit": 0,
+        "stderr": "token saved to /home/you/.config/meowny/token\n",
+        "stdout": ""
+      }
+    },
+    "logout": {
+      "command": "meowny logout",
+      "human": {
+        "exit": 0,
+        "stderr": "token removed from /home/you/.config/meowny/token\n",
+        "stdout": ""
+      }
+    },
+    "recurring create": {
+      "command": "meowny recurring create --name \"Vet plan\" --amount 20.00 --category-id 16 --start-date 2026-10-20 --interval-unit month --interval-count 1",
+      "json": {
+        "exit": 0,
+        "stderr": "",
+        "stdout": "{\"amount\":\"20.00\",\"categoryId\":\"16\",\"description\":null,\"endDate\":null,\"id\":\"10\",\"intervalCount\":1,\"intervalUnit\":\"MONTH\",\"isActive\":true,\"name\":\"Vet plan\",\"nextDueDate\":\"2026-10-20\",\"startDate\":\"2026-10-20\"}\n"
+      }
+    },
+    "recurring delete": {
+      "command": "meowny recurring delete 10 --yes",
+      "human": {
+        "exit": 0,
+        "stderr": "done.\n",
+        "stdout": ""
+      }
+    },
+    "recurring dues": {
+      "command": "meowny recurring dues --within-days 10",
+      "human": {
+        "exit": 0,
+        "stderr": "",
+        "stdout": "overdue\nid  name              nextDueDate  amount  categoryId  description  endDate  intervalCount  intervalUnit  isActive  startDate\n 6  Cleaning service  2026-10-11    30.00          10  -            -                    2  WEEK          true      2026-04-26\n\nupcoming\nid  name         nextDueDate   amount  categoryId  description            endDate  intervalCount  intervalUnit  isActive  startDate\n 4  Electricity  2026-10-20         -          10  Varies with the meter  -                    1  MONTH         true      2025-07-20\n 7  Salary       2026-10-25   3240.00           1  Monthly pay            -                    1  MONTH         true      2025-07-25\n"
+      },
+      "json": {
+        "exit": 0,
+        "stderr": "",
+        "stdout": "{\"overdue\":[{\"amount\":\"30.00\",\"categoryId\":\"10\",\"description\":null,\"endDate\":null,\"id\":\"6\",\"intervalCount\":2,\"intervalUnit\":\"WEEK\",\"isActive\":true,\"name\":\"Cleaning service\",\"nextDueDate\":\"2026-10-11\",\"startDate\":\"2026-04-26\"}],\"upcoming\":[{\"amount\":null,\"categoryId\":\"10\",\"description\":\"Varies with the meter\",\"endDate\":null,\"id\":\"4\",\"intervalCount\":1,\"intervalUnit\":\"MONTH\",\"isActive\":true,\"name\":\"Electricity\",\"nextDueDate\":\"2026-10-20\",\"startDate\":\"2025-07-20\"},{\"amount\":\"3240.00\",\"categoryId\":\"1\",\"description\":\"Monthly pay\",\"endDate\":null,\"id\":\"7\",\"intervalCount\":1,\"intervalUnit\":\"MONTH\",\"isActive\":true,\"name\":\"Salary\",\"nextDueDate\":\"2026-10-25\",\"startDate\":\"2025-07-25\"}]}\n"
+      }
+    },
+    "recurring end": {
+      "command": "meowny recurring end 10 --yes",
+      "json": {
+        "exit": 0,
+        "stderr": "",
+        "stdout": "{\"amount\":\"20.00\",\"categoryId\":\"16\",\"description\":null,\"endDate\":\"2026-10-20\",\"id\":\"10\",\"intervalCount\":1,\"intervalUnit\":\"MONTH\",\"isActive\":false,\"name\":\"Vet plan plus\",\"nextDueDate\":\"2026-12-20\",\"startDate\":\"2026-10-20\"}\n"
+      }
+    },
+    "recurring list": {
+      "command": "meowny recurring list",
+      "human": {
+        "exit": 0,
+        "stderr": "",
+        "stdout": "id  name              nextDueDate   amount  categoryId  description             endDate     intervalCount  intervalUnit  isActive  startDate\n 6  Cleaning service  2026-10-11     30.00          10  -                       -                       2  WEEK          true      2026-04-26\n 4  Electricity       2026-10-20         -          10  Varies with the meter   -                       1  MONTH         true      2025-07-20\n 7  Salary            2026-10-25   3240.00           1  Monthly pay             -                       1  MONTH         true      2025-07-25\n 1  Rent              2026-11-01    950.00           4  Flat, paid by transfer  -                       1  MONTH         true      20…",
+        "truncated": true
+      },
+      "json": {
+        "exit": 0,
+        "stderr": "",
+        "stdout": "[{\"amount\":\"30.00\",\"categoryId\":\"10\",\"description\":null,\"endDate\":null,\"id\":\"6\",\"intervalCount\":2,\"intervalUnit\":\"WEEK\",\"isActive\":true,\"name\":\"Cleaning service\",\"nextDueDate\":\"2026-10-11\",\"startDate\":\"2026-04-26\"},{\"amount\":null,\"categoryId\":\"10\",\"description\":\"Varies with the meter\",\"endDate\":null,\"id\":\"4\",\"intervalCount\":1,\"intervalUnit\":\"MONTH\",\"isActive\":true,\"name\":\"Electricity\",\"nextDueDate\":\"2026-10-20\",\"startDate\":\"2025-07-20\"},{\"amount\":\"3240.00\",\"categoryId\":\"1\",\"description\":\"Monthly pay\",\"endDate\":null,\"id\":\"7\",\"intervalCount\":1,\"intervalUnit\":\"MONTH\",\"isActive\":true,\"name\":\"Salary\",\"nextDueDate\":\"2026-10-25\",\"startDate\":\"2025-07-25\"},{\"amount\":\"950.00\",\"categoryId\":\"4\",\"descrip…",
+        "truncated": true
+      }
+    },
+    "recurring pause": {
+      "command": "meowny recurring pause 10",
+      "json": {
+        "exit": 0,
+        "stderr": "",
+        "stdout": "{\"amount\":\"20.00\",\"categoryId\":\"16\",\"description\":null,\"endDate\":null,\"id\":\"10\",\"intervalCount\":1,\"intervalUnit\":\"MONTH\",\"isActive\":false,\"name\":\"Vet plan plus\",\"nextDueDate\":\"2026-12-20\",\"startDate\":\"2026-10-20\"}\n"
+      }
+    },
+    "recurring pay": {
+      "command": "meowny recurring pay 10 --paid-on 2026-10-14",
+      "json": {
+        "exit": 0,
+        "stderr": "",
+        "stdout": "{\"amount\":\"20.00\",\"categoryId\":\"16\",\"clientUuid\":null,\"description\":null,\"id\":\"405\",\"name\":\"Vet plan plus\",\"paymentDate\":\"2026-10-14\"}\n"
+      }
+    },
+    "recurring resume": {
+      "command": "meowny recurring resume 10",
+      "json": {
+        "exit": 0,
+        "stderr": "",
+        "stdout": "{\"amount\":\"20.00\",\"categoryId\":\"16\",\"description\":null,\"endDate\":null,\"id\":\"10\",\"intervalCount\":1,\"intervalUnit\":\"MONTH\",\"isActive\":true,\"name\":\"Vet plan plus\",\"nextDueDate\":\"2026-12-20\",\"startDate\":\"2026-10-20\"}\n"
+      }
+    },
+    "recurring skip": {
+      "command": "meowny recurring skip 10",
+      "json": {
+        "exit": 0,
+        "stderr": "",
+        "stdout": "{\"amount\":\"20.00\",\"categoryId\":\"16\",\"description\":null,\"endDate\":null,\"id\":\"10\",\"intervalCount\":1,\"intervalUnit\":\"MONTH\",\"isActive\":true,\"name\":\"Vet plan plus\",\"nextDueDate\":\"2026-12-20\",\"startDate\":\"2026-10-20\"}\n"
+      }
+    },
+    "recurring update": {
+      "command": "meowny recurring update 10 --name \"Vet plan plus\" --clear-end-date",
+      "json": {
+        "exit": 0,
+        "stderr": "",
+        "stdout": "{\"amount\":\"20.00\",\"categoryId\":\"16\",\"description\":null,\"endDate\":null,\"id\":\"10\",\"intervalCount\":1,\"intervalUnit\":\"MONTH\",\"isActive\":true,\"name\":\"Vet plan plus\",\"nextDueDate\":\"2026-10-20\",\"startDate\":\"2026-10-20\"}\n"
+      }
+    },
+    "schema": {
+      "command": "meowny schema",
+      "human": {
+        "exit": 0,
+        "stderr": "",
+        "stdout": "{\"cli\":{\"api\":1,\"name\":\"meowny\",\"version\":\"0.1.0\"},\"commands\":[{\"command\":\"status\",\"confirm\":false,\"destructive\":false,\"flags\":[],\"positional\":null,\"route\":\"status\",\"scope\":\"read\",\"summary\":\"The app version, the API version and the scope of the token used.\",\"usage\":\"meowny status\"},{\"command\":\"schema\",\"confirm\":false,\"destructive\":false,\"flags\":[],\"positional\":null,\"route\":\"schema\",\"scope\":\"read\",\"summary\":\"Every route with its scope and arguments, so a client can discover them.\",\"usage\":\"meowny schema\"},{\"command\":\"today\",\"confirm\":false,\"destructive\":false,\"flags\":[],\"positional\":null,\"route\":\"today\",\"scope\":\"read\",\"summary\":\"Today's date and the current month in the time zone set in the a…",
+        "truncated": true
+      }
+    },
+    "settings get": {
+      "command": "meowny settings get",
+      "human": {
+        "exit": 0,
+        "stderr": "",
+        "stdout": "currency: EUR\nlanguage: en\nlocale: en-IE\ntimezone: Europe/Dublin\n"
+      },
+      "json": {
+        "exit": 0,
+        "stderr": "",
+        "stdout": "{\"currency\":\"EUR\",\"language\":\"en\",\"locale\":\"en-IE\",\"timezone\":\"Europe/Dublin\"}\n"
+      }
+    },
+    "settings set": {
+      "command": "meowny settings set --language ro",
+      "json": {
+        "exit": 0,
+        "stderr": "",
+        "stdout": "{\"currency\":\"EUR\",\"language\":\"ro\",\"locale\":\"en-IE\",\"timezone\":\"Europe/Dublin\"}\n"
+      }
+    },
+    "stats budget": {
+      "command": "meowny stats budget --month 2026-09",
+      "human": {
+        "exit": 0,
+        "stderr": "",
+        "stdout": "month: 2026-09\n\ncategories\nname                 type     budgeted   actual  remaining  pctUsed  categoryId\nEating out           EXPENSE    200.00   177.00      23.00     88.5           7\nEntertainment        EXPENSE         -    52.07          -        -           8\nGifts                EXPENSE         -     0.00          -        -          13\nGroceries            EXPENSE    500.00   365.00     135.00     73.0           5\nHealth               EXPENSE         -    12.34          -        -          11\nRent                 EXPENSE    950.00   950.00       0.00    100.0           4\nSubscriptions        EXPENSE     45.00    23.98      21.02     53.3           9\nTransport            EXPENSE     …",
+        "truncated": true
+      },
+      "json": {
+        "exit": 0,
+        "stderr": "",
+        "stdout": "{\"categories\":[{\"actual\":\"177.00\",\"budgeted\":\"200.00\",\"categoryId\":\"7\",\"name\":\"Eating out\",\"pctUsed\":88.5,\"remaining\":\"23.00\",\"type\":\"EXPENSE\"},{\"actual\":\"52.07\",\"budgeted\":null,\"categoryId\":\"8\",\"name\":\"Entertainment\",\"pctUsed\":null,\"remaining\":null,\"type\":\"EXPENSE\"},{\"actual\":\"0.00\",\"budgeted\":null,\"categoryId\":\"13\",\"name\":\"Gifts\",\"pctUsed\":null,\"remaining\":null,\"type\":\"EXPENSE\"},{\"actual\":\"365.00\",\"budgeted\":\"500.00\",\"categoryId\":\"5\",\"name\":\"Groceries\",\"pctUsed\":73.0,\"remaining\":\"135.00\",\"type\":\"EXPENSE\"},{\"actual\":\"12.34\",\"budgeted\":null,\"categoryId\":\"11\",\"name\":\"Health\",\"pctUsed\":null,\"remaining\":null,\"type\":\"EXPENSE\"},{\"actual\":\"950.00\",\"budgeted\":\"950.00\",\"categoryId\":\"4\",\"name\":\"Rent\"…",
+        "truncated": true
+      }
+    },
+    "stats commitments": {
+      "command": "meowny stats commitments",
+      "human": {
+        "exit": 0,
+        "stderr": "",
+        "stdout": "expense: 1064.98\nincome: 3240.00\n\nitems\nid  name              type     perMonth\n 6  Cleaning service  EXPENSE     65.00\n 4  Electricity       EXPENSE         -\n 5  Home insurance    EXPENSE     26.00\n 2  Netflix           EXPENSE     12.99\n 1  Rent              EXPENSE    950.00\n 3  Spotify           EXPENSE     10.99\n 7  Salary            INCOME    3240.00\n"
+      },
+      "json": {
+        "exit": 0,
+        "stderr": "",
+        "stdout": "{\"expense\":\"1064.98\",\"income\":\"3240.00\",\"items\":[{\"id\":\"6\",\"name\":\"Cleaning service\",\"perMonth\":\"65.00\",\"type\":\"EXPENSE\"},{\"id\":\"4\",\"name\":\"Electricity\",\"perMonth\":null,\"type\":\"EXPENSE\"},{\"id\":\"5\",\"name\":\"Home insurance\",\"perMonth\":\"26.00\",\"type\":\"EXPENSE\"},{\"id\":\"2\",\"name\":\"Netflix\",\"perMonth\":\"12.99\",\"type\":\"EXPENSE\"},{\"id\":\"1\",\"name\":\"Rent\",\"perMonth\":\"950.00\",\"type\":\"EXPENSE\"},{\"id\":\"3\",\"name\":\"Spotify\",\"perMonth\":\"10.99\",\"type\":\"EXPENSE\"},{\"id\":\"7\",\"name\":\"Salary\",\"perMonth\":\"3240.00\",\"type\":\"INCOME\"}]}\n"
+      }
+    },
+    "stats planned": {
+      "command": "meowny stats planned --month 2026-09",
+      "human": {
+        "exit": 0,
+        "stderr": "",
+        "stdout": "name              difference     paid  paidCount  planned  recurringId\nCleaning service        5.00    65.00          2    60.00            6\nElectricity                -    80.30          1        -            4\nNetflix                 0.00    12.99          1    12.99            2\nRent                    0.00   950.00          1   950.00            1\nSalary                  0.00  3240.00          1  3240.00            7\nSpotify                 0.00    10.99          1    10.99            3\n"
+      },
+      "json": {
+        "exit": 0,
+        "stderr": "",
+        "stdout": "[{\"difference\":\"5.00\",\"name\":\"Cleaning service\",\"paid\":\"65.00\",\"paidCount\":2,\"planned\":\"60.00\",\"recurringId\":\"6\"},{\"difference\":null,\"name\":\"Electricity\",\"paid\":\"80.30\",\"paidCount\":1,\"planned\":null,\"recurringId\":\"4\"},{\"difference\":\"0.00\",\"name\":\"Netflix\",\"paid\":\"12.99\",\"paidCount\":1,\"planned\":\"12.99\",\"recurringId\":\"2\"},{\"difference\":\"0.00\",\"name\":\"Rent\",\"paid\":\"950.00\",\"paidCount\":1,\"planned\":\"950.00\",\"recurringId\":\"1\"},{\"difference\":\"0.00\",\"name\":\"Salary\",\"paid\":\"3240.00\",\"paidCount\":1,\"planned\":\"3240.00\",\"recurringId\":\"7\"},{\"difference\":\"0.00\",\"name\":\"Spotify\",\"paid\":\"10.99\",\"paidCount\":1,\"planned\":\"10.99\",\"recurringId\":\"3\"}]\n"
+      }
+    },
+    "stats top": {
+      "command": "meowny stats top --month 2026-09 --type expense --limit 3",
+      "human": {
+        "exit": 0,
+        "stderr": "",
+        "stdout": "name       actual  categoryId  share\nRent       950.00           4   49.6\nGroceries  365.00           5   19.1\nUtilities  180.29          10    9.4\n"
+      },
+      "json": {
+        "exit": 0,
+        "stderr": "",
+        "stdout": "[{\"actual\":\"950.00\",\"categoryId\":\"4\",\"name\":\"Rent\",\"share\":49.6},{\"actual\":\"365.00\",\"categoryId\":\"5\",\"name\":\"Groceries\",\"share\":19.1},{\"actual\":\"180.29\",\"categoryId\":\"10\",\"name\":\"Utilities\",\"share\":9.4}]\n"
+      }
+    },
+    "stats trend": {
+      "command": "meowny stats trend --category-id 5 --from 2026-07 --to 2026-09",
+      "human": {
+        "exit": 0,
+        "stderr": "",
+        "stdout": "categoryId: 5\n\npoints\nmonth    budgeted  actual\n2026-07    500.00  391.30\n2026-08    500.00  255.15\n2026-09    500.00  365.00\n"
+      },
+      "json": {
+        "exit": 0,
+        "stderr": "",
+        "stdout": "{\"categoryId\":\"5\",\"points\":[{\"actual\":\"391.30\",\"budgeted\":\"500.00\",\"month\":\"2026-07\"},{\"actual\":\"255.15\",\"budgeted\":\"500.00\",\"month\":\"2026-08\"},{\"actual\":\"365.00\",\"budgeted\":\"500.00\",\"month\":\"2026-09\"}]}\n"
+      }
+    },
+    "stats year": {
+      "command": "meowny stats year --year 2026",
+      "human": {
+        "exit": 0,
+        "stderr": "",
+        "stdout": "month    expense   income   savings  savingsRate\n2026-01  1890.68  4715.33   2824.65         59.9\n2026-02  2162.65  3200.00   1037.35         32.4\n2026-03  2079.23  3520.00   1440.77         40.9\n2026-04  1872.86  3214.22   1341.36         41.7\n2026-05  2792.37  3240.00    447.63         13.8\n2026-06  1905.88  3520.00   1614.12         45.9\n2026-07  1904.70  3253.11   1348.41         41.4\n2026-08  3912.69  3240.00   -672.69        -20.8\n2026-09  1913.64  3690.00   1776.36         48.1\n2026-10  1516.50     0.00  -1516.50            -\n2026-11     0.00     0.00      0.00            -\n2026-12     0.00     0.00      0.00            -\n"
+      },
+      "json": {
+        "exit": 0,
+        "stderr": "",
+        "stdout": "[{\"expense\":\"1890.68\",\"income\":\"4715.33\",\"month\":\"2026-01\",\"savings\":\"2824.65\",\"savingsRate\":59.9},{\"expense\":\"2162.65\",\"income\":\"3200.00\",\"month\":\"2026-02\",\"savings\":\"1037.35\",\"savingsRate\":32.4},{\"expense\":\"2079.23\",\"income\":\"3520.00\",\"month\":\"2026-03\",\"savings\":\"1440.77\",\"savingsRate\":40.9},{\"expense\":\"1872.86\",\"income\":\"3214.22\",\"month\":\"2026-04\",\"savings\":\"1341.36\",\"savingsRate\":41.7},{\"expense\":\"2792.37\",\"income\":\"3240.00\",\"month\":\"2026-05\",\"savings\":\"447.63\",\"savingsRate\":13.8},{\"expense\":\"1905.88\",\"income\":\"3520.00\",\"month\":\"2026-06\",\"savings\":\"1614.12\",\"savingsRate\":45.9},{\"expense\":\"1904.70\",\"income\":\"3253.11\",\"month\":\"2026-07\",\"savings\":\"1348.41\",\"savingsRate\":41.4},{\"expense\":\"39…",
+        "truncated": true
+      }
+    },
+    "status": {
+      "command": "meowny status",
+      "human": {
+        "exit": 0,
+        "stderr": "",
+        "stdout": "api: 1\napp: meowny\nschemaVersion: 9\nscope: read\nversion: 0.1.0\n"
+      },
+      "json": {
+        "exit": 0,
+        "stderr": "",
+        "stdout": "{\"api\":1,\"app\":\"meowny\",\"schemaVersion\":9,\"scope\":\"read\",\"version\":\"0.1.0\"}\n"
+      }
+    },
+    "today": {
+      "command": "meowny today",
+      "human": {
+        "exit": 0,
+        "stderr": "",
+        "stdout": "date: 2026-10-15\nmonth: 2026-10\n"
+      },
+      "json": {
+        "exit": 0,
+        "stderr": "",
+        "stdout": "{\"date\":\"2026-10-15\",\"month\":\"2026-10\"}\n"
+      }
+    },
+    "transactions create": {
+      "command": "meowny transactions create --name Bread --amount 2.40 --payment-date 2026-10-14 --category-id 16 --client-uuid 9b2f5d44-6e1a-4c3b-8f2d-1a2b3c4d5e6f",
+      "json": {
+        "exit": 0,
+        "stderr": "",
+        "stdout": "{\"amount\":\"2.40\",\"categoryId\":\"16\",\"clientUuid\":\"9b2f5d44-6e1a-4c3b-8f2d-1a2b3c4d5e6f\",\"description\":null,\"id\":\"404\",\"name\":\"Bread\",\"paymentDate\":\"2026-10-14\"}\n"
+      }
+    },
+    "transactions delete": {
+      "command": "meowny transactions delete 404 --yes",
+      "human": {
+        "exit": 0,
+        "stderr": "done.\n",
+        "stdout": ""
+      }
+    },
+    "transactions list": {
+      "command": "meowny transactions list --limit 4",
+      "human": {
+        "exit": 0,
+        "stderr": "showing 1-4 of 403; next page: --offset 4\n",
+        "stdout": "limit: 4\noffset: 0\ntotal: 403\n\ntransactions\n id  name             paymentDate  amount  categoryId  clientUuid  description\n403  Coffee           2026-10-13     3.20           7  -           Flat white\n402  Bus ticket       2026-10-13     2.80           6  -           -\n401  Corner shop      2026-10-13     4.50           5  -           -\n291  Board game cafe  2026-10-13    51.83           8  -           -\n"
+      },
+      "json": {
+        "exit": 0,
+        "stderr": "",
+        "stdout": "{\"limit\":4,\"offset\":0,\"total\":403,\"transactions\":[{\"amount\":\"3.20\",\"categoryId\":\"7\",\"clientUuid\":null,\"description\":\"Flat white\",\"id\":\"403\",\"name\":\"Coffee\",\"paymentDate\":\"2026-10-13\"},{\"amount\":\"2.80\",\"categoryId\":\"6\",\"clientUuid\":null,\"description\":null,\"id\":\"402\",\"name\":\"Bus ticket\",\"paymentDate\":\"2026-10-13\"},{\"amount\":\"4.50\",\"categoryId\":\"5\",\"clientUuid\":null,\"description\":null,\"id\":\"401\",\"name\":\"Corner shop\",\"paymentDate\":\"2026-10-13\"},{\"amount\":\"51.83\",\"categoryId\":\"8\",\"clientUuid\":null,\"description\":null,\"id\":\"291\",\"name\":\"Board game cafe\",\"paymentDate\":\"2026-10-13\"}]}\n"
+      }
+    },
+    "transactions update": {
+      "command": "meowny transactions update 404 --amount 2.95 --description Sourdough",
+      "json": {
+        "exit": 0,
+        "stderr": "",
+        "stdout": "{\"amount\":\"2.95\",\"categoryId\":\"16\",\"clientUuid\":\"9b2f5d44-6e1a-4c3b-8f2d-1a2b3c4d5e6f\",\"description\":\"Sourdough\",\"id\":\"404\",\"name\":\"Bread\",\"paymentDate\":\"2026-10-14\"}\n"
+      }
+    }
+  }
+}

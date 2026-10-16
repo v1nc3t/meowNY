@@ -19,9 +19,58 @@ use crate::schedule::{self, Schedule};
 use crate::tokens::{self, CreatedToken, NewToken, TokenInfo};
 use crate::stats::{self, BudgetVsActual, CategoryTrend, Commitments, PlannedVsPaid, TopCategory, YearPoint};
 use crate::transactions::{self, Filter, NewTransaction, Page, Transaction, TransactionPatch};
-use crate::vault::{AppError, LockPrefs, Settings, Vault, VaultStatus};
+use crate::sync::engine::SyncError;
+use crate::sync::peers::Peer;
+use crate::sync::service::{Status as SyncStatus, SyncService};
+use crate::vault::{AppError, Attempts, LockPrefs, Policy, Settings, Vault, VaultStatus};
 
 type Shared<'a> = State<'a, Arc<Vault>>;
+type Syncing<'a> = State<'a, Arc<SyncService<Vault>>>;
+
+/// Asking the person for a file or a folder. Only the desktop does it: the phone has no backup, export or recovery key file
+/// to save or load, so its build has neither these dialogs nor the dialog plugin (see `Cargo.toml`), and asking is refused.
+#[cfg(desktop)]
+mod ask {
+    use std::path::PathBuf;
+
+    use tauri_plugin_dialog::DialogExt;
+
+    use crate::vault::AppError;
+
+    pub fn save(app: &tauri::AppHandle, name: &str, kind: &str, extension: &str) -> Result<Option<PathBuf>, AppError> {
+        let picked = app.dialog().file().set_file_name(name).add_filter(kind, &[extension]).blocking_save_file();
+        picked.map(|path| path.into_path().map_err(|_| AppError::Internal)).transpose()
+    }
+
+    pub fn pick(app: &tauri::AppHandle, kind: &str, extension: &str) -> Result<Option<PathBuf>, AppError> {
+        let picked = app.dialog().file().add_filter(kind, &[extension]).blocking_pick_file();
+        picked.map(|path| path.into_path().map_err(|_| AppError::Internal)).transpose()
+    }
+
+    pub fn folder(app: &tauri::AppHandle) -> Result<Option<PathBuf>, AppError> {
+        let picked = app.dialog().file().blocking_pick_folder();
+        picked.map(|path| path.into_path().map_err(|_| AppError::Internal)).transpose()
+    }
+}
+
+#[cfg(mobile)]
+mod ask {
+    use std::path::PathBuf;
+
+    use crate::vault::AppError;
+
+    pub fn save(_: &tauri::AppHandle, _: &str, _: &str, _: &str) -> Result<Option<PathBuf>, AppError> {
+        Err(AppError::InvalidInput)
+    }
+
+    pub fn pick(_: &tauri::AppHandle, _: &str, _: &str) -> Result<Option<PathBuf>, AppError> {
+        Err(AppError::InvalidInput)
+    }
+
+    pub fn folder(_: &tauri::AppHandle) -> Result<Option<PathBuf>, AppError> {
+        Err(AppError::InvalidInput)
+    }
+}
 
 /// Names of every command, used by the build script to generate one permission each.
 pub const COMMANDS: &[&str] = &[
@@ -86,6 +135,18 @@ pub const COMMANDS: &[&str] = &[
     "list_api_tokens",
     "create_api_token",
     "revoke_api_token",
+    "app_profile",
+    "unlock_attempts",
+    "sync_status",
+    "sync_start_pairing",
+    "sync_enter_code",
+    "sync_decide",
+    "sync_start",
+    "sync_scan",
+    "sync_cancel",
+    "sync_acknowledge",
+    "sync_devices",
+    "sync_remove_device",
 ];
 
 #[tauri::command]
@@ -108,18 +169,8 @@ pub fn recover_vault(vault: Shared, recovery_key: String, new_passphrase: Option
 /// Only a valid recovery key can be written, so this cannot be used to write other content to disk.
 #[tauri::command]
 pub async fn save_recovery_key(app: tauri::AppHandle, code: String) -> Result<bool, AppError> {
-    use tauri_plugin_dialog::DialogExt;
     let text = crate::recovery_file::text(&code)?;
-    let Some(path) = app
-        .dialog()
-        .file()
-        .set_file_name("meowny-recovery-key.txt")
-        .add_filter("Text file", &["txt"])
-        .blocking_save_file()
-    else {
-        return Ok(false);
-    };
-    let path = path.into_path().map_err(|_| AppError::Internal)?;
+    let Some(path) = ask::save(&app, "meowny-recovery-key.txt", "Text file", "txt")? else { return Ok(false) };
     crate::recovery_file::write(&path, &text)?;
     Ok(true)
 }
@@ -136,8 +187,9 @@ pub fn unlock_vault(vault: Shared, passphrase: Option<String>) -> Result<(), App
 }
 
 #[tauri::command]
-pub fn lock_vault(vault: Shared) {
+pub fn lock_vault(vault: Shared, syncing: Syncing) {
     vault.lock();
+    syncing.cancel();
 }
 
 #[tauri::command]
@@ -238,6 +290,10 @@ pub struct ChangeCurrency {
 /// Changes the currency, converting every amount at the rate the person typed, or only relabelling.
 #[tauri::command]
 pub fn change_currency(vault: Shared, input: ChangeCurrency) -> Result<Conversion, AppError> {
+    // The currency is changed on the desktop and reaches the phone with a sync; a phone that changed it too would never agree.
+    if is_phone(&vault) {
+        return Err(AppError::InvalidInput);
+    }
     let timezone = vault.settings()?.timezone;
     let today = clock::today(chrono::Utc::now(), &timezone)?.to_string();
     vault.with_conn(|c| currency::change(c, &input.currency, input.rate.as_deref(), &today))
@@ -397,36 +453,17 @@ pub fn recurring_planned_vs_paid(vault: Shared, month: String) -> Result<Vec<Pla
 
 /// Asks the person to pick a backup file. None if they cancel.
 fn pick_backup_file(app: &tauri::AppHandle) -> Result<Option<std::path::PathBuf>, AppError> {
-    use tauri_plugin_dialog::DialogExt;
-    let Some(path) = app
-        .dialog()
-        .file()
-        .add_filter("meowNY backup", &[backup::EXTENSION])
-        .blocking_pick_file()
-    else {
-        return Ok(None);
-    };
-    Ok(Some(path.into_path().map_err(|_| AppError::Internal)?))
+    ask::pick(app, "meowNY backup", backup::EXTENSION)
 }
 
 /// Writes all data to one encrypted file in a place the person picks, locked with the passphrase
 /// they chose for this backup. Returns false if they cancel the save dialog.
 #[tauri::command]
 pub async fn create_backup(app: tauri::AppHandle, vault: Shared<'_>, passphrase: String) -> Result<bool, AppError> {
-    use tauri_plugin_dialog::DialogExt;
     let snapshot = vault.with_conn(|c| backup::dump(c))?;
     let bytes = backup::seal(&snapshot, &passphrase)?;
     let name = format!("meowny-backup-{}.{}", today_text(&vault)?, backup::EXTENSION);
-    let Some(path) = app
-        .dialog()
-        .file()
-        .set_file_name(name)
-        .add_filter("meowNY backup", &[backup::EXTENSION])
-        .blocking_save_file()
-    else {
-        return Ok(false);
-    };
-    let path = path.into_path().map_err(|_| AppError::Internal)?;
+    let Some(path) = ask::save(&app, &name, "meowNY backup", backup::EXTENSION)? else { return Ok(false) };
     backup::write_file(&path, &bytes)?;
     Ok(true)
 }
@@ -484,10 +521,10 @@ pub async fn set_backup_schedule(
     passphrase: String,
     every_days: u32,
 ) -> Result<bool, AppError> {
-    use tauri_plugin_dialog::DialogExt;
     backup::check_passphrase(&passphrase)?;
-    let Some(folder) = app.dialog().file().blocking_pick_folder() else { return Ok(false) };
-    let folder = folder.into_path().map_err(|_| AppError::Internal)?;
+    // Scheduled backups are a desktop feature: a phone cannot pick a folder for the app to write into, and its data is on the
+    // desktop too (`ask::folder` refuses there).
+    let Some(folder) = ask::folder(&app)? else { return Ok(false) };
     schedule::start(&vault, &folder, &passphrase, every_days, chrono::Utc::now())?;
     Ok(true)
 }
@@ -500,11 +537,7 @@ pub fn clear_backup_schedule(vault: Shared) -> Result<(), AppError> {
 /// Asks where to save `text`, then writes it there readable by the owner only. False if the person cancels.
 /// These files are not encrypted; the export screen says so.
 fn save_export(app: &tauri::AppHandle, name: String, kind: &str, extension: &str, bytes: &[u8]) -> Result<bool, AppError> {
-    use tauri_plugin_dialog::DialogExt;
-    let Some(path) = app.dialog().file().set_file_name(name).add_filter(kind, &[extension]).blocking_save_file() else {
-        return Ok(false);
-    };
-    let path = path.into_path().map_err(|_| AppError::Internal)?;
+    let Some(path) = ask::save(app, &name, kind, extension)? else { return Ok(false) };
     backup::write_file(&path, bytes)?;
     Ok(true)
 }
@@ -587,9 +620,136 @@ pub fn revoke_api_token(vault: Shared, id: String) -> Result<(), AppError> {
     vault.with_conn(|c| tokens::revoke(c, id))
 }
 
+// --- the phone and the sync (phase 8) ---------------------------------------------------------------------------------
+
+/// Which app this is: the desktop's, or the phone's. The screens differ, and so does the vault (the phone's needs a passphrase
+/// and erases itself after 5 wrong ones).
+#[tauri::command]
+pub fn app_profile(vault: Shared) -> &'static str {
+    if vault.policy() == Policy::PHONE {
+        "phone"
+    } else {
+        "desktop"
+    }
+}
+
+/// How many wrong passphrases have been typed and how many are left before the erase; none on a device that never erases.
+#[tauri::command]
+pub fn unlock_attempts(vault: Shared) -> Result<Option<Attempts>, AppError> {
+    vault.attempts()
+}
+
+fn sync_error(e: SyncError) -> AppError {
+    match e {
+        SyncError::Locked => AppError::Locked,
+        SyncError::Invalid(_) => AppError::InvalidInput,
+        _ => AppError::Internal,
+    }
+}
+
+fn is_phone(vault: &Vault) -> bool {
+    vault.policy() == Policy::PHONE
+}
+
+#[tauri::command]
+pub fn sync_status(syncing: Syncing) -> SyncStatus {
+    syncing.status()
+}
+
+/// The address a person typed to use instead of the one the system picks, for a computer on several networks. Empty means the
+/// system's choice. Only an address of a home network is taken, and not the computer's own loopback address: a phone cannot
+/// reach that.
+fn typed_address(text: Option<&str>) -> Result<Option<std::net::IpAddr>, AppError> {
+    let Some(text) = text.map(str::trim).filter(|t| !t.is_empty()) else { return Ok(None) };
+    let ip: std::net::IpAddr = text.parse().map_err(|_| AppError::InvalidInput)?;
+    if ip.is_loopback() || !crate::sync::qr::is_local(&ip) {
+        return Err(AppError::InvalidInput);
+    }
+    Ok(Some(ip))
+}
+
+/// Desktop: opens a window for a new phone and shows its code (read it with `sync_status`). `address` is optional.
+#[tauri::command]
+pub fn sync_start_pairing(vault: Shared, syncing: Syncing, name: String, address: Option<String>) -> Result<(), AppError> {
+    if is_phone(&vault) {
+        return Err(AppError::InvalidInput);
+    }
+    let address = typed_address(address.as_deref())?;
+    syncing.start_pairing(&name, address).map_err(sync_error)
+}
+
+/// Phone: the person typed the six digits that the desktop shows. Checked here; three wrong tries end the pairing.
+#[tauri::command]
+pub fn sync_enter_code(vault: Shared, syncing: Syncing, code: String) -> Result<(), AppError> {
+    if !is_phone(&vault) {
+        return Err(AppError::InvalidInput);
+    }
+    syncing.enter_code(&code);
+    Ok(())
+}
+
+/// The person chose, for each conflict in the order it was shown, which version is true (`mine` or `theirs`).
+#[tauri::command]
+pub fn sync_decide(syncing: Syncing, choices: Vec<crate::sync::engine::Choice>) -> Result<(), AppError> {
+    syncing.decide(choices).map_err(sync_error)
+}
+
+/// Desktop: opens a window for a paired phone and shows its code. `address` is optional. `mode` says which way the sync goes:
+/// both ways, the phone's changes to the desktop only, or the desktop's changes to the phone only.
+#[tauri::command]
+pub fn sync_start(vault: Shared, syncing: Syncing, name: String, address: Option<String>, mode: Option<crate::sync::wire::Mode>) -> Result<(), AppError> {
+    if is_phone(&vault) {
+        return Err(AppError::InvalidInput);
+    }
+    let address = typed_address(address.as_deref())?;
+    syncing.start_sync(&name, address, mode.unwrap_or_default()).map_err(sync_error)
+}
+
+/// Phone: the text of a scanned code. A pairing code pairs, a sync code syncs.
+#[tauri::command]
+pub fn sync_scan(vault: Shared, syncing: Syncing, text: String, name: String) -> Result<(), AppError> {
+    if !is_phone(&vault) {
+        return Err(AppError::InvalidInput);
+    }
+    syncing.scan(&text, &name).map_err(sync_error)
+}
+
+#[tauri::command]
+pub fn sync_cancel(syncing: Syncing) {
+    syncing.cancel();
+}
+
+#[tauri::command]
+pub fn sync_acknowledge(syncing: Syncing) {
+    syncing.acknowledge();
+}
+
+#[tauri::command]
+pub fn sync_devices(syncing: Syncing) -> Result<Vec<Peer>, AppError> {
+    syncing.devices().map_err(sync_error)
+}
+
+/// Forgets a paired device: its secret is deleted and it can never sync again.
+#[tauri::command]
+pub fn sync_remove_device(syncing: Syncing, device_id: String) -> Result<bool, AppError> {
+    syncing.remove_device(&device_id).map_err(sync_error)
+}
+
 #[cfg(test)]
 mod tests {
-    use super::COMMANDS;
+    use super::{typed_address, COMMANDS};
+
+    #[test]
+    fn an_address_typed_in_the_app_must_be_one_of_a_home_network() {
+        assert_eq!(typed_address(None).unwrap(), None);
+        assert_eq!(typed_address(Some("  ")).unwrap(), None, "empty means the system's choice");
+        assert_eq!(typed_address(Some(" 192.168.1.20 ")).unwrap(), Some("192.168.1.20".parse().unwrap()));
+        assert_eq!(typed_address(Some("10.0.0.7")).unwrap(), Some("10.0.0.7".parse().unwrap()));
+        assert_eq!(typed_address(Some("fd12:3456:789a::1")).unwrap(), Some("fd12:3456:789a::1".parse().unwrap()));
+        for bad in ["8.8.8.8", "127.0.0.1", "::1", "0.0.0.0", "192.168.1.20:5000", "my-computer.local", "192.168.1", "2001:db8::1"] {
+            assert!(typed_address(Some(bad)).is_err(), "{bad}");
+        }
+    }
 
     #[test]
     fn build_script_lists_every_command() {

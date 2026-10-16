@@ -121,7 +121,7 @@ pub fn clean_date(text: &str) -> Result<String, AppError> {
     Ok(text.to_string())
 }
 
-fn clean_uuid(text: &str) -> Result<String, AppError> {
+pub(crate) fn clean_uuid(text: &str) -> Result<String, AppError> {
     let groups: Vec<&str> = text.split('-').collect();
     let shape = [8, 4, 4, 4, 12];
     let ok = groups.len() == 5

@@ -37,13 +37,13 @@ jobs:
 
       # The same checks as for every push: the generator's tests, and that docs/CLI.md is up to date.
       - name: Test the generator
-        run: node --test docs/build.test.mjs
+        run: node --test docs/site/build.test.mjs
 
       - name: Check the page
-        run: node docs/build.mjs --check
+        run: node docs/site/build.mjs --check
 
       - name: Build the site
-        run: node docs/build.mjs
+        run: node docs/site/build.mjs
 
       - name: Set up Pages
         uses: actions/configure-pages@v5
@@ -51,7 +51,7 @@ jobs:
       - name: Upload the site
         uses: actions/upload-pages-artifact@v3
         with:
-          path: docs/_site
+          path: docs/site/_site
 
   deploy:
     needs: build

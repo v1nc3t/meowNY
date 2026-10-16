@@ -126,6 +126,7 @@ impl From<AppError> for ApiError {
             | AppError::KeyUnavailable
             | AppError::DatabaseTooNew
             | AppError::InvalidBackup
+            | AppError::Erased
             | AppError::Internal => Self::INTERNAL,
         }
     }

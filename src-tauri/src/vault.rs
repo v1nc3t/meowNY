@@ -39,6 +39,8 @@ pub enum AppError {
     InvalidBackup,
     NotFound,
     NameExists,
+    /// The wrong passphrase was typed too many times in a row and the vault erased itself (see `Policy`).
+    Erased,
     Internal,
 }
 
@@ -56,6 +58,7 @@ impl std::fmt::Display for AppError {
             AppError::InvalidBackup => "that is not a meowNY backup, or it is damaged",
             AppError::NotFound => "not found",
             AppError::NameExists => "that name already exists",
+            AppError::Erased => "the data on this device was erased after too many wrong passphrases",
             AppError::Internal => "something went wrong",
         };
         write!(f, "{text}")
@@ -119,6 +122,13 @@ struct VaultConfig {
     /// database, so the app knows at start whether to listen while the database is still locked.
     #[serde(default)]
     api_enabled: bool,
+    /// 0 means never. A number means: after that many wrong passphrases in a row the vault erases itself (the phone: 5).
+    #[serde(default)]
+    erase_after_failures: u32,
+    /// Wrong passphrases since the last right one. Kept here and not in the database, so it counts while the app is locked
+    /// and closing the app does not reset it.
+    #[serde(default)]
+    failed_attempts: u32,
 }
 
 fn default_notify_due() -> bool {
@@ -153,15 +163,50 @@ struct State {
     last_activity: Instant,
 }
 
+/// What a device demands of its vault. The desktop leaves the passphrase optional and never erases itself. The phone has no keychain, so
+/// the passphrase is what keeps the data closed: it is required, and 5 wrong ones in a row erase the data (the desktop has a full copy,
+/// and pairing again brings it back).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Policy {
+    pub require_passphrase: bool,
+    /// 0 means never.
+    pub erase_after_failures: u32,
+}
+
+impl Policy {
+    pub const DESKTOP: Policy = Policy { require_passphrase: false, erase_after_failures: 0 };
+    pub const PHONE: Policy = Policy { require_passphrase: true, erase_after_failures: 5 };
+}
+
+/// How many wrong passphrases have been typed, and how many are allowed before the erase. Readable while locked.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Attempts {
+    pub failed: u32,
+    pub allowed: u32,
+    pub left: u32,
+}
+
 pub struct Vault {
     dir: PathBuf,
     store: Box<dyn SecretStore>,
     state: Mutex<State>,
+    policy: Policy,
+    /// One unlock at a time, so two at once cannot both read the counter before either writes it.
+    unlock_guard: Mutex<()>,
 }
 
 impl Vault {
     pub fn new(dir: PathBuf, store: Box<dyn SecretStore>) -> Self {
-        Self { dir, store, state: Mutex::new(State { conn: None, last_activity: Instant::now() }) }
+        Self::with_policy(dir, store, Policy::DESKTOP)
+    }
+
+    pub fn with_policy(dir: PathBuf, store: Box<dyn SecretStore>, policy: Policy) -> Self {
+        Self { dir, store, state: Mutex::new(State { conn: None, last_activity: Instant::now() }), policy, unlock_guard: Mutex::new(()) }
+    }
+
+    pub fn policy(&self) -> Policy {
+        self.policy
     }
 
     pub fn data_dir(&self) -> &Path {
@@ -196,6 +241,9 @@ impl Vault {
     pub fn create(&self, settings: &Settings, passphrase: Option<&str>) -> Result<String, AppError> {
         let settings = validate_settings(settings)?;
         let passphrase = normalize_passphrase(passphrase)?;
+        if self.policy.require_passphrase && passphrase.is_none() {
+            return Err(AppError::InvalidInput);
+        }
         if self.db_path().exists() {
             return Err(AppError::AlreadySetUp);
         }
@@ -226,6 +274,8 @@ impl Vault {
             lock_on_close: true,
             notify_due: true,
             api_enabled: false,
+            erase_after_failures: self.policy.erase_after_failures,
+            failed_attempts: 0,
         };
         write_config(&self.config_path(), &config)?;
 
@@ -248,7 +298,11 @@ impl Vault {
         if !self.db_path().exists() {
             return Err(AppError::NotSetUp);
         }
-        let config = read_config(&self.config_path())?;
+        let _one_at_a_time = self.unlock_guard.lock().unwrap_or_else(|e| e.into_inner());
+        if self.lock_state().conn.is_some() {
+            return Ok(());
+        }
+        let mut config = read_config(&self.config_path())?;
         let passphrase = match (config.passphrase, passphrase.filter(|p| !p.is_empty())) {
             (true, None) => return Err(AppError::WrongCredentials),
             (true, Some(p)) => Some(p),
@@ -256,13 +310,56 @@ impl Vault {
             (false, _) => None,
         };
 
-        let key = self.everyday_key(&config, passphrase)?;
-        let conn = db::open_and_migrate(&self.db_path(), &key)?;
+        // A vault that erases itself counts the try before it makes it, so closing the app in the middle cannot hide a guess.
+        let limit = config.erase_after_failures;
+        let counting = limit > 0 && passphrase.is_some();
+        if counting {
+            config.failed_attempts = config.failed_attempts.saturating_add(1);
+            write_config(&self.config_path(), &config)?;
+        }
 
-        let mut state = self.lock_state();
-        state.conn = Some(conn);
-        state.last_activity = Instant::now();
-        Ok(())
+        match self.everyday_key(&config, passphrase) {
+            Ok(key) => {
+                if counting && config.failed_attempts != 0 {
+                    config.failed_attempts = 0;
+                    write_config(&self.config_path(), &config)?;
+                }
+                let conn = db::open_and_migrate(&self.db_path(), &key)?;
+                let mut state = self.lock_state();
+                state.conn = Some(conn);
+                state.last_activity = Instant::now();
+                Ok(())
+            }
+            Err(AppError::WrongCredentials) if counting => {
+                if config.failed_attempts >= limit {
+                    self.remove_everything();
+                    Err(AppError::Erased)
+                } else {
+                    Err(AppError::WrongCredentials)
+                }
+            }
+            Err(other) => {
+                // not a wrong guess (the keychain is missing, say): it does not count
+                if counting {
+                    config.failed_attempts = config.failed_attempts.saturating_sub(1);
+                    write_config(&self.config_path(), &config)?;
+                }
+                Err(other)
+            }
+        }
+    }
+
+    /// How many wrong passphrases have been typed since the last right one, for a vault that erases itself; none for one that does not.
+    pub fn attempts(&self) -> Result<Option<Attempts>, AppError> {
+        if !self.config_path().exists() {
+            return Ok(None);
+        }
+        let config = read_config(&self.config_path())?;
+        if config.erase_after_failures == 0 {
+            return Ok(None);
+        }
+        let failed = config.failed_attempts.min(config.erase_after_failures);
+        Ok(Some(Attempts { failed, allowed: config.erase_after_failures, left: config.erase_after_failures - failed }))
     }
 
     /// Opens the everyday copy of the database key with the keychain secret and the passphrase.
@@ -281,6 +378,9 @@ impl Vault {
             return Err(AppError::NotSetUp);
         }
         let new_passphrase = normalize_passphrase(new_passphrase)?;
+        if self.policy.require_passphrase && new_passphrase.is_none() {
+            return Err(AppError::InvalidInput);
+        }
         let recovery = RecoveryKey::parse(recovery_key).ok_or(AppError::WrongRecoveryKey)?;
         let mut config = read_config(&self.config_path())?;
         let key = keys::unwrap(&recovery.kek()?, &config.wrapped_recovery, Purpose::Recovery).map_err(|e| match e {
@@ -301,6 +401,7 @@ impl Vault {
         };
         let salt = keys::random_bytes::<SALT_LEN>()?;
         config.passphrase = new_passphrase.is_some();
+        config.failed_attempts = 0;
         config.salt = keys::hex_encode(&salt);
         config.wrapped_everyday =
             keys::wrap(&keys::derive_kek(&secret, new_passphrase, &salt)?, &key, Purpose::Everyday)?;
@@ -664,6 +765,159 @@ mod tests {
         v.lock();
         v.store.delete().unwrap();
         assert_eq!(v.unlock(Some("long enough pass")), Err(AppError::KeyUnavailable));
+    }
+
+    fn phone(dir: &Path) -> Vault {
+        Vault::with_policy(dir.to_path_buf(), Box::new(MemoryStore::default()), Policy::PHONE)
+    }
+
+    const PHONE_PASS: &str = "a long phone passphrase";
+
+    #[test]
+    fn a_phone_vault_demands_a_passphrase_and_leaves_nothing_behind_without_one() {
+        let dir = tempfile::tempdir().unwrap();
+        let v = phone(dir.path());
+        for bad in [None, Some(""), Some("short")] {
+            assert_eq!(v.create(&settings(), bad), Err(AppError::InvalidInput), "{bad:?}");
+        }
+        assert_eq!(v.status(), VaultStatus::NotSetUp);
+        assert!(!v.config_path().exists() && !v.db_path().exists());
+        v.create(&settings(), Some(PHONE_PASS)).unwrap();
+        assert_eq!(v.attempts().unwrap(), Some(Attempts { failed: 0, allowed: 5, left: 5 }));
+    }
+
+    #[test]
+    fn the_desktop_vault_never_counts_and_never_erases() {
+        let dir = tempfile::tempdir().unwrap();
+        let v = vault(dir.path());
+        v.create(&settings(), Some("long enough pass")).unwrap();
+        v.lock();
+        for _ in 0..12 {
+            assert_eq!(v.unlock(Some("wrong wrong wrong")), Err(AppError::WrongCredentials));
+        }
+        assert_eq!(v.attempts().unwrap(), None);
+        v.unlock(Some("long enough pass")).unwrap();
+    }
+
+    #[test]
+    fn wrong_passphrases_are_counted_and_a_right_one_starts_over() {
+        let dir = tempfile::tempdir().unwrap();
+        let v = phone(dir.path());
+        v.create(&settings(), Some(PHONE_PASS)).unwrap();
+        v.lock();
+        for expected_left in [4, 3, 2, 1] {
+            assert_eq!(v.unlock(Some("wrong wrong wrong")), Err(AppError::WrongCredentials));
+            assert_eq!(v.attempts().unwrap().unwrap().left, expected_left);
+        }
+        v.unlock(Some(PHONE_PASS)).unwrap();
+        assert_eq!(v.attempts().unwrap(), Some(Attempts { failed: 0, allowed: 5, left: 5 }), "one right passphrase resets the count");
+        v.lock();
+        assert_eq!(v.unlock(Some("wrong wrong wrong")), Err(AppError::WrongCredentials));
+        assert_eq!(v.attempts().unwrap().unwrap().failed, 1);
+    }
+
+    #[test]
+    fn the_fifth_wrong_passphrase_erases_everything_on_the_phone() {
+        let dir = tempfile::tempdir().unwrap();
+        let v = phone(dir.path());
+        v.create(&settings(), Some(PHONE_PASS)).unwrap();
+        v.with_conn(|c| {
+            c.execute("INSERT INTO sync_peers (device_id, name, secret, paired_at) VALUES (?1, 'Desktop', ?2, 'now')", rusqlite::params!["ab".repeat(16), "cd".repeat(32)])?;
+            Ok(())
+        })
+        .unwrap();
+        v.lock();
+        for _ in 0..4 {
+            assert_eq!(v.unlock(Some("wrong wrong wrong")), Err(AppError::WrongCredentials));
+        }
+        assert!(v.db_path().exists());
+        assert_eq!(v.unlock(Some("wrong wrong wrong")), Err(AppError::Erased));
+        assert_eq!(v.status(), VaultStatus::NotSetUp);
+        assert!(!v.db_path().exists() && !v.config_path().exists(), "the database, with the pairing secret in it, and the config are gone");
+        assert!(v.store.get().unwrap().is_none(), "and so is the secret");
+        // and the right passphrase now opens nothing
+        assert_eq!(v.unlock(Some(PHONE_PASS)), Err(AppError::NotSetUp));
+        assert_eq!(v.attempts().unwrap(), None);
+        // a new vault can be made in its place
+        v.create(&settings(), Some(PHONE_PASS)).unwrap();
+        assert_eq!(v.status(), VaultStatus::Unlocked);
+    }
+
+    #[test]
+    fn the_count_survives_closing_the_app() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = std::sync::Arc::new(MemoryStore::default());
+        struct Shared(std::sync::Arc<MemoryStore>);
+        impl SecretStore for Shared {
+            fn get(&self) -> Result<Option<zeroize::Zeroizing<[u8; 32]>>, KeyError> {
+                self.0.get()
+            }
+            fn set(&self, s: &[u8; 32]) -> Result<(), KeyError> {
+                self.0.set(s)
+            }
+            fn delete(&self) -> Result<(), KeyError> {
+                self.0.delete()
+            }
+        }
+        let v = Vault::with_policy(dir.path().to_path_buf(), Box::new(Shared(store.clone())), Policy::PHONE);
+        v.create(&settings(), Some(PHONE_PASS)).unwrap();
+        v.lock();
+        for _ in 0..3 {
+            let _ = v.unlock(Some("wrong wrong wrong"));
+        }
+        drop(v);
+        let v = Vault::with_policy(dir.path().to_path_buf(), Box::new(Shared(store)), Policy::PHONE);
+        assert_eq!(v.attempts().unwrap().unwrap().failed, 3, "a new start does not give the tries back");
+        let _ = v.unlock(Some("wrong wrong wrong"));
+        assert_eq!(v.unlock(Some("wrong wrong wrong")), Err(AppError::Erased));
+    }
+
+    #[test]
+    fn nothing_typed_and_a_missing_key_do_not_count_as_guesses() {
+        let dir = tempfile::tempdir().unwrap();
+        let v = phone(dir.path());
+        v.create(&settings(), Some(PHONE_PASS)).unwrap();
+        v.lock();
+        for _ in 0..10 {
+            assert_eq!(v.unlock(None), Err(AppError::WrongCredentials));
+            assert_eq!(v.unlock(Some("")), Err(AppError::WrongCredentials));
+        }
+        assert_eq!(v.attempts().unwrap().unwrap().failed, 0);
+        v.store.delete().unwrap();
+        for _ in 0..10 {
+            assert_eq!(v.unlock(Some("wrong wrong wrong")), Err(AppError::KeyUnavailable));
+        }
+        assert_eq!(v.attempts().unwrap().unwrap().failed, 0, "a lost key file is not a wrong passphrase");
+        assert!(v.db_path().exists());
+    }
+
+    #[test]
+    fn two_unlocks_at_once_still_count_every_wrong_passphrase() {
+        let dir = tempfile::tempdir().unwrap();
+        let v = std::sync::Arc::new(phone(dir.path()));
+        v.create(&settings(), Some(PHONE_PASS)).unwrap();
+        v.lock();
+        let handles: Vec<_> = (0..4)
+            .map(|_| {
+                let v = v.clone();
+                std::thread::spawn(move || v.unlock(Some("wrong wrong wrong")))
+            })
+            .collect();
+        let results: Vec<_> = handles.into_iter().map(|h| h.join().unwrap()).collect();
+        assert_eq!(results.iter().filter(|r| **r == Err(AppError::WrongCredentials)).count(), 4);
+        assert_eq!(v.attempts().unwrap().unwrap().failed, 4, "no count was lost");
+    }
+
+    #[test]
+    fn a_phone_cannot_drop_its_passphrase_through_the_recovery_key() {
+        let dir = tempfile::tempdir().unwrap();
+        let v = phone(dir.path());
+        let recovery = v.create(&settings(), Some(PHONE_PASS)).unwrap();
+        v.lock();
+        assert_eq!(v.recover(&recovery, None), Err(AppError::InvalidInput));
+        assert_eq!(v.status(), VaultStatus::Locked);
+        v.recover(&recovery, Some("another long passphrase")).unwrap();
+        assert_eq!(v.attempts().unwrap().unwrap().failed, 0);
     }
 
     #[test]

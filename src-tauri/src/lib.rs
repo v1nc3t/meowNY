@@ -17,6 +17,7 @@ pub mod money;
 pub mod schedule;
 /// Dev demo data, used by `examples/seed.rs`.
 pub mod seed;
+pub mod sync;
 pub mod stats;
 pub mod tokens;
 pub mod transactions;
@@ -29,11 +30,38 @@ use std::time::{Duration, Instant};
 
 use tauri::{Emitter, Manager, WindowEvent};
 
-use crate::keys::KeychainStore;
-use crate::vault::Vault;
+use crate::keys::FileStore;
+use crate::sync::service::SyncService;
+use crate::vault::{Policy, Vault};
 
 const IDLE_CHECK_EVERY: Duration = Duration::from_secs(5);
 const SCHEDULE_CHECK_EVERY: Duration = Duration::from_secs(60);
+
+/// Whether this is the phone's app: always on a phone, and in a debug build when `MEOWNY_PROFILE=phone` is set, so the phone's
+/// screens can be tried in a window on a computer (with a separate data folder; the vault is of another kind).
+#[cfg(not(target_os = "android"))]
+fn is_phone() -> bool {
+    cfg!(any(target_os = "android", target_os = "ios")) || (cfg!(debug_assertions) && std::env::var("MEOWNY_PROFILE").is_ok_and(|v| v == "phone"))
+}
+
+/// The phone has no keychain to rely on, so its vault keeps the secret in a file and demands a passphrase.
+fn phone_vault(dir: std::path::PathBuf) -> Vault {
+    let secret = dir.join("phone.secret");
+    Vault::with_policy(dir, Box::new(FileStore::new(secret)), Policy::PHONE)
+}
+
+#[cfg(not(target_os = "android"))]
+fn make_vault(dir: std::path::PathBuf) -> Vault {
+    if is_phone() {
+        return phone_vault(dir);
+    }
+    Vault::new(dir, Box::new(crate::keys::KeychainStore::new().expect("keychain entry")))
+}
+
+#[cfg(target_os = "android")]
+fn make_vault(dir: std::path::PathBuf) -> Vault {
+    phone_vault(dir)
+}
 
 /// Panic messages can quote data (an amount, a description), so only the location is printed.
 fn install_safe_panic_hook() {
@@ -45,6 +73,8 @@ fn install_safe_panic_hook() {
 
 /// The webview may only show the app itself. Anything else is refused; links to the outside
 /// go through the opener plugin, which hands them to the system browser.
+// The local server of `tauri dev` is allowed in a debug build only; clippy sees that `cfg!` as a plain `true`.
+#[allow(clippy::match_like_matches_macro)]
 fn is_app_url(url: &tauri::Url) -> bool {
     match url.scheme() {
         "tauri" | "about" => true,
@@ -60,6 +90,7 @@ fn is_app_url(url: &tauri::Url) -> bool {
 /// Asks the person to allow something a token wants to do, in a native dialog over the app's window.
 struct AllowDialog(tauri::AppHandle);
 
+#[cfg(desktop)]
 impl api::Show for AllowDialog {
     fn show(&self, approval: &api::Approval) -> bool {
         use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
@@ -79,26 +110,52 @@ impl api::Show for AllowDialog {
     }
 }
 
+/// Only a computer has the command API that asks; a phone never starts it, so on a phone the answer is always no.
+#[cfg(mobile)]
+impl api::Show for AllowDialog {
+    fn show(&self, _: &api::Approval) -> bool {
+        let _ = &self.0;
+        false
+    }
+}
+
+// On a phone the app starts through this entry point (Tauri's generated Android project calls it); on a computer `main` does.
+#[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     install_safe_panic_hook();
 
-    tauri::Builder::default()
+    let builder = tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
-        .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_notification::init())
-        .plugin(tauri::plugin::Builder::<tauri::Wry>::new("navigation-guard").on_navigation(|_, url| is_app_url(url)).build())
+        .plugin(tauri::plugin::Builder::<tauri::Wry>::new("navigation-guard").on_navigation(|_, url| is_app_url(url)).build());
+
+    // The camera that reads the code of the desktop, on a phone only.
+    #[cfg(mobile)]
+    let builder = builder.plugin(tauri_plugin_barcode_scanner::init());
+
+    // The file dialogs, on a computer only (the phone has no backups or exports to save and load).
+    #[cfg(desktop)]
+    let builder = builder.plugin(tauri_plugin_dialog::init());
+
+    builder
         .setup(|app| {
             let dir = app.path().app_data_dir()?;
-            let store = KeychainStore::new().expect("keychain entry");
-            let vault = Arc::new(Vault::new(dir, Box::new(store)));
+            let vault = Arc::new(make_vault(dir));
             app.manage(vault.clone());
+
+            // Syncing with the phone: a window on the home network for a minute or two, only while the app is unlocked.
+            let syncing = Arc::new(SyncService::new(vault.clone()));
+            app.manage(syncing.clone());
 
             // The command API for the CLI, if the person left it on. Before it writes a file for a token, the person
             // is asked in a dialog.
             let prompter = api::Prompter::new(AllowDialog(app.handle().clone()));
             let api_host = Arc::new(api::Host::with_prompter(vault.clone(), prompter));
             app.manage(api_host.clone());
-            api_host.start_if_enabled();
+            // The command API belongs to the desktop app; the phone has none.
+            if vault.policy() == Policy::DESKTOP {
+                api_host.start_if_enabled();
+            }
 
             // Scheduled backups, while the app is unlocked.
             let scheduled = vault.clone();
@@ -112,6 +169,7 @@ pub fn run() {
             std::thread::spawn(move || loop {
                 std::thread::sleep(IDLE_CHECK_EVERY);
                 if vault.lock_if_idle(Instant::now()) {
+                    syncing.cancel();
                     let _ = handle.emit("vault-locked", ());
                 }
             });
@@ -121,9 +179,13 @@ pub fn run() {
             let vault = window.state::<Arc<Vault>>();
             let Ok(prefs) = vault.lock_prefs() else { return };
             match event {
-                WindowEvent::CloseRequested { .. } if prefs.lock_on_close => vault.lock(),
+                WindowEvent::CloseRequested { .. } if prefs.lock_on_close => {
+                    vault.lock();
+                    window.state::<Arc<SyncService<Vault>>>().cancel();
+                }
                 WindowEvent::Resized(_) if prefs.lock_on_minimize && window.is_minimized().unwrap_or(false) => {
                     vault.lock();
+                    window.state::<Arc<SyncService<Vault>>>().cancel();
                     let _ = window.emit("vault-locked", ());
                 }
                 _ => {}
@@ -191,6 +253,18 @@ pub fn run() {
             commands::list_api_tokens,
             commands::create_api_token,
             commands::revoke_api_token,
+            commands::app_profile,
+            commands::unlock_attempts,
+            commands::sync_status,
+            commands::sync_start_pairing,
+            commands::sync_enter_code,
+            commands::sync_decide,
+            commands::sync_start,
+            commands::sync_scan,
+            commands::sync_cancel,
+            commands::sync_acknowledge,
+            commands::sync_devices,
+            commands::sync_remove_device,
         ])
         .build(tauri::generate_context!())
         .expect("error while building meowNY")

@@ -56,7 +56,7 @@ pub struct Category {
     pub kind: CategoryType,
 }
 
-fn clean_name(name: &str) -> Result<String, AppError> {
+pub(crate) fn clean_name(name: &str) -> Result<String, AppError> {
     let name = name.trim();
     let length = name.chars().count();
     if length == 0 || length > NAME_MAX_CHARS || name.chars().any(char::is_control) {

@@ -1,10 +1,11 @@
 [package]
-name = "meowny"
+# The desktop program is `meowny-desktop`. The command line, in cli/, is `meowny`.
+name = "meowny-desktop"
 version = "0.1.0"
 description = "meowNY: local-first expense tracker"
 license = "AGPL-3.0-only"
 edition = "2021"
-rust-version = "1.77"
+rust-version = "1.90"
 
 [lib]
 name = "meowny_lib"
@@ -14,22 +15,17 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-argon2 = "0.5.3"
-chacha20poly1305 = "0.10.1"
+argon2 = { version = "0.5.3", default-features = false, features = ["alloc"] }
+chacha20poly1305 = { version = "0.10.1", default-features = false, features = ["alloc"] }
 chrono = { version = "0.4.45", default-features = false, features = ["std", "clock"] }
 chrono-tz = "0.10.4"
 getrandom = "0.3.4"
 hkdf = "0.12.4"
-keyring = { version = "3", default-features = false, features = ["apple-native", "windows-native", "sync-secret-service", "crypto-rust"] }
-krilla = { version = "0.6.0", default-features = false, features = ["simple-text"] }
 rusqlite = { version = "0.40.2", features = ["bundled-sqlcipher-vendored-openssl"] }
-rust_xlsxwriter = "0.92.0"
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"
 sha2 = "0.10.9"
-skrifa = "0.37"
 tauri = { version = "2", features = [] }
-tauri-plugin-dialog = "2"
 tauri-plugin-notification = "2"
 tauri-plugin-opener = "2.5.5"
 zeroize = { version = "1.8.2", features = ["derive"] }
@@ -37,3 +33,21 @@ zeroize = { version = "1.8.2", features = ["derive"] }
 [dev-dependencies]
 flate2 = "1"
 tempfile = "3.27.0"
+
+# Excel and PDF exports, and the fonts they need, and the file dialogs that say where a file goes. The phone has none of these
+# (it cannot save a file for the person yet, and the desktop keeps the backups and exports), so they and the two embedded fonts
+# are left out of its build.
+[target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
+tauri-plugin-dialog = "2"
+krilla = { version = "0.6.0", default-features = false, features = ["simple-text"] }
+rust_xlsxwriter = "0.92.0"
+skrifa = "0.37"
+
+# The OS keychain. Android has none the app can use; the phone app keeps its secret in a file and relies on its passphrase.
+[target.'cfg(not(target_os = "android"))'.dependencies]
+keyring = { version = "3", default-features = false, features = ["apple-native", "windows-native", "sync-secret-service", "crypto-rust"] }
+
+# The camera of the phone, which reads the QR code that the desktop shows. It is built for the phone only; the desktop does not
+# contain it. If it ever breaks, pairing and syncing stop and the rest of the app does not.
+[target.'cfg(any(target_os = "android", target_os = "ios"))'.dependencies]
+tauri-plugin-barcode-scanner = "2"

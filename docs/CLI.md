@@ -145,7 +145,7 @@ $ meowny status
 
 api: 1
 app: meowny
-schemaVersion: 7
+schemaVersion: 9
 scope: read
 version: 0.1.0
 ```
@@ -156,7 +156,7 @@ With `--json` (one line; shown indented):
 {
   "api": 1,
   "app": "meowny",
-  "schemaVersion": 7,
+  "schemaVersion": 9,
   "scope": "read",
   "version": "0.1.0"
 }
@@ -1753,7 +1753,7 @@ The app asks you to allow this each time, in a dialog; nothing is written until 
 ```console
 $ meowny export xlsx --out /home/you/budget.xlsx
 
-bytes: 21865
+bytes: 21864
 path: /home/you/budget.xlsx
 ```
 
@@ -1838,7 +1838,7 @@ The app asks you to allow this each time, in a dialog; nothing is written until 
 ```console
 $ echo "correct horse battery staple" | meowny backup create --out /home/you/meowny.meowbak --passphrase -
 
-bytes: 143482
+bytes: 181029
 path: /home/you/meowny.meowbak
 
 waiting for you to allow this in the meowNY app...
@@ -2070,7 +2070,7 @@ The command line is a thin client. Anything it does you can do yourself with `cu
 curl -s -X POST "http://127.0.0.1:$PORT/v1/status" \
   -H "Authorization: Bearer $MEOWNY_TOKEN"
 
-{"data":{"api":1,"app":"meowny","schemaVersion":7,"scope":"read","version":"0.1.0"},"ok":true}
+{"data":{"api":1,"app":"meowny","schemaVersion":9,"scope":"read","version":"0.1.0"},"ok":true}
 ```
 
 The port is in `api.json`. `meowny schema --app` prints every route with its arguments as JSON.

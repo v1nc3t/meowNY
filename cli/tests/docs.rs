@@ -2,8 +2,8 @@
 //! every command, and every way a command fails, against the real app and records what really came
 //! out. The website shows those outputs.
 //!
-//!   cd cli && UPDATE_DOCS=1 cargo test --offline --test docs      # rewrite docs/commands.json and docs/examples.json
-//!   node docs/build.mjs                                            # rebuild the site and docs/CLI.md
+//!   cd cli && UPDATE_DOCS=1 cargo test --offline --test docs      # rewrite docs/site/commands.json and docs/site/examples.json
+//!   node docs/site/build.mjs                                            # rebuild the site and docs/CLI.md
 //!
 //! Without `UPDATE_DOCS` the same tour runs and is compared with the recorded files, so a command that
 //! changes, a message that is reworded or a command with no example fails here until the docs are redone.
@@ -85,6 +85,7 @@ impl Tour<'_> {
 
     /// Runs a command for the docs. `human` and `json` say which of its two outputs to show. Returns the data
     /// the command printed as JSON, if it was run that way, so later steps can use the ids it made.
+    #[allow(clippy::too_many_arguments)] // one call per documented example, each part is a separate thing to show
     fn example(&mut self, name: &str, who: Who, shown: &str, args: &[&str], human: bool, json_too: bool, stdin: Option<&str>) -> Value {
         let mut entry = Map::new();
         entry.insert("command".into(), json!(shown));
@@ -281,7 +282,7 @@ fn differences(name: &str, old: &Value, new: &Value, loose: bool, found: &mut Ve
 }
 
 fn docs_dir() -> std::path::PathBuf {
-    std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../docs")
+    std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../docs/site")
 }
 
 fn read_json(name: &str) -> Value {
@@ -315,13 +316,13 @@ fn the_documentation_matches_the_program() {
     if std::env::var_os("UPDATE_DOCS").is_some() {
         std::fs::write(docs_dir().join("commands.json"), serde_json::to_string_pretty(&commands_now).unwrap() + "\n").unwrap();
         std::fs::write(docs_dir().join("examples.json"), serde_json::to_string_pretty(&new).unwrap() + "\n").unwrap();
-        println!("docs/commands.json and docs/examples.json were rewritten; now run: node docs/build.mjs");
+        println!("docs/site/commands.json and docs/site/examples.json were rewritten; now run: node docs/site/build.mjs");
         return;
     }
 
     let mut found = Vec::new();
     if read_json("commands.json") != commands_now {
-        found.push("docs/commands.json is not what `meowny schema` prints".to_string());
+        found.push("docs/site/commands.json is not what `meowny schema` prints".to_string());
     }
     let recorded = read_json("examples.json");
     for (name, entry) in &examples {
@@ -354,7 +355,7 @@ fn the_documentation_matches_the_program() {
     }
     assert!(
         found.is_empty(),
-        "the documentation is out of date:\n{}\n\nrun: cd cli && UPDATE_DOCS=1 cargo test --offline --test docs && node ../docs/build.mjs",
+        "the documentation is out of date:\n{}\n\nrun: cd cli && UPDATE_DOCS=1 cargo test --offline --test docs && node ../docs/site/build.mjs",
         found.join("\n")
     );
 }
