@@ -1,3 +1,4 @@
+import type { MessageKey } from '../i18n/en'
 import { pickLanguage } from '../i18n/languages'
 import { t } from '../i18n/translate'
 
@@ -5,6 +6,26 @@ import { t } from '../i18n/translate'
 // rules again; these exist to give an answer before a round trip.
 
 export const MIN_PASSPHRASE_CHARS = 8
+
+/** A library smaller than this (100 MB) goes into a backup unless the person says no; a bigger one only if they say yes. */
+export const DOCUMENTS_BY_DEFAULT_UNDER = 100 * 1024 * 1024
+
+/** How many scheduled backups the app keeps in the folder (`KEEP` in `schedule.rs`). */
+export const BACKUPS_KEPT = 10
+
+/** Whether the files of the documents are put in a backup when the person has not chosen. */
+export function includeDocumentsByDefault(heldBytes: number): boolean {
+  return heldBytes < DOCUMENTS_BY_DEFAULT_UNDER
+}
+
+/** The lines that follow "backup saved": how many documents it holds, and how many were left out for having no file here. */
+export function backupDoneLines(done: { documents: number; missing: number }): { key: MessageKey; count: number }[] {
+  const lines: { key: MessageKey; count: number }[] = [
+    { key: 'settings.backupHolds', count: done.documents },
+    { key: 'settings.backupMissing', count: done.missing },
+  ]
+  return lines.filter((line) => line.count > 0)
+}
 
 export type Settings = { currency: string; locale: string; timezone: string; language: string }
 

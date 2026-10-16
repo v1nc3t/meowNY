@@ -260,6 +260,7 @@ fn confirm_backup(ctx: &Ctx, args: &Map<String, Value>) -> Result<Approval, ApiE
     let preview = ctx.vault.with_conn(|c| export::preview(c, &Selection::default()))?;
     let lines = vec![
         "Everything: all categories, budgets, recurring items, transactions and the change history".to_string(),
+        "Documents: their names, dates and links are in it, but not the files themselves. A backup made in the app can include the files.".to_string(),
         format!("Transactions: {}", preview.transactions),
         "Locked with the passphrase the program gave. You need that passphrase to restore the backup.".to_string(),
     ];

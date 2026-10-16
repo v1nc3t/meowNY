@@ -486,15 +486,18 @@ fn pick_backup_file(app: &tauri::AppHandle) -> Result<Option<std::path::PathBuf>
 }
 
 /// Writes all data to one encrypted file in a place the person picks, locked with the passphrase
-/// they chose for this backup. Returns false if they cancel the save dialog.
+/// they chose for this backup, and the files of the documents too if `include_documents`. What it held of the documents, or None
+/// if they cancel the save dialog. The file is written as it is read, so a big library does not have to fit in memory.
 #[tauri::command]
-pub async fn create_backup(app: tauri::AppHandle, vault: Shared<'_>, passphrase: String) -> Result<bool, AppError> {
-    let snapshot = vault.with_conn(|c| backup::dump(c))?;
-    let bytes = backup::seal(&snapshot, &passphrase)?;
+pub async fn create_backup(app: tauri::AppHandle, vault: Shared<'_>, passphrase: String, include_documents: bool) -> Result<Option<backup::Written>, AppError> {
+    backup::check_passphrase(&passphrase)?;
     let name = format!("meowny-backup-{}.{}", today_text(&vault)?, backup::EXTENSION);
-    let Some(path) = ask::save(&app, &name, "meowNY backup", backup::EXTENSION)? else { return Ok(false) };
-    backup::write_file(&path, &bytes)?;
-    Ok(true)
+    let Some(path) = ask::save(&app, &name, "meowNY backup", backup::EXTENSION)? else { return Ok(None) };
+    // the rows are read after the person has chosen the place, so the backup is of this moment and not of the one before the dialog
+    let snapshot = vault.with_conn(|c| backup::dump(c))?;
+    let mut files = backup::VaultFiles(&vault);
+    let written = backup::create_file(&path, &snapshot, &passphrase, include_documents.then_some(&mut files as &mut dyn backup::FileSource))?;
+    Ok(Some(written))
 }
 
 /// Replaces all data with a backup the person picks. `confirmation` must be "RESTORE". Returns false
@@ -513,7 +516,7 @@ pub async fn restore_backup(
         return Err(AppError::Locked);
     }
     let Some(path) = pick_backup_file(&app)? else { return Ok(false) };
-    vault.restore_backup(&backup::read_file(&path)?, &passphrase, &confirmation)?;
+    vault.restore_backup(path.as_path(), &passphrase, &confirmation)?;
     Ok(true)
 }
 
@@ -531,7 +534,7 @@ pub async fn restore_backup_new_vault(
         return Err(AppError::AlreadySetUp);
     }
     let Some(path) = pick_backup_file(&app)? else { return Ok(None) };
-    let key = vault.create_from_backup(&backup::read_file(&path)?, &passphrase, vault_passphrase.as_deref())?;
+    let key = vault.create_from_backup(path.as_path(), &passphrase, vault_passphrase.as_deref())?;
     Ok(Some(key))
 }
 
@@ -542,19 +545,21 @@ pub fn get_backup_schedule(vault: Shared) -> Result<Option<Schedule>, AppError> 
 }
 
 /// Starts (or replaces) scheduled backups: asks for the folder, then makes the first backup there.
-/// `every_days` is 1, 7 or 30. Returns false if the person cancels the folder dialog.
+/// `every_days` is 1, 7 or 30; `include_documents` puts the files of the documents in every backup. Returns false if the person
+/// cancels the folder dialog.
 #[tauri::command]
 pub async fn set_backup_schedule(
     app: tauri::AppHandle,
     vault: Shared<'_>,
     passphrase: String,
     every_days: u32,
+    include_documents: bool,
 ) -> Result<bool, AppError> {
     backup::check_passphrase(&passphrase)?;
     // Scheduled backups are a desktop feature: a phone cannot pick a folder for the app to write into, and its data is on the
     // desktop too (`ask::folder` refuses there).
     let Some(folder) = ask::folder(&app)? else { return Ok(false) };
-    schedule::start(&vault, &folder, &passphrase, every_days, chrono::Utc::now())?;
+    schedule::start(&vault, &folder, &passphrase, every_days, include_documents, chrono::Utc::now())?;
     Ok(true)
 }
 

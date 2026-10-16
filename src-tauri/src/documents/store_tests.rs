@@ -432,3 +432,24 @@ fn how_far_an_unfinished_transfer_got_can_be_asked_without_touching_it() {
     assert_eq!(store.resume_offset(&keys, &id(1), plain.len() as u64), 0);
     assert!(part.exists(), "even a bad one is left for the transfer to deal with");
 }
+
+#[test]
+fn an_unfinished_file_can_be_thrown_away_without_touching_a_finished_one() {
+    let (_dir, store) = store();
+    let keys = doc_keys();
+    store.put(&keys, &id(1), b"whole").unwrap();
+    store.put(&keys, &id(2), b"another whole one").unwrap();
+    {
+        let mut incoming = store.begin_incoming(&keys, &id(1), 3 * CHUNK_SIZE as u64).unwrap();
+        incoming.write(&pattern(CHUNK_SIZE + 5)).unwrap();
+    }
+    fs::write(store.dir().join(format!("{}.tmp", keys.stem(&id(1)))), b"half written").unwrap();
+    let before = names(&store);
+    assert_eq!(before.len(), 4);
+    store.discard_unfinished(&keys, &id(1));
+    store.discard_unfinished(&keys, &id(3));
+    let after = names(&store);
+    assert_eq!(after.len(), 2, "{after:?}");
+    assert!(after.iter().all(|name| name.ends_with(".mnd")));
+    assert!(store.has(&keys, &id(1)) && store.has(&keys, &id(2)), "the finished files are still there");
+}

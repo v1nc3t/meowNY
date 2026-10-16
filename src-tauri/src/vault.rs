@@ -13,7 +13,7 @@ use std::time::{Duration, Instant};
 use rusqlite::Connection;
 use serde::{Deserialize, Serialize};
 
-use crate::backup::{self, Snapshot};
+use crate::backup::{self, Backup, Snapshot, Source};
 use crate::db::{self, DbError};
 use crate::documents::library::{self, Files, Report};
 use crate::documents::opened::Opened;
@@ -465,8 +465,9 @@ impl Vault {
     }
 
     /// Replaces all data with the contents of a backup. Needs the typed confirmation, because what
-    /// is in the app now is gone afterwards. Nothing changes if the backup cannot be opened or fails a check.
-    pub fn restore_backup(&self, bytes: &[u8], backup_passphrase: &str, confirmation: &str) -> Result<(), AppError> {
+    /// is in the app now is gone afterwards. Nothing changes if the backup cannot be opened or fails a check, or if it is cut or damaged
+    /// anywhere, files included: the rows are written last.
+    pub fn restore_backup<'a>(&self, source: impl Into<Source<'a>>, backup_passphrase: &str, confirmation: &str) -> Result<(), AppError> {
         if confirmation != "RESTORE" {
             return Err(AppError::InvalidInput);
         }
@@ -474,36 +475,50 @@ impl Vault {
             return Err(AppError::Locked);
         }
         // The slow key stretching happens before the connection is borrowed.
-        let snapshot = backup::open(bytes, backup_passphrase)?;
-        self.with_conn(|c| backup::restore_snapshot(c, &snapshot))?;
-        // The rows are another set now: files that no row names any more go, and rows whose file is not here are counted.
+        let mut backup = Backup::open(source, backup_passphrase)?;
+        let result = self.replace_with(&mut backup);
+        // The rows are another set now, or the same if it failed after some files were written: files that no row names go, and rows
+        // whose file is not here are counted.
         self.tidy_documents();
+        result?;
         self.touch();
         Ok(())
     }
 
+    /// The files of the backup are sealed into the folder first, then the rows are replaced in one transaction. A crash or an error
+    /// before the second step leaves the old data and some files no row names, which the next check removes; after it, the new data
+    /// and old files no row names, which the check removes too. The state is held throughout, so nothing else touches the data.
+    fn replace_with(&self, backup: &mut Backup) -> Result<(), AppError> {
+        let prepared = backup::prepare(backup.snapshot())?;
+        self.with_files_mut(|conn, files| {
+            backup.restore_files(files, &prepared)?;
+            backup::commit(conn, &prepared)
+        })
+    }
+
     /// First run, from a backup instead of an empty start: makes new keys and a new database, then
-    /// loads the backup into it. Returns the recovery key, as `create` does. A backup that fails
-    /// leaves the app as it was, not set up.
-    pub fn create_from_backup(
+    /// loads the backup into it, files included (sealed under the new keys). Returns the recovery key, as `create` does. A backup that
+    /// fails leaves the app as it was, not set up.
+    pub fn create_from_backup<'a>(
         &self,
-        bytes: &[u8],
+        source: impl Into<Source<'a>>,
         backup_passphrase: &str,
         passphrase: Option<&str>,
     ) -> Result<String, AppError> {
         if self.db_path().exists() {
             return Err(AppError::AlreadySetUp);
         }
-        let snapshot = backup::open(bytes, backup_passphrase)?;
-        let settings = settings_of(&snapshot)
+        let mut backup = Backup::open(source, backup_passphrase)?;
+        let settings = settings_of(backup.snapshot())
             .and_then(|s| validate_settings(&s).ok())
             .ok_or(AppError::InvalidBackup)?;
         let recovery = self.create(&settings, passphrase)?;
-        if let Err(e) = self.with_conn(|c| backup::restore_snapshot(c, &snapshot)) {
+        if let Err(e) = self.replace_with(&mut backup) {
             self.lock();
             self.remove_everything();
             return Err(e);
         }
+        self.tidy_documents();
         Ok(recovery)
     }
 
@@ -558,6 +573,15 @@ impl Vault {
     pub fn with_files<R>(&self, f: impl FnOnce(&Connection, &Files) -> Result<R, AppError>) -> Result<R, AppError> {
         let state = self.lock_state();
         let (Some(conn), Some(keys)) = (state.conn.as_ref(), state.docs.as_ref()) else { return Err(AppError::Locked) };
+        let store = Store::new(&self.dir);
+        f(conn, &Files { store: &store, keys })
+    }
+
+    /// `with_files` for a call that changes the database as a whole (restoring a backup), which needs the connection by `&mut`.
+    pub fn with_files_mut<R>(&self, f: impl FnOnce(&mut Connection, &Files) -> Result<R, AppError>) -> Result<R, AppError> {
+        let mut state = self.lock_state();
+        let State { conn, docs, .. } = &mut *state;
+        let (Some(conn), Some(keys)) = (conn.as_mut(), docs.as_ref()) else { return Err(AppError::Locked) };
         let store = Store::new(&self.dir);
         f(conn, &Files { store: &store, keys })
     }

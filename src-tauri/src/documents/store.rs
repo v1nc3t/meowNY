@@ -215,6 +215,14 @@ impl Store {
         }
     }
 
+    /// Throws away an unfinished file of this document (and a half-written one), and leaves a finished one alone. For a writer that starts
+    /// from the first byte and cannot use what an earlier transfer left.
+    pub fn discard_unfinished(&self, keys: &DocKeys, id: &DocId) {
+        for extension in ["part", "tmp"] {
+            let _ = fs::remove_file(self.path(keys, id, extension));
+        }
+    }
+
     /// How many bytes of the file of this document are already here as the good start of an unfinished transfer, which is where the
     /// next one can begin (a multiple of the chunk size, and less than `size`), or 0. Only looks: nothing is created, cut or removed.
     pub fn resume_offset(&self, keys: &DocKeys, id: &DocId, size: u64) -> u64 {

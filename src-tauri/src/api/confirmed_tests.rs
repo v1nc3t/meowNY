@@ -380,7 +380,7 @@ fn the_preview_and_the_schedule_need_no_yes() {
     assert!(preview["transactions"].as_u64().unwrap() > 100);
     assert!(call(r.server.port(), Some(&r.read), "backup.schedule", "{}").data().is_null(), "no schedule yet");
     let folder = tempfile::tempdir().unwrap();
-    crate::schedule::start(&r.vault, folder.path(), PASSPHRASE, 7, chrono::Utc::now()).unwrap();
+    crate::schedule::start(&r.vault, folder.path(), PASSPHRASE, 7, false, chrono::Utc::now()).unwrap();
     let schedule = call(r.server.port(), Some(&r.read), "backup.schedule", "{}").data();
     assert_eq!((schedule["everyDays"].clone(), schedule["lastOk"].clone()), (json!(7), json!(true)));
     assert_eq!(schedule["folder"], folder.path().to_str().unwrap());
