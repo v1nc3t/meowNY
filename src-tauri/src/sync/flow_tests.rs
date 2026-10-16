@@ -739,3 +739,55 @@ fn big_databases_in_both_directions_cross_a_real_connection_without_a_standstill
     same(&desktop, &phone);
     assert_eq!(a.compared, vec![Table::Transactions]);
 }
+
+// --- documents ------------------------------------------------------------------------------------------------------------
+
+fn document_name(db: &LocalDb) -> String {
+    db.conn.lock().unwrap().query_row("SELECT name FROM documents", [], |r| r.get(0)).unwrap()
+}
+
+#[test]
+fn a_document_renamed_on_both_devices_is_put_to_the_desktop_with_what_differs_and_the_choice_holds_on_both() {
+    for (choice, expected) in [(Choice::Theirs, "Warranty (phone).pdf"), (Choice::Mine, "Warranty (desktop).pdf")] {
+        let (desktop, phone) = met();
+        // a document the desktop made, which both now hold; its file is not part of this sync
+        desktop.conn.lock().unwrap().execute(
+            "INSERT INTO documents (name, media_type, size_bytes, sha256, document_date) VALUES ('Warranty.pdf', 'application/pdf', 1000, ?1, '2026-03-02')",
+            ["ab".repeat(32)],
+        )
+        .unwrap();
+        let first = sync_run(&desktop, &phone, 0x51, 0x51, Mode::Both, Person::default(), Person::default());
+        first.desktop.unwrap();
+        first.phone.unwrap();
+        assert_eq!(document_name(&phone), "Warranty.pdf");
+        pause();
+
+        phone.conn.lock().unwrap().execute("UPDATE documents SET name = 'Warranty (phone).pdf', keep_on_phone = 1", []).unwrap();
+        pause();
+        desktop.conn.lock().unwrap().execute("UPDATE documents SET name = 'Warranty (desktop).pdf'", []).unwrap();
+        let run = sync_run(&desktop, &phone, 0x52, 0x52, Mode::Both, Person { choose: always(choice), ..Person::default() }, Person::default());
+        let (on_desktop, on_phone) = (run.desktop.unwrap().0, run.phone.unwrap());
+        assert!(!on_desktop.differences && !on_phone.differences);
+
+        let (asked, more) = &run.desktop_person.reviewed[0];
+        assert_eq!((asked.len(), *more), (1, 0));
+        let view = &asked[0];
+        assert_eq!(view.table, Table::Documents);
+        assert_eq!(view.title, "Warranty (desktop).pdf", "the title is the name of this device's version");
+        let fields: Vec<(&str, &str, &str)> = view.fields.iter().map(|f| (f.field, f.mine.as_str(), f.theirs.as_str())).collect();
+        assert_eq!(fields, [("name", "Warranty (desktop).pdf", "Warranty (phone).pdf"), ("keepOnPhone", "no", "yes")], "{choice:?}");
+
+        // the true version is on both, as a whole (the switch goes with the name)
+        assert_eq!(document_name(&desktop), expected, "{choice:?}");
+        assert_eq!(document_name(&phone), expected, "{choice:?}");
+        let keep = |db: &LocalDb| db.conn.lock().unwrap().query_row("SELECT keep_on_phone FROM documents", [], |r| r.get::<_, i64>(0)).unwrap();
+        assert_eq!(keep(&desktop), keep(&phone));
+        same(&desktop, &phone);
+        // and it stays so
+        pause();
+        let again = sync_run(&desktop, &phone, 0x53, 0x53, Mode::Both, Person::default(), Person::default());
+        again.desktop.unwrap();
+        assert!(again.desktop_person.reviewed.is_empty());
+        assert_eq!(document_name(&phone), expected);
+    }
+}

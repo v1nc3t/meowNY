@@ -323,8 +323,9 @@ fn deleting_what_a_document_is_linked_to_removes_the_link_and_keeps_the_document
     assert_eq!((count(&conn, "SELECT count(*) FROM document_links"), count(&conn, "SELECT count(*) FROM documents")), (1, 1));
     conn.execute("DELETE FROM recurring_transactions WHERE id = ?1", [rec]).unwrap();
     assert_eq!((count(&conn, "SELECT count(*) FROM document_links"), count(&conn, "SELECT count(*) FROM documents")), (0, 1));
-    // both links left a marker
-    assert_eq!(count(&conn, "SELECT count(*) FROM sync_deleted WHERE kind = 'document_links'"), 2);
+    // the parents' own markers say it; a link that only went because its parent did needs none (migration 0011)
+    assert_eq!(count(&conn, "SELECT count(*) FROM sync_deleted WHERE kind = 'document_links'"), 0);
+    assert_eq!(count(&conn, "SELECT count(*) FROM sync_deleted WHERE kind IN ('transactions', 'recurring_transactions')"), 2);
 }
 
 #[test]
@@ -338,7 +339,39 @@ fn deleting_a_document_removes_its_links_and_nothing_it_was_linked_to() {
     assert_eq!(count(&conn, "SELECT count(*) FROM document_links"), 0);
     assert_eq!((count(&conn, "SELECT count(*) FROM transactions"), count(&conn, "SELECT count(*) FROM recurring_transactions")), (1, 1));
     assert_eq!(count(&conn, "SELECT count(*) FROM sync_deleted WHERE kind = 'documents'"), 1);
-    assert_eq!(count(&conn, "SELECT count(*) FROM sync_deleted WHERE kind = 'document_links'"), 2);
+    assert_eq!(count(&conn, "SELECT count(*) FROM sync_deleted WHERE kind = 'document_links'"), 0, "the document's marker covers its links");
+}
+
+#[test]
+fn only_a_link_that_a_person_removes_leaves_a_marker() {
+    let conn = db();
+    let cat = category(&conn);
+    let (doc, tx, rec) = (document(&conn, "Receipt"), transaction(&conn, cat), recurring(&conn, cat));
+    link_transaction(&conn, doc, tx).unwrap();
+    link_recurring(&conn, doc, rec).unwrap();
+    let markers = || count(&conn, "SELECT count(*) FROM sync_deleted WHERE kind = 'document_links'");
+
+    // taken by the foreign key with its transaction, its recurring item or its document: no marker
+    conn.execute("DELETE FROM transactions WHERE id = ?1", [tx]).unwrap();
+    conn.execute("DELETE FROM recurring_transactions WHERE id = ?1", [rec]).unwrap();
+    assert_eq!((count(&conn, "SELECT count(*) FROM document_links"), markers()), (0, 0));
+    let (tx, rec) = (transaction(&conn, cat), recurring(&conn, cat));
+    link_transaction(&conn, doc, tx).unwrap();
+    conn.execute("DELETE FROM documents WHERE id = ?1", [doc]).unwrap();
+    assert_eq!((count(&conn, "SELECT count(*) FROM document_links"), markers()), (0, 0));
+
+    // removed on purpose, whichever kind of target: a marker, newer than the link
+    let doc = document(&conn, "Another");
+    link_transaction(&conn, doc, tx).unwrap();
+    link_recurring(&conn, doc, rec).unwrap();
+    let stamps: Vec<String> = {
+        let mut stmt = conn.prepare("SELECT stamp FROM document_links ORDER BY id").unwrap();
+        stmt.query_map([], |r| r.get(0)).unwrap().map(Result::unwrap).collect()
+    };
+    conn.execute("DELETE FROM document_links", []).unwrap();
+    assert_eq!(markers(), 2);
+    let newest: String = text(&conn, "SELECT min(stamp) FROM sync_deleted WHERE kind = 'document_links'");
+    assert!(newest > stamps.iter().max().unwrap().clone());
 }
 
 #[test]
@@ -458,6 +491,6 @@ fn the_markers_of_the_old_schema_survive_and_the_old_triggers_still_write_them()
     assert_eq!(count(&conn, "SELECT count(*) FROM sync_deleted WHERE kind = 'transactions'"), 2);
     assert_eq!(count(&conn, "SELECT count(*) FROM sync_deleted WHERE kind = 'recurring_transactions'"), 2);
     assert_eq!(count(&conn, "SELECT count(*) FROM sync_deleted WHERE kind = 'budgets'"), 2);
-    assert_eq!(conn.query_row::<i64, _, _>("PRAGMA user_version", [], |r| r.get(0)).unwrap(), 10);
+    assert_eq!(conn.query_row::<i64, _, _>("PRAGMA user_version", [], |r| r.get(0)).unwrap(), i64::from(crate::migrate::latest_version()));
     assert_eq!(count(&conn, "SELECT count(*) FROM pragma_foreign_key_check"), 0);
 }

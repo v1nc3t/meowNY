@@ -15,8 +15,8 @@ use sha2::{Digest as _, Sha256};
 
 use super::stamp::{self, Stamp};
 use super::wire::{
-    self, BudgetRow, CategoryRow, DigestMessage, Entries, Marker, Message, RecurringRow, Row, RowsMessage, Table, TransactionRow, WireError,
-    MAX_ENTRIES_PER_MESSAGE, MAX_ROWS_PER_MESSAGE, MAX_ROWS_PER_TABLE, SOFT_MESSAGE_BYTES,
+    self, BudgetRow, CategoryRow, DigestMessage, DocumentLinkRow, DocumentRow, Entries, Marker, Message, RecurringRow, Row, RowsMessage, Table,
+    TransactionRow, WireError, MAX_ENTRIES_PER_MESSAGE, MAX_ROWS_PER_MESSAGE, MAX_ROWS_PER_TABLE, SOFT_MESSAGE_BYTES,
 };
 use crate::recurring;
 
@@ -96,7 +96,8 @@ impl From<crate::vault::AppError> for SyncError {
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct Digest(pub BTreeMap<Table, Entries>);
 
-const LISTED: [Table; 4] = [Table::Categories, Table::RecurringTransactions, Table::Budgets, Table::Transactions];
+const LISTED: [Table; 6] =
+    [Table::Categories, Table::RecurringTransactions, Table::Budgets, Table::Transactions, Table::Documents, Table::DocumentLinks];
 
 pub fn digest(conn: &Connection) -> Result<Digest, SyncError> {
     let mut out = BTreeMap::new();
@@ -360,6 +361,47 @@ fn load_rows(conn: &Connection, table: Table, wanted: &HashSet<&String>) -> Resu
                 let r = r?;
                 if wanted.contains(&r.sync_id) {
                     rows.push(Row::Transaction(r));
+                }
+            }
+        }
+        Table::Documents => {
+            let mut stmt = conn.prepare(
+                "SELECT sync_id, stamp, name, media_type, size_bytes, sha256, document_date, keep_on_phone, created_at, updated_at
+                 FROM documents ORDER BY sync_id",
+            )?;
+            for r in stmt.query_map([], |r| {
+                Ok(DocumentRow {
+                    sync_id: r.get(0)?,
+                    stamp: r.get(1)?,
+                    name: r.get(2)?,
+                    media_type: r.get(3)?,
+                    size_bytes: r.get(4)?,
+                    sha256: r.get(5)?,
+                    document_date: r.get(6)?,
+                    keep_on_phone: r.get(7)?,
+                    created_at: r.get(8)?,
+                    updated_at: r.get(9)?,
+                })
+            })? {
+                let r = r?;
+                if wanted.contains(&r.sync_id) {
+                    rows.push(Row::Document(r));
+                }
+            }
+        }
+        Table::DocumentLinks => {
+            let mut stmt = conn.prepare(
+                "SELECT l.sync_id, l.stamp, d.sync_id, t.sync_id, r.sync_id, l.created_at
+                 FROM document_links l JOIN documents d ON d.id = l.document_id
+                 LEFT JOIN transactions t ON t.id = l.transaction_id
+                 LEFT JOIN recurring_transactions r ON r.id = l.recurring_transaction_id ORDER BY l.sync_id",
+            )?;
+            for r in stmt.query_map([], |r| {
+                Ok(DocumentLinkRow { sync_id: r.get(0)?, stamp: r.get(1)?, document: r.get(2)?, transaction: r.get(3)?, recurring: r.get(4)?, created_at: r.get(5)? })
+            })? {
+                let r = r?;
+                if wanted.contains(&r.sync_id) {
+                    rows.push(Row::Link(r));
                 }
             }
         }
@@ -1158,6 +1200,153 @@ impl<'a> Applier<'a> {
         Ok(())
     }
 
+    // --- documents ---------------------------------------------------------------------------------------------
+    //
+    // Only the rows. The file of a document goes by a conversation of its own after the rows, and is checked against the hash a row
+    // carries. The contents of a document never change, so a row that names other contents under an id this device already holds
+    // is not a document of this app, and the sync stops.
+
+    fn documents(&mut self, rows: &[Row]) -> Result<(), SyncError> {
+        let mut list: Vec<&DocumentRow> = rows
+            .iter()
+            .map(|r| match r {
+                Row::Document(c) => Ok(c),
+                _ => Err(SyncError::Invalid("row")),
+            })
+            .collect::<Result<_, _>>()?;
+        list.sort_by(|a, b| a.sync_id.cmp(&b.sync_id));
+        for r in list {
+            if let Some(marker) = self.marker(&r.sync_id)? {
+                if marker >= r.stamp {
+                    self.summary.kept_yours += 1;
+                    continue;
+                }
+                self.remove_marker(&r.sync_id)?;
+            }
+            match self.find(Table::Documents, &r.sync_id)? {
+                Some((id, local)) => {
+                    let same: i64 = self.row(
+                        "SELECT media_type = ?2 AND size_bytes = ?3 AND sha256 = ?4 FROM documents WHERE id = ?1",
+                        params![id, r.media_type, r.size_bytes, r.sha256],
+                        |row| row.get(0),
+                    )?;
+                    if same != 1 {
+                        return Err(SyncError::Invalid("document"));
+                    }
+                    if r.stamp <= local {
+                        if r.stamp < local {
+                            self.summary.kept_yours += 1;
+                        }
+                        continue;
+                    }
+                    self.note_overwrite(&local);
+                    self.run(
+                        "UPDATE documents SET stamp = ?2, name = ?3, document_date = ?4, keep_on_phone = ?5, created_at = ?6 WHERE id = ?1",
+                        params![id, r.stamp, r.name, r.document_date, r.keep_on_phone, r.created_at],
+                    )?;
+                    self.set_updated_at(Table::Documents, id, &r.updated_at)?;
+                    self.summary.updated += 1;
+                }
+                None => {
+                    self.run(
+                        "INSERT INTO documents (sync_id, stamp, name, media_type, size_bytes, sha256, document_date, keep_on_phone, created_at, updated_at)
+                         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+                        params![r.sync_id, r.stamp, r.name, r.media_type, r.size_bytes, r.sha256, r.document_date, r.keep_on_phone, r.created_at, r.updated_at],
+                    )?;
+                    self.summary.added += 1;
+                }
+            }
+        }
+        Ok(())
+    }
+
+    // --- links --------------------------------------------------------------------------------------------------
+    //
+    // A link lives and dies with its document and its transaction or recurring item: the foreign key removes it with them, and no
+    // marker is made for that (the parent's marker says it). A link whose document or target this device knows as deleted is therefore
+    // not taken, and costs nothing: the other device, which still holds the link, is sent the deletion of the parent in the same
+    // sync and drops the link with it. A marker for a link means a person unlinked it.
+
+    fn links(&mut self, rows: &[Row]) -> Result<(), SyncError> {
+        let mut list: Vec<&DocumentLinkRow> = rows
+            .iter()
+            .map(|r| match r {
+                Row::Link(c) => Ok(c),
+                _ => Err(SyncError::Invalid("row")),
+            })
+            .collect::<Result<_, _>>()?;
+        list.sort_by(|a, b| a.sync_id.cmp(&b.sync_id));
+        for r in list {
+            if let Some(marker) = self.marker(&r.sync_id)? {
+                if marker >= r.stamp {
+                    self.summary.kept_yours += 1;
+                    continue;
+                }
+                self.remove_marker(&r.sync_id)?;
+            }
+            // what it points at: here, or deleted here (then the link is not taken), or unknown (a broken row, and the sync stops)
+            let document = match self.find(Table::Documents, &r.document)? {
+                Some((id, _)) => id,
+                None if self.marker(&r.document)?.is_some() => {
+                    self.summary.kept_yours += 1;
+                    continue;
+                }
+                None => return Err(SyncError::Invalid("reference")),
+            };
+            let (column, target_table, target_id) = match (&r.transaction, &r.recurring) {
+                (Some(id), None) => ("transaction_id", Table::Transactions, id),
+                (None, Some(id)) => ("recurring_transaction_id", Table::RecurringTransactions, id),
+                _ => return Err(SyncError::Invalid("link")),
+            };
+            let target = match self.find(target_table, target_id)? {
+                Some((id, _)) => id,
+                None if self.marker(target_id)?.is_some() => {
+                    self.summary.kept_yours += 1;
+                    continue;
+                }
+                None => return Err(SyncError::Invalid("reference")),
+            };
+            if let Some((id, local)) = self.find(Table::DocumentLinks, &r.sync_id)? {
+                // a link never changes: the same document and the same target, or it is not a link of this app
+                let same: i64 = self.row(&format!("SELECT COALESCE(document_id = ?2 AND {column} = ?3, 0) FROM document_links WHERE id = ?1"), params![id, document, target], |row| row.get(0)).optional()?.unwrap_or(0);
+                if same != 1 {
+                    return Err(SyncError::Invalid("link"));
+                }
+                if r.stamp > local {
+                    self.run("UPDATE document_links SET stamp = ?2 WHERE id = ?1", params![id, r.stamp])?;
+                }
+                continue;
+            }
+            // another link of the same document and target (made on the other device) is the same fact twice: the newer stays
+            let rival: Option<(i64, String, String)> = self
+                .row(
+                    &format!("SELECT id, sync_id, stamp FROM document_links WHERE document_id = ?1 AND {column} = ?2 AND sync_id != ?3"),
+                    params![document, target, r.sync_id],
+                    |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+                )
+                .optional()?;
+            if let Some((rival_id, rival_sync_id, rival_stamp)) = rival {
+                let incoming_wins = (r.stamp.as_str(), std::cmp::Reverse(r.sync_id.as_str())) > (rival_stamp.as_str(), std::cmp::Reverse(rival_sync_id.as_str()));
+                self.summary.dropped += 1;
+                if incoming_wins {
+                    let marker = self.loser_marker(&rival_sync_id, &rival_stamp);
+                    self.run("DELETE FROM document_links WHERE id = ?1", [rival_id])?;
+                    self.put_marker(Table::DocumentLinks, &rival_sync_id, &marker)?;
+                } else {
+                    self.put_marker(Table::DocumentLinks, &r.sync_id, &after(&parse(&r.stamp)?).format())?;
+                    continue;
+                }
+            }
+            let (transaction, recurring) = if column == "transaction_id" { (Some(target), None) } else { (None, Some(target)) };
+            self.run(
+                "INSERT INTO document_links (sync_id, stamp, document_id, transaction_id, recurring_transaction_id, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+                params![r.sync_id, r.stamp, document, transaction, recurring, r.created_at],
+            )?;
+            self.summary.added += 1;
+        }
+        Ok(())
+    }
+
     // --- deletions --------------------------------------------------------------------------------------------
 
     fn delete_row(&mut self, table: Table, id: i64) -> Result<(), SyncError> {
@@ -1270,9 +1459,12 @@ pub fn apply(conn: &mut Connection, incoming: &Incoming, now_ms: u64, since_ms: 
     applier.recurring(incoming.rows.get(&Table::RecurringTransactions).unwrap_or(&empty))?;
     applier.budgets(incoming.rows.get(&Table::Budgets).unwrap_or(&empty))?;
     applier.transactions(incoming.rows.get(&Table::Transactions).unwrap_or(&empty))?;
+    applier.documents(incoming.rows.get(&Table::Documents).unwrap_or(&empty))?;
+    applier.links(incoming.rows.get(&Table::DocumentLinks).unwrap_or(&empty))?;
     // payments before the recurring item they belong to: deleting the item gives the payments it still finds a newer stamp, which
     // must not happen to a payment that was deleted on the other device (and is in this same batch)
-    for table in [Table::Transactions, Table::Budgets, Table::RecurringTransactions] {
+    // (a deleted document, transaction or recurring item takes its links with it, silently, by the foreign key)
+    for table in [Table::Transactions, Table::Budgets, Table::RecurringTransactions, Table::DocumentLinks, Table::Documents] {
         applier.markers(table, incoming.markers.get(&table).map(Vec::as_slice).unwrap_or(&[]))?;
     }
     applier.settle_budgets()?;
@@ -1291,7 +1483,7 @@ pub fn apply(conn: &mut Connection, incoming: &Incoming, now_ms: u64, since_ms: 
 
 /// Whether this device holds no budget data yet, so it can be paired and given a full copy (docs/sync-design.md, section 5).
 pub fn is_empty(conn: &Connection) -> Result<bool, SyncError> {
-    for table in ["categories", "budgets", "recurring_transactions", "transactions", "sync_deleted", "currency_changes"] {
+    for table in ["categories", "budgets", "recurring_transactions", "transactions", "documents", "sync_deleted", "currency_changes"] {
         let count: i64 = conn.query_row(&format!("SELECT count(*) FROM {table}"), [], |r| r.get(0))?;
         if count != 0 {
             return Ok(false);
@@ -1522,6 +1714,10 @@ fn category_name(conn: &Connection, sync_id: &str) -> String {
     conn.query_row("SELECT name FROM categories WHERE sync_id = ?1", [sync_id], |r| r.get::<_, String>(0)).unwrap_or_default()
 }
 
+fn name_of(conn: &Connection, sql: &str, sync_id: &str) -> String {
+    conn.query_row(sql, [sync_id], |r| r.get::<_, String>(0)).unwrap_or_default()
+}
+
 fn money_text(minor: Option<i64>) -> String {
     minor.map(crate::money::format_amount).unwrap_or_default()
 }
@@ -1550,6 +1746,19 @@ fn facts(conn: &Connection, row: &Row) -> Vec<(&'static str, String)> {
             ("category", category_name(conn, &r.category)),
             ("description", some(&r.description)),
         ],
+        Row::Document(r) => vec![
+            ("name", r.name.clone()),
+            ("date", r.document_date.clone()),
+            ("keepOnPhone", if r.keep_on_phone == 1 { "yes" } else { "no" }.to_string()),
+        ],
+        Row::Link(r) => {
+            let target = match (&r.transaction, &r.recurring) {
+                (Some(id), _) => name_of(conn, "SELECT name FROM transactions WHERE sync_id = ?1", id),
+                (_, Some(id)) => name_of(conn, "SELECT name FROM recurring_transactions WHERE sync_id = ?1", id),
+                _ => String::new(),
+            };
+            vec![("document", name_of(conn, "SELECT name FROM documents WHERE sync_id = ?1", &r.document)), ("target", target)]
+        }
     }
 }
 
