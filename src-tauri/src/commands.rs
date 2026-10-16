@@ -176,6 +176,7 @@ pub const COMMANDS: &[&str] = &[
     "document_upload_chunk",
     "document_upload_finish",
     "document_upload_cancel",
+    "document_add_dropped",
 ];
 
 #[tauri::command]
@@ -893,6 +894,19 @@ pub fn document_upload_finish(vault: Shared) -> Result<docs::AddOutcome, AppErro
 #[tauri::command]
 pub fn document_upload_cancel(vault: Shared) {
     vault.uploads().clear();
+}
+
+/// Adds the files that were just dropped on the window, each as a document of its own named after the file. The page does not name a
+/// path: the window took the drop (the web view cannot be relied on to give a page the files) and Rust remembers which files they were.
+/// What each came to is in the answer, and one that cannot be added does not stop the others.
+#[tauri::command]
+pub async fn document_add_dropped(vault: Shared<'_>) -> Result<crate::documents::dropped::DroppedResult, AppError> {
+    if vault.status() != VaultStatus::Unlocked {
+        return Err(AppError::Locked);
+    }
+    let today = today_text(&vault)?;
+    let pending = vault.dropped().take();
+    Ok(crate::documents::dropped::add_all(pending, |input, bytes| vault.with_files(|conn, files| docs::add(conn, files, input, bytes, &today))))
 }
 
 #[cfg(test)]

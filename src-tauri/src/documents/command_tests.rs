@@ -53,6 +53,7 @@ fn harness() -> Harness {
             commands::document_upload_chunk,
             commands::document_upload_finish,
             commands::document_upload_cancel,
+            commands::document_add_dropped,
         ])
         .build(mock_context(noop_assets()))
         .unwrap();
@@ -274,4 +275,37 @@ fn a_file_of_the_largest_size_goes_in_through_the_commands() {
     let bytes: Vec<u8> = (0..crate::documents::MAX_DOCUMENT_BYTES as usize).map(|i| (i % 251) as u8).collect();
     let outcome = h.upload(json!({ "name": "largest.bin" }), &bytes, 256 * 1024);
     assert_eq!(outcome["document"]["sizeBytes"], crate::documents::MAX_DOCUMENT_BYTES);
+}
+
+#[test]
+fn files_dropped_on_the_window_are_added_when_the_page_asks_and_only_what_was_dropped() {
+    let h = harness();
+    let files = tempfile::tempdir().unwrap();
+    // nothing was dropped: nothing is added, and the page cannot name a path (the command takes no argument that could)
+    let none = h.call("document_add_dropped", json!({})).unwrap();
+    assert_eq!(none, json!({ "outcomes": [], "ignored": 0 }));
+    let rejected = h.call("document_add_dropped", json!({ "paths": ["/etc/passwd"] })).unwrap();
+    assert_eq!(rejected["outcomes"], json!([]), "a path in the request is not a file that was dropped");
+    assert_eq!(h.call("document_library_size", json!({})).unwrap()["count"], 0);
+
+    std::fs::write(files.path().join("Receipt.pdf"), PDF).unwrap();
+    std::fs::write(files.path().join("empty.pdf"), b"").unwrap();
+    h.vault.dropped().set(vec![files.path().join("Receipt.pdf"), files.path().join("empty.pdf")]);
+    let done = h.call("document_add_dropped", json!({})).unwrap();
+    assert_eq!(
+        done,
+        json!({ "outcomes": [
+            { "name": "Receipt.pdf", "status": "added", "error": null },
+            { "name": "empty.pdf", "status": "failed", "error": "invalid_input" },
+        ], "ignored": 0 })
+    );
+    assert_eq!(h.call("document_library_size", json!({})).unwrap()["count"], 1);
+    // what was added is not added again by asking again
+    assert_eq!(h.call("document_add_dropped", json!({})).unwrap()["outcomes"], json!([]));
+
+    // a locked app adds nothing and forgets
+    h.vault.dropped().set(vec![files.path().join("Receipt.pdf")]);
+    h.vault.lock();
+    assert_eq!(h.code("document_add_dropped", json!({})), "locked");
+    assert!(h.vault.dropped().is_empty());
 }

@@ -180,6 +180,13 @@ pub fn run() {
         })
         .on_window_event(|window, event| {
             let vault = window.state::<Arc<Vault>>();
+            // Files dropped on the window: the web view cannot be relied on to hand them to the page, so the window takes them.
+            if let WindowEvent::DragDrop(drag) = event {
+                for (name, payload) in documents::dropped::on_drag(&vault, drag) {
+                    let _ = window.emit(name, payload);
+                }
+                return;
+            }
             let Ok(prefs) = vault.lock_prefs() else { return };
             match event {
                 WindowEvent::CloseRequested { .. } if prefs.lock_on_close => {
@@ -285,6 +292,7 @@ pub fn run() {
             commands::document_upload_chunk,
             commands::document_upload_finish,
             commands::document_upload_cancel,
+            commands::document_add_dropped,
         ])
         .build(tauri::generate_context!())
         .expect("error while building meowNY")

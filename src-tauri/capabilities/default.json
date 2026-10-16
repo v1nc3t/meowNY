@@ -94,6 +94,7 @@
     "allow-document-upload-chunk",
     "allow-document-upload-finish",
     "allow-document-upload-cancel",
+    "allow-document-add-dropped",
     "core:event:allow-listen",
     "core:event:allow-unlisten",
     {

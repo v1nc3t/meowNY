@@ -501,6 +501,7 @@ export const de: Messages = {
   'docs.add': 'datei hinzufügen',
   'docs.takePhoto': 'foto aufnehmen',
   'docs.dropHint': 'oder zieh dateien auf diese seite.',
+  'docs.dropIgnored': '{count} weitere dateien wurden ausgelassen: bitte höchstens 100 auf einmal ablegen.',
   'docs.empty': 'noch keine dokumente.',
   'docs.noMatch': 'kein dokument passt.',
   'docs.kindImage': 'bilder',

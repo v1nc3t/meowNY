@@ -8,8 +8,10 @@
 //! * `library`: the documents and their links in the database, together with their files.
 //! * `opened`: the plain copies handed to the system's viewer, in a folder that is emptied on lock and exit.
 //! * `upload`: a file arriving from the page in pieces of text, gathered in memory.
+//! * `dropped`: files dropped on the window, which the window takes (the web view cannot be relied on to), added at the page's asking.
 
 pub mod library;
+pub mod dropped;
 pub mod names;
 pub mod opened;
 pub mod seal;
@@ -34,6 +36,8 @@ impl From<DocError> for AppError {
 
 #[cfg(test)]
 mod command_tests;
+#[cfg(test)]
+mod dropped_tests;
 #[cfg(test)]
 mod library_tests;
 #[cfg(test)]

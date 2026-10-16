@@ -500,6 +500,7 @@ export const it: Messages = {
   'docs.add': 'aggiungi file',
   'docs.takePhoto': 'scatta una foto',
   'docs.dropHint': 'oppure trascina i file su questa pagina.',
+  'docs.dropIgnored': 'altri {count} file sono stati lasciati fuori: trascina al massimo 100 file alla volta.',
   'docs.empty': 'nessun documento per ora.',
   'docs.noMatch': 'nessun documento corrisponde.',
   'docs.kindImage': 'immagini',

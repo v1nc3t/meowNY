@@ -513,6 +513,7 @@ export const en = {
   'docs.add': 'add file',
   'docs.takePhoto': 'take photo',
   'docs.dropHint': 'or drop files on this page.',
+  'docs.dropIgnored': '{count} more files were left out: drop at most 100 at a time.',
   'docs.empty': 'no documents yet.',
   'docs.noMatch': 'no document matches.',
   'docs.kindImage': 'images',

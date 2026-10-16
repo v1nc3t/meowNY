@@ -498,6 +498,7 @@ export const ro: Messages = {
   'docs.add': 'adaugă fișier',
   'docs.takePhoto': 'fă o fotografie',
   'docs.dropHint': 'sau trage fișiere pe această pagină.',
+  'docs.dropIgnored': 'încă {count} fișiere au fost lăsate deoparte: trage cel mult 100 odată.',
   'docs.empty': 'niciun document încă.',
   'docs.noMatch': 'niciun document nu se potrivește.',
   'docs.kindImage': 'imagini',

@@ -15,6 +15,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::backup::{self, Backup, Snapshot, Source};
 use crate::db::{self, DbError};
+use crate::documents::dropped::Dropped;
 use crate::documents::library::{self, Files, Report};
 use crate::documents::opened::Opened;
 use crate::documents::upload::Uploads;
@@ -209,6 +210,8 @@ pub struct Vault {
     state: Mutex<State>,
     /// The file that is being sent in by the page, if any. Locking drops it.
     uploads: Uploads,
+    /// Files dropped on the window that the page has not asked to add yet. Locking forgets them.
+    dropped: Dropped,
     policy: Policy,
     /// One unlock at a time, so two at once cannot both read the counter before either writes it.
     unlock_guard: Mutex<()>,
@@ -225,6 +228,7 @@ impl Vault {
             store,
             state: Mutex::new(State { conn: None, docs: None, last_activity: Instant::now() }),
             uploads: Uploads::default(),
+            dropped: Dropped::default(),
             policy,
             unlock_guard: Mutex::new(()),
         }
@@ -535,6 +539,7 @@ impl Vault {
 
     fn after_lock(&self) {
         self.uploads.clear();
+        self.dropped.clear();
         self.clear_open_copies();
     }
 
@@ -589,6 +594,11 @@ impl Vault {
     /// The file being sent in by the page.
     pub fn uploads(&self) -> &Uploads {
         &self.uploads
+    }
+
+    /// The files dropped on the window, waiting for the page to ask for them to be added.
+    pub fn dropped(&self) -> &Dropped {
+        &self.dropped
     }
 
     /// Removes the plain copies made for the system's viewer. Says whether they are all gone.

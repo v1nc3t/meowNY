@@ -500,6 +500,7 @@ export const fr: Messages = {
   'docs.add': 'ajouter un fichier',
   'docs.takePhoto': 'prendre une photo',
   'docs.dropHint': 'ou dépose des fichiers sur cette page.',
+  'docs.dropIgnored': '{count} fichiers de plus ont été laissés de côté : dépose 100 fichiers au plus à la fois.',
   'docs.empty': "aucun document pour l'instant.",
   'docs.noMatch': 'aucun document ne correspond.',
   'docs.kindImage': 'images',

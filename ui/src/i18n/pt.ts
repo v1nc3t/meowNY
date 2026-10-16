@@ -500,6 +500,7 @@ export const pt: Messages = {
   'docs.add': 'adicionar ficheiro',
   'docs.takePhoto': 'tirar uma fotografia',
   'docs.dropHint': 'ou larga ficheiros nesta página.',
+  'docs.dropIgnored': 'mais {count} ficheiros ficaram de fora: larga no máximo 100 de cada vez.',
   'docs.empty': 'ainda sem documentos.',
   'docs.noMatch': 'nenhum documento corresponde.',
   'docs.kindImage': 'imagens',

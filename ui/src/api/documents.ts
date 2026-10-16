@@ -1,3 +1,4 @@
+import { listen } from '@tauri-apps/api/event'
 import { z } from 'zod'
 import { ApiError, call } from './invoke'
 
@@ -57,6 +58,18 @@ export type Target = { kind: TargetKind; id: string }
 
 export const LinkView = z.object({ kind: TargetKind, id, name: z.string(), date })
 export type LinkView = z.infer<typeof LinkView>
+
+/** What became of one file that was dropped on the window. `error` is one of the app's fixed codes when it failed. */
+export const DropOutcome = z.object({
+  name: z.string(),
+  status: z.enum(['added', 'alreadyThere', 'failed']),
+  error: z.string().nullable(),
+})
+export type DropOutcome = z.infer<typeof DropOutcome>
+
+/** What adding the dropped files came to; `ignored` is how many a drop held beyond the 100 the app takes at once. */
+export const DroppedResult = z.object({ outcomes: z.array(DropOutcome), ignored: z.number().int().nonnegative() })
+export type DroppedResult = z.infer<typeof DroppedResult>
 
 export const LibrarySize = z.object({
   count: z.number().int().nonnegative(),
@@ -182,6 +195,15 @@ export const documents = {
   /** Saves a copy where the person chooses. False if they cancel. The copy is not encrypted. */
   saveCopy: (id: string) => call('save_document_copy', z.boolean(), { id }),
   add: (file: Blob, input: NewDoc, onProgress?: (sent: number, total: number) => void) => upload(file, input, transport, onProgress),
+  /**
+   * Adds the files that were just dropped on the window. The page does not name a path: the window takes the drop (a web view cannot be
+   * relied on to hand a page the files that are dropped on it) and the app remembers which files they were.
+   */
+  addDropped: () => call('document_add_dropped', DroppedResult),
+  /** Told when something is held over the window (true) and when it is let go or dropped (false). */
+  onDrag: (handler: (over: boolean) => void) => listen<boolean>('documents-drag', (event) => handler(event.payload === true)),
+  /** Told when files were dropped on the window and the app is holding them, waiting to be asked to add them. */
+  onDropped: (handler: () => void) => listen('documents-dropped', () => handler()),
 }
 
 /** Whether the app opens this kind of file in the system's viewer. A file of an unknown kind can only be saved as a copy. */

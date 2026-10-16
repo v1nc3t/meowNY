@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type ChangeEvent, type DragEvent } from 'react'
+import { useCallback, useEffect, useRef, useState, type ChangeEvent } from 'react'
 import ConfirmModal from '../components/ConfirmModal'
 import DocumentModal from '../components/DocumentModal'
 import Icon from '../components/NavIcon'
@@ -11,7 +11,7 @@ import { useDebounced } from '../hooks/useDebounced'
 import { useNotice } from '../hooks/useNotice'
 import { useT } from '../i18n/context'
 import { formatSize } from '../lib/bytes'
-import { fileState, fileStateText, KIND_CHOICES, reportLines, type KindChoice } from '../lib/documents'
+import { dropNotice, fileState, fileStateText, KIND_CHOICES, reportLines, type KindChoice } from '../lib/documents'
 import { formatDate } from '../lib/money'
 import { useShortcut } from '../keys/registry'
 import { tip } from '../keys/tip'
@@ -41,6 +41,8 @@ function DocumentsView({ settings }: { settings: MoneySettings }) {
   const [viewing, setViewing] = useState<string | null>(null)
   const [deleting, setDeleting] = useState<Doc | null>(null)
   const [busy, setBusy] = useState(false)
+  // Held over the window by a drag. On the computer the window takes the drop itself (the web view cannot be relied on to hand a page the
+  // files), and the page is told.
   const [dragging, setDragging] = useState(false)
   const [message, setMessage] = useNotice()
   const search = useDebounced(q.trim(), 200)
@@ -111,24 +113,37 @@ function DocumentsView({ settings }: { settings: MoneySettings }) {
     refresh()
   }
 
+  // Files were dropped on the window: the app is holding them, and the page asks it to add them. The page never names a path.
+  const addDropped = useCallback(async () => {
+    setBusy(true)
+    try {
+      setMessage(dropNotice(await documents.addDropped(), t))
+    } catch (failure) {
+      setMessage(errorText(failure))
+    }
+    setBusy(false)
+    setOffset(0)
+    setReload((value) => value + 1)
+  }, [setMessage, t])
+
+  useEffect(() => {
+    if (phone) return
+    let gone = false
+    const stops: Array<() => void> = []
+    const keep = (stop: () => void) => (gone ? stop() : stops.push(stop))
+    documents.onDrag(setDragging).then(keep, () => undefined)
+    documents.onDropped(() => void addDropped()).then(keep, () => undefined)
+    return () => {
+      gone = true
+      stops.forEach((stop) => stop())
+    }
+  }, [phone, addDropped])
+
   function onChosen(event: ChangeEvent<HTMLInputElement>) {
     const files = Array.from(event.target.files ?? [])
     // the field is emptied so choosing the same file again is a choice
     event.target.value = ''
     void addFiles(files)
-  }
-
-  function onDragOver(event: DragEvent) {
-    if (!event.dataTransfer.types.includes('Files')) return
-    event.preventDefault()
-    setDragging(true)
-  }
-
-  function onDrop(event: DragEvent) {
-    if (!event.dataTransfer.types.includes('Files')) return
-    event.preventDefault()
-    setDragging(false)
-    void addFiles(Array.from(event.dataTransfer.files))
   }
 
   async function onDelete() {
@@ -155,12 +170,7 @@ function DocumentsView({ settings }: { settings: MoneySettings }) {
   const lines = report ? reportLines(report, phone) : []
 
   return (
-    <section
-      className={dragging ? 'tx-page doc-page is-dragging' : 'tx-page doc-page'}
-      onDragOver={onDragOver}
-      onDragLeave={() => setDragging(false)}
-      onDrop={onDrop}
-    >
+    <section className={dragging ? 'tx-page doc-page is-dragging' : 'tx-page doc-page'}>
       <div className="tx-title">
         <h1>{t('docs.title')}</h1>
         <div className="tx-actions">
@@ -178,10 +188,10 @@ function DocumentsView({ settings }: { settings: MoneySettings }) {
       <input ref={photoInput} type="file" accept="image/*" capture="environment" hidden tabIndex={-1} onChange={onChosen} />
       {phone ? null : <p className="hint">{t('docs.dropHint')}</p>}
       {size ? (
-        <p className="doc-summary">
-          {t('docs.summary', { count: size.count, size: formatSize(size.bytes, locale) })}
-          {phone ? ` · ${t('docs.heldSummary', { count: size.heldCount, size: formatSize(size.heldBytes, locale) })}` : ''}
-        </p>
+        <div className="doc-summary">
+          <p>{t('docs.summary', { count: size.count, size: formatSize(size.bytes, locale) })}</p>
+          {phone ? <p>{t('docs.heldSummary', { count: size.heldCount, size: formatSize(size.heldBytes, locale) })}</p> : null}
+        </div>
       ) : null}
       {lines.map((line) => (
         <p key={line.key} className="warn">

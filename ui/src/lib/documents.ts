@@ -1,5 +1,7 @@
 import type { MessageKey } from '../i18n/en'
-import { isImage, isOpenable, type Doc, type Report } from '../api/documents'
+import { isImage, isOpenable, type Doc, type DropOutcome, type DroppedResult, type Report } from '../api/documents'
+import { messageFor, toErrorCode } from '../api/invoke'
+import type { t as Translate } from '../i18n/translate'
 
 /** The biggest image the app draws itself, in bytes; a bigger one goes to the system's viewer. The Rust side holds the same limit. */
 export const MAX_DRAW_BYTES = 10 * 1024 * 1024
@@ -58,3 +60,17 @@ export const KIND_CHOICES = [
 ] as const satisfies readonly { value: '' | 'image' | 'pdf' | 'other'; label: MessageKey }[]
 
 export type KindChoice = (typeof KIND_CHOICES)[number]['value']
+
+/** The sentence for one dropped file: that it was added, that it was there already, or why it was not. */
+export function dropNote(outcome: DropOutcome, t: typeof Translate): string {
+  if (outcome.status === 'added') return t('docs.added', { name: outcome.name })
+  if (outcome.status === 'alreadyThere') return t('docs.alreadyThere', { name: outcome.name })
+  return `${outcome.name}: ${messageFor(toErrorCode(outcome.error))}`
+}
+
+/** Everything a drop came to, as one notice: a sentence for each file, and how many were left out of a drop that was too big. */
+export function dropNotice(result: DroppedResult, t: typeof Translate): string {
+  const notes = result.outcomes.map((outcome) => dropNote(outcome, t))
+  if (result.ignored > 0) notes.push(t('docs.dropIgnored', { count: result.ignored }))
+  return notes.join(' ')
+}

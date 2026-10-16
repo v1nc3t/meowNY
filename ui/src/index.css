@@ -3560,9 +3560,16 @@ button.attach-name {
 
 /* The page of documents. */
 .doc-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
   margin: 0;
   font-size: 0.8125rem;
   color: var(--text-muted);
+}
+
+.doc-summary p {
+  margin: 0;
 }
 
 .doc-page > p.hint {

@@ -92,6 +92,7 @@ const COMMANDS: &[&str] = &[
     "document_upload_chunk",
     "document_upload_finish",
     "document_upload_cancel",
+    "document_add_dropped",
 ];
 
 fn main() {
