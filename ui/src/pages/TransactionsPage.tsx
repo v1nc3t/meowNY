@@ -18,7 +18,7 @@ import { transactions as transactionsApi, type Transaction, type TransactionPage
 import { categoryOptions } from '../lib/categoriesView'
 import { amountString, formatDate, formatMoney } from '../lib/money'
 import { apiBound, shiftBound, type RangeMode } from '../lib/range'
-import { draftOfBill, equalDraft, NOT_SPLIT, partsText, toInput, type SplitState } from '../lib/split'
+import { draftOfBill, equalDraft, NOT_SPLIT, toInput, type SplitState } from '../lib/split'
 import { useAttachments, type Attachments } from '../hooks/useAttachments'
 import { useClipCounts } from '../hooks/useClipCounts'
 import { useMoneySettings, type MoneySettings } from '../hooks/useMoneySettings'
@@ -436,14 +436,7 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
         />
       ) : null}
       {deleting ? (
-        <ConfirmModal
-          title={t('split.deleteTitle', {
-            name: deleting.name,
-            parts: partsText(deleting.split, (amount) => formatMoney(amount, settings.currency, settings.locale)),
-          })}
-          onConfirm={() => void onDelete(deleting.id)}
-          onClose={() => setDeleting(null)}
-        />
+        <ConfirmModal title={t('rec.confirmTitle', { action: t('common.delete'), name: deleting.name })} onConfirm={() => void onDelete(deleting.id)} onClose={() => setDeleting(null)} />
       ) : null}
       {page ? (
         <>
@@ -509,7 +502,7 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
                     <button type="button" data-row-focus onClick={() => openEdit(transaction)}>
                       {t('common.edit')}
                     </button>
-                    <button type="button" onClick={() => (transaction.split.length > 0 ? setDeleting(transaction) : void onDelete(transaction.id))}>
+                    <button type="button" onClick={() => setDeleting(transaction)}>
                       {t('common.delete')}
                     </button>
                   </div>

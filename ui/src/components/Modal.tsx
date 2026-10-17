@@ -31,8 +31,9 @@ export default function Modal({
     const dialog = ref.current
     if (!dialog) return
     dialog.showModal()
-    const field = dialog.querySelector<HTMLElement>('input, select, textarea')
-    ;(field ?? dialog.querySelector<HTMLElement>('button'))?.focus()
+    // A dialog can name what takes the focus (a question, so that no answer is highlighted); otherwise the first field, then the first button.
+    const first = dialog.querySelector<HTMLElement>('[data-autofocus]') ?? dialog.querySelector<HTMLElement>('input, select, textarea')
+    ;(first ?? dialog.querySelector<HTMLElement>('button'))?.focus()
   }, [])
 
   return (

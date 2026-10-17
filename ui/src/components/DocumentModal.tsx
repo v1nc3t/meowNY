@@ -249,7 +249,7 @@ export default function DocumentModal({ id, onClose, onChanged }: { id: string; 
         </Modal>
       ) : null}
       {confirming ? (
-        <ConfirmModal title={t('docs.deleteTitle', { name: doc.name })} pending={pending} onConfirm={() => void onDelete()} onClose={() => setConfirming(false)} />
+        <ConfirmModal title={t('rec.confirmTitle', { action: t('common.delete'), name: doc.name })} pending={pending} onConfirm={() => void onDelete()} onClose={() => setConfirming(false)} />
       ) : null}
     </>
   )

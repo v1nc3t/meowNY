@@ -214,7 +214,9 @@ function CategoriesView({ settings, thisMonth }: { settings: MoneySettings; this
       </thead>
       <tbody>
         {history.map((row) => {
+          // red when more was spent than was budgeted, green when more was earned than was budgeted
           const overspent = row.expenseBudget !== null && Number(row.expenseActual) > Number(row.expenseBudget)
+          const overearned = row.incomeBudget !== null && Number(row.incomeActual) > Number(row.incomeBudget)
           return (
             <tr key={row.month} className={row.month === month ? 'selected' : undefined}>
               <td>
@@ -233,7 +235,9 @@ function CategoriesView({ settings, thisMonth }: { settings: MoneySettings; this
                 <span className={overspent ? 'over' : undefined}>{money(row.expenseActual)}</span>
               </td>
               <td>{row.incomeBudget === null ? '-' : money(row.incomeBudget)}</td>
-              <td>{money(row.incomeActual)}</td>
+              <td>
+                <span className={overearned ? 'earned-over' : undefined}>{money(row.incomeActual)}</span>
+              </td>
             </tr>
           )
         })}

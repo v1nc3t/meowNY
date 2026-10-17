@@ -161,7 +161,10 @@ function FriendView({ settings, now }: { settings: MoneySettings; now: Today }) 
       {dialog?.kind === 'rename' ? <FriendNameModal person={person} onClose={() => setDialog(null)} onSaved={() => done()} /> : null}
       {dialog?.kind === 'delete' ? (
         <ConfirmModal
-          title={t('debts.deleteEntryTitle')}
+          title={t('rec.confirmTitle', {
+            action: t('common.delete'),
+            name: `${t(`debts.kind.${dialog.entry.kind}`)}${dialog.entry.note ? `: ${dialog.entry.note}` : ''}`,
+          })}
           pending={pending}
           onConfirm={() => void run(() => debts.removeEntry(dialog.entry.id))}
           onClose={() => setDialog(null)}

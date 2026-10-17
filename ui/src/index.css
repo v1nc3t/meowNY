@@ -1399,8 +1399,11 @@ form > button {
 }
 
 .budget-history .over {
-  border: 1px solid var(--accent);
-  padding: 0.125rem 0.5rem;
+  color: #f7768e;
+}
+
+.budget-history .earned-over {
+  color: var(--accent);
 }
 
 /* Dates as dropdowns: day, month and year side by side. A label sits above, like other fields. */
@@ -3283,6 +3286,12 @@ html.is-phone .rec-due .rec-pay {
 .confirm-text {
   margin: 0;
   color: var(--text-h);
+}
+
+/* The question takes the focus when the dialog opens, so that neither answer does; it shows no outline. */
+.confirm-text:focus,
+.confirm-text:focus-visible {
+  outline: none;
 }
 
 /* A phone: "current month" and the range sit beside "add transaction"; from and to are side by side, level with each other. */

@@ -34,7 +34,7 @@ What changes:
 - The transaction keeps **what you paid**. **Budgets, statistics, reports and exports count only your part**, and the list shows your part as its amount; press **details** under it to see, in a section called split, what was paid and who has which part (and, if there is one, the description in its own section). To change a split, press **edit**: the same form has the switch.
 - Each friend's part is added to what they owe you.
 - The odd cent goes to whoever has the largest remainder, you first; the parts always add up to the bill to the cent.
-- Changing the **amount** of a shared bill scales every part, yours included. Deleting a shared bill asks first and says whose parts go with it, because they will owe you less. A shared bill cannot be an income.
+- Changing the **amount** of a shared bill scales every part, yours included. Deleting a transaction asks first (a shared bill's parts go with it, so the friends owe you less). A shared bill cannot be an income.
 - A saved bill opens as exact amounts. Changing how it is split starts the numbers again.
 
 A **recurring item** can be split too (tick **split this bill** in its form). Each payment is then split by the same proportions, whatever it was paid for. It is kept as proportions, so an item with no fixed amount can be split. The payments already made keep their parts. **Details** on the item in the list shows the proportions (you 2, Anna 1, …).

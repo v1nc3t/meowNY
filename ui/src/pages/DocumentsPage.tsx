@@ -243,7 +243,7 @@ function DocumentsView({ settings }: { settings: MoneySettings }) {
       </p>
       {viewing ? <DocumentModal id={viewing} onClose={() => setViewing(null)} onChanged={refresh} /> : null}
       {deleting ? (
-        <ConfirmModal title={t('docs.deleteTitle', { name: deleting.name })} pending={busy} onConfirm={() => void onDelete()} onClose={() => setDeleting(null)} />
+        <ConfirmModal title={t('rec.confirmTitle', { action: t('common.delete'), name: deleting.name })} pending={busy} onConfirm={() => void onDelete()} onClose={() => setDeleting(null)} />
       ) : null}
       {page ? (
         <>
