@@ -67,6 +67,9 @@ pub struct Selection {
     /// Only transactions whose name or description has this text in it, whatever the case (as the search of the transactions page).
     #[serde(default)]
     pub text: Option<String>,
+    /// Only the bills that are shared with friends, or only those that are not. Null means both.
+    #[serde(default)]
+    pub split: Option<SplitFilter>,
     /// What goes into a JSON or an Excel file. Null means every part. The change history only ever goes into a file with no limit.
     #[serde(default)]
     pub sections: Option<Vec<Section>>,
@@ -89,6 +92,14 @@ impl Kind {
     }
 }
 
+/// Whether a transaction is a bill shared with friends.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SplitFilter {
+    Split,
+    NotSplit,
+}
+
 /// The parts of a JSON or Excel file that can be left out.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -98,8 +109,10 @@ pub enum Section {
     Budgets,
     Recurring,
     Documents,
-    /// The friends, the ledger of money lent and borrowed, and the parts of shared bills.
+    /// The friends and what each owes or is owed.
     People,
+    /// The history of debts: the ledger of money lent, borrowed and paid back, and the parts of the shared bills.
+    Ledger,
     History,
 }
 
@@ -112,6 +125,7 @@ impl Section {
             Section::Recurring => "recurring",
             Section::Documents => "documents",
             Section::People => "people",
+            Section::Ledger => "ledger",
             Section::History => "history",
         }
     }
@@ -133,6 +147,7 @@ pub(crate) struct Parsed {
     /// The text asked for, and the `LIKE` pattern made of it (`%text%`, with the wild characters of the text escaped).
     pub(crate) text: Option<String>,
     pub(crate) pattern: Option<String>,
+    pub(crate) split: Option<SplitFilter>,
     pub(crate) sections: Option<Vec<Section>>,
 }
 
@@ -146,6 +161,7 @@ impl Parsed {
             && self.min.is_none()
             && self.max.is_none()
             && self.pattern.is_none()
+            && self.split.is_none()
     }
 
     /// Whether a part of the file is asked for. (The history is also left out of any file that has a limit.)
@@ -153,12 +169,20 @@ impl Parsed {
         self.sections.as_ref().is_none_or(|list| list.contains(&section))
     }
 
-    /// The six values `transaction_filter` names, in order: first day, last day, kind, least and most it cost, text pattern.
-    pub(crate) fn args(&self) -> [rusqlite::types::Value; 6] {
+    /// The seven values `transaction_filter` names, in order: first day, last day, kind, least and most it cost, text pattern, shared or not.
+    pub(crate) fn args(&self) -> [rusqlite::types::Value; 7] {
         use rusqlite::types::Value;
         let text = |t: &Option<String>| t.clone().map_or(Value::Null, Value::Text);
         let number = |n: Option<i64>| n.map_or(Value::Null, Value::Integer);
-        [text(&self.from), text(&self.to), self.kind.map_or(Value::Null, |k| Value::Text(k.as_str().to_string())), number(self.min), number(self.max), text(&self.pattern)]
+        [
+            text(&self.from),
+            text(&self.to),
+            self.kind.map_or(Value::Null, |k| Value::Text(k.as_str().to_string())),
+            number(self.min),
+            number(self.max),
+            text(&self.pattern),
+            self.split.map_or(Value::Null, |split| Value::Integer(i64::from(split == SplitFilter::Split))),
+        ]
     }
 
     /// `AND`-ready SQL for a category column; ids are integers, so they are written in directly.
@@ -200,7 +224,7 @@ pub(crate) fn parse(selection: &Selection) -> Result<Parsed, AppError> {
         Some(list) if list.is_empty() => return Err(AppError::InvalidInput),
         Some(list) => Some(list.clone()),
     };
-    Ok(Parsed { from, to, categories, debts: selection.include_debts, kind: selection.kind, min, max, text, pattern, sections })
+    Ok(Parsed { from, to, categories, debts: selection.include_debts, kind: selection.kind, min, max, text, pattern, split: selection.split, sections })
 }
 
 /// Spreadsheet programs run a cell that starts with one of these as a formula, so such a cell is
@@ -232,13 +256,15 @@ pub(crate) struct Tx {
 
 /// The `WHERE` of every transaction query, written for `transactions t JOIN transaction_costs k ON k.transaction_id = t.id`, with the
 /// values of `Parsed::args` bound in order: `?1` the first day, `?2` the last, `?3` income or expense, `?4` the least it cost, `?5` the most,
-/// `?6` a text pattern. Each is optional, and the categories are written in (they are integers).
+/// `?6` a text pattern, `?7` 1 for the bills that are shared and 0 for those that are not. Each is optional, and the categories are written in
+/// (they are integers).
 pub(crate) fn transaction_filter(sel: &Parsed) -> String {
     format!(
         "(?1 IS NULL OR t.payment_date >= ?1) AND (?2 IS NULL OR t.payment_date <= ?2) AND {}
          AND (?3 IS NULL OR (SELECT kind.type FROM categories kind WHERE kind.id = t.category_id) = ?3)
          AND (?4 IS NULL OR k.cost_minor >= ?4) AND (?5 IS NULL OR k.cost_minor <= ?5)
-         AND (?6 IS NULL OR t.name LIKE ?6 ESCAPE '\\' OR t.description LIKE ?6 ESCAPE '\\')",
+         AND (?6 IS NULL OR t.name LIKE ?6 ESCAPE '\\' OR t.description LIKE ?6 ESCAPE '\\')
+         AND (?7 IS NULL OR EXISTS (SELECT 1 FROM transaction_split_lines sl WHERE sl.transaction_id = t.id) = ?7)",
         sel.category_filter("t.category_id")
     )
 }
@@ -430,6 +456,31 @@ fn budgets_in_range(rows: Vec<BudgetRow>, sel: &Parsed) -> Vec<BudgetRow> {
 
 /// The recurring items an export contains: those in the chosen categories (and of the chosen kind) that were running at some time in the
 /// range of dates, that is, that started on or before its last day and did not end before its first.
+/// Today's date in the person's timezone, as `now` says it.
+pub(crate) fn today_of(conn: &Connection, now: DateTime<Utc>) -> Result<String, AppError> {
+    let timezone: String = conn.query_row("SELECT timezone FROM settings WHERE id = 1", [], |r| r.get(0))?;
+    Ok(crate::clock::today(now, &timezone)?.to_string())
+}
+
+/// The recurring payments that have come due and are not paid or skipped yet, the oldest first: what you owe by `today`, to be listed with
+/// the debts. Those of the chosen categories (and kind); the dates of an export do not narrow them, because what is due is a matter of today.
+pub(crate) fn due_payments(conn: &Connection, sel: &Parsed, today: &str) -> Result<Vec<recurring::Recurring>, AppError> {
+    let mut statement = conn.prepare("SELECT id, type FROM categories")?;
+    let kinds: std::collections::HashMap<i64, String> =
+        statement.query_map([], |r| Ok((r.get::<_, i64>(0)?, r.get::<_, String>(1)?)))?.collect::<Result<_, _>>()?;
+    // overdue, then the ones due today
+    let dues = recurring::dues(conn, today, Some(0))?;
+    Ok(dues
+        .overdue
+        .into_iter()
+        .chain(dues.upcoming)
+        .filter(|item| {
+            sel.categories.as_ref().is_none_or(|ids| ids.contains(&item.category_id))
+                && sel.kind.is_none_or(|kind| kinds.get(&item.category_id).is_some_and(|k| k == kind.as_str()))
+        })
+        .collect())
+}
+
 fn recurring_rows(conn: &Connection, sel: &Parsed) -> Result<Vec<recurring::Recurring>, AppError> {
     let mut statement = conn.prepare("SELECT id, type FROM categories")?;
     let kinds: std::collections::HashMap<i64, String> =
@@ -646,6 +697,8 @@ pub struct Preview {
     pub people: u32,
     pub ledger: u32,
     pub split_bills: u32,
+    /// Recurring payments that have come due and are listed with the debts.
+    pub due_payments: u32,
     /// Entries of the change history. Only a JSON file with no selection carries them; with any
     /// selection this is 0.
     pub history: u32,
@@ -667,21 +720,18 @@ pub fn preview(conn: &Connection, selection: &Selection) -> Result<Preview, AppE
     )?;
     let history = if sel.everything() && sel.wants(Section::History) { tx.query_row("SELECT COUNT(*) FROM audit_log", [], |r| r.get(0))? } else { 0 };
     let bill_lines = debts::lines(&tx, &sel)?;
-    let (ledger, friends) = if sel.wants(Section::People) {
-        let ledger = debts::entries(&tx, &sel)?;
-        let friends = debts::people(&tx, &sel, &bill_lines, &ledger)?;
-        (ledger, friends)
-    } else {
-        (Vec::new(), Vec::new())
-    };
+    let ledger = if sel.wants(Section::Ledger) { debts::entries(&tx, &sel)? } else { Vec::new() };
+    let friends = if sel.wants(Section::People) { debts::people(&tx, &sel, &bill_lines, &ledger)? } else { Vec::new() };
     let split_bills = bill_lines.iter().map(|l| l.transaction_id).collect::<std::collections::BTreeSet<_>>().len() as u32;
+    let due = if sel.wants(Section::People) { due_payments(&tx, &sel, &today_of(&tx, Utc::now())?)?.len() } else { 0 };
     // what a file would hold: a part that is left out counts for nothing
     let count = |wanted: bool, n: usize| if wanted { n as u32 } else { 0 };
     let with_transactions = sel.wants(Section::Transactions);
     Ok(Preview {
         people: friends.len() as u32,
+        due_payments: due as u32,
         ledger: ledger.len() as u32,
-        split_bills: count(sel.wants(Section::People), split_bills as usize),
+        split_bills: count(sel.wants(Section::Transactions) || sel.wants(Section::Ledger), split_bills as usize),
         transactions: count(with_transactions, transactions as usize),
         first_date: if with_transactions { first_date } else { None },
         last_date: if with_transactions { last_date } else { None },
@@ -708,13 +758,8 @@ pub fn json(conn: &Connection, selection: &Selection, now: DateTime<Utc>) -> Res
     )?;
     // the parts of shared bills go with the transactions they are parts of; the friends and the ledger are a part of their own
     let bill_lines = debts::lines(&tx, &sel)?;
-    let (ledger, friends) = if sel.wants(Section::People) {
-        let ledger = debts::entries(&tx, &sel)?;
-        let friends = debts::people(&tx, &sel, &bill_lines, &ledger)?;
-        (ledger, friends)
-    } else {
-        (Vec::new(), Vec::new())
-    };
+    let ledger = if sel.wants(Section::Ledger) { debts::entries(&tx, &sel)? } else { Vec::new() };
+    let friends = if sel.wants(Section::People) { debts::people(&tx, &sel, &bill_lines, &ledger)? } else { Vec::new() };
     let mut parts = debts::lines_by_transaction(bill_lines);
     let transactions: Vec<Value> = transactions(&tx, &sel)?
         .into_iter()
@@ -782,6 +827,7 @@ pub fn json(conn: &Connection, selection: &Selection, now: DateTime<Utc>) -> Res
             "minAmount": sel.min.map(format_amount),
             "maxAmount": sel.max.map(format_amount),
             "text": sel.text,
+            "split": selection.split.map(|s| if s == SplitFilter::Split { "split" } else { "not_split" }),
             "sections": sel.sections.as_ref().map(|list| list.iter().map(|s| s.as_str()).collect::<Vec<_>>()),
         },
         "settings": { "currency": currency, "locale": locale, "timezone": timezone, "language": language },
@@ -801,6 +847,11 @@ pub fn json(conn: &Connection, selection: &Selection, now: DateTime<Utc>) -> Res
     }
     if sel.wants(Section::People) {
         file["people"] = Value::Array(people);
+        // the payments that have come due are owed too: listed with the debts
+        let due = due_payments(&tx, &sel, &today_of(&tx, now)?)?;
+        file["duePayments"] = Value::Array(due.into_iter().map(|item| serde_json::to_value(item).map_err(|_| AppError::Internal)).collect::<Result<_, _>>()?);
+    }
+    if sel.wants(Section::Ledger) {
         file["ledger"] = Value::Array(ledger);
     }
     if sel.wants(Section::Documents) {

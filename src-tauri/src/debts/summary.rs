@@ -42,6 +42,11 @@ fn summary_in(tx: &Connection) -> Result<Summary, AppError> {
 pub struct Labels {
     pub summary_title: String,
     pub statement_title: String,
+    /// The title of the history of debts in a report: every line of every friend in the months of the report.
+    pub history_title: String,
+    /// The recurring payments that have come due, listed with the debts in a report, and their total.
+    pub due_title: String,
+    pub due_total: String,
     pub owed_to_you: String,
     pub you_owe: String,
     pub net: String,
@@ -70,6 +75,9 @@ impl Labels {
         Labels {
             summary_title: s("Who owes what"),
             statement_title: s("Statement"),
+            history_title: s("History of debts"),
+            due_title: s("Due payments"),
+            due_total: s("Total due"),
             owed_to_you: s("Owed to you"),
             you_owe: s("You owe"),
             net: s("Net"),
@@ -93,9 +101,9 @@ impl Labels {
     }
 
     /// Every piece of text, to be checked before it is drawn or written: short, plain, no control characters.
-    pub fn all(&self) -> [&String; 22] {
+    pub fn all(&self) -> [&String; 25] {
         [
-            &self.summary_title, &self.statement_title, &self.owed_to_you, &self.you_owe, &self.net, &self.owes_you, &self.you_owe_them,
+            &self.summary_title, &self.statement_title, &self.history_title, &self.due_title, &self.due_total, &self.owed_to_you, &self.you_owe, &self.net, &self.owes_you, &self.you_owe_them,
             &self.nobody, &self.settled, &self.lent, &self.borrowed, &self.repaid_to_me, &self.repaid_by_me, &self.bill, &self.date,
             &self.what, &self.change, &self.balance, &self.name, &self.amount, &self.page, &self.statement_title,
         ]

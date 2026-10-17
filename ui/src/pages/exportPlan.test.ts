@@ -38,6 +38,7 @@ test('the first choice is every date and every category, with this month ready f
     minAmount: '',
     maxAmount: '',
     text: '',
+    split: '',
     sections: [...EXPORT_SECTIONS],
   })
 })
@@ -56,7 +57,9 @@ test('a range by day, by month and by year is sent as the days it covers, the sa
   ]
   for (const [choice, expected] of picks) {
     for (const format of ['json', 'csv', 'xlsx'] as const) {
-      assert.deepEqual(selectionFor(format, choice), { ...expected, categoryIds: null }, `${format} ${choice.mode}`)
+      // with a range the history of debts, a part of a JSON or Excel file, has to be asked for
+      const asked = format === 'csv' ? {} : { includeDebts: true }
+      assert.deepEqual(selectionFor(format, choice), { ...expected, categoryIds: null, ...asked }, `${format} ${choice.mode}`)
     }
     assert.deepEqual(bounds(choice), expected)
   }
@@ -184,4 +187,34 @@ test('an amount that is not one, the first above the second, or no part to put i
   assert.equal(problemWith('json', { ...all, sections: ['history'], kind: 'INCOME' }, 1), 'sections', 'and a limit leaves the history out')
   assert.equal(problemWith('json', { ...all, sections: ['history'] }, 1), null)
   assert.equal(problemWith('json', { ...all, sections: ['budgets'] }, 1), null)
+})
+
+test('the bills shared with friends, or those that are not, are a limit of their own, sent when chosen', () => {
+  assert.equal('split' in selectionFor('json', all), false)
+  assert.equal(selectionFor('csv', { ...all, split: 'split' }).split, 'split')
+  assert.equal(selectionFor('xlsx', { ...all, split: 'not_split' }).split, 'not_split')
+  assert.equal('split' in selectionFor('pdf', { ...all, split: 'split' }), false, 'a report has no such choice')
+  assert.equal(isLimited({ ...all, split: 'split' }), true)
+  assert.equal(isLimited({ ...all, split: '' }), false)
+})
+
+test('the history of debts is a part of its own, and a limit leaves it out of a file unless the part is chosen', () => {
+  assert.ok((EXPORT_SECTIONS as readonly string[]).includes('ledger') && (EXPORT_SECTIONS as readonly string[]).includes('people'))
+  // no limit: the ledger is in with the rest, and nothing needs asking for
+  assert.equal('includeDebts' in selectionFor('json', all), false)
+  // a limit with the part chosen (as it is at first): asked for
+  assert.equal(selectionFor('json', { ...all, kind: 'EXPENSE' }).includeDebts, true)
+  assert.equal(selectionFor('xlsx', { ...all, limitDates: true, mode: 'date', from: '2026-01-01', to: '2026-01-31' }).includeDebts, true)
+  // a limit with the part left out: not asked for, and the part is not in the list sent
+  const without = selectionFor('json', { ...all, kind: 'EXPENSE', sections: EXPORT_SECTIONS.filter((section) => section !== 'ledger' && section !== 'history') })
+  assert.equal('includeDebts' in without, false)
+  assert.ok(!without.sections?.includes('ledger'))
+  // an Excel file has a sheet for the history of debts, and none for the change history
+  assert.ok(sectionsFor('xlsx', all).includes('ledger') && !sectionsFor('xlsx', all).includes('history'))
+  // a CSV and a report have no ledger to ask for
+  assert.equal('includeDebts' in selectionFor('csv', { ...all, kind: 'EXPENSE' }), false)
+  assert.equal('includeDebts' in selectionFor('pdf', { ...all, kind: 'EXPENSE' }), false)
+  // only the history of debts is a part to put in
+  assert.equal(problemWith('json', { ...all, sections: ['ledger'] }, 1), null)
+  assert.deepEqual(selectionFor('json', { ...all, sections: ['ledger'] }).sections, ['ledger'])
 })

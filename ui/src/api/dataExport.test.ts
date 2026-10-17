@@ -14,6 +14,10 @@ const preview = {
   recurring: 2,
   documents: 6,
   history: 12,
+  people: 3,
+  ledger: 14,
+  splitBills: 5,
+  duePayments: 2,
 }
 
 test('a preview is read as the app sends it, with the number of documents it lists', () => {
@@ -31,5 +35,12 @@ test('the start of a file for the preview is read as the app sends it, and a cou
   assert.deepEqual(TextPreview.parse({ text: 'a,b\r\n', bytes: 9, cut: false }), { text: 'a,b\r\n', bytes: 9, cut: false })
   for (const bad of [{ text: 'x', bytes: -1, cut: false }, { text: 'x', bytes: 1.5, cut: false }, { text: 'x', bytes: 1 }, { bytes: 1, cut: false }]) {
     assert.equal(TextPreview.safeParse(bad).success, false, JSON.stringify(bad))
+  }
+})
+
+test('a preview without the friends, the ledger or the shared bills, or with a count that cannot be, is refused', () => {
+  for (const key of ['people', 'ledger', 'splitBills', 'duePayments'] as const) {
+    assert.equal(Preview.safeParse({ ...preview, [key]: undefined }).success, false, key)
+    assert.equal(Preview.safeParse({ ...preview, [key]: -1 }).success, false, key)
   }
 })

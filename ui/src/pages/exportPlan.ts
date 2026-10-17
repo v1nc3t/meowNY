@@ -27,6 +27,8 @@ export type Choice = {
   maxAmount: string
   /** Only transactions with this text in the name or the description, as typed. */
   text: string
+  /** Only the bills shared with friends, or only those that are not; empty means both. */
+  split: '' | 'split' | 'not_split'
   /** The parts of a JSON or Excel file that go in. */
   sections: ExportSection[]
 }
@@ -54,6 +56,7 @@ export function defaultChoice(today: { date: string; month: string }): Choice {
     minAmount: '',
     maxAmount: '',
     text: '',
+    split: '',
     sections: [...EXPORT_SECTIONS],
   }
 }
@@ -72,7 +75,7 @@ export function amountText(text: string): string | null {
 
 /** Whether anything but the parts of the file is limited: dates, categories, income or expenses, an amount or a text. */
 export function isLimited(choice: Choice): boolean {
-  return choice.limitDates || !choice.allCategories || choice.kind !== '' || choice.minAmount.trim() !== '' || choice.maxAmount.trim() !== '' || choice.text.trim() !== ''
+  return choice.limitDates || !choice.allCategories || choice.kind !== '' || choice.minAmount.trim() !== '' || choice.maxAmount.trim() !== '' || choice.text.trim() !== '' || choice.split !== ''
 }
 
 /** The parts that go into a file of this format: for JSON all but a history that a limit would leave out, for Excel those with a sheet. */
@@ -151,6 +154,7 @@ export function selectionFor(format: ExportFormat, choice: Choice): ExportSelect
   const selection: ExportSelection = { ...range, categoryIds }
   if (format === 'pdf') return selection
   if (choice.kind) selection.kind = choice.kind
+  if (choice.split) selection.split = choice.split
   const least = amountText(choice.minAmount)
   const most = amountText(choice.maxAmount)
   if (least) selection.minAmount = least
@@ -159,6 +163,8 @@ export function selectionFor(format: ExportFormat, choice: Choice): ExportSelect
   if (text) selection.text = text
   if (format === 'csv') return selection
   const sections = sectionsFor(format, choice)
+  // a limit leaves the ledger out unless it is asked for, and choosing its part is asking
+  if (isLimited(choice) && sections.includes('ledger')) selection.includeDebts = true
   const every = format === 'json' ? EXPORT_SECTIONS.filter((section) => section !== 'history' || !isLimited(choice)) : SHEETED
   if (sections.length !== every.length) selection.sections = sections
   return selection

@@ -149,6 +149,11 @@ export type Reminders = z.infer<typeof Reminders>
 export type DebtsLabels = {
   summaryTitle: string
   statementTitle: string
+  /** The title of the history of debts in a report. */
+  historyTitle: string
+  /** The recurring payments that have come due, listed with the debts in a report, and their total. */
+  dueTitle: string
+  dueTotal: string
   owedToYou: string
   youOwe: string
   net: string

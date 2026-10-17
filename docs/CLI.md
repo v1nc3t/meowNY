@@ -1845,6 +1845,7 @@ $ meowny export preview --from 2026-01-01 --to 2026-09-30
 budgets: 14
 categories: 15
 documents: 0
+duePayments: 1
 expense: 20434.70
 firstDate: 2026-01-01
 history: 0
@@ -1864,6 +1865,7 @@ With `--json` (one line; shown indented):
   "budgets": 14,
   "categories": 15,
   "documents": 0,
+  "duePayments": 1,
   "expense": "20434.70",
   "firstDate": "2026-01-01",
   "history": 0,
@@ -1902,7 +1904,7 @@ The app asks you to allow this each time, in a dialog; nothing is written until 
 ```console
 $ meowny export json --out /home/you/everything.json
 
-bytes: 166236
+bytes: 166715
 path: /home/you/everything.json
 ```
 
@@ -1959,7 +1961,7 @@ The app asks you to allow this each time, in a dialog; nothing is written until 
 ```console
 $ meowny export xlsx --out /home/you/budget.xlsx
 
-bytes: 25967
+bytes: 26668
 path: /home/you/budget.xlsx
 ```
 
@@ -2113,7 +2115,7 @@ total: 1
 
 documents
 id  name                createdAt                 documentDate  hasFile  keepOnPhone  linkCount  mediaType        sha256                                                        sizeBytes
- 1  boiler-receipt.pdf  2026-10-17T13:09:31.500Z  2026-10-01    true     false                0  application/pdf  735a7713978716d1e65eb6bf069e2f410eb72ec5b285861be417aeca0fe…         45
+ 1  boiler-receipt.pdf  2026-10-17T19:47:53.963Z  2026-10-01    true     false                0  application/pdf  735a7713978716d1e65eb6bf069e2f410eb72ec5b285861be417aeca0fe…         45
 ```
 
 With `--json` (one line; shown indented):
@@ -2122,7 +2124,7 @@ With `--json` (one line; shown indented):
 {
   "documents": [
     {
-      "createdAt": "2026-10-17T13:09:31.500Z",
+      "createdAt": "2026-10-17T19:47:53.963Z",
       "documentDate": "2026-10-01",
       "hasFile": true,
       "id": "1",
@@ -2161,7 +2163,7 @@ The id can be given as a plain word, as in `meowny documents show 42`, or with `
 ```console
 $ meowny documents show 1
 
-createdAt: 2026-10-17T13:09:31.500Z
+createdAt: 2026-10-17T19:47:53.963Z
 documentDate: 2026-10-01
 hasFile: true
 id: 1
@@ -2180,7 +2182,7 @@ With `--json` (one line; shown indented):
 
 ```json
 {
-  "createdAt": "2026-10-17T13:09:31.500Z",
+  "createdAt": "2026-10-17T19:47:53.963Z",
   "documentDate": "2026-10-01",
   "hasFile": true,
   "id": "1",
@@ -2229,7 +2231,7 @@ With `--json` (one line; shown indented):
 ```json
 {
   "alreadyThere": false,
-  "createdAt": "2026-10-17T13:09:31.500Z",
+  "createdAt": "2026-10-17T19:47:53.963Z",
   "documentDate": "2026-10-01",
   "hasFile": true,
   "id": "1",
@@ -2271,7 +2273,7 @@ With `--json` (one line; shown indented):
 
 ```json
 {
-  "createdAt": "2026-10-17T13:09:31.500Z",
+  "createdAt": "2026-10-17T19:47:53.963Z",
   "documentDate": "2026-10-01",
   "hasFile": true,
   "id": "1",

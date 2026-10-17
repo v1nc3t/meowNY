@@ -13,6 +13,7 @@ use super::*;
 use crate::budgets::Scope;
 use crate::categories::{self, CategoryType};
 use crate::debts::fixtures::{equal, friend, who};
+use crate::debts::ledger::{self as ledger_entries, Kind as EntryKind, NewEntry};
 use crate::debts::splits::set_split;
 
 #[derive(Clone)]
@@ -25,6 +26,8 @@ pub(crate) struct Row {
     pub(crate) minor: i64,
     /// What it cost: less than was paid for a bill that is shared.
     pub(crate) cost: i64,
+    /// Whether the bill is shared with a friend, and with whom (a friend's name).
+    pub(crate) shared_with: Option<&'static str>,
 }
 
 /// What a document is attached to, as the test made it: a transaction (by its index in `rows`) or a recurring item (by its name).
@@ -40,6 +43,8 @@ struct Recurring {
     category: i64,
     start: &'static str,
     end: Option<&'static str>,
+    /// A paused item is not due.
+    paused: bool,
 }
 
 #[derive(Clone)]
@@ -61,6 +66,10 @@ pub(crate) struct World {
     /// (name, links) of each document.
     documents: Vec<(String, Vec<Link>)>,
     budgets: Vec<Budget>,
+    /// The entries of the ledger: (date, friend).
+    pub(crate) entries: Vec<(String, &'static str)>,
+    /// Every friend there is.
+    pub(crate) friends: Vec<&'static str>,
 }
 
 /// The same numbers every time: xorshift, which is plenty for choosing dates and categories.
@@ -106,7 +115,7 @@ pub(crate) fn world() -> World {
     for (name, kind) in [("Salary", CategoryType::Income), ("Freelance", CategoryType::Income), ("Rent", CategoryType::Expense), ("Food", CategoryType::Expense), ("Fun", CategoryType::Expense), ("Old", CategoryType::Expense)] {
         categories_made.push((categories::create(&conn, name, kind).unwrap().id, kind == CategoryType::Income));
     }
-    let anna = friend(&conn, "Anna");
+    let (anna, bob, _carol) = (friend(&conn, "Anna"), friend(&conn, "Bob"), friend(&conn, "Carol"));
     let mut dates: Vec<String> = EDGES.iter().map(|d| d.to_string()).collect();
     for _ in 0..60 {
         dates.push(format!("{}-{:02}-{:02}", 2023 + random.below(4), 1 + random.below(12), 1 + random.below(28)));
@@ -119,14 +128,18 @@ pub(crate) fn world() -> World {
         let name = format!("T{at:03}");
         let description = (random.below(100) < 40).then(|| format!("{} {at}", WORDS[random.below(WORDS.len())]));
         spend(&conn, category, &name, &cents(minor), &date, description.as_deref());
-        // every sixth expense is shared with Anna, who has half (the odd cent stays with the person); an income cannot be shared
-        let mut cost = minor;
-        if at % 6 == 0 && !categories_made.iter().find(|c| c.0 == category).unwrap().1 {
+        // every sixth expense is shared with Anna and every tenth of the others with Bob, who have half (the odd cent stays with the
+        // person); an income cannot be shared
+        let (mut cost, mut shared_with) = (minor, None);
+        let income = categories_made.iter().find(|c| c.0 == category).unwrap().1;
+        if !income && (at % 6 == 0 || at % 10 == 3) {
+            let (who_has, name_of) = if at % 6 == 0 { (anna, "Anna") } else { (bob, "Bob") };
             let id: i64 = conn.query_row("SELECT id FROM transactions WHERE name = ?1", [&name], |r| r.get(0)).unwrap();
-            set_split(&conn, id, &equal(vec![who(anna)])).unwrap();
+            set_split(&conn, id, &equal(vec![who(who_has)])).unwrap();
             cost = minor - minor / 2;
+            shared_with = Some(name_of);
         }
-        rows.push(Row { name, description, date, category, minor, cost });
+        rows.push(Row { name, description, date, category, minor, cost, shared_with });
     }
     let (salary, rent, food) = (categories_made[0].0, categories_made[2].0, categories_made[3].0);
     for (kind, scope, category, month, limit) in [
@@ -141,6 +154,15 @@ pub(crate) fn world() -> World {
     ] {
         set_budget(&conn, kind, scope, category, month, limit);
     }
+    // the ledger: loans and repayments with Anna and Bob (Carol has none), on the edge days and others
+    let mut entries: Vec<(String, &'static str)> = Vec::new();
+    for at in 0..40 {
+        let (person, name_of) = if at % 3 == 0 { (bob, "Bob") } else { (anna, "Anna") };
+        let date = dates[random.below(dates.len())].clone();
+        let kind = [EntryKind::Lent, EntryKind::Borrowed, EntryKind::RepaidToMe, EntryKind::RepaidByMe][random.below(4)];
+        ledger_entries::add(&conn, &NewEntry { person_id: person.to_string(), kind, amount: cents(100 + random.below(5_000) as i64), date: date.clone(), note: None, transaction_id: None }).unwrap();
+        entries.push((date, name_of));
+    }
     // budgets that stay as they are until a later row changes them, which `set` does not write (it pins the next month): two rows of
     // Fun, so that a range can start in the middle of one
     let fun = categories_made[4].0;
@@ -151,13 +173,21 @@ pub(crate) fn world() -> World {
         )
         .unwrap();
     }
+    // three days from today, whenever the test runs
+    let soon: &'static str = Box::leak(
+        crate::clock::today(Utc::now(), "Europe/Dublin").unwrap().checked_add_days(chrono::Days::new(3)).unwrap().to_string().into_boxed_str(),
+    );
     let mut recurring_made = Vec::new();
-    for (name, index, start, end) in [
-        ("Pay", 0, "2025-01-01", None),
-        ("Rent", 2, "2024-06-01", Some("2025-03-01")),
-        ("Food box", 3, "2026-01-01", None),
-        ("Gym", 4, "2023-01-01", Some("2023-12-31")),
-        ("Old magazine", 5, "2025-06-01", None),
+    for (name, index, start, end, paused) in [
+        ("Pay", 0, "2025-01-01", None, false),
+        ("Rent", 2, "2024-06-01", Some("2025-03-01"), false),
+        ("Food box", 3, "2026-01-01", None, false),
+        ("Gym", 4, "2023-01-01", Some("2023-12-31"), false),
+        ("Old magazine", 5, "2025-06-01", None, false),
+        // not due yet (one of them in a few days, one far off), and not due because it is paused
+        ("Soon", 3, soon, None, false),
+        ("Future", 2, "2099-01-01", None, false),
+        ("Paused", 3, "2025-03-01", None, true),
     ] {
         let category = categories_made[index].0;
         crate::recurring::create(
@@ -174,7 +204,11 @@ pub(crate) fn world() -> World {
             },
         )
         .unwrap();
-        recurring_made.push(Recurring { name, category, start, end });
+        if paused {
+            let id: i64 = conn.query_row("SELECT id FROM recurring_transactions WHERE name = ?1", [name], |r| r.get(0)).unwrap();
+            crate::recurring::set_active(&conn, id, false).unwrap();
+        }
+        recurring_made.push(Recurring { name, category, start, end, paused });
     }
     let mut documents = Vec::new();
     for (at, links) in [
@@ -211,10 +245,10 @@ pub(crate) fn world() -> World {
             .map(|b| b.unwrap())
             .collect()
     };
-    World { conn, rows, categories: categories_made, recurring: recurring_made, documents, budgets }
+    World { conn, rows, categories: categories_made, recurring: recurring_made, documents, budgets, entries, friends: vec!["Anna", "Bob", "Carol"] }
 }
 
-const SECTIONS: [Section; 7] = [Section::Transactions, Section::Categories, Section::Budgets, Section::Recurring, Section::Documents, Section::People, Section::History];
+const SECTIONS: [Section; 8] = [Section::Transactions, Section::Categories, Section::Budgets, Section::Recurring, Section::Documents, Section::People, Section::Ledger, Section::History];
 
 /// Choices by a fixed random sequence: every mix of a first day, a last day, categories (including none, one that is deleted, one that
 /// does not exist and one named twice), income or expenses, an amount range, a text, and the parts of the file.
@@ -268,7 +302,13 @@ pub(crate) fn random_selections(world: &World, count: usize, seed: u64) -> Vec<S
             }
             list
         });
-        out.push(Selection { from, to, category_ids, include_debts: false, kind, min_amount: low.then(|| cents(a)), max_amount: high.then(|| cents(b)), text, sections });
+        let split = match random.below(10) {
+            0..=1 => Some(SplitFilter::Split),
+            2..=3 => Some(SplitFilter::NotSplit),
+            _ => None,
+        };
+        let include_debts = random.below(100) < 40;
+        out.push(Selection { from, to, category_ids, include_debts, kind, min_amount: low.then(|| cents(a)), max_amount: high.then(|| cents(b)), text, split, sections });
     }
     out
 }
@@ -297,6 +337,7 @@ pub(crate) fn expected(world: &World, selection: &Selection) -> Vec<usize> {
                 && selection.to.as_deref().is_none_or(|to| row.date.as_str() <= to)
                 && categories.as_ref().is_none_or(|set| set.contains(&row.category))
                 && selection.kind.is_none_or(|kind| (kind == Kind::Income) == is_income(world, row.category))
+                && selection.split.is_none_or(|split| (split == SplitFilter::Split) == row.shared_with.is_some())
                 && least.is_none_or(|least| row.cost >= least)
                 && most.is_none_or(|most| row.cost <= most)
                 // the search ignores case in the letters A to Z, as the search of the transactions page does
@@ -311,17 +352,18 @@ pub(crate) fn expected(world: &World, selection: &Selection) -> Vec<usize> {
 }
 
 /// Whether the selection limits anything but the parts of the file.
-fn limited(selection: &Selection) -> bool {
+pub(crate) fn limited(selection: &Selection) -> bool {
     selection.from.is_some()
         || selection.to.is_some()
         || selection.category_ids.is_some()
         || selection.kind.is_some()
         || selection.min_amount.is_some()
         || selection.max_amount.is_some()
+        || selection.split.is_some()
         || selection.text.as_deref().is_some_and(|t| !t.trim().is_empty())
 }
 
-fn wants(selection: &Selection, section: Section) -> bool {
+pub(crate) fn wants(selection: &Selection, section: Section) -> bool {
     selection.sections.as_ref().is_none_or(|list| list.contains(&section))
 }
 
@@ -372,9 +414,60 @@ fn expected_recurring(world: &World, selection: &Selection) -> Vec<String> {
     names
 }
 
-fn describe(selection: &Selection) -> String {
+/// How many entries of the ledger a file holds: those in the dates, and only when the part is asked for and there is no limit or the
+/// ledger was asked for (`include_debts`). The entries are about no category, so the categories never narrow them.
+pub(crate) fn expected_entries(world: &World, selection: &Selection) -> Vec<&'static str> {
+    let held = wants(selection, Section::Ledger) && (!limited(selection) || selection.include_debts);
+    if !held {
+        return Vec::new();
+    }
+    world
+        .entries
+        .iter()
+        .filter(|(date, _)| selection.from.as_deref().is_none_or(|from| date.as_str() >= from) && selection.to.as_deref().is_none_or(|to| date.as_str() <= to))
+        .map(|entry| entry.1)
+        .collect()
+}
+
+/// How many friends a file names: everyone with no limit, otherwise those with a part in a bill of the file or an entry in it.
+pub(crate) fn expected_friends(world: &World, selection: &Selection, want: &[usize]) -> usize {
+    if !limited(selection) {
+        return world.friends.len();
+    }
+    let mut named: BTreeSet<&str> = want.iter().filter_map(|&at| world.rows[at].shared_with).collect();
+    named.extend(expected_entries(world, selection));
+    named.len()
+}
+
+/// How many of the transactions are bills shared with a friend.
+pub(crate) fn shared_among(world: &World, want: &[usize]) -> usize {
+    want.iter().filter(|&&at| world.rows[at].shared_with.is_some()).count()
+}
+
+/// The names of the recurring payments that are due today and have not been paid or skipped: active, with the day they fall due on or
+/// before today (none of the items here has been paid, so that is the day they start). The categories and the kind narrow them, the dates
+/// do not.
+pub(crate) fn expected_due(world: &World, selection: &Selection) -> Vec<&'static str> {
+    if !wants(selection, Section::People) {
+        return Vec::new();
+    }
+    let today = crate::clock::today(Utc::now(), "Europe/Dublin").unwrap().to_string();
+    let categories = chosen(selection);
+    let mut names: Vec<&'static str> = world
+        .recurring
+        .iter()
+        .filter(|r| !r.paused && r.start <= today.as_str())
+        .filter(|r| categories.as_ref().is_none_or(|set| set.contains(&r.category)))
+        .filter(|r| selection.kind.is_none_or(|kind| (kind == Kind::Income) == is_income(world, r.category)))
+        .map(|r| r.name)
+        .collect();
+    names.sort();
+    names
+}
+
+pub(crate) fn describe(selection: &Selection) -> String {
     format!(
-        "from {:?} to {:?} categories {:?} kind {:?} amount {:?}..{:?} text {:?} sections {:?}",
+        "from {:?} to {:?} categories {:?} kind {:?} amount {:?}..{:?} text {:?} split {:?} debts {} sections {:?}",
         selection.from,
         selection.to,
         selection.category_ids,
@@ -382,6 +475,8 @@ fn describe(selection: &Selection) -> String {
         selection.min_amount,
         selection.max_amount,
         selection.text,
+        selection.split.map(|s| if s == SplitFilter::Split { "split" } else { "not_split" }),
+        selection.include_debts,
         selection.sections.as_ref().map(|s| s.iter().map(|s| s.as_str()).collect::<Vec<_>>()),
     )
 }
@@ -422,7 +517,7 @@ fn every_choice_gives_the_same_things_in_every_file_and_the_preview() {
             (Section::Recurring, "recurring"),
             (Section::Documents, "documents"),
             (Section::People, "people"),
-            (Section::People, "ledger"),
+            (Section::Ledger, "ledger"),
         ] {
             assert_eq!(file.get(key).is_some(), wants(&selection, section), "{key} is there only when asked for, {label}");
         }
@@ -448,6 +543,25 @@ fn every_choice_gives_the_same_things_in_every_file_and_the_preview() {
         let want_budgets = expected_budgets(&world, &selection);
         if wants(&selection, Section::Budgets) {
             assert_eq!(file["budgets"].as_array().unwrap().len(), want_budgets, "budgets, {label}");
+        }
+
+        // the friends and the history of debts: the entries by date only (a limit leaves them out unless they were asked for), the friends
+        // by what the file holds
+        let want_entries = expected_entries(&world, &selection);
+        let want_friends = expected_friends(&world, &selection, &want);
+        if wants(&selection, Section::People) {
+            assert_eq!(file["people"].as_array().unwrap().len(), want_friends, "friends, {label}");
+        }
+        if wants(&selection, Section::Ledger) {
+            assert_eq!(file["ledger"].as_array().unwrap().len(), want_entries.len(), "ledger, {label}");
+        }
+        // the recurring payments that have come due are listed with the friends
+        let want_due = expected_due(&world, &selection);
+        assert_eq!(file.get("duePayments").is_some(), wants(&selection, Section::People), "duePayments is there only with the friends, {label}");
+        if wants(&selection, Section::People) {
+            let mut have = named(&file["duePayments"], "name");
+            have.sort();
+            assert_eq!(have, want_due, "due payments, {label}");
         }
 
         // the documents: with a limit only those attached to something in the export, and only those attachments
@@ -488,6 +602,11 @@ fn every_choice_gives_the_same_things_in_every_file_and_the_preview() {
         assert_eq!(preview.recurring as usize, count(Section::Recurring, want_recurring.len()), "{label}");
         assert_eq!(preview.budgets as usize, count(Section::Budgets, want_budgets), "{label}");
         assert_eq!(preview.documents as usize, count(Section::Documents, want_documents.len()), "{label}");
+        assert_eq!(preview.people as usize, count(Section::People, want_friends), "{label}");
+        assert_eq!(preview.ledger as usize, want_entries.len(), "{label}");
+        assert_eq!(preview.due_payments as usize, want_due.len(), "{label}");
+        let shared = shared_among(&world, &want);
+        assert_eq!(preview.split_bills as usize, if wants(&selection, Section::Transactions) || wants(&selection, Section::Ledger) { shared } else { 0 }, "{label}");
 
         // the months of the summary add up to the same
         let mut months: BTreeMap<String, (i64, i64)> = BTreeMap::new();
@@ -589,12 +708,12 @@ fn the_recurring_items_of_a_range_are_those_that_ran_in_it() {
         found.sort();
         found
     };
-    assert_eq!(names(None, None).len(), 5);
+    assert_eq!(names(None, None).len(), 8);
     assert_eq!(names(Some("2023-06-01"), Some("2023-06-30")), ["Gym"], "the others had not started");
     assert_eq!(names(Some("2024-01-01"), Some("2024-05-31")), Vec::<String>::new(), "Gym had ended, Rent had not begun");
-    assert_eq!(names(Some("2025-03-01"), Some("2025-03-01")), ["Pay", "Rent"], "Rent ended that very day");
-    assert_eq!(names(Some("2025-03-02"), Some("2025-12-31")), ["Old magazine", "Pay"]);
-    assert_eq!(names(Some("2026-01-01"), None), ["Food box", "Old magazine", "Pay"]);
+    assert_eq!(names(Some("2025-03-01"), Some("2025-03-01")), ["Paused", "Pay", "Rent"], "Rent ended that very day, and a paused item still ran");
+    assert_eq!(names(Some("2025-03-02"), Some("2025-12-31")), ["Old magazine", "Paused", "Pay"]);
+    assert_eq!(names(Some("2026-01-01"), None), ["Food box", "Future", "Old magazine", "Paused", "Pay", "Soon"]);
 }
 
 #[test]
@@ -763,4 +882,35 @@ fn the_choice_the_screen_sends_is_read_as_it_is_written() {
     for bad in [json!({ "kind": "BOTH" }), json!({ "sections": ["everything"] }), json!({ "colour": "red" }), json!({ "minAmount": 5 })] {
         assert!(serde_json::from_value::<Selection>(bad.clone()).is_err(), "{bad}");
     }
+}
+
+#[test]
+fn the_recurring_payments_that_have_come_due_are_listed_with_the_debts() {
+    let world = world();
+    let due = |selection: &Selection| -> Vec<String> {
+        let mut names: Vec<String> = parsed(&world.conn, selection)["duePayments"].as_array().unwrap().iter().map(|d| d["name"].as_str().unwrap().to_string()).collect();
+        names.sort();
+        names
+    };
+    // everything not paused and started: Soon is due in three days, Future begins in 2099 and Paused is paused
+    let all = Selection::default();
+    assert_eq!(due(&all), ["Food box", "Gym", "Old magazine", "Pay", "Rent"]);
+    // the dates of an export do not narrow what is due, the categories and the kind do
+    let old_dates = Selection { from: Some("2020-01-01".into()), to: Some("2020-12-31".into()), ..Default::default() };
+    assert_eq!(due(&old_dates), due(&all));
+    let rent = Selection { category_ids: Some(vec![world.categories[2].0.to_string()]), ..Default::default() };
+    assert_eq!(due(&rent), ["Rent"], "Future is in the same category and is not due");
+    assert_eq!(due(&Selection { kind: Some(Kind::Income), ..Default::default() }), ["Pay"]);
+    // they go with the friends, and only then
+    let ledger_only = parsed(&world.conn, &Selection { sections: Some(vec![Section::Ledger]), ..Default::default() });
+    assert!(ledger_only.get("duePayments").is_none());
+    // they are the same items the recurring screen calls overdue or due today, in the order of their days
+    let today = crate::clock::today(Utc::now(), "Europe/Dublin").unwrap().to_string();
+    let screen = crate::recurring::dues(&world.conn, &today, Some(0)).unwrap();
+    let on_screen: Vec<String> = screen.overdue.iter().chain(&screen.upcoming).map(|r| r.name.clone()).collect();
+    let in_file: Vec<String> = parsed(&world.conn, &all)["duePayments"].as_array().unwrap().iter().map(|d| d["name"].as_str().unwrap().to_string()).collect();
+    assert_eq!(in_file, on_screen);
+    let file = parsed(&world.conn, &all);
+    let days: Vec<&str> = file["duePayments"].as_array().unwrap().iter().map(|d| d["nextDueDate"].as_str().unwrap()).collect();
+    assert!(days.windows(2).all(|pair| pair[0] <= pair[1]), "the oldest first: {days:?}");
 }

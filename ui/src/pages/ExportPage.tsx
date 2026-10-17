@@ -2,6 +2,7 @@ import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react
 import { categories as categoriesApi, type Category } from '../api/categories'
 import { dataExport, EXPORT_SECTIONS, report, type ExportSection, type Preview, type ReportOptions, type TextPreview } from '../api/dataExport'
 import { displayFormat } from '../api/displayFormat'
+import { debtsLabels } from '../api/debtsLabels'
 import { ApiError, errorText, inDesktopApp } from '../api/invoke'
 import { periodLabel, reportLabels } from '../api/reportLabels'
 import { useToday, type Today } from '../api/today'
@@ -40,6 +41,7 @@ import {
 
 const FORMAT_NAMES: Record<ExportFormat, string> = { json: 'JSON', csv: 'CSV', xlsx: 'Excel', pdf: 'PDF' }
 const KINDS = ['', 'EXPENSE', 'INCOME'] as const
+const SPLITS = ['', 'split', 'not_split'] as const
 const PAGE_SIZES = [
   { value: 'A4', label: 'A4' },
   { value: 'LETTER', label: 'Letter' },
@@ -80,6 +82,8 @@ function ExportForm({ today, settings, categories }: { today: Today; settings: M
   const [page, setPage] = useState<'A4' | 'LETTER'>('A4')
   const [includeTransactions, setIncludeTransactions] = useState(false)
   const [showDescriptions, setShowDescriptions] = useState(false)
+  const [includeDebts, setIncludeDebts] = useState(false)
+  const [includeDebtHistory, setIncludeDebtHistory] = useState(false)
   const [preview, setPreview] = useState<Preview | null>(null)
   const [fileText, setFileText] = useState<{ format: 'json' | 'csv'; data: TextPreview } | null>(null)
   const [fileView, setFileView] = useState<FileView | null>(null)
@@ -98,6 +102,9 @@ function ExportForm({ today, settings, categories }: { today: Today; settings: M
     categoryIds: selection.categoryIds,
     includeTransactions,
     showDescriptions: includeTransactions && showDescriptions,
+    includeDebts,
+    includeDebtHistory,
+    ...(includeDebts || includeDebtHistory ? { debtsLabels: debtsLabels() } : {}),
     page,
     format: look,
     labels: reportLabels(periodLabel(months.fromMonth, months.toMonth, language)),
@@ -260,6 +267,7 @@ function ExportForm({ today, settings, categories }: { today: Today; settings: M
     recurring: t('nav.recurring'),
     documents: t('nav.documents'),
     people: t('nav.debts'),
+    ledger: t('debts.historyTitle'),
     history: t('export.history'),
   }
   const togglePart = (section: ExportSection, on: boolean) => {
@@ -268,6 +276,7 @@ function ExportForm({ today, settings, categories }: { today: Today; settings: M
     else next.delete(section)
     update({ sections: EXPORT_SECTIONS.filter((each) => next.has(each)) })
   }
+  const splitLabel = (split: (typeof SPLITS)[number]) => (split === '' ? t('common.all') : split === 'split' ? t('export.splitYes') : t('export.splitNo'))
   const kindLabel = (kind: (typeof KINDS)[number]) => (kind === '' ? t('common.all') : kind === 'EXPENSE' ? t('budgets.expenses') : t('common.income'))
   // what the file is limited to, for the receipt: the categories by name when some are chosen, income or expenses, an amount range, a text
   const chosenNames = categories.filter((category) => choice.categoryIds.includes(category.id)).map((category) => category.name)
@@ -409,6 +418,12 @@ function ExportForm({ today, settings, categories }: { today: Today; settings: M
                 options={KINDS.map((kind) => ({ value: kind, label: kindLabel(kind) }))}
                 onChange={(value) => update({ kind: value as Choice['kind'] })}
               />
+              <Dropdown
+                label={t('export.split')}
+                value={choice.split}
+                options={SPLITS.map((split) => ({ value: split, label: splitLabel(split) }))}
+                onChange={(value) => update({ split: value as Choice['split'] })}
+              />
               <div className="export-amounts">
                 <label>
                   {t('export.amountFrom')}
@@ -461,6 +476,14 @@ function ExportForm({ today, settings, categories }: { today: Today; settings: M
                   onChange={(e) => setShowDescriptions(e.target.checked)}
                 />
               </label>
+              <label className="export-switch">
+                {t('export.includeDebts')}
+                <input type="checkbox" checked={includeDebts} onChange={(e) => setIncludeDebts(e.target.checked)} />
+              </label>
+              <label className="export-switch">
+                {t('export.includeDebtHistory')}
+                <input type="checkbox" checked={includeDebtHistory} onChange={(e) => setIncludeDebtHistory(e.target.checked)} />
+              </label>
             </div>
           )}
         </div>
@@ -485,6 +508,7 @@ function ExportForm({ today, settings, categories }: { today: Today; settings: M
                   <p className="hint">{t('export.noTransactions')}</p>
                 ) : null}
                 {format !== 'pdf' && choice.kind !== '' && <Row label={t('common.type')} value={kindLabel(choice.kind)} />}
+                {format !== 'pdf' && choice.split !== '' && <Row label={t('export.split')} value={splitLabel(choice.split)} />}
                 {format !== 'pdf' && amountRange !== '' && <Row label={t('tx.amount')} value={amountRange} />}
                 {format !== 'pdf' && searched !== '' && <Row label={t('common.search')} value={`\u201c${searched}\u201d`} />}
                 {(format === 'csv' || format === 'pdf' || hasPart('categories')) && (
@@ -498,6 +522,10 @@ function ExportForm({ today, settings, categories }: { today: Today; settings: M
                   </>
                 )}
                 {listed && hasPart('documents') && preview.documents > 0 && <Row label={t('nav.documents')} value={String(preview.documents)} />}
+                {listed && (hasPart('transactions') || hasPart('ledger')) && preview.splitBills > 0 && <Row label={t('export.sharedBills')} value={String(preview.splitBills)} />}
+                {listed && hasPart('people') && preview.people > 0 && <Row label={t('nav.debts')} value={String(preview.people)} />}
+                {listed && hasPart('people') && preview.duePayments > 0 && <Row label={t('debts.dueTitle')} value={String(preview.duePayments)} />}
+                {listed && hasPart('ledger') && preview.ledger > 0 && <Row label={t('debts.historyTitle')} value={String(preview.ledger)} />}
                 {(format === 'json' || format === 'csv' || (format === 'pdf' && includeTransactions)) && preview.history > 0 && <Row label={t('export.history')} value={String(preview.history)} />}
               </div>
             )

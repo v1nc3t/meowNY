@@ -18,8 +18,8 @@ use rust_xlsxwriter::{ExcelDateTime, Format, Workbook, Worksheet, XlsxError};
 
 use super::debts::{self, EntryRow, LineRow, PersonRow};
 use super::{
-    budget_rows, category_rows, currency, document_names_by_transaction, documents, join_names, monthly_sums, neutralise, parse,
-    recurring_rows, transactions, BudgetRow, CategoryRow, DocRow, Parsed, Section, Selection, Tx,
+    budget_rows, category_rows, currency, document_names_by_transaction, documents, due_payments, join_names, monthly_sums, neutralise, parse,
+    recurring_rows, today_of, transactions, BudgetRow, CategoryRow, DocRow, Parsed, Section, Selection, Tx,
 };
 use crate::display::{DateOrder, DateSeparator, DisplayFormat};
 use crate::recurring::Recurring;
@@ -77,6 +77,9 @@ struct Data {
     /// The names of the documents attached to each transaction.
     attached: HashMap<i64, Vec<String>>,
     people: Vec<PersonRow>,
+    /// The recurring payments that have come due, and the day they are counted from.
+    due: Vec<Recurring>,
+    today: String,
     ledger: Vec<EntryRow>,
     bill_lines: Vec<LineRow>,
     /// The parts of the workbook that were asked for; the others have no sheet. Null means all of them.
@@ -90,7 +93,7 @@ impl Data {
 }
 
 /// The parts that have sheets. The change history has none, so a workbook of nothing else would have no sheet at all.
-const SHEETED: [Section; 6] = [Section::Transactions, Section::Categories, Section::Budgets, Section::Recurring, Section::Documents, Section::People];
+const SHEETED: [Section; 7] = [Section::Transactions, Section::Categories, Section::Budgets, Section::Recurring, Section::Documents, Section::People, Section::Ledger];
 
 fn next_month(month: &str) -> Option<String> {
     let (year, number) = month.split_once('-')?;
@@ -125,16 +128,14 @@ fn summary(conn: &Connection, sel: &Parsed) -> Result<Vec<(String, i64, i64)>, A
 
 fn load(conn: &Connection, sel: &Parsed) -> Result<Data, AppError> {
     let everything = Parsed::default();
+    let today = today_of(conn, chrono::Utc::now())?;
     // only what is asked for is read
     let wants = |section: Section| sel.wants(section);
-    let (bill_lines, ledger, people) = if wants(Section::People) {
-        let bill_lines = debts::lines(conn, sel)?;
-        let ledger = debts::entries(conn, sel)?;
-        let people = debts::people(conn, sel, &bill_lines, &ledger)?;
-        (bill_lines, ledger, people)
-    } else {
-        (Vec::new(), Vec::new(), Vec::new())
-    };
+    let bill_lines = if wants(Section::Ledger) || wants(Section::People) { debts::lines(conn, sel)? } else { Vec::new() };
+    let ledger = if wants(Section::Ledger) { debts::entries(conn, sel)? } else { Vec::new() };
+    let people = if wants(Section::People) { debts::people(conn, sel, &bill_lines, &ledger)? } else { Vec::new() };
+    // the parts of the bills are a sheet of the history of debts, not of the friends
+    let bill_lines = if wants(Section::Ledger) { bill_lines } else { Vec::new() };
     let data = Data {
         currency: currency(conn)?,
         transactions: if wants(Section::Transactions) { transactions(conn, sel)? } else { Vec::new() },
@@ -146,6 +147,8 @@ fn load(conn: &Connection, sel: &Parsed) -> Result<Data, AppError> {
         documents: if wants(Section::Documents) { documents(conn, sel)? } else { Vec::new() },
         attached: document_names_by_transaction(conn)?,
         people,
+        due: if wants(Section::People) { due_payments(conn, sel, &today)? } else { Vec::new() },
+        today,
         ledger,
         bill_lines,
         sections: sel.sections.clone(),
@@ -371,6 +374,27 @@ fn write(data: &Data, codes: &Codes) -> Result<Vec<u8>, XlsxError> {
             }
         }
 
+    }
+
+    if data.wants(Section::People) {
+        // The recurring payments that have come due and are not paid or skipped: owed by now.
+        let s = sheet(&mut book, "Due payments", &[("Due", 12.0), ("Name", 26.0), ("Category", 22.0), ("Type", 10.0), (&amount, 14.0), ("Overdue", 9.0)])?;
+        for (i, r) in data.due.iter().enumerate() {
+            let row = i as u32 + 1;
+            let (category, kind) = data.names.get(&r.category_id).cloned().unwrap_or_default();
+            date(s, row, 0, &r.next_due_date, &day)?;
+            text(s, row, 1, &r.name)?;
+            text(s, row, 2, &category)?;
+            text(s, row, 3, &kind)?;
+            // a bill with no fixed amount leaves the cell empty
+            if let Some(amount) = r.amount.as_deref().and_then(|a| crate::money::parse_amount(a).ok()) {
+                money(s, row, 4, amount, &cash)?;
+            }
+            s.write_boolean(row, 5, r.next_due_date.as_str() < data.today.as_str())?;
+        }
+    }
+
+    if data.wants(Section::Ledger) {
         // Money lent, borrowed and paid back. Never income or expense.
         let s = sheet(&mut book, "Ledger", &[("Date", 12.0), ("Friend", 30.0), ("Kind", 16.0), (&amount, 14.0), ("Note", 44.0)])?;
         for (i, e) in data.ledger.iter().enumerate() {
@@ -617,11 +641,11 @@ mod tests {
     }
 
     #[test]
-    fn the_workbook_has_the_nine_sheets() {
+    fn the_workbook_has_the_ten_sheets() {
         let (conn, ..) = lived_in();
         let bytes = build(&conn, &Selection::default(), &DisplayFormat::default());
         assert!(bytes.starts_with(b"PK"), "an .xlsx file is a zip");
-        assert_eq!(open(&bytes).sheet_names(), ["Transactions", "Categories", "Budgets", "Recurring", "Monthly summary", "Documents", "People", "Ledger", "Split bills"]);
+        assert_eq!(open(&bytes).sheet_names(), ["Transactions", "Categories", "Budgets", "Recurring", "Monthly summary", "Documents", "People", "Due payments", "Ledger", "Split bills"]);
     }
 
     #[test]
@@ -716,7 +740,7 @@ mod tests {
         assert_eq!((&evil[3], &evil[5]), (&Cell::Text("'=cmd|' /C calc'!A0".into()), &Cell::Text("'+1+1".into())));
         // No cell is a formula: the file has no <f> elements at all.
         let sheets: Vec<String> = Book::open(&bytes).parts.keys().filter(|n| n.starts_with("xl/worksheets/sheet")).cloned().collect();
-        assert_eq!(sheets.len(), 9);
+        assert_eq!(sheets.len(), 10);
         for name in sheets {
             let part = Book::open(&bytes).part(&name);
             assert!(!part.contains("<f>") && !part.contains("<f "), "{name} has a formula");
@@ -974,7 +998,7 @@ mod tests {
 
     #[test]
     fn every_choice_gives_the_same_transactions_and_months_in_the_workbook_as_in_the_other_files() {
-        use super::super::filters_tests::{cents, expected, random_selections, world};
+        use super::super::filters_tests::{cents, expected, expected_due, expected_entries, expected_friends, random_selections, shared_among, world};
         let world = world();
         let mut checked = 0;
         for selection in random_selections(&world, 120, 0x0e1_ce15) {
@@ -993,8 +1017,20 @@ mod tests {
             assert_eq!(names.iter().any(|n| n == "Budgets"), wants(Section::Budgets), "{label}");
             assert_eq!(names.iter().any(|n| n == "Recurring"), wants(Section::Recurring), "{label}");
             assert_eq!(names.iter().any(|n| n == "Documents"), wants(Section::Documents), "{label}");
-            for sheet in ["People", "Ledger", "Split bills"] {
-                assert_eq!(names.iter().any(|n| n == sheet), wants(Section::People), "{sheet}, {label}");
+            assert_eq!(names.iter().any(|n| n == "People"), wants(Section::People), "People, {label}");
+            assert_eq!(names.iter().any(|n| n == "Due payments"), wants(Section::People), "Due payments, {label}");
+            if wants(Section::People) {
+                assert_eq!(rows(&mut book, "Due payments").len() - 1, expected_due(&world, &selection).len(), "due payments, {label}");
+            }
+            for sheet in ["Ledger", "Split bills"] {
+                assert_eq!(names.iter().any(|n| n == sheet), wants(Section::Ledger), "{sheet}, {label}");
+            }
+            if wants(Section::People) {
+                assert_eq!(rows(&mut book, "People").len() - 1, expected_friends(&world, &selection, &want), "friends, {label}");
+            }
+            if wants(Section::Ledger) {
+                assert_eq!(rows(&mut book, "Ledger").len() - 1, expected_entries(&world, &selection).len(), "ledger, {label}");
+                assert_eq!(rows(&mut book, "Split bills").len() - 1, shared_among(&world, &want), "split bills, {label}");
             }
             if wants(Section::Transactions) {
                 let sheet = rows(&mut book, "Transactions");

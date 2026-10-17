@@ -7,6 +7,9 @@ export function debtsLabels(): DebtsLabels {
   return {
     summaryTitle: capital(t('debts.fileSummaryTitle')),
     statementTitle: capital(t('debts.statement')),
+    historyTitle: capital(t('debts.historyTitle')),
+    dueTitle: capital(t('debts.dueTitle')),
+    dueTotal: capital(t('debts.dueTotal')),
     owedToYou: capital(t('debts.owedToYou')),
     youOwe: capital(t('debts.youOwe')),
     net: capital(t('debts.net')),

@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import type { DisplayFormat } from './displayFormat'
 import { call } from './invoke'
+import type { DebtsLabels } from './debts'
 import type { ReportLabels } from './reportLabels'
 
 /**
@@ -18,12 +19,19 @@ export type ExportSelection = {
   maxAmount?: string | null
   /** Only transactions whose name or description has this text in it. */
   text?: string | null
+  /** Only the bills that are shared with friends, or only those that are not. */
+  split?: 'split' | 'not_split' | null
+  /** With some limit chosen, also the ledger of money lent and borrowed (inside the dates). With none it is in anyway. */
+  includeDebts?: boolean
   /** The parts of a JSON or Excel file; null (or left out) means every part. */
   sections?: ExportSection[] | null
 }
 
-/** The parts of a JSON or Excel file that can be left out. The change history is only ever in a file with no limits. */
-export const EXPORT_SECTIONS = ['transactions', 'categories', 'budgets', 'recurring', 'documents', 'people', 'history'] as const
+/**
+ * The parts of a JSON or Excel file that can be left out: `people` are the friends and what they owe, `ledger` the history of debts (money
+ * lent, borrowed and paid back, and the parts of shared bills). The change history is only ever in a file with no limits.
+ */
+export const EXPORT_SECTIONS = ['transactions', 'categories', 'budgets', 'recurring', 'documents', 'people', 'ledger', 'history'] as const
 export type ExportSection = (typeof EXPORT_SECTIONS)[number]
 
 const date = z.string().regex(/^\d{4}-\d{2}-\d{2}$/)
@@ -45,6 +53,12 @@ export const Preview = z.object({
   documents: count,
   /** Entries of the change history; only a JSON file with no limits carries them. */
   history: count,
+  /** Friends, entries of the ledger and shared bills in the file. */
+  people: count,
+  ledger: count,
+  splitBills: count,
+  /** Recurring payments that have come due and are listed with the debts. */
+  duePayments: count,
 })
 export type Preview = z.infer<typeof Preview>
 
@@ -86,6 +100,12 @@ export type ReportOptions = {
   categoryIds?: string[] | null
   includeTransactions?: boolean
   showDescriptions?: boolean
+  /** Who owed what on the last day of the months. */
+  includeDebts?: boolean
+  /** Every line of the debts of every friend in the months. */
+  includeDebtHistory?: boolean
+  /** The words of the two parts above; needed when either is on. */
+  debtsLabels?: DebtsLabels
   page?: 'A4' | 'LETTER'
   format?: DisplayFormat
   labels: ReportLabels
