@@ -51,11 +51,12 @@ pub(crate) fn lines(conn: &Connection, sel: &Parsed) -> Result<Vec<LineRow>, App
         "SELECT l.transaction_id, t.payment_date, t.name, l.person_id, p.name, l.guest_name, l.amount_minor
          FROM transaction_split_lines l
          JOIN transactions t ON t.id = l.transaction_id
+         JOIN transaction_costs k ON k.transaction_id = t.id
          LEFT JOIN people p ON p.id = l.person_id
          WHERE {} ORDER BY t.payment_date, t.id, l.id",
         transaction_filter(sel)
     ))?;
-    let rows = statement.query_map(params![sel.from, sel.to], |r| {
+    let rows = statement.query_map(rusqlite::params_from_iter(sel.args()), |r| {
         Ok(LineRow {
             transaction_id: r.get(0)?,
             date: r.get(1)?,

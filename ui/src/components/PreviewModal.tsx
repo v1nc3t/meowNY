@@ -4,11 +4,11 @@ import { ApiError } from '../api/invoke'
 import { useT } from '../i18n/context'
 import type { MessageKey } from '../i18n/en'
 import { PreviewError } from '../lib/preview/errors'
-import { columnName, looksNumeric } from '../lib/preview/grid'
 import { shownOf, type Shown } from '../lib/preview/load'
 import { MAX_COLUMNS, MAX_ROWS } from '../lib/preview/xlsx'
 import type { DocBlock } from '../lib/preview/docx'
 import Modal from './Modal'
+import { Sheets, SheetGrid } from './SheetView'
 
 // pdf.js is large: it is read when a PDF is shown, and not before
 const PdfView = lazy(() => import('./PdfView'))
@@ -33,42 +33,6 @@ function Table({ rows }: { rows: string[][] }) {
               {Array.from({ length: columns }, (_, column) => (
                 <td key={column}>{row[column] ?? ''}</td>
               ))}
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  )
-}
-
-/** Rows of cells drawn as a sheet is: letters over the columns, numbers beside the rows, a line round every cell, numbers to the right. */
-function SheetGrid({ rows }: { rows: string[][] }) {
-  const columns = Math.max(rows.reduce((most, row) => Math.max(most, row.length), 0), 1)
-  return (
-    <div className="sheet-grid">
-      <table>
-        <thead>
-          <tr>
-            <th className="sheet-corner" />
-            {Array.from({ length: columns }, (_, column) => (
-              <th key={column} scope="col">
-                {columnName(column)}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((row, at) => (
-            <tr key={at}>
-              <th scope="row">{at + 1}</th>
-              {Array.from({ length: columns }, (_, column) => {
-                const text = row[column] ?? ''
-                return (
-                  <td key={column} className={looksNumeric(text) ? 'is-number' : undefined} title={text.length > 30 ? text : undefined}>
-                    {text}
-                  </td>
-                )
-              })}
             </tr>
           ))}
         </tbody>
@@ -109,28 +73,6 @@ function Paper({ blocks }: { blocks: DocBlock[] }) {
     <div className="paper-scroll">
       <article className="paper">{out}</article>
     </div>
-  )
-}
-
-/** An Excel file: the sheet as a grid, and its tabs under it, as the program shows them. */
-function Sheets({ sheets }: { sheets: { name: string; rows: string[][]; cut: boolean }[] }) {
-  const t = useT()
-  const [open, setOpen] = useState(0)
-  const sheet = sheets[Math.min(open, sheets.length - 1)]
-  if (!sheet) return null
-  return (
-    <>
-      <SheetGrid rows={sheet.rows} />
-      {sheets.length > 1 ? (
-        <div className="sheet-tabs" role="tablist" aria-label={t('docs.previewSheets')}>
-          {sheets.map((each, at) => (
-            <button key={at} type="button" role="tab" aria-selected={at === open} onClick={() => setOpen(at)}>
-              {each.name}
-            </button>
-          ))}
-        </div>
-      ) : null}
-    </>
   )
 }
 

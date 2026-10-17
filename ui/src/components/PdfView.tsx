@@ -4,12 +4,13 @@ import { useT } from '../i18n/context'
 
 /**
  * A PDF drawn one page at a time on a canvas, as large as fits its frame, with the buttons for the previous and the next page and the
- * page number under it. The wheel turns the pages too: one page for each turn of the wheel or flick of a trackpad. This is the only
+ * page number under it. The wheel turns the pages too (one page for each turn of the wheel or flick of a trackpad) unless `wheel` is
+ * off, as on a page that scrolls and must not lose its wheel. This is the only
  * part of the app that uses pdf.js, and it is loaded only when a PDF is shown, so the library (and its worker, a file of the app's
  * own) is not read at start. The file is read from memory: nothing is fetched, no script in the file runs (pdf.js has none turned
  * on here), and no eval, wasm or font file from outside is used (the content policy would refuse them).
  */
-export default function PdfView({ bytes, onFailed }: { bytes: Uint8Array; onFailed: () => void }) {
+export default function PdfView({ bytes, onFailed, wheel = true }: { bytes: Uint8Array; onFailed: () => void; wheel?: boolean }) {
   const t = useT()
   const host = useRef<HTMLDivElement>(null)
   const canvas = useRef<HTMLCanvasElement>(null)
@@ -59,7 +60,7 @@ export default function PdfView({ bytes, onFailed }: { bytes: Uint8Array; onFail
   // stop the frame from scrolling.
   useEffect(() => {
     const element = frame.current
-    if (!element) return
+    if (!element || !wheel) return
     function onWheel(event: WheelEvent) {
       event.preventDefault()
       if (event.timeStamp - lastWheel.current > 120) wheelLocked.current = false
@@ -71,7 +72,7 @@ export default function PdfView({ bytes, onFailed }: { bytes: Uint8Array; onFail
     }
     element.addEventListener('wheel', onWheel, { passive: false })
     return () => element.removeEventListener('wheel', onWheel)
-  }, [turn])
+  }, [turn, wheel])
 
   useEffect(() => {
     if (!pdf) return

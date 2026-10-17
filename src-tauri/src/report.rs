@@ -25,7 +25,7 @@ mod render;
 use std::collections::HashMap;
 
 use chrono::Duration;
-use rusqlite::{params, Connection};
+use rusqlite::Connection;
 use serde::Deserialize;
 
 use crate::budgets::{month_start, next_month};
@@ -217,7 +217,7 @@ fn load(conn: &Connection, options: &ReportOptions) -> Result<ReportData, AppErr
         from: Some(first_day.to_string()),
         to: Some(last_day.to_string()),
         category_ids: options.category_ids.clone(),
-        include_debts: false,
+        ..Selection::default()
     })?;
 
     let sums = export::monthly_sums(conn, &sel)?;
@@ -232,12 +232,12 @@ fn load(conn: &Connection, options: &ReportOptions) -> Result<ReportData, AppErr
     let expense: i64 = figures.iter().map(|m| m.expense).sum();
 
     let mut statement = conn.prepare(&format!(
-        "SELECT c.name, SUM(t.cost_minor) FROM transaction_costs t JOIN categories c ON c.id = t.category_id
+        "SELECT c.name, SUM(k.cost_minor) FROM transactions t JOIN transaction_costs k ON k.transaction_id = t.id JOIN categories c ON c.id = t.category_id
          WHERE {} AND c.type = 'EXPENSE' GROUP BY c.id ORDER BY 2 DESC, c.name",
         export::transaction_filter(&sel)
     ))?;
     let spending = statement
-        .query_map(params![sel.from, sel.to], |r| Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)?)))?
+        .query_map(rusqlite::params_from_iter(sel.args()), |r| Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)?)))?
         .collect::<Result<Vec<_>, _>>()?;
 
     // Budget against actual, month by month with the same code the budget screens use.

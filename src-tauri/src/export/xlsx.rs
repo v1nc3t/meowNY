@@ -19,7 +19,7 @@ use rust_xlsxwriter::{ExcelDateTime, Format, Workbook, Worksheet, XlsxError};
 use super::debts::{self, EntryRow, LineRow, PersonRow};
 use super::{
     budget_rows, category_rows, currency, document_names_by_transaction, documents, join_names, monthly_sums, neutralise, parse,
-    recurring_rows, transactions, BudgetRow, CategoryRow, DocRow, Parsed, Selection, Tx,
+    recurring_rows, transactions, BudgetRow, CategoryRow, DocRow, Parsed, Section, Selection, Tx,
 };
 use crate::display::{DateOrder, DateSeparator, DisplayFormat};
 use crate::recurring::Recurring;
@@ -79,7 +79,18 @@ struct Data {
     people: Vec<PersonRow>,
     ledger: Vec<EntryRow>,
     bill_lines: Vec<LineRow>,
+    /// The parts of the workbook that were asked for; the others have no sheet. Null means all of them.
+    sections: Option<Vec<Section>>,
 }
+
+impl Data {
+    fn wants(&self, section: Section) -> bool {
+        self.sections.as_ref().is_none_or(|list| list.contains(&section))
+    }
+}
+
+/// The parts that have sheets. The change history has none, so a workbook of nothing else would have no sheet at all.
+const SHEETED: [Section; 6] = [Section::Transactions, Section::Categories, Section::Budgets, Section::Recurring, Section::Documents, Section::People];
 
 fn next_month(month: &str) -> Option<String> {
     let (year, number) = month.split_once('-')?;
@@ -113,23 +124,31 @@ fn summary(conn: &Connection, sel: &Parsed) -> Result<Vec<(String, i64, i64)>, A
 }
 
 fn load(conn: &Connection, sel: &Parsed) -> Result<Data, AppError> {
-    let everything = Parsed { from: None, to: None, categories: None, debts: false };
-    let bill_lines = debts::lines(conn, sel)?;
-    let ledger = debts::entries(conn, sel)?;
-    let people = debts::people(conn, sel, &bill_lines, &ledger)?;
+    let everything = Parsed::default();
+    // only what is asked for is read
+    let wants = |section: Section| sel.wants(section);
+    let (bill_lines, ledger, people) = if wants(Section::People) {
+        let bill_lines = debts::lines(conn, sel)?;
+        let ledger = debts::entries(conn, sel)?;
+        let people = debts::people(conn, sel, &bill_lines, &ledger)?;
+        (bill_lines, ledger, people)
+    } else {
+        (Vec::new(), Vec::new(), Vec::new())
+    };
     let data = Data {
         currency: currency(conn)?,
-        transactions: transactions(conn, sel)?,
-        categories: category_rows(conn, sel)?,
-        budgets: budget_rows(conn, sel)?,
-        recurring: recurring_rows(conn, sel)?,
+        transactions: if wants(Section::Transactions) { transactions(conn, sel)? } else { Vec::new() },
+        categories: if wants(Section::Categories) { category_rows(conn, sel)? } else { Vec::new() },
+        budgets: if wants(Section::Budgets) { budget_rows(conn, sel)? } else { Vec::new() },
+        recurring: if wants(Section::Recurring) { recurring_rows(conn, sel)? } else { Vec::new() },
         names: category_rows(conn, &everything)?.into_iter().map(|c| (c.id, (c.name, c.kind))).collect(),
-        summary: summary(conn, sel)?,
-        documents: documents(conn, sel)?,
+        summary: if wants(Section::Transactions) { summary(conn, sel)? } else { Vec::new() },
+        documents: if wants(Section::Documents) { documents(conn, sel)? } else { Vec::new() },
         attached: document_names_by_transaction(conn)?,
         people,
         ledger,
         bill_lines,
+        sections: sel.sections.clone(),
     };
     if data.transactions.len() > MAX_ROWS || data.documents.len() > MAX_ROWS {
         return Err(AppError::InvalidInput);
@@ -140,6 +159,9 @@ fn load(conn: &Connection, sel: &Parsed) -> Result<Data, AppError> {
 /// The workbook as the bytes of an .xlsx file.
 pub fn workbook(conn: &Connection, selection: &Selection, format: &DisplayFormat) -> Result<Vec<u8>, AppError> {
     let sel = parse(selection)?;
+    if !SHEETED.iter().any(|section| sel.wants(*section)) {
+        return Err(AppError::InvalidInput);
+    }
     let codes = format.codes()?;
     // One read transaction, so the sheets agree with each other.
     let tx = conn.unchecked_transaction()?;
@@ -197,165 +219,179 @@ fn write(data: &Data, codes: &Codes) -> Result<Vec<u8>, XlsxError> {
     let share = format!("My share ({})", data.currency);
     let mut book = Workbook::new();
 
-    let s = sheet(
-        &mut book,
-        "Transactions",
-        &[
-            ("Date", 12.0), ("Type", 10.0), ("Category", 22.0), ("Name", 30.0), (&amount, 14.0), ("Description", 44.0), ("Documents", 40.0),
-            (&share, 16.0),
-        ],
-    )?;
-    for (i, t) in data.transactions.iter().enumerate() {
-        let row = i as u32 + 1;
-        date(s, row, 0, &t.date, &day)?;
-        text(s, row, 1, &t.kind)?;
-        text(s, row, 2, &t.category)?;
-        text(s, row, 3, &t.name)?;
-        money(s, row, 4, t.amount, &cash)?;
-        text(s, row, 5, t.description.as_deref().unwrap_or(""))?;
-        if let Some(names) = data.attached.get(&t.id) {
-            text(s, row, 6, &join_names(names))?;
-        }
-        money(s, row, 7, t.my_share, &cash)?;
-    }
-
-    let s = sheet(&mut book, "Categories", &[("Name", 26.0), ("Type", 10.0), ("Deleted", 10.0)])?;
-    for (i, c) in data.categories.iter().enumerate() {
-        let row = i as u32 + 1;
-        text(s, row, 0, &c.name)?;
-        text(s, row, 1, &c.kind)?;
-        s.write_boolean(row, 2, c.deleted)?;
-    }
-
-    let limit = format!("Limit ({})", data.currency);
-    let s = sheet(
-        &mut book,
-        "Budgets",
-        &[("From month", 12.0), ("Type", 10.0), ("Scope", 10.0), ("Category", 26.0), (&limit, 14.0)],
-    )?;
-    for (i, b) in data.budgets.iter().enumerate() {
-        let row = i as u32 + 1;
-        date(s, row, 0, &b.effective_from, &month)?;
-        text(s, row, 1, &b.kind)?;
-        text(s, row, 2, &b.scope)?;
-        if let Some((name, _)) = b.category_id.and_then(|id| data.names.get(&id)) {
-            text(s, row, 3, name)?;
-        }
-        // A budget removed from this month on has no limit: the cell stays empty.
-        if let Some(minor) = b.limit {
-            money(s, row, 4, minor, &cash)?;
+    if data.wants(Section::Transactions) {
+        let s = sheet(
+            &mut book,
+            "Transactions",
+            &[
+                ("Date", 12.0), ("Type", 10.0), ("Category", 22.0), ("Name", 30.0), (&amount, 14.0), ("Description", 44.0), ("Documents", 40.0),
+                (&share, 16.0),
+            ],
+        )?;
+        for (i, t) in data.transactions.iter().enumerate() {
+            let row = i as u32 + 1;
+            date(s, row, 0, &t.date, &day)?;
+            text(s, row, 1, &t.kind)?;
+            text(s, row, 2, &t.category)?;
+            text(s, row, 3, &t.name)?;
+            money(s, row, 4, t.amount, &cash)?;
+            text(s, row, 5, t.description.as_deref().unwrap_or(""))?;
+            if let Some(names) = data.attached.get(&t.id) {
+                text(s, row, 6, &join_names(names))?;
+            }
+            money(s, row, 7, t.my_share, &cash)?;
         }
     }
 
-    let s = sheet(
-        &mut book,
-        "Recurring",
-        &[
-            ("Name", 26.0), ("Category", 22.0), ("Type", 10.0), (&amount, 14.0), ("Every", 8.0), ("Unit", 8.0),
-            ("Start", 12.0), ("Next due", 12.0), ("End", 12.0), ("Active", 8.0), ("Description", 40.0),
-        ],
-    )?;
-    for (i, r) in data.recurring.iter().enumerate() {
-        let row = i as u32 + 1;
-        let (category, kind) = data.names.get(&r.category_id).cloned().unwrap_or_default();
-        text(s, row, 0, &r.name)?;
-        text(s, row, 1, &category)?;
-        text(s, row, 2, &kind)?;
-        // A bill with no fixed amount leaves the cell empty.
-        if let Some(amount) = r.amount.as_deref().and_then(|a| crate::money::parse_amount(a).ok()) {
-            money(s, row, 3, amount, &cash)?;
-        }
-        s.write_number(row, 4, r.interval_count)?;
-        text(s, row, 5, &format!("{:?}", r.interval_unit).to_uppercase())?;
-        date(s, row, 6, &r.start_date, &day)?;
-        date(s, row, 7, &r.next_due_date, &day)?;
-        if let Some(end) = &r.end_date {
-            date(s, row, 8, end, &day)?;
-        }
-        s.write_boolean(row, 9, r.is_active)?;
-        text(s, row, 10, r.description.as_deref().unwrap_or(""))?;
-    }
-
-    let (income, expense, savings) = (format!("Income ({})", data.currency), format!("Expense ({})", data.currency), format!("Savings ({})", data.currency));
-    let s = sheet(
-        &mut book,
-        "Monthly summary",
-        &[("Month", 12.0), (&income, 16.0), (&expense, 16.0), (&savings, 16.0), ("Savings rate", 13.0)],
-    )?;
-    for (i, (m, earned, spent)) in data.summary.iter().enumerate() {
-        let row = i as u32 + 1;
-        date(s, row, 0, m, &month)?;
-        money(s, row, 1, *earned, &cash)?;
-        money(s, row, 2, *spent, &cash)?;
-        money(s, row, 3, earned - spent, &cash)?;
-        // Savings as a share of income; no income that month, no rate.
-        if *earned > 0 {
-            s.write_number_with_format(row, 4, (earned - spent) as f64 / *earned as f64, &percent)?;
+    if data.wants(Section::Categories) {
+        let s = sheet(&mut book, "Categories", &[("Name", 26.0), ("Type", 10.0), ("Deleted", 10.0)])?;
+        for (i, c) in data.categories.iter().enumerate() {
+            let row = i as u32 + 1;
+            text(s, row, 0, &c.name)?;
+            text(s, row, 1, &c.kind)?;
+            s.write_boolean(row, 2, c.deleted)?;
         }
     }
 
-    // The documents: what each is and what it is attached to. The files are never in an export.
-    let s = sheet(
-        &mut book,
-        "Documents",
-        &[("Name", 36.0), ("Date", 12.0), ("Type", 22.0), ("Size (bytes)", 14.0), ("SHA-256", 66.0), ("Attached to", 60.0)],
-    )?;
-    for (i, d) in data.documents.iter().enumerate() {
-        let row = i as u32 + 1;
-        text(s, row, 0, &d.name)?;
-        date(s, row, 1, &d.date, &day)?;
-        text(s, row, 2, &d.media_type)?;
-        s.write_number(row, 3, d.size as f64)?;
-        text(s, row, 4, &d.sha256)?;
-        let attached: Vec<String> = d
-            .links
-            .iter()
-            .map(|l| match &l.date {
-                Some(day) => format!("{} ({day})", l.name),
-                None => format!("{} (recurring)", l.name),
-            })
-            .collect();
-        text(s, row, 5, &join_names(&attached))?;
-    }
-
-    // The friends, with what they owe you (negative: you owe them) in an export with no limit.
-    let owes = format!("Balance ({})", data.currency);
-    let s = sheet(&mut book, "People", &[("Name", 30.0), ("Archived", 10.0), (&owes, 16.0), ("Reminder", 12.0), ("Repeats every (days)", 20.0)])?;
-    for (i, p) in data.people.iter().enumerate() {
-        let row = i as u32 + 1;
-        text(s, row, 0, &p.name)?;
-        s.write_boolean(row, 1, p.archived)?;
-        if let Some(balance) = p.balance {
-            money(s, row, 2, balance, &cash)?;
-        }
-        if let Some(on) = &p.remind_on {
-            date(s, row, 3, on, &day)?;
-        }
-        if let Some(every) = p.remind_every_days {
-            s.write_number(row, 4, every)?;
+    if data.wants(Section::Budgets) {
+        let limit = format!("Limit ({})", data.currency);
+        let s = sheet(
+            &mut book,
+            "Budgets",
+            &[("From month", 12.0), ("Type", 10.0), ("Scope", 10.0), ("Category", 26.0), (&limit, 14.0)],
+        )?;
+        for (i, b) in data.budgets.iter().enumerate() {
+            let row = i as u32 + 1;
+            date(s, row, 0, &b.effective_from, &month)?;
+            text(s, row, 1, &b.kind)?;
+            text(s, row, 2, &b.scope)?;
+            if let Some((name, _)) = b.category_id.and_then(|id| data.names.get(&id)) {
+                text(s, row, 3, name)?;
+            }
+            // A budget removed from this month on has no limit: the cell stays empty.
+            if let Some(minor) = b.limit {
+                money(s, row, 4, minor, &cash)?;
+            }
         }
     }
 
-    // Money lent, borrowed and paid back. Never income or expense.
-    let s = sheet(&mut book, "Ledger", &[("Date", 12.0), ("Friend", 30.0), ("Kind", 16.0), (&amount, 14.0), ("Note", 44.0)])?;
-    for (i, e) in data.ledger.iter().enumerate() {
-        let row = i as u32 + 1;
-        date(s, row, 0, &e.date, &day)?;
-        text(s, row, 1, &e.person)?;
-        text(s, row, 2, &e.kind)?;
-        money(s, row, 3, e.amount, &cash)?;
-        text(s, row, 4, e.note.as_deref().unwrap_or(""))?;
+    if data.wants(Section::Recurring) {
+        let s = sheet(
+            &mut book,
+            "Recurring",
+            &[
+                ("Name", 26.0), ("Category", 22.0), ("Type", 10.0), (&amount, 14.0), ("Every", 8.0), ("Unit", 8.0),
+                ("Start", 12.0), ("Next due", 12.0), ("End", 12.0), ("Active", 8.0), ("Description", 40.0),
+            ],
+        )?;
+        for (i, r) in data.recurring.iter().enumerate() {
+            let row = i as u32 + 1;
+            let (category, kind) = data.names.get(&r.category_id).cloned().unwrap_or_default();
+            text(s, row, 0, &r.name)?;
+            text(s, row, 1, &category)?;
+            text(s, row, 2, &kind)?;
+            // A bill with no fixed amount leaves the cell empty.
+            if let Some(amount) = r.amount.as_deref().and_then(|a| crate::money::parse_amount(a).ok()) {
+                money(s, row, 3, amount, &cash)?;
+            }
+            s.write_number(row, 4, r.interval_count)?;
+            text(s, row, 5, &format!("{:?}", r.interval_unit).to_uppercase())?;
+            date(s, row, 6, &r.start_date, &day)?;
+            date(s, row, 7, &r.next_due_date, &day)?;
+            if let Some(end) = &r.end_date {
+                date(s, row, 8, end, &day)?;
+            }
+            s.write_boolean(row, 9, r.is_active)?;
+            text(s, row, 10, r.description.as_deref().unwrap_or(""))?;
+        }
     }
 
-    // The parts of the bills that are shared: who has which part of which bill.
-    let s = sheet(&mut book, "Split bills", &[("Date", 12.0), ("Bill", 30.0), ("Who", 30.0), ("Guest", 8.0), (&amount, 14.0)])?;
-    for (i, l) in data.bill_lines.iter().enumerate() {
-        let row = i as u32 + 1;
-        date(s, row, 0, &l.date, &day)?;
-        text(s, row, 1, &l.bill)?;
-        text(s, row, 2, l.person.as_deref().or(l.guest.as_deref()).unwrap_or(""))?;
-        s.write_boolean(row, 3, l.guest.is_some())?;
-        money(s, row, 4, l.amount, &cash)?;
+    if data.wants(Section::Transactions) {
+        let (income, expense, savings) = (format!("Income ({})", data.currency), format!("Expense ({})", data.currency), format!("Savings ({})", data.currency));
+        let s = sheet(
+            &mut book,
+            "Monthly summary",
+            &[("Month", 12.0), (&income, 16.0), (&expense, 16.0), (&savings, 16.0), ("Savings rate", 13.0)],
+        )?;
+        for (i, (m, earned, spent)) in data.summary.iter().enumerate() {
+            let row = i as u32 + 1;
+            date(s, row, 0, m, &month)?;
+            money(s, row, 1, *earned, &cash)?;
+            money(s, row, 2, *spent, &cash)?;
+            money(s, row, 3, earned - spent, &cash)?;
+            // Savings as a share of income; no income that month, no rate.
+            if *earned > 0 {
+                s.write_number_with_format(row, 4, (earned - spent) as f64 / *earned as f64, &percent)?;
+            }
+        }
+    }
+
+    if data.wants(Section::Documents) {
+        // The documents: what each is and what it is attached to. The files are never in an export.
+        let s = sheet(
+            &mut book,
+            "Documents",
+            &[("Name", 36.0), ("Date", 12.0), ("Type", 22.0), ("Size (bytes)", 14.0), ("SHA-256", 66.0), ("Attached to", 60.0)],
+        )?;
+        for (i, d) in data.documents.iter().enumerate() {
+            let row = i as u32 + 1;
+            text(s, row, 0, &d.name)?;
+            date(s, row, 1, &d.date, &day)?;
+            text(s, row, 2, &d.media_type)?;
+            s.write_number(row, 3, d.size as f64)?;
+            text(s, row, 4, &d.sha256)?;
+            let attached: Vec<String> = d
+                .links
+                .iter()
+                .map(|l| match &l.date {
+                    Some(day) => format!("{} ({day})", l.name),
+                    None => format!("{} (recurring)", l.name),
+                })
+                .collect();
+            text(s, row, 5, &join_names(&attached))?;
+        }
+    }
+
+    if data.wants(Section::People) {
+        // The friends, with what they owe you (negative: you owe them) in an export with no limit.
+        let owes = format!("Balance ({})", data.currency);
+        let s = sheet(&mut book, "People", &[("Name", 30.0), ("Archived", 10.0), (&owes, 16.0), ("Reminder", 12.0), ("Repeats every (days)", 20.0)])?;
+        for (i, p) in data.people.iter().enumerate() {
+            let row = i as u32 + 1;
+            text(s, row, 0, &p.name)?;
+            s.write_boolean(row, 1, p.archived)?;
+            if let Some(balance) = p.balance {
+                money(s, row, 2, balance, &cash)?;
+            }
+            if let Some(on) = &p.remind_on {
+                date(s, row, 3, on, &day)?;
+            }
+            if let Some(every) = p.remind_every_days {
+                s.write_number(row, 4, every)?;
+            }
+        }
+
+        // Money lent, borrowed and paid back. Never income or expense.
+        let s = sheet(&mut book, "Ledger", &[("Date", 12.0), ("Friend", 30.0), ("Kind", 16.0), (&amount, 14.0), ("Note", 44.0)])?;
+        for (i, e) in data.ledger.iter().enumerate() {
+            let row = i as u32 + 1;
+            date(s, row, 0, &e.date, &day)?;
+            text(s, row, 1, &e.person)?;
+            text(s, row, 2, &e.kind)?;
+            money(s, row, 3, e.amount, &cash)?;
+            text(s, row, 4, e.note.as_deref().unwrap_or(""))?;
+        }
+
+        // The parts of the bills that are shared: who has which part of which bill.
+        let s = sheet(&mut book, "Split bills", &[("Date", 12.0), ("Bill", 30.0), ("Who", 30.0), ("Guest", 8.0), (&amount, 14.0)])?;
+        for (i, l) in data.bill_lines.iter().enumerate() {
+            let row = i as u32 + 1;
+            date(s, row, 0, &l.date, &day)?;
+            text(s, row, 1, &l.bill)?;
+            text(s, row, 2, l.person.as_deref().or(l.guest.as_deref()).unwrap_or(""))?;
+            s.write_boolean(row, 3, l.guest.is_some())?;
+            money(s, row, 4, l.amount, &cash)?;
+        }
     }
 
     book.save_to_buffer()
@@ -934,5 +970,52 @@ mod tests {
         let transactions = rows(&mut book, "Transactions");
         let rent = transactions.iter().find(|r| r[3] == Cell::Text("Rent".into()) && matches!(&r[0], Cell::Date(d) if *d == serial(2026, 2, 1))).unwrap();
         assert_eq!(rent[6], Cell::Text("'=cmd|' /C calc'!A0".into()));
+    }
+
+    #[test]
+    fn every_choice_gives_the_same_transactions_and_months_in_the_workbook_as_in_the_other_files() {
+        use super::super::filters_tests::{cents, expected, random_selections, world};
+        let world = world();
+        let mut checked = 0;
+        for selection in random_selections(&world, 120, 0x0e1_ce15) {
+            let wants = |section| selection.sections.as_ref().is_none_or(|list| list.contains(&section));
+            if !SHEETED.iter().any(|section| wants(*section)) {
+                assert_eq!(workbook(&world.conn, &selection, &DisplayFormat::default()), Err(AppError::InvalidInput));
+                continue;
+            }
+            let mut book = open(&build(&world.conn, &selection, &DisplayFormat::default()));
+            let label = format!("{selection:?}");
+            let want = expected(&world, &selection);
+            let names = book.sheet_names();
+            assert_eq!(names.iter().any(|n| n == "Transactions"), wants(Section::Transactions), "{label}");
+            assert_eq!(names.iter().any(|n| n == "Monthly summary"), wants(Section::Transactions), "{label}");
+            assert_eq!(names.iter().any(|n| n == "Categories"), wants(Section::Categories), "{label}");
+            assert_eq!(names.iter().any(|n| n == "Budgets"), wants(Section::Budgets), "{label}");
+            assert_eq!(names.iter().any(|n| n == "Recurring"), wants(Section::Recurring), "{label}");
+            assert_eq!(names.iter().any(|n| n == "Documents"), wants(Section::Documents), "{label}");
+            for sheet in ["People", "Ledger", "Split bills"] {
+                assert_eq!(names.iter().any(|n| n == sheet), wants(Section::People), "{sheet}, {label}");
+            }
+            if wants(Section::Transactions) {
+                let sheet = rows(&mut book, "Transactions");
+                assert_eq!(sheet.len() - 1, want.len(), "{label}");
+                for (row, &at) in sheet[1..].iter().zip(&want) {
+                    assert_eq!(row[3], Cell::Text(world.rows[at].name.clone()), "{label}");
+                    let Cell::Number(paid) = row[4] else { panic!("{:?}", row[4]) };
+                    let Cell::Number(share) = row[7] else { panic!("{:?}", row[7]) };
+                    assert_eq!(((paid * 100.0).round() as i64, (share * 100.0).round() as i64), (world.rows[at].minor, world.rows[at].cost), "{label}");
+                }
+                // the months add up to what the rows cost
+                let (mut income, mut expense) = (0, 0);
+                for &at in &want {
+                    if world.categories.iter().find(|c| c.0 == world.rows[at].category).unwrap().1 { income += world.rows[at].cost } else { expense += world.rows[at].cost }
+                }
+                let summary = rows(&mut book, "Monthly summary");
+                let total = |column: usize| summary[1..].iter().map(|r| if let Cell::Number(n) = r[column] { (n * 100.0).round() as i64 } else { 0 }).sum::<i64>();
+                assert_eq!((cents(total(1)), cents(total(2))), (cents(income), cents(expense)), "{label}");
+            }
+            checked += 1;
+        }
+        assert!(checked > 80, "most of the choices have a workbook to look at: {checked}");
     }
 }

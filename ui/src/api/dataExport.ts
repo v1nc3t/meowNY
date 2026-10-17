@@ -7,7 +7,24 @@ import type { ReportLabels } from './reportLabels'
  * What an export covers. Dates are inclusive "YYYY-MM-DD" and narrow the transactions; `categoryIds`
  * null means every category. With categories chosen, the file leaves out everything else.
  */
-export type ExportSelection = { from?: string | null; to?: string | null; categoryIds?: string[] | null }
+export type ExportSelection = {
+  from?: string | null
+  to?: string | null
+  categoryIds?: string[] | null
+  /** Only income or only expenses. */
+  kind?: 'INCOME' | 'EXPENSE' | null
+  /** What a transaction cost you is at least this and at most that: decimal strings with two decimals ("12.50"). */
+  minAmount?: string | null
+  maxAmount?: string | null
+  /** Only transactions whose name or description has this text in it. */
+  text?: string | null
+  /** The parts of a JSON or Excel file; null (or left out) means every part. */
+  sections?: ExportSection[] | null
+}
+
+/** The parts of a JSON or Excel file that can be left out. The change history is only ever in a file with no limits. */
+export const EXPORT_SECTIONS = ['transactions', 'categories', 'budgets', 'recurring', 'documents', 'people', 'history'] as const
+export type ExportSection = (typeof EXPORT_SECTIONS)[number]
 
 const date = z.string().regex(/^\d{4}-\d{2}-\d{2}$/)
 const amount = z.string().regex(/^\d+\.\d{2}$/)
@@ -31,9 +48,26 @@ export const Preview = z.object({
 })
 export type Preview = z.infer<typeof Preview>
 
+/** The start of the file a JSON or CSV export would write, as text: at most 64 KiB, cut after a whole line. Nothing is written. */
+export const TextPreview = z.object({
+  text: z.string(),
+  /** How long the whole file would be. */
+  bytes: z.number().int().nonnegative(),
+  cut: z.boolean(),
+})
+export type TextPreview = z.infer<typeof TextPreview>
+
+/** A whole Excel or PDF file for the preview, as base64url text: it is not saved anywhere. */
+export const PreviewFile = z.object({ data: z.string(), bytes: z.number().int().nonnegative() })
+export type PreviewFile = z.infer<typeof PreviewFile>
+
 /** Each opens a save dialog and writes a plain, unencrypted file. False when the person cancels. */
 export const dataExport = {
   preview: (selection: ExportSelection = {}) => call('export_preview', Preview, { selection }),
+  /** The Excel file this selection would be, to be read by the screen; at most 16 MiB (`invalid_input` for more). */
+  previewWorkbook: (selection: ExportSelection, format?: DisplayFormat) => call('export_preview_workbook', PreviewFile, { selection, format: format ?? null }),
+  /** What the file of a JSON or CSV export would say, for the preview on the screen. */
+  previewText: (selection: ExportSelection, format: 'json' | 'csv') => call('export_preview_text', TextPreview, { selection, format }),
   json: (selection: ExportSelection = {}) => call('export_json', z.boolean(), { selection }),
   csv: (selection: ExportSelection = {}) => call('export_csv', z.boolean(), { selection }),
   /** `format` sets how dates and money look in the sheets; see `displayFormat`. Leave it out for ISO dates. */
@@ -59,4 +93,6 @@ export type ReportOptions = {
 
 export const report = {
   pdf: (options: ReportOptions) => call('export_pdf', z.boolean(), { options }),
+  /** The PDF these options would be, to be drawn by the screen; at most 16 MiB (`invalid_input` for more). */
+  previewPdf: (options: ReportOptions) => call('export_preview_pdf', PreviewFile, { options }),
 }

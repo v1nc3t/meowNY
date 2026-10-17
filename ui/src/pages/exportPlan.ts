@@ -1,4 +1,4 @@
-import type { ExportSelection } from '../api/dataExport'
+import { EXPORT_SECTIONS, type ExportSection, type ExportSelection } from '../api/dataExport'
 import { apiBound, shiftBound, thisPeriod, type RangeMode } from '../lib/range'
 
 export type ExportFormat = 'json' | 'csv' | 'xlsx' | 'pdf'
@@ -20,15 +20,66 @@ export type Choice = {
   /** False means only `categoryIds`. */
   allCategories: boolean
   categoryIds: string[]
+  /** Income or expenses only; empty means both. */
+  kind: '' | 'INCOME' | 'EXPENSE'
+  /** What a transaction cost you, at least and at most, as typed. Empty means no bound. */
+  minAmount: string
+  maxAmount: string
+  /** Only transactions with this text in the name or the description, as typed. */
+  text: string
+  /** The parts of a JSON or Excel file that go in. */
+  sections: ExportSection[]
 }
+
+/** The longest text a transaction may be looked for by (the app refuses more). */
+export const TEXT_MAX_CHARS = 100
+
+/** The parts that have a sheet in an Excel file: everything but the change history. */
+const SHEETED: readonly ExportSection[] = EXPORT_SECTIONS.filter((section) => section !== 'history')
 
 export type Span = { firstDate: string | null; lastDate: string | null }
 
-export type Problem = 'dates' | 'categories' | 'months'
+export type Problem = 'dates' | 'categories' | 'months' | 'amount' | 'sections'
 
 /** Every date and every category, and a range of the current month ready for when the person limits the dates. */
 export function defaultChoice(today: { date: string; month: string }): Choice {
-  return { limitDates: false, mode: 'month', from: thisPeriod('month', today), to: thisPeriod('month', today), allCategories: true, categoryIds: [] }
+  return {
+    limitDates: false,
+    mode: 'month',
+    from: thisPeriod('month', today),
+    to: thisPeriod('month', today),
+    allCategories: true,
+    categoryIds: [],
+    kind: '',
+    minAmount: '',
+    maxAmount: '',
+    text: '',
+    sections: [...EXPORT_SECTIONS],
+  }
+}
+
+/**
+ * An amount as the app takes it: "12", "12.5" and "12,50" are "12.00", "12.50" and "12.50". Empty is empty (no bound); anything else, or
+ * more than ten whole digits, is null.
+ */
+export function amountText(text: string): string | null {
+  const typed = text.trim()
+  if (typed === '') return ''
+  const match = /^(\d{1,10})(?:[.,](\d{1,2}))?$/.exec(typed)
+  if (!match) return null
+  return `${(match[1] ?? '0').replace(/^0+(?=\d)/, '')}.${(match[2] ?? '').padEnd(2, '0')}`
+}
+
+/** Whether anything but the parts of the file is limited: dates, categories, income or expenses, an amount or a text. */
+export function isLimited(choice: Choice): boolean {
+  return choice.limitDates || !choice.allCategories || choice.kind !== '' || choice.minAmount.trim() !== '' || choice.maxAmount.trim() !== '' || choice.text.trim() !== ''
+}
+
+/** The parts that go into a file of this format: for JSON all but a history that a limit would leave out, for Excel those with a sheet. */
+export function sectionsFor(format: ExportFormat, choice: Choice): ExportSection[] {
+  if (format === 'json') return choice.sections.filter((section) => section !== 'history' || !isLimited(choice))
+  if (format === 'xlsx') return choice.sections.filter((section) => SHEETED.includes(section))
+  return choice.sections
 }
 
 /**
@@ -85,13 +136,32 @@ export function reportMonths(choice: Choice, span: Span, thisMonth: string): { f
   return { fromMonth: span.firstDate?.slice(0, 7) ?? thisMonth, toMonth: span.lastDate?.slice(0, 7) ?? thisMonth }
 }
 
-/** What the file covers, as the app takes it. A PDF only ever covers whole months, so its dates are widened to them if need be. */
+/**
+ * What the file covers, as the app takes it. A PDF only ever covers whole months, so its dates are widened to them if need be, and it has
+ * no other choice than the dates and the categories. A CSV is the transactions alone, so it has no parts to choose. Choices left as they
+ * are come to nothing and are not sent.
+ */
 export function selectionFor(format: ExportFormat, choice: Choice): ExportSelection {
   const categoryIds = choice.allCategories ? null : choice.categoryIds
-  if (!choice.limitDates) return { from: null, to: null, categoryIds }
-  const { from, to } = bounds(choice)
-  if (format === 'pdf') return { from: from ? `${from.slice(0, 7)}-01` : from, to: to ? monthEnd(to.slice(0, 7)) : to, categoryIds }
-  return { from, to, categoryIds }
+  let range: { from: string | null; to: string | null } = { from: null, to: null }
+  if (choice.limitDates) {
+    const { from, to } = bounds(choice)
+    range = format === 'pdf' ? { from: from ? `${from.slice(0, 7)}-01` : from, to: to ? monthEnd(to.slice(0, 7)) : to } : { from, to }
+  }
+  const selection: ExportSelection = { ...range, categoryIds }
+  if (format === 'pdf') return selection
+  if (choice.kind) selection.kind = choice.kind
+  const least = amountText(choice.minAmount)
+  const most = amountText(choice.maxAmount)
+  if (least) selection.minAmount = least
+  if (most) selection.maxAmount = most
+  const text = choice.text.trim()
+  if (text) selection.text = text
+  if (format === 'csv') return selection
+  const sections = sectionsFor(format, choice)
+  const every = format === 'json' ? EXPORT_SECTIONS.filter((section) => section !== 'history' || !isLimited(choice)) : SHEETED
+  if (sections.length !== every.length) selection.sections = sections
+  return selection
 }
 
 /** The first thing wrong with the choice, or null when it can be exported. */
@@ -102,5 +172,13 @@ export function problemWith(format: ExportFormat, choice: Choice, months: number
   }
   if (!choice.allCategories && choice.categoryIds.length === 0) return 'categories'
   if (format === 'pdf' && months > MAX_REPORT_MONTHS) return 'months'
+  if (format !== 'pdf') {
+    const least = amountText(choice.minAmount)
+    const most = amountText(choice.maxAmount)
+    if (least === null || most === null) return 'amount'
+    // the amounts are compared as cents, which two decimals make whole numbers
+    if (least !== '' && most !== '' && Number(least.replace('.', '')) > Number(most.replace('.', ''))) return 'amount'
+  }
+  if ((format === 'json' || format === 'xlsx') && sectionsFor(format, choice).length === 0) return 'sections'
   return null
 }

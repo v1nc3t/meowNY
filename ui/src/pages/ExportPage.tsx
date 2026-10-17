@@ -1,15 +1,19 @@
-import { useEffect, useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react'
 import { categories as categoriesApi, type Category } from '../api/categories'
-import { dataExport, report, type Preview } from '../api/dataExport'
+import { dataExport, EXPORT_SECTIONS, report, type ExportSection, type Preview, type ReportOptions, type TextPreview } from '../api/dataExport'
 import { displayFormat } from '../api/displayFormat'
-import { errorText, inDesktopApp } from '../api/invoke'
+import { ApiError, errorText, inDesktopApp } from '../api/invoke'
 import { periodLabel, reportLabels } from '../api/reportLabels'
 import { useToday, type Today } from '../api/today'
 import DatePicker from '../components/DatePicker'
 import Dropdown from '../components/Dropdown'
 import Pick, { PickOption } from '../components/Pick'
+import { Sheets } from '../components/SheetView'
 import { useI18n } from '../i18n/context'
+import { formatSize } from '../lib/bytes'
+import { tokenizeJson } from '../lib/jsonView'
+import { fromBase64Url } from '../lib/preview/load'
+import { MAX_COLUMNS, MAX_ROWS, readXlsx, type XlsxContent } from '../lib/preview/xlsx'
 import { formatDate, formatMoney } from '../lib/money'
 import { thisPeriod, type RangeMode } from '../lib/range'
 import { useDebounced } from '../hooks/useDebounced'
@@ -18,23 +22,34 @@ import { useNotice } from '../hooks/useNotice'
 import {
   bounds,
   defaultChoice,
+  amountText,
   fitFormat,
   FORMATS,
+  isLimited,
   modesFor,
   monthsBetween,
   problemWith,
   reportMonths,
+  sectionsFor,
   selectionFor,
+  TEXT_MAX_CHARS,
   withMode,
   type Choice,
   type ExportFormat,
 } from './exportPlan'
 
 const FORMAT_NAMES: Record<ExportFormat, string> = { json: 'JSON', csv: 'CSV', xlsx: 'Excel', pdf: 'PDF' }
+const KINDS = ['', 'EXPENSE', 'INCOME'] as const
 const PAGE_SIZES = [
   { value: 'A4', label: 'A4' },
   { value: 'LETTER', label: 'Letter' },
 ]
+
+// pdf.js is large: it is read when a report is looked at, and not before
+const PdfView = lazy(() => import('../components/PdfView'))
+
+/** An Excel file or a PDF report as the preview holds it: read, and how long the whole file is. */
+type FileView = { format: 'xlsx'; content: XlsxContent; bytes: number } | { format: 'pdf'; data: Uint8Array; bytes: number }
 
 export default function ExportPage() {
   const { t } = useI18n()
@@ -66,12 +81,31 @@ function ExportForm({ today, settings, categories }: { today: Today; settings: M
   const [includeTransactions, setIncludeTransactions] = useState(false)
   const [showDescriptions, setShowDescriptions] = useState(false)
   const [preview, setPreview] = useState<Preview | null>(null)
+  const [fileText, setFileText] = useState<{ format: 'json' | 'csv'; data: TextPreview } | null>(null)
+  const [fileView, setFileView] = useState<FileView | null>(null)
+  // why an Excel file or a report cannot be looked at: it is too big for that, or it could not be read
+  const [viewProblem, setViewProblem] = useState<'' | 'big' | 'failed'>('')
+  const look = useMemo(() => displayFormat(settings.locale, settings.currency), [settings.locale, settings.currency])
 
   const selection = useMemo(() => selectionFor(format, choice), [format, choice])
   const settled = useDebounced(selection, 250)
   const months = reportMonths(choice, preview ?? { firstDate: null, lastDate: null }, today.month)
   const problem = problemWith(format, choice, monthsBetween(months.fromMonth, months.toMonth))
   const datesOk = problem !== 'dates'
+  // the report these choices make, for the preview and for the file
+  const reportOptions: ReportOptions = {
+    ...months,
+    categoryIds: selection.categoryIds,
+    includeTransactions,
+    showDescriptions: includeTransactions && showDescriptions,
+    page,
+    format: look,
+    labels: reportLabels(periodLabel(months.fromMonth, months.toMonth, language)),
+  }
+  const reportKey = JSON.stringify(reportOptions)
+  const settledReport = useDebounced(reportKey, 400)
+  const hasPreview = preview !== null
+  const viewFailed = useCallback(() => setViewProblem('failed'), [])
 
   // What the file would contain follows the choice, a moment after it stops changing.
   useEffect(() => {
@@ -90,6 +124,66 @@ function ExportForm({ today, settings, categories }: { today: Today; settings: M
     }
   }, [settled, datesOk, setMessage])
 
+  // A JSON or CSV file can be looked at before it is saved: the start of the text it would hold, following the choice.
+  const textFormat = format === 'json' || format === 'csv' ? format : null
+  useEffect(() => {
+    if (!textFormat || !datesOk || problem !== null) return
+    let cancelled = false
+    dataExport.previewText(settled, textFormat).then(
+      (data) => {
+        if (!cancelled) setFileText({ format: textFormat, data })
+      },
+      (e) => {
+        if (!cancelled) setMessage(errorText(e))
+      },
+    )
+    return () => {
+      cancelled = true
+    }
+  }, [settled, textFormat, datesOk, problem, setMessage])
+
+  // An Excel file is made as the saved one would be, and read by the screen.
+  useEffect(() => {
+    if (format !== 'xlsx' || !datesOk || problem !== null) return
+    let cancelled = false
+    dataExport
+      .previewWorkbook(settled, look)
+      .then(async (file) => ({ file, content: await readXlsx(fromBase64Url(file.data)) }))
+      .then(
+        ({ file, content }) => {
+          if (cancelled) return
+          setFileView({ format: 'xlsx', content, bytes: file.bytes })
+          setViewProblem('')
+        },
+        (e) => {
+          if (!cancelled) setViewProblem(e instanceof ApiError && e.code === 'invalid_input' ? 'big' : 'failed')
+        },
+      )
+    return () => {
+      cancelled = true
+    }
+  }, [settled, look, format, datesOk, problem])
+
+  // A report is made as the saved one would be, a little after the choices stop changing, and drawn by the screen. With every date it
+  // waits for the span of the data, which tells its months.
+  useEffect(() => {
+    if (format !== 'pdf' || problem !== null || (!choice.limitDates && !hasPreview)) return
+    let cancelled = false
+    report.previewPdf(JSON.parse(settledReport) as ReportOptions).then(
+      (file) => {
+        if (cancelled) return
+        setFileView({ format: 'pdf', data: fromBase64Url(file.data), bytes: file.bytes })
+        setViewProblem('')
+      },
+      (e) => {
+        if (!cancelled) setViewProblem(e instanceof ApiError && e.code === 'invalid_input' ? 'big' : 'failed')
+      },
+    )
+    return () => {
+      cancelled = true
+    }
+  }, [settledReport, format, problem, choice.limitDates, hasPreview])
+
   const update = (patch: Partial<Choice>) => setChoice((current) => ({ ...current, ...patch }))
   // A report is made of whole months, so choosing it turns a range by day into the months it touches.
   const chooseFormat = (next: ExportFormat) => {
@@ -104,7 +198,6 @@ function ExportForm({ today, settings, categories }: { today: Today; settings: M
   async function run() {
     setBusy(true)
     try {
-      const look = displayFormat(settings.locale, settings.currency)
       const saved =
         format === 'json'
           ? await dataExport.json(selection)
@@ -112,15 +205,7 @@ function ExportForm({ today, settings, categories }: { today: Today; settings: M
             ? await dataExport.csv(selection)
             : format === 'xlsx'
               ? await dataExport.xlsx(selection, look)
-              : await report.pdf({
-                  ...months,
-                  categoryIds: selection.categoryIds,
-                  includeTransactions,
-                  showDescriptions: includeTransactions && showDescriptions,
-                  page,
-                  format: look,
-                  labels: reportLabels(periodLabel(months.fromMonth, months.toMonth, language)),
-                })
+              : await report.pdf(reportOptions)
       if (saved) setMessage(t('export.saved'))
     } catch (error) {
       setMessage(errorText(error))
@@ -128,7 +213,18 @@ function ExportForm({ today, settings, categories }: { today: Today; settings: M
     setBusy(false)
   }
 
-  const problemText = problem === 'dates' ? t('export.errorDates') : problem === 'categories' ? t('export.errorCategories') : problem === 'months' ? t('export.errorMonths') : ''
+  const problemText =
+    problem === 'dates'
+      ? t('export.errorDates')
+      : problem === 'categories'
+        ? t('export.errorCategories')
+        : problem === 'months'
+          ? t('export.errorMonths')
+          : problem === 'amount'
+            ? t('export.errorAmount')
+            : problem === 'sections'
+              ? t('export.errorSections')
+              : ''
   const money = (amount: string) => formatMoney(amount, settings.currency, settings.locale)
   const day = (iso: string) => formatDate(iso, settings.locale)
   const span =
@@ -152,6 +248,35 @@ function ExportForm({ today, settings, categories }: { today: Today; settings: M
         : choice.mode === 'month'
           ? periodLabel(range.from.slice(0, 7), range.to.slice(0, 7), language)
           : joined(range.from.slice(0, 4), range.to.slice(0, 4))
+  // the parts a file of this format can hold, and which of them are on: the history is only in a file with no limits
+  const partsOfFile: readonly ExportSection[] = format === 'xlsx' ? EXPORT_SECTIONS.filter((section) => section !== 'history') : EXPORT_SECTIONS
+  const partsIn = sectionsFor(format, choice)
+  const limited = isLimited(choice)
+  const hasPart = (section: ExportSection) => (format === 'json' || format === 'xlsx' ? partsIn.includes(section) : true)
+  const partName: Record<ExportSection, string> = {
+    transactions: t('nav.transactions'),
+    categories: t('nav.categories'),
+    budgets: t('nav.budgets'),
+    recurring: t('nav.recurring'),
+    documents: t('nav.documents'),
+    people: t('nav.debts'),
+    history: t('export.history'),
+  }
+  const togglePart = (section: ExportSection, on: boolean) => {
+    const next = new Set(choice.sections)
+    if (on) next.add(section)
+    else next.delete(section)
+    update({ sections: EXPORT_SECTIONS.filter((each) => next.has(each)) })
+  }
+  const kindLabel = (kind: (typeof KINDS)[number]) => (kind === '' ? t('common.all') : kind === 'EXPENSE' ? t('budgets.expenses') : t('common.income'))
+  // what the file is limited to, for the receipt: the categories by name when some are chosen, income or expenses, an amount range, a text
+  const chosenNames = categories.filter((category) => choice.categoryIds.includes(category.id)).map((category) => category.name)
+  const least = amountText(choice.minAmount)
+  const most = amountText(choice.maxAmount)
+  const amountRange = least && most ? `${money(least)} \u2013 ${money(most)}` : least ? `\u2265 ${money(least)}` : most ? `\u2264 ${money(most)}` : ''
+  const searched = choice.text.trim()
+  // the files that list what they hold: every format but a report, and a report too once it lists the transactions
+  const listed = format !== 'pdf' || includeTransactions
   const groups = [
     { type: 'EXPENSE', title: t('budgets.expenses') },
     { type: 'INCOME', title: t('budgets.income') },
@@ -166,6 +291,7 @@ function ExportForm({ today, settings, categories }: { today: Today; settings: M
         {message}
       </p>
 
+      <div className="tx-pane wide">
       <div className="export-layout wide">
         <div className="export-main">
           <fieldset className="export-formats" aria-label={t('export.format')}>
@@ -235,6 +361,7 @@ function ExportForm({ today, settings, categories }: { today: Today; settings: M
                   />
                 </div>
                 {format === 'pdf' && <p className="hint">{t('export.pdfWholeMonths')}</p>}
+                {(format === 'json' || format === 'xlsx') && <p className="hint">{t('export.datesHint')}</p>}
               </>
             )}
           </div>
@@ -273,6 +400,51 @@ function ExportForm({ today, settings, categories }: { today: Today; settings: M
             )}
           </div>
 
+          {format !== 'pdf' && (
+            <div className="export-card">
+              <h2>{t('export.filters')}</h2>
+              <Dropdown
+                label={t('common.type')}
+                value={choice.kind}
+                options={KINDS.map((kind) => ({ value: kind, label: kindLabel(kind) }))}
+                onChange={(value) => update({ kind: value as Choice['kind'] })}
+              />
+              <div className="export-amounts">
+                <label>
+                  {t('export.amountFrom')}
+                  <input inputMode="decimal" autoComplete="off" maxLength={14} placeholder="0.00" value={choice.minAmount} onChange={(e) => update({ minAmount: e.target.value })} />
+                </label>
+                <label>
+                  {t('export.amountTo')}
+                  <input inputMode="decimal" autoComplete="off" maxLength={14} placeholder="0.00" value={choice.maxAmount} onChange={(e) => update({ maxAmount: e.target.value })} />
+                </label>
+              </div>
+              <p className="hint">{t('export.amountHint')}</p>
+              <label>
+                {t('export.textLabel')}
+                <input autoComplete="off" maxLength={TEXT_MAX_CHARS} value={choice.text} onChange={(e) => update({ text: e.target.value })} />
+              </label>
+            </div>
+          )}
+
+          {(format === 'json' || format === 'xlsx') && (
+            <div className="export-card">
+              <h2>{t('export.include')}</h2>
+              <div className="export-chips">
+                {partsOfFile.map((section) => {
+                  const off = section === 'history' && limited
+                  return (
+                    <label className="export-chip" key={section}>
+                      <input type="checkbox" checked={!off && choice.sections.includes(section)} disabled={off} onChange={(e) => togglePart(section, e.target.checked)} />
+                      <span>{partName[section]}</span>
+                    </label>
+                  )
+                })}
+              </div>
+              {format === 'json' && limited && <p className="hint">{t('export.historyHint')}</p>}
+            </div>
+          )}
+
           {format === 'pdf' && (
             <div className="export-card">
               <Dropdown label={t('export.pageSize')} value={page} options={PAGE_SIZES} onChange={(value) => setPage(value as 'A4' | 'LETTER')} />
@@ -302,41 +474,82 @@ function ExportForm({ today, settings, categories }: { today: Today; settings: M
           ) : (
             preview && (
               <div className="export-receipt">
-                <Row label={t('nav.transactions')} value={String(preview.transactions)} />
-                {preview.transactions > 0 ? (
+                {hasPart('transactions') && <Row label={t('nav.transactions')} value={String(preview.transactions)} />}
+                {hasPart('transactions') && preview.transactions > 0 ? (
                   <>
                     <Row label={t('export.period')} value={period} />
                     <Row label={t('common.income')} value={money(preview.income)} tone="income" />
                     <Row label={t('budgets.expenses')} value={money(preview.expense)} tone="expense" />
                   </>
-                ) : (
+                ) : hasPart('transactions') ? (
                   <p className="hint">{t('export.noTransactions')}</p>
+                ) : null}
+                {format !== 'pdf' && choice.kind !== '' && <Row label={t('common.type')} value={kindLabel(choice.kind)} />}
+                {format !== 'pdf' && amountRange !== '' && <Row label={t('tx.amount')} value={amountRange} />}
+                {format !== 'pdf' && searched !== '' && <Row label={t('common.search')} value={`\u201c${searched}\u201d`} />}
+                {(format === 'csv' || format === 'pdf' || hasPart('categories')) && (
+                  <Row label={t('nav.categories')} value={format === 'pdf' && !includeTransactions ? (choice.allCategories ? t('common.all') : String(preview.categories)) : String(preview.categories)} />
                 )}
-                {(format === 'json' || format === 'xlsx') && (
+                {!choice.allCategories && chosenNames.length > 0 && (format === 'csv' || format === 'pdf' || hasPart('categories')) && <p className="hint">{chosenNames.join(', ')}</p>}
+                {listed && (
                   <>
-                    <Row label={t('nav.categories')} value={String(preview.categories)} />
-                    <Row label={t('nav.budgets')} value={String(preview.budgets)} />
-                    <Row label={t('nav.recurring')} value={String(preview.recurring)} />
+                    {hasPart('budgets') && <Row label={t('nav.budgets')} value={String(preview.budgets)} />}
+                    {hasPart('recurring') && <Row label={t('nav.recurring')} value={String(preview.recurring)} />}
                   </>
                 )}
-                {format !== 'pdf' && preview.documents > 0 && (
-                  <>
-                    {format !== 'csv' && <Row label={t('nav.documents')} value={String(preview.documents)} />}
-                    <p className="hint">{t(format === 'csv' ? 'export.documentsColumn' : 'export.documentsListed')}</p>
-                  </>
-                )}
-                {format === 'json' && preview.history > 0 && <Row label={t('export.history')} value={String(preview.history)} />}
+                {listed && hasPart('documents') && preview.documents > 0 && <Row label={t('nav.documents')} value={String(preview.documents)} />}
+                {(format === 'json' || format === 'csv' || (format === 'pdf' && includeTransactions)) && preview.history > 0 && <Row label={t('export.history')} value={String(preview.history)} />}
               </div>
             )
           )}
-          <p className="warning" role="note">
-            {t('export.warning')} <Link to="/app/settings">{t('export.backupLink')}</Link>
-          </p>
           <button type="button" className="export-go" disabled={busy || problem !== null} onClick={() => void run()}>
             <span>{t('export.go')}</span>
             <span className="export-ext">.{format}</span>
           </button>
         </aside>
+      </div>
+
+      {textFormat && problem === null && fileText?.format === textFormat ? (
+        <div className="export-card export-preview">
+          <h2>{t('export.previewTitle')}</h2>
+          <p className="hint">
+            {`.${textFormat} \u00b7 ${formatSize(fileText.data.bytes, settings.locale)}`}
+            {fileText.data.cut ? ` \u00b7 ${t('export.previewCut', { shown: formatSize(new TextEncoder().encode(fileText.data.text).length, settings.locale), total: formatSize(fileText.data.bytes, settings.locale) })}` : ''}
+          </p>
+          <FileText format={textFormat} text={fileText.data.text} />
+        </div>
+      ) : null}
+
+      {(format === 'xlsx' || format === 'pdf') && problem === null && viewProblem !== '' ? (
+        <div className="export-card export-preview">
+          <h2>{t('export.previewTitle')}</h2>
+          <p className="hint">{t(viewProblem === 'big' ? 'export.previewTooBig' : 'docs.previewUnreadable')}</p>
+        </div>
+      ) : null}
+
+      {format === 'xlsx' && problem === null && viewProblem === '' && fileView?.format === 'xlsx' ? (
+        <div className="export-card export-preview">
+          <h2>{t('export.previewTitle')}</h2>
+          <p className="hint">{`.xlsx \u00b7 ${formatSize(fileView.bytes, settings.locale)}`}</p>
+          <div className="export-frame is-sheet">
+            <Sheets sheets={fileView.content.sheets} />
+          </div>
+          {fileView.content.sheets.some((sheet) => sheet.cut) ? <p className="hint">{t('docs.previewCutCells', { rows: MAX_ROWS, columns: MAX_COLUMNS })}</p> : null}
+          <p className="hint">{t('export.previewNoteExcel')}</p>
+        </div>
+      ) : null}
+
+      {format === 'pdf' && problem === null && viewProblem === '' && fileView?.format === 'pdf' ? (
+        <div className="export-card export-preview">
+          <h2>{t('export.previewTitle')}</h2>
+          <p className="hint">{`.pdf \u00b7 ${formatSize(fileView.bytes, settings.locale)}`}</p>
+          <div className="export-frame is-pdf">
+            <Suspense fallback={<p className="hint">{t('docs.previewLoading')}</p>}>
+              <PdfView bytes={fileView.data} onFailed={viewFailed} wheel={false} />
+            </Suspense>
+          </div>
+        </div>
+      ) : null}
       </div>
     </section>
   )
@@ -350,5 +563,15 @@ function Row({ label, value, tone }: { label: string; value: string; tone?: 'inc
       <span className="leader" aria-hidden="true" />
       <strong>{value}</strong>
     </p>
+  )
+}
+
+/** The text of a file as a text editor shows it: CSV as it is, JSON with its fields, strings, numbers and words in their own colours. */
+function FileText({ format, text }: { format: 'json' | 'csv'; text: string }) {
+  const tokens = useMemo(() => (format === 'json' ? tokenizeJson(text) : null), [format, text])
+  return (
+    <pre className={`export-file is-${format}`} tabIndex={0} aria-label={format === 'json' ? 'JSON' : 'CSV'}>
+      {tokens ? tokens.map((token, at) => (token.kind === 'plain' ? token.text : <span key={at} className={`json-${token.kind}`}>{token.text}</span>)) : text}
+    </pre>
   )
 }

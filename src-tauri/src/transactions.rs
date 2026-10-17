@@ -330,7 +330,7 @@ pub fn delete(conn: &Connection, id: i64) -> Result<(), AppError> {
     }
 }
 
-fn like_pattern(q: &str) -> String {
+pub(crate) fn like_pattern(q: &str) -> String {
     let mut pattern = String::from("%");
     for c in q.chars() {
         if matches!(c, '\\' | '%' | '_') {

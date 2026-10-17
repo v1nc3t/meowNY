@@ -1,7 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { en } from '../i18n/en.ts'
-import { Preview } from './dataExport.ts'
+import { Preview, TextPreview } from './dataExport.ts'
 
 // What the Rust side sends for `export_preview` (export.rs, `Preview`).
 const preview = {
@@ -28,6 +27,9 @@ test('a preview without the documents, or with a count that cannot be, is refuse
   }
 })
 
-test('the two notes about documents in an export exist', () => {
-  assert.ok('export.documentsListed' in en && 'export.documentsColumn' in en)
+test('the start of a file for the preview is read as the app sends it, and a count that cannot be is refused', () => {
+  assert.deepEqual(TextPreview.parse({ text: 'a,b\r\n', bytes: 9, cut: false }), { text: 'a,b\r\n', bytes: 9, cut: false })
+  for (const bad of [{ text: 'x', bytes: -1, cut: false }, { text: 'x', bytes: 1.5, cut: false }, { text: 'x', bytes: 1 }, { bytes: 1, cut: false }]) {
+    assert.equal(TextPreview.safeParse(bad).success, false, JSON.stringify(bad))
+  }
 })

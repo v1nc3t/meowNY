@@ -148,6 +148,9 @@ pub const COMMANDS: &[&str] = &[
     "export_xlsx",
     "export_pdf",
     "export_preview",
+    "export_preview_text",
+    "export_preview_workbook",
+    "export_preview_pdf",
     "get_api_status",
     "set_api_enabled",
     "list_api_tokens",
@@ -598,7 +601,7 @@ pub fn clear_backup_schedule(vault: Shared) -> Result<(), AppError> {
 }
 
 /// Asks where to save `text`, then writes it there readable by the owner only. False if the person cancels.
-/// These files are not encrypted; the export screen says so.
+/// These files are not encrypted; the guides say so (the screen used to, until the maintainer asked for the warning to go).
 fn save_export(app: &tauri::AppHandle, name: String, kind: &str, extension: &str, bytes: &[u8]) -> Result<bool, AppError> {
     let Some(path) = ask::save(app, &name, kind, extension)? else { return Ok(false) };
     backup::write_file(&path, bytes)?;
@@ -609,6 +612,30 @@ fn save_export(app: &tauri::AppHandle, name: String, kind: &str, extension: &str
 #[tauri::command]
 pub fn export_preview(vault: Shared, selection: Selection) -> Result<export::Preview, AppError> {
     vault.with_conn(|c| export::preview(c, &selection))
+}
+
+/// The start of the file an export of this selection would write, as text, for the preview on the export screen. Writes nothing, and
+/// sends at most 64 KiB (see `export::preview_text`).
+#[tauri::command]
+pub fn export_preview_text(vault: Shared, selection: Selection, format: export::TextFormat) -> Result<export::TextPreview, AppError> {
+    vault.with_conn(|c| export::preview_text(c, &selection, format, chrono::Utc::now()))
+}
+
+/// The Excel file an export of this selection would write, for the preview on the export screen, which reads it itself. Written nowhere.
+/// `InvalidInput` when it is more than 16 MiB.
+#[tauri::command]
+pub async fn export_preview_workbook(vault: Shared<'_>, selection: Selection, format: Option<DisplayFormat>) -> Result<export::PreviewFile, AppError> {
+    let bytes = vault.with_conn(|c| export::workbook(c, &selection, &format.unwrap_or_default()))?;
+    export::preview_file(&bytes)
+}
+
+/// The PDF report these options would write, for the preview on the export screen. Written nowhere. `InvalidInput` when it is more than
+/// 16 MiB.
+#[tauri::command]
+pub async fn export_preview_pdf(vault: Shared<'_>, options: ReportOptions) -> Result<export::PreviewFile, AppError> {
+    let report = vault.with_conn(|c| report::read(c, &options))?;
+    let bytes = report.pdf(&options)?;
+    export::preview_file(&bytes)
 }
 
 /// The data as a JSON file, or part of it: see `Selection`. Not encrypted.

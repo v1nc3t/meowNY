@@ -1,8 +1,11 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
+import { EXPORT_SECTIONS } from '../api/dataExport.ts'
 import {
+  amountText,
   bounds,
   defaultChoice,
+  isLimited,
   fitFormat,
   FORMATS,
   MAX_REPORT_MONTHS,
@@ -11,19 +14,32 @@ import {
   monthsBetween,
   problemWith,
   reportMonths,
+  sectionsFor,
   selectionFor,
   withMode,
   type Choice,
 } from './exportPlan.ts'
 
-const all: Choice = { limitDates: false, mode: 'date', from: '2026-01-01', to: '2026-12-31', allCategories: true, categoryIds: [] }
+const all: Choice = { ...defaultChoice({ date: '2026-10-16', month: '2026-10' }), mode: 'date', from: '2026-01-01', to: '2026-12-31' }
 const days = (from: string, to: string): Choice => ({ ...all, limitDates: true, mode: 'date', from, to })
 const months = (from: string, to: string): Choice => ({ ...all, limitDates: true, mode: 'month', from, to })
 const years = (from: string, to: string): Choice => ({ ...all, limitDates: true, mode: 'year', from, to })
 
 test('the first choice is every date and every category, with this month ready for a range', () => {
   const choice = defaultChoice({ date: '2026-10-16', month: '2026-10' })
-  assert.deepEqual(choice, { limitDates: false, mode: 'month', from: '2026-10', to: '2026-10', allCategories: true, categoryIds: [] })
+  assert.deepEqual(choice, {
+    limitDates: false,
+    mode: 'month',
+    from: '2026-10',
+    to: '2026-10',
+    allCategories: true,
+    categoryIds: [],
+    kind: '',
+    minAmount: '',
+    maxAmount: '',
+    text: '',
+    sections: [...EXPORT_SECTIONS],
+  })
 })
 
 test('every date and every category means no limits', () => {
@@ -108,4 +124,64 @@ test('an end before its start, an unfinished range, no categories or too long a 
   assert.equal(problemWith('json', { ...all, allCategories: false, categoryIds: ['3'] }, 1), null)
   assert.equal(problemWith('pdf', all, MAX_REPORT_MONTHS + 1), 'months')
   assert.equal(problemWith('xlsx', all, MAX_REPORT_MONTHS + 1), null, 'only a report has a length limit')
+})
+
+test('an amount is written the way the app takes it, and what is not an amount is refused', () => {
+  assert.deepEqual(['', ' ', '12', '12.5', '12,50', '0', '0.05', '007.10', ' 3.00 ', '9999999999.99'].map(amountText), ['', '', '12.00', '12.50', '12.50', '0.00', '0.05', '7.10', '3.00', '9999999999.99'])
+  for (const bad of ['abc', '-1', '1.234', '1,2,3', '12.', '.5', '12 50', '1e3', '99999999999', '€5']) assert.equal(amountText(bad), null, bad)
+})
+
+test('choices left as they are send nothing, and the others go with the dates and the categories', () => {
+  const choice: Choice = { ...months('2026-03', '2026-05'), allCategories: false, categoryIds: ['4'], kind: 'EXPENSE', minAmount: '5', maxAmount: '20,5', text: '  coffee ' }
+  assert.deepEqual(selectionFor('csv', choice), { from: '2026-03-01', to: '2026-05-31', categoryIds: ['4'], kind: 'EXPENSE', minAmount: '5.00', maxAmount: '20.50', text: 'coffee' })
+  for (const format of ['json', 'csv', 'xlsx'] as const) {
+    const sent = selectionFor(format, { ...all, kind: '', minAmount: ' ', maxAmount: '', text: '   ' })
+    assert.deepEqual(Object.keys(sent).sort(), ['categoryIds', 'from', 'to'], format)
+  }
+})
+
+test('a report takes only the dates and the categories', () => {
+  const choice: Choice = { ...months('2026-03', '2026-05'), kind: 'INCOME', minAmount: '5', text: 'x', sections: ['budgets'] }
+  assert.deepEqual(selectionFor('pdf', choice), { from: '2026-03-01', to: '2026-05-31', categoryIds: null })
+  assert.equal(problemWith('pdf', { ...choice, minAmount: 'nonsense' }, 3), null, 'what a report ignores cannot be wrong')
+})
+
+test('the parts of a file are sent only when some are left out, and the history only when nothing limits the file', () => {
+  assert.equal('sections' in selectionFor('json', all), false)
+  assert.equal('sections' in selectionFor('xlsx', all), false)
+  assert.deepEqual(selectionFor('json', { ...all, sections: ['transactions', 'budgets'] }).sections, ['transactions', 'budgets'])
+  // a limit leaves the history out of a JSON file, which is every part but that one
+  const limited: Choice = { ...all, kind: 'INCOME' }
+  assert.deepEqual(sectionsFor('json', limited), EXPORT_SECTIONS.filter((section) => section !== 'history'))
+  assert.equal('sections' in selectionFor('json', limited), false, 'what is left is every part there can be')
+  assert.deepEqual(selectionFor('json', { ...limited, sections: ['history', 'budgets'] }).sections, ['budgets'])
+  // an Excel file has no sheet for the history
+  assert.deepEqual(selectionFor('xlsx', { ...all, sections: ['history', 'budgets'] }).sections, ['budgets'])
+  assert.equal('sections' in selectionFor('xlsx', { ...all, sections: EXPORT_SECTIONS.filter((section) => section !== 'history') }), false)
+  // a CSV is the transactions and has no parts
+  assert.equal('sections' in selectionFor('csv', { ...all, sections: ['budgets'] }), false)
+})
+
+test('what limits a file is the dates, the categories, a kind, an amount or a text, and the parts are not a limit', () => {
+  assert.equal(isLimited(all), false)
+  assert.equal(isLimited({ ...all, sections: ['budgets'] }), false)
+  for (const limit of [{ limitDates: true }, { allCategories: false }, { kind: 'INCOME' as const }, { minAmount: '1' }, { maxAmount: '1' }, { text: 'a' }]) {
+    assert.equal(isLimited({ ...all, ...limit }), true, JSON.stringify(limit))
+  }
+  assert.equal(isLimited({ ...all, text: '   ' }), false, 'only spaces is no text')
+})
+
+test('an amount that is not one, the first above the second, or no part to put in is refused', () => {
+  assert.equal(problemWith('csv', { ...all, minAmount: 'x' }, 1), 'amount')
+  assert.equal(problemWith('json', { ...all, maxAmount: '1.234' }, 1), 'amount')
+  assert.equal(problemWith('xlsx', { ...all, minAmount: '20', maxAmount: '19.99' }, 1), 'amount')
+  assert.equal(problemWith('xlsx', { ...all, minAmount: '20', maxAmount: '20.00' }, 1), null, 'the same amount for both is fine')
+  assert.equal(problemWith('xlsx', { ...all, minAmount: '9.99', maxAmount: '10' }, 1), null)
+  assert.equal(problemWith('xlsx', { ...all, minAmount: '100', maxAmount: '9' }, 1), 'amount', 'compared as numbers, not as text')
+  assert.equal(problemWith('csv', { ...all, sections: [] }, 1), null, 'a CSV has no parts')
+  assert.equal(problemWith('json', { ...all, sections: [] }, 1), 'sections')
+  assert.equal(problemWith('xlsx', { ...all, sections: ['history'] }, 1), 'sections', 'a workbook of the history would have no sheet')
+  assert.equal(problemWith('json', { ...all, sections: ['history'], kind: 'INCOME' }, 1), 'sections', 'and a limit leaves the history out')
+  assert.equal(problemWith('json', { ...all, sections: ['history'] }, 1), null)
+  assert.equal(problemWith('json', { ...all, sections: ['budgets'] }, 1), null)
 })

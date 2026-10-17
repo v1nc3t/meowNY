@@ -132,7 +132,7 @@ fn whatever_the_selection_a_listed_document_is_attached_to_something_listed_and_
         Selection { from: Some("2026-02-01".into()), ..Default::default() },
         Selection { from: Some("2026-02-01".into()), to: Some("2026-02-28".into()), ..Default::default() },
         Selection { category_ids: Some(vec![rent.to_string()]), ..Default::default() },
-        Selection { category_ids: Some(vec![salary.to_string(), secret.to_string()]), from: Some("2026-02-05".into()), to: None, include_debts: false },
+        Selection { category_ids: Some(vec![salary.to_string(), secret.to_string()]), from: Some("2026-02-05".into()), to: None, ..Default::default() },
         Selection { category_ids: Some(vec![]), ..Default::default() },
     ] {
         let file = parsed(&conn, &selection);
