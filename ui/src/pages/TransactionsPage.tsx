@@ -5,7 +5,7 @@ import AttachArea from '../components/AttachArea'
 import BillCodeModal from '../components/BillCodeModal'
 import ClipMark from '../components/ClipMark'
 import ConfirmModal from '../components/ConfirmModal'
-import Dropdown from '../components/Dropdown'
+import Dropdown, { type DropdownOption } from '../components/Dropdown'
 import Modal, { modalFormId } from '../components/Modal'
 import Pick, { PickOption } from '../components/Pick'
 import DatePicker from '../components/DatePicker'
@@ -15,9 +15,10 @@ import { debts } from '../api/debts'
 import { errorText } from '../api/invoke'
 import { useToday, type Today } from '../api/today'
 import { transactions as transactionsApi, type Transaction, type TransactionPage } from '../api/transactions'
+import { categoryOptions } from '../lib/categoriesView'
 import { amountString, formatDate, formatMoney } from '../lib/money'
 import { apiBound, shiftBound, type RangeMode } from '../lib/range'
-import { draftOfBill, equalDraft, NOT_SPLIT, partsText, shareMark, toInput, type SplitState } from '../lib/split'
+import { draftOfBill, equalDraft, NOT_SPLIT, partsText, toInput, type SplitState } from '../lib/split'
 import { useAttachments, type Attachments } from '../hooks/useAttachments'
 import { useClipCounts } from '../hooks/useClipCounts'
 import { useMoneySettings, type MoneySettings } from '../hooks/useMoneySettings'
@@ -68,7 +69,6 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
   const [draftMessage, setDraftMessage] = useNotice()
   const [editing, setEditing] = useState<Transaction | null>(null)
   const [split, setSplit] = useState<SplitState>(NOT_SPLIT)
-  const [splitOpenId, setSplitOpenId] = useState<string | null>(null)
   const [deleting, setDeleting] = useState<Transaction | null>(null)
   // the bill whose code for one friend is on the screen
   const [coding, setCoding] = useState<{ transaction: Transaction; personId: string; name: string; part: string } | null>(null)
@@ -167,19 +167,13 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  function openEdit(transaction: Transaction, options: { split?: boolean } = {}) {
+  function openEdit(transaction: Transaction) {
     setMenu(null)
     setDraftMessage('')
     attachments.reset()
     setAdding(false)
     // a saved bill opens as exact amounts, as they are stored
-    setSplit(
-      transaction.split.length > 0
-        ? { on: true, draft: draftOfBill(transaction.split), ready: true, touched: false }
-        : options.split
-          ? { on: true, draft: equalDraft(), ready: false, touched: false }
-          : NOT_SPLIT,
-    )
+    setSplit(transaction.split.length > 0 ? { on: true, draft: draftOfBill(transaction.split), ready: true, touched: false } : NOT_SPLIT)
     setEditing(transaction)
   }
 
@@ -318,9 +312,6 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
         <div className="tx-actions">
           <button type="button" onClick={() => openAdd()} {...tip('new', t('tx.add'))}>
             {t('tx.add')}
-          </button>
-          <button type="button" onClick={() => openAdd({ split: true })}>
-            {t('split.add')}
           </button>
           {phone ? rangeControls : null}
         </div>
@@ -473,53 +464,51 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
                         .map((part) => ` \u00b7 ${part}`)
                         .join('')}
                     </p>
-                    {transaction.split.length > 0 ? (
-                      <button
-                        type="button"
-                        className="split-mark"
-                        aria-expanded={splitOpenId === transaction.id}
-                        aria-label={t('split.markLabel', { count: transaction.split.length })}
-                        onClick={() => setSplitOpenId((current) => (current === transaction.id ? null : transaction.id))}
-                      >
-                        {shareMark(transaction.split)}
-                      </button>
-                    ) : null}
-                    {splitOpenId === transaction.id && transaction.split.length > 0 ? (
-                      <div className="split-detail">
-                        <p>{t('split.paid', { amount: formatMoney(transaction.amount, settings.currency, settings.locale) })}</p>
-                        {transaction.split.map((part) => (
-                          <div className="split-part" key={`${part.personId ?? 'guest'}-${part.person ?? part.guest}`}>
-                            <span>{`${part.person ?? part.guest ?? ''} ${formatMoney(part.amount, settings.currency, settings.locale)}`}</span>
-                            {part.personId && part.person ? (
-                              <button type="button" onClick={() => setCoding({ transaction, personId: part.personId ?? '', name: part.person ?? '', part: part.amount })}>
-                                {t('code.show')}
-                              </button>
-                            ) : null}
-                          </div>
-                        ))}
-                      </div>
-                    ) : null}
-                    {clips[transaction.id] ? <ClipMark count={clips[transaction.id] ?? 0} onClick={() => openEdit(transaction)} /> : null}
-                    {transaction.description?.trim() ? (
+                    {transaction.split.length > 0 || transaction.description?.trim() ? (
                       <button
                         type="button"
                         className="tx-desc"
                         aria-expanded={openId === transaction.id}
                         onClick={() => setOpenId((current) => (current === transaction.id ? null : transaction.id))}
                       >
-                        {openId === transaction.id ? transaction.description : t('common.description')}
+                        {t('common.details')}
                       </button>
                     ) : null}
+                    {openId === transaction.id ? (
+                      <div className="card-detail">
+                        {transaction.split.length > 0 ? (
+                          <section className="detail-section">
+                            <p className="detail-title">{t('split.section')}</p>
+                            <p>{t('split.paid', { amount: formatMoney(transaction.amount, settings.currency, settings.locale) })}</p>
+                            <div className="split-part">
+                              <span>{`${t('split.you')} ${formatMoney(transaction.myShare, settings.currency, settings.locale)}`}</span>
+                            </div>
+                            {transaction.split.map((part) => (
+                              <div className="split-part" key={`${part.personId ?? 'guest'}-${part.person ?? part.guest}`}>
+                                <span>{`${part.person ?? part.guest ?? ''} ${formatMoney(part.amount, settings.currency, settings.locale)}`}</span>
+                                {part.personId && part.person ? (
+                                  <button type="button" onClick={() => setCoding({ transaction, personId: part.personId ?? '', name: part.person ?? '', part: part.amount })}>
+                                    {t('code.show')}
+                                  </button>
+                                ) : null}
+                              </div>
+                            ))}
+                          </section>
+                        ) : null}
+                        {transaction.description?.trim() ? (
+                          <section className="detail-section">
+                            <p className="detail-title">{t('common.description')}</p>
+                            <p>{transaction.description}</p>
+                          </section>
+                        ) : null}
+                      </div>
+                    ) : null}
+                    {clips[transaction.id] ? <ClipMark count={clips[transaction.id] ?? 0} onClick={() => openEdit(transaction)} /> : null}
                   </div>
                   <div className="card-actions">
                     <button type="button" data-row-focus onClick={() => openEdit(transaction)}>
                       {t('common.edit')}
                     </button>
-                    {categories.find((category) => category.id === transaction.categoryId)?.type === 'EXPENSE' ? (
-                      <button type="button" onClick={() => openEdit(transaction, { split: true })}>
-                        {t(transaction.split.length > 0 ? 'split.rowEdit' : 'split.rowSplit')}
-                      </button>
-                    ) : null}
                     <button type="button" onClick={() => (transaction.split.length > 0 ? setDeleting(transaction) : void onDelete(transaction.id))}>
                       {t('common.delete')}
                     </button>
@@ -581,11 +570,16 @@ function TransactionModal({
   const [categoryId, setCategoryId] = useState(transaction?.categoryId ?? '')
   const [amount, setAmount] = useState(transaction?.amount ?? '')
   const [addingCategory, setAddingCategory] = useState(false)
+  // The documents area is behind a switch, as the split is. It is open when the transaction already has documents (they are listed
+  // as soon as they are loaded) or files were chosen for a new one, and then it cannot be closed on them.
+  const [docsOn, setDocsOn] = useState(false)
+  const hasDocuments = attachments.linked.length > 0 || attachments.pending.length > 0 || attachments.working !== ''
+  const showDocuments = docsOn || hasDocuments
   // only an expense can be shared
   const canSplit = categories.find((category) => category.id === categoryId)?.type !== 'INCOME'
   const hadSplit = (transaction?.split.length ?? 0) > 0
   const rescaled = hadSplit && !split.touched && amountString(amount, false) !== transaction?.amount
-  const options = categories.map((category) => ({ value: category.id, label: category.name }))
+  const options: DropdownOption[] = categoryOptions(categories, { expense: t('common.expense'), income: t('common.income') })
   if (transaction && categories.every((category) => category.id !== transaction.categoryId)) {
     options.unshift({ value: transaction.categoryId, label: t('tx.deletedCategory') })
   }
@@ -641,10 +635,14 @@ function TransactionModal({
           ) : null}
           <label>
             {t('common.description')}
-            <input name="description" maxLength={255} defaultValue={transaction?.description ?? ''} autoComplete="off" />
+            <input name="description" maxLength={255} placeholder={t('common.optional')} defaultValue={transaction?.description ?? ''} autoComplete="off" />
+          </label>
+          <label>
+            <input type="checkbox" checked={showDocuments} disabled={hasDocuments} onChange={(event) => setDocsOn(event.target.checked)} />
+            {t('docs.attachSwitch')}
           </label>
         </form>
-        <AttachArea attachments={attachments} />
+        {showDocuments ? <AttachArea attachments={attachments} /> : null}
       </Modal>
       {addingCategory ? (
         <AddCategoryModal

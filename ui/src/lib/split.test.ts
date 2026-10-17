@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { draftOfBill, draftOfTemplate, equalDraft, normalise, partsText, shareMark, toInput, withMode } from './split.ts'
+import { draftOfBill, draftOfTemplate, equalDraft, normalise, partsText, reducedWeights, toInput, withMode } from './split.ts'
 
 const anna = { personId: '2', name: 'Anna' }
 const bob = { guest: 'Bob', name: 'Bob' }
@@ -57,12 +57,34 @@ test('a saved bill opens as exact amounts, the person having the rest', () => {
   assert.deepEqual(toInput(draft), { mode: 'EXACT', parts: [{ personId: '2', value: '25.00' }, { guest: 'Bob', value: '25.00' }] })
 })
 
-test('a saved template opens as shares, the weights as they are kept', () => {
-  const draft = draftOfTemplate({ mine: 2, parts: [{ personId: '2', person: 'Anna', guest: null, weight: 1 }] })
-  assert.deepEqual(toInput(draft), { mode: 'SHARES', mine: '2', parts: [{ personId: '2', value: '1' }] })
+test('a saved template opens as shares, in lowest terms, so what was typed as 19 and 1 does not come back as 1900 and 100', () => {
+  const template = (mine: number, ...weights: number[]) => ({ mine, parts: weights.map((weight, at) => ({ personId: String(at + 2), person: `P${at}`, guest: null, weight })) })
+  assert.deepEqual(toInput(draftOfTemplate(template(2, 1))), { mode: 'SHARES', mine: '2', parts: [{ personId: '2', value: '1' }] })
+  // amounts of 19.00 and 1.00 are kept as 1900 and 100
+  assert.deepEqual(toInput(draftOfTemplate(template(100, 1900))), { mode: 'SHARES', mine: '1', parts: [{ personId: '2', value: '19' }] })
+  assert.deepEqual(toInput(draftOfTemplate(template(1900, 100))), { mode: 'SHARES', mine: '19', parts: [{ personId: '2', value: '1' }] })
+  assert.deepEqual(toInput(draftOfTemplate(template(3, 3, 6))), { mode: 'SHARES', mine: '1', parts: [{ personId: '2', value: '1' }, { personId: '3', value: '2' }] })
 })
 
-test('the mark counts the person and the others', () => {
-  assert.equal(shareMark([1, 2, 3]), '÷4')
+test('the weights of a whole percent split open as percent, with two decimals', () => {
+  const draft = draftOfTemplate({ mine: 8100, parts: [{ personId: '2', person: 'Anna', guest: null, weight: 1900 }] })
+  assert.deepEqual(toInput(draft), { mode: 'PERCENT', mine: '81.00', parts: [{ personId: '2', value: '19.00' }] })
+  const odd = draftOfTemplate({ mine: 3334, parts: [{ personId: '2', person: 'A', guest: null, weight: 3333 }, { personId: null, person: null, guest: 'B', weight: 3333 }] })
+  assert.deepEqual(toInput(odd), { mode: 'PERCENT', mine: '33.34', parts: [{ personId: '2', value: '33.33' }, { guest: 'B', value: '33.33' }] })
+  const small = draftOfTemplate({ mine: 9905, parts: [{ personId: '2', person: 'A', guest: null, weight: 95 }] })
+  assert.equal(small.rows[0]?.value, '0.95')
+})
+
+test('the parts of a bill are listed as name and amount', () => {
   assert.equal(partsText([{ personId: '2', person: 'Anna', guest: null, amount: '25.00' }, { personId: null, person: null, guest: 'Bob', amount: '25.00' }]), 'Anna 25.00, Bob 25.00')
+})
+
+test('the weights of a template are shown in lowest terms and never changed otherwise', () => {
+  assert.deepEqual(reducedWeights([5000, 5000]), [1, 1])
+  assert.deepEqual(reducedWeights([2500, 7500]), [1, 3])
+  assert.deepEqual(reducedWeights([2, 1, 1]), [2, 1, 1])
+  assert.deepEqual(reducedWeights([4, 2, 0]), [2, 1, 0], 'a part of nothing stays nothing')
+  assert.deepEqual(reducedWeights([0, 3]), [0, 1])
+  assert.deepEqual(reducedWeights([]), [])
+  assert.deepEqual(reducedWeights([0, 0]), [0, 0])
 })

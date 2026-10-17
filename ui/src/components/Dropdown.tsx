@@ -1,9 +1,10 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { Fragment, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { place } from '../lib/placeList'
 import { useT } from '../i18n/context'
 
-export type DropdownOption = { value: string; label: string }
+/** `group` puts the option under a heading: a heading is drawn where the group changes from the option before. */
+export type DropdownOption = { value: string; label: string; group?: string }
 
 // A styled select for forms. The list is portaled into the surrounding dialog, so a modal panel never clips it.
 // name: add a hidden input so a form submit carries the value.
@@ -146,20 +147,27 @@ export default function Dropdown({
                   </button>
                 </li>
               ) : null}
-              {options.map((option) => (
-                <li key={option.value}>
-                  <button
-                    type="button"
-                    role="option"
-                    aria-selected={option.value === value}
-                    onClick={() => {
-                      onChange(option.value)
-                      close()
-                    }}
-                  >
-                    {option.label}
-                  </button>
-                </li>
+              {options.map((option, at) => (
+                <Fragment key={option.value}>
+                  {option.group !== undefined && option.group !== options[at - 1]?.group ? (
+                    <li role="presentation" className="pick-group">
+                      {option.group}
+                    </li>
+                  ) : null}
+                  <li>
+                    <button
+                      type="button"
+                      role="option"
+                      aria-selected={option.value === value}
+                      onClick={() => {
+                        onChange(option.value)
+                        close()
+                      }}
+                    >
+                      {option.label}
+                    </button>
+                  </li>
+                </Fragment>
               ))}
             </ul>,
             host,

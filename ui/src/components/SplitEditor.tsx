@@ -8,6 +8,7 @@ import { useT } from '../i18n/context'
 import { amountString, formatMoney } from '../lib/money'
 import { rowKey, toInput, withMode, type SplitDraft, type SplitRow } from '../lib/split'
 import Dropdown from './Dropdown'
+import PersonCombo from './PersonCombo'
 
 /**
  * Who shares a bill and how: the person (always first), friends and guests, and a mode that says how the numbers are typed. Every
@@ -31,7 +32,6 @@ export default function SplitEditor({
   const { settings } = useMoneySettings()
   const [friends, setFriends] = useState<Person[]>([])
   const [shown, setShown] = useState<{ key: string; preview: SplitPreview } | null>(null)
-  const [newName, setNewName] = useState('')
   const [message, setMessage] = useNotice()
   const proportions = amount === null
   const bill = proportions ? '100.00' : amountString(amount, false)
@@ -88,24 +88,18 @@ export default function SplitEditor({
     onChange({ ...draft, rows: draft.rows.map((row, index) => (index === at ? { ...row, value } : row)) })
   }
 
-  async function addNew(asFriend: boolean) {
-    const name = newName.trim()
+  /** A name that is typed becomes a friend, and as a part of the bill they owe it: the debt is made when the bill is saved. */
+  async function addNew(typed: string) {
+    const name = typed.trim()
     if (!name) return
-    const taken = draft.rows.some((row) => row.name.toLowerCase() === name.toLowerCase())
-    if (taken) {
+    if (draft.rows.some((row) => row.name.toLowerCase() === name.toLowerCase())) {
       setMessage(errorText(new ApiError('name_exists')))
-      return
-    }
-    if (!asFriend) {
-      addRow({ guest: name, name })
-      setNewName('')
       return
     }
     try {
       const person = await debts.createPerson(name)
       setFriends((list) => [...list, person])
       addRow({ personId: person.id, name: person.name })
-      setNewName('')
     } catch (failure) {
       setMessage(errorText(failure))
     }
@@ -168,37 +162,14 @@ export default function SplitEditor({
           {t('split.rest')}
         </button>
       ) : null}
-      <Dropdown
-        label={t('split.addPerson')}
-        value=""
-        options={free.map((friend) => ({ value: friend.id, label: friend.name }))}
-        onChange={(id) => {
-          const friend = friends.find((other) => other.id === id)
-          if (friend) addRow({ personId: friend.id, name: friend.name })
-        }}
+      <PersonCombo
+        label={t('debts.addFriend')}
+        placeholder={t('split.pickOrType')}
+        friends={free}
+        taken={draft.rows.map((row) => row.name.toLowerCase())}
+        onPickFriend={(friend) => addRow({ personId: friend.id, name: friend.name })}
+        onAddNew={(name) => void addNew(name)}
       />
-      <div className="split-new">
-        <input
-          aria-label={t('split.newPerson')}
-          placeholder={t('split.newPerson')}
-          maxLength={50}
-          autoComplete="off"
-          value={newName}
-          onChange={(event) => setNewName(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.key !== 'Enter') return
-            event.preventDefault()
-            void addNew(true)
-          }}
-        />
-        <button type="button" disabled={!newName.trim()} onClick={() => void addNew(true)}>
-          {t('split.asFriend')}
-        </button>
-        <button type="button" disabled={!newName.trim()} onClick={() => void addNew(false)}>
-          {t('split.asGuest')}
-        </button>
-      </div>
-      <p className="hint">{t('split.guestHint')}</p>
       {proportions ? <p className="hint">{t('split.proportions')}</p> : null}
       {draft.rows.length === 0 ? (
         <p className="hint">{t('split.needParts')}</p>

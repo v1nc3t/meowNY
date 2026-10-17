@@ -8,7 +8,7 @@ This is the guide for using it. How it is built is in [debts-design.md](debts-de
 
 A **friend** is a name and nothing else: no phone number, no email, no address, and nothing is read from your contacts. Add one on the **debts** page (**add friend**), or when you need one (on a bill, in an entry, when you take in a code). A friend is never deleted: **remove from the list** hides them from the lists, and **show removed friends** brings them into view; their balance and history stay, and the name can be used again.
 
-A **guest** is a name typed for someone on one bill, who is not a friend: their part leaves your cost, and no debt is made.
+A name typed on a bill becomes a friend at once. (A **guest**, a name on one bill who is not a friend and makes no debt, can still be made from the command line; a bill that has one opens and saves as before.)
 
 ## What you owe and are owed
 
@@ -23,25 +23,25 @@ The totals are on the **debts** page (**owed to you**, **you owe**, **net**) and
 
 ## Splitting a bill
 
-You paid for a dinner; four of you shared it. Press **split a bill** (on the transactions, debts or a friend's page; or tick **split this bill** in any new or existing transaction, or press **split** on a transaction in the list):
+You paid for a dinner; four of you shared it. Tick **split this bill** when you add or edit a transaction (or press **split a bill** on the debts page or a friend's page, which opens a new transaction with the split on and that friend on the bill):
 
 1. Choose **how to split**: **equally**, **by percent** (each person's percent; together exactly 100), **by shares** (2, 1, 1) or **by amounts** (each person's amount; together exactly the bill).
-2. Add friends from the list, or type a name and add it **as a friend** or **as a guest**. You are always the first line.
+2. Add people in the one field under the lines: choose a friend from the list (it narrows as you type), or type a name that is not in it and choose **add "name" as a friend**. A new name becomes a friend, and their part of the bill is what they owe you. You are always the first line.
 3. Every line shows what it comes to, worked out by the app as you type. For percent and amounts, **give the rest to me** makes your own line the difference. The dialog says what is **left to assign** until the numbers add up; it cannot be saved before.
 
 What changes:
 
-- The transaction keeps **what you paid**. **Budgets, statistics, reports and exports count only your part**, and the list shows your part as its amount with a mark such as `÷4`; press the mark to see what was paid and who has which part.
-- Each friend's part is added to what they owe you. Guests make no debt.
+- The transaction keeps **what you paid**. **Budgets, statistics, reports and exports count only your part**, and the list shows your part as its amount; press **details** under it to see, in a section called split, what was paid and who has which part (and, if there is one, the description in its own section). To change a split, press **edit**: the same form has the switch.
+- Each friend's part is added to what they owe you.
 - The odd cent goes to whoever has the largest remainder, you first; the parts always add up to the bill to the cent.
 - Changing the **amount** of a shared bill scales every part, yours included. Deleting a shared bill asks first and says whose parts go with it, because they will owe you less. A shared bill cannot be an income.
 - A saved bill opens as exact amounts. Changing how it is split starts the numbers again.
 
-A **recurring item** can be split too (tick **split this bill** in its form, or press **split**). Each payment is then split by the same proportions, whatever it was paid for. It is kept as proportions, so an item with no fixed amount can be split. The payments already made keep their parts, and the list marks a split item with `÷N`.
+A **recurring item** can be split too (tick **split this bill** in its form). Each payment is then split by the same proportions, whatever it was paid for. It is kept as proportions, so an item with no fixed amount can be split. The payments already made keep their parts. **Details** on the item in the list shows the proportions (you 2, Anna 1, …).
 
 ## Showing a bill to a friend: the bill code
 
-On a shared bill, open the `÷4` mark and press **show code** beside a friend (or press **show code** on a bill line in the friend's page). The first time, the app asks what name your friend should see; it is kept on this device. The dialog shows a **QR code** and **copy** copies the same text, so you can send it in the chat you already use.
+On a shared bill, open **details** and press **show code** beside a friend (or press **show code** on a bill line in the friend's page). The first time, the app asks what name your friend should see; it is kept on this device. The dialog shows a **QR code** and **copy** copies the same text, so you can send it in the chat you already use.
 
 The code holds this bill's name and date, your name, your friend's part and the whole bill, and the currency. It holds nobody else's name or part. It is **not stored and not encrypted**: whoever sees the screen, or the text you copied, can read it. Show it only to the friend it is for. If a code is too long for a QR code (long names), the app says so and the text is the way.
 

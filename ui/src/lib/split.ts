@@ -54,18 +54,30 @@ export function draftOfBill(split: PartOut[]): SplitDraft {
   }
 }
 
-/** A saved template opens as shares: the weights, as they are kept. The proportions are the same whatever they were typed as. */
+/** Hundredths as a number with two decimals: 1900 is "19.00". */
+function hundredths(weight: number): string {
+  return `${Math.floor(weight / 100)}.${String(weight % 100).padStart(2, '0')}`
+}
+
+/**
+ * A saved template is kept as weights, so what was typed has to be guessed back. Weights that make up the whole of a percent split
+ * (10,000 hundredths) open as percent, so 19 and 81 come back as 19.00 and 81.00. Any others open as shares in lowest terms, so a split
+ * of 19.00 and 1.00 (kept as 1900 and 100) comes back as 19 and 1. The proportions are the same whatever it was typed as.
+ */
 export function draftOfTemplate(template: Template): SplitDraft {
+  const weights = [template.mine, ...template.parts.map((part) => part.weight)]
+  const percent = weights.reduce((sum, weight) => sum + weight, 0) === 10_000
+  const shown = percent ? weights.map(hundredths) : reducedWeights(weights).map(String)
   return {
-    mode: 'SHARES',
-    mine: String(template.mine),
+    mode: percent ? 'PERCENT' : 'SHARES',
+    mine: shown[0] ?? '',
     mineIsRest: false,
-    rows: template.parts.map((part) => ({
+    rows: template.parts.map((part, at) => ({
       key: rowKey(),
       ...(part.personId ? { personId: part.personId } : {}),
       ...(part.guest ? { guest: part.guest } : {}),
       name: part.person ?? part.guest ?? '',
-      value: String(part.weight),
+      value: shown[at + 1] ?? '',
     })),
   }
 }
@@ -109,9 +121,11 @@ export function partsText(split: PartOut[], format: (amount: string) => string =
   return split.map((part) => `${part.person ?? part.guest ?? ''} ${format(part.amount)}`).join(', ')
 }
 
-/** The mark on a shared bill: ÷4 for the person and three others. */
-export function shareMark(split: { length: number }): string {
-  return `÷${split.length + 1}`
+/** The weights of a template in lowest terms, so 5000 and 5000 read as 1 and 1: only for showing, the weights stay as they are kept. */
+export function reducedWeights(weights: number[]): number[] {
+  const gcd = (a: number, b: number): number => (b === 0 ? a : gcd(b, a % b))
+  const divisor = weights.reduce((common, weight) => gcd(common, weight), 0)
+  return divisor > 1 ? weights.map((weight) => weight / divisor) : weights
 }
 
 export const NOT_SPLIT: SplitState = { on: false, draft: equalDraft(), ready: false, touched: false }
