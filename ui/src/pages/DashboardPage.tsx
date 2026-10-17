@@ -148,7 +148,7 @@ function DashboardView({ settings, now }: { settings: MoneySettings; now: Today 
             </div>
             <div className="dash-card">
               <h2>
-                <Link to="/app/budgets">{t('nav.budgets')}</Link>
+                <Link to="/app/categories">{t('nav.budgets')}</Link>
               </h2>
               <BudgetBars bva={data.bva} settings={settings} />
             </div>

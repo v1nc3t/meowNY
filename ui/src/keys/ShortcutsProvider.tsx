@@ -32,7 +32,6 @@ export default function ShortcutsProvider({
       registerShortcut('goDashboard', () => navigate('/app/dashboard')),
       registerShortcut('goTransactions', () => navigate('/app/transactions')),
       registerShortcut('goCategories', () => navigate('/app/categories')),
-      registerShortcut('goBudgets', () => navigate('/app/budgets')),
       registerShortcut('goRecurring', () => navigate('/app/recurring')),
       registerShortcut('goDocuments', () => navigate('/app/documents')),
       registerShortcut('goDebts', () => navigate('/app/debts')),

@@ -14,7 +14,6 @@ const items = [
   { to: '/app/dashboard', label: 'nav.dashboard', icon: 'dashboard', page: 'dashboard', shortcut: 'goDashboard' },
   { to: '/app/transactions', label: 'nav.transactions', icon: 'transactions', page: 'transactions', shortcut: 'goTransactions' },
   { to: '/app/categories', label: 'nav.categories', icon: 'categories', page: 'categories', shortcut: 'goCategories' },
-  { to: '/app/budgets', label: 'nav.budgets', icon: 'budgets', page: 'budgets', shortcut: 'goBudgets' },
   { to: '/app/recurring', label: 'nav.recurring', icon: 'recurring', page: 'recurring', shortcut: 'goRecurring' },
   { to: '/app/documents', label: 'nav.documents', icon: 'documents', page: 'documents', shortcut: 'goDocuments' },
   { to: '/app/debts', label: 'nav.debts', icon: 'debts', page: 'debts', shortcut: 'goDebts' },

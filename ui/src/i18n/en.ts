@@ -106,13 +106,12 @@ export const en = {
   'tx.errorAmount': 'enter an amount greater than zero, with at most two decimals.',
 
   // Budgets
-  'budgets.title': 'budgets',
   'budgets.expenses': 'expenses',
   'budgets.income': 'income',
-  'budgets.budget': 'budget',
-  'budgets.allocated': 'allocated',
-  'budgets.unallocated': 'unallocated',
-  'budgets.history': 'history',
+  'budgets.budget': 'allocated',
+  'budgets.allocated': 'used',
+  'budgets.unallocated': 'not used',
+  'budgets.history': 'budget history',
   'budgets.colMonth': 'month',
   'budgets.colExpenseBudget': 'expense budget',
   'budgets.colSpent': 'spent',
@@ -693,6 +692,9 @@ export const en = {
   'common.details': 'details',
   'split.section': 'split',
   'common.optional': 'optional',
+  'categories.editTitle': 'edit category',
+  'categories.budgetFrom': 'budget from {month} on',
+  'categories.budgetHint': 'leave empty for no budget from this month on.',
 } as const
 
 export type MessageKey = keyof typeof en

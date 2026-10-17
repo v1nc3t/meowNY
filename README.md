@@ -58,7 +58,7 @@ meowNY is a desktop app for tracking income and expenses against monthly budgets
 **Budgeting**
 
 - Categories, and transactions (income and expenses) with search and filters.
-- Monthly budgets with an amount per category. Budgets are dated, so changing a limit does not rewrite old months.
+- Monthly budgets with an amount per category, on the **categories** page: each side (expenses, income) shows what is allocated, used and not used, and each category has its own budget, which you change with the name in one dialog. Budgets are dated, so changing a limit does not rewrite old months; the **budget history** below lists every month.
 - Recurring items (subscriptions, rent and the like): see what is due or overdue, pay it with one click to make a normal transaction, skip it, pause it or end it. Optional notifications for items that are due.
 - Statistics and charts: budget against spending, trends, a year view, top categories, upcoming commitments and planned payments.
 - Money is kept as whole minor units (cents), never as floating point numbers. Months and due dates follow the time zone you choose.
@@ -209,7 +209,7 @@ Press `?` in the app to see them all. Hovering or focusing a control shows its s
 
 | Keys | Does |
 |---|---|
-| `g` then `d` `t` `c` `b` `s` | go to dashboard, transactions, categories, budgets, settings |
+| `g` then `d` `t` `c` `s` | go to dashboard, transactions, categories (and budgets), settings |
 | `n` | add a new transaction or category |
 | `/` | search |
 | `[` and `]` | previous and next month (budgets) |

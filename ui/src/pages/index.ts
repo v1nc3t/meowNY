@@ -7,7 +7,6 @@ export const pageLoaders = {
   dashboard: () => import('./DashboardPage'),
   transactions: () => import('./TransactionsPage'),
   categories: () => import('./CategoriesPage'),
-  budgets: () => import('./BudgetsPage'),
   recurring: () => import('./RecurringPage'),
   documents: () => import('./DocumentsPage'),
   debts: () => import('./DebtsPage'),

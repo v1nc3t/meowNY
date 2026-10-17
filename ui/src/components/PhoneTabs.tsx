@@ -8,7 +8,6 @@ import Icon from './NavIcon'
 export const PHONE_TABS = [
   { to: '/app/dashboard', label: 'nav.dashboard', icon: 'dashboard', page: 'dashboard' },
   { to: '/app/transactions', label: 'nav.transactions', icon: 'transactions', page: 'transactions' },
-  { to: '/app/budgets', label: 'nav.budgets', icon: 'budgets', page: 'budgets' },
   { to: '/app/recurring', label: 'nav.recurring', icon: 'recurring', page: 'recurring' },
   { to: '/app/categories', label: 'nav.categories', icon: 'categories', page: 'categories' },
 ] as const satisfies readonly { to: string; label: string; icon: string; page: PageName }[]

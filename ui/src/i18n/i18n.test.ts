@@ -23,11 +23,10 @@ test('every translation keeps the same {placeholders} as the English text', () =
 
 // Words that really are the same in that language (a loan word, or a unit such as "1 minute").
 const SAME_AS_ENGLISH = new Set([
-  'de common.name', 'de nav.budgets', 'de lock.1m', 'de budgets.title', 'de budgets.budget',
+  'de common.name', 'de nav.budgets', 'de lock.1m',
   'de welcome.passphrase', 'de lock.passphrase',
   'fr common.type', 'fr common.description', 'fr nav.transactions', 'fr nav.budgets', 'fr lock.1m', 'fr lock.5m',
-  'fr lock.15m', 'fr tx.title', 'fr budgets.title', 'fr budgets.budget',
-  'it budgets.budget',
+  'fr lock.15m', 'fr tx.title',
   'fr report.date', 'fr report.page',
   'de nav.export', 'de export.title', 'fr export.format', 'ro export.format',
   'es keys.groupGeneral', 'ro keys.groupGeneral', 'fr keys.groupActions', 'fr settings.notifications',
