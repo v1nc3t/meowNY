@@ -1575,6 +1575,16 @@
           "values": []
         },
         {
+          "flag": "--ledger-entry-id",
+          "nullable": false,
+          "param": "ledgerEntryId",
+          "required": false,
+          "summary": "An entry of the ledger of money lent and borrowed.",
+          "type": "id",
+          "value": "id",
+          "values": []
+        },
+        {
           "flag": "--limit",
           "nullable": false,
           "param": "limit",
@@ -1599,7 +1609,7 @@
       "route": "documents.list",
       "scope": "read",
       "summary": "Documents, newest paper first, with the total that match: names, dates, types, sizes and hashes, never the files. Up to 100 a page, 50 unless limit says otherwise.",
-      "usage": "meowny documents list [--q <text>] [--kind <image|pdf|other>] [--from <date>] [--to <date>] [--transaction-id <id>] [--recurring-id <id>] [--limit <number>] [--offset <number>]"
+      "usage": "meowny documents list [--q <text>] [--kind <image|pdf|other>] [--from <date>] [--to <date>] [--transaction-id <id>] [--recurring-id <id>] [--ledger-entry-id <id>] [--limit <number>] [--offset <number>]"
     },
     {
       "command": "documents show",
@@ -1687,13 +1697,23 @@
           "type": "ids",
           "value": "id,id,...",
           "values": []
+        },
+        {
+          "flag": "--ledger-entry-ids",
+          "nullable": false,
+          "param": "ledgerEntryIds",
+          "required": false,
+          "summary": "Attach it to these entries of the ledger.",
+          "type": "ids",
+          "value": "id,id,...",
+          "values": []
         }
       ],
       "positional": "data",
       "route": "documents.add",
       "scope": "write",
       "summary": "Stores a file as a document, encrypted, and attaches it where asked. The answer is the document and `alreadyThere`: the same file added again is not stored twice, and the attachments are added to the document that is there. At most 25 MiB.",
-      "usage": "meowny documents add <file> [--name <text>] [--date <date>] [--keep-on-phone <boolean>] [--transaction-ids <id,id,...>] [--recurring-ids <id,id,...>]"
+      "usage": "meowny documents add <file> [--name <text>] [--date <date>] [--keep-on-phone <boolean>] [--transaction-ids <id,id,...>] [--recurring-ids <id,id,...>] [--ledger-entry-ids <id,id,...>]"
     },
     {
       "command": "documents update",
@@ -1803,13 +1823,23 @@
           "type": "id",
           "value": "id",
           "values": []
+        },
+        {
+          "flag": "--ledger-entry-id",
+          "nullable": false,
+          "param": "ledgerEntryId",
+          "required": false,
+          "summary": "An entry of the ledger of money lent and borrowed.",
+          "type": "id",
+          "value": "id",
+          "values": []
         }
       ],
       "positional": "id",
       "route": "documents.link",
       "scope": "write",
-      "summary": "Attaches a document to a transaction or to a recurring item. Giving one that is attached already changes nothing.",
-      "usage": "meowny documents link <id> [--transaction-id <id>] [--recurring-id <id>]"
+      "summary": "Attaches a document to a transaction, a recurring item or a ledger entry. Giving one that is attached already changes nothing.",
+      "usage": "meowny documents link <id> [--transaction-id <id>] [--recurring-id <id>] [--ledger-entry-id <id>]"
     },
     {
       "command": "documents unlink",
@@ -1845,13 +1875,23 @@
           "type": "id",
           "value": "id",
           "values": []
+        },
+        {
+          "flag": "--ledger-entry-id",
+          "nullable": false,
+          "param": "ledgerEntryId",
+          "required": false,
+          "summary": "An entry of the ledger of money lent and borrowed.",
+          "type": "id",
+          "value": "id",
+          "values": []
         }
       ],
       "positional": "id",
       "route": "documents.unlink",
       "scope": "write",
-      "summary": "Detaches a document from a transaction or a recurring item. The document and the transaction stay.",
-      "usage": "meowny documents unlink <id> [--transaction-id <id>] [--recurring-id <id>]"
+      "summary": "Detaches a document from a transaction, a recurring item or a ledger entry. The document and the transaction stay.",
+      "usage": "meowny documents unlink <id> [--transaction-id <id>] [--recurring-id <id>] [--ledger-entry-id <id>]"
     },
     {
       "command": "documents get",
@@ -2621,7 +2661,7 @@
           "nullable": false,
           "param": "out",
           "required": true,
-          "summary": "Where to write the file: an absolute path ending in .txt (TEXT) or .csv (CSV), in a folder that exists, that is not there yet.",
+          "summary": "Where to write the file: an absolute path ending in .txt (TEXT), .csv (CSV) or .pdf (PDF), in a folder that exists, that is not there yet.",
           "type": "path",
           "value": "path",
           "values": []
@@ -2645,12 +2685,13 @@
           "nullable": false,
           "param": "format",
           "required": false,
-          "summary": "TEXT (the default) or CSV. LEDGER is CSV only.",
+          "summary": "TEXT (the default), CSV or PDF. LEDGER is CSV only.",
           "type": "string",
-          "value": "TEXT|CSV",
+          "value": "TEXT|CSV|PDF",
           "values": [
             "TEXT",
-            "CSV"
+            "CSV",
+            "PDF"
           ]
         },
         {
@@ -2667,8 +2708,8 @@
       "positional": null,
       "route": "export.debts",
       "scope": "read",
-      "summary": "Writes who owes what to a text or CSV file, after the person allows it in the app: the SUMMARY of all friends, the STATEMENT of one friend (personId), or the LEDGER of every entry as CSV. An existing file is never replaced.",
-      "usage": "meowny export debts --out <path> [--what <SUMMARY|STATEMENT|LEDGER>] [--format <TEXT|CSV>] [--person-id <id>]"
+      "summary": "Writes who owes what to a text, CSV or PDF file, in English, after the person allows it in the app: the SUMMARY of all friends, the STATEMENT of one friend (personId), or the LEDGER of every entry as CSV. An existing file is never replaced.",
+      "usage": "meowny export debts --out <path> [--what <SUMMARY|STATEMENT|LEDGER>] [--format <TEXT|CSV|PDF>] [--person-id <id>]"
     },
     {
       "command": "login",

@@ -16,6 +16,8 @@
 
 // The PDF is made on the desktop only: the phone's build has neither the PDF writer nor the fonts (see `Cargo.toml`).
 #[cfg(desktop)]
+mod debts;
+#[cfg(desktop)]
 mod layout;
 #[cfg(desktop)]
 mod render;
@@ -333,6 +335,47 @@ pub fn read(conn: &Connection, options: &ReportOptions) -> Result<Report, AppErr
     }
     let tx = conn.unchecked_transaction()?;
     Ok(Report(load(&tx, options)?))
+}
+
+/// The summary of who owes what as a PDF, with the words in the person's language. The phone's build has no PDF writer.
+#[cfg(desktop)]
+pub fn debts_summary_pdf(conn: &Connection, today: &str, labels: &crate::debts::summary::Labels, format: &DisplayFormat, page: PageSize) -> Result<Vec<u8>, AppError> {
+    labels.validate()?;
+    format.validate()?;
+    let tx = conn.unchecked_transaction()?;
+    let currency = export::currency(&tx)?;
+    let summary = crate::debts::summary::summary(&tx)?;
+    let doc = debts::summary_doc(&summary, &currency, today, labels, format, page)?;
+    debts::pdf(&doc, &labels.summary_title, true)
+}
+
+/// The statement of one friend as a PDF.
+#[cfg(desktop)]
+pub fn debts_statement_pdf(
+    conn: &Connection,
+    person_id: i64,
+    today: &str,
+    labels: &crate::debts::summary::Labels,
+    format: &DisplayFormat,
+    page: PageSize,
+) -> Result<Vec<u8>, AppError> {
+    labels.validate()?;
+    format.validate()?;
+    let tx = conn.unchecked_transaction()?;
+    let currency = export::currency(&tx)?;
+    let statement = crate::debts::ledger::statement_in(&tx, person_id)?;
+    let doc = debts::statement_doc(&statement, &currency, today, labels, format, page)?;
+    debts::pdf(&doc, &labels.statement_title, true)
+}
+
+#[cfg(mobile)]
+pub fn debts_summary_pdf(_: &Connection, _: &str, _: &crate::debts::summary::Labels, _: &DisplayFormat, _: PageSize) -> Result<Vec<u8>, AppError> {
+    Err(AppError::InvalidInput)
+}
+
+#[cfg(mobile)]
+pub fn debts_statement_pdf(_: &Connection, _: i64, _: &str, _: &crate::debts::summary::Labels, _: &DisplayFormat, _: PageSize) -> Result<Vec<u8>, AppError> {
+    Err(AppError::InvalidInput)
 }
 
 #[cfg(test)]

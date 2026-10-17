@@ -15,9 +15,11 @@ use sha2::{Digest as _, Sha256};
 
 use super::stamp::{self, Stamp};
 use super::wire::{
-    self, BudgetRow, CategoryRow, DigestMessage, DocumentLinkRow, DocumentRow, Entries, Marker, Message, RecurringRow, Row, RowsMessage, Table,
-    TransactionRow, WireError, MAX_ENTRIES_PER_MESSAGE, MAX_ROWS_PER_MESSAGE, MAX_ROWS_PER_TABLE, SOFT_MESSAGE_BYTES,
+    self, BudgetRow, CategoryRow, DigestMessage, DocumentLinkRow, DocumentRow, Entries, LedgerRow, Marker, Message, PersonRow, RecurringRow, Row,
+    RowsMessage, SplitPartRow, Table, TemplatePartRow, TemplateRow, TransactionRow, WireError, MAX_ENTRIES_PER_MESSAGE, MAX_ROWS_PER_MESSAGE,
+    MAX_ROWS_PER_TABLE, SOFT_MESSAGE_BYTES,
 };
+use crate::debts::splits::{self, Who};
 use crate::recurring;
 
 /// A stamp from the other device this far ahead of this device's clock is refused: it would win every later fight.
@@ -96,8 +98,16 @@ impl From<crate::vault::AppError> for SyncError {
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct Digest(pub BTreeMap<Table, Entries>);
 
-const LISTED: [Table; 6] =
-    [Table::Categories, Table::RecurringTransactions, Table::Budgets, Table::Transactions, Table::Documents, Table::DocumentLinks];
+const LISTED: [Table; 8] = [
+    Table::Categories,
+    Table::People,
+    Table::RecurringTransactions,
+    Table::Budgets,
+    Table::Transactions,
+    Table::LedgerEntries,
+    Table::Documents,
+    Table::DocumentLinks,
+];
 
 pub fn digest(conn: &Connection) -> Result<Digest, SyncError> {
     let mut out = BTreeMap::new();
@@ -280,7 +290,57 @@ fn load_rows(conn: &Connection, table: Table, wanted: &HashSet<&String>) -> Resu
                 }
             }
         }
+        Table::People => {
+            let mut stmt = conn.prepare(
+                "SELECT sync_id, stamp, name, archived, merged_into, remind_on, remind_every_days, created_at, updated_at FROM people ORDER BY sync_id",
+            )?;
+            for r in stmt.query_map([], |r| {
+                Ok(PersonRow {
+                    sync_id: r.get(0)?,
+                    stamp: r.get(1)?,
+                    name: r.get(2)?,
+                    archived: r.get(3)?,
+                    merged_into: r.get(4)?,
+                    remind_on: r.get(5)?,
+                    remind_every_days: r.get(6)?,
+                    created_at: r.get(7)?,
+                    updated_at: r.get(8)?,
+                })
+            })? {
+                let r = r?;
+                if wanted.contains(&r.sync_id) {
+                    rows.push(Row::Person(r));
+                }
+            }
+        }
+        Table::LedgerEntries => {
+            let mut stmt = conn.prepare(
+                "SELECT e.sync_id, e.stamp, p.sync_id, e.kind, e.amount_minor, e.entry_date, e.note, t.sync_id, e.origin_id, e.created_at, e.updated_at
+                 FROM ledger_entries e JOIN people p ON p.id = e.person_id LEFT JOIN transactions t ON t.id = e.transaction_id ORDER BY e.sync_id",
+            )?;
+            for r in stmt.query_map([], |r| {
+                Ok(LedgerRow {
+                    sync_id: r.get(0)?,
+                    stamp: r.get(1)?,
+                    person: r.get(2)?,
+                    kind: r.get(3)?,
+                    amount_minor: r.get(4)?,
+                    entry_date: r.get(5)?,
+                    note: r.get(6)?,
+                    transaction: r.get(7)?,
+                    origin_id: r.get(8)?,
+                    created_at: r.get(9)?,
+                    updated_at: r.get(10)?,
+                })
+            })? {
+                let r = r?;
+                if wanted.contains(&r.sync_id) {
+                    rows.push(Row::Ledger(r));
+                }
+            }
+        }
         Table::RecurringTransactions => {
+            let mut templates = templates_by_item(conn)?;
             let mut stmt = conn.prepare(
                 "SELECT x.sync_id, x.stamp, c.sync_id, x.name, x.description, x.amount_minor, x.start_date, x.interval_unit, x.interval_count,
                         x.next_due_date, x.end_date, x.is_active, x.created_at, x.updated_at
@@ -300,12 +360,14 @@ fn load_rows(conn: &Connection, table: Table, wanted: &HashSet<&String>) -> Resu
                     next_due_date: r.get(9)?,
                     end_date: r.get(10)?,
                     is_active: r.get(11)?,
+                    split: None,
                     created_at: r.get(12)?,
                     updated_at: r.get(13)?,
                 })
             })? {
-                let r = r?;
+                let mut r = r?;
                 if wanted.contains(&r.sync_id) {
+                    r.split = templates.remove(&r.sync_id);
                     rows.push(Row::Recurring(r));
                 }
             }
@@ -335,6 +397,7 @@ fn load_rows(conn: &Connection, table: Table, wanted: &HashSet<&String>) -> Resu
             }
         }
         Table::Transactions => {
+            let mut parts = parts_by_bill(conn)?;
             let mut stmt = conn.prepare(
                 "SELECT t.sync_id, t.stamp, c.sync_id, r.sync_id, t.recurring_due_date, t.client_uuid, t.name, t.amount_minor,
                         t.planned_amount_minor, t.payment_date, t.description, t.created_at, t.updated_at
@@ -354,12 +417,14 @@ fn load_rows(conn: &Connection, table: Table, wanted: &HashSet<&String>) -> Resu
                     planned_amount_minor: r.get(8)?,
                     payment_date: r.get(9)?,
                     description: r.get(10)?,
+                    split: Vec::new(),
                     created_at: r.get(11)?,
                     updated_at: r.get(12)?,
                 })
             })? {
-                let r = r?;
+                let mut r = r?;
                 if wanted.contains(&r.sync_id) {
+                    r.split = parts.remove(&r.sync_id).unwrap_or_default();
                     rows.push(Row::Transaction(r));
                 }
             }
@@ -391,13 +456,22 @@ fn load_rows(conn: &Connection, table: Table, wanted: &HashSet<&String>) -> Resu
         }
         Table::DocumentLinks => {
             let mut stmt = conn.prepare(
-                "SELECT l.sync_id, l.stamp, d.sync_id, t.sync_id, r.sync_id, l.created_at
+                "SELECT l.sync_id, l.stamp, d.sync_id, t.sync_id, r.sync_id, e.sync_id, l.created_at
                  FROM document_links l JOIN documents d ON d.id = l.document_id
                  LEFT JOIN transactions t ON t.id = l.transaction_id
-                 LEFT JOIN recurring_transactions r ON r.id = l.recurring_transaction_id ORDER BY l.sync_id",
+                 LEFT JOIN recurring_transactions r ON r.id = l.recurring_transaction_id
+                 LEFT JOIN ledger_entries e ON e.id = l.ledger_entry_id ORDER BY l.sync_id",
             )?;
             for r in stmt.query_map([], |r| {
-                Ok(DocumentLinkRow { sync_id: r.get(0)?, stamp: r.get(1)?, document: r.get(2)?, transaction: r.get(3)?, recurring: r.get(4)?, created_at: r.get(5)? })
+                Ok(DocumentLinkRow {
+                    sync_id: r.get(0)?,
+                    stamp: r.get(1)?,
+                    document: r.get(2)?,
+                    transaction: r.get(3)?,
+                    recurring: r.get(4)?,
+                    ledger: r.get(5)?,
+                    created_at: r.get(6)?,
+                })
             })? {
                 let r = r?;
                 if wanted.contains(&r.sync_id) {
@@ -407,6 +481,43 @@ fn load_rows(conn: &Connection, table: Table, wanted: &HashSet<&String>) -> Resu
         }
     }
     Ok(rows)
+}
+
+/// The parts of every shared bill by the `sync_id` of the bill, in the order they are sent in.
+fn parts_by_bill(conn: &Connection) -> Result<HashMap<String, Vec<SplitPartRow>>, SyncError> {
+    let mut stmt = conn.prepare(
+        "SELECT t.sync_id, p.sync_id, l.guest_name, l.amount_minor
+         FROM transaction_split_lines l JOIN transactions t ON t.id = l.transaction_id LEFT JOIN people p ON p.id = l.person_id",
+    )?;
+    let mut out: HashMap<String, Vec<SplitPartRow>> = HashMap::new();
+    for row in stmt.query_map([], |r| Ok((r.get::<_, String>(0)?, SplitPartRow { person: r.get(1)?, guest: r.get(2)?, amount_minor: r.get(3)? })))? {
+        let (bill, part) = row?;
+        out.entry(bill).or_default().push(part);
+    }
+    out.values_mut().for_each(|parts| wire::sort_split(parts));
+    Ok(out)
+}
+
+/// The template of every split recurring item by the `sync_id` of the item.
+fn templates_by_item(conn: &Connection) -> Result<HashMap<String, TemplateRow>, SyncError> {
+    let mut out: HashMap<String, TemplateRow> = HashMap::new();
+    let mut stmt = conn.prepare("SELECT sync_id, split_my_weight FROM recurring_transactions WHERE split_my_weight IS NOT NULL")?;
+    for row in stmt.query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)?)))? {
+        let (item, mine) = row?;
+        out.insert(item, TemplateRow { mine, parts: Vec::new() });
+    }
+    let mut stmt = conn.prepare(
+        "SELECT x.sync_id, p.sync_id, l.guest_name, l.weight
+         FROM recurring_split_lines l JOIN recurring_transactions x ON x.id = l.recurring_transaction_id LEFT JOIN people p ON p.id = l.person_id",
+    )?;
+    for row in stmt.query_map([], |r| Ok((r.get::<_, String>(0)?, TemplatePartRow { person: r.get(1)?, guest: r.get(2)?, weight: r.get(3)? })))? {
+        let (item, part) = row?;
+        if let Some(template) = out.get_mut(&item) {
+            template.parts.push(part);
+        }
+    }
+    out.values_mut().for_each(|t| wire::sort_template(&mut t.parts));
+    Ok(out)
 }
 
 fn load_markers(conn: &Connection, table: Table, wanted: &HashSet<&String>) -> Result<Vec<Marker>, SyncError> {
@@ -639,6 +750,13 @@ impl<'a> Applier<'a> {
         Ok(())
     }
 
+    /// The entries of the ledger that were linked to this expense lose the link when it is deleted, and take the stamp of the deletion, as the
+    /// payments of a recurring item do (migration 0013): if the expense comes back on the other device with a newer edit, they are sent again.
+    fn unlink_entries(&self, transaction_id: i64, deleted_at: &str) -> Result<(), SyncError> {
+        self.run("UPDATE ledger_entries SET stamp = ?1 WHERE transaction_id = ?2 AND stamp < ?1", params![deleted_at, transaction_id])?;
+        Ok(())
+    }
+
     /// A newer row from the other device is about to replace this one: was it changed here since the last sync?
     fn note_overwrite(&mut self, local_stamp: &str) {
         let changed_here_since = match (self.since, Stamp::parse(local_stamp)) {
@@ -693,6 +811,49 @@ impl<'a> Applier<'a> {
             }
         }
         Err(SyncError::Invalid("reference"))
+    }
+
+    /// The local id of a friend, following a merge: a friend who was merged into another is that other one, and a row that pointed at
+    /// the first is moved (`true`) and takes the moved stamp, as it does on the device that merged them.
+    fn person(&self, sync_id: &str) -> Result<(i64, bool), SyncError> {
+        let mut current = sync_id.to_string();
+        let mut moved = false;
+        for _ in 0..8 {
+            let row: Option<(i64, Option<String>)> =
+                self.row("SELECT id, merged_into FROM people WHERE sync_id = ?1", [&current], |r| Ok((r.get(0)?, r.get(1)?))).optional()?;
+            let (id, merged_into) = row.ok_or(SyncError::Invalid("reference"))?;
+            match merged_into {
+                None => return Ok((id, moved)),
+                Some(next) => {
+                    moved = true;
+                    current = next;
+                }
+            }
+        }
+        Err(SyncError::Invalid("reference"))
+    }
+
+    /// The parts of an incoming bill (or the weights of a template) with the friends turned into local ids. Two entries that end up
+    /// with one friend after a merge become one, with the amounts added. `true` when some friend was merged into another.
+    fn local_parts<'p>(&self, parts: impl Iterator<Item = (&'p Option<String>, &'p Option<String>, i64)>) -> Result<(Vec<(Who, i64)>, bool), SyncError> {
+        let mut out: Vec<(Who, i64)> = Vec::new();
+        let mut any_moved = false;
+        for (person, guest, amount) in parts {
+            let who = match (person, guest) {
+                (Some(sync_id), None) => {
+                    let (id, moved) = self.person(sync_id)?;
+                    any_moved |= moved;
+                    Who::Person(id)
+                }
+                (None, Some(name)) => Who::Guest(name.clone()),
+                _ => return Err(SyncError::Invalid("split")),
+            };
+            match out.iter_mut().find(|(w, _)| *w == who) {
+                Some((_, total)) => *total += amount,
+                None => out.push((who, amount)),
+            }
+        }
+        Ok((out, any_moved))
     }
 
     fn settings(&mut self, rows: &[Row]) -> Result<(), SyncError> {
@@ -935,6 +1096,185 @@ impl<'a> Applier<'a> {
         Ok(())
     }
 
+    // --- people -----------------------------------------------------------------------------------------------
+    //
+    // The rules are those of the categories: the newer whole row wins; two friends with the same name who are both active become one
+    // (the lower id stays, the other is archived with `merged_into` and the stamp both devices work out), and what pointed at the one
+    // that went is moved to the one that stays. A friend is never deleted, so there are no markers.
+
+    fn write_person(&mut self, existing: Option<&Found>, r: &PersonRow) -> Result<i64, SyncError> {
+        match existing {
+            Some((id, _)) => {
+                self.run(
+                    "UPDATE people SET name = ?2, archived = ?3, merged_into = ?4, remind_on = ?5, remind_every_days = ?6, stamp = ?7, created_at = ?8 WHERE id = ?1",
+                    params![id, r.name, r.archived, r.merged_into, r.remind_on, r.remind_every_days, r.stamp, r.created_at],
+                )?;
+                self.set_updated_at(Table::People, *id, &r.updated_at)?;
+                Ok(*id)
+            }
+            None => {
+                self.run(
+                    "INSERT INTO people (sync_id, stamp, name, archived, merged_into, remind_on, remind_every_days, created_at, updated_at)
+                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+                    params![r.sync_id, r.stamp, r.name, r.archived, r.merged_into, r.remind_on, r.remind_every_days, r.created_at, r.updated_at],
+                )?;
+                Ok(self.tx.last_insert_rowid())
+            }
+        }
+    }
+
+    /// Marks a local friend as merged into another, with the stamp both devices work out.
+    fn merge_away_person(&mut self, loser_id: i64, winner_sync_id: &str, star: &Stamp) -> Result<(), SyncError> {
+        let when = iso(star.ms);
+        self.run("UPDATE people SET archived = 1, merged_into = ?2, stamp = ?3 WHERE id = ?1", params![loser_id, winner_sync_id, star.format()])?;
+        self.set_updated_at(Table::People, loser_id, &when)?;
+        self.summary.merged += 1;
+        Ok(())
+    }
+
+    /// Moves everything that belonged to a friend who was merged away to the one they were merged into: their ledger entries, and their
+    /// parts of bills and of templates (a bill that held both gets one part with the amounts added). What moves takes the moved stamp.
+    fn repoint_person(&mut self, loser: i64, winner: i64) -> Result<(), SyncError> {
+        let entries: Vec<(i64, String)> = self.tx.prepare_cached("SELECT id, stamp FROM ledger_entries WHERE person_id = ?1")?
+            .query_map([loser], |r| Ok((r.get(0)?, r.get(1)?)))?
+            .collect::<Result<_, _>>()?;
+        for (id, stamp) in entries {
+            let new = moved(&parse(&stamp)?);
+            self.run("UPDATE ledger_entries SET person_id = ?2, stamp = ?3 WHERE id = ?1", params![id, winner, new.format()])?;
+            self.set_updated_at(Table::LedgerEntries, id, &iso(new.ms))?;
+        }
+        for (lines, parent, amount_column, parent_table) in [
+            ("transaction_split_lines", "transaction_id", "amount_minor", Table::Transactions),
+            ("recurring_split_lines", "recurring_transaction_id", "weight", Table::RecurringTransactions),
+        ] {
+            let parts: Vec<(i64, i64, i64, String)> = self
+                .tx
+                .prepare_cached(&format!(
+                    "SELECT l.id, l.{parent}, l.{amount_column}, p.stamp FROM {lines} l JOIN {} p ON p.id = l.{parent} WHERE l.person_id = ?1",
+                    parent_table.name()
+                ))?
+                .query_map([loser], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)))?
+                .collect::<Result<_, _>>()?;
+            for (id, bill, amount, stamp) in parts {
+                let other: Option<i64> = self
+                    .row(&format!("SELECT id FROM {lines} WHERE {parent} = ?1 AND person_id = ?2"), params![bill, winner], |r| r.get(0))
+                    .optional()?;
+                match other {
+                    Some(other_id) => {
+                        self.run(&format!("UPDATE {lines} SET {amount_column} = {amount_column} + ?2 WHERE id = ?1"), params![other_id, amount])?;
+                        self.run(&format!("DELETE FROM {lines} WHERE id = ?1"), [id])?;
+                    }
+                    None => {
+                        self.run(&format!("UPDATE {lines} SET person_id = ?2 WHERE id = ?1"), params![id, winner])?;
+                    }
+                }
+                let new = moved(&parse(&stamp)?);
+                self.run(&format!("UPDATE {} SET stamp = ?2 WHERE id = ?1", parent_table.name()), params![bill, new.format()])?;
+                self.set_updated_at(parent_table, bill, &iso(new.ms))?;
+            }
+        }
+        Ok(())
+    }
+
+    fn person_row(&mut self, r: &PersonRow) -> Result<(), SyncError> {
+        let existing = self.find(Table::People, &r.sync_id)?;
+        if let Some((_, stamp)) = &existing {
+            if r.stamp <= *stamp {
+                if r.stamp < *stamp {
+                    self.summary.kept_yours += 1;
+                }
+                return Ok(());
+            }
+        }
+        let active = r.archived == 0 && r.merged_into.is_none();
+        if active {
+            if let Some((rival_id, rival_sync_id, rival_stamp)) = self.person_rival(r)? {
+                // the same name on both devices: they become one friend, the one with the lower id
+                if r.sync_id < rival_sync_id {
+                    let star = after(&parse(&rival_stamp)?);
+                    self.merge_away_person(rival_id, &r.sync_id, &star)?;
+                    let id = self.write_person(existing.as_ref(), r)?;
+                    self.repoint_person(rival_id, id)?;
+                } else {
+                    let star = after(&parse(&r.stamp)?);
+                    let mut merged = r.clone();
+                    merged.archived = 1;
+                    merged.merged_into = Some(rival_sync_id.clone());
+                    merged.stamp = star.format();
+                    merged.updated_at = iso(star.ms);
+                    let id = self.write_person(existing.as_ref(), &merged)?;
+                    self.summary.merged += 1;
+                    self.repoint_person(id, rival_id)?;
+                }
+                return Ok(());
+            }
+        }
+        let id = self.write_person(existing.as_ref(), r)?;
+        if let Some((_, local)) = &existing {
+            self.note_overwrite(local);
+            self.summary.updated += 1;
+        } else {
+            self.summary.added += 1;
+        }
+        if let Some(target) = &r.merged_into {
+            // the other device merged this friend away: what is here that pointed at them moves too
+            let (winner, _) = self.person(target)?;
+            self.repoint_person(id, winner)?;
+        }
+        Ok(())
+    }
+
+    /// The local active friend with the name this incoming row wants, if any: a collision (or the first sign of one).
+    fn person_rival(&self, r: &PersonRow) -> Result<Option<(i64, String, String)>, SyncError> {
+        Ok(self
+            .row(
+                "SELECT id, sync_id, stamp FROM people WHERE name = ?1 COLLATE NOCASE AND archived = 0 AND sync_id != ?2",
+                params![r.name, r.sync_id],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+            )
+            .optional()?)
+    }
+
+    fn people(&mut self, rows: &[Row]) -> Result<(), SyncError> {
+        let mut queue: Vec<&PersonRow> = rows
+            .iter()
+            .map(|r| match r {
+                Row::Person(c) => Ok(c),
+                _ => Err(SyncError::Invalid("row")),
+            })
+            .collect::<Result<_, _>>()?;
+        // the friends who stand come first, so the one a merged friend points at is there
+        queue.sort_by_key(|c| (c.merged_into.is_some(), c.sync_id.clone()));
+        let mut waiting: HashSet<String> = queue.iter().map(|c| c.sync_id.clone()).collect();
+        while !queue.is_empty() {
+            let mut deferred: Vec<&PersonRow> = Vec::new();
+            let mut progressed = false;
+            for r in queue {
+                let blocked = r.archived == 0
+                    && r.merged_into.is_none()
+                    && self.person_rival(r)?.is_some_and(|(_, rival, _)| waiting.contains(&rival));
+                if blocked {
+                    deferred.push(r);
+                } else {
+                    waiting.remove(&r.sync_id);
+                    self.person_row(r)?;
+                    progressed = true;
+                }
+            }
+            if !progressed {
+                // two friends who swap names: the one holding the name steps aside under a name no person can type
+                let r = deferred.remove(0);
+                if let Some((rival_id, rival, _)) = self.person_rival(r)? {
+                    self.run("UPDATE people SET name = ?2 WHERE id = ?1", params![rival_id, format!("\u{1}{rival}")])?;
+                }
+                waiting.remove(&r.sync_id);
+                self.person_row(r)?;
+            }
+            queue = deferred;
+        }
+        Ok(())
+    }
+
     // --- recurring items ------------------------------------------------------------------------------------
 
     fn recurring(&mut self, rows: &[Row]) -> Result<(), SyncError> {
@@ -950,6 +1290,16 @@ impl<'a> Applier<'a> {
             let mut stamp = r.stamp.clone();
             let (category, moved_category) = self.category(&r.category)?;
             if moved_category {
+                stamp = moved(&parse(&stamp)?).format();
+            }
+            let (template, moved_person) = match &r.split {
+                Some(t) => {
+                    let (lines, moved_person) = self.local_parts(t.parts.iter().map(|p| (&p.person, &p.guest, p.weight)))?;
+                    (Some((t.mine, lines)), moved_person)
+                }
+                None => (None, false),
+            };
+            if moved_person {
                 stamp = moved(&parse(&stamp)?).format();
             }
             if let Some(marker) = self.marker(&r.sync_id)? {
@@ -968,8 +1318,11 @@ impl<'a> Applier<'a> {
                     continue;
                 }
             }
+            if template.is_some() && self.is_income(category)? {
+                return Err(SyncError::Invalid("split"));
+            }
             let when = if stamp == r.stamp { r.updated_at.clone() } else { iso(parse(&stamp)?.ms) };
-            match &existing {
+            let item_id = match &existing {
                 Some((id, local)) => {
                     self.note_overwrite(local);
                     self.run(
@@ -979,6 +1332,7 @@ impl<'a> Applier<'a> {
                     )?;
                     self.set_updated_at(Table::RecurringTransactions, *id, &when)?;
                     self.summary.updated += 1;
+                    *id
                 }
                 None => {
                     self.run(
@@ -988,10 +1342,17 @@ impl<'a> Applier<'a> {
                         params![r.sync_id, stamp, category, r.name, r.description, r.amount_minor, r.start_date, r.interval_unit, r.interval_count, r.next_due_date, r.end_date, r.is_active, r.created_at, when],
                     )?;
                     self.summary.added += 1;
+                    self.tx.last_insert_rowid()
                 }
-            }
+            };
+            // the template comes with the item and replaces this device's
+            splits::replace_template(self.tx, item_id, template.as_ref().map(|(mine, lines)| (*mine, lines.as_slice()))).map_err(|_| SyncError::Invalid("split"))?;
         }
         Ok(())
+    }
+
+    fn is_income(&self, category_id: i64) -> Result<bool, SyncError> {
+        Ok(self.row("SELECT type = 'INCOME' FROM categories WHERE id = ?1", [category_id], |r| r.get(0))?)
     }
 
     // --- budgets ----------------------------------------------------------------------------------------------
@@ -1103,6 +1464,10 @@ impl<'a> Applier<'a> {
             if moved_category {
                 stamp = moved(&parse(&stamp)?).format();
             }
+            let (parts, moved_person) = self.local_parts(r.split.iter().map(|p| (&p.person, &p.guest, p.amount_minor)))?;
+            if moved_person {
+                stamp = moved(&parse(&stamp)?).format();
+            }
             // updated_at follows the stamp only when the stamp was derived from a merge; any other stamp change keeps it
             let when = if moved_by_merge(&stamp, &r.stamp) { iso(parse(&stamp)?.ms) } else { r.updated_at.clone() };
             if let Some(marker) = self.marker(&r.sync_id)? {
@@ -1163,6 +1528,7 @@ impl<'a> Applier<'a> {
             if incoming_loses {
                 let marker = after(&parse(&stamp)?).format();
                 if existing_id != 0 {
+                    self.unlink_entries(existing_id, &marker)?;
                     self.run("DELETE FROM transactions WHERE id = ?1", [existing_id])?;
                 }
                 self.put_marker(Table::Transactions, &r.sync_id, &marker)?;
@@ -1171,22 +1537,25 @@ impl<'a> Applier<'a> {
             }
             for (rival_id, rival_sync_id, rival_stamp) in &rivals {
                 let marker = self.loser_marker(rival_sync_id, rival_stamp);
+                self.unlink_entries(*rival_id, &marker)?;
                 self.run("DELETE FROM transactions WHERE id = ?1", [rival_id])?;
                 self.put_marker(Table::Transactions, rival_sync_id, &marker)?;
                 self.summary.dropped += 1;
             }
-            match &existing {
+            if !parts.is_empty() && self.is_income(category)? {
+                return Err(SyncError::Invalid("split"));
+            }
+            let bill = match &existing {
                 Some((id, local)) => {
                     self.note_overwrite(local);
-                    let old_amount: i64 = self.tx.query_row("SELECT amount_minor FROM transactions WHERE id = ?1", [id], |row| row.get(0))?;
                     self.run(
                         "UPDATE transactions SET stamp = ?2, category_id = ?3, recurring_transaction_id = ?4, recurring_due_date = ?5, client_uuid = ?6,
                          name = ?7, amount_minor = ?8, planned_amount_minor = ?9, payment_date = ?10, description = ?11, created_at = ?12 WHERE id = ?1",
                         params![id, stamp, category, recurring, r.recurring_due_date, r.client_uuid, r.name, r.amount_minor, r.planned_amount_minor, r.payment_date, r.description, r.created_at],
                     )?;
                     self.set_updated_at(Table::Transactions, *id, &when)?;
-                    crate::debts::splits::keep_valid_after_overwrite(self.tx, *id, old_amount).map_err(|_| SyncError::Internal)?;
                     self.summary.updated += 1;
+                    *id
                 }
                 None => {
                     self.run(
@@ -1194,6 +1563,119 @@ impl<'a> Applier<'a> {
                          amount_minor, planned_amount_minor, payment_date, description, created_at, updated_at)
                          VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
                         params![r.sync_id, stamp, category, recurring, r.recurring_due_date, r.client_uuid, r.name, r.amount_minor, r.planned_amount_minor, r.payment_date, r.description, r.created_at, when],
+                    )?;
+                    self.summary.added += 1;
+                    self.tx.last_insert_rowid()
+                }
+            };
+            // the parts come with the bill and replace this device's: the newer whole bill wins, parts included
+            splits::replace_lines(self.tx, bill, &parts).map_err(|_| SyncError::Invalid("split"))?;
+        }
+        Ok(())
+    }
+
+    // --- the ledger -------------------------------------------------------------------------------------------
+    //
+    // Entries are rows of the ordinary kind: the newer wins, a deletion leaves a marker, and an entry follows its friend if the friend
+    // was merged into another. Its link to the expense it came with is cleared by the foreign key when the expense goes, with no stamp
+    // (as for a payment and its recurring item), so an entry that arrives linked to an expense this device knows as deleted is taken
+    // with no link. Two entries from one bill code are the same entry: the newer stays and the other leaves a marker.
+
+    fn ledger(&mut self, rows: &[Row]) -> Result<(), SyncError> {
+        let mut list: Vec<&LedgerRow> = rows
+            .iter()
+            .map(|r| match r {
+                Row::Ledger(c) => Ok(c),
+                _ => Err(SyncError::Invalid("row")),
+            })
+            .collect::<Result<_, _>>()?;
+        list.sort_by(|a, b| a.sync_id.cmp(&b.sync_id));
+        for r in list {
+            let mut stamp = r.stamp.clone();
+            let (person, moved_person) = self.person(&r.person)?;
+            if moved_person {
+                stamp = moved(&parse(&stamp)?).format();
+            }
+            if let Some(marker) = self.marker(&r.sync_id)? {
+                if marker >= stamp {
+                    self.summary.kept_yours += 1;
+                    continue;
+                }
+                self.remove_marker(&r.sync_id)?;
+            }
+            let existing = self.find(Table::LedgerEntries, &r.sync_id)?;
+            if let Some((_, local)) = &existing {
+                if stamp <= *local {
+                    if stamp < *local {
+                        self.summary.kept_yours += 1;
+                    }
+                    continue;
+                }
+            }
+            // an entry linked to an expense that was deleted here arrives with no link, and takes the stamp of the deletion unless it is newer
+            let transaction = match &r.transaction {
+                Some(sync_id) => match self.find(Table::Transactions, sync_id)? {
+                    Some((id, _)) => Some(id),
+                    None => match self.marker(sync_id)? {
+                        Some(deleted_at) => {
+                            if deleted_at > stamp {
+                                stamp = deleted_at;
+                            }
+                            None
+                        }
+                        None => return Err(SyncError::Invalid("reference")),
+                    },
+                },
+                None => None,
+            };
+            if let Some((_, local)) = &existing {
+                if stamp <= *local {
+                    if stamp < *local {
+                        self.summary.kept_yours += 1;
+                    }
+                    continue;
+                }
+            }
+            if let Some(origin) = &r.origin_id {
+                let rival: Option<(i64, String, String)> = self
+                    .row("SELECT id, sync_id, stamp FROM ledger_entries WHERE origin_id = ?1 AND sync_id != ?2", params![origin, r.sync_id], |row| {
+                        Ok((row.get(0)?, row.get(1)?, row.get(2)?))
+                    })
+                    .optional()?;
+                if let Some((rival_id, rival_sync_id, rival_stamp)) = rival {
+                    let incoming_wins = (stamp.as_str(), std::cmp::Reverse(r.sync_id.as_str())) > (rival_stamp.as_str(), std::cmp::Reverse(rival_sync_id.as_str()));
+                    self.summary.dropped += 1;
+                    if incoming_wins {
+                        let marker = self.loser_marker(&rival_sync_id, &rival_stamp);
+                        self.run("DELETE FROM ledger_entries WHERE id = ?1", [rival_id])?;
+                        self.put_marker(Table::LedgerEntries, &rival_sync_id, &marker)?;
+                    } else {
+                        if let Some((id, _)) = &existing {
+                            self.run("DELETE FROM ledger_entries WHERE id = ?1", [id])?;
+                        }
+                        self.put_marker(Table::LedgerEntries, &r.sync_id, &after(&parse(&stamp)?).format())?;
+                        continue;
+                    }
+                }
+            }
+            // updated_at follows the stamp only when the stamp was derived from a merge (a friend moved); a stamp raised to a deletion's keeps it
+            let when = if moved_by_merge(&stamp, &r.stamp) { iso(parse(&stamp)?.ms) } else { r.updated_at.clone() };
+            match &existing {
+                Some((id, local)) => {
+                    self.note_overwrite(local);
+                    self.run(
+                        "UPDATE ledger_entries SET stamp = ?2, person_id = ?3, kind = ?4, amount_minor = ?5, entry_date = ?6, note = ?7, transaction_id = ?8,
+                         origin_id = ?9, created_at = ?10 WHERE id = ?1",
+                        params![id, stamp, person, r.kind, r.amount_minor, r.entry_date, r.note, transaction, r.origin_id, r.created_at],
+                    )?;
+                    self.set_updated_at(Table::LedgerEntries, *id, &when)?;
+                    self.summary.updated += 1;
+                }
+                None => {
+                    self.run(
+                        "INSERT INTO ledger_entries (sync_id, stamp, person_id, kind, amount_minor, entry_date, note, transaction_id, origin_id, created_at, updated_at)
+                         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+                        params![r.sync_id, stamp, person, r.kind, r.amount_minor, r.entry_date, r.note, transaction, r.origin_id, r.created_at, when],
                     )?;
                     self.summary.added += 1;
                 }
@@ -1264,7 +1746,7 @@ impl<'a> Applier<'a> {
 
     // --- links --------------------------------------------------------------------------------------------------
     //
-    // A link lives and dies with its document and its transaction or recurring item: the foreign key removes it with them, and no
+    // A link lives and dies with its document and its transaction, recurring item or ledger entry: the foreign key removes it with them, and no
     // marker is made for that (the parent's marker says it). A link whose document or target this device knows as deleted is therefore
     // not taken, and costs nothing: the other device, which still holds the link, is sent the deletion of the parent in the same
     // sync and drops the link with it. A marker for a link means a person unlinked it.
@@ -1295,9 +1777,10 @@ impl<'a> Applier<'a> {
                 }
                 None => return Err(SyncError::Invalid("reference")),
             };
-            let (column, target_table, target_id) = match (&r.transaction, &r.recurring) {
-                (Some(id), None) => ("transaction_id", Table::Transactions, id),
-                (None, Some(id)) => ("recurring_transaction_id", Table::RecurringTransactions, id),
+            let (column, target_table, target_id) = match (&r.transaction, &r.recurring, &r.ledger) {
+                (Some(id), None, None) => ("transaction_id", Table::Transactions, id),
+                (None, Some(id), None) => ("recurring_transaction_id", Table::RecurringTransactions, id),
+                (None, None, Some(id)) => ("ledger_entry_id", Table::LedgerEntries, id),
                 _ => return Err(SyncError::Invalid("link")),
             };
             let target = match self.find(target_table, target_id)? {
@@ -1339,10 +1822,15 @@ impl<'a> Applier<'a> {
                     continue;
                 }
             }
-            let (transaction, recurring) = if column == "transaction_id" { (Some(target), None) } else { (None, Some(target)) };
+            let (transaction, recurring, ledger) = match column {
+                "transaction_id" => (Some(target), None, None),
+                "recurring_transaction_id" => (None, Some(target), None),
+                _ => (None, None, Some(target)),
+            };
             self.run(
-                "INSERT INTO document_links (sync_id, stamp, document_id, transaction_id, recurring_transaction_id, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
-                params![r.sync_id, r.stamp, document, transaction, recurring, r.created_at],
+                "INSERT INTO document_links (sync_id, stamp, document_id, transaction_id, recurring_transaction_id, ledger_entry_id, created_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+                params![r.sync_id, r.stamp, document, transaction, recurring, ledger, r.created_at],
             )?;
             self.summary.added += 1;
         }
@@ -1367,6 +1855,10 @@ impl<'a> Applier<'a> {
                         if table == Table::RecurringTransactions {
                             // the payments lose their link to the item and take the stamp of the deletion, as on the device that deleted it
                             self.run("UPDATE transactions SET stamp = ?1 WHERE recurring_transaction_id = ?2 AND stamp < ?1", params![m.stamp, id])?;
+                        }
+                        if table == Table::Transactions {
+                            // and so do the entries of the ledger that were linked to the expense
+                            self.unlink_entries(id, &m.stamp)?;
                         }
                         self.delete_row(table, id)?;
                         self.put_marker(table, &m.sync_id, &m.stamp)?;
@@ -1458,23 +1950,29 @@ pub fn apply(conn: &mut Connection, incoming: &Incoming, now_ms: u64, since_ms: 
     let empty = Vec::new();
     applier.settings(incoming.rows.get(&Table::Settings).unwrap_or(&empty))?;
     applier.categories(incoming.rows.get(&Table::Categories).unwrap_or(&empty))?;
+    applier.people(incoming.rows.get(&Table::People).unwrap_or(&empty))?;
     applier.recurring(incoming.rows.get(&Table::RecurringTransactions).unwrap_or(&empty))?;
     applier.budgets(incoming.rows.get(&Table::Budgets).unwrap_or(&empty))?;
     applier.transactions(incoming.rows.get(&Table::Transactions).unwrap_or(&empty))?;
+    applier.ledger(incoming.rows.get(&Table::LedgerEntries).unwrap_or(&empty))?;
     applier.documents(incoming.rows.get(&Table::Documents).unwrap_or(&empty))?;
     applier.links(incoming.rows.get(&Table::DocumentLinks).unwrap_or(&empty))?;
     // payments before the recurring item they belong to: deleting the item gives the payments it still finds a newer stamp, which
     // must not happen to a payment that was deleted on the other device (and is in this same batch)
     // (a deleted document, transaction or recurring item takes its links with it, silently, by the foreign key)
-    for table in [Table::Transactions, Table::Budgets, Table::RecurringTransactions, Table::DocumentLinks, Table::Documents] {
+    // (a deleted ledger entry takes its links with it, silently, and a deleted expense clears the link of its entries and gives them the
+    // stamp of its deletion, which must not happen to an entry that was deleted on the other device and is in this same batch: so the
+    // entries go first, as the payments go before their recurring item)
+    for table in [Table::LedgerEntries, Table::Transactions, Table::Budgets, Table::RecurringTransactions, Table::DocumentLinks, Table::Documents] {
         applier.markers(table, incoming.markers.get(&table).map(Vec::as_slice).unwrap_or(&[]))?;
     }
     applier.settle_budgets()?;
     applier.check_recurring()?;
     let summary = applier.summary;
-    // the parts of shared bills do not travel yet; whatever the rows above did, they must still add up to no more than their bills
-    if !crate::debts::splits::check(&tx).map_err(|_| SyncError::Internal)? {
-        return Err(SyncError::Invalid("splits"));
+    // the parts of a bill travel with it and the checks of the database stood aside while they were written: the finished state must
+    // still follow the rules (no more than the bill, no more than 30, only an expense, a template that gives someone a weight)
+    if !splits::check(&tx).map_err(|_| SyncError::Internal)? {
+        return Err(SyncError::Invalid("split"));
     }
 
     let broken: i64 = tx.query_row("SELECT count(*) FROM pragma_foreign_key_check", [], |r| r.get(0))?;
@@ -1489,7 +1987,7 @@ pub fn apply(conn: &mut Connection, incoming: &Incoming, now_ms: u64, since_ms: 
 
 /// Whether this device holds no budget data yet, so it can be paired and given a full copy (docs/sync-design.md, section 5).
 pub fn is_empty(conn: &Connection) -> Result<bool, SyncError> {
-    for table in ["categories", "budgets", "recurring_transactions", "transactions", "documents", "sync_deleted", "currency_changes"] {
+    for table in ["categories", "people", "ledger_entries", "budgets", "recurring_transactions", "transactions", "documents", "sync_deleted", "currency_changes"] {
         let count: i64 = conn.query_row(&format!("SELECT count(*) FROM {table}"), [], |r| r.get(0))?;
         if count != 0 {
             return Ok(false);
@@ -1724,6 +2222,39 @@ fn name_of(conn: &Connection, sql: &str, sync_id: &str) -> String {
     conn.query_row(sql, [sync_id], |r| r.get::<_, String>(0)).unwrap_or_default()
 }
 
+/// "Anna 30.00, Bob 30.00": the parts of a bill, by the names of the friends on this device.
+fn split_text(conn: &Connection, parts: &[SplitPartRow]) -> String {
+    parts
+        .iter()
+        .map(|p| {
+            let who = match (&p.person, &p.guest) {
+                (Some(id), _) => name_of(conn, "SELECT name FROM people WHERE sync_id = ?1", id),
+                (_, Some(name)) => name.clone(),
+                _ => String::new(),
+            };
+            format!("{who} {}", crate::money::format_amount(p.amount_minor))
+        })
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+
+fn template_text(conn: &Connection, template: &Option<TemplateRow>) -> String {
+    let Some(t) = template else { return String::new() };
+    let parts: Vec<String> = t
+        .parts
+        .iter()
+        .map(|p| {
+            let who = match (&p.person, &p.guest) {
+                (Some(id), _) => name_of(conn, "SELECT name FROM people WHERE sync_id = ?1", id),
+                (_, Some(name)) => name.clone(),
+                _ => String::new(),
+            };
+            format!("{who} {}", p.weight)
+        })
+        .collect();
+    format!("{} {}", t.mine, parts.join(" "))
+}
+
 fn money_text(minor: Option<i64>) -> String {
     minor.map(crate::money::format_amount).unwrap_or_default()
 }
@@ -1740,6 +2271,23 @@ fn facts(conn: &Connection, row: &Row) -> Vec<(&'static str, String)> {
             ("date", r.payment_date.clone()),
             ("category", category_name(conn, &r.category)),
             ("description", some(&r.description)),
+            ("split", split_text(conn, &r.split)),
+        ],
+        Row::Person(r) => vec![
+            ("name", r.name.clone()),
+            ("archived", if r.archived == 1 { "yes" } else { "no" }.to_string()),
+            ("reminder", match (&r.remind_on, r.remind_every_days) {
+                (Some(on), Some(every)) => format!("{on} / {every}"),
+                (Some(on), None) => on.clone(),
+                _ => String::new(),
+            }),
+        ],
+        Row::Ledger(r) => vec![
+            ("friend", name_of(conn, "SELECT name FROM people WHERE sync_id = ?1", &r.person)),
+            ("kind", r.kind.clone()),
+            ("amount", money_text(Some(r.amount_minor))),
+            ("date", r.entry_date.clone()),
+            ("note", some(&r.note)),
         ],
         Row::Budget(r) => vec![("amount", money_text(r.amount_limit_minor)), ("month", r.effective_from.clone()), ("type", r.kind.clone())],
         Row::Recurring(r) => vec![
@@ -1751,6 +2299,7 @@ fn facts(conn: &Connection, row: &Row) -> Vec<(&'static str, String)> {
             ("active", if r.is_active == 1 { "yes" } else { "no" }.to_string()),
             ("category", category_name(conn, &r.category)),
             ("description", some(&r.description)),
+            ("split", template_text(conn, &r.split)),
         ],
         Row::Document(r) => vec![
             ("name", r.name.clone()),
@@ -1758,9 +2307,14 @@ fn facts(conn: &Connection, row: &Row) -> Vec<(&'static str, String)> {
             ("keepOnPhone", if r.keep_on_phone == 1 { "yes" } else { "no" }.to_string()),
         ],
         Row::Link(r) => {
-            let target = match (&r.transaction, &r.recurring) {
-                (Some(id), _) => name_of(conn, "SELECT name FROM transactions WHERE sync_id = ?1", id),
-                (_, Some(id)) => name_of(conn, "SELECT name FROM recurring_transactions WHERE sync_id = ?1", id),
+            let target = match (&r.transaction, &r.recurring, &r.ledger) {
+                (Some(id), _, _) => name_of(conn, "SELECT name FROM transactions WHERE sync_id = ?1", id),
+                (_, Some(id), _) => name_of(conn, "SELECT name FROM recurring_transactions WHERE sync_id = ?1", id),
+                (_, _, Some(id)) => name_of(
+                    conn,
+                    "SELECT p.name FROM ledger_entries e JOIN people p ON p.id = e.person_id WHERE e.sync_id = ?1",
+                    id,
+                ),
                 _ => String::new(),
             };
             vec![("document", name_of(conn, "SELECT name FROM documents WHERE sync_id = ?1", &r.document)), ("target", target)]
@@ -1803,6 +2357,7 @@ pub fn describe(conn: &Connection, conflicts: &[Conflict], theirs: &Incoming) ->
             .find(|(f, v)| *f == "name" && !v.is_empty())
             .map(|(_, v)| v.clone())
             .or_else(|| mine_facts.iter().chain(their_facts.iter()).find(|(f, v)| *f == "month" && !v.is_empty()).map(|(_, v)| v.clone()))
+            .or_else(|| mine_facts.iter().chain(their_facts.iter()).find(|(f, v)| *f == "friend" && !v.is_empty()).map(|(_, v)| v.clone()))
             .unwrap_or_default();
         out.push(ConflictView { table: c.table, id: c.id.clone(), title, mine_deleted: c.mine_deleted, theirs_deleted: c.theirs_deleted, fields });
     }

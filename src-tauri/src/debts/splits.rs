@@ -160,7 +160,7 @@ fn who_of(conn: &Connection, parts: &[Part], keep: &HashSet<i64>) -> Result<Vec<
         match (&part.person_id, &part.guest) {
             (Some(id), None) => {
                 let id = parse_id(id)?;
-                let archived: Option<bool> = conn.query_row("SELECT archived FROM people WHERE id = ?1", [id], |r| r.get(0)).optional()?;
+                let archived: Option<bool> = conn.query_row("SELECT archived FROM people WHERE id = ?1 AND merged_into IS NULL", [id], |r| r.get(0)).optional()?;
                 match archived {
                     None => return Err(AppError::InvalidInput),
                     Some(true) if !keep.contains(&id) => return Err(AppError::InvalidInput),
@@ -369,10 +369,23 @@ pub fn clear_split(conn: &Connection, transaction_id: i64) -> Result<(), AppErro
 /// new amount with `allocate`, so the parts still add up to the cent and your part is never negative. Parts that come out as 0 are dropped.
 /// The caller runs this inside its own database transaction, before the amount changes when it gets smaller and after when it grows.
 pub(crate) fn rescale(conn: &Connection, transaction_id: i64, old_amount: i64, new_amount: i64) -> Result<(), AppError> {
-    let current = lines_of(conn, transaction_id)?;
+    let mut current = lines_of(conn, transaction_id)?;
     if current.is_empty() {
         return Ok(());
     }
+    // The odd cents go by position, and two devices that convert a currency each rescale their own copy of the bill. The order the lines
+    // were stored in differs from one device to the other, so the positions come from something they share: friends by their sync id,
+    // then guests by name.
+    let mut keys: Vec<(u8, String)> = Vec::with_capacity(current.len());
+    for (_, who, _) in &current {
+        keys.push(match who {
+            Who::Person(id) => (0, conn.query_row("SELECT sync_id FROM people WHERE id = ?1", [id], |r| r.get::<_, String>(0))?),
+            Who::Guest(name) => (1, name.clone()),
+        });
+    }
+    let mut order: Vec<usize> = (0..current.len()).collect();
+    order.sort_by(|a, b| keys[*a].cmp(&keys[*b]));
+    current = order.into_iter().map(|at| current[at].clone()).collect();
     let others: i64 = current.iter().map(|(_, _, amount)| amount).sum();
     let weights: Vec<u64> = std::iter::once(old_amount - others).chain(current.iter().map(|(_, _, amount)| *amount)).map(|w| w as u64).collect();
     let amounts = allocate(new_amount, &weights)?;
@@ -380,18 +393,45 @@ pub(crate) fn rescale(conn: &Connection, transaction_id: i64, old_amount: i64, n
     write_lines(conn, transaction_id, &lines)
 }
 
-/// A transaction that arrives from another device replaces this device's. The sync does not carry the parts of a shared bill yet (it
-/// will, inside the transaction's row, in the next batch of the phase), so the other device's row knows nothing of them. Until then this
-/// keeps the parts here valid: they are scaled to a new amount, and dropped if the bill became an income. Nothing else is touched.
-pub(crate) fn keep_valid_after_overwrite(conn: &Connection, transaction_id: i64, old_amount: i64) -> Result<(), AppError> {
-    if line_count(conn, transaction_id)? == 0 {
+/// Makes the parts of a bill exactly `new` (a sync brings the parts with the bill). Only the lines that differ are touched.
+pub(crate) fn replace_lines(conn: &Connection, transaction_id: i64, new: &[(Who, i64)]) -> Result<(), AppError> {
+    write_lines(conn, transaction_id, new)
+}
+
+/// Makes the template of a recurring item exactly this (a sync brings the template with the item): `None` for no template, otherwise
+/// the weight of the person who pays and one weight for each friend or guest. Only what differs is touched.
+pub(crate) fn replace_template(conn: &Connection, recurring_id: i64, template: Option<(i64, &[(Who, i64)])>) -> Result<(), AppError> {
+    let current: Vec<(Who, u64)> = template_lines(conn, recurring_id)?;
+    let current_mine: Option<i64> = conn.query_row("SELECT split_my_weight FROM recurring_transactions WHERE id = ?1", [recurring_id], |r| r.get(0))?;
+    let Some((mine, lines)) = template else {
+        if !current.is_empty() {
+            conn.execute("DELETE FROM recurring_split_lines WHERE recurring_transaction_id = ?1", [recurring_id])?;
+        }
+        if current_mine.is_some() {
+            conn.execute("UPDATE recurring_transactions SET split_my_weight = NULL WHERE id = ?1", [recurring_id])?;
+        }
+        return Ok(());
+    };
+    let wanted: Vec<(Who, u64)> = lines.iter().map(|(who, weight)| (who.clone(), *weight as u64)).collect();
+    let same = |a: &[(Who, u64)], b: &[(Who, u64)]| a.len() == b.len() && a.iter().all(|x| b.contains(x));
+    if current_mine == Some(mine) && same(&current, &wanted) {
         return Ok(());
     }
-    let now = bill(conn, transaction_id)?;
-    if now.income {
-        conn.execute("DELETE FROM transaction_split_lines WHERE transaction_id = ?1", [transaction_id])?;
-    } else if now.amount != old_amount {
-        rescale(conn, transaction_id, old_amount, now.amount)?;
+    if current_mine != Some(mine) {
+        conn.execute("UPDATE recurring_transactions SET split_my_weight = ?1 WHERE id = ?2", params![mine, recurring_id])?;
+    }
+    if !same(&current, &wanted) {
+        conn.execute("DELETE FROM recurring_split_lines WHERE recurring_transaction_id = ?1", [recurring_id])?;
+        for (who, weight) in &wanted {
+            let (person, guest) = match who {
+                Who::Person(id) => (Some(*id), None),
+                Who::Guest(name) => (None, Some(name.as_str())),
+            };
+            conn.execute(
+                "INSERT INTO recurring_split_lines (recurring_transaction_id, person_id, guest_name, weight) VALUES (?1, ?2, ?3, ?4)",
+                params![recurring_id, person, guest, *weight as i64],
+            )?;
+        }
     }
     Ok(())
 }

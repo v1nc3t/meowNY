@@ -124,11 +124,21 @@ fn a_conversion_is_not_an_edit_so_no_row_gets_a_new_stamp() {
     assert_eq!(stamps(&conn), before);
 }
 
+/// Makes the friends of `to` the same people as those of `from`: friends are matched by their sync id, so two devices that have met
+/// hold the same ones, and the odd cents of a conversion follow them.
+fn same_friends(from: &Connection, to: &Connection) {
+    let all: Vec<(String, String)> = from.prepare("SELECT name, sync_id FROM people").unwrap().query_map([], |r| Ok((r.get(0)?, r.get(1)?))).unwrap().map(Result::unwrap).collect();
+    for (name, sync_id) in all {
+        to.execute("UPDATE people SET sync_id = ?1 WHERE name = ?2", rusqlite::params![sync_id, name]).unwrap();
+    }
+}
+
 #[test]
 fn two_devices_converting_with_the_same_rate_end_with_the_same_numbers() {
     for rate in ["1.08", "0.0063", "160", "0.5", "2.5", "1.00000001"] {
         let (mut desktop, ..) = lived_in();
         let (mut phone, ..) = lived_in();
+        same_friends(&desktop, &phone);
         change(&mut desktop, "USD", Some(rate), "2026-02-01").unwrap();
         let (generation, from, to, recorded_rate, stamp): (i64, String, String, Option<String>, String) =
             desktop.query_row("SELECT id, from_currency, to_currency, rate, stamp FROM currency_changes", [], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?))).unwrap();

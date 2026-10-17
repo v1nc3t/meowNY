@@ -11,6 +11,10 @@ use crate::categories::{self, Category, CategoryType};
 use crate::budgets::{self, Budget, Overview, SetBudget};
 use crate::clock;
 use crate::currency::{self, Conversion};
+use crate::debts::ledger::{self, Entry, EntryPatch, Expense, NewEntry, Settled, Statement};
+use crate::debts::people::{self, Person, PersonPatch};
+use crate::debts::splits::{self, Preview, SplitInput};
+use crate::debts::summary::{self, Labels, Summary};
 use crate::display::DisplayFormat;
 use crate::documents::library as docs;
 use crate::documents::names as doc_names;
@@ -177,6 +181,23 @@ pub const COMMANDS: &[&str] = &[
     "document_upload_finish",
     "document_upload_cancel",
     "document_add_dropped",
+    "list_people",
+    "create_person",
+    "update_person",
+    "archive_person",
+    "unarchive_person",
+    "person_statement",
+    "debts_summary",
+    "add_ledger_entry",
+    "update_ledger_entry",
+    "delete_ledger_entry",
+    "settle_person",
+    "split_preview",
+    "set_transaction_split",
+    "clear_transaction_split",
+    "set_recurring_split",
+    "clear_recurring_split",
+    "export_debts",
 ];
 
 #[tauri::command]
@@ -907,6 +928,207 @@ pub async fn document_add_dropped(vault: Shared<'_>) -> Result<crate::documents:
     let today = today_text(&vault)?;
     let pending = vault.dropped().take();
     Ok(crate::documents::dropped::add_all(pending, |input, bytes| vault.with_files(|conn, files| docs::add(conn, files, input, bytes, &today))))
+}
+
+// ---- friends, the ledger and shared bills (phase 10) ----------------------------------------------------------------------
+
+/// The friends with what each owes you (negative: you owe them), the largest first. Archived friends only on request.
+#[tauri::command]
+pub fn list_people(vault: Shared, archived: bool) -> Result<Vec<Person>, AppError> {
+    vault.with_conn(|c| people::list(c, archived))
+}
+
+#[tauri::command]
+pub fn create_person(vault: Shared, name: String) -> Result<Person, AppError> {
+    vault.with_conn(|c| people::create(c, &name))
+}
+
+/// Renames a friend and/or sets or clears their reminder.
+#[tauri::command]
+pub fn update_person(vault: Shared, id: String, patch: PersonPatch) -> Result<Person, AppError> {
+    let id = categories::parse_id(&id)?;
+    vault.with_conn(|c| people::update(c, id, &patch))
+}
+
+#[tauri::command]
+pub fn archive_person(vault: Shared, id: String) -> Result<Person, AppError> {
+    let id = categories::parse_id(&id)?;
+    vault.with_conn(|c| people::archive(c, id))
+}
+
+#[tauri::command]
+pub fn unarchive_person(vault: Shared, id: String) -> Result<Person, AppError> {
+    let id = categories::parse_id(&id)?;
+    vault.with_conn(|c| people::restore(c, id))
+}
+
+/// A friend's ledger: their parts of shared bills and the entries by date, with the balance after each line.
+#[tauri::command]
+pub fn person_statement(vault: Shared, id: String) -> Result<Statement, AppError> {
+    let id = categories::parse_id(&id)?;
+    vault.with_conn(|c| ledger::statement(c, id))
+}
+
+/// What friends owe you and what you owe them, in all and for each friend whose balance is not 0.
+#[tauri::command]
+pub fn debts_summary(vault: Shared) -> Result<Summary, AppError> {
+    vault.with_conn(|c| summary::summary(c))
+}
+
+/// Records money lent, borrowed or paid back. With `expense`, a borrowing also adds the person's share to their expenses, in one step.
+#[tauri::command]
+pub fn add_ledger_entry(vault: Shared, input: NewEntry, expense: Option<Expense>) -> Result<Entry, AppError> {
+    vault.with_conn(|c| match &expense {
+        Some(expense) => ledger::borrow_with_expense(c, &input, expense),
+        None => ledger::add(c, &input),
+    })
+}
+
+#[tauri::command]
+pub fn update_ledger_entry(vault: Shared, id: String, patch: EntryPatch) -> Result<Entry, AppError> {
+    let id = categories::parse_id(&id)?;
+    vault.with_conn(|c| ledger::update(c, id, &patch))
+}
+
+#[tauri::command]
+pub fn delete_ledger_entry(vault: Shared, id: String) -> Result<(), AppError> {
+    let id = categories::parse_id(&id)?;
+    vault.with_conn(|c| ledger::delete(c, id))
+}
+
+/// "Mark as paid": a payment between the person and a friend. No amount means the whole balance; one larger than the debt is accepted and
+/// turns the balance around (the answer says how much was over).
+#[tauri::command]
+pub fn settle_person(vault: Shared, id: String, amount: Option<String>, date: Option<String>, note: Option<String>) -> Result<Settled, AppError> {
+    let id = categories::parse_id(&id)?;
+    let today = today_text(&vault)?;
+    vault.with_conn(|c| ledger::settle(c, id, amount.as_deref(), date.as_deref(), note.as_deref(), &today))
+}
+
+/// What a split would give each person for a bill of `amount`, for the dialog, on every change. Writes nothing. The rule is here and
+/// nowhere else, so what the dialog shows is what is stored.
+#[tauri::command]
+pub fn split_preview(vault: Shared, amount: String, input: SplitInput) -> Result<Preview, AppError> {
+    let total = crate::money::parse_positive_amount(&amount)?;
+    vault.with_conn(|c| splits::preview(c, total, &input))
+}
+
+/// Shares a transaction with friends and guests. The transaction keeps what was paid; budgets and statistics count the person's part.
+#[tauri::command]
+pub fn set_transaction_split(vault: Shared, id: String, input: SplitInput) -> Result<Transaction, AppError> {
+    let id = categories::parse_id(&id)?;
+    vault.with_conn(|c| {
+        splits::set_split(c, id, &input)?;
+        transactions::get(c, id)
+    })
+}
+
+#[tauri::command]
+pub fn clear_transaction_split(vault: Shared, id: String) -> Result<Transaction, AppError> {
+    let id = categories::parse_id(&id)?;
+    vault.with_conn(|c| {
+        splits::clear_split(c, id)?;
+        transactions::get(c, id)
+    })
+}
+
+/// Splits every payment of a recurring item the same way from now on (kept as proportions). Payments already made are not changed.
+#[tauri::command]
+pub fn set_recurring_split(vault: Shared, id: String, input: SplitInput) -> Result<Recurring, AppError> {
+    let id = categories::parse_id(&id)?;
+    vault.with_conn(|c| {
+        splits::set_template(c, id, &input)?;
+        recurring::get(c, id)
+    })
+}
+
+#[tauri::command]
+pub fn clear_recurring_split(vault: Shared, id: String) -> Result<Recurring, AppError> {
+    let id = categories::parse_id(&id)?;
+    vault.with_conn(|c| {
+        splits::clear_template(c, id)?;
+        recurring::get(c, id)
+    })
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Deserialize)]
+#[serde(rename_all = "UPPERCASE")]
+pub enum DebtsWhat {
+    /// Who owes what, all friends.
+    Summary,
+    /// One friend's ledger.
+    Statement,
+    /// Every entry of the ledger (CSV only).
+    Ledger,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Deserialize)]
+#[serde(rename_all = "UPPERCASE")]
+pub enum DebtsFormat {
+    Text,
+    Csv,
+    Pdf,
+}
+
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct DebtsExport {
+    pub what: DebtsWhat,
+    pub format: DebtsFormat,
+    /// The friend, for a statement.
+    #[serde(default)]
+    pub person_id: Option<String>,
+    /// The fixed words, in the person's language.
+    pub labels: Labels,
+    /// How numbers and money look in a PDF.
+    #[serde(default)]
+    pub display: Option<DisplayFormat>,
+    #[serde(default)]
+    pub page: Option<report::PageSize>,
+}
+
+/// A name that is safe in a file name: letters and digits kept, the rest becomes a dash.
+fn file_stem(text: &str) -> String {
+    let stem: String = text.chars().map(|c| if c.is_alphanumeric() { c } else { '-' }).collect();
+    let stem = stem.trim_matches('-');
+    stem.chars().take(40).collect::<String>().trim_matches('-').to_string()
+}
+
+/// Saves who owes what (the summary, one friend's statement, or the whole ledger) as text, CSV or PDF, where the person says. The app sends
+/// it to nobody. Not encrypted.
+#[tauri::command]
+pub async fn export_debts(app: tauri::AppHandle, vault: Shared<'_>, request: DebtsExport) -> Result<bool, AppError> {
+    request.labels.validate()?;
+    let today = today_text(&vault)?;
+    let person = request.person_id.as_deref().map(categories::parse_id).transpose()?;
+    let display = request.display.clone().unwrap_or_default();
+    let page = request.page.unwrap_or_default();
+    let labels = &request.labels;
+    let (stem, bytes) = vault.with_conn(|c| -> Result<(String, Vec<u8>), AppError> {
+        Ok(match (request.what, request.format, person) {
+            (DebtsWhat::Summary, DebtsFormat::Text, None) => ("who-owes-what".to_string(), summary::summary_text(c, &today, labels)?.into_bytes()),
+            (DebtsWhat::Summary, DebtsFormat::Csv, None) => ("who-owes-what".to_string(), summary::summary_csv(c)?.into_bytes()),
+            (DebtsWhat::Summary, DebtsFormat::Pdf, None) => ("who-owes-what".to_string(), report::debts_summary_pdf(c, &today, labels, &display, page)?),
+            (DebtsWhat::Statement, format, Some(id)) => {
+                let name = people::get(c, id)?.name;
+                let stem = format!("statement-{}", file_stem(&name));
+                let bytes = match format {
+                    DebtsFormat::Text => summary::statement_text(c, id, &today, labels)?.into_bytes(),
+                    DebtsFormat::Csv => summary::statement_csv(c, id)?.into_bytes(),
+                    DebtsFormat::Pdf => report::debts_statement_pdf(c, id, &today, labels, &display, page)?,
+                };
+                (stem, bytes)
+            }
+            (DebtsWhat::Ledger, DebtsFormat::Csv, None) => ("ledger".to_string(), summary::ledger_csv(c)?.into_bytes()),
+            _ => return Err(AppError::InvalidInput),
+        })
+    })?;
+    let (kind, extension) = match request.format {
+        DebtsFormat::Text => ("Text", "txt"),
+        DebtsFormat::Csv => ("CSV", "csv"),
+        DebtsFormat::Pdf => ("PDF", "pdf"),
+    };
+    save_export(&app, format!("meowny-{stem}-{today}.{extension}"), kind, extension, &bytes)
 }
 
 #[cfg(test)]

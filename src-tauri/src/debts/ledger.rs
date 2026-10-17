@@ -153,7 +153,7 @@ pub fn get(conn: &Connection, id: i64) -> Result<Entry, AppError> {
 }
 
 fn person_exists(conn: &Connection, id: i64) -> Result<bool, AppError> {
-    Ok(conn.query_row("SELECT 1 FROM people WHERE id = ?1", [id], |_| Ok(())).optional()?.is_some())
+    Ok(conn.query_row("SELECT 1 FROM people WHERE id = ?1 AND merged_into IS NULL", [id], |_| Ok(())).optional()?.is_some())
 }
 
 fn transaction_exists(conn: &Connection, id: i64) -> Result<bool, AppError> {
@@ -330,6 +330,11 @@ pub struct Line {
     pub effect: String,
     /// The balance after this line.
     pub balance: String,
+    /// The same in minor units, for the code around (they do not leave the app).
+    #[serde(skip)]
+    pub effect_minor: i64,
+    #[serde(skip)]
+    pub balance_minor: i64,
     pub entry_id: Option<String>,
     pub transaction_id: Option<String>,
 }
@@ -348,7 +353,7 @@ pub fn statement(conn: &Connection, person_id: i64) -> Result<Statement, AppErro
 }
 
 /// Without a transaction of its own, for the callers that have one.
-pub(super) fn statement_in(tx: &Connection, person_id: i64) -> Result<Statement, AppError> {
+pub(crate) fn statement_in(tx: &Connection, person_id: i64) -> Result<Statement, AppError> {
     let person = people::get(tx, person_id)?;
     // (date, source, id, kind, what, signed minor, entry id, transaction id): bills before entries on the same day
     struct Raw {
@@ -391,6 +396,8 @@ pub(super) fn statement_in(tx: &Connection, person_id: i64) -> Result<Statement,
                 amount: format_amount(r.signed.abs()),
                 effect: format_amount(r.signed),
                 balance: format_amount(running),
+                effect_minor: r.signed,
+                balance_minor: running,
                 entry_id: r.entry.map(|id| id.to_string()),
                 transaction_id: r.transaction.map(|id| id.to_string()),
             }

@@ -93,6 +93,23 @@ const COMMANDS: &[&str] = &[
     "document_upload_finish",
     "document_upload_cancel",
     "document_add_dropped",
+    "list_people",
+    "create_person",
+    "update_person",
+    "archive_person",
+    "unarchive_person",
+    "person_statement",
+    "debts_summary",
+    "add_ledger_entry",
+    "update_ledger_entry",
+    "delete_ledger_entry",
+    "settle_person",
+    "split_preview",
+    "set_transaction_split",
+    "clear_transaction_split",
+    "set_recurring_split",
+    "clear_recurring_split",
+    "export_debts",
 ];
 
 fn main() {

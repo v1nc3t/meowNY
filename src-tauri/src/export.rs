@@ -337,7 +337,7 @@ fn history_json(conn: &Connection) -> Result<Vec<Value>, AppError> {
 
 /// What a document is attached to, as an export names it.
 pub(crate) struct DocLink {
-    /// "transaction" or "recurring".
+    /// "transaction", "recurring" or "ledger" (the name is then the friend's and the date the entry's).
     pub(crate) kind: &'static str,
     pub(crate) id: i64,
     pub(crate) name: String,
@@ -375,12 +375,15 @@ pub(crate) fn documents(conn: &Connection, sel: &Parsed) -> Result<Vec<DocRow>, 
     let mut statement = conn.prepare(
         "SELECT d.id, d.name, d.media_type, d.size_bytes, d.sha256, d.document_date,
                 l.transaction_id, t.name, t.payment_date, t.category_id,
-                l.recurring_transaction_id, r.name, r.category_id
+                l.recurring_transaction_id, r.name, r.category_id,
+                l.ledger_entry_id, pe.name, e.entry_date
          FROM documents d
          LEFT JOIN document_links l ON l.document_id = d.id
          LEFT JOIN transactions t ON t.id = l.transaction_id
          LEFT JOIN recurring_transactions r ON r.id = l.recurring_transaction_id
-         ORDER BY d.document_date, d.id, l.transaction_id IS NULL, t.payment_date, l.transaction_id, r.name, l.recurring_transaction_id",
+         LEFT JOIN ledger_entries e ON e.id = l.ledger_entry_id
+         LEFT JOIN people pe ON pe.id = e.person_id
+         ORDER BY d.document_date, d.id, l.transaction_id IS NULL, t.payment_date, l.transaction_id, r.name, l.recurring_transaction_id, e.entry_date, l.ledger_entry_id",
     )?;
     let mut rows = statement.query([])?;
     let everything = sel.everything();
@@ -418,6 +421,12 @@ pub(crate) fn documents(conn: &Connection, sel: &Parsed) -> Result<Vec<DocRow>, 
             let (name, category): (String, i64) = (r.get(11)?, r.get(12)?);
             if sel.has_recurring(category) {
                 doc.links.push(DocLink { kind: "recurring", id: item, name, date: None });
+            }
+        } else if let Some(entry) = r.get::<_, Option<i64>>(13)? {
+            // an entry of the ledger is in the export only when the ledger is (see `debts.rs`)
+            let (friend, date): (String, String) = (r.get(14)?, r.get(15)?);
+            if (everything || sel.debts) && sel.from.as_deref().is_none_or(|from| date.as_str() >= from) && sel.to.as_deref().is_none_or(|to| date.as_str() <= to) {
+                doc.links.push(DocLink { kind: "ledger", id: entry, name: friend, date: Some(date) });
             }
         }
     }

@@ -212,6 +212,29 @@ fn a_new_amount_scales_every_part_yours_included() {
 }
 
 #[test]
+fn the_odd_cents_of_a_new_amount_do_not_depend_on_the_order_the_parts_were_stored_in() {
+    // Two devices that convert a currency each rescale their own copy of a bill; the parts are stored in a different order on each, and
+    // the cents that are left must still go to the same people.
+    let w = world();
+    let (anna, bob) = (friend(&w.conn, "Anna"), friend(&w.conn, "Bob"));
+    let one_way = bill(&w.conn, w.food, "Dinner", "100.01", "2026-01-01");
+    let other_way = bill(&w.conn, w.food, "Dinner again", "100.01", "2026-01-01");
+    let exact = |parts: Vec<_>| input(Mode::Exact, None, parts.into_iter().map(|p| with(p, "33.33")).collect());
+    set_split(&w.conn, one_way, &exact(vec![who(anna), who(bob), guest("Cy")])).unwrap();
+    set_split(&w.conn, other_way, &exact(vec![guest("Cy"), who(bob), who(anna)])).unwrap();
+    assert_ne!(parts(&w.conn, one_way).iter().map(|p| p.0.clone()).collect::<Vec<_>>(), parts(&w.conn, other_way).iter().map(|p| p.0.clone()).collect::<Vec<_>>(), "stored in opposite orders");
+    amount(&w.conn, one_way, "100.00").unwrap();
+    amount(&w.conn, other_way, "100.00").unwrap();
+    let by_name = |id: i64| {
+        let mut all = parts(&w.conn, id);
+        all.sort();
+        all
+    };
+    assert_eq!(by_name(one_way), by_name(other_way));
+    assert_eq!(cost(&w.conn, one_way), cost(&w.conn, other_way));
+}
+
+#[test]
 fn a_tiny_amount_can_drop_a_part_and_the_rest_still_adds_up() {
     let w = world();
     let (anna, bob) = (friend(&w.conn, "Anna"), friend(&w.conn, "Bob"));

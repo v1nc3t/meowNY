@@ -51,9 +51,9 @@ export type DocPage = z.infer<typeof DocPage>
 export const AddOutcome = z.object({ document: Doc, alreadyThere: z.boolean() })
 export type AddOutcome = z.infer<typeof AddOutcome>
 
-export const TargetKind = z.enum(['transaction', 'recurring'])
+export const TargetKind = z.enum(['transaction', 'recurring', 'ledger_entry'])
 export type TargetKind = z.infer<typeof TargetKind>
-/** What a document is linked to: a transaction or a recurring item. */
+/** What a document is linked to: a transaction, a recurring item or an entry of the ledger of money lent and borrowed. */
 export type Target = { kind: TargetKind; id: string }
 
 export const LinkView = z.object({ kind: TargetKind, id, name: z.string(), date })
@@ -96,6 +96,7 @@ export type DocFilter = {
   to?: string
   transactionId?: string
   recurringTransactionId?: string
+  ledgerEntryId?: string
   limit?: number
   offset?: number
 }

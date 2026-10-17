@@ -311,6 +311,6 @@ mod tests {
         assert_eq!(catalog.find(&["documents", "show"]).unwrap().positional().unwrap().name, "id");
         assert_eq!(catalog.find(&["documents", "get"]).unwrap().positional().unwrap().name, "id");
         let flags: Vec<&str> = add.params.iter().map(|p| p.flag.as_str()).collect();
-        assert_eq!(flags, ["file", "name", "date", "keep-on-phone", "transaction-ids", "recurring-ids"]);
+        assert_eq!(flags, ["file", "name", "date", "keep-on-phone", "transaction-ids", "recurring-ids", "ledger-entry-ids"]);
     }
 }

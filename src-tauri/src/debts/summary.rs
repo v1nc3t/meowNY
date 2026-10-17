@@ -2,7 +2,7 @@
 //! connection to anyone; a file is something the person writes and sends with whatever they already use.
 
 use rusqlite::Connection;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use super::ledger::{self, Statement};
 use super::people::{self, Person};
@@ -36,8 +36,9 @@ fn summary_in(tx: &Connection) -> Result<Summary, AppError> {
     Ok(Summary { owed_to_you: format_amount(owed), you_owe: format_amount(owe), net: format_amount(owed - owe), people })
 }
 
-/// The fixed words of the text files. The screens give their own, in the person's language; the command line uses these.
-#[derive(Debug, Clone)]
+/// The fixed words of the text files and the PDF. The screens give their own, in the person's language; the command line uses the English.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct Labels {
     pub summary_title: String,
     pub statement_title: String,
@@ -53,6 +54,14 @@ pub struct Labels {
     pub repaid_to_me: String,
     pub repaid_by_me: String,
     pub bill: String,
+    /// The heads of the columns of a statement, and the word before the number of a page.
+    pub date: String,
+    pub what: String,
+    pub change: String,
+    pub balance: String,
+    pub name: String,
+    pub amount: String,
+    pub page: String,
 }
 
 impl Labels {
@@ -73,10 +82,34 @@ impl Labels {
             repaid_to_me: s("paid back to me"),
             repaid_by_me: s("paid back by me"),
             bill: s("share of a bill"),
+            date: s("Date"),
+            what: s("What"),
+            change: s("Change"),
+            balance: s("Balance"),
+            name: s("Friend"),
+            amount: s("Amount"),
+            page: s("Page"),
         }
     }
 
-    fn kind(&self, kind: &str) -> &str {
+    /// Every piece of text, to be checked before it is drawn or written: short, plain, no control characters.
+    pub fn all(&self) -> [&String; 22] {
+        [
+            &self.summary_title, &self.statement_title, &self.owed_to_you, &self.you_owe, &self.net, &self.owes_you, &self.you_owe_them,
+            &self.nobody, &self.settled, &self.lent, &self.borrowed, &self.repaid_to_me, &self.repaid_by_me, &self.bill, &self.date,
+            &self.what, &self.change, &self.balance, &self.name, &self.amount, &self.page, &self.statement_title,
+        ]
+    }
+
+    /// Words that are too long or hold a control character are refused: the labels arrive from the webview.
+    pub fn validate(&self) -> Result<(), AppError> {
+        if self.all().iter().any(|l| l.chars().count() > 120 || l.chars().any(char::is_control)) {
+            return Err(AppError::InvalidInput);
+        }
+        Ok(())
+    }
+
+    pub(crate) fn kind(&self, kind: &str) -> &str {
         match kind {
             "LENT" => &self.lent,
             "BORROWED" => &self.borrowed,

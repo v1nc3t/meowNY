@@ -212,7 +212,7 @@ export default function DocumentModal({ id, onClose, onChanged }: { id: string; 
                 {links.map((link) => (
                   <li key={`${link.kind}-${link.id}`}>
                     <span>
-                      {t(link.kind === 'transaction' ? 'docs.kindTransaction' : 'docs.kindRecurring')}: {link.name} ({formatDate(link.date, locale)})
+                      {t(link.kind === 'transaction' ? 'docs.kindTransaction' : link.kind === 'recurring' ? 'docs.kindRecurring' : 'docs.kindLedger')}: {link.name} ({formatDate(link.date, locale)})
                     </span>
                     <button type="button" onClick={() => void onDetach(link)}>
                       {t('docs.detach')}

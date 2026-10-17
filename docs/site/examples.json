@@ -230,7 +230,7 @@
       "json": {
         "exit": 0,
         "stderr": "",
-        "stdout": "{\"alreadyThere\":false,\"createdAt\":\"2026-10-17T08:51:36.994Z\",\"documentDate\":\"2026-10-01\",\"hasFile\":true,\"id\":\"1\",\"keepOnPhone\":false,\"linkCount\":0,\"mediaType\":\"application/pdf\",\"name\":\"boiler-receipt.pdf\",\"sha256\":\"735a7713978716d1e65eb6bf069e2f410eb72ec5b285861be417aeca0feeb935\",\"sizeBytes\":45}\n"
+        "stdout": "{\"alreadyThere\":false,\"createdAt\":\"2026-10-17T13:09:31.500Z\",\"documentDate\":\"2026-10-01\",\"hasFile\":true,\"id\":\"1\",\"keepOnPhone\":false,\"linkCount\":0,\"mediaType\":\"application/pdf\",\"name\":\"boiler-receipt.pdf\",\"sha256\":\"735a7713978716d1e65eb6bf069e2f410eb72ec5b285861be417aeca0feeb935\",\"sizeBytes\":45}\n"
       }
     },
     "documents delete": {
@@ -262,12 +262,12 @@
       "human": {
         "exit": 0,
         "stderr": "",
-        "stdout": "limit: 50\noffset: 0\ntotal: 1\n\ndocuments\nid  name                createdAt                 documentDate  hasFile  keepOnPhone  linkCount  mediaType        sha256                                                        sizeBytes\n 1  boiler-receipt.pdf  2026-10-17T08:51:36.994Z  2026-10-01    true     false                0  application/pdf  735a7713978716d1e65eb6bf069e2f410eb72ec5b285861be417aeca0fe…         45\n"
+        "stdout": "limit: 50\noffset: 0\ntotal: 1\n\ndocuments\nid  name                createdAt                 documentDate  hasFile  keepOnPhone  linkCount  mediaType        sha256                                                        sizeBytes\n 1  boiler-receipt.pdf  2026-10-17T13:09:31.500Z  2026-10-01    true     false                0  application/pdf  735a7713978716d1e65eb6bf069e2f410eb72ec5b285861be417aeca0fe…         45\n"
       },
       "json": {
         "exit": 0,
         "stderr": "",
-        "stdout": "{\"documents\":[{\"createdAt\":\"2026-10-17T08:51:36.994Z\",\"documentDate\":\"2026-10-01\",\"hasFile\":true,\"id\":\"1\",\"keepOnPhone\":false,\"linkCount\":0,\"mediaType\":\"application/pdf\",\"name\":\"boiler-receipt.pdf\",\"sha256\":\"735a7713978716d1e65eb6bf069e2f410eb72ec5b285861be417aeca0feeb935\",\"sizeBytes\":45}],\"limit\":50,\"offset\":0,\"total\":1}\n"
+        "stdout": "{\"documents\":[{\"createdAt\":\"2026-10-17T13:09:31.500Z\",\"documentDate\":\"2026-10-01\",\"hasFile\":true,\"id\":\"1\",\"keepOnPhone\":false,\"linkCount\":0,\"mediaType\":\"application/pdf\",\"name\":\"boiler-receipt.pdf\",\"sha256\":\"735a7713978716d1e65eb6bf069e2f410eb72ec5b285861be417aeca0feeb935\",\"sizeBytes\":45}],\"limit\":50,\"offset\":0,\"total\":1}\n"
       }
     },
     "documents show": {
@@ -275,12 +275,12 @@
       "human": {
         "exit": 0,
         "stderr": "",
-        "stdout": "createdAt: 2026-10-17T08:51:36.994Z\ndocumentDate: 2026-10-01\nhasFile: true\nid: 1\nkeepOnPhone: false\nlinkCount: 0\nmediaType: application/pdf\nname: boiler-receipt.pdf\nsha256: 735a7713978716d1e65eb6bf069e2f410eb72ec5b285861be417aeca0feeb935\nsizeBytes: 45\n\nlinks\n(none)\n"
+        "stdout": "createdAt: 2026-10-17T13:09:31.500Z\ndocumentDate: 2026-10-01\nhasFile: true\nid: 1\nkeepOnPhone: false\nlinkCount: 0\nmediaType: application/pdf\nname: boiler-receipt.pdf\nsha256: 735a7713978716d1e65eb6bf069e2f410eb72ec5b285861be417aeca0feeb935\nsizeBytes: 45\n\nlinks\n(none)\n"
       },
       "json": {
         "exit": 0,
         "stderr": "",
-        "stdout": "{\"createdAt\":\"2026-10-17T08:51:36.994Z\",\"documentDate\":\"2026-10-01\",\"hasFile\":true,\"id\":\"1\",\"keepOnPhone\":false,\"linkCount\":0,\"links\":[],\"mediaType\":\"application/pdf\",\"name\":\"boiler-receipt.pdf\",\"sha256\":\"735a7713978716d1e65eb6bf069e2f410eb72ec5b285861be417aeca0feeb935\",\"sizeBytes\":45}\n"
+        "stdout": "{\"createdAt\":\"2026-10-17T13:09:31.500Z\",\"documentDate\":\"2026-10-01\",\"hasFile\":true,\"id\":\"1\",\"keepOnPhone\":false,\"linkCount\":0,\"links\":[],\"mediaType\":\"application/pdf\",\"name\":\"boiler-receipt.pdf\",\"sha256\":\"735a7713978716d1e65eb6bf069e2f410eb72ec5b285861be417aeca0feeb935\",\"sizeBytes\":45}\n"
       }
     },
     "documents unlink": {
@@ -296,7 +296,7 @@
       "json": {
         "exit": 0,
         "stderr": "",
-        "stdout": "{\"createdAt\":\"2026-10-17T08:51:36.994Z\",\"documentDate\":\"2026-10-01\",\"hasFile\":true,\"id\":\"1\",\"keepOnPhone\":true,\"linkCount\":0,\"mediaType\":\"application/pdf\",\"name\":\"Boiler repair\",\"sha256\":\"735a7713978716d1e65eb6bf069e2f410eb72ec5b285861be417aeca0feeb935\",\"sizeBytes\":45}\n"
+        "stdout": "{\"createdAt\":\"2026-10-17T13:09:31.500Z\",\"documentDate\":\"2026-10-01\",\"hasFile\":true,\"id\":\"1\",\"keepOnPhone\":true,\"linkCount\":0,\"mediaType\":\"application/pdf\",\"name\":\"Boiler repair\",\"sha256\":\"735a7713978716d1e65eb6bf069e2f410eb72ec5b285861be417aeca0feeb935\",\"sizeBytes\":45}\n"
       }
     },
     "export csv": {
@@ -349,7 +349,7 @@
       "human": {
         "exit": 0,
         "stderr": "",
-        "stdout": "bytes: 25968\npath: /home/you/budget.xlsx\n"
+        "stdout": "bytes: 25967\npath: /home/you/budget.xlsx\n"
       }
     },
     "ledger add": {
@@ -697,12 +697,12 @@
       "human": {
         "exit": 0,
         "stderr": "",
-        "stdout": "api: 1\napp: meowny\nschemaVersion: 12\nscope: read\nversion: 0.1.0\n"
+        "stdout": "api: 1\napp: meowny\nschemaVersion: 13\nscope: read\nversion: 0.1.0\n"
       },
       "json": {
         "exit": 0,
         "stderr": "",
-        "stdout": "{\"api\":1,\"app\":\"meowny\",\"schemaVersion\":12,\"scope\":\"read\",\"version\":\"0.1.0\"}\n"
+        "stdout": "{\"api\":1,\"app\":\"meowny\",\"schemaVersion\":13,\"scope\":\"read\",\"version\":\"0.1.0\"}\n"
       }
     },
     "today": {

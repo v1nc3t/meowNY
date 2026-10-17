@@ -18,16 +18,16 @@ pub(super) const BOLD_FONT: &[u8] = include_bytes!("../../fonts/DejaVuSans-Bold.
 
 pub type Color = (u8, u8, u8);
 
-const INK: Color = (0x1f, 0x23, 0x28);
-const MUTED: Color = (0x5f, 0x66, 0x73);
-const GRID: Color = (0xd8, 0xdc, 0xe2);
+pub(super) const INK: Color = (0x1f, 0x23, 0x28);
+pub(super) const MUTED: Color = (0x5f, 0x66, 0x73);
+pub(super) const GRID: Color = (0xd8, 0xdc, 0xe2);
 const TRACK: Color = (0xec, 0xee, 0xf1);
-const CARD: Color = (0xf5, 0xf6, 0xf8);
+pub(super) const CARD: Color = (0xf5, 0xf6, 0xf8);
 const WHITE: Color = (0xff, 0xff, 0xff);
 // The dashboard's colours: income green, expenses red, the rest of the palette for the donut.
-const INCOME: Color = (0x2e, 0x8b, 0x57);
+pub(super) const INCOME: Color = (0x2e, 0x8b, 0x57);
 const EXPENSE: Color = (0xf7, 0x76, 0x8e);
-const OVER_TEXT: Color = (0xc0, 0x39, 0x4d);
+pub(super) const OVER_TEXT: Color = (0xc0, 0x39, 0x4d);
 const WITHIN: Color = (0x7a, 0xa2, 0xf7);
 const PALETTE: [Color; 8] = [
     (0x2e, 0x8b, 0x57),
@@ -40,8 +40,8 @@ const PALETTE: [Color; 8] = [
     (0x8a, 0x8f, 0x98),
 ];
 
-const MARGIN: f32 = 44.0;
-const FOOTER_SPACE: f32 = 34.0;
+pub(super) const MARGIN: f32 = 44.0;
+pub(super) const FOOTER_SPACE: f32 = 34.0;
 const CHART_HEIGHT: f32 = 150.0;
 const DONUT_OUTER: f32 = 58.0;
 const DONUT_INNER: f32 = 33.0;

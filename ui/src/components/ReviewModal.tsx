@@ -35,7 +35,8 @@ export default function ReviewModal({
     if (value === '') return '-'
     if (field === 'amount' && settings) return formatMoney(value, settings.currency, settings.locale)
     if (field === 'type') return t(value === 'INCOME' ? 'common.income' : 'common.expense')
-    if (field === 'active' || field === 'keepOnPhone') return t(value === 'yes' ? 'common.yes' : 'common.no')
+    if (field === 'active' || field === 'keepOnPhone' || field === 'archived') return t(value === 'yes' ? 'common.yes' : 'common.no')
+    if (field === 'kind' && (value === 'LENT' || value === 'BORROWED' || value === 'REPAID_TO_ME' || value === 'REPAID_BY_ME')) return t(`debts.kind.${value}`)
     if (field === 'every') {
       const every = parseEvery(value)
       if (every) return every.count === 1 ? t(`rec.every1.${every.unit as 'DAY' | 'WEEK' | 'MONTH' | 'YEAR'}`) : t(`rec.everyN.${every.unit as 'DAY' | 'WEEK' | 'MONTH' | 'YEAR'}`, { count: every.count })

@@ -20,14 +20,15 @@ use super::{ApiError, Approval};
 use crate::categories::parse_id;
 use crate::debts::ledger::{self, EntryPatch, Expense, NewEntry};
 use crate::debts::splits::{self, Mode, Part, SplitInput};
-use crate::debts::{people, summary};
+use crate::debts::people::{self, PersonPatch};
+use crate::debts::summary;
 use crate::money::parse_positive_amount;
 use crate::tokens::Scope;
 use crate::{recurring, transactions};
 
 const MODES: &[&str] = &["EQUAL", "PERCENT", "SHARES", "EXACT"];
 const KINDS: &[&str] = &["LENT", "BORROWED", "REPAID_TO_ME", "REPAID_BY_ME"];
-const FORMATS: &[&str] = &["TEXT", "CSV"];
+const FORMATS: &[&str] = &["TEXT", "CSV", "PDF"];
 const WHAT: &[&str] = &["SUMMARY", "STATEMENT", "LEDGER"];
 
 const FRIEND: Param = Param::new("id", Kind::Id, "The friend.");
@@ -161,33 +162,8 @@ pub const PEOPLE_UPDATE: Route = Route {
     confirm: None,
     run: |ctx, mut args| {
         let id = take_id(&mut args, "id")?;
-        #[derive(Deserialize)]
-        #[serde(rename_all = "camelCase")]
-        struct Args {
-            name: Option<String>,
-            #[serde(default, deserialize_with = "present")]
-            remind_on: Option<Option<String>>,
-            #[serde(default, deserialize_with = "present")]
-            remind_every_days: Option<Option<u32>>,
-        }
-        fn present<'de, D: serde::Deserializer<'de>, T: Deserialize<'de>>(d: D) -> Result<Option<Option<T>>, D::Error> {
-            Ok(Some(Option::deserialize(d)?))
-        }
-        let a: Args = parse(args)?;
-        let person = ctx.vault.with_conn(|c| {
-            if let Some(name) = &a.name {
-                people::rename(c, id, name)?;
-            }
-            if a.remind_on.is_some() || a.remind_every_days.is_some() {
-                let current = people::get(c, id)?;
-                let on = a.remind_on.clone().unwrap_or(current.remind_on);
-                // clearing the date clears the repeat with it; a repeat given for a friend with no date is refused
-                let every = if a.remind_on == Some(None) && a.remind_every_days.is_none() { None } else { a.remind_every_days.unwrap_or(current.remind_every_days) };
-                people::set_reminder(c, id, on.as_deref(), every)?;
-            }
-            people::get(c, id)
-        })?;
-        reply(person)
+        let patch: PersonPatch = parse(args)?;
+        reply(ctx.vault.with_conn(|c| people::update(c, id, &patch))?)
     },
 };
 
@@ -389,20 +365,20 @@ pub const EXPORT_DEBTS: Route = Route {
     name: "export.debts",
     scope: Scope::Read,
     confirm: Some(confirm_debts),
-    summary: "Writes who owes what to a text or CSV file, after the person allows it in the app: the SUMMARY of all friends, the STATEMENT of one friend (personId), or the LEDGER of every entry as CSV. An existing file is never replaced.",
+    summary: "Writes who owes what to a text, CSV or PDF file, in English, after the person allows it in the app: the SUMMARY of all friends, the STATEMENT of one friend (personId), or the LEDGER of every entry as CSV. An existing file is never replaced.",
     params: &[
-        Param::new("out", Kind::Path, "Where to write the file: an absolute path ending in .txt (TEXT) or .csv (CSV), in a folder that exists, that is not there yet.").required(),
+        Param::new("out", Kind::Path, "Where to write the file: an absolute path ending in .txt (TEXT), .csv (CSV) or .pdf (PDF), in a folder that exists, that is not there yet.").required(),
         Param::new("what", Kind::String, "SUMMARY (the default), STATEMENT or LEDGER.").one_of(WHAT),
-        Param::new("format", Kind::String, "TEXT (the default) or CSV. LEDGER is CSV only.").one_of(FORMATS),
+        Param::new("format", Kind::String, "TEXT (the default), CSV or PDF. LEDGER is CSV only.").one_of(FORMATS),
         Param::new("personId", Kind::Id, "The friend, for a STATEMENT."),
     ],
     run: |ctx, args| {
         let plan = plan(&args)?;
         let (path, _) = split(&args, plan.extension())?;
         let today = today(ctx)?;
-        let text = ctx.vault.with_conn(|c| plan.render(c, &today))?;
-        write_new(&path, text.as_bytes())?;
-        Ok(json!({ "path": path.display().to_string(), "bytes": text.len() }))
+        let bytes = ctx.vault.with_conn(|c| plan.render(c, &today))?;
+        write_new(&path, &bytes)?;
+        Ok(json!({ "path": path.display().to_string(), "bytes": bytes.len() }))
     },
 };
 
@@ -410,6 +386,7 @@ pub const EXPORT_DEBTS: Route = Route {
 enum Format {
     Text,
     Csv,
+    Pdf,
 }
 
 /// What `export.debts` was asked for, checked.
@@ -428,13 +405,14 @@ fn plan(args: &Map<String, Value>) -> Result<Plan, ApiError> {
     };
     let format = match text("format").unwrap_or(if what == "LEDGER" { "CSV" } else { "TEXT" }) {
         "CSV" => Format::Csv,
+        "PDF" => Format::Pdf,
         _ => Format::Text,
     };
     let person = text("personId").map(parse_id).transpose()?;
     match (what, person, format) {
         ("STATEMENT", None, _) => Err(ApiError::invalid("a STATEMENT needs a personId")),
         ("SUMMARY" | "LEDGER", Some(_), _) => Err(ApiError::invalid("personId is only for a STATEMENT")),
-        ("LEDGER", _, Format::Text) => Err(ApiError::invalid("the LEDGER is a CSV file")),
+        ("LEDGER", _, Format::Text | Format::Pdf) => Err(ApiError::invalid("the LEDGER is a CSV file")),
         _ => Ok(Plan { what, format, person }),
     }
 }
@@ -444,18 +422,22 @@ impl Plan {
         match self.format {
             Format::Text => "txt",
             Format::Csv => "csv",
+            Format::Pdf => "pdf",
         }
     }
 
-    fn render(&self, conn: &rusqlite::Connection, today: &str) -> Result<String, crate::vault::AppError> {
+    fn render(&self, conn: &rusqlite::Connection, today: &str) -> Result<Vec<u8>, crate::vault::AppError> {
         let labels = summary::Labels::english();
-        match (self.what, self.format, self.person) {
-            ("STATEMENT", Format::Text, Some(id)) => summary::statement_text(conn, id, today, &labels),
-            ("STATEMENT", _, Some(id)) => summary::statement_csv(conn, id),
-            ("LEDGER", _, _) => summary::ledger_csv(conn),
-            (_, Format::Text, _) => summary::summary_text(conn, today, &labels),
-            _ => summary::summary_csv(conn),
-        }
+        let (display, page) = (Default::default(), crate::report::PageSize::A4);
+        Ok(match (self.what, self.format, self.person) {
+            ("STATEMENT", Format::Text, Some(id)) => summary::statement_text(conn, id, today, &labels)?.into_bytes(),
+            ("STATEMENT", Format::Csv, Some(id)) => summary::statement_csv(conn, id)?.into_bytes(),
+            ("STATEMENT", Format::Pdf, Some(id)) => crate::report::debts_statement_pdf(conn, id, today, &labels, &display, page)?,
+            ("LEDGER", _, _) => summary::ledger_csv(conn)?.into_bytes(),
+            (_, Format::Text, _) => summary::summary_text(conn, today, &labels)?.into_bytes(),
+            (_, Format::Csv, _) => summary::summary_csv(conn)?.into_bytes(),
+            (_, Format::Pdf, _) => crate::report::debts_summary_pdf(conn, today, &labels, &display, page)?,
+        })
     }
 }
 
@@ -465,7 +447,7 @@ fn confirm_debts(ctx: &Ctx, args: &Map<String, Value>) -> Result<Approval, ApiEr
     let today = today(ctx)?;
     // A file that could not be made (a friend that is not there) is refused here, before the person is asked.
     let (lines, what) = ctx.vault.with_conn(|c| {
-        let text = plan.render(c, &today)?;
+        let text = String::from_utf8_lossy(&plan.render(c, &today)?).into_owned();
         let who = match plan.person {
             Some(id) => format!("the statement of {}", people::get(c, id)?.name),
             None if plan.what == "LEDGER" => "every entry of the ledger".to_string(),

@@ -905,6 +905,16 @@ fn every_command_runs_against_a_real_app_and_a_new_one_without_a_test_fails_this
     assert_eq!(t.go(&r, &["debts", "summary"])["owedToYou"], "60.00");
     let loan = id_of(&t.go(&w, &["ledger", "add", "--person-id", &anna, "--kind", "lent", "--amount", "10.00", "--date", "2026-10-15", "--note", "taxi"]));
     assert_eq!(t.go(&w, &["ledger", "update", &loan, "--amount", "12.00", "--clear-note"])["amount"], "12.00");
+    // a loan note on the entry: attached as it is added, found by the entry, and gone from it with `unlink`
+    let note = app.out("Loan note.pdf");
+    std::fs::write(&note, b"%PDF-1.4 a loan note for the taxi").unwrap();
+    let on_entry = t.go(&w, &["documents", "add", &note, "--ledger-entry-ids", &loan]);
+    let note_doc = id_of(&on_entry);
+    assert_eq!(on_entry["linkCount"], 1);
+    assert_eq!(t.go(&r, &["documents", "list", "--ledger-entry-id", &loan])["total"], 1);
+    assert_eq!(t.go(&r, &["documents", "show", &note_doc])["links"][0]["kind"], "ledger_entry");
+    assert!(t.go(&w, &["documents", "unlink", &note_doc, "--ledger-entry-id", &loan]).is_null());
+    assert_eq!(t.go(&r, &["documents", "list", "--ledger-entry-id", &loan])["total"], 0);
     let borrowed = t.go(&w, &["ledger", "add", "--person-id", &bob, "--kind", "borrowed", "--amount", "8.00", "--date", "2026-10-16", "--expense-name", "Lunch", "--expense-category-id", &pets]);
     assert!(borrowed["transactionId"].is_string(), "the share was added to the expenses");
     let paid = t.go(&w, &["people", "settle", &anna, "--amount", "50.00", "--date", "2026-10-17"]);
@@ -916,6 +926,9 @@ fn every_command_runs_against_a_real_app_and_a_new_one_without_a_test_fails_this
     let statement = app.out("anna.txt");
     assert!(t.go(&w, &["export", "debts", "--out", &statement, "--what", "statement", "--person-id", &anna])["bytes"].as_u64().unwrap() > 0);
     assert!(std::fs::read_to_string(&statement).unwrap().starts_with("Statement: Anna"));
+    let pdf = app.out("anna.pdf");
+    assert!(t.go(&w, &["export", "debts", "--out", &pdf, "--what", "statement", "--format", "pdf", "--person-id", &anna])["bytes"].as_u64().unwrap() > 500);
+    assert!(std::fs::read(&pdf).unwrap().starts_with(b"%PDF-"));
     assert!(t.go(&w, &["transactions", "unsplit", &dinner])["split"].as_array().unwrap().is_empty());
     assert_eq!(t.go(&w, &["people", "archive", &bob])["archived"], true);
     assert_eq!(t.go(&w, &["people", "unarchive", &bob])["archived"], false);

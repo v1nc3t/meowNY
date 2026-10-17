@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
+import { debts, type Summary } from '../api/debts'
 import { errorText } from '../api/invoke'
 import { monthNames, shiftMonth, withYear, yearChoices } from '../api/months'
 import Dropdown from '../components/Dropdown'
@@ -34,7 +35,22 @@ function DashboardView({ settings, now }: { settings: MoneySettings; now: Today 
   const t = useT()
   const [month, setMonth] = useState(now.month)
   const [data, setData] = useState<MonthData | null>(null)
+  // who owes what, over all time: it does not follow the month
+  const [owed, setOwed] = useState<Summary | null>(null)
   const [message, setMessage] = useNotice()
+
+  useEffect(() => {
+    let cancelled = false
+    void debts.summary().then(
+      (summary) => {
+        if (!cancelled) setOwed(summary)
+      },
+      () => undefined,
+    )
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   useEffect(() => {
     let cancelled = false
@@ -108,6 +124,27 @@ function DashboardView({ settings, now }: { settings: MoneySettings; now: Today 
                 </div>
                 <RecurringTable commitments={data.commitments} paid={data.paid} income={point.income} settings={settings} />
               </div>
+              {owed ? (
+                <div className="dash-card">
+                  <h2>
+                    <Link to="/app/debts">{t('debts.title')}</Link>
+                  </h2>
+                  {owed.people.length === 0 ? (
+                    <p className="dash-empty">{t('debts.nobody')}</p>
+                  ) : (
+                    <div className="dash-stats">
+                      <div className="dash-stat">
+                        <span className="dash-stat-label">{t('debts.owedToYou')}</span>
+                        <span className="dash-stat-value">{formatMoney(owed.owedToYou, settings.currency, settings.locale)}</span>
+                      </div>
+                      <div className="dash-stat">
+                        <span className="dash-stat-label">{t('debts.youOwe')}</span>
+                        <span className="dash-stat-value">{formatMoney(owed.youOwe, settings.currency, settings.locale)}</span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ) : null}
             </div>
             <div className="dash-card">
               <h2>

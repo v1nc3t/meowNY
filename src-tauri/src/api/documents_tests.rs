@@ -272,7 +272,7 @@ fn a_document_is_renamed_redated_switched_attached_detached_and_deleted() {
     assert_eq!(count(&r, "SELECT count(*) FROM document_links"), 2);
     for body in [json!({ "id": id }), json!({ "id": id, "transactionId": "1", "recurringId": "1" })] {
         let reply = r.post("documents.link", body);
-        assert_eq!((reply.status, reply.message().as_str()), (400, "give exactly one of transactionId and recurringId"));
+        assert_eq!((reply.status, reply.message().as_str()), (400, "give exactly one of transactionId, recurringId and ledgerEntryId"));
     }
     assert_eq!(r.post("documents.link", json!({ "id": id, "transactionId": "999999" })).status, 404);
     assert_eq!(r.post("documents.link", json!({ "id": "999", "transactionId": "1" })).status, 404);
@@ -293,6 +293,40 @@ fn a_document_is_renamed_redated_switched_attached_detached_and_deleted() {
     let history = |action: &str| count(&r, &format!("SELECT count(*) FROM audit_log WHERE entity_type = 'documents' AND action = '{action}'"));
     assert_eq!((history("INSERT"), history("DELETE")), (1, 1));
     assert!(history("UPDATE") >= 2, "the changes of a name are in the history");
+}
+
+#[test]
+fn a_document_can_be_attached_to_an_entry_of_the_ledger_and_goes_with_it() {
+    let r = rig(true);
+    let anna = r.post("people.create", json!({ "name": "Anna" })).data()["id"].as_str().unwrap().to_string();
+    let entry = r.post("ledger.add", json!({ "personId": anna, "kind": "LENT", "amount": "40.00", "date": "2026-10-01" })).data()["id"].as_str().unwrap().to_string();
+    let id = add(&r, "Loan note.pdf", PDF, None);
+
+    // attached once, and once more changes nothing; an entry that is not there is not found; exactly one target
+    assert_eq!(r.post("documents.link", json!({ "id": id, "ledgerEntryId": entry })).status, 200);
+    assert_eq!(r.post("documents.link", json!({ "id": id, "ledgerEntryId": entry })).status, 200);
+    assert_eq!(count(&r, "SELECT count(*) FROM document_links WHERE ledger_entry_id IS NOT NULL"), 1);
+    assert_eq!(r.post("documents.link", json!({ "id": id, "ledgerEntryId": "999999" })).status, 404);
+    let two = r.post("documents.link", json!({ "id": id, "ledgerEntryId": entry, "transactionId": "1" }));
+    assert_eq!((two.status, two.message().as_str()), (400, "give exactly one of transactionId, recurringId and ledgerEntryId"));
+
+    // the read routes say what it is attached to, by the friend's name and the day
+    let shown = call_with(&r, &r.read, "documents.show", json!({ "id": id })).data();
+    assert_eq!((shown["links"][0]["kind"].as_str(), shown["links"][0]["name"].as_str(), shown["links"][0]["date"].as_str()), (Some("ledger_entry"), Some("Anna"), Some("2026-10-01")));
+    assert_eq!(call_with(&r, &r.read, "documents.list", json!({ "ledgerEntryId": entry })).data()["total"], 1);
+    assert_eq!(call_with(&r, &r.read, "documents.list", json!({ "transactionId": "1" })).data()["total"], 0);
+
+    // a new document can be attached to entries as it is added
+    let added = r.post("documents.add", json!({ "name": "Invoice.pdf", "data": base64url_encode(&pattern(2000, 3)), "ledgerEntryIds": [entry] })).data();
+    assert_eq!(added["linkCount"], 1);
+    assert_eq!(call_with(&r, &r.read, "documents.list", json!({ "ledgerEntryId": entry })).data()["total"], 2);
+
+    // detaching leaves the document and the entry; deleting the entry leaves the document
+    assert_eq!(r.post("documents.unlink", json!({ "id": id, "ledgerEntryId": entry })).status, 200);
+    assert_eq!(r.post("documents.unlink", json!({ "id": id, "ledgerEntryId": entry })).status, 404);
+    assert_eq!(count(&r, "SELECT count(*) FROM documents"), 2);
+    assert_eq!(r.post("ledger.delete", json!({ "id": entry })).status, 200);
+    assert_eq!((count(&r, "SELECT count(*) FROM documents"), count(&r, "SELECT count(*) FROM document_links WHERE ledger_entry_id IS NOT NULL")), (2, 0));
 }
 
 // ---- getting a file out -----------------------------------------------------------------------

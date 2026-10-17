@@ -196,7 +196,17 @@ fn who_owes_what_is_saved_only_when_the_person_says_yes_and_the_dialog_says_what
     assert_eq!(r.post("export.debts", json!({ "out": ledger, "what": "LEDGER" })).status, 200);
     assert!(r.last().contains("every entry of the ledger"));
     assert!(std::fs::read_to_string(&ledger).unwrap().starts_with("\u{feff}date,friend,kind,amount,currency,note"));
-    assert_eq!(r.asked(), 3);
+
+    // the same as PDF files, in English; the ending must be .pdf
+    let (pdf_summary, pdf_statement) = (r.path("owed.pdf"), r.path("anna.pdf"));
+    assert_eq!(r.post("export.debts", json!({ "out": pdf_summary, "format": "PDF" })).status, 200);
+    let statement_reply = r.post("export.debts", json!({ "out": pdf_statement, "what": "STATEMENT", "format": "PDF", "personId": anna }));
+    assert_eq!(statement_reply.status, 200, "{}", statement_reply.body);
+    for path in [&pdf_summary, &pdf_statement] {
+        assert!(std::fs::read(path).unwrap().starts_with(b"%PDF-"), "{path}");
+    }
+    assert_eq!(r.post("export.debts", json!({ "out": r.path("wrong.txt"), "format": "PDF" })).status, 400, "the ending must match the format");
+    assert_eq!(r.asked(), 5);
 }
 
 #[test]

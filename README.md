@@ -24,7 +24,7 @@
 
 meowNY is a desktop app for tracking income and expenses against monthly budgets. A [Tauri](https://tauri.app) shell (Rust) shows a React UI and keeps everything in one encrypted SQLite file ([SQLCipher](https://www.zetetic.net/sqlcipher/)) on your own machine. It also ships a command line program, `meowny`, so scripts and AI agents can use the running app without opening the data file.
 
-> **Status: pre-release (version 0.1.0).** The desktop app and the command line work, and are tested, but there are no installers yet: you build it from source (see [Getting started](#getting-started)). The phone app and its sync are built and being tested; documents, and debts and expense splitting are planned; see the [roadmap](#roadmap).
+> **Status: pre-release (version 0.1.0).** The desktop app and the command line work, and are tested, but there are no installers yet: you build it from source (see [Getting started](#getting-started)). The phone app and its sync are built and being tested; documents are built; debts and expense splitting are built except the bill codes and the reminders; see the [roadmap](#roadmap).
 
 ## Table of contents
 
@@ -73,6 +73,15 @@ meowNY is a desktop app for tracking income and expenses against monthly budgets
 - **Keep on phone** is a switch on each document. A document you did not switch on never leaves the computer; one added on the phone goes to the computer and leaves the phone only once the computer has confirmed it holds a good copy.
 - Backups can include the files (a choice, on by default under 100 MB), as one encrypted file written as it is read. Exports list the documents by name and what they are attached to and never contain a file.
 - From a script: `meowny documents add|list|show|update|link|unlink|delete|get`. A read-only token sees names, never a file; a copy comes out only when you allow it in the app.
+
+**Debts and shared bills (phase 10: built except the bill codes and the reminders)**
+
+- A **friend is a name** and nothing else: no phone number, no address, no contacts imported. A friend is archived, never deleted. A **guest** is a name typed for one bill.
+- A **ledger** for each friend: money you lent, money you borrowed, and repayments, each with a date, an amount and a note, and optionally a document (a loan note). "Mark as paid" takes the whole balance or an amount you type; an amount over the debt is accepted and the screen says first that the balance will turn around. None of it is income or expense, and none of it touches a budget.
+- **Split a bill** between you and friends and guests: equally, by percent, by shares or by exact amounts, with every amount shown before it is saved. The transaction keeps what you paid; **budgets, statistics, reports and exports count only your part**, and the list shows it with a mark such as `÷4`. A recurring item can be split too, and each payment of it is.
+- "I borrowed" can add your share to your expenses in the same step (someone else paid).
+- **Who owes what** on the debts page and on the dashboard; the summary, a friend's statement and the whole ledger can be saved as text or CSV, and the summary and a statement as a PDF. The app sends them to nobody.
+- Friends, entries and parts sync with the phone like everything else. From a script: `meowny people|ledger|debts|splits ...`, `meowny transactions split`.
 
 **Safety of your data**
 
@@ -442,7 +451,7 @@ The full plan, with what is done in each phase, is in [docs/PLAN.md](docs/PLAN.m
 | 7 | Command line for scripts and AI agents (desktop only) | Done. Installing it together with the app is part of phase 11 |
 | 8 | Android app that keeps a full offline copy and syncs with the desktop at home by scanning a QR code (iOS comes later) | In progress: the sync, the phone vault, the screens and the Android app are built and have been tried between a real phone and a desktop at home; reviewed on a real phone; the CI job has not run on GitHub yet, and nobody outside the project has gone through the protocol |
 | 9 | Documents: attach receipts and invoices to transactions, stored encrypted, and choose which ones go to the phone | Built: sealed files, the sync of their bytes, backups and exports, the screens, the command line. Not yet tried on a real phone (the camera, the file chooser, opening a PDF there) |
-| 10 | Debts and expense splitting: who owes you and whom you owe, and bills shared with other people, in your own ledger | Planned |
+| 10 | Debts and expense splitting: who owes you and whom you owe, and bills shared with other people, in your own ledger | In progress: friends, the ledger, split bills (budgets and statistics count only your part), the screens, summaries as text, CSV or PDF, documents on entries, the command line and the sync with the phone are built. Bill codes (a QR code a friend scans) and reminders are next. Not yet tried on a real phone |
 | 11 | Signed installers, updates, `SECURITY.md`, `CONTRIBUTING.md` and install guides | Planned |
 
 ## Contributing

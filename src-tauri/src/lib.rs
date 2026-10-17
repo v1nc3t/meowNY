@@ -294,6 +294,23 @@ pub fn run() {
             commands::document_upload_finish,
             commands::document_upload_cancel,
             commands::document_add_dropped,
+            commands::list_people,
+            commands::create_person,
+            commands::update_person,
+            commands::archive_person,
+            commands::unarchive_person,
+            commands::person_statement,
+            commands::debts_summary,
+            commands::add_ledger_entry,
+            commands::update_ledger_entry,
+            commands::delete_ledger_entry,
+            commands::settle_person,
+            commands::split_preview,
+            commands::set_transaction_split,
+            commands::clear_transaction_split,
+            commands::set_recurring_split,
+            commands::clear_recurring_split,
+            commands::export_debts,
         ])
         .build(tauri::generate_context!())
         .expect("error while building meowNY")

@@ -9,7 +9,7 @@ export type Pending = { key: number; file: File } | { key: number; doc: Doc }
 const pendingName = (item: Pending) => ('file' in item ? item.file.name : item.doc.name)
 
 /**
- * What belongs with one transaction or recurring item. With a `target` (the item exists) a file added here is stored and linked at
+ * What belongs with one transaction, recurring item or ledger entry. With a `target` (the item exists) a file added here is stored and linked at
  * once, and the list shows what is linked. Without one (the item is being made) the files and chosen documents wait in `pending`, and
  * `commit` links them after the item is saved. Nothing about the item itself changes here.
  */
@@ -27,7 +27,7 @@ export function useAttachments(target: Target | null) {
   useEffect(() => {
     if (!kind || !id) return
     let cancelled = false
-    void documents.list({ ...(kind === 'transaction' ? { transactionId: id } : { recurringTransactionId: id }), limit: 100 }).then(
+    void documents.list({ ...(kind === 'transaction' ? { transactionId: id } : kind === 'recurring' ? { recurringTransactionId: id } : { ledgerEntryId: id }), limit: 100 }).then(
       (page) => {
         if (!cancelled) setLinked(page.documents)
       },

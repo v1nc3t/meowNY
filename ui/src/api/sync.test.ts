@@ -11,6 +11,7 @@ import {
   cleanDeviceName,
   clockGapText,
   countdownText,
+  FIELDS,
   filesLines,
   isBusy,
   isFinished,
@@ -24,6 +25,7 @@ import {
   shouldWarn,
   Status,
   summaryLines,
+  TABLES,
   wantsLongerPassphrase,
 } from './sync.ts'
 
@@ -227,3 +229,18 @@ test('"every" arrives as a number and a unit', () => {
   for (const bad of ['', 'MONTH', '0 MONTH', '1 FORTNIGHT', '1 month', '1  MONTH']) assert.equal(parseEvery(bad), null, bad)
 })
 
+
+test('every table and field a review can show has a name', () => {
+  for (const table of TABLES) assert.ok(`sync.table.${table}` in en, table)
+  for (const field of FIELDS) assert.ok(`sync.field.${field}` in en, field)
+})
+
+test('the tables and fields are the ones the Rust side sends', () => {
+  const wire = readFileSync(new URL('../../../src-tauri/src/sync/wire.rs', import.meta.url), 'utf8')
+  const names = [...(/pub fn name\(self\)[\s\S]*?\n    \}/.exec(wire)?.[0] ?? '').matchAll(/=> "(\w+)"/g)].map((m) => m[1])
+  assert.deepEqual([...TABLES].sort(), names.sort())
+  const engine = readFileSync(new URL('../../../src-tauri/src/sync/engine.rs', import.meta.url), 'utf8')
+  const facts = /fn facts\(conn[\s\S]*?\n\}\n/.exec(engine)?.[0] ?? ''
+  const sent = new Set([...facts.matchAll(/\("(\w+)", /g)].map((m) => m[1]))
+  for (const field of sent) assert.ok((FIELDS as readonly string[]).includes(field ?? ''), `${field} is not a known field`)
+})

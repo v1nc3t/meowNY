@@ -951,6 +951,12 @@
           "type": "id"
         },
         {
+          "name": "ledgerEntryId",
+          "required": false,
+          "summary": "An entry of the ledger of money lent and borrowed.",
+          "type": "id"
+        },
+        {
           "name": "limit",
           "required": false,
           "summary": "How many to return, 1 to 100.",
@@ -1016,6 +1022,12 @@
           "name": "recurringIds",
           "required": false,
           "summary": "Attach it to these recurring items.",
+          "type": "ids"
+        },
+        {
+          "name": "ledgerEntryIds",
+          "required": false,
+          "summary": "Attach it to these entries of the ledger.",
           "type": "ids"
         }
       ],
@@ -1086,10 +1098,16 @@
           "required": false,
           "summary": "A recurring item.",
           "type": "id"
+        },
+        {
+          "name": "ledgerEntryId",
+          "required": false,
+          "summary": "An entry of the ledger of money lent and borrowed.",
+          "type": "id"
         }
       ],
       "scope": "write",
-      "summary": "Attaches a document to a transaction or to a recurring item. Giving one that is attached already changes nothing."
+      "summary": "Attaches a document to a transaction, a recurring item or a ledger entry. Giving one that is attached already changes nothing."
     },
     {
       "name": "documents.unlink",
@@ -1111,10 +1129,16 @@
           "required": false,
           "summary": "A recurring item.",
           "type": "id"
+        },
+        {
+          "name": "ledgerEntryId",
+          "required": false,
+          "summary": "An entry of the ledger of money lent and borrowed.",
+          "type": "id"
         }
       ],
       "scope": "write",
-      "summary": "Detaches a document from a transaction or a recurring item. The document and the transaction stay."
+      "summary": "Detaches a document from a transaction, a recurring item or a ledger entry. The document and the transaction stay."
     },
     {
       "confirm": true,
@@ -1582,7 +1606,7 @@
         {
           "name": "out",
           "required": true,
-          "summary": "Where to write the file: an absolute path ending in .txt (TEXT) or .csv (CSV), in a folder that exists, that is not there yet.",
+          "summary": "Where to write the file: an absolute path ending in .txt (TEXT), .csv (CSV) or .pdf (PDF), in a folder that exists, that is not there yet.",
           "type": "path"
         },
         {
@@ -1599,11 +1623,12 @@
         {
           "name": "format",
           "required": false,
-          "summary": "TEXT (the default) or CSV. LEDGER is CSV only.",
+          "summary": "TEXT (the default), CSV or PDF. LEDGER is CSV only.",
           "type": "string",
           "values": [
             "TEXT",
-            "CSV"
+            "CSV",
+            "PDF"
           ]
         },
         {
@@ -1614,7 +1639,7 @@
         }
       ],
       "scope": "read",
-      "summary": "Writes who owes what to a text or CSV file, after the person allows it in the app: the SUMMARY of all friends, the STATEMENT of one friend (personId), or the LEDGER of every entry as CSV. An existing file is never replaced."
+      "summary": "Writes who owes what to a text, CSV or PDF file, in English, after the person allows it in the app: the SUMMARY of all friends, the STATEMENT of one friend (personId), or the LEDGER of every entry as CSV. An existing file is never replaced."
     }
   ]
 }

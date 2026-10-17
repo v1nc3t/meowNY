@@ -21,8 +21,10 @@ use crate::money::MAX_MINOR;
 use crate::{categories, transactions, vault};
 
 /// The version of this protocol, in `hello`.
-/// Protocol 3 adds the tables `documents` and `document_links`; a device that speaks 2 is told to update.
-pub const PROTOCOL: u32 = 3;
+/// Protocol 3 adds the tables `documents` and `document_links`; protocol 4 adds `people` and `ledger_entries`, the parts of a shared
+/// bill inside its transaction's row, the split template inside a recurring item's row, and a third target for a document link (a
+/// ledger entry). A device that speaks an older protocol is told to update.
+pub const PROTOCOL: u32 = 4;
 /// Digest entries in one message, and rows in one message. Messages are also cut by size (`SOFT_MESSAGE_BYTES`).
 pub const MAX_ENTRIES_PER_MESSAGE: usize = 400;
 pub const MAX_ROWS_PER_MESSAGE: usize = 200;
@@ -40,21 +42,25 @@ pub const MAX_ROWS_PER_TABLE: usize = 2_000_000;
 pub enum Table {
     Settings,
     Categories,
+    People,
     RecurringTransactions,
     Budgets,
     Transactions,
+    LedgerEntries,
     Documents,
     DocumentLinks,
 }
 
 impl Table {
     /// In the order they are sent and applied: a row's references always point at a table earlier in the list.
-    pub const ALL: [Table; 7] = [
+    pub const ALL: [Table; 9] = [
         Table::Settings,
         Table::Categories,
+        Table::People,
         Table::RecurringTransactions,
         Table::Budgets,
         Table::Transactions,
+        Table::LedgerEntries,
         Table::Documents,
         Table::DocumentLinks,
     ];
@@ -63,6 +69,8 @@ impl Table {
         match self {
             Table::Settings => "settings",
             Table::Categories => "categories",
+            Table::People => "people",
+            Table::LedgerEntries => "ledger_entries",
             Table::RecurringTransactions => "recurring_transactions",
             Table::Budgets => "budgets",
             Table::Transactions => "transactions",
@@ -481,6 +489,67 @@ fn description_ok(text: &Option<String>) -> bool {
     }
 }
 
+/// A note of a ledger entry: 1 to 200 characters, already trimmed, with no control characters.
+fn note_ok(text: &str) -> bool {
+    let length = text.chars().count();
+    (1..=200).contains(&length) && text.trim() == text && !text.chars().any(char::is_control)
+}
+
+/// Who a part belongs to: exactly one of a friend (a `sync_id`) and a guest (a plain name).
+fn who_ok(person: &Option<String>, guest: &Option<String>) -> bool {
+    match (person, guest) {
+        (Some(id), None) => sync_id_ok(id),
+        (None, Some(name)) => category_name_ok(name),
+        _ => false,
+    }
+}
+
+/// Nobody twice: a friend once, a guest name once (ignoring case).
+fn nobody_twice<'a>(who: impl Iterator<Item = (&'a Option<String>, &'a Option<String>)>) -> bool {
+    let (mut people, mut guests) = (std::collections::HashSet::new(), std::collections::HashSet::new());
+    who.into_iter().all(|(person, guest)| match (person, guest) {
+        (Some(id), _) => people.insert(id.as_str().to_string()),
+        (None, Some(name)) => guests.insert(name.to_lowercase()),
+        _ => false,
+    })
+}
+
+/// The order the parts of a bill are sent in, so two devices that hold the same parts send the same bytes: friends by `sync_id`, then
+/// guests by name.
+pub fn sort_split(parts: &mut [SplitPartRow]) {
+    parts.sort_by(|a, b| (a.person.is_none(), &a.person, a.guest.as_ref().map(|g| g.to_lowercase())).cmp(&(b.person.is_none(), &b.person, b.guest.as_ref().map(|g| g.to_lowercase()))));
+}
+
+/// The same for a template.
+pub fn sort_template(parts: &mut [TemplatePartRow]) {
+    parts.sort_by(|a, b| (a.person.is_none(), &a.person, a.guest.as_ref().map(|g| g.to_lowercase())).cmp(&(b.person.is_none(), &b.person, b.guest.as_ref().map(|g| g.to_lowercase()))));
+}
+
+/// The parts of a shared bill: at most 30, each a friend or a guest with a part of at least a cent, nobody twice, and together no more
+/// than the bill, in the order `sort_split` makes.
+fn split_ok(parts: &[SplitPartRow], amount: i64) -> bool {
+    let mut sorted = parts.to_vec();
+    sort_split(&mut sorted);
+    parts.len() <= 30
+        && sorted == parts
+        && parts.iter().all(|p| who_ok(&p.person, &p.guest) && money_ok(p.amount_minor, 1))
+        && nobody_twice(parts.iter().map(|p| (&p.person, &p.guest)))
+        && parts.iter().map(|p| p.amount_minor).sum::<i64>() <= amount
+}
+
+/// A template: the weight of the person who pays (0 or more), at most 30 friends and guests with a weight of at least 1, nobody twice,
+/// and some weight above 0 somewhere.
+fn template_ok(t: &TemplateRow) -> bool {
+    let mut sorted = t.parts.clone();
+    sort_template(&mut sorted);
+    t.parts.len() <= 30
+        && sorted == t.parts
+        && money_ok(t.mine, 0)
+        && t.parts.iter().all(|p| who_ok(&p.person, &p.guest) && money_ok(p.weight, 1))
+        && nobody_twice(t.parts.iter().map(|p| (&p.person, &p.guest)))
+        && (t.mine > 0 || !t.parts.is_empty())
+}
+
 fn money_ok(value: i64, min: i64) -> bool {
     (min..=MAX_MINOR).contains(&value)
 }
@@ -531,6 +600,71 @@ pub struct RecurringRow {
     pub next_due_date: String,
     pub end_date: Option<String>,
     pub is_active: i64,
+    /// How each payment is shared, as weights; none when the payments are not split.
+    pub split: Option<TemplateRow>,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+/// The split template of a recurring item: the weight of the person who pays and one weight for each friend or guest.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct TemplateRow {
+    pub mine: i64,
+    pub parts: Vec<TemplatePartRow>,
+}
+
+/// One friend (by the `sync_id` of the person) or one guest (by name) in a template.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct TemplatePartRow {
+    pub person: Option<String>,
+    pub guest: Option<String>,
+    pub weight: i64,
+}
+
+/// One friend or guest and their part of a shared bill. The parts belong to their transaction: they travel in its row and replace
+/// the parts of the version it replaces, so two devices can never end with parts from both.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct SplitPartRow {
+    pub person: Option<String>,
+    pub guest: Option<String>,
+    pub amount_minor: i64,
+}
+
+/// A friend: a name, whether they are archived, the person they were merged into (when two devices each added the same friend), and a
+/// reminder.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct PersonRow {
+    pub sync_id: String,
+    pub stamp: String,
+    pub name: String,
+    pub archived: i64,
+    pub merged_into: Option<String>,
+    pub remind_on: Option<String>,
+    pub remind_every_days: Option<i64>,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+/// An entry of the ledger: money lent, borrowed or paid back with one friend.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct LedgerRow {
+    pub sync_id: String,
+    pub stamp: String,
+    /// The `sync_id` of the friend.
+    pub person: String,
+    pub kind: String,
+    pub amount_minor: i64,
+    pub entry_date: String,
+    pub note: Option<String>,
+    /// The `sync_id` of the expense it came with, if it is still there.
+    pub transaction: Option<String>,
+    /// The bill code this entry came from, if any.
+    pub origin_id: Option<String>,
     pub created_at: String,
     pub updated_at: String,
 }
@@ -566,6 +700,9 @@ pub struct TransactionRow {
     pub planned_amount_minor: Option<i64>,
     pub payment_date: String,
     pub description: Option<String>,
+    /// The parts of the friends and guests the bill is shared with, in the order `sort_split` makes. Your own part is not here: it is
+    /// the amount minus these.
+    pub split: Vec<SplitPartRow>,
     pub created_at: String,
     pub updated_at: String,
 }
@@ -588,7 +725,7 @@ pub struct DocumentRow {
     pub updated_at: String,
 }
 
-/// One document linked to one transaction or one recurring item (exactly one of the two).
+/// One document linked to one transaction, one recurring item or one ledger entry (exactly one of the three).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct DocumentLinkRow {
@@ -596,9 +733,10 @@ pub struct DocumentLinkRow {
     pub stamp: String,
     /// The `sync_id` of the document.
     pub document: String,
-    /// The `sync_id` of the transaction, or of the recurring item.
+    /// The `sync_id` of the transaction, of the recurring item or of the ledger entry.
     pub transaction: Option<String>,
     pub recurring: Option<String>,
+    pub ledger: Option<String>,
     pub created_at: String,
 }
 
@@ -607,6 +745,8 @@ pub struct DocumentLinkRow {
 pub enum Row {
     Settings(SettingsRow),
     Category(CategoryRow),
+    Person(PersonRow),
+    Ledger(LedgerRow),
     Recurring(RecurringRow),
     Budget(BudgetRow),
     Transaction(TransactionRow),
@@ -619,6 +759,8 @@ impl Row {
         match self {
             Row::Settings(_) => "settings",
             Row::Category(r) => &r.sync_id,
+            Row::Person(r) => &r.sync_id,
+            Row::Ledger(r) => &r.sync_id,
             Row::Recurring(r) => &r.sync_id,
             Row::Budget(r) => &r.sync_id,
             Row::Transaction(r) => &r.sync_id,
@@ -631,6 +773,8 @@ impl Row {
         match self {
             Row::Settings(r) => &r.stamp,
             Row::Category(r) => &r.stamp,
+            Row::Person(r) => &r.stamp,
+            Row::Ledger(r) => &r.stamp,
             Row::Recurring(r) => &r.stamp,
             Row::Budget(r) => &r.stamp,
             Row::Transaction(r) => &r.stamp,
@@ -646,6 +790,8 @@ pub fn parse_row(table: Table, value: &Value) -> Result<Row, WireError> {
     let row = match table {
         Table::Settings => Row::Settings(serde_json::from_value(value.clone()).map_err(|_| WireError::Format)?),
         Table::Categories => Row::Category(serde_json::from_value(value.clone()).map_err(|_| WireError::Format)?),
+        Table::People => Row::Person(serde_json::from_value(value.clone()).map_err(|_| WireError::Format)?),
+        Table::LedgerEntries => Row::Ledger(serde_json::from_value(value.clone()).map_err(|_| WireError::Format)?),
         Table::RecurringTransactions => Row::Recurring(serde_json::from_value(value.clone()).map_err(|_| WireError::Format)?),
         Table::Budgets => Row::Budget(serde_json::from_value(value.clone()).map_err(|_| WireError::Format)?),
         Table::Transactions => Row::Transaction(serde_json::from_value(value.clone()).map_err(|_| WireError::Format)?),
@@ -670,8 +816,34 @@ pub fn parse_row(table: Table, value: &Value) -> Result<Row, WireError> {
                 && timestamp_ok(&r.created_at)
                 && timestamp_ok(&r.updated_at)
         }
+        Row::Person(r) => {
+            sync_id_ok(&r.sync_id)
+                && category_name_ok(&r.name)
+                && [0, 1].contains(&r.archived)
+                && option_sync_id(&r.merged_into)
+                && r.merged_into.as_deref() != Some(r.sync_id.as_str())
+                // a friend who was merged into another is archived
+                && (r.merged_into.is_none() || r.archived == 1)
+                && option_date(&r.remind_on)
+                && r.remind_every_days.is_none_or(|n| (1..=365).contains(&n) && r.remind_on.is_some())
+                && timestamp_ok(&r.created_at)
+                && timestamp_ok(&r.updated_at)
+        }
+        Row::Ledger(r) => {
+            sync_id_ok(&r.sync_id)
+                && sync_id_ok(&r.person)
+                && ["LENT", "BORROWED", "REPAID_TO_ME", "REPAID_BY_ME"].contains(&r.kind.as_str())
+                && money_ok(r.amount_minor, 1)
+                && date_ok(&r.entry_date)
+                && r.note.as_deref().is_none_or(note_ok)
+                && option_sync_id(&r.transaction)
+                && option_sync_id(&r.origin_id)
+                && timestamp_ok(&r.created_at)
+                && timestamp_ok(&r.updated_at)
+        }
         Row::Recurring(r) => {
             sync_id_ok(&r.sync_id)
+                && r.split.as_ref().is_none_or(template_ok)
                 && sync_id_ok(&r.category)
                 && name_ok(&r.name)
                 && description_ok(&r.description)
@@ -714,6 +886,7 @@ pub fn parse_row(table: Table, value: &Value) -> Result<Row, WireError> {
                 && r.planned_amount_minor.is_none_or(|a| money_ok(a, 0))
                 && date_ok(&r.payment_date)
                 && description_ok(&r.description)
+                && split_ok(&r.split, r.amount_minor)
                 && timestamp_ok(&r.created_at)
                 && timestamp_ok(&r.updated_at)
         }
@@ -730,8 +903,9 @@ pub fn parse_row(table: Table, value: &Value) -> Result<Row, WireError> {
         }
         Row::Link(r) => {
             // exactly one target, and it is a real id
-            let one_target = matches!((&r.transaction, &r.recurring), (Some(_), None) | (None, Some(_)));
-            sync_id_ok(&r.sync_id) && sync_id_ok(&r.document) && one_target && option_sync_id(&r.transaction) && option_sync_id(&r.recurring) && timestamp_ok(&r.created_at)
+            let targets = [&r.transaction, &r.recurring, &r.ledger];
+            let one_target = targets.iter().filter(|t| t.is_some()).count() == 1;
+            sync_id_ok(&r.sync_id) && sync_id_ok(&r.document) && one_target && targets.iter().all(|t| option_sync_id(t)) && timestamp_ok(&r.created_at)
         }
     };
     if ok {
@@ -746,6 +920,8 @@ pub fn row_to_value(row: &Row) -> Value {
     let value = match row {
         Row::Settings(r) => serde_json::to_value(r),
         Row::Category(r) => serde_json::to_value(r),
+        Row::Person(r) => serde_json::to_value(r),
+        Row::Ledger(r) => serde_json::to_value(r),
         Row::Recurring(r) => serde_json::to_value(r),
         Row::Budget(r) => serde_json::to_value(r),
         Row::Transaction(r) => serde_json::to_value(r),
@@ -775,13 +951,43 @@ mod tests {
     fn transaction() -> Value {
         json!({"syncId": ID_B, "stamp": STAMP, "category": ID_A, "recurring": null, "recurringDueDate": null, "clientUuid": null,
                "name": "Coffee", "amountMinor": 350, "plannedAmountMinor": null, "paymentDate": "2026-03-01", "description": null,
-               "createdAt": TS, "updatedAt": TS})
+               "split": [], "createdAt": TS, "updatedAt": TS})
     }
 
     fn recurring() -> Value {
         json!({"syncId": ID_B, "stamp": STAMP, "category": ID_A, "name": "Rent", "description": "Flat 4", "amountMinor": 90000,
                "startDate": "2026-01-01", "intervalUnit": "MONTH", "intervalCount": 1, "nextDueDate": "2026-03-01", "endDate": null,
-               "isActive": 1, "createdAt": TS, "updatedAt": TS})
+               "isActive": 1, "split": null, "createdAt": TS, "updatedAt": TS})
+    }
+
+    fn person() -> Value {
+        json!({"syncId": ID_A, "stamp": STAMP, "name": "Anna", "archived": 0, "mergedInto": null, "remindOn": null, "remindEveryDays": null,
+               "createdAt": TS, "updatedAt": TS})
+    }
+
+    fn entry() -> Value {
+        json!({"syncId": ID_B, "stamp": STAMP, "person": ID_A, "kind": "LENT", "amountMinor": 2500, "entryDate": "2026-03-01", "note": "taxi",
+               "transaction": null, "originId": null, "createdAt": TS, "updatedAt": TS})
+    }
+
+    fn shared() -> Value {
+        // 90.00 shared with a friend and a guest: your part is what is left
+        changed(
+            transaction(),
+            "split",
+            json!([{"person": ID_A, "guest": null, "amountMinor": 3000}, {"person": null, "guest": "Carl", "amountMinor": 3000}]),
+        )
+        .as_object()
+        .map(|o| {
+            let mut o = o.clone();
+            o.insert("amountMinor".into(), json!(9000));
+            Value::Object(o)
+        })
+        .unwrap()
+    }
+
+    fn templated() -> Value {
+        changed(recurring(), "split", json!({"mine": 2, "parts": [{"person": ID_A, "guest": null, "weight": 1}, {"person": null, "guest": "Carl", "weight": 1}]}))
     }
 
     fn budget() -> Value {
@@ -797,7 +1003,7 @@ mod tests {
     }
 
     fn link() -> Value {
-        json!({"syncId": ID_B, "stamp": STAMP, "document": ID_A, "transaction": ID_A, "recurring": null, "createdAt": TS})
+        json!({"syncId": ID_B, "stamp": STAMP, "document": ID_A, "transaction": ID_A, "recurring": null, "ledger": null, "createdAt": TS})
     }
 
     fn changed(mut value: Value, key: &str, to: Value) -> Value {
@@ -811,12 +1017,20 @@ mod tests {
         for (table, value) in [
             (Table::Settings, settings),
             (Table::Categories, category()),
+            (Table::People, person()),
+            (Table::People, changed(changed(person(), "archived", json!(1)), "mergedInto", json!(ID_B))),
+            (Table::People, changed(changed(person(), "remindOn", json!("2026-04-01")), "remindEveryDays", json!(30))),
+            (Table::LedgerEntries, entry()),
+            (Table::LedgerEntries, changed(changed(entry(), "transaction", json!(ID_A)), "originId", json!(ID_B))),
             (Table::RecurringTransactions, recurring()),
+            (Table::RecurringTransactions, templated()),
             (Table::Budgets, budget()),
             (Table::Transactions, transaction()),
+            (Table::Transactions, shared()),
             (Table::Documents, document()),
             (Table::DocumentLinks, link()),
             (Table::DocumentLinks, changed(changed(link(), "transaction", json!(null)), "recurring", json!(ID_B))),
+            (Table::DocumentLinks, changed(changed(link(), "transaction", json!(null)), "ledger", json!(ID_B))),
         ] {
             let row = parse_row(table, &value).unwrap_or_else(|e| panic!("{table:?}: {e}"));
             assert_eq!(row_to_value(&row), value, "{table:?}");
@@ -842,13 +1056,24 @@ mod tests {
 
     #[test]
     fn there_is_a_table_for_every_kind_of_row_and_the_protocol_knows_it() {
-        assert_eq!(PROTOCOL, 3);
+        assert_eq!(PROTOCOL, 4);
         let names: Vec<&str> = Table::ALL.iter().map(|t| t.name()).collect();
-        assert_eq!(names, ["settings", "categories", "recurring_transactions", "budgets", "transactions", "documents", "document_links"]);
+        assert_eq!(
+            names,
+            ["settings", "categories", "people", "recurring_transactions", "budgets", "transactions", "ledger_entries", "documents", "document_links"]
+        );
         // what a row points at is always in an earlier table, so it is there when the row is applied
         let position = |t: Table| Table::ALL.iter().position(|x| *x == t).unwrap();
         assert!(position(Table::Documents) > position(Table::Transactions) && position(Table::DocumentLinks) > position(Table::Documents));
         assert!(position(Table::DocumentLinks) > position(Table::RecurringTransactions));
+        // the parts of a bill and the weights of a template name friends, the ledger names friends and expenses, a link names an entry
+        assert!(position(Table::People) < position(Table::Transactions) && position(Table::People) < position(Table::RecurringTransactions));
+        assert!(position(Table::LedgerEntries) > position(Table::Transactions) && position(Table::LedgerEntries) > position(Table::People));
+        assert!(position(Table::DocumentLinks) > position(Table::LedgerEntries));
+        // the order of the tables is the order they are declared in, which is how a map of them is walked
+        let mut sorted = Table::ALL.to_vec();
+        sorted.sort();
+        assert_eq!(sorted, Table::ALL);
         // and each table has a name the digest messages accept
         for table in Table::ALL.into_iter().filter(|t| *t != Table::Settings) {
             let digest = format!(r#"{{"t":"digest","table":"{}","entries":[["{ID_A}","{STAMP}",0]],"last":true}}"#, table.name());
@@ -923,6 +1148,68 @@ mod tests {
             (Table::DocumentLinks, changed(link(), "transaction", json!("x"))),
             (Table::DocumentLinks, changed(changed(link(), "transaction", json!(null)), "recurring", json!("x"))),
             (Table::DocumentLinks, changed(link(), "createdAt", json!("2026-03-01"))),
+            (Table::DocumentLinks, changed(link(), "ledger", json!(ID_B))),
+            (Table::DocumentLinks, changed(changed(link(), "transaction", json!(null)), "ledger", json!("x"))),
+            (Table::DocumentLinks, changed(changed(link(), "transaction", json!(null)), "ledger", json!(null))),
+            // friends
+            (Table::People, changed(person(), "name", json!(""))),
+            (Table::People, changed(person(), "name", json!(" Anna"))),
+            (Table::People, changed(person(), "name", json!("a".repeat(51)))),
+            (Table::People, changed(person(), "name", json!("tab\there"))),
+            (Table::People, changed(person(), "archived", json!(2))),
+            (Table::People, changed(person(), "archived", json!(true))),
+            (Table::People, changed(person(), "mergedInto", json!(ID_B))),
+            (Table::People, changed(changed(person(), "archived", json!(1)), "mergedInto", json!(ID_A))),
+            (Table::People, changed(changed(person(), "archived", json!(1)), "mergedInto", json!("x"))),
+            (Table::People, changed(person(), "remindOn", json!("2026-02-30"))),
+            (Table::People, changed(person(), "remindEveryDays", json!(7))),
+            (Table::People, changed(changed(person(), "remindOn", json!("2026-04-01")), "remindEveryDays", json!(0))),
+            (Table::People, changed(changed(person(), "remindOn", json!("2026-04-01")), "remindEveryDays", json!(366))),
+            (Table::People, changed(person(), "syncId", json!("nope"))),
+            (Table::People, changed(person(), "phone", json!("555"))),
+            // the ledger
+            (Table::LedgerEntries, changed(entry(), "kind", json!("GIFT"))),
+            (Table::LedgerEntries, changed(entry(), "kind", json!("lent"))),
+            (Table::LedgerEntries, changed(entry(), "amountMinor", json!(0))),
+            (Table::LedgerEntries, changed(entry(), "amountMinor", json!(-1))),
+            (Table::LedgerEntries, changed(entry(), "amountMinor", json!(MAX_MINOR + 1))),
+            (Table::LedgerEntries, changed(entry(), "amountMinor", json!(1.5))),
+            (Table::LedgerEntries, changed(entry(), "entryDate", json!("2026-02-30"))),
+            (Table::LedgerEntries, changed(entry(), "entryDate", json!("2026-3-1"))),
+            (Table::LedgerEntries, changed(entry(), "note", json!(""))),
+            (Table::LedgerEntries, changed(entry(), "note", json!(" padded"))),
+            (Table::LedgerEntries, changed(entry(), "note", json!("x".repeat(201)))),
+            (Table::LedgerEntries, changed(entry(), "note", json!("line\nbreak"))),
+            (Table::LedgerEntries, changed(entry(), "person", json!("1"))),
+            (Table::LedgerEntries, changed(entry(), "transaction", json!("x"))),
+            (Table::LedgerEntries, changed(entry(), "originId", json!("ab"))),
+            (Table::LedgerEntries, changed(entry(), "originId", json!(ID_A.to_uppercase()))),
+            // the parts of a bill
+            (Table::Transactions, changed(shared(), "amountMinor", json!(5999))),
+            (Table::Transactions, changed(shared(), "split", json!([{"person": ID_A, "guest": null, "amountMinor": 0}]))),
+            (Table::Transactions, changed(shared(), "split", json!([{"person": ID_A, "guest": null, "amountMinor": -5}]))),
+            (Table::Transactions, changed(shared(), "split", json!([{"person": ID_A, "guest": null, "amountMinor": 9001}]))),
+            (Table::Transactions, changed(shared(), "split", json!([{"person": ID_A, "guest": "Carl", "amountMinor": 100}]))),
+            (Table::Transactions, changed(shared(), "split", json!([{"person": null, "guest": null, "amountMinor": 100}]))),
+            (Table::Transactions, changed(shared(), "split", json!([{"person": "x", "guest": null, "amountMinor": 100}]))),
+            (Table::Transactions, changed(shared(), "split", json!([{"person": null, "guest": "", "amountMinor": 100}]))),
+            (Table::Transactions, changed(shared(), "split", json!([{"person": null, "guest": " Carl", "amountMinor": 100}]))),
+            (Table::Transactions, changed(shared(), "split", json!([{"person": ID_A, "guest": null, "amountMinor": 100}, {"person": ID_A, "guest": null, "amountMinor": 100}]))),
+            (Table::Transactions, changed(shared(), "split", json!([{"person": null, "guest": "Carl", "amountMinor": 100}, {"person": null, "guest": "carl", "amountMinor": 100}]))),
+            // not in the order the parts are sent in
+            (Table::Transactions, changed(shared(), "split", json!([{"person": null, "guest": "Carl", "amountMinor": 3000}, {"person": ID_A, "guest": null, "amountMinor": 3000}]))),
+            (Table::Transactions, changed(shared(), "split", json!({"person": ID_A}))),
+            (Table::Transactions, changed(shared(), "split", json!(null))),
+            (Table::Transactions, changed(shared(), "split", json!([{"person": ID_A, "guest": null, "amountMinor": 100, "note": "x"}]))),
+            // a template
+            (Table::RecurringTransactions, changed(templated(), "split", json!({"mine": -1, "parts": [{"person": ID_A, "guest": null, "weight": 1}]}))),
+            (Table::RecurringTransactions, changed(templated(), "split", json!({"mine": 0, "parts": []}))),
+            (Table::RecurringTransactions, changed(templated(), "split", json!({"mine": 1, "parts": [{"person": ID_A, "guest": null, "weight": 0}]}))),
+            (Table::RecurringTransactions, changed(templated(), "split", json!({"mine": 1, "parts": [{"person": ID_A, "guest": null, "weight": MAX_MINOR + 1}]}))),
+            (Table::RecurringTransactions, changed(templated(), "split", json!({"mine": 1, "parts": [{"person": ID_A, "guest": "Carl", "weight": 1}]}))),
+            (Table::RecurringTransactions, changed(templated(), "split", json!({"mine": 1, "parts": [{"person": ID_A, "guest": null, "weight": 1}, {"person": ID_A, "guest": null, "weight": 1}]}))),
+            (Table::RecurringTransactions, changed(templated(), "split", json!({"mine": 1}))),
+            (Table::RecurringTransactions, changed(templated(), "split", json!({"mine": 1, "parts": [], "extra": 1}))),
             (Table::Settings, json!({"stamp": STAMP, "locale": "x", "timezone": "Europe/Dublin"})),
             (Table::Settings, json!({"stamp": STAMP, "locale": "en-IE", "timezone": "Mars/Base"})),
             (Table::Settings, json!({"stamp": STAMP, "locale": " en-IE", "timezone": "UTC"})),

@@ -180,8 +180,10 @@ fn deleting_the_expense_clears_the_link_and_nothing_else_of_the_entry() {
     let audited = audit(&w.conn, "ledger_entries", "UPDATE");
     exec(&w.conn, &format!("DELETE FROM transactions WHERE id = {dinner}")).unwrap();
     assert_eq!(one(&w.conn, "SELECT count(*) FROM ledger_entries WHERE transaction_id IS NULL"), 1, "the debt outlives the expense");
-    assert_eq!(stamp_of(&w.conn, "ledger_entries", 1), stamp, "the other device clears the link itself: no stamp");
-    assert_eq!(updated_at_of(&w.conn, "ledger_entries", 1), updated, "and it is not an edit");
+    let marker = text(&w.conn, "SELECT stamp FROM sync_deleted WHERE kind = 'transactions'");
+    assert_eq!(stamp_of(&w.conn, "ledger_entries", 1), marker, "the entry takes the stamp of the deletion (migration 0013), one tick for both");
+    assert!(marker > stamp);
+    assert_eq!(updated_at_of(&w.conn, "ledger_entries", 1), updated, "but it is not an edit of the entry");
     assert_eq!(audit(&w.conn, "ledger_entries", "UPDATE"), audited + 1, "but the history shows it");
     assert_eq!(one(&w.conn, "SELECT count(*) FROM sync_deleted WHERE kind = 'ledger_entries'"), 0);
 }

@@ -2,7 +2,7 @@
 //! address, no import of contacts). A friend is archived, never deleted: the balance and the history stay, and the name is free to use again.
 
 use rusqlite::{params, Connection, OptionalExtension};
-use serde::Serialize;
+use serde::{Deserialize, Deserializer, Serialize};
 
 use crate::categories::{clean_name, serialize_id};
 use crate::money::format_amount;
@@ -54,9 +54,15 @@ fn write_error(error: rusqlite::Error) -> AppError {
     }
 }
 
+/// A friend who was merged into another (two devices each added the same friend, and the sync made them one) is not a friend any more:
+/// everything that was theirs belongs to the other, and they are neither listed nor found.
 pub fn find(conn: &Connection, id: i64) -> Result<Option<Person>, AppError> {
     Ok(conn
-        .query_row(&format!("SELECT {COLUMNS} FROM people p JOIN person_balances b ON b.person_id = p.id WHERE p.id = ?1"), [id], from_row)
+        .query_row(
+            &format!("SELECT {COLUMNS} FROM people p JOIN person_balances b ON b.person_id = p.id WHERE p.id = ?1 AND p.merged_into IS NULL"),
+            [id],
+            from_row,
+        )
         .optional()?)
 }
 
@@ -68,10 +74,44 @@ pub fn get(conn: &Connection, id: i64) -> Result<Person, AppError> {
 pub fn list(conn: &Connection, include_archived: bool) -> Result<Vec<Person>, AppError> {
     let mut statement = conn.prepare_cached(&format!(
         "SELECT {COLUMNS} FROM people p JOIN person_balances b ON b.person_id = p.id
-         WHERE ?1 OR p.archived = 0 ORDER BY p.archived, abs(b.balance_minor) DESC, p.name COLLATE NOCASE, p.id"
+         WHERE (?1 OR p.archived = 0) AND p.merged_into IS NULL ORDER BY p.archived, abs(b.balance_minor) DESC, p.name COLLATE NOCASE, p.id"
     ))?;
     let rows = statement.query_map([include_archived], from_row)?;
     Ok(rows.collect::<Result<_, _>>()?)
+}
+
+/// Fields left out stay as they are. `remindOn: null` clears the reminder (and its repeat with it); `remindEveryDays: null` makes it once.
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct PersonPatch {
+    #[serde(default)]
+    pub name: Option<String>,
+    #[serde(default, deserialize_with = "present_or_null")]
+    pub remind_on: Option<Option<String>>,
+    #[serde(default, deserialize_with = "present_or_null")]
+    pub remind_every_days: Option<Option<u32>>,
+}
+
+fn present_or_null<'de, D: Deserializer<'de>, T: Deserialize<'de>>(deserializer: D) -> Result<Option<Option<T>>, D::Error> {
+    Ok(Some(Option::deserialize(deserializer)?))
+}
+
+/// Renames a friend and/or changes the reminder, all or nothing.
+pub fn update(conn: &Connection, id: i64, patch: &PersonPatch) -> Result<Person, AppError> {
+    let tx = conn.unchecked_transaction()?;
+    let current = get(&tx, id)?;
+    if let Some(name) = &patch.name {
+        rename(&tx, id, name)?;
+    }
+    if patch.remind_on.is_some() || patch.remind_every_days.is_some() {
+        let on = patch.remind_on.clone().unwrap_or(current.remind_on);
+        // clearing the date clears the repeat with it; a repeat given for a friend with no date is refused
+        let every = if patch.remind_on == Some(None) && patch.remind_every_days.is_none() { None } else { patch.remind_every_days.unwrap_or(current.remind_every_days) };
+        set_reminder(&tx, id, on.as_deref(), every)?;
+    }
+    let person = get(&tx, id)?;
+    tx.commit()?;
+    Ok(person)
 }
 
 pub fn create(conn: &Connection, name: &str) -> Result<Person, AppError> {

@@ -19,6 +19,8 @@ mod allocate_tests;
 #[cfg(test)]
 mod cost_tests;
 #[cfg(test)]
+mod command_tests;
+#[cfg(test)]
 mod currency_tests;
 #[cfg(test)]
 mod ledger_tests;

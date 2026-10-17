@@ -131,8 +131,8 @@ Every command is `meowny <noun> <verb>`, or a single word, with its flags after 
 | [`documents add`](#cmd-documents-add) | Stores a file as a document, encrypted, and attaches it where asked. The answer is the document and `alreadyThere`: the same file added again is not stored twice, and the attachments are added to the document that is there. At most 25 MiB. | write token |
 | [`documents update`](#cmd-documents-update) | Renames a document, changes its date, or switches whether the phone keeps its file. Give at least one. The contents cannot be changed. | write token |
 | [`documents delete`](#cmd-documents-delete) | Deletes a document, its file and its attachments. The transactions it was attached to stay. | write token |
-| [`documents link`](#cmd-documents-link) | Attaches a document to a transaction or to a recurring item. Giving one that is attached already changes nothing. | write token |
-| [`documents unlink`](#cmd-documents-unlink) | Detaches a document from a transaction or a recurring item. The document and the transaction stay. | write token |
+| [`documents link`](#cmd-documents-link) | Attaches a document to a transaction, a recurring item or a ledger entry. Giving one that is attached already changes nothing. | write token |
+| [`documents unlink`](#cmd-documents-unlink) | Detaches a document from a transaction, a recurring item or a ledger entry. The document and the transaction stay. | write token |
 | [`documents get`](#cmd-documents-get) | Writes a copy of a document's file, after the person allows it in the app. It is not encrypted. An existing file is never replaced. | write token |
 | [`people list`](#cmd-people-list) | The friends with what each owes you (negative: you owe them), the largest first. Archived friends only if asked. | read token |
 | [`people show`](#cmd-people-show) | One friend and their ledger: their parts of shared bills and the entries by date, with the balance after each line. | read token |
@@ -150,7 +150,7 @@ Every command is `meowny <noun> <verb>`, or a single word, with its flags after 
 | [`transactions unsplit`](#cmd-transactions-unsplit) | Takes the split off a transaction: it costs you its whole amount again, and the friends' balances go down by their parts. | write token |
 | [`recurring split`](#cmd-recurring-split) | Splits every payment of a recurring item the same way, from now on. Kept as proportions, so a payment that differs from the plan is shared in the same proportions. EXACT needs an item with an amount that the values add up to. Payments already made are not changed. | write token |
 | [`recurring unsplit`](#cmd-recurring-unsplit) | Takes the split off a recurring item: its payments are not split from now on. Payments already made keep theirs. | write token |
-| [`export debts`](#cmd-export-debts) | Writes who owes what to a text or CSV file, after the person allows it in the app: the SUMMARY of all friends, the STATEMENT of one friend (`--person-id`), or the LEDGER of every entry as CSV. An existing file is never replaced. | read token, and your yes |
+| [`export debts`](#cmd-export-debts) | Writes who owes what to a text, CSV or PDF file, in English, after the person allows it in the app: the SUMMARY of all friends, the STATEMENT of one friend (`--person-id`), or the LEDGER of every entry as CSV. An existing file is never replaced. | read token, and your yes |
 | [`login`](#cmd-login) | Saves a token, read from standard input, for the commands that follow. | this computer |
 | [`logout`](#cmd-logout) | Removes the saved token. | this computer |
 
@@ -171,7 +171,7 @@ $ meowny status
 
 api: 1
 app: meowny
-schemaVersion: 12
+schemaVersion: 13
 scope: read
 version: 0.1.0
 ```
@@ -182,7 +182,7 @@ With `--json` (one line; shown indented):
 {
   "api": 1,
   "app": "meowny",
-  "schemaVersion": 12,
+  "schemaVersion": 13,
   "scope": "read",
   "version": "0.1.0"
 }
@@ -1959,7 +1959,7 @@ The app asks you to allow this each time, in a dialog; nothing is written until 
 ```console
 $ meowny export xlsx --out /home/you/budget.xlsx
 
-bytes: 25968
+bytes: 25967
 path: /home/you/budget.xlsx
 ```
 
@@ -1998,20 +1998,20 @@ path: /home/you/report.pdf
 
 *read token · asks you in the app*
 
-Writes who owes what to a text or CSV file, after the person allows it in the app: the SUMMARY of all friends, the STATEMENT of one friend (`--person-id`), or the LEDGER of every entry as CSV. An existing file is never replaced.
+Writes who owes what to a text, CSV or PDF file, in English, after the person allows it in the app: the SUMMARY of all friends, the STATEMENT of one friend (`--person-id`), or the LEDGER of every entry as CSV. An existing file is never replaced.
 
 ```text
-meowny export debts --out <path> [--what <SUMMARY|STATEMENT|LEDGER>] [--format <TEXT|CSV>] [--person-id <id>]
+meowny export debts --out <path> [--what <SUMMARY|STATEMENT|LEDGER>] [--format <TEXT|CSV|PDF>] [--person-id <id>]
 ```
 
 | Flag | Type | Description |
 | --- | --- | --- |
-| `--out` (required) | path | Where to write the file: an absolute path ending in .txt (TEXT) or .csv (CSV), in a folder that exists, that is not there yet. |
+| `--out` (required) | path | Where to write the file: an absolute path ending in .txt (TEXT), .csv (CSV) or .pdf (PDF), in a folder that exists, that is not there yet. |
 | `--what` | one of SUMMARY, STATEMENT, LEDGER | SUMMARY (the default), STATEMENT or LEDGER. |
-| `--format` | one of TEXT, CSV | TEXT (the default) or CSV. LEDGER is CSV only. |
+| `--format` | one of TEXT, CSV, PDF | TEXT (the default), CSV or PDF. LEDGER is CSV only. |
 | `--person-id` | id | The friend, for a STATEMENT. |
 
-Saves who owes what to a file you can send yourself; the app sends it to nobody. `--what` is `summary` (all friends), `statement` (one friend, with `--person-id`) or `ledger` (every entry, CSV only). `--format` is `text` or `csv`. It holds the names of your friends and amounts of money, and is not encrypted. The person allows it in the app first.
+Saves who owes what to a file you can send yourself; the app sends it to nobody. `--what` is `summary` (all friends), `statement` (one friend, with `--person-id`) or `ledger` (every entry, CSV only). `--format` is `text`, `csv` or `pdf` (the words are in English; the app writes them in your language). It holds the names of your friends and amounts of money, and is not encrypted. The person allows it in the app first.
 
 The app asks you to allow this each time, in a dialog; nothing is written until you do. See [Files need your yes](#files).
 
@@ -2087,7 +2087,7 @@ waiting for you to allow this in the meowNY app...
 Documents, newest paper first, with the total that match: names, dates, types, sizes and hashes, never the files. Up to 100 a page, 50 unless limit says otherwise.
 
 ```text
-meowny documents list [--q <text>] [--kind <image|pdf|other>] [--from <date>] [--to <date>] [--transaction-id <id>] [--recurring-id <id>] [--limit <number>] [--offset <number>]
+meowny documents list [--q <text>] [--kind <image|pdf|other>] [--from <date>] [--to <date>] [--transaction-id <id>] [--recurring-id <id>] [--ledger-entry-id <id>] [--limit <number>] [--offset <number>]
 ```
 
 | Flag | Type | Description |
@@ -2098,10 +2098,11 @@ meowny documents list [--q <text>] [--kind <image|pdf|other>] [--from <date>] [-
 | `--to` | date | Only documents dated on or before this date. |
 | `--transaction-id` | id | A transaction. |
 | `--recurring-id` | id | A recurring item. |
+| `--ledger-entry-id` | id | An entry of the ledger of money lent and borrowed. |
 | `--limit` | number | How many to return, 1 to 100. |
 | `--offset` | number | How many to skip. |
 
-Names, dates, types, sizes and hashes of the documents, newest paper first, never the files. `--transaction-id` and `--recurring-id` show what is attached to one thing. A read-only token can do this.
+Names, dates, types, sizes and hashes of the documents, newest paper first, never the files. `--transaction-id`, `--recurring-id` and `--ledger-entry-id` show what is attached to one thing. A read-only token can do this.
 
 ```console
 $ meowny documents list --q boiler
@@ -2112,7 +2113,7 @@ total: 1
 
 documents
 id  name                createdAt                 documentDate  hasFile  keepOnPhone  linkCount  mediaType        sha256                                                        sizeBytes
- 1  boiler-receipt.pdf  2026-10-17T08:51:36.994Z  2026-10-01    true     false                0  application/pdf  735a7713978716d1e65eb6bf069e2f410eb72ec5b285861be417aeca0fe…         45
+ 1  boiler-receipt.pdf  2026-10-17T13:09:31.500Z  2026-10-01    true     false                0  application/pdf  735a7713978716d1e65eb6bf069e2f410eb72ec5b285861be417aeca0fe…         45
 ```
 
 With `--json` (one line; shown indented):
@@ -2121,7 +2122,7 @@ With `--json` (one line; shown indented):
 {
   "documents": [
     {
-      "createdAt": "2026-10-17T08:51:36.994Z",
+      "createdAt": "2026-10-17T13:09:31.500Z",
       "documentDate": "2026-10-01",
       "hasFile": true,
       "id": "1",
@@ -2160,7 +2161,7 @@ The id can be given as a plain word, as in `meowny documents show 42`, or with `
 ```console
 $ meowny documents show 1
 
-createdAt: 2026-10-17T08:51:36.994Z
+createdAt: 2026-10-17T13:09:31.500Z
 documentDate: 2026-10-01
 hasFile: true
 id: 1
@@ -2179,7 +2180,7 @@ With `--json` (one line; shown indented):
 
 ```json
 {
-  "createdAt": "2026-10-17T08:51:36.994Z",
+  "createdAt": "2026-10-17T13:09:31.500Z",
   "documentDate": "2026-10-01",
   "hasFile": true,
   "id": "1",
@@ -2200,7 +2201,7 @@ With `--json` (one line; shown indented):
 Stores a file as a document, encrypted, and attaches it where asked. The answer is the document and `alreadyThere`: the same file added again is not stored twice, and the attachments are added to the document that is there. At most 25 MiB.
 
 ```text
-meowny documents add <file> [--name <text>] [--date <date>] [--keep-on-phone <boolean>] [--transaction-ids <id,id,...>] [--recurring-ids <id,id,...>]
+meowny documents add <file> [--name <text>] [--date <date>] [--keep-on-phone <boolean>] [--transaction-ids <id,id,...>] [--recurring-ids <id,id,...>] [--ledger-entry-ids <id,id,...>]
 ```
 
 | Flag | Type | Description |
@@ -2211,10 +2212,11 @@ meowny documents add <file> [--name <text>] [--date <date>] [--keep-on-phone <bo
 | `--keep-on-phone` | boolean | Keep the file on the phone too. Off if left out. |
 | `--transaction-ids` | id,id,... | Attach it to these transactions. |
 | `--recurring-ids` | id,id,... | Attach it to these recurring items. |
+| `--ledger-entry-ids` | id,id,... | Attach it to these entries of the ledger. |
 
 The program reads the file itself, as you, and sends its bytes to the app, which stores it encrypted. The app never opens a path on a token's behalf. The name is the name of the file unless you give `--name`. A file of at most 25 MiB; the same file added again is not stored twice: the answer says `alreadyThere` and the attachments are added to the document that is there.
 
-`--transaction-ids` and `--recurring-ids` attach it to what it belongs to, as comma-separated ids. `--keep-on-phone` also keeps the file on the phone after a sync.
+`--transaction-ids`, `--recurring-ids` and `--ledger-entry-ids` attach it to what it belongs to, as comma-separated ids. `--keep-on-phone` also keeps the file on the phone after a sync.
 
 The data can be given as a plain word, as in `meowny documents add 42`, or with `--data`.
 
@@ -2227,7 +2229,7 @@ With `--json` (one line; shown indented):
 ```json
 {
   "alreadyThere": false,
-  "createdAt": "2026-10-17T08:51:36.994Z",
+  "createdAt": "2026-10-17T13:09:31.500Z",
   "documentDate": "2026-10-01",
   "hasFile": true,
   "id": "1",
@@ -2269,7 +2271,7 @@ With `--json` (one line; shown indented):
 
 ```json
 {
-  "createdAt": "2026-10-17T08:51:36.994Z",
+  "createdAt": "2026-10-17T13:09:31.500Z",
   "documentDate": "2026-10-01",
   "hasFile": true,
   "id": "1",
@@ -2312,10 +2314,10 @@ done.
 
 *write token*
 
-Attaches a document to a transaction or to a recurring item. Giving one that is attached already changes nothing.
+Attaches a document to a transaction, a recurring item or a ledger entry. Giving one that is attached already changes nothing.
 
 ```text
-meowny documents link <id> [--transaction-id <id>] [--recurring-id <id>]
+meowny documents link <id> [--transaction-id <id>] [--recurring-id <id>] [--ledger-entry-id <id>]
 ```
 
 | Flag | Type | Description |
@@ -2323,8 +2325,9 @@ meowny documents link <id> [--transaction-id <id>] [--recurring-id <id>]
 | `--id` (required) | id | The document. |
 | `--transaction-id` | id | A transaction. |
 | `--recurring-id` | id | A recurring item. |
+| `--ledger-entry-id` | id | An entry of the ledger of money lent and borrowed. |
 
-Give exactly one of `--transaction-id` and `--recurring-id`. Attaching what is attached already changes nothing.
+Give exactly one of `--transaction-id`, `--recurring-id` and `--ledger-entry-id` (an entry of the ledger of money lent and borrowed, such as a loan note). Attaching what is attached already changes nothing.
 
 The id can be given as a plain word, as in `meowny documents link 42`, or with `--id`.
 
@@ -2338,10 +2341,10 @@ done.
 
 *write token*
 
-Detaches a document from a transaction or a recurring item. The document and the transaction stay.
+Detaches a document from a transaction, a recurring item or a ledger entry. The document and the transaction stay.
 
 ```text
-meowny documents unlink <id> [--transaction-id <id>] [--recurring-id <id>]
+meowny documents unlink <id> [--transaction-id <id>] [--recurring-id <id>] [--ledger-entry-id <id>]
 ```
 
 | Flag | Type | Description |
@@ -2349,6 +2352,7 @@ meowny documents unlink <id> [--transaction-id <id>] [--recurring-id <id>]
 | `--id` (required) | id | The document. |
 | `--transaction-id` | id | A transaction. |
 | `--recurring-id` | id | A recurring item. |
+| `--ledger-entry-id` | id | An entry of the ledger of money lent and borrowed. |
 
 Detaches it. The document and the transaction stay.
 
@@ -3167,7 +3171,7 @@ The command line is a thin client. Anything it does you can do yourself with `cu
 curl -s -X POST "http://127.0.0.1:$PORT/v1/status" \
   -H "Authorization: Bearer $MEOWNY_TOKEN"
 
-{"data":{"api":1,"app":"meowny","schemaVersion":12,"scope":"read","version":"0.1.0"},"ok":true}
+{"data":{"api":1,"app":"meowny","schemaVersion":13,"scope":"read","version":"0.1.0"},"ok":true}
 ```
 
 The port is in `api.json`. `meowny schema --app` prints every route with its arguments as JSON.
@@ -3214,13 +3218,13 @@ The port is in `api.json`. `meowny schema --app` prints every route with its arg
 | `export.xlsx` | read, and your yes | `out` (required), `from`, `to`, `categoryIds`, `includeDebts` | Writes a workbook (.xlsx) with sheets for transactions, categories, budgets, recurring items and a monthly summary, after the person allows it in the app. Dates are ISO and amounts plain numbers. An existing file is never replaced. |
 | `export.pdf` | read, and your yes | `out` (required), `fromMonth` (required), `toMonth` (required), `categoryIds`, `includeTransactions`, `showDescriptions`, `page` | Writes a PDF report for whole months, in English, after the person allows it in the app: totals, charts and budget against actual, and the transactions if asked. An existing file is never replaced. |
 | `backup.create` | read, and your yes | `out` (required), `passphrase` (required) | Writes an encrypted backup of all the data, after the person allows it in the app. It opens only with the passphrase given here, and only the app can restore it. An existing file is never replaced. |
-| `documents.list` | read | `q`, `kind`, `from`, `to`, `transactionId`, `recurringId`, `limit`, `offset` | Documents, newest paper first, with the total that match: names, dates, types, sizes and hashes, never the files. Up to 100 a page, 50 unless limit says otherwise. |
+| `documents.list` | read | `q`, `kind`, `from`, `to`, `transactionId`, `recurringId`, `ledgerEntryId`, `limit`, `offset` | Documents, newest paper first, with the total that match: names, dates, types, sizes and hashes, never the files. Up to 100 a page, 50 unless limit says otherwise. |
 | `documents.show` | read | `id` (required) | One document: its name, date, type, size and hash, whether this computer holds its file, and in `links` what it is attached to. Never the file. |
-| `documents.add` | write | `data` (required), `name` (required), `date`, `keepOnPhone`, `transactionIds`, `recurringIds` | Stores a file as a document, encrypted, and attaches it where asked. The answer is the document and `alreadyThere`: the same file added again is not stored twice, and the attachments are added to the document that is there. At most 25 MiB. |
+| `documents.add` | write | `data` (required), `name` (required), `date`, `keepOnPhone`, `transactionIds`, `recurringIds`, `ledgerEntryIds` | Stores a file as a document, encrypted, and attaches it where asked. The answer is the document and `alreadyThere`: the same file added again is not stored twice, and the attachments are added to the document that is there. At most 25 MiB. |
 | `documents.update` | write | `id` (required), `name`, `date`, `keepOnPhone` | Renames a document, changes its date, or switches whether the phone keeps its file. Give at least one. The contents cannot be changed. |
 | `documents.delete` | write | `id` (required) | Deletes a document, its file and its attachments. The transactions it was attached to stay. |
-| `documents.link` | write | `id` (required), `transactionId`, `recurringId` | Attaches a document to a transaction or to a recurring item. Giving one that is attached already changes nothing. |
-| `documents.unlink` | write | `id` (required), `transactionId`, `recurringId` | Detaches a document from a transaction or a recurring item. The document and the transaction stay. |
+| `documents.link` | write | `id` (required), `transactionId`, `recurringId`, `ledgerEntryId` | Attaches a document to a transaction, a recurring item or a ledger entry. Giving one that is attached already changes nothing. |
+| `documents.unlink` | write | `id` (required), `transactionId`, `recurringId`, `ledgerEntryId` | Detaches a document from a transaction, a recurring item or a ledger entry. The document and the transaction stay. |
 | `documents.get` | write, and your yes | `id` (required), `out` (required) | Writes a copy of a document's file, after the person allows it in the app. It is not encrypted. An existing file is never replaced. |
 | `people.list` | read | `archived` | The friends with what each owes you (negative: you owe them), the largest first. Archived friends only if asked. |
 | `people.show` | read | `id` (required) | One friend and their ledger: their parts of shared bills and the entries by date, with the balance after each line. |
@@ -3238,7 +3242,7 @@ The port is in `api.json`. `meowny schema --app` prints every route with its arg
 | `transactions.unsplit` | write | `id` (required) | Takes the split off a transaction: it costs you its whole amount again, and the friends' balances go down by their parts. |
 | `recurring.split` | write | `id` (required), `mode` (required), `mine`, `people`, `guests`, `values` | Splits every payment of a recurring item the same way, from now on. Kept as proportions, so a payment that differs from the plan is shared in the same proportions. EXACT needs an item with an amount that the values add up to. Payments already made are not changed. |
 | `recurring.unsplit` | write | `id` (required) | Takes the split off a recurring item: its payments are not split from now on. Payments already made keep theirs. |
-| `export.debts` | read, and your yes | `out` (required), `what`, `format`, `personId` | Writes who owes what to a text or CSV file, after the person allows it in the app: the SUMMARY of all friends, the STATEMENT of one friend (personId), or the LEDGER of every entry as CSV. An existing file is never replaced. |
+| `export.debts` | read, and your yes | `out` (required), `what`, `format`, `personId` | Writes who owes what to a text, CSV or PDF file, in English, after the person allows it in the app: the SUMMARY of all friends, the STATEMENT of one friend (personId), or the LEDGER of every entry as CSV. An existing file is never replaced. |
 
 ## Security
 

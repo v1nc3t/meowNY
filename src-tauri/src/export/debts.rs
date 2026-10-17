@@ -110,7 +110,7 @@ pub(crate) fn people(conn: &Connection, sel: &Parsed, lines: &[LineRow], entries
     let wanted: BTreeSet<i64> = lines.iter().filter_map(|l| l.person_id).chain(entries.iter().map(|e| e.person_id)).collect();
     let mut statement = conn.prepare(
         "SELECT p.id, p.name, p.archived, b.balance_minor, p.remind_on, p.remind_every_days
-         FROM people p JOIN person_balances b ON b.person_id = p.id ORDER BY p.id",
+         FROM people p JOIN person_balances b ON b.person_id = p.id WHERE p.merged_into IS NULL ORDER BY p.id",
     )?;
     let rows = statement.query_map([], |r| {
         Ok(PersonRow {

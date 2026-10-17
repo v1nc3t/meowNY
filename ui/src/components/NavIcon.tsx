@@ -9,6 +9,7 @@ export default function NavIcon({ name, className = 'nav-icon' }: { name: string
       {name === 'recurring' ? <path d="M5 12a7 7 0 0 1 12-5l2 2M19 4v5h-5M19 12a7 7 0 0 1-12 5l-2-2M5 20v-5h5" /> : null}
       {name === 'export' ? <path d="M12 15V4M8 8l4-4 4 4M5 14v5h14v-5" /> : null}
       {name === 'documents' ? <path d="M7 3h7l5 5v13H7zM14 3v5h5M10 13h6M10 17h6" /> : null}
+      {name === 'debts' ? <path d="M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM14.6 9.3c-.4-.8-1.4-1.3-2.6-1.3-1.4 0-2.6.7-2.6 1.8 0 2.4 5.2 1.2 5.2 3.6 0 1.1-1.2 1.8-2.6 1.8-1.2 0-2.2-.5-2.6-1.3M12 6.5V8M12 16v1.5" /> : null}
       {name === 'clip' ? <path d="M21.4 11.1l-9.2 9.2a6 6 0 0 1-8.5-8.5l9.2-9.2a4 4 0 0 1 5.7 5.7l-9.2 9.2a2 2 0 0 1-2.8-2.8l8.5-8.5" /> : null}
       {name === 'help' ? <path d="M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM9.6 9.3a2.4 2.4 0 1 1 3.4 2.2c-.7.4-1 .9-1 1.7M12 16.8h.01" /> : null}
       {name === 'settings' ? <path d="M4 7h10M18 7h2M4 17h2M10 17h10M14 4v6M6 14v6" /> : null}
