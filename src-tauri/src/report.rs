@@ -215,6 +215,7 @@ fn load(conn: &Connection, options: &ReportOptions) -> Result<ReportData, AppErr
         from: Some(first_day.to_string()),
         to: Some(last_day.to_string()),
         category_ids: options.category_ids.clone(),
+        include_debts: false,
     })?;
 
     let sums = export::monthly_sums(conn, &sel)?;
@@ -229,7 +230,7 @@ fn load(conn: &Connection, options: &ReportOptions) -> Result<ReportData, AppErr
     let expense: i64 = figures.iter().map(|m| m.expense).sum();
 
     let mut statement = conn.prepare(&format!(
-        "SELECT c.name, SUM(t.amount_minor) FROM transactions t JOIN categories c ON c.id = t.category_id
+        "SELECT c.name, SUM(t.cost_minor) FROM transaction_costs t JOIN categories c ON c.id = t.category_id
          WHERE {} AND c.type = 'EXPENSE' GROUP BY c.id ORDER BY 2 DESC, c.name",
         export::transaction_filter(&sel)
     ))?;
@@ -332,6 +333,15 @@ pub fn read(conn: &Connection, options: &ReportOptions) -> Result<Report, AppErr
     }
     let tx = conn.unchecked_transaction()?;
     Ok(Report(load(&tx, options)?))
+}
+
+#[cfg(test)]
+impl Report {
+    /// What the report adds up, for the tests: income, expenses, the sum of "where the money went", and the sum of the listed transactions.
+    pub(crate) fn figures(&self) -> (i64, i64, i64, i64) {
+        let data = &self.0;
+        (data.income, data.expense, data.spending.iter().map(|s| s.1).sum(), data.transactions.iter().map(|t| t.my_share).sum())
+    }
 }
 
 impl Report {

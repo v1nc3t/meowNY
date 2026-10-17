@@ -6,6 +6,7 @@ use rusqlite::{params, Connection, OptionalExtension};
 use serde::{Deserialize, Deserializer, Serialize};
 
 use crate::categories::{parse_id, serialize_id};
+use crate::debts::splits::{self, PartOut};
 use crate::money::{format_amount, parse_positive_amount};
 use crate::vault::AppError;
 
@@ -24,8 +25,13 @@ pub struct Transaction {
     pub category_id: i64,
     pub client_uuid: Option<String>,
     pub name: String,
-    /// Decimal string, e.g. "12.50".
+    /// What was paid. Decimal string, e.g. "12.50".
     pub amount: String,
+    /// What it costs you: the amount minus the parts of the friends and guests it is shared with (`transaction_costs`). The same as
+    /// `amount` for a bill that is not split. Budgets, statistics and reports add up this, never `amount`.
+    pub my_share: String,
+    /// The parts of the others, when the bill is shared.
+    pub split: Vec<PartOut>,
     pub payment_date: String,
     pub description: Option<String>,
 }
@@ -142,26 +148,61 @@ fn from_row(row: &rusqlite::Row) -> rusqlite::Result<Transaction> {
         client_uuid: row.get(2)?,
         name: row.get(3)?,
         amount: format_amount(row.get(4)?),
+        my_share: format_amount(row.get(4)?),
+        split: Vec::new(),
         payment_date: row.get(5)?,
         description: row.get(6)?,
     })
 }
 
+/// Fills in what the row alone does not say: what each transaction costs you and how it is shared. One query for each, whatever the number.
+fn hydrate(conn: &Connection, transactions: &mut [Transaction]) -> Result<(), AppError> {
+    let ids: Vec<i64> = transactions.iter().map(|t| t.id).collect();
+    let costs = splits::costs_of(conn, &ids)?;
+    let mut parts = splits::parts_of(conn, &ids)?;
+    for t in transactions {
+        if let Some(cost) = costs.get(&t.id) {
+            t.my_share = format_amount(*cost);
+        }
+        t.split = parts.remove(&t.id).unwrap_or_default();
+    }
+    Ok(())
+}
+
 fn find(conn: &Connection, id: i64) -> Result<Option<Transaction>, AppError> {
-    Ok(conn
-        .query_row(&format!("SELECT {COLUMNS} FROM transactions WHERE id = ?1"), [id], from_row)
-        .optional()?)
+    let found = conn.query_row(&format!("SELECT {COLUMNS} FROM transactions WHERE id = ?1"), [id], from_row).optional()?;
+    found
+        .map(|t| {
+            let mut one = [t];
+            hydrate(conn, &mut one)?;
+            let [t] = one;
+            Ok(t)
+        })
+        .transpose()
 }
 
 fn find_by_uuid(conn: &Connection, uuid: &str) -> Result<Option<Transaction>, AppError> {
-    Ok(conn
-        .query_row(&format!("SELECT {COLUMNS} FROM transactions WHERE client_uuid = ?1"), [uuid], from_row)
-        .optional()?)
+    let found = conn.query_row(&format!("SELECT {COLUMNS} FROM transactions WHERE client_uuid = ?1"), [uuid], from_row).optional()?;
+    found
+        .map(|t| {
+            let mut one = [t];
+            hydrate(conn, &mut one)?;
+            let [t] = one;
+            Ok(t)
+        })
+        .transpose()
 }
 
 pub(crate) fn category_is_active(conn: &Connection, id: i64) -> Result<bool, AppError> {
     Ok(conn
         .query_row("SELECT 1 FROM categories WHERE id = ?1 AND deleted_at IS NULL", [id], |_| Ok(()))
+        .optional()?
+        .is_some())
+}
+
+fn category_is_expense(conn: &Connection, id: i64) -> Result<bool, AppError> {
+    Ok(conn
+        .query_row("SELECT 1 FROM categories WHERE id = ?1 AND type = 'EXPENSE'", [id], |_| Ok(()))
         .optional()?
         .is_some())
 }
@@ -203,6 +244,8 @@ pub fn create(conn: &Connection, input: &NewTransaction) -> Result<Transaction, 
             client_uuid: uuid,
             name,
             amount: format_amount(minor),
+            my_share: format_amount(minor),
+            split: Vec::new(),
             payment_date: date,
             description,
         }),
@@ -248,12 +291,35 @@ pub fn update(conn: &Connection, id: i64, patch: &TransactionPatch) -> Result<Tr
         None => current.description.clone(),
     };
 
-    conn.execute(
-        "UPDATE transactions
-         SET name = ?1, amount_minor = ?2, payment_date = ?3, category_id = ?4, description = ?5
-         WHERE id = ?6",
-        params![name, minor, date, category_id, description, id],
-    )?;
+    // A bill that is shared keeps its parts adding up to the bill: a new amount rescales every part, yours included, and a split bill
+    // stays an expense. The parts are written before the amount when it shrinks and after it when it grows, so they never pass the bill.
+    let old_minor = parse_positive_amount(&current.amount)?;
+    let shared = !current.split.is_empty();
+    if shared && category_id != current.category_id && !category_is_expense(conn, category_id)? {
+        return Err(AppError::InvalidInput);
+    }
+    let write = |conn: &Connection| -> Result<(), AppError> {
+        conn.execute(
+            "UPDATE transactions
+             SET name = ?1, amount_minor = ?2, payment_date = ?3, category_id = ?4, description = ?5
+             WHERE id = ?6",
+            params![name, minor, date, category_id, description, id],
+        )?;
+        Ok(())
+    };
+    if !shared {
+        write(conn)?;
+        return get(conn, id);
+    }
+    let tx = conn.unchecked_transaction()?;
+    if minor < old_minor {
+        splits::rescale(&tx, id, old_minor, minor)?;
+    }
+    write(&tx)?;
+    if minor > old_minor {
+        splits::rescale(&tx, id, old_minor, minor)?;
+    }
+    tx.commit()?;
     get(conn, id)
 }
 
@@ -327,7 +393,8 @@ pub fn list(conn: &Connection, filter: &Filter) -> Result<Page, AppError> {
         "SELECT {COLUMNS} FROM transactions {filter_sql} ORDER BY payment_date DESC, id DESC LIMIT ? OFFSET ?"
     ))?;
     let rows = statement.query_map(rusqlite::params_from_iter(page_values), from_row)?;
-    let transactions = rows.collect::<Result<Vec<_>, _>>()?;
+    let mut transactions = rows.collect::<Result<Vec<_>, _>>()?;
+    hydrate(conn, &mut transactions)?;
     Ok(Page { transactions, total, limit, offset })
 }
 

@@ -974,7 +974,10 @@ fn random_edits_with_a_currency_change_in_between_still_converge() {
 // --- what stays on a device ---------------------------------------------------------------------------------------------
 
 /// Tables whose rows are sent to the other device (the settings only in their shared part), and tables that never are.
-const SHARED_TABLES: [&str; 9] = [
+///
+/// Phase 10 (debts): `people` and `ledger_entries` are shared like the rest; the two tables of parts belong to their transaction and to
+/// their recurring item and will travel inside them. None of the four is sent yet (the sync learns them in the next batch of the phase).
+const SHARED_TABLES: [&str; 13] = [
     "settings",
     "categories",
     "budgets",
@@ -982,6 +985,10 @@ const SHARED_TABLES: [&str; 9] = [
     "transactions",
     "documents",
     "document_links",
+    "people",
+    "ledger_entries",
+    "transaction_split_lines",
+    "recurring_split_lines",
     "sync_deleted",
     "currency_changes",
 ];
@@ -1558,4 +1565,40 @@ fn a_big_library_of_documents_travels_in_frames_that_fit() {
     let outcome = sync_ok(&mut desktop, &mut phone);
     assert_eq!((count(&phone, "SELECT count(*) FROM documents"), links(&phone)), (1500, 1500));
     assert!(outcome.messages > 10, "the rows did not fit one message: {}", outcome.messages);
+}
+
+// --- shared bills (phase 10) -----------------------------------------------------------------------------------------------
+
+/// The parts of a shared bill do not travel yet (the next batch of the phase makes them part of the transaction's row). Until they do, a
+/// transaction that arrives from the other device must not leave this device's parts passing the bill.
+#[test]
+fn a_bill_shared_here_stays_valid_when_the_other_device_changes_the_amount_or_the_category() {
+    use crate::debts::fixtures::{equal, friend, who};
+    use crate::debts::splits::{check, set_split};
+    let (mut desktop, mut phone) = paired();
+    let food = count(&desktop, "SELECT id FROM categories WHERE name = 'Food'");
+    let anna = friend(&desktop, "Anna");
+    let dinner = spend(&desktop, food, "Dinner", "90.00");
+    set_split(&desktop, dinner, &equal(vec![who(anna)])).unwrap();
+    sync_ok(&mut desktop, &mut phone);
+    assert_eq!(count(&phone, "SELECT amount_minor FROM transactions WHERE name = 'Dinner'"), 9000, "the phone has the bill, whole");
+    assert_eq!(count(&desktop, "SELECT count(*) FROM transaction_split_lines"), 1);
+
+    // the phone makes the bill smaller
+    pause();
+    let on_phone = count(&phone, "SELECT id FROM transactions WHERE name = 'Dinner'");
+    transactions::update(&phone, on_phone, &transactions::TransactionPatch { amount: Some("30.00".into()), ..Default::default() }).unwrap();
+    sync_ok(&mut desktop, &mut phone);
+    assert_eq!(count(&desktop, "SELECT amount_minor FROM transactions WHERE name = 'Dinner'"), 3000);
+    assert_eq!(count(&desktop, "SELECT amount_minor FROM transaction_split_lines"), 1500, "the part is scaled with the bill");
+    assert_eq!(count(&desktop, "SELECT cost_minor FROM transaction_costs WHERE transaction_id = (SELECT id FROM transactions WHERE name = 'Dinner')"), 1500);
+    assert!(check(&desktop).unwrap());
+
+    // the phone makes it an income: nothing can be shared in it
+    pause();
+    let salary_on_phone = count(&phone, "SELECT id FROM categories WHERE name = 'Salary'");
+    transactions::update(&phone, on_phone, &transactions::TransactionPatch { category_id: Some(salary_on_phone.to_string()), ..Default::default() }).unwrap();
+    sync_ok(&mut desktop, &mut phone);
+    assert_eq!(count(&desktop, "SELECT count(*) FROM transaction_split_lines"), 0);
+    assert!(check(&desktop).unwrap());
 }

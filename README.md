@@ -248,6 +248,10 @@ meowny transactions delete 42 --yes
 meowny export csv --out ~/budget-2026.csv --from 2026-01-01
 meowny documents add ~/Downloads/boiler-receipt.pdf --transaction-ids 42   # the program reads the file and sends it
 meowny documents get 7 --out ~/boiler-receipt.pdf                          # you allow this in the app
+meowny people create --name Anna                                            # a friend is a name and nothing else
+meowny transactions split 42 --mode equal --people 1,2                     # you paid for dinner; budgets count only your part
+meowny people settle 1 --amount 20.00                                       # Anna paid you back
+meowny debts summary                                                        # who owes what
 meowny backup create --out ~/meowny.meowbak --passphrase -   # the passphrase on standard input
 meowny --help        # and meowny <command> --help
 meowny schema        # every command, flag and exit code as JSON, without the app
@@ -261,7 +265,7 @@ meowny schema        # every command, flag and exit code as JSON, without the ap
 - Money stays a string end to end, and dates are ISO 8601.
 - The token is found in `--token-file`, then `MEOWNY_TOKEN`, then `MEOWNY_TOKEN_FILE`, then the file `login` saved (`~/.config/meowny/token` on Linux). A token file that other users can read is refused.
 - `MEOWNY_DATA_DIR` or `--data-dir` says where the app keeps its data (where it writes its port); `MEOWNY_PORT` or `--port` skips that.
-- Exports (`export json|csv|xlsx|pdf`), backups (`backup create`) and copies of documents (`documents get`) are not done on a token's say-so. Each one is described in a dialog in the app (which token, what, the exact file) and is written only if you click Allow. The file must have the right ending, be in a folder that exists, and not exist yet: nothing is ever overwritten. Asking again right after a "no" is refused for 30 seconds.
+- Exports (`export json|csv|xlsx|pdf|debts`), backups (`backup create`) and copies of documents (`documents get`) are not done on a token's say-so. Each one is described in a dialog in the app (which token, what, the exact file) and is written only if you click Allow. The file must have the right ending, be in a folder that exists, and not exist yet: nothing is ever overwritten. Asking again right after a "no" is refused for 30 seconds.
 
 | Exit code | Means |
 |---|---|

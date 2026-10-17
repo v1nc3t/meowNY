@@ -7,6 +7,7 @@ use rusqlite::{params, Connection, OptionalExtension};
 use serde::{Deserialize, Deserializer, Serialize};
 
 use crate::categories::{parse_id, serialize_id};
+use crate::debts::splits::{self, Template};
 use crate::money::{format_amount, parse_positive_amount};
 use crate::transactions::{category_is_active, clean_date, clean_description, clean_name};
 use crate::vault::AppError;
@@ -60,6 +61,8 @@ pub struct Recurring {
     pub next_due_date: String,
     pub end_date: Option<String>,
     pub is_active: bool,
+    /// How each payment is shared, as weights (yours and one for each friend or guest), or null when the payments are not split.
+    pub split: Option<Template>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -150,11 +153,30 @@ fn from_row(row: &rusqlite::Row) -> rusqlite::Result<Recurring> {
         next_due_date: row.get(8)?,
         end_date: row.get(9)?,
         is_active: row.get::<_, i64>(10)? == 1,
+        split: None,
     })
 }
 
+/// Fills in the split of each item, with one query for all of them.
+fn hydrate(conn: &Connection, items: &mut [Recurring]) -> Result<(), AppError> {
+    let ids: Vec<i64> = items.iter().map(|r| r.id).collect();
+    let mut templates = splits::templates_of(conn, &ids)?;
+    for item in items {
+        item.split = templates.remove(&item.id);
+    }
+    Ok(())
+}
+
 pub fn find(conn: &Connection, id: i64) -> Result<Option<Recurring>, AppError> {
-    Ok(conn.query_row(&format!("SELECT {COLUMNS} FROM recurring_transactions WHERE id = ?1"), [id], from_row).optional()?)
+    let found = conn.query_row(&format!("SELECT {COLUMNS} FROM recurring_transactions WHERE id = ?1"), [id], from_row).optional()?;
+    found
+        .map(|item| {
+            let mut one = [item];
+            hydrate(conn, &mut one)?;
+            let [item] = one;
+            Ok(item)
+        })
+        .transpose()
 }
 
 pub fn get(conn: &Connection, id: i64) -> Result<Recurring, AppError> {
@@ -167,6 +189,10 @@ fn optional_amount(text: Option<&str>) -> Result<Option<i64>, AppError> {
         None => Ok(None),
         Some(text) => Ok(Some(parse_positive_amount(text)?)),
     }
+}
+
+fn category_is_expense(conn: &Connection, id: i64) -> Result<bool, AppError> {
+    Ok(conn.query_row("SELECT 1 FROM categories WHERE id = ?1 AND type = 'EXPENSE'", [id], |_| Ok(())).optional()?.is_some())
 }
 
 fn clean_count(count: u32) -> Result<u32, AppError> {
@@ -234,6 +260,10 @@ pub fn update(conn: &Connection, id: i64, patch: &RecurringPatch) -> Result<Recu
         Some(description) => clean_description(description.as_deref())?,
         None => current.description.clone(),
     };
+    // A split item stays an expense: take the split off first to move it to an income category.
+    if current.split.is_some() && category_id != current.category_id && !category_is_expense(conn, category_id)? {
+        return Err(AppError::InvalidInput);
+    }
     let start_text = patch.start_date.clone().unwrap_or_else(|| current.start_date.clone());
     let start = parse_date(&start_text)?;
     let unit = patch.interval_unit.unwrap_or(current.interval_unit);
@@ -277,7 +307,9 @@ pub fn list(conn: &Connection) -> Result<Vec<Recurring>, AppError> {
         "SELECT {COLUMNS} FROM recurring_transactions ORDER BY is_active DESC, next_due_date, id"
     ))?;
     let rows = statement.query_map([], from_row)?;
-    Ok(rows.collect::<Result<Vec<_>, _>>()?)
+    let mut items = rows.collect::<Result<Vec<_>, _>>()?;
+    hydrate(conn, &mut items)?;
+    Ok(items)
 }
 
 #[derive(Debug, Serialize)]
@@ -303,7 +335,8 @@ pub fn dues(conn: &Connection, today: &str, within_days: Option<u32>) -> Result<
         "SELECT {COLUMNS} FROM recurring_transactions
          WHERE is_active = 1 AND next_due_date <= ?1 ORDER BY next_due_date, id"
     ))?;
-    let items = statement.query_map([&horizon], from_row)?.collect::<Result<Vec<_>, _>>()?;
+    let mut items = statement.query_map([&horizon], from_row)?.collect::<Result<Vec<_>, _>>()?;
+    hydrate(conn, &mut items)?;
     let (overdue, upcoming) = items.into_iter().partition(|r| r.next_due_date.as_str() < today);
     Ok(Dues { overdue, upcoming })
 }
@@ -375,6 +408,8 @@ pub fn pay(
         Err(e) => return Err(e.into()),
     }
     let created = tx.last_insert_rowid();
+    // An item that is split makes a payment that is split by the same proportions, whatever was paid.
+    splits::apply_template(&tx, created, id, paid)?;
     advance(&tx, &item)?;
     tx.commit()?;
     crate::transactions::get(conn, created)

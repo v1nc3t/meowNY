@@ -8,6 +8,7 @@ use serde::Serialize;
 
 use crate::budgets::{self, kind_sql, next_month, month_start, Overview, Scope};
 use crate::categories::{serialize_id, CategoryType};
+use crate::debts::splits;
 use crate::money::format_amount;
 use crate::vault::AppError;
 
@@ -61,11 +62,11 @@ pub fn budget_vs_actual(conn: &Connection, month: &str) -> Result<BudgetVsActual
         .collect();
 
     let mut statement = conn.prepare(
-        "SELECT c.id, c.name, c.type, COALESCE(SUM(t.amount_minor), 0) AS actual, c.deleted_at IS NULL
+        "SELECT c.id, c.name, c.type, COALESCE(SUM(t.cost_minor), 0) AS actual, c.deleted_at IS NULL
          FROM categories c
-         LEFT JOIN transactions t ON t.category_id = c.id AND t.payment_date >= ?1 AND t.payment_date < ?2
+         LEFT JOIN transaction_costs t ON t.category_id = c.id AND t.payment_date >= ?1 AND t.payment_date < ?2
          GROUP BY c.id
-         HAVING c.deleted_at IS NULL OR COUNT(t.id) > 0
+         HAVING c.deleted_at IS NULL OR COUNT(t.transaction_id) > 0
          ORDER BY c.type, c.name COLLATE NOCASE, c.id",
     )?;
     let rows = statement.query_map([&start, &end], |r| {
@@ -122,7 +123,7 @@ pub fn category_trend(conn: &Connection, category_id: i64, from: &str, to: &str)
     let after_last = next_month(last)?.to_string();
     let mut actuals = std::collections::HashMap::new();
     let mut statement = conn.prepare(
-        "SELECT substr(payment_date, 1, 7), SUM(amount_minor) FROM transactions
+        "SELECT substr(payment_date, 1, 7), SUM(cost_minor) FROM transaction_costs
          WHERE category_id = ?1 AND payment_date >= ?2 AND payment_date < ?3 GROUP BY 1",
     )?;
     for row in statement.query_map(params![category_id, first.to_string(), after_last], |r| Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)?)))? {
@@ -166,8 +167,8 @@ pub fn year_trend(conn: &Connection, year: &str) -> Result<Vec<YearPoint>, AppEr
     month_start(&format!("{year}-01"))?;
     let mut sums: std::collections::HashMap<(String, String), i64> = std::collections::HashMap::new();
     let mut statement = conn.prepare(
-        "SELECT substr(t.payment_date, 1, 7), c.type, SUM(t.amount_minor)
-         FROM transactions t JOIN categories c ON c.id = t.category_id
+        "SELECT substr(t.payment_date, 1, 7), c.type, SUM(t.cost_minor)
+         FROM transaction_costs t JOIN categories c ON c.id = t.category_id
          WHERE t.payment_date >= ?1 AND t.payment_date < ?2 GROUP BY 1, 2",
     )?;
     let from = format!("{year}-01-01");
@@ -217,8 +218,8 @@ pub fn top_categories(conn: &Connection, month: &str, kind: CategoryType, limit:
     let first = month_start(month)?;
     let (start, end) = (first.to_string(), next_month(first)?.to_string());
     let mut statement = conn.prepare(
-        "SELECT c.id, c.name, SUM(t.amount_minor) AS total
-         FROM transactions t JOIN categories c ON c.id = t.category_id
+        "SELECT c.id, c.name, SUM(t.cost_minor) AS total
+         FROM transaction_costs t JOIN categories c ON c.id = t.category_id
          WHERE c.type = ?1 AND t.payment_date >= ?2 AND t.payment_date < ?3
          GROUP BY c.id ORDER BY total DESC, c.name COLLATE NOCASE, c.id",
     )?;
@@ -275,11 +276,17 @@ pub fn commitments(conn: &Connection) -> Result<Commitments, AppError> {
     let rows = statement.query_map([], |r| {
         Ok((r.get::<_, i64>(0)?, r.get::<_, String>(1)?, r.get::<_, String>(2)?, r.get::<_, Option<i64>>(3)?, r.get::<_, String>(4)?, r.get::<_, i64>(5)?))
     })?;
+    // An item that is split costs you only your part of each payment.
+    let templates = splits::all_template_weights(conn)?;
     let (mut expense, mut income) = (0, 0);
     let mut items = Vec::new();
     for row in rows {
         let (id, name, kind, amount, unit, count) = row?;
-        let monthly = amount.map(|amount| per_month_minor(amount, &unit, count));
+        let mine = match (amount, templates.get(&id)) {
+            (Some(amount), Some(weights)) => Some(splits::my_part(amount, weights)?),
+            (amount, _) => amount,
+        };
+        let monthly = mine.map(|amount| per_month_minor(amount, &unit, count));
         let kind = if kind == "INCOME" { CategoryType::Income } else { CategoryType::Expense };
         match kind {
             CategoryType::Income => income += monthly.unwrap_or(0),

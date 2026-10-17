@@ -15,7 +15,7 @@ use std::path::{Path, PathBuf};
 use serde_json::{json, Map, Value};
 
 use super::files::{checked, write_new};
-use super::read::{CATEGORY_IDS, FROM, TO};
+use super::read::{CATEGORY_IDS, FROM, INCLUDE_DEBTS, TO};
 use super::routes::{parse, Ctx, Kind, Param, Route};
 use super::{ApiError, Approval};
 use crate::backup;
@@ -59,8 +59,17 @@ fn counts(p: &Preview, with_other_records: bool) -> Vec<String> {
         if p.documents > 0 {
             lines.push(format!("And {} documents, by name, date, type, size and what they are attached to. Never the files themselves", p.documents));
         }
+        if p.people > 0 || p.ledger > 0 || p.split_bills > 0 {
+            lines.push(format!(
+                "And {} friends by name, {} ledger entries of money lent and borrowed, and the parts of {} shared bills",
+                p.people, p.ledger, p.split_bills
+            ));
+        }
     } else if p.documents > 0 {
         lines.push("A column with the names of the documents attached to each transaction. Never the files themselves".to_string());
+    }
+    if !with_other_records && p.split_bills > 0 {
+        lines.push(format!("A column with what each transaction cost you; {} of them are shared bills", p.split_bills));
     }
     lines
 }
@@ -85,6 +94,7 @@ pub const EXPORT_JSON: Route = Route {
         FROM,
         TO,
         CATEGORY_IDS,
+        INCLUDE_DEBTS,
     ],
     run: |ctx, args| {
         let (path, rest) = split(&args, "json")?;
@@ -152,6 +162,7 @@ pub const EXPORT_XLSX: Route = Route {
         FROM,
         TO,
         CATEGORY_IDS,
+        INCLUDE_DEBTS,
     ],
     run: |ctx, args| {
         let (path, rest) = split(&args, "xlsx")?;

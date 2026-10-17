@@ -492,7 +492,7 @@ impl Builder<'_> {
             self.text_fit(cols.category, base, 8.5, false, INK, &t.category, 110.0);
             self.text_fit(cols.name, base, 8.5, false, INK, &t.name, self.right - amount_w - cols.name - 8.0);
             let income = t.kind == "INCOME";
-            self.text_right(self.right, base, 8.5, false, if income { INCOME } else { INK }, &self.fmt.money(t.amount));
+            self.text_right(self.right, base, 8.5, false, if income { INCOME } else { INK }, &self.fmt.money(t.my_share));
             if let Some(description) = description {
                 self.text_fit(cols.name, base + 10.0, 7.5, false, MUTED, description, self.right - cols.name);
             }

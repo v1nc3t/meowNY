@@ -113,6 +113,8 @@ fn sample(command: &str, category: &str) -> Vec<String> {
         "categories list" => &["--type", "expense"],
         "recurring dues" => &["--within-days", "10"],
         "documents show" => &["1"],
+        "people show" => &["1"],
+        "splits preview" => &["--amount", "100.00", "--mode", "equal", "--people", "1"],
         _ => &[],
     };
     let mut out: Vec<String> = command.split(' ').map(String::from).collect();
@@ -127,6 +129,7 @@ fn sample(command: &str, category: &str) -> Vec<String> {
 fn every_read_command_runs_and_prints_what_the_app_returns() {
     let app = app(true);
     document(&app, "Receipt.pdf", b"%PDF-1.4 a receipt", Some("1"));
+    app.vault.with_conn(|c| meowny_lib::debts::people::create(c, "Anna").map(drop)).unwrap();
     let category = category(&app, "EXPENSE", "Groceries");
     let schema = run(&app, "", &["schema"]).json();
     let mut tried = 0;
@@ -885,6 +888,38 @@ fn every_command_runs_against_a_real_app_and_a_new_one_without_a_test_fails_this
     assert_eq!(std::fs::read(&copy).unwrap(), b"%PDF-1.4 the boiler was repaired");
     assert!(t.go(&w, &["documents", "delete", &doc, "--yes"]).is_null());
     assert_eq!(t.go(&r, &["documents", "list"])["total"], 0);
+
+    // Friends, the ledger and shared bills: a read token sees, a write token changes, and the numbers add up.
+    let dinner = id_of(&t.go(&w, &["transactions", "create", "--name", "Dinner", "--amount", "90.00", "--payment-date", "2026-10-14", "--category-id", &pets]));
+    let anna = id_of(&t.go(&w, &["people", "create", "--name", "Anna"]));
+    let bob = id_of(&t.go(&w, &["people", "create", "--name", "Bob"]));
+    let updated = t.go(&w, &["people", "update", &bob, "--name", "Bobby", "--remind-on", "2026-11-01", "--remind-every-days", "7"]);
+    assert_eq!((updated["name"].clone(), updated["remindOn"].clone(), updated["remindEveryDays"].clone()), (json!("Bobby"), json!("2026-11-01"), json!(7)));
+    assert_eq!(t.go(&w, &["people", "update", &bob, "--clear-remind-on"])["remindOn"], Value::Null);
+    let preview = t.go(&r, &["splits", "preview", "--amount", "100.00", "--mode", "percent", "--people", &anna, "--guests", "Carl", "--values", "30.00,20.00"]);
+    assert_eq!((preview["complete"].clone(), preview["mine"].clone()), (json!(true), json!("50.00")));
+    let shared = t.go(&w, &["transactions", "split", &dinner, "--mode", "equal", "--people", &format!("{anna},{bob}")]);
+    assert_eq!((shared["amount"].clone(), shared["myShare"].clone(), shared["split"].as_array().unwrap().len()), (json!("90.00"), json!("30.00"), 2));
+    assert_eq!(t.go(&r, &["people", "list"])[0]["balance"], "30.00");
+    assert_eq!(t.go(&r, &["people", "show", &anna])["lines"][0]["kind"], "BILL");
+    assert_eq!(t.go(&r, &["debts", "summary"])["owedToYou"], "60.00");
+    let loan = id_of(&t.go(&w, &["ledger", "add", "--person-id", &anna, "--kind", "lent", "--amount", "10.00", "--date", "2026-10-15", "--note", "taxi"]));
+    assert_eq!(t.go(&w, &["ledger", "update", &loan, "--amount", "12.00", "--clear-note"])["amount"], "12.00");
+    let borrowed = t.go(&w, &["ledger", "add", "--person-id", &bob, "--kind", "borrowed", "--amount", "8.00", "--date", "2026-10-16", "--expense-name", "Lunch", "--expense-category-id", &pets]);
+    assert!(borrowed["transactionId"].is_string(), "the share was added to the expenses");
+    let paid = t.go(&w, &["people", "settle", &anna, "--amount", "50.00", "--date", "2026-10-17"]);
+    assert_eq!((paid["before"].clone(), paid["after"].clone(), paid["over"].clone()), (json!("42.00"), json!("-8.00"), json!("8.00")), "more than the debt turns the balance around");
+    let rent = id_of(&t.go(&w, &["recurring", "create", "--name", "Flat", "--amount", "900.00", "--category-id", &pets, "--start-date", "2026-11-01", "--interval-unit", "month", "--interval-count", "1"]));
+    let templated = t.go(&w, &["recurring", "split", &rent, "--mode", "shares", "--mine", "2", "--people", &anna, "--values", "1"]);
+    assert_eq!((templated["split"]["mine"].clone(), templated["split"]["parts"][0]["weight"].clone()), (json!(2), json!(1)));
+    assert!(t.go(&w, &["recurring", "unsplit", &rent])["split"].is_null());
+    let statement = app.out("anna.txt");
+    assert!(t.go(&w, &["export", "debts", "--out", &statement, "--what", "statement", "--person-id", &anna])["bytes"].as_u64().unwrap() > 0);
+    assert!(std::fs::read_to_string(&statement).unwrap().starts_with("Statement: Anna"));
+    assert!(t.go(&w, &["transactions", "unsplit", &dinner])["split"].as_array().unwrap().is_empty());
+    assert_eq!(t.go(&w, &["people", "archive", &bob])["archived"], true);
+    assert_eq!(t.go(&w, &["people", "unarchive", &bob])["archived"], false);
+    assert!(t.go(&w, &["ledger", "delete", &loan, "--yes"]).is_null());
 
     // Statistics.
     assert!(t.go(&r, &["stats", "budget", "--month", "2026-09"])["categories"].is_array());

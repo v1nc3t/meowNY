@@ -24,6 +24,7 @@ const SIDE: Param = Param::new("type", Kind::String, "INCOME or EXPENSE.").one_o
 /// What an export covers. Shared with the routes that write the files.
 pub(super) const FROM: Param = Param::new("from", Kind::Date, "Only transactions on or after this date.");
 pub(super) const TO: Param = Param::new("to", Kind::Date, "Only transactions on or before this date.");
+pub(super) const INCLUDE_DEBTS: Param = Param::new("includeDebts", Kind::Boolean, "With dates or categories chosen, also include the ledger of money lent and borrowed (the friends and their parts of the bills in the selection are in it anyway). Without a choice everything is in.");
 pub(super) const CATEGORY_IDS: Param = Param::new("categoryIds", Kind::Ids, "Only these categories and what belongs to them. Leave out for all of them.");
 
 #[derive(Deserialize)]
@@ -240,7 +241,7 @@ pub const EXPORT_PREVIEW: Route = Route {
     scope: Scope::Read,
     confirm: None,
     summary: "What an export of this selection would contain: how many transactions, their dates, the income and expense totals, and the other records.",
-    params: &[FROM, TO, CATEGORY_IDS],
+    params: &[FROM, TO, CATEGORY_IDS, INCLUDE_DEBTS],
     run: |ctx, args| {
         let selection: Selection = parse(args)?;
         reply(ctx.vault.with_conn(|c| export::preview(c, &selection))?)

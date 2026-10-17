@@ -1178,12 +1178,14 @@ impl<'a> Applier<'a> {
             match &existing {
                 Some((id, local)) => {
                     self.note_overwrite(local);
+                    let old_amount: i64 = self.tx.query_row("SELECT amount_minor FROM transactions WHERE id = ?1", [id], |row| row.get(0))?;
                     self.run(
                         "UPDATE transactions SET stamp = ?2, category_id = ?3, recurring_transaction_id = ?4, recurring_due_date = ?5, client_uuid = ?6,
                          name = ?7, amount_minor = ?8, planned_amount_minor = ?9, payment_date = ?10, description = ?11, created_at = ?12 WHERE id = ?1",
                         params![id, stamp, category, recurring, r.recurring_due_date, r.client_uuid, r.name, r.amount_minor, r.planned_amount_minor, r.payment_date, r.description, r.created_at],
                     )?;
                     self.set_updated_at(Table::Transactions, *id, &when)?;
+                    crate::debts::splits::keep_valid_after_overwrite(self.tx, *id, old_amount).map_err(|_| SyncError::Internal)?;
                     self.summary.updated += 1;
                 }
                 None => {
@@ -1470,6 +1472,10 @@ pub fn apply(conn: &mut Connection, incoming: &Incoming, now_ms: u64, since_ms: 
     applier.settle_budgets()?;
     applier.check_recurring()?;
     let summary = applier.summary;
+    // the parts of shared bills do not travel yet; whatever the rows above did, they must still add up to no more than their bills
+    if !crate::debts::splits::check(&tx).map_err(|_| SyncError::Internal)? {
+        return Err(SyncError::Invalid("splits"));
+    }
 
     let broken: i64 = tx.query_row("SELECT count(*) FROM pragma_foreign_key_check", [], |r| r.get(0))?;
     if broken != 0 {

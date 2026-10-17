@@ -162,7 +162,7 @@ mod tests {
         let login = s["commands"].as_array().unwrap().iter().find(|c| c["command"] == "login").unwrap();
         assert_eq!((login["route"].clone(), login["scope"].clone()), (Value::Null, Value::Null));
         let asking: Vec<&str> = s["commands"].as_array().unwrap().iter().filter(|c| c["confirm"] == true).map(|c| c["command"].as_str().unwrap()).collect();
-        assert_eq!(asking, ["export json", "export csv", "export xlsx", "export pdf", "backup create", "documents get"], "a script is told which commands wait for the person");
+        assert_eq!(asking, ["export json", "export csv", "export xlsx", "export pdf", "backup create", "documents get", "export debts"], "a script is told which commands wait for the person");
         assert!(s["commands"].as_array().unwrap().iter().filter(|c| c["confirm"] != true).all(|c| c["confirm"] == false));
         assert_eq!(s["errorCodes"]["denied"], 3);
         assert_eq!(s["errorCodes"]["file_exists"], 1);

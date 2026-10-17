@@ -38,6 +38,10 @@ const READ_ROUTES: &[&str] = &[
     "backup.schedule",
     "documents.list",
     "documents.show",
+    "people.list",
+    "people.show",
+    "debts.summary",
+    "splits.preview",
 ];
 
 pub(super) fn at(text: &str) -> DateTime<Utc> {
@@ -346,6 +350,8 @@ fn a_locked_app_gives_no_data_from_any_read_route() {
         "stats.year" => json!({ "year": "2026" }),
         "stats.top" => json!({ "month": "2026-10", "type": "EXPENSE" }),
         "documents.show" => json!({ "id": "1" }),
+        "people.show" => json!({ "id": "1" }),
+        "splits.preview" => json!({ "amount": "100.00", "mode": "EQUAL", "people": ["1"] }),
         _ => json!({}),
     };
     for name in READ_ROUTES {
@@ -366,8 +372,17 @@ fn money_and_ids_are_strings_and_the_only_numbers_are_counts_and_percentages() {
         "stats.top" => json!({ "month": "2026-09", "type": "EXPENSE" }),
         "transactions.list" => json!({ "limit": 100 }),
         "documents.show" => json!({ "id": "1" }),
+        "people.show" => json!({ "id": "1" }),
+        "splits.preview" => json!({ "amount": "100.00", "mode": "SHARES", "mine": "2", "people": ["1"], "guests": "Bob", "values": "1,1" }),
         _ => json!({}),
     };
+    // a friend, a shared bill, a loan and a split template, so that their answers are walked too
+    let bill = ok(&vault, "transactions.list", json!({ "limit": 1 }))["transactions"][0]["id"].as_str().unwrap().to_string();
+    let friend = ok(&vault, "people.create", json!({ "name": "Anna" }))["id"].as_str().unwrap().to_string();
+    ok(&vault, "transactions.split", json!({ "id": bill, "mode": "EQUAL", "people": [friend], "guests": "Bob" }));
+    ok(&vault, "ledger.add", json!({ "personId": friend, "kind": "LENT", "amount": "5.00", "date": "2026-10-01" }));
+    let plan = ok(&vault, "recurring.list", json!({}))[0]["id"].as_str().unwrap().to_string();
+    ok(&vault, "recurring.split", json!({ "id": plan, "mode": "SHARES", "mine": "2", "people": [friend], "values": "1" }));
     // a document, so that its answers are walked too
     vault
         .with_files(|conn, files| {
@@ -391,9 +406,9 @@ fn money_and_ids_are_strings_and_the_only_numbers_are_counts_and_percentages() {
         walk(&ok(&vault, name, args(name)), name, &mut numbers);
     }
     // Counts: `limit`, `offset`, `total` (a page), `intervalCount` (every 2 weeks), `paidCount`, and what an export
-    // would contain (`transactions`, `categories`, `budgets`, `recurring`, `documents`, `history`), the size of a file in bytes and the number of things it is attached to (`sizeBytes`, `linkCount`), `everyDays` (a backup schedule). Percentages: `pctUsed`,
+    // would contain (`transactions`, `categories`, `budgets`, `recurring`, `documents`, `people`, `ledger`, `splitBills`, `history`), the weights of a split template (`mine`, `weight`: proportions, not money), the size of a file in bytes and the number of things it is attached to (`sizeBytes`, `linkCount`), `everyDays` (a backup schedule). Percentages: `pctUsed`,
     // `share`, `savingsRate`. Everything else, money above all, is a string.
-    let allowed: BTreeSet<String> = ["intervalCount", "limit", "offset", "paidCount", "pctUsed", "savingsRate", "share", "total", "transactions", "categories", "budgets", "recurring", "documents", "history", "everyDays", "sizeBytes", "linkCount"]
+    let allowed: BTreeSet<String> = ["intervalCount", "limit", "offset", "paidCount", "pctUsed", "savingsRate", "share", "total", "transactions", "categories", "budgets", "recurring", "documents", "people", "ledger", "splitBills", "history", "everyDays", "sizeBytes", "linkCount", "mine", "weight"]
         .into_iter()
         .map(String::from)
         .collect();

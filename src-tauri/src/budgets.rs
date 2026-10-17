@@ -254,8 +254,8 @@ pub(crate) fn effective(conn: &Connection, start: &str) -> Result<Vec<Effective>
 
 fn actual_minor(conn: &Connection, kind: CategoryType, start: &str, end: &str) -> Result<i64, AppError> {
     Ok(conn.query_row(
-        "SELECT COALESCE(SUM(t.amount_minor), 0)
-         FROM transactions t JOIN categories c ON c.id = t.category_id
+        "SELECT COALESCE(SUM(t.cost_minor), 0)
+         FROM transaction_costs t JOIN categories c ON c.id = t.category_id
          WHERE c.type = ?1 AND t.payment_date >= ?2 AND t.payment_date < ?3",
         params![kind_sql(kind), start, end],
         |r| r.get(0),
@@ -340,8 +340,8 @@ pub fn history(conn: &Connection, now: DateTime<Utc>) -> Result<Vec<MonthHistory
     // What was spent and earned in every month, in one pass over the transactions.
     let mut actuals: std::collections::HashMap<(String, &'static str), i64> = std::collections::HashMap::new();
     let mut statement = conn.prepare(
-        "SELECT substr(t.payment_date, 1, 7), c.type, SUM(t.amount_minor)
-         FROM transactions t JOIN categories c ON c.id = t.category_id
+        "SELECT substr(t.payment_date, 1, 7), c.type, SUM(t.cost_minor)
+         FROM transaction_costs t JOIN categories c ON c.id = t.category_id
          WHERE t.payment_date >= ?1 AND t.payment_date < ?2
          GROUP BY 1, 2",
     )?;

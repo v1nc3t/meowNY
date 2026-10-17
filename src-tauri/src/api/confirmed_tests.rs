@@ -98,7 +98,7 @@ pub(super) fn denied(reply: &Reply) -> String {
 #[test]
 fn exactly_the_routes_that_write_files_ask_the_person() {
     let asking: BTreeSet<&str> = routes::ALL.iter().filter(|r| r.confirm.is_some()).map(|r| r.name).collect();
-    assert_eq!(asking, BTreeSet::from(["export.json", "export.csv", "export.xlsx", "export.pdf", "backup.create", "documents.get"]));
+    assert_eq!(asking, BTreeSet::from(["export.json", "export.csv", "export.xlsx", "export.pdf", "export.debts", "backup.create", "documents.get"]));
     // And the schema says so, so a client can tell the person to look at the app.
     let r = rig(true);
     let schema = call(r.server.port(), Some(&r.read), "schema", "").data();
@@ -300,7 +300,7 @@ fn every_route_writes_a_real_file_of_its_kind() {
     let csv = r.path("t.csv");
     assert_eq!(r.post("export.csv", json!({ "out": csv })).status, 200);
     let text = std::fs::read_to_string(&csv).unwrap();
-    assert!(text.starts_with("\u{feff}date,type,category,name,amount,currency,description,documents\r\n"), "{}", &text[..80]);
+    assert!(text.starts_with("\u{feff}date,type,category,name,amount,currency,description,documents,my_share\r\n"), "{}", &text[..80]);
     assert!(!r.last().contains("budget entries"), "a CSV is only transactions: {}", r.last());
     // Excel: a zip.
     let xlsx = r.path("w.xlsx");

@@ -8,9 +8,12 @@
 //! Documents are listed by name, date, type, size, hash and what they are attached to, and a file is never in an export (the
 //! encrypted backup is where the files go). A limited export lists only the documents attached to something that is in it, and for
 //! each only the attachments that are in it, so the name of a document attached to something left out is not revealed.
+//! Debts are listed too: the friends, the ledger of money lent and borrowed, and the parts of every shared bill; each transaction has what was
+//! paid (`amount`) and what it costs you (`my_share`). A limited export keeps to what it contains (see `debts.rs`).
 //! The device-specific scheduled-backup setup, which holds a passphrase, and the access tokens of the
 //! command-line client are never exported.
 
+pub(crate) mod debts;
 #[cfg(desktop)]
 mod xlsx;
 
@@ -47,12 +50,16 @@ pub struct Selection {
     /// Null means every category. An empty list means none.
     #[serde(default)]
     pub category_ids: Option<Vec<String>>,
+    /// With a limit (dates or categories) the ledger of money lent and borrowed is left out, unless this is set. Without a limit it is all in.
+    #[serde(default)]
+    pub include_debts: bool,
 }
 
 pub(crate) struct Parsed {
     pub(crate) from: Option<String>,
     pub(crate) to: Option<String>,
     pub(crate) categories: Option<Vec<i64>>,
+    pub(crate) debts: bool,
 }
 
 impl Parsed {
@@ -83,7 +90,7 @@ pub(crate) fn parse(selection: &Selection) -> Result<Parsed, AppError> {
         .as_ref()
         .map(|ids| ids.iter().map(|id| parse_id(id)).collect::<Result<Vec<_>, _>>())
         .transpose()?;
-    Ok(Parsed { from, to, categories })
+    Ok(Parsed { from, to, categories, debts: selection.include_debts })
 }
 
 /// Spreadsheet programs run a cell that starts with one of these as a formula, so such a cell is
@@ -104,7 +111,10 @@ pub(crate) struct Tx {
     pub(crate) category_id: i64,
     pub(crate) category: String,
     pub(crate) name: String,
+    /// What was paid.
     pub(crate) amount: i64,
+    /// What it costs you (`transaction_costs`): the amount minus the parts of the others.
+    pub(crate) my_share: i64,
     pub(crate) planned: Option<i64>,
     pub(crate) description: Option<String>,
     pub(crate) recurring_id: Option<i64>,
@@ -121,8 +131,8 @@ pub(crate) fn transaction_filter(sel: &Parsed) -> String {
 pub(crate) fn transactions(conn: &Connection, sel: &Parsed) -> Result<Vec<Tx>, AppError> {
     let mut statement = conn.prepare(&format!(
         "SELECT t.id, t.payment_date, c.type, t.category_id, c.name, t.name, t.amount_minor,
-                t.planned_amount_minor, t.description, t.recurring_transaction_id
-         FROM transactions t JOIN categories c ON c.id = t.category_id
+                t.planned_amount_minor, t.description, t.recurring_transaction_id, k.cost_minor
+         FROM transactions t JOIN categories c ON c.id = t.category_id JOIN transaction_costs k ON k.transaction_id = t.id
          WHERE {}
          ORDER BY t.payment_date, t.id",
         transaction_filter(sel)
@@ -139,6 +149,7 @@ pub(crate) fn transactions(conn: &Connection, sel: &Parsed) -> Result<Vec<Tx>, A
             planned: r.get(7)?,
             description: r.get(8)?,
             recurring_id: r.get(9)?,
+            my_share: r.get(10)?,
         })
     })?;
     Ok(rows.collect::<Result<Vec<_>, _>>()?)
@@ -148,8 +159,8 @@ pub(crate) fn transactions(conn: &Connection, sel: &Parsed) -> Result<Vec<Tx>, A
 pub(crate) fn monthly_sums(conn: &Connection, sel: &Parsed) -> Result<std::collections::BTreeMap<String, (i64, i64)>, AppError> {
     let mut sums: std::collections::BTreeMap<String, (i64, i64)> = Default::default();
     let mut statement = conn.prepare(&format!(
-        "SELECT substr(t.payment_date, 1, 7), c.type, SUM(t.amount_minor)
-         FROM transactions t JOIN categories c ON c.id = t.category_id
+        "SELECT substr(t.payment_date, 1, 7), c.type, SUM(t.cost_minor)
+         FROM transaction_costs t JOIN categories c ON c.id = t.category_id
          WHERE {} GROUP BY 1, 2",
         transaction_filter(sel)
     ))?;
@@ -172,7 +183,22 @@ pub(crate) fn currency(conn: &Connection) -> Result<String, AppError> {
     Ok(conn.query_row("SELECT currency FROM settings WHERE id = 1", [], |r| r.get(0))?)
 }
 
-fn csv_field(cell: &str) -> String {
+/// A cell that is a number as `format_amount` writes it ("12.50", "-7.50"). It is not neutralised: a minus sign in front of a number is not
+/// a formula, and an apostrophe in front of it would make a spreadsheet read the number as text. Anything that is not such a number is
+/// treated like any other text.
+pub(crate) fn csv_number(cell: &str) -> String {
+    let digits = cell.strip_prefix('-').unwrap_or(cell);
+    let plain = digits.split_once('.').is_some_and(|(whole, fraction)| {
+        !whole.is_empty() && !fraction.is_empty() && whole.bytes().all(|b| b.is_ascii_digit()) && fraction.bytes().all(|b| b.is_ascii_digit())
+    });
+    if plain {
+        cell.to_string()
+    } else {
+        csv_field(cell)
+    }
+}
+
+pub(crate) fn csv_field(cell: &str) -> String {
     let cell = neutralise(cell);
     if cell.contains([',', '"', '\n', '\r']) {
         format!("\"{}\"", cell.replace('"', "\"\""))
@@ -182,16 +208,18 @@ fn csv_field(cell: &str) -> String {
 }
 
 /// Transactions as CSV: a header row, then one row per transaction, oldest first. Amounts are
-/// positive; `type` says whether it was income or an expense. The last column names the documents attached to the transaction. The file starts with a byte order
+/// positive; `type` says whether it was income or an expense. `documents` names the documents attached to the transaction and `my_share` is
+/// what it costs you (the same as `amount` unless the bill is shared). The file starts with a byte order
 /// mark so Excel reads the UTF-8 text correctly, and rows end with CRLF as the format says.
 pub fn csv(conn: &Connection, selection: &Selection) -> Result<String, AppError> {
     let sel = parse(selection)?;
     let tx = conn.unchecked_transaction()?;
     let currency = currency(&tx)?;
     let attached = document_names_by_transaction(&tx)?;
-    let mut out = String::from("\u{feff}date,type,category,name,amount,currency,description,documents\r\n");
+    let mut out = String::from("\u{feff}date,type,category,name,amount,currency,description,documents,my_share\r\n");
     for t in transactions(&tx, &sel)? {
         let documents = attached.get(&t.id).map(|names| join_names(names)).unwrap_or_default();
+        let share = format_amount(t.my_share);
         let cells = [
             t.date.as_str(),
             t.kind.as_str(),
@@ -201,6 +229,7 @@ pub fn csv(conn: &Connection, selection: &Selection) -> Result<String, AppError>
             currency.as_str(),
             t.description.as_deref().unwrap_or(""),
             documents.as_str(),
+            share.as_str(),
         ];
         let row: Vec<String> = cells.iter().map(|c| csv_field(c)).collect();
         out.push_str(&row.join(","));
@@ -455,6 +484,10 @@ pub struct Preview {
     pub recurring: u32,
     /// Documents listed by name (never their files).
     pub documents: u32,
+    /// Friends, ledger entries and shared bills (with their parts) in the export.
+    pub people: u32,
+    pub ledger: u32,
+    pub split_bills: u32,
     /// Entries of the change history. Only a JSON file with no selection carries them; with any
     /// selection this is 0.
     pub history: u32,
@@ -466,16 +499,23 @@ pub fn preview(conn: &Connection, selection: &Selection) -> Result<Preview, AppE
     let (transactions, first_date, last_date, income, expense) = tx.query_row(
         &format!(
             "SELECT COUNT(*), MIN(t.payment_date), MAX(t.payment_date),
-                    COALESCE(SUM(CASE WHEN c.type = 'INCOME' THEN t.amount_minor END), 0),
-                    COALESCE(SUM(CASE WHEN c.type = 'EXPENSE' THEN t.amount_minor END), 0)
-             FROM transactions t JOIN categories c ON c.id = t.category_id WHERE {}",
+                    COALESCE(SUM(CASE WHEN c.type = 'INCOME' THEN t.cost_minor END), 0),
+                    COALESCE(SUM(CASE WHEN c.type = 'EXPENSE' THEN t.cost_minor END), 0)
+             FROM transaction_costs t JOIN categories c ON c.id = t.category_id WHERE {}",
             transaction_filter(&sel)
         ),
         params![sel.from, sel.to],
         |r| Ok((r.get::<_, u32>(0)?, r.get(1)?, r.get(2)?, r.get::<_, i64>(3)?, r.get::<_, i64>(4)?)),
     )?;
     let history = if sel.everything() { tx.query_row("SELECT COUNT(*) FROM audit_log", [], |r| r.get(0))? } else { 0 };
+    let bill_lines = debts::lines(&tx, &sel)?;
+    let ledger = debts::entries(&tx, &sel)?;
+    let friends = debts::people(&tx, &sel, &bill_lines, &ledger)?;
+    let split_bills = bill_lines.iter().map(|l| l.transaction_id).collect::<std::collections::BTreeSet<_>>().len() as u32;
     Ok(Preview {
+        people: friends.len() as u32,
+        ledger: ledger.len() as u32,
+        split_bills,
         transactions,
         first_date,
         last_date,
@@ -500,9 +540,19 @@ pub fn json(conn: &Connection, selection: &Selection, now: DateTime<Utc>) -> Res
         [],
         |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)),
     )?;
+    let bill_lines = debts::lines(&tx, &sel)?;
+    let ledger = debts::entries(&tx, &sel)?;
+    let friends = debts::people(&tx, &sel, &bill_lines, &ledger)?;
+    let mut parts = debts::lines_by_transaction(bill_lines);
     let transactions: Vec<Value> = transactions(&tx, &sel)?
         .into_iter()
         .map(|t| {
+            let split: Vec<Value> = parts
+                .remove(&t.id)
+                .unwrap_or_default()
+                .into_iter()
+                .map(|l| json!({ "personId": l.person_id.map(|id| id.to_string()), "person": l.person, "guest": l.guest, "amount": format_amount(l.amount) }))
+                .collect();
             json!({
                 "id": t.id.to_string(),
                 "date": t.date,
@@ -511,9 +561,39 @@ pub fn json(conn: &Connection, selection: &Selection, now: DateTime<Utc>) -> Res
                 "category": t.category,
                 "name": t.name,
                 "amount": format_amount(t.amount),
+                "myShare": format_amount(t.my_share),
+                "split": split,
                 "plannedAmount": t.planned.map(format_amount),
                 "description": t.description,
                 "recurringId": t.recurring_id.map(|id| id.to_string()),
+            })
+        })
+        .collect();
+    let people: Vec<Value> = friends
+        .into_iter()
+        .map(|p| {
+            json!({
+                "id": p.id.to_string(),
+                "name": p.name,
+                "archived": p.archived,
+                "balance": p.balance.map(format_amount),
+                "remindOn": p.remind_on,
+                "remindEveryDays": p.remind_every_days,
+            })
+        })
+        .collect();
+    let ledger: Vec<Value> = ledger
+        .into_iter()
+        .map(|e| {
+            json!({
+                "id": e.id.to_string(),
+                "date": e.date,
+                "personId": e.person_id.to_string(),
+                "person": e.person,
+                "kind": e.kind,
+                "amount": format_amount(e.amount),
+                "note": e.note,
+                "transactionId": e.transaction_id.map(|id| id.to_string()),
             })
         })
         .collect();
@@ -528,6 +608,8 @@ pub fn json(conn: &Connection, selection: &Selection, now: DateTime<Utc>) -> Res
         "budgets": budgets_json(&tx, &sel)?,
         "recurring": recurring_json(&tx, &sel)?,
         "transactions": transactions,
+        "people": people,
+        "ledger": ledger,
         "documents": documents_json(&tx, &sel)?,
     });
     if sel.everything() {
@@ -538,6 +620,8 @@ pub fn json(conn: &Connection, selection: &Selection, now: DateTime<Utc>) -> Res
 
 #[cfg(test)]
 mod documents_tests;
+#[cfg(test)]
+mod debts_tests;
 
 #[cfg(test)]
 mod tests {
@@ -660,11 +744,11 @@ mod tests {
     fn the_csv_has_one_row_per_transaction_oldest_first() {
         let (conn, ..) = lived_in();
         let text = csv(&conn, &Selection::default()).unwrap();
-        assert!(text.starts_with("\u{feff}date,type,category,name,amount,currency,description,documents\r\n"));
+        assert!(text.starts_with("\u{feff}date,type,category,name,amount,currency,description,documents,my_share\r\n"));
         let rows = read_csv(&text);
         assert_eq!(rows.len(), 5, "header and four transactions");
-        assert_eq!(rows[1], ["2026-01-25", "INCOME", "Salary", "Pay", "3200.00", "EUR", "Monthly pay", ""]);
-        assert_eq!(rows[2], ["2026-02-01", "EXPENSE", "Rent", "Rent", "900.00", "EUR", "", ""]);
+        assert_eq!(rows[1], ["2026-01-25", "INCOME", "Salary", "Pay", "3200.00", "EUR", "Monthly pay", "", "3200.00"]);
+        assert_eq!(rows[2], ["2026-02-01", "EXPENSE", "Rent", "Rent", "900.00", "EUR", "", "", "900.00"]);
         assert_eq!(rows[3][3..5], ["Session", "80.00"]);
         assert_eq!(rows[4][4], "905.50");
     }
@@ -848,7 +932,7 @@ mod tests {
             Selection::default(),
             Selection { from: Some("2026-02-01".into()), ..Default::default() },
             Selection { category_ids: Some(vec![rent.to_string()]), ..Default::default() },
-            Selection { from: Some("2026-02-01".into()), to: Some("2026-02-28".into()), category_ids: Some(vec![rent.to_string()]) },
+            Selection { from: Some("2026-02-01".into()), to: Some("2026-02-28".into()), category_ids: Some(vec![rent.to_string()]), include_debts: false },
             Selection { category_ids: Some(vec![]), ..Default::default() },
         ] {
             let shown = preview(&conn, &selection).unwrap();

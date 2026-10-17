@@ -132,7 +132,7 @@ fn whatever_the_selection_a_listed_document_is_attached_to_something_listed_and_
         Selection { from: Some("2026-02-01".into()), ..Default::default() },
         Selection { from: Some("2026-02-01".into()), to: Some("2026-02-28".into()), ..Default::default() },
         Selection { category_ids: Some(vec![rent.to_string()]), ..Default::default() },
-        Selection { category_ids: Some(vec![salary.to_string(), secret.to_string()]), from: Some("2026-02-05".into()), to: None },
+        Selection { category_ids: Some(vec![salary.to_string(), secret.to_string()]), from: Some("2026-02-05".into()), to: None, include_debts: false },
         Selection { category_ids: Some(vec![]), ..Default::default() },
     ] {
         let file = parsed(&conn, &selection);
@@ -181,8 +181,8 @@ fn the_preview_counts_the_documents_the_json_lists() {
 fn the_csv_names_the_documents_attached_to_each_transaction() {
     let (conn, _, rent, _) = with_documents();
     let rows = read_csv(&csv(&conn, &Selection::default()).unwrap());
-    assert_eq!(rows[0].last().map(String::as_str), Some("documents"));
-    let cell = |name: &str, date: &str| rows.iter().find(|r| r[3] == name && r[0] == date).unwrap().last().unwrap().clone();
+    let column = rows[0].iter().position(|h| h == "documents").expect("a documents column");
+    let cell = |name: &str, date: &str| rows.iter().find(|r| r[3] == name && r[0] == date).unwrap()[column].clone();
     assert_eq!(cell("Pay", "2026-01-25"), "Pay slip.pdf; Shared scan.pdf", "in the order of the names");
     assert_eq!(cell("Rent", "2026-02-01"), "Lease.pdf");
     assert_eq!(cell("Rent", "2026-03-01"), "", "a transaction with none has an empty cell");
@@ -201,11 +201,12 @@ fn a_document_name_cannot_run_as_a_formula_in_the_csv() {
     let second = add_doc(&conn, "Receipt, \"signed\".pdf", "2026-02-01");
     attach_transaction(&conn, second, "Rent", "2026-02-01");
     let rows = read_csv(&csv(&conn, &Selection::default()).unwrap());
-    let cell = rows.iter().find(|r| r[3] == "Rent" && r[0] == "2026-02-01").unwrap().last().unwrap();
+    let column = rows[0].iter().position(|h| h == "documents").expect("a documents column");
+    let cell = &rows.iter().find(|r| r[3] == "Rent" && r[0] == "2026-02-01").unwrap()[column];
     // the names are in the order of the names: the one that starts with an equals sign is first, so the whole cell is made text
     assert_eq!(cell, "'=HYPERLINK(\"http://evil\",\"x\"); Receipt, \"signed\".pdf");
     for row in &rows[1..] {
-        assert!(!row.last().unwrap().starts_with(['=', '+', '-', '@', '\t', '\r']));
+        assert!(!row[column].starts_with(['=', '+', '-', '@', '\t', '\r']));
     }
 }
 

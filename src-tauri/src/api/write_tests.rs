@@ -34,6 +34,18 @@ const WRITE_ROUTES: &[&str] = &[
     "documents.link",
     "documents.unlink",
     "documents.get",
+    "people.create",
+    "people.update",
+    "people.archive",
+    "people.unarchive",
+    "people.settle",
+    "ledger.add",
+    "ledger.update",
+    "ledger.delete",
+    "transactions.split",
+    "transactions.unsplit",
+    "recurring.split",
+    "recurring.unsplit",
 ];
 
 const UUID: &str = "123e4567-e89b-12d3-a456-426614174000";
@@ -491,6 +503,18 @@ fn a_locked_app_refuses_every_write_and_nothing_changes() {
         ("documents.link", json!({ "id": "1", "transactionId": "1" })),
         ("documents.unlink", json!({ "id": "1", "transactionId": "1" })),
         ("documents.get", json!({ "id": "1", "out": "/tmp/x.pdf" })),
+        ("people.create", json!({ "name": "Anna" })),
+        ("people.update", json!({ "id": "1", "name": "Anna" })),
+        ("people.archive", json!({ "id": "1" })),
+        ("people.unarchive", json!({ "id": "1" })),
+        ("people.settle", json!({ "id": "1" })),
+        ("ledger.add", json!({ "personId": "1", "kind": "LENT", "amount": "1.00", "date": "2026-10-14" })),
+        ("ledger.update", json!({ "id": "1", "amount": "2.00" })),
+        ("ledger.delete", json!({ "id": "1" })),
+        ("transactions.split", json!({ "id": "1", "mode": "EQUAL", "people": ["1"] })),
+        ("transactions.unsplit", json!({ "id": "1" })),
+        ("recurring.split", json!({ "id": "1", "mode": "EQUAL", "people": ["1"] })),
+        ("recurring.unsplit", json!({ "id": "1" })),
     ];
     let mut covered: Vec<&str> = cases.iter().map(|(name, _)| *name).collect();
     covered.sort_unstable();

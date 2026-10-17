@@ -231,7 +231,7 @@ mod tests {
         let destructive: Vec<String> = catalog.commands.iter().filter(|c| c.destructive()).map(Command::name).collect();
         assert_eq!(
             destructive,
-            ["categories delete", "transactions delete", "budgets remove", "recurring delete", "recurring end", "documents delete"]
+            ["categories delete", "transactions delete", "budgets remove", "recurring delete", "recurring end", "documents delete", "ledger delete"]
         );
         assert!(!catalog.find(&["login"]).unwrap().destructive());
         assert!(!catalog.find(&["logout"]).unwrap().destructive());
@@ -258,9 +258,9 @@ mod tests {
     fn the_commands_that_write_files_are_the_ones_the_person_must_allow() {
         let catalog = Catalog::embedded();
         let asking: Vec<String> = catalog.commands.iter().filter(|c| c.confirm).map(Command::name).collect();
-        assert_eq!(asking, ["export json", "export csv", "export xlsx", "export pdf", "backup create", "documents get"]);
+        assert_eq!(asking, ["export json", "export csv", "export xlsx", "export pdf", "backup create", "documents get", "export debts"]);
         let verbs: Vec<&str> = catalog.verbs("export").iter().map(|c| c.verb()).collect();
-        assert_eq!(verbs, ["preview", "json", "csv", "xlsx", "pdf"]);
+        assert_eq!(verbs, ["preview", "json", "csv", "xlsx", "pdf", "debts"]);
         assert_eq!(catalog.verbs("backup").iter().map(|c| c.verb()).collect::<Vec<_>>(), ["schedule", "create"]);
         let out = catalog.find(&["export", "json"]).unwrap().params.iter().find(|p| p.name == "out").unwrap();
         assert!(out.required && out.kind == "path");

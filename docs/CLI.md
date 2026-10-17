@@ -82,7 +82,7 @@ Without `--json` you get a plain table or `key: value` lines, and messages (such
 
 ## Commands
 
-Every command is `meowny <noun> <verb>`, or a single word, with its flags after it. `--help` works at every level, with no app running. There are 50 commands; each is listed here with what it prints.
+Every command is `meowny <noun> <verb>`, or a single word, with its flags after it. `--help` works at every level, with no app running. There are 67 commands; each is listed here with what it prints.
 
 | Command | What it does | Needs |
 | --- | --- | --- |
@@ -134,6 +134,23 @@ Every command is `meowny <noun> <verb>`, or a single word, with its flags after 
 | [`documents link`](#cmd-documents-link) | Attaches a document to a transaction or to a recurring item. Giving one that is attached already changes nothing. | write token |
 | [`documents unlink`](#cmd-documents-unlink) | Detaches a document from a transaction or a recurring item. The document and the transaction stay. | write token |
 | [`documents get`](#cmd-documents-get) | Writes a copy of a document's file, after the person allows it in the app. It is not encrypted. An existing file is never replaced. | write token |
+| [`people list`](#cmd-people-list) | The friends with what each owes you (negative: you owe them), the largest first. Archived friends only if asked. | read token |
+| [`people show`](#cmd-people-show) | One friend and their ledger: their parts of shared bills and the entries by date, with the balance after each line. | read token |
+| [`debts summary`](#cmd-debts-summary) | What friends owe you and what you owe them, in all and for each friend whose balance is not zero. Neither is income or expense. | read token |
+| [`splits preview`](#cmd-splits-preview) | What a split would give each person for a bill of this amount, without saving anything: your part, theirs, whether the numbers add up and how much is left. | read token |
+| [`people create`](#cmd-people-create) | Adds a friend. A friend is a name, 1 to 50 characters, unique among the friends who are not archived. Nothing else about a person is kept. | write token |
+| [`people update`](#cmd-people-update) | Renames a friend or sets their reminder: a date, and optionally a number of days after which it repeats. Fields left out stay as they are. | write token |
+| [`people archive`](#cmd-people-archive) | Hides a friend from the lists and pickers. Their balance and history stay, and the name can be used again. | write token |
+| [`people unarchive`](#cmd-people-unarchive) | Brings back an archived friend, if no other friend has taken the name. | write token |
+| [`people settle`](#cmd-people-settle) | Marks a payment between you and a friend: they paid you back if they owe you, you paid them back if you owe them. With no amount it is the whole balance. An amount larger than the debt is accepted: the balance turns around and the answer says how much was over. | write token |
+| [`ledger add`](#cmd-ledger-add) | Records money lent, borrowed or paid back with a friend. It is never income or expense. For a borrowing, give `--expense-name` and `--expense-category-id` to add your share to your expenses in the same step, with the entry linked to it. | write token |
+| [`ledger update`](#cmd-ledger-update) | Changes an entry of the ledger. Fields left out stay as they are; a null note or `--transaction-id` clears it. The expense it came with is not changed. | write token |
+| [`ledger delete`](#cmd-ledger-delete) | Deletes an entry of the ledger. The balance of the friend changes by that much. The change history keeps what it said. | write token |
+| [`transactions split`](#cmd-transactions-split) | Shares a transaction with friends and guests. It keeps the amount that was paid; your part, the amount minus theirs, is what budgets and statistics count. The numbers must add up. Only an expense can be shared. | write token |
+| [`transactions unsplit`](#cmd-transactions-unsplit) | Takes the split off a transaction: it costs you its whole amount again, and the friends' balances go down by their parts. | write token |
+| [`recurring split`](#cmd-recurring-split) | Splits every payment of a recurring item the same way, from now on. Kept as proportions, so a payment that differs from the plan is shared in the same proportions. EXACT needs an item with an amount that the values add up to. Payments already made are not changed. | write token |
+| [`recurring unsplit`](#cmd-recurring-unsplit) | Takes the split off a recurring item: its payments are not split from now on. Payments already made keep theirs. | write token |
+| [`export debts`](#cmd-export-debts) | Writes who owes what to a text or CSV file, after the person allows it in the app: the SUMMARY of all friends, the STATEMENT of one friend (`--person-id`), or the LEDGER of every entry as CSV. An existing file is never replaced. | read token, and your yes |
 | [`login`](#cmd-login) | Saves a token, read from standard input, for the commands that follow. | this computer |
 | [`logout`](#cmd-logout) | Removes the saved token. | this computer |
 
@@ -154,7 +171,7 @@ $ meowny status
 
 api: 1
 app: meowny
-schemaVersion: 11
+schemaVersion: 12
 scope: read
 version: 0.1.0
 ```
@@ -165,7 +182,7 @@ With `--json` (one line; shown indented):
 {
   "api": 1,
   "app": "meowny",
-  "schemaVersion": 11,
+  "schemaVersion": 12,
   "scope": "read",
   "version": "0.1.0"
 }
@@ -184,7 +201,7 @@ meowny today
 ```console
 $ meowny today
 
-date: 2026-10-16
+date: 2026-10-17
 month: 2026-10
 ```
 
@@ -192,7 +209,7 @@ With `--json` (one line; shown indented):
 
 ```json
 {
-  "date": "2026-10-16",
+  "date": "2026-10-17",
   "month": "2026-10"
 }
 ```
@@ -524,11 +541,11 @@ offset: 0
 total: 403
 
 transactions
- id  name             paymentDate  amount  categoryId  clientUuid  description
-403  Coffee           2026-10-13     3.20           7  -           Flat white
-402  Bus ticket       2026-10-13     2.80           6  -           -
-401  Corner shop      2026-10-13     4.50           5  -           -
-291  Board game cafe  2026-10-13    51.83           8  -           -
+ id  name             paymentDate  amount  categoryId  clientUuid  description  myShare
+403  Coffee           2026-10-13     3.20           7  -           Flat white      3.20
+402  Bus ticket       2026-10-13     2.80           6  -           -               2.80
+401  Corner shop      2026-10-13     4.50           5  -           -               4.50
+291  Board game cafe  2026-10-13    51.83           8  -           -              51.83
 
 showing 1-4 of 403; next page: --offset 4
 ```
@@ -547,8 +564,10 @@ With `--json` (one line; shown indented):
       "clientUuid": null,
       "description": "Flat white",
       "id": "403",
+      "myShare": "3.20",
       "name": "Coffee",
-      "paymentDate": "2026-10-13"
+      "paymentDate": "2026-10-13",
+      "split": []
     },
     {
       "amount": "2.80",
@@ -556,8 +575,10 @@ With `--json` (one line; shown indented):
       "clientUuid": null,
       "description": null,
       "id": "402",
+      "myShare": "2.80",
       "name": "Bus ticket",
-      "paymentDate": "2026-10-13"
+      "paymentDate": "2026-10-13",
+      "split": []
     },
     {
       "amount": "4.50",
@@ -565,8 +586,10 @@ With `--json` (one line; shown indented):
       "clientUuid": null,
       "description": null,
       "id": "401",
+      "myShare": "4.50",
       "name": "Corner shop",
-      "paymentDate": "2026-10-13"
+      "paymentDate": "2026-10-13",
+      "split": []
     },
     {
       "amount": "51.83",
@@ -574,8 +597,10 @@ With `--json` (one line; shown indented):
       "clientUuid": null,
       "description": null,
       "id": "291",
+      "myShare": "51.83",
       "name": "Board game cafe",
-      "paymentDate": "2026-10-13"
+      "paymentDate": "2026-10-13",
+      "split": []
     }
   ]
 }
@@ -617,8 +642,10 @@ With `--json` (one line; shown indented):
   "clientUuid": "9b2f5d44-6e1a-4c3b-8f2d-1a2b3c4d5e6f",
   "description": null,
   "id": "404",
+  "myShare": "2.40",
   "name": "Bread",
-  "paymentDate": "2026-10-14"
+  "paymentDate": "2026-10-14",
+  "split": []
 }
 ```
 
@@ -659,8 +686,10 @@ With `--json` (one line; shown indented):
   "clientUuid": "9b2f5d44-6e1a-4c3b-8f2d-1a2b3c4d5e6f",
   "description": "Sourdough",
   "id": "404",
+  "myShare": "2.95",
   "name": "Bread",
-  "paymentDate": "2026-10-14"
+  "paymentDate": "2026-10-14",
+  "split": []
 }
 ```
 
@@ -686,6 +715,102 @@ This cannot be undone, so it needs `--yes`.
 $ meowny transactions delete 404 --yes
 
 done.
+```
+
+#### `transactions split`
+
+*write token*
+
+Shares a transaction with friends and guests. It keeps the amount that was paid; your part, the amount minus theirs, is what budgets and statistics count. The numbers must add up. Only an expense can be shared.
+
+```text
+meowny transactions split <id> --mode <EQUAL|PERCENT|SHARES|EXACT> [--mine <text>] [--people <id,id,...>] [--guests <text>] [--values <text>]
+```
+
+| Flag | Type | Description |
+| --- | --- | --- |
+| `--id` (required) | id | The transaction. |
+| `--mode` (required) | one of EQUAL, PERCENT, SHARES, EXACT | How the numbers are typed: EQUAL (everyone the same), PERCENT (two decimals, 100.00 in all), SHARES (whole numbers) or EXACT (amounts that add up to the bill). |
+| `--mine` | text | Your own value, typed the way the mode says. Leave out for an equal split, or to take the rest in PERCENT and EXACT. |
+| `--people` | id,id,... | The friends the bill is shared with, as ids. |
+| `--guests` | text | People who are not tracked, by name, separated by commas. Their part leaves your cost and makes no debt. |
+| `--values` | text | The value of each friend, in the order of --people, then of each guest, separated by commas. Not for an equal split. |
+
+Shares a transaction you paid with friends and guests (names typed for people you do not track; their part leaves your cost and makes no debt). It keeps the amount that was paid. `myShare` is what it costs you: **budgets, statistics, reports and exports count that, not the amount.** Only an expense can be shared. The flags are the ones of `splits preview`.
+
+Changing the amount of a shared transaction scales every part, yours included, so they still add up to the cent.
+
+The id can be given as a plain word, as in `meowny transactions split 42`, or with `--id`.
+
+```console
+$ meowny transactions split 405 --mode equal --people 1,2
+```
+
+With `--json` (one line; shown indented):
+
+```json
+{
+  "amount": "90.00",
+  "categoryId": "16",
+  "clientUuid": "5c1d8e07-3b2a-4f6e-9a41-7d0c2b9e8f13",
+  "description": null,
+  "id": "405",
+  "myShare": "30.00",
+  "name": "Dinner",
+  "paymentDate": "2026-10-12",
+  "split": [
+    {
+      "amount": "30.00",
+      "guest": null,
+      "person": "Anna",
+      "personId": "1"
+    },
+    {
+      "amount": "30.00",
+      "guest": null,
+      "person": "Bob",
+      "personId": "2"
+    }
+  ]
+}
+```
+
+#### `transactions unsplit`
+
+*write token*
+
+Takes the split off a transaction: it costs you its whole amount again, and the friends' balances go down by their parts.
+
+```text
+meowny transactions unsplit <id>
+```
+
+| Flag | Type | Description |
+| --- | --- | --- |
+| `--id` (required) | id | The transaction. |
+
+The transaction costs you its whole amount again, and the friends' balances go down by their parts.
+
+The id can be given as a plain word, as in `meowny transactions unsplit 42`, or with `--id`.
+
+```console
+$ meowny transactions unsplit 405
+```
+
+With `--json` (one line; shown indented):
+
+```json
+{
+  "amount": "90.00",
+  "categoryId": "16",
+  "clientUuid": "5c1d8e07-3b2a-4f6e-9a41-7d0c2b9e8f13",
+  "description": null,
+  "id": "405",
+  "myShare": "90.00",
+  "name": "Dinner",
+  "paymentDate": "2026-10-12",
+  "split": []
+}
 ```
 
 ### Budgets
@@ -889,17 +1014,17 @@ meowny recurring list
 ```console
 $ meowny recurring list
 
-id  name              nextDueDate   amount  categoryId  description             endDate     intervalCount  intervalUnit  isActive  startDate
- 6  Cleaning service  2026-10-11     30.00          10  -                       -                       2  WEEK          true      2026-04-26
- 4  Electricity       2026-10-20         -          10  Varies with the meter   -                       1  MONTH         true      2025-07-20
- 7  Salary            2026-10-25   3240.00           1  Monthly pay             -                       1  MONTH         true      2025-07-25
- 1  Rent              2026-11-01    950.00           4  Flat, paid by transfer  -                       1  MONTH         true      20…
+id  name              nextDueDate   amount  categoryId  description             endDate     intervalCount  intervalUnit  isActive  split  startDate
+ 6  Cleaning service  2026-10-11     30.00          10  -                       -                       2  WEEK          true      -      2026-04-26
+ 4  Electricity       2026-10-20         -          10  Varies with the meter   -                       1  MONTH         true      -      2025-07-20
+ 7  Salary            2026-10-25   3240.00           1  Monthly pay             -                       1  MONTH         true      -      2025-07-25
+ 1  Rent              2026-11-01    950.00           4  Flat, paid by transfer  -                       1…
 ```
 
 With `--json` (one line; shown indented):
 
 ```json
-[{"amount":"30.00","categoryId":"10","description":null,"endDate":null,"id":"6","intervalCount":2,"intervalUnit":"WEEK","isActive":true,"name":"Cleaning service","nextDueDate":"2026-10-11","startDate":"2026-04-26"},{"amount":null,"categoryId":"10","description":"Varies with the meter","endDate":null,"id":"4","intervalCount":1,"intervalUnit":"MONTH","isActive":true,"name":"Electricity","nextDueDate":"2026-10-20","startDate":"2025-07-20"},{"amount":"3240.00","categoryId":"1","description":"Monthly pay","endDate":null,"id":"7","intervalCount":1,"intervalUnit":"MONTH","isActive":true,"name":"Salary","nextDueDate":"2026-10-25","startDate":"2025-07-25"},{"amount":"950.00","categoryId":"4","descrip…
+[{"amount":"30.00","categoryId":"10","description":null,"endDate":null,"id":"6","intervalCount":2,"intervalUnit":"WEEK","isActive":true,"name":"Cleaning service","nextDueDate":"2026-10-11","split":null,"startDate":"2026-04-26"},{"amount":null,"categoryId":"10","description":"Varies with the meter","endDate":null,"id":"4","intervalCount":1,"intervalUnit":"MONTH","isActive":true,"name":"Electricity","nextDueDate":"2026-10-20","split":null,"startDate":"2025-07-20"},{"amount":"3240.00","categoryId":"1","description":"Monthly pay","endDate":null,"id":"7","intervalCount":1,"intervalUnit":"MONTH","isActive":true,"name":"Salary","nextDueDate":"2026-10-25","split":null,"startDate":"2025-07-25"},{"amo…
 ```
 
 #### `recurring dues`
@@ -920,63 +1045,19 @@ meowny recurring dues [--within-days <number>]
 $ meowny recurring dues --within-days 10
 
 overdue
-id  name              nextDueDate  amount  categoryId  description  endDate  intervalCount  intervalUnit  isActive  startDate
- 6  Cleaning service  2026-10-11    30.00          10  -            -                    2  WEEK          true      2026-04-26
+id  name              nextDueDate  amount  categoryId  description  endDate  intervalCount  intervalUnit  isActive  split  startDate
+ 6  Cleaning service  2026-10-11    30.00          10  -            -                    2  WEEK          true      -      2026-04-26
 
 upcoming
-id  name         nextDueDate   amount  categoryId  description            endDate  intervalCount  intervalUnit  isActive  startDate
- 4  Electricity  2026-10-20         -          10  Varies with the meter  -                    1  MONTH         true      2025-07-20
- 7  Salary       2026-10-25   3240.00           1  Monthly pay            -                    1  MONTH         true      2025-07-25
+id  name         nextDueDate   amount  categoryId  description            endDate  intervalCount  intervalUnit  isActive  split  startDate
+ 4  Electricity  2026-10-20         -          10  Varies with the meter  -                    1  MONTH         true      -      2025-07-20
+ 7  Salary       2026-10-25   3240.00           1  Monthly pay            -                    1  MONTH         true      -      2025-07…
 ```
 
 With `--json` (one line; shown indented):
 
 ```json
-{
-  "overdue": [
-    {
-      "amount": "30.00",
-      "categoryId": "10",
-      "description": null,
-      "endDate": null,
-      "id": "6",
-      "intervalCount": 2,
-      "intervalUnit": "WEEK",
-      "isActive": true,
-      "name": "Cleaning service",
-      "nextDueDate": "2026-10-11",
-      "startDate": "2026-04-26"
-    }
-  ],
-  "upcoming": [
-    {
-      "amount": null,
-      "categoryId": "10",
-      "description": "Varies with the meter",
-      "endDate": null,
-      "id": "4",
-      "intervalCount": 1,
-      "intervalUnit": "MONTH",
-      "isActive": true,
-      "name": "Electricity",
-      "nextDueDate": "2026-10-20",
-      "startDate": "2025-07-20"
-    },
-    {
-      "amount": "3240.00",
-      "categoryId": "1",
-      "description": "Monthly pay",
-      "endDate": null,
-      "id": "7",
-      "intervalCount": 1,
-      "intervalUnit": "MONTH",
-      "isActive": true,
-      "name": "Salary",
-      "nextDueDate": "2026-10-25",
-      "startDate": "2025-07-25"
-    }
-  ]
-}
+{"overdue":[{"amount":"30.00","categoryId":"10","description":null,"endDate":null,"id":"6","intervalCount":2,"intervalUnit":"WEEK","isActive":true,"name":"Cleaning service","nextDueDate":"2026-10-11","split":null,"startDate":"2026-04-26"}],"upcoming":[{"amount":null,"categoryId":"10","description":"Varies with the meter","endDate":null,"id":"4","intervalCount":1,"intervalUnit":"MONTH","isActive":true,"name":"Electricity","nextDueDate":"2026-10-20","split":null,"startDate":"2025-07-20"},{"amount":"3240.00","categoryId":"1","description":"Monthly pay","endDate":null,"id":"7","intervalCount":1,"intervalUnit":"MONTH","isActive":true,"name":"Salary","nextDueDate":"2026-10-25","split":null,"startD…
 ```
 
 #### `recurring create`
@@ -1020,6 +1101,7 @@ With `--json` (one line; shown indented):
   "isActive": true,
   "name": "Vet plan",
   "nextDueDate": "2026-10-20",
+  "split": null,
   "startDate": "2026-10-20"
 }
 ```
@@ -1071,6 +1153,7 @@ With `--json` (one line; shown indented):
   "isActive": true,
   "name": "Vet plan plus",
   "nextDueDate": "2026-10-20",
+  "split": null,
   "startDate": "2026-10-20"
 }
 ```
@@ -1131,9 +1214,11 @@ With `--json` (one line; shown indented):
   "categoryId": "16",
   "clientUuid": null,
   "description": null,
-  "id": "405",
+  "id": "406",
+  "myShare": "20.00",
   "name": "Vet plan plus",
-  "paymentDate": "2026-10-14"
+  "paymentDate": "2026-10-14",
+  "split": []
 }
 ```
 
@@ -1171,6 +1256,7 @@ With `--json` (one line; shown indented):
   "isActive": true,
   "name": "Vet plan plus",
   "nextDueDate": "2026-12-20",
+  "split": null,
   "startDate": "2026-10-20"
 }
 ```
@@ -1209,6 +1295,7 @@ With `--json` (one line; shown indented):
   "isActive": false,
   "name": "Vet plan plus",
   "nextDueDate": "2026-12-20",
+  "split": null,
   "startDate": "2026-10-20"
 }
 ```
@@ -1247,6 +1334,7 @@ With `--json` (one line; shown indented):
   "isActive": true,
   "name": "Vet plan plus",
   "nextDueDate": "2026-12-20",
+  "split": null,
   "startDate": "2026-10-20"
 }
 ```
@@ -1287,6 +1375,104 @@ With `--json` (one line; shown indented):
   "isActive": false,
   "name": "Vet plan plus",
   "nextDueDate": "2026-12-20",
+  "split": null,
+  "startDate": "2026-10-20"
+}
+```
+
+#### `recurring split`
+
+*write token*
+
+Splits every payment of a recurring item the same way, from now on. Kept as proportions, so a payment that differs from the plan is shared in the same proportions. EXACT needs an item with an amount that the values add up to. Payments already made are not changed.
+
+```text
+meowny recurring split <id> --mode <EQUAL|PERCENT|SHARES|EXACT> [--mine <text>] [--people <id,id,...>] [--guests <text>] [--values <text>]
+```
+
+| Flag | Type | Description |
+| --- | --- | --- |
+| `--id` (required) | id | The recurring item. |
+| `--mode` (required) | one of EQUAL, PERCENT, SHARES, EXACT | How the numbers are typed: EQUAL (everyone the same), PERCENT (two decimals, 100.00 in all), SHARES (whole numbers) or EXACT (amounts that add up to the bill). |
+| `--mine` | text | Your own value, typed the way the mode says. Leave out for an equal split, or to take the rest in PERCENT and EXACT. |
+| `--people` | id,id,... | The friends the bill is shared with, as ids. |
+| `--guests` | text | People who are not tracked, by name, separated by commas. Their part leaves your cost and makes no debt. |
+| `--values` | text | The value of each friend, in the order of --people, then of each guest, separated by commas. Not for an equal split. |
+
+Splits every payment of a recurring item the same way from now on, kept as proportions: a payment that differs from the plan is shared in the same proportions. `exact` needs an item with an amount that the values add up to. Payments already made keep what they had. An income item cannot be split.
+
+The id can be given as a plain word, as in `meowny recurring split 42`, or with `--id`.
+
+```console
+$ meowny recurring split 10 --mode shares --mine 2 --people 1 --values 1
+```
+
+With `--json` (one line; shown indented):
+
+```json
+{
+  "amount": "20.00",
+  "categoryId": "16",
+  "description": null,
+  "endDate": null,
+  "id": "10",
+  "intervalCount": 1,
+  "intervalUnit": "MONTH",
+  "isActive": true,
+  "name": "Vet plan plus",
+  "nextDueDate": "2026-10-20",
+  "split": {
+    "mine": 2,
+    "parts": [
+      {
+        "guest": null,
+        "person": "Anna",
+        "personId": "1",
+        "weight": 1
+      }
+    ]
+  },
+  "startDate": "2026-10-20"
+}
+```
+
+#### `recurring unsplit`
+
+*write token*
+
+Takes the split off a recurring item: its payments are not split from now on. Payments already made keep theirs.
+
+```text
+meowny recurring unsplit <id>
+```
+
+| Flag | Type | Description |
+| --- | --- | --- |
+| `--id` (required) | id | The recurring item. |
+
+The payments are not split from now on. Payments already made keep theirs.
+
+The id can be given as a plain word, as in `meowny recurring unsplit 42`, or with `--id`.
+
+```console
+$ meowny recurring unsplit 10
+```
+
+With `--json` (one line; shown indented):
+
+```json
+{
+  "amount": "20.00",
+  "categoryId": "16",
+  "description": null,
+  "endDate": null,
+  "id": "10",
+  "intervalCount": 1,
+  "intervalUnit": "MONTH",
+  "isActive": true,
+  "name": "Vet plan plus",
+  "nextDueDate": "2026-10-20",
+  "split": null,
   "startDate": "2026-10-20"
 }
 ```
@@ -1641,7 +1827,7 @@ With `--json` (one line; shown indented):
 What an export of this selection would contain: how many transactions, their dates, the income and expense totals, and the other records.
 
 ```text
-meowny export preview [--from <date>] [--to <date>] [--category-ids <id,id,...>]
+meowny export preview [--from <date>] [--to <date>] [--category-ids <id,id,...>] [--include-debts <boolean>]
 ```
 
 | Flag | Type | Description |
@@ -1649,6 +1835,7 @@ meowny export preview [--from <date>] [--to <date>] [--category-ids <id,id,...>]
 | `--from` | date | Only transactions on or after this date. |
 | `--to` | date | Only transactions on or before this date. |
 | `--category-ids` | id,id,... | Only these categories and what belongs to them. Leave out for all of them. |
+| `--include-debts` | boolean | With dates or categories chosen, also include the ledger of money lent and borrowed (the friends and their parts of the bills in the selection are in it anyway). Without a choice everything is in. |
 
 Nothing is written and nothing is asked: this only says how many transactions an export with these choices would contain. Use it to check a selection before exporting.
 
@@ -1663,7 +1850,10 @@ firstDate: 2026-01-01
 history: 0
 income: 31592.66
 lastDate: 2026-09-29
+ledger: 0
+people: 0
 recurring: 9
+splitBills: 0
 transactions: 239
 ```
 
@@ -1679,7 +1869,10 @@ With `--json` (one line; shown indented):
   "history": 0,
   "income": "31592.66",
   "lastDate": "2026-09-29",
+  "ledger": 0,
+  "people": 0,
   "recurring": 9,
+  "splitBills": 0,
   "transactions": 239
 }
 ```
@@ -1691,7 +1884,7 @@ With `--json` (one line; shown indented):
 Writes the data as a JSON file, after the person allows it in the app. An existing file is never replaced.
 
 ```text
-meowny export json --out <path> [--from <date>] [--to <date>] [--category-ids <id,id,...>]
+meowny export json --out <path> [--from <date>] [--to <date>] [--category-ids <id,id,...>] [--include-debts <boolean>]
 ```
 
 | Flag | Type | Description |
@@ -1700,15 +1893,16 @@ meowny export json --out <path> [--from <date>] [--to <date>] [--category-ids <i
 | `--from` | date | Only transactions on or after this date. |
 | `--to` | date | Only transactions on or before this date. |
 | `--category-ids` | id,id,... | Only these categories and what belongs to them. Leave out for all of them. |
+| `--include-debts` | boolean | With dates or categories chosen, also include the ledger of money lent and borrowed (the friends and their parts of the bills in the selection are in it anyway). Without a choice everything is in. |
 
-The whole data as one file, including the change history unless you chose categories. Documents are listed by name, date, type, size, hash and what they are attached to, never their files. It is not encrypted.
+The whole data as one file, including the change history unless you chose categories. Documents are listed by name, date, type, size, hash and what they are attached to, never their files. Friends, the ledger and the parts of shared bills are in it; each transaction has `amount` (what was paid) and `myShare` (what it cost you). With dates or categories chosen the ledger is left out unless you give `--include-debts`. It is not encrypted.
 
 The app asks you to allow this each time, in a dialog; nothing is written until you do. See [Files need your yes](#files).
 
 ```console
 $ meowny export json --out /home/you/everything.json
 
-bytes: 138233
+bytes: 166236
 path: /home/you/everything.json
 ```
 
@@ -1729,14 +1923,14 @@ meowny export csv --out <path> [--from <date>] [--to <date>] [--category-ids <id
 | `--to` | date | Only transactions on or before this date. |
 | `--category-ids` | id,id,... | Only these categories and what belongs to them. Leave out for all of them. |
 
-One row per transaction, with a byte order mark so Excel reads the accents, and a last column with the names of the documents attached to it. Text that starts like a formula is written as text, so opening the file cannot run anything.
+One row per transaction, with a byte order mark so Excel reads the accents, a column with the names of the documents attached to it, and a last column `my_share` with what it cost you (the same as `amount` unless the bill is shared). Text that starts like a formula is written as text, so opening the file cannot run anything.
 
 The app asks you to allow this each time, in a dialog; nothing is written until you do. See [Files need your yes](#files).
 
 ```console
 $ meowny export csv --out /home/you/budget-2026.csv --from 2026-01-01
 
-bytes: 15822
+bytes: 17480
 path: /home/you/budget-2026.csv
 ```
 
@@ -1747,7 +1941,7 @@ path: /home/you/budget-2026.csv
 Writes a workbook (.xlsx) with sheets for transactions, categories, budgets, recurring items and a monthly summary, after the person allows it in the app. Dates are ISO and amounts plain numbers. An existing file is never replaced.
 
 ```text
-meowny export xlsx --out <path> [--from <date>] [--to <date>] [--category-ids <id,id,...>]
+meowny export xlsx --out <path> [--from <date>] [--to <date>] [--category-ids <id,id,...>] [--include-debts <boolean>]
 ```
 
 | Flag | Type | Description |
@@ -1756,15 +1950,16 @@ meowny export xlsx --out <path> [--from <date>] [--to <date>] [--category-ids <i
 | `--from` | date | Only transactions on or after this date. |
 | `--to` | date | Only transactions on or before this date. |
 | `--category-ids` | id,id,... | Only these categories and what belongs to them. Leave out for all of them. |
+| `--include-debts` | boolean | With dates or categories chosen, also include the ledger of money lent and borrowed (the friends and their parts of the bills in the selection are in it anyway). Without a choice everything is in. |
 
-Sheets for transactions, categories, budgets, recurring items, a monthly summary and the documents (listed, never the files). Dates are real dates and amounts are numbers.
+Sheets for transactions (with what each cost you), categories, budgets, recurring items, a monthly summary, the documents (listed, never the files), the friends, the ledger and the parts of shared bills. Dates are real dates and amounts are numbers.
 
 The app asks you to allow this each time, in a dialog; nothing is written until you do. See [Files need your yes](#files).
 
 ```console
 $ meowny export xlsx --out /home/you/budget.xlsx
 
-bytes: 22568
+bytes: 25968
 path: /home/you/budget.xlsx
 ```
 
@@ -1797,6 +1992,34 @@ $ meowny export pdf --out /home/you/report.pdf --from-month 2026-01 --to-month 2
 
 bytes: 44345
 path: /home/you/report.pdf
+```
+
+#### `export debts`
+
+*read token · asks you in the app*
+
+Writes who owes what to a text or CSV file, after the person allows it in the app: the SUMMARY of all friends, the STATEMENT of one friend (`--person-id`), or the LEDGER of every entry as CSV. An existing file is never replaced.
+
+```text
+meowny export debts --out <path> [--what <SUMMARY|STATEMENT|LEDGER>] [--format <TEXT|CSV>] [--person-id <id>]
+```
+
+| Flag | Type | Description |
+| --- | --- | --- |
+| `--out` (required) | path | Where to write the file: an absolute path ending in .txt (TEXT) or .csv (CSV), in a folder that exists, that is not there yet. |
+| `--what` | one of SUMMARY, STATEMENT, LEDGER | SUMMARY (the default), STATEMENT or LEDGER. |
+| `--format` | one of TEXT, CSV | TEXT (the default) or CSV. LEDGER is CSV only. |
+| `--person-id` | id | The friend, for a STATEMENT. |
+
+Saves who owes what to a file you can send yourself; the app sends it to nobody. `--what` is `summary` (all friends), `statement` (one friend, with `--person-id`) or `ledger` (every entry, CSV only). `--format` is `text` or `csv`. It holds the names of your friends and amounts of money, and is not encrypted. The person allows it in the app first.
+
+The app asks you to allow this each time, in a dialog; nothing is written until you do. See [Files need your yes](#files).
+
+```console
+$ meowny export debts --out /home/you/who-owes-what.txt
+
+bytes: 121
+path: /home/you/who-owes-what.txt
 ```
 
 ### Backup
@@ -1849,7 +2072,7 @@ The app asks you to allow this each time, in a dialog; nothing is written until 
 ```console
 $ echo "correct horse battery staple" | meowny backup create --out /home/you/meowny.meowbak --passphrase -
 
-bytes: 183253
+bytes: 191542
 path: /home/you/meowny.meowbak
 
 waiting for you to allow this in the meowNY app...
@@ -1889,7 +2112,7 @@ total: 1
 
 documents
 id  name                createdAt                 documentDate  hasFile  keepOnPhone  linkCount  mediaType        sha256                                                        sizeBytes
- 1  boiler-receipt.pdf  2026-10-16T16:14:41.036Z  2026-10-01    true     false                0  application/pdf  735a7713978716d1e65eb6bf069e2f410eb72ec5b285861be417aeca0fe…         45
+ 1  boiler-receipt.pdf  2026-10-17T08:51:36.994Z  2026-10-01    true     false                0  application/pdf  735a7713978716d1e65eb6bf069e2f410eb72ec5b285861be417aeca0fe…         45
 ```
 
 With `--json` (one line; shown indented):
@@ -1898,7 +2121,7 @@ With `--json` (one line; shown indented):
 {
   "documents": [
     {
-      "createdAt": "2026-10-16T16:14:41.036Z",
+      "createdAt": "2026-10-17T08:51:36.994Z",
       "documentDate": "2026-10-01",
       "hasFile": true,
       "id": "1",
@@ -1937,7 +2160,7 @@ The id can be given as a plain word, as in `meowny documents show 42`, or with `
 ```console
 $ meowny documents show 1
 
-createdAt: 2026-10-16T16:14:41.036Z
+createdAt: 2026-10-17T08:51:36.994Z
 documentDate: 2026-10-01
 hasFile: true
 id: 1
@@ -1956,7 +2179,7 @@ With `--json` (one line; shown indented):
 
 ```json
 {
-  "createdAt": "2026-10-16T16:14:41.036Z",
+  "createdAt": "2026-10-17T08:51:36.994Z",
   "documentDate": "2026-10-01",
   "hasFile": true,
   "id": "1",
@@ -2004,7 +2227,7 @@ With `--json` (one line; shown indented):
 ```json
 {
   "alreadyThere": false,
-  "createdAt": "2026-10-16T16:14:41.036Z",
+  "createdAt": "2026-10-17T08:51:36.994Z",
   "documentDate": "2026-10-01",
   "hasFile": true,
   "id": "1",
@@ -2046,7 +2269,7 @@ With `--json` (one line; shown indented):
 
 ```json
 {
-  "createdAt": "2026-10-16T16:14:41.036Z",
+  "createdAt": "2026-10-17T08:51:36.994Z",
   "documentDate": "2026-10-01",
   "hasFile": true,
   "id": "1",
@@ -2165,6 +2388,542 @@ $ meowny documents get 1 --out /home/you/boiler-receipt-copy.pdf
 
 bytes: 45
 path: /home/you/boiler-receipt-copy.pdf
+```
+
+### Friends
+
+#### `people list`
+
+*read token*
+
+The friends with what each owes you (negative: you owe them), the largest first. Archived friends only if asked.
+
+```text
+meowny people list [--archived <boolean>]
+```
+
+| Flag | Type | Description |
+| --- | --- | --- |
+| `--archived` | boolean | Also list the friends that were archived. |
+
+Your friends with what each owes you, the largest first. A friend is a name and nothing else: no phone number, email or address is kept. A balance below zero means you owe them. Archived friends only with `--archived`. A read-only token can do this.
+
+```console
+$ meowny people list
+
+id  name  archived  balance  remindEveryDays  remindOn
+ 1  Anna  false       42.00                -  -
+ 2  Bob   false       30.00                7  2026-11-01
+```
+
+With `--json` (one line; shown indented):
+
+```json
+[
+  {
+    "archived": false,
+    "balance": "42.00",
+    "id": "1",
+    "name": "Anna",
+    "remindEveryDays": null,
+    "remindOn": null
+  },
+  {
+    "archived": false,
+    "balance": "30.00",
+    "id": "2",
+    "name": "Bob",
+    "remindEveryDays": 7,
+    "remindOn": "2026-11-01"
+  }
+]
+```
+
+#### `people show`
+
+*read token*
+
+One friend and their ledger: their parts of shared bills and the entries by date, with the balance after each line.
+
+```text
+meowny people show <id>
+```
+
+| Flag | Type | Description |
+| --- | --- | --- |
+| `--id` (required) | id | The friend. |
+
+A friend and their ledger: their parts of shared bills (`BILL`) and the entries you made, by date, with the balance after each line. The last line is where the balance ends up.
+
+The id can be given as a plain word, as in `meowny people show 42`, or with `--id`.
+
+```console
+$ meowny people show 1
+
+person: {"archived":false,"balance":"42.00","id":"1","name":"Anna","remindEveryDays":null,"remindOn":null}
+
+lines
+amount  balance  date        effect  entryId  kind  transactionId  what
+ 30.00    30.00  2026-10-12   30.00        -  BILL            405  Dinner
+ 12.00    42.00  2026-10-13   12.00        1  LENT              -  taxi
+```
+
+With `--json` (one line; shown indented):
+
+```json
+{
+  "lines": [
+    {
+      "amount": "30.00",
+      "balance": "30.00",
+      "date": "2026-10-12",
+      "effect": "30.00",
+      "entryId": null,
+      "kind": "BILL",
+      "transactionId": "405",
+      "what": "Dinner"
+    },
+    {
+      "amount": "12.00",
+      "balance": "42.00",
+      "date": "2026-10-13",
+      "effect": "12.00",
+      "entryId": "1",
+      "kind": "LENT",
+      "transactionId": null,
+      "what": "taxi"
+    }
+  ],
+  "person": {
+    "archived": false,
+    "balance": "42.00",
+    "id": "1",
+    "name": "Anna",
+    "remindEveryDays": null,
+    "remindOn": null
+  }
+}
+```
+
+#### `people create`
+
+*write token*
+
+Adds a friend. A friend is a name, 1 to 50 characters, unique among the friends who are not archived. Nothing else about a person is kept.
+
+```text
+meowny people create --name <text>
+```
+
+| Flag | Type | Description |
+| --- | --- | --- |
+| `--name` (required) | text | The name. |
+
+The name is 1 to 50 characters and unique among the friends who are not archived, ignoring case.
+
+```console
+$ meowny people create --name Anna
+```
+
+With `--json` (one line; shown indented):
+
+```json
+{
+  "archived": false,
+  "balance": "0.00",
+  "id": "1",
+  "name": "Anna",
+  "remindEveryDays": null,
+  "remindOn": null
+}
+```
+
+#### `people update`
+
+*write token*
+
+Renames a friend or sets their reminder: a date, and optionally a number of days after which it repeats. Fields left out stay as they are.
+
+```text
+meowny people update <id> [--name <text>] [--remind-on <date>] [--remind-every-days <number>]
+```
+
+| Flag | Type | Description |
+| --- | --- | --- |
+| `--id` (required) | id | The friend. |
+| `--name` | text | The new name. |
+| `--remind-on` | date | The day to be reminded of the debt, or null for no reminder. |
+| `--clear-remind-on` | no value | Clears `--remind-on`. |
+| `--remind-every-days` | number | Repeat the reminder every this many days, 1 to 365, or null for once. |
+| `--clear-remind-every-days` | no value | Clears `--remind-every-days`. |
+
+Only the flags you give change. A reminder is a date and, optionally, a number of days after which it repeats; `--clear-remind-on` removes both. The app rings it (batch of the phase that is not built yet): for now it is kept.
+
+The id can be given as a plain word, as in `meowny people update 42`, or with `--id`.
+
+```console
+$ meowny people update 2 --remind-on 2026-11-01 --remind-every-days 7
+```
+
+With `--json` (one line; shown indented):
+
+```json
+{
+  "archived": false,
+  "balance": "0.00",
+  "id": "2",
+  "name": "Bob",
+  "remindEveryDays": 7,
+  "remindOn": "2026-11-01"
+}
+```
+
+#### `people archive`
+
+*write token*
+
+Hides a friend from the lists and pickers. Their balance and history stay, and the name can be used again.
+
+```text
+meowny people archive <id>
+```
+
+| Flag | Type | Description |
+| --- | --- | --- |
+| `--id` (required) | id | The friend. |
+
+Hides a friend from the lists. Their balance and history stay, and the name can be used again. A friend is never deleted.
+
+The id can be given as a plain word, as in `meowny people archive 42`, or with `--id`.
+
+```console
+$ meowny people archive 2
+```
+
+With `--json` (one line; shown indented):
+
+```json
+{
+  "archived": true,
+  "balance": "0.00",
+  "id": "2",
+  "name": "Bob",
+  "remindEveryDays": 7,
+  "remindOn": "2026-11-01"
+}
+```
+
+#### `people unarchive`
+
+*write token*
+
+Brings back an archived friend, if no other friend has taken the name.
+
+```text
+meowny people unarchive <id>
+```
+
+| Flag | Type | Description |
+| --- | --- | --- |
+| `--id` (required) | id | The friend. |
+
+Brings the friend back, if no other friend has taken the name.
+
+The id can be given as a plain word, as in `meowny people unarchive 42`, or with `--id`.
+
+```console
+$ meowny people unarchive 2
+```
+
+With `--json` (one line; shown indented):
+
+```json
+{
+  "archived": false,
+  "balance": "0.00",
+  "id": "2",
+  "name": "Bob",
+  "remindEveryDays": 7,
+  "remindOn": "2026-11-01"
+}
+```
+
+#### `people settle`
+
+*write token*
+
+Marks a payment between you and a friend: they paid you back if they owe you, you paid them back if you owe them. With no amount it is the whole balance. An amount larger than the debt is accepted: the balance turns around and the answer says how much was over.
+
+```text
+meowny people settle <id> [--amount <amount>] [--date <date>] [--note <text>]
+```
+
+| Flag | Type | Description |
+| --- | --- | --- |
+| `--id` (required) | id | The friend. |
+| `--amount` | amount | How much was paid, more than zero. The whole balance if left out. |
+| `--date` | date | The day it was paid. Today if left out. |
+| `--note` | text | A note, up to 200 characters. |
+
+Marks a payment between you and a friend. If they owe you, it is a repayment to you; if you owe them, a repayment by you. Without `--amount` it is the whole balance.
+
+An amount larger than the debt is accepted: the balance turns around and the answer says in `over` how much of the payment was more than the debt. When the balance reaches zero the friend's reminder is cleared. Repayments are never income or expenses.
+
+The id can be given as a plain word, as in `meowny people settle 42`, or with `--id`.
+
+```console
+$ meowny people settle 1 --amount 50.00 --date 2026-10-15
+```
+
+With `--json` (one line; shown indented):
+
+```json
+{
+  "after": "-8.00",
+  "before": "42.00",
+  "entry": {
+    "amount": "50.00",
+    "date": "2026-10-15",
+    "id": "2",
+    "kind": "REPAID_TO_ME",
+    "note": null,
+    "personId": "1",
+    "transactionId": null
+  },
+  "over": "8.00"
+}
+```
+
+### Debts
+
+#### `debts summary`
+
+*read token*
+
+What friends owe you and what you owe them, in all and for each friend whose balance is not zero. Neither is income or expense.
+
+```text
+meowny debts summary
+```
+
+What friends owe you and what you owe them, in all and for each friend whose balance is not zero. Neither is income or expense, and neither touches a budget.
+
+```console
+$ meowny debts summary
+
+net: 72.00
+owedToYou: 72.00
+youOwe: 0.00
+
+people
+id  name  archived  balance  remindEveryDays  remindOn
+ 1  Anna  false       42.00                -  -
+ 2  Bob   false       30.00                7  2026-11-01
+```
+
+With `--json` (one line; shown indented):
+
+```json
+{
+  "net": "72.00",
+  "owedToYou": "72.00",
+  "people": [
+    {
+      "archived": false,
+      "balance": "42.00",
+      "id": "1",
+      "name": "Anna",
+      "remindEveryDays": null,
+      "remindOn": null
+    },
+    {
+      "archived": false,
+      "balance": "30.00",
+      "id": "2",
+      "name": "Bob",
+      "remindEveryDays": 7,
+      "remindOn": "2026-11-01"
+    }
+  ],
+  "youOwe": "0.00"
+}
+```
+
+### Shared bills
+
+#### `splits preview`
+
+*read token*
+
+What a split would give each person for a bill of this amount, without saving anything: your part, theirs, whether the numbers add up and how much is left.
+
+```text
+meowny splits preview --amount <amount> --mode <EQUAL|PERCENT|SHARES|EXACT> [--mine <text>] [--people <id,id,...>] [--guests <text>] [--values <text>]
+```
+
+| Flag | Type | Description |
+| --- | --- | --- |
+| `--amount` (required) | amount | The bill, more than zero. |
+| `--mode` (required) | one of EQUAL, PERCENT, SHARES, EXACT | How the numbers are typed: EQUAL (everyone the same), PERCENT (two decimals, 100.00 in all), SHARES (whole numbers) or EXACT (amounts that add up to the bill). |
+| `--mine` | text | Your own value, typed the way the mode says. Leave out for an equal split, or to take the rest in PERCENT and EXACT. |
+| `--people` | id,id,... | The friends the bill is shared with, as ids. |
+| `--guests` | text | People who are not tracked, by name, separated by commas. Their part leaves your cost and makes no debt. |
+| `--values` | text | The value of each friend, in the order of --people, then of each guest, separated by commas. Not for an equal split. |
+
+Shows what a split would give each person for a bill of this amount, and saves nothing. `--mode` is `equal`, `percent` (two decimals, 100.00 in all), `shares` (whole numbers) or `exact` (amounts that add up to the bill). `--mine` is your value; in `percent` and `exact` leave it out to take the rest.
+
+`--values` has one value for each friend in the order of `--people`, then one for each guest in the order of `--guests`. The parts always add up to the bill to the cent: the odd cents go to the largest remainders, and to you first.
+
+```console
+$ meowny splits preview --amount 90.00 --mode percent --people 1,2 --values 30.00,30.00
+
+complete: true
+left: 0.00
+mine: 36.00
+
+parts
+amount  guest  person  personId
+ 27.00  -      Anna           1
+ 27.00  -      Bob            2
+```
+
+With `--json` (one line; shown indented):
+
+```json
+{
+  "complete": true,
+  "left": "0.00",
+  "mine": "36.00",
+  "parts": [
+    {
+      "amount": "27.00",
+      "guest": null,
+      "person": "Anna",
+      "personId": "1"
+    },
+    {
+      "amount": "27.00",
+      "guest": null,
+      "person": "Bob",
+      "personId": "2"
+    }
+  ]
+}
+```
+
+### Ledger
+
+#### `ledger add`
+
+*write token*
+
+Records money lent, borrowed or paid back with a friend. It is never income or expense. For a borrowing, give `--expense-name` and `--expense-category-id` to add your share to your expenses in the same step, with the entry linked to it.
+
+```text
+meowny ledger add --person-id <id> --kind <LENT|BORROWED|REPAID_TO_ME|REPAID_BY_ME> --amount <amount> --date <date> [--note <text>] [--transaction-id <id>] [--expense-name <text>] [--expense-category-id <id>]
+```
+
+| Flag | Type | Description |
+| --- | --- | --- |
+| `--person-id` (required) | id | The friend. |
+| `--kind` (required) | one of LENT, BORROWED, REPAID_TO_ME, REPAID_BY_ME | LENT (you lent), BORROWED (you borrowed), REPAID_TO_ME (they paid you back) or REPAID_BY_ME (you paid them back). |
+| `--amount` (required) | amount | More than zero. |
+| `--date` (required) | date | The day it happened. |
+| `--note` | text | A note, up to 200 characters. |
+| `--transaction-id` | id | A transaction this belongs to. |
+| `--expense-name` | text | BORROWED only: the name of the expense that is made for your share (1 to 50 characters). Needs `--expense-category-id`. |
+| `--expense-category-id` | id | BORROWED only: the expense category for your share. Needs `--expense-name`. |
+
+Money lent, borrowed or paid back. It is never income or expense and appears in no budget or statistic. `--kind` is `lent`, `borrowed`, `repaid_to_me` or `repaid_by_me`.
+
+For a borrowing, give `--expense-name` and `--expense-category-id` to add your share to your expenses in the same step, with the entry linked to it. Paying them back later is another entry and never a second expense.
+
+```console
+$ meowny ledger add --person-id 1 --kind lent --amount 10.00 --date 2026-10-13 --note taxi
+```
+
+With `--json` (one line; shown indented):
+
+```json
+{
+  "amount": "10.00",
+  "date": "2026-10-13",
+  "id": "1",
+  "kind": "LENT",
+  "note": "taxi",
+  "personId": "1",
+  "transactionId": null
+}
+```
+
+#### `ledger update`
+
+*write token*
+
+Changes an entry of the ledger. Fields left out stay as they are; a null note or `--transaction-id` clears it. The expense it came with is not changed.
+
+```text
+meowny ledger update <id> [--person-id <id>] [--kind <LENT|BORROWED|REPAID_TO_ME|REPAID_BY_ME>] [--amount <amount>] [--date <date>] [--note <text>] [--transaction-id <id>]
+```
+
+| Flag | Type | Description |
+| --- | --- | --- |
+| `--id` (required) | id | The entry. |
+| `--person-id` | id | The friend. |
+| `--kind` | one of LENT, BORROWED, REPAID_TO_ME, REPAID_BY_ME | LENT, BORROWED, REPAID_TO_ME or REPAID_BY_ME. |
+| `--amount` | amount | More than zero. |
+| `--date` | date | The day it happened. |
+| `--note` | text | The new note, or null to clear it. |
+| `--clear-note` | no value | Clears note. |
+| `--transaction-id` | id | The transaction it belongs to, or null for none. |
+| `--clear-transaction-id` | no value | Clears `--transaction-id`. |
+
+Only the flags you give change. `--clear-note` and `--clear-transaction-id` remove those. The expense an entry came with is not changed.
+
+The id can be given as a plain word, as in `meowny ledger update 42`, or with `--id`.
+
+```console
+$ meowny ledger update 1 --amount 12.00
+```
+
+With `--json` (one line; shown indented):
+
+```json
+{
+  "amount": "12.00",
+  "date": "2026-10-13",
+  "id": "1",
+  "kind": "LENT",
+  "note": "taxi",
+  "personId": "1",
+  "transactionId": null
+}
+```
+
+#### `ledger delete`
+
+*write token · needs --yes*
+
+Deletes an entry of the ledger. The balance of the friend changes by that much. The change history keeps what it said.
+
+```text
+meowny ledger delete <id>
+```
+
+| Flag | Type | Description |
+| --- | --- | --- |
+| `--id` (required) | id | The entry. |
+
+The balance of the friend changes by that much. The change history keeps what the entry said.
+
+The id can be given as a plain word, as in `meowny ledger delete 42`, or with `--id`.
+
+This cannot be undone, so it needs `--yes`.
+
+```console
+$ meowny ledger delete 1 --yes
+
+done.
 ```
 
 ## Global flags and settings
@@ -2408,7 +3167,7 @@ The command line is a thin client. Anything it does you can do yourself with `cu
 curl -s -X POST "http://127.0.0.1:$PORT/v1/status" \
   -H "Authorization: Bearer $MEOWNY_TOKEN"
 
-{"data":{"api":1,"app":"meowny","schemaVersion":11,"scope":"read","version":"0.1.0"},"ok":true}
+{"data":{"api":1,"app":"meowny","schemaVersion":12,"scope":"read","version":"0.1.0"},"ok":true}
 ```
 
 The port is in `api.json`. `meowny schema --app` prints every route with its arguments as JSON.
@@ -2448,11 +3207,11 @@ The port is in `api.json`. `meowny schema --app` prints every route with its arg
 | `recurring.pause` | write | `id` (required) | Pauses a recurring item: it stops coming due until it is resumed. |
 | `recurring.resume` | write | `id` (required) | Resumes a paused recurring item, unless its next date is past its end date. |
 | `recurring.end` | write | `id` (required) | Ends a recurring item for good: it becomes inactive and its end date is today. What it already paid stays. |
-| `export.preview` | read | `from`, `to`, `categoryIds` | What an export of this selection would contain: how many transactions, their dates, the income and expense totals, and the other records. |
+| `export.preview` | read | `from`, `to`, `categoryIds`, `includeDebts` | What an export of this selection would contain: how many transactions, their dates, the income and expense totals, and the other records. |
 | `backup.schedule` | read | none | The scheduled backup, if one is set up: the folder, how often and how the last one went, or null. Its passphrase is never shown. |
-| `export.json` | read, and your yes | `out` (required), `from`, `to`, `categoryIds` | Writes the data as a JSON file, after the person allows it in the app. An existing file is never replaced. |
+| `export.json` | read, and your yes | `out` (required), `from`, `to`, `categoryIds`, `includeDebts` | Writes the data as a JSON file, after the person allows it in the app. An existing file is never replaced. |
 | `export.csv` | read, and your yes | `out` (required), `from`, `to`, `categoryIds` | Writes the transactions as a CSV file, after the person allows it in the app. An existing file is never replaced. |
-| `export.xlsx` | read, and your yes | `out` (required), `from`, `to`, `categoryIds` | Writes a workbook (.xlsx) with sheets for transactions, categories, budgets, recurring items and a monthly summary, after the person allows it in the app. Dates are ISO and amounts plain numbers. An existing file is never replaced. |
+| `export.xlsx` | read, and your yes | `out` (required), `from`, `to`, `categoryIds`, `includeDebts` | Writes a workbook (.xlsx) with sheets for transactions, categories, budgets, recurring items and a monthly summary, after the person allows it in the app. Dates are ISO and amounts plain numbers. An existing file is never replaced. |
 | `export.pdf` | read, and your yes | `out` (required), `fromMonth` (required), `toMonth` (required), `categoryIds`, `includeTransactions`, `showDescriptions`, `page` | Writes a PDF report for whole months, in English, after the person allows it in the app: totals, charts and budget against actual, and the transactions if asked. An existing file is never replaced. |
 | `backup.create` | read, and your yes | `out` (required), `passphrase` (required) | Writes an encrypted backup of all the data, after the person allows it in the app. It opens only with the passphrase given here, and only the app can restore it. An existing file is never replaced. |
 | `documents.list` | read | `q`, `kind`, `from`, `to`, `transactionId`, `recurringId`, `limit`, `offset` | Documents, newest paper first, with the total that match: names, dates, types, sizes and hashes, never the files. Up to 100 a page, 50 unless limit says otherwise. |
@@ -2463,6 +3222,23 @@ The port is in `api.json`. `meowny schema --app` prints every route with its arg
 | `documents.link` | write | `id` (required), `transactionId`, `recurringId` | Attaches a document to a transaction or to a recurring item. Giving one that is attached already changes nothing. |
 | `documents.unlink` | write | `id` (required), `transactionId`, `recurringId` | Detaches a document from a transaction or a recurring item. The document and the transaction stay. |
 | `documents.get` | write, and your yes | `id` (required), `out` (required) | Writes a copy of a document's file, after the person allows it in the app. It is not encrypted. An existing file is never replaced. |
+| `people.list` | read | `archived` | The friends with what each owes you (negative: you owe them), the largest first. Archived friends only if asked. |
+| `people.show` | read | `id` (required) | One friend and their ledger: their parts of shared bills and the entries by date, with the balance after each line. |
+| `debts.summary` | read | none | What friends owe you and what you owe them, in all and for each friend whose balance is not zero. Neither is income or expense. |
+| `splits.preview` | read | `amount` (required), `mode` (required), `mine`, `people`, `guests`, `values` | What a split would give each person for a bill of this amount, without saving anything: your part, theirs, whether the numbers add up and how much is left. |
+| `people.create` | write | `name` (required) | Adds a friend. A friend is a name, 1 to 50 characters, unique among the friends who are not archived. Nothing else about a person is kept. |
+| `people.update` | write | `id` (required), `name`, `remindOn`, `remindEveryDays` | Renames a friend or sets their reminder: a date, and optionally a number of days after which it repeats. Fields left out stay as they are. |
+| `people.archive` | write | `id` (required) | Hides a friend from the lists and pickers. Their balance and history stay, and the name can be used again. |
+| `people.unarchive` | write | `id` (required) | Brings back an archived friend, if no other friend has taken the name. |
+| `people.settle` | write | `id` (required), `amount`, `date`, `note` | Marks a payment between you and a friend: they paid you back if they owe you, you paid them back if you owe them. With no amount it is the whole balance. An amount larger than the debt is accepted: the balance turns around and the answer says how much was over. |
+| `ledger.add` | write | `personId` (required), `kind` (required), `amount` (required), `date` (required), `note`, `transactionId`, `expenseName`, `expenseCategoryId` | Records money lent, borrowed or paid back with a friend. It is never income or expense. For a borrowing, give expenseName and expenseCategoryId to add your share to your expenses in the same step, with the entry linked to it. |
+| `ledger.update` | write | `id` (required), `personId`, `kind`, `amount`, `date`, `note`, `transactionId` | Changes an entry of the ledger. Fields left out stay as they are; a null note or transactionId clears it. The expense it came with is not changed. |
+| `ledger.delete` | write | `id` (required) | Deletes an entry of the ledger. The balance of the friend changes by that much. The change history keeps what it said. |
+| `transactions.split` | write | `id` (required), `mode` (required), `mine`, `people`, `guests`, `values` | Shares a transaction with friends and guests. It keeps the amount that was paid; your part, the amount minus theirs, is what budgets and statistics count. The numbers must add up. Only an expense can be shared. |
+| `transactions.unsplit` | write | `id` (required) | Takes the split off a transaction: it costs you its whole amount again, and the friends' balances go down by their parts. |
+| `recurring.split` | write | `id` (required), `mode` (required), `mine`, `people`, `guests`, `values` | Splits every payment of a recurring item the same way, from now on. Kept as proportions, so a payment that differs from the plan is shared in the same proportions. EXACT needs an item with an amount that the values add up to. Payments already made are not changed. |
+| `recurring.unsplit` | write | `id` (required) | Takes the split off a recurring item: its payments are not split from now on. Payments already made keep theirs. |
+| `export.debts` | read, and your yes | `out` (required), `what`, `format`, `personId` | Writes who owes what to a text or CSV file, after the person allows it in the app: the SUMMARY of all friends, the STATEMENT of one friend (personId), or the LEDGER of every entry as CSV. An existing file is never replaced. |
 
 ## Security
 

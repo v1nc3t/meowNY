@@ -10,6 +10,7 @@
 use rusqlite::{params, Connection};
 use serde::Serialize;
 
+use crate::debts::splits;
 use crate::money::MAX_MINOR;
 use crate::sync;
 use crate::vault::AppError;
@@ -19,6 +20,8 @@ pub struct Conversion {
     pub transactions: u32,
     pub recurring: u32,
     pub budgets: u32,
+    /// Entries of the ledger of money lent and borrowed.
+    pub ledger: u32,
 }
 
 /// An exchange rate as an exact fraction, so no floating point touches money.
@@ -86,6 +89,11 @@ pub fn change(conn: &mut Connection, new_currency: &str, rate: Option<&str>, tod
         done.transactions = convert_transactions(&tx, rate)?;
         done.recurring = convert_recurring(&tx, rate)?;
         done.budgets = convert_budgets(&tx, rate)?;
+        done.ledger = convert_ledger(&tx, rate)?;
+    }
+    // The parts of the shared bills were written while the checks stood aside: they must add up to no more than their bills.
+    if !splits::check(&tx)? {
+        return Err(AppError::Internal);
     }
 
     tx.execute("UPDATE settings SET currency = ?1, currency_generation = currency_generation + 1 WHERE id = 1", [&new_currency])?;
@@ -130,6 +138,10 @@ pub(crate) fn apply_recorded(tx: &rusqlite::Transaction, change: &Recorded, toda
         done.transactions = convert_transactions(tx, rate)?;
         done.recurring = convert_recurring(tx, rate)?;
         done.budgets = convert_budgets(tx, rate)?;
+        done.ledger = convert_ledger(tx, rate)?;
+    }
+    if !splits::check(tx)? {
+        return Err(AppError::Internal);
     }
     tx.execute("UPDATE settings SET currency = ?1, currency_generation = ?2 WHERE id = 1", params![change.to, change.generation])?;
     tx.execute(
@@ -156,10 +168,27 @@ fn convert_transactions(tx: &rusqlite::Transaction, rate: Rate) -> Result<u32, A
         .query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))?
         .collect::<Result<_, _>>()?;
     let mut update = tx.prepare("UPDATE transactions SET amount_minor = ?1, planned_amount_minor = ?2 WHERE id = ?3")?;
-    for (id, amount, planned) in &rows {
-        let amount = at_least_one(convert(*amount, rate)?);
+    for (id, old, planned) in &rows {
+        let amount = at_least_one(convert(*old, rate)?);
         let planned = planned.map(|p| convert(p, rate)).transpose()?;
         update.execute(params![amount, planned, id])?;
+        // A shared bill: every part, yours included, is scaled to the new amount with the old parts as the weights, so the parts still add
+        // up to the cent and none of them is negative. Rounding each part on its own could make them add up to more than the bill.
+        splits::rescale(tx, *id, *old, amount)?;
+    }
+    Ok(rows.len() as u32)
+}
+
+/// Each entry of the ledger, at least one cent. The balance of a friend is a sum of converted pieces, so it can differ from the converted old
+/// balance by a few cents; every device ends with the same number.
+fn convert_ledger(tx: &rusqlite::Transaction, rate: Rate) -> Result<u32, AppError> {
+    let rows: Vec<(i64, i64)> = tx
+        .prepare("SELECT id, amount_minor FROM ledger_entries")?
+        .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?
+        .collect::<Result<_, _>>()?;
+    let mut update = tx.prepare("UPDATE ledger_entries SET amount_minor = ?1 WHERE id = ?2")?;
+    for (id, amount) in &rows {
+        update.execute(params![at_least_one(convert(*amount, rate)?), id])?;
     }
     Ok(rows.len() as u32)
 }
@@ -272,7 +301,7 @@ mod tests {
 
         let done = change(&mut conn, "usd", Some("1.08"), "2026-10-13").unwrap();
 
-        assert_eq!(done, Conversion { transactions: 1, recurring: 1, budgets: 1 });
+        assert_eq!(done, Conversion { transactions: 1, recurring: 1, budgets: 1, ledger: 0 });
         assert_eq!(currency(&conn), "USD");
         assert_eq!(amount_of(&conn, id), 10_800);
         let planned: i64 = conn.query_row("SELECT planned_amount_minor FROM transactions", [], |r| r.get(0)).unwrap();

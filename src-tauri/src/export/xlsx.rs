@@ -1,5 +1,6 @@
 //! The Excel export: one workbook with a sheet each for transactions, categories, budgets,
-//! recurring items, a monthly summary and the documents (listed, never the files).
+//! recurring items, a monthly summary, the documents (listed, never the files), the friends, the ledger of money
+//! lent and borrowed, and the parts of the bills that are shared.
 //!
 //! Dates are real dates and money is real numbers with a currency number format, so the sheets sort,
 //! filter and sum in Excel. Amounts are stored as whole minor units and divided by 100 only when a cell
@@ -15,6 +16,7 @@ use std::collections::HashMap;
 use rusqlite::Connection;
 use rust_xlsxwriter::{ExcelDateTime, Format, Workbook, Worksheet, XlsxError};
 
+use super::debts::{self, EntryRow, LineRow, PersonRow};
 use super::{
     budget_rows, category_rows, currency, document_names_by_transaction, documents, join_names, monthly_sums, neutralise, parse,
     recurring_rows, transactions, BudgetRow, CategoryRow, DocRow, Parsed, Selection, Tx,
@@ -74,6 +76,9 @@ struct Data {
     documents: Vec<DocRow>,
     /// The names of the documents attached to each transaction.
     attached: HashMap<i64, Vec<String>>,
+    people: Vec<PersonRow>,
+    ledger: Vec<EntryRow>,
+    bill_lines: Vec<LineRow>,
 }
 
 fn next_month(month: &str) -> Option<String> {
@@ -108,7 +113,10 @@ fn summary(conn: &Connection, sel: &Parsed) -> Result<Vec<(String, i64, i64)>, A
 }
 
 fn load(conn: &Connection, sel: &Parsed) -> Result<Data, AppError> {
-    let everything = Parsed { from: None, to: None, categories: None };
+    let everything = Parsed { from: None, to: None, categories: None, debts: false };
+    let bill_lines = debts::lines(conn, sel)?;
+    let ledger = debts::entries(conn, sel)?;
+    let people = debts::people(conn, sel, &bill_lines, &ledger)?;
     let data = Data {
         currency: currency(conn)?,
         transactions: transactions(conn, sel)?,
@@ -119,6 +127,9 @@ fn load(conn: &Connection, sel: &Parsed) -> Result<Data, AppError> {
         summary: summary(conn, sel)?,
         documents: documents(conn, sel)?,
         attached: document_names_by_transaction(conn)?,
+        people,
+        ledger,
+        bill_lines,
     };
     if data.transactions.len() > MAX_ROWS || data.documents.len() > MAX_ROWS {
         return Err(AppError::InvalidInput);
@@ -182,12 +193,17 @@ fn write(data: &Data, codes: &Codes) -> Result<Vec<u8>, XlsxError> {
     let cash = Format::new().set_num_format(&codes.money);
     let percent = Format::new().set_num_format("0.0%");
     let amount = format!("Amount ({})", data.currency);
+    // What the transaction costs you; the same as the amount unless the bill is shared.
+    let share = format!("My share ({})", data.currency);
     let mut book = Workbook::new();
 
     let s = sheet(
         &mut book,
         "Transactions",
-        &[("Date", 12.0), ("Type", 10.0), ("Category", 22.0), ("Name", 30.0), (&amount, 14.0), ("Description", 44.0), ("Documents", 40.0)],
+        &[
+            ("Date", 12.0), ("Type", 10.0), ("Category", 22.0), ("Name", 30.0), (&amount, 14.0), ("Description", 44.0), ("Documents", 40.0),
+            (&share, 16.0),
+        ],
     )?;
     for (i, t) in data.transactions.iter().enumerate() {
         let row = i as u32 + 1;
@@ -200,6 +216,7 @@ fn write(data: &Data, codes: &Codes) -> Result<Vec<u8>, XlsxError> {
         if let Some(names) = data.attached.get(&t.id) {
             text(s, row, 6, &join_names(names))?;
         }
+        money(s, row, 7, t.my_share, &cash)?;
     }
 
     let s = sheet(&mut book, "Categories", &[("Name", 26.0), ("Type", 10.0), ("Deleted", 10.0)])?;
@@ -299,6 +316,46 @@ fn write(data: &Data, codes: &Codes) -> Result<Vec<u8>, XlsxError> {
             })
             .collect();
         text(s, row, 5, &join_names(&attached))?;
+    }
+
+    // The friends, with what they owe you (negative: you owe them) in an export with no limit.
+    let owes = format!("Balance ({})", data.currency);
+    let s = sheet(&mut book, "People", &[("Name", 30.0), ("Archived", 10.0), (&owes, 16.0), ("Reminder", 12.0), ("Repeats every (days)", 20.0)])?;
+    for (i, p) in data.people.iter().enumerate() {
+        let row = i as u32 + 1;
+        text(s, row, 0, &p.name)?;
+        s.write_boolean(row, 1, p.archived)?;
+        if let Some(balance) = p.balance {
+            money(s, row, 2, balance, &cash)?;
+        }
+        if let Some(on) = &p.remind_on {
+            date(s, row, 3, on, &day)?;
+        }
+        if let Some(every) = p.remind_every_days {
+            s.write_number(row, 4, every)?;
+        }
+    }
+
+    // Money lent, borrowed and paid back. Never income or expense.
+    let s = sheet(&mut book, "Ledger", &[("Date", 12.0), ("Friend", 30.0), ("Kind", 16.0), (&amount, 14.0), ("Note", 44.0)])?;
+    for (i, e) in data.ledger.iter().enumerate() {
+        let row = i as u32 + 1;
+        date(s, row, 0, &e.date, &day)?;
+        text(s, row, 1, &e.person)?;
+        text(s, row, 2, &e.kind)?;
+        money(s, row, 3, e.amount, &cash)?;
+        text(s, row, 4, e.note.as_deref().unwrap_or(""))?;
+    }
+
+    // The parts of the bills that are shared: who has which part of which bill.
+    let s = sheet(&mut book, "Split bills", &[("Date", 12.0), ("Bill", 30.0), ("Who", 30.0), ("Guest", 8.0), (&amount, 14.0)])?;
+    for (i, l) in data.bill_lines.iter().enumerate() {
+        let row = i as u32 + 1;
+        date(s, row, 0, &l.date, &day)?;
+        text(s, row, 1, &l.bill)?;
+        text(s, row, 2, l.person.as_deref().or(l.guest.as_deref()).unwrap_or(""))?;
+        s.write_boolean(row, 3, l.guest.is_some())?;
+        money(s, row, 4, l.amount, &cash)?;
     }
 
     book.save_to_buffer()
@@ -524,11 +581,11 @@ mod tests {
     }
 
     #[test]
-    fn the_workbook_has_the_six_sheets() {
+    fn the_workbook_has_the_nine_sheets() {
         let (conn, ..) = lived_in();
         let bytes = build(&conn, &Selection::default(), &DisplayFormat::default());
         assert!(bytes.starts_with(b"PK"), "an .xlsx file is a zip");
-        assert_eq!(open(&bytes).sheet_names(), ["Transactions", "Categories", "Budgets", "Recurring", "Monthly summary", "Documents"]);
+        assert_eq!(open(&bytes).sheet_names(), ["Transactions", "Categories", "Budgets", "Recurring", "Monthly summary", "Documents", "People", "Ledger", "Split bills"]);
     }
 
     #[test]
@@ -613,7 +670,7 @@ mod tests {
         spend(&conn, rent, "@SUM(1)", "2.00", "2026-04-02", Some("-5% promo"));
         let bytes = build(&conn, &Selection::default(), &DisplayFormat::default());
         let mut book = open(&bytes);
-        for name in ["Transactions", "Categories", "Budgets", "Recurring", "Monthly summary", "Documents"] {
+        for name in ["Transactions", "Categories", "Budgets", "Recurring", "Monthly summary", "Documents", "People", "Ledger", "Split bills"] {
             for cell in strings(&rows(&mut book, name)) {
                 assert!(!cell.starts_with(['=', '+', '-', '@', '\t', '\r']), "{name}: {cell:?}");
             }
@@ -623,7 +680,7 @@ mod tests {
         assert_eq!((&evil[3], &evil[5]), (&Cell::Text("'=cmd|' /C calc'!A0".into()), &Cell::Text("'+1+1".into())));
         // No cell is a formula: the file has no <f> elements at all.
         let sheets: Vec<String> = Book::open(&bytes).parts.keys().filter(|n| n.starts_with("xl/worksheets/sheet")).cloned().collect();
-        assert_eq!(sheets.len(), 6);
+        assert_eq!(sheets.len(), 9);
         for name in sheets {
             let part = Book::open(&bytes).part(&name);
             assert!(!part.contains("<f>") && !part.contains("<f "), "{name} has a formula");
@@ -769,6 +826,41 @@ mod tests {
         build(&conn, &Selection::default(), &DisplayFormat::default());
         let after: i64 = conn.query_row("SELECT count(*) FROM audit_log", [], |r| r.get(0)).unwrap();
         assert_eq!(before, after);
+    }
+
+    #[test]
+    fn the_friends_the_ledger_and_the_shared_bills_have_sheets_and_the_transactions_say_what_each_cost_you() {
+        use crate::debts::fixtures::*;
+        use crate::debts::ledger::{self, Kind, NewEntry};
+        let w = world();
+        let (anna, bob) = (friend(&w.conn, "Anna"), friend(&w.conn, "Bob"));
+        let dinner = bill(&w.conn, w.food, "Dinner", "90.00", "2026-03-05");
+        crate::debts::splits::set_split(&w.conn, dinner, &equal(vec![who(anna), guest("Carl")])).unwrap();
+        ledger::add(&w.conn, &NewEntry { person_id: bob.to_string(), kind: Kind::Borrowed, amount: "7.00".into(), date: "2026-03-09".into(), note: Some("lunch".into()), transaction_id: None }).unwrap();
+        let mut book = open(&build(&w.conn, &Selection::default(), &DisplayFormat::default()));
+        let sheet = rows(&mut book, "Transactions");
+        assert_eq!(strings(&sheet[..1]).last().unwrap(), "My share (EUR)");
+        assert_eq!((&sheet[1][4], &sheet[1][7]), (&Cell::Number(90.0), &Cell::Number(30.0)), "paid 90.00, cost 30.00");
+        let people = rows(&mut book, "People");
+        assert_eq!(strings(&people[..1]), ["Name", "Archived", "Balance (EUR)", "Reminder", "Repeats every (days)"]);
+        assert_eq!((&people[1][0], &people[1][2]), (&Cell::Text("Anna".into()), &Cell::Number(30.0)));
+        assert_eq!(people[2][2], Cell::Number(-7.0), "you owe Bob");
+        let ledger_sheet = rows(&mut book, "Ledger");
+        assert_eq!(strings(&ledger_sheet[1..2]), ["Bob", "BORROWED", "lunch"]);
+        assert_eq!(ledger_sheet[1][3], Cell::Number(7.0));
+        let parts = rows(&mut book, "Split bills");
+        assert_eq!(parts.len(), 3, "the heading and the two parts");
+        assert_eq!((&parts[1][1], &parts[1][2], &parts[1][3], &parts[1][4]), (&Cell::Text("Dinner".into()), &Cell::Text("Anna".into()), &Cell::Bool(false), &Cell::Number(30.0)));
+        assert_eq!((&parts[2][2], &parts[2][3]), (&Cell::Text("Carl".into()), &Cell::Bool(true)));
+        // the monthly summary adds up what it cost you
+        let summary = rows(&mut book, "Monthly summary");
+        assert_eq!(summary[1][2], Cell::Number(30.0));
+        // a limit keeps the friends of the bills in it and no ledger and no balance
+        let limited = Selection { category_ids: Some(vec![w.food.to_string()]), ..Default::default() };
+        let mut book = open(&build(&w.conn, &limited, &DisplayFormat::default()));
+        assert_eq!(rows(&mut book, "People").len(), 2, "Anna alone");
+        assert!(matches!(rows(&mut book, "People")[1].get(2), None | Some(Cell::Empty)), "no balance");
+        assert_eq!(rows(&mut book, "Ledger").len(), 1, "only the heading");
     }
 
     #[test]

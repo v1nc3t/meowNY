@@ -6,6 +6,7 @@ pub mod clock;
 pub mod commands;
 pub mod currency;
 pub mod db;
+pub mod debts;
 pub mod display;
 pub mod documents;
 pub mod export;
