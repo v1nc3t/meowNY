@@ -111,7 +111,10 @@ pub enum Section {
     Documents,
     /// The friends and what each owes or is owed.
     People,
-    /// The history of debts: the ledger of money lent, borrowed and paid back, and the parts of the shared bills.
+    /// The recurring payments that have come due and are not paid or skipped: what you owe by now.
+    Due,
+    /// The history of debts: the ledger of money lent, borrowed and paid back, the parts of the shared bills, and the recurring payments that
+    /// were paid or are due.
     Ledger,
     History,
 }
@@ -125,6 +128,7 @@ impl Section {
             Section::Recurring => "recurring",
             Section::Documents => "documents",
             Section::People => "people",
+            Section::Due => "due",
             Section::Ledger => "ledger",
             Section::History => "history",
         }
@@ -162,6 +166,12 @@ impl Parsed {
             && self.max.is_none()
             && self.pattern.is_none()
             && self.split.is_none()
+    }
+
+    /// Whether anything but the dates and the parts leaves some transactions out. A running balance that counts them would add up what the
+    /// file leaves out, so it is not shown then.
+    pub(crate) fn narrows_transactions(&self) -> bool {
+        self.categories.is_some() || self.kind.is_some() || self.min.is_some() || self.max.is_some() || self.pattern.is_some() || self.split.is_some()
     }
 
     /// Whether a part of the file is asked for. (The history is also left out of any file that has a limit.)
@@ -462,22 +472,16 @@ pub(crate) fn today_of(conn: &Connection, now: DateTime<Utc>) -> Result<String, 
     Ok(crate::clock::today(now, &timezone)?.to_string())
 }
 
-/// The recurring payments that have come due and are not paid or skipped yet, the oldest first: what you owe by `today`, to be listed with
-/// the debts. Those of the chosen categories (and kind); the dates of an export do not narrow them, because what is due is a matter of today.
-pub(crate) fn due_payments(conn: &Connection, sel: &Parsed, today: &str) -> Result<Vec<recurring::Recurring>, AppError> {
-    let mut statement = conn.prepare("SELECT id, type FROM categories")?;
-    let kinds: std::collections::HashMap<i64, String> =
-        statement.query_map([], |r| Ok((r.get::<_, i64>(0)?, r.get::<_, String>(1)?)))?.collect::<Result<_, _>>()?;
-    // overdue, then the ones due today
-    let dues = recurring::dues(conn, today, Some(0))?;
-    Ok(dues
-        .overdue
+/// The recurring payments that have come due and are not paid or skipped yet (every occurrence, the oldest first): what you owe by `today`,
+/// as the debts screen lists it. Those of the chosen categories; the dates of an export do not narrow them, because what is due is a matter
+/// of today, and a payment is an expense, so choosing income leaves none.
+pub(crate) fn due_payments(conn: &Connection, sel: &Parsed, today: &str) -> Result<Vec<crate::debts::dues::DuePayment>, AppError> {
+    if sel.kind == Some(Kind::Income) {
+        return Ok(Vec::new());
+    }
+    Ok(crate::debts::dues::due_payments(conn, today)?
         .into_iter()
-        .chain(dues.upcoming)
-        .filter(|item| {
-            sel.categories.as_ref().is_none_or(|ids| ids.contains(&item.category_id))
-                && sel.kind.is_none_or(|kind| kinds.get(&item.category_id).is_some_and(|k| k == kind.as_str()))
-        })
+        .filter(|payment| sel.categories.as_ref().is_none_or(|ids| ids.contains(&payment.category_id)))
         .collect())
 }
 
@@ -699,6 +703,8 @@ pub struct Preview {
     pub split_bills: u32,
     /// Recurring payments that have come due and are listed with the debts.
     pub due_payments: u32,
+    /// Lines of the history of debts: those of the friends and the recurring payments paid or due.
+    pub debt_history: u32,
     /// Entries of the change history. Only a JSON file with no selection carries them; with any
     /// selection this is 0.
     pub history: u32,
@@ -723,13 +729,16 @@ pub fn preview(conn: &Connection, selection: &Selection) -> Result<Preview, AppE
     let ledger = if sel.wants(Section::Ledger) { debts::entries(&tx, &sel)? } else { Vec::new() };
     let friends = if sel.wants(Section::People) { debts::people(&tx, &sel, &bill_lines, &ledger)? } else { Vec::new() };
     let split_bills = bill_lines.iter().map(|l| l.transaction_id).collect::<std::collections::BTreeSet<_>>().len() as u32;
-    let due = if sel.wants(Section::People) { due_payments(&tx, &sel, &today_of(&tx, Utc::now())?)?.len() } else { 0 };
+    let today = today_of(&tx, Utc::now())?;
+    let due = if sel.wants(Section::Due) { due_payments(&tx, &sel, &today)?.len() } else { 0 };
+    let timeline = if sel.wants(Section::Ledger) { debts::history_lines(&tx, &sel, &today, sel.everything() || sel.debts)?.len() } else { 0 };
     // what a file would hold: a part that is left out counts for nothing
     let count = |wanted: bool, n: usize| if wanted { n as u32 } else { 0 };
     let with_transactions = sel.wants(Section::Transactions);
     Ok(Preview {
         people: friends.len() as u32,
         due_payments: due as u32,
+        debt_history: timeline as u32,
         ledger: ledger.len() as u32,
         split_bills: count(sel.wants(Section::Transactions) || sel.wants(Section::Ledger), split_bills as usize),
         transactions: count(with_transactions, transactions as usize),
@@ -847,12 +856,18 @@ pub fn json(conn: &Connection, selection: &Selection, now: DateTime<Utc>) -> Res
     }
     if sel.wants(Section::People) {
         file["people"] = Value::Array(people);
-        // the payments that have come due are owed too: listed with the debts
-        let due = due_payments(&tx, &sel, &today_of(&tx, now)?)?;
+    }
+    let today = today_of(&tx, now)?;
+    if sel.wants(Section::Due) {
+        // the payments that have come due are owed too
+        let due = due_payments(&tx, &sel, &today)?;
         file["duePayments"] = Value::Array(due.into_iter().map(|item| serde_json::to_value(item).map_err(|_| AppError::Internal)).collect::<Result<_, _>>()?);
     }
     if sel.wants(Section::Ledger) {
         file["ledger"] = Value::Array(ledger);
+        // the same story as the debts screen tells, oldest first
+        let timeline = debts::history_lines(&tx, &sel, &today, sel.everything() || sel.debts)?;
+        file["debtHistory"] = Value::Array(timeline.into_iter().map(|line| serde_json::to_value(line).map_err(|_| AppError::Internal)).collect::<Result<_, _>>()?);
     }
     if sel.wants(Section::Documents) {
         file["documents"] = Value::Array(documents_json(&tx, &sel)?);

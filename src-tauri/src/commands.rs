@@ -194,6 +194,8 @@ pub const COMMANDS: &[&str] = &[
     "unarchive_person",
     "person_statement",
     "debts_summary",
+    "debts_due_payments",
+    "debts_history",
     "add_ledger_entry",
     "update_ledger_entry",
     "delete_ledger_entry",
@@ -204,6 +206,7 @@ pub const COMMANDS: &[&str] = &[
     "set_recurring_split",
     "clear_recurring_split",
     "export_debts",
+    "export_debts_preview",
     "bill_code",
     "bill_preview",
     "bill_accept",
@@ -1018,6 +1021,21 @@ pub fn debts_summary(vault: Shared) -> Result<Summary, AppError> {
     vault.with_conn(|c| summary::summary(c))
 }
 
+/// The recurring payments that have come due and are not paid or skipped (every occurrence, the oldest first), and what they come to.
+#[tauri::command]
+pub fn debts_due_payments(vault: Shared) -> Result<crate::debts::dues::Due, AppError> {
+    let today = today_text(&vault)?;
+    vault.with_conn(|c| crate::debts::dues::due(c, &today))
+}
+
+/// The history of debts, newest first: the lines of every friend (or of one), the recurring payments that were paid and those that are
+/// due, in a range of dates if asked, a page at a time.
+#[tauri::command]
+pub fn debts_history(vault: Shared, filter: crate::debts::history::Filter) -> Result<crate::debts::history::History, AppError> {
+    let today = today_text(&vault)?;
+    vault.with_conn(|c| crate::debts::history::history(c, &today, &filter))
+}
+
 /// Records money lent, borrowed or paid back. With `expense`, a borrowing also adds the person's share to their expenses, in one step.
 #[tauri::command]
 pub fn add_ledger_entry(vault: Shared, input: NewEntry, expense: Option<Expense>) -> Result<Entry, AppError> {
@@ -1114,11 +1132,13 @@ pub fn bill_accept(vault: Shared, input: Accept) -> Result<Entry, AppError> {
     vault.with_conn(|c| codes::accept(c, &input))
 }
 
-/// The friends whose reminder day has come, and the next days with a reminder, for the debts page and for the notifications.
+/// The friends whose reminder has come, and the next days with a reminder, for the debts page and for the notifications. `every_days` is
+/// this device's setting: every friend with a debt is reminded that many days after the debt last changed, and again after as many (0 is
+/// none, at most 365).
 #[tauri::command]
-pub fn debts_reminders(vault: Shared) -> Result<Reminders, AppError> {
+pub fn debts_reminders(vault: Shared, every_days: u32) -> Result<Reminders, AppError> {
     let today = today_text(&vault)?;
-    vault.with_conn(|c| reminders::reminders(c, &today))
+    vault.with_conn(|c| reminders::reminders(c, &today, every_days))
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Deserialize)]
@@ -1164,41 +1184,55 @@ fn file_stem(text: &str) -> String {
     stem.chars().take(40).collect::<String>().trim_matches('-').to_string()
 }
 
-/// Saves who owes what (the summary, one friend's statement, or the whole ledger) as text, CSV or PDF, where the person says. The app sends
-/// it to nobody. Not encrypted.
-#[tauri::command]
-pub async fn export_debts(app: tauri::AppHandle, vault: Shared<'_>, request: DebtsExport) -> Result<bool, AppError> {
+/// The file that `request` makes: its name without the date and ending, and its bytes.
+fn debts_file(vault: &Shared<'_>, request: &DebtsExport, today: &str) -> Result<(String, Vec<u8>), AppError> {
     request.labels.validate()?;
-    let today = today_text(&vault)?;
     let person = request.person_id.as_deref().map(categories::parse_id).transpose()?;
     let display = request.display.clone().unwrap_or_default();
     let page = request.page.unwrap_or_default();
     let labels = &request.labels;
-    let (stem, bytes) = vault.with_conn(|c| -> Result<(String, Vec<u8>), AppError> {
+    vault.with_conn(|c| -> Result<(String, Vec<u8>), AppError> {
         Ok(match (request.what, request.format, person) {
-            (DebtsWhat::Summary, DebtsFormat::Text, None) => ("who-owes-what".to_string(), summary::summary_text(c, &today, labels)?.into_bytes()),
+            (DebtsWhat::Summary, DebtsFormat::Text, None) => ("who-owes-what".to_string(), summary::summary_text(c, today, labels)?.into_bytes()),
             (DebtsWhat::Summary, DebtsFormat::Csv, None) => ("who-owes-what".to_string(), summary::summary_csv(c)?.into_bytes()),
-            (DebtsWhat::Summary, DebtsFormat::Pdf, None) => ("who-owes-what".to_string(), report::debts_summary_pdf(c, &today, labels, &display, page)?),
+            (DebtsWhat::Summary, DebtsFormat::Pdf, None) => ("who-owes-what".to_string(), report::debts_summary_pdf(c, today, labels, &display, page)?),
             (DebtsWhat::Statement, format, Some(id)) => {
                 let name = people::get(c, id)?.name;
                 let stem = format!("statement-{}", file_stem(&name));
                 let bytes = match format {
-                    DebtsFormat::Text => summary::statement_text(c, id, &today, labels)?.into_bytes(),
+                    DebtsFormat::Text => summary::statement_text(c, id, today, labels)?.into_bytes(),
                     DebtsFormat::Csv => summary::statement_csv(c, id)?.into_bytes(),
-                    DebtsFormat::Pdf => report::debts_statement_pdf(c, id, &today, labels, &display, page)?,
+                    DebtsFormat::Pdf => report::debts_statement_pdf(c, id, today, labels, &display, page)?,
                 };
                 (stem, bytes)
             }
             (DebtsWhat::Ledger, DebtsFormat::Csv, None) => ("ledger".to_string(), summary::ledger_csv(c)?.into_bytes()),
             _ => return Err(AppError::InvalidInput),
         })
-    })?;
+    })
+}
+
+/// Saves who owes what (the summary, one friend's statement, or the whole ledger) as text, CSV or PDF, where the person says. The app sends
+/// it to nobody. Not encrypted.
+#[tauri::command]
+pub async fn export_debts(app: tauri::AppHandle, vault: Shared<'_>, request: DebtsExport) -> Result<bool, AppError> {
+    let today = today_text(&vault)?;
+    let (stem, bytes) = debts_file(&vault, &request, &today)?;
     let (kind, extension) = match request.format {
         DebtsFormat::Text => ("Text", "txt"),
         DebtsFormat::Csv => ("CSV", "csv"),
         DebtsFormat::Pdf => ("PDF", "pdf"),
     };
     save_export(&app, format!("meowny-{stem}-{today}.{extension}"), kind, extension, &bytes)
+}
+
+/// The file `export_debts` would write, for the preview that comes before saving it: the bytes of the text, the CSV or the PDF as the
+/// preview of an export is given them. Written nowhere. `InvalidInput` when it is more than 16 MiB.
+#[tauri::command]
+pub async fn export_debts_preview(vault: Shared<'_>, request: DebtsExport) -> Result<export::PreviewFile, AppError> {
+    let today = today_text(&vault)?;
+    let (_, bytes) = debts_file(&vault, &request, &today)?;
+    export::preview_file(&bytes)
 }
 
 #[cfg(test)]

@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { en } from '../i18n/en.ts'
 import { LANGUAGES } from '../i18n/languages.ts'
-import { DEFAULT_REMINDER_TIME, localDay, notificationId, notifiedDays, parseTime, reminderTime, ringNow, schedulePlan } from './reminders.ts'
+import { DEFAULT_REMINDER_EVERY, DEFAULT_REMINDER_TIME, localDay, notificationId, notifiedDays, parseTime, REMINDER_PERIODS, reminderEvery, reminderTime, ringNow, saveReminderEvery, schedulePlan } from './reminders.ts'
 
 const reminders = (today: string, due: [string, string, string][] = [], upcoming: [string, number][] = []) => ({
   today,
@@ -19,6 +19,32 @@ test('a time of day is HH:MM on a 24-hour clock and nothing else', () => {
 test('with nothing saved a device rings at nine and remembers nothing', () => {
   assert.equal(reminderTime(), DEFAULT_REMINDER_TIME)
   assert.deepEqual(notifiedDays(), {})
+})
+
+test('a device reminds every week unless told otherwise, and only the periods on offer are kept', () => {
+  assert.equal(reminderEvery(), DEFAULT_REMINDER_EVERY, 'nothing saved')
+  assert.ok(REMINDER_PERIODS.includes(DEFAULT_REMINDER_EVERY))
+  const store = new Map<string, string>()
+  Object.defineProperty(globalThis, 'localStorage', {
+    configurable: true,
+    value: { getItem: (key: string) => store.get(key) ?? null, setItem: (key: string, value: string) => void store.set(key, value) },
+  })
+  try {
+    for (const days of REMINDER_PERIODS) {
+      saveReminderEvery(days)
+      assert.equal(reminderEvery(), days)
+    }
+    saveReminderEvery(14)
+    saveReminderEvery(5)
+    saveReminderEvery(-7)
+    assert.equal(reminderEvery(), 14, 'a period that is not offered is not kept')
+    store.set('debt-reminder-every', 'soon')
+    assert.equal(reminderEvery(), DEFAULT_REMINDER_EVERY, 'a damaged value is the default')
+    store.set('debt-reminder-every', '9')
+    assert.equal(reminderEvery(), DEFAULT_REMINDER_EVERY)
+  } finally {
+    Reflect.deleteProperty(globalThis, 'localStorage')
+  }
 })
 
 test('a reminder rings when its day has come and the time of day is reached, once for each day', () => {

@@ -18,6 +18,7 @@ const preview = {
   ledger: 14,
   splitBills: 5,
   duePayments: 2,
+  debtHistory: 17,
 }
 
 test('a preview is read as the app sends it, with the number of documents it lists', () => {
@@ -39,7 +40,7 @@ test('the start of a file for the preview is read as the app sends it, and a cou
 })
 
 test('a preview without the friends, the ledger or the shared bills, or with a count that cannot be, is refused', () => {
-  for (const key of ['people', 'ledger', 'splitBills', 'duePayments'] as const) {
+  for (const key of ['people', 'ledger', 'splitBills', 'duePayments', 'debtHistory'] as const) {
     assert.equal(Preview.safeParse({ ...preview, [key]: undefined }).success, false, key)
     assert.equal(Preview.safeParse({ ...preview, [key]: -1 }).success, false, key)
   }

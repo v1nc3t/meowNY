@@ -154,6 +154,9 @@ export type DebtsLabels = {
   /** The recurring payments that have come due, listed with the debts in a report, and their total. */
   dueTitle: string
   dueTotal: string
+  /** What a recurring payment is called in the history of debts, when it was paid late and when it is overdue. */
+  paidPayment: string
+  duePayment: string
   owedToYou: string
   youOwe: string
   net: string
@@ -184,7 +187,77 @@ export type DebtsFileRequest = {
   page?: 'A4' | 'LETTER'
 }
 
+/** A recurring payment that has come due and is not paid or skipped: money you owe by now. One for each occurrence that was missed. */
+export const DuePayment = z.object({
+  recurringId: id,
+  categoryId: id,
+  name: z.string(),
+  category: z.string(),
+  /** The day it fell due. */
+  dueDate: date,
+  /** What it is for; null for a bill whose amount changes every time. */
+  amount: amount.nullable(),
+  /** Whole days since it fell due; 0 is today. */
+  daysOverdue: z.number().int().nonnegative(),
+})
+export type DuePayment = z.infer<typeof DuePayment>
+
+export const Due = z.object({
+  /** Every occurrence, the oldest first. */
+  payments: z.array(DuePayment),
+  /** What the payments that say what they are for come to. */
+  total: amount,
+  /** How many say nothing about the amount. */
+  unknown: z.number().int().nonnegative(),
+})
+export type Due = z.infer<typeof Due>
+
+/** What a line of the history of debts is: the kinds of a friend's statement, and a recurring payment that was paid or is due. */
+export const HISTORY_KINDS = ['LENT', 'BORROWED', 'REPAID_TO_ME', 'REPAID_BY_ME', 'BILL', 'PAYMENT_PAID', 'PAYMENT_DUE'] as const
+export const HistoryKind = z.enum(HISTORY_KINDS)
+export type HistoryKind = z.infer<typeof HistoryKind>
+
+export const HistoryLine = z.object({
+  /** The day it happened: for a recurring payment that was paid the day it was paid, for one that is due the day it fell due. */
+  date,
+  kind: HistoryKind,
+  /** The friend, for a friend's line. */
+  friend: z.string().nullable(),
+  personId: id.nullable(),
+  what: z.string(),
+  /** Always above 0 (a payment that is due and has no fixed amount says 0.00). */
+  amount,
+  /** What it did to what the friend owes you, and what they owed after it. Only for a friend's line. */
+  effect: signed.nullable(),
+  balance: signed.nullable(),
+  /** The day a recurring payment fell due. */
+  dueDate: date.nullable(),
+  entryId: id.nullable(),
+  transactionId: id.nullable(),
+  recurringId: id.nullable(),
+})
+export type HistoryLine = z.infer<typeof HistoryLine>
+
+export const History = z.object({
+  /** Newest first. */
+  lines: z.array(HistoryLine),
+  total: z.number().int().nonnegative(),
+  limit: z.number().int().positive(),
+  offset: z.number().int().nonnegative(),
+})
+export type History = z.infer<typeof History>
+
+export type HistoryFilter = { from?: string; to?: string; personId?: string; limit?: number; offset?: number }
+
+/** A file for the preview before it is saved: its bytes as base64url text, and how many. */
+export const DebtsFilePreview = z.object({ data: z.string(), bytes: z.number().int().nonnegative() })
+export type DebtsFilePreview = z.infer<typeof DebtsFilePreview>
+
 export const debts = {
+  /** The recurring payments that have come due and are not paid or skipped, and what they come to. */
+  duePayments: () => call('debts_due_payments', Due),
+  /** Everything that changed what you owe or are owed, newest first, a page at a time. */
+  history: (filter: HistoryFilter = {}) => call('debts_history', History, { filter }),
   summary: () => call('debts_summary', Summary),
   people: (archived = false) => call('list_people', z.array(Person), { archived }),
   createPerson: (name: string) => call('create_person', Person, { name }),
@@ -209,7 +282,10 @@ export const debts = {
   billCode: (transactionId: string, personId: string, from: string) => call('bill_code', z.string(), { transactionId, personId, from }),
   billPreview: (text: string) => call('bill_preview', BillPreview, { text }),
   billAccept: (input: BillAccept) => call('bill_accept', Entry, { input }),
-  reminders: () => call('debts_reminders', Reminders),
+  /** The friends to be reminded of now and the days that come, for a period of `everyDays` days after each debt last changed (0: none). */
+  reminders: (everyDays: number) => call('debts_reminders', Reminders, { everyDays }),
   /** Opens a save dialog and writes the file where the person says. False when they cancel. The file is not encrypted. */
   save: (request: DebtsFileRequest) => call('export_debts', z.boolean(), { request }),
+  /** The file `save` would write, as base64url text, for the preview that comes before saving it. Written nowhere. */
+  filePreview: (request: DebtsFileRequest) => call('export_debts_preview', DebtsFilePreview, { request }),
 }

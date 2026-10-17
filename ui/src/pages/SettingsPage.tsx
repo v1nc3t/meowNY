@@ -16,7 +16,10 @@ import { useProfile } from '../hooks/profile'
 import { syncApi } from '../api/sync'
 import { documents, type LibrarySize } from '../api/documents'
 import { formatSize } from '../lib/bytes'
-import { parseTime, reminderTime, remindersChanged, saveReminderTime } from '../lib/reminders'
+import { scheduleOnPhone } from '../api/debtReminders'
+import { parseTime, REMINDER_PERIODS, reminderEvery, reminderTime, remindersChanged, saveReminderEvery, saveReminderTime } from '../lib/reminders'
+
+const PERIOD_LABELS = { 0: 'settings.debtEveryOff', 7: 'settings.scheduleWeekly', 14: 'settings.debtEveryTwoWeeks', 30: 'settings.scheduleMonthly' } as const
 
 const EVERY_CHOICES = [
   { days: 1, labelKey: 'settings.scheduleDaily' },
@@ -44,6 +47,7 @@ export default function SettingsPage() {
   const [newKey, setNewKey] = useState<string | null>(null)
   const [notifyDue, setNotifyDue] = useState<boolean | null>(null)
   const [reminderAt, setReminderAt] = useState(reminderTime)
+  const [debtEvery, setDebtEvery] = useState(() => String(reminderEvery()))
   const [lockAfter, setLockAfter] = useState('300')
   const [changingCurrency, setChangingCurrency] = useState(false)
   const [locale, setLocale] = useState('')
@@ -336,6 +340,24 @@ export default function SettingsPage() {
                 }}
               />
             </label>
+            <Dropdown
+              label={t('settings.debtEvery')}
+              value={debtEvery}
+              options={REMINDER_PERIODS.map((days) => ({ value: String(days), label: t(PERIOD_LABELS[days]) }))}
+              onChange={(value) => {
+                setDebtEvery(value)
+                // the period is this device's, like the time of day: kept here, and the phone hands the system the new days
+                saveReminderEvery(Number(value))
+                if (phone) {
+                  void scheduleOnPhone().then((result) => {
+                    if (result === 'denied') setMessage(t('debts.remindDenied'))
+                  })
+                } else {
+                  remindersChanged()
+                }
+              }}
+            />
+            <p className="hint">{t('settings.debtEveryHint')}</p>
             <p className="hint">{t(phone ? 'settings.reminderPhone' : 'settings.reminderDesktop')}</p>
           </div>
         )}

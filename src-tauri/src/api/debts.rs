@@ -152,12 +152,12 @@ pub const PEOPLE_CREATE: Route = Route {
 pub const PEOPLE_UPDATE: Route = Route {
     name: "people.update",
     scope: Scope::Write,
-    summary: "Renames a friend or sets their reminder: a date, and optionally a number of days after which it repeats. Fields left out stay as they are.",
+    summary: "Renames a friend. Fields left out stay as they are. The reminder fields are kept for data written before reminders became a setting of each device (every so many days after a debt last changed), and nothing rings from them.",
     params: &[
         FRIEND.required(),
         Param::new("name", Kind::String, "The new name."),
-        Param::new("remindOn", Kind::Date, "The day to be reminded of the debt, or null for no reminder.").nullable(),
-        Param::new("remindEveryDays", Kind::Integer, "Repeat the reminder every this many days, 1 to 365, or null for once.").nullable(),
+        Param::new("remindOn", Kind::Date, "Not used for reminders any more; kept as it was written. Null clears it.").nullable(),
+        Param::new("remindEveryDays", Kind::Integer, "Not used for reminders any more; kept as it was written, 1 to 365, or null.").nullable(),
     ],
     confirm: None,
     run: |ctx, mut args| {

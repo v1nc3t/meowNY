@@ -2598,12 +2598,10 @@ ul.rec-list > li.rec-item {
   }
 }
 
-ul.rec-list > li.rec-item[data-status='overdue'] {
-  border-color: rgba(247, 118, 142, 0.5);
-}
-
+/* Due is red: from its day on (today, or before) an item has to be paid. */
+ul.rec-list > li.rec-item[data-status='overdue'],
 ul.rec-list > li.rec-item[data-status='today'] {
-  border-color: var(--accent);
+  border-color: rgba(247, 118, 142, 0.5);
 }
 
 ul.rec-list > li.rec-item[data-status='paused'],
@@ -2673,20 +2671,14 @@ ul.rec-list > li.rec-item[data-status='ended'] {
   letter-spacing: 0.02em;
 }
 
-.rec-badge[data-status='overdue'] {
+.rec-badge[data-status='overdue'],
+.rec-badge[data-status='today'] {
   border-color: #f7768e;
 }
 
-.rec-badge[data-status='overdue'] .rec-state {
-  color: #f7768e;
-}
-
-.rec-badge[data-status='today'] {
-  border-color: var(--accent);
-}
-
+.rec-badge[data-status='overdue'] .rec-state,
 .rec-badge[data-status='today'] .rec-state {
-  color: var(--accent);
+  color: #f7768e;
 }
 
 .rec-badge[data-status='paused'],
@@ -4303,4 +4295,11 @@ button.attach-name {
 .export-frame.is-pdf {
   height: 40rem;
   max-height: 85svh;
+}
+
+/* The debts tabs: a little room under what comes before the list. */
+.tx-pane > .dash-card,
+.tx-pane > .hint,
+.tx-pane > .tx-actions {
+  margin-bottom: 0.75rem;
 }

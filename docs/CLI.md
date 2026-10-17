@@ -139,7 +139,7 @@ Every command is `meowny <noun> <verb>`, or a single word, with its flags after 
 | [`debts summary`](#cmd-debts-summary) | What friends owe you and what you owe them, in all and for each friend whose balance is not zero. Neither is income or expense. | read token |
 | [`splits preview`](#cmd-splits-preview) | What a split would give each person for a bill of this amount, without saving anything: your part, theirs, whether the numbers add up and how much is left. | read token |
 | [`people create`](#cmd-people-create) | Adds a friend. A friend is a name, 1 to 50 characters, unique among the friends who are not archived. Nothing else about a person is kept. | write token |
-| [`people update`](#cmd-people-update) | Renames a friend or sets their reminder: a date, and optionally a number of days after which it repeats. Fields left out stay as they are. | write token |
+| [`people update`](#cmd-people-update) | Renames a friend. Fields left out stay as they are. The reminder fields are kept for data written before reminders became a setting of each device (every so many days after a debt last changed), and nothing rings from them. | write token |
 | [`people archive`](#cmd-people-archive) | Hides a friend from the lists and pickers. Their balance and history stay, and the name can be used again. | write token |
 | [`people unarchive`](#cmd-people-unarchive) | Brings back an archived friend, if no other friend has taken the name. | write token |
 | [`people settle`](#cmd-people-settle) | Marks a payment between you and a friend: they paid you back if they owe you, you paid them back if you owe them. With no amount it is the whole balance. An amount larger than the debt is accepted: the balance turns around and the answer says how much was over. | write token |
@@ -1844,6 +1844,7 @@ $ meowny export preview --from 2026-01-01 --to 2026-09-30
 
 budgets: 14
 categories: 15
+debtHistory: 7
 documents: 0
 duePayments: 1
 expense: 20434.70
@@ -1864,6 +1865,7 @@ With `--json` (one line; shown indented):
 {
   "budgets": 14,
   "categories": 15,
+  "debtHistory": 7,
   "documents": 0,
   "duePayments": 1,
   "expense": "20434.70",
@@ -1904,7 +1906,7 @@ The app asks you to allow this each time, in a dialog; nothing is written until 
 ```console
 $ meowny export json --out /home/you/everything.json
 
-bytes: 166715
+bytes: 171754
 path: /home/you/everything.json
 ```
 
@@ -1961,7 +1963,7 @@ The app asks you to allow this each time, in a dialog; nothing is written until 
 ```console
 $ meowny export xlsx --out /home/you/budget.xlsx
 
-bytes: 26668
+bytes: 27846
 path: /home/you/budget.xlsx
 ```
 
@@ -2115,7 +2117,7 @@ total: 1
 
 documents
 id  name                createdAt                 documentDate  hasFile  keepOnPhone  linkCount  mediaType        sha256                                                        sizeBytes
- 1  boiler-receipt.pdf  2026-10-17T19:47:53.963Z  2026-10-01    true     false                0  application/pdf  735a7713978716d1e65eb6bf069e2f410eb72ec5b285861be417aeca0fe…         45
+ 1  boiler-receipt.pdf  2026-10-17T21:03:43.076Z  2026-10-01    true     false                0  application/pdf  735a7713978716d1e65eb6bf069e2f410eb72ec5b285861be417aeca0fe…         45
 ```
 
 With `--json` (one line; shown indented):
@@ -2124,7 +2126,7 @@ With `--json` (one line; shown indented):
 {
   "documents": [
     {
-      "createdAt": "2026-10-17T19:47:53.963Z",
+      "createdAt": "2026-10-17T21:03:43.076Z",
       "documentDate": "2026-10-01",
       "hasFile": true,
       "id": "1",
@@ -2163,7 +2165,7 @@ The id can be given as a plain word, as in `meowny documents show 42`, or with `
 ```console
 $ meowny documents show 1
 
-createdAt: 2026-10-17T19:47:53.963Z
+createdAt: 2026-10-17T21:03:43.076Z
 documentDate: 2026-10-01
 hasFile: true
 id: 1
@@ -2182,7 +2184,7 @@ With `--json` (one line; shown indented):
 
 ```json
 {
-  "createdAt": "2026-10-17T19:47:53.963Z",
+  "createdAt": "2026-10-17T21:03:43.076Z",
   "documentDate": "2026-10-01",
   "hasFile": true,
   "id": "1",
@@ -2231,7 +2233,7 @@ With `--json` (one line; shown indented):
 ```json
 {
   "alreadyThere": false,
-  "createdAt": "2026-10-17T19:47:53.963Z",
+  "createdAt": "2026-10-17T21:03:43.076Z",
   "documentDate": "2026-10-01",
   "hasFile": true,
   "id": "1",
@@ -2273,7 +2275,7 @@ With `--json` (one line; shown indented):
 
 ```json
 {
-  "createdAt": "2026-10-17T19:47:53.963Z",
+  "createdAt": "2026-10-17T21:03:43.076Z",
   "documentDate": "2026-10-01",
   "hasFile": true,
   "id": "1",
@@ -2548,7 +2550,7 @@ With `--json` (one line; shown indented):
 
 *write token*
 
-Renames a friend or sets their reminder: a date, and optionally a number of days after which it repeats. Fields left out stay as they are.
+Renames a friend. Fields left out stay as they are. The reminder fields are kept for data written before reminders became a setting of each device (every so many days after a debt last changed), and nothing rings from them.
 
 ```text
 meowny people update <id> [--name <text>] [--remind-on <date>] [--remind-every-days <number>]
@@ -2558,9 +2560,9 @@ meowny people update <id> [--name <text>] [--remind-on <date>] [--remind-every-d
 | --- | --- | --- |
 | `--id` (required) | id | The friend. |
 | `--name` | text | The new name. |
-| `--remind-on` | date | The day to be reminded of the debt, or null for no reminder. |
+| `--remind-on` | date | Not used for reminders any more; kept as it was written. Null clears it. |
 | `--clear-remind-on` | no value | Clears `--remind-on`. |
-| `--remind-every-days` | number | Repeat the reminder every this many days, 1 to 365, or null for once. |
+| `--remind-every-days` | number | Not used for reminders any more; kept as it was written, 1 to 365, or null. |
 | `--clear-remind-every-days` | no value | Clears `--remind-every-days`. |
 
 Only the flags you give change. A reminder is a date and, optionally, a number of days after which it repeats; `--clear-remind-on` removes both. The app rings it (batch of the phase that is not built yet): for now it is kept.
@@ -3233,7 +3235,7 @@ The port is in `api.json`. `meowny schema --app` prints every route with its arg
 | `debts.summary` | read | none | What friends owe you and what you owe them, in all and for each friend whose balance is not zero. Neither is income or expense. |
 | `splits.preview` | read | `amount` (required), `mode` (required), `mine`, `people`, `guests`, `values` | What a split would give each person for a bill of this amount, without saving anything: your part, theirs, whether the numbers add up and how much is left. |
 | `people.create` | write | `name` (required) | Adds a friend. A friend is a name, 1 to 50 characters, unique among the friends who are not archived. Nothing else about a person is kept. |
-| `people.update` | write | `id` (required), `name`, `remindOn`, `remindEveryDays` | Renames a friend or sets their reminder: a date, and optionally a number of days after which it repeats. Fields left out stay as they are. |
+| `people.update` | write | `id` (required), `name`, `remindOn`, `remindEveryDays` | Renames a friend. Fields left out stay as they are. The reminder fields are kept for data written before reminders became a setting of each device (every so many days after a debt last changed), and nothing rings from them. |
 | `people.archive` | write | `id` (required) | Hides a friend from the lists and pickers. Their balance and history stay, and the name can be used again. |
 | `people.unarchive` | write | `id` (required) | Brings back an archived friend, if no other friend has taken the name. |
 | `people.settle` | write | `id` (required), `amount`, `date`, `note` | Marks a payment between you and a friend: they paid you back if they owe you, you paid them back if you owe them. With no amount it is the whole balance. An amount larger than the debt is accepted: the balance turns around and the answer says how much was over. |

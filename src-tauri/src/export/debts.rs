@@ -133,21 +133,40 @@ pub(crate) fn people(conn: &Connection, sel: &Parsed, lines: &[LineRow], entries
     Ok(out)
 }
 
-/// A line of the history of debts in a report: a part of a bill or an entry of the ledger, of one friend.
-pub(crate) struct HistoryLine {
-    pub(crate) date: String,
-    pub(crate) friend: String,
-    /// `BILL` for a part of a shared bill, otherwise the kind of the entry.
-    pub(crate) kind: String,
-    /// The name of the bill, or the note of the entry.
-    pub(crate) what: String,
-    /// What it did to what the friend owes you: positive when they owe you more.
-    pub(crate) effect: i64,
-    /// What the friend owed you after the line, counting every line there is.
-    pub(crate) balance: i64,
+/// The history of debts an export holds, oldest first: the lines of the friends and the recurring payments that were paid or are due, in the
+/// dates. With a limit, as in the ledger above: the entries only when they were asked for (`entries`), and the parts of bills and the
+/// recurring payments only those of what the export holds (a part of a bill belongs to a transaction, a payment is a transaction or a
+/// recurring item of a category). A balance is only kept when no transaction is left out of what it adds up.
+pub(crate) fn history_lines(conn: &Connection, sel: &Parsed, today: &str, entries: bool) -> Result<Vec<crate::debts::history::HistoryLine>, AppError> {
+    use crate::debts::history::{self, PAYMENT_DUE, PAYMENT_PAID};
+    let held: std::collections::HashSet<i64> = super::transactions(conn, sel)?.iter().map(|t| t.id).collect();
+    let scope = history::Scope { from: sel.from.as_deref(), to: sel.to.as_deref(), person: None };
+    let keep_balance = !sel.narrows_transactions();
+    let mut out = Vec::new();
+    for mut line in history::lines(conn, today, &scope)? {
+        let transaction = line.transaction_id.as_deref().and_then(|id| id.parse::<i64>().ok());
+        let keep = match line.kind.as_str() {
+            "BILL" => transaction.is_some_and(|id| held.contains(&id)),
+            PAYMENT_PAID => transaction.is_some_and(|id| held.contains(&id)),
+            PAYMENT_DUE => sel.kind != Some(super::Kind::Income) && sel.categories.as_ref().is_none_or(|ids| line.category_id.is_some_and(|id| ids.contains(&id))),
+            _ => entries,
+        };
+        if !keep {
+            continue;
+        }
+        if !keep_balance {
+            line.balance = None;
+            line.balance_minor = None;
+        }
+        out.push(line);
+        if out.len() > MAX_HISTORY_LINES {
+            return Err(AppError::InvalidInput);
+        }
+    }
+    Ok(out)
 }
 
-/// A recurring payment that has come due and is not paid or skipped, as a report lists it with the debts.
+/// A recurring payment that has come due and is not paid or skipped, as a report lists it.
 pub(crate) struct DueLine {
     pub(crate) name: String,
     /// The day it fell due.
@@ -158,69 +177,57 @@ pub(crate) struct DueLine {
 
 /// What a report says about debts, for the months it covers.
 pub(crate) struct DebtsPart {
-    /// The recurring payments that have come due as of today (not as of the months: what is due is a matter of the day), listed with the
-    /// friends.
-    pub(crate) due: Option<Vec<DueLine>>,
     /// Each friend who owed or was owed something on the last day, the biggest first: what they owed you (negative: you owed them).
     pub(crate) friends: Option<Vec<(String, i64)>>,
-    /// Every line of every friend inside the months, by date.
-    pub(crate) history: Option<Vec<HistoryLine>>,
-    /// Whether the balance after each line may be shown. With some categories chosen it is not: the balance adds up bills that the report
-    /// leaves out, and the parts of those bills are not in the history either.
+    /// The recurring payments that have come due as of today (not as of the months: what is due is a matter of the day).
+    pub(crate) due: Option<Vec<DueLine>>,
+    /// Every line of the history inside the months, by date.
+    pub(crate) history: Option<Vec<crate::debts::history::HistoryLine>>,
+    /// Whether the balance after each line may be shown (see `history_lines`).
     pub(crate) show_balance: bool,
 }
 
-/// The most lines of the history of debts a report holds.
+/// The most lines of the history of debts an export or a report holds.
 pub(crate) const MAX_HISTORY_LINES: usize = 20_000;
 
-/// The debts of a report: who owed what on the last day of its months (`friends`), and what happened in those months (`history`). Both come
-/// from the statements of the friends, so they are the numbers of the debts screens. The ledger has no category, so the categories of the
-/// report do not narrow its entries; they narrow the parts of bills, which belong to a transaction of a category.
+/// The debts of a report: who owed what on the last day of its months (`friends`), the payments that are due (`due`), and what happened in
+/// those months (`history`). All come from the same functions as the debts screens, so the numbers are theirs. The ledger has no category,
+/// so the categories of the report do not narrow its entries; they narrow the parts of bills and the payments.
 pub(crate) fn report_part(
     conn: &Connection,
     sel: &Parsed,
     first_day: &str,
     last_day: &str,
-    friends: bool,
-    history: bool,
+    wanted: (bool, bool, bool),
     today: &str,
 ) -> Result<DebtsPart, AppError> {
-    let held: std::collections::HashSet<i64> = super::transactions(conn, sel)?.iter().map(|t| t.id).collect();
-    let mut owing: Vec<(String, i64)> = Vec::new();
-    let mut lines: Vec<(String, usize, HistoryLine)> = Vec::new();
-    for person in crate::debts::people::list(conn, true)? {
-        let statement = crate::debts::ledger::statement_in(conn, person.id)?;
-        if friends {
+    let (friends, due, history) = wanted;
+    let owing = if friends {
+        let mut owing: Vec<(String, i64)> = Vec::new();
+        for person in crate::debts::people::list(conn, true)? {
+            let statement = crate::debts::ledger::statement_in(conn, person.id)?;
             let balance = statement.lines.iter().rev().find(|l| l.date.as_str() <= last_day).map_or(0, |l| l.balance_minor);
             if balance != 0 {
                 owing.push((person.name.clone(), balance));
             }
         }
-        if history {
-            for line in statement.lines.iter().filter(|l| l.date.as_str() >= first_day && l.date.as_str() <= last_day) {
-                let in_report = line.kind != "BILL" || line.transaction_id.as_deref().and_then(|id| id.parse::<i64>().ok()).is_some_and(|id| held.contains(&id));
-                if !in_report {
-                    continue;
-                }
-                let at = lines.len();
-                lines.push((
-                    person.name.clone(),
-                    at,
-                    HistoryLine { date: line.date.clone(), friend: person.name.clone(), kind: line.kind.clone(), what: line.what.clone(), effect: line.effect_minor, balance: line.balance_minor },
-                ));
-                if lines.len() > MAX_HISTORY_LINES {
-                    return Err(AppError::InvalidInput);
-                }
-            }
-        }
-    }
-    owing.sort_by(|a, b| (b.1.abs(), a.0.to_lowercase()).cmp(&(a.1.abs(), b.0.to_lowercase())));
-    lines.sort_by(|a, b| (&a.2.date, a.0.to_lowercase(), a.1).cmp(&(&b.2.date, b.0.to_lowercase(), b.1)));
-    let due = if friends {
-        let items = super::due_payments(conn, sel, today)?;
-        Some(items.into_iter().map(|item| DueLine { name: item.name, date: item.next_due_date, amount: item.amount.as_deref().and_then(|a| crate::money::parse_amount(a).ok()) }).collect())
+        owing.sort_by(|a, b| (b.1.abs(), a.0.to_lowercase()).cmp(&(a.1.abs(), b.0.to_lowercase())));
+        Some(owing)
     } else {
         None
     };
-    Ok(DebtsPart { due, friends: friends.then_some(owing), history: history.then(|| lines.into_iter().map(|l| l.2).collect()), show_balance: sel.categories.is_none() })
+    let due = if due {
+        let items = super::due_payments(conn, sel, today)?;
+        Some(items.into_iter().map(|d| DueLine { name: d.name, date: d.due_date, amount: d.amount_minor }).collect())
+    } else {
+        None
+    };
+    let history = if history {
+        // the dates of the report are its months, not those of `sel` (which has them too, as whole months)
+        let _ = (first_day, last_day);
+        Some(history_lines(conn, sel, today, true)?)
+    } else {
+        None
+    };
+    Ok(DebtsPart { friends: owing, due, history, show_balance: !sel.narrows_transactions() })
 }

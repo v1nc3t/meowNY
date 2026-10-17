@@ -37,6 +37,8 @@ test('the English words are the ones the command line uses', () => {
   assert.equal(labels.historyTitle, 'History of debts')
   assert.equal(labels.dueTitle, 'Due payments')
   assert.equal(labels.dueTotal, 'Total due')
+  assert.equal(labels.paidPayment, 'recurring payment paid late')
+  assert.equal(labels.duePayment, 'recurring payment overdue')
   assert.equal(labels.owedToYou, 'Owed to you')
   assert.equal(labels.settled, 'All settled.')
   assert.equal(labels.nobody, 'Nobody owes anything.')

@@ -83,6 +83,7 @@ function ExportForm({ today, settings, categories }: { today: Today; settings: M
   const [includeTransactions, setIncludeTransactions] = useState(false)
   const [showDescriptions, setShowDescriptions] = useState(false)
   const [includeDebts, setIncludeDebts] = useState(false)
+  const [includeDuePayments, setIncludeDuePayments] = useState(false)
   const [includeDebtHistory, setIncludeDebtHistory] = useState(false)
   const [preview, setPreview] = useState<Preview | null>(null)
   const [fileText, setFileText] = useState<{ format: 'json' | 'csv'; data: TextPreview } | null>(null)
@@ -103,8 +104,9 @@ function ExportForm({ today, settings, categories }: { today: Today; settings: M
     includeTransactions,
     showDescriptions: includeTransactions && showDescriptions,
     includeDebts,
+    includeDuePayments,
     includeDebtHistory,
-    ...(includeDebts || includeDebtHistory ? { debtsLabels: debtsLabels() } : {}),
+    ...(includeDebts || includeDuePayments || includeDebtHistory ? { debtsLabels: debtsLabels() } : {}),
     page,
     format: look,
     labels: reportLabels(periodLabel(months.fromMonth, months.toMonth, language)),
@@ -267,6 +269,7 @@ function ExportForm({ today, settings, categories }: { today: Today; settings: M
     recurring: t('nav.recurring'),
     documents: t('nav.documents'),
     people: t('nav.debts'),
+    due: t('debts.dueTitle'),
     ledger: t('debts.historyTitle'),
     history: t('export.history'),
   }
@@ -481,6 +484,10 @@ function ExportForm({ today, settings, categories }: { today: Today; settings: M
                 <input type="checkbox" checked={includeDebts} onChange={(e) => setIncludeDebts(e.target.checked)} />
               </label>
               <label className="export-switch">
+                {t('export.includeDuePayments')}
+                <input type="checkbox" checked={includeDuePayments} onChange={(e) => setIncludeDuePayments(e.target.checked)} />
+              </label>
+              <label className="export-switch">
                 {t('export.includeDebtHistory')}
                 <input type="checkbox" checked={includeDebtHistory} onChange={(e) => setIncludeDebtHistory(e.target.checked)} />
               </label>
@@ -524,8 +531,8 @@ function ExportForm({ today, settings, categories }: { today: Today; settings: M
                 {listed && hasPart('documents') && preview.documents > 0 && <Row label={t('nav.documents')} value={String(preview.documents)} />}
                 {listed && (hasPart('transactions') || hasPart('ledger')) && preview.splitBills > 0 && <Row label={t('export.sharedBills')} value={String(preview.splitBills)} />}
                 {listed && hasPart('people') && preview.people > 0 && <Row label={t('nav.debts')} value={String(preview.people)} />}
-                {listed && hasPart('people') && preview.duePayments > 0 && <Row label={t('debts.dueTitle')} value={String(preview.duePayments)} />}
-                {listed && hasPart('ledger') && preview.ledger > 0 && <Row label={t('debts.historyTitle')} value={String(preview.ledger)} />}
+                {listed && hasPart('due') && preview.duePayments > 0 && <Row label={t('debts.dueTitle')} value={String(preview.duePayments)} />}
+                {listed && hasPart('ledger') && preview.debtHistory > 0 && <Row label={t('debts.historyTitle')} value={String(preview.debtHistory)} />}
                 {(format === 'json' || format === 'csv' || (format === 'pdf' && includeTransactions)) && preview.history > 0 && <Row label={t('export.history')} value={String(preview.history)} />}
               </div>
             )

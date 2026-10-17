@@ -503,7 +503,7 @@ impl Builder<'_> {
     }
 
     /// Who owed what on the last day: a line for each friend, and under them what is owed to you, what you owe, and the net.
-    fn debts(&mut self, friends: &[(String, i64)], due: &[crate::export::debts::DueLine], words: &DebtsLabels) {
+    fn debts(&mut self, friends: &[(String, i64)], words: &DebtsLabels) {
         let title = words.summary_title.clone();
         self.y += 12.0;
         self.section_title(&title, 20.0 * 2.0);
@@ -512,7 +512,6 @@ impl Builder<'_> {
             let nobody = words.nobody.clone();
             self.text(self.left, self.y + 10.0, 9.5, false, MUTED, &nobody);
             self.y += 22.0;
-            self.due_payments(due, words);
             return;
         }
         for (name, balance) in friends {
@@ -541,18 +540,22 @@ impl Builder<'_> {
             self.y += row;
         }
         self.y += 14.0;
-        self.due_payments(due, words);
     }
 
     /// The recurring payments that have come due, each with the day it fell due and what it is for, and what they come to.
     fn due_payments(&mut self, due: &[crate::export::debts::DueLine], words: &DebtsLabels) {
         if due.is_empty() {
+            let title = words.due_title.clone();
+            self.y += 12.0;
+            self.section_title(&title, 40.0);
+            let nobody = words.nobody.clone();
+            self.text(self.left, self.y + 10.0, 9.5, false, MUTED, &nobody);
+            self.y += 22.0;
             return;
         }
         let title = words.due_title.clone();
-        self.ensure(20.0 + 17.0 * 2.0);
-        self.text(self.left, self.y + 10.0, 9.5, true, MUTED, &title.to_uppercase());
-        self.y += 17.0;
+        self.y += 12.0;
+        self.section_title(&title, 20.0 + 17.0 * 2.0);
         let row = 17.0;
         for line in due {
             self.ensure(row);
@@ -577,7 +580,7 @@ impl Builder<'_> {
 
     /// Every line of every friend in the months of the report, by date: the friend, what it was, what it changed and (when it may be
     /// shown) what the friend owed you after it.
-    fn debt_history(&mut self, lines: &[crate::export::debts::HistoryLine], words: &DebtsLabels, show_balance: bool) {
+    fn debt_history(&mut self, lines: &[crate::debts::history::HistoryLine], words: &DebtsLabels, show_balance: bool) {
         let title = words.history_title.clone();
         self.y += 4.0;
         self.section_title(&title, 20.0 + 17.0 * 2.0);
@@ -617,17 +620,27 @@ impl Builder<'_> {
             }
             let base = Self::baseline(self.y, row, 8.5);
             self.text(self.left, base, 8.5, false, MUTED, &self.fmt.date(&line.date));
-            self.text_fit(friend_x, base, 8.5, false, INK, &line.friend, friend_w);
+            self.text_fit(friend_x, base, 8.5, false, INK, line.friend.as_deref().unwrap_or(""), friend_w);
             let what = match (words.kind(&line.kind), line.what.is_empty()) {
                 (kind, true) => kind.to_string(),
                 (kind, false) => format!("{kind}: {}", line.what),
             };
             self.text_fit(what_x, base, 8.5, false, INK, &what, what_w);
-            let signed = if line.effect >= 0 { format!("+{}", self.fmt.money(line.effect)) } else { self.fmt.money(line.effect) };
-            // money that went out to a friend is red, and money that came back is green, as in the statement of a friend
-            self.text_right(change_right, base, 8.5, false, if line.effect > 0 { OVER_TEXT } else { INCOME }, &signed);
-            if show_balance {
-                self.text_right(balance_right, base, 8.5, true, INK, &self.fmt.money(line.balance));
+            match line.effect_minor {
+                // a friend's line: what it did to what they owe you, red when money went out to them and green when it came back, as in
+                // their statement, and what they owed after it
+                Some(effect) => {
+                    let signed = if effect >= 0 { format!("+{}", self.fmt.money(effect)) } else { self.fmt.money(effect) };
+                    self.text_right(change_right, base, 8.5, false, if effect > 0 { OVER_TEXT } else { INCOME }, &signed);
+                    if let (true, Some(balance)) = (show_balance, line.balance_minor) {
+                        self.text_right(balance_right, base, 8.5, true, INK, &self.fmt.money(balance));
+                    }
+                }
+                // a recurring payment: what it is for (a dash if the bill has no fixed amount and is only due), with no balance
+                None => {
+                    let amount = if line.kind == crate::debts::history::PAYMENT_DUE && line.amount_minor == 0 { "\u{2013}".to_string() } else { self.fmt.money(line.amount_minor) };
+                    self.text_right(change_right, base, 8.5, false, MUTED, &amount);
+                }
             }
             self.line(self.left, self.y + row, self.right, self.y + row, 0.3, GRID);
             self.y += row;
@@ -695,7 +708,10 @@ pub fn build(data: &ReportData, options: &ReportOptions) -> Result<Doc, AppError
         }
         if let (Some(part), Some(words)) = (&data.debts, &options.debts_labels) {
             if let Some(friends) = &part.friends {
-                b.debts(friends, part.due.as_deref().unwrap_or(&[]), words);
+                b.debts(friends, words);
+            }
+            if let Some(due) = &part.due {
+                b.due_payments(due, words);
             }
             if let Some(lines) = &part.history {
                 b.debt_history(lines, words, part.show_balance);

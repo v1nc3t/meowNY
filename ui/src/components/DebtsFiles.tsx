@@ -1,10 +1,10 @@
 import { useState } from 'react'
-import { debts } from '../api/debts'
+import type { DebtsFileRequest } from '../api/debts'
 import { debtsLabels } from '../api/debtsLabels'
 import { displayFormat } from '../api/displayFormat'
-import { errorText } from '../api/invoke'
 import { useMoneySettings } from '../hooks/useMoneySettings'
 import { useI18n } from '../i18n/context'
+import DebtsFilePreview from './DebtsFilePreview'
 import Pick, { PickOption } from './Pick'
 
 const FORMATS = [
@@ -16,32 +16,28 @@ const FORMATS = [
 type Format = (typeof FORMATS)[number]['value']
 
 /**
- * Saves who owes what, or one friend's statement, as a text, CSV or PDF file, where the person says. The app sends it to nobody: the
- * person sends it with whatever they already use. `personId` makes it the statement of that friend.
+ * Saves one friend's statement as a text, CSV or PDF file, where the person says. The file is shown first, in a preview, and written only
+ * when they press save there. The app sends it to nobody: the person sends it with whatever they already use.
  */
-export default function DebtsFiles({ personId, onSaved, onFailed }: { personId?: string; onSaved: () => void; onFailed: (text: string) => void }) {
+export default function DebtsFiles({ personId, onSaved, onFailed }: { personId: string; onSaved: () => void; onFailed: (text: string) => void }) {
   const { t } = useI18n()
   const { settings } = useMoneySettings()
   const [format, setFormat] = useState<Format>('PDF')
   const [menu, setMenu] = useState(false)
-  const [busy, setBusy] = useState(false)
+  const [asking, setAsking] = useState<{ request: DebtsFileRequest; title: string } | null>(null)
 
-  async function save(what: 'SUMMARY' | 'STATEMENT' | 'LEDGER', as: 'TEXT' | 'CSV' | 'PDF') {
-    if (busy || !settings) return
-    setBusy(true)
-    try {
-      const saved = await debts.save({
-        what,
+  function ask(as: 'TEXT' | 'CSV' | 'PDF') {
+    if (!settings) return
+    setAsking({
+      request: {
+        what: 'STATEMENT',
         format: as,
-        ...(personId && what === 'STATEMENT' ? { personId } : {}),
+        personId,
         labels: debtsLabels(),
         ...(as === 'PDF' ? { display: displayFormat(settings.locale, settings.currency) } : {}),
-      })
-      if (saved) onSaved()
-    } catch (failure) {
-      onFailed(errorText(failure))
-    }
-    setBusy(false)
+      },
+      title: t('debts.statement'),
+    })
   }
 
   return (
@@ -67,14 +63,21 @@ export default function DebtsFiles({ personId, onSaved, onFailed }: { personId?:
           </PickOption>
         ))}
       </Pick>
-      <button type="button" disabled={busy} onClick={() => void save(personId ? 'STATEMENT' : 'SUMMARY', format)}>
-        {t(personId ? 'debts.saveStatement' : 'debts.saveSummary')}
+      <button type="button" onClick={() => ask(format)}>
+        {t('debts.saveStatement')}
       </button>
-      {personId ? null : (
-        <button type="button" disabled={busy} onClick={() => void save('LEDGER', 'CSV')}>
-          {t('debts.saveLedger')}
-        </button>
-      )}
+      {asking ? (
+        <DebtsFilePreview
+          request={asking.request}
+          title={asking.title}
+          onClose={() => setAsking(null)}
+          onSaved={() => {
+            setAsking(null)
+            onSaved()
+          }}
+          onFailed={onFailed}
+        />
+      ) : null}
     </div>
   )
 }

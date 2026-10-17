@@ -9,7 +9,6 @@ import ConfirmModal from '../components/ConfirmModal'
 import DebtsFiles from '../components/DebtsFiles'
 import EntryModal from '../components/EntryModal'
 import FriendNameModal from '../components/FriendNameModal'
-import ReminderBlock from '../components/ReminderBlock'
 import SettleModal from '../components/SettleModal'
 import { useClipCounts } from '../hooks/useClipCounts'
 import { useFocusRequest, useJumpTo } from '../hooks/useFocusRequest'
@@ -177,9 +176,6 @@ function FriendView({ settings, now }: { settings: MoneySettings; now: Today }) 
       <div className="tx-pane wide">
         <div className="dash-card">
           <p className={`debt-total debt-${tone}`}>{summaryText}</p>
-          {person.remindOn && tone !== 'even' ? (
-            <p className="hint">{t('debts.reminderBadge', { date: formatDate(person.remindOn, settings.locale) })}</p>
-          ) : null}
           <div className="card-actions">
             <Link to="/app/debts">{t('debts.back')}</Link>
             <button type="button" onClick={() => setDialog({ kind: 'rename' })}>
@@ -190,7 +186,6 @@ function FriendView({ settings, now }: { settings: MoneySettings; now: Today }) 
             </button>
           </div>
         </div>
-        <ReminderBlock key={`${person.remindOn}-${person.remindEveryDays}`} person={person} today={now.date} onDone={done} />
         <h2>{t('debts.ledger')}</h2>
         {lines.length === 0 ? <p>{t('debts.noLines')}</p> : null}
         <ul className="card-list">

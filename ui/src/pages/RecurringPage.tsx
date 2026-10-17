@@ -1,4 +1,5 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
+import { useLocation } from 'react-router-dom'
 import AddCategoryModal from '../components/AddCategoryModal'
 import AttachArea from '../components/AttachArea'
 import ClipPreview from '../components/ClipPreview'
@@ -81,6 +82,16 @@ function RecurringView({ settings, now }: { settings: MoneySettings; now: Today 
   // a document can send the person here for one of its recurring items: the row is scrolled to and outlined
   const { request: focus, done: focusDone } = useFocusRequest('recurring')
   useJumpTo(focus, focusDone, items)
+  // the debts screen can send the person to pay a recurring payment that is due: the dialog of that item opens, once
+  const payAsked = (useLocation().state as { pay?: boolean } | null)?.pay === true
+  const payOpened = useRef<string | null>(null)
+  useEffect(() => {
+    if (!focus || !payAsked || !items || payOpened.current === focus.id) return
+    const item = items.find((candidate) => candidate.id === focus.id)
+    if (!item) return
+    payOpened.current = focus.id
+    openPay(item)
+  })
   const onSplitReady = useCallback((ready: boolean) => setSplit((current) => (current.ready === ready ? current : { ...current, ready })), [])
   const removedFriends = useMemo(() => new Set(friends.filter((friend) => friend.archived).map((friend) => friend.id)), [friends])
   const categoryNames = useMemo(() => new Map(categories.map((category) => [category.id, category.name])), [categories])

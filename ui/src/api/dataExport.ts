@@ -29,9 +29,10 @@ export type ExportSelection = {
 
 /**
  * The parts of a JSON or Excel file that can be left out: `people` are the friends and what they owe, `ledger` the history of debts (money
- * lent, borrowed and paid back, and the parts of shared bills). The change history is only ever in a file with no limits.
+ * lent, borrowed and paid back, the parts of shared bills, and the recurring payments paid or due), `due` the recurring payments that have come
+ * due. The change history is only ever in a file with no limits.
  */
-export const EXPORT_SECTIONS = ['transactions', 'categories', 'budgets', 'recurring', 'documents', 'people', 'ledger', 'history'] as const
+export const EXPORT_SECTIONS = ['transactions', 'categories', 'budgets', 'recurring', 'documents', 'people', 'due', 'ledger', 'history'] as const
 export type ExportSection = (typeof EXPORT_SECTIONS)[number]
 
 const date = z.string().regex(/^\d{4}-\d{2}-\d{2}$/)
@@ -59,6 +60,8 @@ export const Preview = z.object({
   splitBills: count,
   /** Recurring payments that have come due and are listed with the debts. */
   duePayments: count,
+  /** Lines of the history of debts: those of the friends and the recurring payments paid or due. */
+  debtHistory: count,
 })
 export type Preview = z.infer<typeof Preview>
 
@@ -102,6 +105,8 @@ export type ReportOptions = {
   showDescriptions?: boolean
   /** Who owed what on the last day of the months. */
   includeDebts?: boolean
+  /** The recurring payments that have come due and are not paid or skipped. */
+  includeDuePayments?: boolean
   /** Every line of the debts of every friend in the months. */
   includeDebtHistory?: boolean
   /** The words of the two parts above; needed when either is on. */

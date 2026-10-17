@@ -1,7 +1,11 @@
-//! Reminders about debts (`docs/debts-design.md`, section 11). A reminder belongs to a friend: a day and, optionally, a number of days
-//! after which it comes again. It is **live while the balance is not 0** (settling to 0 clears it, and a balance that reaches 0 any
-//! other way makes it quiet). Nothing is written when a reminder comes due, so two devices never fight over one: each device keeps for
+//! Reminders about debts (`docs/debts-design.md`, section 11). One setting for all of them: **every so many days**. Every friend whose balance
+//! is not 0 is reminded that many days after the day of the latest line of their statement (the last time the debt changed), and again
+//! after the same number of days until the debt is settled or changes (a new line starts the count again). Nothing is stored about a
+//! reminder and nothing is written when one comes due, so two devices never fight over one: each device has its own period, keeps for
 //! itself which day it has shown, and rings at its own time of day. This module only says which days those are.
+//!
+//! (The `remind_on` and `remind_every_days` of a friend are not read here any more: they stay in the data, the sync, the backups and the
+//! command API so that nothing written before is lost, and nothing rings from them.)
 
 use chrono::{Duration, NaiveDate};
 use serde::Serialize;
@@ -9,7 +13,11 @@ use std::collections::BTreeMap;
 
 use rusqlite::Connection;
 
+use super::ledger;
 use crate::vault::AppError;
+
+/// The longest period a device may ask for.
+pub const MAX_EVERY_DAYS: u32 = 365;
 
 /// How many days a phone schedules ahead: the next few distinct days with a reminder.
 pub const SCHEDULED_DAYS: usize = 4;
@@ -80,28 +88,34 @@ pub struct Reminders {
     pub upcoming: Vec<Day>,
 }
 
-/// Which friends are due and which days come next, for `today` (a day in the person's time zone). Friends who are not on the list any more
-/// still count: the money is still owed.
-pub fn reminders(conn: &Connection, today: &str) -> Result<Reminders, AppError> {
-    if day(today).is_none() {
+/// Which friends are due and which days come next, for `today` (a day in the person's time zone) and a period of `every_days` days (0 is no
+/// reminders). Friends who are not on the list any more still count: the money is still owed.
+pub fn reminders(conn: &Connection, today: &str, every_days: u32) -> Result<Reminders, AppError> {
+    if day(today).is_none() || every_days > MAX_EVERY_DAYS {
         return Err(AppError::InvalidInput);
     }
+    let mut out = Reminders { today: today.to_string(), due: Vec::new(), upcoming: Vec::new() };
+    if every_days == 0 {
+        return Ok(out);
+    }
     let mut statement = conn.prepare(
-        "SELECT p.id, p.name, p.remind_on, p.remind_every_days FROM people p JOIN person_balances b ON b.person_id = p.id
-         WHERE p.remind_on IS NOT NULL AND p.merged_into IS NULL AND b.balance_minor != 0 ORDER BY p.remind_on, p.id",
+        "SELECT p.id FROM people p JOIN person_balances b ON b.person_id = p.id WHERE p.merged_into IS NULL AND b.balance_minor != 0 ORDER BY p.id",
     )?;
-    let rows: Vec<(i64, String, String, Option<u32>)> = statement.query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)))?.collect::<Result<_, _>>()?;
-    let mut due = Vec::new();
+    let ids: Vec<i64> = statement.query_map([], |r| r.get(0))?.collect::<Result<_, _>>()?;
     let mut days: BTreeMap<String, u32> = BTreeMap::new();
-    for (id, name, remind_on, every) in rows {
-        if let Some(due_on) = latest_until(&remind_on, every, today) {
-            due.push(Due { person_id: id.to_string(), name, due_on });
+    for id in ids {
+        let statement = ledger::statement_in(conn, id)?;
+        // the debt last changed on the day of the latest line; the first reminder comes a period after it
+        let Some(changed) = statement.lines.iter().map(|l| l.date.as_str()).max().and_then(day) else { continue };
+        let first = text(changed + Duration::days(i64::from(every_days)));
+        if let Some(due_on) = latest_until(&first, Some(every_days), today) {
+            out.due.push(Due { person_id: id.to_string(), name: statement.person.name.clone(), due_on });
         }
-        for date in days_from(&remind_on, every, today, SCHEDULED_DAYS) {
+        for date in days_from(&first, Some(every_days), today, SCHEDULED_DAYS) {
             *days.entry(date).or_default() += 1;
         }
     }
-    due.sort_by(|a, b| a.due_on.cmp(&b.due_on).then(a.person_id.len().cmp(&b.person_id.len())).then(a.person_id.cmp(&b.person_id)));
-    let upcoming = days.into_iter().take(SCHEDULED_DAYS).map(|(date, count)| Day { date, count }).collect();
-    Ok(Reminders { today: today.to_string(), due, upcoming })
+    out.due.sort_by(|a, b| a.due_on.cmp(&b.due_on).then(a.person_id.len().cmp(&b.person_id.len())).then(a.person_id.cmp(&b.person_id)));
+    out.upcoming = days.into_iter().take(SCHEDULED_DAYS).map(|(date, count)| Day { date, count }).collect();
+    Ok(out)
 }

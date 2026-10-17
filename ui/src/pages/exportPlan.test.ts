@@ -218,3 +218,16 @@ test('the history of debts is a part of its own, and a limit leaves it out of a 
   assert.equal(problemWith('json', { ...all, sections: ['ledger'] }, 1), null)
   assert.deepEqual(selectionFor('json', { ...all, sections: ['ledger'] }).sections, ['ledger'])
 })
+
+test('the due payments are a part of their own, in a JSON file and in an Excel file, and are not the ledger', () => {
+  assert.ok((EXPORT_SECTIONS as readonly string[]).includes('due'))
+  assert.ok(sectionsFor('json', all).includes('due') && sectionsFor('xlsx', all).includes('due'))
+  // only the due payments: a valid choice that sends just that part, and a limit does not ask for the ledger
+  assert.equal(problemWith('json', { ...all, sections: ['due'] }, 1), null)
+  const only = selectionFor('json', { ...all, kind: 'EXPENSE', sections: ['due'] })
+  assert.deepEqual(only.sections, ['due'])
+  assert.equal('includeDebts' in only, false)
+  // leaving them out of a file with the rest sends the list of the others
+  const rest = selectionFor('xlsx', { ...all, sections: EXPORT_SECTIONS.filter((section) => section !== 'due') })
+  assert.ok(rest.sections && !rest.sections.includes('due') && rest.sections.includes('ledger'))
+})

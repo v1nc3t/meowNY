@@ -406,9 +406,9 @@ fn money_and_ids_are_strings_and_the_only_numbers_are_counts_and_percentages() {
         walk(&ok(&vault, name, args(name)), name, &mut numbers);
     }
     // Counts: `limit`, `offset`, `total` (a page), `intervalCount` (every 2 weeks), `paidCount`, and what an export
-    // would contain (`transactions`, `categories`, `budgets`, `recurring`, `documents`, `people`, `ledger`, `splitBills`, `duePayments`, `history`), the weights of a split template (`mine`, `weight`: proportions, not money), the size of a file in bytes and the number of things it is attached to (`sizeBytes`, `linkCount`), `everyDays` (a backup schedule). Percentages: `pctUsed`,
+    // would contain (`transactions`, `categories`, `budgets`, `recurring`, `documents`, `people`, `ledger`, `splitBills`, `duePayments`, `debtHistory`, `history`), the weights of a split template (`mine`, `weight`: proportions, not money), the size of a file in bytes and the number of things it is attached to (`sizeBytes`, `linkCount`), `everyDays` (a backup schedule). Percentages: `pctUsed`,
     // `share`, `savingsRate`. Everything else, money above all, is a string.
-    let allowed: BTreeSet<String> = ["intervalCount", "limit", "offset", "paidCount", "pctUsed", "savingsRate", "share", "total", "transactions", "categories", "budgets", "recurring", "documents", "people", "ledger", "splitBills", "duePayments", "history", "everyDays", "sizeBytes", "linkCount", "mine", "weight"]
+    let allowed: BTreeSet<String> = ["intervalCount", "limit", "offset", "paidCount", "pctUsed", "savingsRate", "share", "total", "transactions", "categories", "budgets", "recurring", "documents", "people", "ledger", "splitBills", "duePayments", "debtHistory", "history", "everyDays", "sizeBytes", "linkCount", "mine", "weight"]
         .into_iter()
         .map(String::from)
         .collect();

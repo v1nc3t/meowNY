@@ -47,6 +47,9 @@ pub struct Labels {
     /// The recurring payments that have come due, listed with the debts in a report, and their total.
     pub due_title: String,
     pub due_total: String,
+    /// What a recurring payment is called in the history of debts, when it was paid late and when it is overdue.
+    pub paid_payment: String,
+    pub due_payment: String,
     pub owed_to_you: String,
     pub you_owe: String,
     pub net: String,
@@ -78,6 +81,8 @@ impl Labels {
             history_title: s("History of debts"),
             due_title: s("Due payments"),
             due_total: s("Total due"),
+            paid_payment: s("recurring payment paid late"),
+            due_payment: s("recurring payment overdue"),
             owed_to_you: s("Owed to you"),
             you_owe: s("You owe"),
             net: s("Net"),
@@ -101,9 +106,9 @@ impl Labels {
     }
 
     /// Every piece of text, to be checked before it is drawn or written: short, plain, no control characters.
-    pub fn all(&self) -> [&String; 25] {
+    pub fn all(&self) -> [&String; 27] {
         [
-            &self.summary_title, &self.statement_title, &self.history_title, &self.due_title, &self.due_total, &self.owed_to_you, &self.you_owe, &self.net, &self.owes_you, &self.you_owe_them,
+            &self.summary_title, &self.statement_title, &self.history_title, &self.due_title, &self.due_total, &self.paid_payment, &self.due_payment, &self.owed_to_you, &self.you_owe, &self.net, &self.owes_you, &self.you_owe_them,
             &self.nobody, &self.settled, &self.lent, &self.borrowed, &self.repaid_to_me, &self.repaid_by_me, &self.bill, &self.date,
             &self.what, &self.change, &self.balance, &self.name, &self.amount, &self.page, &self.statement_title,
         ]
@@ -123,6 +128,8 @@ impl Labels {
             "BORROWED" => &self.borrowed,
             "REPAID_TO_ME" => &self.repaid_to_me,
             "REPAID_BY_ME" => &self.repaid_by_me,
+            "PAYMENT_PAID" => &self.paid_payment,
+            "PAYMENT_DUE" => &self.due_payment,
             _ => &self.bill,
         }
     }

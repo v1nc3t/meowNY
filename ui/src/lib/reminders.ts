@@ -3,8 +3,13 @@ import type { Reminders } from '../api/debts'
 /** The time of day a reminder rings, on this device: "HH:MM". Each device has its own. */
 export const DEFAULT_REMINDER_TIME = '09:00'
 const TIME_KEY = 'debt-reminder-time'
+const EVERY_KEY = 'debt-reminder-every'
 const NOTIFIED_KEY = 'debt-reminded'
 const SCHEDULED_KEY = 'debt-scheduled'
+
+/** The periods a device can choose, in days: 0 is no reminders. Each friend with a debt is reminded this many days after the debt last changed, and again after as many. */
+export const REMINDER_PERIODS = [0, 7, 14, 30] as const
+export const DEFAULT_REMINDER_EVERY = 7
 
 /** Hours and minutes of "HH:MM", or null when it is not a time. */
 export function parseTime(text: string): { hours: number; minutes: number } | null {
@@ -35,6 +40,16 @@ export function reminderTime(): string {
 
 export function saveReminderTime(time: string): void {
   if (parseTime(time)) write(TIME_KEY, time)
+}
+
+/** How many days apart this device reminds about a debt (0: never). Each device has its own, like the time of day. */
+export function reminderEvery(): number {
+  const saved = Number(read(EVERY_KEY))
+  return read(EVERY_KEY) !== null && (REMINDER_PERIODS as readonly number[]).includes(saved) ? saved : DEFAULT_REMINDER_EVERY
+}
+
+export function saveReminderEvery(days: number): void {
+  if ((REMINDER_PERIODS as readonly number[]).includes(days)) write(EVERY_KEY, String(days))
 }
 
 /** Which day of each friend's reminder this device has already shown: friend id to day. */
@@ -112,7 +127,7 @@ export function saveScheduledIds(ids: number[]): void {
   write(SCHEDULED_KEY, JSON.stringify(ids))
 }
 
-/** Something that changed a friend's reminder or balance: the phone schedules again. */
+/** Something that changed a friend's debt or the reminder setting: the phone schedules again. */
 export const REMINDERS_CHANGED = 'meowny-reminders-changed'
 
 export function remindersChanged(): void {

@@ -153,7 +153,10 @@ pub struct ReportOptions {
     /// Who owed what on the last day of the months: one line for each friend.
     #[serde(default)]
     pub include_debts: bool,
-    /// Every line of the debts of every friend in the months, with the balance after it.
+    /// The recurring payments that have come due and are not paid or skipped.
+    #[serde(default)]
+    pub include_due_payments: bool,
+    /// Every line of the debts of every friend in the months, with the balance after it, and the recurring payments paid or due in them.
     #[serde(default)]
     pub include_debt_history: bool,
     /// The words of the two parts above, in the person's language. Needed when either is asked for.
@@ -321,8 +324,9 @@ fn load(conn: &Connection, options: &ReportOptions, now: chrono::DateTime<chrono
         return Err(AppError::InvalidInput);
     }
 
-    let debts = if options.include_debts || options.include_debt_history {
-        Some(export::debts::report_part(conn, &sel, &first_day.to_string(), &last_day.to_string(), options.include_debts, options.include_debt_history, &export::today_of(conn, now)?)?)
+    let debts = if options.include_debts || options.include_due_payments || options.include_debt_history {
+        let wanted = (options.include_debts, options.include_due_payments, options.include_debt_history);
+        Some(export::debts::report_part(conn, &sel, &first_day.to_string(), &last_day.to_string(), wanted, &export::today_of(conn, now)?)?)
     } else {
         None
     };
@@ -350,7 +354,7 @@ pub fn read(conn: &Connection, options: &ReportOptions) -> Result<Report, AppErr
     read_at(conn, options, chrono::Utc::now())
 }
 
-/// The same, as of `now`: the recurring payments that have come due are the ones due by that day.
+/// The same, as of `now`: the recurring payments that are overdue are the ones whose day is before that day.
 pub(crate) fn read_at(conn: &Connection, options: &ReportOptions, now: chrono::DateTime<chrono::Utc>) -> Result<Report, AppError> {
     options.format.validate()?;
     if options.labels.all().iter().any(|l| l.chars().count() > LABEL_MAX_CHARS || l.chars().any(char::is_control)) {
@@ -360,7 +364,7 @@ pub(crate) fn read_at(conn: &Connection, options: &ReportOptions, now: chrono::D
     if let Some(labels) = &options.debts_labels {
         labels.validate()?;
     }
-    if (options.include_debts || options.include_debt_history) && options.debts_labels.is_none() {
+    if (options.include_debts || options.include_due_payments || options.include_debt_history) && options.debts_labels.is_none() {
         return Err(AppError::InvalidInput);
     }
     let tx = conn.unchecked_transaction()?;
@@ -476,6 +480,7 @@ mod tests {
             include_transactions: false,
             show_descriptions: false,
             include_debts: false,
+            include_due_payments: false,
             include_debt_history: false,
             debts_labels: None,
             page: PageSize::A4,
@@ -1366,7 +1371,7 @@ mod tests {
     }
 
     #[test]
-    fn the_recurring_payments_that_have_come_due_are_listed_under_the_debts_with_what_they_come_to() {
+    fn the_recurring_payments_that_have_come_due_are_a_list_of_their_own_with_every_occurrence_and_what_they_come_to() {
         let w = indebted();
         let item = |name: &str, amount: Option<&str>, category: i64, start: &str| {
             crate::recurring::create(
@@ -1384,7 +1389,8 @@ mod tests {
             )
             .unwrap()
         };
-        // two that have come due by the 15th of March, one that has not, and one that is paused
+        // two that have come due by the 15th of March (the rent twice: the 1st of February and the 1st of March), one that has not, and one
+        // that is paused
         item("Flat rent", Some("900.00"), w.rent, "2026-02-01");
         item("Phone bill", None, w.food, "2026-03-01");
         item("Gym", Some("30.00"), w.rent, "2026-04-01");
@@ -1396,35 +1402,73 @@ mod tests {
             layout::build(&report.0, o).unwrap().texts().iter().map(|t| t.to_string()).collect()
         };
         let has = |text: &[String], needle: &str| text.iter().any(|t| t.contains(needle));
+        let due_only = |from: &str, to: &str| {
+            let mut o = options(from, to);
+            o.include_due_payments = true;
+            o.debts_labels = Some(crate::debts::summary::Labels::english());
+            o
+        };
 
-        let text = say(&with_debts("2026-01", "2026-02", true, false));
-        assert!(has(&text, "DUE PAYMENTS") && has(&text, "Flat rent") && has(&text, "Phone bill"), "{text:?}");
+        let text = say(&due_only("2026-01", "2026-02"));
+        assert!(has(&text, "Due payments") && has(&text, "Flat rent") && has(&text, "Phone bill"), "{text:?}");
+        assert_eq!(text.iter().filter(|t| *t == "Flat rent").count(), 2, "one for each month that came due: {text:?}");
         assert!(has(&text, "2026-02-01") && has(&text, "2026-03-01"), "the day each fell due: {text:?}");
         assert!(!has(&text, "Gym") && !has(&text, "Old paper"), "not due yet, and paused: {text:?}");
         // the total is of the payments that say what they are for; the phone bill says only that it is due
-        assert!(has(&text, "Total due") && text.iter().any(|t| t == "900.00"), "{text:?}");
+        assert!(has(&text, "Total due") && text.iter().any(|t| t == "1,800.00"), "{text:?}");
         assert!(text.iter().any(|t| t == "\u{2013}"), "a bill with no fixed amount has a dash: {text:?}");
-        // with no friend owing anything the due payments are still there
-        assert!(has(&text, "Nobody owes anything") || has(&text, "owes you"), "{text:?}");
+        // a list of its own: the friends are not listed unless they are asked for
+        assert!(!has(&text, "Who owes what"), "{text:?}");
 
-        // asked for the history only: no list of debts, so no due payments
-        let history = say(&with_debts("2026-01", "2026-02", false, true));
-        assert!(!has(&history, "DUE PAYMENTS") && !has(&history, "Flat rent"), "{history:?}");
+        // asked for the friends and the history only: no due payments
+        let others = say(&with_debts("2026-01", "2026-02", true, true));
+        assert!(!has(&others, "Due payments") && !has(&others, "Total due"), "{others:?}");
+        // the history, though, says what is overdue, with the others
+        assert!(has(&others, "recurring payment overdue: Flat rent"), "{others:?}");
 
         // some categories: only the payments of those
-        let mut food = with_debts("2026-01", "2026-02", true, false);
+        let mut food = due_only("2026-01", "2026-02");
         food.category_ids = Some(vec![w.food.to_string()]);
         let limited = say(&food);
         assert!(has(&limited, "Phone bill") && !has(&limited, "Flat rent"), "{limited:?}");
-        // a day before the first one fell due there is nothing to list
+        // before the first one fell due there is nothing to list, and the report says so
         let early: chrono::DateTime<chrono::Utc> = "2026-01-15T12:00:00Z".parse().unwrap();
-        let o = with_debts("2026-01", "2026-02", true, false);
+        let o = due_only("2026-01", "2026-02");
         let none: Vec<String> = layout::build(&read_at(&w.conn, &o, early).unwrap().0, &o).unwrap().texts().iter().map(|t| t.to_string()).collect();
-        assert!(!has(&none, "DUE PAYMENTS") && !has(&none, "Flat rent"), "{none:?}");
-        // a month of nothing but debts, with a payment due, shows both
-        let quiet = with_debts("2026-06", "2026-06", true, false);
-        let report = read_at(&w.conn, &quiet, now).unwrap();
-        let page: Vec<String> = layout::build(&report.0, &quiet).unwrap().texts().iter().map(|t| t.to_string()).collect();
+        assert!(has(&none, "Due payments") && has(&none, "Nobody owes anything") && !has(&none, "Flat rent"), "{none:?}");
+        // a month of nothing but debts, with payments due, shows them and not the empty message
+        let report = read_at(&w.conn, &due_only("2026-06", "2026-06"), now).unwrap();
+        let page: Vec<String> = layout::build(&report.0, &due_only("2026-06", "2026-06")).unwrap().texts().iter().map(|t| t.to_string()).collect();
         assert!(!has(&page, "No transactions in this period.") && has(&page, "Flat rent"), "{page:?}");
+    }
+
+    #[test]
+    fn a_recurring_payment_that_was_paid_is_in_the_history_with_the_day_it_fell_due_and_no_balance() {
+        let w = indebted();
+        let rent = crate::recurring::create(
+            &w.conn,
+            &crate::recurring::NewRecurring {
+                name: "Flat rent".into(),
+                amount: Some("900.00".into()),
+                category_id: w.rent.to_string(),
+                start_date: "2026-01-01".into(),
+                interval_unit: crate::recurring::Unit::Month,
+                interval_count: 1,
+                end_date: Some("2026-02-15".into()),
+                description: None,
+            },
+        )
+        .unwrap();
+        let now: chrono::DateTime<chrono::Utc> = "2026-03-15T12:00:00Z".parse().unwrap();
+        crate::recurring::pay(&w.conn, rent.id, None, Some("2026-01-04"), "2026-03-01").unwrap();
+        let o = with_debts("2026-01", "2026-02", false, true);
+        let report = read_at(&w.conn, &o, now).unwrap();
+        let text: Vec<String> = layout::build(&report.0, &o).unwrap().texts().iter().map(|t| t.to_string()).collect();
+        let has = |needle: &str| text.iter().any(|t| t.contains(needle));
+        assert!(has("recurring payment paid late: Flat rent") && has("recurring payment overdue: Flat rent"), "{text:?}");
+        // the day it was paid, and what was paid
+        assert!(has("2026-01-04") && text.iter().filter(|t| *t == "900.00").count() == 2, "{text:?}");
+        // a friend's lines still have the balance, and the payments do not
+        assert!(has("Balance") && has("65.00"), "{text:?}");
     }
 }

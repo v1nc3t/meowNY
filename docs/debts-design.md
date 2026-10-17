@@ -198,7 +198,9 @@ Row checks on arrival (the screens' own rules): name rule, closed set of kinds, 
 
 ## 11. Reminders
 
-A reminder belongs to a friend: `remind_on` (a date) and, optionally, `remind_every_days`. It is **live while the balance is not 0**: the dates are `remind_on`, then every N days if N is set. Nothing is written when a reminder fires, so two devices never fight over it; each keeps on its own device (webview storage, like `due-notified`) which date it has shown. The **time of day** is a setting of the device (09:00 unless changed). Settling a friend to 0 clears their reminder.
+**Changed on 2026-10-17:** the reminder is no longer set for each friend. It is one setting of each device (settings: never, every week, every 2 weeks, every month; every week unless changed, kept in the webview storage as `debt-reminder-every`), and it applies to **every friend whose balance is not 0**: the first reminder is that many days after the day of the latest line of their statement (the last time the debt changed), and then every period again until the debt is settled; a new line starts the count again. `reminders::reminders(conn, today, every_days)` works the days out from the statements, so nothing new is stored. The friend's `remind_on` and `remind_every_days` are kept in the data, the sync, the backups and the command API (to lose nothing written before, and to avoid a migration and a sync change), and **nothing reads them** for a reminder; the friend's page has no reminder block any more. The rest of this section, about the notifications themselves, still holds.
+
+(Before that change:) A reminder belongs to a friend: `remind_on` (a date) and, optionally, `remind_every_days`. It is **live while the balance is not 0**: the dates are `remind_on`, then every N days if N is set. Nothing is written when a reminder fires, so two devices never fight over it; each keeps on its own device (webview storage, like `due-notified`) which date it has shown. The **time of day** is a setting of the device (09:00 unless changed). Settling a friend to 0 clears their reminder.
 
 The text is the same for everyone, **"meowNY: a debt reminder"** with a count: never a name or an amount, because the app is locked when it shows and a notification can be seen on a lock screen and kept in the system's history. The debts page then shows which friends are due.
 
@@ -220,13 +222,13 @@ New routes, named like the existing ones and given a command by construction thr
 
 Desktop and phone, in all seven languages (the i18n key test covers them).
 
-- **Debts page** (sidebar on the desktop, an icon in the top bar of the phone): "owed to you" and "you owe" at the top; the friends with their balance, the largest first; per friend "mark as paid"; "I lent", "I borrowed", "add friend"; "show removed" for archived friends; "scan a bill" (phone) and "paste a code" (desktop). Due reminders appear as a line above the list.
-- **A friend's page**: the name, the balance, the reminder (date, repeat), the ledger with lines and entries by date and the balance after each, documents, "statement".
+- **Debts page** (sidebar on the desktop, an icon in the top bar of the phone) (changed on 2026-10-17: tabs friends, due payments and history of debts; no totals and no saving on the page; each friend has *edit* (the name, in a dialog), *delete* (taken off the list, which is what "remove" always was: the balance and history stay and "show removed friends" brings them back; a removed friend has *bring back*) and *mark as paid*; "lend", "borrow", "add friend"; "show removed" for archived friends; "scan a bill" (phone) and "paste a code" (desktop). Due reminders appear as a line above the list.
+- **A friend's page**: the name, the balance (no reminder block any more), the ledger with lines and entries by date and the balance after each, documents, "statement".
 - **The bill dialog** (part of the transaction form): section 5. After saving, each friend line has "show code".
 - **The recurring form** has the same split switch and dialog, and the recurring list marks the items that are split (and the ones whose template names an archived friend).
 - **The transaction list**: your part is the amount; a mark `÷4`; the detail shows what was paid and who has which part.
 - **The dashboard** gets a small card with the two numbers, which opens the debts page.
-- **Settings**: the reminder time of this device, and the plain statement of what the desktop and the phone can do.
+- **Settings**: the reminder time and the period of this device, and the plain statement of what the desktop and the phone can do.
 - **The review dialog of a sync** and the sync summary know the new rows.
 
 ## 15. Threats and what stops them

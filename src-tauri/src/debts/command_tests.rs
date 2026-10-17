@@ -1,6 +1,7 @@
 //! The commands of friends, the ledger and shared bills, called the way the page calls them: a name and a JSON body through Tauri's
 //! message layer (its mock runtime), with the vault as managed state. `export_debts` takes the real window's handle and asks where to
-//! save, so it cannot be called on a mock; what it writes is tested in `summary_tests.rs` and `report/debts.rs`.
+//! save, so it cannot be called on a mock; what it writes is tested in `summary_tests.rs` and `report/debts.rs`. Its preview,
+//! `export_debts_preview`, asks nothing and is called here.
 
 use std::sync::Arc;
 
@@ -44,6 +45,9 @@ fn harness() -> Harness {
             commands::unarchive_person,
             commands::person_statement,
             commands::debts_summary,
+            commands::debts_due_payments,
+            commands::debts_history,
+            commands::export_debts_preview,
             commands::add_ledger_entry,
             commands::update_ledger_entry,
             commands::delete_ledger_entry,
@@ -231,17 +235,22 @@ fn a_code_is_shown_read_and_taken_in_as_the_page_does_it() {
 }
 
 #[test]
-fn reminders_are_listed_for_the_page_with_the_days_to_come() {
+fn reminders_follow_the_period_the_device_asks_for_from_the_day_each_debt_last_changed() {
     let h = harness();
     let anna = h.friend("Anna");
-    assert_eq!(h.ok("debts_reminders", json!({}))["due"], json!([]));
-    h.ok("update_person", json!({ "id": anna, "patch": { "remindOn": "2020-01-01", "remindEveryDays": 30 } }));
-    assert_eq!(h.ok("debts_reminders", json!({}))["due"], json!([]), "nobody owes anything, so nothing is live");
-    h.ok("add_ledger_entry", json!({ "input": { "personId": anna, "kind": "LENT", "amount": "25.00", "date": "2026-10-01" } }));
-    let live = h.ok("debts_reminders", json!({}));
+    assert_eq!(h.ok("debts_reminders", json!({ "everyDays": 30 }))["due"], json!([]), "nobody owes anything, so nothing is live");
+    h.ok("add_ledger_entry", json!({ "input": { "personId": anna, "kind": "LENT", "amount": "25.00", "date": "2020-01-01" } }));
+    let live = h.ok("debts_reminders", json!({ "everyDays": 30 }));
     assert_eq!((live["due"][0]["name"].as_str(), live["due"][0]["personId"].as_str()), (Some("Anna"), Some(anna.as_str())));
     assert_eq!(live["upcoming"].as_array().unwrap().len(), 4);
     assert!(live["today"].as_str().unwrap().starts_with("20"));
+    // none when the device says none, and a period that is too long or missing is refused
+    assert_eq!(h.ok("debts_reminders", json!({ "everyDays": 0 }))["due"], json!([]));
+    assert_eq!(h.code("debts_reminders", json!({ "everyDays": 366 })), "invalid_input");
+    assert!(h.call("debts_reminders", json!({})).is_err());
+    // a debt that changed today is not due for another period
+    h.ok("add_ledger_entry", json!({ "input": { "personId": anna, "kind": "LENT", "amount": "1.00", "date": "2100-01-01" } }));
+    assert_eq!(h.ok("debts_reminders", json!({ "everyDays": 30 }))["due"], json!([]), "the latest line is in the future: the count has not begun");
 }
 
 #[test]
@@ -260,6 +269,9 @@ fn documents_can_be_counted_on_ledger_entries_and_a_locked_app_answers_every_com
         ("unarchive_person", json!({ "id": "1" })),
         ("person_statement", json!({ "id": "1" })),
         ("debts_summary", json!({})),
+        ("debts_due_payments", json!({})),
+        ("debts_history", json!({ "filter": {} })),
+        ("export_debts_preview", json!({ "request": { "what": "SUMMARY", "format": "TEXT", "labels": english_labels() } })),
         ("add_ledger_entry", json!({ "input": { "personId": "1", "kind": "LENT", "amount": "1.00", "date": "2026-10-01" } })),
         ("update_ledger_entry", json!({ "id": "1", "patch": {} })),
         ("delete_ledger_entry", json!({ "id": "1" })),
@@ -272,8 +284,140 @@ fn documents_can_be_counted_on_ledger_entries_and_a_locked_app_answers_every_com
         ("bill_code", json!({ "transactionId": "1", "personId": "1", "from": "Me" })),
         ("bill_preview", json!({ "text": "MNB1:x" })),
         ("bill_accept", json!({ "input": { "text": "MNB1:x", "newFriend": "A", "addExpense": false } })),
-        ("debts_reminders", json!({})),
+        ("debts_reminders", json!({ "everyDays": 7 })),
     ] {
         assert_eq!(h.code(cmd, args), "locked", "{cmd}");
     }
+}
+
+/// A recurring item that started and ended long ago, so what is due does not depend on the day the test runs: monthly from `start`, ending on
+/// `end`.
+fn old_item(h: &Harness, name: &str, amount: Option<&str>, category: &str, start: &str, end: &str) -> String {
+    let mut input = json!({ "name": name, "categoryId": category, "startDate": start, "endDate": end, "intervalUnit": "MONTH", "intervalCount": 1 });
+    if let Some(amount) = amount {
+        input["amount"] = json!(amount);
+    }
+    h.ok("create_recurring", json!({ "input": input }))["id"].as_str().unwrap().to_string()
+}
+
+#[test]
+fn the_recurring_payments_that_have_come_due_are_debts_and_paying_one_moves_it_to_the_history() {
+    let h = harness();
+    let food = h.category();
+    let salary = h.ok("create_category", json!({ "name": "Salary", "kind": "INCOME" }))["id"].as_str().unwrap().to_string();
+    let flat = old_item(&h, "Flat", Some("900.00"), &food, "2020-01-01", "2020-03-15");
+    old_item(&h, "Phone", None, &food, "2020-06-01", "2020-06-15");
+    old_item(&h, "Wages", Some("3000.00"), &salary, "2020-01-01", "2020-01-15");
+    let later = h.ok(
+        "create_recurring",
+        json!({ "input": { "name": "Next century", "amount": "5.00", "categoryId": food, "startDate": "2099-01-01", "intervalUnit": "MONTH", "intervalCount": 1 } }),
+    );
+    assert!(later["id"].is_string());
+
+    // three occurrences of the flat (a rent not paid for three months is three debts) and one of the phone bill; the wages are not owed
+    let due = h.ok("debts_due_payments", json!({}));
+    let names: Vec<(&str, &str)> = due["payments"].as_array().unwrap().iter().map(|p| (p["name"].as_str().unwrap(), p["dueDate"].as_str().unwrap())).collect();
+    assert_eq!(names, [("Flat", "2020-01-01"), ("Flat", "2020-02-01"), ("Flat", "2020-03-01"), ("Phone", "2020-06-01")]);
+    assert_eq!((due["total"].as_str(), due["unknown"].as_u64()), (Some("2700.00"), Some(1)), "the phone bill says only that it is due");
+    let first = &due["payments"][0];
+    assert_eq!((first["amount"].as_str(), first["category"].as_str(), first["recurringId"].as_str()), (Some("900.00"), Some("Food"), Some(flat.as_str())));
+    assert!(first["daysOverdue"].as_u64().unwrap() > 2_000, "since 2020");
+    assert!(due["payments"][3]["amount"].is_null());
+
+    // paying the oldest moves it from the due payments to the history, with the day it fell due
+    h.ok("pay_recurring", json!({ "id": flat, "amount": null, "paidOn": "2020-01-05" }));
+    let after = h.ok("debts_due_payments", json!({}));
+    assert_eq!(after["payments"].as_array().unwrap().len(), 3);
+    assert_eq!(after["total"], "1800.00");
+    let history = h.ok("debts_history", json!({ "filter": {} }));
+    let lines = history["lines"].as_array().unwrap();
+    assert_eq!(history["total"], 4, "one paid and three due");
+    // newest first: the due ones of 2020-06, 2020-03 and 2020-02, then the payment of 2020-01-05
+    let kinds: Vec<(&str, &str)> = lines.iter().map(|l| (l["kind"].as_str().unwrap(), l["date"].as_str().unwrap())).collect();
+    assert_eq!(kinds, [("PAYMENT_DUE", "2020-06-01"), ("PAYMENT_DUE", "2020-03-01"), ("PAYMENT_DUE", "2020-02-01"), ("PAYMENT_PAID", "2020-01-05")]);
+    let paid = &lines[3];
+    assert_eq!((paid["what"].as_str(), paid["amount"].as_str(), paid["dueDate"].as_str()), (Some("Flat"), Some("900.00"), Some("2020-01-01")));
+    assert!(paid["friend"].is_null() && paid["balance"].is_null() && paid["transactionId"].is_string());
+}
+
+#[test]
+fn the_history_of_debts_has_the_lines_of_the_friends_and_the_payments_and_filters_by_date_and_friend() {
+    let h = harness();
+    let food = h.category();
+    let (anna, bob) = (h.friend("Anna"), h.friend("Bob"));
+    for (person, kind, amount, date) in [(&anna, "LENT", "25.00", "2026-01-02"), (&bob, "BORROWED", "7.50", "2026-02-02"), (&anna, "REPAID_TO_ME", "10.00", "2026-03-04")] {
+        h.ok("add_ledger_entry", json!({ "input": { "personId": person, "kind": kind, "amount": amount, "date": date } }));
+    }
+    old_item(&h, "Phone", Some("30.00"), &food, "2020-06-01", "2020-06-15");
+    let all = h.ok("debts_history", json!({ "filter": {} }));
+    let line = |at: usize| (all["lines"][at]["date"].as_str().unwrap().to_string(), all["lines"][at]["kind"].as_str().unwrap().to_string());
+    assert_eq!(all["total"], 4);
+    assert_eq!(line(0), ("2026-03-04".into(), "REPAID_TO_ME".into()));
+    assert_eq!(line(3), ("2020-06-01".into(), "PAYMENT_DUE".into()));
+    // a friend's lines carry the balance after them, the debts screens' own
+    assert_eq!((all["lines"][0]["friend"].as_str(), all["lines"][0]["effect"].as_str(), all["lines"][0]["balance"].as_str()), (Some("Anna"), Some("-10.00"), Some("15.00")));
+
+    // one friend: no recurring payments
+    let only_anna = h.ok("debts_history", json!({ "filter": { "personId": anna } }));
+    assert_eq!(only_anna["total"], 2);
+    assert!(only_anna["lines"].as_array().unwrap().iter().all(|l| l["friend"] == "Anna"));
+    // dates, both ends inclusive
+    let february = h.ok("debts_history", json!({ "filter": { "from": "2026-02-02", "to": "2026-02-02" } }));
+    assert_eq!((february["total"].as_u64(), february["lines"][0]["friend"].as_str()), (Some(1), Some("Bob")));
+    // a page at a time
+    let page = h.ok("debts_history", json!({ "filter": { "limit": 2, "offset": 1 } }));
+    assert_eq!((page["total"].as_u64(), page["lines"].as_array().unwrap().len(), page["offset"].as_u64()), (Some(4), 2, Some(1)));
+    assert_eq!(page["lines"][0]["date"], all["lines"][1]["date"]);
+
+    // what cannot be asked
+    for bad in [json!({ "limit": 0 }), json!({ "limit": 201 }), json!({ "from": "2026-03-01", "to": "2026-02-01" }), json!({ "from": "yesterday" }), json!({ "personId": "x" })] {
+        assert_eq!(h.code("debts_history", json!({ "filter": bad.clone() })), "invalid_input", "{bad}");
+    }
+    // an argument it does not know is refused before the command runs
+    assert!(h.call("debts_history", json!({ "filter": { "unknown": 1 } })).is_err());
+}
+
+/// The fixed words of the files, as the page sends them (English).
+fn english_labels() -> Value {
+    let mut labels = serde_json::Map::new();
+    for key in [
+        "summaryTitle", "statementTitle", "historyTitle", "dueTitle", "dueTotal", "paidPayment", "duePayment", "owedToYou", "youOwe", "net", "owesYou", "youOweThem", "nobody", "settled", "lent",
+        "borrowed", "repaidToMe", "repaidByMe", "bill", "date", "what", "change", "balance", "name", "amount", "page",
+    ] {
+        labels.insert(key.to_string(), json!(key));
+    }
+    Value::Object(labels)
+}
+
+#[test]
+fn the_preview_of_a_debts_file_is_the_file_that_would_be_saved_and_a_choice_that_makes_no_file_is_refused() {
+    let h = harness();
+    let anna = h.friend("Anna");
+    h.ok("add_ledger_entry", json!({ "input": { "personId": anna, "kind": "LENT", "amount": "25.00", "date": "2026-01-02" } }));
+    let ask = |what: &str, format: &str, person: Option<&str>| {
+        let mut request = json!({ "what": what, "format": format, "labels": english_labels() });
+        if let Some(id) = person {
+            request["personId"] = json!(id);
+        }
+        h.call("export_debts_preview", json!({ "request": request }))
+    };
+    let text = |answer: &Value| String::from_utf8(crate::sync::qr::base64url_decode(answer["data"].as_str().unwrap()).unwrap()).unwrap();
+
+    let summary = ask("SUMMARY", "TEXT", None).unwrap();
+    let written = text(&summary);
+    assert_eq!(summary["bytes"].as_u64(), Some(written.len() as u64));
+    assert!(written.contains("Anna") && written.contains("25.00"), "{written}");
+    let csv = text(&ask("LEDGER", "CSV", None).unwrap());
+    assert!(csv.contains("Anna") && (csv.contains("LENT") || csv.contains("lent")), "{csv}");
+    let statement = text(&ask("STATEMENT", "TEXT", Some(&anna)).unwrap());
+    assert!(statement.contains("25.00"), "{statement}");
+    let pdf = crate::sync::qr::base64url_decode(ask("SUMMARY", "PDF", None).unwrap()["data"].as_str().unwrap()).unwrap();
+    assert!(pdf.starts_with(b"%PDF"), "a PDF");
+
+    // what makes no file: a statement with no friend, a ledger as a PDF, labels that are not plain text
+    assert_eq!(match ask("STATEMENT", "TEXT", None) { Err(Value::String(code)) => code, other => panic!("{other:?}") }, "invalid_input");
+    assert_eq!(match ask("LEDGER", "PDF", None) { Err(Value::String(code)) => code, other => panic!("{other:?}") }, "invalid_input");
+    let mut bad = english_labels();
+    bad["net"] = json!("two\nlines");
+    assert_eq!(h.code("export_debts_preview", json!({ "request": { "what": "SUMMARY", "format": "TEXT", "labels": bad } })), "invalid_input");
 }

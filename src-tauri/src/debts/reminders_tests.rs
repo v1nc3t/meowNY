@@ -4,10 +4,6 @@ use super::people;
 use super::reminders::{days_from, latest_until, reminders, Day, SCHEDULED_DAYS};
 use crate::vault::AppError;
 
-fn lend(conn: &rusqlite::Connection, person: i64, kind: Kind, amount: &str) {
-    ledger::add(conn, &NewEntry { person_id: person.to_string(), kind, amount: amount.into(), date: "2026-10-01".into(), note: None, transaction_id: None }).unwrap();
-}
-
 #[test]
 fn the_day_a_reminder_last_came_is_its_first_day_or_the_last_step_after_it() {
     // once only
@@ -44,45 +40,64 @@ fn the_next_days_of_a_reminder_start_today_and_a_once_only_one_has_at_most_one()
     }
 }
 
+fn lend_on(conn: &rusqlite::Connection, person: i64, kind: Kind, amount: &str, date: &str) {
+    ledger::add(conn, &NewEntry { person_id: person.to_string(), kind, amount: amount.into(), date: date.into(), note: None, transaction_id: None }).unwrap();
+}
+
 #[test]
-fn a_reminder_is_live_only_while_somebody_owes_something() {
+fn every_friend_with_a_debt_is_reminded_a_period_after_it_last_changed_and_again_after_each_period() {
     let w = world();
-    let (anna, bob, cleo, dave) = (friend(&w.conn, "Anna"), friend(&w.conn, "Bob"), friend(&w.conn, "Cleo"), friend(&w.conn, "Dave"));
-    for (id, on, every) in [(anna, "2026-10-10", None), (bob, "2026-10-20", Some(7)), (cleo, "2026-10-17", None), (dave, "2026-10-12", None)] {
-        people::set_reminder(&w.conn, id, Some(on), every).unwrap();
-    }
-    lend(&w.conn, anna, Kind::Lent, "10.00");
-    lend(&w.conn, bob, Kind::Borrowed, "5.00");
-    lend(&w.conn, cleo, Kind::Lent, "1.00");
-    // Dave has a reminder and no debt
-    let on_17 = reminders(&w.conn, "2026-10-17").unwrap();
-    assert_eq!(on_17.today, "2026-10-17");
-    let due: Vec<(&str, &str)> = on_17.due.iter().map(|d| (d.name.as_str(), d.due_on.as_str())).collect();
-    assert_eq!(due, [("Anna", "2026-10-10"), ("Cleo", "2026-10-17")], "Bob's has not come, Dave owes nothing");
-    assert_eq!(on_17.upcoming, [Day { date: "2026-10-17".into(), count: 1 }, Day { date: "2026-10-20".into(), count: 1 }, Day { date: "2026-10-27".into(), count: 1 }, Day { date: "2026-11-03".into(), count: 1 }]);
-    // a debt paid back by hand makes the reminder quiet, and a new one makes it live again
-    lend(&w.conn, anna, Kind::RepaidToMe, "10.00");
-    assert!(!reminders(&w.conn, "2026-10-17").unwrap().due.iter().any(|d| d.name == "Anna"));
-    lend(&w.conn, anna, Kind::Lent, "3.00");
-    assert!(reminders(&w.conn, "2026-10-17").unwrap().due.iter().any(|d| d.name == "Anna"));
-    // marking as paid in the app clears the reminder itself
-    ledger::settle(&w.conn, cleo, None, None, None, "2026-10-17").unwrap();
-    assert!(people::get(&w.conn, cleo).unwrap().remind_on.is_none());
-    assert!(!reminders(&w.conn, "2026-10-17").unwrap().due.iter().any(|d| d.name == "Cleo"));
+    let (anna, bob, cleo, _dave) = (friend(&w.conn, "Anna"), friend(&w.conn, "Bob"), friend(&w.conn, "Cleo"), friend(&w.conn, "Dave"));
+    lend_on(&w.conn, anna, Kind::Lent, "10.00", "2026-10-01");
+    lend_on(&w.conn, bob, Kind::Borrowed, "5.00", "2026-10-10");
+    // Cleo paid everything back: no debt, no reminder; Dave never had one
+    lend_on(&w.conn, cleo, Kind::Lent, "1.00", "2026-09-01");
+    lend_on(&w.conn, cleo, Kind::RepaidToMe, "1.00", "2026-09-02");
+    let r = reminders(&w.conn, "2026-10-17", 7).unwrap();
+    assert_eq!(r.today, "2026-10-17");
+    let due: Vec<(&str, &str)> = r.due.iter().map(|d| (d.name.as_str(), d.due_on.as_str())).collect();
+    // Anna: 1 Oct + 7 = 8 Oct, then 15 Oct; Bob: 10 Oct + 7 = 17 Oct, today
+    assert_eq!(due, [("Anna", "2026-10-15"), ("Bob", "2026-10-17")]);
+    // Bob's is today, Anna's come on the 22nd and 29th, Bob's on the 24th: four days at most, in order
+    assert_eq!(
+        r.upcoming,
+        [Day { date: "2026-10-17".into(), count: 1 }, Day { date: "2026-10-22".into(), count: 1 }, Day { date: "2026-10-24".into(), count: 1 }, Day { date: "2026-10-29".into(), count: 1 }]
+    );
+    // the day before the first one: nobody is due yet, and the first days are those
+    let early = reminders(&w.conn, "2026-10-07", 7).unwrap();
+    assert!(early.due.is_empty());
+    assert_eq!((early.upcoming[0].date.as_str(), early.upcoming[0].count), ("2026-10-08", 1));
+}
+
+#[test]
+fn a_new_line_starts_the_count_again_and_a_debt_paid_back_makes_the_reminder_quiet() {
+    let w = world();
+    let anna = friend(&w.conn, "Anna");
+    lend_on(&w.conn, anna, Kind::Lent, "10.00", "2026-10-01");
+    assert_eq!(reminders(&w.conn, "2026-10-17", 7).unwrap().due.len(), 1);
+    // money lent again on the 16th: the next reminder is the 23rd
+    lend_on(&w.conn, anna, Kind::Lent, "3.00", "2026-10-16");
+    let r = reminders(&w.conn, "2026-10-17", 7).unwrap();
+    assert!(r.due.is_empty());
+    assert_eq!(r.upcoming[0].date, "2026-10-23");
+    // a payment back on the 17th that does not settle it starts it again from the 17th
+    lend_on(&w.conn, anna, Kind::RepaidToMe, "5.00", "2026-10-17");
+    assert_eq!(reminders(&w.conn, "2026-10-17", 7).unwrap().upcoming[0].date, "2026-10-24");
+    // paid back in full: quiet
+    lend_on(&w.conn, anna, Kind::RepaidToMe, "8.00", "2026-10-17");
+    let paid = reminders(&w.conn, "2026-10-30", 7).unwrap();
+    assert!(paid.due.is_empty() && paid.upcoming.is_empty());
 }
 
 #[test]
 fn a_friend_who_is_off_the_list_is_still_reminded_and_days_are_counted_by_friends() {
     let w = world();
     let (anna, bob, cleo) = (friend(&w.conn, "Anna"), friend(&w.conn, "Bob"), friend(&w.conn, "Cleo"));
-    for id in [anna, bob] {
-        lend(&w.conn, id, Kind::Lent, "10.00");
-        people::set_reminder(&w.conn, id, Some("2026-10-20"), None).unwrap();
-    }
-    lend(&w.conn, cleo, Kind::Lent, "10.00");
-    people::set_reminder(&w.conn, cleo, Some("2026-10-21"), Some(1)).unwrap();
+    lend_on(&w.conn, anna, Kind::Lent, "10.00", "2026-10-13");
+    lend_on(&w.conn, bob, Kind::Lent, "10.00", "2026-10-13");
+    lend_on(&w.conn, cleo, Kind::Lent, "10.00", "2026-10-14");
     people::archive(&w.conn, anna).unwrap();
-    let r = reminders(&w.conn, "2026-10-19").unwrap();
+    let r = reminders(&w.conn, "2026-10-19", 7).unwrap();
     assert!(r.due.is_empty());
     assert_eq!(r.upcoming.len(), SCHEDULED_DAYS, "at most four days");
     assert_eq!((r.upcoming[0].date.as_str(), r.upcoming[0].count), ("2026-10-20", 2), "an archived friend counts: the money is still owed");
@@ -91,9 +106,15 @@ fn a_friend_who_is_off_the_list_is_still_reminded_and_days_are_counted_by_friend
 }
 
 #[test]
-fn a_day_that_is_not_a_day_is_refused() {
+fn no_period_is_no_reminders_and_what_cannot_be_asked_is_refused() {
     let w = world();
+    let anna = friend(&w.conn, "Anna");
+    lend_on(&w.conn, anna, Kind::Lent, "10.00", "2020-01-01");
+    let off = reminders(&w.conn, "2026-10-17", 0).unwrap();
+    assert!(off.due.is_empty() && off.upcoming.is_empty());
+    assert_eq!(reminders(&w.conn, "2026-10-17", 365).unwrap().due.len(), 1, "the longest period");
+    assert_eq!(reminders(&w.conn, "2026-10-17", 366), Err(AppError::InvalidInput));
     for today in ["", "2026-13-01", "tomorrow", "2026-10-17T10:00"] {
-        assert_eq!(reminders(&w.conn, today), Err(AppError::InvalidInput), "{today:?}");
+        assert_eq!(reminders(&w.conn, today, 7), Err(AppError::InvalidInput), "{today:?}");
     }
 }

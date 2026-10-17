@@ -2109,7 +2109,7 @@
           "nullable": true,
           "param": "remindOn",
           "required": false,
-          "summary": "The day to be reminded of the debt, or null for no reminder.",
+          "summary": "Not used for reminders any more; kept as it was written. Null clears it.",
           "type": "date",
           "value": "date",
           "values": []
@@ -2124,7 +2124,7 @@
           "nullable": true,
           "param": "remindEveryDays",
           "required": false,
-          "summary": "Repeat the reminder every this many days, 1 to 365, or null for once.",
+          "summary": "Not used for reminders any more; kept as it was written, 1 to 365, or null.",
           "type": "integer",
           "value": "number",
           "values": []
@@ -2138,7 +2138,7 @@
       "positional": "id",
       "route": "people.update",
       "scope": "write",
-      "summary": "Renames a friend or sets their reminder: a date, and optionally a number of days after which it repeats. Fields left out stay as they are.",
+      "summary": "Renames a friend. Fields left out stay as they are. The reminder fields are kept for data written before reminders became a setting of each device (every so many days after a debt last changed), and nothing rings from them.",
       "usage": "meowny people update <id> [--name <text>] [--remind-on <date>] [--remind-every-days <number>]"
     },
     {

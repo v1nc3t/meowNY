@@ -8,8 +8,12 @@
 //! * `summary`: who owes what, as text or CSV, to save and send yourself.
 //! * `codes`: the bill code (a friend's part of one bill as text for a QR code) and taking one in.
 //! * `reminders`: which friends are due a reminder.
+//! * `dues`: the recurring payments that have come due, kept with the debts.
+//! * `history`: everything that changed what you owe or are owed, in one list.
 
 pub mod codes;
+pub mod dues;
+pub mod history;
 pub mod ledger;
 pub mod people;
 pub mod reminders;
@@ -22,6 +26,10 @@ pub(crate) mod fixtures;
 mod allocate_tests;
 #[cfg(test)]
 mod cost_tests;
+#[cfg(test)]
+mod dues_tests;
+#[cfg(test)]
+mod history_tests;
 #[cfg(test)]
 mod codes_tests;
 #[cfg(test)]

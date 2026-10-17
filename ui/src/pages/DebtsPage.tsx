@@ -1,13 +1,16 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { debts, type EntryKind, type Person, type Reminders, type Summary } from '../api/debts'
+import { debts, type Due, type EntryKind, type History, type Person, type Reminders } from '../api/debts'
 import { errorText } from '../api/invoke'
 import { scanQr, stopScan } from '../api/scanner'
 import { useToday, type Today } from '../api/today'
 import BillAcceptModal from '../components/BillAcceptModal'
-import DebtsFiles from '../components/DebtsFiles'
+import ConfirmModal from '../components/ConfirmModal'
+import DebtsDue from '../components/DebtsDue'
+import DebtsHistory from '../components/DebtsHistory'
 import EntryModal from '../components/EntryModal'
 import FriendNameModal from '../components/FriendNameModal'
+import SectionTabs from '../components/SectionTabs'
 import SettleModal from '../components/SettleModal'
 import { useMoneySettings, type MoneySettings } from '../hooks/useMoneySettings'
 import { useNotice } from '../hooks/useNotice'
@@ -18,7 +21,7 @@ import { tip } from '../keys/tip'
 import { useRowNavigation } from '../keys/useRowNavigation'
 import { balanceView } from '../lib/balance'
 import { formatDate, formatMoney } from '../lib/money'
-import { remindersChanged } from '../lib/reminders'
+import { reminderEvery, remindersChanged } from '../lib/reminders'
 
 export default function DebtsPage() {
   const { settings, error } = useMoneySettings()
@@ -28,13 +31,18 @@ export default function DebtsPage() {
   return <DebtsView settings={settings} now={now} />
 }
 
+type Tab = 'friends' | 'due' | 'history'
+
 function DebtsView({ settings, now }: { settings: MoneySettings; now: Today }) {
   const t = useT()
   const phone = useProfile() === 'phone'
   const navigate = useNavigate()
   const [people, setPeople] = useState<Person[] | null>(null)
-  const [summary, setSummary] = useState<Summary | null>(null)
   const [reminders, setReminders] = useState<Reminders | null>(null)
+  const [due, setDue] = useState<Due | null>(null)
+  const [tab, setTab] = useState<Tab>('friends')
+  const [history, setHistory] = useState<History | null>(null)
+  const [historyOffset, setHistoryOffset] = useState(0)
   // a code that was scanned or is being pasted, and the camera while it looks
   const [taking, setTaking] = useState<string | null>(null)
   const [scanning, setScanning] = useState(false)
@@ -44,16 +52,20 @@ function DebtsView({ settings, now }: { settings: MoneySettings; now: Today }) {
   const [addingFriend, setAddingFriend] = useState(false)
   const [entryKind, setEntryKind] = useState<EntryKind | null>(null)
   const [settling, setSettling] = useState<Person | null>(null)
+  // the friend whose name is being changed, and the one being taken off the list
+  const [editing, setEditing] = useState<Person | null>(null)
+  const [deleting, setDeleting] = useState<Person | null>(null)
+  const [pending, setPending] = useState(false)
   const money = (amount: string) => formatMoney(amount, settings.currency, settings.locale)
 
   useEffect(() => {
     let cancelled = false
-    void Promise.all([debts.people(showRemoved), debts.summary(), debts.reminders()]).then(
-      ([list, totals, due]) => {
+    void Promise.all([debts.people(showRemoved), debts.reminders(reminderEvery()), debts.duePayments()]).then(
+      ([list, reminded, owed]) => {
         if (cancelled) return
         setPeople(list)
-        setSummary(totals)
-        setReminders(due)
+        setReminders(reminded)
+        setDue(owed)
       },
       (failure) => {
         if (!cancelled) setMessage(errorText(failure))
@@ -63,6 +75,51 @@ function DebtsView({ settings, now }: { settings: MoneySettings; now: Today }) {
       cancelled = true
     }
   }, [showRemoved, reload, setMessage])
+
+  // the history is read a page at a time, only while it is shown
+  useEffect(() => {
+    if (tab !== 'history') return
+    let cancelled = false
+    void debts.history({ offset: historyOffset }).then(
+      (loaded) => {
+        if (!cancelled) setHistory(loaded)
+      },
+      (failure) => {
+        if (!cancelled) setMessage(errorText(failure))
+      },
+    )
+    return () => {
+      cancelled = true
+    }
+  }, [tab, historyOffset, reload, setMessage])
+
+  // A friend is taken off the list, never erased: the balance and the history stay, and "show removed friends" brings them back.
+  async function onDelete(person: Person) {
+    setPending(true)
+    try {
+      await debts.archive(person.id)
+    } catch (failure) {
+      setMessage(errorText(failure))
+      return
+    } finally {
+      setPending(false)
+      setDeleting(null)
+    }
+    setMessage(t('debts.deleted', { name: person.name }))
+    setReload((value) => value + 1)
+    remindersChanged()
+  }
+
+  async function bringBack(person: Person) {
+    try {
+      await debts.unarchive(person.id)
+    } catch (failure) {
+      setMessage(errorText(failure))
+      return
+    }
+    setReload((value) => value + 1)
+    remindersChanged()
+  }
 
   // The camera shows behind the page while it scans, so the page must not paint over it.
   useEffect(() => {
@@ -102,9 +159,6 @@ function DebtsView({ settings, now }: { settings: MoneySettings; now: Today }) {
           </button>
           <button type="button" onClick={() => setEntryKind('BORROWED')}>
             {t('debts.borrowed')}
-          </button>
-          <button type="button" onClick={() => setAddingFriend(true)}>
-            {t('debts.addFriend')}
           </button>
           <button type="button" onClick={() => navigate('/app/transactions', { state: { split: true } })}>
             {t('split.add')}
@@ -180,23 +234,50 @@ function DebtsView({ settings, now }: { settings: MoneySettings; now: Today }) {
           }}
         />
       ) : null}
-      {summary && people ? (
-        <div className="tx-pane wide">
-          <div className="dash-card">
-            <div className="dash-stats">
-              <div className="dash-stat">
-                <span className="dash-stat-label">{t('debts.owedToYou')}</span>
-                <span className="dash-stat-value">{money(summary.owedToYou)}</span>
-              </div>
-              <div className="dash-stat">
-                <span className="dash-stat-label">{t('debts.youOwe')}</span>
-                <span className="dash-stat-value">{money(summary.youOwe)}</span>
-              </div>
-              <div className="dash-stat">
-                <span className="dash-stat-label">{t('debts.net')}</span>
-                <span className="dash-stat-value">{money(summary.net)}</span>
-              </div>
-            </div>
+      {editing ? (
+        <FriendNameModal
+          person={editing}
+          onClose={() => setEditing(null)}
+          onSaved={() => {
+            setEditing(null)
+            setReload((value) => value + 1)
+          }}
+        />
+      ) : null}
+      {deleting ? (
+        <ConfirmModal
+          title={t('rec.confirmTitle', { action: t('common.delete'), name: deleting.name })}
+          pending={pending}
+          onConfirm={() => void onDelete(deleting)}
+          onClose={() => setDeleting(null)}
+        />
+      ) : null}
+      <SectionTabs
+        label={t('debts.title')}
+        value={tab}
+        onChange={setTab}
+        tabs={[
+          { id: 'friends', label: t('debts.tabFriends') },
+          { id: 'due', label: due && due.payments.length > 0 ? `${t('debts.dueTitle')} (${due.payments.length})` : t('debts.dueTitle') },
+          { id: 'history', label: t('debts.historyTitle') },
+        ]}
+      />
+      {tab === 'due' && due ? (
+        <div className="tx-pane wide" role="tabpanel">
+          <DebtsDue due={due} currency={settings.currency} locale={settings.locale} />
+        </div>
+      ) : null}
+      {tab === 'history' && history ? (
+        <div className="tx-pane wide" role="tabpanel">
+          <DebtsHistory history={history} currency={settings.currency} locale={settings.locale} onPage={setHistoryOffset} />
+        </div>
+      ) : null}
+      {tab === 'friends' && people ? (
+        <div className="tx-pane wide" role="tabpanel">
+          <div>
+            <button type="button" onClick={() => setAddingFriend(true)}>
+              {t('debts.addFriend')}
+            </button>
           </div>
           {people.length === 0 ? <p>{t('debts.empty')}</p> : null}
           <ul className="card-list">
@@ -211,15 +292,22 @@ function DebtsView({ settings, now }: { settings: MoneySettings; now: Today }) {
                     </p>
                     <p className="card-meta">
                       <span className={`card-amount debt-${tone}`}>{balanceText(person)}</span>
-                      {person.remindOn && tone !== 'even'
-                        ? ` · ${dueIds.has(person.id) ? t('debts.dueBadge', { date: formatDate(dueOn.get(person.id) ?? person.remindOn, settings.locale) }) : t('debts.reminderBadge', { date: formatDate(person.remindOn, settings.locale) })}`
-                        : ''}
+                      {dueIds.has(person.id) && tone !== 'even' ? ` · ${t('debts.dueBadge', { date: formatDate(dueOn.get(person.id) ?? '', settings.locale) })}` : ''}
                     </p>
                   </div>
                   <div className="card-actions">
-                    <button type="button" data-row-focus onClick={() => navigate(`/app/debts/${person.id}`)}>
-                      {t('debts.statement')}
+                    <button type="button" data-row-focus onClick={() => setEditing(person)}>
+                      {t('common.edit')}
                     </button>
+                    {person.archived ? (
+                      <button type="button" onClick={() => void bringBack(person)}>
+                        {t('debts.unarchive')}
+                      </button>
+                    ) : (
+                      <button type="button" onClick={() => setDeleting(person)}>
+                        {t('common.delete')}
+                      </button>
+                    )}
                     {tone !== 'even' ? (
                       <button type="button" onClick={() => setSettling(person)}>
                         {t('debts.settle')}
@@ -234,12 +322,6 @@ function DebtsView({ settings, now }: { settings: MoneySettings; now: Today }) {
             <input type="checkbox" checked={showRemoved} onChange={(event) => setShowRemoved(event.target.checked)} />
             {t('debts.showRemoved')}
           </label>
-          {phone ? null : (
-            <DebtsFiles
-              onSaved={() => setMessage(t('export.saved'))}
-              onFailed={setMessage}
-            />
-          )}
         </div>
       ) : null}
     </section>

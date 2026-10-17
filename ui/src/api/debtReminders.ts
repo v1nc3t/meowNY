@@ -2,7 +2,7 @@ import { invoke } from '@tauri-apps/api/core'
 import { debts } from './debts'
 import { t } from '../i18n/translate'
 import { vault } from '../vault/api'
-import { notifiedDays, reminderTime, ringNow, saveNotifiedDays, saveScheduledIds, scheduledIds, schedulePlan } from '../lib/reminders'
+import { notifiedDays, reminderEvery, reminderTime, ringNow, saveNotifiedDays, saveScheduledIds, scheduledIds, schedulePlan } from '../lib/reminders'
 
 // Reminders about debts (docs/debts-design.md, section 11). The text is the same for everyone and holds a count, never a name or an
 // amount: the app is locked when it rings, and a notification can be seen on a lock screen and kept by the system.
@@ -18,7 +18,7 @@ export type Scheduling = 'scheduled' | 'off' | 'denied' | 'unavailable'
 /** Shows one notification for the friends whose reminder has come and which this device has not shown yet. Returns how many. */
 export async function ringOnComputer(now = new Date()): Promise<number> {
   if (!(await vault.notifyDue())) return 0
-  const reminders = await debts.reminders()
+  const reminders = await debts.reminders(reminderEvery())
   const notified = notifiedDays()
   const ring = ringNow(reminders, reminderTime(), now, notified)
   // days of friends who are no longer due are forgotten, so the list does not grow
@@ -57,7 +57,7 @@ export async function scheduleOnPhone(now = new Date()): Promise<Scheduling> {
       await cancelScheduled()
       return 'off'
     }
-    const plan = schedulePlan(await debts.reminders(), reminderTime(), now)
+    const plan = schedulePlan(await debts.reminders(reminderEvery()), reminderTime(), now)
     await cancelScheduled()
     if (plan.length === 0) return 'scheduled'
     if (!(await allowed())) return 'denied'
