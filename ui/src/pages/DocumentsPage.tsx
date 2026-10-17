@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useRef, useState, type ChangeEvent } from 'react'
+import ClipMark from '../components/ClipMark'
 import ConfirmModal from '../components/ConfirmModal'
+import DocumentLinksModal from '../components/DocumentLinksModal'
 import DocumentModal from '../components/DocumentModal'
+import PreviewModal from '../components/PreviewModal'
 import Icon from '../components/NavIcon'
 import Pick, { PickOption } from '../components/Pick'
 import { documents, type Doc, type DocPage, type LibrarySize, type Report } from '../api/documents'
@@ -11,7 +14,7 @@ import { useDebounced } from '../hooks/useDebounced'
 import { useNotice } from '../hooks/useNotice'
 import { useT } from '../i18n/context'
 import { formatSize } from '../lib/bytes'
-import { dropNotice, fileState, fileStateText, KIND_CHOICES, reportLines, type KindChoice } from '../lib/documents'
+import { canPreview, dropNotice, fileState, fileStateText, KIND_CHOICES, reportLines, type KindChoice } from '../lib/documents'
 import { formatDate } from '../lib/money'
 import { useShortcut } from '../keys/registry'
 import { tip } from '../keys/tip'
@@ -39,6 +42,8 @@ function DocumentsView({ settings }: { settings: MoneySettings }) {
   const [size, setSize] = useState<LibrarySize | null>(null)
   const [report, setReport] = useState<Report | null>(null)
   const [viewing, setViewing] = useState<string | null>(null)
+  const [previewing, setPreviewing] = useState<Doc | null>(null)
+  const [linking, setLinking] = useState<Doc | null>(null)
   const [deleting, setDeleting] = useState<Doc | null>(null)
   const [busy, setBusy] = useState(false)
   // Held over the window by a drag. On the computer the window takes the drop itself (the web view cannot be relied on to hand a page the
@@ -252,6 +257,8 @@ function DocumentsView({ settings }: { settings: MoneySettings }) {
         {message}
       </p>
       {viewing ? <DocumentModal id={viewing} onClose={() => setViewing(null)} onChanged={refresh} /> : null}
+      {previewing ? <PreviewModal doc={previewing} onClose={() => setPreviewing(null)} /> : null}
+      {linking ? <DocumentLinksModal doc={linking} onClose={() => setLinking(null)} /> : null}
       {deleting ? (
         <ConfirmModal title={t('rec.confirmTitle', { action: t('common.delete'), name: deleting.name })} pending={busy} onConfirm={() => void onDelete()} onClose={() => setDeleting(null)} />
       ) : null}
@@ -270,23 +277,25 @@ function DocumentsView({ settings }: { settings: MoneySettings }) {
                         <p className="card-name">{doc.name}</p>
                       </div>
                       <p className="card-meta">
-                        {[formatDate(doc.documentDate, locale), formatSize(doc.sizeBytes, locale), state ? t(state) : '']
-                          .filter(Boolean)
-                          .join(' · ')}
+                        {formatDate(doc.documentDate, locale)} · {formatSize(doc.sizeBytes, locale)}
+                        {doc.linkCount > 0 ? (
+                          <>
+                            {' · '}
+                            <ClipMark inline count={doc.linkCount} onClick={() => setLinking(doc)} />
+                          </>
+                        ) : null}
+                        {state ? ` · ${t(state)}` : ''}
                       </p>
-                      {doc.linkCount > 0 || doc.keepOnPhone ? (
+                      {doc.keepOnPhone ? (
                         <p className="card-meta doc-marks">
-                          {doc.linkCount > 0 ? (
-                            <span className="clip" role="img" aria-label={t('docs.clip', { count: doc.linkCount })}>
-                              <Icon name="clip" className="clip-icon" />
-                              {doc.linkCount}
-                            </span>
-                          ) : null}
-                          {doc.keepOnPhone ? <span className="doc-chip">{t('docs.keepOnPhone')}</span> : null}
+                          <span className="doc-chip">{t('docs.keepOnPhone')}</span>
                         </p>
                       ) : null}
                     </div>
                     <div className="card-actions">
+                      <button type="button" disabled={!canPreview(doc)} onClick={() => setPreviewing(doc)}>
+                        {t('docs.previewButton')}
+                      </button>
                       <button type="button" data-row-focus onClick={() => setViewing(doc.id)}>
                         {t('docs.details')}
                       </button>

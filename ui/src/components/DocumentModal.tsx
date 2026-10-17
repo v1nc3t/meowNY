@@ -7,10 +7,11 @@ import { useProfile } from '../hooks/profile'
 import { useNotice } from '../hooks/useNotice'
 import { useT } from '../i18n/context'
 import { formatSize } from '../lib/bytes'
-import { canOpen, canShowImage, fileState, fileStateText, typeText } from '../lib/documents'
+import { canOpen, canPreview, canShowImage, fileState, fileStateText, typeText } from '../lib/documents'
 import { formatDate } from '../lib/money'
 import DatePicker from './DatePicker'
 import Modal from './Modal'
+import PreviewModal from './PreviewModal'
 
 const FORM_ID = 'document-form'
 const WARNING_FORM_ID = 'document-open-form'
@@ -37,6 +38,7 @@ export default function DocumentModal({ id, onClose, onChanged }: { id: string; 
   const [message, setMessage] = useNotice()
   const [pending, setPending] = useState(false)
   const [warning, setWarning] = useState(false)
+  const [previewing, setPreviewing] = useState(false)
   const [serial, setSerial] = useState(0)
   const locale = settings?.locale ?? 'en'
 
@@ -183,7 +185,15 @@ export default function DocumentModal({ id, onClose, onChanged }: { id: string; 
             <dd>{formatSize(doc.sizeBytes, locale)}</dd>
           </dl>
           {state ? <p className="hint">{t(state)}</p> : null}
-          {doc.hasFile && !canOpen(doc) ? <p className="hint">{t('docs.cannotOpen')}</p> : null}
+          {doc.hasFile && !canOpen(doc) && !canPreview(doc) ? <p className="hint">{t('docs.cannotOpen')}</p> : null}
+          {canPreview(doc) ? (
+            <div className="doc-action">
+              <button type="button" onClick={() => setPreviewing(true)}>
+                {t('docs.previewButton')}
+              </button>
+              <span className="hint">{t('docs.previewAbout')}</span>
+            </div>
+          ) : null}
           {canOpen(doc) ? (
             <div className="doc-action">
               <button type="button" onClick={onOpen}>
@@ -213,6 +223,7 @@ export default function DocumentModal({ id, onClose, onChanged }: { id: string; 
           )}
         </section>
       </Modal>
+      {previewing ? <PreviewModal doc={doc} onClose={() => setPreviewing(false)} /> : null}
       {warning ? (
         <Modal title={t('docs.openTitle')} formId={WARNING_FORM_ID} doneLabel={t('docs.open')} onClose={() => setWarning(false)}>
           <form id={WARNING_FORM_ID} onSubmit={(event) => void onWarned(event)}>

@@ -287,6 +287,7 @@ pub fn run() {
             commands::document_counts,
             commands::check_documents,
             commands::read_document_image,
+            commands::read_document_preview,
             commands::open_document,
             commands::save_document_copy,
             commands::document_upload_begin,

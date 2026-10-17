@@ -176,6 +176,7 @@ pub const COMMANDS: &[&str] = &[
     "document_counts",
     "check_documents",
     "read_document_image",
+    "read_document_preview",
     "open_document",
     "save_document_copy",
     "document_upload_begin",
@@ -866,6 +867,15 @@ pub fn check_documents(vault: Shared) -> Result<docs::Report, AppError> {
 pub fn read_document_image(vault: Shared, id: String) -> Result<docs::ImageData, AppError> {
     let id = categories::parse_id(&id)?;
     vault.with_files(|conn, files| docs::read_image(conn, files, id))
+}
+
+/// A document for the page to show in its preview: an image, a PDF, text, a CSV, or a Word or Excel file the page reads itself (see
+/// `documents::library::read_preview`). Anything else, or a file that is too big, is invalid input, and the page offers the system's
+/// viewer or a saved copy.
+#[tauri::command]
+pub fn read_document_preview(vault: Shared, id: String) -> Result<docs::PreviewData, AppError> {
+    let id = categories::parse_id(&id)?;
+    vault.with_files(|conn, files| docs::read_preview(conn, files, id))
 }
 
 /// Opens a document in the system's own viewer, from a plain copy that is removed when the app locks or closes. Not for a kind of

@@ -3,7 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import AddCategoryModal from '../components/AddCategoryModal'
 import AttachArea from '../components/AttachArea'
 import BillCodeModal from '../components/BillCodeModal'
-import ClipMark from '../components/ClipMark'
+import ClipPreview from '../components/ClipPreview'
 import ConfirmModal from '../components/ConfirmModal'
 import Dropdown, { type DropdownOption } from '../components/Dropdown'
 import Modal, { modalFormId } from '../components/Modal'
@@ -21,6 +21,7 @@ import { apiBound, shiftBound, type RangeMode } from '../lib/range'
 import { draftOfBill, equalDraft, NOT_SPLIT, toInput, type SplitState } from '../lib/split'
 import { useAttachments, type Attachments } from '../hooks/useAttachments'
 import { useClipCounts } from '../hooks/useClipCounts'
+import { useFocusRequest, useJumpTo } from '../hooks/useFocusRequest'
 import { useMoneySettings, type MoneySettings } from '../hooks/useMoneySettings'
 import { useProfile } from '../hooks/profile'
 import { useNotice } from '../hooks/useNotice'
@@ -79,6 +80,9 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
   // The documents of the transaction being edited are stored and linked at once; those of one being made wait for it to be saved.
   const attachments = useAttachments(editing ? { kind: 'transaction', id: editing.id } : null)
   const clips = useClipCounts('transaction', page?.transactions.map((transaction) => transaction.id) ?? [], reload)
+  // a document can send the person here for one of its transactions: its month is shown, and the row is scrolled to and outlined
+  const { request: focus, done: focusDone } = useFocusRequest('transaction')
+  useJumpTo(focus, focusDone, page)
   // The list waits for a short pause in typing instead of asking the database on every key.
   const searchText = useDebounced(filters.q, 200)
   const categoryNames = useMemo(() => new Map(categories.map((category) => [category.id, category.name])), [categories])
@@ -124,6 +128,14 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
       cancelled = true
     }
   }, [filters.mode, filters.from, filters.to, filters.categoryId, searchText, limit, offset, reload, setMessage])
+
+  useEffect(() => {
+    if (!focus) return
+    const month = focus.date.slice(0, 7)
+    setFilters({ mode: 'month', from: month, to: month, categoryId: '', q: '' })
+    setLimit(100)
+    setOffset(0)
+  }, [focus])
 
   function patchFilters(patch: Partial<Filters>) {
     setFilters((current) => ({ ...current, ...patch }))
@@ -444,7 +456,7 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
             {page.transactions.length === 0 ? <p>{t('tx.empty')}</p> : null}
             <ul className="card-list">
               {page.transactions.map((transaction) => (
-                <li key={transaction.id} className="card-item">
+                <li key={transaction.id} className="card-item" data-item={`transaction:${transaction.id}`}>
                   <div className="card-body">
                     <p className="card-name">{transaction.name}</p>
                     <p className="card-meta">
@@ -456,6 +468,12 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
                         .filter(Boolean)
                         .map((part) => ` \u00b7 ${part}`)
                         .join('')}
+                      {clips[transaction.id] ? (
+                        <>
+                          {' \u00b7 '}
+                          <ClipPreview inline target={{ kind: 'transaction', id: transaction.id }} name={transaction.name} count={clips[transaction.id] ?? 0} />
+                        </>
+                      ) : null}
                     </p>
                     {transaction.split.length > 0 || transaction.description?.trim() ? (
                       <button
@@ -496,7 +514,6 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
                         ) : null}
                       </div>
                     ) : null}
-                    {clips[transaction.id] ? <ClipMark count={clips[transaction.id] ?? 0} onClick={() => openEdit(transaction)} /> : null}
                   </div>
                   <div className="card-actions">
                     <button type="button" data-row-focus onClick={() => openEdit(transaction)}>

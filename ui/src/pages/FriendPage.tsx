@@ -4,7 +4,7 @@ import { debts, type Entry, type EntryKind, type Line, type Statement } from '..
 import { ApiError, errorText } from '../api/invoke'
 import { useToday, type Today } from '../api/today'
 import BillCodeModal from '../components/BillCodeModal'
-import ClipMark from '../components/ClipMark'
+import ClipPreview from '../components/ClipPreview'
 import ConfirmModal from '../components/ConfirmModal'
 import DebtsFiles from '../components/DebtsFiles'
 import EntryModal from '../components/EntryModal'
@@ -12,6 +12,7 @@ import FriendNameModal from '../components/FriendNameModal'
 import ReminderBlock from '../components/ReminderBlock'
 import SettleModal from '../components/SettleModal'
 import { useClipCounts } from '../hooks/useClipCounts'
+import { useFocusRequest, useJumpTo } from '../hooks/useFocusRequest'
 import { useMoneySettings, type MoneySettings } from '../hooks/useMoneySettings'
 import { useNotice } from '../hooks/useNotice'
 import { useProfile } from '../hooks/profile'
@@ -72,6 +73,9 @@ function FriendView({ settings, now }: { settings: MoneySettings; now: Today }) 
   const lines = useMemo(() => [...(statement?.lines ?? [])].reverse(), [statement])
   const entryIds = useMemo(() => lines.flatMap((line) => (line.entryId ? [line.entryId] : [])), [lines])
   const clips = useClipCounts('ledger_entry', entryIds, reload)
+  // a document can send the person here for one of its entries: the line is scrolled to and outlined
+  const { request: focus, done: focusDone } = useFocusRequest('ledger_entry')
+  useJumpTo(focus, focusDone, lines)
 
   // Keyboard: n adds money lent, j and k move between rows.
   useShortcut('new', () => setDialog({ kind: 'entry', entry: null, as: 'LENT' }))
@@ -193,15 +197,15 @@ function FriendView({ settings, now }: { settings: MoneySettings; now: Today }) 
           {lines.map((line, at) => {
             const entry = entryOfLine(line, person.id)
             return (
-              <li key={`${line.entryId ?? 'bill'}-${line.transactionId ?? ''}-${at}`} className="card-item">
+              <li key={`${line.entryId ?? 'bill'}-${line.transactionId ?? ''}-${at}`} className="card-item" data-item={line.entryId ? `ledger_entry:${line.entryId}` : undefined}>
                 <div className="card-body">
                   <p className="card-name">{lineLabel(line)}</p>
                   <p className="card-meta">
                     <span className={`card-amount debt-${line.effect.startsWith('-') ? 'owe' : 'owed'}`}>{effectText(line)}</span>
                     {` · ${formatDate(line.date, settings.locale)} · ${t('debts.balance')} ${money(line.balance)}`}
                   </p>
-                  {line.entryId && clips[line.entryId] && entry ? (
-                    <ClipMark count={clips[line.entryId] ?? 0} onClick={() => setDialog({ kind: 'entry', entry })} />
+                  {line.entryId && clips[line.entryId] ? (
+                    <ClipPreview target={{ kind: 'ledger_entry', id: line.entryId }} name={lineLabel(line)} count={clips[line.entryId] ?? 0} />
                   ) : null}
                 </div>
                 {line.kind === 'BILL' && line.transactionId ? (

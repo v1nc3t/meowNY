@@ -49,6 +49,7 @@ fn harness() -> Harness {
             commands::document_counts,
             commands::check_documents,
             commands::read_document_image,
+            commands::read_document_preview,
             commands::document_upload_begin,
             commands::document_upload_chunk,
             commands::document_upload_finish,
@@ -170,6 +171,25 @@ fn an_image_is_given_for_drawing_and_a_pdf_is_not() {
 }
 
 #[test]
+fn a_preview_is_given_with_its_kind_and_refused_for_what_is_not_shown() {
+    let h = harness();
+    let pdf = h.upload(json!({ "name": "a.pdf" }), PDF, 1000);
+    let given = h.call("read_document_preview", json!({ "id": pdf["document"]["id"] })).unwrap();
+    assert_eq!(given["kind"], "pdf");
+    assert_eq!(given["mediaType"], "application/pdf");
+    assert_eq!(base64url_decode(given["data"].as_str().unwrap()).unwrap(), PDF);
+
+    let mut docx = b"PK\x03\x04".to_vec();
+    docx.extend_from_slice(&[0; 20]);
+    let word = h.upload(json!({ "name": "Letter.docx" }), &docx, 10);
+    assert_eq!(h.call("read_document_preview", json!({ "id": word["document"]["id"] })).unwrap()["kind"], "docx");
+
+    let page = h.upload(json!({ "name": "page.html" }), b"<b>hi</b>", 10);
+    assert_eq!(h.code("read_document_preview", json!({ "id": page["document"]["id"] })), "invalid_input");
+    assert_eq!(h.code("read_document_preview", json!({ "id": "x" })), "invalid_input");
+}
+
+#[test]
 fn a_document_is_renamed_linked_unlinked_and_deleted() {
     let h = harness();
     let tx = h.transaction();
@@ -251,6 +271,7 @@ fn when_the_app_is_locked_nothing_can_be_done_and_a_half_sent_file_is_gone() {
         ("document_library_size", json!({})),
         ("check_documents", json!({})),
         ("read_document_image", json!({ "id": "1" })),
+        ("read_document_preview", json!({ "id": "1" })),
         ("document_upload_begin", json!({ "input": { "name": "x" }, "size": 10 })),
     ] {
         assert_eq!(h.code(cmd, args), "locked", "{cmd}");

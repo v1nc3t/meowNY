@@ -3704,6 +3704,13 @@ button.attach-name {
   flex: 0 0 auto;
 }
 
+/* The number of attachments inside a line of text, after the size of a document. */
+.clip.in-line {
+  align-self: auto;
+  padding: 0;
+  vertical-align: middle;
+}
+
 /* Debts and shared bills (phase 10). */
 .debt-owed {
   color: var(--accent);
@@ -3939,4 +3946,294 @@ button.attach-name {
    its scroll bar (and nothing when the list is short). */
 .app-main main > section.doc-page > .tx-pane.wide {
   padding-right: 0;
+}
+
+/* Looking into a document: a wide dialog, and the document in a frame. */
+.modal.modal-look {
+  width: min(60rem, calc(100vw - 2rem));
+}
+
+.preview-body {
+  flex: 1 1 auto;
+  min-height: 10rem;
+  max-height: calc(100svh - 12rem);
+  padding: var(--edge) var(--room) var(--edge) var(--edge);
+  overflow: auto;
+  border: 0.8px solid var(--border);
+}
+
+.preview-body > .hint,
+.preview-body > .notice {
+  margin: 0;
+  padding: 0.75rem;
+}
+
+.preview-note {
+  margin: 0;
+}
+
+/* A PDF, a Word file and a sheet have a frame of a height of their own, and turn pages or scroll inside it. */
+.preview-body.is-framed {
+  display: flex;
+  flex-direction: column;
+  height: calc(100svh - 14.5rem);
+  min-height: 16rem;
+  max-height: none;
+  padding: 0;
+  overflow: hidden;
+}
+
+/* A sheet is only as tall as its rows, up to the frame. */
+.preview-body.is-sheet {
+  height: auto;
+  min-height: 0;
+  max-height: calc(100svh - 14.5rem);
+}
+
+.preview-image {
+  display: block;
+  max-width: 100%;
+  max-height: calc(100svh - 14rem);
+  margin: 0 auto;
+  object-fit: contain;
+}
+
+.preview-text {
+  margin: 0;
+  font: inherit;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* A PDF: the page as large as the frame lets it be, and under it the buttons and the page number. */
+.preview-pdf {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 0.5rem;
+  min-height: 0;
+  padding: 0.75rem 0.75rem 0.5rem;
+}
+
+.preview-canvas {
+  display: flex;
+  flex: 1 1 0;
+  align-items: center;
+  justify-content: center;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.preview-canvas canvas {
+  display: block;
+  background: #fff;
+}
+
+.preview-pages {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  gap: 1.5rem;
+}
+
+/* A Word file: a sheet of white paper with dark ink on it, in a frame that scrolls. */
+.paper-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: 1rem;
+  overflow: auto;
+}
+
+.paper {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  width: min(100%, 46rem);
+  min-height: 100%;
+  margin: 0 auto;
+  padding: 2.5rem 3rem;
+  background: #fff;
+  color: #1b1b1b;
+  font-family: 'Segoe UI', system-ui, -apple-system, Arial, 'Liberation Sans', sans-serif;
+  font-size: 0.9375rem;
+  line-height: 1.55;
+}
+
+.paper p,
+.paper h3,
+.paper ul {
+  margin: 0;
+  color: inherit;
+  font-family: inherit;
+  font-size: inherit;
+  line-height: inherit;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.paper h3 {
+  margin-top: 0.5rem;
+  color: #000;
+  font-weight: 700;
+}
+
+.paper h3.level-1 {
+  font-size: 1.5rem;
+}
+
+.paper h3.level-2 {
+  font-size: 1.25rem;
+}
+
+.paper h3.level-3 {
+  font-size: 1.0625rem;
+}
+
+.paper ul {
+  width: auto;
+  padding-left: 1.5rem;
+  list-style: disc;
+}
+
+.paper li {
+  display: list-item;
+  padding: 0.125rem 0;
+  border: 0;
+}
+
+.paper-table-wrap {
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.paper-table {
+  border-collapse: collapse;
+  font-size: 0.875rem;
+}
+
+.paper-table td {
+  padding: 0.3rem 0.625rem;
+  border: 1px solid #b8b8b8;
+  color: #1b1b1b;
+  vertical-align: top;
+  white-space: pre-wrap;
+}
+
+/* An Excel file or a CSV: a grid with letters over the columns and numbers beside the rows, and the tabs of the sheets under it. */
+.sheet-grid {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  background: #fff;
+}
+
+.sheet-grid table {
+  border-collapse: separate;
+  border-spacing: 0;
+  color: #1b1b1b;
+  font-family: Calibri, 'Segoe UI', system-ui, Arial, 'Liberation Sans', sans-serif;
+  font-size: 0.8125rem;
+}
+
+.sheet-grid th,
+.sheet-grid td {
+  max-width: 22rem;
+  padding: 0.125rem 0.5rem;
+  overflow: hidden;
+  border-right: 1px solid #d4d4d4;
+  border-bottom: 1px solid #d4d4d4;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sheet-grid td {
+  min-width: 5rem;
+  background: #fff;
+  color: #1b1b1b;
+}
+
+.sheet-grid td.is-number {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.sheet-grid th {
+  background: #f0f0f0;
+  color: #555;
+  font-weight: 400;
+  text-align: center;
+}
+
+.sheet-grid thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+}
+
+.sheet-grid tbody th {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  min-width: 2.5rem;
+}
+
+.sheet-grid thead th.sheet-corner {
+  left: 0;
+  z-index: 3;
+}
+
+.sheet-tabs {
+  display: flex;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  background: #e6e6e6;
+  border-top: 1px solid #c4c4c4;
+}
+
+.sheet-tabs button {
+  padding: 0.375rem 1rem;
+  border-right: 1px solid #c4c4c4;
+  color: #444;
+}
+
+.sheet-tabs button[aria-selected='true'] {
+  background: #fff;
+  color: #111;
+  font-weight: 700;
+}
+
+/* What a document is linked to: a line to choose for each item, which takes the person to it. */
+.link-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.link-list > li {
+  display: block;
+  padding: 0;
+  border: 0;
+}
+
+.link-list button {
+  width: 100%;
+  min-width: 0;
+  padding: 0.5rem 0.75rem;
+  border: 0.8px solid var(--border);
+  border-radius: var(--card-radius);
+  background: var(--surface);
+  text-align: left;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+/* The item that a document sent the person to, for a moment after the page opens. */
+[data-item].is-found {
+  outline: 1.5px solid var(--accent);
+  outline-offset: 3px;
 }

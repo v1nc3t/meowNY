@@ -88,6 +88,7 @@
     "allow-document-counts",
     "allow-check-documents",
     "allow-read-document-image",
+    "allow-read-document-preview",
     "allow-open-document",
     "allow-save-document-copy",
     "allow-document-upload-begin",

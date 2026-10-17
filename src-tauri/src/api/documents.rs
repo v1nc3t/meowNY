@@ -84,7 +84,7 @@ pub const LIST: Route = Route {
 pub const SHOW: Route = Route {
     name: "documents.show",
     scope: Scope::Read,
-    summary: "One document: its name, date, type, size and hash, whether this computer holds its file, and in `links` what it is attached to. Never the file.",
+    summary: "One document: its name, date, type, size and hash, whether this computer holds its file, and in `links` what it is attached to (a debt entry also gives `personId`, the friend). Never the file.",
     params: &[ID.required()],
     confirm: None,
     run: |ctx, mut args| {

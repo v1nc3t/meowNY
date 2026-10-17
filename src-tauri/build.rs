@@ -86,6 +86,7 @@ const COMMANDS: &[&str] = &[
     "document_counts",
     "check_documents",
     "read_document_image",
+    "read_document_preview",
     "open_document",
     "save_document_copy",
     "document_upload_begin",

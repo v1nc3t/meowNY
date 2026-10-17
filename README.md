@@ -68,6 +68,7 @@ meowNY is a desktop app for tracking income and expenses against monthly budgets
 **Documents (phase 9: built; not yet tried on a real phone)**
 
 - Attach receipts, invoices and contracts to transactions and recurring items, on the computer and on the phone (from its file chooser or its camera). A file is kept **encrypted** next to your database, up to 25 MiB each, and is readable only while the app is unlocked. [A guide](docs/documents.md).
+- **Preview** shows an image, a PDF, text, a CSV, a Word (.docx) or an Excel (.xlsx) file inside the app, with no plain copy and nothing run (PDFs are drawn by PDF.js, the one library added for it; the Word and Excel readers are the app's own).
 - Each document has a name, a date and the things it is attached to. The type is found from the file's first bytes, never from its name, and a file of no known type is never opened from the app, only saved.
 - Opening a PDF or a large picture hands a plain copy to your system's viewer; the copy is removed when you lock the app or close it, and the screen says so first.
 - **Keep on phone** is a switch on each document. A document you did not switch on never leaves the computer; one added on the phone goes to the computer and leaves the phone only once the computer has confirmed it holds a good copy.

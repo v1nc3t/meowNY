@@ -151,6 +151,9 @@ fn a_date_the_switch_and_the_links_can_be_given_when_adding() {
     assert_eq!(links.len(), 2);
     assert!(links.iter().any(|l| l.kind == TargetKind::Transaction && l.id == tx && l.name == "Boiler" && l.date == "2026-01-10"));
     assert!(links.iter().any(|l| l.kind == TargetKind::Recurring && l.id == rec && l.name == "Rent" && l.date == "2026-02-01"));
+    assert!(links.iter().all(|l| l.person_id.is_none()), "only an entry of the ledger names a friend");
+    let json = serde_json::to_value(&links).unwrap();
+    assert!(json[0].get("personId").is_none(), "and the field is left out of the others");
 }
 
 #[test]
@@ -635,6 +638,86 @@ fn an_image_is_given_to_the_page_as_text_and_only_when_the_app_may_draw_it() {
     let heavy = env.add("heavy.png", &heavy).document;
     assert_eq!(read_image(&env.conn, &env.files(), heavy.id).err(), Some(AppError::InvalidInput));
     assert_eq!(read_image(&env.conn, &env.files(), 999).err(), Some(AppError::NotFound));
+}
+
+/// The start of a zip file, enough for the app to take it for a Word or Excel file by its name.
+fn zip_like(tail: u8) -> Vec<u8> {
+    let mut bytes = b"PK\x03\x04".to_vec();
+    bytes.extend_from_slice(&[0, 0, 0, 0, 0, 0, 1, 2, tail]);
+    bytes
+}
+
+#[test]
+fn the_preview_is_given_for_the_kinds_the_page_can_show() {
+    let env = Env::new();
+    let cases: [(&str, Vec<u8>, PreviewKind); 6] = [
+        ("photo.png", png(), PreviewKind::Image),
+        ("Receipt.pdf", PDF.to_vec(), PreviewKind::Pdf),
+        ("notes.txt", b"milk\neggs\n".to_vec(), PreviewKind::Text),
+        ("rows.csv", b"a,b\n1,2\n".to_vec(), PreviewKind::Csv),
+        ("Contract.DOCX", zip_like(1), PreviewKind::Docx),
+        ("Budget.xlsx", zip_like(2), PreviewKind::Xlsx),
+    ];
+    for (name, bytes, kind) in cases {
+        let doc = env.add(name, &bytes).document;
+        let given = read_preview(&env.conn, &env.files(), doc.id).unwrap();
+        assert_eq!(given.kind, kind, "{name}");
+        assert_eq!(crate::sync::qr::base64url_decode(&given.data).unwrap(), bytes, "{name}");
+    }
+}
+
+#[test]
+fn the_preview_is_not_given_for_what_the_page_would_have_to_trust_or_cannot_read() {
+    let env = Env::new();
+    let refused = |name: &str, bytes: &[u8]| {
+        let doc = env.add(name, bytes).document;
+        read_preview(&env.conn, &env.files(), doc.id).err()
+    };
+    // markup of someone else, a kind the app has no reader for, and a name that says Word over bytes that are not a zip
+    assert_eq!(refused("page.html", b"<script>alert(1)</script>"), Some(AppError::InvalidInput));
+    assert_eq!(refused("old.doc", &zip_like(3)), Some(AppError::InvalidInput));
+    assert_eq!(refused("slides.pptx", &zip_like(4)), Some(AppError::InvalidInput));
+    assert_eq!(refused("Contract.docx", b"\x00\x01 not a zip"), Some(AppError::InvalidInput));
+    assert_eq!(refused("Budget", &zip_like(5)), Some(AppError::InvalidInput), "no extension, no reader");
+    // an image that says it is enormous
+    let mut huge = png();
+    huge[16..20].copy_from_slice(&20_000u32.to_be_bytes());
+    huge[20..24].copy_from_slice(&20_000u32.to_be_bytes());
+    assert_eq!(refused("huge.png", &huge), Some(AppError::InvalidInput));
+    assert_eq!(read_preview(&env.conn, &env.files(), 999).err(), Some(AppError::NotFound));
+}
+
+#[test]
+fn the_preview_has_a_limit_by_kind() {
+    let env = Env::new();
+    let mut heavy_image = png();
+    heavy_image.resize(MAX_DRAW_BYTES as usize + 1, 7);
+    let image = env.add("heavy.png", &heavy_image).document;
+    assert_eq!(read_preview(&env.conn, &env.files(), image.id).err(), Some(AppError::InvalidInput));
+    // a PDF may be heavier than an image, up to the preview limit
+    let mut pdf = PDF.to_vec();
+    pdf.resize(MAX_DRAW_BYTES as usize + 1, b' ');
+    let fine = env.add("long.pdf", &pdf).document;
+    assert_eq!(read_preview(&env.conn, &env.files(), fine.id).unwrap().kind, PreviewKind::Pdf);
+    let mut too_heavy = PDF.to_vec();
+    too_heavy.resize(MAX_PREVIEW_BYTES as usize + 1, b' ');
+    let doc = env.add("heavier.pdf", &too_heavy).document;
+    assert_eq!(read_preview(&env.conn, &env.files(), doc.id).err(), Some(AppError::InvalidInput));
+}
+
+#[test]
+fn a_preview_whose_file_is_gone_or_changed_is_not_given() {
+    let env = Env::new();
+    let doc = env.add("Receipt.pdf", PDF).document;
+    let path = env.path_of(&doc);
+    let sealed = fs::read(&path).unwrap();
+    fs::remove_file(&path).unwrap();
+    assert_eq!(read_preview(&env.conn, &env.files(), doc.id).err(), Some(AppError::FileMissing));
+    let mut changed = sealed;
+    let at = changed.len() - 5;
+    changed[at] ^= 1;
+    fs::write(&path, changed).unwrap();
+    assert_eq!(read_preview(&env.conn, &env.files(), doc.id).err(), Some(AppError::FileDamaged));
 }
 
 #[test]

@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
+import type { Doc } from '../api/documents.ts'
 import { t } from '../i18n/translate.ts'
-import { canOpen, canShowImage, dropNotice, dropNote, fileState, fileStateText, KIND_CHOICES, MAX_DRAW_BYTES, reportLines, typeText } from './documents.ts'
+import { canOpen, canPreview, canShowImage, dropNotice, dropNote, fileState, fileStateText, KIND_CHOICES, MAX_DRAW_BYTES, MAX_PREVIEW_BYTES, previewKindOf, reportLines, typeText, whereIs } from './documents.ts'
 
 test('a missing file is a fault on the computer and normal on the phone', () => {
   assert.equal(fileState({ hasFile: true, keepOnPhone: false }, false), 'here')
@@ -72,4 +73,38 @@ test('a kind of file is named the way a person says it', () => {
   assert.equal(typeText('application/pdf'), 'docs.typePdf')
   for (const text of ['text/plain', 'text/csv', 'text/html'] as const) assert.equal(typeText(text), 'docs.typeText')
   assert.equal(typeText('application/octet-stream'), 'docs.typeOther')
+})
+
+test('a document is previewed as an image, a PDF, text or a table, or by its name as a Word or Excel file; never as HTML', () => {
+  const doc = (name: string, mediaType: Doc['mediaType']) => ({ name, mediaType })
+  assert.equal(previewKindOf(doc('a.png', 'image/png')), 'image')
+  assert.equal(previewKindOf(doc('a.pdf', 'application/pdf')), 'pdf')
+  assert.equal(previewKindOf(doc('a.txt', 'text/plain')), 'text')
+  assert.equal(previewKindOf(doc('a.csv', 'text/csv')), 'csv')
+  assert.equal(previewKindOf(doc('page.html', 'text/html')), null)
+  assert.equal(previewKindOf(doc('Letter.DOCX', 'application/octet-stream')), 'docx')
+  assert.equal(previewKindOf(doc('Budget.xlsx', 'application/octet-stream')), 'xlsx')
+  assert.equal(previewKindOf(doc('Budget.xlsm', 'application/octet-stream')), 'xlsx')
+  assert.equal(previewKindOf(doc('old.doc', 'application/octet-stream')), null)
+  assert.equal(previewKindOf(doc('Budget', 'application/octet-stream')), null, 'no extension, no reader')
+  assert.equal(previewKindOf(doc('.xlsx', 'application/octet-stream')), 'xlsx')
+})
+
+test('the preview button is offered for a file that is here, of a kind that is shown, and not too heavy for that kind', () => {
+  const pdf = { hasFile: true, name: 'a.pdf', mediaType: 'application/pdf', sizeBytes: MAX_PREVIEW_BYTES } as const
+  assert.equal(canPreview(pdf), true)
+  assert.equal(canPreview({ ...pdf, sizeBytes: MAX_PREVIEW_BYTES + 1 }), false)
+  assert.equal(canPreview({ ...pdf, hasFile: false }), false, 'a phone that does not keep the file has nothing to show')
+  const image = { hasFile: true, name: 'a.png', mediaType: 'image/png', sizeBytes: MAX_DRAW_BYTES } as const
+  assert.equal(canPreview(image), true)
+  assert.equal(canPreview({ ...image, sizeBytes: MAX_DRAW_BYTES + 1 }), false, 'an image keeps the lower limit')
+  assert.equal(canPreview({ ...pdf, name: 'a.html', mediaType: 'text/html' }), false)
+})
+
+test('an item that a document is attached to is found on the page of its kind, and a debt entry on its friend\'s page', () => {
+  const focus = (kind: 'transaction' | 'recurring' | 'ledger_entry') => ({ kind, id: '7', date: '2026-03-04' })
+  assert.deepEqual(whereIs({ kind: 'transaction', id: '7', date: '2026-03-04' }), { path: '/app/transactions', focus: focus('transaction') })
+  assert.deepEqual(whereIs({ kind: 'recurring', id: '7', date: '2026-03-04' }), { path: '/app/recurring', focus: focus('recurring') })
+  assert.deepEqual(whereIs({ kind: 'ledger_entry', id: '7', date: '2026-03-04', personId: '3' }), { path: '/app/debts/3', focus: focus('ledger_entry') })
+  assert.equal(whereIs({ kind: 'ledger_entry', id: '7', date: '2026-03-04' }), null, 'without the friend there is no page to go to')
 })

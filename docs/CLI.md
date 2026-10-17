@@ -127,7 +127,7 @@ Every command is `meowny <noun> <verb>`, or a single word, with its flags after 
 | [`export pdf`](#cmd-export-pdf) | Writes a PDF report for whole months, in English, after the person allows it in the app: totals, charts and budget against actual, and the transactions if asked. An existing file is never replaced. | read token, and your yes |
 | [`backup create`](#cmd-backup-create) | Writes an encrypted backup of all the data, after the person allows it in the app. It opens only with the passphrase given here, and only the app can restore it. An existing file is never replaced. | read token, and your yes |
 | [`documents list`](#cmd-documents-list) | Documents, newest paper first, with the total that match: names, dates, types, sizes and hashes, never the files. Up to 100 a page, 50 unless limit says otherwise. | read token |
-| [`documents show`](#cmd-documents-show) | One document: its name, date, type, size and hash, whether this computer holds its file, and in `links` what it is attached to. Never the file. | read token |
+| [`documents show`](#cmd-documents-show) | One document: its name, date, type, size and hash, whether this computer holds its file, and in `links` what it is attached to (a debt entry also gives `personId`, the friend). Never the file. | read token |
 | [`documents add`](#cmd-documents-add) | Stores a file as a document, encrypted, and attaches it where asked. The answer is the document and `alreadyThere`: the same file added again is not stored twice, and the attachments are added to the document that is there. At most 25 MiB. | write token |
 | [`documents update`](#cmd-documents-update) | Renames a document, changes its date, or switches whether the phone keeps its file. Give at least one. The contents cannot be changed. | write token |
 | [`documents delete`](#cmd-documents-delete) | Deletes a document, its file and its attachments. The transactions it was attached to stay. | write token |
@@ -2144,7 +2144,7 @@ With `--json` (one line; shown indented):
 
 *read token*
 
-One document: its name, date, type, size and hash, whether this computer holds its file, and in `links` what it is attached to. Never the file.
+One document: its name, date, type, size and hash, whether this computer holds its file, and in `links` what it is attached to (a debt entry also gives `personId`, the friend). Never the file.
 
 ```text
 meowny documents show <id>
@@ -3219,7 +3219,7 @@ The port is in `api.json`. `meowny schema --app` prints every route with its arg
 | `export.pdf` | read, and your yes | `out` (required), `fromMonth` (required), `toMonth` (required), `categoryIds`, `includeTransactions`, `showDescriptions`, `page` | Writes a PDF report for whole months, in English, after the person allows it in the app: totals, charts and budget against actual, and the transactions if asked. An existing file is never replaced. |
 | `backup.create` | read, and your yes | `out` (required), `passphrase` (required) | Writes an encrypted backup of all the data, after the person allows it in the app. It opens only with the passphrase given here, and only the app can restore it. An existing file is never replaced. |
 | `documents.list` | read | `q`, `kind`, `from`, `to`, `transactionId`, `recurringId`, `ledgerEntryId`, `limit`, `offset` | Documents, newest paper first, with the total that match: names, dates, types, sizes and hashes, never the files. Up to 100 a page, 50 unless limit says otherwise. |
-| `documents.show` | read | `id` (required) | One document: its name, date, type, size and hash, whether this computer holds its file, and in `links` what it is attached to. Never the file. |
+| `documents.show` | read | `id` (required) | One document: its name, date, type, size and hash, whether this computer holds its file, and in `links` what it is attached to (a debt entry also gives `personId`, the friend). Never the file. |
 | `documents.add` | write | `data` (required), `name` (required), `date`, `keepOnPhone`, `transactionIds`, `recurringIds`, `ledgerEntryIds` | Stores a file as a document, encrypted, and attaches it where asked. The answer is the document and `alreadyThere`: the same file added again is not stored twice, and the attachments are added to the document that is there. At most 25 MiB. |
 | `documents.update` | write | `id` (required), `name`, `date`, `keepOnPhone` | Renames a document, changes its date, or switches whether the phone keeps its file. Give at least one. The contents cannot be changed. |
 | `documents.delete` | write | `id` (required) | Deletes a document, its file and its attachments. The transactions it was attached to stay. |

@@ -1,7 +1,7 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import AddCategoryModal from '../components/AddCategoryModal'
 import AttachArea from '../components/AttachArea'
-import ClipMark from '../components/ClipMark'
+import ClipPreview from '../components/ClipPreview'
 import DatePicker from '../components/DatePicker'
 import SplitEditor from '../components/SplitEditor'
 import Dropdown from '../components/Dropdown'
@@ -17,6 +17,7 @@ import { amountString, formatDate, formatMoney } from '../lib/money'
 import { draftOfTemplate, NOT_SPLIT, reducedWeights, toInput, type SplitState } from '../lib/split'
 import { useAttachments, type Attachments } from '../hooks/useAttachments'
 import { useClipCounts } from '../hooks/useClipCounts'
+import { useFocusRequest, useJumpTo } from '../hooks/useFocusRequest'
 import { useMoneySettings, type MoneySettings } from '../hooks/useMoneySettings'
 import { useNotice } from '../hooks/useNotice'
 import { useT } from '../i18n/context'
@@ -77,6 +78,9 @@ function RecurringView({ settings, now }: { settings: MoneySettings; now: Today 
   // The documents of the item being edited are stored and linked at once; those of one being made wait for it to be saved.
   const attachments = useAttachments(editing ? { kind: 'recurring', id: editing.id } : null)
   const clips = useClipCounts('recurring', items?.map((item) => item.id) ?? [], reload)
+  // a document can send the person here for one of its recurring items: the row is scrolled to and outlined
+  const { request: focus, done: focusDone } = useFocusRequest('recurring')
+  useJumpTo(focus, focusDone, items)
   const onSplitReady = useCallback((ready: boolean) => setSplit((current) => (current.ready === ready ? current : { ...current, ready })), [])
   const removedFriends = useMemo(() => new Set(friends.filter((friend) => friend.archived).map((friend) => friend.id)), [friends])
   const categoryNames = useMemo(() => new Map(categories.map((category) => [category.id, category.name])), [categories])
@@ -137,6 +141,8 @@ function RecurringView({ settings, now }: { settings: MoneySettings; now: Today 
   function openPay(item: Recurring) {
     setDraftMessage('')
     closeModals()
+    // the documents of a payment wait in the dialog and are attached to the transaction it makes
+    attachments.reset()
     setPaying(item)
   }
 
@@ -249,8 +255,10 @@ function RecurringView({ settings, now }: { settings: MoneySettings; now: Today 
       return
     }
     setPending(true)
+    let notAttached: string[] = []
     try {
-      await recurringApi.pay(paying.id, { amount, paidOn })
+      const paid = await recurringApi.pay(paying.id, { amount, paidOn })
+      notAttached = await attachments.commit({ kind: 'transaction', id: paid.id })
     } catch (failure) {
       setDraftMessage(errorText(failure))
       return
@@ -258,7 +266,7 @@ function RecurringView({ settings, now }: { settings: MoneySettings; now: Today 
       setPending(false)
     }
     setDraftMessage('')
-    setMessage('')
+    setMessage(notAttached.length > 0 ? t('docs.attachFailed', { names: notAttached.join(', ') }) : '')
     closeModals()
     setReload((value) => value + 1)
   }
@@ -326,6 +334,7 @@ function RecurringView({ settings, now }: { settings: MoneySettings; now: Today 
             </label>
             <DateField name="paidOn" label={t('rec.paidOn')} defaultValue={now.date} today={now.date} />
           </form>
+          <AttachArea attachments={attachments} />
         </Modal>
       ) : null}
       {items ? (
@@ -339,7 +348,7 @@ function RecurringView({ settings, now }: { settings: MoneySettings; now: Today 
                   const status = statusOf(item, now.date)
                   const badge = badgeOf(item, status)
                   return (
-                    <li key={item.id} className="rec-item" data-status={status}>
+                    <li key={item.id} className="rec-item" data-status={status} data-item={`recurring:${item.id}`}>
                       <div className="rec-body">
                         <p className="rec-name">{item.name}</p>
                         <p className="rec-meta">
@@ -348,6 +357,12 @@ function RecurringView({ settings, now }: { settings: MoneySettings; now: Today 
                           </span>
                           {' \u00b7 '}
                           {everyText(item)}
+                          {clips[item.id] ? (
+                            <>
+                              {' \u00b7 '}
+                              <ClipPreview inline target={{ kind: 'recurring', id: item.id }} name={item.name} count={clips[item.id] ?? 0} />
+                            </>
+                          ) : null}
                         </p>
                         {item.split?.parts.some((part) => part.personId && removedFriends.has(part.personId)) ? (
                           <p className="hint">{t('split.archivedFriend')}</p>
@@ -386,7 +401,6 @@ function RecurringView({ settings, now }: { settings: MoneySettings; now: Today 
                             ) : null}
                           </div>
                         ) : null}
-                        {clips[item.id] ? <ClipMark count={clips[item.id] ?? 0} onClick={() => openEdit(item)} /> : null}
                       </div>
                       <div className="rec-due">
                         <span className="rec-badge" data-status={status}>

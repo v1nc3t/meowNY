@@ -56,7 +56,8 @@ export type TargetKind = z.infer<typeof TargetKind>
 /** What a document is linked to: a transaction, a recurring item or an entry of the ledger of money lent and borrowed. */
 export type Target = { kind: TargetKind; id: string }
 
-export const LinkView = z.object({ kind: TargetKind, id, name: z.string(), date })
+/** `personId` is the friend, for an entry of the ledger only: it is what a screen needs to go to the entry's page. */
+export const LinkView = z.object({ kind: TargetKind, id, name: z.string(), date, personId: id.optional() })
 export type LinkView = z.infer<typeof LinkView>
 
 /** What became of one file that was dropped on the window. `error` is one of the app's fixed codes when it failed. */
@@ -88,6 +89,14 @@ export type Report = z.infer<typeof Report>
 
 export const ImageData = z.object({ mediaType: MediaType, data: z.string() })
 export type ImageData = z.infer<typeof ImageData>
+
+/** A file for the preview: what to show it as, and its bytes as base64url text. */
+export const PreviewData = z.object({
+  kind: z.enum(['image', 'pdf', 'text', 'csv', 'docx', 'xlsx']),
+  mediaType: MediaType,
+  data: z.string(),
+})
+export type PreviewData = z.infer<typeof PreviewData>
 
 export type DocFilter = {
   q?: string
@@ -191,6 +200,7 @@ export const documents = {
   counts: (kind: TargetKind, ids: string[]) => call('document_counts', z.record(z.string(), z.number().int().positive()), { kind, ids }),
   /** An image the app may draw. Anything else is an error, and the page offers the system's viewer. */
   image: (id: string) => call('read_document_image', ImageData, { id }),
+  preview: (id: string) => call('read_document_preview', PreviewData, { id }),
   /** Opens the file in the system's own viewer, from a plain copy that is removed when the app locks or closes. */
   open: (id: string) => call('open_document', z.null(), { id }).then(() => undefined),
   /** Saves a copy where the person chooses. False if they cancel. The copy is not encrypted. */

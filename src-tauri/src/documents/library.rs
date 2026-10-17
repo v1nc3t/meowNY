@@ -163,6 +163,16 @@ pub struct LinkView {
     /// The payment date of a transaction, the next due date of a recurring item, the date of a ledger entry. For an entry the name is the
     /// friend's.
     pub date: String,
+    /// For an entry of the ledger, the friend it is with, so that a screen can go to that friend's page. Left out for the other kinds.
+    #[serde(skip_serializing_if = "Option::is_none", serialize_with = "serialize_optional_id")]
+    pub person_id: Option<i64>,
+}
+
+fn serialize_optional_id<S: serde::Serializer>(id: &Option<i64>, serializer: S) -> Result<S::Ok, S::Error> {
+    match id {
+        Some(id) => serializer.serialize_str(&id.to_string()),
+        None => serializer.serialize_none(),
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -399,13 +409,13 @@ pub fn links_of(conn: &Connection, document_id: i64) -> Result<Vec<LinkView>, Ap
         return Err(AppError::NotFound);
     }
     let mut stmt = conn.prepare(
-        "SELECT 'transaction', t.id, t.name, t.payment_date
+        "SELECT 'transaction', t.id, t.name, t.payment_date, NULL
            FROM document_links l JOIN transactions t ON t.id = l.transaction_id WHERE l.document_id = ?1
          UNION ALL
-         SELECT 'recurring', r.id, r.name, r.next_due_date
+         SELECT 'recurring', r.id, r.name, r.next_due_date, NULL
            FROM document_links l JOIN recurring_transactions r ON r.id = l.recurring_transaction_id WHERE l.document_id = ?1
          UNION ALL
-         SELECT 'ledger_entry', e.id, p.name, e.entry_date
+         SELECT 'ledger_entry', e.id, p.name, e.entry_date, e.person_id
            FROM document_links l JOIN ledger_entries e ON e.id = l.ledger_entry_id JOIN people p ON p.id = e.person_id WHERE l.document_id = ?1
          ORDER BY 4 DESC, 2 DESC",
     )?;
@@ -420,6 +430,7 @@ pub fn links_of(conn: &Connection, document_id: i64) -> Result<Vec<LinkView>, Ap
             id: r.get(1)?,
             name: r.get(2)?,
             date: r.get(3)?,
+            person_id: r.get(4)?,
         })
     })?;
     Ok(rows.collect::<Result<Vec<_>, _>>()?)
@@ -629,6 +640,76 @@ pub fn read_image(conn: &Connection, files: &Files, id: i64) -> Result<ImageData
         return Err(AppError::InvalidInput);
     }
     Ok(ImageData { media_type: media.as_str().to_string(), data: base64url_encode(&bytes) })
+}
+
+/// The most a preview reads: 16 MiB, a third more as text. A bigger file goes to the system's viewer or is saved. Images keep the
+/// lower `MAX_DRAW_BYTES`.
+pub const MAX_PREVIEW_BYTES: u64 = 16 * 1024 * 1024;
+
+/// What the page draws a document as, in its preview.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum PreviewKind {
+    Image,
+    Pdf,
+    Text,
+    Csv,
+    /// A Word file: its text and tables, read by the page.
+    Docx,
+    /// An Excel file: its cells, read by the page.
+    Xlsx,
+}
+
+/// What a document would be previewed as, from what the app knows of it. HTML is not previewed (the page would have to draw
+/// someone else's markup), and the other kinds of file only when the name says Word or Excel: the app reads those two itself and
+/// the file is checked to be a zip before it is given. `None` means the preview is not offered.
+pub fn preview_kind_of(name: &str, media: MediaType) -> Option<PreviewKind> {
+    match media {
+        MediaType::Jpeg | MediaType::Png | MediaType::Gif | MediaType::Webp => Some(PreviewKind::Image),
+        MediaType::Pdf => Some(PreviewKind::Pdf),
+        MediaType::Text => Some(PreviewKind::Text),
+        MediaType::Csv => Some(PreviewKind::Csv),
+        MediaType::Html => None,
+        MediaType::Other => match name.rsplit_once('.')?.1.to_ascii_lowercase().as_str() {
+            "docx" | "docm" => Some(PreviewKind::Docx),
+            "xlsx" | "xlsm" => Some(PreviewKind::Xlsx),
+            _ => None,
+        },
+    }
+}
+
+/// A file for the page to show, as base64url text, and what to show it as. The page reads the bytes itself; it is told no more than
+/// the kind, and the kind decides which reader it uses.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PreviewData {
+    pub kind: PreviewKind,
+    pub media_type: String,
+    pub data: String,
+}
+
+/// The contents of a document for the preview, if the app may show it: a kind that `preview_kind_of` gives, not bigger than the
+/// limit of that kind, with a file that opens and matches its row. An image must also have a header that gives at most 64
+/// megapixels, and a Word or Excel file must begin as a zip. Anything else is `InvalidInput`, which the page answers by offering
+/// the system's viewer. Nothing is decoded or run here.
+pub fn read_preview(conn: &Connection, files: &Files, id: i64) -> Result<PreviewData, AppError> {
+    let document = get(conn, files, id)?;
+    let media = media_type_of(&document);
+    let kind = preview_kind_of(&document.name, media).ok_or(AppError::InvalidInput)?;
+    let limit = if kind == PreviewKind::Image { MAX_DRAW_BYTES } else { MAX_PREVIEW_BYTES };
+    if document.size_bytes > limit {
+        return Err(AppError::InvalidInput);
+    }
+    let bytes = read(conn, files, id)?;
+    let fits = match kind {
+        PreviewKind::Image => drawable(&bytes, media),
+        PreviewKind::Docx | PreviewKind::Xlsx => bytes.starts_with(b"PK\x03\x04"),
+        PreviewKind::Pdf | PreviewKind::Text | PreviewKind::Csv => true,
+    };
+    if !fits {
+        return Err(AppError::InvalidInput);
+    }
+    Ok(PreviewData { kind, media_type: media.as_str().to_string(), data: base64url_encode(&bytes) })
 }
 
 /// Makes the plain copy that the system's viewer is given and says where it is. A kind of file that is not opened from the app

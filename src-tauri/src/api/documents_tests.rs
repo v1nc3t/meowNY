@@ -313,6 +313,8 @@ fn a_document_can_be_attached_to_an_entry_of_the_ledger_and_goes_with_it() {
     // the read routes say what it is attached to, by the friend's name and the day
     let shown = call_with(&r, &r.read, "documents.show", json!({ "id": id })).data();
     assert_eq!((shown["links"][0]["kind"].as_str(), shown["links"][0]["name"].as_str(), shown["links"][0]["date"].as_str()), (Some("ledger_entry"), Some("Anna"), Some("2026-10-01")));
+    // an entry also says which friend it is with, for a screen that goes to the friend's page; the other kinds have no such field
+    assert_eq!(shown["links"][0]["personId"].as_str(), Some(anna.as_str()));
     assert_eq!(call_with(&r, &r.read, "documents.list", json!({ "ledgerEntryId": entry })).data()["total"], 1);
     assert_eq!(call_with(&r, &r.read, "documents.list", json!({ "transactionId": "1" })).data()["total"], 0);
 

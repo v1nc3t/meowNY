@@ -11,6 +11,8 @@ export default function Modal({
   formId = modalFormId,
   doneLabel,
   cancelLabel,
+  wide = false,
+  readOnly = false,
   children,
 }: {
   title: string
@@ -21,6 +23,10 @@ export default function Modal({
   doneLabel?: string
   /** The words on the button that closes without doing anything; "cancel" when left out. */
   cancelLabel?: string
+  /** A dialog for looking at something big: wider than the others, and tall. */
+  wide?: boolean
+  /** A dialog that only shows: it has the one button that closes it and no button that submits. */
+  readOnly?: boolean
   children: ReactNode
 }) {
   const t = useT()
@@ -40,7 +46,7 @@ export default function Modal({
   return (
     <dialog
       ref={ref}
-      className="modal"
+      className={wide ? 'modal modal-look' : 'modal'}
       aria-labelledby={titleId}
       onKeyDown={(event) => {
         if (event.key !== 'Escape') return
@@ -64,9 +70,11 @@ export default function Modal({
           <button type="button" onClick={onClose}>
             {cancelLabel ?? t('common.cancel')}
           </button>
-          <button type="submit" form={formId} disabled={pending}>
-            {doneLabel ?? t('common.done')}
-          </button>
+          {readOnly ? null : (
+            <button type="submit" form={formId} disabled={pending}>
+              {doneLabel ?? t('common.done')}
+            </button>
+          )}
         </div>
       </div>
     </dialog>
