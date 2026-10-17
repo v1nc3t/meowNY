@@ -59,6 +59,11 @@ fn convert(minor: i64, rate: Rate) -> Result<i64, AppError> {
     i64::try_from(rounded).ok().filter(|v| *v <= MAX_MINOR).ok_or(AppError::InvalidInput)
 }
 
+/// One amount converted at a rate the person typed, with the same rules and rounding as a change of currency (half up, to the cent).
+pub(crate) fn convert_at(minor: i64, rate: &str) -> Result<i64, AppError> {
+    convert(minor, parse_rate(rate)?)
+}
+
 fn normalize_code(code: &str) -> Result<String, AppError> {
     let code = code.trim().to_ascii_uppercase();
     if code.len() == 3 && code.bytes().all(|b| b.is_ascii_uppercase()) {

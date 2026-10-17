@@ -103,6 +103,46 @@ export const SplitPreview = z.object({
 })
 export type SplitPreview = z.infer<typeof SplitPreview>
 
+// -- bill codes and reminders --------------------------------------------------------------------------------------------------
+
+/** What a bill code holds, for the dialog before it is accepted. Reading it writes nothing. */
+export const BillPreview = z.object({
+  id: z.string().regex(/^[0-9a-f]{32}$/),
+  from: z.string(),
+  what: z.string(),
+  date,
+  /** The friend's part, in the currency of the code. */
+  amount,
+  total: amount,
+  currency: z.string().regex(/^[A-Z]{3}$/),
+  ownCurrency: z.string().regex(/^[A-Z]{3}$/),
+  sameCurrency: z.boolean(),
+  alreadyAdded: z.boolean(),
+  /** The friend whose name is the sender's, to choose first. */
+  friendId: id.nullable(),
+})
+export type BillPreview = z.infer<typeof BillPreview>
+
+/** What the person chose in the dialog. Exactly one of `personId` and `newFriend`; `rate` and `amount` only for another currency. */
+export type BillAccept = {
+  text: string
+  personId?: string
+  newFriend?: string
+  addExpense: boolean
+  categoryId?: string
+  rate?: string
+  amount?: string
+}
+
+export const Reminders = z.object({
+  today: date,
+  /** The friends whose reminder day has come and whose balance is not 0, the oldest first. */
+  due: z.array(z.object({ personId: id, name: z.string(), dueOn: date })),
+  /** The next days with a reminder, today included, with how many friends have one. */
+  upcoming: z.array(z.object({ date, count: z.number().int().positive() })),
+})
+export type Reminders = z.infer<typeof Reminders>
+
 // -- the files -----------------------------------------------------------------------------------------------------------------
 
 /** The fixed words of the text files and the PDF, in the person's language. */
@@ -160,6 +200,11 @@ export const debts = {
   unsplit: (transactionId: string) => call('clear_transaction_split', Transaction, { id: transactionId }),
   splitRecurring: (recurringId: string, input: SplitInput) => call('set_recurring_split', Recurring, { id: recurringId, input }),
   unsplitRecurring: (recurringId: string) => call('clear_recurring_split', Recurring, { id: recurringId }),
+  /** The text of the code for one friend's part of one bill. The same text every time; nothing is stored. */
+  billCode: (transactionId: string, personId: string, from: string) => call('bill_code', z.string(), { transactionId, personId, from }),
+  billPreview: (text: string) => call('bill_preview', BillPreview, { text }),
+  billAccept: (input: BillAccept) => call('bill_accept', Entry, { input }),
+  reminders: () => call('debts_reminders', Reminders),
   /** Opens a save dialog and writes the file where the person says. False when they cancel. The file is not encrypted. */
   save: (request: DebtsFileRequest) => call('export_debts', z.boolean(), { request }),
 }

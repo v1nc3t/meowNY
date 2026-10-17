@@ -54,6 +54,10 @@ fn harness() -> Harness {
             commands::set_recurring_split,
             commands::clear_recurring_split,
             commands::document_counts,
+            commands::bill_code,
+            commands::bill_preview,
+            commands::bill_accept,
+            commands::debts_reminders,
         ])
         .build(mock_context(noop_assets()))
         .unwrap();
@@ -203,6 +207,44 @@ fn a_recurring_item_is_split_and_its_payment_comes_split() {
 }
 
 #[test]
+fn a_code_is_shown_read_and_taken_in_as_the_page_does_it() {
+    let h = harness();
+    let (anna, category) = (h.friend("Anna"), h.category());
+    let bill = h.bill(&category, "90.00");
+    h.ok("set_transaction_split", json!({ "id": bill, "input": { "mode": "EQUAL", "parts": [{ "personId": anna }, { "guest": "Carl" }] } }));
+    let code = h.ok("bill_code", json!({ "transactionId": bill, "personId": anna, "from": "Vincent" }));
+    let text = code.as_str().unwrap().to_string();
+    assert!(text.starts_with("MNB1:"));
+    assert_eq!(h.code("bill_code", json!({ "transactionId": bill, "personId": anna, "from": "" })), "invalid_input");
+    assert_eq!(h.code("bill_code", json!({ "transactionId": bill, "personId": "999", "from": "Vincent" })), "not_found");
+    // the same app as the receiver here: the preview says what it holds, and writes nothing
+    let shown = h.ok("bill_preview", json!({ "text": text }));
+    assert_eq!((shown["from"].as_str(), shown["amount"].as_str(), shown["total"].as_str(), shown["sameCurrency"].as_bool(), shown["alreadyAdded"].as_bool()), (Some("Vincent"), Some("30.00"), Some("90.00"), Some(true), Some(false)));
+    assert_eq!(h.code("bill_preview", json!({ "text": "MNY1:abc" })), "invalid_input");
+    // taken in with a new friend and an expense; a field the page does not know is refused
+    let accepted = h.ok("bill_accept", json!({ "input": { "text": text, "newFriend": "Vincent", "addExpense": true, "categoryId": category } }));
+    assert_eq!((accepted["kind"].as_str(), accepted["amount"].as_str(), accepted["note"].as_str()), (Some("BORROWED"), Some("30.00"), Some("Dinner")));
+    assert!(accepted["transactionId"].is_string());
+    assert_eq!(h.ok("bill_preview", json!({ "text": text }))["alreadyAdded"], true);
+    assert_eq!(h.code("bill_accept", json!({ "input": { "text": text, "newFriend": "Again", "addExpense": false } })), "invalid_input");
+    assert!(h.call("bill_accept", json!({ "input": { "text": text, "newFriend": "Again", "addExpense": false, "extra": 1 } })).is_err(), "a field the page does not know is refused before the command runs");
+}
+
+#[test]
+fn reminders_are_listed_for_the_page_with_the_days_to_come() {
+    let h = harness();
+    let anna = h.friend("Anna");
+    assert_eq!(h.ok("debts_reminders", json!({}))["due"], json!([]));
+    h.ok("update_person", json!({ "id": anna, "patch": { "remindOn": "2020-01-01", "remindEveryDays": 30 } }));
+    assert_eq!(h.ok("debts_reminders", json!({}))["due"], json!([]), "nobody owes anything, so nothing is live");
+    h.ok("add_ledger_entry", json!({ "input": { "personId": anna, "kind": "LENT", "amount": "25.00", "date": "2026-10-01" } }));
+    let live = h.ok("debts_reminders", json!({}));
+    assert_eq!((live["due"][0]["name"].as_str(), live["due"][0]["personId"].as_str()), (Some("Anna"), Some(anna.as_str())));
+    assert_eq!(live["upcoming"].as_array().unwrap().len(), 4);
+    assert!(live["today"].as_str().unwrap().starts_with("20"));
+}
+
+#[test]
 fn documents_can_be_counted_on_ledger_entries_and_a_locked_app_answers_every_command_with_locked() {
     let h = harness();
     let anna = h.friend("Anna");
@@ -227,6 +269,10 @@ fn documents_can_be_counted_on_ledger_entries_and_a_locked_app_answers_every_com
         ("clear_transaction_split", json!({ "id": "1" })),
         ("set_recurring_split", json!({ "id": "1", "input": { "mode": "EQUAL", "parts": [{ "guest": "A" }] } })),
         ("clear_recurring_split", json!({ "id": "1" })),
+        ("bill_code", json!({ "transactionId": "1", "personId": "1", "from": "Me" })),
+        ("bill_preview", json!({ "text": "MNB1:x" })),
+        ("bill_accept", json!({ "input": { "text": "MNB1:x", "newFriend": "A", "addExpense": false } })),
+        ("debts_reminders", json!({})),
     ] {
         assert_eq!(h.code(cmd, args), "locked", "{cmd}");
     }

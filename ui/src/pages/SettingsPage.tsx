@@ -16,6 +16,7 @@ import { useProfile } from '../hooks/profile'
 import { syncApi } from '../api/sync'
 import { documents, type LibrarySize } from '../api/documents'
 import { formatSize } from '../lib/bytes'
+import { parseTime, reminderTime, remindersChanged, saveReminderTime } from '../lib/reminders'
 
 const EVERY_CHOICES = [
   { days: 1, labelKey: 'settings.scheduleDaily' },
@@ -42,6 +43,7 @@ export default function SettingsPage() {
   const [scheduleDocuments, setScheduleDocuments] = useState<boolean | null>(null)
   const [newKey, setNewKey] = useState<string | null>(null)
   const [notifyDue, setNotifyDue] = useState<boolean | null>(null)
+  const [reminderAt, setReminderAt] = useState(reminderTime)
   const [lockAfter, setLockAfter] = useState('300')
   const [changingCurrency, setChangingCurrency] = useState(false)
   const [locale, setLocale] = useState('')
@@ -319,6 +321,22 @@ export default function SettingsPage() {
               <input type="checkbox" checked={notifyDue} onChange={(event) => void onNotify(event.target.checked)} />
               {t('settings.notifyDue')}
             </label>
+            <label>
+              {t('settings.reminderTime')}
+              <input
+                type="time"
+                value={reminderAt}
+                onChange={(event) => {
+                  setReminderAt(event.target.value)
+                  // the time of a reminder is this device's: kept here, and the phone hands the system the new time
+                  if (parseTime(event.target.value)) {
+                    saveReminderTime(event.target.value)
+                    remindersChanged()
+                  }
+                }}
+              />
+            </label>
+            <p className="hint">{t(phone ? 'settings.reminderPhone' : 'settings.reminderDesktop')}</p>
           </div>
         )}
 

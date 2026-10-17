@@ -8,6 +8,7 @@ import SyncStatusPanel from '../components/SyncStatusPanel'
 import { useDeviceName } from '../hooks/useDeviceName'
 import { useNotice } from '../hooks/useNotice'
 import { useProfile } from '../hooks/profile'
+import { remindersChanged } from '../lib/reminders'
 import { useRegion } from '../hooks/useRegion'
 import { useSyncStatus } from '../hooks/useSyncStatus'
 import { useT } from '../i18n/context'
@@ -43,7 +44,10 @@ function PhoneSync() {
 
   const state = status.state
   useEffect(() => {
-    if (state === 'done') loadDevices()
+    if (state !== 'done') return
+    loadDevices()
+    // a sync may have brought, changed or settled debts and reminders: the phone hands the system the days again
+    remindersChanged()
   }, [state, loadDevices])
 
   // The camera shows behind the page while it scans, so the page must not paint over it.

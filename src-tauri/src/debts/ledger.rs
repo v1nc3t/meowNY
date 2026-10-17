@@ -162,6 +162,11 @@ fn transaction_exists(conn: &Connection, id: i64) -> Result<bool, AppError> {
 
 /// Adds an entry. The friend may be archived: a repayment can come after the friend was hidden.
 pub fn add(conn: &Connection, input: &NewEntry) -> Result<Entry, AppError> {
+    add_from(conn, input, None)
+}
+
+/// Adds an entry that came from a bill code: `origin` is the code's id, so the same code is never accepted twice.
+pub(crate) fn add_from(conn: &Connection, input: &NewEntry, origin: Option<&str>) -> Result<Entry, AppError> {
     let person_id = parse_id(&input.person_id)?;
     let minor = parse_positive_amount(&input.amount)?;
     let date = clean_date(&input.date)?;
@@ -176,8 +181,8 @@ pub fn add(conn: &Connection, input: &NewEntry) -> Result<Entry, AppError> {
         }
     }
     conn.execute(
-        "INSERT INTO ledger_entries (person_id, kind, amount_minor, entry_date, note, transaction_id) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
-        params![person_id, input.kind.as_sql(), minor, date, note, transaction_id],
+        "INSERT INTO ledger_entries (person_id, kind, amount_minor, entry_date, note, transaction_id, origin_id) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+        params![person_id, input.kind.as_sql(), minor, date, note, transaction_id, origin],
     )?;
     get(conn, conn.last_insert_rowid())
 }
@@ -185,12 +190,19 @@ pub fn add(conn: &Connection, input: &NewEntry) -> Result<Entry, AppError> {
 /// "I borrowed", with your share added to your expenses: the expense (the given name, your amount, the date, the category, which must be an
 /// expense category) and the `BORROWED` entry linked to it, in one step or not at all.
 pub fn borrow_with_expense(conn: &Connection, input: &NewEntry, expense: &Expense) -> Result<Entry, AppError> {
+    let tx = conn.unchecked_transaction()?;
+    let entry = borrow_in(&tx, input, expense, None)?;
+    tx.commit()?;
+    Ok(entry)
+}
+
+/// The same, for a caller that has its own database transaction (taking in a bill code). `origin` is the id of the code, if there was one.
+pub(crate) fn borrow_in(conn: &Connection, input: &NewEntry, expense: &Expense, origin: Option<&str>) -> Result<Entry, AppError> {
     if input.kind != Kind::Borrowed {
         return Err(AppError::InvalidInput);
     }
     let category = parse_id(&expense.category_id)?;
-    let tx = conn.unchecked_transaction()?;
-    let is_expense: bool = tx
+    let is_expense: bool = conn
         .query_row("SELECT type = 'EXPENSE' AND deleted_at IS NULL FROM categories WHERE id = ?1", [category], |r| r.get(0))
         .optional()?
         .unwrap_or(false);
@@ -198,7 +210,7 @@ pub fn borrow_with_expense(conn: &Connection, input: &NewEntry, expense: &Expens
         return Err(AppError::InvalidInput);
     }
     let spent = transactions::create(
-        &tx,
+        conn,
         &NewTransaction {
             name: expense.name.clone(),
             amount: input.amount.clone(),
@@ -208,9 +220,7 @@ pub fn borrow_with_expense(conn: &Connection, input: &NewEntry, expense: &Expens
             client_uuid: None,
         },
     )?;
-    let entry = add(&tx, &NewEntry { transaction_id: Some(spent.id.to_string()), ..input.clone() })?;
-    tx.commit()?;
-    Ok(entry)
+    add_from(conn, &NewEntry { transaction_id: Some(spent.id.to_string()), ..input.clone() }, origin)
 }
 
 pub fn update(conn: &Connection, id: i64, patch: &EntryPatch) -> Result<Entry, AppError> {

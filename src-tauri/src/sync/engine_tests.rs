@@ -2018,6 +2018,29 @@ mod debts {
     }
 
     #[test]
+    fn a_code_taken_in_on_both_devices_ends_as_one_entry_and_two_expenses_stay_because_each_device_made_its_own() {
+        use crate::debts::codes::{accept, encode, Accept, BillCode};
+        let (mut desktop, mut phone) = paired();
+        let code = encode(&BillCode { id: "cd".repeat(16), from: "Vincent".into(), what: "Dinner".into(), date: "2026-03-04".into(), amount_minor: 2250, total_minor: 9000, currency: "EUR".into() });
+        let take = |conn: &Connection, expense: bool| {
+            accept(
+                conn,
+                &Accept { text: code.clone(), person_id: None, new_friend: Some("Vincent".into()), add_expense: expense, category_id: expense.then(|| food(conn).to_string()), rate: None, amount: None },
+            )
+            .unwrap();
+        };
+        take(&desktop, true);
+        pause();
+        take(&phone, true);
+        sync_ok(&mut desktop, &mut phone);
+        for conn in [&desktop, &phone] {
+            assert_eq!(count(conn, "SELECT count(*) FROM ledger_entries WHERE origin_id IS NOT NULL"), 1, "one entry for one code");
+            assert_eq!(count(conn, "SELECT count(*) FROM people WHERE name = 'Vincent' AND merged_into IS NULL"), 1, "and one friend");
+            assert_eq!(count(conn, "SELECT count(*) FROM transactions WHERE name = 'Dinner'"), 2, "each device made an expense: the person takes a code in on one device");
+        }
+    }
+
+    #[test]
     fn deleting_an_expense_clears_the_link_of_its_entries_on_both_and_a_newer_edit_brings_it_back_unlinked() {
         let (mut desktop, mut phone) = paired();
         let anna = friend(&desktop, "Anna");

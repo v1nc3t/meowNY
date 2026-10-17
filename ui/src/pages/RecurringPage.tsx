@@ -13,7 +13,7 @@ import { errorText } from '../api/invoke'
 import { INTERVAL_UNITS, recurring as recurringApi, type IntervalUnit, type Recurring } from '../api/recurring'
 import { useToday, type Today } from '../api/today'
 import { amountString, formatDate, formatMoney } from '../lib/money'
-import { draftOfTemplate, NOT_SPLIT, shareMark, toInput, type SplitState } from '../lib/split'
+import { draftOfTemplate, equalDraft, NOT_SPLIT, shareMark, toInput, type SplitState } from '../lib/split'
 import { useAttachments, type Attachments } from '../hooks/useAttachments'
 import { useClipCounts } from '../hooks/useClipCounts'
 import { useMoneySettings, type MoneySettings } from '../hooks/useMoneySettings'
@@ -114,20 +114,27 @@ function RecurringView({ settings, now }: { settings: MoneySettings; now: Today 
     setConfirming(null)
   }
 
-  function openAdd() {
+  /** A new item; `split` opens it with the split on. */
+  function openAdd(options: { split?: boolean } = {}) {
     setDraftMessage('')
     closeModals()
     attachments.reset()
-    setSplit(NOT_SPLIT)
+    setSplit(options.split ? { on: true, draft: equalDraft(), ready: false, touched: false } : NOT_SPLIT)
     setAdding(true)
   }
 
-  function openEdit(item: Recurring) {
+  function openEdit(item: Recurring, options: { split?: boolean } = {}) {
     setDraftMessage('')
     closeModals()
     attachments.reset()
     // a saved template opens as shares: the weights, as they are kept
-    setSplit(item.split ? { on: true, draft: draftOfTemplate(item.split), ready: true, touched: false } : NOT_SPLIT)
+    setSplit(
+      item.split
+        ? { on: true, draft: draftOfTemplate(item.split), ready: true, touched: false }
+        : options.split
+          ? { on: true, draft: equalDraft(), ready: false, touched: false }
+          : NOT_SPLIT,
+    )
     setEditing(item)
   }
 
@@ -138,7 +145,7 @@ function RecurringView({ settings, now }: { settings: MoneySettings; now: Today 
   }
 
   // Keyboard: n adds, j and k move between rows.
-  useShortcut('new', openAdd)
+  useShortcut('new', () => openAdd())
   useRowNavigation()
 
   // Skipping, pausing, ending and deleting ask first; the question names the item.
@@ -280,8 +287,11 @@ function RecurringView({ settings, now }: { settings: MoneySettings; now: Today 
       <div className="tx-title">
         <h1>{t('rec.title')}</h1>
         <div className="tx-actions">
-          <button type="button" onClick={openAdd} {...tip('new', t('rec.add'))}>
+          <button type="button" onClick={() => openAdd()} {...tip('new', t('rec.add'))}>
             {t('rec.add')}
+          </button>
+          <button type="button" onClick={() => openAdd({ split: true })}>
+            {t('split.add')}
           </button>
         </div>
       </div>
@@ -381,6 +391,11 @@ function RecurringView({ settings, now }: { settings: MoneySettings; now: Today 
                         <button type="button" onClick={() => openEdit(item)}>
                           {t('common.edit')}
                         </button>
+                        {categories.find((category) => category.id === item.categoryId)?.type === 'EXPENSE' ? (
+                          <button type="button" onClick={() => openEdit(item, { split: true })}>
+                            {t(item.split ? 'split.rowEdit' : 'split.rowSplit')}
+                          </button>
+                        ) : null}
                         {status !== 'ended' ? (
                           <button type="button" onClick={() => setConfirming({ kind: 'end', item })}>
                             {t('rec.end')}
@@ -478,10 +493,6 @@ function RecurringModal({
           {hasEnd ? (
             <DateField name="endDate" label={t('rec.endDate')} defaultValue={item?.endDate ?? todayDate} today={todayDate} />
           ) : null}
-          <label>
-            {t('common.description')}
-            <input name="description" maxLength={255} defaultValue={item?.description ?? ''} autoComplete="off" />
-          </label>
           {canSplit ? (
             <label>
               <input type="checkbox" checked={split.on} onChange={(event) => onSplit({ ...split, on: event.target.checked })} />
@@ -501,6 +512,10 @@ function RecurringModal({
               />
             </>
           ) : null}
+          <label>
+            {t('common.description')}
+            <input name="description" maxLength={255} defaultValue={item?.description ?? ''} autoComplete="off" />
+          </label>
         </form>
         <AttachArea attachments={attachments} />
       </Modal>

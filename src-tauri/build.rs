@@ -110,6 +110,10 @@ const COMMANDS: &[&str] = &[
     "set_recurring_split",
     "clear_recurring_split",
     "export_debts",
+    "bill_code",
+    "bill_preview",
+    "bill_accept",
+    "debts_reminders",
 ];
 
 fn main() {

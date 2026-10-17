@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
+import { useLocation, useNavigate } from 'react-router-dom'
 import AddCategoryModal from '../components/AddCategoryModal'
 import AttachArea from '../components/AttachArea'
+import BillCodeModal from '../components/BillCodeModal'
 import ClipMark from '../components/ClipMark'
 import ConfirmModal from '../components/ConfirmModal'
 import Dropdown from '../components/Dropdown'
@@ -15,7 +17,7 @@ import { useToday, type Today } from '../api/today'
 import { transactions as transactionsApi, type Transaction, type TransactionPage } from '../api/transactions'
 import { amountString, formatDate, formatMoney } from '../lib/money'
 import { apiBound, shiftBound, type RangeMode } from '../lib/range'
-import { draftOfBill, NOT_SPLIT, partsText, shareMark, toInput, type SplitState } from '../lib/split'
+import { draftOfBill, equalDraft, NOT_SPLIT, partsText, shareMark, toInput, type SplitState } from '../lib/split'
 import { useAttachments, type Attachments } from '../hooks/useAttachments'
 import { useClipCounts } from '../hooks/useClipCounts'
 import { useMoneySettings, type MoneySettings } from '../hooks/useMoneySettings'
@@ -68,6 +70,10 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
   const [split, setSplit] = useState<SplitState>(NOT_SPLIT)
   const [splitOpenId, setSplitOpenId] = useState<string | null>(null)
   const [deleting, setDeleting] = useState<Transaction | null>(null)
+  // the bill whose code for one friend is on the screen
+  const [coding, setCoding] = useState<{ transaction: Transaction; personId: string; name: string; part: string } | null>(null)
+  const location = useLocation()
+  const navigate = useNavigate()
   const [message, setMessage] = useNotice()
   const onSplitReady = useCallback((ready: boolean) => setSplit((current) => (current.ready === ready ? current : { ...current, ready })), [])
   // The documents of the transaction being edited are stored and linked at once; those of one being made wait for it to be saved.
@@ -141,22 +147,39 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
     setOffset(0)
   }
 
-  function openAdd() {
+  /** A new transaction; `split` opens it with the bill dialog on, `friend` with that friend already on the bill. */
+  function openAdd(options: { split?: boolean; friend?: { id: string; name: string } } = {}) {
     setMenu(null)
     setDraftMessage('')
     attachments.reset()
     setEditing(null)
-    setSplit(NOT_SPLIT)
+    setSplit(options.split ? { on: true, draft: equalDraft(options.friend ? [{ personId: options.friend.id, name: options.friend.name }] : []), ready: false, touched: false } : NOT_SPLIT)
     setAdding(true)
   }
 
-  function openEdit(transaction: Transaction) {
+  // The debts pages send the person here to split a bill (with the friend they came from already on it).
+  useEffect(() => {
+    const state = location.state as { split?: boolean; friendId?: string; friendName?: string } | null
+    if (!state?.split) return
+    openAdd({ split: true, ...(state.friendId && state.friendName ? { friend: { id: state.friendId, name: state.friendName } } : {}) })
+    navigate(location.pathname, { replace: true, state: null })
+    // once, when the page opens with that request
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  function openEdit(transaction: Transaction, options: { split?: boolean } = {}) {
     setMenu(null)
     setDraftMessage('')
     attachments.reset()
     setAdding(false)
     // a saved bill opens as exact amounts, as they are stored
-    setSplit(transaction.split.length > 0 ? { on: true, draft: draftOfBill(transaction.split), ready: true, touched: false } : NOT_SPLIT)
+    setSplit(
+      transaction.split.length > 0
+        ? { on: true, draft: draftOfBill(transaction.split), ready: true, touched: false }
+        : options.split
+          ? { on: true, draft: equalDraft(), ready: false, touched: false }
+          : NOT_SPLIT,
+    )
     setEditing(transaction)
   }
 
@@ -168,7 +191,7 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
   }
 
   // Keyboard: n adds, / searches, t jumps to this month, j and k move between rows.
-  useShortcut('new', openAdd)
+  useShortcut('new', () => openAdd())
   useShortcut('search', () => searchRef.current?.focus())
   useShortcut('today', goCurrentMonth)
   useRowNavigation()
@@ -293,8 +316,11 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
       <div className="tx-title">
         <h1>{t('tx.title')}</h1>
         <div className="tx-actions">
-          <button type="button" onClick={openAdd} {...tip('new', t('tx.add'))}>
+          <button type="button" onClick={() => openAdd()} {...tip('new', t('tx.add'))}>
             {t('tx.add')}
+          </button>
+          <button type="button" onClick={() => openAdd({ split: true })}>
+            {t('split.add')}
           </button>
           {phone ? rangeControls : null}
         </div>
@@ -409,6 +435,15 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
           onCategoryAdded={(category) => setCategories((current) => [...current, category])}
         />
       ) : null}
+      {coding ? (
+        <BillCodeModal
+          transactionId={coding.transaction.id}
+          person={{ id: coding.personId, name: coding.name }}
+          part={coding.part}
+          total={coding.transaction.amount}
+          onClose={() => setCoding(null)}
+        />
+      ) : null}
       {deleting ? (
         <ConfirmModal
           title={t('split.deleteTitle', {
@@ -450,9 +485,19 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
                       </button>
                     ) : null}
                     {splitOpenId === transaction.id && transaction.split.length > 0 ? (
-                      <p className="split-detail">
-                        {`${t('split.paid', { amount: formatMoney(transaction.amount, settings.currency, settings.locale) })} \u00b7 ${partsText(transaction.split, (amount) => formatMoney(amount, settings.currency, settings.locale))}`}
-                      </p>
+                      <div className="split-detail">
+                        <p>{t('split.paid', { amount: formatMoney(transaction.amount, settings.currency, settings.locale) })}</p>
+                        {transaction.split.map((part) => (
+                          <div className="split-part" key={`${part.personId ?? 'guest'}-${part.person ?? part.guest}`}>
+                            <span>{`${part.person ?? part.guest ?? ''} ${formatMoney(part.amount, settings.currency, settings.locale)}`}</span>
+                            {part.personId && part.person ? (
+                              <button type="button" onClick={() => setCoding({ transaction, personId: part.personId ?? '', name: part.person ?? '', part: part.amount })}>
+                                {t('code.show')}
+                              </button>
+                            ) : null}
+                          </div>
+                        ))}
+                      </div>
                     ) : null}
                     {clips[transaction.id] ? <ClipMark count={clips[transaction.id] ?? 0} onClick={() => openEdit(transaction)} /> : null}
                     {transaction.description?.trim() ? (
@@ -470,6 +515,11 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
                     <button type="button" data-row-focus onClick={() => openEdit(transaction)}>
                       {t('common.edit')}
                     </button>
+                    {categories.find((category) => category.id === transaction.categoryId)?.type === 'EXPENSE' ? (
+                      <button type="button" onClick={() => openEdit(transaction, { split: true })}>
+                        {t(transaction.split.length > 0 ? 'split.rowEdit' : 'split.rowSplit')}
+                      </button>
+                    ) : null}
                     <button type="button" onClick={() => (transaction.split.length > 0 ? setDeleting(transaction) : void onDelete(transaction.id))}>
                       {t('common.delete')}
                     </button>
@@ -569,10 +619,6 @@ function TransactionModal({
             action={{ label: t('categories.add'), onSelect: () => setAddingCategory(true) }}
           />
           <PaymentDate defaultValue={transaction?.paymentDate ?? todayDate} />
-          <label>
-            {t('common.description')}
-            <input name="description" maxLength={255} defaultValue={transaction?.description ?? ''} autoComplete="off" />
-          </label>
           {canSplit ? (
             <label>
               <input type="checkbox" checked={split.on} onChange={(event) => onSplit({ ...split, on: event.target.checked })} />
@@ -593,6 +639,10 @@ function TransactionModal({
               />
             )
           ) : null}
+          <label>
+            {t('common.description')}
+            <input name="description" maxLength={255} defaultValue={transaction?.description ?? ''} autoComplete="off" />
+          </label>
         </form>
         <AttachArea attachments={attachments} />
       </Modal>

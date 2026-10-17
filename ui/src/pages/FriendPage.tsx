@@ -1,13 +1,15 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams } from 'react-router-dom'
 import { debts, type Entry, type EntryKind, type Line, type Statement } from '../api/debts'
 import { ApiError, errorText } from '../api/invoke'
 import { useToday, type Today } from '../api/today'
+import BillCodeModal from '../components/BillCodeModal'
 import ClipMark from '../components/ClipMark'
 import ConfirmModal from '../components/ConfirmModal'
 import DebtsFiles from '../components/DebtsFiles'
 import EntryModal from '../components/EntryModal'
 import FriendNameModal from '../components/FriendNameModal'
+import ReminderBlock from '../components/ReminderBlock'
 import SettleModal from '../components/SettleModal'
 import { useClipCounts } from '../hooks/useClipCounts'
 import { useMoneySettings, type MoneySettings } from '../hooks/useMoneySettings'
@@ -18,6 +20,7 @@ import { useShortcut } from '../keys/registry'
 import { useRowNavigation } from '../keys/useRowNavigation'
 import { balanceView, entryOfLine } from '../lib/balance'
 import { formatDate, formatMoney } from '../lib/money'
+import { remindersChanged } from '../lib/reminders'
 
 export default function FriendPage() {
   const { settings, error } = useMoneySettings()
@@ -27,12 +30,19 @@ export default function FriendPage() {
   return <FriendView settings={settings} now={now} />
 }
 
-type Dialog = { kind: 'entry'; entry: Entry | null; as?: EntryKind } | { kind: 'settle' } | { kind: 'rename' } | { kind: 'delete'; entry: Entry } | null
+type Dialog =
+  | { kind: 'entry'; entry: Entry | null; as?: EntryKind }
+  | { kind: 'settle' }
+  | { kind: 'rename' }
+  | { kind: 'delete'; entry: Entry }
+  | { kind: 'code'; transactionId: string; amount: string }
+  | null
 
 function FriendView({ settings, now }: { settings: MoneySettings; now: Today }) {
   const t = useT()
   const phone = useProfile() === 'phone'
   const { personId = '' } = useParams()
+  const navigate = useNavigate()
   const [statement, setStatement] = useState<Statement | null>(null)
   const [missing, setMissing] = useState(false)
   const [reload, setReload] = useState(0)
@@ -71,6 +81,8 @@ function FriendView({ settings, now }: { settings: MoneySettings; now: Today }) 
     setDialog(null)
     setMessage(text)
     setReload((value) => value + 1)
+    // a balance or a reminder may have changed: the phone schedules again
+    remindersChanged()
   }
 
   async function run(action: () => Promise<unknown>) {
@@ -121,6 +133,9 @@ function FriendView({ settings, now }: { settings: MoneySettings; now: Today }) 
           <button type="button" onClick={() => setDialog({ kind: 'entry', entry: null, as: 'BORROWED' })}>
             {t('debts.borrowed')}
           </button>
+          <button type="button" onClick={() => navigate('/app/transactions', { state: { split: true, friendId: person.id, friendName: person.name } })}>
+            {t('split.add')}
+          </button>
           {tone !== 'even' ? (
             <button type="button" onClick={() => setDialog({ kind: 'settle' })}>
               {t('debts.settle')}
@@ -138,6 +153,9 @@ function FriendView({ settings, now }: { settings: MoneySettings; now: Today }) 
           onClose={() => setDialog(null)}
           onSaved={(notAttached) => done(notAttached.length > 0 ? t('docs.attachFailed', { names: notAttached.join(', ') }) : '')}
         />
+      ) : null}
+      {dialog?.kind === 'code' ? (
+        <BillCodeModal transactionId={dialog.transactionId} person={{ id: person.id, name: person.name }} part={dialog.amount} onClose={() => setDialog(null)} />
       ) : null}
       {dialog?.kind === 'settle' ? <SettleModal person={person} today={now.date} onClose={() => setDialog(null)} onDone={() => done(t('debts.settled'))} /> : null}
       {dialog?.kind === 'rename' ? <FriendNameModal person={person} onClose={() => setDialog(null)} onSaved={() => done()} /> : null}
@@ -165,6 +183,7 @@ function FriendView({ settings, now }: { settings: MoneySettings; now: Today }) 
             </button>
           </div>
         </div>
+        <ReminderBlock key={`${person.remindOn}-${person.remindEveryDays}`} person={person} today={now.date} onDone={done} />
         <h2>{t('debts.ledger')}</h2>
         {lines.length === 0 ? <p>{t('debts.noLines')}</p> : null}
         <ul className="card-list">
@@ -182,6 +201,13 @@ function FriendView({ settings, now }: { settings: MoneySettings; now: Today }) 
                     <ClipMark count={clips[line.entryId] ?? 0} onClick={() => setDialog({ kind: 'entry', entry })} />
                   ) : null}
                 </div>
+                {line.kind === 'BILL' && line.transactionId ? (
+                  <div className="card-actions">
+                    <button type="button" data-row-focus onClick={() => setDialog({ kind: 'code', transactionId: line.transactionId ?? '', amount: line.amount })}>
+                      {t('code.show')}
+                    </button>
+                  </div>
+                ) : null}
                 {entry ? (
                   <div className="card-actions">
                     <button type="button" data-row-focus onClick={() => setDialog({ kind: 'entry', entry })}>

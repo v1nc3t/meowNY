@@ -112,6 +112,10 @@
     "allow-set-recurring-split",
     "allow-clear-recurring-split",
     "allow-export-debts",
+    "allow-bill-code",
+    "allow-bill-preview",
+    "allow-bill-accept",
+    "allow-debts-reminders",
     "core:event:allow-listen",
     "core:event:allow-unlisten",
     {

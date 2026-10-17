@@ -11,8 +11,10 @@ use crate::categories::{self, Category, CategoryType};
 use crate::budgets::{self, Budget, Overview, SetBudget};
 use crate::clock;
 use crate::currency::{self, Conversion};
+use crate::debts::codes::{self, Accept, Preview as CodePreview};
 use crate::debts::ledger::{self, Entry, EntryPatch, Expense, NewEntry, Settled, Statement};
 use crate::debts::people::{self, Person, PersonPatch};
+use crate::debts::reminders::{self, Reminders};
 use crate::debts::splits::{self, Preview, SplitInput};
 use crate::debts::summary::{self, Labels, Summary};
 use crate::display::DisplayFormat;
@@ -198,6 +200,10 @@ pub const COMMANDS: &[&str] = &[
     "set_recurring_split",
     "clear_recurring_split",
     "export_debts",
+    "bill_code",
+    "bill_preview",
+    "bill_accept",
+    "debts_reminders",
 ];
 
 #[tauri::command]
@@ -1049,6 +1055,33 @@ pub fn clear_recurring_split(vault: Shared, id: String) -> Result<Recurring, App
         splits::clear_template(c, id)?;
         recurring::get(c, id)
     })
+}
+
+/// The text of the code for one friend's part of one bill, in the name the person gives for the sender. The page shows it as a QR code and
+/// offers to copy it. Nothing is stored: the same text comes every time.
+#[tauri::command]
+pub fn bill_code(vault: Shared, transaction_id: String, person_id: String, from: String) -> Result<String, AppError> {
+    let (transaction, person) = (categories::parse_id(&transaction_id)?, categories::parse_id(&person_id)?);
+    vault.with_conn(|c| codes::make(c, transaction, person, &from))
+}
+
+/// What a code holds, for the dialog before the person accepts or denies it. Writes nothing.
+#[tauri::command]
+pub fn bill_preview(vault: Shared, text: String) -> Result<CodePreview, AppError> {
+    vault.with_conn(|c| codes::preview(c, &text))
+}
+
+/// Takes a code in: the friend, the expense when ticked and the entry, together or not at all.
+#[tauri::command]
+pub fn bill_accept(vault: Shared, input: Accept) -> Result<Entry, AppError> {
+    vault.with_conn(|c| codes::accept(c, &input))
+}
+
+/// The friends whose reminder day has come, and the next days with a reminder, for the debts page and for the notifications.
+#[tauri::command]
+pub fn debts_reminders(vault: Shared) -> Result<Reminders, AppError> {
+    let today = today_text(&vault)?;
+    vault.with_conn(|c| reminders::reminders(c, &today))
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Deserialize)]

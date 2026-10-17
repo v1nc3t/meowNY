@@ -1,13 +1,17 @@
 {
   "$schema": "../gen/schemas/mobile-schema.json",
   "identifier": "mobile",
-  "description": "The camera of the phone, only to read the code the desktop shows",
+  "description": "The camera of the phone, only to read a code, and the notifications it hands to the system for debt reminders",
   "windows": ["main"],
   "platforms": ["android", "iOS"],
   "permissions": [
     "barcode-scanner:allow-scan",
     "barcode-scanner:allow-cancel",
     "barcode-scanner:allow-check-permissions",
-    "barcode-scanner:allow-request-permissions"
+    "barcode-scanner:allow-request-permissions",
+    "notification:allow-notify",
+    "notification:allow-cancel",
+    "notification:allow-is-permission-granted",
+    "notification:allow-request-permission"
   ]
 }

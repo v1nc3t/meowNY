@@ -6,9 +6,13 @@
 //! * `people`: the friends of the ledger. A name and nothing else; archived, never deleted.
 //! * `ledger`: loans, borrowings and repayments with one friend, "mark as paid", and the statement of a friend.
 //! * `summary`: who owes what, as text or CSV, to save and send yourself.
+//! * `codes`: the bill code (a friend's part of one bill as text for a QR code) and taking one in.
+//! * `reminders`: which friends are due a reminder.
 
+pub mod codes;
 pub mod ledger;
 pub mod people;
+pub mod reminders;
 pub mod splits;
 pub mod summary;
 
@@ -19,6 +23,8 @@ mod allocate_tests;
 #[cfg(test)]
 mod cost_tests;
 #[cfg(test)]
+mod codes_tests;
+#[cfg(test)]
 mod command_tests;
 #[cfg(test)]
 mod currency_tests;
@@ -26,6 +32,8 @@ mod currency_tests;
 mod ledger_tests;
 #[cfg(test)]
 mod people_tests;
+#[cfg(test)]
+mod reminders_tests;
 #[cfg(test)]
 mod splits_tests;
 #[cfg(test)]

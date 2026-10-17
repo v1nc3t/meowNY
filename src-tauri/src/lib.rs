@@ -311,6 +311,10 @@ pub fn run() {
             commands::set_recurring_split,
             commands::clear_recurring_split,
             commands::export_debts,
+            commands::bill_code,
+            commands::bill_preview,
+            commands::bill_accept,
+            commands::debts_reminders,
         ])
         .build(tauri::generate_context!())
         .expect("error while building meowNY")
