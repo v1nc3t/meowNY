@@ -21,7 +21,7 @@ What the app does with a file:
 ## Attaching, opening, saving
 
 - A paper clip with a number on a transaction or a recurring item says how many documents are attached. Click it to open the item, where they are listed.
-- **Details** on the documents page shows the picture (for images the app may draw), the name, the date, what it is attached to, and where the file is if it is not here.
+- **Details** on the documents page opens a dialog with the picture (for images the app may draw), the name, the date (the day on the paper), the box **keep a copy on my phone**, a section **about this file** (its kind and size, and where it is if it is not here), **linked to** (what it is attached to, with **detach**) and **open** (which says it shows the file in your system's viewer). **Save** (to keep a copy where you choose) and **delete** are buttons on the card in the list, beside **details**.
 - **Open** hands the file to your system's own viewer, from a **plain copy** made for the occasion. The first time in a session the app says what that means and asks. The copy is not encrypted while it is open; it is removed when you lock the app, when you close it, when the app starts again and on "delete all my data". On Windows a viewer that is still holding the file can stop its removal until the next start, so close the viewer first. An HTML file may load things from the internet when the system opens it.
 - Files of the kind **other** (a program, an archive, anything the app cannot recognise) are never opened from the app. They can only be **saved as a copy**, and what happens to them then is up to you. This is on purpose: your system chooses what to start by the file's extension, and the extension is the one thing whoever sent the file chose.
 - **Save a copy** (on the computer) asks where, never replaces a file that is there, and the copy is not encrypted.
@@ -29,7 +29,7 @@ What the app does with a file:
 
 ## Keeping a document on your phone
 
-Every document is kept on the computer, which is the archive. A document goes to the phone only if you switch on **keep on phone** for it, and then at the next sync. A document you did not switch on never leaves the computer, even if the phone asks for it.
+Every document is kept on the computer, which is the archive. A document goes to the phone only if you tick **keep a copy on my phone** for it, and then at the next sync. A document you did not switch on never leaves the computer, even if the phone asks for it.
 
 - A document **added on the phone** goes to the computer at the next sync. If its switch is off, the phone then lets go of its own copy, but **only after the computer has said, in the same sync, that it holds a whole and checked copy**. Until then it stays on the phone.
 - The files move after the rows, in the same encrypted connection as the rest of the sync. A sync that is cut half way carries on from where it stopped at the next one, and a file that arrives damaged is refused and asked for again. At most about 100 MB of files move in one sync; the rest waits and the sync says how many are waiting.

@@ -15,8 +15,8 @@ const items = [
   { to: '/app/transactions', label: 'nav.transactions', icon: 'transactions', page: 'transactions', shortcut: 'goTransactions' },
   { to: '/app/categories', label: 'nav.categories', icon: 'categories', page: 'categories', shortcut: 'goCategories' },
   { to: '/app/recurring', label: 'nav.recurring', icon: 'recurring', page: 'recurring', shortcut: 'goRecurring' },
-  { to: '/app/documents', label: 'nav.documents', icon: 'documents', page: 'documents', shortcut: 'goDocuments' },
   { to: '/app/debts', label: 'nav.debts', icon: 'debts', page: 'debts', shortcut: 'goDebts' },
+  { to: '/app/documents', label: 'nav.documents', icon: 'documents', page: 'documents', shortcut: 'goDocuments' },
   { to: '/app/export', label: 'nav.export', icon: 'export', page: 'export', shortcut: 'goExport' },
   { to: '/app/settings', label: 'nav.settings', icon: 'settings', page: 'settings', shortcut: 'goSettings' },
 ] as const satisfies readonly { to: string; label: string; icon: string; page: PageName; shortcut: ShortcutId }[]

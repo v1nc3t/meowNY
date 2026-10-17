@@ -51,6 +51,14 @@ export function reportLines(report: Report, phone: boolean): { key: MessageKey; 
   return lines
 }
 
+/** The name of a kind of file as a person says it: an image, a pdf file, a text file, or another file. */
+export function typeText(mediaType: Doc['mediaType']): MessageKey {
+  if (isImage(mediaType)) return 'docs.typeImage'
+  if (mediaType === 'application/pdf') return 'docs.typePdf'
+  if (mediaType.startsWith('text/')) return 'docs.typeText'
+  return 'docs.typeOther'
+}
+
 /** The order the type filter offers its choices in, with the words for each. */
 export const KIND_CHOICES = [
   { value: '', label: 'common.all' },

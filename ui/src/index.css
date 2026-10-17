@@ -3586,6 +3586,7 @@ button.attach-name {
 }
 
 .doc-links > li {
+  font-size: 0.8125rem;
   display: flex;
   flex-direction: row;
   flex-wrap: wrap;
@@ -3596,28 +3597,52 @@ button.attach-name {
   border-top: 0;
 }
 
-.doc-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.25rem 1.5rem;
+/* An action and, beside it, what it does. */
+.doc-action {
+  display: grid;
+  grid-template-columns: 6.5rem minmax(0, 1fr);
+  align-items: baseline;
+  gap: 0 0.875rem;
+}
+
+.doc-action button {
+  min-width: 6.5rem;
+  text-align: left;
+}
+
+.doc-action .hint {
+  margin: 0;
 }
 
 /* The page of documents. */
-.doc-summary {
+.doc-drop {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem 1.5rem;
+  width: 100%;
+  max-width: none;
+  padding: 0.875rem 1rem;
+  border: 0.8px dashed var(--border-strong);
+  border-radius: var(--card-radius);
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.doc-drop-text {
   display: flex;
   flex-direction: column;
-  gap: 0.125rem;
-  margin: 0;
-  font-size: 0.8125rem;
-  color: var(--text-muted);
+  gap: 0.25rem;
+  min-width: 0;
 }
 
-.doc-summary p {
+.doc-drop-text p {
   margin: 0;
 }
 
-.doc-page > p.hint {
-  margin: 0;
+.doc-count {
+  font-size: 0.9375rem;
+  color: var(--text-h);
 }
 
 .doc-page > p.warn {
@@ -3626,8 +3651,33 @@ button.attach-name {
 }
 
 .doc-page.is-dragging {
-  outline: 1px dashed var(--accent);
-  outline-offset: -0.25rem;
+  outline: none;
+}
+
+.doc-page.is-dragging .doc-drop {
+  border-color: var(--accent);
+  background: rgba(46, 139, 87, 0.1);
+}
+
+.doc-title {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  min-width: 0;
+}
+
+.doc-icon {
+  flex: 0 0 auto;
+  width: 1.125rem;
+  height: 1.125rem;
+  color: var(--text-muted);
+}
+
+.doc-chip {
+  padding: 0.0625rem 0.5rem;
+  border: 0.8px solid var(--border-strong);
+  border-radius: 999px;
+  font-size: 0.75rem;
 }
 
 .doc-marks {
@@ -3871,4 +3921,22 @@ button.attach-name {
   padding: 0.875rem 0;
   font-size: 0.8125rem;
   color: var(--text-muted);
+}
+
+.tx-page > .doc-drop {
+  width: auto;
+  max-width: none;
+  align-self: stretch;
+}
+
+/* The panel of a dialog takes the focus when nothing else in it can, and shows no outline for it. */
+.modal-panel:focus,
+.modal-panel:focus-visible {
+  outline: none;
+}
+
+/* The documents are as wide as the search and the type together: the list keeps no gutter of its own on the right, only the width of
+   its scroll bar (and nothing when the list is short). */
+.app-main main > section.doc-page > .tx-pane.wide {
+  padding-right: 0;
 }

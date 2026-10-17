@@ -7,9 +7,8 @@ import { useProfile } from '../hooks/profile'
 import { useNotice } from '../hooks/useNotice'
 import { useT } from '../i18n/context'
 import { formatSize } from '../lib/bytes'
-import { canOpen, canShowImage, fileState, fileStateText } from '../lib/documents'
+import { canOpen, canShowImage, fileState, fileStateText, typeText } from '../lib/documents'
 import { formatDate } from '../lib/money'
-import ConfirmModal from './ConfirmModal'
 import DatePicker from './DatePicker'
 import Modal from './Modal'
 
@@ -37,7 +36,6 @@ export default function DocumentModal({ id, onClose, onChanged }: { id: string; 
   const [keep, setKeep] = useState(false)
   const [message, setMessage] = useNotice()
   const [pending, setPending] = useState(false)
-  const [confirming, setConfirming] = useState(false)
   const [warning, setWarning] = useState(false)
   const [serial, setSerial] = useState(0)
   const locale = settings?.locale ?? 'en'
@@ -130,33 +128,12 @@ export default function DocumentModal({ id, onClose, onChanged }: { id: string; 
     await run(() => documents.open(id))
   }
 
-  async function onSaveCopy() {
-    await run(async () => {
-      if (await documents.saveCopy(id)) setMessage(t('docs.copySaved'))
-    })
-  }
-
   async function onDetach(link: LinkView) {
     await run(async () => {
       await documents.unlink(id, { kind: link.kind, id: link.id })
       setSerial((value) => value + 1)
       onChanged()
     })
-  }
-
-  async function onDelete() {
-    setPending(true)
-    try {
-      await documents.remove(id)
-    } catch (failure) {
-      setConfirming(false)
-      setMessage(errorText(failure))
-      return
-    } finally {
-      setPending(false)
-    }
-    onChanged()
-    onClose()
   }
 
   if (!doc || !now) {
@@ -194,52 +171,47 @@ export default function DocumentModal({ id, onClose, onChanged }: { id: string; 
           </div>
           <label>
             <input type="checkbox" checked={keep} onChange={(event) => setKeep(event.target.checked)} />
-            {t('docs.keepOnPhone')}
+            {t('docs.keepLabel')}
           </label>
-          <p className="hint">{t('docs.keepHint')}</p>
         </form>
-        <dl className="doc-facts">
-          <dt>{t('common.type')}</dt>
-          <dd>{doc.mediaType}</dd>
-          <dt>{t('docs.size')}</dt>
-          <dd>{formatSize(doc.sizeBytes, locale)}</dd>
-          <dt>{t('docs.links')}</dt>
-          <dd>
-            {links.length === 0 ? (
-              t('docs.noLinks')
-            ) : (
-              <ul className="doc-links">
-                {links.map((link) => (
-                  <li key={`${link.kind}-${link.id}`}>
-                    <span>
-                      {t(link.kind === 'transaction' ? 'docs.kindTransaction' : link.kind === 'recurring' ? 'docs.kindRecurring' : 'docs.kindLedger')}: {link.name} ({formatDate(link.date, locale)})
-                    </span>
-                    <button type="button" onClick={() => void onDetach(link)}>
-                      {t('docs.detach')}
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </dd>
-        </dl>
-        {state ? <p className="hint">{t(state)}</p> : null}
-        {doc.hasFile && !canOpen(doc) ? <p className="hint">{t('docs.cannotOpen')}</p> : null}
-        <div className="doc-actions">
+        <section className="detail-section">
+          <p className="detail-title">{t('docs.sectionAbout')}</p>
+          <dl className="doc-facts">
+            <dt>{t('common.type')}</dt>
+            <dd>{t(typeText(doc.mediaType))}</dd>
+            <dt>{t('docs.size')}</dt>
+            <dd>{formatSize(doc.sizeBytes, locale)}</dd>
+          </dl>
+          {state ? <p className="hint">{t(state)}</p> : null}
+          {doc.hasFile && !canOpen(doc) ? <p className="hint">{t('docs.cannotOpen')}</p> : null}
           {canOpen(doc) ? (
-            <button type="button" onClick={onOpen}>
-              {t('docs.open')}
-            </button>
+            <div className="doc-action">
+              <button type="button" onClick={onOpen}>
+                {t('docs.open')}
+              </button>
+              <span className="hint">{t('docs.openAbout')}</span>
+            </div>
           ) : null}
-          {doc.hasFile && !phone ? (
-            <button type="button" onClick={() => void onSaveCopy()}>
-              {t('docs.saveCopy')}
-            </button>
-          ) : null}
-          <button type="button" onClick={() => setConfirming(true)}>
-            {t('common.delete')}
-          </button>
-        </div>
+        </section>
+        <section className="detail-section">
+          <p className="detail-title">{t('docs.links')}</p>
+          {links.length === 0 ? (
+            <p className="hint">{t('docs.noLinks')}</p>
+          ) : (
+            <ul className="doc-links">
+              {links.map((link) => (
+                <li key={`${link.kind}-${link.id}`}>
+                  <span>
+                    {t(link.kind === 'transaction' ? 'docs.kindTransaction' : link.kind === 'recurring' ? 'docs.kindRecurring' : 'docs.kindLedger')}: {link.name} ({formatDate(link.date, locale)})
+                  </span>
+                  <button type="button" onClick={() => void onDetach(link)}>
+                    {t('docs.detach')}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
       </Modal>
       {warning ? (
         <Modal title={t('docs.openTitle')} formId={WARNING_FORM_ID} doneLabel={t('docs.open')} onClose={() => setWarning(false)}>
@@ -247,9 +219,6 @@ export default function DocumentModal({ id, onClose, onChanged }: { id: string; 
             <p className="confirm-text">{t('docs.openWarning')}</p>
           </form>
         </Modal>
-      ) : null}
-      {confirming ? (
-        <ConfirmModal title={t('rec.confirmTitle', { action: t('common.delete'), name: doc.name })} pending={pending} onConfirm={() => void onDelete()} onClose={() => setConfirming(false)} />
       ) : null}
     </>
   )

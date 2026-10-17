@@ -31,9 +31,10 @@ export default function Modal({
     const dialog = ref.current
     if (!dialog) return
     dialog.showModal()
-    // A dialog can name what takes the focus (a question, so that no answer is highlighted); otherwise the first field, then the first button.
+    // A dialog can name what takes the focus (a question); otherwise the first field. With none, the panel itself takes it, so that no
+    // button opens outlined.
     const first = dialog.querySelector<HTMLElement>('[data-autofocus]') ?? dialog.querySelector<HTMLElement>('input, select, textarea')
-    ;(first ?? dialog.querySelector<HTMLElement>('button'))?.focus()
+    ;(first ?? dialog.querySelector<HTMLElement>('.modal-panel'))?.focus()
   }, [])
 
   return (
@@ -54,7 +55,7 @@ export default function Modal({
         if (event.target === event.currentTarget) onClose()
       }}
     >
-      <div className="modal-panel">
+      <div className="modal-panel" tabIndex={-1}>
         <div className="modal-head">
           <h2 id={titleId}>{title}</h2>
         </div>

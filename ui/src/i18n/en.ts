@@ -534,11 +534,10 @@ export const en = {
   'docs.saveCopy': 'save a copy',
   'docs.copySaved': 'copy saved. it is not encrypted.',
   'docs.keepOnPhone': 'keep on phone',
-  'docs.keepHint': 'a marked file is sent to the phone with the next sync. an unmarked file stays on the computer.',
   'docs.date': 'date of the document',
   'docs.size': 'size',
   'docs.links': 'linked to',
-  'docs.noLinks': 'not linked to anything.',
+  'docs.noLinks': 'not attached to anything yet.',
   'docs.kindTransaction': 'transaction',
   'docs.kindRecurring': 'recurring item',
   'docs.detach': 'detach',
@@ -692,6 +691,13 @@ export const en = {
   'categories.editTitle': 'edit category',
   'categories.budgetFrom': 'budget from {month} on',
   'categories.budgetHint': 'leave empty for no budget from this month on.',
+  'docs.typeImage': 'image',
+  'docs.typePdf': 'pdf file',
+  'docs.typeText': 'text file',
+  'docs.typeOther': 'other file',
+  'docs.keepLabel': 'keep a copy on my phone',
+  'docs.sectionAbout': 'about this file',
+  'docs.openAbout': "shows the file in your system's viewer.",
 } as const
 
 export type MessageKey = keyof typeof en

@@ -160,6 +160,15 @@ function DocumentsView({ settings }: { settings: MoneySettings }) {
     refresh()
   }
 
+  // Saves a copy of the file where the person says. The copy is not encrypted.
+  async function onSaveCopy(doc: Doc) {
+    try {
+      if (await documents.saveCopy(doc.id)) setMessage(t('docs.copySaved'))
+    } catch (failure) {
+      setMessage(errorText(failure))
+    }
+  }
+
   // Keyboard: n adds a file, / searches, j and k move between rows.
   useShortcut('new', () => fileInput.current?.click())
   useShortcut('search', () => searchRef.current?.focus())
@@ -173,6 +182,16 @@ function DocumentsView({ settings }: { settings: MoneySettings }) {
     <section className={dragging ? 'tx-page doc-page is-dragging' : 'tx-page doc-page'}>
       <div className="tx-title">
         <h1>{t('docs.title')}</h1>
+      </div>
+      <input ref={fileInput} type="file" multiple hidden tabIndex={-1} onChange={onChosen} />
+      <input ref={photoInput} type="file" accept="image/*" capture="environment" hidden tabIndex={-1} onChange={onChosen} />
+      {/* What is here and where to add more: a frame that also lights up when files are held over the window. */}
+      <div className="doc-drop">
+        <div className="doc-drop-text">
+          {size ? <p className="doc-count">{t('docs.summary', { count: size.count, size: formatSize(size.bytes, locale) })}</p> : null}
+          {size && phone ? <p className="hint">{t('docs.heldSummary', { count: size.heldCount, size: formatSize(size.heldBytes, locale) })}</p> : null}
+          {phone ? null : <p className="hint">{t('docs.dropHint')}</p>}
+        </div>
         <div className="tx-actions">
           <button type="button" disabled={busy} onClick={() => fileInput.current?.click()} {...tip('new', t('docs.add'))}>
             {t('docs.add')}
@@ -184,15 +203,6 @@ function DocumentsView({ settings }: { settings: MoneySettings }) {
           ) : null}
         </div>
       </div>
-      <input ref={fileInput} type="file" multiple hidden tabIndex={-1} onChange={onChosen} />
-      <input ref={photoInput} type="file" accept="image/*" capture="environment" hidden tabIndex={-1} onChange={onChosen} />
-      {phone ? null : <p className="hint">{t('docs.dropHint')}</p>}
-      {size ? (
-        <div className="doc-summary">
-          <p>{t('docs.summary', { count: size.count, size: formatSize(size.bytes, locale) })}</p>
-          {phone ? <p>{t('docs.heldSummary', { count: size.heldCount, size: formatSize(size.heldBytes, locale) })}</p> : null}
-        </div>
-      ) : null}
       {lines.map((line) => (
         <p key={line.key} className="warn">
           {t(line.key, { count: line.count })}
@@ -255,7 +265,10 @@ function DocumentsView({ settings }: { settings: MoneySettings }) {
                 return (
                   <li key={doc.id} className="card-item">
                     <div className="card-body">
-                      <p className="card-name">{doc.name}</p>
+                      <div className="doc-title">
+                        <Icon name="documents" className="doc-icon" />
+                        <p className="card-name">{doc.name}</p>
+                      </div>
                       <p className="card-meta">
                         {[formatDate(doc.documentDate, locale), formatSize(doc.sizeBytes, locale), state ? t(state) : '']
                           .filter(Boolean)
@@ -269,7 +282,7 @@ function DocumentsView({ settings }: { settings: MoneySettings }) {
                               {doc.linkCount}
                             </span>
                           ) : null}
-                          {doc.keepOnPhone ? <span>{t('docs.keepOnPhone')}</span> : null}
+                          {doc.keepOnPhone ? <span className="doc-chip">{t('docs.keepOnPhone')}</span> : null}
                         </p>
                       ) : null}
                     </div>
@@ -277,6 +290,11 @@ function DocumentsView({ settings }: { settings: MoneySettings }) {
                       <button type="button" data-row-focus onClick={() => setViewing(doc.id)}>
                         {t('docs.details')}
                       </button>
+                      {doc.hasFile && !phone ? (
+                        <button type="button" aria-label={t('docs.saveCopy')} onClick={() => void onSaveCopy(doc)}>
+                          {t('common.save')}
+                        </button>
+                      ) : null}
                       <button type="button" onClick={() => setDeleting(doc)}>
                         {t('common.delete')}
                       </button>

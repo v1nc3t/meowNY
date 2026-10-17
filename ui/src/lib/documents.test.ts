@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { t } from '../i18n/translate.ts'
-import { canOpen, canShowImage, dropNotice, dropNote, fileState, fileStateText, KIND_CHOICES, MAX_DRAW_BYTES, reportLines } from './documents.ts'
+import { canOpen, canShowImage, dropNotice, dropNote, fileState, fileStateText, KIND_CHOICES, MAX_DRAW_BYTES, reportLines, typeText } from './documents.ts'
 
 test('a missing file is a fault on the computer and normal on the phone', () => {
   assert.equal(fileState({ hasFile: true, keepOnPhone: false }, false), 'here')
@@ -65,4 +65,11 @@ test('a drop is one notice, with how many files were left out when there were to
   assert.equal(dropNotice({ outcomes, ignored: 0 }, t), 'added a.pdf. b.pdf is in the library already.')
   assert.match(dropNotice({ outcomes, ignored: 30 }, t), /added a\.pdf\..*30/)
   assert.equal(dropNotice({ outcomes: [], ignored: 0 }, t), '')
+})
+
+test('a kind of file is named the way a person says it', () => {
+  assert.equal(typeText('image/png'), 'docs.typeImage')
+  assert.equal(typeText('application/pdf'), 'docs.typePdf')
+  for (const text of ['text/plain', 'text/csv', 'text/html'] as const) assert.equal(typeText(text), 'docs.typeText')
+  assert.equal(typeText('application/octet-stream'), 'docs.typeOther')
 })
