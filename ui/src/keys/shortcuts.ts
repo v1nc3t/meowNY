@@ -4,9 +4,9 @@ export type ShortcutId =
   | 'goDashboard'
   | 'goTransactions'
   | 'goCategories'
-  | 'goBudgets'
   | 'goRecurring'
   | 'goDocuments'
+  | 'goDebts'
   | 'goSettings'
   | 'goExport'
   | 'new'
@@ -37,9 +37,9 @@ export const SHORTCUTS: Record<ShortcutId, ShortcutDef> = {
   goDashboard: { keys: ['g', 'd'], group: 'go', label: 'keys.goTo', page: 'nav.dashboard' },
   goTransactions: { keys: ['g', 't'], group: 'go', label: 'keys.goTo', page: 'nav.transactions' },
   goCategories: { keys: ['g', 'c'], group: 'go', label: 'keys.goTo', page: 'nav.categories' },
-  goBudgets: { keys: ['g', 'b'], group: 'go', label: 'keys.goTo', page: 'nav.budgets' },
   goRecurring: { keys: ['g', 'r'], group: 'go', label: 'keys.goTo', page: 'nav.recurring' },
   goDocuments: { keys: ['g', 'o'], group: 'go', label: 'keys.goTo', page: 'nav.documents' },
+  goDebts: { keys: ['g', 'f'], group: 'go', label: 'keys.goTo', page: 'nav.debts' },
   goSettings: { keys: ['g', 's'], group: 'go', label: 'keys.goTo', page: 'nav.settings' },
   goExport: { keys: ['g', 'e'], group: 'go', label: 'keys.goTo', page: 'nav.export' },
   new: { keys: ['n'], group: 'actions', label: 'keys.new' },
@@ -58,9 +58,9 @@ const GO_SECOND_KEY: Record<string, ShortcutId> = {
   d: 'goDashboard',
   t: 'goTransactions',
   c: 'goCategories',
-  b: 'goBudgets',
   r: 'goRecurring',
   o: 'goDocuments',
+  f: 'goDebts',
   s: 'goSettings',
   e: 'goExport',
 }

@@ -6,6 +6,7 @@ import QuickAdd from '../components/QuickAdd'
 import { preloadAllWhenIdle } from '../pages'
 import { DataVersionContext } from '../hooks/dataVersion'
 import { blocksSwipe, SwipeContext, type SwipeHandler } from '../hooks/swipe'
+import { useDebtReminders } from '../hooks/useDebtReminders'
 import { useDueNotifications } from '../hooks/useDueNotifications'
 import { useProfile } from '../hooks/profile'
 import { neighbour, swipeDirection, type Direction } from '../lib/swipe'
@@ -16,6 +17,7 @@ export default function AppLayout() {
   const [dataVersion, setDataVersion] = useState(0)
   const locked = true
   useDueNotifications()
+  useDebtReminders()
   const phone = useProfile() === 'phone'
   const navigate = useNavigate()
   const { pathname } = useLocation()

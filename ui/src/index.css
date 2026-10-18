@@ -777,6 +777,20 @@ body:has(.app-shell.is-locked) {
   border: 0;
 }
 
+.pick-list > li.pick-group {
+  padding: 0.5rem 0.875rem 0.25rem;
+  font-size: 0.6875rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  cursor: default;
+}
+
+.pick-list > li.pick-group:not(:first-child) {
+  margin-top: 0.25rem;
+  border-top: 0.8px solid var(--border);
+}
+
 .pick-list button {
   display: block;
   width: max-content;
@@ -839,7 +853,8 @@ body:has(.app-shell.is-locked) {
   padding: 0;
   text-align: left;
   letter-spacing: normal;
-  color: var(--text-muted);
+  /* the buttons that open split details and the description are a little quieter than what they open */
+  color: rgba(255, 255, 255, 0.5);
 }
 
 .tx-pane {
@@ -1384,8 +1399,11 @@ form > button {
 }
 
 .budget-history .over {
-  border: 1px solid var(--accent);
-  padding: 0.125rem 0.5rem;
+  color: #f7768e;
+}
+
+.budget-history .earned-over {
+  color: var(--accent);
 }
 
 /* Dates as dropdowns: day, month and year side by side. A label sits above, like other fields. */
@@ -2030,12 +2048,11 @@ kbd {
   width: 100%;
   height: 100%;
   overflow: visible;
-  transform: rotate(-90deg);
 }
 
-.donut circle {
-  fill: none;
-  transition: opacity 0.15s, stroke-width 0.15s;
+.donut path {
+  fill: var(--seg);
+  transition: opacity 0.15s;
 }
 
 .donut .dim {
@@ -2070,14 +2087,14 @@ kbd {
   white-space: nowrap;
 }
 
-.seg-0 { stroke: #2e8b57; } .seg-bg-0 { background: #2e8b57; }
-.seg-1 { stroke: #7aa2f7; } .seg-bg-1 { background: #7aa2f7; }
-.seg-2 { stroke: #e0af68; } .seg-bg-2 { background: #e0af68; }
-.seg-3 { stroke: #bb9af7; } .seg-bg-3 { background: #bb9af7; }
-.seg-4 { stroke: #5fb3a1; } .seg-bg-4 { background: #5fb3a1; }
-.seg-5 { stroke: #f7768e; } .seg-bg-5 { background: #f7768e; }
-.seg-6 { stroke: #7dcfff; } .seg-bg-6 { background: #7dcfff; }
-.seg-7 { stroke: #8a8f98; } .seg-bg-7 { background: #8a8f98; }
+.seg-0 { --seg: #2e8b57; } .seg-bg-0 { background: #2e8b57; }
+.seg-1 { --seg: #7aa2f7; } .seg-bg-1 { background: #7aa2f7; }
+.seg-2 { --seg: #e0af68; } .seg-bg-2 { background: #e0af68; }
+.seg-3 { --seg: #bb9af7; } .seg-bg-3 { background: #bb9af7; }
+.seg-4 { --seg: #5fb3a1; } .seg-bg-4 { background: #5fb3a1; }
+.seg-5 { --seg: #f7768e; } .seg-bg-5 { background: #f7768e; }
+.seg-6 { --seg: #7dcfff; } .seg-bg-6 { background: #7dcfff; }
+.seg-7 { --seg: #8a8f98; } .seg-bg-7 { background: #8a8f98; }
 
 .dash-legend {
   flex: 1 1 17rem;
@@ -2085,6 +2102,11 @@ kbd {
   flex-direction: column;
   min-width: 0;
   font-size: 0.8125rem;
+}
+
+/* A list straight in a card (the recurring cards) takes the height of its rows; beside a donut it takes its share of the width. */
+.dash-card > .dash-legend {
+  flex: none;
 }
 
 .dash .dash-legend li {
@@ -2580,12 +2602,10 @@ ul.rec-list > li.rec-item {
   }
 }
 
-ul.rec-list > li.rec-item[data-status='overdue'] {
-  border-color: rgba(247, 118, 142, 0.5);
-}
-
+/* Due is red: from its day on (today, or before) an item has to be paid. */
+ul.rec-list > li.rec-item[data-status='overdue'],
 ul.rec-list > li.rec-item[data-status='today'] {
-  border-color: var(--accent);
+  border-color: rgba(247, 118, 142, 0.5);
 }
 
 ul.rec-list > li.rec-item[data-status='paused'],
@@ -2655,20 +2675,14 @@ ul.rec-list > li.rec-item[data-status='ended'] {
   letter-spacing: 0.02em;
 }
 
-.rec-badge[data-status='overdue'] {
+.rec-badge[data-status='overdue'],
+.rec-badge[data-status='today'] {
   border-color: #f7768e;
 }
 
-.rec-badge[data-status='overdue'] .rec-state {
-  color: #f7768e;
-}
-
-.rec-badge[data-status='today'] {
-  border-color: var(--accent);
-}
-
+.rec-badge[data-status='overdue'] .rec-state,
 .rec-badge[data-status='today'] .rec-state {
-  color: var(--accent);
+  color: #f7768e;
 }
 
 .rec-badge[data-status='paused'],
@@ -2926,8 +2940,15 @@ html.is-scanning #root {
    gesture bar) are left free, and the height is the visible height (the address-bar-free `dvh`). */
 html.is-phone .gate {
   min-height: 100dvh;
-  padding-top: calc(2rem + env(safe-area-inset-top, 0px));
+  /* at the top, not in the middle: the keyboard comes up over the lower half, and would cover the field and the button */
+  align-items: start;
+  padding-top: calc(1.5rem + env(safe-area-inset-top, 0px));
   padding-bottom: calc(2rem + env(safe-area-inset-bottom, 0px));
+}
+
+html.is-phone .gate > form,
+html.is-phone .gate > .panel {
+  padding-top: 0;
 }
 
 html.is-phone button,
@@ -3104,42 +3125,15 @@ html.is-phone .fab {
   text-align: center;
 }
 
-.quick-kind {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 0.5rem;
-}
-
-.quick-kind button,
-.quick-chips button {
-  background: var(--surface);
-  color: var(--text);
-}
-
-.quick-kind button[aria-pressed='true'],
-.quick-chips button[aria-pressed='true'] {
-  color: var(--text-h);
-  box-shadow: inset 0 -2px 0 var(--accent);
-}
-
-.quick-amount {
-  min-height: 3.5rem;
-  font-size: 1.75rem;
-  text-align: right;
-}
-
-html.is-phone .quick-amount {
-  font-size: 1.75rem;
-}
-
-.quick-chips {
+.quick-menu {
   display: flex;
-  flex-wrap: wrap;
+  flex-direction: column;
   gap: 0.5rem;
 }
 
-.quick-chips button {
-  padding: 0 0.875rem;
+.quick-menu button {
+  background: var(--surface);
+  color: var(--text-h);
 }
 
 /* A short list of choices that opens inside a form. */
@@ -3268,6 +3262,12 @@ html.is-phone .rec-due .rec-pay {
 .confirm-text {
   margin: 0;
   color: var(--text-h);
+}
+
+/* The question takes the focus when the dialog opens, so that neither answer does; it shows no outline. */
+.confirm-text:focus,
+.confirm-text:focus-visible {
+  outline: none;
 }
 
 /* A phone: "current month" and the range sit beside "add transaction"; from and to are side by side, level with each other. */
@@ -3458,28 +3458,40 @@ fieldset.conflict {
 .attach-list {
   display: flex;
   flex-direction: column;
-  gap: 0.25rem;
+  gap: 0.375rem;
   margin: 0;
   padding: 0;
   list-style: none;
 }
 
+/* A document in the list: an icon, the name, the size, and what can be done with it, in a quiet outlined row. */
 .attach-list > li {
   display: flex;
   flex-direction: row;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   align-items: center;
-  gap: 0.125rem 0.75rem;
-  padding: 0.125rem 0;
-  border-top: 0;
+  gap: 0.625rem;
+  padding: 0.375rem 0.625rem;
+  border: 0.8px solid var(--border);
+  border-radius: var(--card-radius);
+  background: var(--surface);
   font-size: 0.8125rem;
 }
 
+.attach-icon {
+  flex: 0 0 auto;
+  width: 1rem;
+  height: 1rem;
+  color: var(--text-muted);
+}
+
 .attach-name {
-  flex: 1 1 8rem;
+  flex: 1 1 0;
   min-width: 0;
-  overflow-wrap: anywhere;
+  overflow: hidden;
   text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   color: var(--text-h);
 }
 
@@ -3488,7 +3500,15 @@ button.attach-name {
 }
 
 .attach-size {
+  flex: 0 0 auto;
+  font-variant-numeric: tabular-nums;
   color: var(--text-muted);
+}
+
+.attach-list > li > button:not(.attach-name) {
+  flex: 0 0 auto;
+  padding: 0.25rem 0.5rem;
+  font-size: 0.8125rem;
 }
 
 .attach-actions {
@@ -3542,6 +3562,7 @@ button.attach-name {
 }
 
 .doc-links > li {
+  font-size: 0.8125rem;
   display: flex;
   flex-direction: row;
   flex-wrap: wrap;
@@ -3552,28 +3573,52 @@ button.attach-name {
   border-top: 0;
 }
 
-.doc-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.25rem 1.5rem;
+/* An action and, beside it, what it does. */
+.doc-action {
+  display: grid;
+  grid-template-columns: 6.5rem minmax(0, 1fr);
+  align-items: baseline;
+  gap: 0 0.875rem;
+}
+
+.doc-action button {
+  min-width: 6.5rem;
+  text-align: left;
+}
+
+.doc-action .hint {
+  margin: 0;
 }
 
 /* The page of documents. */
-.doc-summary {
+.doc-drop {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem 1.5rem;
+  width: 100%;
+  max-width: none;
+  padding: 0.875rem 1rem;
+  border: 0.8px dashed var(--border-strong);
+  border-radius: var(--card-radius);
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.doc-drop-text {
   display: flex;
   flex-direction: column;
-  gap: 0.125rem;
-  margin: 0;
-  font-size: 0.8125rem;
-  color: var(--text-muted);
+  gap: 0.25rem;
+  min-width: 0;
 }
 
-.doc-summary p {
+.doc-drop-text p {
   margin: 0;
 }
 
-.doc-page > p.hint {
-  margin: 0;
+.doc-count {
+  font-size: 0.9375rem;
+  color: var(--text-h);
 }
 
 .doc-page > p.warn {
@@ -3582,8 +3627,33 @@ button.attach-name {
 }
 
 .doc-page.is-dragging {
-  outline: 1px dashed var(--accent);
-  outline-offset: -0.25rem;
+  outline: none;
+}
+
+.doc-page.is-dragging .doc-drop {
+  border-color: var(--accent);
+  background: rgba(46, 139, 87, 0.1);
+}
+
+.doc-title {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  min-width: 0;
+}
+
+.doc-icon {
+  flex: 0 0 auto;
+  width: 1.125rem;
+  height: 1.125rem;
+  color: var(--text-muted);
+}
+
+.doc-chip {
+  padding: 0.0625rem 0.5rem;
+  border: 0.8px solid var(--border-strong);
+  border-radius: 999px;
+  font-size: 0.75rem;
 }
 
 .doc-marks {
@@ -3608,4 +3678,612 @@ button.attach-name {
   width: 1rem;
   height: 1rem;
   flex: 0 0 auto;
+}
+
+/* The number of attachments inside a line of text, after the size of a document. */
+.clip.in-line {
+  align-self: auto;
+  padding: 0;
+  vertical-align: middle;
+}
+
+/* Debts and shared bills (phase 10). */
+.debt-owed {
+  color: var(--accent);
+}
+
+.debt-owe {
+  color: #f7768e;
+}
+
+.debt-even {
+  color: var(--text-muted);
+}
+
+.card-item[data-archived] .card-name {
+  color: var(--text-muted);
+}
+
+.debt-total {
+  margin: 0 0 0.5rem;
+  font-size: 1.25rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.debts-files {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.5rem 0.75rem;
+  margin-top: 1rem;
+}
+
+/* What "split details" and "description" open on a list: the text goes under the button. */
+.card-detail {
+  margin: 0.25rem 0 0.25rem;
+  font-size: 0.8125rem;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+.card-detail p {
+  margin: 0;
+}
+
+/* A section of the details (the split, the description) with its small grey title. */
+.detail-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  margin-top: 0.5rem;
+}
+
+.detail-section .detail-title {
+  font-size: 0.75rem;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+
+/* The bill dialog: the person first, then friends and guests, each with what was typed and what it comes to. */
+.split-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 0.75rem;
+  border: 0.8px solid var(--border);
+  border-radius: var(--card-radius);
+}
+
+.split-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.split-row {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 0.25rem 0.5rem;
+  padding: 0.125rem 0;
+  border-top: 0;
+}
+
+/* The names on a bill are set like the labels of the form: the same size and spacing, in grey. */
+.split-name {
+  flex: 1 1 0;
+  min-width: 2.5rem;
+  overflow-wrap: anywhere;
+  font-family: var(--font);
+  font-size: 0.75rem;
+  line-height: 1.4;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+
+.split-value {
+  flex: 0 1 8rem;
+  min-width: 0;
+}
+
+.split-amount {
+  flex: 0 0 auto;
+  min-width: 4.5rem;
+  text-align: right;
+  font-size: 0.8125rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-h);
+}
+
+.split-remove,
+.split-spacer {
+  flex: 0 0 4.5rem;
+}
+
+.split-remove {
+  padding: 0.25rem 0.375rem;
+  font-size: 0.8125rem;
+}
+
+/* What a shared bill opens to on the list: what was paid and who has which part, a code for each friend. */
+.split-part {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem 0.75rem;
+  font-size: 0.8125rem;
+  color: var(--text);
+}
+
+.split-part button {
+  padding: 0.125rem 0.5rem;
+  font-size: 0.8125rem;
+}
+
+/* A bill code that was read: who it is from, what, and when. */
+.code-details {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 0.25rem 1rem;
+  margin: 0;
+}
+
+.code-details dt {
+  color: var(--text-muted);
+}
+
+.code-details dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+  color: var(--text-h);
+}
+
+/* The categories page. The controls (add, the month) share a row under the title, and the parts that scroll (the categories of each side, the history)
+   are framed with a track you can see, so it is plain where a list ends and that it moves. */
+.tx-page .tx-title.budget-title {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.75rem;
+}
+
+.budget-title .tx-actions {
+  flex-wrap: wrap;
+  gap: 0.75rem 1.5rem;
+}
+
+.budget-page .budget-pane,
+.budget-page .budget-history-scroll {
+  border: 0.8px solid var(--border-strong);
+  border-radius: var(--card-radius);
+  background: rgba(255, 255, 255, 0.025);
+  padding: 0 0.875rem;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.55) rgba(255, 255, 255, 0.1);
+}
+
+/* The three totals of a side (allocated, used, not used) sit in a frame of their own. */
+.budget-page .budget-half > .budget-table {
+  border: 0.8px solid var(--border);
+  border-radius: var(--card-radius);
+  padding: 0 0.875rem;
+}
+
+.budget-page .budget-half .budget-row:first-child {
+  border-top: 0;
+}
+
+.budget-page .budget-half .budget-row:last-child {
+  border-bottom: 0;
+}
+
+.budget-page .budget-pane:empty {
+  display: none;
+}
+
+/* Changing the amount of a side (allocated) takes the whole row: the amount and the label on one line, the buttons under them. */
+.budget-page .budget-row.editing {
+  grid-template-columns: minmax(0, 1fr) auto;
+  row-gap: 0.375rem;
+}
+
+.budget-page .budget-row.editing .budget-label {
+  white-space: nowrap;
+}
+
+.budget-page .budget-row.editing .budget-actions {
+  grid-column: 1 / -1;
+  justify-content: flex-end;
+}
+
+.budget-pane > p {
+  margin: 0;
+  padding: 0.875rem 0;
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+}
+
+.tx-page > .doc-drop {
+  width: auto;
+  max-width: none;
+  align-self: stretch;
+}
+
+/* The panel of a dialog takes the focus when nothing else in it can, and shows no outline for it. */
+.modal-panel:focus,
+.modal-panel:focus-visible {
+  outline: none;
+}
+
+/* The documents are as wide as the search and the type together: the list keeps no gutter of its own on the right, only the width of
+   its scroll bar (and nothing when the list is short). */
+.app-main main > section.doc-page > .tx-pane.wide {
+  padding-right: 0;
+}
+
+/* Looking into a document: a wide dialog, and the document in a frame. */
+.modal.modal-look {
+  width: min(60rem, calc(100vw - 2rem));
+}
+
+.preview-body {
+  flex: 1 1 auto;
+  min-height: 10rem;
+  max-height: calc(100svh - 12rem);
+  padding: var(--edge) var(--room) var(--edge) var(--edge);
+  overflow: auto;
+  border: 0.8px solid var(--border);
+}
+
+.preview-body > .hint,
+.preview-body > .notice {
+  margin: 0;
+  padding: 0.75rem;
+}
+
+.preview-note {
+  margin: 0;
+}
+
+/* A PDF, a Word file and a sheet have a frame of a height of their own, and turn pages or scroll inside it. */
+.preview-body.is-framed {
+  display: flex;
+  flex-direction: column;
+  height: calc(100svh - 14.5rem);
+  min-height: 16rem;
+  max-height: none;
+  padding: 0;
+  overflow: hidden;
+}
+
+/* A sheet is only as tall as its rows, up to the frame. */
+.preview-body.is-sheet {
+  height: auto;
+  min-height: 0;
+  max-height: calc(100svh - 14.5rem);
+}
+
+.preview-image {
+  display: block;
+  max-width: 100%;
+  max-height: calc(100svh - 14rem);
+  margin: 0 auto;
+  object-fit: contain;
+}
+
+.preview-text {
+  margin: 0;
+  font: inherit;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* A PDF: the page as large as the frame lets it be, and under it the buttons and the page number. */
+.preview-pdf {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 0.5rem;
+  min-height: 0;
+  padding: 0.75rem 0.75rem 0.5rem;
+}
+
+.preview-canvas {
+  display: flex;
+  flex: 1 1 0;
+  align-items: center;
+  justify-content: center;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.preview-canvas canvas {
+  display: block;
+  background: #fff;
+}
+
+.preview-pages {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  gap: 1.5rem;
+}
+
+/* A Word file: a sheet of white paper with dark ink on it, in a frame that scrolls. */
+.paper-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: 1rem;
+  overflow: auto;
+}
+
+.paper {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  width: min(100%, 46rem);
+  min-height: 100%;
+  margin: 0 auto;
+  padding: 2.5rem 3rem;
+  background: #fff;
+  color: #1b1b1b;
+  font-family: 'Segoe UI', system-ui, -apple-system, Arial, 'Liberation Sans', sans-serif;
+  font-size: 0.9375rem;
+  line-height: 1.55;
+}
+
+.paper p,
+.paper h3,
+.paper ul {
+  margin: 0;
+  color: inherit;
+  font-family: inherit;
+  font-size: inherit;
+  line-height: inherit;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.paper h3 {
+  margin-top: 0.5rem;
+  color: #000;
+  font-weight: 700;
+}
+
+.paper h3.level-1 {
+  font-size: 1.5rem;
+}
+
+.paper h3.level-2 {
+  font-size: 1.25rem;
+}
+
+.paper h3.level-3 {
+  font-size: 1.0625rem;
+}
+
+.paper ul {
+  width: auto;
+  padding-left: 1.5rem;
+  list-style: disc;
+}
+
+.paper li {
+  display: list-item;
+  padding: 0.125rem 0;
+  border: 0;
+}
+
+.paper-table-wrap {
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.paper-table {
+  border-collapse: collapse;
+  font-size: 0.875rem;
+}
+
+.paper-table td {
+  padding: 0.3rem 0.625rem;
+  border: 1px solid #b8b8b8;
+  color: #1b1b1b;
+  vertical-align: top;
+  white-space: pre-wrap;
+}
+
+/* An Excel file or a CSV: a grid with letters over the columns and numbers beside the rows, and the tabs of the sheets under it. */
+.sheet-grid {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  background: #fff;
+}
+
+.sheet-grid table {
+  border-collapse: separate;
+  border-spacing: 0;
+  color: #1b1b1b;
+  font-family: Calibri, 'Segoe UI', system-ui, Arial, 'Liberation Sans', sans-serif;
+  font-size: 0.8125rem;
+}
+
+.sheet-grid th,
+.sheet-grid td {
+  max-width: 22rem;
+  padding: 0.125rem 0.5rem;
+  overflow: hidden;
+  border-right: 1px solid #d4d4d4;
+  border-bottom: 1px solid #d4d4d4;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sheet-grid td {
+  min-width: 5rem;
+  background: #fff;
+  color: #1b1b1b;
+}
+
+.sheet-grid td.is-number {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.sheet-grid th {
+  background: #f0f0f0;
+  color: #555;
+  font-weight: 400;
+  text-align: center;
+}
+
+.sheet-grid thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+}
+
+.sheet-grid tbody th {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  min-width: 2.5rem;
+}
+
+.sheet-grid thead th.sheet-corner {
+  left: 0;
+  z-index: 3;
+}
+
+.sheet-tabs {
+  display: flex;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  background: #e6e6e6;
+  border-top: 1px solid #c4c4c4;
+}
+
+.sheet-tabs button {
+  padding: 0.375rem 1rem;
+  border-right: 1px solid #c4c4c4;
+  color: #444;
+}
+
+.sheet-tabs button[aria-selected='true'] {
+  background: #fff;
+  color: #111;
+  font-weight: 700;
+}
+
+/* What a document is linked to: a line to choose for each item, which takes the person to it. */
+.link-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.link-list > li {
+  display: block;
+  padding: 0;
+  border: 0;
+}
+
+.link-list button {
+  width: 100%;
+  min-width: 0;
+  padding: 0.5rem 0.75rem;
+  border: 0.8px solid var(--border);
+  border-radius: var(--card-radius);
+  background: var(--surface);
+  text-align: left;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+/* The item that a document sent the person to, for a moment after the page opens. */
+[data-item].is-found {
+  outline: 1.5px solid var(--accent);
+  outline-offset: 3px;
+}
+
+/* The preview of a JSON or CSV export: the start of the file as a text editor would show it. */
+.export-preview {
+  max-width: 64rem;
+  margin-top: 1.25rem;
+}
+
+.export-preview .hint {
+  margin: 0;
+}
+
+.export-file {
+  max-height: 26rem;
+  margin: 0;
+  padding: 0.75rem 0.875rem;
+  overflow: auto;
+  border: 0.8px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  tab-size: 2;
+  white-space: pre;
+}
+
+.export-file .json-key {
+  color: var(--text-h);
+}
+
+.export-file .json-string {
+  color: #9ece6a;
+}
+
+.export-file .json-number {
+  color: #e0af68;
+}
+
+.export-file .json-literal {
+  color: #bb9af7;
+}
+
+/* Export: the amount range, from and to side by side. */
+.export-amounts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+/* The preview of an Excel file or a PDF report on the export screen: a frame of its own, in which the sheet scrolls or the page is
+   drawn whole. The page of the export screen keeps its wheel, so a report does not turn its pages with it. */
+.export-frame {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow: hidden;
+  border: 0.8px solid var(--border);
+}
+
+.export-frame.is-sheet {
+  max-height: 30rem;
+}
+
+.export-frame.is-pdf {
+  height: 40rem;
+  max-height: 85svh;
+}
+
+/* The debts tabs: a little room under what comes before the list. */
+.tx-pane > .dash-card,
+.tx-pane > .hint,
+.tx-pane > .tx-actions {
+  margin-bottom: 0.75rem;
 }

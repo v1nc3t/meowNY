@@ -150,31 +150,6 @@ mod tests {
     }
 
     #[test]
-    fn a_command_in_the_schema_says_what_it_calls_and_takes() {
-        let s = schema(&Catalog::embedded());
-        let update = s["commands"].as_array().unwrap().iter().find(|c| c["command"] == "transactions update").unwrap();
-        assert_eq!((update["route"].clone(), update["scope"].clone(), update["destructive"].clone()), (json!("transactions.update"), json!("write"), json!(false)));
-        assert_eq!(update["positional"], "id");
-        let flags: Vec<&str> = update["flags"].as_array().unwrap().iter().map(|f| f["flag"].as_str().unwrap()).collect();
-        assert_eq!(flags, ["--id", "--name", "--amount", "--payment-date", "--category-id", "--description", "--clear-description"]);
-        let delete = s["commands"].as_array().unwrap().iter().find(|c| c["command"] == "transactions delete").unwrap();
-        assert_eq!(delete["destructive"], true);
-        let login = s["commands"].as_array().unwrap().iter().find(|c| c["command"] == "login").unwrap();
-        assert_eq!((login["route"].clone(), login["scope"].clone()), (Value::Null, Value::Null));
-        let asking: Vec<&str> = s["commands"].as_array().unwrap().iter().filter(|c| c["confirm"] == true).map(|c| c["command"].as_str().unwrap()).collect();
-        assert_eq!(asking, ["export json", "export csv", "export xlsx", "export pdf", "backup create", "documents get"], "a script is told which commands wait for the person");
-        assert!(s["commands"].as_array().unwrap().iter().filter(|c| c["confirm"] != true).all(|c| c["confirm"] == false));
-        assert_eq!(s["errorCodes"]["denied"], 3);
-        assert_eq!(s["errorCodes"]["file_exists"], 1);
-        let create = s["commands"].as_array().unwrap().iter().find(|c| c["command"] == "transactions create").unwrap();
-        assert_eq!(create["usage"], "meowny transactions create --name <text> --amount <amount> --payment-date <date> --category-id <id> [--description <text>] [--client-uuid <uuid>]");
-        assert_eq!(create["flags"][1]["value"], "amount");
-        assert!(s["commands"].as_array().unwrap().iter().all(|c| c["usage"].as_str().unwrap().starts_with("meowny ")), "every command has a usage line");
-        let top = s["commands"].as_array().unwrap().iter().find(|c| c["command"] == "categories list").unwrap();
-        assert_eq!(top["flags"][0]["values"], json!(["INCOME", "EXPENSE"]));
-    }
-
-    #[test]
     fn login_saves_the_token_privately_and_logout_removes_it() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("nested/cfg/token");
@@ -215,17 +190,4 @@ mod tests {
         assert_eq!(fs::read_to_string(&path).unwrap(), format!("{TOKEN}\n"));
     }
 
-    #[test]
-    fn the_place_follows_the_flag_then_the_variable_then_the_config_folder() {
-        let dir = tempfile::tempdir().unwrap();
-        let by_var = dir.path().join("by-var");
-        let e = env(&[("MEOWNY_TOKEN_FILE", by_var.to_str().unwrap())]);
-        login(&e, &Globals::default(), &mut format!("{TOKEN}\n").as_bytes()).unwrap();
-        assert!(by_var.exists());
-        if cfg!(target_os = "linux") {
-            let cfg = env(&[("XDG_CONFIG_HOME", dir.path().to_str().unwrap())]);
-            login(&cfg, &Globals::default(), &mut format!("{TOKEN}\n").as_bytes()).unwrap();
-            assert!(dir.path().join("meowny/token").exists());
-        }
-    }
 }

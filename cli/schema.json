@@ -707,10 +707,60 @@
           "required": false,
           "summary": "Only these categories and what belongs to them. Leave out for all of them.",
           "type": "ids"
+        },
+        {
+          "name": "includeDebts",
+          "required": false,
+          "summary": "With dates or categories chosen, also include the ledger of money lent and borrowed (the friends and their parts of the bills in the selection are in it anyway). Without a choice everything is in.",
+          "type": "boolean"
+        },
+        {
+          "name": "kind",
+          "required": false,
+          "summary": "Only INCOME or only EXPENSE. Leave out for both.",
+          "type": "string",
+          "values": [
+            "INCOME",
+            "EXPENSE"
+          ]
+        },
+        {
+          "name": "minAmount",
+          "required": false,
+          "summary": "Only transactions that cost you at least this (a bill shared with friends counts for your part).",
+          "type": "money"
+        },
+        {
+          "name": "maxAmount",
+          "required": false,
+          "summary": "Only transactions that cost you at most this (a bill shared with friends counts for your part).",
+          "type": "money"
+        },
+        {
+          "name": "text",
+          "required": false,
+          "summary": "Only transactions with this text in the name or the description, whatever the case.",
+          "type": "string"
+        },
+        {
+          "name": "split",
+          "required": false,
+          "summary": "Only the bills shared with friends (split) or only those that are not (not_split). Leave out for both.",
+          "type": "string",
+          "values": [
+            "split",
+            "not_split"
+          ]
+        },
+        {
+          "name": "sections",
+          "required": false,
+          "summary": "The parts of the file, separated by commas, from: transactions, categories, budgets, recurring, documents, people (the friends and what they owe), due (the overdue recurring payments), ledger (the history of debts) and history (the change history, only in a file with no limits). Leave out for all of them.",
+          "type": "string"
         }
       ],
       "scope": "read",
-      "summary": "What an export of this selection would contain: how many transactions, their dates, the income and expense totals, and the other records."
+      "summary": "What an export of this selection would contain: how many transactions, their dates, the income and expense totals, and the other records (the friends, the history of debts, the overdue payments, the documents)."
     },
     {
       "name": "backup.schedule",
@@ -745,10 +795,60 @@
           "required": false,
           "summary": "Only these categories and what belongs to them. Leave out for all of them.",
           "type": "ids"
+        },
+        {
+          "name": "includeDebts",
+          "required": false,
+          "summary": "With dates or categories chosen, also include the ledger of money lent and borrowed (the friends and their parts of the bills in the selection are in it anyway). Without a choice everything is in.",
+          "type": "boolean"
+        },
+        {
+          "name": "kind",
+          "required": false,
+          "summary": "Only INCOME or only EXPENSE. Leave out for both.",
+          "type": "string",
+          "values": [
+            "INCOME",
+            "EXPENSE"
+          ]
+        },
+        {
+          "name": "minAmount",
+          "required": false,
+          "summary": "Only transactions that cost you at least this (a bill shared with friends counts for your part).",
+          "type": "money"
+        },
+        {
+          "name": "maxAmount",
+          "required": false,
+          "summary": "Only transactions that cost you at most this (a bill shared with friends counts for your part).",
+          "type": "money"
+        },
+        {
+          "name": "text",
+          "required": false,
+          "summary": "Only transactions with this text in the name or the description, whatever the case.",
+          "type": "string"
+        },
+        {
+          "name": "split",
+          "required": false,
+          "summary": "Only the bills shared with friends (split) or only those that are not (not_split). Leave out for both.",
+          "type": "string",
+          "values": [
+            "split",
+            "not_split"
+          ]
+        },
+        {
+          "name": "sections",
+          "required": false,
+          "summary": "The parts of the file, separated by commas, from: transactions, categories, budgets, recurring, documents, people (the friends and what they owe), due (the overdue recurring payments), ledger (the history of debts) and history (the change history, only in a file with no limits). Leave out for all of them.",
+          "type": "string"
         }
       ],
       "scope": "read",
-      "summary": "Writes the data as a JSON file, after the person allows it in the app. An existing file is never replaced."
+      "summary": "Writes the data as a JSON file, after the person allows it in the app: the transactions, categories, budgets, recurring items, documents, and the debts (friends, the overdue recurring payments, the history of debts), or the parts and the limits chosen. An existing file is never replaced."
     },
     {
       "confirm": true,
@@ -777,10 +877,48 @@
           "required": false,
           "summary": "Only these categories and what belongs to them. Leave out for all of them.",
           "type": "ids"
+        },
+        {
+          "name": "kind",
+          "required": false,
+          "summary": "Only INCOME or only EXPENSE. Leave out for both.",
+          "type": "string",
+          "values": [
+            "INCOME",
+            "EXPENSE"
+          ]
+        },
+        {
+          "name": "minAmount",
+          "required": false,
+          "summary": "Only transactions that cost you at least this (a bill shared with friends counts for your part).",
+          "type": "money"
+        },
+        {
+          "name": "maxAmount",
+          "required": false,
+          "summary": "Only transactions that cost you at most this (a bill shared with friends counts for your part).",
+          "type": "money"
+        },
+        {
+          "name": "text",
+          "required": false,
+          "summary": "Only transactions with this text in the name or the description, whatever the case.",
+          "type": "string"
+        },
+        {
+          "name": "split",
+          "required": false,
+          "summary": "Only the bills shared with friends (split) or only those that are not (not_split). Leave out for both.",
+          "type": "string",
+          "values": [
+            "split",
+            "not_split"
+          ]
         }
       ],
       "scope": "read",
-      "summary": "Writes the transactions as a CSV file, after the person allows it in the app. An existing file is never replaced."
+      "summary": "Writes the transactions as a CSV file, after the person allows it in the app, limited by the dates, the categories, the kind, what they cost you, a text and whether they are shared. An existing file is never replaced."
     },
     {
       "confirm": true,
@@ -809,10 +947,60 @@
           "required": false,
           "summary": "Only these categories and what belongs to them. Leave out for all of them.",
           "type": "ids"
+        },
+        {
+          "name": "includeDebts",
+          "required": false,
+          "summary": "With dates or categories chosen, also include the ledger of money lent and borrowed (the friends and their parts of the bills in the selection are in it anyway). Without a choice everything is in.",
+          "type": "boolean"
+        },
+        {
+          "name": "kind",
+          "required": false,
+          "summary": "Only INCOME or only EXPENSE. Leave out for both.",
+          "type": "string",
+          "values": [
+            "INCOME",
+            "EXPENSE"
+          ]
+        },
+        {
+          "name": "minAmount",
+          "required": false,
+          "summary": "Only transactions that cost you at least this (a bill shared with friends counts for your part).",
+          "type": "money"
+        },
+        {
+          "name": "maxAmount",
+          "required": false,
+          "summary": "Only transactions that cost you at most this (a bill shared with friends counts for your part).",
+          "type": "money"
+        },
+        {
+          "name": "text",
+          "required": false,
+          "summary": "Only transactions with this text in the name or the description, whatever the case.",
+          "type": "string"
+        },
+        {
+          "name": "split",
+          "required": false,
+          "summary": "Only the bills shared with friends (split) or only those that are not (not_split). Leave out for both.",
+          "type": "string",
+          "values": [
+            "split",
+            "not_split"
+          ]
+        },
+        {
+          "name": "sections",
+          "required": false,
+          "summary": "The parts of the file, separated by commas, from: transactions, categories, budgets, recurring, documents, people (the friends and what they owe), due (the overdue recurring payments), ledger (the history of debts) and history (the change history, only in a file with no limits). Leave out for all of them.",
+          "type": "string"
         }
       ],
       "scope": "read",
-      "summary": "Writes a workbook (.xlsx) with sheets for transactions, categories, budgets, recurring items and a monthly summary, after the person allows it in the app. Dates are ISO and amounts plain numbers. An existing file is never replaced."
+      "summary": "Writes a workbook (.xlsx) with sheets for transactions, categories, budgets, recurring items, documents, the debts (friends, due payments, history of debts) and a monthly summary, after the person allows it in the app. Dates are ISO and amounts plain numbers. An existing file is never replaced."
     },
     {
       "confirm": true,
@@ -863,6 +1051,24 @@
             "A4",
             "LETTER"
           ]
+        },
+        {
+          "name": "includeDebts",
+          "required": false,
+          "summary": "Also list who owes what on the last day of each month: one line for each friend.",
+          "type": "boolean"
+        },
+        {
+          "name": "includeDuePayments",
+          "required": false,
+          "summary": "Also list the recurring payments that are overdue today, with the day each fell due and a total.",
+          "type": "boolean"
+        },
+        {
+          "name": "includeDebtHistory",
+          "required": false,
+          "summary": "Also list every line of the debts of every friend in the months, with the balance after it, and the recurring payments paid late or overdue.",
+          "type": "boolean"
         }
       ],
       "scope": "read",
@@ -933,6 +1139,12 @@
           "type": "id"
         },
         {
+          "name": "ledgerEntryId",
+          "required": false,
+          "summary": "An entry of the ledger of money lent and borrowed.",
+          "type": "id"
+        },
+        {
           "name": "limit",
           "required": false,
           "summary": "How many to return, 1 to 100.",
@@ -959,7 +1171,7 @@
         }
       ],
       "scope": "read",
-      "summary": "One document: its name, date, type, size and hash, whether this computer holds its file, and in `links` what it is attached to. Never the file."
+      "summary": "One document: its name, date, type, size and hash, whether this computer holds its file, and in `links` what it is attached to (a debt entry also gives `personId`, the friend). Never the file."
     },
     {
       "name": "documents.add",
@@ -998,6 +1210,12 @@
           "name": "recurringIds",
           "required": false,
           "summary": "Attach it to these recurring items.",
+          "type": "ids"
+        },
+        {
+          "name": "ledgerEntryIds",
+          "required": false,
+          "summary": "Attach it to these entries of the ledger.",
           "type": "ids"
         }
       ],
@@ -1068,10 +1286,16 @@
           "required": false,
           "summary": "A recurring item.",
           "type": "id"
+        },
+        {
+          "name": "ledgerEntryId",
+          "required": false,
+          "summary": "An entry of the ledger of money lent and borrowed.",
+          "type": "id"
         }
       ],
       "scope": "write",
-      "summary": "Attaches a document to a transaction or to a recurring item. Giving one that is attached already changes nothing."
+      "summary": "Attaches a document to a transaction, a recurring item or a ledger entry. Giving one that is attached already changes nothing."
     },
     {
       "name": "documents.unlink",
@@ -1093,10 +1317,16 @@
           "required": false,
           "summary": "A recurring item.",
           "type": "id"
+        },
+        {
+          "name": "ledgerEntryId",
+          "required": false,
+          "summary": "An entry of the ledger of money lent and borrowed.",
+          "type": "id"
         }
       ],
       "scope": "write",
-      "summary": "Detaches a document from a transaction or a recurring item. The document and the transaction stay."
+      "summary": "Detaches a document from a transaction, a recurring item or a ledger entry. The document and the transaction stay."
     },
     {
       "confirm": true,
@@ -1117,6 +1347,543 @@
       ],
       "scope": "write",
       "summary": "Writes a copy of a document's file, after the person allows it in the app. It is not encrypted. An existing file is never replaced."
+    },
+    {
+      "name": "people.list",
+      "params": [
+        {
+          "name": "archived",
+          "required": false,
+          "summary": "Also list the friends that were archived.",
+          "type": "boolean"
+        }
+      ],
+      "scope": "read",
+      "summary": "The friends with what each owes you (negative: you owe them), the largest first. Archived friends only if asked."
+    },
+    {
+      "name": "people.show",
+      "params": [
+        {
+          "name": "id",
+          "required": true,
+          "summary": "The friend.",
+          "type": "id"
+        }
+      ],
+      "scope": "read",
+      "summary": "One friend and their ledger: their parts of shared bills and the entries by date, with the balance after each line."
+    },
+    {
+      "name": "debts.summary",
+      "params": [],
+      "scope": "read",
+      "summary": "What friends owe you and what you owe them, in all and for each friend whose balance is not zero. Neither is income or expense."
+    },
+    {
+      "name": "debts.due",
+      "params": [],
+      "scope": "read",
+      "summary": "The recurring payments that are overdue and not paid or skipped, one for each occurrence that was missed (at most 24 for an item), the oldest first, with the day each fell due, what it is for (null for a bill with no fixed amount), the days late and what they come to. A payment is overdue from the day after its day; income and paused or ended items are not listed."
+    },
+    {
+      "name": "debts.history",
+      "params": [
+        {
+          "name": "from",
+          "required": false,
+          "summary": "Only lines on or after this date.",
+          "type": "date"
+        },
+        {
+          "name": "to",
+          "required": false,
+          "summary": "Only lines on or before this date.",
+          "type": "date"
+        },
+        {
+          "name": "personId",
+          "required": false,
+          "summary": "Only the lines of this friend (and none of the recurring payments).",
+          "type": "id"
+        },
+        {
+          "name": "limit",
+          "required": false,
+          "summary": "How many to return, 1 to 200. Default 50.",
+          "type": "integer"
+        },
+        {
+          "name": "offset",
+          "required": false,
+          "summary": "How many to skip, for the next page. Default 0.",
+          "type": "integer"
+        }
+      ],
+      "scope": "read",
+      "summary": "The history of debts, newest first, a page at a time: the lines of every friend (lent, borrowed, paid back, their parts of shared bills, with the balance after each) and the recurring payments that were paid late or are overdue. A payment made on its day or before it is not in it."
+    },
+    {
+      "name": "debts.reminders",
+      "params": [
+        {
+          "name": "everyDays",
+          "required": true,
+          "summary": "The period in days, 0 to 365.",
+          "type": "integer"
+        }
+      ],
+      "scope": "read",
+      "summary": "Which friends a reminder is due for today, and the next days with one. Every friend whose balance is not zero is reminded this many days after the day their debt last changed (the latest line of their statement), and again after as many; 0 is none. The app rings them (a device sets its own period and time of day); this only reads what they would be about."
+    },
+    {
+      "name": "splits.preview",
+      "params": [
+        {
+          "name": "amount",
+          "required": true,
+          "summary": "The bill, more than zero.",
+          "type": "money"
+        },
+        {
+          "name": "mode",
+          "required": true,
+          "summary": "How the numbers are typed: EQUAL (everyone the same), PERCENT (two decimals, 100.00 in all), SHARES (whole numbers) or EXACT (amounts that add up to the bill).",
+          "type": "string",
+          "values": [
+            "EQUAL",
+            "PERCENT",
+            "SHARES",
+            "EXACT"
+          ]
+        },
+        {
+          "name": "mine",
+          "required": false,
+          "summary": "Your own value, typed the way the mode says. Leave out for an equal split, or to take the rest in PERCENT and EXACT.",
+          "type": "string"
+        },
+        {
+          "name": "people",
+          "required": false,
+          "summary": "The friends the bill is shared with, as ids.",
+          "type": "ids"
+        },
+        {
+          "name": "guests",
+          "required": false,
+          "summary": "People who are not tracked, by name, separated by commas. Their part leaves your cost and makes no debt.",
+          "type": "string"
+        },
+        {
+          "name": "values",
+          "required": false,
+          "summary": "The value of each friend, in the order of --people, then of each guest, separated by commas. Not for an equal split.",
+          "type": "string"
+        }
+      ],
+      "scope": "read",
+      "summary": "What a split would give each person for a bill of this amount, without saving anything: your part, theirs, whether the numbers add up and how much is left."
+    },
+    {
+      "name": "people.create",
+      "params": [
+        {
+          "name": "name",
+          "required": true,
+          "summary": "The name.",
+          "type": "string"
+        }
+      ],
+      "scope": "write",
+      "summary": "Adds a friend. A friend is a name, 1 to 50 characters, unique among the friends who are not archived. Nothing else about a person is kept."
+    },
+    {
+      "name": "people.update",
+      "params": [
+        {
+          "name": "id",
+          "required": true,
+          "summary": "The friend.",
+          "type": "id"
+        },
+        {
+          "name": "name",
+          "required": false,
+          "summary": "The new name.",
+          "type": "string"
+        },
+        {
+          "name": "remindOn",
+          "nullable": true,
+          "required": false,
+          "summary": "Not used for reminders any more; kept as it was written. Null clears it.",
+          "type": "date"
+        },
+        {
+          "name": "remindEveryDays",
+          "nullable": true,
+          "required": false,
+          "summary": "Not used for reminders any more; kept as it was written, 1 to 365, or null.",
+          "type": "integer"
+        }
+      ],
+      "scope": "write",
+      "summary": "Renames a friend. Fields left out stay as they are. The reminder fields are kept for data written before reminders became a setting of each device (every so many days after a debt last changed), and nothing rings from them."
+    },
+    {
+      "name": "people.archive",
+      "params": [
+        {
+          "name": "id",
+          "required": true,
+          "summary": "The friend.",
+          "type": "id"
+        }
+      ],
+      "scope": "write",
+      "summary": "Hides a friend from the lists and pickers. Their balance and history stay, and the name can be used again."
+    },
+    {
+      "name": "people.unarchive",
+      "params": [
+        {
+          "name": "id",
+          "required": true,
+          "summary": "The friend.",
+          "type": "id"
+        }
+      ],
+      "scope": "write",
+      "summary": "Brings back an archived friend, if no other friend has taken the name."
+    },
+    {
+      "name": "people.settle",
+      "params": [
+        {
+          "name": "id",
+          "required": true,
+          "summary": "The friend.",
+          "type": "id"
+        },
+        {
+          "name": "amount",
+          "required": false,
+          "summary": "How much was paid, more than zero. The whole balance if left out.",
+          "type": "money"
+        },
+        {
+          "name": "date",
+          "required": false,
+          "summary": "The day it was paid. Today if left out.",
+          "type": "date"
+        },
+        {
+          "name": "note",
+          "required": false,
+          "summary": "A note, up to 200 characters.",
+          "type": "string"
+        }
+      ],
+      "scope": "write",
+      "summary": "Marks a payment between you and a friend: they paid you back if they owe you, you paid them back if you owe them. With no amount it is the whole balance. An amount larger than the debt is accepted: the balance turns around and the answer says how much was over."
+    },
+    {
+      "name": "ledger.add",
+      "params": [
+        {
+          "name": "personId",
+          "required": true,
+          "summary": "The friend.",
+          "type": "id"
+        },
+        {
+          "name": "kind",
+          "required": true,
+          "summary": "LENT (you lent), BORROWED (you borrowed), REPAID_TO_ME (they paid you back) or REPAID_BY_ME (you paid them back).",
+          "type": "string",
+          "values": [
+            "LENT",
+            "BORROWED",
+            "REPAID_TO_ME",
+            "REPAID_BY_ME"
+          ]
+        },
+        {
+          "name": "amount",
+          "required": true,
+          "summary": "More than zero.",
+          "type": "money"
+        },
+        {
+          "name": "date",
+          "required": true,
+          "summary": "The day it happened.",
+          "type": "date"
+        },
+        {
+          "name": "note",
+          "required": false,
+          "summary": "A note, up to 200 characters.",
+          "type": "string"
+        },
+        {
+          "name": "transactionId",
+          "required": false,
+          "summary": "A transaction this belongs to.",
+          "type": "id"
+        },
+        {
+          "name": "expenseName",
+          "required": false,
+          "summary": "BORROWED only: the name of the expense that is made for your share (1 to 50 characters). Needs expenseCategoryId.",
+          "type": "string"
+        },
+        {
+          "name": "expenseCategoryId",
+          "required": false,
+          "summary": "BORROWED only: the expense category for your share. Needs expenseName.",
+          "type": "id"
+        }
+      ],
+      "scope": "write",
+      "summary": "Records money lent, borrowed or paid back with a friend. It is never income or expense. For a borrowing, give expenseName and expenseCategoryId to add your share to your expenses in the same step, with the entry linked to it."
+    },
+    {
+      "name": "ledger.update",
+      "params": [
+        {
+          "name": "id",
+          "required": true,
+          "summary": "The entry.",
+          "type": "id"
+        },
+        {
+          "name": "personId",
+          "required": false,
+          "summary": "The friend.",
+          "type": "id"
+        },
+        {
+          "name": "kind",
+          "required": false,
+          "summary": "LENT, BORROWED, REPAID_TO_ME or REPAID_BY_ME.",
+          "type": "string",
+          "values": [
+            "LENT",
+            "BORROWED",
+            "REPAID_TO_ME",
+            "REPAID_BY_ME"
+          ]
+        },
+        {
+          "name": "amount",
+          "required": false,
+          "summary": "More than zero.",
+          "type": "money"
+        },
+        {
+          "name": "date",
+          "required": false,
+          "summary": "The day it happened.",
+          "type": "date"
+        },
+        {
+          "name": "note",
+          "nullable": true,
+          "required": false,
+          "summary": "The new note, or null to clear it.",
+          "type": "string"
+        },
+        {
+          "name": "transactionId",
+          "nullable": true,
+          "required": false,
+          "summary": "The transaction it belongs to, or null for none.",
+          "type": "id"
+        }
+      ],
+      "scope": "write",
+      "summary": "Changes an entry of the ledger. Fields left out stay as they are; a null note or transactionId clears it. The expense it came with is not changed."
+    },
+    {
+      "name": "ledger.delete",
+      "params": [
+        {
+          "name": "id",
+          "required": true,
+          "summary": "The entry.",
+          "type": "id"
+        }
+      ],
+      "scope": "write",
+      "summary": "Deletes an entry of the ledger. The balance of the friend changes by that much. The change history keeps what it said."
+    },
+    {
+      "name": "transactions.split",
+      "params": [
+        {
+          "name": "id",
+          "required": true,
+          "summary": "The transaction.",
+          "type": "id"
+        },
+        {
+          "name": "mode",
+          "required": true,
+          "summary": "How the numbers are typed: EQUAL (everyone the same), PERCENT (two decimals, 100.00 in all), SHARES (whole numbers) or EXACT (amounts that add up to the bill).",
+          "type": "string",
+          "values": [
+            "EQUAL",
+            "PERCENT",
+            "SHARES",
+            "EXACT"
+          ]
+        },
+        {
+          "name": "mine",
+          "required": false,
+          "summary": "Your own value, typed the way the mode says. Leave out for an equal split, or to take the rest in PERCENT and EXACT.",
+          "type": "string"
+        },
+        {
+          "name": "people",
+          "required": false,
+          "summary": "The friends the bill is shared with, as ids.",
+          "type": "ids"
+        },
+        {
+          "name": "guests",
+          "required": false,
+          "summary": "People who are not tracked, by name, separated by commas. Their part leaves your cost and makes no debt.",
+          "type": "string"
+        },
+        {
+          "name": "values",
+          "required": false,
+          "summary": "The value of each friend, in the order of --people, then of each guest, separated by commas. Not for an equal split.",
+          "type": "string"
+        }
+      ],
+      "scope": "write",
+      "summary": "Shares a transaction with friends and guests. It keeps the amount that was paid; your part, the amount minus theirs, is what budgets and statistics count. The numbers must add up. Only an expense can be shared."
+    },
+    {
+      "name": "transactions.unsplit",
+      "params": [
+        {
+          "name": "id",
+          "required": true,
+          "summary": "The transaction.",
+          "type": "id"
+        }
+      ],
+      "scope": "write",
+      "summary": "Takes the split off a transaction: it costs you its whole amount again, and the friends' balances go down by their parts."
+    },
+    {
+      "name": "recurring.split",
+      "params": [
+        {
+          "name": "id",
+          "required": true,
+          "summary": "The recurring item.",
+          "type": "id"
+        },
+        {
+          "name": "mode",
+          "required": true,
+          "summary": "How the numbers are typed: EQUAL (everyone the same), PERCENT (two decimals, 100.00 in all), SHARES (whole numbers) or EXACT (amounts that add up to the bill).",
+          "type": "string",
+          "values": [
+            "EQUAL",
+            "PERCENT",
+            "SHARES",
+            "EXACT"
+          ]
+        },
+        {
+          "name": "mine",
+          "required": false,
+          "summary": "Your own value, typed the way the mode says. Leave out for an equal split, or to take the rest in PERCENT and EXACT.",
+          "type": "string"
+        },
+        {
+          "name": "people",
+          "required": false,
+          "summary": "The friends the bill is shared with, as ids.",
+          "type": "ids"
+        },
+        {
+          "name": "guests",
+          "required": false,
+          "summary": "People who are not tracked, by name, separated by commas. Their part leaves your cost and makes no debt.",
+          "type": "string"
+        },
+        {
+          "name": "values",
+          "required": false,
+          "summary": "The value of each friend, in the order of --people, then of each guest, separated by commas. Not for an equal split.",
+          "type": "string"
+        }
+      ],
+      "scope": "write",
+      "summary": "Splits every payment of a recurring item the same way, from now on. Kept as proportions, so a payment that differs from the plan is shared in the same proportions. EXACT needs an item with an amount that the values add up to. Payments already made are not changed."
+    },
+    {
+      "name": "recurring.unsplit",
+      "params": [
+        {
+          "name": "id",
+          "required": true,
+          "summary": "The recurring item.",
+          "type": "id"
+        }
+      ],
+      "scope": "write",
+      "summary": "Takes the split off a recurring item: its payments are not split from now on. Payments already made keep theirs."
+    },
+    {
+      "confirm": true,
+      "name": "export.debts",
+      "params": [
+        {
+          "name": "out",
+          "required": true,
+          "summary": "Where to write the file: an absolute path ending in .txt (TEXT), .csv (CSV) or .pdf (PDF), in a folder that exists, that is not there yet.",
+          "type": "path"
+        },
+        {
+          "name": "what",
+          "required": false,
+          "summary": "SUMMARY (the default), STATEMENT or LEDGER.",
+          "type": "string",
+          "values": [
+            "SUMMARY",
+            "STATEMENT",
+            "LEDGER"
+          ]
+        },
+        {
+          "name": "format",
+          "required": false,
+          "summary": "TEXT (the default), CSV or PDF. LEDGER is CSV only.",
+          "type": "string",
+          "values": [
+            "TEXT",
+            "CSV",
+            "PDF"
+          ]
+        },
+        {
+          "name": "personId",
+          "required": false,
+          "summary": "The friend, for a STATEMENT.",
+          "type": "id"
+        }
+      ],
+      "scope": "read",
+      "summary": "Writes who owes what to a text, CSV or PDF file, in English, after the person allows it in the app: the SUMMARY of all friends, the STATEMENT of one friend (personId), or the LEDGER of every entry as CSV. An existing file is never replaced."
     }
   ]
 }

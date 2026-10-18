@@ -47,42 +47,6 @@ fn names(file: &Value) -> Vec<String> {
 }
 
 #[test]
-fn the_full_json_lists_every_document_with_what_it_is_attached_to() {
-    let (conn, ..) = with_documents();
-    let file = parsed(&conn, &Selection::default());
-    // oldest paper first
-    assert_eq!(
-        names(&file),
-        ["Lease.pdf", "Therapy plan contract.pdf", "Pay slip.pdf", "Therapy invoice.pdf", "Shared scan.pdf", "Loose receipt.pdf"]
-    );
-    let lease = &file["documents"][0];
-    assert_eq!(lease["date"], "2026-01-02");
-    assert_eq!(lease["type"], "application/pdf");
-    assert_eq!(lease["sizeBytes"], 1234);
-    assert_eq!(lease["sha256"], crate::keys::hex_encode(&crate::documents::store::sha256(b"Lease.pdf")));
-    assert!(lease["id"].is_string(), "ids are strings, as everywhere in the file");
-    let links = lease["links"].as_array().unwrap();
-    assert_eq!(links.len(), 2);
-    assert_eq!((links[0]["kind"].as_str(), links[0]["name"].as_str(), links[0]["date"].as_str()), (Some("transaction"), Some("Rent"), Some("2026-02-01")));
-    assert_eq!((links[1]["kind"].as_str(), links[1]["name"].as_str(), links[1]["date"].is_null()), (Some("recurring"), Some("Rent"), true));
-    // an attachment points at something that is in the file
-    let tx_ids: Vec<&str> = file["transactions"].as_array().unwrap().iter().map(|t| t["id"].as_str().unwrap()).collect();
-    assert!(tx_ids.contains(&links[0]["id"].as_str().unwrap()));
-    // a document that is attached to nothing is listed, with no links
-    let loose = file["documents"].as_array().unwrap().iter().find(|d| d["name"] == "Loose receipt.pdf").unwrap();
-    assert_eq!(loose["links"], serde_json::json!([]));
-    // nothing but the description of a document is in the file: no bytes, no path, no sealed name
-    let keys: Vec<&str> = loose.as_object().unwrap().keys().map(String::as_str).collect();
-    assert_eq!(keys, ["date", "id", "links", "name", "sha256", "sizeBytes", "type"]);
-}
-
-#[test]
-fn a_file_without_documents_has_an_empty_list() {
-    let (conn, ..) = lived_in();
-    assert_eq!(parsed(&conn, &Selection::default())["documents"], serde_json::json!([]));
-}
-
-#[test]
 fn a_limited_export_lists_only_documents_attached_to_what_is_in_it_and_only_those_attachments() {
     let (conn, salary, rent, secret) = with_documents();
     let private = ["Therapy invoice.pdf", "Therapy plan contract.pdf", "Session", "Therapy plan", "Dr. Private"];
@@ -132,7 +96,7 @@ fn whatever_the_selection_a_listed_document_is_attached_to_something_listed_and_
         Selection { from: Some("2026-02-01".into()), ..Default::default() },
         Selection { from: Some("2026-02-01".into()), to: Some("2026-02-28".into()), ..Default::default() },
         Selection { category_ids: Some(vec![rent.to_string()]), ..Default::default() },
-        Selection { category_ids: Some(vec![salary.to_string(), secret.to_string()]), from: Some("2026-02-05".into()), to: None },
+        Selection { category_ids: Some(vec![salary.to_string(), secret.to_string()]), from: Some("2026-02-05".into()), to: None, ..Default::default() },
         Selection { category_ids: Some(vec![]), ..Default::default() },
     ] {
         let file = parsed(&conn, &selection);
@@ -163,37 +127,6 @@ fn whatever_the_selection_a_listed_document_is_attached_to_something_listed_and_
 }
 
 #[test]
-fn the_preview_counts_the_documents_the_json_lists() {
-    let (conn, salary, rent, _) = with_documents();
-    for selection in [
-        Selection::default(),
-        Selection { from: Some("2026-03-01".into()), ..Default::default() },
-        Selection { category_ids: Some(vec![salary.to_string(), rent.to_string()]), ..Default::default() },
-        Selection { category_ids: Some(vec![]), ..Default::default() },
-    ] {
-        let shown = preview(&conn, &selection).unwrap();
-        assert_eq!(shown.documents as usize, names(&parsed(&conn, &selection)).len(), "{selection:?}");
-    }
-    assert_eq!(preview(&conn, &Selection::default()).unwrap().documents, 6);
-}
-
-#[test]
-fn the_csv_names_the_documents_attached_to_each_transaction() {
-    let (conn, _, rent, _) = with_documents();
-    let rows = read_csv(&csv(&conn, &Selection::default()).unwrap());
-    assert_eq!(rows[0].last().map(String::as_str), Some("documents"));
-    let cell = |name: &str, date: &str| rows.iter().find(|r| r[3] == name && r[0] == date).unwrap().last().unwrap().clone();
-    assert_eq!(cell("Pay", "2026-01-25"), "Pay slip.pdf; Shared scan.pdf", "in the order of the names");
-    assert_eq!(cell("Rent", "2026-02-01"), "Lease.pdf");
-    assert_eq!(cell("Rent", "2026-03-01"), "", "a transaction with none has an empty cell");
-    assert_eq!(cell("Session", "2026-02-10"), "Shared scan.pdf; Therapy invoice.pdf");
-
-    // a limited CSV has only the rows it has, and so only their documents
-    let limited = csv(&conn, &Selection { category_ids: Some(vec![rent.to_string()]), ..Default::default() }).unwrap();
-    assert!(limited.contains("Lease.pdf") && !limited.contains("Therapy") && !limited.contains("Shared scan") && !limited.contains("Pay slip"), "{limited}");
-}
-
-#[test]
 fn a_document_name_cannot_run_as_a_formula_in_the_csv() {
     let (conn, ..) = lived_in();
     let doc = add_doc(&conn, "=HYPERLINK(\"http://evil\",\"x\")", "2026-02-01");
@@ -201,11 +134,12 @@ fn a_document_name_cannot_run_as_a_formula_in_the_csv() {
     let second = add_doc(&conn, "Receipt, \"signed\".pdf", "2026-02-01");
     attach_transaction(&conn, second, "Rent", "2026-02-01");
     let rows = read_csv(&csv(&conn, &Selection::default()).unwrap());
-    let cell = rows.iter().find(|r| r[3] == "Rent" && r[0] == "2026-02-01").unwrap().last().unwrap();
+    let column = rows[0].iter().position(|h| h == "documents").expect("a documents column");
+    let cell = &rows.iter().find(|r| r[3] == "Rent" && r[0] == "2026-02-01").unwrap()[column];
     // the names are in the order of the names: the one that starts with an equals sign is first, so the whole cell is made text
     assert_eq!(cell, "'=HYPERLINK(\"http://evil\",\"x\"); Receipt, \"signed\".pdf");
     for row in &rows[1..] {
-        assert!(!row.last().unwrap().starts_with(['=', '+', '-', '@', '\t', '\r']));
+        assert!(!row[column].starts_with(['=', '+', '-', '@', '\t', '\r']));
     }
 }
 

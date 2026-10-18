@@ -32,6 +32,7 @@ pub(super) const MAX_DATA_CHARS: usize = (MAX_DOCUMENT_BYTES as usize).div_ceil(
 const ID: Param = Param::new("id", Kind::Id, "The document.");
 const TRANSACTION: Param = Param::new("transactionId", Kind::Id, "A transaction.");
 const RECURRING: Param = Param::new("recurringId", Kind::Id, "A recurring item.");
+const LEDGER_ENTRY: Param = Param::new("ledgerEntryId", Kind::Id, "An entry of the ledger of money lent and borrowed.");
 
 pub const LIST: Route = Route {
     name: "documents.list",
@@ -44,6 +45,7 @@ pub const LIST: Route = Route {
         Param::new("to", Kind::Date, "Only documents dated on or before this date."),
         TRANSACTION,
         RECURRING,
+        LEDGER_ENTRY,
         Param::new("limit", Kind::Integer, "How many to return, 1 to 100."),
         Param::new("offset", Kind::Integer, "How many to skip."),
     ],
@@ -58,6 +60,7 @@ pub const LIST: Route = Route {
             to: Option<String>,
             transaction_id: Option<String>,
             recurring_id: Option<String>,
+            ledger_entry_id: Option<String>,
             limit: Option<u32>,
             offset: Option<u32>,
         }
@@ -69,6 +72,7 @@ pub const LIST: Route = Route {
             to: a.to,
             transaction_id: a.transaction_id,
             recurring_transaction_id: a.recurring_id,
+            ledger_entry_id: a.ledger_entry_id,
             limit: a.limit,
             offset: a.offset,
         };
@@ -80,7 +84,7 @@ pub const LIST: Route = Route {
 pub const SHOW: Route = Route {
     name: "documents.show",
     scope: Scope::Read,
-    summary: "One document: its name, date, type, size and hash, whether this computer holds its file, and in `links` what it is attached to. Never the file.",
+    summary: "One document: its name, date, type, size and hash, whether this computer holds its file, and in `links` what it is attached to (a debt entry also gives `personId`, the friend). Never the file.",
     params: &[ID.required()],
     confirm: None,
     run: |ctx, mut args| {
@@ -104,6 +108,7 @@ pub const ADD: Route = Route {
         Param::new("keepOnPhone", Kind::Boolean, "Keep the file on the phone too. Off if left out."),
         Param::new("transactionIds", Kind::Ids, "Attach it to these transactions."),
         Param::new("recurringIds", Kind::Ids, "Attach it to these recurring items."),
+        Param::new("ledgerEntryIds", Kind::Ids, "Attach it to these entries of the ledger."),
     ],
     confirm: None,
     run: |ctx, args| {
@@ -116,6 +121,7 @@ pub const ADD: Route = Route {
             keep_on_phone: Option<bool>,
             transaction_ids: Option<Vec<String>>,
             recurring_ids: Option<Vec<String>>,
+            ledger_entry_ids: Option<Vec<String>>,
         }
         let a: Args = parse(args)?;
         if a.data.len() > MAX_DATA_CHARS {
@@ -123,7 +129,10 @@ pub const ADD: Route = Route {
         }
         let bytes = Zeroizing::new(base64url_decode(&a.data).ok_or_else(|| ApiError::invalid("`data` is not base64url text"))?);
         let targets = |ids: Option<Vec<String>>, kind: TargetKind| ids.unwrap_or_default().into_iter().map(move |id| LinkTarget { kind, id });
-        let links: Vec<LinkTarget> = targets(a.transaction_ids, TargetKind::Transaction).chain(targets(a.recurring_ids, TargetKind::Recurring)).collect();
+        let links: Vec<LinkTarget> = targets(a.transaction_ids, TargetKind::Transaction)
+            .chain(targets(a.recurring_ids, TargetKind::Recurring))
+            .chain(targets(a.ledger_entry_ids, TargetKind::LedgerEntry))
+            .collect();
         let input = NewDocument { name: a.name, document_date: a.date, keep_on_phone: a.keep_on_phone.unwrap_or(false), links };
         let today = today(ctx)?;
         let added = ctx.vault.with_files(|conn, files| library::add(conn, files, &input, &bytes, &today))?;
@@ -175,21 +184,22 @@ pub const DELETE: Route = Route {
     },
 };
 
-/// The one thing an attachment is made to: a transaction or a recurring item, not both and not neither.
+/// The one thing an attachment is made to: a transaction, a recurring item or a ledger entry, only one of them.
 fn target(args: &Map<String, Value>) -> Result<LinkTarget, ApiError> {
     let given = |name: &str| args.get(name).and_then(Value::as_str).map(str::to_string);
-    match (given("transactionId"), given("recurringId")) {
-        (Some(id), None) => Ok(LinkTarget { kind: TargetKind::Transaction, id }),
-        (None, Some(id)) => Ok(LinkTarget { kind: TargetKind::Recurring, id }),
-        _ => Err(ApiError::invalid("give exactly one of transactionId and recurringId")),
+    match (given("transactionId"), given("recurringId"), given("ledgerEntryId")) {
+        (Some(id), None, None) => Ok(LinkTarget { kind: TargetKind::Transaction, id }),
+        (None, Some(id), None) => Ok(LinkTarget { kind: TargetKind::Recurring, id }),
+        (None, None, Some(id)) => Ok(LinkTarget { kind: TargetKind::LedgerEntry, id }),
+        _ => Err(ApiError::invalid("give exactly one of transactionId, recurringId and ledgerEntryId")),
     }
 }
 
 pub const LINK: Route = Route {
     name: "documents.link",
     scope: Scope::Write,
-    summary: "Attaches a document to a transaction or to a recurring item. Giving one that is attached already changes nothing.",
-    params: &[ID.required(), TRANSACTION, RECURRING],
+    summary: "Attaches a document to a transaction, a recurring item or a ledger entry. Giving one that is attached already changes nothing.",
+    params: &[ID.required(), TRANSACTION, RECURRING, LEDGER_ENTRY],
     confirm: None,
     run: |ctx, mut args| {
         let id = take_id(&mut args, "id")?;
@@ -202,8 +212,8 @@ pub const LINK: Route = Route {
 pub const UNLINK: Route = Route {
     name: "documents.unlink",
     scope: Scope::Write,
-    summary: "Detaches a document from a transaction or a recurring item. The document and the transaction stay.",
-    params: &[ID.required(), TRANSACTION, RECURRING],
+    summary: "Detaches a document from a transaction, a recurring item or a ledger entry. The document and the transaction stay.",
+    params: &[ID.required(), TRANSACTION, RECURRING, LEDGER_ENTRY],
     confirm: None,
     run: |ctx, mut args| {
         let id = take_id(&mut args, "id")?;

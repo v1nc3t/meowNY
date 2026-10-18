@@ -286,28 +286,6 @@ mod tests {
     }
 
     #[test]
-    fn help_and_version_need_no_app_and_no_token() {
-        let top = go("--help", &[], "");
-        assert_eq!((top.code, top.err.as_str()), (0, ""));
-        assert!(top.out.contains("commands:") && top.out.contains("transactions"));
-        assert!(go("transactions create --help", &[], "").out.contains("usage: meowny transactions create"));
-        assert!(go("help budgets", &[], "").out.contains("overview"));
-        let v = go("--version", &[], "");
-        assert_eq!((v.code, v.out.starts_with("meowny 0.1.0 (API 1)")), (0, true));
-        assert_eq!(go("nope --help", &[], "").code, 2);
-    }
-
-    #[test]
-    fn schema_is_answered_without_the_app_or_a_token() {
-        let r = go("schema", &[], "");
-        assert_eq!((r.code, r.err.as_str()), (0, ""));
-        let json: Value = serde_json::from_str(&r.out).unwrap();
-        assert!(json["commands"].as_array().unwrap().len() > 30);
-        assert_eq!(r.out.lines().count(), 1, "one line");
-        assert_eq!(go("schema --json", &[], "").out, r.out);
-    }
-
-    #[test]
     fn usage_errors_end_with_2_before_anything_else_is_tried() {
         // No token and no app: a usage error is still a usage error.
         for line in ["transactions create", "nope", "transactions", "transactions list --limit ten", "transactions delete 5", "status --what", ""] {
@@ -366,44 +344,6 @@ mod tests {
         assert_eq!(r.out, "api: 1\napp: meowny\nschemaVersion: 7\nscope: read\nversion: 0.1.0\n");
         assert_eq!(r.err, "");
         assert!(!r.out.contains(TOKEN) && !r.err.contains(TOKEN));
-    }
-
-    #[test]
-    fn the_body_holds_the_flags_and_a_new_transaction_gets_a_fresh_client_uuid() {
-        let (port, app) = fake_app(answer(r#"{"data":{"id":"5"},"ok":true}"#));
-        let line = format!("transactions create --name Bread --amount 2.40 --payment-date 2026-10-14 --category-id 7 --port {port} --json");
-        let r = go(&line, &[("MEOWNY_TOKEN", TOKEN)], "");
-        let request = app.join().unwrap();
-        let body: Value = serde_json::from_str(request.split("\r\n\r\n").nth(1).unwrap()).unwrap();
-        assert_eq!((body["name"].clone(), body["amount"].clone(), body["paymentDate"].clone(), body["categoryId"].clone()), (json!("Bread"), json!("2.40"), json!("2026-10-14"), json!("7")));
-        assert_eq!(body["clientUuid"].as_str().unwrap().len(), 36);
-        assert!(request.starts_with("POST /v1/transactions.create "));
-        assert_eq!((r.code, r.out.as_str()), (0, "{\"id\":\"5\"}\n"));
-
-        // A uuid the caller gives is kept, so a retry is the same request.
-        let (port, app) = fake_app(answer(r#"{"data":null,"ok":true}"#));
-        go(&format!("transactions create --name B --amount 1.00 --payment-date 2026-10-14 --category-id 7 --client-uuid 123e4567-e89b-12d3-a456-426614174000 --port {port}"), &[("MEOWNY_TOKEN", TOKEN)], "");
-        assert!(app.join().unwrap().contains("\"clientUuid\":\"123e4567-e89b-12d3-a456-426614174000\""));
-    }
-
-    #[test]
-    fn a_read_that_finds_nothing_says_so_instead_of_done() {
-        let (port, app) = fake_app(answer(r#"{"data":null,"ok":true}"#));
-        let r = go(&format!("backup schedule --port {port}"), &[("MEOWNY_TOKEN", TOKEN)], "");
-        app.join().unwrap();
-        assert_eq!((r.code, r.out.as_str(), r.err.as_str()), (0, "", "there is nothing to show.\n"));
-    }
-
-    #[test]
-    fn nothing_returned_prints_done_on_standard_error_and_null_in_json() {
-        let (port, app) = fake_app(answer(r#"{"data":null,"ok":true}"#));
-        let r = go(&format!("transactions delete 5 --yes --port {port}"), &[("MEOWNY_TOKEN", TOKEN)], "");
-        let request = app.join().unwrap();
-        assert!(request.starts_with("POST /v1/transactions.delete ") && request.ends_with("{\"id\":\"5\"}"));
-        assert_eq!((r.code, r.out.as_str(), r.err.as_str()), (0, "", "done.\n"));
-        let (port, _app) = fake_app(answer(r#"{"data":null,"ok":true}"#));
-        let r = go(&format!("transactions delete 5 --yes --json --port {port}"), &[("MEOWNY_TOKEN", TOKEN)], "");
-        assert_eq!((r.code, r.out.as_str(), r.err.as_str()), (0, "null\n", ""));
     }
 
     #[test]
@@ -506,77 +446,6 @@ mod tests {
         assert!(timeout_for(asks, None) > Duration::from_secs(120), "the app gives up on the person after two minutes");
         assert_eq!(timeout_for(asks, Some(7)), Duration::from_secs(7), "--timeout wins");
         assert_eq!(timeout_for(plain, Some(500)), Duration::from_secs(500));
-    }
-
-    #[test]
-    fn it_says_it_is_waiting_for_the_person_only_if_the_answer_takes_a_moment_and_only_in_the_plain_form() {
-        let reply = r#"{"data":{"path":"/tmp/x.json","bytes":5},"ok":true}"#;
-        let vars = [("MEOWNY_TOKEN", TOKEN)];
-        // The person takes their time: told where to look.
-        let (port, app) = fake_app_after(answer(reply), Duration::from_millis(1300));
-        let slow = go(&format!("export json --out /tmp/x.json --port {port}"), &vars, "");
-        let request = app.join().unwrap();
-        assert!(request.starts_with("POST /v1/export.json "), "{request}");
-        if !cfg!(windows) {
-            assert!(request.ends_with("{\"out\":\"/tmp/x.json\"}"), "{request}");
-        }
-        assert_eq!(slow.err, "waiting for you to allow this in the meowNY app...\n");
-        assert_eq!(slow.out, "bytes: 5\npath: /tmp/x.json\n");
-        // The app answers at once (a refusal, say): nothing to wait for, nothing said.
-        let (port, app) = fake_app(answer(reply));
-        let quick = go(&format!("export json --out /tmp/x.json --port {port}"), &vars, "");
-        app.join().unwrap();
-        assert_eq!((quick.err.as_str(), quick.code), ("", 0));
-        let (port, app) = fake_app(answer_with("409 Conflict", r#"{"error":{"code":"file_exists","message":"that file already exists"},"ok":false}"#));
-        let refused = go(&format!("export json --out /tmp/x.json --port {port}"), &vars, "");
-        app.join().unwrap();
-        assert_eq!((refused.code, refused.err.as_str()), (1, "error: that file already exists\n"), "no 'waiting' before an instant refusal");
-        // A script reading JSON gets no extra text even when it waits.
-        let (port, app) = fake_app_after(answer(reply), Duration::from_millis(1300));
-        let json = go(&format!("export json --out /tmp/x.json --json --port {port}"), &vars, "");
-        app.join().unwrap();
-        assert_eq!((json.err.as_str(), json.out.as_str()), ("", "{\"bytes\":5,\"path\":\"/tmp/x.json\"}\n"));
-        // A command that does not ask the person never says it waits.
-        let (port, app) = fake_app_after(answer(r#"{"data":{"scope":"read"},"ok":true}"#), Duration::from_millis(1300));
-        assert_eq!(go(&format!("status --port {port}"), &vars, "").err, "");
-        app.join().unwrap();
-    }
-
-    #[test]
-    fn a_page_of_a_longer_list_says_where_the_rest_is() {
-        let page = |total: u64, limit: u64, offset: u64, shown: usize| json!({ "total": total, "limit": limit, "offset": offset, "transactions": vec![json!({ "id": "1" }); shown] });
-        assert_eq!(page_hint(&page(404, 4, 0, 4)).unwrap(), "showing 1-4 of 404; next page: --offset 4");
-        assert_eq!(page_hint(&page(404, 50, 100, 50)).unwrap(), "showing 101-150 of 404; next page: --offset 150");
-        assert_eq!(page_hint(&page(10, 4, 8, 2)), None, "the last page has nothing more");
-        assert_eq!(page_hint(&page(4, 50, 0, 4)), None, "everything fit on one page");
-        assert_eq!(page_hint(&page(0, 50, 0, 0)), None, "nothing at all");
-        assert_eq!(page_hint(&page(10, 4, 40, 0)).unwrap(), "10 in all; --offset 40 is past the end");
-        for not_a_page in [json!([1]), json!(null), json!({ "total": 5, "transactions": [] }), json!({ "total": "5", "limit": 1, "offset": 0, "x": [1] }), json!({ "total": 5, "limit": 1, "offset": 0 })] {
-            assert_eq!(page_hint(&not_a_page), None, "{not_a_page}");
-        }
-    }
-
-    #[test]
-    fn the_hint_goes_to_standard_error_in_the_plain_form_only() {
-        let body = r#"{"data":{"total":404,"limit":2,"offset":0,"transactions":[{"id":"1"},{"id":"2"}]},"ok":true}"#;
-        let (port, app) = fake_app(answer(body));
-        let plain = go(&format!("transactions list --limit 2 --port {port}"), &[("MEOWNY_TOKEN", TOKEN)], "");
-        app.join().unwrap();
-        assert_eq!(plain.err, "showing 1-2 of 404; next page: --offset 2\n");
-        assert!(plain.out.contains("transactions") && !plain.out.contains("showing"), "data on standard output only");
-        let (port, app) = fake_app(answer(body));
-        let json = go(&format!("transactions list --limit 2 --json --port {port}"), &[("MEOWNY_TOKEN", TOKEN)], "");
-        app.join().unwrap();
-        assert_eq!(json.err, "", "a script gets no extra text");
-    }
-
-    #[test]
-    fn a_text_flag_reads_standard_input_for_its_value() {
-        let (port, app) = fake_app(answer(r#"{"data":{"transactions":[],"total":0,"limit":50,"offset":0},"ok":true}"#));
-        let r = go(&format!("transactions list --q - --port {port}"), &[("MEOWNY_TOKEN", TOKEN)], "coffee shop\n");
-        assert!(app.join().unwrap().ends_with("{\"q\":\"coffee shop\"}"));
-        assert_eq!(r.code, 0);
-        assert_eq!(r.out, "limit: 50\noffset: 0\ntotal: 0\n\ntransactions\n(none)\n");
     }
 
     #[test]

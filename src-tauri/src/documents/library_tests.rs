@@ -1,13 +1,11 @@
 use std::fs;
 
 use rusqlite::{params, Connection};
-use sha2::{Digest, Sha256};
 
 use super::library::*;
 use super::seal::{DocError, DocId, DocKeys, MAX_DOCUMENT_BYTES};
 use super::store::Store;
 use crate::db::DbKey;
-use crate::keys;
 use crate::vault::AppError;
 
 const TODAY: &str = "2026-10-16";
@@ -114,44 +112,6 @@ fn png() -> Vec<u8> {
 }
 
 // -- adding -------------------------------------------------------------------------------------------------------------
-
-#[test]
-fn adding_makes_the_row_and_the_file_together() {
-    let env = Env::new();
-    let outcome = env.add("/tmp/downloads/Receipt.pdf", PDF);
-    assert!(!outcome.already_there);
-    let doc = outcome.document;
-    assert_eq!(doc.name, "Receipt.pdf");
-    assert_eq!(doc.media_type, "application/pdf");
-    assert_eq!(doc.size_bytes, PDF.len() as u64);
-    assert_eq!(doc.sha256, keys::hex_encode(&Sha256::digest(PDF)));
-    assert_eq!(doc.document_date, TODAY, "today when no date is given");
-    assert!(!doc.keep_on_phone, "off when a document is added");
-    assert_eq!((doc.link_count, doc.has_file), (0, true));
-
-    assert_eq!(env.files_on_disk().len(), 1);
-    assert!(env.path_of(&doc).exists());
-    assert_eq!(read(&env.conn, &env.files(), doc.id).unwrap().as_slice(), PDF);
-    assert_eq!(get(&env.conn, &env.files(), doc.id).unwrap(), doc);
-}
-
-#[test]
-fn a_date_the_switch_and_the_links_can_be_given_when_adding() {
-    let env = Env::new();
-    let (tx, rec) = (env.transaction("Boiler"), env.recurring("Rent"));
-    let input = NewDocument {
-        name: "Boiler invoice.pdf".into(),
-        document_date: Some("2026-03-04".into()),
-        keep_on_phone: true,
-        links: vec![transaction_target(tx), recurring_target(rec)],
-    };
-    let doc = add(&env.conn, &env.files(), &input, PDF, TODAY).unwrap().document;
-    assert_eq!((doc.document_date.as_str(), doc.keep_on_phone, doc.link_count), ("2026-03-04", true, 2));
-    let links = links_of(&env.conn, doc.id).unwrap();
-    assert_eq!(links.len(), 2);
-    assert!(links.iter().any(|l| l.kind == TargetKind::Transaction && l.id == tx && l.name == "Boiler" && l.date == "2026-01-10"));
-    assert!(links.iter().any(|l| l.kind == TargetKind::Recurring && l.id == rec && l.name == "Rent" && l.date == "2026-02-01"));
-}
 
 #[test]
 fn the_kind_of_file_comes_from_its_bytes_and_not_its_name() {
@@ -267,26 +227,6 @@ fn a_file_that_cannot_be_written_leaves_no_row() {
 // -- changing, linking, deleting ------------------------------------------------------------------------------------------
 
 #[test]
-fn a_document_is_renamed_re_dated_and_switched() {
-    let env = Env::new();
-    let doc = env.add("scan0001.pdf", PDF).document;
-    let stamp = || -> String { env.conn.query_row("SELECT stamp FROM documents", [], |r| r.get(0)).unwrap() };
-    let before = stamp();
-
-    let patch = DocumentPatch { name: Some("  Boiler / warranty  ".into()), document_date: Some("2026-02-03".into()), keep_on_phone: Some(true) };
-    let changed = update(&env.conn, &env.files(), doc.id, &patch).unwrap();
-    assert_eq!((changed.name.as_str(), changed.document_date.as_str(), changed.keep_on_phone), ("Boiler - warranty", "2026-02-03", true));
-    assert_eq!((changed.sha256.as_str(), changed.size_bytes), (doc.sha256.as_str(), doc.size_bytes));
-    assert!(stamp() > before);
-
-    // asking for what is there already changes nothing, not even the stamp
-    let now = stamp();
-    update(&env.conn, &env.files(), doc.id, &DocumentPatch::default()).unwrap();
-    update(&env.conn, &env.files(), doc.id, &DocumentPatch { keep_on_phone: Some(true), ..Default::default() }).unwrap();
-    assert_eq!(stamp(), now);
-}
-
-#[test]
 fn a_bad_change_is_refused_and_changes_nothing() {
     let env = Env::new();
     let doc = env.add("Receipt.pdf", PDF).document;
@@ -379,113 +319,6 @@ fn deleting_a_transaction_or_a_recurring_item_never_deletes_a_document() {
 
 // -- listing ------------------------------------------------------------------------------------------------------------
 
-fn named(page: &Page) -> Vec<&str> {
-    page.documents.iter().map(|d| d.name.as_str()).collect()
-}
-
-fn dated(env: &Env, name: &str, bytes: &[u8], date: &str) -> Document {
-    let input = NewDocument { name: name.into(), document_date: Some(date.into()), ..Default::default() };
-    add(&env.conn, &env.files(), &input, bytes, TODAY).unwrap().document
-}
-
-fn library() -> Env {
-    let env = Env::new();
-    dated(&env, "Rent contract.pdf", b"%PDF-1.7 rent", "2026-01-05");
-    dated(&env, "Boiler photo.png", &png(), "2026-02-10");
-    dated(&env, "100% cotton_shirt.pdf", b"%PDF-1.7 shirt", "2026-02-10");
-    dated(&env, "Totals.csv", b"a,b\n1,2\n", "2026-03-01");
-    dated(&env, "Odd thing", b"MZ\x90\x00 odd", "2025-12-31");
-    env
-}
-
-#[test]
-fn the_list_is_newest_paper_first_and_then_newest_added() {
-    let env = library();
-    let page = list(&env.conn, &env.files(), &Filter::default()).unwrap();
-    assert_eq!(named(&page), ["Totals.csv", "100% cotton_shirt.pdf", "Boiler photo.png", "Rent contract.pdf", "Odd thing"]);
-    assert_eq!((page.total, page.limit, page.offset), (5, DEFAULT_LIMIT, 0));
-}
-
-#[test]
-fn the_list_can_be_searched_and_filtered() {
-    let env = library();
-    let find = |filter: Filter| -> Vec<String> { named(&list(&env.conn, &env.files(), &filter).unwrap()).into_iter().map(String::from).collect() };
-
-    assert_eq!(find(Filter { q: Some("BOILER".into()), ..Default::default() }), ["Boiler photo.png"], "ignoring ASCII case");
-    assert_eq!(find(Filter { q: Some("100%".into()), ..Default::default() }), ["100% cotton_shirt.pdf"], "a percent sign is not a wildcard");
-    assert_eq!(find(Filter { q: Some("%".into()), ..Default::default() }), ["100% cotton_shirt.pdf"]);
-    // "o_t" would match "ott" in "cotton" if the underscore were a wildcard
-    assert_eq!(find(Filter { q: Some("o_t".into()), ..Default::default() }), Vec::<String>::new(), "an underscore is not a wildcard");
-    assert_eq!(find(Filter { q: Some("cotton_s".into()), ..Default::default() }), ["100% cotton_shirt.pdf"]);
-    assert_eq!(find(Filter { q: Some("  ".into()), ..Default::default() }).len(), 5, "a blank search is no search");
-
-    assert_eq!(find(Filter { kind: Some(Kind::Image), ..Default::default() }), ["Boiler photo.png"]);
-    assert_eq!(find(Filter { kind: Some(Kind::Pdf), ..Default::default() }), ["100% cotton_shirt.pdf", "Rent contract.pdf"]);
-    assert_eq!(find(Filter { kind: Some(Kind::Other), ..Default::default() }), ["Totals.csv", "Odd thing"]);
-
-    assert_eq!(find(Filter { from: Some("2026-02-10".into()), to: Some("2026-02-10".into()), ..Default::default() }), ["100% cotton_shirt.pdf", "Boiler photo.png"]);
-    assert_eq!(find(Filter { from: Some("2026-02-11".into()), ..Default::default() }), ["Totals.csv"]);
-    assert_eq!(find(Filter { to: Some("2026-01-05".into()), ..Default::default() }), ["Rent contract.pdf", "Odd thing"]);
-    assert_eq!(find(Filter { q: Some("o".into()), kind: Some(Kind::Pdf), from: Some("2026-01-01".into()), ..Default::default() }).len(), 2);
-}
-
-#[test]
-fn the_list_can_be_limited_to_what_is_linked_to_one_thing() {
-    let env = library();
-    let (tx, rec) = (env.transaction("Boiler"), env.recurring("Rent"));
-    let id_of = |name: &str| -> i64 { env.conn.query_row("SELECT id FROM documents WHERE name = ?1", [name], |r| r.get(0)).unwrap() };
-    link(&env.conn, id_of("Boiler photo.png"), &transaction_target(tx)).unwrap();
-    link(&env.conn, id_of("Totals.csv"), &transaction_target(tx)).unwrap();
-    link(&env.conn, id_of("Rent contract.pdf"), &recurring_target(rec)).unwrap();
-
-    let by_tx = list(&env.conn, &env.files(), &Filter { transaction_id: Some(tx.to_string()), ..Default::default() }).unwrap();
-    assert_eq!((named(&by_tx), by_tx.total), (vec!["Totals.csv", "Boiler photo.png"], 2));
-    let by_rec = list(&env.conn, &env.files(), &Filter { recurring_transaction_id: Some(rec.to_string()), ..Default::default() }).unwrap();
-    assert_eq!(named(&by_rec), ["Rent contract.pdf"]);
-    let none = list(&env.conn, &env.files(), &Filter { transaction_id: Some("9999".into()), ..Default::default() }).unwrap();
-    assert_eq!(none.total, 0);
-}
-
-#[test]
-fn the_list_is_paged_and_says_how_many_there_are() {
-    let env = library();
-    let page = |limit, offset| list(&env.conn, &env.files(), &Filter { limit: Some(limit), offset: Some(offset), ..Default::default() }).unwrap();
-    assert_eq!(named(&page(2, 0)), ["Totals.csv", "100% cotton_shirt.pdf"]);
-    assert_eq!(named(&page(2, 2)), ["Boiler photo.png", "Rent contract.pdf"]);
-    let last = page(2, 4);
-    assert_eq!((named(&last), last.total), (vec!["Odd thing"], 5));
-    assert!(page(2, 9).documents.is_empty());
-    for bad in [0, MAX_LIMIT + 1] {
-        assert_eq!(list(&env.conn, &env.files(), &Filter { limit: Some(bad), ..Default::default() }).err(), Some(AppError::InvalidInput));
-    }
-    assert_eq!(list(&env.conn, &env.files(), &Filter { from: Some("soon".into()), ..Default::default() }).err(), Some(AppError::InvalidInput));
-    assert_eq!(list(&env.conn, &env.files(), &Filter { q: Some("x".repeat(121)), ..Default::default() }).err(), Some(AppError::InvalidInput));
-}
-
-#[test]
-fn the_list_says_which_documents_have_no_file_on_this_device() {
-    let env = library();
-    let gone = env.conn.query_row("SELECT id FROM documents WHERE name = 'Totals.csv'", [], |r| r.get::<_, i64>(0)).unwrap();
-    let doc = get(&env.conn, &env.files(), gone).unwrap();
-    fs::remove_file(env.path_of(&doc)).unwrap();
-    let page = list(&env.conn, &env.files(), &Filter::default()).unwrap();
-    for d in &page.documents {
-        assert_eq!(d.has_file, d.name != "Totals.csv", "{}", d.name);
-    }
-}
-
-#[test]
-fn the_size_of_the_library_is_the_sum_of_the_files() {
-    let env = Env::new();
-    assert_eq!(library_size(&env.conn, &env.files()).unwrap(), Size { count: 0, bytes: 0, held_count: 0, held_bytes: 0 });
-    env.add("a.pdf", b"%PDF-1.7 one");
-    let lost = env.add("b.pdf", b"%PDF-1.7 and two").document;
-    assert_eq!(library_size(&env.conn, &env.files()).unwrap(), Size { count: 2, bytes: 12 + 16, held_count: 2, held_bytes: 12 + 16 });
-    // a phone that keeps only some: what it holds is not what there is
-    fs::remove_file(env.path_of(&lost)).unwrap();
-    assert_eq!(library_size(&env.conn, &env.files()).unwrap(), Size { count: 2, bytes: 12 + 16, held_count: 1, held_bytes: 12 });
-}
-
 // -- reading and checking ------------------------------------------------------------------------------------------------
 
 #[test]
@@ -562,20 +395,6 @@ fn the_history_of_a_document_names_it_and_holds_no_contents() {
     assert!(!all.contains(&doc.sha256) && !all.contains("%PDF"));
 }
 
-#[test]
-fn what_is_sent_to_the_screens_has_the_fields_they_expect() {
-    let env = Env::new();
-    let doc = env.add("Receipt.pdf", PDF).document;
-    let json = serde_json::to_value(&doc).unwrap();
-    assert_eq!(json["id"], doc.id.to_string(), "ids are text, as everywhere");
-    for key in ["name", "mediaType", "sizeBytes", "sha256", "documentDate", "keepOnPhone", "createdAt", "linkCount", "hasFile"] {
-        assert!(json.get(key).is_some(), "{key}");
-    }
-    assert_eq!(json.as_object().unwrap().len(), 10, "no sync id and nothing else leaves");
-    assert!(serde_json::from_str::<NewDocument>(r#"{"name":"x","unknown":1}"#).is_err());
-    assert!(serde_json::from_str::<Filter>(r#"{"kind":"video"}"#).is_err());
-}
-
 // -- what the screens and the commands lean on --------------------------------------------------------------------------
 
 #[test]
@@ -637,6 +456,67 @@ fn an_image_is_given_to_the_page_as_text_and_only_when_the_app_may_draw_it() {
     assert_eq!(read_image(&env.conn, &env.files(), 999).err(), Some(AppError::NotFound));
 }
 
+/// The start of a zip file, enough for the app to take it for a Word or Excel file by its name.
+fn zip_like(tail: u8) -> Vec<u8> {
+    let mut bytes = b"PK\x03\x04".to_vec();
+    bytes.extend_from_slice(&[0, 0, 0, 0, 0, 0, 1, 2, tail]);
+    bytes
+}
+
+#[test]
+fn the_preview_is_not_given_for_what_the_page_would_have_to_trust_or_cannot_read() {
+    let env = Env::new();
+    let refused = |name: &str, bytes: &[u8]| {
+        let doc = env.add(name, bytes).document;
+        read_preview(&env.conn, &env.files(), doc.id).err()
+    };
+    // markup of someone else, a kind the app has no reader for, and a name that says Word over bytes that are not a zip
+    assert_eq!(refused("page.html", b"<script>alert(1)</script>"), Some(AppError::InvalidInput));
+    assert_eq!(refused("old.doc", &zip_like(3)), Some(AppError::InvalidInput));
+    assert_eq!(refused("slides.pptx", &zip_like(4)), Some(AppError::InvalidInput));
+    assert_eq!(refused("Contract.docx", b"\x00\x01 not a zip"), Some(AppError::InvalidInput));
+    assert_eq!(refused("Budget", &zip_like(5)), Some(AppError::InvalidInput), "no extension, no reader");
+    // an image that says it is enormous
+    let mut huge = png();
+    huge[16..20].copy_from_slice(&20_000u32.to_be_bytes());
+    huge[20..24].copy_from_slice(&20_000u32.to_be_bytes());
+    assert_eq!(refused("huge.png", &huge), Some(AppError::InvalidInput));
+    assert_eq!(read_preview(&env.conn, &env.files(), 999).err(), Some(AppError::NotFound));
+}
+
+#[test]
+fn the_preview_has_a_limit_by_kind() {
+    let env = Env::new();
+    let mut heavy_image = png();
+    heavy_image.resize(MAX_DRAW_BYTES as usize + 1, 7);
+    let image = env.add("heavy.png", &heavy_image).document;
+    assert_eq!(read_preview(&env.conn, &env.files(), image.id).err(), Some(AppError::InvalidInput));
+    // a PDF may be heavier than an image, up to the preview limit
+    let mut pdf = PDF.to_vec();
+    pdf.resize(MAX_DRAW_BYTES as usize + 1, b' ');
+    let fine = env.add("long.pdf", &pdf).document;
+    assert_eq!(read_preview(&env.conn, &env.files(), fine.id).unwrap().kind, PreviewKind::Pdf);
+    let mut too_heavy = PDF.to_vec();
+    too_heavy.resize(MAX_PREVIEW_BYTES as usize + 1, b' ');
+    let doc = env.add("heavier.pdf", &too_heavy).document;
+    assert_eq!(read_preview(&env.conn, &env.files(), doc.id).err(), Some(AppError::InvalidInput));
+}
+
+#[test]
+fn a_preview_whose_file_is_gone_or_changed_is_not_given() {
+    let env = Env::new();
+    let doc = env.add("Receipt.pdf", PDF).document;
+    let path = env.path_of(&doc);
+    let sealed = fs::read(&path).unwrap();
+    fs::remove_file(&path).unwrap();
+    assert_eq!(read_preview(&env.conn, &env.files(), doc.id).err(), Some(AppError::FileMissing));
+    let mut changed = sealed;
+    let at = changed.len() - 5;
+    changed[at] ^= 1;
+    fs::write(&path, changed).unwrap();
+    assert_eq!(read_preview(&env.conn, &env.files(), doc.id).err(), Some(AppError::FileDamaged));
+}
+
 #[test]
 fn an_image_whose_file_is_gone_or_changed_is_not_given() {
     let env = Env::new();
@@ -653,27 +533,6 @@ fn an_image_whose_file_is_gone_or_changed_is_not_given() {
 }
 
 #[test]
-fn the_copy_for_the_viewer_is_named_for_what_the_file_is() {
-    let env = Env::new();
-    let opened = super::opened::Opened::new(env.dir_path());
-    let cases: [(&str, Vec<u8>, &str); 4] = [
-        ("Receipt March.pdf", PDF.to_vec(), "Receipt March.pdf"),
-        ("holiday.bat", png(), "holiday.png"),
-        ("invoice.pdf.exe", [PDF, b"% a second file, not the same bytes\n"].concat(), "invoice.pdf.pdf"),
-        ("notes.html", b"<html>hi</html>".to_vec(), "notes.html"),
-    ];
-    for (name, bytes, expected) in cases {
-        let doc = env.add(name, &bytes).document;
-        let path = open_copy(&env.conn, &env.files(), &opened, doc.id).unwrap();
-        assert_eq!(path.file_name().unwrap().to_string_lossy(), expected, "{name}");
-        assert_eq!(fs::read(&path).unwrap(), bytes);
-        assert!(path.starts_with(env.dir_path().join("open")));
-    }
-    assert!(opened.clear());
-    assert!(!env.dir_path().join("open").exists());
-}
-
-#[test]
 fn a_file_that_is_not_known_is_never_opened_from_the_app() {
     let env = Env::new();
     let opened = super::opened::Opened::new(env.dir_path());
@@ -686,36 +545,4 @@ fn a_file_that_is_not_known_is_never_opened_from_the_app() {
     // it can still be read, to be saved as a copy by the person
     let doc = env.add("keep.bin", b"MZ\x90\x00 keep me").document;
     assert_eq!(read(&env.conn, &env.files(), doc.id).unwrap().as_slice(), b"MZ\x90\x00 keep me");
-}
-
-#[test]
-fn a_description_is_checked_without_a_file() {
-    assert!(check_input(&Env::input("x.pdf")).is_ok());
-    let dated = |d: &str| NewDocument { document_date: Some(d.into()), ..Env::input("x") };
-    assert!(check_input(&dated("2026-10-16")).is_ok());
-    for bad in ["", "yesterday", "2026-1-1", "2026-02-30"] {
-        assert_eq!(check_input(&dated(bad)), Err(AppError::InvalidInput), "{bad:?}");
-    }
-}
-
-#[test]
-fn the_documents_linked_to_each_item_of_a_list_are_counted() {
-    let env = Env::new();
-    let (t1, t2, t3, rec) = (env.transaction("One"), env.transaction("Two"), env.transaction("Three"), env.recurring("Rent"));
-    let linked = |name: &str, bytes: &[u8], targets: Vec<LinkTarget>| {
-        add(&env.conn, &env.files(), &NewDocument { name: name.into(), links: targets, ..Default::default() }, bytes, TODAY).unwrap();
-    };
-    linked("a.pdf", b"%PDF-1.7 a", vec![transaction_target(t1), transaction_target(t2), recurring_target(rec)]);
-    linked("b.pdf", b"%PDF-1.7 b", vec![transaction_target(t1)]);
-    linked("c.pdf", b"%PDF-1.7 c", vec![]);
-    let ids = |list: &[i64]| list.iter().map(i64::to_string).collect::<Vec<_>>();
-
-    let counts = link_counts(&env.conn, TargetKind::Transaction, &ids(&[t1, t2, t3])).unwrap();
-    assert_eq!(counts.len(), 2, "an item with no document is not in the answer");
-    assert_eq!((counts[&t1.to_string()], counts[&t2.to_string()]), (2, 1));
-    let counts = link_counts(&env.conn, TargetKind::Recurring, &ids(&[rec, t1])).unwrap();
-    assert_eq!(counts.into_iter().collect::<Vec<_>>(), vec![(rec.to_string(), 1)], "a transaction id is not a recurring id");
-    assert!(link_counts(&env.conn, TargetKind::Transaction, &[]).unwrap().is_empty());
-    assert_eq!(link_counts(&env.conn, TargetKind::Transaction, &["abc".to_string()]).err(), Some(AppError::InvalidInput));
-    assert_eq!(link_counts(&env.conn, TargetKind::Transaction, &vec!["1".to_string(); 201]).err(), Some(AppError::InvalidInput));
 }

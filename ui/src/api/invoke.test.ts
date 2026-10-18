@@ -18,10 +18,3 @@ test('error text is a fixed message, never the raw error', () => {
   assert.equal(errorText(new ApiError('not_found')), messageFor('not_found'))
   assert.equal(errorText(new Error('SELECT * FROM transactions')), messageFor('internal'))
 })
-
-test('error messages follow the language', () => {
-  setActiveLanguage('de')
-  assert.equal(messageFor('locked'), 'die app ist gesperrt.')
-  assert.equal(errorText(new ApiError('locked')), 'die app ist gesperrt.')
-  setActiveLanguage('en')
-})

@@ -6,6 +6,7 @@ pub mod clock;
 pub mod commands;
 pub mod currency;
 pub mod db;
+pub mod debts;
 pub mod display;
 pub mod documents;
 pub mod export;
@@ -258,6 +259,9 @@ pub fn run() {
             commands::export_xlsx,
             commands::export_pdf,
             commands::export_preview,
+            commands::export_preview_text,
+            commands::export_preview_workbook,
+            commands::export_preview_pdf,
             commands::get_api_status,
             commands::set_api_enabled,
             commands::list_api_tokens,
@@ -286,6 +290,7 @@ pub fn run() {
             commands::document_counts,
             commands::check_documents,
             commands::read_document_image,
+            commands::read_document_preview,
             commands::open_document,
             commands::save_document_copy,
             commands::document_upload_begin,
@@ -293,6 +298,31 @@ pub fn run() {
             commands::document_upload_finish,
             commands::document_upload_cancel,
             commands::document_add_dropped,
+            commands::list_people,
+            commands::create_person,
+            commands::update_person,
+            commands::archive_person,
+            commands::unarchive_person,
+            commands::person_statement,
+            commands::debts_summary,
+            commands::debts_due_payments,
+            commands::debts_history,
+            commands::add_ledger_entry,
+            commands::update_ledger_entry,
+            commands::delete_ledger_entry,
+            commands::settle_person,
+            commands::split_preview,
+            commands::set_transaction_split,
+            commands::clear_transaction_split,
+            commands::set_recurring_split,
+            commands::clear_recurring_split,
+            commands::export_debts,
+            commands::export_debts_preview,
+            commands::bill_code,
+            commands::recurring_code,
+            commands::bill_preview,
+            commands::bill_accept,
+            commands::debts_reminders,
         ])
         .build(tauri::generate_context!())
         .expect("error while building meowNY")

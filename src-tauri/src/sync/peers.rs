@@ -66,7 +66,7 @@ pub fn changes_since(conn: &Connection, since_ms: u64) -> Result<u32, SyncError>
     let device: String = conn.query_row("SELECT substr(device_id, 1, 8) FROM sync_clock WHERE id = 1", [], |r| r.get(0))?;
     let from = format!("{:013}", since_ms.saturating_add(1));
     let mut total: i64 = 0;
-    for table in ["categories", "budgets", "recurring_transactions", "transactions", "settings", "documents", "document_links", "sync_deleted"] {
+    for table in ["categories", "people", "ledger_entries", "budgets", "recurring_transactions", "transactions", "settings", "documents", "document_links", "sync_deleted"] {
         // The names are fixed above, never typed by anyone.
         let sql = format!("SELECT count(*) FROM {table} WHERE stamp >= ?1 AND substr(stamp, 20, 8) = ?2");
         total += conn.query_row(&sql, params![from, device], |r| r.get::<_, i64>(0))?;

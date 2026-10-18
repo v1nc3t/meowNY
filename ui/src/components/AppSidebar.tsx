@@ -14,8 +14,8 @@ const items = [
   { to: '/app/dashboard', label: 'nav.dashboard', icon: 'dashboard', page: 'dashboard', shortcut: 'goDashboard' },
   { to: '/app/transactions', label: 'nav.transactions', icon: 'transactions', page: 'transactions', shortcut: 'goTransactions' },
   { to: '/app/categories', label: 'nav.categories', icon: 'categories', page: 'categories', shortcut: 'goCategories' },
-  { to: '/app/budgets', label: 'nav.budgets', icon: 'budgets', page: 'budgets', shortcut: 'goBudgets' },
   { to: '/app/recurring', label: 'nav.recurring', icon: 'recurring', page: 'recurring', shortcut: 'goRecurring' },
+  { to: '/app/debts', label: 'nav.debts', icon: 'debts', page: 'debts', shortcut: 'goDebts' },
   { to: '/app/documents', label: 'nav.documents', icon: 'documents', page: 'documents', shortcut: 'goDocuments' },
   { to: '/app/export', label: 'nav.export', icon: 'export', page: 'export', shortcut: 'goExport' },
   { to: '/app/settings', label: 'nav.settings', icon: 'settings', page: 'settings', shortcut: 'goSettings' },
@@ -32,7 +32,7 @@ export default function AppSidebar({
   const phone = useProfile() === 'phone'
   const lock = () => void vault.lock().then(() => window.location.reload(), () => undefined)
   if (phone) {
-    // A phone has a bar at the top: the name on the left, and sync, settings and lock on the right (the other pages are tabs).
+    // A phone has a bar at the top: the name on the left, and documents, sync, settings and lock on the right (the other pages are tabs).
     return (
       <header className="phone-header">
         <Link to="/app/dashboard" className="app-logo">

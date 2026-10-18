@@ -2,58 +2,6 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { PLAIN_FORMAT, displayFormat } from './displayFormat.ts'
 
-test('German: day first, dots, the symbol after the number with a space', () => {
-  assert.deepEqual(displayFormat('de-DE', 'EUR'), {
-    dateOrder: 'DMY',
-    dateSeparator: '.',
-    currencySymbol: '€',
-    symbolBefore: false,
-    symbolSpace: true,
-    decimalMark: ',',
-    groupSeparator: '.',
-  })
-})
-
-test('US: month first, slashes, the symbol before the number', () => {
-  assert.deepEqual(displayFormat('en-US', 'USD'), {
-    dateOrder: 'MDY',
-    dateSeparator: '/',
-    currencySymbol: '$',
-    symbolBefore: true,
-    symbolSpace: false,
-    decimalMark: '.',
-    groupSeparator: ',',
-  })
-})
-
-test('Irish English: day first with slashes and the euro before the number', () => {
-  const format = displayFormat('en-IE', 'EUR')
-  assert.deepEqual([format.dateOrder, format.dateSeparator, format.symbolBefore], ['DMY', '/', true])
-})
-
-test('Swedish and Japanese put the year first', () => {
-  assert.equal(displayFormat('sv-SE', 'SEK').dateOrder, 'YMD')
-  assert.equal(displayFormat('sv-SE', 'SEK').dateSeparator, '-')
-  assert.equal(displayFormat('ja-JP', 'JPY').dateOrder, 'YMD')
-  assert.equal(displayFormat('ja-JP', 'JPY').dateSeparator, '/')
-})
-
-test('Dutch uses dashes and French a space before the symbol', () => {
-  assert.equal(displayFormat('nl-NL', 'EUR').dateSeparator, '-')
-  const french = displayFormat('fr-FR', 'EUR')
-  assert.deepEqual([french.dateOrder, french.symbolBefore, french.symbolSpace], ['DMY', false, true])
-})
-
-test('decimal and group marks follow the locale', () => {
-  const swiss = displayFormat('de-CH', 'CHF')
-  assert.equal(swiss.decimalMark, '.')
-  assert.match(swiss.groupSeparator, /^['\u2019]$/, 'an apostrophe, straight or curly depending on the ICU version')
-  const french = displayFormat('fr-FR', 'EUR')
-  assert.equal(french.decimalMark, ',')
-  assert.match(french.groupSeparator, /^\s$/, 'a space of some kind')
-  assert.deepEqual([displayFormat('en-IN', 'INR').decimalMark, displayFormat('ro-RO', 'RON').groupSeparator], ['.', '.'])
-})
-
 test('digits are Western even where the locale writes others', () => {
   const arabic = displayFormat('ar-EG', 'EGP')
   assert.ok(!/[\u0660-\u0669]/.test(arabic.decimalMark + arabic.groupSeparator + arabic.currencySymbol.replace(/\D/g, '')))

@@ -279,7 +279,7 @@ fn a_route_cannot_be_made_to_write_a_file_without_the_person() {
     let files = tempfile::tempdir().unwrap();
     let mut rng = Rng(0xDEAD_BEEF_CAFE_F00D);
     let writers: Vec<&Route> = routes::ALL.iter().filter(|r| r.confirm.is_some()).collect();
-    assert_eq!(writers.len(), 6, "the exports, the backup and the copy of a document");
+    assert_eq!(writers.len(), 7, "the exports, the backup and the copy of a document");
     for i in 0..400 {
         let route = writers[i % writers.len()];
         let mut body = body_for(&mut rng, route);

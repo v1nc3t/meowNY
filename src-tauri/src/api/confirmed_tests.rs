@@ -98,7 +98,7 @@ pub(super) fn denied(reply: &Reply) -> String {
 #[test]
 fn exactly_the_routes_that_write_files_ask_the_person() {
     let asking: BTreeSet<&str> = routes::ALL.iter().filter(|r| r.confirm.is_some()).map(|r| r.name).collect();
-    assert_eq!(asking, BTreeSet::from(["export.json", "export.csv", "export.xlsx", "export.pdf", "backup.create", "documents.get"]));
+    assert_eq!(asking, BTreeSet::from(["export.json", "export.csv", "export.xlsx", "export.pdf", "export.debts", "backup.create", "documents.get"]));
     // And the schema says so, so a client can tell the person to look at the app.
     let r = rig(true);
     let schema = call(r.server.port(), Some(&r.read), "schema", "").data();
@@ -255,6 +255,15 @@ fn a_bad_request_is_refused_without_asking_the_person_anything() {
         ("export.pdf", json!({ "out": r.path("x.pdf"), "fromMonth": "2000-01", "toMonth": "2026-10" }), 400, "invalid input"),
         ("export.pdf", json!({ "out": r.path("x.pdf"), "fromMonth": "2026-01", "toMonth": "2026-02", "page": "A3" }), 400, "must be one of"),
         ("export.pdf", json!({ "out": r.path("x.pdf"), "fromMonth": "2026-01" }), 400, "missing argument `toMonth`"),
+        ("export.json", json!({ "out": r.path("x.json"), "sections": "transactions,bogus" }), 400, "unknown variant"),
+        ("export.json", json!({ "out": r.path("x.json"), "sections": "" }), 400, "unknown variant"),
+        ("export.xlsx", json!({ "out": r.path("x.xlsx"), "sections": "history" }), 400, "invalid input"),
+        ("export.json", json!({ "out": r.path("x.json"), "minAmount": "9.5" }), 400, "amount"),
+        ("export.csv", json!({ "out": r.path("x.csv"), "minAmount": "10.00", "maxAmount": "5.00" }), 400, "invalid input"),
+        ("export.json", json!({ "out": r.path("x.json"), "kind": "income" }), 400, "must be one of"),
+        ("export.csv", json!({ "out": r.path("x.csv"), "split": "maybe" }), 400, "must be one of"),
+        ("export.csv", json!({ "out": r.path("x.csv"), "sections": "people" }), 400, "unknown argument"),
+        ("export.pdf", json!({ "out": r.path("x.pdf"), "fromMonth": "2026-01", "toMonth": "2026-02", "includeDuePayments": "yes" }), 400, "must be a boolean"),
         ("backup.create", json!({ "out": r.path("x.meowbak"), "passphrase": "short" }), 400, "invalid input"),
         ("backup.create", json!({ "out": r.path("x.meowbak") }), 400, "missing argument `passphrase`"),
         ("backup.create", json!({ "out": r.path("x.backup"), "passphrase": PASSPHRASE }), 400, "must end in .meowbak"),
@@ -300,7 +309,7 @@ fn every_route_writes_a_real_file_of_its_kind() {
     let csv = r.path("t.csv");
     assert_eq!(r.post("export.csv", json!({ "out": csv })).status, 200);
     let text = std::fs::read_to_string(&csv).unwrap();
-    assert!(text.starts_with("\u{feff}date,type,category,name,amount,currency,description,documents\r\n"), "{}", &text[..80]);
+    assert!(text.starts_with("\u{feff}date,type,category,name,amount,currency,description,documents,my_share\r\n"), "{}", &text[..80]);
     assert!(!r.last().contains("budget entries"), "a CSV is only transactions: {}", r.last());
     // Excel: a zip.
     let xlsx = r.path("w.xlsx");
@@ -412,4 +421,24 @@ fn the_preview_and_the_schedule_need_no_yes() {
     assert_eq!(schedule["folder"], folder.path().to_str().unwrap());
     assert!(!schedule.to_string().contains(PASSPHRASE), "the passphrase is never shown");
     assert_eq!(r.asked(), 0);
+}
+
+#[test]
+fn the_parts_the_limits_and_the_debts_of_a_report_are_taken_and_told_to_the_person() {
+    let r = rig(true);
+    // only the due payments and the history of debts, of expenses over 5.00 that are not shared
+    let out = r.path("parts.json");
+    let reply = r.post("export.json", json!({ "out": out, "sections": "due, Ledger", "kind": "EXPENSE", "minAmount": "5.00", "split": "not_split" }));
+    assert_eq!(reply.status, 200, "{}", reply.body);
+    let file: Value = serde_json::from_str(&std::fs::read_to_string(&out).unwrap()).unwrap();
+    let keys: BTreeSet<&str> = file.as_object().unwrap().keys().map(String::as_str).collect();
+    assert!(keys.contains("duePayments") && keys.contains("debtHistory"), "{keys:?}");
+    assert!(!keys.contains("transactions") && !keys.contains("categories"), "a part that is left out is not in the file: {keys:?}");
+    // a report with the three lists of debts is made in English, and the person is told which are in it
+    let pdf = r.path("report.pdf");
+    let reply = r.post("export.pdf", json!({ "out": pdf, "fromMonth": "2026-01", "toMonth": "2026-03", "includeDebts": true, "includeDuePayments": true, "includeDebtHistory": true }));
+    assert_eq!(reply.status, 200, "{}", reply.body);
+    assert!(std::fs::read(&pdf).unwrap().starts_with(b"%PDF"));
+    let told = r.last();
+    assert!(told.contains("Who owes what") && told.contains("Overdue recurring payments") && told.contains("History of debts"), "{told}");
 }

@@ -3,13 +3,13 @@ import { preloadPage, type PageName } from '../pages'
 import { useT } from '../i18n/context'
 import Icon from './NavIcon'
 
-// The pages used most are tabs. Sync, settings and lock are in the bar at the top. Export is not on a phone: the data lives
+// The pages used most are tabs. Documents, sync, settings and lock are in the bar at the top. Export is not on a phone: the data lives
 // on the desktop too, and a file cannot be saved from the app on Android yet.
 export const PHONE_TABS = [
   { to: '/app/dashboard', label: 'nav.dashboard', icon: 'dashboard', page: 'dashboard' },
   { to: '/app/transactions', label: 'nav.transactions', icon: 'transactions', page: 'transactions' },
-  { to: '/app/budgets', label: 'nav.budgets', icon: 'budgets', page: 'budgets' },
   { to: '/app/recurring', label: 'nav.recurring', icon: 'recurring', page: 'recurring' },
+  { to: '/app/debts', label: 'nav.debts', icon: 'debts', page: 'debts' },
   { to: '/app/categories', label: 'nav.categories', icon: 'categories', page: 'categories' },
 ] as const satisfies readonly { to: string; label: string; icon: string; page: PageName }[]
 

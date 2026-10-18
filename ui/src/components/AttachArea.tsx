@@ -6,7 +6,10 @@ import { useMoneySettings } from '../hooks/useMoneySettings'
 import { useProfile } from '../hooks/profile'
 import { useT } from '../i18n/context'
 import { formatSize } from '../lib/bytes'
+import { canPreview } from '../lib/documents'
 import DocumentModal from './DocumentModal'
+import Icon from './NavIcon'
+import PreviewModal from './PreviewModal'
 
 /** The documents of one item, in the dialog that edits it. `compact` is for the quick add of a phone: just the buttons and the list. */
 export default function AttachArea({ attachments, compact = false }: { attachments: Attachments; compact?: boolean }) {
@@ -18,6 +21,7 @@ export default function AttachArea({ attachments, compact = false }: { attachmen
   const photoInput = useRef<HTMLInputElement>(null)
   const [picking, setPicking] = useState(false)
   const [viewing, setViewing] = useState<string | null>(null)
+  const [previewing, setPreviewing] = useState<Doc | null>(null)
   const empty = attachments.linked.length === 0 && attachments.pending.length === 0
 
   function onChosen(event: ChangeEvent<HTMLInputElement>) {
@@ -39,10 +43,14 @@ export default function AttachArea({ attachments, compact = false }: { attachmen
         <ul className="attach-list">
           {attachments.linked.map((doc) => (
             <li key={`linked-${doc.id}`}>
+              <Icon name="documents" className="attach-icon" />
               <button type="button" className="attach-name" onClick={() => setViewing(doc.id)}>
                 {doc.name}
               </button>
               <span className="attach-size">{formatSize(doc.sizeBytes, locale)}</span>
+              <button type="button" disabled={!canPreview(doc)} onClick={() => setPreviewing(doc)}>
+                {t('docs.previewButton')}
+              </button>
               <button type="button" onClick={() => void attachments.detach(doc)}>
                 {t('docs.detach')}
               </button>
@@ -50,6 +58,7 @@ export default function AttachArea({ attachments, compact = false }: { attachmen
           ))}
           {attachments.pending.map((item) => (
             <li key={`pending-${item.key}`}>
+              <Icon name="documents" className="attach-icon" />
               {'doc' in item ? (
                 <button type="button" className="attach-name" onClick={() => setViewing(item.doc.id)}>
                   {item.doc.name}
@@ -57,7 +66,12 @@ export default function AttachArea({ attachments, compact = false }: { attachmen
               ) : (
                 <span className="attach-name">{item.file.name}</span>
               )}
-              <span className="attach-size">{t('docs.attachPending')}</span>
+              <span className="attach-size">{formatSize('doc' in item ? item.doc.sizeBytes : item.file.size, locale)}</span>
+              {'doc' in item ? (
+                <button type="button" disabled={!canPreview(item.doc)} onClick={() => setPreviewing(item.doc)}>
+                  {t('docs.previewButton')}
+                </button>
+              ) : null}
               <button type="button" onClick={() => attachments.removePending(item.key)}>
                 {t('docs.detach')}
               </button>
@@ -83,6 +97,7 @@ export default function AttachArea({ attachments, compact = false }: { attachmen
       <input ref={fileInput} type="file" multiple hidden tabIndex={-1} onChange={onChosen} />
       <input ref={photoInput} type="file" accept="image/*" capture="environment" hidden tabIndex={-1} onChange={onChosen} />
       {picking ? <LibraryPicker attachments={attachments} locale={locale} /> : null}
+      {previewing ? <PreviewModal doc={previewing} onClose={() => setPreviewing(null)} /> : null}
       {viewing ? (
         <DocumentModal
           id={viewing}
@@ -128,6 +143,7 @@ function LibraryPicker({ attachments, locale }: { attachments: Attachments; loca
       <ul className="attach-list">
         {choices.map((doc) => (
           <li key={doc.id}>
+            <Icon name="documents" className="attach-icon" />
             <span className="attach-name">{doc.name}</span>
             <span className="attach-size">{formatSize(doc.sizeBytes, locale)}</span>
             <button type="button" onClick={() => void attachments.attachExisting(doc)}>

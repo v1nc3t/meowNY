@@ -61,9 +61,11 @@ pub struct Document {
 pub enum TargetKind {
     Transaction,
     Recurring,
+    /// An entry of the ledger of money lent and borrowed (a loan note, an invoice).
+    LedgerEntry,
 }
 
-/// What a document is linked to: a transaction or a recurring item, by id as the app writes ids.
+/// What a document is linked to: a transaction, a recurring item or a ledger entry, by id as the app writes ids.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct LinkTarget {
@@ -124,6 +126,9 @@ pub struct Filter {
     /// Only the documents linked to this recurring item.
     #[serde(default)]
     pub recurring_transaction_id: Option<String>,
+    /// Only the documents linked to this ledger entry.
+    #[serde(default)]
+    pub ledger_entry_id: Option<String>,
     #[serde(default)]
     pub limit: Option<u32>,
     #[serde(default)]
@@ -155,8 +160,19 @@ pub struct LinkView {
     #[serde(serialize_with = "serialize_id")]
     pub id: i64,
     pub name: String,
-    /// The payment date of a transaction, the next due date of a recurring item.
+    /// The payment date of a transaction, the next due date of a recurring item, the date of a ledger entry. For an entry the name is the
+    /// friend's.
     pub date: String,
+    /// For an entry of the ledger, the friend it is with, so that a screen can go to that friend's page. Left out for the other kinds.
+    #[serde(skip_serializing_if = "Option::is_none", serialize_with = "serialize_optional_id")]
+    pub person_id: Option<i64>,
+}
+
+fn serialize_optional_id<S: serde::Serializer>(id: &Option<i64>, serializer: S) -> Result<S::Ok, S::Error> {
+    match id {
+        Some(id) => serializer.serialize_str(&id.to_string()),
+        None => serializer.serialize_none(),
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -174,6 +190,7 @@ pub struct Size {
 enum Target {
     Transaction(i64),
     Recurring(i64),
+    LedgerEntry(i64),
 }
 
 fn parse_target(target: &LinkTarget) -> Result<Target, AppError> {
@@ -181,6 +198,7 @@ fn parse_target(target: &LinkTarget) -> Result<Target, AppError> {
     Ok(match target.kind {
         TargetKind::Transaction => Target::Transaction(id),
         TargetKind::Recurring => Target::Recurring(id),
+        TargetKind::LedgerEntry => Target::LedgerEntry(id),
     })
 }
 
@@ -188,6 +206,7 @@ fn target_exists(conn: &Connection, target: Target) -> Result<bool, AppError> {
     let (sql, id) = match target {
         Target::Transaction(id) => ("SELECT 1 FROM transactions WHERE id = ?1", id),
         Target::Recurring(id) => ("SELECT 1 FROM recurring_transactions WHERE id = ?1", id),
+        Target::LedgerEntry(id) => ("SELECT 1 FROM ledger_entries WHERE id = ?1", id),
     };
     Ok(conn.query_row(sql, [id], |_| Ok(())).optional()?.is_some())
 }
@@ -201,13 +220,14 @@ fn insert_link(conn: &Connection, document_id: i64, target: Target) -> Result<()
     if !target_exists(conn, target)? {
         return Err(AppError::NotFound);
     }
-    let (transaction, recurring) = match target {
-        Target::Transaction(id) => (Some(id), None),
-        Target::Recurring(id) => (None, Some(id)),
+    let (transaction, recurring, ledger) = match target {
+        Target::Transaction(id) => (Some(id), None, None),
+        Target::Recurring(id) => (None, Some(id), None),
+        Target::LedgerEntry(id) => (None, None, Some(id)),
     };
     conn.execute(
-        "INSERT OR IGNORE INTO document_links (document_id, transaction_id, recurring_transaction_id) VALUES (?1, ?2, ?3)",
-        params![document_id, transaction, recurring],
+        "INSERT OR IGNORE INTO document_links (document_id, transaction_id, recurring_transaction_id, ledger_entry_id) VALUES (?1, ?2, ?3, ?4)",
+        params![document_id, transaction, recurring, ledger],
     )?;
     Ok(())
 }
@@ -375,6 +395,7 @@ pub fn unlink(conn: &Connection, document_id: i64, target: &LinkTarget) -> Resul
         Target::Recurring(id) => {
             conn.execute("DELETE FROM document_links WHERE document_id = ?1 AND recurring_transaction_id = ?2", params![document_id, id])?
         }
+        Target::LedgerEntry(id) => conn.execute("DELETE FROM document_links WHERE document_id = ?1 AND ledger_entry_id = ?2", params![document_id, id])?,
     };
     if removed == 0 {
         return Err(AppError::NotFound);
@@ -388,20 +409,28 @@ pub fn links_of(conn: &Connection, document_id: i64) -> Result<Vec<LinkView>, Ap
         return Err(AppError::NotFound);
     }
     let mut stmt = conn.prepare(
-        "SELECT 'transaction', t.id, t.name, t.payment_date
+        "SELECT 'transaction', t.id, t.name, t.payment_date, NULL
            FROM document_links l JOIN transactions t ON t.id = l.transaction_id WHERE l.document_id = ?1
          UNION ALL
-         SELECT 'recurring', r.id, r.name, r.next_due_date
+         SELECT 'recurring', r.id, r.name, r.next_due_date, NULL
            FROM document_links l JOIN recurring_transactions r ON r.id = l.recurring_transaction_id WHERE l.document_id = ?1
+         UNION ALL
+         SELECT 'ledger_entry', e.id, p.name, e.entry_date, e.person_id
+           FROM document_links l JOIN ledger_entries e ON e.id = l.ledger_entry_id JOIN people p ON p.id = e.person_id WHERE l.document_id = ?1
          ORDER BY 4 DESC, 2 DESC",
     )?;
     let rows = stmt.query_map([document_id], |r| {
         let kind: String = r.get(0)?;
         Ok(LinkView {
-            kind: if kind == "transaction" { TargetKind::Transaction } else { TargetKind::Recurring },
+            kind: match kind.as_str() {
+                "transaction" => TargetKind::Transaction,
+                "recurring" => TargetKind::Recurring,
+                _ => TargetKind::LedgerEntry,
+            },
             id: r.get(1)?,
             name: r.get(2)?,
             date: r.get(3)?,
+            person_id: r.get(4)?,
         })
     })?;
     Ok(rows.collect::<Result<Vec<_>, _>>()?)
@@ -425,6 +454,7 @@ pub fn list(conn: &Connection, files: &Files, filter: &Filter) -> Result<Page, A
     let to = filter.to.as_deref().map(clean_date).transpose()?;
     let transaction = filter.transaction_id.as_deref().map(parse_id).transpose()?;
     let recurring = filter.recurring_transaction_id.as_deref().map(parse_id).transpose()?;
+    let ledger = filter.ledger_entry_id.as_deref().map(parse_id).transpose()?;
     let pattern = match filter.q.as_deref().map(str::trim).filter(|q| !q.is_empty()) {
         Some(q) if q.chars().count() > SEARCH_MAX_CHARS => return Err(AppError::InvalidInput),
         Some(q) => Some(like_pattern(q)),
@@ -462,6 +492,10 @@ pub fn list(conn: &Connection, files: &Files, filter: &Filter) -> Result<Page, A
     }
     if let Some(id) = recurring {
         clauses.push("d.id IN (SELECT document_id FROM document_links WHERE recurring_transaction_id = ?)");
+        values.push(Box::new(id));
+    }
+    if let Some(id) = ledger {
+        clauses.push("d.id IN (SELECT document_id FROM document_links WHERE ledger_entry_id = ?)");
         values.push(Box::new(id));
     }
     let filter_sql = if clauses.is_empty() { String::new() } else { format!("WHERE {}", clauses.join(" AND ")) };
@@ -513,8 +547,9 @@ pub fn link_counts(conn: &Connection, kind: TargetKind, ids: &[String]) -> Resul
     let column = match kind {
         TargetKind::Transaction => "transaction_id",
         TargetKind::Recurring => "recurring_transaction_id",
+        TargetKind::LedgerEntry => "ledger_entry_id",
     };
-    // The column is one of two fixed names; the ids are bound.
+    // The column is one of three fixed names; the ids are bound.
     let marks = vec!["?"; ids.len()].join(", ");
     let mut stmt = conn.prepare(&format!("SELECT {column}, count(*) FROM document_links WHERE {column} IN ({marks}) GROUP BY {column}"))?;
     let rows = stmt.query_map(rusqlite::params_from_iter(ids.iter()), |r| Ok((r.get::<_, i64>(0)?, r.get::<_, u32>(1)?)))?;
@@ -605,6 +640,76 @@ pub fn read_image(conn: &Connection, files: &Files, id: i64) -> Result<ImageData
         return Err(AppError::InvalidInput);
     }
     Ok(ImageData { media_type: media.as_str().to_string(), data: base64url_encode(&bytes) })
+}
+
+/// The most a preview reads: 16 MiB, a third more as text. A bigger file goes to the system's viewer or is saved. Images keep the
+/// lower `MAX_DRAW_BYTES`.
+pub const MAX_PREVIEW_BYTES: u64 = 16 * 1024 * 1024;
+
+/// What the page draws a document as, in its preview.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum PreviewKind {
+    Image,
+    Pdf,
+    Text,
+    Csv,
+    /// A Word file: its text and tables, read by the page.
+    Docx,
+    /// An Excel file: its cells, read by the page.
+    Xlsx,
+}
+
+/// What a document would be previewed as, from what the app knows of it. HTML is not previewed (the page would have to draw
+/// someone else's markup), and the other kinds of file only when the name says Word or Excel: the app reads those two itself and
+/// the file is checked to be a zip before it is given. `None` means the preview is not offered.
+pub fn preview_kind_of(name: &str, media: MediaType) -> Option<PreviewKind> {
+    match media {
+        MediaType::Jpeg | MediaType::Png | MediaType::Gif | MediaType::Webp => Some(PreviewKind::Image),
+        MediaType::Pdf => Some(PreviewKind::Pdf),
+        MediaType::Text => Some(PreviewKind::Text),
+        MediaType::Csv => Some(PreviewKind::Csv),
+        MediaType::Html => None,
+        MediaType::Other => match name.rsplit_once('.')?.1.to_ascii_lowercase().as_str() {
+            "docx" | "docm" => Some(PreviewKind::Docx),
+            "xlsx" | "xlsm" => Some(PreviewKind::Xlsx),
+            _ => None,
+        },
+    }
+}
+
+/// A file for the page to show, as base64url text, and what to show it as. The page reads the bytes itself; it is told no more than
+/// the kind, and the kind decides which reader it uses.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PreviewData {
+    pub kind: PreviewKind,
+    pub media_type: String,
+    pub data: String,
+}
+
+/// The contents of a document for the preview, if the app may show it: a kind that `preview_kind_of` gives, not bigger than the
+/// limit of that kind, with a file that opens and matches its row. An image must also have a header that gives at most 64
+/// megapixels, and a Word or Excel file must begin as a zip. Anything else is `InvalidInput`, which the page answers by offering
+/// the system's viewer. Nothing is decoded or run here.
+pub fn read_preview(conn: &Connection, files: &Files, id: i64) -> Result<PreviewData, AppError> {
+    let document = get(conn, files, id)?;
+    let media = media_type_of(&document);
+    let kind = preview_kind_of(&document.name, media).ok_or(AppError::InvalidInput)?;
+    let limit = if kind == PreviewKind::Image { MAX_DRAW_BYTES } else { MAX_PREVIEW_BYTES };
+    if document.size_bytes > limit {
+        return Err(AppError::InvalidInput);
+    }
+    let bytes = read(conn, files, id)?;
+    let fits = match kind {
+        PreviewKind::Image => drawable(&bytes, media),
+        PreviewKind::Docx | PreviewKind::Xlsx => bytes.starts_with(b"PK\x03\x04"),
+        PreviewKind::Pdf | PreviewKind::Text | PreviewKind::Csv => true,
+    };
+    if !fits {
+        return Err(AppError::InvalidInput);
+    }
+    Ok(PreviewData { kind, media_type: media.as_str().to_string(), data: base64url_encode(&bytes) })
 }
 
 /// Makes the plain copy that the system's viewer is given and says where it is. A kind of file that is not opened from the app

@@ -906,7 +906,10 @@ fn sample_args(name: &str, category: &str) -> String {
         "transactions.list" => r#"{"limit":5}"#.into(),
         "categories.list" => r#"{"type":"EXPENSE"}"#.into(),
         "recurring.dues" => r#"{"withinDays":10}"#.into(),
+        "debts.reminders" => r#"{"everyDays":7}"#.into(),
         "documents.show" => r#"{"id":"1"}"#.into(),
+        "people.show" => r#"{"id":"1"}"#.into(),
+        "splits.preview" => r#"{"amount":"100.00","mode":"EQUAL","people":["1"],"guests":"Bob"}"#.into(),
         _ => "{}".into(),
     }
 }
@@ -923,6 +926,7 @@ fn a_read_token_uses_every_read_route_over_http_and_gets_what_the_screens_get() 
             Ok(())
         })
         .unwrap();
+    vault.with_conn(|c| crate::debts::people::create(c, "Anna").map(drop)).unwrap();
     let token = make_token(&vault, Scope::Read);
     let server = ApiServer::start(vault.clone(), routes::ALL, Limits::default()).unwrap();
     let port = server.port();

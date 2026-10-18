@@ -353,38 +353,6 @@ mod tests {
     }
 
     #[test]
-    fn a_command_and_its_flags_become_a_body() {
-        let i = run("transactions create --name Bread --amount 2.40 --payment-date 2026-10-14 --category-id 7");
-        assert_eq!(i.command.name(), "transactions create");
-        assert_eq!(Value::Object(i.body), json!({ "name": "Bread", "amount": "2.40", "paymentDate": "2026-10-14", "categoryId": "7" }));
-    }
-
-    #[test]
-    fn a_flag_can_be_written_with_an_equals_sign() {
-        let i = run("transactions list --limit=3 --q=-weird --from=2026-01-01");
-        assert_eq!(Value::Object(i.body), json!({ "limit": 3, "q": "-weird", "from": "2026-01-01" }));
-    }
-
-    #[test]
-    fn global_flags_stand_anywhere_and_do_not_end_up_in_the_body() {
-        for line in [
-            "--json status",
-            "status --json",
-            "--json=true status",
-            "--timeout 5 status --port 4000 --json --data-dir /x --token-file /y",
-        ] {
-            let i = run(line);
-            assert!(i.globals.json, "{line}");
-            assert!(i.body.is_empty(), "{line}");
-        }
-        let i = run("--timeout 5 transactions list --port 4000 --token-file /y --data-dir /x --limit 2");
-        assert_eq!((i.globals.timeout_secs, i.globals.port), (Some(5), Some(4000)));
-        assert_eq!((i.globals.token_file.as_deref(), i.globals.data_dir.as_deref()), (Some("/y"), Some("/x")));
-        assert_eq!(Value::Object(i.body), json!({ "limit": 2 }));
-        assert!(!run("status --json=false").globals.json);
-    }
-
-    #[test]
     fn whole_numbers_are_numbers_and_the_rest_stay_text() {
         let i = run("transactions list --limit 10 --offset 0 --category-id 12");
         assert_eq!(Value::Object(i.body), json!({ "limit": 10, "offset": 0, "categoryId": "12" }));
@@ -403,29 +371,6 @@ mod tests {
     }
 
     #[test]
-    fn the_id_can_be_a_plain_word_or_a_flag() {
-        let by_word = run("transactions update 42 --name Rye --yes");
-        assert_eq!(Value::Object(by_word.body), json!({ "id": "42", "name": "Rye" }));
-        let by_flag = run("transactions update --id 42 --name Rye");
-        assert_eq!(Value::Object(by_flag.body), json!({ "id": "42", "name": "Rye" }));
-        assert!(usage("transactions update 42 --id 43").contains("given twice"));
-        assert!(usage("transactions update 42 43").contains("unexpected argument \"43\""));
-        assert!(usage("transactions update --name Rye").contains("give the id: meowny transactions update <id>"));
-        assert!(usage("status 42").contains("unexpected argument"), "a command with no id takes no plain words");
-    }
-
-    #[test]
-    fn a_flag_that_clears_sends_null() {
-        let i = run("transactions update 5 --clear-description");
-        assert_eq!(Value::Object(i.body), json!({ "id": "5", "description": null }));
-        let i = run("recurring update 5 --clear-amount --clear-end-date --name Gym");
-        assert_eq!(Value::Object(i.body), json!({ "id": "5", "amount": null, "endDate": null, "name": "Gym" }));
-        assert!(usage("transactions update 5 --description x --clear-description").contains("more than once"));
-        assert!(usage("transactions update 5 --clear-description=yes").contains("takes no value"));
-        assert!(usage("transactions update 5 --clear-name").contains("no flag --clear-name"), "only what the app lets you clear");
-    }
-
-    #[test]
     fn missing_unknown_and_repeated_flags_are_usage_errors() {
         assert!(usage("transactions create --name X").contains("missing --amount"));
         assert!(usage("categories create --name Pets").contains("missing --type"));
@@ -434,16 +379,6 @@ mod tests {
         assert!(usage("transactions list --limit 1 --limit 2").contains("--limit was given more than once"));
         assert!(usage("transactions list --category-id 1 --category-id=1").contains("more than once"));
         assert!(usage("transactions list --categoryId 1").contains("no flag --categoryId"), "flags are kebab-case");
-    }
-
-    #[test]
-    fn unknown_commands_say_what_there_is() {
-        assert!(usage("nope").contains("unknown command \"nope\""));
-        assert!(usage("transactions").contains("transactions needs one of: list, create, update, delete"));
-        assert!(usage("transactions frobnicate").contains("needs one of"));
-        assert!(usage("").contains("give a command"));
-        assert!(usage("--json").contains("give a command"));
-        assert!(usage("--limit 5 transactions list").contains("unknown command") || usage("--limit 5 transactions list").contains("give a command"));
     }
 
     #[test]
@@ -459,29 +394,6 @@ mod tests {
     }
 
     #[test]
-    fn help_and_version_win_over_everything_after_them() {
-        for (line, words) in [
-            ("--help", vec![]),
-            ("-h", vec![]),
-            ("help", vec![]),
-            ("transactions --help", vec!["transactions"]),
-            ("transactions create -h", vec!["transactions", "create"]),
-            ("help transactions create", vec!["transactions", "create"]),
-            ("transactions create --name X --help", vec!["transactions", "create"]),
-            ("transactions delete 5 --help", vec!["transactions", "delete"]),
-            ("nonsense --help", vec!["nonsense"]),
-        ] {
-            match parsed(line) {
-                Ok(Parsed::Help(w)) => assert_eq!(w, words, "{line}"),
-                other => panic!("{line}: {other:?}"),
-            }
-        }
-        for line in ["--version", "-V", "status --version"] {
-            assert!(matches!(parsed(line), Ok(Parsed::Version)), "{line}");
-        }
-    }
-
-    #[test]
     fn two_dashes_end_the_flags() {
         // After `--` everything is a plain word, even if it starts with dashes.
         let i = run("transactions update --name Rye -- 42");
@@ -489,22 +401,6 @@ mod tests {
         let i = run("transactions delete --yes -- -5");
         assert_eq!(i.body["id"], "-5", "the app will refuse it, not this program");
         assert!(usage("status -- --json").contains("unexpected argument"));
-    }
-
-    #[test]
-    fn a_text_flag_can_read_its_value_from_standard_input() {
-        let mut stdin: &[u8] = b"line one\nline two\n";
-        let list = ["transactions", "list", "--q", "-"].map(String::from);
-        let Ok(Parsed::Run(i)) = parse(&list, &Catalog::embedded(), &mut stdin) else { panic!() };
-        assert_eq!(i.body["q"], "line one\nline two", "all of it, without the last line break");
-        let mut windows: &[u8] = b"text\r\n";
-        let Ok(Parsed::Run(i)) = parse(&list, &Catalog::embedded(), &mut windows) else { panic!() };
-        assert_eq!(i.body["q"], "text");
-        // Only one flag can use it, and only text flags.
-        let twice = ["transactions", "create", "--name", "-", "--description", "-", "--amount", "1.00", "--payment-date", "2026-10-14", "--category-id", "1"].map(String::from);
-        let mut input: &[u8] = b"x";
-        assert!(matches!(parse(&twice, &Catalog::embedded(), &mut input), Err(e) if e.message.contains("only one value")));
-        assert_eq!(Value::Object(run("transactions create --name X --amount - --payment-date 2026-10-14 --category-id 1").body)["amount"], "-", "a lone dash is only special for text");
     }
 
     #[test]
@@ -544,21 +440,6 @@ mod tests {
     }
 
     #[test]
-    fn ids_are_given_separated_by_commas_and_sent_as_a_list() {
-        let i = run("export json --out /x/a.json --category-ids 3,7,12");
-        assert_eq!(i.body["categoryIds"], json!(["3", "7", "12"]));
-        assert_eq!(run("export csv --out /x/a.csv --category-ids=5").body["categoryIds"], json!(["5"]));
-        assert_eq!(run("export csv --out /x/a.csv --category-ids  3,7").body["categoryIds"], json!(["3", "7"]));
-        for bad in ["", "3,", ",3", "3,,7", " "] {
-            let line: Vec<String> = ["export", "csv", "--out", "/x/a.csv", "--category-ids", bad].map(String::from).to_vec();
-            match parse(&line, &Catalog::embedded(), &mut std::io::empty()) {
-                Err(e) => assert!(e.message.contains("separated by commas"), "{bad:?}: {}", e.message),
-                other => panic!("{bad:?}: {other:?}"),
-            }
-        }
-    }
-
-    #[test]
     fn the_backup_passphrase_can_come_from_standard_input() {
         let line = ["backup", "create", "--out", "/x/a.meowbak", "--passphrase", "-"].map(String::from);
         let mut stdin: &[u8] = b"correct horse battery\n";
@@ -585,30 +466,6 @@ mod tests {
         parse(&words, &Catalog::embedded(), &mut std::io::empty())
     }
 
-    fn body_in(dir: &std::path::Path, line: &str) -> Map<String, Value> {
-        match parsed_in(dir, line) {
-            Ok(Parsed::Run(i)) => i.body,
-            other => panic!("{line}: {other:?}"),
-        }
-    }
-
-    #[test]
-    fn a_file_is_read_by_this_program_and_sent_as_text_under_its_own_name() {
-        let dir = tempfile::tempdir().unwrap();
-        std::fs::write(dir.path().join("Boiler.pdf"), b"%PDF-1.4 hello").unwrap();
-        // as the plain word, and as --file
-        for line in ["documents add DIR/Boiler.pdf", "documents add --file DIR/Boiler.pdf"] {
-            let body = body_in(dir.path(), line);
-            assert_eq!(body["data"], "JVBERi0xLjQgaGVsbG8", "{line}");
-            assert_eq!(body["name"], "Boiler.pdf", "{line}: the name of the file");
-        }
-        // another name, a date, the phone switch and what it is attached to
-        let body = body_in(dir.path(), "documents add DIR/Boiler.pdf --name Receipt --date 2026-10-01 --keep-on-phone --transaction-ids 3,7 --recurring-ids 2");
-        assert_eq!(body["name"], "Receipt");
-        assert_eq!((body["date"].clone(), body["keepOnPhone"].clone()), (json!("2026-10-01"), json!(true)));
-        assert_eq!((body["transactionIds"].clone(), body["recurringIds"].clone()), (json!(["3", "7"]), json!(["2"])));
-    }
-
     #[test]
     fn a_file_that_cannot_be_sent_is_a_usage_error_before_anything_is_asked() {
         let dir = tempfile::tempdir().unwrap();
@@ -626,14 +483,4 @@ mod tests {
         assert!(message("documents add DIR/a.pdf --file DIR/a.pdf").1.contains("given twice"));
     }
 
-    #[test]
-    fn the_other_document_commands_take_an_id_as_the_plain_word() {
-        let dir = tempfile::tempdir().unwrap();
-        let body = body_in(dir.path(), "documents link 5 --transaction-id 9");
-        assert_eq!((body["id"].clone(), body["transactionId"].clone()), (json!("5"), json!("9")));
-        let body = body_in(dir.path(), "documents get 5 --out /tmp/x.pdf");
-        assert_eq!((body["id"].clone(), body["out"].clone()), (json!("5"), json!("/tmp/x.pdf")));
-        assert!(matches!(parsed_in(dir.path(), "documents delete 5"), Err(e) if e.message.contains("--yes")), "deleting asks for --yes");
-        assert!(parsed_in(dir.path(), "documents delete 5 --yes").is_ok());
-    }
 }

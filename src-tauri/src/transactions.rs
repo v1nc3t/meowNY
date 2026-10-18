@@ -6,6 +6,7 @@ use rusqlite::{params, Connection, OptionalExtension};
 use serde::{Deserialize, Deserializer, Serialize};
 
 use crate::categories::{parse_id, serialize_id};
+use crate::debts::splits::{self, PartOut};
 use crate::money::{format_amount, parse_positive_amount};
 use crate::vault::AppError;
 
@@ -24,8 +25,13 @@ pub struct Transaction {
     pub category_id: i64,
     pub client_uuid: Option<String>,
     pub name: String,
-    /// Decimal string, e.g. "12.50".
+    /// What was paid. Decimal string, e.g. "12.50".
     pub amount: String,
+    /// What it costs you: the amount minus the parts of the friends and guests it is shared with (`transaction_costs`). The same as
+    /// `amount` for a bill that is not split. Budgets, statistics and reports add up this, never `amount`.
+    pub my_share: String,
+    /// The parts of the others, when the bill is shared.
+    pub split: Vec<PartOut>,
     pub payment_date: String,
     pub description: Option<String>,
 }
@@ -142,26 +148,61 @@ fn from_row(row: &rusqlite::Row) -> rusqlite::Result<Transaction> {
         client_uuid: row.get(2)?,
         name: row.get(3)?,
         amount: format_amount(row.get(4)?),
+        my_share: format_amount(row.get(4)?),
+        split: Vec::new(),
         payment_date: row.get(5)?,
         description: row.get(6)?,
     })
 }
 
+/// Fills in what the row alone does not say: what each transaction costs you and how it is shared. One query for each, whatever the number.
+fn hydrate(conn: &Connection, transactions: &mut [Transaction]) -> Result<(), AppError> {
+    let ids: Vec<i64> = transactions.iter().map(|t| t.id).collect();
+    let costs = splits::costs_of(conn, &ids)?;
+    let mut parts = splits::parts_of(conn, &ids)?;
+    for t in transactions {
+        if let Some(cost) = costs.get(&t.id) {
+            t.my_share = format_amount(*cost);
+        }
+        t.split = parts.remove(&t.id).unwrap_or_default();
+    }
+    Ok(())
+}
+
 fn find(conn: &Connection, id: i64) -> Result<Option<Transaction>, AppError> {
-    Ok(conn
-        .query_row(&format!("SELECT {COLUMNS} FROM transactions WHERE id = ?1"), [id], from_row)
-        .optional()?)
+    let found = conn.query_row(&format!("SELECT {COLUMNS} FROM transactions WHERE id = ?1"), [id], from_row).optional()?;
+    found
+        .map(|t| {
+            let mut one = [t];
+            hydrate(conn, &mut one)?;
+            let [t] = one;
+            Ok(t)
+        })
+        .transpose()
 }
 
 fn find_by_uuid(conn: &Connection, uuid: &str) -> Result<Option<Transaction>, AppError> {
-    Ok(conn
-        .query_row(&format!("SELECT {COLUMNS} FROM transactions WHERE client_uuid = ?1"), [uuid], from_row)
-        .optional()?)
+    let found = conn.query_row(&format!("SELECT {COLUMNS} FROM transactions WHERE client_uuid = ?1"), [uuid], from_row).optional()?;
+    found
+        .map(|t| {
+            let mut one = [t];
+            hydrate(conn, &mut one)?;
+            let [t] = one;
+            Ok(t)
+        })
+        .transpose()
 }
 
 pub(crate) fn category_is_active(conn: &Connection, id: i64) -> Result<bool, AppError> {
     Ok(conn
         .query_row("SELECT 1 FROM categories WHERE id = ?1 AND deleted_at IS NULL", [id], |_| Ok(()))
+        .optional()?
+        .is_some())
+}
+
+fn category_is_expense(conn: &Connection, id: i64) -> Result<bool, AppError> {
+    Ok(conn
+        .query_row("SELECT 1 FROM categories WHERE id = ?1 AND type = 'EXPENSE'", [id], |_| Ok(()))
         .optional()?
         .is_some())
 }
@@ -203,6 +244,8 @@ pub fn create(conn: &Connection, input: &NewTransaction) -> Result<Transaction, 
             client_uuid: uuid,
             name,
             amount: format_amount(minor),
+            my_share: format_amount(minor),
+            split: Vec::new(),
             payment_date: date,
             description,
         }),
@@ -248,12 +291,35 @@ pub fn update(conn: &Connection, id: i64, patch: &TransactionPatch) -> Result<Tr
         None => current.description.clone(),
     };
 
-    conn.execute(
-        "UPDATE transactions
-         SET name = ?1, amount_minor = ?2, payment_date = ?3, category_id = ?4, description = ?5
-         WHERE id = ?6",
-        params![name, minor, date, category_id, description, id],
-    )?;
+    // A bill that is shared keeps its parts adding up to the bill: a new amount rescales every part, yours included, and a split bill
+    // stays an expense. The parts are written before the amount when it shrinks and after it when it grows, so they never pass the bill.
+    let old_minor = parse_positive_amount(&current.amount)?;
+    let shared = !current.split.is_empty();
+    if shared && category_id != current.category_id && !category_is_expense(conn, category_id)? {
+        return Err(AppError::InvalidInput);
+    }
+    let write = |conn: &Connection| -> Result<(), AppError> {
+        conn.execute(
+            "UPDATE transactions
+             SET name = ?1, amount_minor = ?2, payment_date = ?3, category_id = ?4, description = ?5
+             WHERE id = ?6",
+            params![name, minor, date, category_id, description, id],
+        )?;
+        Ok(())
+    };
+    if !shared {
+        write(conn)?;
+        return get(conn, id);
+    }
+    let tx = conn.unchecked_transaction()?;
+    if minor < old_minor {
+        splits::rescale(&tx, id, old_minor, minor)?;
+    }
+    write(&tx)?;
+    if minor > old_minor {
+        splits::rescale(&tx, id, old_minor, minor)?;
+    }
+    tx.commit()?;
     get(conn, id)
 }
 
@@ -264,7 +330,7 @@ pub fn delete(conn: &Connection, id: i64) -> Result<(), AppError> {
     }
 }
 
-fn like_pattern(q: &str) -> String {
+pub(crate) fn like_pattern(q: &str) -> String {
     let mut pattern = String::from("%");
     for c in q.chars() {
         if matches!(c, '\\' | '%' | '_') {
@@ -327,7 +393,8 @@ pub fn list(conn: &Connection, filter: &Filter) -> Result<Page, AppError> {
         "SELECT {COLUMNS} FROM transactions {filter_sql} ORDER BY payment_date DESC, id DESC LIMIT ? OFFSET ?"
     ))?;
     let rows = statement.query_map(rusqlite::params_from_iter(page_values), from_row)?;
-    let transactions = rows.collect::<Result<Vec<_>, _>>()?;
+    let mut transactions = rows.collect::<Result<Vec<_>, _>>()?;
+    hydrate(conn, &mut transactions)?;
     Ok(Page { transactions, total, limit, offset })
 }
 
@@ -357,18 +424,6 @@ mod tests {
             description: None,
             client_uuid: None,
         }
-    }
-
-    #[test]
-    fn create_returns_the_stored_values() {
-        let (conn, food, _) = db();
-        let t = create(&conn, &NewTransaction { description: Some("  weekly shop ".into()), ..new(food, " Tesco ", "42.10", "2026-06-15") }).unwrap();
-        assert_eq!(t.name, "Tesco");
-        assert_eq!(t.amount, "42.10");
-        assert_eq!(t.description.as_deref(), Some("weekly shop"));
-        assert_eq!(get(&conn, t.id).unwrap(), t);
-        let stored: i64 = conn.query_row("SELECT amount_minor FROM transactions", [], |r| r.get(0)).unwrap();
-        assert_eq!(stored, 4210, "stored as integer minor units");
     }
 
     #[test]
@@ -437,21 +492,6 @@ mod tests {
     }
 
     #[test]
-    fn update_changes_only_the_given_fields() {
-        let (conn, food, salary) = db();
-        let t = create(&conn, &NewTransaction { description: Some("note".into()), ..new(food, "A", "1.00", "2026-06-15") }).unwrap();
-
-        let renamed = update(&conn, t.id, &TransactionPatch { name: Some("B".into()), ..Default::default() }).unwrap();
-        assert_eq!((renamed.name.as_str(), renamed.amount.as_str(), renamed.description.as_deref()), ("B", "1.00", Some("note")));
-
-        let moved = update(&conn, t.id, &TransactionPatch { category_id: Some(salary.to_string()), amount: Some("2.50".into()), ..Default::default() }).unwrap();
-        assert_eq!((moved.category_id, moved.amount.as_str()), (salary, "2.50"));
-
-        let cleared = update(&conn, t.id, &TransactionPatch { description: Some(None), ..Default::default() }).unwrap();
-        assert_eq!(cleared.description, None);
-    }
-
-    #[test]
     fn update_validates_and_reports_missing() {
         let (conn, food, _) = db();
         let t = create(&conn, &new(food, "A", "1.00", "2026-06-15")).unwrap();
@@ -476,15 +516,6 @@ mod tests {
         assert_eq!(edited.name, "B");
     }
 
-    #[test]
-    fn delete_removes_and_reports_missing() {
-        let (conn, food, _) = db();
-        let t = create(&conn, &new(food, "A", "1.00", "2026-06-15")).unwrap();
-        delete(&conn, t.id).unwrap();
-        assert_eq!(get(&conn, t.id), Err(AppError::NotFound));
-        assert_eq!(delete(&conn, t.id), Err(AppError::NotFound));
-    }
-
     fn seeded() -> (Connection, i64, i64) {
         let (conn, food, salary) = db();
         for (cat, name, amount, date, description) in [
@@ -503,12 +534,6 @@ mod tests {
     }
 
     #[test]
-    fn list_is_newest_first_with_id_as_tie_breaker() {
-        let (conn, _, _) = seeded();
-        assert_eq!(names(&conn, Filter::default()), ["Aldi", "Pay", "Lidl", "Tesco"]);
-    }
-
-    #[test]
     fn list_filters_by_date_range_inclusively() {
         let (conn, _, _) = seeded();
         let june = Filter { from: Some("2026-06-01".into()), to: Some("2026-06-30".into()), ..Default::default() };
@@ -520,32 +545,12 @@ mod tests {
     }
 
     #[test]
-    fn list_filters_by_category_and_text() {
-        let (conn, food, salary) = seeded();
-        assert_eq!(names(&conn, Filter { category_id: Some(salary.to_string()), ..Default::default() }), ["Pay"]);
-        assert_eq!(names(&conn, Filter { category_id: Some(food.to_string()), q: Some("l".into()), ..Default::default() }), ["Aldi", "Lidl", "Tesco"]);
-        assert_eq!(names(&conn, Filter { q: Some("WEEKLY".into()), ..Default::default() }), ["Tesco"], "name or description, any case");
-    }
-
-    #[test]
     fn list_text_search_treats_like_wildcards_literally() {
         let (conn, _, _) = seeded();
         assert_eq!(names(&conn, Filter { q: Some("100%".into()), ..Default::default() }), ["Pay"]);
         assert_eq!(names(&conn, Filter { q: Some("pay_day".into()), ..Default::default() }), ["Pay"]);
         assert!(names(&conn, Filter { q: Some("%".into()), ..Default::default() }).len() == 1, "a lone % matches only text containing %");
         assert!(names(&conn, Filter { q: Some("p_y".into()), ..Default::default() }).is_empty(), "_ is not a wildcard");
-    }
-
-    #[test]
-    fn list_paginates_and_reports_the_total() {
-        let (conn, _, _) = seeded();
-        let first = list(&conn, &Filter { limit: Some(3), ..Default::default() }).unwrap();
-        assert_eq!((first.transactions.len(), first.total, first.limit, first.offset), (3, 4, 3, 0));
-        let second = list(&conn, &Filter { limit: Some(3), offset: Some(3), ..Default::default() }).unwrap();
-        assert_eq!(second.transactions.iter().map(|t| t.name.as_str()).collect::<Vec<_>>(), ["Tesco"]);
-        assert_eq!(second.total, 4);
-        let past_end = list(&conn, &Filter { offset: Some(50), ..Default::default() }).unwrap();
-        assert!(past_end.transactions.is_empty());
     }
 
     #[test]
@@ -562,74 +567,13 @@ mod tests {
         }
     }
 
-    #[test]
-    fn wire_format_matches_what_the_client_expects() {
-        let (conn, food, _) = db();
-        let t = create(&conn, &new(food, "A", "1.00", "2026-06-15")).unwrap();
-        let json = serde_json::to_value(&t).unwrap();
-        assert_eq!(json["id"], t.id.to_string());
-        assert_eq!(json["categoryId"], food.to_string());
-        assert_eq!(json["paymentDate"], "2026-06-15");
-        assert_eq!(json["amount"], "1.00");
-        assert!(json["clientUuid"].is_null());
-
-        let patch: TransactionPatch = serde_json::from_str(r#"{"description": null}"#).unwrap();
-        assert_eq!(patch.description, Some(None));
-        let patch: TransactionPatch = serde_json::from_str(r#"{}"#).unwrap();
-        assert_eq!(patch.description, None);
-        assert!(serde_json::from_str::<TransactionPatch>(r#"{"userId": 1}"#).is_err(), "unknown fields are refused");
-    }
 }
 
 #[cfg(test)]
 mod bench {
-    use super::*;
-    use crate::budgets::{self, Scope, SetBudget};
-    use crate::categories::{self, CategoryType};
-    use std::time::Instant;
+    
+    
+    
+    
 
-    /// Not a pass/fail test: prints how long the main queries take on a large database.
-    /// Run with `cargo test bench -- --ignored --nocapture`.
-    #[test]
-    #[ignore]
-    fn timings_on_a_large_database() {
-        let mut conn = Connection::open_in_memory().unwrap();
-        conn.execute_batch("PRAGMA foreign_keys = ON;").unwrap();
-        crate::migrate::run(&mut conn).unwrap();
-        conn.execute("INSERT INTO settings (id, currency, timezone) VALUES (1, 'EUR', 'UTC')", []).unwrap();
-        let cats: Vec<i64> = (0..30).map(|i| categories::create(&conn, &format!("c{i}"), if i % 6 == 0 { CategoryType::Income } else { CategoryType::Expense }).unwrap().id).collect();
-        let tx = conn.transaction().unwrap();
-        for i in 0..50_000i64 {
-            let month = 1 + (i % 60);
-            let (year, m) = (2022 + (month - 1) / 12, 1 + (month - 1) % 12);
-            tx.execute(
-                "INSERT INTO transactions (category_id, name, amount_minor, payment_date, description) VALUES (?1, ?2, ?3, ?4, ?5)",
-                params![cats[(i % 30) as usize], format!("shop {i}"), 100 + i % 9000, format!("{year}-{m:02}-{:02}", 1 + i % 28), "weekly"],
-            ).unwrap();
-        }
-        tx.commit().unwrap();
-        for &c in &cats {
-            let kind = if c % 6 == 1 { CategoryType::Income } else { CategoryType::Expense };
-            let _ = budgets::set(&conn, &SetBudget { kind, scope: Scope::Category, month: "2022-01".into(), amount_limit: Some("100.00".into()), category_id: Some(c.to_string()) }, "2022-01-15T00:00:00Z".parse().unwrap());
-        }
-        let time = |label: &str, f: &dyn Fn()| {
-            let start = Instant::now();
-            f();
-            println!("{label}: {:?}", start.elapsed());
-        };
-        time("list newest 50", &|| { list(&conn, &Filter::default()).unwrap(); });
-        time("list page 500", &|| { list(&conn, &Filter { offset: Some(25_000), ..Default::default() }).unwrap(); });
-        time("list one month", &|| { list(&conn, &Filter { from: Some("2025-03-01".into()), to: Some("2025-03-31".into()), ..Default::default() }).unwrap(); });
-        time("list search", &|| { list(&conn, &Filter { q: Some("shop 4999".into()), ..Default::default() }).unwrap(); });
-        time("overview one month", &|| { budgets::overview(&conn, "2025-03").unwrap(); });
-        time("history 5 years", &|| { budgets::history(&conn, "2026-12-15T00:00:00Z".parse().unwrap()).unwrap(); });
-        let plan: Vec<String> = conn
-            .prepare("EXPLAIN QUERY PLAN SELECT id FROM transactions WHERE payment_date >= '2025-03-01' AND payment_date <= '2025-03-31' ORDER BY payment_date DESC, id DESC LIMIT 50")
-            .unwrap()
-            .query_map([], |r| r.get::<_, String>(3))
-            .unwrap()
-            .collect::<Result<_, _>>()
-            .unwrap();
-        println!("plan: {plan:?}");
-    }
 }

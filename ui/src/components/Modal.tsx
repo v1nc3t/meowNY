@@ -11,6 +11,8 @@ export default function Modal({
   formId = modalFormId,
   doneLabel,
   cancelLabel,
+  wide = false,
+  readOnly = false,
   children,
 }: {
   title: string
@@ -21,6 +23,10 @@ export default function Modal({
   doneLabel?: string
   /** The words on the button that closes without doing anything; "cancel" when left out. */
   cancelLabel?: string
+  /** A dialog for looking at something big: wider than the others, and tall. */
+  wide?: boolean
+  /** A dialog that only shows: it has the one button that closes it and no button that submits. */
+  readOnly?: boolean
   children: ReactNode
 }) {
   const t = useT()
@@ -31,14 +37,16 @@ export default function Modal({
     const dialog = ref.current
     if (!dialog) return
     dialog.showModal()
-    const field = dialog.querySelector<HTMLElement>('input, select, textarea')
-    ;(field ?? dialog.querySelector<HTMLElement>('button'))?.focus()
+    // A dialog can name what takes the focus (a question); otherwise the first field. With none, the panel itself takes it, so that no
+    // button opens outlined.
+    const first = dialog.querySelector<HTMLElement>('[data-autofocus]') ?? dialog.querySelector<HTMLElement>('input, select, textarea')
+    ;(first ?? dialog.querySelector<HTMLElement>('.modal-panel'))?.focus()
   }, [])
 
   return (
     <dialog
       ref={ref}
-      className="modal"
+      className={wide ? 'modal modal-look' : 'modal'}
       aria-labelledby={titleId}
       onKeyDown={(event) => {
         if (event.key !== 'Escape') return
@@ -53,7 +61,7 @@ export default function Modal({
         if (event.target === event.currentTarget) onClose()
       }}
     >
-      <div className="modal-panel">
+      <div className="modal-panel" tabIndex={-1}>
         <div className="modal-head">
           <h2 id={titleId}>{title}</h2>
         </div>
@@ -62,9 +70,11 @@ export default function Modal({
           <button type="button" onClick={onClose}>
             {cancelLabel ?? t('common.cancel')}
           </button>
-          <button type="submit" form={formId} disabled={pending}>
-            {doneLabel ?? t('common.done')}
-          </button>
+          {readOnly ? null : (
+            <button type="submit" form={formId} disabled={pending}>
+              {doneLabel ?? t('common.done')}
+            </button>
+          )}
         </div>
       </div>
     </dialog>

@@ -3,6 +3,8 @@
 //!   cargo run --release --example bench            60 000 transactions (about 16 a day), 30 categories, a budget for every month
 //!   cargo run --release --example bench -- 20000   another number of transactions
 //!
+//! One expense in five is shared with one to three of eight friends, so every sum has the cost of a transaction to work out.
+//!
 //! It makes the data in memory (nothing on disk, nothing of the app's data is touched), then times the lists, the searches, the
 //! budget and statistics queries, and a sync between two devices: the first copy to an empty device, a sync with nothing new, and
 //! one with 500 changes. The first copy is also shown in pieces. Use `--release`: a debug build is many times slower.
@@ -11,6 +13,7 @@ use std::time::Instant;
 use chrono::NaiveDate;
 use meowny_lib::budgets::{self, Scope, SetBudget};
 use meowny_lib::categories::{self, CategoryType};
+use meowny_lib::debts::{people, splits};
 use meowny_lib::migrate;
 use meowny_lib::stats;
 use meowny_lib::sync::{engine, run, stamp};
@@ -52,14 +55,28 @@ fn main() {
         }
     });
     let start = NaiveDate::from_ymd_opt(2017, 1, 1).unwrap();
+    let mut ids = Vec::with_capacity(count);
     time(&format!("create {count} transactions (one at a time)"), || {
         for i in 0..count {
             let day = start + chrono::Duration::days((i * 3500 / count) as i64);
             let (cat, name) = if i % 12 == 0 { (income[i % 6], "Salary") } else { (cats[(i * 7) % 30], if i % 3 == 0 { "Coffee" } else { "Groceries" }) };
             let input = NewTransaction { name: format!("{name} {}", i % 50), amount: format!("{}.{:02}", 1 + i % 90, i % 100), payment_date: day.to_string(), category_id: cat.to_string(), description: if i % 4 == 0 { Some(format!("note number {i} about something")) } else { None }, client_uuid: None };
-            if let Err(e) = transactions::create(a, &input) { panic!("{e:?} for {input:?}"); }
+            match transactions::create(a, &input) {
+                Ok(t) => ids.push((t.id, i % 12 != 0)),
+                Err(e) => panic!("{e:?} for {input:?}"),
+            }
         }
     });
+    let friends: Vec<String> = (0..8).map(|i| people::create(a, &format!("Friend {i}")).unwrap().id.to_string()).collect();
+    time("share one expense in five with 1 to 3 friends", || {
+        for (n, (id, expense)) in ids.iter().enumerate() {
+            if n % 5 == 0 && *expense {
+                let parts = friends.iter().cycle().skip(n % 8).take(1 + n % 3).map(|f| splits::Part { person_id: Some(f.clone()), guest: None, value: None }).collect();
+                splits::set_split(a, *id, &splits::SplitInput { mode: splits::Mode::Equal, mine: None, parts }).unwrap();
+            }
+        }
+    });
+    println!("   {} shared bills", a.query_row("SELECT count(DISTINCT transaction_id) FROM transaction_split_lines", [], |r| r.get::<_, i64>(0)).unwrap());
     println!("--- reads");
     let page = |f: Filter| transactions::list(a, &f).unwrap();
     time("list: newest 50", || page(Filter::default()));

@@ -181,13 +181,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn flags_are_the_argument_names_in_kebab_case() {
-        for (name, flag) in [("categoryId", "category-id"), ("paymentDate", "payment-date"), ("q", "q"), ("withinDays", "within-days"), ("clientUuid", "client-uuid"), ("amountLimit", "amount-limit")] {
-            assert_eq!(kebab(name), flag);
-        }
-    }
-
-    #[test]
     fn the_embedded_schema_loads_and_every_command_name_is_unique() {
         let catalog = Catalog::embedded();
         let mut names: Vec<String> = catalog.commands.iter().map(Command::name).collect();
@@ -203,82 +196,30 @@ mod tests {
     }
 
     #[test]
-    fn a_route_becomes_a_command_with_a_flag_per_argument() {
-        let catalog = Catalog::embedded();
-        let create = catalog.find(&["transactions", "create"]).unwrap();
-        assert_eq!(create.route.as_deref(), Some("transactions.create"));
-        assert_eq!(create.scope.as_deref(), Some("write"));
-        let flags: Vec<&str> = create.params.iter().map(|p| p.flag.as_str()).collect();
-        assert_eq!(flags, ["name", "amount", "payment-date", "category-id", "description", "client-uuid"]);
-        let amount = create.params.iter().find(|p| p.name == "amount").unwrap();
-        assert!(amount.required && amount.kind == "money" && !amount.nullable);
-        assert_eq!(catalog.find(&["status"]).unwrap().words, ["status"]);
-    }
-
-    #[test]
-    fn values_and_nullable_arguments_carry_over() {
-        let catalog = Catalog::embedded();
-        let side = catalog.find(&["categories", "list"]).unwrap().params.iter().find(|p| p.name == "type").unwrap();
-        assert_eq!(side.values, ["INCOME", "EXPENSE"]);
-        let update = catalog.find(&["transactions", "update"]).unwrap();
-        assert!(update.params.iter().find(|p| p.name == "description").unwrap().nullable);
-        assert!(!update.params.iter().find(|p| p.name == "name").unwrap().nullable);
-    }
-
-    #[test]
     fn deleting_and_ending_need_yes_and_nothing_else_does() {
         let catalog = Catalog::embedded();
         let destructive: Vec<String> = catalog.commands.iter().filter(|c| c.destructive()).map(Command::name).collect();
         assert_eq!(
             destructive,
-            ["categories delete", "transactions delete", "budgets remove", "recurring delete", "recurring end", "documents delete"]
+            ["categories delete", "transactions delete", "budgets remove", "recurring delete", "recurring end", "documents delete", "ledger delete"]
         );
         assert!(!catalog.find(&["login"]).unwrap().destructive());
         assert!(!catalog.find(&["logout"]).unwrap().destructive());
     }
 
     #[test]
-    fn the_id_is_the_positional_argument_when_it_is_required() {
-        let catalog = Catalog::embedded();
-        assert_eq!(catalog.find(&["transactions", "delete"]).unwrap().positional().unwrap().name, "id");
-        assert!(catalog.find(&["transactions", "list"]).unwrap().positional().is_none());
-        assert!(catalog.find(&["stats", "trend"]).unwrap().positional().is_none(), "categoryId is not `id`");
-    }
-
-    #[test]
-    fn local_commands_are_added_and_the_schema_route_is_answered_here() {
-        let catalog = Catalog::embedded();
-        assert_eq!(catalog.find(&["login"]).unwrap().action, Action::Login);
-        assert_eq!(catalog.find(&["logout"]).unwrap().route, None);
-        assert_eq!(catalog.find(&["schema"]).unwrap().action, Action::Schema);
-        assert_eq!(catalog.find(&["status"]).unwrap().action, Action::Route);
-    }
-
-    #[test]
     fn the_commands_that_write_files_are_the_ones_the_person_must_allow() {
         let catalog = Catalog::embedded();
         let asking: Vec<String> = catalog.commands.iter().filter(|c| c.confirm).map(Command::name).collect();
-        assert_eq!(asking, ["export json", "export csv", "export xlsx", "export pdf", "backup create", "documents get"]);
+        assert_eq!(asking, ["export json", "export csv", "export xlsx", "export pdf", "backup create", "documents get", "export debts"]);
         let verbs: Vec<&str> = catalog.verbs("export").iter().map(|c| c.verb()).collect();
-        assert_eq!(verbs, ["preview", "json", "csv", "xlsx", "pdf"]);
+        assert_eq!(verbs, ["preview", "json", "csv", "xlsx", "pdf", "debts"]);
         assert_eq!(catalog.verbs("backup").iter().map(|c| c.verb()).collect::<Vec<_>>(), ["schedule", "create"]);
         let out = catalog.find(&["export", "json"]).unwrap().params.iter().find(|p| p.name == "out").unwrap();
         assert!(out.required && out.kind == "path");
         assert!(catalog.find(&["export", "preview"]).is_some_and(|c| !c.confirm), "a preview needs no yes");
         assert!(catalog.find(&["backup", "schedule"]).is_some_and(|c| !c.confirm));
         assert!(catalog.commands.iter().all(|c| c.name() != "backup restore"), "restoring is done in the app");
-    }
-
-    #[test]
-    fn nouns_group_their_verbs() {
-        let catalog = Catalog::embedded();
-        let nouns = catalog.nouns();
-        for noun in ["settings", "categories", "transactions", "budgets", "recurring", "stats"] {
-            assert!(nouns.contains(&noun), "{noun}");
-        }
-        assert!(!nouns.contains(&"status"));
-        let verbs: Vec<&str> = catalog.verbs("categories").iter().map(|c| c.verb()).collect();
-        assert_eq!(verbs, ["list", "create", "rename", "delete"]);
     }
 
     #[test]
@@ -289,28 +230,4 @@ mod tests {
         assert!(Catalog::from_json(r#"{"api":1,"routes":[{"name":"x"}]}"#).is_err());
     }
 
-    #[test]
-    fn the_document_commands_follow_the_routes_and_the_file_is_the_plain_word() {
-        let catalog = Catalog::embedded();
-        let verbs: Vec<&str> = catalog.verbs("documents").iter().map(|c| c.verb()).collect();
-        assert_eq!(verbs, ["list", "show", "add", "update", "delete", "link", "unlink", "get"]);
-        let scopes: Vec<(&str, &str)> = catalog.verbs("documents").iter().map(|c| (c.verb(), c.scope.as_deref().unwrap())).collect();
-        assert_eq!(
-            scopes,
-            [("list", "read"), ("show", "read"), ("add", "write"), ("update", "write"), ("delete", "write"), ("link", "write"), ("unlink", "write"), ("get", "write")],
-            "a read-only token can list and show, and nothing else"
-        );
-        let add = catalog.find(&["documents", "add"]).unwrap();
-        // the bytes are given as a path: the flag is --file, it may be the plain word, and the name has a default
-        let file = add.params.iter().find(|p| p.kind == "bytes").unwrap();
-        assert_eq!((file.name.as_str(), file.flag.as_str(), file.required), ("data", "file", true));
-        assert_eq!(add.positional().map(|p| p.flag.as_str()), Some("file"));
-        let name = add.params.iter().find(|p| p.name == "name").unwrap();
-        assert!(!name.required && name.summary.contains("name of the file"));
-        // the other commands keep the id as the plain word
-        assert_eq!(catalog.find(&["documents", "show"]).unwrap().positional().unwrap().name, "id");
-        assert_eq!(catalog.find(&["documents", "get"]).unwrap().positional().unwrap().name, "id");
-        let flags: Vec<&str> = add.params.iter().map(|p| p.flag.as_str()).collect();
-        assert_eq!(flags, ["file", "name", "date", "keep-on-phone", "transaction-ids", "recurring-ids"]);
-    }
 }

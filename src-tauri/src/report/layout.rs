@@ -9,6 +9,7 @@ use skrifa::{FontRef, MetadataProvider};
 
 use super::{ReportData, ReportLabels, ReportOptions};
 use crate::categories::CategoryType;
+use crate::debts::summary::Labels as DebtsLabels;
 use crate::display::DisplayFormat;
 use crate::stats::pct_tenths;
 use crate::vault::AppError;
@@ -18,16 +19,16 @@ pub(super) const BOLD_FONT: &[u8] = include_bytes!("../../fonts/DejaVuSans-Bold.
 
 pub type Color = (u8, u8, u8);
 
-const INK: Color = (0x1f, 0x23, 0x28);
-const MUTED: Color = (0x5f, 0x66, 0x73);
-const GRID: Color = (0xd8, 0xdc, 0xe2);
+pub(super) const INK: Color = (0x1f, 0x23, 0x28);
+pub(super) const MUTED: Color = (0x5f, 0x66, 0x73);
+pub(super) const GRID: Color = (0xd8, 0xdc, 0xe2);
 const TRACK: Color = (0xec, 0xee, 0xf1);
-const CARD: Color = (0xf5, 0xf6, 0xf8);
+pub(super) const CARD: Color = (0xf5, 0xf6, 0xf8);
 const WHITE: Color = (0xff, 0xff, 0xff);
 // The dashboard's colours: income green, expenses red, the rest of the palette for the donut.
-const INCOME: Color = (0x2e, 0x8b, 0x57);
+pub(super) const INCOME: Color = (0x2e, 0x8b, 0x57);
 const EXPENSE: Color = (0xf7, 0x76, 0x8e);
-const OVER_TEXT: Color = (0xc0, 0x39, 0x4d);
+pub(super) const OVER_TEXT: Color = (0xc0, 0x39, 0x4d);
 const WITHIN: Color = (0x7a, 0xa2, 0xf7);
 const PALETTE: [Color; 8] = [
     (0x2e, 0x8b, 0x57),
@@ -40,8 +41,8 @@ const PALETTE: [Color; 8] = [
     (0x8a, 0x8f, 0x98),
 ];
 
-const MARGIN: f32 = 44.0;
-const FOOTER_SPACE: f32 = 34.0;
+pub(super) const MARGIN: f32 = 44.0;
+pub(super) const FOOTER_SPACE: f32 = 34.0;
 const CHART_HEIGHT: f32 = 150.0;
 const DONUT_OUTER: f32 = 58.0;
 const DONUT_INNER: f32 = 33.0;
@@ -492,13 +493,159 @@ impl Builder<'_> {
             self.text_fit(cols.category, base, 8.5, false, INK, &t.category, 110.0);
             self.text_fit(cols.name, base, 8.5, false, INK, &t.name, self.right - amount_w - cols.name - 8.0);
             let income = t.kind == "INCOME";
-            self.text_right(self.right, base, 8.5, false, if income { INCOME } else { INK }, &self.fmt.money(t.amount));
+            self.text_right(self.right, base, 8.5, false, if income { INCOME } else { INK }, &self.fmt.money(t.my_share));
             if let Some(description) = description {
                 self.text_fit(cols.name, base + 10.0, 7.5, false, MUTED, description, self.right - cols.name);
             }
             self.line(self.left, self.y + row, self.right, self.y + row, 0.3, GRID);
             self.y += row;
         }
+    }
+
+    /// Who owed what on the last day: a line for each friend, and under them what is owed to you, what you owe, and the net.
+    fn debts(&mut self, friends: &[(String, i64)], words: &DebtsLabels) {
+        let title = words.summary_title.clone();
+        self.y += 12.0;
+        self.section_title(&title, 20.0 * 2.0);
+        let row = 17.0;
+        if friends.is_empty() {
+            let nobody = words.nobody.clone();
+            self.text(self.left, self.y + 10.0, 9.5, false, MUTED, &nobody);
+            self.y += 22.0;
+            return;
+        }
+        for (name, balance) in friends {
+            self.ensure(row);
+            let base = Self::baseline(self.y, row, 9.5);
+            let (phrase, color) = if *balance < 0 { (&words.you_owe_them, OVER_TEXT) } else { (&words.owes_you, INCOME) };
+            let amount = format!("{phrase} {}", self.fmt.money(balance.abs()));
+            let room = self.width() - self.m.width(&self.m.clean(&amount), 9.5, false) - 16.0;
+            self.text_fit(self.left, base, 9.5, false, INK, name, room.max(40.0));
+            self.text_right(self.right, base, 9.5, false, color, &amount);
+            self.line(self.left, self.y + row, self.right, self.y + row, 0.3, GRID);
+            self.y += row;
+        }
+        let owed: i64 = friends.iter().map(|f| f.1).filter(|b| *b > 0).sum();
+        let owe: i64 = -friends.iter().map(|f| f.1).filter(|b| *b < 0).sum::<i64>();
+        self.ensure(row * 3.0 + 6.0);
+        self.y += 6.0;
+        for (label, value, bold, color) in [
+            (words.owed_to_you.clone(), self.fmt.money(owed), false, INCOME),
+            (words.you_owe.clone(), self.fmt.money(owe), false, OVER_TEXT),
+            (words.net.clone(), self.fmt.money(owed - owe), true, if owed - owe < 0 { OVER_TEXT } else { INCOME }),
+        ] {
+            let base = Self::baseline(self.y, row, 9.5);
+            self.text(self.left, base, 9.5, bold, MUTED, &label);
+            self.text_right(self.right, base, 9.5, bold, color, &value);
+            self.y += row;
+        }
+        self.y += 14.0;
+    }
+
+    /// The recurring payments that have come due, each with the day it fell due and what it is for, and what they come to.
+    fn due_payments(&mut self, due: &[crate::export::debts::DueLine], words: &DebtsLabels) {
+        if due.is_empty() {
+            let title = words.due_title.clone();
+            self.y += 12.0;
+            self.section_title(&title, 40.0);
+            let nobody = words.nobody.clone();
+            self.text(self.left, self.y + 10.0, 9.5, false, MUTED, &nobody);
+            self.y += 22.0;
+            return;
+        }
+        let title = words.due_title.clone();
+        self.y += 12.0;
+        self.section_title(&title, 20.0 + 17.0 * 2.0);
+        let row = 17.0;
+        for line in due {
+            self.ensure(row);
+            let base = Self::baseline(self.y, row, 9.5);
+            self.text(self.left, base, 9.5, false, MUTED, &self.fmt.date(&line.date));
+            let amount = line.amount.map_or_else(|| "\u{2013}".to_string(), |minor| self.fmt.money(minor));
+            let room = self.width() - 80.0 - self.m.width(&self.m.clean(&amount), 9.5, false) - 16.0;
+            self.text_fit(self.left + 74.0, base, 9.5, false, INK, &line.name, room.max(40.0));
+            self.text_right(self.right, base, 9.5, false, OVER_TEXT, &amount);
+            self.line(self.left, self.y + row, self.right, self.y + row, 0.3, GRID);
+            self.y += row;
+        }
+        let total: i64 = due.iter().filter_map(|d| d.amount).sum();
+        self.ensure(row + 6.0);
+        self.y += 6.0;
+        let base = Self::baseline(self.y, row, 9.5);
+        let label = words.due_total.clone();
+        self.text(self.left, base, 9.5, true, MUTED, &label);
+        self.text_right(self.right, base, 9.5, true, OVER_TEXT, &self.fmt.money(total));
+        self.y += row + 14.0;
+    }
+
+    /// Every line of every friend in the months of the report, by date: the friend, what it was, what it changed and (when it may be
+    /// shown) what the friend owed you after it.
+    fn debt_history(&mut self, lines: &[crate::debts::history::HistoryLine], words: &DebtsLabels, show_balance: bool) {
+        let title = words.history_title.clone();
+        self.y += 4.0;
+        self.section_title(&title, 20.0 + 17.0 * 2.0);
+        let date_w = 62.0;
+        let friend_x = self.left + date_w + 8.0;
+        let friend_w = 92.0;
+        let what_x = friend_x + friend_w + 8.0;
+        let change_w = 74.0;
+        let balance_w = if show_balance { 78.0 } else { 0.0 };
+        let balance_right = self.right;
+        let change_right = if show_balance { self.right - balance_w - 10.0 } else { self.right };
+        let what_w = change_right - change_w - what_x - 8.0;
+        let heads = |b: &mut Self| {
+            let base = Self::baseline(b.y, 16.0, 8.5);
+            let (date, friend, what, change, balance) = (words.date.clone(), words.name.clone(), words.what.clone(), words.change.clone(), words.balance.clone());
+            b.text(b.left, base, 8.5, true, MUTED, &date);
+            b.text(friend_x, base, 8.5, true, MUTED, &friend);
+            b.text(what_x, base, 8.5, true, MUTED, &what);
+            b.text_right(change_right, base, 8.5, true, MUTED, &change);
+            if show_balance {
+                b.text_right(balance_right, base, 8.5, true, MUTED, &balance);
+            }
+            b.line(b.left, b.y + 17.0, b.right, b.y + 17.0, 0.8, GRID);
+            b.y += 20.0;
+        };
+        heads(self);
+        if lines.is_empty() {
+            let nobody = words.nobody.clone();
+            self.text(self.left, self.y + 10.0, 9.5, false, MUTED, &nobody);
+            self.y += 22.0;
+            return;
+        }
+        let row = 16.0;
+        for line in lines {
+            if self.ensure(row) {
+                heads(self);
+            }
+            let base = Self::baseline(self.y, row, 8.5);
+            self.text(self.left, base, 8.5, false, MUTED, &self.fmt.date(&line.date));
+            self.text_fit(friend_x, base, 8.5, false, INK, line.friend.as_deref().unwrap_or(""), friend_w);
+            let what = match (words.kind(&line.kind), line.what.is_empty()) {
+                (kind, true) => kind.to_string(),
+                (kind, false) => format!("{kind}: {}", line.what),
+            };
+            self.text_fit(what_x, base, 8.5, false, INK, &what, what_w);
+            match line.effect_minor {
+                // a friend's line: what it did to what they owe you, red when money went out to them and green when it came back, as in
+                // their statement, and what they owed after it
+                Some(effect) => {
+                    let signed = if effect >= 0 { format!("+{}", self.fmt.money(effect)) } else { self.fmt.money(effect) };
+                    self.text_right(change_right, base, 8.5, false, if effect > 0 { OVER_TEXT } else { INCOME }, &signed);
+                    if let (true, Some(balance)) = (show_balance, line.balance_minor) {
+                        self.text_right(balance_right, base, 8.5, true, INK, &self.fmt.money(balance));
+                    }
+                }
+                // a recurring payment: what it is for (a dash if the bill has no fixed amount and is only due), with no balance
+                None => {
+                    let amount = if line.kind == crate::debts::history::PAYMENT_DUE && line.amount_minor == 0 { "\u{2013}".to_string() } else { self.fmt.money(line.amount_minor) };
+                    self.text_right(change_right, base, 8.5, false, MUTED, &amount);
+                }
+            }
+            self.line(self.left, self.y + row, self.right, self.y + row, 0.3, GRID);
+            self.y += row;
+        }
+        self.y += 8.0;
     }
 
     fn footers(&mut self) {
@@ -546,15 +693,29 @@ pub fn build(data: &ReportData, options: &ReportOptions) -> Result<Doc, AppError
     b.new_page();
     b.header(data);
     b.tiles(data);
-    if data.income == 0 && data.expense == 0 && data.budget_lines.is_empty() && data.transactions.is_empty() {
+    let no_money = data.income == 0 && data.expense == 0 && data.budget_lines.is_empty() && data.transactions.is_empty();
+    if no_money && data.debts.is_none() {
         let none = b.labels.no_data.clone();
         b.text(b.left, b.y + 10.0, 10.0, false, MUTED, &none);
     } else {
-        b.month_chart(data);
-        b.donut(data);
-        b.budget_section(data);
-        if options.include_transactions && !data.transactions.is_empty() {
-            b.transactions(data, options.show_descriptions);
+        if !no_money {
+            b.month_chart(data);
+            b.donut(data);
+            b.budget_section(data);
+            if options.include_transactions && !data.transactions.is_empty() {
+                b.transactions(data, options.show_descriptions);
+            }
+        }
+        if let (Some(part), Some(words)) = (&data.debts, &options.debts_labels) {
+            if let Some(friends) = &part.friends {
+                b.debts(friends, words);
+            }
+            if let Some(due) = &part.due {
+                b.due_payments(due, words);
+            }
+            if let Some(lines) = &part.history {
+                b.debt_history(lines, words, part.show_balance);
+            }
         }
     }
     b.footers();

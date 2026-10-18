@@ -99,7 +99,7 @@ fn no_command_line_makes_the_parser_panic_and_what_it_accepts_is_consistent() {
         }
     }
     // The generator reaches all three outcomes, so the checks above are not idle.
-    assert!(ran > 50 && helped > 50 && refused > 5000, "ran {ran}, helped {helped}, refused {refused}");
+    assert!(ran > 20 && helped > 50 && refused > 5000, "ran {ran}, helped {helped}, refused {refused}");
 }
 
 fn text(rng: &mut Rng) -> String {

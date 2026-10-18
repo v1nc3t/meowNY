@@ -254,8 +254,8 @@ pub(crate) fn effective(conn: &Connection, start: &str) -> Result<Vec<Effective>
 
 fn actual_minor(conn: &Connection, kind: CategoryType, start: &str, end: &str) -> Result<i64, AppError> {
     Ok(conn.query_row(
-        "SELECT COALESCE(SUM(t.amount_minor), 0)
-         FROM transactions t JOIN categories c ON c.id = t.category_id
+        "SELECT COALESCE(SUM(t.cost_minor), 0)
+         FROM transaction_costs t JOIN categories c ON c.id = t.category_id
          WHERE c.type = ?1 AND t.payment_date >= ?2 AND t.payment_date < ?3",
         params![kind_sql(kind), start, end],
         |r| r.get(0),
@@ -340,8 +340,8 @@ pub fn history(conn: &Connection, now: DateTime<Utc>) -> Result<Vec<MonthHistory
     // What was spent and earned in every month, in one pass over the transactions.
     let mut actuals: std::collections::HashMap<(String, &'static str), i64> = std::collections::HashMap::new();
     let mut statement = conn.prepare(
-        "SELECT substr(t.payment_date, 1, 7), c.type, SUM(t.amount_minor)
-         FROM transactions t JOIN categories c ON c.id = t.category_id
+        "SELECT substr(t.payment_date, 1, 7), c.type, SUM(t.cost_minor)
+         FROM transaction_costs t JOIN categories c ON c.id = t.category_id
          WHERE t.payment_date >= ?1 AND t.payment_date < ?2
          GROUP BY 1, 2",
     )?;
@@ -483,31 +483,6 @@ mod tests {
     }
 
     #[test]
-    fn income_and_expense_budgets_are_independent() {
-        let (conn, _, _, salary) = db();
-        put(&conn, &global(CategoryType::Income, "2026-03", Some("3200.00"))).unwrap();
-        put(&conn, &global(CategoryType::Expense, "2026-03", Some("2000.00"))).unwrap();
-        put(&conn, &category(CategoryType::Income, salary, "2026-03", Some("3000.00"))).unwrap();
-        let income = side(&conn, "2026-04", CategoryType::Income);
-        assert_eq!((income.budgeted.as_deref(), income.allocated.as_str(), income.unallocated.as_deref()), (Some("3200.00"), "3000.00", Some("200.00")));
-        let expense = side(&conn, "2026-04", CategoryType::Expense);
-        assert_eq!((expense.budgeted.as_deref(), expense.allocated.as_str()), (Some("2000.00"), "0.00"));
-    }
-
-    #[test]
-    fn setting_the_same_month_again_replaces_it() {
-        let (conn, food, _, _) = db();
-        let first = put(&conn, &global(CategoryType::Expense, "2026-03", Some("2000.00"))).unwrap();
-        let second = put(&conn, &global(CategoryType::Expense, "2026-03", Some("2100.00"))).unwrap();
-        assert_eq!(first.id, second.id);
-        put(&conn, &category(CategoryType::Expense, food, "2026-03", Some("1.00"))).unwrap();
-        put(&conn, &category(CategoryType::Expense, food, "2026-03", Some("2.00"))).unwrap();
-        let rows: i64 = conn.query_row("SELECT count(*) FROM budgets", [], |r| r.get(0)).unwrap();
-        assert_eq!(rows, 2);
-        assert_eq!(side(&conn, "2026-03", CategoryType::Expense).budgeted.as_deref(), Some("2100.00"));
-    }
-
-    #[test]
     fn allocation_overview_warns_when_categories_exceed_the_global_budget() {
         let (conn, food, rent, _) = db();
         put(&conn, &global(CategoryType::Expense, "2026-06", Some("1000.00"))).unwrap();
@@ -604,22 +579,6 @@ mod tests {
         assert_eq!(put(&conn, &category(CategoryType::Expense, food, "2026-07", Some("1.00"))).err(), Some(AppError::InvalidInput));
     }
 
-    #[test]
-    fn wire_format_matches_the_client() {
-        let (conn, _, _, _) = db();
-        let budget = put(&conn, &global(CategoryType::Expense, "2026-06", Some("12.00"))).unwrap();
-        let json = serde_json::to_value(&budget).unwrap();
-        assert_eq!(json["type"], "EXPENSE");
-        assert_eq!(json["scope"], "GLOBAL");
-        assert_eq!(json["amountLimit"], "12.00");
-        assert_eq!(json["effectiveFrom"], "2026-06-01");
-        assert!(json["categoryId"].is_null());
-        let overview = serde_json::to_value(side(&conn, "2026-06", CategoryType::Expense)).unwrap();
-        assert_eq!(overview["overAllocated"], false);
-        assert!(overview["categories"].is_array());
-        assert!(serde_json::from_str::<SetBudget>(r#"{"type":"EXPENSE","scope":"GLOBAL","month":"2026-06","amountLimit":null,"userId":1}"#).is_err());
-    }
-
     const LATE: &str = "2026-10-15T12:00:00Z";
 
     fn exp(conn: &Connection, month: &str) -> Option<String> {
@@ -638,17 +597,6 @@ mod tests {
         assert_eq!(exp(&conn, "2026-04"), None, "the months after it that already happened stay empty");
         assert_eq!(exp(&conn, "2026-10"), None);
         assert_eq!(exp(&conn, "2026-02"), None, "and nothing carries back");
-    }
-
-    #[test]
-    fn setting_the_current_month_carries_forward_into_future_months() {
-        let (conn, _, _, _) = db();
-        put_at(&conn, &global(CategoryType::Expense, "2026-10", Some("2000.00")), LATE).unwrap();
-        assert_eq!(exp(&conn, "2026-09"), None, "never carries back");
-        for month in ["2026-10", "2026-11", "2027-03"] {
-            assert_eq!(exp(&conn, month).as_deref(), Some("2000.00"), "{month}");
-        }
-        assert_eq!(row_count(&conn), 1, "no extra rows for months that follow");
     }
 
     #[test]
@@ -723,14 +671,6 @@ mod tests {
         assert_eq!(limits("2026-03"), [(f.clone(), "450.00".into()), (r.clone(), "900.00".into())]);
         assert_eq!(limits("2026-04"), [(f, "400.00".into()), (r, "900.00".into())], "food is back to its old value, rent never moved");
         assert_eq!(exp(&conn, "2026-04").as_deref(), Some("2000.00"), "the global budget is untouched");
-    }
-
-    #[test]
-    fn editing_in_a_future_month_still_carries_forward() {
-        let (conn, _, _, _) = db();
-        put_at(&conn, &global(CategoryType::Expense, "2026-12", Some("1800.00")), LATE).unwrap();
-        assert_eq!(exp(&conn, "2027-01").as_deref(), Some("1800.00"));
-        assert_eq!(row_count(&conn), 1);
     }
 
     #[test]

@@ -24,7 +24,7 @@
 
 meowNY is a desktop app for tracking income and expenses against monthly budgets. A [Tauri](https://tauri.app) shell (Rust) shows a React UI and keeps everything in one encrypted SQLite file ([SQLCipher](https://www.zetetic.net/sqlcipher/)) on your own machine. It also ships a command line program, `meowny`, so scripts and AI agents can use the running app without opening the data file.
 
-> **Status: pre-release (version 0.1.0).** The desktop app and the command line work, and are tested, but there are no installers yet: you build it from source (see [Getting started](#getting-started)). The phone app and its sync are built and being tested; documents, and debts and expense splitting are planned; see the [roadmap](#roadmap).
+> **Status: pre-release (version 0.1.0).** The desktop app and the command line work, and are tested, but there are no installers yet: you build it from source (see [Getting started](#getting-started)). The phone app and its sync are built and being tested; documents, and debts and expense splitting are built (the camera for a bill code and the phone's reminders are not yet tried on a real phone); see the [roadmap](#roadmap).
 
 ## Table of contents
 
@@ -58,7 +58,7 @@ meowNY is a desktop app for tracking income and expenses against monthly budgets
 **Budgeting**
 
 - Categories, and transactions (income and expenses) with search and filters.
-- Monthly budgets with an amount per category. Budgets are dated, so changing a limit does not rewrite old months.
+- Monthly budgets with an amount per category, on the **categories** page: each side (expenses, income) shows what is allocated, used and not used, and each category has its own budget, which you change with the name in one dialog. Budgets are dated, so changing a limit does not rewrite old months; the **budget history** below lists every month.
 - Recurring items (subscriptions, rent and the like): see what is due or overdue, pay it with one click to make a normal transaction, skip it, pause it or end it. Optional notifications for items that are due.
 - Statistics and charts: budget against spending, trends, a year view, top categories, upcoming commitments and planned payments.
 - Money is kept as whole minor units (cents), never as floating point numbers. Months and due dates follow the time zone you choose.
@@ -68,11 +68,23 @@ meowNY is a desktop app for tracking income and expenses against monthly budgets
 **Documents (phase 9: built; not yet tried on a real phone)**
 
 - Attach receipts, invoices and contracts to transactions and recurring items, on the computer and on the phone (from its file chooser or its camera). A file is kept **encrypted** next to your database, up to 25 MiB each, and is readable only while the app is unlocked. [A guide](docs/documents.md).
+- **Preview** shows an image, a PDF, text, a CSV, a Word (.docx) or an Excel (.xlsx) file inside the app, with no plain copy and nothing run (PDFs are drawn by PDF.js, the one library added for it; the Word and Excel readers are the app's own).
 - Each document has a name, a date and the things it is attached to. The type is found from the file's first bytes, never from its name, and a file of no known type is never opened from the app, only saved.
 - Opening a PDF or a large picture hands a plain copy to your system's viewer; the copy is removed when you lock the app or close it, and the screen says so first.
 - **Keep on phone** is a switch on each document. A document you did not switch on never leaves the computer; one added on the phone goes to the computer and leaves the phone only once the computer has confirmed it holds a good copy.
 - Backups can include the files (a choice, on by default under 100 MB), as one encrypted file written as it is read. Exports list the documents by name and what they are attached to and never contain a file.
 - From a script: `meowny documents add|list|show|update|link|unlink|delete|get`. A read-only token sees names, never a file; a copy comes out only when you allow it in the app.
+
+**Debts and shared bills (phase 10: built; the phone's camera and reminders not yet tried on a real phone)**
+
+- A **friend is a name** and nothing else: no phone number, no address, no contacts imported. A friend is archived, never deleted. A **guest** is a name typed for one bill.
+- A **ledger** for each friend: money you lent, money you borrowed, and repayments, each with a date, an amount and a note, and optionally a document (a loan note). "Mark as paid" takes the whole balance or an amount you type; an amount over the debt is accepted and the screen says first that the balance will turn around. None of it is income or expense, and none of it touches a budget.
+- **Split a bill** between you and friends and guests: equally, by percent, by shares or by exact amounts, with every amount shown before it is saved. The transaction keeps what you paid; **budgets, statistics, reports and exports count only your part**, and the list shows it with a mark such as `÷4`. A recurring item can be split too, and each payment of it is.
+- "I borrowed" can add your share to your expenses in the same step (someone else paid).
+- **Who owes what** on the debts page and on the dashboard, with the **recurring payments that are overdue** (one for each missed occurrence, from the day after it fell due) and a **history of debts** (friends' lines, and the recurring payments that were overdue: paid late, or still overdue) on tabs of the same page; a friend's page can save the statement as text, CSV or PDF, after showing it in a preview. The app sends it to nobody. Friends can be renamed or taken off the list from the list itself.
+- **Bill codes.** On a shared bill, **show code** gives a friend a QR code (and its text) with their part, the bill and your name, nothing else. A friend with the app scans it (phone) or pastes it, sees the details, and accepts or denies; accepting makes the debt and, if ticked, an expense of their part (in another currency, with the rate they type). Nothing is sent or stored.
+- **Reminders** about debts, one setting for all of them (in **settings**, for each device): every week, every 2 weeks or every month (or never) after the day each friend's debt last changed, and again after as long until it is settled. They ring on the computer while meowNY is open and, on the phone, from the system with the app closed. The text holds a count, never a name or an amount.
+- Friends, entries and parts sync with the phone like everything else. [A guide](docs/debts.md). From a script: `meowny people|ledger|debts|splits ...` (`debts due`, `debts history`, `debts reminders`), `meowny transactions split`.
 
 **Safety of your data**
 
@@ -80,7 +92,7 @@ meowNY is a desktop app for tracking income and expenses against monthly budgets
 - A recovery key, shown once, so a forgotten passphrase or a lost keychain entry can be recovered.
 - The app locks itself when idle, and optionally when minimised or closed. Locking drops the key from memory.
 - Encrypted backups to a single file (`.meowbak`), restore, and scheduled backups to a folder you pick.
-- Export to JSON, CSV, Excel and PDF, for the period and categories you choose (documents are listed by name, never their files).
+- Export to JSON, CSV, Excel and PDF, for the period and categories you choose (documents are listed by name, never their files). For JSON, CSV and Excel you can also keep to income or expenses, to an amount range (what it cost you) or to transactions with some text in the name or description, and for JSON and Excel choose which parts go in (transactions, categories, budgets, recurring items, documents, debts, due payments, the history of debts, the change history). You can also keep to the bills that are shared with friends, or to those that are not. A PDF report can add a **list of debts** (who owes what on the last day of its months), a **list of due payments** (the recurring payments that are overdue) and the history of debts in those months. The due payments are a part of their own in a JSON or Excel file too. The dates narrow the budgets and recurring items too: those that were in force or running in the range. The export screen shows a preview of the file that follows your choices: the start of the text for JSON (with its fields coloured) and CSV (plain text), the sheets of an Excel file as a grid, and the pages of a PDF report. The command line takes the same choices (`meowny export json|csv|xlsx|pdf --help`). The files are not encrypted; make an encrypted backup to keep data safe.
 - "Delete all my data" removes the database, its key and the app's own backups.
 
 **Your phone (phase 8: the sync, the screens and the Android app are built and have been reviewed on a real phone)**
@@ -198,7 +210,7 @@ Press `?` in the app to see them all. Hovering or focusing a control shows its s
 
 | Keys | Does |
 |---|---|
-| `g` then `d` `t` `c` `b` `s` | go to dashboard, transactions, categories, budgets, settings |
+| `g` then `d` `t` `c` `s` | go to dashboard, transactions, categories (and budgets), settings |
 | `n` | add a new transaction or category |
 | `/` | search |
 | `[` and `]` | previous and next month (budgets) |
@@ -248,6 +260,12 @@ meowny transactions delete 42 --yes
 meowny export csv --out ~/budget-2026.csv --from 2026-01-01
 meowny documents add ~/Downloads/boiler-receipt.pdf --transaction-ids 42   # the program reads the file and sends it
 meowny documents get 7 --out ~/boiler-receipt.pdf                          # you allow this in the app
+meowny people create --name Anna                                            # a friend is a name and nothing else
+meowny transactions split 42 --mode equal --people 1,2                     # you paid for dinner; budgets count only your part
+meowny people settle 1 --amount 20.00                                       # Anna paid you back
+meowny debts summary                                                        # who owes what
+meowny debts due                                                            # recurring payments that are overdue
+meowny export json --out ~/debts.json --sections people,due,ledger          # parts and limits as on the export screen
 meowny backup create --out ~/meowny.meowbak --passphrase -   # the passphrase on standard input
 meowny --help        # and meowny <command> --help
 meowny schema        # every command, flag and exit code as JSON, without the app
@@ -261,7 +279,7 @@ meowny schema        # every command, flag and exit code as JSON, without the ap
 - Money stays a string end to end, and dates are ISO 8601.
 - The token is found in `--token-file`, then `MEOWNY_TOKEN`, then `MEOWNY_TOKEN_FILE`, then the file `login` saved (`~/.config/meowny/token` on Linux). A token file that other users can read is refused.
 - `MEOWNY_DATA_DIR` or `--data-dir` says where the app keeps its data (where it writes its port); `MEOWNY_PORT` or `--port` skips that.
-- Exports (`export json|csv|xlsx|pdf`), backups (`backup create`) and copies of documents (`documents get`) are not done on a token's say-so. Each one is described in a dialog in the app (which token, what, the exact file) and is written only if you click Allow. The file must have the right ending, be in a folder that exists, and not exist yet: nothing is ever overwritten. Asking again right after a "no" is refused for 30 seconds.
+- Exports (`export json|csv|xlsx|pdf|debts`), backups (`backup create`) and copies of documents (`documents get`) are not done on a token's say-so. Each one is described in a dialog in the app (which token, what, the exact file) and is written only if you click Allow. The file must have the right ending, be in a folder that exists, and not exist yet: nothing is ever overwritten. Asking again right after a "no" is refused for 30 seconds.
 
 | Exit code | Means |
 |---|---|
@@ -285,6 +303,7 @@ Every command, flag and exit code is documented, with real output, in the [CLI r
 | [docs/data-inventory.md](docs/data-inventory.md) | What data the app holds, where, which network calls exist, and who could see it |
 | [docs/sync-design.md](docs/sync-design.md) | How the phone syncs with the desktop: the QR codes, the encryption, the merge rules, the screens (phase 8) |
 | [docs/documents.md](docs/documents.md) | A guide to documents: adding, attaching, opening, keeping on the phone, backups, exports and scripts (phase 9) |
+| [docs/debts.md](docs/debts.md) | A guide to debts and shared bills: friends, the ledger, splitting, bill codes, reminders, files to send (phase 10) |
 | [docs/documents-design.md](docs/documents-design.md) | How documents are built: the sealed file format, keys, names and types, the sync of the bytes, the backup format, the screens and the checklist for the real phone |
 
 The reference site is made from the program, so it cannot say something the program does not do. `cli/tests/docs.rs` runs one tour of every command and every way to fail against a real app, records what came out (`docs/site/commands.json`, `docs/site/examples.json`), and fails when a command, a flag, a message or an example changes without the docs being redone. The prose around those facts is `docs/site/content.mjs`; the generator stops with an error if the program has a command, a group or an error code that the prose does not cover. There are no scripts, fonts or images, and the page asks nothing from anywhere else.
@@ -312,7 +331,7 @@ meowNY/
 │   ├── seeds/         Demo data
 │   └── examples/      dev_vault, seed and api_demo
 ├── cli/               The `meowny` command line program (Rust, one dependency)
-├── docs/              Everything written for people: PLAN.md, data-inventory.md, sync-design.md, documents.md, documents-design.md, CLI.md, postgres-schema.txt
+├── docs/              Everything written for people: PLAN.md, data-inventory.md, sync-design.md, documents.md, documents-design.md, debts.md, debts-design.md, CLI.md, postgres-schema.txt
 │   └── site/          Generator of the CLI reference site and CLI.md (plain Node, no dependencies)
 ├── scripts/           Checks CI runs on the whole repo: check-outbound and its allowlist
 └── .github/workflows/ ci.yml, desktop.yml, security.yml and pages.yml
@@ -389,7 +408,7 @@ Money is stored as integer minor units (`*_minor` columns). Constraint tests are
 
 ### Demo data
 
-There are sixteen months of demo data, with dates relative to today (`src-tauri/seeds/dev.sql`): categories, budgets that change over time, recurring items that are paid, overdue, paused and ended, a deleted category and a few hundred transactions, including awkward text (accents, Romanian and Japanese letters, quotes, cells that look like formulas) for trying the exports.
+There are sixteen months of demo data, with dates relative to today (`src-tauri/seeds/dev.sql`): categories, budgets that change over time, recurring items that are paid, overdue, paused and ended, a deleted category and a few hundred transactions, debts (four friends: one who owes you, one you owe, one who has paid back everything and one taken off the list who still owes; a ledger; bills shared with friends and a guest; a veg box shared every week, payments that are overdue for months, one with no fixed amount, and one due in five days), including awkward text (accents, Romanian and Japanese letters, quotes, cells that look like formulas) for trying the exports.
 
 To put it in the desktop app, quit the app and run:
 
@@ -438,7 +457,7 @@ The full plan, with what is done in each phase, is in [docs/PLAN.md](docs/PLAN.m
 | 7 | Command line for scripts and AI agents (desktop only) | Done. Installing it together with the app is part of phase 11 |
 | 8 | Android app that keeps a full offline copy and syncs with the desktop at home by scanning a QR code (iOS comes later) | In progress: the sync, the phone vault, the screens and the Android app are built and have been tried between a real phone and a desktop at home; reviewed on a real phone; the CI job has not run on GitHub yet, and nobody outside the project has gone through the protocol |
 | 9 | Documents: attach receipts and invoices to transactions, stored encrypted, and choose which ones go to the phone | Built: sealed files, the sync of their bytes, backups and exports, the screens, the command line. Not yet tried on a real phone (the camera, the file chooser, opening a PDF there) |
-| 10 | Debts and expense splitting: who owes you and whom you owe, and bills shared with other people, in your own ledger | Planned |
+| 10 | Debts and expense splitting: who owes you and whom you owe, and bills shared with other people, in your own ledger | Built: friends, the ledger, split bills (budgets and statistics count only your part), the screens, summaries as text, CSV or PDF, documents on entries, bill codes a friend scans or pastes, reminders, the command line and the sync with the phone. The camera for a bill code and the reminders that ring on a phone with the app closed are not yet tried on a real phone |
 | 11 | Signed installers, updates, `SECURITY.md`, `CONTRIBUTING.md` and install guides | Planned |
 
 ## Contributing

@@ -39,6 +39,8 @@ mod stream;
 mod stream_tests;
 #[cfg(test)]
 mod documents_tests;
+#[cfg(test)]
+mod debts_tests;
 
 use std::collections::{BTreeMap, HashSet};
 use std::fs;
@@ -71,8 +73,12 @@ const TABLES: &[&str] = &[
     "settings",
     "categories",
     "budgets",
+    "people",
     "recurring_transactions",
+    "recurring_split_lines",
     "transactions",
+    "transaction_split_lines",
+    "ledger_entries",
     "documents",
     "document_links",
     "audit_log",
@@ -249,6 +255,12 @@ fn replace_all(conn: &mut Connection, tables: &BTreeMap<String, Vec<Row>>) -> Re
             tx.execute(&format!("DELETE FROM {HISTORY_TABLE}"), [])?;
         }
         insert_rows(&tx, name, columns, tables.get(*name).map(Vec::as_slice).unwrap_or(&[]))?;
+    }
+    // The checks of the parts against their bills stood aside while the rows were written in some order: the file is refused whole if the
+    // finished state breaks them.
+    let has_parts = present.iter().any(|(name, _)| *name == "recurring_split_lines");
+    if has_parts && !crate::debts::splits::check(&tx)? {
+        return Err(AppError::InvalidBackup);
     }
     if has_clock {
         sync::stamp::set_applying(&tx, false)?;
@@ -792,6 +804,61 @@ mod tests {
         )
         .unwrap();
         conn.execute("INSERT INTO document_links (document_id, recurring_transaction_id) VALUES (1, ?1)", [plan.id]).unwrap();
+        // friends, a shared bill with a friend and a guest, a split template that makes a split payment, the ledger, and a document on an entry
+        use crate::debts::{ledger, people, splits};
+        let anna = people::create(&conn, "Anna “A” 日本語").unwrap();
+        let bob = people::create(&conn, "Bob").unwrap();
+        let dinner = transactions::create(
+            &conn,
+            &transactions::NewTransaction {
+                name: "Dinner".into(),
+                amount: "90.00".into(),
+                payment_date: "2026-01-12".into(),
+                category_id: rent.id.to_string(),
+                description: None,
+                client_uuid: None,
+            },
+        )
+        .unwrap();
+        let part = |person: Option<&crate::debts::people::Person>, guest: Option<&str>| splits::Part {
+            person_id: person.map(|p| p.id.to_string()),
+            guest: guest.map(str::to_string),
+            value: None,
+        };
+        splits::set_split(&conn, dinner.id, &splits::SplitInput { mode: splits::Mode::Equal, mine: None, parts: vec![part(Some(&anna), None), part(None, Some("Carl"))] })
+            .unwrap();
+        splits::set_template(
+            &conn,
+            plan.id,
+            &splits::SplitInput {
+                mode: splits::Mode::Shares,
+                mine: Some("2".into()),
+                parts: vec![splits::Part { person_id: Some(bob.id.to_string()), guest: None, value: Some("1".into()) }],
+            },
+        )
+        .unwrap();
+        recurring::pay(&conn, plan.id, Some("900.00"), Some("2026-02-01"), "2026-02-01").unwrap();
+        let loan = ledger::add(
+            &conn,
+            &ledger::NewEntry {
+                person_id: anna.id.to_string(),
+                kind: ledger::Kind::Lent,
+                amount: "20.00".into(),
+                date: "2026-01-13".into(),
+                note: Some("taxi, \"Maple\" street".into()),
+                transaction_id: Some(dinner.id.to_string()),
+            },
+        )
+        .unwrap();
+        people::set_reminder(&conn, bob.id, Some("2026-03-01"), Some(30)).unwrap();
+        people::archive(&conn, bob.id).unwrap();
+        conn.execute(
+            "INSERT INTO documents (name, media_type, size_bytes, sha256, document_date, keep_on_phone)
+             VALUES ('Loan note.pdf', 'application/pdf', 99, ?1, '2026-01-13', 0)",
+            ["cd".repeat(32)],
+        )
+        .unwrap();
+        conn.execute("INSERT INTO document_links (document_id, ledger_entry_id) VALUES (2, ?1)", [loan.id]).unwrap();
         let mut conn = conn;
         categories::delete(&mut conn, gym.id, chrono::Utc::now()).unwrap();
         // a deletion (it leaves a marker for sync) and a change of currency (it is recorded for sync)
@@ -864,7 +931,7 @@ mod tests {
             .query_row("SELECT description FROM transactions WHERE name = 'Salary'", [], |r| r.get(0))
             .unwrap();
         assert_eq!(description, "Café “bonus” \\ 日本語 'x'; DROP TABLE transactions;--");
-        assert_eq!(count(&target, "transactions"), 3, "four were made and one deleted");
+        assert_eq!(count(&target, "transactions"), 5, "six were made and one deleted");
     }
 
     #[test]

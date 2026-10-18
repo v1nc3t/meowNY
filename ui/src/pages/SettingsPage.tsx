@@ -16,6 +16,12 @@ import { useProfile } from '../hooks/profile'
 import { syncApi } from '../api/sync'
 import { documents, type LibrarySize } from '../api/documents'
 import { formatSize } from '../lib/bytes'
+import { scheduleOnPhone } from '../api/debtReminders'
+import { cleanCategoryName } from '../api/categories'
+import { saveSenderName, senderName } from '../lib/senderName'
+import { parseTime, REMINDER_PERIODS, reminderEvery, reminderTime, remindersChanged, saveReminderEvery, saveReminderTime } from '../lib/reminders'
+
+const PERIOD_LABELS = { 0: 'settings.debtEveryOff', 7: 'settings.scheduleWeekly', 14: 'settings.debtEveryTwoWeeks', 30: 'settings.scheduleMonthly' } as const
 
 const EVERY_CHOICES = [
   { days: 1, labelKey: 'settings.scheduleDaily' },
@@ -42,6 +48,9 @@ export default function SettingsPage() {
   const [scheduleDocuments, setScheduleDocuments] = useState<boolean | null>(null)
   const [newKey, setNewKey] = useState<string | null>(null)
   const [notifyDue, setNotifyDue] = useState<boolean | null>(null)
+  const [reminderAt, setReminderAt] = useState(reminderTime)
+  const [name, setName] = useState(senderName)
+  const [debtEvery, setDebtEvery] = useState(() => String(reminderEvery()))
   const [lockAfter, setLockAfter] = useState('300')
   const [changingCurrency, setChangingCurrency] = useState(false)
   const [locale, setLocale] = useState('')
@@ -312,6 +321,27 @@ export default function SettingsPage() {
           </form>
         )}
 
+        <form
+          className="settings-block"
+          onSubmit={(event) => {
+            event.preventDefault()
+            // the rule of a friend's name; kept on this device, for the code of a shared bill
+            const clean = cleanCategoryName(name)
+            if (!clean) return setMessage(t('debts.errorName'))
+            saveSenderName(clean)
+            setName(clean)
+            setMessage(t('settings.saved'))
+          }}
+        >
+          <label>
+            {t('code.senderAsk')}
+            <input value={name} maxLength={50} autoComplete="name" onChange={(event) => setName(event.target.value)} />
+          </label>
+          <div className="actions">
+            <button type="submit">{t('common.save')}</button>
+          </div>
+        </form>
+
         {notifyDue !== null && (
           <div className="settings-block">
             <h2>{t('settings.notifications')}</h2>
@@ -319,6 +349,40 @@ export default function SettingsPage() {
               <input type="checkbox" checked={notifyDue} onChange={(event) => void onNotify(event.target.checked)} />
               {t('settings.notifyDue')}
             </label>
+            <label>
+              {t('settings.reminderTime')}
+              <input
+                type="time"
+                value={reminderAt}
+                onChange={(event) => {
+                  setReminderAt(event.target.value)
+                  // the time of a reminder is this device's: kept here, and the phone hands the system the new time
+                  if (parseTime(event.target.value)) {
+                    saveReminderTime(event.target.value)
+                    remindersChanged()
+                  }
+                }}
+              />
+            </label>
+            <Dropdown
+              label={t('settings.debtEvery')}
+              value={debtEvery}
+              options={REMINDER_PERIODS.map((days) => ({ value: String(days), label: t(PERIOD_LABELS[days]) }))}
+              onChange={(value) => {
+                setDebtEvery(value)
+                // the period is this device's, like the time of day: kept here, and the phone hands the system the new days
+                saveReminderEvery(Number(value))
+                if (phone) {
+                  void scheduleOnPhone().then((result) => {
+                    if (result === 'denied') setMessage(t('debts.remindDenied'))
+                  })
+                } else {
+                  remindersChanged()
+                }
+              }}
+            />
+            <p className="hint">{t('settings.debtEveryHint')}</p>
+            <p className="hint">{t(phone ? 'settings.reminderPhone' : 'settings.reminderDesktop')}</p>
           </div>
         )}
 

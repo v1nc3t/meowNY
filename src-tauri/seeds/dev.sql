@@ -11,6 +11,9 @@
 --   * a deleted category that still has history
 --   * awkward text: accents, Romanian and Japanese letters, commas, quotes, and cells that look like formulas
 --   * enough rows for several pages of the list and the PDF
+--   * debts: friends (one owes you, you owe one, one is settled, one was removed from the list and still owes), a ledger of loans and
+--     repayments, bills shared with friends and a guest, and recurring items that are shared, overdue for several months, overdue with no
+--     fixed amount, and due in a few days
 -- Amounts and days come from simple arithmetic on the row numbers, so the data is the same every run.
 
 INSERT OR IGNORE INTO settings (id, currency, locale, timezone, language) VALUES (1, 'EUR', 'en-IE', 'Europe/Dublin', 'en');
@@ -294,3 +297,75 @@ INSERT INTO transactions (category_id, name, amount_minor, payment_date, descrip
   (5,  'Corner shop',               450,    date(@today, '-1 days'),  NULL),
   (6,  'Bus ticket',                280,    date(@today, '-1 days'),  NULL),
   (7,  'Coffee',                    320,    date(@today, '-1 days'),  'Flat white');
+
+
+-- ---- debts ------------------------------------------------------------------------------------------------------------------------
+-- Friends. Marta owes you, you owe Tomás (his part of the lunch below is taken off what you owe him), Priya has paid back everything,
+-- including her half of the breakfast, and Sorin was taken off the list and still owes. (The names are not the ones the tests use.)
+INSERT INTO people (id, name, archived) VALUES
+  (1, 'Marta', 0),
+  (2, 'Tomás', 0),
+  (3, 'Priya', 0),
+  (4, 'Sorin', 1);
+
+-- The ledger: loans, repayments and a borrowing, none of it income or expense.
+INSERT INTO ledger_entries (person_id, kind, amount_minor, entry_date, note) VALUES
+  (1, 'LENT',         6000, date(@today, '-75 days'), 'Deposit for the trip'),
+  (1, 'REPAID_TO_ME', 2000, date(@today, '-40 days'), NULL),
+  (1, 'LENT',         1500, date(@today, '-12 days'), 'Concert ticket'),
+  (1, 'REPAID_TO_ME', 13000, date(@today, '-6 days'), 'For the veg box'),
+  (2, 'BORROWED',     5000, date(@today, '-30 days'), 'Concert tickets he bought'),
+  (2, 'REPAID_BY_ME', 1000, date(@today, '-9 days'),  NULL),
+  (3, 'LENT',         4000, date(@today, '-100 days'), 'Laptop repair'),
+  (3, 'REPAID_TO_ME', 4000, date(@today, '-60 days'), NULL),
+  (3, 'REPAID_TO_ME', 690,  date(@today, '-8 days'),  'Her half of the breakfast'),
+  (4, 'LENT',         1000, date(@today, '-200 days'), 'Train ticket');
+
+-- Bills shared with friends: the lunch on the table above split four ways (you, Marta, Tomás and a colleague who is not a friend), and a
+-- breakfast with Priya. The bill stays what was paid; what it costs you is the rest.
+INSERT INTO transaction_split_lines (transaction_id, person_id, guest_name, amount_minor)
+SELECT id, 1, NULL, 1605 FROM transactions WHERE name = 'Lunch, "team" day';
+INSERT INTO transaction_split_lines (transaction_id, person_id, guest_name, amount_minor)
+SELECT id, 2, NULL, 1605 FROM transactions WHERE name = 'Lunch, "team" day';
+INSERT INTO transaction_split_lines (transaction_id, person_id, guest_name, amount_minor)
+SELECT id, NULL, 'Colleague', 1605 FROM transactions WHERE name = 'Lunch, "team" day';
+INSERT INTO transaction_split_lines (transaction_id, person_id, guest_name, amount_minor)
+SELECT id, 3, NULL, 690 FROM transactions WHERE name = 'Café Müller';
+
+-- Recurring items for the debts screen and the dashboard.
+--   10 a weekly veg box, shared with Marta half and half: due in five days, twelve weeks of payments with their parts
+--   11 a yoga class that was not paid for two or three months (overdue, one occurrence each month)
+--   12 a mobile top-up with no fixed amount, one or two months overdue
+INSERT INTO recurring_transactions
+  (id, category_id, name, description, amount_minor, start_date, interval_unit, interval_count, next_due_date, end_date, is_active, split_my_weight) VALUES
+  (10, 5, 'Veg box', 'Shared with Marta', 2400,
+      date(@today, '+5 days', '-84 days'), 'WEEK', 1, date(@today, '+5 days'), NULL, 1, 1),
+  (11, 8, 'Yoga class', 'Monthly pass', 3200,
+      date(@today, 'start of month', '-6 months', '+4 days'), 'MONTH', 1,
+      date(@today, 'start of month', '-2 months', '+4 days'), NULL, 1, NULL),
+  (12, 10, 'Mobile top-up', 'Whatever the shop charges', NULL,
+      date(@today, 'start of month', '-5 months', '+2 days'), 'MONTH', 1,
+      date(@today, 'start of month', '-1 months', '+2 days'), NULL, 1, NULL);
+INSERT INTO recurring_split_lines (recurring_transaction_id, person_id, weight) VALUES (10, 1, 1);
+
+-- The veg box was paid on its day for the last twelve weeks; Marta's half is a part of each payment.
+WITH RECURSIVE k(n) AS (SELECT 1 UNION ALL SELECT n + 1 FROM k WHERE n < 12)
+INSERT INTO transactions
+  (category_id, recurring_transaction_id, recurring_due_date, name, amount_minor, planned_amount_minor, payment_date, description)
+SELECT 5, 10, due, 'Veg box', 2400, 2400, due, 'Shared with Marta'
+FROM (SELECT date(@today, '+5 days', '-' || (7 * n) || ' days') AS due FROM k);
+INSERT INTO transaction_split_lines (transaction_id, person_id, guest_name, amount_minor)
+SELECT id, 1, NULL, 1200 FROM transactions WHERE recurring_transaction_id = 10;
+
+-- The yoga class was paid four times, and then not. The top-up was paid three times, a day or two late, for what the shop charged.
+WITH RECURSIVE m(i) AS (SELECT 3 UNION ALL SELECT i + 1 FROM m WHERE i < 6)
+INSERT INTO transactions
+  (category_id, recurring_transaction_id, recurring_due_date, name, amount_minor, planned_amount_minor, payment_date, description)
+SELECT 8, 11, due, 'Yoga class', 3200, 3200, due, 'Monthly pass'
+FROM (SELECT date(@today, 'start of month', '-' || i || ' months', '+4 days') AS due FROM m);
+
+WITH RECURSIVE m(i) AS (SELECT 2 UNION ALL SELECT i + 1 FROM m WHERE i < 5)
+INSERT INTO transactions
+  (category_id, recurring_transaction_id, recurring_due_date, name, amount_minor, planned_amount_minor, payment_date, description)
+SELECT 10, 12, due, 'Mobile top-up', 1000 + (i * 7) % 5 * 250, NULL, date(due, '+' || (i % 3 + 1) || ' days'), 'Whatever the shop charges'
+FROM (SELECT date(@today, 'start of month', '-' || i || ' months', '+2 days') AS due, i FROM m);

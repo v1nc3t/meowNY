@@ -1,13 +1,26 @@
 import { z } from 'zod'
 import { call } from './invoke'
 
+/** One friend or guest's part of a shared bill. A friend has `personId` and `person`; a guest only `guest`. */
+export const PartOut = z.object({
+  personId: z.string().regex(/^[1-9]\d*$/).nullable(),
+  person: z.string().nullable(),
+  guest: z.string().nullable(),
+  amount: z.string().regex(/^\d+\.\d{2}$/),
+})
+export type PartOut = z.infer<typeof PartOut>
+
 export const Transaction = z.object({
   id: z.string().regex(/^[1-9]\d*$/),
   categoryId: z.string().regex(/^[1-9]\d*$/),
   clientUuid: z.string().nullable(),
   name: z.string(),
-  /** Decimal string such as "12.50". Never converted to a number for storage or sums. */
+  /** What was paid. Decimal string such as "12.50". Never converted to a number for storage or sums. */
   amount: z.string().regex(/^\d+\.\d{2}$/),
+  /** What it costs the person: the amount minus the parts of the others. The same as `amount` for a bill that is not shared. */
+  myShare: z.string().regex(/^\d+\.\d{2}$/),
+  /** The parts of the others, when the bill is shared; empty otherwise. */
+  split: z.array(PartOut),
   paymentDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   description: z.string().nullable(),
 })

@@ -22,13 +22,14 @@ mod common;
 use common::*;
 
 const UUID: &str = "9b2f5d44-6e1a-4c3b-8f2d-1a2b3c4d5e6f";
+const DINNER_UUID: &str = "5c1d8e07-3b2a-4f6e-9a41-7d0c2b9e8f13";
 const PASSPHRASE: &str = "correct horse battery staple";
 /// Where the files of the tour are said to be in the docs.
 const HOME: &str = "/home/you";
 
 /// Outputs that legitimately differ from run to run (the clock, file sizes, timestamps inside files). They are
 /// compared by exit code, by the shape of their JSON and by the frame of their plain output, not word for word.
-const MOVES: &[&str] = &["today", "recurring dues", "budgets history", "recurring end", "documents add", "documents list", "documents show", "documents update", "export json", "export csv", "export xlsx", "export pdf", "backup create", "schema"];
+const MOVES: &[&str] = &["today", "recurring dues", "debts due", "debts history", "debts reminders", "budgets history", "recurring end", "documents add", "documents list", "documents show", "documents update", "export debts", "export json", "export csv", "export xlsx", "export pdf", "backup create", "schema"];
 
 #[derive(Clone, Copy)]
 enum Who {
@@ -163,6 +164,65 @@ fn tour(app: &App) -> (Map<String, Value>, Vec<Value>) {
     t.example("budgets set", write, &format!("meowny budgets set --type expense --month 2026-12 --amount-limit 100.00 --category-id {pets}"), &["budgets", "set", "--type", "expense", "--month", "2026-12", "--amount-limit", "100.00", "--category-id", &pets], false, true, None);
     t.example("budgets remove", write, &format!("meowny budgets remove --type expense --month 2027-01 --category-id {pets} --yes"), &["budgets", "remove", "--type", "expense", "--month", "2027-01", "--category-id", &pets, "--yes"], false, true, None);
 
+    // Friends, shared bills and the ledger: money that is owed, in both directions. A loan is never income or an expense.
+    let json_id = |got: Value| serde_json::from_str::<Value>(got["stdout"].as_str().unwrap()).unwrap()["id"].as_str().unwrap().to_string();
+    let dinner = json_id(t.capture(write, &Tour::strings(&["transactions", "create", "--name", "Dinner", "--amount", "90.00", "--payment-date", "2026-10-12", "--category-id", &pets, "--client-uuid", DINNER_UUID, "--json"]), None, &[]));
+    let anna = Tour::id(&t.example("people create", write, "meowny people create --name Anna", &["people", "create", "--name", "Anna"], false, true, None));
+    let bob = json_id(t.capture(write, &Tour::strings(&["people", "create", "--name", "Bob", "--json"]), None, &[]));
+    t.example(
+        "people update",
+        write,
+        &format!("meowny people update {bob} --remind-on 2026-11-01 --remind-every-days 7"),
+        &["people", "update", &bob, "--remind-on", "2026-11-01", "--remind-every-days", "7"],
+        false,
+        true,
+        None,
+    );
+    let friends = format!("{anna},{bob}");
+    t.example(
+        "splits preview",
+        read,
+        &format!("meowny splits preview --amount 90.00 --mode percent --people {friends} --values 30.00,30.00"),
+        &["splits", "preview", "--amount", "90.00", "--mode", "percent", "--people", &friends, "--values", "30.00,30.00"],
+        true,
+        true,
+        None,
+    );
+    t.example(
+        "transactions split",
+        write,
+        &format!("meowny transactions split {dinner} --mode equal --people {friends}"),
+        &["transactions", "split", &dinner, "--mode", "equal", "--people", &friends],
+        false,
+        true,
+        None,
+    );
+    let loan = Tour::id(&t.example(
+        "ledger add",
+        write,
+        &format!("meowny ledger add --person-id {anna} --kind lent --amount 10.00 --date 2026-10-13 --note taxi"),
+        &["ledger", "add", "--person-id", &anna, "--kind", "lent", "--amount", "10.00", "--date", "2026-10-13", "--note", "taxi"],
+        false,
+        true,
+        None,
+    ));
+    t.example("ledger update", write, &format!("meowny ledger update {loan} --amount 12.00"), &["ledger", "update", &loan, "--amount", "12.00"], false, true, None);
+    t.example("people list", read, "meowny people list", &["people", "list"], true, true, None);
+    t.example("people show", read, &format!("meowny people show {anna}"), &["people", "show", &anna], true, true, None);
+    t.example("debts summary", read, "meowny debts summary", &["debts", "summary"], true, true, None);
+    t.example("debts due", read, "meowny debts due", &["debts", "due"], true, true, None);
+    t.example("debts history", read, "meowny debts history --limit 5", &["debts", "history", "--limit", "5"], true, true, None);
+    t.example("debts reminders", read, "meowny debts reminders --every-days 7", &["debts", "reminders", "--every-days", "7"], true, true, None);
+    t.example(
+        "people settle",
+        write,
+        &format!("meowny people settle {anna} --amount 50.00 --date 2026-10-15"),
+        &["people", "settle", &anna, "--amount", "50.00", "--date", "2026-10-15"],
+        false,
+        true,
+        None,
+    );
+
     // Recurring items.
     let plan = Tour::id(&t.example(
         "recurring create",
@@ -174,6 +234,16 @@ fn tour(app: &App) -> (Map<String, Value>, Vec<Value>) {
         None,
     ));
     t.example("recurring update", write, &format!("meowny recurring update {plan} --name \"Vet plan plus\" --clear-end-date"), &["recurring", "update", &plan, "--name", "Vet plan plus", "--clear-end-date"], false, true, None);
+    t.example(
+        "recurring split",
+        write,
+        &format!("meowny recurring split {plan} --mode shares --mine 2 --people {anna} --values 1"),
+        &["recurring", "split", &plan, "--mode", "shares", "--mine", "2", "--people", &anna, "--values", "1"],
+        false,
+        true,
+        None,
+    );
+    t.example("recurring unsplit", write, &format!("meowny recurring unsplit {plan}"), &["recurring", "unsplit", &plan], false, true, None);
     t.example("recurring pay", write, &format!("meowny recurring pay {plan} --paid-on 2026-10-14"), &["recurring", "pay", &plan, "--paid-on", "2026-10-14"], false, true, None);
     t.example("recurring skip", write, &format!("meowny recurring skip {plan}"), &["recurring", "skip", &plan], false, true, None);
     t.example("recurring pause", write, &format!("meowny recurring pause {plan}"), &["recurring", "pause", &plan], false, true, None);
@@ -210,10 +280,27 @@ fn tour(app: &App) -> (Map<String, Value>, Vec<Value>) {
     t.example("documents delete", write, &format!("meowny documents delete {receipt} --yes"), &["documents", "delete", &receipt, "--yes"], true, false, None);
 
     // Files, which the person allows in the app.
-    t.example("export json", read, "meowny export json --out /home/you/everything.json", &["export", "json", "--out", &path("everything.json")], true, false, None);
-    t.example("export csv", read, "meowny export csv --out /home/you/budget-2026.csv --from 2026-01-01", &["export", "csv", "--out", &path("budget-2026.csv"), "--from", "2026-01-01"], true, false, None);
+    t.example("export debts", read, "meowny export debts --out /home/you/who-owes-what.txt", &["export", "debts", "--out", &path("who-owes-what.txt")], true, false, None);
+    t.example("export json", read, "meowny export json --out /home/you/debts.json --sections people,due,ledger", &["export", "json", "--out", &path("debts.json"), "--sections", "people,due,ledger"], true, false, None);
+    t.example(
+        "export csv",
+        read,
+        "meowny export csv --out /home/you/budget-2026.csv --from 2026-01-01 --kind expense --min-amount 5.00",
+        &["export", "csv", "--out", &path("budget-2026.csv"), "--from", "2026-01-01", "--kind", "expense", "--min-amount", "5.00"],
+        true,
+        false,
+        None,
+    );
     t.example("export xlsx", read, "meowny export xlsx --out /home/you/budget.xlsx", &["export", "xlsx", "--out", &path("budget.xlsx")], true, false, None);
-    t.example("export pdf", read, "meowny export pdf --out /home/you/report.pdf --from-month 2026-01 --to-month 2026-03 --include-transactions", &["export", "pdf", "--out", &path("report.pdf"), "--from-month", "2026-01", "--to-month", "2026-03", "--include-transactions"], true, false, None);
+    t.example(
+        "export pdf",
+        read,
+        "meowny export pdf --out /home/you/report.pdf --from-month 2026-01 --to-month 2026-03 --include-transactions --include-debts",
+        &["export", "pdf", "--out", &path("report.pdf"), "--from-month", "2026-01", "--to-month", "2026-03", "--include-transactions", "--include-debts"],
+        true,
+        false,
+        None,
+    );
     t.example(
         "backup create",
         read,
@@ -225,6 +312,10 @@ fn tour(app: &App) -> (Map<String, Value>, Vec<Value>) {
     );
 
     // Clearing up what the tour made.
+    t.example("transactions unsplit", write, &format!("meowny transactions unsplit {dinner}"), &["transactions", "unsplit", &dinner], false, true, None);
+    t.example("people archive", write, &format!("meowny people archive {bob}"), &["people", "archive", &bob], false, true, None);
+    t.example("people unarchive", write, &format!("meowny people unarchive {bob}"), &["people", "unarchive", &bob], false, true, None);
+    t.example("ledger delete", write, &format!("meowny ledger delete {loan} --yes"), &["ledger", "delete", &loan, "--yes"], true, false, None);
     t.example("transactions delete", write, &format!("meowny transactions delete {bread} --yes"), &["transactions", "delete", &bread, "--yes"], true, false, None);
     t.example("categories delete", write, &format!("meowny categories delete {pets} --yes"), &["categories", "delete", &pets, "--yes"], true, false, None);
 

@@ -8,7 +8,7 @@ This is the guide for using them. How they are built is in [documents-design.md]
 
 **On the computer.** Open **documents** in the sidebar and press `n`, or the **add file** button, and choose one or more files. You can also drag files from your file manager onto the window; each becomes a document named after the file, dated today. To attach a file to something as you make it, open the transaction (or recurring item) and use the **attach** area: **add file** stores a new one and **attach** searches the documents you already have.
 
-**On the phone.** Open **documents** from the bar at the top. **Add file** opens Android's own chooser, and **take photo** opens the camera. The quick add (the round "+") also has a photo button, because a receipt is most often photographed at the till.
+**On the phone.** Open **documents** from the bar at the top. **Add file** opens Android's own chooser, and **take photo** opens the camera. The round "+" opens the normal add-transaction form, which has the same attach area (with the photo button), because a receipt is most often photographed at the till.
 
 What the app does with a file:
 
@@ -20,16 +20,31 @@ What the app does with a file:
 
 ## Attaching, opening, saving
 
-- A paper clip with a number on a transaction or a recurring item says how many documents are attached. Click it to open the item, where they are listed.
-- **Details** on the documents page shows the picture (for images the app may draw), the name, the date, what it is attached to, and where the file is if it is not here.
+- On the documents page a card's second line says the date, the size and, after the size, a paper clip with the number of things the document is attached to.
+- A paper clip with a number on a transaction, a recurring item or a debt entry says how many documents are attached. On the transactions list and on the recurring list it is on the first line, after the date and after how often it repeats. **Press it** to get the list of that item's documents: each has its own **preview** button, and its name opens its details. (To change what is attached, use **edit** on the item.)
+- On the documents page the number on a card is a button. It opens a list of everything that document is attached to (transactions, recurring items, debt entries); **choose one to go to it**: the page opens (a transaction on its month), scrolls to the item and outlines it for a moment.
+- In an item's own dialog (**edit**), each document attached to it has a **preview** button too.
+- **Mark as paid** on a recurring item has a **documents** area under the amount and the date: add a file, or attach one from the library. It is attached to the **transaction the payment makes** (not to the recurring item), so a receipt is kept with that payment.
+- **Details** on the documents page opens a dialog with the picture (for images the app may draw), the name, the date (the day on the paper), the box **keep a copy on my phone**, a section **about this file** (its kind and size, and where it is if it is not here), **linked to** (what it is attached to, with **detach**) and **open** (which says it shows the file in your system's viewer). **Preview**, **save** (to keep a copy where you choose) and **delete** are buttons on the card in the list, beside **details**; **preview** is in the dialog too.
 - **Open** hands the file to your system's own viewer, from a **plain copy** made for the occasion. The first time in a session the app says what that means and asks. The copy is not encrypted while it is open; it is removed when you lock the app, when you close it, when the app starts again and on "delete all my data". On Windows a viewer that is still holding the file can stop its removal until the next start, so close the viewer first. An HTML file may load things from the internet when the system opens it.
 - Files of the kind **other** (a program, an archive, anything the app cannot recognise) are never opened from the app. They can only be **saved as a copy**, and what happens to them then is up to you. This is on purpose: your system chooses what to start by the file's extension, and the extension is the one thing whoever sent the file chose.
 - **Save a copy** (on the computer) asks where, never replaces a file that is there, and the copy is not encrypted.
 - **Delete** asks first and names the file. It removes the document, its file and its attachments; the transactions stay.
 
+## Previewing a document
+
+**Preview** (on each card, before **details**, and in the details dialog) shows what is in the file, inside the app. It makes no plain copy and starts no other program.
+
+- **Images** are drawn. A **PDF** is drawn one page at a time, as large as the dialog lets it be, with **previous**, the page number and **next** under it; the mouse wheel (or a flick on a trackpad) turns the page too. **Text** is shown as text.
+- A **Word** file (.docx) is shown as a sheet of white paper with its text, headings, lists and tables. An **Excel** file (.xlsx) and a **CSV** are shown as a sheet: letters over the columns, numbers beside the rows, a line round every cell and numbers to the right; an Excel file has the tabs of its sheets under the grid, shows the first 1,000 rows and 40 columns of each, and dates as dates. The dialog says what is not shown: pictures, text boxes, charts, formulas, colours and the look of the page. To see those, **save** a copy and open it in your own program.
+- The old Word and Excel formats (.doc, .xls), PowerPoint, HTML (the app would have to draw someone else's page) and files of no known kind are not previewed, and the button is dimmed. So is a file bigger than 16 MiB (10 MiB for an image), and a file this device does not hold.
+- Word and Excel files are told by their **name** (.docx, .xlsx, and their macro forms .docm, .xlsm), because their first bytes say only "zip"; the file must also really be a zip. A file renamed to have no extension is not previewed until it has one again.
+- The file is only **read**: no macro, script or link in it is run or followed, and nothing is fetched. It is not written to disk; the page holds it in memory while the dialog is open. Characters that hide or reverse text are taken out of what is shown.
+- A PDF that does not carry its fonts is drawn in your system's fonts, so it can look a little different. A picture coded as JPEG 2000 inside a PDF (rare) is not drawn.
+
 ## Keeping a document on your phone
 
-Every document is kept on the computer, which is the archive. A document goes to the phone only if you switch on **keep on phone** for it, and then at the next sync. A document you did not switch on never leaves the computer, even if the phone asks for it.
+Every document is kept on the computer, which is the archive. A document goes to the phone only if you tick **keep a copy on my phone** for it, and then at the next sync. A document you did not switch on never leaves the computer, even if the phone asks for it.
 
 - A document **added on the phone** goes to the computer at the next sync. If its switch is off, the phone then lets go of its own copy, but **only after the computer has said, in the same sync, that it holds a whole and checked copy**. Until then it stays on the phone.
 - The files move after the rows, in the same encrypted connection as the rest of the sync. A sync that is cut half way carries on from where it stopped at the next one, and a file that arrives damaged is refused and asked for again. At most about 100 MB of files move in one sync; the rest waits and the sync says how many are waiting.

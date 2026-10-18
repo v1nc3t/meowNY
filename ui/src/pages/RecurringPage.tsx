@@ -1,18 +1,25 @@
-import { Fragment, useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
+import { useLocation } from 'react-router-dom'
 import AddCategoryModal from '../components/AddCategoryModal'
 import AttachArea from '../components/AttachArea'
-import ClipMark from '../components/ClipMark'
+import BillCodeModal from '../components/BillCodeModal'
+import ClipPreview from '../components/ClipPreview'
 import DatePicker from '../components/DatePicker'
+import SplitEditor from '../components/SplitEditor'
 import Dropdown from '../components/Dropdown'
 import ConfirmModal from '../components/ConfirmModal'
 import Modal, { modalFormId } from '../components/Modal'
 import { categories as categoriesApi, type Category } from '../api/categories'
+import { debts, type Person } from '../api/debts'
 import { errorText } from '../api/invoke'
 import { INTERVAL_UNITS, recurring as recurringApi, type IntervalUnit, type Recurring } from '../api/recurring'
 import { useToday, type Today } from '../api/today'
+import { categoryOptions } from '../lib/categoriesView'
 import { amountString, formatDate, formatMoney } from '../lib/money'
+import { draftOfTemplate, NOT_SPLIT, reducedWeights, toInput, type SplitState } from '../lib/split'
 import { useAttachments, type Attachments } from '../hooks/useAttachments'
 import { useClipCounts } from '../hooks/useClipCounts'
+import { useFocusRequest, useJumpTo } from '../hooks/useFocusRequest'
 import { useMoneySettings, type MoneySettings } from '../hooks/useMoneySettings'
 import { useNotice } from '../hooks/useNotice'
 import { useT } from '../i18n/context'
@@ -57,10 +64,17 @@ function RecurringView({ settings, now }: { settings: MoneySettings; now: Today 
   const t = useT()
   const [categories, setCategories] = useState<Category[]>([])
   const [items, setItems] = useState<Recurring[] | null>(null)
+  // every friend, removed ones too: a template may still name one
+  const [friends, setFriends] = useState<Person[]>([])
+  const [split, setSplit] = useState<SplitState>(NOT_SPLIT)
+  // the item whose details are open in the list
+  const [openId, setOpenId] = useState<string | null>(null)
   const [reload, setReload] = useState(0)
   const [adding, setAdding] = useState(false)
   const [editing, setEditing] = useState<Recurring | null>(null)
   const [paying, setPaying] = useState<Recurring | null>(null)
+  // the friend a code of an item's next payment is being shown for
+  const [coding, setCoding] = useState<{ item: Recurring; personId: string; name: string } | null>(null)
   const [confirming, setConfirming] = useState<{ kind: ConfirmKind; item: Recurring } | null>(null)
   const [pending, setPending] = useState(false)
   const [draftMessage, setDraftMessage] = useNotice()
@@ -68,6 +82,22 @@ function RecurringView({ settings, now }: { settings: MoneySettings; now: Today 
   // The documents of the item being edited are stored and linked at once; those of one being made wait for it to be saved.
   const attachments = useAttachments(editing ? { kind: 'recurring', id: editing.id } : null)
   const clips = useClipCounts('recurring', items?.map((item) => item.id) ?? [], reload)
+  // a document can send the person here for one of its recurring items: the row is scrolled to and outlined
+  const { request: focus, done: focusDone } = useFocusRequest('recurring')
+  useJumpTo(focus, focusDone, items)
+  // the debts screen can send the person to pay a recurring payment that is due: the dialog of that item opens, once
+  const location = useLocation()
+  const payAsked = (location.state as { pay?: boolean } | null)?.pay === true
+  const payOpened = useRef<string | null>(null)
+  useEffect(() => {
+    if (!focus || !payAsked || !items || payOpened.current === focus.id) return
+    const item = items.find((candidate) => candidate.id === focus.id)
+    if (!item) return
+    payOpened.current = focus.id
+    openPay(item)
+  })
+  const onSplitReady = useCallback((ready: boolean) => setSplit((current) => (current.ready === ready ? current : { ...current, ready })), [])
+  const removedFriends = useMemo(() => new Set(friends.filter((friend) => friend.archived).map((friend) => friend.id)), [friends])
   const categoryNames = useMemo(() => new Map(categories.map((category) => [category.id, category.name])), [categories])
 
   // One group per category, in the category list's order; items of a deleted category go last.
@@ -81,11 +111,12 @@ function RecurringView({ settings, now }: { settings: MoneySettings; now: Today 
 
   useEffect(() => {
     let cancelled = false
-    void Promise.all([categoriesApi.list(), recurringApi.list()]).then(
-      ([categoryList, list]) => {
+    void Promise.all([categoriesApi.list(), recurringApi.list(), debts.people(true)]).then(
+      ([categoryList, list, people]) => {
         if (cancelled) return
         setCategories(categoryList)
         setItems(list)
+        setFriends(people)
       },
       (failure) => {
         if (!cancelled) setMessage(errorText(failure))
@@ -109,6 +140,7 @@ function RecurringView({ settings, now }: { settings: MoneySettings; now: Today 
     setDraftMessage('')
     closeModals()
     attachments.reset()
+    setSplit(NOT_SPLIT)
     setAdding(true)
   }
 
@@ -116,17 +148,21 @@ function RecurringView({ settings, now }: { settings: MoneySettings; now: Today 
     setDraftMessage('')
     closeModals()
     attachments.reset()
+    // a saved template opens as shares: the weights, as they are kept
+    setSplit(item.split ? { on: true, draft: draftOfTemplate(item.split), ready: true, touched: false } : NOT_SPLIT)
     setEditing(item)
   }
 
   function openPay(item: Recurring) {
     setDraftMessage('')
     closeModals()
+    // the documents of a payment wait in the dialog and are attached to the transaction it makes
+    attachments.reset()
     setPaying(item)
   }
 
   // Keyboard: n adds, j and k move between rows.
-  useShortcut('new', openAdd)
+  useShortcut('new', () => openAdd())
   useRowNavigation()
 
   // Skipping, pausing, ending and deleting ask first; the question names the item.
@@ -188,13 +224,27 @@ function RecurringView({ settings, now }: { settings: MoneySettings; now: Today 
       endDate: endDate || null,
       description: description || null,
     }
+    // Payments are shared by the proportions of the template. Only an expense can be, and the app wants the template off before an item
+    // moves to an income category.
+    const hadSplit = editing?.split != null
+    const wantsSplit = split.on && categories.find((category) => category.id === categoryId)?.type !== 'INCOME'
+    const sendSplit = wantsSplit && (split.touched || !hadSplit)
+    const input = sendSplit ? toInput(split.draft) : null
+    if (sendSplit && (!split.ready || !input)) {
+      setDraftMessage(t('split.notComplete'))
+      return
+    }
     setPending(true)
     // what could not be attached to a new item: it is saved all the same, and the notice names the files
     let notAttached: string[] = []
     try {
-      if (editing) await recurringApi.update(editing.id, body)
-      else {
+      if (editing) {
+        if (hadSplit && !wantsSplit) await debts.unsplitRecurring(editing.id)
+        await recurringApi.update(editing.id, body)
+        if (input) await debts.splitRecurring(editing.id, input)
+      } else {
         const created = await recurringApi.create(body)
+        if (input) await debts.splitRecurring(created.id, input)
         notAttached = await attachments.commit({ kind: 'recurring', id: created.id })
       }
     } catch (failure) {
@@ -220,8 +270,10 @@ function RecurringView({ settings, now }: { settings: MoneySettings; now: Today 
       return
     }
     setPending(true)
+    let notAttached: string[] = []
     try {
-      await recurringApi.pay(paying.id, { amount, paidOn })
+      const paid = await recurringApi.pay(paying.id, { amount, paidOn })
+      notAttached = await attachments.commit({ kind: 'transaction', id: paid.id })
     } catch (failure) {
       setDraftMessage(errorText(failure))
       return
@@ -229,9 +281,15 @@ function RecurringView({ settings, now }: { settings: MoneySettings; now: Today 
       setPending(false)
     }
     setDraftMessage('')
-    setMessage('')
+    setMessage(notAttached.length > 0 ? t('docs.attachFailed', { names: notAttached.join(', ') }) : '')
     closeModals()
     setReload((value) => value + 1)
+  }
+
+  // The code of the next payment is for a friend with a part, and needs an amount to share (a bill that changes has none).
+  const codeFor = (item: Recurring, at: number) => {
+    const part = item.split?.parts[at]
+    return item.amount !== null && part?.personId && part.person && part.weight > 0 ? { item, personId: part.personId, name: part.person } : null
   }
 
   const everyText = (item: Recurring) =>
@@ -254,7 +312,7 @@ function RecurringView({ settings, now }: { settings: MoneySettings; now: Today 
       <div className="tx-title">
         <h1>{t('rec.title')}</h1>
         <div className="tx-actions">
-          <button type="button" onClick={openAdd} {...tip('new', t('rec.add'))}>
+          <button type="button" onClick={() => openAdd()} {...tip('new', t('rec.add'))}>
             {t('rec.add')}
           </button>
         </div>
@@ -269,6 +327,9 @@ function RecurringView({ settings, now }: { settings: MoneySettings; now: Today 
           pending={pending}
           message={draftMessage}
           attachments={attachments}
+          split={split}
+          onSplit={setSplit}
+          onSplitReady={onSplitReady}
           onSubmit={(event) => void onSave(event)}
           onClose={closeModals}
           onCategoryAdded={(category) => setCategories((current) => [...current, category])}
@@ -280,6 +341,13 @@ function RecurringView({ settings, now }: { settings: MoneySettings; now: Today 
           pending={pending}
           onConfirm={() => void onConfirm()}
           onClose={() => setConfirming(null)}
+        />
+      ) : null}
+      {coding ? (
+        <BillCodeModal
+          target={{ kind: 'recurring', id: coding.item.id, date: coding.item.nextDueDate }}
+          person={{ id: coding.personId, name: coding.name }}
+          onClose={() => setCoding(null)}
         />
       ) : null}
       {paying ? (
@@ -294,6 +362,7 @@ function RecurringView({ settings, now }: { settings: MoneySettings; now: Today 
             </label>
             <DateField name="paidOn" label={t('rec.paidOn')} defaultValue={now.date} today={now.date} />
           </form>
+          <AttachArea attachments={attachments} />
         </Modal>
       ) : null}
       {items ? (
@@ -307,7 +376,7 @@ function RecurringView({ settings, now }: { settings: MoneySettings; now: Today 
                   const status = statusOf(item, now.date)
                   const badge = badgeOf(item, status)
                   return (
-                    <li key={item.id} className="rec-item" data-status={status}>
+                    <li key={item.id} className="rec-item" data-status={status} data-item={`recurring:${item.id}`}>
                       <div className="rec-body">
                         <p className="rec-name">{item.name}</p>
                         <p className="rec-meta">
@@ -316,8 +385,55 @@ function RecurringView({ settings, now }: { settings: MoneySettings; now: Today 
                           </span>
                           {' \u00b7 '}
                           {everyText(item)}
+                          {clips[item.id] ? (
+                            <>
+                              {' \u00b7 '}
+                              <ClipPreview inline target={{ kind: 'recurring', id: item.id }} name={item.name} count={clips[item.id] ?? 0} />
+                            </>
+                          ) : null}
                         </p>
-                        {clips[item.id] ? <ClipMark count={clips[item.id] ?? 0} onClick={() => openEdit(item)} /> : null}
+                        {item.split?.parts.some((part) => part.personId && removedFriends.has(part.personId)) ? (
+                          <p className="hint">{t('split.archivedFriend')}</p>
+                        ) : null}
+                        {item.split || item.description?.trim() ? (
+                          <button
+                            type="button"
+                            className="tx-desc"
+                            aria-expanded={openId === item.id}
+                            onClick={() => setOpenId((current) => (current === item.id ? null : item.id))}
+                          >
+                            {t('common.details')}
+                          </button>
+                        ) : null}
+                        {openId === item.id ? (
+                          <div className="card-detail">
+                            {item.split ? (
+                              <section className="detail-section">
+                                <p className="detail-title">{t('split.section')}</p>
+                                <p>{t('split.templateHint')}</p>
+                                {(() => {
+                                  const shares = reducedWeights([item.split.mine, ...item.split.parts.map((part) => part.weight)])
+                                  return [t('split.you'), ...item.split.parts.map((part) => part.person ?? part.guest ?? '')].map((name, at) => (
+                                    <div className="split-part" key={`${name}-${at}`}>
+                                      <span>{`${name} ${shares[at] ?? 0}`}</span>
+                                      {codeFor(item, at - 1) ? (
+                                        <button type="button" onClick={() => setCoding(codeFor(item, at - 1))}>
+                                          {t('code.show')}
+                                        </button>
+                                      ) : null}
+                                    </div>
+                                  ))
+                                })()}
+                              </section>
+                            ) : null}
+                            {item.description?.trim() ? (
+                              <section className="detail-section">
+                                <p className="detail-title">{t('common.description')}</p>
+                                <p>{item.description}</p>
+                              </section>
+                            ) : null}
+                          </div>
+                        ) : null}
                       </div>
                       <div className="rec-due">
                         <span className="rec-badge" data-status={status}>
@@ -348,6 +464,16 @@ function RecurringView({ settings, now }: { settings: MoneySettings; now: Today 
                         <button type="button" onClick={() => openEdit(item)}>
                           {t('common.edit')}
                         </button>
+                        {(() => {
+                          // an item split with friends has a code for each of them: one friend opens it, several open the details to choose
+                          const friends = (item.split?.parts ?? []).map((_, at) => codeFor(item, at)).filter((code) => code !== null)
+                          if (friends.length === 0) return null
+                          return (
+                            <button type="button" onClick={() => (friends.length === 1 ? setCoding(friends[0] ?? null) : setOpenId(item.id))}>
+                              {t('code.show')}
+                            </button>
+                          )
+                        })()}
                         {status !== 'ended' ? (
                           <button type="button" onClick={() => setConfirming({ kind: 'end', item })}>
                             {t('rec.end')}
@@ -377,6 +503,9 @@ function RecurringModal({
   pending,
   message,
   attachments,
+  split,
+  onSplit,
+  onSplitReady,
   onSubmit,
   onClose,
   onCategoryAdded,
@@ -387,16 +516,22 @@ function RecurringModal({
   pending: boolean
   message: string
   attachments: Attachments
+  split: SplitState
+  onSplit: (split: SplitState) => void
+  onSplitReady: (ready: boolean) => void
   onSubmit: (event: FormEvent<HTMLFormElement>) => void
   onClose: () => void
   onCategoryAdded: (category: Category) => void
 }) {
   const t = useT()
   const [categoryId, setCategoryId] = useState(item?.categoryId ?? '')
+  const [amount, setAmount] = useState(item?.amount ?? '')
   const [unit, setUnit] = useState<IntervalUnit>(item?.intervalUnit ?? 'MONTH')
   const [hasEnd, setHasEnd] = useState(item?.endDate != null)
   const [addingCategory, setAddingCategory] = useState(false)
-  const options = categories.map((category) => ({ value: category.id, label: category.name }))
+  // only an expense can be shared
+  const canSplit = categories.find((category) => category.id === categoryId)?.type !== 'INCOME'
+  const options = categoryOptions(categories, { expense: t('common.expense'), income: t('common.income') })
   return (
     <>
       <Modal title={item ? t('rec.editTitle') : t('rec.addTitle')} pending={pending} onClose={onClose}>
@@ -408,7 +543,7 @@ function RecurringModal({
           </label>
           <label>
             {t('tx.amount')}
-            <input name="amount" inputMode="decimal" defaultValue={item?.amount ?? ''} autoComplete="off" />
+            <input name="amount" inputMode="decimal" value={amount} onChange={(event) => setAmount(event.target.value)} autoComplete="off" />
           </label>
           <p className="hint">{t('rec.amountHint')}</p>
           <Dropdown
@@ -436,9 +571,28 @@ function RecurringModal({
           {hasEnd ? (
             <DateField name="endDate" label={t('rec.endDate')} defaultValue={item?.endDate ?? todayDate} today={todayDate} />
           ) : null}
+          {canSplit ? (
+            <label>
+              <input type="checkbox" checked={split.on} onChange={(event) => onSplit({ ...split, on: event.target.checked })} />
+              {t('split.switch')}
+            </label>
+          ) : split.on ? (
+            <p className="hint">{t('split.onlyExpenses')}</p>
+          ) : null}
+          {canSplit && split.on ? (
+            <>
+              <p className="hint">{t('split.templateHint')}</p>
+              <SplitEditor
+                amount={amount.trim() === '' ? null : amount}
+                draft={split.draft}
+                onChange={(draft) => onSplit({ ...split, draft, touched: true })}
+                onReady={onSplitReady}
+              />
+            </>
+          ) : null}
           <label>
             {t('common.description')}
-            <input name="description" maxLength={255} defaultValue={item?.description ?? ''} autoComplete="off" />
+            <input name="description" maxLength={255} placeholder={t('common.optional')} defaultValue={item?.description ?? ''} autoComplete="off" />
           </label>
         </form>
         <AttachArea attachments={attachments} />

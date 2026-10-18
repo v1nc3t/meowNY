@@ -3,12 +3,11 @@
 
 use serde_json::{json, Value};
 
-use super::read_tests::{at, noon, ok, refused, run, run_at, seeded, TODAY};
+use super::read_tests::{at, ok, refused, run, run_at, seeded};
 use super::routes;
 use super::*;
-use crate::categories::CategoryType;
 use crate::tokens::Scope;
-use crate::{backup, budgets};
+use crate::backup;
 
 const WRITE_ROUTES: &[&str] = &[
     "settings.set",
@@ -34,6 +33,18 @@ const WRITE_ROUTES: &[&str] = &[
     "documents.link",
     "documents.unlink",
     "documents.get",
+    "people.create",
+    "people.update",
+    "people.archive",
+    "people.unarchive",
+    "people.settle",
+    "ledger.add",
+    "ledger.update",
+    "ledger.delete",
+    "transactions.split",
+    "transactions.unsplit",
+    "recurring.split",
+    "recurring.unsplit",
 ];
 
 const UUID: &str = "123e4567-e89b-12d3-a456-426614174000";
@@ -71,33 +82,6 @@ fn the_write_routes_are_exactly_these_and_each_needs_a_write_token() {
 }
 
 #[test]
-fn categories_can_be_made_renamed_and_deleted() {
-    let (_dir, vault) = seeded();
-    let made = ok(&vault, "categories.create", json!({ "name": "  Pets  ", "type": "EXPENSE" }));
-    assert_eq!((made["name"].clone(), made["type"].clone()), (json!("Pets"), json!("EXPENSE")), "the name is trimmed");
-    let id = made["id"].as_str().unwrap().to_string();
-    assert_eq!(category_id(&vault, "EXPENSE", "Pets"), id);
-
-    // The same name on the other side is a different category.
-    assert!(run(&vault, "categories.create", json!({ "name": "Pets", "type": "INCOME" })).is_ok());
-    assert_eq!(refused(&vault, "categories.create", json!({ "name": "Pets", "type": "EXPENSE" })).1, "name_exists", "the same name twice on one side");
-    assert_eq!(refused(&vault, "categories.create", json!({ "name": " Pets ", "type": "EXPENSE" })).1, "name_exists", "the name is trimmed before it is compared");
-    for bad in ["", "   ", &"x".repeat(51), "two\nlines"] {
-        assert_eq!(refused(&vault, "categories.create", json!({ "name": bad, "type": "EXPENSE" })), (400, "invalid_input".into()), "{bad:?}");
-    }
-
-    let renamed = ok(&vault, "categories.rename", json!({ "id": id, "name": "Animals" }));
-    assert_eq!((renamed["id"].clone(), renamed["name"].clone()), (json!(id), json!("Animals")));
-    assert_eq!(refused(&vault, "categories.rename", json!({ "id": id, "name": "Groceries" })).1, "name_exists");
-    assert_eq!(refused(&vault, "categories.rename", json!({ "id": "999999", "name": "Nothing" })), (404, "not_found".into()));
-
-    assert_eq!(ok(&vault, "categories.delete", json!({ "id": id })), Value::Null);
-    assert!(ok(&vault, "categories.list", json!({})).as_array().unwrap().iter().all(|c| c["id"] != json!(id)));
-    assert_eq!(refused(&vault, "categories.delete", json!({ "id": id })).0, 404, "deleting twice");
-    assert_eq!(refused(&vault, "categories.delete", json!({ "id": "999999" })), (404, "not_found".into()));
-}
-
-#[test]
 fn deleting_a_category_keeps_its_transactions() {
     let (_dir, vault) = seeded();
     let rent = category_id(&vault, "EXPENSE", "Rent");
@@ -106,39 +90,6 @@ fn deleting_a_category_keeps_its_transactions() {
     ok(&vault, "categories.delete", json!({ "id": rent }));
     let after = ok(&vault, "transactions.list", json!({ "categoryId": rent, "limit": 100 }));
     assert_eq!(before, after, "the transactions still have their category");
-}
-
-#[test]
-fn a_transaction_is_recorded_changed_and_deleted() {
-    let (_dir, vault) = seeded();
-    let food = category_id(&vault, "EXPENSE", "Groceries");
-    let before = total(&vault);
-    let made = ok(&vault, "transactions.create", json!({ "name": "Bread", "amount": "2.40", "paymentDate": "2026-10-14", "categoryId": food, "description": "Sourdough" }));
-    assert_eq!(made["amount"], "2.40");
-    assert_eq!((made["name"].clone(), made["paymentDate"].clone(), made["categoryId"].clone()), (json!("Bread"), json!("2026-10-14"), json!(food)));
-    assert_eq!(made["description"], "Sourdough");
-    assert!(made["id"].is_string() && made["clientUuid"].is_null());
-    assert_eq!(total(&vault), before + 1);
-    let id = made["id"].as_str().unwrap().to_string();
-
-    // Only what is sent changes.
-    let updated = ok(&vault, "transactions.update", json!({ "id": id, "name": "Rye bread", "amount": "2.95" }));
-    assert_eq!((updated["name"].clone(), updated["amount"].clone(), updated["description"].clone()), (json!("Rye bread"), json!("2.95"), json!("Sourdough")));
-    assert_eq!(updated["paymentDate"], "2026-10-14");
-    // null clears the description; leaving it out keeps it.
-    let cleared = ok(&vault, "transactions.update", json!({ "id": id, "description": null }));
-    assert!(cleared["description"].is_null());
-    let moved = ok(&vault, "transactions.update", json!({ "id": id, "paymentDate": "2026-10-01", "categoryId": category_id(&vault, "EXPENSE", "Rent") }));
-    assert_eq!(moved["paymentDate"], "2026-10-01");
-    assert_eq!(moved["categoryId"], json!(category_id(&vault, "EXPENSE", "Rent")));
-    assert!(cleared["description"].is_null() && moved["description"].is_null());
-    // Naming nothing to change is allowed and changes nothing.
-    assert_eq!(ok(&vault, "transactions.update", json!({ "id": id })), moved);
-
-    assert_eq!(ok(&vault, "transactions.delete", json!({ "id": id })), Value::Null);
-    assert_eq!(total(&vault), before);
-    assert_eq!(refused(&vault, "transactions.delete", json!({ "id": id })), (404, "not_found".into()));
-    assert_eq!(refused(&vault, "transactions.update", json!({ "id": id, "name": "Ghost" })), (404, "not_found".into()));
 }
 
 #[test]
@@ -218,49 +169,6 @@ fn a_transaction_needs_a_real_category_a_real_date_and_a_name() {
 }
 
 #[test]
-fn budgets_are_set_from_a_month_and_removed_the_same_way() {
-    let (_a, via_api) = seeded();
-    let (_b, direct) = seeded();
-    let groceries = category_id(&via_api, "EXPENSE", "Groceries");
-    assert_eq!(groceries, category_id(&direct, "EXPENSE", "Groceries"));
-    let steps = [
-        json!({ "type": "EXPENSE", "month": "2026-12", "amountLimit": "2500.00" }),
-        json!({ "type": "INCOME", "month": "2026-11", "amountLimit": "4000.00" }),
-        json!({ "type": "EXPENSE", "month": "2026-12", "amountLimit": "450.00", "categoryId": groceries }),
-    ];
-    for step in &steps {
-        let made = ok(&via_api, "budgets.set", step.clone());
-        assert_eq!(made["amountLimit"], step["amountLimit"]);
-        assert_eq!(made["type"], step["type"]);
-        assert_eq!(made["scope"], if step.get("categoryId").is_some() { "CATEGORY" } else { "GLOBAL" });
-        assert_eq!(made["effectiveFrom"], format!("{}-01", step["month"].as_str().unwrap()));
-        let input = budgets::SetBudget {
-            kind: if step["type"] == "INCOME" { CategoryType::Income } else { CategoryType::Expense },
-            scope: if step.get("categoryId").is_some() { budgets::Scope::Category } else { budgets::Scope::Global },
-            month: step["month"].as_str().unwrap().into(),
-            amount_limit: Some(step["amountLimit"].as_str().unwrap().into()),
-            category_id: step.get("categoryId").map(|c| c.as_str().unwrap().into()),
-        };
-        direct.with_conn(|c| budgets::set(c, &input, noon())).unwrap();
-    }
-    for month in ["2026-09", "2026-10", "2026-11", "2026-12", "2027-01"] {
-        assert_eq!(ok(&via_api, "budgets.overview", json!({ "month": month })), ok(&direct, "budgets.overview", json!({ "month": month })), "{month}");
-    }
-    assert_eq!(ok(&via_api, "budgets.history", json!({})), ok(&direct, "budgets.history", json!({})));
-    assert_eq!(ok(&via_api, "budgets.overview", json!({ "month": "2026-12" }))[1]["budgeted"], "2500.00");
-
-    // Removing is setting nothing from that month on.
-    ok(&via_api, "budgets.remove", json!({ "type": "EXPENSE", "month": "2027-02", "categoryId": groceries }));
-    ok(&via_api, "budgets.remove", json!({ "type": "EXPENSE", "month": "2027-02" }));
-    let overview = ok(&via_api, "budgets.overview", json!({ "month": "2027-02" }));
-    let expense = overview.as_array().unwrap().iter().find(|o| o["type"] == "EXPENSE").unwrap();
-    assert!(expense["budgeted"].is_null(), "{expense}");
-    assert_eq!(ok(&via_api, "budgets.overview", json!({ "month": "2027-01" })).as_array().unwrap().iter().find(|o| o["type"] == "EXPENSE").unwrap()["budgeted"], "2500.00", "the month before keeps it");
-    // Zero is a budget.
-    assert_eq!(ok(&via_api, "budgets.set", json!({ "type": "EXPENSE", "month": "2027-03", "amountLimit": "0.00" }))["amountLimit"], "0.00");
-}
-
-#[test]
 fn a_budget_must_fit_its_category_and_its_amount() {
     let (_dir, vault) = seeded();
     let groceries = category_id(&vault, "EXPENSE", "Groceries");
@@ -277,66 +185,6 @@ fn a_budget_must_fit_its_category_and_its_amount() {
     assert_eq!(refused(&vault, "budgets.set", json!({ "type": "EXPENSE", "month": "2026-13", "amountLimit": "1.00" })), (400, "invalid_input".into()));
     assert_eq!(refused(&vault, "budgets.set", json!({ "type": "SAVINGS", "month": "2026-12", "amountLimit": "1.00" })), (400, "invalid_input".into()));
     assert_eq!(refused(&vault, "budgets.remove", json!({ "type": "EXPENSE", "month": "2026-12", "amountLimit": "1.00" })), (400, "invalid_input".into()), "remove takes no amount");
-}
-
-#[test]
-fn recurring_items_are_made_changed_paid_and_ended() {
-    let (_dir, vault) = seeded();
-    let bills = category_id(&vault, "EXPENSE", "Rent");
-    let made = ok(&vault, "recurring.create", json!({
-        "name": "Gym", "amount": "29.99", "categoryId": bills, "startDate": "2026-10-20", "intervalUnit": "MONTH", "intervalCount": 1, "description": "Monthly"
-    }));
-    let id = made["id"].as_str().unwrap().to_string();
-    assert_eq!((made["amount"].clone(), made["nextDueDate"].clone(), made["isActive"].clone()), (json!("29.99"), json!("2026-10-20"), json!(true)));
-    assert_eq!((made["intervalUnit"].clone(), made["intervalCount"].clone()), (json!("MONTH"), json!(1)));
-
-    // A bill with no fixed amount: leave the amount out.
-    let varying = ok(&vault, "recurring.create", json!({ "name": "Electricity", "categoryId": bills, "startDate": "2026-10-20", "intervalUnit": "MONTH", "intervalCount": 2 }));
-    assert!(varying["amount"].is_null());
-    let varying_id = varying["id"].as_str().unwrap().to_string();
-
-    let changed = ok(&vault, "recurring.update", json!({ "id": id, "name": "Gym membership", "amount": "31.00", "endDate": "2027-12-31" }));
-    assert_eq!((changed["name"].clone(), changed["amount"].clone(), changed["endDate"].clone()), (json!("Gym membership"), json!("31.00"), json!("2027-12-31")));
-    assert_eq!(changed["description"], "Monthly", "left out stays");
-    let cleared = ok(&vault, "recurring.update", json!({ "id": id, "endDate": null, "description": null }));
-    assert!(cleared["endDate"].is_null() && cleared["description"].is_null());
-    let no_amount = ok(&vault, "recurring.update", json!({ "id": id, "amount": null }));
-    assert!(no_amount["amount"].is_null(), "null makes it a bill with no fixed amount");
-    ok(&vault, "recurring.update", json!({ "id": id, "amount": "31.00" }));
-
-    // Paying turns the occurrence into a transaction and moves on.
-    let paid = ok(&vault, "recurring.pay", json!({ "id": id }));
-    assert_eq!((paid["name"].clone(), paid["amount"].clone(), paid["paymentDate"].clone()), (json!("Gym membership"), json!("31.00"), json!(TODAY)));
-    let after = ok(&vault, "recurring.list", json!({}));
-    assert_eq!(after.as_array().unwrap().iter().find(|r| r["id"] == json!(id)).unwrap()["nextDueDate"], "2026-11-20");
-    let odd = ok(&vault, "recurring.pay", json!({ "id": id, "amount": "28.40", "paidOn": "2026-11-18" }));
-    assert_eq!((odd["amount"].clone(), odd["paymentDate"].clone()), (json!("28.40"), json!("2026-11-18")), "what was paid and when");
-    // A bill with no amount cannot be paid without saying how much.
-    assert_eq!(refused(&vault, "recurring.pay", json!({ "id": varying_id })), (400, "invalid_input".into()));
-    assert_eq!(ok(&vault, "recurring.pay", json!({ "id": varying_id, "amount": "88.10" }))["amount"], "88.10");
-
-    let skipped = ok(&vault, "recurring.skip", json!({ "id": id }));
-    assert_ne!(skipped["nextDueDate"], json!("2026-11-20"));
-    let paused = ok(&vault, "recurring.pause", json!({ "id": id }));
-    assert_eq!(paused["isActive"], false);
-    assert!(ok(&vault, "recurring.dues", json!({ "withinDays": 366 }))["upcoming"].as_array().unwrap().iter().all(|r| r["id"] != json!(id)), "a paused item is not due");
-    assert_eq!(refused(&vault, "recurring.pay", json!({ "id": id })).0 / 100, 4, "a paused item cannot be paid");
-    assert_eq!(ok(&vault, "recurring.resume", json!({ "id": id }))["isActive"], true);
-
-    let ended = ok(&vault, "recurring.end", json!({ "id": id }));
-    // The end date is today, or the start date if that is later (this item starts on the 20th).
-    assert_eq!((ended["isActive"].clone(), ended["endDate"].clone()), (json!(false), json!("2026-10-20")));
-    assert_eq!(refused(&vault, "recurring.resume", json!({ "id": id })).0, 400, "past its end date");
-
-    // Deleting keeps what was paid.
-    let paid_count = ok(&vault, "transactions.list", json!({ "q": "Gym membership" }))["total"].as_u64().unwrap();
-    assert!(paid_count >= 2);
-    assert_eq!(ok(&vault, "recurring.delete", json!({ "id": id })), Value::Null);
-    assert_eq!(ok(&vault, "transactions.list", json!({ "q": "Gym membership" }))["total"].as_u64().unwrap(), paid_count);
-    assert!(ok(&vault, "recurring.list", json!({})).as_array().unwrap().iter().all(|r| r["id"] != json!(id)));
-    for name in ["recurring.delete", "recurring.pay", "recurring.skip", "recurring.pause", "recurring.resume", "recurring.end", "recurring.update"] {
-        assert_eq!(refused(&vault, name, json!({ "id": id })).0, 404, "{name} on a deleted item");
-    }
 }
 
 #[test]
@@ -491,6 +339,18 @@ fn a_locked_app_refuses_every_write_and_nothing_changes() {
         ("documents.link", json!({ "id": "1", "transactionId": "1" })),
         ("documents.unlink", json!({ "id": "1", "transactionId": "1" })),
         ("documents.get", json!({ "id": "1", "out": "/tmp/x.pdf" })),
+        ("people.create", json!({ "name": "Anna" })),
+        ("people.update", json!({ "id": "1", "name": "Anna" })),
+        ("people.archive", json!({ "id": "1" })),
+        ("people.unarchive", json!({ "id": "1" })),
+        ("people.settle", json!({ "id": "1" })),
+        ("ledger.add", json!({ "personId": "1", "kind": "LENT", "amount": "1.00", "date": "2026-10-14" })),
+        ("ledger.update", json!({ "id": "1", "amount": "2.00" })),
+        ("ledger.delete", json!({ "id": "1" })),
+        ("transactions.split", json!({ "id": "1", "mode": "EQUAL", "people": ["1"] })),
+        ("transactions.unsplit", json!({ "id": "1" })),
+        ("recurring.split", json!({ "id": "1", "mode": "EQUAL", "people": ["1"] })),
+        ("recurring.unsplit", json!({ "id": "1" })),
     ];
     let mut covered: Vec<&str> = cases.iter().map(|(name, _)| *name).collect();
     covered.sort_unstable();

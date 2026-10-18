@@ -15,7 +15,7 @@ use std::path::{Path, PathBuf};
 use serde_json::{json, Map, Value};
 
 use super::files::{checked, write_new};
-use super::read::{CATEGORY_IDS, FROM, TO};
+use super::read::{selection, CATEGORY_IDS, FROM, INCLUDE_DEBTS, KIND, MAX_AMOUNT, MIN_AMOUNT, SECTIONS, SPLIT, TEXT, TO};
 use super::routes::{parse, Ctx, Kind, Param, Route};
 use super::{ApiError, Approval};
 use crate::backup;
@@ -59,8 +59,23 @@ fn counts(p: &Preview, with_other_records: bool) -> Vec<String> {
         if p.documents > 0 {
             lines.push(format!("And {} documents, by name, date, type, size and what they are attached to. Never the files themselves", p.documents));
         }
+        if p.people > 0 || p.ledger > 0 || p.split_bills > 0 {
+            lines.push(format!(
+                "And {} friends by name, {} ledger entries of money lent and borrowed, and the parts of {} shared bills",
+                p.people, p.ledger, p.split_bills
+            ));
+        }
+        if p.due_payments > 0 {
+            lines.push(format!("And {} recurring payments that are overdue, by name, day and amount", p.due_payments));
+        }
+        if p.debt_history > 0 {
+            lines.push(format!("And a history of debts of {} lines: the friends' entries and the recurring payments paid late or overdue", p.debt_history));
+        }
     } else if p.documents > 0 {
         lines.push("A column with the names of the documents attached to each transaction. Never the files themselves".to_string());
+    }
+    if !with_other_records && p.split_bills > 0 {
+        lines.push(format!("A column with what each transaction cost you; {} of them are shared bills", p.split_bills));
     }
     lines
 }
@@ -79,16 +94,23 @@ pub const EXPORT_JSON: Route = Route {
     name: "export.json",
     scope: Scope::Read,
     confirm: Some(confirm_json),
-    summary: "Writes the data as a JSON file, after the person allows it in the app. An existing file is never replaced.",
+    summary: "Writes the data as a JSON file, after the person allows it in the app: the transactions, categories, budgets, recurring items, documents, and the debts (friends, the overdue recurring payments, the history of debts), or the parts and the limits chosen. An existing file is never replaced.",
     params: &[
         Param::new("out", Kind::Path, "Where to write the file: an absolute path ending in .json, in a folder that exists, that is not there yet.").required(),
         FROM,
         TO,
         CATEGORY_IDS,
+        INCLUDE_DEBTS,
+        KIND,
+        MIN_AMOUNT,
+        MAX_AMOUNT,
+        TEXT,
+        SPLIT,
+        SECTIONS,
     ],
     run: |ctx, args| {
         let (path, rest) = split(&args, "json")?;
-        let selection: Selection = parse(rest)?;
+        let selection = selection(rest)?;
         let text = ctx.vault.with_conn(|c| export::json(c, &selection, ctx.now))?;
         write_new(&path, text.as_bytes())?;
         done(&path, text.len())
@@ -97,7 +119,7 @@ pub const EXPORT_JSON: Route = Route {
 
 fn confirm_json(ctx: &Ctx, args: &Map<String, Value>) -> Result<Approval, ApiError> {
     let (path, rest) = split(args, "json")?;
-    let selection: Selection = parse(rest)?;
+    let selection = selection(rest)?;
     let preview = ctx.vault.with_conn(|c| export::preview(c, &selection))?;
     let mut lines = counts(&preview, true);
     if preview.history > 0 {
@@ -114,16 +136,21 @@ pub const EXPORT_CSV: Route = Route {
     name: "export.csv",
     scope: Scope::Read,
     confirm: Some(confirm_csv),
-    summary: "Writes the transactions as a CSV file, after the person allows it in the app. An existing file is never replaced.",
+    summary: "Writes the transactions as a CSV file, after the person allows it in the app, limited by the dates, the categories, the kind, what they cost you, a text and whether they are shared. An existing file is never replaced.",
     params: &[
         Param::new("out", Kind::Path, "Where to write the file: an absolute path ending in .csv, in a folder that exists, that is not there yet.").required(),
         FROM,
         TO,
         CATEGORY_IDS,
+        KIND,
+        MIN_AMOUNT,
+        MAX_AMOUNT,
+        TEXT,
+        SPLIT,
     ],
     run: |ctx, args| {
         let (path, rest) = split(&args, "csv")?;
-        let selection: Selection = parse(rest)?;
+        let selection = selection(rest)?;
         let text = ctx.vault.with_conn(|c| export::csv(c, &selection))?;
         write_new(&path, text.as_bytes())?;
         done(&path, text.len())
@@ -132,7 +159,7 @@ pub const EXPORT_CSV: Route = Route {
 
 fn confirm_csv(ctx: &Ctx, args: &Map<String, Value>) -> Result<Approval, ApiError> {
     let (path, rest) = split(args, "csv")?;
-    let selection: Selection = parse(rest)?;
+    let selection = selection(rest)?;
     let preview = ctx.vault.with_conn(|c| export::preview(c, &selection))?;
     let mut lines = counts(&preview, false);
     lines.extend(only_chosen(&selection.category_ids));
@@ -146,16 +173,23 @@ pub const EXPORT_XLSX: Route = Route {
     name: "export.xlsx",
     scope: Scope::Read,
     confirm: Some(confirm_xlsx),
-    summary: "Writes a workbook (.xlsx) with sheets for transactions, categories, budgets, recurring items and a monthly summary, after the person allows it in the app. Dates are ISO and amounts plain numbers. An existing file is never replaced.",
+    summary: "Writes a workbook (.xlsx) with sheets for transactions, categories, budgets, recurring items, documents, the debts (friends, due payments, history of debts) and a monthly summary, after the person allows it in the app. Dates are ISO and amounts plain numbers. An existing file is never replaced.",
     params: &[
         Param::new("out", Kind::Path, "Where to write the file: an absolute path ending in .xlsx, in a folder that exists, that is not there yet.").required(),
         FROM,
         TO,
         CATEGORY_IDS,
+        INCLUDE_DEBTS,
+        KIND,
+        MIN_AMOUNT,
+        MAX_AMOUNT,
+        TEXT,
+        SPLIT,
+        SECTIONS,
     ],
     run: |ctx, args| {
         let (path, rest) = split(&args, "xlsx")?;
-        let selection: Selection = parse(rest)?;
+        let selection = selection(rest)?;
         let bytes = ctx.vault.with_conn(|c| export::workbook(c, &selection, &Default::default()))?;
         write_new(&path, &bytes)?;
         done(&path, bytes.len())
@@ -164,7 +198,9 @@ pub const EXPORT_XLSX: Route = Route {
 
 fn confirm_xlsx(ctx: &Ctx, args: &Map<String, Value>) -> Result<Approval, ApiError> {
     let (path, rest) = split(args, "xlsx")?;
-    let selection: Selection = parse(rest)?;
+    let selection = selection(rest)?;
+    // A workbook that could not be made (only parts that have no sheet, such as the change history) is refused here, before the person is asked.
+    ctx.vault.with_conn(|c| export::workbook(c, &selection, &Default::default()).map(drop))?;
     let preview = ctx.vault.with_conn(|c| export::preview(c, &selection))?;
     let mut lines = counts(&preview, true);
     lines.extend(only_chosen(&selection.category_ids));
@@ -180,6 +216,10 @@ fn report_options(rest: Map<String, Value>) -> Result<ReportOptions, ApiError> {
     let (from, to) = (month("fromMonth")?, month("toMonth")?);
     let labels = ReportLabels::english(&from, &to)?;
     let mut options = rest;
+    let asked = |key: &str| options.get(key).and_then(Value::as_bool) == Some(true);
+    if asked("includeDebts") || asked("includeDuePayments") || asked("includeDebtHistory") {
+        options.insert("debtsLabels".into(), serde_json::to_value(crate::debts::summary::Labels::english()).map_err(|_| ApiError::INVALID_INPUT)?);
+    }
     options.insert(
         "labels".into(),
         json!({
@@ -207,6 +247,9 @@ pub const EXPORT_PDF: Route = Route {
         Param::new("includeTransactions", Kind::Boolean, "Also list the transactions. Up to 20,000."),
         Param::new("showDescriptions", Kind::Boolean, "Show each transaction's description. Leave off to share the report without private details."),
         Param::new("page", Kind::String, "A4 (the default) or LETTER.").one_of(PAGES),
+        Param::new("includeDebts", Kind::Boolean, "Also list who owes what on the last day of each month: one line for each friend."),
+        Param::new("includeDuePayments", Kind::Boolean, "Also list the recurring payments that are overdue today, with the day each fell due and a total."),
+        Param::new("includeDebtHistory", Kind::Boolean, "Also list every line of the debts of every friend in the months, with the balance after it, and the recurring payments paid late or overdue."),
     ],
     run: |ctx, args| {
         let (path, rest) = split(&args, "pdf")?;
@@ -231,6 +274,11 @@ fn confirm_pdf(ctx: &Ctx, args: &Map<String, Value>) -> Result<Approval, ApiErro
     ];
     if options.include_transactions {
         lines.push(format!("Descriptions shown: {}", yes(options.show_descriptions)));
+    }
+    for (on, what) in [(options.include_debts, "Who owes what"), (options.include_due_payments, "Overdue recurring payments"), (options.include_debt_history, "History of debts")] {
+        if on {
+            lines.push(format!("{what}: yes, with the names of your friends and amounts of money"));
+        }
     }
     lines.extend(only_chosen(&options.category_ids));
     lines.push(NOT_ENCRYPTED.into());

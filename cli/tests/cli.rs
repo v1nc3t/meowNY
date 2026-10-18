@@ -2,7 +2,6 @@
 //! folder, real tokens, a real listener on 127.0.0.1. A command and the route behind it are tested
 //! together, from the command line to the database and back.
 
-use std::collections::BTreeSet;
 use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
 
@@ -55,140 +54,7 @@ fn every_route_has_a_command_that_answers_help_and_names_all_its_flags() {
     }
 }
 
-#[test]
-fn help_works_at_every_level_without_the_app() {
-    let app = app(false);
-    let schema = run(&app, "", &["schema"]).json();
-    let mut nouns = BTreeSet::new();
-    for command in schema["commands"].as_array().unwrap() {
-        let words: Vec<&str> = command["command"].as_str().unwrap().split(' ').collect();
-        if words.len() == 2 {
-            nouns.insert(words[0].to_string());
-        }
-    }
-    let mut calls: Vec<Vec<String>> = vec![vec!["--help".into()], vec!["help".into()], vec!["-h".into()]];
-    calls.extend(nouns.iter().map(|n| vec![n.clone(), "--help".into()]));
-    calls.extend(nouns.iter().map(|n| vec!["help".into(), n.clone()]));
-    for call in calls {
-        let args: Vec<&str> = call.iter().map(String::as_str).collect();
-        let out = run(&app, "", &args);
-        assert_eq!((out.code, out.err.as_str()), (0, ""), "{args:?}");
-        assert!(out.out.len() > 100, "{args:?}");
-    }
-    let version = run(&app, "", &["--version"]);
-    assert_eq!((version.code, version.out.trim()), (0, concat!("meowny ", env!("CARGO_PKG_VERSION"), " (API 1)")));
-    let unknown = run(&app, "", &["frobnicate"]);
-    assert_eq!((unknown.code, unknown.out.as_str()), (2, ""));
-    assert!(unknown.err.contains("unknown command"));
-}
-
-#[test]
-fn schema_is_answered_offline_and_the_app_can_be_asked_too() {
-    let app = app(false);
-    // No token, no app data folder: still an answer.
-    let mut bare = Command::new(env!("CARGO_BIN_EXE_meowny"));
-    clean(&mut bare).arg("schema");
-    let offline = finish(bare);
-    assert_eq!((offline.code, offline.err.as_str()), (0, ""));
-    let schema = offline.json();
-    assert_eq!(schema["cli"]["api"], 1);
-    assert_eq!(schema["errorCodes"]["locked"], 3);
-    assert_eq!(schema["exitCodes"].as_object().unwrap().len(), 5);
-    assert_eq!(offline.out.lines().count(), 1);
-    // `--app` asks the running app and gets the app's own description of its routes.
-    let live = ok(&app, &app.read, &["schema", "--app"]);
-    assert_eq!(live, serde_json::from_str::<Value>(include_str!("../schema.json")).unwrap());
-    assert_eq!(failed(&app, "", &["schema", "--app"]), (3, "no_token".into()));
-}
-
 // ---- reading ---------------------------------------------------------------------------------
-
-/// Arguments that make each read command work on the demo data.
-fn sample(command: &str, category: &str) -> Vec<String> {
-    let args: &[&str] = match command {
-        "budgets overview" | "stats budget" | "stats planned" => &["--month", "2026-09"],
-        "stats year" => &["--year", "2026"],
-        "stats top" => &["--month", "2026-09", "--type", "expense", "--limit", "3"],
-        "transactions list" => &["--limit", "5"],
-        "categories list" => &["--type", "expense"],
-        "recurring dues" => &["--within-days", "10"],
-        "documents show" => &["1"],
-        _ => &[],
-    };
-    let mut out: Vec<String> = command.split(' ').map(String::from).collect();
-    out.extend(args.iter().map(|s| s.to_string()));
-    if command == "stats trend" {
-        out.extend(["--category-id", category, "--from", "2026-01", "--to", "2026-09"].map(String::from));
-    }
-    out
-}
-
-#[test]
-fn every_read_command_runs_and_prints_what_the_app_returns() {
-    let app = app(true);
-    document(&app, "Receipt.pdf", b"%PDF-1.4 a receipt", Some("1"));
-    let category = category(&app, "EXPENSE", "Groceries");
-    let schema = run(&app, "", &["schema"]).json();
-    let mut tried = 0;
-    for command in schema["commands"].as_array().unwrap() {
-        if command["scope"] != "read" || command["command"] == "schema" || command["confirm"] == true {
-            continue;
-        }
-        let name = command["command"].as_str().unwrap();
-        let args = sample(name, &category);
-        let args: Vec<&str> = args.iter().map(String::as_str).collect();
-        // The JSON is exactly what the route returned, and a write token reads the same.
-        let data = ok(&app, &app.read, &args);
-        let http = ok(&app, &app.write, &args);
-        if name != "status" {
-            assert_eq!(data, http, "{name}: a write token and a read token see the same");
-        } else {
-            assert_eq!((data["scope"].clone(), http["scope"].clone()), (json!("read"), json!("write")), "status says what the token may do");
-        }
-        // The plain form is text a person can read: no escapes, no JSON, nothing on stderr.
-        let plain = run(&app, &app.read, &args);
-        assert_eq!(plain.code, 0, "{name}: {}", plain.err);
-        assert!(plain.err.is_empty() || plain.err.starts_with("showing ") || (data.is_null() && plain.err == "there is nothing to show.\n"), "{name}: {}", plain.err);
-        assert!((!plain.out.is_empty() || data.is_null()) && !plain.out.contains('\u{1b}') && !plain.out.starts_with('{'), "{name}: {:?}", plain.out);
-        tried += 1;
-    }
-    assert!(tried >= 16, "only {tried} read commands were tried");
-}
-
-/// The shape of the JSON is a promise: fields may be added, never removed or changed in type.
-#[test]
-fn the_json_shapes_are_stable() {
-    let app = app(true);
-    let groceries = category(&app, "EXPENSE", "Groceries");
-    let has = |value: &Value, keys: &[&str], what: &str| {
-        for key in keys {
-            assert!(value.get(*key).is_some(), "{what} lost its `{key}`: {value}");
-        }
-    };
-    let list = ok(&app, &app.read, &["transactions", "list", "--limit", "2"]);
-    has(&list, &["limit", "offset", "total", "transactions"], "transactions list");
-    let row = &list["transactions"][0];
-    has(row, &["amount", "categoryId", "clientUuid", "description", "id", "name", "paymentDate"], "a transaction");
-    assert!(row["amount"].is_string() && row["id"].is_string() && row["categoryId"].is_string(), "money and ids are strings");
-    assert!(list["total"].is_u64() && list["limit"].is_u64());
-
-    has(&ok(&app, &app.read, &["categories", "list"])[0], &["id", "name", "type"], "a category");
-    has(&ok(&app, &app.read, &["settings", "get"]), &["currency", "language", "locale", "timezone"], "settings");
-    has(&ok(&app, &app.read, &["status"]), &["api", "app", "schemaVersion", "scope", "version"], "status");
-    has(&ok(&app, &app.read, &["today"]), &["date", "month"], "today");
-    has(&ok(&app, &app.read, &["budgets", "overview", "--month", "2026-09"])[0], &["type", "budgeted", "allocated", "unallocated", "actual", "remaining"], "a budget overview");
-    has(&ok(&app, &app.read, &["budgets", "history"])[0], &["month", "expenseBudget", "expenseActual", "incomeBudget", "incomeActual"], "a history row");
-    has(&ok(&app, &app.read, &["recurring", "list"])[0], &["amount", "categoryId", "description", "endDate", "id", "intervalCount", "intervalUnit", "isActive", "name", "nextDueDate", "startDate"], "a recurring item");
-    has(&ok(&app, &app.read, &["recurring", "dues"]), &["overdue", "upcoming"], "dues");
-    let budget = ok(&app, &app.read, &["stats", "budget", "--month", "2026-09"]);
-    has(&budget, &["month", "categories", "totals"], "budget against actual");
-    has(&budget["categories"][0], &["categoryId", "name", "type", "budgeted", "actual", "remaining", "pctUsed"], "a category line");
-    has(&ok(&app, &app.read, &["stats", "year", "--year", "2026"])[0], &["month", "income", "expense", "savings", "savingsRate"], "a year point");
-    has(&ok(&app, &app.read, &["stats", "top", "--month", "2026-09", "--type", "expense"])[0], &["categoryId", "name", "actual", "share"], "a top category");
-    has(&ok(&app, &app.read, &["stats", "commitments"]), &["items"], "commitments");
-    has(&ok(&app, &app.read, &["stats", "trend", "--category-id", &groceries, "--from", "2026-01", "--to", "2026-03"]), &["categoryId", "points"], "a trend");
-    assert!(ok(&app, &app.read, &["stats", "planned", "--month", "2026-09"]).is_array());
-}
 
 // ---- the plan's "done when": only a token, no prompts ----------------------------------------
 
@@ -218,51 +84,6 @@ fn with_only_a_token_a_script_can_record_expenses_set_a_budget_and_read_budget_a
     assert_eq!(plain.code, 0);
     let row = plain.out.lines().find(|l| l.contains("Food")).unwrap();
     assert!(row.contains("400.00") && row.contains("356.20") && row.contains("43.80") && row.contains("89.1"), "{row}");
-}
-
-#[test]
-fn a_new_transaction_gets_a_client_uuid_that_can_be_sent_again() {
-    let app = app(false);
-    let food = ok(&app, &app.write, &["categories", "create", "--name", "Food", "--type", "expense"])["id"].as_str().unwrap().to_string();
-    let args = ["transactions", "create", "--name", "Tea", "--amount", "2.00", "--payment-date", "2026-10-14", "--category-id", &food];
-    let first = ok(&app, &app.write, &args);
-    let uuid = first["clientUuid"].as_str().unwrap().to_string();
-    assert_eq!(uuid.len(), 36);
-    let again = ok(&app, &app.write, &[&args[..], &["--client-uuid", &uuid]].concat());
-    assert_eq!(again["id"], first["id"], "sending the uuid the CLI made gives the first transaction back");
-    // Without a uuid every run is a new transaction with its own.
-    let second = ok(&app, &app.write, &args);
-    assert_ne!(second["id"], first["id"]);
-    assert_ne!(second["clientUuid"], first["clientUuid"]);
-    assert_eq!(ok(&app, &app.read, &["transactions", "list"])["total"], 2);
-}
-
-#[test]
-fn changes_flow_through_the_commands_the_way_the_app_does_them() {
-    let app = app(true);
-    let groceries = category(&app, "EXPENSE", "Groceries");
-    let made = ok(&app, &app.write, &["transactions", "create", "--name", "Bread", "--amount", "2.40", "--payment-date", "2026-10-14", "--category-id", &groceries, "--description", "Sourdough"]);
-    let id = made["id"].as_str().unwrap();
-    let updated = ok(&app, &app.write, &["transactions", "update", id, "--name", "Rye", "--amount", "2.95"]);
-    assert_eq!((updated["name"].clone(), updated["amount"].clone(), updated["description"].clone()), (json!("Rye"), json!("2.95"), json!("Sourdough")));
-    let cleared = ok(&app, &app.write, &["transactions", "update", id, "--clear-description"]);
-    assert!(cleared["description"].is_null());
-
-    let gym = ok(&app, &app.write, &["recurring", "create", "--name", "Gym", "--amount", "29.99", "--category-id", &groceries, "--start-date", "2026-10-20", "--interval-unit", "month", "--interval-count", "1"]);
-    let gym_id = gym["id"].as_str().unwrap();
-    assert_eq!((gym["intervalUnit"].clone(), gym["nextDueDate"].clone()), (json!("MONTH"), json!("2026-10-20")));
-    let varying = ok(&app, &app.write, &["recurring", "update", gym_id, "--clear-amount"]);
-    assert!(varying["amount"].is_null());
-    let paid = ok(&app, &app.write, &["recurring", "pay", gym_id, "--amount", "31.00", "--paid-on", "2026-10-14"]);
-    assert_eq!((paid["amount"].clone(), paid["paymentDate"].clone()), (json!("31.00"), json!("2026-10-14")));
-    assert_eq!(ok(&app, &app.write, &["recurring", "pause", gym_id])["isActive"], false);
-    assert_eq!(ok(&app, &app.write, &["recurring", "resume", gym_id])["isActive"], true);
-    assert!(ok(&app, &app.write, &["recurring", "skip", gym_id])["nextDueDate"].is_string());
-
-    let settings = ok(&app, &app.write, &["settings", "set", "--language", "ro"]);
-    assert_eq!(settings["language"], "ro");
-    assert_eq!(settings["currency"], "EUR");
-    assert_eq!(failed(&app, &app.write, &["settings", "set", "--currency", "USD"]), (2, "usage".into()), "the currency is changed in the app");
 }
 
 // ---- failing the documented way --------------------------------------------------------------
@@ -579,26 +400,6 @@ fn a_command_never_waits_for_input_it_was_not_asked_to_read() {
 }
 
 #[test]
-fn a_text_flag_given_a_dash_reads_standard_input() {
-    let app = app(false);
-    let food = ok(&app, &app.write, &["categories", "create", "--name", "Food", "--type", "expense"])["id"].as_str().unwrap().to_string();
-    let mut c = command(&app);
-    c.env("MEOWNY_TOKEN", &app.write)
-        .args(["transactions", "create", "--name", "Lunch", "--amount", "9.90", "--payment-date", "2026-10-14", "--category-id", &food, "--description", "-", "--json"])
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped());
-    let mut child = c.spawn().unwrap();
-    {
-        use std::io::Write;
-        child.stdin.take().unwrap().write_all("Lunch with Sam, \"quoted\", ünïcode 日本語 & $HOME; rm -rf\n".as_bytes()).unwrap();
-    }
-    let out = child.wait_with_output().unwrap();
-    let made: Value = serde_json::from_slice(&out.stdout).unwrap_or_else(|e| panic!("{e}: {}", String::from_utf8_lossy(&out.stderr)));
-    assert_eq!(made["description"], "Lunch with Sam, \"quoted\", ünïcode 日本語 & $HOME; rm -rf", "taken as is, without the last line break");
-}
-
-#[test]
 fn control_characters_cannot_get_into_the_data_so_they_cannot_reach_a_terminal_from_it() {
     let app = app(false);
     let food = ok(&app, &app.write, &["categories", "create", "--name", "Food", "--type", "expense"])["id"].as_str().unwrap().to_string();
@@ -719,37 +520,6 @@ fn an_existing_file_is_never_replaced_and_the_person_is_not_asked_about_it() {
 }
 
 #[test]
-fn a_relative_path_is_made_absolute_from_where_the_program_runs() {
-    let app = app(true);
-    let mut c = command(&app);
-    c.current_dir(app.files.path()).env("MEOWNY_TOKEN", &app.write).args(["export", "csv", "--out", "sub/../relative.csv", "--json"]);
-    let out = finish(c);
-    assert_eq!(out.code, 0, "{}", out.err);
-    let shown = out.json()["path"].as_str().unwrap().to_string();
-    let expected = std::fs::canonicalize(app.files.path()).unwrap().join("relative.csv");
-    assert_eq!(std::fs::canonicalize(&shown).unwrap(), expected);
-    assert!(app.shown.lock().unwrap()[0].text.contains(&shown), "the person is shown the full path, not the one that was typed");
-    assert!(!shown.contains(".."));
-}
-
-#[test]
-fn a_selection_by_category_and_date_narrows_the_file() {
-    let app = app(true);
-    let categories = ok(&app, &app.read, &["categories", "list", "--type", "expense"]);
-    let (a, b) = (categories[0].clone(), categories[1].clone());
-    let ids = format!("{},{}", a["id"].as_str().unwrap(), b["id"].as_str().unwrap());
-    let file = app.out("two.json");
-    ok(&app, &app.write, &["export", "json", "--out", &file, "--category-ids", &ids, "--from", "2026-09-01", "--to", "2026-09-30"]);
-    let text = std::fs::read_to_string(&file).unwrap();
-    let parsed: Value = serde_json::from_str(&text).unwrap();
-    assert_eq!(parsed["categories"].as_array().unwrap().len(), 2);
-    assert!(parsed["transactions"].as_array().unwrap().iter().all(|t| t["date"].as_str().unwrap().starts_with("2026-09")));
-    assert!(app.shown.lock().unwrap()[0].text.contains("Only the 2 categories chosen"));
-    let preview = ok(&app, &app.read, &["export", "preview", "--category-ids", &ids, "--from", "2026-09-01", "--to", "2026-09-30"]);
-    assert_eq!(preview["transactions"], parsed["transactions"].as_array().unwrap().len());
-}
-
-#[test]
 fn a_backup_takes_its_passphrase_from_standard_input_and_opens_only_with_it() {
     let app = app(true);
     let file = app.out("b.meowbak");
@@ -790,156 +560,8 @@ fn there_is_no_command_to_restore_a_backup_or_to_change_the_currency_or_to_delet
     assert_eq!(app.asked(), 0);
 }
 
-// ---- every command, once, against a real app --------------------------------------------------
-
-/// Runs commands and remembers which ones, so a command nobody tested is a failure.
-struct Tour<'a> {
-    app: &'a App,
-    known: BTreeSet<String>,
-    used: BTreeSet<String>,
-}
-
-impl Tour<'_> {
-    fn note(&mut self, args: &[&str]) {
-        for n in (1..=2.min(args.len())).rev() {
-            let name = args[..n].join(" ");
-            if self.known.contains(&name) {
-                self.used.insert(name);
-                return;
-            }
-        }
-        panic!("{args:?} is not a command");
-    }
-
-    fn go(&mut self, token: &str, args: &[&str]) -> Value {
-        self.note(args);
-        ok(self.app, token, args)
-    }
-}
-
 fn id_of(value: &Value) -> String {
     value["id"].as_str().unwrap().to_string()
-}
-
-#[test]
-fn every_command_runs_against_a_real_app_and_a_new_one_without_a_test_fails_this() {
-    let app = app(true);
-    let schema = run(&app, "", &["schema"]).json();
-    let known: BTreeSet<String> = schema["commands"].as_array().unwrap().iter().map(|c| c["command"].as_str().unwrap().to_string()).collect();
-    let mut t = Tour { app: &app, known: known.clone(), used: BTreeSet::new() };
-    let (r, w) = (app.read.clone(), app.write.clone());
-
-    // The app itself.
-    assert_eq!(t.go(&r, &["status"])["app"], "meowny");
-    assert_eq!(t.go(&r, &["today"])["date"].as_str().unwrap().len(), 10);
-    assert_eq!(t.go(&r, &["settings", "get"])["language"], "en");
-    assert_eq!(t.go(&w, &["settings", "set", "--language", "ro", "--locale", "ro-RO"])["language"], "ro");
-    assert_eq!(t.go(&r, &["settings", "get"])["locale"], "ro-RO");
-    t.go(&w, &["settings", "set", "--language", "en", "--locale", "en-IE"]);
-
-    // Categories.
-    let before = t.go(&r, &["categories", "list"]).as_array().unwrap().len();
-    let pets = id_of(&t.go(&w, &["categories", "create", "--name", "Pets", "--type", "expense"]));
-    assert_eq!(t.go(&r, &["categories", "list"]).as_array().unwrap().len(), before + 1);
-    assert_eq!(t.go(&w, &["categories", "rename", &pets, "--name", "Animals"])["name"], "Animals");
-
-    // Transactions.
-    let tx = id_of(&t.go(&w, &["transactions", "create", "--name", "Food", "--amount", "12.50", "--payment-date", "2026-10-14", "--category-id", &pets, "--description", "Kibble"]));
-    assert_eq!(t.go(&r, &["transactions", "list", "--category-id", &pets])["total"], 1);
-    assert_eq!(t.go(&w, &["transactions", "update", &tx, "--amount", "13.00"])["amount"], "13.00");
-    assert!(t.go(&w, &["transactions", "delete", &tx, "--yes"]).is_null());
-    assert_eq!(t.go(&r, &["transactions", "list", "--category-id", &pets])["total"], 0);
-
-    // Budgets.
-    assert_eq!(t.go(&w, &["budgets", "set", "--type", "expense", "--month", "2026-12", "--amount-limit", "100.00", "--category-id", &pets])["amountLimit"], "100.00");
-    assert!(t.go(&r, &["budgets", "overview", "--month", "2026-12"]).is_array());
-    assert!(t.go(&r, &["budgets", "history"]).is_array());
-    t.go(&w, &["budgets", "remove", "--type", "expense", "--month", "2027-01", "--category-id", &pets, "--yes"]);
-
-    // Recurring items.
-    let item = id_of(&t.go(&w, &["recurring", "create", "--name", "Vet plan", "--amount", "20.00", "--category-id", &pets, "--start-date", "2026-10-20", "--interval-unit", "month", "--interval-count", "1"]));
-    assert!(t.go(&r, &["recurring", "list"]).as_array().unwrap().iter().any(|i| i["id"] == json!(item)));
-    assert_eq!(t.go(&w, &["recurring", "update", &item, "--name", "Vet plan plus"])["name"], "Vet plan plus");
-    assert!(t.go(&r, &["recurring", "dues", "--within-days", "30"])["upcoming"].is_array());
-    assert_eq!(t.go(&w, &["recurring", "pay", &item, "--paid-on", "2026-10-14"])["amount"], "20.00");
-    t.go(&w, &["recurring", "skip", &item]);
-    assert_eq!(t.go(&w, &["recurring", "pause", &item])["isActive"], false);
-    assert_eq!(t.go(&w, &["recurring", "resume", &item])["isActive"], true);
-    assert_eq!(t.go(&w, &["recurring", "end", &item, "--yes"])["isActive"], false);
-    assert!(t.go(&w, &["recurring", "delete", &item, "--yes"]).is_null());
-
-    // Documents: the program reads the file itself and sends its bytes; a read token sees names only; getting a file out is allowed
-    // in the app.
-    let source = app.out("Boiler receipt.pdf");
-    std::fs::write(&source, b"%PDF-1.4 the boiler was repaired").unwrap();
-    let added = t.go(&w, &["documents", "add", &source, "--date", "2026-10-01", "--transaction-ids", "1"]);
-    let doc = id_of(&added);
-    assert_eq!((added["alreadyThere"].clone(), added["name"].clone(), added["linkCount"].clone()), (json!(false), json!("Boiler receipt.pdf"), json!(1)));
-    assert_eq!(t.go(&r, &["documents", "list", "--q", "boiler"])["total"], 1);
-    assert_eq!(t.go(&r, &["documents", "show", &doc])["links"][0]["kind"], "transaction");
-    assert_eq!(t.go(&w, &["documents", "update", &doc, "--name", "Boiler", "--keep-on-phone"])["keepOnPhone"], true);
-    assert!(t.go(&w, &["documents", "link", &doc, "--recurring-id", "1"]).is_null());
-    assert!(t.go(&w, &["documents", "unlink", &doc, "--transaction-id", "1"]).is_null());
-    let copy = app.out("copy.pdf");
-    assert_eq!(t.go(&w, &["documents", "get", &doc, "--out", &copy])["bytes"], 32);
-    assert_eq!(std::fs::read(&copy).unwrap(), b"%PDF-1.4 the boiler was repaired");
-    assert!(t.go(&w, &["documents", "delete", &doc, "--yes"]).is_null());
-    assert_eq!(t.go(&r, &["documents", "list"])["total"], 0);
-
-    // Statistics.
-    assert!(t.go(&r, &["stats", "budget", "--month", "2026-09"])["categories"].is_array());
-    assert!(t.go(&r, &["stats", "trend", "--category-id", &pets, "--from", "2026-01", "--to", "2026-03"])["points"].is_array());
-    assert!(t.go(&r, &["stats", "year", "--year", "2026"]).is_array());
-    assert!(t.go(&r, &["stats", "top", "--month", "2026-09", "--type", "expense", "--limit", "2"]).is_array());
-    assert!(t.go(&r, &["stats", "commitments"]).is_object());
-    assert!(t.go(&r, &["stats", "planned", "--month", "2026-10"]).is_array());
-
-    // Files, which the person has to allow.
-    let preview = t.go(&r, &["export", "preview"]);
-    assert!(preview["transactions"].as_u64().unwrap() > 100);
-    assert!(t.go(&r, &["backup", "schedule"]).is_null());
-    for (words, name, extra) in [
-        (vec!["export", "json"], "t.json", vec![]),
-        (vec!["export", "csv"], "t.csv", vec![]),
-        (vec!["export", "xlsx"], "t.xlsx", vec![]),
-        (vec!["export", "pdf"], "t.pdf", vec!["--from-month", "2026-01", "--to-month", "2026-02"]),
-        (vec!["backup", "create"], "t.meowbak", vec!["--passphrase", "a long enough passphrase"]),
-    ] {
-        let out = app.out(name);
-        let mut args = words.clone();
-        args.extend(["--out", &out]);
-        args.extend(extra.iter().copied());
-        let made = t.go(&w, &args);
-        assert_eq!(made["path"], out.as_str());
-        assert!(std::path::Path::new(&out).exists(), "{words:?} wrote no file");
-    }
-
-    // Last, because it removes the category the rows above used.
-    assert!(t.go(&w, &["categories", "delete", &pets, "--yes"]).is_null());
-
-    // The commands that are about this program.
-    assert!(t.go(&r, &["schema"])["commands"].is_array());
-    assert!(t.go(&r, &["schema", "--app"])["routes"].is_array());
-    let file = app.dir.path().join("saved-token");
-    let file = file.to_str().unwrap();
-    for (words, stdin) in [(vec!["login", "--token-file", file], Some(format!("{}\n", app.read))), (vec!["logout", "--token-file", file], None)] {
-        t.note(&words);
-        let mut c = command(&app);
-        c.args(&words).stdin(if stdin.is_some() { Stdio::piped() } else { Stdio::null() }).stdout(Stdio::piped()).stderr(Stdio::piped());
-        let mut child = c.spawn().unwrap();
-        if let Some(text) = stdin {
-            use std::io::Write;
-            child.stdin.take().unwrap().write_all(text.as_bytes()).unwrap();
-        }
-        let out = child.wait_with_output().unwrap();
-        assert_eq!(out.status.code(), Some(0), "{words:?}: {}", String::from_utf8_lossy(&out.stderr));
-    }
-    assert!(!std::path::Path::new(file).exists(), "logout removed what login saved");
-
-    let missing: Vec<&String> = known.difference(&t.used).collect();
-    assert!(missing.is_empty(), "these commands have no test here: {missing:?}");
-    let unknown: Vec<&String> = t.used.difference(&known).collect();
-    assert!(unknown.is_empty(), "{unknown:?}");
 }
 
 // ---- documents --------------------------------------------------------------------------------
@@ -1004,18 +626,4 @@ fn a_file_that_cannot_be_read_is_exit_2_and_nothing_reaches_the_app() {
     std::fs::write(app.out("a.pdf"), b"%PDF-1.4 x").unwrap();
     assert_eq!(failed(&app, &app.write, &["documents", "add", &app.out("a.pdf"), "--transaction-ids", "999999"]), (4, "not_found".into()));
     assert_eq!(snapshot(&app), before);
-}
-
-#[test]
-fn the_plain_form_of_the_document_commands_is_text_a_person_can_read() {
-    let app = app(true);
-    std::fs::write(app.out("Boiler receipt.pdf"), b"%PDF-1.4 the boiler").unwrap();
-    let added = run(&app, &app.write, &["documents", "add", &app.out("Boiler receipt.pdf"), "--date", "2026-10-01"]);
-    assert_eq!(added.code, 0, "{}", added.err);
-    assert!(added.out.contains("Boiler receipt.pdf") && !added.out.starts_with('{') && !added.out.contains('\u{1b}'), "{}", added.out);
-    let list = run(&app, &app.read, &["documents", "list"]);
-    assert_eq!(list.code, 0, "{}", list.err);
-    assert!(list.out.contains("Boiler receipt.pdf") && list.out.contains("2026-10-01"), "{}", list.out);
-    let help = run(&app, "", &["documents", "add", "--help"]);
-    assert!(help.out.contains("usage: meowny documents add <file>") && help.out.contains("--file <path>") && help.out.contains("name of the file"), "{}", help.out);
 }

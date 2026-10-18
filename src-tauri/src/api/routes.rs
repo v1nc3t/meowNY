@@ -10,7 +10,7 @@ use serde::de::DeserializeOwned;
 use serde::Serialize;
 use serde_json::{json, Map, Value};
 
-use super::{confirmed, documents, read, write, Approval, ApiError, API_VERSION};
+use super::{confirmed, debts, documents, read, write, Approval, ApiError, API_VERSION};
 use crate::clock;
 use crate::migrate;
 use crate::tokens::{Grant, Scope};
@@ -339,6 +339,26 @@ pub static ALL: &[Route] = &[
     documents::LINK,
     documents::UNLINK,
     documents::GET,
+    debts::PEOPLE_LIST,
+    debts::PEOPLE_SHOW,
+    debts::DEBTS_SUMMARY,
+    debts::DEBTS_DUE,
+    debts::DEBTS_HISTORY,
+    debts::DEBTS_REMINDERS,
+    debts::SPLITS_PREVIEW,
+    debts::PEOPLE_CREATE,
+    debts::PEOPLE_UPDATE,
+    debts::PEOPLE_ARCHIVE,
+    debts::PEOPLE_UNARCHIVE,
+    debts::PEOPLE_SETTLE,
+    debts::LEDGER_ADD,
+    debts::LEDGER_UPDATE,
+    debts::LEDGER_DELETE,
+    debts::TRANSACTIONS_SPLIT,
+    debts::TRANSACTIONS_UNSPLIT,
+    debts::RECURRING_SPLIT,
+    debts::RECURRING_UNSPLIT,
+    debts::EXPORT_DEBTS,
 ];
 
 #[cfg(test)]

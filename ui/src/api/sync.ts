@@ -45,8 +45,18 @@ export const MODES = ['both', 'to_desktop', 'to_phone'] as const
 export const Mode = z.enum(MODES)
 export type Mode = z.infer<typeof Mode>
 
-export const TABLES = ['settings', 'categories', 'recurring_transactions', 'budgets', 'transactions', 'documents', 'document_links'] as const
-export const FIELDS = ['name', 'amount', 'date', 'category', 'description', 'type', 'month', 'every', 'nextDue', 'endDate', 'active', 'locale', 'timezone', 'keepOnPhone', 'document', 'target'] as const
+export const TABLES = [
+  'settings',
+  'categories',
+  'people',
+  'recurring_transactions',
+  'budgets',
+  'transactions',
+  'ledger_entries',
+  'documents',
+  'document_links',
+] as const
+export const FIELDS = ['name', 'amount', 'date', 'category', 'description', 'type', 'month', 'every', 'nextDue', 'endDate', 'active', 'locale', 'timezone', 'keepOnPhone', 'document', 'target', 'archived', 'reminder', 'friend', 'kind', 'note', 'split'] as const
 
 /** One thing that was changed on both devices since they last met: how its two versions differ. */
 export const Conflict = z.object({

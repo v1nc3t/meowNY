@@ -1,5 +1,5 @@
 //! Plain-file exports: a JSON file with the data and a CSV of transactions. These files are not
-//! encrypted (the encrypted copy is the backup), so the export screen says so before saving.
+//! encrypted (the encrypted copy is the backup); the guides say so.
 //!
 //! A `Selection` narrows what goes in: a date range for transactions, and a set of categories for
 //! everything that belongs to a category. With categories chosen, other category names, global
@@ -8,16 +8,21 @@
 //! Documents are listed by name, date, type, size, hash and what they are attached to, and a file is never in an export (the
 //! encrypted backup is where the files go). A limited export lists only the documents attached to something that is in it, and for
 //! each only the attachments that are in it, so the name of a document attached to something left out is not revealed.
+//! Debts are listed too: the friends, the ledger of money lent and borrowed, and the parts of every shared bill; each transaction has what was
+//! paid (`amount`) and what it costs you (`my_share`). A limited export keeps to what it contains (see `debts.rs`).
 //! The device-specific scheduled-backup setup, which holds a passphrase, and the access tokens of the
 //! command-line client are never exported.
 
+pub(crate) mod debts;
 #[cfg(desktop)]
 mod xlsx;
 
 use std::borrow::Cow;
 
 use chrono::{DateTime, SecondsFormat, Utc};
-use rusqlite::{params, Connection};
+use rusqlite::Connection;
+#[cfg(test)]
+use rusqlite::params;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
@@ -47,17 +52,147 @@ pub struct Selection {
     /// Null means every category. An empty list means none.
     #[serde(default)]
     pub category_ids: Option<Vec<String>>,
+    /// With a limit (dates or categories) the ledger of money lent and borrowed is left out, unless this is set. Without a limit it is all in.
+    #[serde(default)]
+    pub include_debts: bool,
+    /// Only income or only expenses. Null means both.
+    #[serde(default)]
+    pub kind: Option<Kind>,
+    /// What a transaction cost you (the amount minus the parts of the others) is at least this and at most that, as decimal strings
+    /// ("12.50"). Null means no bound.
+    #[serde(default)]
+    pub min_amount: Option<String>,
+    #[serde(default)]
+    pub max_amount: Option<String>,
+    /// Only transactions whose name or description has this text in it, whatever the case (as the search of the transactions page).
+    #[serde(default)]
+    pub text: Option<String>,
+    /// Only the bills that are shared with friends, or only those that are not. Null means both.
+    #[serde(default)]
+    pub split: Option<SplitFilter>,
+    /// What goes into a JSON or an Excel file. Null means every part. The change history only ever goes into a file with no limit.
+    #[serde(default)]
+    pub sections: Option<Vec<Section>>,
 }
 
+/// Income or expense, to choose one of them.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "UPPERCASE")]
+pub enum Kind {
+    Income,
+    Expense,
+}
+
+impl Kind {
+    pub(crate) fn as_str(self) -> &'static str {
+        match self {
+            Kind::Income => "INCOME",
+            Kind::Expense => "EXPENSE",
+        }
+    }
+}
+
+/// Whether a transaction is a bill shared with friends.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SplitFilter {
+    Split,
+    NotSplit,
+}
+
+/// The parts of a JSON or Excel file that can be left out.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Section {
+    Transactions,
+    Categories,
+    Budgets,
+    Recurring,
+    Documents,
+    /// The friends and what each owes or is owed.
+    People,
+    /// The recurring payments that have come due and are not paid or skipped: what you owe by now.
+    Due,
+    /// The history of debts: the ledger of money lent, borrowed and paid back, the parts of the shared bills, and the recurring payments that
+    /// were paid or are due.
+    Ledger,
+    History,
+}
+
+impl Section {
+    pub(crate) fn as_str(self) -> &'static str {
+        match self {
+            Section::Transactions => "transactions",
+            Section::Categories => "categories",
+            Section::Budgets => "budgets",
+            Section::Recurring => "recurring",
+            Section::Documents => "documents",
+            Section::People => "people",
+            Section::Due => "due",
+            Section::Ledger => "ledger",
+            Section::History => "history",
+        }
+    }
+}
+
+/// The longest text a transaction search may be, in characters.
+pub const TEXT_MAX_CHARS: usize = 100;
+
+#[derive(Default)]
 pub(crate) struct Parsed {
     pub(crate) from: Option<String>,
     pub(crate) to: Option<String>,
     pub(crate) categories: Option<Vec<i64>>,
+    pub(crate) debts: bool,
+    pub(crate) kind: Option<Kind>,
+    /// In minor units: what a transaction cost you.
+    pub(crate) min: Option<i64>,
+    pub(crate) max: Option<i64>,
+    /// The text asked for, and the `LIKE` pattern made of it (`%text%`, with the wild characters of the text escaped).
+    pub(crate) text: Option<String>,
+    pub(crate) pattern: Option<String>,
+    pub(crate) split: Option<SplitFilter>,
+    pub(crate) sections: Option<Vec<Section>>,
 }
 
 impl Parsed {
-    fn everything(&self) -> bool {
-        self.from.is_none() && self.to.is_none() && self.categories.is_none()
+    /// No limit of any kind: not dates, not categories, not a kind, an amount or a text.
+    pub(crate) fn everything(&self) -> bool {
+        self.from.is_none()
+            && self.to.is_none()
+            && self.categories.is_none()
+            && self.kind.is_none()
+            && self.min.is_none()
+            && self.max.is_none()
+            && self.pattern.is_none()
+            && self.split.is_none()
+    }
+
+    /// Whether anything but the dates and the parts leaves some transactions out. A running balance that counts them would add up what the
+    /// file leaves out, so it is not shown then.
+    pub(crate) fn narrows_transactions(&self) -> bool {
+        self.categories.is_some() || self.kind.is_some() || self.min.is_some() || self.max.is_some() || self.pattern.is_some() || self.split.is_some()
+    }
+
+    /// Whether a part of the file is asked for. (The history is also left out of any file that has a limit.)
+    pub(crate) fn wants(&self, section: Section) -> bool {
+        self.sections.as_ref().is_none_or(|list| list.contains(&section))
+    }
+
+    /// The seven values `transaction_filter` names, in order: first day, last day, kind, least and most it cost, text pattern, shared or not.
+    pub(crate) fn args(&self) -> [rusqlite::types::Value; 7] {
+        use rusqlite::types::Value;
+        let text = |t: &Option<String>| t.clone().map_or(Value::Null, Value::Text);
+        let number = |n: Option<i64>| n.map_or(Value::Null, Value::Integer);
+        [
+            text(&self.from),
+            text(&self.to),
+            self.kind.map_or(Value::Null, |k| Value::Text(k.as_str().to_string())),
+            number(self.min),
+            number(self.max),
+            text(&self.pattern),
+            self.split.map_or(Value::Null, |split| Value::Integer(i64::from(split == SplitFilter::Split))),
+        ]
     }
 
     /// `AND`-ready SQL for a category column; ids are integers, so they are written in directly.
@@ -83,7 +218,23 @@ pub(crate) fn parse(selection: &Selection) -> Result<Parsed, AppError> {
         .as_ref()
         .map(|ids| ids.iter().map(|id| parse_id(id)).collect::<Result<Vec<_>, _>>())
         .transpose()?;
-    Ok(Parsed { from, to, categories })
+    let amount = |a: &Option<String>| a.as_deref().map(crate::money::parse_amount).transpose();
+    let (min, max) = (amount(&selection.min_amount)?, amount(&selection.max_amount)?);
+    if matches!((min, max), (Some(low), Some(high)) if low > high) {
+        return Err(AppError::InvalidInput);
+    }
+    let text = match selection.text.as_deref().map(str::trim).filter(|t| !t.is_empty()) {
+        None => None,
+        Some(text) if text.chars().count() > TEXT_MAX_CHARS || text.chars().any(char::is_control) => return Err(AppError::InvalidInput),
+        Some(text) => Some(text.to_string()),
+    };
+    let pattern = text.as_deref().map(crate::transactions::like_pattern);
+    let sections = match &selection.sections {
+        None => None,
+        Some(list) if list.is_empty() => return Err(AppError::InvalidInput),
+        Some(list) => Some(list.clone()),
+    };
+    Ok(Parsed { from, to, categories, debts: selection.include_debts, kind: selection.kind, min, max, text, pattern, split: selection.split, sections })
 }
 
 /// Spreadsheet programs run a cell that starts with one of these as a formula, so such a cell is
@@ -104,16 +255,26 @@ pub(crate) struct Tx {
     pub(crate) category_id: i64,
     pub(crate) category: String,
     pub(crate) name: String,
+    /// What was paid.
     pub(crate) amount: i64,
+    /// What it costs you (`transaction_costs`): the amount minus the parts of the others.
+    pub(crate) my_share: i64,
     pub(crate) planned: Option<i64>,
     pub(crate) description: Option<String>,
     pub(crate) recurring_id: Option<i64>,
 }
 
-/// The `WHERE` of every transaction query: `?1` is the first date, `?2` the last, both optional.
+/// The `WHERE` of every transaction query, written for `transactions t JOIN transaction_costs k ON k.transaction_id = t.id`, with the
+/// values of `Parsed::args` bound in order: `?1` the first day, `?2` the last, `?3` income or expense, `?4` the least it cost, `?5` the most,
+/// `?6` a text pattern, `?7` 1 for the bills that are shared and 0 for those that are not. Each is optional, and the categories are written in
+/// (they are integers).
 pub(crate) fn transaction_filter(sel: &Parsed) -> String {
     format!(
-        "(?1 IS NULL OR t.payment_date >= ?1) AND (?2 IS NULL OR t.payment_date <= ?2) AND {}",
+        "(?1 IS NULL OR t.payment_date >= ?1) AND (?2 IS NULL OR t.payment_date <= ?2) AND {}
+         AND (?3 IS NULL OR (SELECT kind.type FROM categories kind WHERE kind.id = t.category_id) = ?3)
+         AND (?4 IS NULL OR k.cost_minor >= ?4) AND (?5 IS NULL OR k.cost_minor <= ?5)
+         AND (?6 IS NULL OR t.name LIKE ?6 ESCAPE '\\' OR t.description LIKE ?6 ESCAPE '\\')
+         AND (?7 IS NULL OR EXISTS (SELECT 1 FROM transaction_split_lines sl WHERE sl.transaction_id = t.id) = ?7)",
         sel.category_filter("t.category_id")
     )
 }
@@ -121,13 +282,13 @@ pub(crate) fn transaction_filter(sel: &Parsed) -> String {
 pub(crate) fn transactions(conn: &Connection, sel: &Parsed) -> Result<Vec<Tx>, AppError> {
     let mut statement = conn.prepare(&format!(
         "SELECT t.id, t.payment_date, c.type, t.category_id, c.name, t.name, t.amount_minor,
-                t.planned_amount_minor, t.description, t.recurring_transaction_id
-         FROM transactions t JOIN categories c ON c.id = t.category_id
+                t.planned_amount_minor, t.description, t.recurring_transaction_id, k.cost_minor
+         FROM transactions t JOIN categories c ON c.id = t.category_id JOIN transaction_costs k ON k.transaction_id = t.id
          WHERE {}
          ORDER BY t.payment_date, t.id",
         transaction_filter(sel)
     ))?;
-    let rows = statement.query_map(params![sel.from, sel.to], |r| {
+    let rows = statement.query_map(rusqlite::params_from_iter(sel.args()), |r| {
         Ok(Tx {
             id: r.get(0)?,
             date: r.get(1)?,
@@ -139,6 +300,7 @@ pub(crate) fn transactions(conn: &Connection, sel: &Parsed) -> Result<Vec<Tx>, A
             planned: r.get(7)?,
             description: r.get(8)?,
             recurring_id: r.get(9)?,
+            my_share: r.get(10)?,
         })
     })?;
     Ok(rows.collect::<Result<Vec<_>, _>>()?)
@@ -148,12 +310,12 @@ pub(crate) fn transactions(conn: &Connection, sel: &Parsed) -> Result<Vec<Tx>, A
 pub(crate) fn monthly_sums(conn: &Connection, sel: &Parsed) -> Result<std::collections::BTreeMap<String, (i64, i64)>, AppError> {
     let mut sums: std::collections::BTreeMap<String, (i64, i64)> = Default::default();
     let mut statement = conn.prepare(&format!(
-        "SELECT substr(t.payment_date, 1, 7), c.type, SUM(t.amount_minor)
-         FROM transactions t JOIN categories c ON c.id = t.category_id
+        "SELECT substr(t.payment_date, 1, 7), c.type, SUM(k.cost_minor)
+         FROM transactions t JOIN transaction_costs k ON k.transaction_id = t.id JOIN categories c ON c.id = t.category_id
          WHERE {} GROUP BY 1, 2",
         transaction_filter(sel)
     ))?;
-    let rows = statement.query_map(params![sel.from, sel.to], |r| {
+    let rows = statement.query_map(rusqlite::params_from_iter(sel.args()), |r| {
         Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?, r.get::<_, i64>(2)?))
     })?;
     for row in rows {
@@ -172,7 +334,22 @@ pub(crate) fn currency(conn: &Connection) -> Result<String, AppError> {
     Ok(conn.query_row("SELECT currency FROM settings WHERE id = 1", [], |r| r.get(0))?)
 }
 
-fn csv_field(cell: &str) -> String {
+/// A cell that is a number as `format_amount` writes it ("12.50", "-7.50"). It is not neutralised: a minus sign in front of a number is not
+/// a formula, and an apostrophe in front of it would make a spreadsheet read the number as text. Anything that is not such a number is
+/// treated like any other text.
+pub(crate) fn csv_number(cell: &str) -> String {
+    let digits = cell.strip_prefix('-').unwrap_or(cell);
+    let plain = digits.split_once('.').is_some_and(|(whole, fraction)| {
+        !whole.is_empty() && !fraction.is_empty() && whole.bytes().all(|b| b.is_ascii_digit()) && fraction.bytes().all(|b| b.is_ascii_digit())
+    });
+    if plain {
+        cell.to_string()
+    } else {
+        csv_field(cell)
+    }
+}
+
+pub(crate) fn csv_field(cell: &str) -> String {
     let cell = neutralise(cell);
     if cell.contains([',', '"', '\n', '\r']) {
         format!("\"{}\"", cell.replace('"', "\"\""))
@@ -182,16 +359,18 @@ fn csv_field(cell: &str) -> String {
 }
 
 /// Transactions as CSV: a header row, then one row per transaction, oldest first. Amounts are
-/// positive; `type` says whether it was income or an expense. The last column names the documents attached to the transaction. The file starts with a byte order
+/// positive; `type` says whether it was income or an expense. `documents` names the documents attached to the transaction and `my_share` is
+/// what it costs you (the same as `amount` unless the bill is shared). The file starts with a byte order
 /// mark so Excel reads the UTF-8 text correctly, and rows end with CRLF as the format says.
 pub fn csv(conn: &Connection, selection: &Selection) -> Result<String, AppError> {
     let sel = parse(selection)?;
     let tx = conn.unchecked_transaction()?;
     let currency = currency(&tx)?;
     let attached = document_names_by_transaction(&tx)?;
-    let mut out = String::from("\u{feff}date,type,category,name,amount,currency,description,documents\r\n");
+    let mut out = String::from("\u{feff}date,type,category,name,amount,currency,description,documents,my_share\r\n");
     for t in transactions(&tx, &sel)? {
         let documents = attached.get(&t.id).map(|names| join_names(names)).unwrap_or_default();
+        let share = format_amount(t.my_share);
         let cells = [
             t.date.as_str(),
             t.kind.as_str(),
@@ -201,6 +380,7 @@ pub fn csv(conn: &Connection, selection: &Selection) -> Result<String, AppError>
             currency.as_str(),
             t.description.as_deref().unwrap_or(""),
             documents.as_str(),
+            share.as_str(),
         ];
         let row: Vec<String> = cells.iter().map(|c| csv_field(c)).collect();
         out.push_str(&row.join(","));
@@ -218,10 +398,10 @@ struct CategoryRow {
 
 fn category_rows(conn: &Connection, sel: &Parsed) -> Result<Vec<CategoryRow>, AppError> {
     let mut statement = conn.prepare(&format!(
-        "SELECT id, type, name, deleted_at IS NOT NULL FROM categories WHERE {} ORDER BY id",
+        "SELECT id, type, name, deleted_at IS NOT NULL FROM categories WHERE {} AND (?1 IS NULL OR type = ?1) ORDER BY id",
         sel.category_filter("id")
     ))?;
-    let rows = statement.query_map([], |r| {
+    let rows = statement.query_map([sel.kind.map(Kind::as_str)], |r| {
         Ok(CategoryRow { id: r.get(0)?, kind: r.get(1)?, name: r.get(2)?, deleted: r.get(3)? })
     })?;
     Ok(rows.collect::<Result<Vec<_>, _>>()?)
@@ -237,24 +417,86 @@ struct BudgetRow {
     limit: Option<i64>,
 }
 
-/// Every budget row, including the ones that remove a budget from a month on.
+/// Every budget row, including the ones that remove a budget from a month on. A budget holds from its month until a later row of the
+/// same budget, so with dates the file keeps the rows of the months in the range and, for each budget, the row in force when the range
+/// starts (unless that row removed the budget): the budgets that applied in the range, and no other.
 fn budget_rows(conn: &Connection, sel: &Parsed) -> Result<Vec<BudgetRow>, AppError> {
     // Global budgets belong to no category, so they only go out with an export of every category.
     let filter = if sel.categories.is_some() { sel.category_filter("category_id") } else { "1".to_string() };
     let mut statement = conn.prepare(&format!(
         "SELECT type, scope, category_id, amount_limit_minor, effective_from
-         FROM budgets WHERE {filter} ORDER BY effective_from, id"
+         FROM budgets WHERE {filter} AND (?1 IS NULL OR type = ?1) ORDER BY effective_from, id"
     ))?;
-    let rows = statement.query_map([], |r| {
+    let rows = statement.query_map([sel.kind.map(Kind::as_str)], |r| {
         Ok(BudgetRow { kind: r.get(0)?, scope: r.get(1)?, category_id: r.get(2)?, limit: r.get(3)?, effective_from: r.get(4)? })
     })?;
-    Ok(rows.collect::<Result<Vec<_>, _>>()?)
+    Ok(budgets_in_range(rows.collect::<Result<Vec<_>, _>>()?, sel))
+}
+
+fn budgets_in_range(rows: Vec<BudgetRow>, sel: &Parsed) -> Vec<BudgetRow> {
+    if sel.from.is_none() && sel.to.is_none() {
+        return rows;
+    }
+    // "YYYY-MM-01" of the months the dates are in; the dates were checked, so they are ten characters long
+    let first = sel.from.as_deref().map(|day| format!("{}-01", &day[..7]));
+    let last = sel.to.as_deref().map(|day| format!("{}-01", &day[..7]));
+    let mut in_force: std::collections::HashMap<(&str, &str, Option<i64>), usize> = Default::default();
+    if let Some(first) = &first {
+        // the rows are in the order of their months, so the last one before the range wins
+        for (at, row) in rows.iter().enumerate().filter(|(_, row)| row.effective_from < *first) {
+            in_force.insert((row.kind.as_str(), row.scope.as_str(), row.category_id), at);
+        }
+    }
+    // a budget that has a row of its own in the first month is in force by that row, which is inside the range
+    let starting_here: std::collections::HashSet<(&str, &str, Option<i64>)> = match &first {
+        Some(first) => rows.iter().filter(|row| row.effective_from == *first).map(|row| (row.kind.as_str(), row.scope.as_str(), row.category_id)).collect(),
+        None => Default::default(),
+    };
+    let carried: std::collections::HashSet<usize> =
+        in_force.into_iter().filter(|(key, at)| rows[*at].limit.is_some() && !starting_here.contains(key)).map(|(_, at)| at).collect();
+    rows.into_iter()
+        .enumerate()
+        .filter(|(at, row)| {
+            let inside = first.as_ref().is_none_or(|first| row.effective_from >= *first) && last.as_ref().is_none_or(|last| row.effective_from <= *last);
+            inside || carried.contains(at)
+        })
+        .map(|(_, row)| row)
+        .collect()
+}
+
+/// The recurring items an export contains: those in the chosen categories (and of the chosen kind) that were running at some time in the
+/// range of dates, that is, that started on or before its last day and did not end before its first.
+/// Today's date in the person's timezone, as `now` says it.
+pub(crate) fn today_of(conn: &Connection, now: DateTime<Utc>) -> Result<String, AppError> {
+    let timezone: String = conn.query_row("SELECT timezone FROM settings WHERE id = 1", [], |r| r.get(0))?;
+    Ok(crate::clock::today(now, &timezone)?.to_string())
+}
+
+/// The recurring payments that have come due and are not paid or skipped yet (every occurrence, the oldest first): what you owe by `today`,
+/// as the debts screen lists it. Those of the chosen categories; the dates of an export do not narrow them, because what is due is a matter
+/// of today, and a payment is an expense, so choosing income leaves none.
+pub(crate) fn due_payments(conn: &Connection, sel: &Parsed, today: &str) -> Result<Vec<crate::debts::dues::DuePayment>, AppError> {
+    if sel.kind == Some(Kind::Income) {
+        return Ok(Vec::new());
+    }
+    Ok(crate::debts::dues::due_payments(conn, today)?
+        .into_iter()
+        .filter(|payment| sel.categories.as_ref().is_none_or(|ids| ids.contains(&payment.category_id)))
+        .collect())
 }
 
 fn recurring_rows(conn: &Connection, sel: &Parsed) -> Result<Vec<recurring::Recurring>, AppError> {
+    let mut statement = conn.prepare("SELECT id, type FROM categories")?;
+    let kinds: std::collections::HashMap<i64, String> =
+        statement.query_map([], |r| Ok((r.get::<_, i64>(0)?, r.get::<_, String>(1)?)))?.collect::<Result<_, _>>()?;
     Ok(recurring::list(conn)?
         .into_iter()
-        .filter(|item| sel.categories.as_ref().is_none_or(|ids| ids.contains(&item.category_id)))
+        .filter(|item| {
+            sel.categories.as_ref().is_none_or(|ids| ids.contains(&item.category_id))
+                && sel.kind.is_none_or(|kind| kinds.get(&item.category_id).is_some_and(|k| k == kind.as_str()))
+                && sel.from.as_deref().is_none_or(|from| item.end_date.as_deref().is_none_or(|end| end >= from))
+                && sel.to.as_deref().is_none_or(|to| item.start_date.as_str() <= to)
+        })
         .collect())
 }
 
@@ -308,7 +550,7 @@ fn history_json(conn: &Connection) -> Result<Vec<Value>, AppError> {
 
 /// What a document is attached to, as an export names it.
 pub(crate) struct DocLink {
-    /// "transaction" or "recurring".
+    /// "transaction", "recurring" or "ledger" (the name is then the friend's and the date the entry's).
     pub(crate) kind: &'static str,
     pub(crate) id: i64,
     pub(crate) name: String,
@@ -328,33 +570,27 @@ pub(crate) struct DocRow {
     pub(crate) links: Vec<DocLink>,
 }
 
-impl Parsed {
-    fn has_transaction(&self, date: &str, category_id: i64) -> bool {
-        self.from.as_deref().is_none_or(|from| date >= from)
-            && self.to.as_deref().is_none_or(|to| date <= to)
-            && self.categories.as_ref().is_none_or(|ids| ids.contains(&category_id))
-    }
-
-    fn has_recurring(&self, category_id: i64) -> bool {
-        self.categories.as_ref().is_none_or(|ids| ids.contains(&category_id))
-    }
-}
-
 /// The documents an export with this selection lists. With no selection every document, attached or not. With one, a document only if
 /// it is attached to a transaction or a recurring item that the export contains, and then only those attachments.
 pub(crate) fn documents(conn: &Connection, sel: &Parsed) -> Result<Vec<DocRow>, AppError> {
     let mut statement = conn.prepare(
         "SELECT d.id, d.name, d.media_type, d.size_bytes, d.sha256, d.document_date,
-                l.transaction_id, t.name, t.payment_date, t.category_id,
-                l.recurring_transaction_id, r.name, r.category_id
+                l.transaction_id, t.name, t.payment_date,
+                l.recurring_transaction_id, r.name,
+                l.ledger_entry_id, pe.name, e.entry_date
          FROM documents d
          LEFT JOIN document_links l ON l.document_id = d.id
          LEFT JOIN transactions t ON t.id = l.transaction_id
          LEFT JOIN recurring_transactions r ON r.id = l.recurring_transaction_id
-         ORDER BY d.document_date, d.id, l.transaction_id IS NULL, t.payment_date, l.transaction_id, r.name, l.recurring_transaction_id",
+         LEFT JOIN ledger_entries e ON e.id = l.ledger_entry_id
+         LEFT JOIN people pe ON pe.id = e.person_id
+         ORDER BY d.document_date, d.id, l.transaction_id IS NULL, t.payment_date, l.transaction_id, r.name, l.recurring_transaction_id, e.entry_date, l.ledger_entry_id",
     )?;
     let mut rows = statement.query([])?;
     let everything = sel.everything();
+    // an attachment counts when what it is attached to is in the export
+    let held: std::collections::HashSet<i64> = transactions(conn, sel)?.iter().map(|t| t.id).collect();
+    let running: std::collections::HashSet<i64> = recurring_rows(conn, sel)?.iter().map(|r| r.id).collect();
     let mut out: Vec<DocRow> = Vec::new();
     // the document being read, kept only once it is known to have an attachment in the export (or the export is of everything)
     let mut current: Option<DocRow> = None;
@@ -381,14 +617,20 @@ pub(crate) fn documents(conn: &Connection, sel: &Parsed) -> Result<Vec<DocRow>, 
         }
         let doc = current.as_mut().expect("a document is being read");
         if let Some(transaction) = r.get::<_, Option<i64>>(6)? {
-            let (name, date, category): (String, String, i64) = (r.get(7)?, r.get(8)?, r.get(9)?);
-            if sel.has_transaction(&date, category) {
+            let (name, date): (String, String) = (r.get(7)?, r.get(8)?);
+            if held.contains(&transaction) {
                 doc.links.push(DocLink { kind: "transaction", id: transaction, name, date: Some(date) });
             }
-        } else if let Some(item) = r.get::<_, Option<i64>>(10)? {
-            let (name, category): (String, i64) = (r.get(11)?, r.get(12)?);
-            if sel.has_recurring(category) {
+        } else if let Some(item) = r.get::<_, Option<i64>>(9)? {
+            let name: String = r.get(10)?;
+            if running.contains(&item) {
                 doc.links.push(DocLink { kind: "recurring", id: item, name, date: None });
+            }
+        } else if let Some(entry) = r.get::<_, Option<i64>>(11)? {
+            // an entry of the ledger is in the export only when the ledger is (see `debts.rs`)
+            let (friend, date): (String, String) = (r.get(12)?, r.get(13)?);
+            if (everything || sel.debts) && sel.from.as_deref().is_none_or(|from| date.as_str() >= from) && sel.to.as_deref().is_none_or(|to| date.as_str() <= to) {
+                doc.links.push(DocLink { kind: "ledger", id: entry, name: friend, date: Some(date) });
             }
         }
     }
@@ -455,6 +697,14 @@ pub struct Preview {
     pub recurring: u32,
     /// Documents listed by name (never their files).
     pub documents: u32,
+    /// Friends, ledger entries and shared bills (with their parts) in the export.
+    pub people: u32,
+    pub ledger: u32,
+    pub split_bills: u32,
+    /// Recurring payments that have come due and are listed with the debts.
+    pub due_payments: u32,
+    /// Lines of the history of debts: those of the friends and the recurring payments paid or due.
+    pub debt_history: u32,
     /// Entries of the change history. Only a JSON file with no selection carries them; with any
     /// selection this is 0.
     pub history: u32,
@@ -466,25 +716,40 @@ pub fn preview(conn: &Connection, selection: &Selection) -> Result<Preview, AppE
     let (transactions, first_date, last_date, income, expense) = tx.query_row(
         &format!(
             "SELECT COUNT(*), MIN(t.payment_date), MAX(t.payment_date),
-                    COALESCE(SUM(CASE WHEN c.type = 'INCOME' THEN t.amount_minor END), 0),
-                    COALESCE(SUM(CASE WHEN c.type = 'EXPENSE' THEN t.amount_minor END), 0)
-             FROM transactions t JOIN categories c ON c.id = t.category_id WHERE {}",
+                    COALESCE(SUM(CASE WHEN c.type = 'INCOME' THEN k.cost_minor END), 0),
+                    COALESCE(SUM(CASE WHEN c.type = 'EXPENSE' THEN k.cost_minor END), 0)
+             FROM transactions t JOIN transaction_costs k ON k.transaction_id = t.id JOIN categories c ON c.id = t.category_id WHERE {}",
             transaction_filter(&sel)
         ),
-        params![sel.from, sel.to],
+        rusqlite::params_from_iter(sel.args()),
         |r| Ok((r.get::<_, u32>(0)?, r.get(1)?, r.get(2)?, r.get::<_, i64>(3)?, r.get::<_, i64>(4)?)),
     )?;
-    let history = if sel.everything() { tx.query_row("SELECT COUNT(*) FROM audit_log", [], |r| r.get(0))? } else { 0 };
+    let history = if sel.everything() && sel.wants(Section::History) { tx.query_row("SELECT COUNT(*) FROM audit_log", [], |r| r.get(0))? } else { 0 };
+    let bill_lines = debts::lines(&tx, &sel)?;
+    let ledger = if sel.wants(Section::Ledger) { debts::entries(&tx, &sel)? } else { Vec::new() };
+    let friends = if sel.wants(Section::People) { debts::people(&tx, &sel, &bill_lines, &ledger)? } else { Vec::new() };
+    let split_bills = bill_lines.iter().map(|l| l.transaction_id).collect::<std::collections::BTreeSet<_>>().len() as u32;
+    let today = today_of(&tx, Utc::now())?;
+    let due = if sel.wants(Section::Due) { due_payments(&tx, &sel, &today)?.len() } else { 0 };
+    let timeline = if sel.wants(Section::Ledger) { debts::history_lines(&tx, &sel, &today, sel.everything() || sel.debts)?.len() } else { 0 };
+    // what a file would hold: a part that is left out counts for nothing
+    let count = |wanted: bool, n: usize| if wanted { n as u32 } else { 0 };
+    let with_transactions = sel.wants(Section::Transactions);
     Ok(Preview {
-        transactions,
-        first_date,
-        last_date,
-        income: format_amount(income),
-        expense: format_amount(expense),
-        categories: category_rows(&tx, &sel)?.len() as u32,
-        budgets: budget_rows(&tx, &sel)?.len() as u32,
-        recurring: recurring_rows(&tx, &sel)?.len() as u32,
-        documents: documents(&tx, &sel)?.len() as u32,
+        people: friends.len() as u32,
+        due_payments: due as u32,
+        debt_history: timeline as u32,
+        ledger: ledger.len() as u32,
+        split_bills: count(sel.wants(Section::Transactions) || sel.wants(Section::Ledger), split_bills as usize),
+        transactions: count(with_transactions, transactions as usize),
+        first_date: if with_transactions { first_date } else { None },
+        last_date: if with_transactions { last_date } else { None },
+        income: format_amount(if with_transactions { income } else { 0 }),
+        expense: format_amount(if with_transactions { expense } else { 0 }),
+        categories: count(sel.wants(Section::Categories), category_rows(&tx, &sel)?.len()),
+        budgets: count(sel.wants(Section::Budgets), budget_rows(&tx, &sel)?.len()),
+        recurring: count(sel.wants(Section::Recurring), recurring_rows(&tx, &sel)?.len()),
+        documents: count(sel.wants(Section::Documents), documents(&tx, &sel)?.len()),
         history,
     })
 }
@@ -500,9 +765,20 @@ pub fn json(conn: &Connection, selection: &Selection, now: DateTime<Utc>) -> Res
         [],
         |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)),
     )?;
+    // the parts of shared bills go with the transactions they are parts of; the friends and the ledger are a part of their own
+    let bill_lines = debts::lines(&tx, &sel)?;
+    let ledger = if sel.wants(Section::Ledger) { debts::entries(&tx, &sel)? } else { Vec::new() };
+    let friends = if sel.wants(Section::People) { debts::people(&tx, &sel, &bill_lines, &ledger)? } else { Vec::new() };
+    let mut parts = debts::lines_by_transaction(bill_lines);
     let transactions: Vec<Value> = transactions(&tx, &sel)?
         .into_iter()
         .map(|t| {
+            let split: Vec<Value> = parts
+                .remove(&t.id)
+                .unwrap_or_default()
+                .into_iter()
+                .map(|l| json!({ "personId": l.person_id.map(|id| id.to_string()), "person": l.person, "guest": l.guest, "amount": format_amount(l.amount) }))
+                .collect();
             json!({
                 "id": t.id.to_string(),
                 "date": t.date,
@@ -511,9 +787,39 @@ pub fn json(conn: &Connection, selection: &Selection, now: DateTime<Utc>) -> Res
                 "category": t.category,
                 "name": t.name,
                 "amount": format_amount(t.amount),
+                "myShare": format_amount(t.my_share),
+                "split": split,
                 "plannedAmount": t.planned.map(format_amount),
                 "description": t.description,
                 "recurringId": t.recurring_id.map(|id| id.to_string()),
+            })
+        })
+        .collect();
+    let people: Vec<Value> = friends
+        .into_iter()
+        .map(|p| {
+            json!({
+                "id": p.id.to_string(),
+                "name": p.name,
+                "archived": p.archived,
+                "balance": p.balance.map(format_amount),
+                "remindOn": p.remind_on,
+                "remindEveryDays": p.remind_every_days,
+            })
+        })
+        .collect();
+    let ledger: Vec<Value> = ledger
+        .into_iter()
+        .map(|e| {
+            json!({
+                "id": e.id.to_string(),
+                "date": e.date,
+                "personId": e.person_id.to_string(),
+                "person": e.person,
+                "kind": e.kind,
+                "amount": format_amount(e.amount),
+                "note": e.note,
+                "transactionId": e.transaction_id.map(|id| id.to_string()),
             })
         })
         .collect();
@@ -522,22 +828,126 @@ pub fn json(conn: &Connection, selection: &Selection, now: DateTime<Utc>) -> Res
         "format": "meowny-export",
         "version": 1,
         "exportedAt": now.to_rfc3339_opts(SecondsFormat::Secs, true),
-        "scope": { "from": sel.from, "to": sel.to, "categoryIds": sel.categories.as_ref().map(|ids| ids.iter().map(|i| i.to_string()).collect::<Vec<_>>()) },
+        "scope": {
+            "from": sel.from,
+            "to": sel.to,
+            "categoryIds": sel.categories.as_ref().map(|ids| ids.iter().map(|i| i.to_string()).collect::<Vec<_>>()),
+            "kind": sel.kind.map(Kind::as_str),
+            "minAmount": sel.min.map(format_amount),
+            "maxAmount": sel.max.map(format_amount),
+            "text": sel.text,
+            "split": selection.split.map(|s| if s == SplitFilter::Split { "split" } else { "not_split" }),
+            "sections": sel.sections.as_ref().map(|list| list.iter().map(|s| s.as_str()).collect::<Vec<_>>()),
+        },
         "settings": { "currency": currency, "locale": locale, "timezone": timezone, "language": language },
-        "categories": categories_json(&tx, &sel)?,
-        "budgets": budgets_json(&tx, &sel)?,
-        "recurring": recurring_json(&tx, &sel)?,
-        "transactions": transactions,
-        "documents": documents_json(&tx, &sel)?,
     });
-    if sel.everything() {
+    // each part only when it is asked for: a file does not say what it was told to leave out
+    if sel.wants(Section::Categories) {
+        file["categories"] = Value::Array(categories_json(&tx, &sel)?);
+    }
+    if sel.wants(Section::Budgets) {
+        file["budgets"] = Value::Array(budgets_json(&tx, &sel)?);
+    }
+    if sel.wants(Section::Recurring) {
+        file["recurring"] = Value::Array(recurring_json(&tx, &sel)?);
+    }
+    if sel.wants(Section::Transactions) {
+        file["transactions"] = Value::Array(transactions);
+    }
+    if sel.wants(Section::People) {
+        file["people"] = Value::Array(people);
+    }
+    let today = today_of(&tx, now)?;
+    if sel.wants(Section::Due) {
+        // the payments that have come due are owed too
+        let due = due_payments(&tx, &sel, &today)?;
+        file["duePayments"] = Value::Array(due.into_iter().map(|item| serde_json::to_value(item).map_err(|_| AppError::Internal)).collect::<Result<_, _>>()?);
+    }
+    if sel.wants(Section::Ledger) {
+        file["ledger"] = Value::Array(ledger);
+        // the same story as the debts screen tells, oldest first
+        let timeline = debts::history_lines(&tx, &sel, &today, sel.everything() || sel.debts)?;
+        file["debtHistory"] = Value::Array(timeline.into_iter().map(|line| serde_json::to_value(line).map_err(|_| AppError::Internal)).collect::<Result<_, _>>()?);
+    }
+    if sel.wants(Section::Documents) {
+        file["documents"] = Value::Array(documents_json(&tx, &sel)?);
+    }
+    if sel.everything() && sel.wants(Section::History) {
         file["history"] = Value::Array(history_json(&tx)?);
     }
     serde_json::to_string_pretty(&file).map_err(|_| AppError::Internal)
 }
 
+/// The kinds of file the export screen can show a preview of, as text.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum TextFormat {
+    Json,
+    Csv,
+}
+
+/// The most of a file that the preview carries: 64 KiB, so a big export does not cross to the screen whole.
+pub const PREVIEW_TEXT_BYTES: usize = 64 * 1024;
+
+/// The start of the file an export would write, for the preview on the export screen.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TextPreview {
+    /// The text as written (without the byte order mark of a CSV file), cut after a whole line when the file is longer than
+    /// `PREVIEW_TEXT_BYTES`.
+    pub text: String,
+    /// How long the whole file would be, in bytes.
+    pub bytes: u64,
+    /// Whether `text` is only the start of the file.
+    pub cut: bool,
+}
+
+/// The file the export of this selection would be, as the preview shows it: the same text `json` or `csv` would save, so what is
+/// seen is what is written. Nothing is written anywhere.
+pub fn preview_text(conn: &Connection, selection: &Selection, format: TextFormat, now: DateTime<Utc>) -> Result<TextPreview, AppError> {
+    let whole = match format {
+        TextFormat::Json => json(conn, selection, now)?,
+        TextFormat::Csv => csv(conn, selection)?,
+    };
+    let bytes = whole.len() as u64;
+    let text = whole.strip_prefix('\u{feff}').unwrap_or(&whole);
+    if text.len() <= PREVIEW_TEXT_BYTES {
+        return Ok(TextPreview { text: text.to_string(), bytes, cut: false });
+    }
+    let mut end = PREVIEW_TEXT_BYTES;
+    while !text.is_char_boundary(end) {
+        end -= 1;
+    }
+    // after a whole line, unless there is no line break at all
+    let end = text[..end].rfind('\n').map_or(end, |at| at + 1);
+    Ok(TextPreview { text: text[..end].to_string(), bytes, cut: true })
+}
+
+/// The most of an Excel or PDF file that the preview carries: 16 MiB. A bigger file is saved whole all the same, it just is not looked at.
+pub const PREVIEW_FILE_BYTES: usize = 16 * 1024 * 1024;
+
+/// A whole file for the preview on the export screen, which reads it itself: the bytes as base64url text, and how long the file is.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PreviewFile {
+    pub data: String,
+    pub bytes: u64,
+}
+
+/// A file that was just made, handed to the preview. `InvalidInput` when it is longer than `PREVIEW_FILE_BYTES`.
+pub fn preview_file(bytes: &[u8]) -> Result<PreviewFile, AppError> {
+    if bytes.len() > PREVIEW_FILE_BYTES {
+        return Err(AppError::InvalidInput);
+    }
+    Ok(PreviewFile { data: crate::sync::qr::base64url_encode(bytes), bytes: bytes.len() as u64 })
+}
+
 #[cfg(test)]
 mod documents_tests;
+#[cfg(test)]
+pub(crate) mod filters_tests;
+#[cfg(test)]
+mod debts_tests;
 
 #[cfg(test)]
 mod tests {
@@ -657,19 +1067,6 @@ mod tests {
     }
 
     #[test]
-    fn the_csv_has_one_row_per_transaction_oldest_first() {
-        let (conn, ..) = lived_in();
-        let text = csv(&conn, &Selection::default()).unwrap();
-        assert!(text.starts_with("\u{feff}date,type,category,name,amount,currency,description,documents\r\n"));
-        let rows = read_csv(&text);
-        assert_eq!(rows.len(), 5, "header and four transactions");
-        assert_eq!(rows[1], ["2026-01-25", "INCOME", "Salary", "Pay", "3200.00", "EUR", "Monthly pay", ""]);
-        assert_eq!(rows[2], ["2026-02-01", "EXPENSE", "Rent", "Rent", "900.00", "EUR", "", ""]);
-        assert_eq!(rows[3][3..5], ["Session", "80.00"]);
-        assert_eq!(rows[4][4], "905.50");
-    }
-
-    #[test]
     fn a_csv_cannot_carry_a_formula_into_a_spreadsheet() {
         let (conn, _, rent, _) = lived_in();
         spend(&conn, rent, "=cmd|' /C calc'!A0", "1.00", "2026-04-01", Some("+1+1"));
@@ -699,27 +1096,6 @@ mod tests {
     }
 
     #[test]
-    fn a_selection_narrows_the_transactions() {
-        let (conn, salary, rent, _) = lived_in();
-        let names = |sel: &Selection| -> Vec<String> {
-            read_csv(&csv(&conn, sel).unwrap())[1..].iter().map(|r| format!("{} {}", r[0], r[3])).collect()
-        };
-        let range = Selection { from: Some("2026-02-01".into()), to: Some("2026-02-10".into()), ..Default::default() };
-        assert_eq!(names(&range), ["2026-02-01 Rent", "2026-02-10 Session"], "both ends are inclusive");
-
-        let categories = Selection { category_ids: Some(vec![rent.to_string(), salary.to_string()]), ..Default::default() };
-        assert_eq!(names(&categories).len(), 3);
-
-        let both = Selection { from: Some("2026-03-01".into()), category_ids: Some(vec![rent.to_string()]), ..Default::default() };
-        assert_eq!(names(&both), ["2026-03-01 Rent"]);
-
-        let none = Selection { category_ids: Some(vec![]), ..Default::default() };
-        assert!(names(&none).is_empty());
-        let empty_range = Selection { from: Some("2030-01-01".into()), ..Default::default() };
-        assert!(names(&empty_range).is_empty());
-    }
-
-    #[test]
     fn a_bad_selection_is_refused() {
         let (conn, ..) = lived_in();
         for bad in [
@@ -739,27 +1115,6 @@ mod tests {
 
     pub(super) fn parsed(conn: &Connection, selection: &Selection) -> Value {
         serde_json::from_str(&json(conn, selection, Utc::now()).unwrap()).unwrap()
-    }
-
-    #[test]
-    fn the_full_json_holds_all_of_the_data() {
-        let (conn, ..) = lived_in();
-        let file = parsed(&conn, &Selection::default());
-        assert_eq!((file["format"].as_str(), file["version"].as_i64()), (Some("meowny-export"), Some(1)));
-        assert_eq!(file["settings"]["currency"], "EUR");
-        assert_eq!(file["categories"].as_array().unwrap().len(), 3);
-        let stored: i64 = conn.query_row("SELECT count(*) FROM budgets", [], |r| r.get(0)).unwrap();
-        assert_eq!(file["budgets"].as_array().unwrap().len() as i64, stored, "every budget row, carry-forward rows included");
-        assert_eq!(file["recurring"].as_array().unwrap().len(), 2);
-        assert_eq!(file["transactions"].as_array().unwrap().len(), 4);
-        assert!(!file["history"].as_array().unwrap().is_empty(), "the change history is part of all the data");
-
-        let pay = &file["transactions"][0];
-        assert_eq!((pay["amount"].as_str(), pay["date"].as_str(), pay["type"].as_str()), (Some("3200.00"), Some("2026-01-25"), Some("INCOME")));
-        assert!(pay["id"].is_string() && pay["categoryId"].is_string(), "ids are strings, as in the app");
-        let removed = file["budgets"].as_array().unwrap().iter().find(|b| b["month"] == "2026-03").unwrap();
-        assert!(removed["limit"].is_null(), "a removed budget stays visible");
-        assert!(file["budgets"].as_array().unwrap().iter().any(|b| b["scope"] == "GLOBAL" && b["limit"] == "2200.00"));
     }
 
     #[test]
@@ -842,39 +1197,6 @@ mod tests {
     }
 
     #[test]
-    fn the_preview_counts_what_the_files_contain() {
-        let (conn, _, rent, _) = lived_in();
-        for selection in [
-            Selection::default(),
-            Selection { from: Some("2026-02-01".into()), ..Default::default() },
-            Selection { category_ids: Some(vec![rent.to_string()]), ..Default::default() },
-            Selection { from: Some("2026-02-01".into()), to: Some("2026-02-28".into()), category_ids: Some(vec![rent.to_string()]) },
-            Selection { category_ids: Some(vec![]), ..Default::default() },
-        ] {
-            let shown = preview(&conn, &selection).unwrap();
-            let file = parsed(&conn, &selection);
-            let count = |section: &str| file[section].as_array().unwrap().len() as u32;
-            assert_eq!(shown.transactions, count("transactions"), "{selection:?}");
-            assert_eq!((shown.categories, shown.budgets, shown.recurring), (count("categories"), count("budgets"), count("recurring")), "{selection:?}");
-            assert_eq!(shown.history, file.get("history").map_or(0, |h| h.as_array().unwrap().len() as u32), "{selection:?}");
-            assert_eq!(read_csv(&csv(&conn, &selection).unwrap()).len() as u32 - 1, shown.transactions, "{selection:?}");
-        }
-    }
-
-    #[test]
-    fn the_preview_gives_the_span_and_the_totals() {
-        let (conn, ..) = lived_in();
-        let all = preview(&conn, &Selection::default()).unwrap();
-        assert_eq!((all.first_date.as_deref(), all.last_date.as_deref()), (Some("2026-01-25"), Some("2026-03-01")));
-        assert_eq!((all.income.as_str(), all.expense.as_str()), ("3200.00", "1885.50"), "900.00 + 905.50 rent and 80.00 of therapy");
-        assert!(all.history > 0);
-
-        let narrow = preview(&conn, &Selection { from: Some("2026-03-01".into()), ..Default::default() }).unwrap();
-        assert_eq!((narrow.transactions, narrow.first_date.as_deref(), narrow.expense.as_str()), (1, Some("2026-03-01"), "905.50"));
-        assert_eq!(narrow.history, 0, "a range is not all the data");
-    }
-
-    #[test]
     fn the_preview_of_nothing_is_empty_not_an_error() {
         let conn = db();
         let empty = preview(&conn, &Selection::default()).unwrap();
@@ -915,5 +1237,63 @@ mod tests {
         json(&conn, &Selection::default(), Utc::now()).unwrap();
         let after: i64 = conn.query_row("SELECT count(*) FROM audit_log", [], |r| r.get(0)).unwrap();
         assert_eq!(before, after);
+    }
+}
+
+#[cfg(test)]
+mod preview_text_tests {
+    use super::tests::{db, spend};
+    use super::*;
+    use crate::categories::{self, CategoryType};
+
+    fn now() -> DateTime<Utc> {
+        "2026-04-01T09:00:00Z".parse().unwrap()
+    }
+
+    fn everything() -> Selection {
+        Selection::default()
+    }
+
+    #[test]
+    fn a_long_file_is_cut_after_a_whole_line_and_says_how_long_it_is() {
+        let conn = db();
+        let food = categories::create(&conn, "Food", CategoryType::Expense).unwrap().id;
+        for at in 0..1500 {
+            spend(&conn, food, &format!("Shop number {at}"), "12.50", "2026-01-15", Some("a description to make the line longer"));
+        }
+        let file = csv(&conn, &everything()).unwrap();
+        let shown = preview_text(&conn, &everything(), TextFormat::Csv, now()).unwrap();
+        assert!(file.len() > PREVIEW_TEXT_BYTES * 2);
+        assert!(shown.cut);
+        assert_eq!(shown.bytes, file.len() as u64);
+        assert!(shown.text.len() <= PREVIEW_TEXT_BYTES);
+        assert!(shown.text.ends_with("\r\n"), "a whole line, not half of one");
+        assert!(file.strip_prefix('\u{feff}').unwrap().starts_with(&shown.text), "it is the start of the file, as it is");
+        assert!(shown.text.len() > PREVIEW_TEXT_BYTES - 400, "and nearly as much as fits");
+    }
+
+    #[test]
+    fn a_cut_never_lands_inside_a_character() {
+        let conn = db();
+        let food = categories::create(&conn, "Food", CategoryType::Expense).unwrap().id;
+        // 3-byte characters, so the limit falls inside one for some lengths of name
+        for at in 0..400 {
+            spend(&conn, food, &format!("{}{}", "\u{20ac}".repeat(40 + at % 3), at), "1.00", "2026-01-15", Some(&"\u{20ac}".repeat(60)));
+        }
+        let shown = preview_text(&conn, &everything(), TextFormat::Csv, now()).unwrap();
+        assert!(shown.cut && shown.text.len() <= PREVIEW_TEXT_BYTES);
+    }
+}
+
+#[cfg(test)]
+mod preview_file_tests {
+    
+    use super::*;
+
+    #[test]
+    fn a_file_over_the_limit_is_not_given() {
+        assert!(preview_file(&vec![7u8; PREVIEW_FILE_BYTES]).is_ok());
+        assert_eq!(preview_file(&vec![7u8; PREVIEW_FILE_BYTES + 1]), Err(AppError::InvalidInput));
+        assert_eq!(preview_file(&[]).map(|f| f.bytes), Ok(0));
     }
 }

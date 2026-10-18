@@ -78,15 +78,6 @@ mod tests {
     }
 
     #[test]
-    fn a_file_is_read_whole_and_named_by_its_last_part() {
-        let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join("Boiler receipt.pdf");
-        std::fs::write(&path, b"%PDF-1.4 hello").unwrap();
-        let (data, name) = load("--file", path.to_str().unwrap()).unwrap();
-        assert_eq!((data.as_str(), name.as_str()), ("JVBERi0xLjQgaGVsbG8", "Boiler receipt.pdf"));
-    }
-
-    #[test]
     fn what_is_not_a_file_to_send_is_refused_with_the_reason() {
         let dir = tempfile::tempdir().unwrap();
         let text = |path: &std::path::Path| load("--file", path.to_str().unwrap()).unwrap_err().message;

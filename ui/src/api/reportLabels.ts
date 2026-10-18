@@ -22,7 +22,7 @@ export type ReportLabels = {
   noData: string
 }
 
-const capital = (text: string) => text.charAt(0).toLocaleUpperCase(activeLanguage()) + text.slice(1)
+export const capital = (text: string) => text.charAt(0).toLocaleUpperCase(activeLanguage()) + text.slice(1)
 
 /** "October 2026", or "October 2026 – December 2026" for a range, in the person's number and date format. */
 export function periodLabel(fromMonth: string, toMonth: string, locale: string): string {

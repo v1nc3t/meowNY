@@ -26,6 +26,7 @@
 //! The server logs nothing and keeps nothing: tokens and bodies exist only for the length of a call.
 
 mod confirmed;
+mod debts;
 mod documents;
 mod files;
 mod http;
@@ -466,6 +467,8 @@ impl Host {
 
 #[cfg(test)]
 mod confirmed_tests;
+#[cfg(test)]
+mod debts_tests;
 #[cfg(test)]
 mod documents_tests;
 #[cfg(test)]

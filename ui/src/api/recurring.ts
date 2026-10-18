@@ -9,6 +9,15 @@ export const INTERVAL_UNITS = ['DAY', 'WEEK', 'MONTH', 'YEAR'] as const
 export const IntervalUnit = z.enum(INTERVAL_UNITS)
 export type IntervalUnit = z.infer<typeof IntervalUnit>
 
+/** How each payment of an item is shared, as weights: the person's own and one for each friend or guest. */
+export const Template = z.object({
+  mine: z.number().int().nonnegative(),
+  parts: z.array(
+    z.object({ personId: id.nullable(), person: z.string().nullable(), guest: z.string().nullable(), weight: z.number().int().nonnegative() }),
+  ),
+})
+export type Template = z.infer<typeof Template>
+
 export const Recurring = z.object({
   id,
   categoryId: id,
@@ -22,6 +31,8 @@ export const Recurring = z.object({
   nextDueDate: date,
   endDate: date.nullable(),
   isActive: z.boolean(),
+  /** How each payment is shared, or null when the payments are not. */
+  split: Template.nullable(),
 })
 export type Recurring = z.infer<typeof Recurring>
 

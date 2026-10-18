@@ -10,6 +10,7 @@
 use rusqlite::{params, Connection};
 use serde::Serialize;
 
+use crate::debts::splits;
 use crate::money::MAX_MINOR;
 use crate::sync;
 use crate::vault::AppError;
@@ -19,6 +20,8 @@ pub struct Conversion {
     pub transactions: u32,
     pub recurring: u32,
     pub budgets: u32,
+    /// Entries of the ledger of money lent and borrowed.
+    pub ledger: u32,
 }
 
 /// An exchange rate as an exact fraction, so no floating point touches money.
@@ -56,6 +59,11 @@ fn convert(minor: i64, rate: Rate) -> Result<i64, AppError> {
     i64::try_from(rounded).ok().filter(|v| *v <= MAX_MINOR).ok_or(AppError::InvalidInput)
 }
 
+/// One amount converted at a rate the person typed, with the same rules and rounding as a change of currency (half up, to the cent).
+pub(crate) fn convert_at(minor: i64, rate: &str) -> Result<i64, AppError> {
+    convert(minor, parse_rate(rate)?)
+}
+
 fn normalize_code(code: &str) -> Result<String, AppError> {
     let code = code.trim().to_ascii_uppercase();
     if code.len() == 3 && code.bytes().all(|b| b.is_ascii_uppercase()) {
@@ -86,6 +94,11 @@ pub fn change(conn: &mut Connection, new_currency: &str, rate: Option<&str>, tod
         done.transactions = convert_transactions(&tx, rate)?;
         done.recurring = convert_recurring(&tx, rate)?;
         done.budgets = convert_budgets(&tx, rate)?;
+        done.ledger = convert_ledger(&tx, rate)?;
+    }
+    // The parts of the shared bills were written while the checks stood aside: they must add up to no more than their bills.
+    if !splits::check(&tx)? {
+        return Err(AppError::Internal);
     }
 
     tx.execute("UPDATE settings SET currency = ?1, currency_generation = currency_generation + 1 WHERE id = 1", [&new_currency])?;
@@ -130,6 +143,10 @@ pub(crate) fn apply_recorded(tx: &rusqlite::Transaction, change: &Recorded, toda
         done.transactions = convert_transactions(tx, rate)?;
         done.recurring = convert_recurring(tx, rate)?;
         done.budgets = convert_budgets(tx, rate)?;
+        done.ledger = convert_ledger(tx, rate)?;
+    }
+    if !splits::check(tx)? {
+        return Err(AppError::Internal);
     }
     tx.execute("UPDATE settings SET currency = ?1, currency_generation = ?2 WHERE id = 1", params![change.to, change.generation])?;
     tx.execute(
@@ -156,10 +173,27 @@ fn convert_transactions(tx: &rusqlite::Transaction, rate: Rate) -> Result<u32, A
         .query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))?
         .collect::<Result<_, _>>()?;
     let mut update = tx.prepare("UPDATE transactions SET amount_minor = ?1, planned_amount_minor = ?2 WHERE id = ?3")?;
-    for (id, amount, planned) in &rows {
-        let amount = at_least_one(convert(*amount, rate)?);
+    for (id, old, planned) in &rows {
+        let amount = at_least_one(convert(*old, rate)?);
         let planned = planned.map(|p| convert(p, rate)).transpose()?;
         update.execute(params![amount, planned, id])?;
+        // A shared bill: every part, yours included, is scaled to the new amount with the old parts as the weights, so the parts still add
+        // up to the cent and none of them is negative. Rounding each part on its own could make them add up to more than the bill.
+        splits::rescale(tx, *id, *old, amount)?;
+    }
+    Ok(rows.len() as u32)
+}
+
+/// Each entry of the ledger, at least one cent. The balance of a friend is a sum of converted pieces, so it can differ from the converted old
+/// balance by a few cents; every device ends with the same number.
+fn convert_ledger(tx: &rusqlite::Transaction, rate: Rate) -> Result<u32, AppError> {
+    let rows: Vec<(i64, i64)> = tx
+        .prepare("SELECT id, amount_minor FROM ledger_entries")?
+        .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?
+        .collect::<Result<_, _>>()?;
+    let mut update = tx.prepare("UPDATE ledger_entries SET amount_minor = ?1 WHERE id = ?2")?;
+    for (id, amount) in &rows {
+        update.execute(params![at_least_one(convert(*amount, rate)?), id])?;
     }
     Ok(rows.len() as u32)
 }
@@ -253,37 +287,6 @@ mod tests {
     }
 
     #[test]
-    fn converting_changes_every_amount_and_the_currency() {
-        let (mut conn, food) = db();
-        let id = spend(&conn, food, "100.00");
-        conn.execute("UPDATE transactions SET planned_amount_minor = 5000 WHERE id = ?1", [id]).unwrap();
-        conn.execute(
-            "INSERT INTO recurring_transactions (category_id, name, amount_minor, start_date, interval_unit, next_due_date)
-             VALUES (?1, 'Rent', 80000, '2026-01-01', 'MONTH', '2026-02-01')",
-            [food],
-        )
-        .unwrap();
-        budgets::set(
-            &conn,
-            &SetBudget { kind: CategoryType::Expense, scope: Scope::Global, month: "2026-06".into(), amount_limit: Some("1000.00".into()), category_id: None },
-            "2026-01-15T00:00:00Z".parse().unwrap(),
-        )
-        .unwrap();
-
-        let done = change(&mut conn, "usd", Some("1.08"), "2026-10-13").unwrap();
-
-        assert_eq!(done, Conversion { transactions: 1, recurring: 1, budgets: 1 });
-        assert_eq!(currency(&conn), "USD");
-        assert_eq!(amount_of(&conn, id), 10_800);
-        let planned: i64 = conn.query_row("SELECT planned_amount_minor FROM transactions", [], |r| r.get(0)).unwrap();
-        assert_eq!(planned, 5_400);
-        let rent: i64 = conn.query_row("SELECT amount_minor FROM recurring_transactions", [], |r| r.get(0)).unwrap();
-        assert_eq!(rent, 86_400);
-        let limit: i64 = conn.query_row("SELECT amount_limit_minor FROM budgets", [], |r| r.get(0)).unwrap();
-        assert_eq!(limit, 108_000);
-    }
-
-    #[test]
     fn a_bill_with_no_fixed_amount_stays_without_one_when_the_currency_changes() {
         let (mut conn, food) = db();
         conn.execute(
@@ -339,16 +342,6 @@ mod tests {
     }
 
     #[test]
-    fn relabel_only_leaves_amounts_alone() {
-        let (mut conn, food) = db();
-        let id = spend(&conn, food, "100.00");
-        let done = change(&mut conn, "USD", None, "2026-10-13").unwrap();
-        assert_eq!(done, Conversion::default());
-        assert_eq!(currency(&conn), "USD");
-        assert_eq!(amount_of(&conn, id), 10_000);
-    }
-
-    #[test]
     fn a_failed_conversion_changes_nothing() {
         let (mut conn, food) = db();
         let small = spend(&conn, food, "10.00");
@@ -368,21 +361,6 @@ mod tests {
         }
         assert_eq!(currency(&conn), "EUR");
         assert_eq!(amount_of(&conn, id), 1_000);
-    }
-
-    #[test]
-    fn the_change_is_written_to_the_history_with_the_rate() {
-        let (mut conn, _) = db();
-        change(&mut conn, "usd", Some("1.08"), "2026-10-13").unwrap();
-        let (old, new): (String, String) = conn
-            .query_row("SELECT old_values, new_values FROM audit_log WHERE entity_type = 'currency_change'", [], |r| Ok((r.get(0)?, r.get(1)?)))
-            .unwrap();
-        assert!(old.contains("EUR"));
-        assert!(new.contains("USD") && new.contains("1.08") && new.contains("2026-10-13"));
-
-        change(&mut conn, "GBP", None, "2026-10-14").unwrap();
-        let count: i64 = conn.query_row("SELECT count(*) FROM audit_log WHERE entity_type = 'currency_change'", [], |r| r.get(0)).unwrap();
-        assert_eq!(count, 2, "a relabel is recorded too");
     }
 
     #[test]

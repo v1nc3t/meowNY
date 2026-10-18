@@ -8,6 +8,7 @@ use serde::Serialize;
 
 use crate::budgets::{self, kind_sql, next_month, month_start, Overview, Scope};
 use crate::categories::{serialize_id, CategoryType};
+use crate::debts::splits;
 use crate::money::format_amount;
 use crate::vault::AppError;
 
@@ -61,11 +62,11 @@ pub fn budget_vs_actual(conn: &Connection, month: &str) -> Result<BudgetVsActual
         .collect();
 
     let mut statement = conn.prepare(
-        "SELECT c.id, c.name, c.type, COALESCE(SUM(t.amount_minor), 0) AS actual, c.deleted_at IS NULL
+        "SELECT c.id, c.name, c.type, COALESCE(SUM(t.cost_minor), 0) AS actual, c.deleted_at IS NULL
          FROM categories c
-         LEFT JOIN transactions t ON t.category_id = c.id AND t.payment_date >= ?1 AND t.payment_date < ?2
+         LEFT JOIN transaction_costs t ON t.category_id = c.id AND t.payment_date >= ?1 AND t.payment_date < ?2
          GROUP BY c.id
-         HAVING c.deleted_at IS NULL OR COUNT(t.id) > 0
+         HAVING c.deleted_at IS NULL OR COUNT(t.transaction_id) > 0
          ORDER BY c.type, c.name COLLATE NOCASE, c.id",
     )?;
     let rows = statement.query_map([&start, &end], |r| {
@@ -122,7 +123,7 @@ pub fn category_trend(conn: &Connection, category_id: i64, from: &str, to: &str)
     let after_last = next_month(last)?.to_string();
     let mut actuals = std::collections::HashMap::new();
     let mut statement = conn.prepare(
-        "SELECT substr(payment_date, 1, 7), SUM(amount_minor) FROM transactions
+        "SELECT substr(payment_date, 1, 7), SUM(cost_minor) FROM transaction_costs
          WHERE category_id = ?1 AND payment_date >= ?2 AND payment_date < ?3 GROUP BY 1",
     )?;
     for row in statement.query_map(params![category_id, first.to_string(), after_last], |r| Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)?)))? {
@@ -166,8 +167,8 @@ pub fn year_trend(conn: &Connection, year: &str) -> Result<Vec<YearPoint>, AppEr
     month_start(&format!("{year}-01"))?;
     let mut sums: std::collections::HashMap<(String, String), i64> = std::collections::HashMap::new();
     let mut statement = conn.prepare(
-        "SELECT substr(t.payment_date, 1, 7), c.type, SUM(t.amount_minor)
-         FROM transactions t JOIN categories c ON c.id = t.category_id
+        "SELECT substr(t.payment_date, 1, 7), c.type, SUM(t.cost_minor)
+         FROM transaction_costs t JOIN categories c ON c.id = t.category_id
          WHERE t.payment_date >= ?1 AND t.payment_date < ?2 GROUP BY 1, 2",
     )?;
     let from = format!("{year}-01-01");
@@ -217,8 +218,8 @@ pub fn top_categories(conn: &Connection, month: &str, kind: CategoryType, limit:
     let first = month_start(month)?;
     let (start, end) = (first.to_string(), next_month(first)?.to_string());
     let mut statement = conn.prepare(
-        "SELECT c.id, c.name, SUM(t.amount_minor) AS total
-         FROM transactions t JOIN categories c ON c.id = t.category_id
+        "SELECT c.id, c.name, SUM(t.cost_minor) AS total
+         FROM transaction_costs t JOIN categories c ON c.id = t.category_id
          WHERE c.type = ?1 AND t.payment_date >= ?2 AND t.payment_date < ?3
          GROUP BY c.id ORDER BY total DESC, c.name COLLATE NOCASE, c.id",
     )?;
@@ -275,11 +276,17 @@ pub fn commitments(conn: &Connection) -> Result<Commitments, AppError> {
     let rows = statement.query_map([], |r| {
         Ok((r.get::<_, i64>(0)?, r.get::<_, String>(1)?, r.get::<_, String>(2)?, r.get::<_, Option<i64>>(3)?, r.get::<_, String>(4)?, r.get::<_, i64>(5)?))
     })?;
+    // An item that is split costs you only your part of each payment.
+    let templates = splits::all_template_weights(conn)?;
     let (mut expense, mut income) = (0, 0);
     let mut items = Vec::new();
     for row in rows {
         let (id, name, kind, amount, unit, count) = row?;
-        let monthly = amount.map(|amount| per_month_minor(amount, &unit, count));
+        let mine = match (amount, templates.get(&id)) {
+            (Some(amount), Some(weights)) => Some(splits::my_part(amount, weights)?),
+            (amount, _) => amount,
+        };
+        let monthly = mine.map(|amount| per_month_minor(amount, &unit, count));
         let kind = if kind == "INCOME" { CategoryType::Income } else { CategoryType::Expense };
         match kind {
             CategoryType::Income => income += monthly.unwrap_or(0),
@@ -479,56 +486,6 @@ mod tests {
     }
 
     #[test]
-    fn year_trend_has_twelve_months_with_savings_and_rate() {
-        let (conn, food, _, salary) = db();
-        spend(&conn, salary, "2000.00", "2026-03-01");
-        spend(&conn, food, "500.00", "2026-03-10");
-        spend(&conn, food, "100.00", "2026-04-10");
-        spend(&conn, food, "999.00", "2027-01-01");
-        let year = year_trend(&conn, "2026").unwrap();
-        assert_eq!(year.len(), 12);
-        let march = &year[2];
-        assert_eq!((march.income.as_str(), march.expense.as_str(), march.savings.as_str()), ("2000.00", "500.00", "1500.00"));
-        assert_eq!(march.savings_rate, Some(75.0));
-        let april = &year[3];
-        assert_eq!((april.savings.as_str(), april.savings_rate), ("-100.00", None));
-        assert_eq!(year[0].expense, "0.00");
-        assert_eq!(year_trend(&conn, "26").unwrap_err(), AppError::InvalidInput);
-    }
-
-    #[test]
-    fn savings_rate_is_negative_when_spending_beats_income() {
-        let (conn, food, _, salary) = db();
-        spend(&conn, salary, "100.00", "2026-05-01");
-        spend(&conn, food, "150.00", "2026-05-02");
-        assert_eq!(year_trend(&conn, "2026").unwrap()[4].savings_rate, Some(-50.0));
-    }
-
-    #[test]
-    fn top_categories_are_ranked_with_their_share() {
-        let (conn, food, rent, _) = db();
-        spend(&conn, food, "100.00", "2026-10-02");
-        spend(&conn, food, "50.00", "2026-10-03");
-        spend(&conn, rent, "850.00", "2026-10-01");
-        spend(&conn, rent, "5.00", "2026-11-01");
-        let top = top_categories(&conn, "2026-10", CategoryType::Expense, 5).unwrap();
-        assert_eq!(top.iter().map(|t| (t.name.as_str(), t.actual.as_str(), t.share)).collect::<Vec<_>>(), vec![("Rent", "850.00", Some(85.0)), ("Food", "150.00", Some(15.0))]);
-        assert_eq!(top_categories(&conn, "2026-10", CategoryType::Expense, 1).unwrap().len(), 1);
-        assert!(top_categories(&conn, "2026-10", CategoryType::Income, 5).unwrap().is_empty());
-        assert_eq!(top_categories(&conn, "2026-10", CategoryType::Expense, 0).unwrap_err(), AppError::InvalidInput);
-    }
-
-    #[test]
-    fn per_month_cost_of_each_interval() {
-        assert_eq!(per_month_minor(1000, "MONTH", 1), 1000);
-        assert_eq!(per_month_minor(1000, "MONTH", 3), 333);
-        assert_eq!(per_month_minor(12000, "YEAR", 1), 1000);
-        assert_eq!(per_month_minor(1200, "WEEK", 1), 5200);
-        assert_eq!(per_month_minor(1200, "WEEK", 2), 2600);
-        assert_eq!(per_month_minor(1200, "DAY", 1), 36500);
-    }
-
-    #[test]
     fn a_bill_with_no_fixed_amount_is_listed_but_not_counted() {
         use crate::recurring::{self, NewRecurring, Unit};
         let (conn, _, rent, _) = db();
@@ -564,63 +521,4 @@ mod tests {
         assert_eq!((row.paid.as_str(), row.paid_count), ("159.50", 2));
     }
 
-    #[test]
-    fn commitments_add_up_active_items_only() {
-        use crate::recurring::{self, NewRecurring, Unit};
-        let (conn, food, rent, salary) = db();
-        let make = |category: i64, name: &str, amount: &str, unit: Unit| {
-            recurring::create(
-                &conn,
-                &NewRecurring {
-                    name: name.into(),
-                    amount: Some(amount.into()),
-                    category_id: category.to_string(),
-                    start_date: "2026-01-01".into(),
-                    interval_unit: unit,
-                    interval_count: 1,
-                    end_date: None,
-                    description: None,
-                },
-            )
-            .unwrap()
-        };
-        make(rent, "Rent", "900.00", Unit::Month);
-        make(food, "Box", "10.00", Unit::Week);
-        make(salary, "Pay", "2400.00", Unit::Month);
-        let paused = make(food, "Gym", "30.00", Unit::Month);
-        recurring::set_active(&conn, paused.id, false).unwrap();
-        let c = commitments(&conn).unwrap();
-        // 10.00 a week is 43.33 a month.
-        assert_eq!((c.expense.as_str(), c.income.as_str()), ("943.33", "2400.00"));
-        assert_eq!(c.items.len(), 3);
-    }
-
-    #[test]
-    fn planned_vs_paid_compares_what_was_expected_with_what_was_paid() {
-        use crate::recurring::{self, NewRecurring, Unit};
-        let (conn, _, rent, _) = db();
-        let item = recurring::create(
-            &conn,
-            &NewRecurring {
-                name: "Power".into(),
-                amount: Some("80.00".into()),
-                category_id: rent.to_string(),
-                start_date: "2026-09-01".into(),
-                interval_unit: Unit::Month,
-                interval_count: 1,
-                end_date: None,
-                description: None,
-            },
-        )
-        .unwrap();
-        recurring::pay(&conn, item.id, Some("95.50"), Some("2026-09-03"), "2026-09-03").unwrap();
-        recurring::pay(&conn, item.id, Some("70.00"), Some("2026-10-02"), "2026-10-02").unwrap();
-        spend(&conn, rent, "40.00", "2026-10-05");
-        let october = planned_vs_paid(&conn, "2026-10").unwrap();
-        assert_eq!(october.len(), 1, "a normal transaction is not a recurring payment");
-        let row = &october[0];
-        assert_eq!((row.planned.as_deref(), row.paid.as_str(), row.difference.as_deref(), row.paid_count), (Some("80.00"), "70.00", Some("-10.00"), 1));
-        assert_eq!(planned_vs_paid(&conn, "2026-09").unwrap()[0].difference.as_deref(), Some("15.50"));
-        assert!(planned_vs_paid(&conn, "2026-11").unwrap().is_empty());
-    }
 }

@@ -1183,13 +1183,89 @@
           "type": "ids",
           "value": "id,id,...",
           "values": []
+        },
+        {
+          "flag": "--include-debts",
+          "nullable": false,
+          "param": "includeDebts",
+          "required": false,
+          "summary": "With dates or categories chosen, also include the ledger of money lent and borrowed (the friends and their parts of the bills in the selection are in it anyway). Without a choice everything is in.",
+          "type": "boolean",
+          "value": "boolean",
+          "values": []
+        },
+        {
+          "flag": "--kind",
+          "nullable": false,
+          "param": "kind",
+          "required": false,
+          "summary": "Only INCOME or only EXPENSE. Leave out for both.",
+          "type": "string",
+          "value": "INCOME|EXPENSE",
+          "values": [
+            "INCOME",
+            "EXPENSE"
+          ]
+        },
+        {
+          "flag": "--min-amount",
+          "nullable": false,
+          "param": "minAmount",
+          "required": false,
+          "summary": "Only transactions that cost you at least this (a bill shared with friends counts for your part).",
+          "type": "money",
+          "value": "amount",
+          "values": []
+        },
+        {
+          "flag": "--max-amount",
+          "nullable": false,
+          "param": "maxAmount",
+          "required": false,
+          "summary": "Only transactions that cost you at most this (a bill shared with friends counts for your part).",
+          "type": "money",
+          "value": "amount",
+          "values": []
+        },
+        {
+          "flag": "--text",
+          "nullable": false,
+          "param": "text",
+          "required": false,
+          "summary": "Only transactions with this text in the name or the description, whatever the case.",
+          "type": "string",
+          "value": "text",
+          "values": []
+        },
+        {
+          "flag": "--split",
+          "nullable": false,
+          "param": "split",
+          "required": false,
+          "summary": "Only the bills shared with friends (split) or only those that are not (not_split). Leave out for both.",
+          "type": "string",
+          "value": "split|not_split",
+          "values": [
+            "split",
+            "not_split"
+          ]
+        },
+        {
+          "flag": "--sections",
+          "nullable": false,
+          "param": "sections",
+          "required": false,
+          "summary": "The parts of the file, separated by commas, from: transactions, categories, budgets, recurring, documents, people (the friends and what they owe), due (the overdue recurring payments), ledger (the history of debts) and history (the change history, only in a file with no limits). Leave out for all of them.",
+          "type": "string",
+          "value": "text",
+          "values": []
         }
       ],
       "positional": null,
       "route": "export.preview",
       "scope": "read",
-      "summary": "What an export of this selection would contain: how many transactions, their dates, the income and expense totals, and the other records.",
-      "usage": "meowny export preview [--from <date>] [--to <date>] [--category-ids <id,id,...>]"
+      "summary": "What an export of this selection would contain: how many transactions, their dates, the income and expense totals, and the other records (the friends, the history of debts, the overdue payments, the documents).",
+      "usage": "meowny export preview [--from <date>] [--to <date>] [--category-ids <id,id,...>] [--include-debts <boolean>] [--kind <INCOME|EXPENSE>] [--min-amount <amount>] [--max-amount <amount>] [--text <text>] [--split <split|not_split>] [--sections <text>]"
     },
     {
       "command": "backup schedule",
@@ -1246,13 +1322,89 @@
           "type": "ids",
           "value": "id,id,...",
           "values": []
+        },
+        {
+          "flag": "--include-debts",
+          "nullable": false,
+          "param": "includeDebts",
+          "required": false,
+          "summary": "With dates or categories chosen, also include the ledger of money lent and borrowed (the friends and their parts of the bills in the selection are in it anyway). Without a choice everything is in.",
+          "type": "boolean",
+          "value": "boolean",
+          "values": []
+        },
+        {
+          "flag": "--kind",
+          "nullable": false,
+          "param": "kind",
+          "required": false,
+          "summary": "Only INCOME or only EXPENSE. Leave out for both.",
+          "type": "string",
+          "value": "INCOME|EXPENSE",
+          "values": [
+            "INCOME",
+            "EXPENSE"
+          ]
+        },
+        {
+          "flag": "--min-amount",
+          "nullable": false,
+          "param": "minAmount",
+          "required": false,
+          "summary": "Only transactions that cost you at least this (a bill shared with friends counts for your part).",
+          "type": "money",
+          "value": "amount",
+          "values": []
+        },
+        {
+          "flag": "--max-amount",
+          "nullable": false,
+          "param": "maxAmount",
+          "required": false,
+          "summary": "Only transactions that cost you at most this (a bill shared with friends counts for your part).",
+          "type": "money",
+          "value": "amount",
+          "values": []
+        },
+        {
+          "flag": "--text",
+          "nullable": false,
+          "param": "text",
+          "required": false,
+          "summary": "Only transactions with this text in the name or the description, whatever the case.",
+          "type": "string",
+          "value": "text",
+          "values": []
+        },
+        {
+          "flag": "--split",
+          "nullable": false,
+          "param": "split",
+          "required": false,
+          "summary": "Only the bills shared with friends (split) or only those that are not (not_split). Leave out for both.",
+          "type": "string",
+          "value": "split|not_split",
+          "values": [
+            "split",
+            "not_split"
+          ]
+        },
+        {
+          "flag": "--sections",
+          "nullable": false,
+          "param": "sections",
+          "required": false,
+          "summary": "The parts of the file, separated by commas, from: transactions, categories, budgets, recurring, documents, people (the friends and what they owe), due (the overdue recurring payments), ledger (the history of debts) and history (the change history, only in a file with no limits). Leave out for all of them.",
+          "type": "string",
+          "value": "text",
+          "values": []
         }
       ],
       "positional": null,
       "route": "export.json",
       "scope": "read",
-      "summary": "Writes the data as a JSON file, after the person allows it in the app. An existing file is never replaced.",
-      "usage": "meowny export json --out <path> [--from <date>] [--to <date>] [--category-ids <id,id,...>]"
+      "summary": "Writes the data as a JSON file, after the person allows it in the app: the transactions, categories, budgets, recurring items, documents, and the debts (friends, the overdue recurring payments, the history of debts), or the parts and the limits chosen. An existing file is never replaced.",
+      "usage": "meowny export json --out <path> [--from <date>] [--to <date>] [--category-ids <id,id,...>] [--include-debts <boolean>] [--kind <INCOME|EXPENSE>] [--min-amount <amount>] [--max-amount <amount>] [--text <text>] [--split <split|not_split>] [--sections <text>]"
     },
     {
       "command": "export csv",
@@ -1298,13 +1450,69 @@
           "type": "ids",
           "value": "id,id,...",
           "values": []
+        },
+        {
+          "flag": "--kind",
+          "nullable": false,
+          "param": "kind",
+          "required": false,
+          "summary": "Only INCOME or only EXPENSE. Leave out for both.",
+          "type": "string",
+          "value": "INCOME|EXPENSE",
+          "values": [
+            "INCOME",
+            "EXPENSE"
+          ]
+        },
+        {
+          "flag": "--min-amount",
+          "nullable": false,
+          "param": "minAmount",
+          "required": false,
+          "summary": "Only transactions that cost you at least this (a bill shared with friends counts for your part).",
+          "type": "money",
+          "value": "amount",
+          "values": []
+        },
+        {
+          "flag": "--max-amount",
+          "nullable": false,
+          "param": "maxAmount",
+          "required": false,
+          "summary": "Only transactions that cost you at most this (a bill shared with friends counts for your part).",
+          "type": "money",
+          "value": "amount",
+          "values": []
+        },
+        {
+          "flag": "--text",
+          "nullable": false,
+          "param": "text",
+          "required": false,
+          "summary": "Only transactions with this text in the name or the description, whatever the case.",
+          "type": "string",
+          "value": "text",
+          "values": []
+        },
+        {
+          "flag": "--split",
+          "nullable": false,
+          "param": "split",
+          "required": false,
+          "summary": "Only the bills shared with friends (split) or only those that are not (not_split). Leave out for both.",
+          "type": "string",
+          "value": "split|not_split",
+          "values": [
+            "split",
+            "not_split"
+          ]
         }
       ],
       "positional": null,
       "route": "export.csv",
       "scope": "read",
-      "summary": "Writes the transactions as a CSV file, after the person allows it in the app. An existing file is never replaced.",
-      "usage": "meowny export csv --out <path> [--from <date>] [--to <date>] [--category-ids <id,id,...>]"
+      "summary": "Writes the transactions as a CSV file, after the person allows it in the app, limited by the dates, the categories, the kind, what they cost you, a text and whether they are shared. An existing file is never replaced.",
+      "usage": "meowny export csv --out <path> [--from <date>] [--to <date>] [--category-ids <id,id,...>] [--kind <INCOME|EXPENSE>] [--min-amount <amount>] [--max-amount <amount>] [--text <text>] [--split <split|not_split>]"
     },
     {
       "command": "export xlsx",
@@ -1350,13 +1558,89 @@
           "type": "ids",
           "value": "id,id,...",
           "values": []
+        },
+        {
+          "flag": "--include-debts",
+          "nullable": false,
+          "param": "includeDebts",
+          "required": false,
+          "summary": "With dates or categories chosen, also include the ledger of money lent and borrowed (the friends and their parts of the bills in the selection are in it anyway). Without a choice everything is in.",
+          "type": "boolean",
+          "value": "boolean",
+          "values": []
+        },
+        {
+          "flag": "--kind",
+          "nullable": false,
+          "param": "kind",
+          "required": false,
+          "summary": "Only INCOME or only EXPENSE. Leave out for both.",
+          "type": "string",
+          "value": "INCOME|EXPENSE",
+          "values": [
+            "INCOME",
+            "EXPENSE"
+          ]
+        },
+        {
+          "flag": "--min-amount",
+          "nullable": false,
+          "param": "minAmount",
+          "required": false,
+          "summary": "Only transactions that cost you at least this (a bill shared with friends counts for your part).",
+          "type": "money",
+          "value": "amount",
+          "values": []
+        },
+        {
+          "flag": "--max-amount",
+          "nullable": false,
+          "param": "maxAmount",
+          "required": false,
+          "summary": "Only transactions that cost you at most this (a bill shared with friends counts for your part).",
+          "type": "money",
+          "value": "amount",
+          "values": []
+        },
+        {
+          "flag": "--text",
+          "nullable": false,
+          "param": "text",
+          "required": false,
+          "summary": "Only transactions with this text in the name or the description, whatever the case.",
+          "type": "string",
+          "value": "text",
+          "values": []
+        },
+        {
+          "flag": "--split",
+          "nullable": false,
+          "param": "split",
+          "required": false,
+          "summary": "Only the bills shared with friends (split) or only those that are not (not_split). Leave out for both.",
+          "type": "string",
+          "value": "split|not_split",
+          "values": [
+            "split",
+            "not_split"
+          ]
+        },
+        {
+          "flag": "--sections",
+          "nullable": false,
+          "param": "sections",
+          "required": false,
+          "summary": "The parts of the file, separated by commas, from: transactions, categories, budgets, recurring, documents, people (the friends and what they owe), due (the overdue recurring payments), ledger (the history of debts) and history (the change history, only in a file with no limits). Leave out for all of them.",
+          "type": "string",
+          "value": "text",
+          "values": []
         }
       ],
       "positional": null,
       "route": "export.xlsx",
       "scope": "read",
-      "summary": "Writes a workbook (.xlsx) with sheets for transactions, categories, budgets, recurring items and a monthly summary, after the person allows it in the app. Dates are ISO and amounts plain numbers. An existing file is never replaced.",
-      "usage": "meowny export xlsx --out <path> [--from <date>] [--to <date>] [--category-ids <id,id,...>]"
+      "summary": "Writes a workbook (.xlsx) with sheets for transactions, categories, budgets, recurring items, documents, the debts (friends, due payments, history of debts) and a monthly summary, after the person allows it in the app. Dates are ISO and amounts plain numbers. An existing file is never replaced.",
+      "usage": "meowny export xlsx --out <path> [--from <date>] [--to <date>] [--category-ids <id,id,...>] [--include-debts <boolean>] [--kind <INCOME|EXPENSE>] [--min-amount <amount>] [--max-amount <amount>] [--text <text>] [--split <split|not_split>] [--sections <text>]"
     },
     {
       "command": "export pdf",
@@ -1435,13 +1719,43 @@
             "A4",
             "LETTER"
           ]
+        },
+        {
+          "flag": "--include-debts",
+          "nullable": false,
+          "param": "includeDebts",
+          "required": false,
+          "summary": "Also list who owes what on the last day of each month: one line for each friend.",
+          "type": "boolean",
+          "value": "boolean",
+          "values": []
+        },
+        {
+          "flag": "--include-due-payments",
+          "nullable": false,
+          "param": "includeDuePayments",
+          "required": false,
+          "summary": "Also list the recurring payments that are overdue today, with the day each fell due and a total.",
+          "type": "boolean",
+          "value": "boolean",
+          "values": []
+        },
+        {
+          "flag": "--include-debt-history",
+          "nullable": false,
+          "param": "includeDebtHistory",
+          "required": false,
+          "summary": "Also list every line of the debts of every friend in the months, with the balance after it, and the recurring payments paid late or overdue.",
+          "type": "boolean",
+          "value": "boolean",
+          "values": []
         }
       ],
       "positional": null,
       "route": "export.pdf",
       "scope": "read",
       "summary": "Writes a PDF report for whole months, in English, after the person allows it in the app: totals, charts and budget against actual, and the transactions if asked. An existing file is never replaced.",
-      "usage": "meowny export pdf --out <path> --from-month <month> --to-month <month> [--category-ids <id,id,...>] [--include-transactions <boolean>] [--show-descriptions <boolean>] [--page <A4|LETTER>]"
+      "usage": "meowny export pdf --out <path> --from-month <month> --to-month <month> [--category-ids <id,id,...>] [--include-transactions <boolean>] [--show-descriptions <boolean>] [--page <A4|LETTER>] [--include-debts <boolean>] [--include-due-payments <boolean>] [--include-debt-history <boolean>]"
     },
     {
       "command": "backup create",
@@ -1545,6 +1859,16 @@
           "values": []
         },
         {
+          "flag": "--ledger-entry-id",
+          "nullable": false,
+          "param": "ledgerEntryId",
+          "required": false,
+          "summary": "An entry of the ledger of money lent and borrowed.",
+          "type": "id",
+          "value": "id",
+          "values": []
+        },
+        {
           "flag": "--limit",
           "nullable": false,
           "param": "limit",
@@ -1569,7 +1893,7 @@
       "route": "documents.list",
       "scope": "read",
       "summary": "Documents, newest paper first, with the total that match: names, dates, types, sizes and hashes, never the files. Up to 100 a page, 50 unless limit says otherwise.",
-      "usage": "meowny documents list [--q <text>] [--kind <image|pdf|other>] [--from <date>] [--to <date>] [--transaction-id <id>] [--recurring-id <id>] [--limit <number>] [--offset <number>]"
+      "usage": "meowny documents list [--q <text>] [--kind <image|pdf|other>] [--from <date>] [--to <date>] [--transaction-id <id>] [--recurring-id <id>] [--ledger-entry-id <id>] [--limit <number>] [--offset <number>]"
     },
     {
       "command": "documents show",
@@ -1590,7 +1914,7 @@
       "positional": "id",
       "route": "documents.show",
       "scope": "read",
-      "summary": "One document: its name, date, type, size and hash, whether this computer holds its file, and in `links` what it is attached to. Never the file.",
+      "summary": "One document: its name, date, type, size and hash, whether this computer holds its file, and in `links` what it is attached to (a debt entry also gives `personId`, the friend). Never the file.",
       "usage": "meowny documents show <id>"
     },
     {
@@ -1657,13 +1981,23 @@
           "type": "ids",
           "value": "id,id,...",
           "values": []
+        },
+        {
+          "flag": "--ledger-entry-ids",
+          "nullable": false,
+          "param": "ledgerEntryIds",
+          "required": false,
+          "summary": "Attach it to these entries of the ledger.",
+          "type": "ids",
+          "value": "id,id,...",
+          "values": []
         }
       ],
       "positional": "data",
       "route": "documents.add",
       "scope": "write",
       "summary": "Stores a file as a document, encrypted, and attaches it where asked. The answer is the document and `alreadyThere`: the same file added again is not stored twice, and the attachments are added to the document that is there. At most 25 MiB.",
-      "usage": "meowny documents add <file> [--name <text>] [--date <date>] [--keep-on-phone <boolean>] [--transaction-ids <id,id,...>] [--recurring-ids <id,id,...>]"
+      "usage": "meowny documents add <file> [--name <text>] [--date <date>] [--keep-on-phone <boolean>] [--transaction-ids <id,id,...>] [--recurring-ids <id,id,...>] [--ledger-entry-ids <id,id,...>]"
     },
     {
       "command": "documents update",
@@ -1773,13 +2107,23 @@
           "type": "id",
           "value": "id",
           "values": []
+        },
+        {
+          "flag": "--ledger-entry-id",
+          "nullable": false,
+          "param": "ledgerEntryId",
+          "required": false,
+          "summary": "An entry of the ledger of money lent and borrowed.",
+          "type": "id",
+          "value": "id",
+          "values": []
         }
       ],
       "positional": "id",
       "route": "documents.link",
       "scope": "write",
-      "summary": "Attaches a document to a transaction or to a recurring item. Giving one that is attached already changes nothing.",
-      "usage": "meowny documents link <id> [--transaction-id <id>] [--recurring-id <id>]"
+      "summary": "Attaches a document to a transaction, a recurring item or a ledger entry. Giving one that is attached already changes nothing.",
+      "usage": "meowny documents link <id> [--transaction-id <id>] [--recurring-id <id>] [--ledger-entry-id <id>]"
     },
     {
       "command": "documents unlink",
@@ -1815,13 +2159,23 @@
           "type": "id",
           "value": "id",
           "values": []
+        },
+        {
+          "flag": "--ledger-entry-id",
+          "nullable": false,
+          "param": "ledgerEntryId",
+          "required": false,
+          "summary": "An entry of the ledger of money lent and borrowed.",
+          "type": "id",
+          "value": "id",
+          "values": []
         }
       ],
       "positional": "id",
       "route": "documents.unlink",
       "scope": "write",
-      "summary": "Detaches a document from a transaction or a recurring item. The document and the transaction stay.",
-      "usage": "meowny documents unlink <id> [--transaction-id <id>] [--recurring-id <id>]"
+      "summary": "Detaches a document from a transaction, a recurring item or a ledger entry. The document and the transaction stay.",
+      "usage": "meowny documents unlink <id> [--transaction-id <id>] [--recurring-id <id>] [--ledger-entry-id <id>]"
     },
     {
       "command": "documents get",
@@ -1854,6 +2208,887 @@
       "scope": "write",
       "summary": "Writes a copy of a document's file, after the person allows it in the app. It is not encrypted. An existing file is never replaced.",
       "usage": "meowny documents get <id> --out <path>"
+    },
+    {
+      "command": "people list",
+      "confirm": false,
+      "destructive": false,
+      "flags": [
+        {
+          "flag": "--archived",
+          "nullable": false,
+          "param": "archived",
+          "required": false,
+          "summary": "Also list the friends that were archived.",
+          "type": "boolean",
+          "value": "boolean",
+          "values": []
+        }
+      ],
+      "positional": null,
+      "route": "people.list",
+      "scope": "read",
+      "summary": "The friends with what each owes you (negative: you owe them), the largest first. Archived friends only if asked.",
+      "usage": "meowny people list [--archived <boolean>]"
+    },
+    {
+      "command": "people show",
+      "confirm": false,
+      "destructive": false,
+      "flags": [
+        {
+          "flag": "--id",
+          "nullable": false,
+          "param": "id",
+          "required": true,
+          "summary": "The friend.",
+          "type": "id",
+          "value": "id",
+          "values": []
+        }
+      ],
+      "positional": "id",
+      "route": "people.show",
+      "scope": "read",
+      "summary": "One friend and their ledger: their parts of shared bills and the entries by date, with the balance after each line.",
+      "usage": "meowny people show <id>"
+    },
+    {
+      "command": "debts summary",
+      "confirm": false,
+      "destructive": false,
+      "flags": [],
+      "positional": null,
+      "route": "debts.summary",
+      "scope": "read",
+      "summary": "What friends owe you and what you owe them, in all and for each friend whose balance is not zero. Neither is income or expense.",
+      "usage": "meowny debts summary"
+    },
+    {
+      "command": "debts due",
+      "confirm": false,
+      "destructive": false,
+      "flags": [],
+      "positional": null,
+      "route": "debts.due",
+      "scope": "read",
+      "summary": "The recurring payments that are overdue and not paid or skipped, one for each occurrence that was missed (at most 24 for an item), the oldest first, with the day each fell due, what it is for (null for a bill with no fixed amount), the days late and what they come to. A payment is overdue from the day after its day; income and paused or ended items are not listed.",
+      "usage": "meowny debts due"
+    },
+    {
+      "command": "debts history",
+      "confirm": false,
+      "destructive": false,
+      "flags": [
+        {
+          "flag": "--from",
+          "nullable": false,
+          "param": "from",
+          "required": false,
+          "summary": "Only lines on or after this date.",
+          "type": "date",
+          "value": "date",
+          "values": []
+        },
+        {
+          "flag": "--to",
+          "nullable": false,
+          "param": "to",
+          "required": false,
+          "summary": "Only lines on or before this date.",
+          "type": "date",
+          "value": "date",
+          "values": []
+        },
+        {
+          "flag": "--person-id",
+          "nullable": false,
+          "param": "personId",
+          "required": false,
+          "summary": "Only the lines of this friend (and none of the recurring payments).",
+          "type": "id",
+          "value": "id",
+          "values": []
+        },
+        {
+          "flag": "--limit",
+          "nullable": false,
+          "param": "limit",
+          "required": false,
+          "summary": "How many to return, 1 to 200. Default 50.",
+          "type": "integer",
+          "value": "number",
+          "values": []
+        },
+        {
+          "flag": "--offset",
+          "nullable": false,
+          "param": "offset",
+          "required": false,
+          "summary": "How many to skip, for the next page. Default 0.",
+          "type": "integer",
+          "value": "number",
+          "values": []
+        }
+      ],
+      "positional": null,
+      "route": "debts.history",
+      "scope": "read",
+      "summary": "The history of debts, newest first, a page at a time: the lines of every friend (lent, borrowed, paid back, their parts of shared bills, with the balance after each) and the recurring payments that were paid late or are overdue. A payment made on its day or before it is not in it.",
+      "usage": "meowny debts history [--from <date>] [--to <date>] [--person-id <id>] [--limit <number>] [--offset <number>]"
+    },
+    {
+      "command": "debts reminders",
+      "confirm": false,
+      "destructive": false,
+      "flags": [
+        {
+          "flag": "--every-days",
+          "nullable": false,
+          "param": "everyDays",
+          "required": true,
+          "summary": "The period in days, 0 to 365.",
+          "type": "integer",
+          "value": "number",
+          "values": []
+        }
+      ],
+      "positional": null,
+      "route": "debts.reminders",
+      "scope": "read",
+      "summary": "Which friends a reminder is due for today, and the next days with one. Every friend whose balance is not zero is reminded this many days after the day their debt last changed (the latest line of their statement), and again after as many; 0 is none. The app rings them (a device sets its own period and time of day); this only reads what they would be about.",
+      "usage": "meowny debts reminders --every-days <number>"
+    },
+    {
+      "command": "splits preview",
+      "confirm": false,
+      "destructive": false,
+      "flags": [
+        {
+          "flag": "--amount",
+          "nullable": false,
+          "param": "amount",
+          "required": true,
+          "summary": "The bill, more than zero.",
+          "type": "money",
+          "value": "amount",
+          "values": []
+        },
+        {
+          "flag": "--mode",
+          "nullable": false,
+          "param": "mode",
+          "required": true,
+          "summary": "How the numbers are typed: EQUAL (everyone the same), PERCENT (two decimals, 100.00 in all), SHARES (whole numbers) or EXACT (amounts that add up to the bill).",
+          "type": "string",
+          "value": "EQUAL|PERCENT|SHARES|EXACT",
+          "values": [
+            "EQUAL",
+            "PERCENT",
+            "SHARES",
+            "EXACT"
+          ]
+        },
+        {
+          "flag": "--mine",
+          "nullable": false,
+          "param": "mine",
+          "required": false,
+          "summary": "Your own value, typed the way the mode says. Leave out for an equal split, or to take the rest in PERCENT and EXACT.",
+          "type": "string",
+          "value": "text",
+          "values": []
+        },
+        {
+          "flag": "--people",
+          "nullable": false,
+          "param": "people",
+          "required": false,
+          "summary": "The friends the bill is shared with, as ids.",
+          "type": "ids",
+          "value": "id,id,...",
+          "values": []
+        },
+        {
+          "flag": "--guests",
+          "nullable": false,
+          "param": "guests",
+          "required": false,
+          "summary": "People who are not tracked, by name, separated by commas. Their part leaves your cost and makes no debt.",
+          "type": "string",
+          "value": "text",
+          "values": []
+        },
+        {
+          "flag": "--values",
+          "nullable": false,
+          "param": "values",
+          "required": false,
+          "summary": "The value of each friend, in the order of --people, then of each guest, separated by commas. Not for an equal split.",
+          "type": "string",
+          "value": "text",
+          "values": []
+        }
+      ],
+      "positional": null,
+      "route": "splits.preview",
+      "scope": "read",
+      "summary": "What a split would give each person for a bill of this amount, without saving anything: your part, theirs, whether the numbers add up and how much is left.",
+      "usage": "meowny splits preview --amount <amount> --mode <EQUAL|PERCENT|SHARES|EXACT> [--mine <text>] [--people <id,id,...>] [--guests <text>] [--values <text>]"
+    },
+    {
+      "command": "people create",
+      "confirm": false,
+      "destructive": false,
+      "flags": [
+        {
+          "flag": "--name",
+          "nullable": false,
+          "param": "name",
+          "required": true,
+          "summary": "The name.",
+          "type": "string",
+          "value": "text",
+          "values": []
+        }
+      ],
+      "positional": null,
+      "route": "people.create",
+      "scope": "write",
+      "summary": "Adds a friend. A friend is a name, 1 to 50 characters, unique among the friends who are not archived. Nothing else about a person is kept.",
+      "usage": "meowny people create --name <text>"
+    },
+    {
+      "command": "people update",
+      "confirm": false,
+      "destructive": false,
+      "flags": [
+        {
+          "flag": "--id",
+          "nullable": false,
+          "param": "id",
+          "required": true,
+          "summary": "The friend.",
+          "type": "id",
+          "value": "id",
+          "values": []
+        },
+        {
+          "flag": "--name",
+          "nullable": false,
+          "param": "name",
+          "required": false,
+          "summary": "The new name.",
+          "type": "string",
+          "value": "text",
+          "values": []
+        },
+        {
+          "flag": "--remind-on",
+          "nullable": true,
+          "param": "remindOn",
+          "required": false,
+          "summary": "Not used for reminders any more; kept as it was written. Null clears it.",
+          "type": "date",
+          "value": "date",
+          "values": []
+        },
+        {
+          "clears": "remindOn",
+          "flag": "--clear-remind-on",
+          "summary": "Clears remindOn."
+        },
+        {
+          "flag": "--remind-every-days",
+          "nullable": true,
+          "param": "remindEveryDays",
+          "required": false,
+          "summary": "Not used for reminders any more; kept as it was written, 1 to 365, or null.",
+          "type": "integer",
+          "value": "number",
+          "values": []
+        },
+        {
+          "clears": "remindEveryDays",
+          "flag": "--clear-remind-every-days",
+          "summary": "Clears remindEveryDays."
+        }
+      ],
+      "positional": "id",
+      "route": "people.update",
+      "scope": "write",
+      "summary": "Renames a friend. Fields left out stay as they are. The reminder fields are kept for data written before reminders became a setting of each device (every so many days after a debt last changed), and nothing rings from them.",
+      "usage": "meowny people update <id> [--name <text>] [--remind-on <date>] [--remind-every-days <number>]"
+    },
+    {
+      "command": "people archive",
+      "confirm": false,
+      "destructive": false,
+      "flags": [
+        {
+          "flag": "--id",
+          "nullable": false,
+          "param": "id",
+          "required": true,
+          "summary": "The friend.",
+          "type": "id",
+          "value": "id",
+          "values": []
+        }
+      ],
+      "positional": "id",
+      "route": "people.archive",
+      "scope": "write",
+      "summary": "Hides a friend from the lists and pickers. Their balance and history stay, and the name can be used again.",
+      "usage": "meowny people archive <id>"
+    },
+    {
+      "command": "people unarchive",
+      "confirm": false,
+      "destructive": false,
+      "flags": [
+        {
+          "flag": "--id",
+          "nullable": false,
+          "param": "id",
+          "required": true,
+          "summary": "The friend.",
+          "type": "id",
+          "value": "id",
+          "values": []
+        }
+      ],
+      "positional": "id",
+      "route": "people.unarchive",
+      "scope": "write",
+      "summary": "Brings back an archived friend, if no other friend has taken the name.",
+      "usage": "meowny people unarchive <id>"
+    },
+    {
+      "command": "people settle",
+      "confirm": false,
+      "destructive": false,
+      "flags": [
+        {
+          "flag": "--id",
+          "nullable": false,
+          "param": "id",
+          "required": true,
+          "summary": "The friend.",
+          "type": "id",
+          "value": "id",
+          "values": []
+        },
+        {
+          "flag": "--amount",
+          "nullable": false,
+          "param": "amount",
+          "required": false,
+          "summary": "How much was paid, more than zero. The whole balance if left out.",
+          "type": "money",
+          "value": "amount",
+          "values": []
+        },
+        {
+          "flag": "--date",
+          "nullable": false,
+          "param": "date",
+          "required": false,
+          "summary": "The day it was paid. Today if left out.",
+          "type": "date",
+          "value": "date",
+          "values": []
+        },
+        {
+          "flag": "--note",
+          "nullable": false,
+          "param": "note",
+          "required": false,
+          "summary": "A note, up to 200 characters.",
+          "type": "string",
+          "value": "text",
+          "values": []
+        }
+      ],
+      "positional": "id",
+      "route": "people.settle",
+      "scope": "write",
+      "summary": "Marks a payment between you and a friend: they paid you back if they owe you, you paid them back if you owe them. With no amount it is the whole balance. An amount larger than the debt is accepted: the balance turns around and the answer says how much was over.",
+      "usage": "meowny people settle <id> [--amount <amount>] [--date <date>] [--note <text>]"
+    },
+    {
+      "command": "ledger add",
+      "confirm": false,
+      "destructive": false,
+      "flags": [
+        {
+          "flag": "--person-id",
+          "nullable": false,
+          "param": "personId",
+          "required": true,
+          "summary": "The friend.",
+          "type": "id",
+          "value": "id",
+          "values": []
+        },
+        {
+          "flag": "--kind",
+          "nullable": false,
+          "param": "kind",
+          "required": true,
+          "summary": "LENT (you lent), BORROWED (you borrowed), REPAID_TO_ME (they paid you back) or REPAID_BY_ME (you paid them back).",
+          "type": "string",
+          "value": "LENT|BORROWED|REPAID_TO_ME|REPAID_BY_ME",
+          "values": [
+            "LENT",
+            "BORROWED",
+            "REPAID_TO_ME",
+            "REPAID_BY_ME"
+          ]
+        },
+        {
+          "flag": "--amount",
+          "nullable": false,
+          "param": "amount",
+          "required": true,
+          "summary": "More than zero.",
+          "type": "money",
+          "value": "amount",
+          "values": []
+        },
+        {
+          "flag": "--date",
+          "nullable": false,
+          "param": "date",
+          "required": true,
+          "summary": "The day it happened.",
+          "type": "date",
+          "value": "date",
+          "values": []
+        },
+        {
+          "flag": "--note",
+          "nullable": false,
+          "param": "note",
+          "required": false,
+          "summary": "A note, up to 200 characters.",
+          "type": "string",
+          "value": "text",
+          "values": []
+        },
+        {
+          "flag": "--transaction-id",
+          "nullable": false,
+          "param": "transactionId",
+          "required": false,
+          "summary": "A transaction this belongs to.",
+          "type": "id",
+          "value": "id",
+          "values": []
+        },
+        {
+          "flag": "--expense-name",
+          "nullable": false,
+          "param": "expenseName",
+          "required": false,
+          "summary": "BORROWED only: the name of the expense that is made for your share (1 to 50 characters). Needs expenseCategoryId.",
+          "type": "string",
+          "value": "text",
+          "values": []
+        },
+        {
+          "flag": "--expense-category-id",
+          "nullable": false,
+          "param": "expenseCategoryId",
+          "required": false,
+          "summary": "BORROWED only: the expense category for your share. Needs expenseName.",
+          "type": "id",
+          "value": "id",
+          "values": []
+        }
+      ],
+      "positional": null,
+      "route": "ledger.add",
+      "scope": "write",
+      "summary": "Records money lent, borrowed or paid back with a friend. It is never income or expense. For a borrowing, give expenseName and expenseCategoryId to add your share to your expenses in the same step, with the entry linked to it.",
+      "usage": "meowny ledger add --person-id <id> --kind <LENT|BORROWED|REPAID_TO_ME|REPAID_BY_ME> --amount <amount> --date <date> [--note <text>] [--transaction-id <id>] [--expense-name <text>] [--expense-category-id <id>]"
+    },
+    {
+      "command": "ledger update",
+      "confirm": false,
+      "destructive": false,
+      "flags": [
+        {
+          "flag": "--id",
+          "nullable": false,
+          "param": "id",
+          "required": true,
+          "summary": "The entry.",
+          "type": "id",
+          "value": "id",
+          "values": []
+        },
+        {
+          "flag": "--person-id",
+          "nullable": false,
+          "param": "personId",
+          "required": false,
+          "summary": "The friend.",
+          "type": "id",
+          "value": "id",
+          "values": []
+        },
+        {
+          "flag": "--kind",
+          "nullable": false,
+          "param": "kind",
+          "required": false,
+          "summary": "LENT, BORROWED, REPAID_TO_ME or REPAID_BY_ME.",
+          "type": "string",
+          "value": "LENT|BORROWED|REPAID_TO_ME|REPAID_BY_ME",
+          "values": [
+            "LENT",
+            "BORROWED",
+            "REPAID_TO_ME",
+            "REPAID_BY_ME"
+          ]
+        },
+        {
+          "flag": "--amount",
+          "nullable": false,
+          "param": "amount",
+          "required": false,
+          "summary": "More than zero.",
+          "type": "money",
+          "value": "amount",
+          "values": []
+        },
+        {
+          "flag": "--date",
+          "nullable": false,
+          "param": "date",
+          "required": false,
+          "summary": "The day it happened.",
+          "type": "date",
+          "value": "date",
+          "values": []
+        },
+        {
+          "flag": "--note",
+          "nullable": true,
+          "param": "note",
+          "required": false,
+          "summary": "The new note, or null to clear it.",
+          "type": "string",
+          "value": "text",
+          "values": []
+        },
+        {
+          "clears": "note",
+          "flag": "--clear-note",
+          "summary": "Clears note."
+        },
+        {
+          "flag": "--transaction-id",
+          "nullable": true,
+          "param": "transactionId",
+          "required": false,
+          "summary": "The transaction it belongs to, or null for none.",
+          "type": "id",
+          "value": "id",
+          "values": []
+        },
+        {
+          "clears": "transactionId",
+          "flag": "--clear-transaction-id",
+          "summary": "Clears transactionId."
+        }
+      ],
+      "positional": "id",
+      "route": "ledger.update",
+      "scope": "write",
+      "summary": "Changes an entry of the ledger. Fields left out stay as they are; a null note or transactionId clears it. The expense it came with is not changed.",
+      "usage": "meowny ledger update <id> [--person-id <id>] [--kind <LENT|BORROWED|REPAID_TO_ME|REPAID_BY_ME>] [--amount <amount>] [--date <date>] [--note <text>] [--transaction-id <id>]"
+    },
+    {
+      "command": "ledger delete",
+      "confirm": false,
+      "destructive": true,
+      "flags": [
+        {
+          "flag": "--id",
+          "nullable": false,
+          "param": "id",
+          "required": true,
+          "summary": "The entry.",
+          "type": "id",
+          "value": "id",
+          "values": []
+        }
+      ],
+      "positional": "id",
+      "route": "ledger.delete",
+      "scope": "write",
+      "summary": "Deletes an entry of the ledger. The balance of the friend changes by that much. The change history keeps what it said.",
+      "usage": "meowny ledger delete <id>"
+    },
+    {
+      "command": "transactions split",
+      "confirm": false,
+      "destructive": false,
+      "flags": [
+        {
+          "flag": "--id",
+          "nullable": false,
+          "param": "id",
+          "required": true,
+          "summary": "The transaction.",
+          "type": "id",
+          "value": "id",
+          "values": []
+        },
+        {
+          "flag": "--mode",
+          "nullable": false,
+          "param": "mode",
+          "required": true,
+          "summary": "How the numbers are typed: EQUAL (everyone the same), PERCENT (two decimals, 100.00 in all), SHARES (whole numbers) or EXACT (amounts that add up to the bill).",
+          "type": "string",
+          "value": "EQUAL|PERCENT|SHARES|EXACT",
+          "values": [
+            "EQUAL",
+            "PERCENT",
+            "SHARES",
+            "EXACT"
+          ]
+        },
+        {
+          "flag": "--mine",
+          "nullable": false,
+          "param": "mine",
+          "required": false,
+          "summary": "Your own value, typed the way the mode says. Leave out for an equal split, or to take the rest in PERCENT and EXACT.",
+          "type": "string",
+          "value": "text",
+          "values": []
+        },
+        {
+          "flag": "--people",
+          "nullable": false,
+          "param": "people",
+          "required": false,
+          "summary": "The friends the bill is shared with, as ids.",
+          "type": "ids",
+          "value": "id,id,...",
+          "values": []
+        },
+        {
+          "flag": "--guests",
+          "nullable": false,
+          "param": "guests",
+          "required": false,
+          "summary": "People who are not tracked, by name, separated by commas. Their part leaves your cost and makes no debt.",
+          "type": "string",
+          "value": "text",
+          "values": []
+        },
+        {
+          "flag": "--values",
+          "nullable": false,
+          "param": "values",
+          "required": false,
+          "summary": "The value of each friend, in the order of --people, then of each guest, separated by commas. Not for an equal split.",
+          "type": "string",
+          "value": "text",
+          "values": []
+        }
+      ],
+      "positional": "id",
+      "route": "transactions.split",
+      "scope": "write",
+      "summary": "Shares a transaction with friends and guests. It keeps the amount that was paid; your part, the amount minus theirs, is what budgets and statistics count. The numbers must add up. Only an expense can be shared.",
+      "usage": "meowny transactions split <id> --mode <EQUAL|PERCENT|SHARES|EXACT> [--mine <text>] [--people <id,id,...>] [--guests <text>] [--values <text>]"
+    },
+    {
+      "command": "transactions unsplit",
+      "confirm": false,
+      "destructive": false,
+      "flags": [
+        {
+          "flag": "--id",
+          "nullable": false,
+          "param": "id",
+          "required": true,
+          "summary": "The transaction.",
+          "type": "id",
+          "value": "id",
+          "values": []
+        }
+      ],
+      "positional": "id",
+      "route": "transactions.unsplit",
+      "scope": "write",
+      "summary": "Takes the split off a transaction: it costs you its whole amount again, and the friends' balances go down by their parts.",
+      "usage": "meowny transactions unsplit <id>"
+    },
+    {
+      "command": "recurring split",
+      "confirm": false,
+      "destructive": false,
+      "flags": [
+        {
+          "flag": "--id",
+          "nullable": false,
+          "param": "id",
+          "required": true,
+          "summary": "The recurring item.",
+          "type": "id",
+          "value": "id",
+          "values": []
+        },
+        {
+          "flag": "--mode",
+          "nullable": false,
+          "param": "mode",
+          "required": true,
+          "summary": "How the numbers are typed: EQUAL (everyone the same), PERCENT (two decimals, 100.00 in all), SHARES (whole numbers) or EXACT (amounts that add up to the bill).",
+          "type": "string",
+          "value": "EQUAL|PERCENT|SHARES|EXACT",
+          "values": [
+            "EQUAL",
+            "PERCENT",
+            "SHARES",
+            "EXACT"
+          ]
+        },
+        {
+          "flag": "--mine",
+          "nullable": false,
+          "param": "mine",
+          "required": false,
+          "summary": "Your own value, typed the way the mode says. Leave out for an equal split, or to take the rest in PERCENT and EXACT.",
+          "type": "string",
+          "value": "text",
+          "values": []
+        },
+        {
+          "flag": "--people",
+          "nullable": false,
+          "param": "people",
+          "required": false,
+          "summary": "The friends the bill is shared with, as ids.",
+          "type": "ids",
+          "value": "id,id,...",
+          "values": []
+        },
+        {
+          "flag": "--guests",
+          "nullable": false,
+          "param": "guests",
+          "required": false,
+          "summary": "People who are not tracked, by name, separated by commas. Their part leaves your cost and makes no debt.",
+          "type": "string",
+          "value": "text",
+          "values": []
+        },
+        {
+          "flag": "--values",
+          "nullable": false,
+          "param": "values",
+          "required": false,
+          "summary": "The value of each friend, in the order of --people, then of each guest, separated by commas. Not for an equal split.",
+          "type": "string",
+          "value": "text",
+          "values": []
+        }
+      ],
+      "positional": "id",
+      "route": "recurring.split",
+      "scope": "write",
+      "summary": "Splits every payment of a recurring item the same way, from now on. Kept as proportions, so a payment that differs from the plan is shared in the same proportions. EXACT needs an item with an amount that the values add up to. Payments already made are not changed.",
+      "usage": "meowny recurring split <id> --mode <EQUAL|PERCENT|SHARES|EXACT> [--mine <text>] [--people <id,id,...>] [--guests <text>] [--values <text>]"
+    },
+    {
+      "command": "recurring unsplit",
+      "confirm": false,
+      "destructive": false,
+      "flags": [
+        {
+          "flag": "--id",
+          "nullable": false,
+          "param": "id",
+          "required": true,
+          "summary": "The recurring item.",
+          "type": "id",
+          "value": "id",
+          "values": []
+        }
+      ],
+      "positional": "id",
+      "route": "recurring.unsplit",
+      "scope": "write",
+      "summary": "Takes the split off a recurring item: its payments are not split from now on. Payments already made keep theirs.",
+      "usage": "meowny recurring unsplit <id>"
+    },
+    {
+      "command": "export debts",
+      "confirm": true,
+      "destructive": false,
+      "flags": [
+        {
+          "flag": "--out",
+          "nullable": false,
+          "param": "out",
+          "required": true,
+          "summary": "Where to write the file: an absolute path ending in .txt (TEXT), .csv (CSV) or .pdf (PDF), in a folder that exists, that is not there yet.",
+          "type": "path",
+          "value": "path",
+          "values": []
+        },
+        {
+          "flag": "--what",
+          "nullable": false,
+          "param": "what",
+          "required": false,
+          "summary": "SUMMARY (the default), STATEMENT or LEDGER.",
+          "type": "string",
+          "value": "SUMMARY|STATEMENT|LEDGER",
+          "values": [
+            "SUMMARY",
+            "STATEMENT",
+            "LEDGER"
+          ]
+        },
+        {
+          "flag": "--format",
+          "nullable": false,
+          "param": "format",
+          "required": false,
+          "summary": "TEXT (the default), CSV or PDF. LEDGER is CSV only.",
+          "type": "string",
+          "value": "TEXT|CSV|PDF",
+          "values": [
+            "TEXT",
+            "CSV",
+            "PDF"
+          ]
+        },
+        {
+          "flag": "--person-id",
+          "nullable": false,
+          "param": "personId",
+          "required": false,
+          "summary": "The friend, for a STATEMENT.",
+          "type": "id",
+          "value": "id",
+          "values": []
+        }
+      ],
+      "positional": null,
+      "route": "export.debts",
+      "scope": "read",
+      "summary": "Writes who owes what to a text, CSV or PDF file, in English, after the person allows it in the app: the SUMMARY of all friends, the STATEMENT of one friend (personId), or the LEDGER of every entry as CSV. An existing file is never replaced.",
+      "usage": "meowny export debts --out <path> [--what <SUMMARY|STATEMENT|LEDGER>] [--format <TEXT|CSV|PDF>] [--person-id <id>]"
     },
     {
       "command": "login",
