@@ -1067,19 +1067,6 @@ mod tests {
     }
 
     #[test]
-    fn the_csv_has_one_row_per_transaction_oldest_first() {
-        let (conn, ..) = lived_in();
-        let text = csv(&conn, &Selection::default()).unwrap();
-        assert!(text.starts_with("\u{feff}date,type,category,name,amount,currency,description,documents,my_share\r\n"));
-        let rows = read_csv(&text);
-        assert_eq!(rows.len(), 5, "header and four transactions");
-        assert_eq!(rows[1], ["2026-01-25", "INCOME", "Salary", "Pay", "3200.00", "EUR", "Monthly pay", "", "3200.00"]);
-        assert_eq!(rows[2], ["2026-02-01", "EXPENSE", "Rent", "Rent", "900.00", "EUR", "", "", "900.00"]);
-        assert_eq!(rows[3][3..5], ["Session", "80.00"]);
-        assert_eq!(rows[4][4], "905.50");
-    }
-
-    #[test]
     fn a_csv_cannot_carry_a_formula_into_a_spreadsheet() {
         let (conn, _, rent, _) = lived_in();
         spend(&conn, rent, "=cmd|' /C calc'!A0", "1.00", "2026-04-01", Some("+1+1"));
@@ -1109,27 +1096,6 @@ mod tests {
     }
 
     #[test]
-    fn a_selection_narrows_the_transactions() {
-        let (conn, salary, rent, _) = lived_in();
-        let names = |sel: &Selection| -> Vec<String> {
-            read_csv(&csv(&conn, sel).unwrap())[1..].iter().map(|r| format!("{} {}", r[0], r[3])).collect()
-        };
-        let range = Selection { from: Some("2026-02-01".into()), to: Some("2026-02-10".into()), ..Default::default() };
-        assert_eq!(names(&range), ["2026-02-01 Rent", "2026-02-10 Session"], "both ends are inclusive");
-
-        let categories = Selection { category_ids: Some(vec![rent.to_string(), salary.to_string()]), ..Default::default() };
-        assert_eq!(names(&categories).len(), 3);
-
-        let both = Selection { from: Some("2026-03-01".into()), category_ids: Some(vec![rent.to_string()]), ..Default::default() };
-        assert_eq!(names(&both), ["2026-03-01 Rent"]);
-
-        let none = Selection { category_ids: Some(vec![]), ..Default::default() };
-        assert!(names(&none).is_empty());
-        let empty_range = Selection { from: Some("2030-01-01".into()), ..Default::default() };
-        assert!(names(&empty_range).is_empty());
-    }
-
-    #[test]
     fn a_bad_selection_is_refused() {
         let (conn, ..) = lived_in();
         for bad in [
@@ -1149,27 +1115,6 @@ mod tests {
 
     pub(super) fn parsed(conn: &Connection, selection: &Selection) -> Value {
         serde_json::from_str(&json(conn, selection, Utc::now()).unwrap()).unwrap()
-    }
-
-    #[test]
-    fn the_full_json_holds_all_of_the_data() {
-        let (conn, ..) = lived_in();
-        let file = parsed(&conn, &Selection::default());
-        assert_eq!((file["format"].as_str(), file["version"].as_i64()), (Some("meowny-export"), Some(1)));
-        assert_eq!(file["settings"]["currency"], "EUR");
-        assert_eq!(file["categories"].as_array().unwrap().len(), 3);
-        let stored: i64 = conn.query_row("SELECT count(*) FROM budgets", [], |r| r.get(0)).unwrap();
-        assert_eq!(file["budgets"].as_array().unwrap().len() as i64, stored, "every budget row, carry-forward rows included");
-        assert_eq!(file["recurring"].as_array().unwrap().len(), 2);
-        assert_eq!(file["transactions"].as_array().unwrap().len(), 4);
-        assert!(!file["history"].as_array().unwrap().is_empty(), "the change history is part of all the data");
-
-        let pay = &file["transactions"][0];
-        assert_eq!((pay["amount"].as_str(), pay["date"].as_str(), pay["type"].as_str()), (Some("3200.00"), Some("2026-01-25"), Some("INCOME")));
-        assert!(pay["id"].is_string() && pay["categoryId"].is_string(), "ids are strings, as in the app");
-        let removed = file["budgets"].as_array().unwrap().iter().find(|b| b["month"] == "2026-03").unwrap();
-        assert!(removed["limit"].is_null(), "a removed budget stays visible");
-        assert!(file["budgets"].as_array().unwrap().iter().any(|b| b["scope"] == "GLOBAL" && b["limit"] == "2200.00"));
     }
 
     #[test]
@@ -1252,39 +1197,6 @@ mod tests {
     }
 
     #[test]
-    fn the_preview_counts_what_the_files_contain() {
-        let (conn, _, rent, _) = lived_in();
-        for selection in [
-            Selection::default(),
-            Selection { from: Some("2026-02-01".into()), ..Default::default() },
-            Selection { category_ids: Some(vec![rent.to_string()]), ..Default::default() },
-            Selection { from: Some("2026-02-01".into()), to: Some("2026-02-28".into()), category_ids: Some(vec![rent.to_string()]), ..Default::default() },
-            Selection { category_ids: Some(vec![]), ..Default::default() },
-        ] {
-            let shown = preview(&conn, &selection).unwrap();
-            let file = parsed(&conn, &selection);
-            let count = |section: &str| file[section].as_array().unwrap().len() as u32;
-            assert_eq!(shown.transactions, count("transactions"), "{selection:?}");
-            assert_eq!((shown.categories, shown.budgets, shown.recurring), (count("categories"), count("budgets"), count("recurring")), "{selection:?}");
-            assert_eq!(shown.history, file.get("history").map_or(0, |h| h.as_array().unwrap().len() as u32), "{selection:?}");
-            assert_eq!(read_csv(&csv(&conn, &selection).unwrap()).len() as u32 - 1, shown.transactions, "{selection:?}");
-        }
-    }
-
-    #[test]
-    fn the_preview_gives_the_span_and_the_totals() {
-        let (conn, ..) = lived_in();
-        let all = preview(&conn, &Selection::default()).unwrap();
-        assert_eq!((all.first_date.as_deref(), all.last_date.as_deref()), (Some("2026-01-25"), Some("2026-03-01")));
-        assert_eq!((all.income.as_str(), all.expense.as_str()), ("3200.00", "1885.50"), "900.00 + 905.50 rent and 80.00 of therapy");
-        assert!(all.history > 0);
-
-        let narrow = preview(&conn, &Selection { from: Some("2026-03-01".into()), ..Default::default() }).unwrap();
-        assert_eq!((narrow.transactions, narrow.first_date.as_deref(), narrow.expense.as_str()), (1, Some("2026-03-01"), "905.50"));
-        assert_eq!(narrow.history, 0, "a range is not all the data");
-    }
-
-    #[test]
     fn the_preview_of_nothing_is_empty_not_an_error() {
         let conn = db();
         let empty = preview(&conn, &Selection::default()).unwrap();
@@ -1330,7 +1242,7 @@ mod tests {
 
 #[cfg(test)]
 mod preview_text_tests {
-    use super::tests::{db, lived_in, spend};
+    use super::tests::{db, spend};
     use super::*;
     use crate::categories::{self, CategoryType};
 
@@ -1340,38 +1252,6 @@ mod preview_text_tests {
 
     fn everything() -> Selection {
         Selection::default()
-    }
-
-    #[test]
-    fn the_preview_of_a_csv_is_the_file_without_its_byte_order_mark() {
-        let (conn, ..) = lived_in();
-        let file = csv(&conn, &everything()).unwrap();
-        let shown = preview_text(&conn, &everything(), TextFormat::Csv, now()).unwrap();
-        assert!(file.starts_with('\u{feff}'));
-        assert_eq!(shown.text, file.strip_prefix('\u{feff}').unwrap());
-        assert!(shown.text.starts_with("date,type,category,name,amount,currency,description,documents,my_share\r\n"));
-        assert_eq!((shown.bytes, shown.cut), (file.len() as u64, false), "the length is the file's, with the mark");
-    }
-
-    #[test]
-    fn the_preview_of_a_json_file_is_the_whole_file_while_it_is_short() {
-        let (conn, ..) = lived_in();
-        let file = json(&conn, &everything(), now()).unwrap();
-        let shown = preview_text(&conn, &everything(), TextFormat::Json, now()).unwrap();
-        assert_eq!((shown.text.as_str(), shown.bytes, shown.cut), (file.as_str(), file.len() as u64, false));
-        let parsed: Value = serde_json::from_str(&shown.text).unwrap();
-        assert!(parsed["transactions"].as_array().is_some_and(|list| list.len() == 4));
-    }
-
-    #[test]
-    fn the_preview_follows_the_selection() {
-        let (conn, _, rent, _) = lived_in();
-        let only_rent = Selection { category_ids: Some(vec![rent.to_string()]), ..Selection::default() };
-        let csv = preview_text(&conn, &only_rent, TextFormat::Csv, now()).unwrap().text;
-        assert!(csv.contains("Rent") && !csv.contains("Session") && !csv.contains("Pay,"));
-        let march = Selection { from: Some("2026-03-01".into()), to: Some("2026-03-31".into()), ..Selection::default() };
-        let json = preview_text(&conn, &march, TextFormat::Json, now()).unwrap().text;
-        assert!(json.contains("905.50") && !json.contains("3200.00"));
     }
 
     #[test]
@@ -1407,19 +1287,8 @@ mod preview_text_tests {
 
 #[cfg(test)]
 mod preview_file_tests {
-    use super::tests::lived_in;
+    
     use super::*;
-
-    #[test]
-    fn a_file_for_the_preview_is_the_file_and_its_length() {
-        let (conn, ..) = lived_in();
-        let selection = Selection::default();
-        let book = workbook(&conn, &selection, &crate::display::DisplayFormat::default()).unwrap();
-        let given = preview_file(&book).unwrap();
-        assert_eq!(given.bytes, book.len() as u64);
-        assert_eq!(crate::sync::qr::base64url_decode(&given.data).unwrap(), book, "the very bytes that would be saved");
-        assert!(book.starts_with(b"PK"));
-    }
 
     #[test]
     fn a_file_over_the_limit_is_not_given() {

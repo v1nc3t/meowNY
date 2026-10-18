@@ -120,6 +120,7 @@
     "allow-export-debts",
     "allow-export-debts-preview",
     "allow-bill-code",
+    "allow-recurring-code",
     "allow-bill-preview",
     "allow-bill-accept",
     "allow-debts-reminders",

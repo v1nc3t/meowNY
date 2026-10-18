@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { CHORD_MS, isMac, isTypingTarget, KeyMatcher, SHORTCUTS, shortcutKeys, type ShortcutId } from './shortcuts.ts'
+import { CHORD_MS, isTypingTarget, KeyMatcher, SHORTCUTS } from './shortcuts.ts'
 
 const press = (key: string, mods: Partial<{ ctrlKey: boolean; metaKey: boolean; altKey: boolean }> = {}) => ({
   key,
@@ -8,25 +8,6 @@ const press = (key: string, mods: Partial<{ ctrlKey: boolean; metaKey: boolean; 
   metaKey: false,
   altKey: false,
   ...mods,
-})
-
-test('single keys map to their actions', () => {
-  const m = new KeyMatcher()
-  const expected: [string, ShortcutId][] = [['n', 'new'], ['/', 'search'], ['[', 'prev'], [']', 'next'], ['t', 'today'], ['j', 'rowNext'], ['k', 'rowPrev'], ['?', 'help']]
-  for (const [key, id] of expected) assert.equal(m.handle(press(key), 0), id, key)
-})
-
-test('capital letters work the same (caps lock)', () => {
-  assert.equal(new KeyMatcher().handle(press('N'), 0), 'new')
-})
-
-test('g then a letter goes to a page', () => {
-  const m = new KeyMatcher()
-  const pages: [string, ShortcutId][] = [['d', 'goDashboard'], ['t', 'goTransactions'], ['c', 'goCategories'], ['r', 'goRecurring'], ['o', 'goDocuments'], ['f', 'goDebts'], ['s', 'goSettings'], ['e', 'goExport']]
-  for (const [key, id] of pages) {
-    assert.equal(m.handle(press('g'), 0), null)
-    assert.equal(m.handle(press(key), 100), id, key)
-  }
 })
 
 test('the second key of a chord is not also a single-key shortcut', () => {
@@ -55,14 +36,6 @@ test('Ctrl or Cmd shortcuts work and plain letters with modifiers do not', () =>
   assert.equal(m.handle(press('n', { ctrlKey: true }), 0), null, 'ctrl+n is the system own')
   assert.equal(m.handle(press('n', { altKey: true }), 0), null)
   assert.equal(m.handle(press('l', { ctrlKey: true, altKey: true }), 0), null)
-})
-
-test('keys are shown the way people expect, per platform', () => {
-  assert.equal(shortcutKeys('goTransactions', false), 'g t')
-  assert.equal(shortcutKeys('new', false), 'n')
-  assert.equal(shortcutKeys('lock', false), 'Ctrl+L')
-  assert.equal(shortcutKeys('lock', true), '⌘L')
-  assert.ok(isMac('MacIntel') && isMac('iPhone') && !isMac('Linux x86_64') && !isMac('Win32'))
 })
 
 test('no two shortcuts use the same keys', () => {

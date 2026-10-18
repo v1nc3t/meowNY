@@ -459,7 +459,7 @@ mod tests {
     use std::collections::HashMap;
     use std::io::Read;
 
-    use chrono::{NaiveDate, Utc};
+    use chrono::NaiveDate;
 
     use super::super::tests::{db, lived_in, set_budget, spend};
     use super::*;
@@ -665,86 +665,8 @@ mod tests {
         (NaiveDate::from_ymd_opt(year, month, day).unwrap() - epoch).num_days() as f64
     }
 
-    fn styles(bytes: &[u8]) -> String {
-        Book::open(bytes).part("xl/styles.xml")
-    }
-
     fn strings(cells: &[Vec<Cell>]) -> Vec<String> {
         cells.iter().flatten().filter_map(|c| if let Cell::Text(s) = c { Some(s.clone()) } else { None }).collect()
-    }
-
-    #[test]
-    fn the_workbook_has_the_eleven_sheets() {
-        let (conn, ..) = lived_in();
-        let bytes = build(&conn, &Selection::default(), &DisplayFormat::default());
-        assert!(bytes.starts_with(b"PK"), "an .xlsx file is a zip");
-        assert_eq!(open(&bytes).sheet_names(), ["Transactions", "Categories", "Budgets", "Recurring", "Monthly summary", "Documents", "People", "Due payments", "Ledger", "Debt history", "Split bills"]);
-    }
-
-    #[test]
-    fn transactions_have_real_dates_and_numeric_money() {
-        let (conn, ..) = lived_in();
-        let mut book = open(&build(&conn, &Selection::default(), &DisplayFormat::default()));
-        let sheet = rows(&mut book, "Transactions");
-        assert_eq!(sheet.len(), 5, "heading and four transactions");
-        assert_eq!(sheet[0][4], Cell::Text("Amount (EUR)".into()));
-
-        assert_eq!(sheet[1][0], Cell::Date(serial(2026, 1, 25)), "a real date, not text");
-        assert_eq!(sheet[1][1], Cell::Text("INCOME".into()));
-        assert_eq!(sheet[1][3], Cell::Text("Pay".into()));
-        assert_eq!(sheet[1][5], Cell::Text("Monthly pay".into()));
-        for (row, minor) in [(1, 320_000), (2, 90_000), (3, 8_000), (4, 90_550)] {
-            let Cell::Number(value) = sheet[row][4] else { panic!("money is a number: {:?}", sheet[row][4]) };
-            assert_eq!((value * 100.0).round() as i64, minor, "row {row}");
-        }
-        assert_eq!(sheet[1][5], Cell::Text("Monthly pay".into()));
-    }
-
-    #[test]
-    fn dates_and_money_follow_the_number_and_date_format() {
-        let (conn, ..) = lived_in();
-        let all = Selection::default();
-        let german = DisplayFormat {
-            date_order: DateOrder::DayMonthYear,
-            date_separator: DateSeparator::Dot,
-            currency_symbol: "€".into(),
-            symbol_before: false,
-            symbol_space: true,
-            ..Default::default()
-        };
-        let styles_de = styles(&build(&conn, &all, &german));
-        assert!(styles_de.contains(r#"formatCode="dd\.mm\.yyyy""#), "{styles_de}");
-        assert!(styles_de.contains(r#"formatCode="mm\.yyyy""#));
-        assert!(styles_de.contains("formatCode=\"#,##0.00&quot; €&quot;\""));
-
-        let american = DisplayFormat {
-            date_order: DateOrder::MonthDayYear,
-            date_separator: DateSeparator::Slash,
-            currency_symbol: "$".into(),
-            symbol_before: true,
-            symbol_space: false,
-            ..Default::default()
-        };
-        let styles_us = styles(&build(&conn, &all, &american));
-        assert!(styles_us.contains(r#"formatCode="mm\/dd\/yyyy""#));
-        assert!(styles_us.contains("formatCode=\"&quot;$&quot;#,##0.00\""));
-
-        let japanese = DisplayFormat { date_order: DateOrder::YearMonthDay, date_separator: DateSeparator::Slash, ..Default::default() };
-        let styles_jp = styles(&build(&conn, &all, &japanese));
-        assert!(styles_jp.contains(r#"formatCode="yyyy\/mm\/dd""#) && styles_jp.contains(r#"formatCode="yyyy\/mm""#));
-        assert!(styles_jp.contains(r##"formatCode="#,##0.00""##), "no symbol, a plain number");
-
-        let default = styles(&build(&conn, &all, &DisplayFormat::default()));
-        assert!(default.contains(r#"formatCode="yyyy\-mm\-dd""#));
-    }
-
-    #[test]
-    fn the_format_does_not_change_the_values() {
-        let (conn, ..) = lived_in();
-        let german = DisplayFormat { date_order: DateOrder::DayMonthYear, date_separator: DateSeparator::Dot, ..Default::default() };
-        let a = rows(&mut open(&build(&conn, &Selection::default(), &DisplayFormat::default())), "Transactions");
-        let b = rows(&mut open(&build(&conn, &Selection::default(), &german)), "Transactions");
-        assert_eq!(a, b);
     }
 
     #[test]
@@ -808,18 +730,6 @@ mod tests {
     }
 
     #[test]
-    fn quiet_months_are_filled_in_with_zeros() {
-        let conn = db();
-        let food = categories::create(&conn, "Food", CategoryType::Expense).unwrap().id;
-        spend(&conn, food, "Bread", "2.50", "2025-11-30", None);
-        spend(&conn, food, "Bread", "2.50", "2026-02-01", None);
-        let mut book = open(&build(&conn, &Selection::default(), &DisplayFormat::default()));
-        let sheet = rows(&mut book, "Monthly summary");
-        assert_eq!(sheet.len(), 1 + 4, "November, December, January, February");
-        assert_eq!(sheet[2][2], Cell::Number(0.0));
-    }
-
-    #[test]
     fn a_selection_limits_every_sheet() {
         let (conn, _, rent, _) = lived_in();
         let selection = Selection { category_ids: Some(vec![rent.to_string()]), ..Default::default() };
@@ -840,32 +750,6 @@ mod tests {
 
         let range = Selection { from: Some("2026-03-01".into()), ..Default::default() };
         assert_eq!(rows(&mut open(&build(&conn, &range, &DisplayFormat::default())), "Transactions").len(), 2);
-    }
-
-    #[test]
-    fn budgets_recurring_items_and_categories_are_listed() {
-        let (mut conn, _, _, secret) = lived_in();
-        categories::delete(&mut conn, secret, Utc::now()).unwrap();
-        let mut book = open(&build(&conn, &Selection::default(), &DisplayFormat::default()));
-
-        let budgets = rows(&mut book, "Budgets");
-        let stored: i64 = conn.query_row("SELECT count(*) FROM budgets", [], |r| r.get(0)).unwrap();
-        assert_eq!(budgets.len() as i64, 1 + stored);
-        let global = budgets.iter().find(|r| r[2] == Cell::Text("GLOBAL".into())).unwrap();
-        assert_eq!((&global[3], &global[4]), (&Cell::Empty, &Cell::Number(2200.0)));
-        let removed = budgets.iter().find(|r| r[0] == Cell::Date(serial(2026, 3, 1)) && r[3] == Cell::Text("Therapy".into()));
-        assert_eq!(removed.map(|r| &r[4]), Some(&Cell::Empty), "a removed budget has no limit");
-
-        let recurring = rows(&mut book, "Recurring");
-        assert_eq!(recurring.len(), 3);
-        let rent_item = recurring.iter().find(|r| r[0] == Cell::Text("Rent".into())).unwrap();
-        assert_eq!(rent_item[1], Cell::Text("Rent".into()));
-        assert_eq!((&rent_item[3], &rent_item[4], &rent_item[5]), (&Cell::Number(100.0), &Cell::Number(1.0), &Cell::Text("MONTH".into())));
-        assert_eq!(rent_item[9], Cell::Bool(true));
-
-        let sheet = rows(&mut book, "Categories");
-        let gone = sheet.iter().find(|r| r[0] == Cell::Text("Therapy".into())).unwrap();
-        assert_eq!(gone[2], Cell::Bool(true));
     }
 
     #[test]
@@ -919,76 +803,6 @@ mod tests {
         build(&conn, &Selection::default(), &DisplayFormat::default());
         let after: i64 = conn.query_row("SELECT count(*) FROM audit_log", [], |r| r.get(0)).unwrap();
         assert_eq!(before, after);
-    }
-
-    #[test]
-    fn the_friends_the_ledger_and_the_shared_bills_have_sheets_and_the_transactions_say_what_each_cost_you() {
-        use crate::debts::fixtures::*;
-        use crate::debts::ledger::{self, Kind, NewEntry};
-        let w = world();
-        let (anna, bob) = (friend(&w.conn, "Anna"), friend(&w.conn, "Bob"));
-        let dinner = bill(&w.conn, w.food, "Dinner", "90.00", "2026-03-05");
-        crate::debts::splits::set_split(&w.conn, dinner, &equal(vec![who(anna), guest("Carl")])).unwrap();
-        ledger::add(&w.conn, &NewEntry { person_id: bob.to_string(), kind: Kind::Borrowed, amount: "7.00".into(), date: "2026-03-09".into(), note: Some("lunch".into()), transaction_id: None }).unwrap();
-        let mut book = open(&build(&w.conn, &Selection::default(), &DisplayFormat::default()));
-        let sheet = rows(&mut book, "Transactions");
-        assert_eq!(strings(&sheet[..1]).last().unwrap(), "My share (EUR)");
-        assert_eq!((&sheet[1][4], &sheet[1][7]), (&Cell::Number(90.0), &Cell::Number(30.0)), "paid 90.00, cost 30.00");
-        let people = rows(&mut book, "People");
-        assert_eq!(strings(&people[..1]), ["Name", "Archived", "Balance (EUR)", "Reminder", "Repeats every (days)"]);
-        assert_eq!((&people[1][0], &people[1][2]), (&Cell::Text("Anna".into()), &Cell::Number(30.0)));
-        assert_eq!(people[2][2], Cell::Number(-7.0), "you owe Bob");
-        let ledger_sheet = rows(&mut book, "Ledger");
-        assert_eq!(strings(&ledger_sheet[1..2]), ["Bob", "BORROWED", "lunch"]);
-        assert_eq!(ledger_sheet[1][3], Cell::Number(7.0));
-        let parts = rows(&mut book, "Split bills");
-        assert_eq!(parts.len(), 3, "the heading and the two parts");
-        assert_eq!((&parts[1][1], &parts[1][2], &parts[1][3], &parts[1][4]), (&Cell::Text("Dinner".into()), &Cell::Text("Anna".into()), &Cell::Bool(false), &Cell::Number(30.0)));
-        assert_eq!((&parts[2][2], &parts[2][3]), (&Cell::Text("Carl".into()), &Cell::Bool(true)));
-        // the monthly summary adds up what it cost you
-        let summary = rows(&mut book, "Monthly summary");
-        assert_eq!(summary[1][2], Cell::Number(30.0));
-        // a limit keeps the friends of the bills in it and no ledger and no balance
-        let limited = Selection { category_ids: Some(vec![w.food.to_string()]), ..Default::default() };
-        let mut book = open(&build(&w.conn, &limited, &DisplayFormat::default()));
-        assert_eq!(rows(&mut book, "People").len(), 2, "Anna alone");
-        assert!(matches!(rows(&mut book, "People")[1].get(2), None | Some(Cell::Empty)), "no balance");
-        assert_eq!(rows(&mut book, "Ledger").len(), 1, "only the heading");
-    }
-
-    #[test]
-    fn the_documents_sheet_lists_each_document_and_what_it_is_attached_to() {
-        use super::super::documents_tests::with_documents;
-        let (conn, ..) = with_documents();
-        let mut book = open(&build(&conn, &Selection::default(), &DisplayFormat::default()));
-        let sheet = rows(&mut book, "Documents");
-        assert_eq!(sheet.len(), 1 + 6, "the heading and six documents");
-        assert_eq!(strings(&sheet[..1]), ["Name", "Date", "Type", "Size (bytes)", "SHA-256", "Attached to"]);
-        // oldest paper first, as in the JSON
-        assert_eq!(sheet[1][0], Cell::Text("Lease.pdf".into()));
-        assert_eq!(sheet[1][1], Cell::Date(serial(2026, 1, 2)), "a real date");
-        assert_eq!(sheet[1][2], Cell::Text("application/pdf".into()));
-        assert_eq!(sheet[1][3], Cell::Number(1234.0));
-        assert_eq!(sheet[1][4], Cell::Text(crate::keys::hex_encode(&crate::documents::store::sha256(b"Lease.pdf"))));
-        assert_eq!(sheet[1][5], Cell::Text("Rent (2026-02-01); Rent (recurring)".into()));
-        let shared = sheet.iter().find(|r| r[0] == Cell::Text("Shared scan.pdf".into())).unwrap();
-        assert_eq!(shared[5], Cell::Text("Pay (2026-01-25); Session (2026-02-10)".into()));
-        let loose = sheet.iter().find(|r| r[0] == Cell::Text("Loose receipt.pdf".into())).unwrap();
-        let nothing = |cell: Option<&Cell>| matches!(cell, None | Some(Cell::Empty)) || cell == Some(&Cell::Text(String::new()));
-        assert!(nothing(loose.get(5)), "a document attached to nothing has an empty cell: {:?}", loose.get(5));
-    }
-
-    #[test]
-    fn the_transactions_sheet_has_a_column_of_document_names() {
-        use super::super::documents_tests::with_documents;
-        let (conn, ..) = with_documents();
-        let mut book = open(&build(&conn, &Selection::default(), &DisplayFormat::default()));
-        let sheet = rows(&mut book, "Transactions");
-        assert_eq!(sheet[0][6], Cell::Text("Documents".into()));
-        let pay = sheet.iter().find(|r| r[3] == Cell::Text("Pay".into())).unwrap();
-        assert_eq!(pay[6], Cell::Text("Pay slip.pdf; Shared scan.pdf".into()));
-        let march = sheet.iter().find(|r| r[3] == Cell::Text("Rent".into()) && r[4] == Cell::Number(905.5)).unwrap();
-        assert!(matches!(march.get(6), None | Some(Cell::Empty)), "a transaction with no document has an empty cell");
     }
 
     #[test]

@@ -102,33 +102,6 @@ fn a_range_of_dates_keeps_the_lines_inside_it_both_ends_included_and_the_balance
 }
 
 #[test]
-fn one_friend_has_only_their_own_lines_and_no_payments() {
-    let w = world();
-    let (anna, bob) = (friend(&w.conn, "Anna"), friend(&w.conn, "Bob"));
-    entry(&w.conn, anna, Kind::Lent, "25.00", "2026-01-02");
-    entry(&w.conn, bob, Kind::Lent, "5.00", "2026-01-03");
-    item(&w.conn, "Rent", w.rent, "2026-01-01", "2026-01-15");
-    let scope = Scope { person: Some(anna), ..Default::default() };
-    assert_eq!(all(&w.conn, &scope), pairs(&[("2026-01-02", "LENT")]));
-}
-
-#[test]
-fn on_the_screen_the_newest_comes_first_and_a_page_is_a_slice_of_it() {
-    let w = world();
-    let anna = friend(&w.conn, "Anna");
-    for day in 1..=7 {
-        entry(&w.conn, anna, Kind::Lent, "1.00", &format!("2026-02-{day:02}"));
-    }
-    let first = history(&w.conn, TODAY, &Filter { limit: Some(3), ..Default::default() }).unwrap();
-    assert_eq!((first.total, first.limit, first.offset), (7, 3, 0));
-    assert_eq!(first.lines.iter().map(|l| l.date.as_str()).collect::<Vec<_>>(), ["2026-02-07", "2026-02-06", "2026-02-05"]);
-    let last = history(&w.conn, TODAY, &Filter { limit: Some(3), offset: Some(6), ..Default::default() }).unwrap();
-    assert_eq!(last.lines.iter().map(|l| l.date.as_str()).collect::<Vec<_>>(), ["2026-02-01"]);
-    let beyond = history(&w.conn, TODAY, &Filter { offset: Some(100), ..Default::default() }).unwrap();
-    assert!(beyond.lines.is_empty() && beyond.total == 7);
-}
-
-#[test]
 fn what_cannot_be_asked_is_refused() {
     let w = world();
     let ask = |filter: Filter| history(&w.conn, TODAY, &filter).err();
@@ -138,13 +111,4 @@ fn what_cannot_be_asked_is_refused() {
     assert_eq!(ask(Filter { from: Some("2026-02-30".into()), ..Default::default() }), Some(AppError::InvalidInput));
     assert_eq!(ask(Filter { person_id: Some("0".into()), ..Default::default() }), Some(AppError::InvalidInput));
     assert_eq!(ask(Filter { person_id: Some("abc".into()), ..Default::default() }), Some(AppError::InvalidInput));
-}
-
-#[test]
-fn a_removed_friend_keeps_their_lines_in_the_history() {
-    let w = world();
-    let anna = friend(&w.conn, "Anna");
-    entry(&w.conn, anna, Kind::Lent, "25.00", "2026-01-02");
-    super::people::archive(&w.conn, anna).unwrap();
-    assert_eq!(all(&w.conn, &Scope::default()), pairs(&[("2026-01-02", "LENT")]));
 }

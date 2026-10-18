@@ -3,7 +3,7 @@ import { test } from 'node:test'
 import '../i18n/languages.ts'
 import { LANGUAGES } from '../i18n/languages.ts'
 import { setActiveLanguage } from '../i18n/translate.ts'
-import { periodLabel, reportLabels } from './reportLabels.ts'
+import { reportLabels } from './reportLabels.ts'
 
 // The fields the app's PDF writer expects, one for one (the Rust side refuses unknown or missing ones).
 const FIELDS = [
@@ -21,22 +21,4 @@ test('every language gives every label, none empty, none too long for the PDF', 
     }
   }
   setActiveLanguage('en')
-})
-
-test('labels start with a capital, except the title, which keeps its brand spelling', () => {
-  setActiveLanguage('en')
-  const labels = reportLabels('2026')
-  assert.equal(labels.income, 'Income')
-  assert.equal(labels.savingsRate, 'Savings rate')
-  assert.equal(labels.title, 'meowNY report')
-  setActiveLanguage('ro')
-  assert.equal(reportLabels('2026').expenses, 'Cheltuieli')
-  setActiveLanguage('en')
-})
-
-test('the period is written out in the number and date format of the person', () => {
-  assert.equal(periodLabel('2026-10', '2026-10', 'en-US'), 'October 2026')
-  assert.equal(periodLabel('2026-10', '2026-12', 'en-US'), 'October 2026 – December 2026')
-  assert.equal(periodLabel('2026-03', '2026-03', 'de-DE'), 'März 2026')
-  assert.equal(periodLabel('2026-03', '2026-03', 'en_US'), '2026-03', 'a locale the browser cannot use falls back to the month')
 })

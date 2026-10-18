@@ -65,6 +65,9 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
   const [menu, setMenu] = useState<MenuName | null>(null)
   const [openId, setOpenId] = useState<string | null>(null)
   const [clientUuid, setClientUuid] = useState(() => crypto.randomUUID())
+  // the transaction a first try made when its bill then failed: the next try changes that one (the same client id would give back the old
+  // row, with the old amount, and the bill would be shared on that)
+  const [savedId, setSavedId] = useState<string | null>(null)
   const [pending, setPending] = useState(false)
   const [adding, setAdding] = useState(false)
   const [draftMessage, setDraftMessage] = useNotice()
@@ -165,19 +168,22 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
     setDraftMessage('')
     attachments.reset()
     setEditing(null)
+    // a new dialog is a new transaction, whatever a cancelled one left
+    setClientUuid(crypto.randomUUID())
+    setSavedId(null)
     setSplit(options.split ? { on: true, draft: equalDraft(options.friend ? [{ personId: options.friend.id, name: options.friend.name }] : []), ready: false, touched: false } : NOT_SPLIT)
     setAdding(true)
   }
 
-  // The debts pages send the person here to split a bill (with the friend they came from already on it).
+  // The debts pages send the person here to split a bill (with the friend they came from already on it), and the phone's round button to add one.
   useEffect(() => {
-    const state = location.state as { split?: boolean; friendId?: string; friendName?: string } | null
-    if (!state?.split) return
-    openAdd({ split: true, ...(state.friendId && state.friendName ? { friend: { id: state.friendId, name: state.friendName } } : {}) })
+    const state = location.state as { add?: boolean; split?: boolean; friendId?: string; friendName?: string } | null
+    if (!state?.split && !state?.add) return
+    openAdd(state.split ? { split: true, ...(state.friendId && state.friendName ? { friend: { id: state.friendId, name: state.friendName } } : {}) } : {})
     navigate(location.pathname, { replace: true, state: null })
-    // once, when the page opens with that request
+    // each time the page is asked, when it opens and when it is open already; the request is taken out of the location, so once
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [location.state])
 
   function openEdit(transaction: Transaction) {
     setMenu(null)
@@ -240,7 +246,8 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
         else if (hadSplit && !wantsSplit) await debts.unsplit(editing.id)
       } else {
         // creating again with the same client id gives back the same transaction, so a failed split can be tried again
-        const created = await transactionsApi.create({ ...body, clientUuid })
+        const created = savedId ? await transactionsApi.update(savedId, body) : await transactionsApi.create({ ...body, clientUuid })
+        setSavedId(created.id)
         if (input) await debts.split(created.id, input)
         notAttached = await attachments.commit({ kind: 'transaction', id: created.id })
       }
@@ -252,7 +259,10 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
     }
     setDraftMessage('')
     setMessage(notAttached.length > 0 ? t('docs.attachFailed', { names: notAttached.join(', ') }) : '')
-    if (!editing) setClientUuid(crypto.randomUUID())
+    if (!editing) {
+      setClientUuid(crypto.randomUUID())
+      setSavedId(null)
+    }
     closeModal()
     setReload((value) => value + 1)
   }
@@ -440,7 +450,7 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
       ) : null}
       {coding ? (
         <BillCodeModal
-          transactionId={coding.transaction.id}
+          target={{ kind: 'transaction', id: coding.transaction.id }}
           person={{ id: coding.personId, name: coding.name }}
           part={coding.part}
           total={coding.transaction.amount}
@@ -519,6 +529,24 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
                     <button type="button" data-row-focus onClick={() => openEdit(transaction)}>
                       {t('common.edit')}
                     </button>
+                    {(() => {
+                      // a bill shared with friends has a code for each of them: one friend opens it, several open the details to choose
+                      const friends = transaction.split.filter((part) => part.personId && part.person)
+                      const [only] = friends
+                      if (friends.length === 0) return null
+                      return (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            friends.length === 1 && only
+                              ? setCoding({ transaction, personId: only.personId ?? '', name: only.person ?? '', part: only.amount })
+                              : setOpenId(transaction.id)
+                          }
+                        >
+                          {t('code.show')}
+                        </button>
+                      )
+                    })()}
                     <button type="button" onClick={() => setDeleting(transaction)}>
                       {t('common.delete')}
                     </button>

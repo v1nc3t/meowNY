@@ -280,6 +280,8 @@ export const debts = {
   unsplitRecurring: (recurringId: string) => call('clear_recurring_split', Recurring, { id: recurringId }),
   /** The text of the code for one friend's part of one bill. The same text every time; nothing is stored. */
   billCode: (transactionId: string, personId: string, from: string) => call('bill_code', z.string(), { transactionId, personId, from }),
+  /** The code of a friend's part of the next payment of a recurring item that is split. */
+  recurringCode: (recurringId: string, personId: string, from: string) => call('recurring_code', z.string(), { recurringId, personId, from }),
   billPreview: (text: string) => call('bill_preview', BillPreview, { text }),
   billAccept: (input: BillAccept) => call('bill_accept', Entry, { input }),
   /** The friends to be reminded of now and the days that come, for a period of `everyDays` days after each debt last changed (0: none). */

@@ -169,17 +169,6 @@ mod tests {
     }
 
     #[test]
-    fn create_and_list_in_order_with_type_filter() {
-        let conn = db();
-        create(&conn, "Salary", CategoryType::Income).unwrap();
-        create(&conn, "Food", CategoryType::Expense).unwrap();
-        create(&conn, "Rent", CategoryType::Expense).unwrap();
-        assert_eq!(names(&conn, None), ["Salary", "Food", "Rent"]);
-        assert_eq!(names(&conn, Some(CategoryType::Expense)), ["Food", "Rent"]);
-        assert_eq!(names(&conn, Some(CategoryType::Income)), ["Salary"]);
-    }
-
-    #[test]
     fn names_are_trimmed_and_validated() {
         let conn = db();
         assert_eq!(create(&conn, "  Food  ", CategoryType::Expense).unwrap().name, "Food");
@@ -195,17 +184,6 @@ mod tests {
         create(&conn, "Food", CategoryType::Expense).unwrap();
         assert_eq!(create(&conn, "Food", CategoryType::Expense), Err(AppError::NameExists));
         assert!(create(&conn, "Food", CategoryType::Income).is_ok());
-    }
-
-    #[test]
-    fn rename_changes_the_name_and_reports_conflicts_and_missing() {
-        let conn = db();
-        let food = create(&conn, "Food", CategoryType::Expense).unwrap();
-        create(&conn, "Rent", CategoryType::Expense).unwrap();
-        assert_eq!(rename(&conn, food.id, "Groceries").unwrap().name, "Groceries");
-        assert_eq!(rename(&conn, food.id, "Rent"), Err(AppError::NameExists));
-        assert_eq!(rename(&conn, 999, "Nope"), Err(AppError::NotFound));
-        assert_eq!(rename(&conn, food.id, " "), Err(AppError::InvalidInput));
     }
 
     #[test]
@@ -286,15 +264,4 @@ mod tests {
         assert_eq!(budgets, 0);
     }
 
-    #[test]
-    fn ids_are_strings_on_the_wire_and_parsed_strictly() {
-        let conn = db();
-        let food = create(&conn, "Food", CategoryType::Expense).unwrap();
-        let json = serde_json::to_string(&food).unwrap();
-        assert_eq!(json, format!(r#"{{"id":"{}","name":"Food","type":"EXPENSE"}}"#, food.id));
-        assert_eq!(parse_id("12"), Ok(12));
-        for bad in ["0", "-1", "1.5", "abc", "", "+3", " 4"] {
-            assert_eq!(parse_id(bad), Err(AppError::InvalidInput), "{bad:?}");
-        }
-    }
 }

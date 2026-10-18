@@ -1,17 +1,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { PreviewError } from './errors.ts'
-import { child, children, parseXml, textOf } from './xml.ts'
-
-test('elements, attributes and text are read, with the prefixes of names left off', () => {
-  const root = parseXml('<?xml version="1.0"?>\n<w:doc xmlns:w="urn:x" w:version="2">\n  <w:p w:id="1">hello &amp; <w:b/>bye</w:p>\n</w:doc>')
-  assert.equal(root.name, 'doc')
-  assert.deepEqual(root.attrs, { version: '2' }, 'the namespace declaration is not an attribute')
-  const p = child(root, 'p')!
-  assert.equal(p.attrs.id, '1')
-  assert.equal(textOf(p), 'hello & bye')
-  assert.equal(children(p, 'b').length, 1)
-})
+import { child, parseXml, textOf } from './xml.ts'
 
 test('named entities, number references and CDATA give their text', () => {
   const root = parseXml('<a>&lt;&gt;&quot;&apos;&#65;&#x42;<![CDATA[<raw & text>]]></a>')

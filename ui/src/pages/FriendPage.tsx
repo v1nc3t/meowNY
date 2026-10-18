@@ -158,7 +158,7 @@ function FriendView({ settings, now }: { settings: MoneySettings; now: Today }) 
         />
       ) : null}
       {dialog?.kind === 'code' ? (
-        <BillCodeModal transactionId={dialog.transactionId} person={{ id: person.id, name: person.name }} part={dialog.amount} onClose={() => setDialog(null)} />
+        <BillCodeModal target={{ kind: 'transaction', id: dialog.transactionId }} person={{ id: person.id, name: person.name }} part={dialog.amount} onClose={() => setDialog(null)} />
       ) : null}
       {dialog?.kind === 'settle' ? <SettleModal person={person} today={now.date} onClose={() => setDialog(null)} onDone={() => done(t('debts.settled'))} /> : null}
       {dialog?.kind === 'rename' ? <FriendNameModal person={person} onClose={() => setDialog(null)} onSaved={() => done()} /> : null}

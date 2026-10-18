@@ -8,7 +8,7 @@ This is the guide for using them. How they are built is in [documents-design.md]
 
 **On the computer.** Open **documents** in the sidebar and press `n`, or the **add file** button, and choose one or more files. You can also drag files from your file manager onto the window; each becomes a document named after the file, dated today. To attach a file to something as you make it, open the transaction (or recurring item) and use the **attach** area: **add file** stores a new one and **attach** searches the documents you already have.
 
-**On the phone.** Open **documents** from the bar at the top. **Add file** opens Android's own chooser, and **take photo** opens the camera. The quick add (the round "+") also has a photo button, because a receipt is most often photographed at the till.
+**On the phone.** Open **documents** from the bar at the top. **Add file** opens Android's own chooser, and **take photo** opens the camera. The round "+" opens the normal add-transaction form, which has the same attach area (with the photo button), because a receipt is most often photographed at the till.
 
 What the app does with a file:
 

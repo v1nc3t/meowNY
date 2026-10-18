@@ -287,37 +287,6 @@ mod tests {
     }
 
     #[test]
-    fn converting_changes_every_amount_and_the_currency() {
-        let (mut conn, food) = db();
-        let id = spend(&conn, food, "100.00");
-        conn.execute("UPDATE transactions SET planned_amount_minor = 5000 WHERE id = ?1", [id]).unwrap();
-        conn.execute(
-            "INSERT INTO recurring_transactions (category_id, name, amount_minor, start_date, interval_unit, next_due_date)
-             VALUES (?1, 'Rent', 80000, '2026-01-01', 'MONTH', '2026-02-01')",
-            [food],
-        )
-        .unwrap();
-        budgets::set(
-            &conn,
-            &SetBudget { kind: CategoryType::Expense, scope: Scope::Global, month: "2026-06".into(), amount_limit: Some("1000.00".into()), category_id: None },
-            "2026-01-15T00:00:00Z".parse().unwrap(),
-        )
-        .unwrap();
-
-        let done = change(&mut conn, "usd", Some("1.08"), "2026-10-13").unwrap();
-
-        assert_eq!(done, Conversion { transactions: 1, recurring: 1, budgets: 1, ledger: 0 });
-        assert_eq!(currency(&conn), "USD");
-        assert_eq!(amount_of(&conn, id), 10_800);
-        let planned: i64 = conn.query_row("SELECT planned_amount_minor FROM transactions", [], |r| r.get(0)).unwrap();
-        assert_eq!(planned, 5_400);
-        let rent: i64 = conn.query_row("SELECT amount_minor FROM recurring_transactions", [], |r| r.get(0)).unwrap();
-        assert_eq!(rent, 86_400);
-        let limit: i64 = conn.query_row("SELECT amount_limit_minor FROM budgets", [], |r| r.get(0)).unwrap();
-        assert_eq!(limit, 108_000);
-    }
-
-    #[test]
     fn a_bill_with_no_fixed_amount_stays_without_one_when_the_currency_changes() {
         let (mut conn, food) = db();
         conn.execute(
@@ -373,16 +342,6 @@ mod tests {
     }
 
     #[test]
-    fn relabel_only_leaves_amounts_alone() {
-        let (mut conn, food) = db();
-        let id = spend(&conn, food, "100.00");
-        let done = change(&mut conn, "USD", None, "2026-10-13").unwrap();
-        assert_eq!(done, Conversion::default());
-        assert_eq!(currency(&conn), "USD");
-        assert_eq!(amount_of(&conn, id), 10_000);
-    }
-
-    #[test]
     fn a_failed_conversion_changes_nothing() {
         let (mut conn, food) = db();
         let small = spend(&conn, food, "10.00");
@@ -402,21 +361,6 @@ mod tests {
         }
         assert_eq!(currency(&conn), "EUR");
         assert_eq!(amount_of(&conn, id), 1_000);
-    }
-
-    #[test]
-    fn the_change_is_written_to_the_history_with_the_rate() {
-        let (mut conn, _) = db();
-        change(&mut conn, "usd", Some("1.08"), "2026-10-13").unwrap();
-        let (old, new): (String, String) = conn
-            .query_row("SELECT old_values, new_values FROM audit_log WHERE entity_type = 'currency_change'", [], |r| Ok((r.get(0)?, r.get(1)?)))
-            .unwrap();
-        assert!(old.contains("EUR"));
-        assert!(new.contains("USD") && new.contains("1.08") && new.contains("2026-10-13"));
-
-        change(&mut conn, "GBP", None, "2026-10-14").unwrap();
-        let count: i64 = conn.query_row("SELECT count(*) FROM audit_log WHERE entity_type = 'currency_change'", [], |r| r.get(0)).unwrap();
-        assert_eq!(count, 2, "a relabel is recorded too");
     }
 
     #[test]

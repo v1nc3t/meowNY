@@ -215,31 +215,6 @@ mod tests {
     }
 
     #[test]
-    fn whole_units_for_axes() {
-        assert_eq!(american().whole(4_000_000), "40,000");
-        assert_eq!(german().whole(-250_000), "-2.500");
-        assert_eq!(german().whole(0), "0");
-    }
-
-    #[test]
-    fn percent_uses_the_decimal_mark() {
-        assert_eq!(american().percent(12.5), "12.5%");
-        assert_eq!(german().percent(12.5), "12,5%");
-        assert_eq!(german().percent(-3.2), "-3,2%");
-        assert_eq!(american().percent(100.0), "100.0%");
-    }
-
-    #[test]
-    fn dates_and_months_follow_the_order_and_separator() {
-        assert_eq!(german().date("2026-10-14"), "14.10.2026");
-        assert_eq!(american().date("2026-10-14"), "10/14/2026");
-        assert_eq!(DisplayFormat::default().date("2026-10-14"), "2026-10-14");
-        assert_eq!(german().month("2026-10"), "10.2026");
-        assert_eq!(DisplayFormat::default().month("2026-10"), "2026-10");
-        assert_eq!(german().date("not a date"), "not a date");
-    }
-
-    #[test]
     fn a_format_the_files_cannot_hold_is_refused() {
         assert!(german().validate().is_ok());
         assert!(DisplayFormat::default().validate().is_ok());

@@ -32,21 +32,13 @@ export default function AppSidebar({
   const phone = useProfile() === 'phone'
   const lock = () => void vault.lock().then(() => window.location.reload(), () => undefined)
   if (phone) {
-    // A phone has a bar at the top: the name on the left, and sync, settings and lock on the right (the other pages are tabs).
+    // A phone has a bar at the top: the name on the left, and documents, sync, settings and lock on the right (the other pages are tabs).
     return (
       <header className="phone-header">
         <Link to="/app/dashboard" className="app-logo">
           meowny
         </Link>
         <nav className="phone-actions" aria-label={t('nav.settings')}>
-          <NavLink
-            to="/app/debts"
-            aria-label={t('nav.debts')}
-            onPointerDown={() => preloadPage('debts')}
-            className={({ isActive }) => (isActive ? 'phone-action active' : 'phone-action')}
-          >
-            <Icon name="debts" className="tab-icon" />
-          </NavLink>
           <NavLink
             to="/app/documents"
             aria-label={t('nav.documents')}

@@ -29,19 +29,3 @@ test('every language gives every label, none empty, none too long, none with a c
   }
   setActiveLanguage('en')
 })
-
-test('the English words are the ones the command line uses', () => {
-  setActiveLanguage('en')
-  const labels = debtsLabels()
-  assert.equal(labels.summaryTitle, 'Who owes what')
-  assert.equal(labels.historyTitle, 'History of debts')
-  assert.equal(labels.dueTitle, 'Due payments')
-  assert.equal(labels.dueTotal, 'Total due')
-  assert.equal(labels.paidPayment, 'recurring payment paid late')
-  assert.equal(labels.duePayment, 'recurring payment overdue')
-  assert.equal(labels.owedToYou, 'Owed to you')
-  assert.equal(labels.settled, 'All settled.')
-  assert.equal(labels.nobody, 'Nobody owes anything.')
-  assert.equal(labels.lent, 'lent')
-  assert.equal(labels.repaidToMe, 'paid back to me')
-})

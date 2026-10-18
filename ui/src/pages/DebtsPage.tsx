@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { debts, type Due, type EntryKind, type History, type Person, type Reminders } from '../api/debts'
 import { errorText } from '../api/invoke'
 import { scanQr, stopScan } from '../api/scanner'
@@ -37,6 +37,7 @@ function DebtsView({ settings, now }: { settings: MoneySettings; now: Today }) {
   const t = useT()
   const phone = useProfile() === 'phone'
   const navigate = useNavigate()
+  const location = useLocation()
   const [people, setPeople] = useState<Person[] | null>(null)
   const [reminders, setReminders] = useState<Reminders | null>(null)
   const [due, setDue] = useState<Due | null>(null)
@@ -135,6 +136,17 @@ function DebtsView({ settings, now }: { settings: MoneySettings; now: Today }) {
     else if (result.kind === 'denied') setMessage(t('phone.cameraDenied'))
     else if (result.kind === 'unavailable') setMessage(t('phone.noScanner'))
   }
+
+  // The phone's round button sends the person here to scan a bill or add a friend: the camera or the form opens at once, once.
+  useEffect(() => {
+    const asked = location.state as { scan?: boolean; addFriend?: boolean } | null
+    if (!phone || (!asked?.scan && !asked?.addFriend)) return
+    navigate(location.pathname, { replace: true, state: null })
+    if (asked.scan) void onScan()
+    else setAddingFriend(true)
+    // each time the page is asked, when it opens and when it is open already; the request is taken out of the location, so once
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.state])
 
   const dueIds = new Set(reminders?.due.map((friend) => friend.personId))
   const dueOn = new Map(reminders?.due.map((friend) => [friend.personId, friend.dueOn]))

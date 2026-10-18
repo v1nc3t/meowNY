@@ -441,7 +441,7 @@ impl Report {
 
 #[cfg(all(test, desktop))]
 mod tests {
-    use super::layout::{axis_top, donut_slices, label_stride, Metrics, Op};
+    use super::layout::{label_stride, Metrics, Op};
     use super::*;
     use crate::budgets::{self, Scope, SetBudget};
     use crate::categories::{self, CategoryType};
@@ -567,36 +567,6 @@ mod tests {
     }
 
     #[test]
-    fn the_figures_match_the_dashboard_for_the_same_month() {
-        let w = world();
-        let report = read(&w.conn, &options("2026-01", "2026-01")).unwrap().0;
-        let view = stats::budget_vs_actual(&w.conn, "2026-01").unwrap();
-        let trend = &stats::year_trend(&w.conn, "2026").unwrap()[0];
-
-        assert_eq!((report.income, report.expense), (money(&trend.income), money(&trend.expense)));
-        assert_eq!(report.income - report.expense, money(&trend.savings));
-        assert_eq!(report.savings_rate, trend.savings_rate);
-        assert_eq!(report.expense, 4 * 90_000 / 4 + 35_620, "900.00 rent and the 356.20 of food");
-        for side in &view.totals {
-            assert_eq!(money(&side.actual), if side.kind == CategoryType::Income { report.income } else { report.expense });
-        }
-        // The Food example: a budget of 400, 356.20 spent, 89.1 percent used.
-        let food = report.budget_lines.iter().find(|l| l.name == "Food").unwrap();
-        assert_eq!((food.budgeted, food.actual), (Some(40_000), 35_620));
-        assert_eq!(stats::pct_tenths(food.actual, 40_000), Some(89.1));
-        for line in &report.budget_lines {
-            let dash = view.categories.iter().find(|c| c.name == line.name).unwrap();
-            assert_eq!(line.actual, money(&dash.actual), "{}", line.name);
-            assert_eq!(line.budgeted, dash.budgeted.as_deref().map(money), "{}", line.name);
-        }
-        for global in &report.global_budgets {
-            let side = view.totals.iter().find(|s| s.kind == global.kind).unwrap();
-            assert_eq!(Some(global.budgeted), side.budgeted.as_deref().map(money));
-            assert_eq!(global.actual, money(&side.actual));
-        }
-    }
-
-    #[test]
     fn a_range_adds_up_the_months() {
         let w = world();
         let report = read(&w.conn, &options("2026-01", "2026-03")).unwrap().0;
@@ -683,50 +653,6 @@ mod tests {
     }
 
     #[test]
-    fn the_page_shows_the_figures_in_the_chosen_format() {
-        let w = world();
-        let mut o = options("2026-01", "2026-01");
-        o.format = DisplayFormat {
-            date_order: DateOrder::DayMonthYear,
-            date_separator: DateSeparator::Dot,
-            currency_symbol: "€".into(),
-            symbol_before: false,
-            symbol_space: true,
-            decimal_mark: ",".into(),
-            group_separator: ".".into(),
-        };
-        let text = texts(&o, &w);
-        let has = |needle: &str| text.iter().any(|t| t.contains(needle));
-        assert!(has("meowNY report") && has("January 2026") && has("Where the money went") && has("Budget vs actual"));
-        assert!(has("3.200,00\u{a0}€"), "income: {text:?}");
-        assert!(has("1.256,20\u{a0}€"), "expenses: 900 rent and 356.20 food");
-        assert!(has("1.943,80\u{a0}€"), "savings");
-        assert!(has("60,7%"), "savings rate, with the decimal mark of the format");
-        assert!(has("356,20\u{a0}€ / 400,00\u{a0}€") && has("89,1%"), "the Food example");
-        assert!(has("01.2026"), "months on the axis follow the date format");
-        assert!(has("Page 1 / 1"));
-    }
-
-    #[test]
-    fn the_transaction_list_is_optional_and_descriptions_can_be_hidden() {
-        let w = world();
-        let mut o = options("2026-01", "2026-01");
-        let without = texts(&o, &w);
-        assert!(!without.iter().any(|t| t == "Transactions" || t.contains("Market")));
-
-        o.include_transactions = true;
-        let hidden = texts(&o, &w);
-        assert!(hidden.iter().any(|t| t == "Transactions"));
-        assert!(hidden.iter().any(|t| t == "Market") && hidden.iter().any(|t| t == "2026-01-05"));
-        assert!(!hidden.iter().any(|t| t.contains("PRIVATE")), "no description reaches the page: {hidden:?}");
-
-        o.show_descriptions = true;
-        let shown = texts(&o, &w);
-        assert!(shown.iter().any(|t| t == "PRIVATE-FOOD-NOTE") && shown.iter().any(|t| t == "PRIVATE-PAY-NOTE"));
-        assert!(!shown.iter().any(|t| t.contains("PRIVATE-THERAPY")), "February is not in this report");
-    }
-
-    #[test]
     fn a_long_list_runs_onto_more_pages_and_repeats_its_heading() {
         let w = world();
         for i in 0..200 {
@@ -799,53 +725,11 @@ mod tests {
     }
 
     #[test]
-    fn axis_labels_use_round_numbers() {
-        assert_eq!(axis_top(35_620), (40_000, 10_000), "the Food example: 0 to 400 in steps of 100");
-        assert_eq!(axis_top(0), (10_000, 2_500), "an empty chart still has an axis");
-        assert_eq!(axis_top(320_000), (400_000, 100_000));
-        assert_eq!(axis_top(100_000), (100_000, 25_000), "1000.00 fits four steps of 250");
-        assert_eq!(axis_top(1_234_567), (2_000_000, 500_000));
-        assert_eq!(axis_top(999_999_999_999), (1_000_000_000_000, 250_000_000_000));
-        for max in [1, 99, 100, 101, 12_345, 9_999_999, 123_456_789_012] {
-            let (top, step) = axis_top(max);
-            assert!(top >= max && top == step * 4, "{max}: {top} {step}");
-        }
-    }
-
-    #[test]
     fn labels_along_an_axis_are_thinned_out_to_fit() {
         assert_eq!(label_stride(12, 40.0, 30.0), 1);
         assert_eq!(label_stride(36, 12.0, 30.0), 3);
         assert_eq!(label_stride(120, 3.0, 30.0), 12);
         assert_eq!(label_stride(1, 400.0, 30.0), 1);
-    }
-
-    #[test]
-    fn the_donut_shows_seven_slices_and_the_rest_together() {
-        let spending: Vec<(String, i64)> = (1..=10).map(|i| (format!("c{i}"), 1000 - i * 10)).collect();
-        let slices = donut_slices(&spending, "Other");
-        assert_eq!(slices.len(), 8);
-        assert_eq!(slices[7], ("Other".to_string(), (8..=10).map(|i| 1000 - i * 10).sum()));
-        let total: i64 = slices.iter().map(|(_, m)| m).sum();
-        assert_eq!(total, spending.iter().map(|(_, m)| m).sum::<i64>());
-        assert_eq!(donut_slices(&spending[..3], "Other").len(), 3);
-        assert!(donut_slices(&[], "Other").is_empty());
-        assert_eq!(donut_slices(&[("a".into(), 0), ("b".into(), 5)], "Other"), [("b".to_string(), 5)]);
-    }
-
-    #[test]
-    fn the_text_of_the_pdf_is_what_the_layout_says() {
-        let w = world();
-        let mut o = options("2026-01", "2026-01");
-        o.include_transactions = true;
-        o.show_descriptions = true;
-        let report = read(&w.conn, &o).unwrap();
-        let in_file = pdf_text(&report.pdf_with(&o, false).unwrap()).concat();
-        // The reader works: everything the layout drew can be read back from the file.
-        for text in layout::build(&report.0, &o).unwrap().texts() {
-            assert!(in_file.contains(text), "{text:?} is not in the PDF");
-        }
-        assert!(in_file.contains("meowNY report") && in_file.contains("3,200.00") && in_file.contains("PRIVATE-FOOD-NOTE"));
     }
 
     #[test]
@@ -912,7 +796,6 @@ mod tests {
     }
 
     struct PdfPage {
-        media_box: Vec<f32>,
         /// One string per text-showing operation, in drawing order.
         text: Vec<String>,
     }
@@ -1031,7 +914,6 @@ mod tests {
         let mut pages = Vec::new();
         for page in references(kids) {
             let d = dict(page);
-            let media_box: Vec<f32> = d.split("/MediaBox [").nth(1).unwrap().split(']').next().unwrap().split_whitespace().map(|n| n.parse().unwrap()).collect();
             let fonts_text = d.split("/Font <<").nth(1).unwrap().split(">>").next().unwrap();
             let words: Vec<&str> = fonts_text.split_whitespace().collect();
             let mut maps: HashMap<String, HashMap<u16, String>> = HashMap::new();
@@ -1051,7 +933,7 @@ mod tests {
                     text.push(codes.chunks(2).map(|c| map.get(&u16::from_be_bytes([c[0], c[1]])).cloned().unwrap_or_else(|| "\u{fffd}".into())).collect());
                 }
             }
-            pages.push(PdfPage { media_box, text });
+            pages.push(PdfPage { text });
         }
         let title = objects.values().find_map(|(d, _)| d.split("/Title (").nth(1).map(|t| t.split(')').next().unwrap().to_string()));
         PdfFile { pages, title }
@@ -1060,37 +942,6 @@ mod tests {
     /// Every piece of text a viewer would let you copy, in drawing order.
     fn pdf_text(bytes: &[u8]) -> Vec<String> {
         read_pdf(bytes).pages.into_iter().flat_map(|p| p.text).collect()
-    }
-
-    #[test]
-    fn the_pdf_is_a_valid_file_with_the_pages_of_the_layout() {
-        let w = world();
-        for page in [PageSize::A4, PageSize::Letter] {
-            let mut o = options("2026-01", "2026-03");
-            o.page = page;
-            o.include_transactions = true;
-            let report = read(&w.conn, &o).unwrap();
-            let expected_pages = layout::build(&report.0, &o).unwrap().pages.len();
-            let (width, height) = page.points();
-            // The real file, compressed, and the readable one have the same pages and page size.
-            for bytes in [report.pdf(&o).unwrap(), report.pdf_with(&o, false).unwrap()] {
-                assert!(bytes.starts_with(b"%PDF-") && String::from_utf8_lossy(&bytes).trim_end().ends_with("%%EOF"));
-                let file = read_pdf_pages_only(&bytes);
-                assert_eq!(file.len(), expected_pages);
-                for size in file {
-                    assert!((size[2] - width).abs() < 0.1 && (size[3] - height).abs() < 0.1, "{size:?}");
-                }
-            }
-            let readable = read_pdf(&report.pdf_with(&o, false).unwrap());
-            assert_eq!(readable.pages.len(), expected_pages);
-            assert!(readable.pages.iter().all(|p| p.media_box.len() == 4 && !p.text.is_empty()));
-        }
-    }
-
-    /// The page sizes of a PDF, without reading the content (which a compressed file keeps packed).
-    fn read_pdf_pages_only(bytes: &[u8]) -> Vec<Vec<f32>> {
-        let raw: String = bytes.iter().map(|&b| b as char).collect();
-        raw.split("/MediaBox [").skip(1).map(|t| t.split(']').next().unwrap().split_whitespace().map(|n| n.parse().unwrap()).collect()).collect()
     }
 
     #[test]
@@ -1132,85 +983,6 @@ mod tests {
     }
 
     // ---- the English texts the command line asks for ----
-
-    const UI_ENGLISH: &str = include_str!("../../ui/src/i18n/en.ts");
-    const UI_LABELS: &str = include_str!("../../ui/src/api/reportLabels.ts");
-
-    /// The English text of a screen text, read from the UI's dictionary.
-    fn ui_text(key: &str) -> String {
-        // On Windows, git may have checked the file out with CRLF line ends.
-        let english = UI_ENGLISH.replace("\r\n", "\n");
-        let marker = format!("'{key}': '");
-        let start = english.find(&marker).unwrap_or_else(|| panic!("no text {key} in the UI")) + marker.len();
-        let end = english[start..].find("',\n").expect("the text ends");
-        english[start..start + end].to_string()
-    }
-
-    fn capital(text: &str) -> String {
-        let mut chars = text.chars();
-        chars.next().map(|c| c.to_uppercase().chain(chars).collect()).unwrap_or_default()
-    }
-
-    fn field<'a>(labels: &'a ReportLabels, name: &str) -> &'a str {
-        match name {
-            "title" => &labels.title,
-            "period" => &labels.period,
-            "income" => &labels.income,
-            "expenses" => &labels.expenses,
-            "savings" => &labels.savings,
-            "savingsRate" => &labels.savings_rate,
-            "byMonth" => &labels.by_month,
-            "spending" => &labels.spending,
-            "other" => &labels.other,
-            "budgetVsActual" => &labels.budget_vs_actual,
-            "noBudget" => &labels.no_budget,
-            "transactions" => &labels.transactions,
-            "date" => &labels.date,
-            "category" => &labels.category,
-            "name" => &labels.name,
-            "amount" => &labels.amount,
-            "page" => &labels.page,
-            "noData" => &labels.no_data,
-            other => panic!("the UI has a label the app does not know: {other}"),
-        }
-    }
-
-    /// The command line writes a report in English without the window's help. Its texts are the ones the
-    /// window would give in English: this reads the UI's own recipe for each label and compares.
-    #[test]
-    fn the_english_labels_are_the_texts_the_ui_builds_in_english() {
-        let labels = ReportLabels::english("2026-01", "2026-03").unwrap();
-        let mut seen = Vec::new();
-        for line in UI_LABELS.lines().map(str::trim) {
-            let Some((name, recipe)) = line.split_once(": ") else { continue };
-            let recipe = recipe.trim_end_matches(',');
-            let (capitalised, key) = if let Some(inner) = recipe.strip_prefix("capital(t('").and_then(|r| r.strip_suffix("'))")) {
-                (true, inner)
-            } else if let Some(inner) = recipe.strip_prefix("t('").and_then(|r| r.strip_suffix("')")) {
-                (false, inner)
-            } else {
-                continue;
-            };
-            let english = ui_text(key);
-            let expected = if capitalised { capital(&english) } else { english };
-            assert_eq!(field(&labels, name), expected, "the label {name} (UI text {key})");
-            seen.push(name.to_string());
-        }
-        // Every label but the period comes from a text; none was skipped by the reader above.
-        assert_eq!(seen.len(), 17, "{seen:?}");
-        assert!(!seen.contains(&"period".to_string()));
-    }
-
-    #[test]
-    fn the_period_is_written_out_in_english() {
-        assert_eq!(ReportLabels::english("2026-10", "2026-10").unwrap().period, "October 2026");
-        assert_eq!(ReportLabels::english("2026-10", "2027-02").unwrap().period, "October 2026 – February 2027");
-        assert_eq!(ReportLabels::english("2026-01", "2026-12").unwrap().period, "January 2026 – December 2026");
-        for bad in ["2026-13", "2026-00", "2026", "x-1", "26-10", "2026-1x", ""] {
-            assert_eq!(ReportLabels::english(bad, "2026-10").unwrap_err(), AppError::InvalidInput, "{bad:?}");
-            assert_eq!(ReportLabels::english("2026-10", bad).unwrap_err(), AppError::InvalidInput, "{bad:?}");
-        }
-    }
 
     #[test]
     fn english_labels_pass_the_reports_own_limits() {

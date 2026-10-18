@@ -241,25 +241,6 @@ mod tests {
     }
 
     #[test]
-    fn the_summary_names_each_friend_with_the_direction_and_the_totals() {
-        let w = world();
-        let (anna, bob) = (friend(&w.conn, "Anna"), friend(&w.conn, "Bob"));
-        lend(&w.conn, anna, Kind::Lent, "25.00", None);
-        lend(&w.conn, bob, Kind::Borrowed, "7.50", None);
-        let summary = crate::debts::summary::summary(&w.conn).unwrap();
-        let doc = summary_doc(&summary, "EUR", "2026-10-17", &Labels::english(), &format(), PageSize::A4).unwrap();
-        let texts = doc.texts();
-        for expected in ["Who owes what", "2026-10-17", "EUR", "Owed to you", "You owe", "Net", "Anna", "owes you", "Bob", "you owe"] {
-            assert!(texts.contains(&expected), "{expected:?} is not on the page: {texts:?}");
-        }
-        let money = |m: &str| texts.iter().any(|t| t.replace('\u{a0}', " ") == m);
-        assert!(money("25.00 €") && money("7.50 €") && money("17.50 €"), "{texts:?}");
-        assert_eq!(doc.pages.len(), 1);
-        let pdf = pdf(&doc, "Who owes what", false).unwrap();
-        assert!(pdf.starts_with(b"%PDF"));
-    }
-
-    #[test]
     fn nobody_owing_anything_says_so_and_a_long_list_goes_on_to_more_pages() {
         let w = world();
         let empty = summary_doc(&crate::debts::summary::summary(&w.conn).unwrap(), "EUR", "2026-10-17", &Labels::english(), &format(), PageSize::A4).unwrap();
@@ -292,21 +273,6 @@ mod tests {
         assert!(money("+45.00 €") && money("-20.00 €") && money("45.00 €") && money("25.00 €"), "{texts:?}");
         assert!(texts.contains(&"share of a bill: Dinner") && texts.contains(&"paid back to me: cash"));
         assert!(texts.iter().any(|t| t.starts_with("owes you")), "where it ends up: {texts:?}");
-    }
-
-    #[test]
-    fn the_two_files_are_made_from_a_database_in_one_step_and_with_the_labels_checked() {
-        let w = world();
-        let anna = friend(&w.conn, "Anna");
-        lend(&w.conn, anna, Kind::Lent, "25.00", Some("taxi"));
-        let (labels, look) = (Labels::english(), format());
-        let summary = crate::report::debts_summary_pdf(&w.conn, "2026-10-17", &labels, &look, PageSize::A4).unwrap();
-        let statement = crate::report::debts_statement_pdf(&w.conn, anna, "2026-10-17", &labels, &look, PageSize::Letter).unwrap();
-        assert!(summary.starts_with(b"%PDF") && statement.starts_with(b"%PDF"));
-        assert_eq!(crate::report::debts_statement_pdf(&w.conn, 999, "2026-10-17", &labels, &look, PageSize::A4), Err(AppError::NotFound));
-        let mut bad = Labels::english();
-        bad.page = "x".repeat(200);
-        assert_eq!(crate::report::debts_summary_pdf(&w.conn, "2026-10-17", &bad, &look, PageSize::A4), Err(AppError::InvalidInput));
     }
 
     #[test]

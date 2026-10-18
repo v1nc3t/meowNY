@@ -12,6 +12,7 @@ use sha2::{Digest, Sha256};
 
 use super::ledger::{self, Entry, Expense, Kind, NewEntry};
 use super::people;
+use super::splits;
 use crate::categories::parse_id;
 use crate::currency;
 use crate::export;
@@ -134,10 +135,48 @@ pub fn make(conn: &Connection, transaction_id: i64, person_id: i64, from: &str) 
         .query_row("SELECT amount_minor FROM transaction_split_lines WHERE transaction_id = ?1 AND person_id = ?2", [transaction_id, person_id], |r| r.get(0))
         .optional()?
         .ok_or(AppError::NotFound)?;
+    build(conn, b"meowny-bill-1", &bill_sync, person_id, from, &name, date, part, total)
+}
+
+/// The code of one friend's part of the **next payment** of a recurring item: the item's name, the day that payment falls due, and its
+/// fixed amount shared as the item's template says. For the friend of a template that has a part for them; an item with no fixed amount has
+/// no code. The same text every time for the same payment of the same item (the next payment has another), so a friend who takes it in
+/// twice is stopped. shortcut: the code of the payment once it is paid (the transaction's) is another code, so a friend who takes in both
+/// owes it twice; the dialog says which payment it is for, and a person who shows both has done it by hand.
+pub fn make_recurring(conn: &Connection, recurring_id: i64, person_id: i64, from: &str) -> Result<String, AppError> {
+    let from = from.trim();
+    if !plain(from, NAME_MAX_CHARS) {
+        return Err(AppError::InvalidInput);
+    }
+    let (sync, name, date, amount, mine): (String, String, String, Option<i64>, Option<i64>) = conn
+        .query_row(
+            "SELECT sync_id, name, next_due_date, amount_minor, split_my_weight FROM recurring_transactions WHERE id = ?1",
+            [recurring_id],
+            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?)),
+        )
+        .optional()?
+        .ok_or(AppError::NotFound)?;
+    let mine = mine.ok_or(AppError::NotFound)?;
+    let total = amount.ok_or(AppError::InvalidInput)?;
+    let others = splits::template_lines(conn, recurring_id)?;
+    let at = others.iter().position(|(who, _)| *who == splits::Who::Person(person_id)).ok_or(AppError::NotFound)?;
+    let weights: Vec<u64> = std::iter::once(mine as u64).chain(others.iter().map(|(_, weight)| *weight)).collect();
+    let part = splits::allocate(total, &weights)?[at + 1];
+    if part <= 0 {
+        return Err(AppError::NotFound);
+    }
+    // the day is part of the identity: next month's payment is another code
+    build(conn, b"meowny-bill-r1", &format!("{sync}:{date}"), person_id, from, &name, date, part, total)
+}
+
+/// What both kinds of code share: the id from the bill (or payment) and the friend, the name of the bill made safe to show, and the check
+/// that what is made is what `parse` takes.
+#[allow(clippy::too_many_arguments)]
+fn build(conn: &Connection, domain: &[u8], bill: &str, person_id: i64, from: &str, name: &str, date: String, part: i64, total: i64) -> Result<String, AppError> {
     let person_sync: String = conn.query_row("SELECT sync_id FROM people WHERE id = ?1", [person_id], |r| r.get(0))?;
     let mut hash = Sha256::new();
-    hash.update(b"meowny-bill-1");
-    hash.update(bill_sync.as_bytes());
+    hash.update(domain);
+    hash.update(bill.as_bytes());
     hash.update(person_sync.as_bytes());
     let id = hex(&hash.finalize()[..16]);
     // the name of a bill is a transaction's: at most 50 characters, and never something `parse` would refuse

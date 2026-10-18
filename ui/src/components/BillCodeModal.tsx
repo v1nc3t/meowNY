@@ -5,41 +5,35 @@ import { cleanCategoryName } from '../api/categories'
 import { useMoneySettings } from '../hooks/useMoneySettings'
 import { useNotice } from '../hooks/useNotice'
 import { useT } from '../i18n/context'
-import { formatMoney } from '../lib/money'
+import { formatDate, formatMoney } from '../lib/money'
+import { saveSenderName, senderName } from '../lib/senderName'
 import Modal, { modalFormId } from './Modal'
 import QrCode from './QrCode'
 
-const NAME_KEY = 'bill-sender-name'
-
-function savedName(): string {
-  try {
-    return localStorage.getItem(NAME_KEY) ?? ''
-  } catch {
-    return ''
-  }
-}
-
 /**
- * The code of one friend's part of one bill: a QR code a friend scans and the same text to copy and send. It holds the bill, the friend's
- * part and the name the person gives for themself, which is asked once and remembered on this device. Nothing is stored or sent from here.
+ * The code of one friend's part of one bill, or of the next payment of a recurring item: a QR code a friend scans and the same text to copy
+ * and send. It holds the bill, the friend's part and the name the person gave at the first run (changed in the settings). The name is only
+ * asked here when there is none (a vault restored from a backup). Nothing is stored or sent from here.
  */
 export default function BillCodeModal({
-  transactionId,
+  target,
   person,
   part,
   total,
   onClose,
 }: {
-  transactionId: string
+  /** A transaction, or a recurring item (its next payment). */
+  target: { kind: 'transaction' | 'recurring'; id: string; date?: string }
   person: { id: string; name: string }
-  /** The friend's part and, when it is known, the whole bill, as amounts. */
-  part: string
+  /** The friend's part and, when it is known, the whole bill, as amounts. A recurring item's are read from its code. */
+  part?: string
   total?: string
   onClose: () => void
 }) {
   const t = useT()
   const { settings } = useMoneySettings()
-  const [from, setFrom] = useState(savedName)
+  const [from, setFrom] = useState(senderName)
+  const [held, setHeld] = useState<{ part: string; total: string } | null>(part ? { part, total: total ?? '' } : null)
   const [asking, setAsking] = useState(from === '')
   const [code, setCode] = useState('')
   const [tooLong, setTooLong] = useState(false)
@@ -50,18 +44,22 @@ export default function BillCodeModal({
   useEffect(() => {
     if (asking || from === '') return
     let cancelled = false
-    void debts.billCode(transactionId, person.id, from).then(
-      (text) => {
+    void (target.kind === 'recurring' ? debts.recurringCode(target.id, person.id, from) : debts.billCode(target.id, person.id, from))
+      .then(async (text) => {
+        // a recurring item's parts come out of its template, so the amounts are read from the code
+        if (target.kind === 'recurring') {
+          const read = await debts.billPreview(text)
+          if (!cancelled) setHeld({ part: read.amount, total: read.total })
+        }
         if (!cancelled) setCode(text)
-      },
-      (failure) => {
+      })
+      .catch((failure: unknown) => {
         if (!cancelled) setMessage(errorText(failure))
-      },
-    )
+      })
     return () => {
       cancelled = true
     }
-  }, [asking, from, transactionId, person.id, setMessage])
+  }, [asking, from, target.kind, target.id, person.id, setMessage])
 
   const onTooLong = useCallback(() => setTooLong(true), [])
 
@@ -71,11 +69,7 @@ export default function BillCodeModal({
     // the same rule as the name of a friend: trimmed, not empty, 50 characters at most
     const name = cleanCategoryName(String(new FormData(event.currentTarget).get('from') ?? ''))
     if (!name) return setMessage(t('debts.errorName'))
-    try {
-      localStorage.setItem(NAME_KEY, name)
-    } catch {
-      // Not remembered: it is asked again next time.
-    }
+    saveSenderName(name)
     setFrom(name)
     setCode('')
     setTooLong(false)
@@ -103,16 +97,14 @@ export default function BillCodeModal({
           </label>
         ) : (
           <>
-            <p>{total ? t('code.part', { name: person.name, amount: money(part), total: money(total) }) : `${person.name}: ${money(part)}`}</p>
+            {target.kind === 'recurring' && target.date && settings ? <p>{t('code.next', { date: formatDate(target.date, settings.locale) })}</p> : null}
+            {held ? <p>{held.total ? t('code.part', { name: person.name, amount: money(held.part), total: money(held.total) }) : `${person.name}: ${money(held.part)}`}</p> : null}
             {code ? <QrCode text={code} label={t('code.title', { name: person.name })} level="L" onTooLong={onTooLong} /> : null}
             {tooLong ? <p className="notice">{t('code.tooLong')}</p> : null}
             <p className="hint">{t('code.hint', { name: person.name })}</p>
             <div className="card-actions">
               <button type="button" disabled={!code} onClick={() => void copy()}>
                 {copied ? t('common.copied') : t('common.copy')}
-              </button>
-              <button type="button" onClick={() => setAsking(true)}>
-                {t('code.change')}
               </button>
             </div>
           </>

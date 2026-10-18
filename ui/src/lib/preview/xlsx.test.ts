@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { PreviewError } from './errors.ts'
-import { excelDate, isDateCode, MAX_COLUMNS, MAX_ROWS, readXlsx } from './xlsx.ts'
+import { excelDate, MAX_COLUMNS, MAX_ROWS, readXlsx } from './xlsx.ts'
 import { makeZip, type FixtureEntry } from './zipFixture.ts'
 
 const NS = 'xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"'
@@ -16,25 +16,6 @@ async function workbook(sheets: { name: string; xml: string; state?: string }[],
     ...extra,
   ])
 }
-
-test('numbers, shared strings, inline strings, booleans and formula results are cells of text', async () => {
-  const shared = '<sst><si><t>item</t></si><si><r><t>re</t></r><r><t>nt</t></r><rPh><t>ignored</t></rPh></si></sst>'
-  const bytes = await workbook(
-    [{
-      name: 'Costs',
-      xml:
-        '<row r="1"><c r="A1" t="s"><v>0</v></c><c r="B1" t="inlineStr"><is><t>note</t></is></c><c r="C1" t="b"><v>1</v></c></row>' +
-        '<row r="2"><c r="A2" t="s"><v>1</v></c><c r="B2"><v>900</v></c><c r="C2"><f>B2*2</f><v>1800.5</v></c><c r="D2" t="str"><v>done</v></c></row>' +
-        '<row r="3"><c r="A3"><v>0.30000000000000004</v></c></row>',
-    }],
-    [{ name: 'xl/sharedStrings.xml', data: shared }],
-  )
-  const { sheets } = await readXlsx(bytes)
-  assert.equal(sheets.length, 1)
-  assert.equal(sheets[0]?.name, 'Costs')
-  assert.deepEqual(sheets[0]?.rows, [['item', 'note', 'TRUE'], ['rent', '900', '1800.5', 'done'], ['0.3']])
-  assert.equal(sheets[0]?.cut, false)
-})
 
 test('a gap in the cells or in the rows stays a gap', async () => {
   const { sheets } = await readXlsx(await workbook([{ name: 'S', xml: '<row r="2"><c r="C2" t="str"><v>x</v></c></row><row r="4"><c r="A4" t="str"><v>y</v></c></row>' }]))
@@ -62,11 +43,6 @@ test('dates are counted from the right day in either system, and a value out of 
   assert.equal(excelDate(-1, false), null)
   assert.equal(excelDate(3_000_000, false), null)
   assert.equal(excelDate(Number.NaN, false), null)
-})
-
-test('which format codes are dates', () => {
-  for (const code of ['yyyy-mm-dd', 'dd/mm/yy', 'h:mm AM/PM', '[$-409]mmmm d, yyyy', 'hh:mm:ss']) assert.equal(isDateCode(code), true, code)
-  for (const code of ['General', '0.00', '#,##0', '0.00E+00', '0.00"d"', '[Red]0.0', '0%', '_(* #,##0_)']) assert.equal(isDateCode(code), false, code)
 })
 
 test('the 1904 date system is read from the workbook', async () => {

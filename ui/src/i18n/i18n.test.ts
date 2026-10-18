@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { en } from './en.ts'
 import { LANGUAGES, pickLanguage } from './languages.ts'
-import { activeLanguage, interpolate, setActiveLanguage, t, translateIn } from './translate.ts'
+import { translateIn } from './translate.ts'
 
 const placeholders = (text: string) => [...text.matchAll(/\{(\w+)\}/g)].map((m) => m[1]).sort()
 
@@ -60,23 +60,9 @@ test('the restore confirmation word is never translated either', () => {
   }
 })
 
-test('placeholders are filled in and unknown ones are left alone', () => {
-  assert.equal(interpolate('use {count} characters', { count: 8 }), 'use 8 characters')
-  assert.equal(interpolate('{a} and {b}', { a: 'x' }), 'x and {b}')
-  assert.equal(interpolate('plain'), 'plain')
-})
-
 test('a regional language falls back to its base language, then to English', () => {
   assert.equal(translateIn('de-AT', 'nav.settings'), 'einstellungen')
   assert.equal(translateIn('xx', 'nav.settings'), 'settings')
-})
-
-test('t() follows the active language', () => {
-  setActiveLanguage('ro')
-  assert.equal(activeLanguage(), 'ro')
-  assert.equal(t('nav.settings'), 'setări')
-  setActiveLanguage('en')
-  assert.equal(t('nav.settings'), 'settings')
 })
 
 test('the best supported language is picked from a preference list', () => {

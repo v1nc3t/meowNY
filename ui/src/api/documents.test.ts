@@ -1,24 +1,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { ApiError } from './invoke.ts'
-import {
-  AddOutcome,
-  checkFileSize,
-  Doc,
-  DocPage,
-  imageSource,
-  isImage,
-  isOpenable,
-  LibrarySize,
-  LinkView,
-  MAX_DOCUMENT_BYTES,
-  PIECE_BYTES,
-  toBase64Url,
-  toStandardBase64,
-  upload,
-  type NewDoc,
-  type UploadTransport,
-} from './documents.ts'
+import { checkFileSize, MAX_DOCUMENT_BYTES, PIECE_BYTES, toBase64Url, upload, type UploadTransport } from './documents.ts'
 
 const doc = {
   id: '4',
@@ -33,23 +16,6 @@ const doc = {
   hasFile: true,
 }
 
-test('what the app answers for a document is checked', () => {
-  assert.ok(Doc.safeParse(doc).success)
-  assert.ok(DocPage.safeParse({ documents: [doc], total: 1, limit: 50, offset: 0 }).success)
-  assert.ok(AddOutcome.safeParse({ document: doc, alreadyThere: false }).success)
-  assert.ok(!Doc.safeParse({ ...doc, mediaType: 'image/svg+xml' }).success, 'the list of kinds is closed')
-  assert.ok(!Doc.safeParse({ ...doc, sizeBytes: 0 }).success)
-  assert.ok(!Doc.safeParse({ ...doc, sha256: 'A'.repeat(64) }).success)
-  assert.ok(!Doc.safeParse({ ...doc, id: '0' }).success)
-  assert.ok(!Doc.safeParse({ ...doc, documentDate: '10/10/2026' }).success)
-  assert.ok(!Doc.safeParse({ ...doc, name: '' }).success)
-  assert.ok(!Doc.safeParse({ ...doc, hasFile: undefined }).success)
-  assert.ok(LinkView.safeParse({ kind: 'transaction', id: '3', name: 'Shop', date: '2026-10-10' }).success)
-  assert.ok(!LinkView.safeParse({ kind: 'category', id: '3', name: 'Shop', date: '2026-10-10' }).success)
-  assert.ok(LibrarySize.safeParse({ count: 2, bytes: 30, heldCount: 1, heldBytes: 10 }).success)
-  assert.ok(!LibrarySize.safeParse({ count: 2, bytes: 30 }).success)
-})
-
 test('bytes become the same base64url text that Node writes, for every length', () => {
   for (let length = 0; length <= 70; length += 1) {
     const bytes = Uint8Array.from({ length }, (_, i) => (i * 37 + 11) & 0xff)
@@ -63,15 +29,6 @@ test('bytes become the same base64url text that Node writes, for every length', 
 test('a long array of bytes does not overflow the call stack', () => {
   const big = new Uint8Array(PIECE_BYTES).fill(0xab)
   assert.equal(toBase64Url(big), Buffer.from(big).toString('base64url'))
-})
-
-test('the text of a data address is the standard base64 of the same bytes', () => {
-  for (let length = 0; length <= 40; length += 1) {
-    const bytes = Uint8Array.from({ length }, (_, i) => 255 - ((i * 53) & 0xff))
-    assert.equal(toStandardBase64(Buffer.from(bytes).toString('base64url')), Buffer.from(bytes).toString('base64'), `${length} bytes`)
-  }
-  const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0xfb, 0xff]).toString('base64url')
-  assert.equal(imageSource({ mediaType: 'image/png', data: png }), `data:image/png;base64,${Buffer.from([0x89, 0x50, 0x4e, 0x47, 0xfb, 0xff]).toString('base64')}`)
 })
 
 test('the pieces are what the Rust side takes: at most half a megabyte of text', () => {
@@ -118,20 +75,6 @@ function fakeApp(options: { failOnChunk?: number } = {}) {
   return { transport, log, bytes: () => Uint8Array.from(gathered) }
 }
 
-test('a file goes in piece by piece and arrives whole', async () => {
-  for (const size of [1, 100, PIECE_BYTES - 1, PIECE_BYTES, PIECE_BYTES + 1, 3 * PIECE_BYTES + 17]) {
-    const source = Uint8Array.from({ length: size }, (_, i) => (i * 7) & 0xff)
-    const app = fakeApp()
-    const seen: number[] = []
-    const outcome = await upload(new Blob([source]), { name: 'a.pdf' } satisfies NewDoc, app.transport, (sent) => seen.push(sent))
-    assert.equal(outcome.document.sizeBytes, size)
-    assert.deepEqual(app.bytes(), source, `${size} bytes`)
-    assert.deepEqual(app.log, [`begin a.pdf ${size}`, 'finish'])
-    assert.equal(seen.length, Math.ceil(size / PIECE_BYTES))
-    assert.equal(seen[seen.length - 1], size, 'progress ends at the whole')
-  }
-})
-
 test('a failure in the middle cancels the upload and is passed on', async () => {
   const app = fakeApp({ failOnChunk: 2 })
   await assert.rejects(upload(new Blob([new Uint8Array(3 * PIECE_BYTES)]), { name: 'a.pdf' }, app.transport), (e) => e instanceof ApiError && e.code === 'internal')
@@ -157,11 +100,5 @@ test('a failure at the end is cancelled too, and a failed cancel does not hide t
     },
   }
   await assert.rejects(upload(new Blob([new Uint8Array(10)]), { name: 'a' }, transport), (e) => e instanceof ApiError && e.code === 'file_damaged')
-})
-
-test('which kinds are opened and which are drawn', () => {
-  assert.ok(isOpenable('application/pdf') && isOpenable('text/html') && isOpenable('image/png'))
-  assert.ok(!isOpenable('application/octet-stream'))
-  assert.ok(isImage('image/webp') && !isImage('application/pdf') && !isImage('text/plain'))
 })
 

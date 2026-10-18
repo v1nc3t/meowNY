@@ -17,6 +17,8 @@ import { syncApi } from '../api/sync'
 import { documents, type LibrarySize } from '../api/documents'
 import { formatSize } from '../lib/bytes'
 import { scheduleOnPhone } from '../api/debtReminders'
+import { cleanCategoryName } from '../api/categories'
+import { saveSenderName, senderName } from '../lib/senderName'
 import { parseTime, REMINDER_PERIODS, reminderEvery, reminderTime, remindersChanged, saveReminderEvery, saveReminderTime } from '../lib/reminders'
 
 const PERIOD_LABELS = { 0: 'settings.debtEveryOff', 7: 'settings.scheduleWeekly', 14: 'settings.debtEveryTwoWeeks', 30: 'settings.scheduleMonthly' } as const
@@ -47,6 +49,7 @@ export default function SettingsPage() {
   const [newKey, setNewKey] = useState<string | null>(null)
   const [notifyDue, setNotifyDue] = useState<boolean | null>(null)
   const [reminderAt, setReminderAt] = useState(reminderTime)
+  const [name, setName] = useState(senderName)
   const [debtEvery, setDebtEvery] = useState(() => String(reminderEvery()))
   const [lockAfter, setLockAfter] = useState('300')
   const [changingCurrency, setChangingCurrency] = useState(false)
@@ -317,6 +320,27 @@ export default function SettingsPage() {
             </div>
           </form>
         )}
+
+        <form
+          className="settings-block"
+          onSubmit={(event) => {
+            event.preventDefault()
+            // the rule of a friend's name; kept on this device, for the code of a shared bill
+            const clean = cleanCategoryName(name)
+            if (!clean) return setMessage(t('debts.errorName'))
+            saveSenderName(clean)
+            setName(clean)
+            setMessage(t('settings.saved'))
+          }}
+        >
+          <label>
+            {t('code.senderAsk')}
+            <input value={name} maxLength={50} autoComplete="name" onChange={(event) => setName(event.target.value)} />
+          </label>
+          <div className="actions">
+            <button type="submit">{t('common.save')}</button>
+          </div>
+        </form>
 
         {notifyDue !== null && (
           <div className="settings-block">

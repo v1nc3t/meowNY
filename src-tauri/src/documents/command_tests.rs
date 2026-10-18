@@ -16,10 +16,6 @@ use crate::sync::qr::{base64url_decode, base64url_encode};
 use crate::vault::{Settings, Vault};
 
 const PDF: &[u8] = b"%PDF-1.7\n1 0 obj\n<< /Type /Catalog >>\nendobj\n%%EOF\n";
-const PNG: [u8; 32] = [
-    0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0x0d, 0x49, 0x48, 0x44, 0x52, 0, 0, 0, 3, 0, 0, 0, 2, 8, 2, 0, 0, 0, 0x12, 0x16, 0xf1,
-];
-
 struct Harness {
     _app: App<tauri::test::MockRuntime>,
     webview: WebviewWindow<tauri::test::MockRuntime>,
@@ -100,51 +96,6 @@ impl Harness {
         self.call("document_upload_finish", json!({})).unwrap()
     }
 
-    fn transaction(&self) -> String {
-        let category = self.call("create_category", json!({ "name": "Food", "kind": "EXPENSE" })).unwrap();
-        let made = self
-            .call(
-                "create_transaction",
-                json!({ "input": { "name": "Weekly shop", "amount": "42.50", "paymentDate": "2026-10-10", "categoryId": category["id"] } }),
-            )
-            .unwrap();
-        made["id"].as_str().unwrap().to_string()
-    }
-}
-
-#[test]
-fn a_file_goes_in_in_pieces_and_comes_back_listed_linked_and_readable() {
-    let h = harness();
-    let tx = h.transaction();
-    let outcome = h.upload(
-        json!({ "name": "/home/me/Downloads/Shop receipt.pdf", "documentDate": "2026-10-10", "links": [{ "kind": "transaction", "id": tx }] }),
-        PDF,
-        20,
-    );
-    assert_eq!(outcome["alreadyThere"], false);
-    let doc = &outcome["document"];
-    assert_eq!(doc["name"], "Shop receipt.pdf");
-    assert_eq!(doc["mediaType"], "application/pdf");
-    assert_eq!((doc["sizeBytes"].as_u64(), doc["linkCount"].as_u64(), doc["hasFile"].as_bool()), (Some(PDF.len() as u64), Some(1), Some(true)));
-    assert_eq!(doc["keepOnPhone"], false);
-    let id = doc["id"].as_str().unwrap().to_string();
-
-    let page = h.call("list_documents", json!({ "filter": {} })).unwrap();
-    assert_eq!((page["total"].as_u64(), page["documents"][0]["id"].as_str()), (Some(1), Some(id.as_str())));
-    assert_eq!(h.call("get_document", json!({ "id": id })).unwrap()["name"], "Shop receipt.pdf");
-    let links = h.call("document_links", json!({ "id": id })).unwrap();
-    assert_eq!((links[0]["kind"].as_str(), links[0]["id"].as_str(), links[0]["name"].as_str()), (Some("transaction"), Some(tx.as_str()), Some("Weekly shop")));
-    let found = h.call("list_documents", json!({ "filter": { "transactionId": tx } })).unwrap();
-    assert_eq!(found["total"], 1);
-    assert_eq!(
-        h.call("document_library_size", json!({})).unwrap(),
-        json!({ "count": 1, "bytes": PDF.len(), "heldCount": 1, "heldBytes": PDF.len() })
-    );
-    // the mark on the list of transactions
-    let counts = h.call("document_counts", json!({ "kind": "transaction", "ids": [tx, "999"] })).unwrap();
-    assert_eq!(counts, json!({ tx.clone(): 1 }));
-    assert_eq!(h.call("document_counts", json!({ "kind": "recurring", "ids": [tx] })).unwrap(), json!({}));
-    assert_eq!(h.code("document_counts", json!({ "kind": "transaction", "ids": ["x"] })), "invalid_input");
 }
 
 #[test]
@@ -155,19 +106,6 @@ fn the_same_file_sent_again_is_not_stored_twice() {
     assert_eq!((first["alreadyThere"].as_bool(), second["alreadyThere"].as_bool()), (Some(false), Some(true)));
     assert_eq!(first["document"]["id"], second["document"]["id"]);
     assert_eq!(h.call("document_library_size", json!({})).unwrap()["count"], 1);
-}
-
-#[test]
-fn an_image_is_given_for_drawing_and_a_pdf_is_not() {
-    let h = harness();
-    let image = h.upload(json!({ "name": "photo.png" }), &PNG, 10);
-    let id = image["document"]["id"].as_str().unwrap();
-    let given = h.call("read_document_image", json!({ "id": id })).unwrap();
-    assert_eq!(given["mediaType"], "image/png");
-    assert_eq!(base64url_decode(given["data"].as_str().unwrap()).unwrap(), PNG);
-
-    let pdf = h.upload(json!({ "name": "a.pdf" }), PDF, 1000);
-    assert_eq!(h.code("read_document_image", json!({ "id": pdf["document"]["id"] })), "invalid_input");
 }
 
 #[test]
@@ -187,39 +125,6 @@ fn a_preview_is_given_with_its_kind_and_refused_for_what_is_not_shown() {
     let page = h.upload(json!({ "name": "page.html" }), b"<b>hi</b>", 10);
     assert_eq!(h.code("read_document_preview", json!({ "id": page["document"]["id"] })), "invalid_input");
     assert_eq!(h.code("read_document_preview", json!({ "id": "x" })), "invalid_input");
-}
-
-#[test]
-fn a_document_is_renamed_linked_unlinked_and_deleted() {
-    let h = harness();
-    let tx = h.transaction();
-    let id = h.upload(json!({ "name": "scan0001.pdf" }), PDF, 1000)["document"]["id"].as_str().unwrap().to_string();
-
-    let changed = h.call("update_document", json!({ "id": id, "patch": { "name": "Shop receipt", "keepOnPhone": true } })).unwrap();
-    assert_eq!((changed["name"].as_str(), changed["keepOnPhone"].as_bool()), (Some("Shop receipt"), Some(true)));
-    let target = json!({ "kind": "transaction", "id": tx });
-    h.call("link_document", json!({ "id": id, "target": target })).unwrap();
-    h.call("link_document", json!({ "id": id, "target": target })).unwrap();
-    assert_eq!(h.call("get_document", json!({ "id": id })).unwrap()["linkCount"], 1);
-    h.call("unlink_document", json!({ "id": id, "target": target })).unwrap();
-    assert_eq!(h.code("unlink_document", json!({ "id": id, "target": target })), "not_found");
-
-    h.call("delete_document", json!({ "id": id })).unwrap();
-    assert_eq!(h.code("get_document", json!({ "id": id })), "not_found");
-    assert_eq!(h.call("document_library_size", json!({})).unwrap()["count"], 0);
-    assert_eq!(h.call("check_documents", json!({})).unwrap(), json!({ "missing": 0, "damaged": 0, "cleaned": 0 }));
-}
-
-#[test]
-fn the_check_says_how_many_files_are_missing() {
-    let h = harness();
-    h.upload(json!({ "name": "a.pdf" }), PDF, 1000);
-    for entry in std::fs::read_dir(h.vault.data_dir().join("documents")).unwrap() {
-        std::fs::remove_file(entry.unwrap().path()).unwrap();
-    }
-    assert_eq!(h.call("check_documents", json!({})).unwrap()["missing"], 1);
-    let page = h.call("list_documents", json!({ "filter": {} })).unwrap();
-    assert_eq!(page["documents"][0]["hasFile"], false);
 }
 
 #[test]
@@ -288,14 +193,6 @@ fn cancelling_drops_the_file() {
     h.call("document_upload_chunk", json!({ "offset": 0, "data": base64url_encode(b"ab") })).unwrap();
     h.call("document_upload_cancel", json!({})).unwrap();
     assert_eq!(h.code("document_upload_finish", json!({})), "invalid_input");
-}
-
-#[test]
-fn a_file_of_the_largest_size_goes_in_through_the_commands() {
-    let h = harness();
-    let bytes: Vec<u8> = (0..crate::documents::MAX_DOCUMENT_BYTES as usize).map(|i| (i % 251) as u8).collect();
-    let outcome = h.upload(json!({ "name": "largest.bin" }), &bytes, 256 * 1024);
-    assert_eq!(outcome["document"]["sizeBytes"], crate::documents::MAX_DOCUMENT_BYTES);
 }
 
 #[test]

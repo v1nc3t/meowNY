@@ -493,7 +493,7 @@ pub struct TemplatePart {
     pub weight: u64,
 }
 
-fn template_lines(conn: &Connection, recurring_id: i64) -> Result<Vec<(Who, u64)>, AppError> {
+pub(crate) fn template_lines(conn: &Connection, recurring_id: i64) -> Result<Vec<(Who, u64)>, AppError> {
     let mut statement = conn.prepare_cached("SELECT person_id, guest_name, weight FROM recurring_split_lines WHERE recurring_transaction_id = ?1 ORDER BY id")?;
     let rows = statement.query_map([recurring_id], |r| {
         let (person, guest): (Option<i64>, Option<String>) = (r.get(0)?, r.get(1)?);

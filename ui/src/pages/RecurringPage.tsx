@@ -2,6 +2,7 @@ import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type FormE
 import { useLocation } from 'react-router-dom'
 import AddCategoryModal from '../components/AddCategoryModal'
 import AttachArea from '../components/AttachArea'
+import BillCodeModal from '../components/BillCodeModal'
 import ClipPreview from '../components/ClipPreview'
 import DatePicker from '../components/DatePicker'
 import SplitEditor from '../components/SplitEditor'
@@ -72,6 +73,8 @@ function RecurringView({ settings, now }: { settings: MoneySettings; now: Today 
   const [adding, setAdding] = useState(false)
   const [editing, setEditing] = useState<Recurring | null>(null)
   const [paying, setPaying] = useState<Recurring | null>(null)
+  // the friend a code of an item's next payment is being shown for
+  const [coding, setCoding] = useState<{ item: Recurring; personId: string; name: string } | null>(null)
   const [confirming, setConfirming] = useState<{ kind: ConfirmKind; item: Recurring } | null>(null)
   const [pending, setPending] = useState(false)
   const [draftMessage, setDraftMessage] = useNotice()
@@ -83,7 +86,8 @@ function RecurringView({ settings, now }: { settings: MoneySettings; now: Today 
   const { request: focus, done: focusDone } = useFocusRequest('recurring')
   useJumpTo(focus, focusDone, items)
   // the debts screen can send the person to pay a recurring payment that is due: the dialog of that item opens, once
-  const payAsked = (useLocation().state as { pay?: boolean } | null)?.pay === true
+  const location = useLocation()
+  const payAsked = (location.state as { pay?: boolean } | null)?.pay === true
   const payOpened = useRef<string | null>(null)
   useEffect(() => {
     if (!focus || !payAsked || !items || payOpened.current === focus.id) return
@@ -282,6 +286,12 @@ function RecurringView({ settings, now }: { settings: MoneySettings; now: Today 
     setReload((value) => value + 1)
   }
 
+  // The code of the next payment is for a friend with a part, and needs an amount to share (a bill that changes has none).
+  const codeFor = (item: Recurring, at: number) => {
+    const part = item.split?.parts[at]
+    return item.amount !== null && part?.personId && part.person && part.weight > 0 ? { item, personId: part.personId, name: part.person } : null
+  }
+
   const everyText = (item: Recurring) =>
     item.intervalCount === 1
       ? t(`rec.every1.${item.intervalUnit}`)
@@ -331,6 +341,13 @@ function RecurringView({ settings, now }: { settings: MoneySettings; now: Today 
           pending={pending}
           onConfirm={() => void onConfirm()}
           onClose={() => setConfirming(null)}
+        />
+      ) : null}
+      {coding ? (
+        <BillCodeModal
+          target={{ kind: 'recurring', id: coding.item.id, date: coding.item.nextDueDate }}
+          person={{ id: coding.personId, name: coding.name }}
+          onClose={() => setCoding(null)}
         />
       ) : null}
       {paying ? (
@@ -399,6 +416,11 @@ function RecurringView({ settings, now }: { settings: MoneySettings; now: Today 
                                   return [t('split.you'), ...item.split.parts.map((part) => part.person ?? part.guest ?? '')].map((name, at) => (
                                     <div className="split-part" key={`${name}-${at}`}>
                                       <span>{`${name} ${shares[at] ?? 0}`}</span>
+                                      {codeFor(item, at - 1) ? (
+                                        <button type="button" onClick={() => setCoding(codeFor(item, at - 1))}>
+                                          {t('code.show')}
+                                        </button>
+                                      ) : null}
                                     </div>
                                   ))
                                 })()}
@@ -442,6 +464,16 @@ function RecurringView({ settings, now }: { settings: MoneySettings; now: Today 
                         <button type="button" onClick={() => openEdit(item)}>
                           {t('common.edit')}
                         </button>
+                        {(() => {
+                          // an item split with friends has a code for each of them: one friend opens it, several open the details to choose
+                          const friends = (item.split?.parts ?? []).map((_, at) => codeFor(item, at)).filter((code) => code !== null)
+                          if (friends.length === 0) return null
+                          return (
+                            <button type="button" onClick={() => (friends.length === 1 ? setCoding(friends[0] ?? null) : setOpenId(item.id))}>
+                              {t('code.show')}
+                            </button>
+                          )
+                        })()}
                         {status !== 'ended' ? (
                           <button type="button" onClick={() => setConfirming({ kind: 'end', item })}>
                             {t('rec.end')}

@@ -49,7 +49,7 @@ A **recurring item** can be split too (tick **split this bill** in its form). Ea
 
 ## Showing a bill to a friend: the bill code
 
-On a shared bill, open **details** and press **show code** beside a friend (or press **show code** on a bill line in the friend's page). The first time, the app asks what name your friend should see; it is kept on this device. The dialog shows a **QR code** and **copy** copies the same text, so you can send it in the chat you already use.
+On a shared bill, press **show code** on the bill in the list (with one friend it opens at once; with several it opens the **details**, where each friend has their own **show code**), or on a bill line in the friend's page. A **recurring item** that is split has **show code** too, for the friend's part of its **next payment** (it needs a fixed amount; the dialog says which day it is for). The name your friend sees is the one you gave when you made the account; **settings** changes it (it is kept on this device), and the app only asks for it here when there is none (for instance after restoring a backup). Show the code of a payment once, either before it is paid (the item's) or after (the bill's): the two are different codes, and a friend who takes in both owes it twice. The dialog shows a **QR code** and **copy** copies the same text, so you can send it in the chat you already use.
 
 The code holds this bill's name and date, your name, your friend's part and the whole bill, and the currency. It holds nobody else's name or part. It is **not stored and not encrypted**: whoever sees the screen, or the text you copied, can read it. Show it only to the friend it is for. If a code is too long for a QR code (long names), the app says so and the text is the way.
 

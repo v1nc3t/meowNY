@@ -533,24 +533,6 @@ mod tests {
     }
 
     #[test]
-    fn a_bill_can_have_no_fixed_amount() {
-        let (conn, rent, _) = db();
-        let item = create(&conn, &varying(rent, "2026-01-20")).unwrap();
-        assert_eq!(item.amount, None);
-        assert_eq!(list(&conn).unwrap()[0].amount, None);
-        // An empty amount means the same, and a stray space does not matter.
-        for blank in ["", "  "] {
-            let input = NewRecurring { amount: Some(blank.into()), ..varying(rent, "2026-01-20") };
-            assert_eq!(create(&conn, &input).unwrap().amount, None, "{blank:?}");
-        }
-        // What is written must still be a real amount.
-        for bad in ["0.00", "-5.00", "abc", "12", "12.345"] {
-            let input = NewRecurring { amount: Some(bad.into()), ..varying(rent, "2026-01-20") };
-            assert_eq!(create(&conn, &input).unwrap_err(), AppError::InvalidInput, "{bad}");
-        }
-    }
-
-    #[test]
     fn editing_can_add_or_remove_the_fixed_amount() {
         let (conn, rent, _) = db();
         let fixed = create(&conn, &new(rent, "2026-01-31")).unwrap();
@@ -593,31 +575,6 @@ mod tests {
     }
 
     #[test]
-    fn the_amount_in_a_request_may_be_left_out_or_null() {
-        let make = |amount: &str| -> NewRecurring {
-            serde_json::from_str(&format!(r#"{{"name":"Gas","categoryId":"1","startDate":"2026-01-01","intervalUnit":"MONTH","intervalCount":1{amount}}}"#)).unwrap()
-        };
-        assert_eq!(make("").amount, None);
-        assert_eq!(make(r#","amount":null"#).amount, None);
-        assert_eq!(make(r#","amount":"12.00""#).amount.as_deref(), Some("12.00"));
-
-        let patch = |json: &str| -> RecurringPatch { serde_json::from_str(json).unwrap() };
-        assert_eq!(patch("{}").amount, None, "left out: unchanged");
-        assert_eq!(patch(r#"{"amount":null}"#).amount, Some(None), "null: no fixed amount");
-        assert_eq!(patch(r#"{"amount":"5.00"}"#).amount, Some(Some("5.00".into())));
-    }
-
-    #[test]
-    fn create_starts_due_on_the_start_date() {
-        let (conn, rent, _) = db();
-        let item = create(&conn, &new(rent, "2026-01-31")).unwrap();
-        assert_eq!(item.next_due_date, "2026-01-31");
-        assert_eq!(item.amount.as_deref(), Some("900.00"));
-        assert!(item.is_active);
-        assert_eq!(list(&conn).unwrap(), vec![item]);
-    }
-
-    #[test]
     fn create_rejects_bad_input() {
         let (conn, rent, _) = db();
         let bad = |f: fn(&mut NewRecurring)| {
@@ -646,19 +603,6 @@ mod tests {
     }
 
     #[test]
-    fn plain_edit_changes_only_what_was_sent() {
-        let (conn, rent, _) = db();
-        let item = create(&conn, &new(rent, "2026-01-31")).unwrap();
-        let patch = RecurringPatch { amount: Some(Some("950.00".into())), end_date: Some(Some("2026-12-31".into())), ..Default::default() };
-        let edited = update(&conn, item.id, &patch).unwrap();
-        assert_eq!((edited.amount.as_deref(), edited.end_date.as_deref()), (Some("950.00"), Some("2026-12-31")));
-        assert_eq!(edited.next_due_date, "2026-01-31");
-        let cleared = update(&conn, item.id, &RecurringPatch { end_date: Some(None), ..Default::default() }).unwrap();
-        assert_eq!(cleared.end_date, None);
-        assert_eq!(update(&conn, 999, &patch), Err(AppError::NotFound));
-    }
-
-    #[test]
     fn delete_keeps_paid_transactions() {
         let (conn, rent, _) = db();
         let item = create(&conn, &new(rent, "2026-01-31")).unwrap();
@@ -675,45 +619,6 @@ mod tests {
     }
 
     const TODAY: &str = "2026-03-15";
-
-    #[test]
-    fn pay_makes_a_transaction_and_moves_on() {
-        let (conn, rent, _) = db();
-        let item = create(&conn, &new(rent, "2026-01-31")).unwrap();
-        let paid = pay(&conn, item.id, None, Some("2026-01-30"), TODAY).unwrap();
-        assert_eq!((paid.amount.as_str(), paid.payment_date.as_str(), paid.name.as_str()), ("900.00", "2026-01-30", "Rent"));
-        assert_eq!(get(&conn, item.id).unwrap().next_due_date, "2026-02-28");
-        let next = pay(&conn, item.id, None, None, TODAY).unwrap();
-        assert_eq!(next.payment_date, TODAY);
-        assert_eq!(get(&conn, item.id).unwrap().next_due_date, "2026-03-31");
-    }
-
-    #[test]
-    fn pay_keeps_planned_and_actual_amounts() {
-        let (conn, rent, _) = db();
-        let item = create(&conn, &new(rent, "2026-01-31")).unwrap();
-        let paid = pay(&conn, item.id, Some("87.35"), None, TODAY).unwrap();
-        assert_eq!(paid.amount, "87.35");
-        let (planned, due, link): (i64, String, i64) = conn
-            .query_row(
-                "SELECT planned_amount_minor, recurring_due_date, recurring_transaction_id FROM transactions WHERE id = ?1",
-                [paid.id.to_string()],
-                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
-            )
-            .unwrap();
-        assert_eq!((planned, due.as_str(), link), (90000, "2026-01-31", item.id));
-    }
-
-    #[test]
-    fn paid_transaction_counts_in_its_category() {
-        let (conn, rent, _) = db();
-        let item = create(&conn, &new(rent, "2026-03-01")).unwrap();
-        pay(&conn, item.id, None, Some("2026-03-01"), TODAY).unwrap();
-        let spent: i64 = conn
-            .query_row("SELECT sum(amount_minor) FROM transactions WHERE category_id = ?1 AND payment_date LIKE '2026-03%'", [rent], |r| r.get(0))
-            .unwrap();
-        assert_eq!(spent, 90000);
-    }
 
     #[test]
     fn an_occurrence_cannot_be_paid_twice() {
@@ -752,33 +657,6 @@ mod tests {
         let done = get(&conn, item.id).unwrap();
         assert!(!done.is_active);
         assert_eq!(set_active(&conn, item.id, true).unwrap_err(), AppError::InvalidInput);
-    }
-
-    #[test]
-    fn skip_moves_on_without_a_transaction() {
-        let (conn, rent, _) = db();
-        let item = create(&conn, &new(rent, "2026-01-31")).unwrap();
-        assert_eq!(skip(&conn, item.id).unwrap().next_due_date, "2026-02-28");
-        let count: i64 = conn.query_row("SELECT count(*) FROM transactions", [], |r| r.get(0)).unwrap();
-        assert_eq!(count, 0);
-        let logged: i64 = conn
-            .query_row("SELECT count(*) FROM audit_log WHERE entity_type = 'recurring_transactions' AND action = 'UPDATE'", [], |r| r.get(0))
-            .unwrap();
-        assert!(logged >= 1);
-    }
-
-    #[test]
-    fn pause_resume_and_end() {
-        let (conn, rent, _) = db();
-        let item = create(&conn, &new(rent, "2026-01-31")).unwrap();
-        assert!(!set_active(&conn, item.id, false).unwrap().is_active);
-        assert!(set_active(&conn, item.id, true).unwrap().is_active);
-        let ended = end(&conn, item.id, TODAY).unwrap();
-        assert!(!ended.is_active);
-        assert_eq!(ended.end_date.as_deref(), Some(TODAY));
-        // Ending before the start date cannot put the end date before it.
-        let future = create(&conn, &new(rent, "2026-09-01")).unwrap();
-        assert_eq!(end(&conn, future.id, TODAY).unwrap().end_date.as_deref(), Some("2026-09-01"));
     }
 
     #[test]

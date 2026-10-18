@@ -3,6 +3,7 @@ import { budgets as budgetsApi, MONTH, type MonthHistory, type Overview } from '
 import { categories as categoriesApi, type Category } from '../api/categories'
 import { errorText } from '../api/invoke'
 import { monthLabel, shiftMonth } from '../api/months'
+import { useLocation, useNavigate } from 'react-router-dom'
 import AddCategoryModal from '../components/AddCategoryModal'
 import ConfirmModal from '../components/ConfirmModal'
 import EditCategoryModal from '../components/EditCategoryModal'
@@ -105,6 +106,17 @@ function CategoriesView({ settings, thisMonth }: { settings: MoneySettings; this
   useShortcut('today', () => setMonth(thisMonth))
   // n adds a category, j and k move between rows.
   useShortcut('new', () => setAdding(true))
+
+  // The phone's round button sends the person here to add a category: the form opens at once, once.
+  const location = useLocation()
+  const navigate = useNavigate()
+  useEffect(() => {
+    if ((location.state as { add?: boolean } | null)?.add !== true) return
+    setAdding(true)
+    navigate(location.pathname, { replace: true, state: null })
+    // each time the page is asked, when it opens and when it is open already; the request is taken out of the location, so once
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.state])
   useRowNavigation()
 
   async function onDelete() {

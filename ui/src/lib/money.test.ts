@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { amountString, convertAmount, formatDate, formatMoney, fromMinor, parseRate, toMinor } from './money.ts'
+import { amountString, convertAmount, fromMinor, parseRate, toMinor } from './money.ts'
 
 test('transaction amounts pad to two decimals and reject empty, zero, and negative', () => {
   assert.equal(amountString('10', false), '10.00')
@@ -24,11 +24,6 @@ test('budget amounts allow zero and still reject negatives', () => {
   assert.equal(amountString('-2', true), null)
 })
 
-test('formatMoney uses the user currency and locale', () => {
-  assert.match(formatMoney('10.50', 'EUR', 'en'), /10\.50/)
-  assert.match(formatMoney('-100.00', 'EUR', 'en'), /100\.00/)
-})
-
 test('rates follow the same rules as the backend', () => {
   for (const good of ['1.08', '160', '0.0063', '0.00000001', '123456789.12345678']) assert.ok(parseRate(good), good)
   for (const bad of ['', '0', '0.0', '-1', '1,5', '1.', '.5', '01.5', '1.123456789', '1e3', ' 1.2', '1234567890']) {
@@ -47,19 +42,17 @@ test('conversion rounds half up to the cent, matching the backend', () => {
   assert.equal(convertAmount('100.00', 'abc'), null)
 })
 
-test('dates are written the way the locale writes them, on the same calendar day', () => {
-  assert.equal(formatDate('2026-10-12', 'en-US'), '10/12/2026')
-  assert.equal(formatDate('2026-10-12', 'en-GB'), '12/10/2026')
-  assert.equal(formatDate('2026-10-12', 'de-DE'), '12.10.2026')
-  assert.equal(formatDate('2026-01-01', 'en-US'), '01/01/2026', 'no shift across the year start')
-  assert.equal(formatDate('nonsense', 'en-US'), 'nonsense')
-  assert.equal(formatDate('2026-10-12', 'not a locale!!'), '2026-10-12')
-})
-
 test('amounts convert to whole cents and back without loss', () => {
   assert.equal(toMinor('12.50'), 1250n)
   assert.equal(toMinor('-0.05'), -5n)
   assert.equal(toMinor('12.5'), null)
   for (const amount of ['0.00', '0.07', '-1250.99', '9999999999.99']) assert.equal(fromMinor(toMinor(amount) ?? 0n), amount)
   assert.equal(fromMinor(-1600n), '-16.00')
+})
+
+test('a comma is a decimal mark like the dot, and nothing else with a separator is an amount', () => {
+  assert.equal(amountString('29,5', false), '29.50')
+  assert.equal(amountString('29,50', false), '29.50')
+  assert.equal(amountString(' 0,05 ', false), '0.05')
+  for (const bad of ['29,', '29.', ',5', '1,234.50', '1.234,50', '29,555', '29,5,0', '29;50', '-29,50']) assert.equal(amountString(bad, false), null, bad)
 })

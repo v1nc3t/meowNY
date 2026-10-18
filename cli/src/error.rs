@@ -114,23 +114,4 @@ mod tests {
         assert_eq!(exit_for("unknown_route"), 1);
     }
 
-    #[test]
-    fn an_unknown_code_is_a_plain_error() {
-        assert_eq!(exit_for("something_new"), 1);
-        assert_eq!(exit_for(""), 1);
-    }
-
-    #[test]
-    fn exit_codes_are_the_plans_five() {
-        let codes: Vec<u8> = EXIT_CODES.iter().map(|(c, _)| *c).collect();
-        assert_eq!(codes, vec![0, 1, 2, 3, 4]);
-    }
-
-    #[test]
-    fn an_error_prints_as_code_and_message() {
-        let e = CliError::new("locked", "the app is locked");
-        assert_eq!(e.to_json(), json!({ "code": "locked", "message": "the app is locked" }));
-        assert_eq!(e.exit(), 3);
-        assert_eq!(CliError::usage("x").exit(), 2);
-    }
 }

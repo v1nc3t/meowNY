@@ -1,5 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import { currencyOptions } from '../api/currencies'
+import { cleanCategoryName } from '../api/categories'
+import { saveSenderName } from '../lib/senderName'
 import { formatExample, localeOptions, zoneOptions } from '../api/locales'
 import Dropdown from '../components/Dropdown'
 import { useI18n } from '../i18n/context'
@@ -28,6 +30,9 @@ export default function FirstRunScreen({ onDone }: { onDone: () => void }) {
     const form = new FormData(event.currentTarget)
     const passphrase = String(form.get('passphrase'))
     const problem = passphraseProblem(passphrase, String(form.get('confirm')))
+    // the name friends see on the code of a shared bill: the rule of a friend's name
+    const name = cleanCategoryName(String(form.get('name') ?? ''))
+    if (!name) return setMessage(t('debts.errorName'))
     if (!isCurrency(currency)) return setMessage(t('welcome.currencyError'))
     if (problem) return setMessage(problem)
 
@@ -37,6 +42,7 @@ export default function FirstRunScreen({ onDone }: { onDone: () => void }) {
       setRecoveryKey(
         await vault.create({ currency: normalizeCurrency(currency), locale, timezone, language }, passphrase),
       )
+      saveSenderName(name)
     } catch (error) {
       setMessage(errorText(error))
       setBusy(false)
@@ -58,6 +64,11 @@ export default function FirstRunScreen({ onDone }: { onDone: () => void }) {
       <form onSubmit={onSubmit}>
         <p className="brand-mark">meowny</p>
         <h1>{t('welcome.title')}</h1>
+
+        <label>
+          {t('code.senderAsk')}
+          <input name="name" required maxLength={50} autoComplete="name" />
+        </label>
 
         <Dropdown
           label={t('welcome.language')}

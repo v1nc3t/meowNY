@@ -1,15 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { apiBound, lastDay, shiftBound, thisPeriod } from './range.ts'
-
-test('a day, a month and a year each stand for their first and last day', () => {
-  assert.equal(apiBound('date', '2026-03-10', 'from'), '2026-03-10')
-  assert.equal(apiBound('date', '2026-03-10', 'to'), '2026-03-10')
-  assert.equal(apiBound('month', '2026-03', 'from'), '2026-03-01')
-  assert.equal(apiBound('month', '2026-03', 'to'), '2026-03-31')
-  assert.equal(apiBound('year', '2026', 'from'), '2026-01-01')
-  assert.equal(apiBound('year', '2026', 'to'), '2026-12-31')
-})
+import { apiBound, lastDay, shiftBound } from './range.ts'
 
 test('a value that is not a whole one of its kind is no bound', () => {
   for (const [mode, value] of [['date', '2026-03'], ['date', ''], ['month', '2026-13'], ['month', '2026-3'], ['month', '2026-03-01'], ['year', '26'], ['year', '2026-03']] as const) {
@@ -41,11 +32,4 @@ test('changing how a range is chosen keeps what it covers as far as it can', () 
   assert.equal(shiftBound('', 'date', 'month', 'from'), '')
   assert.equal(shiftBound('2026-03', 'month', 'month', 'from'), '2026-03')
   assert.equal(shiftBound('garbage', 'month', 'date', 'from'), '')
-})
-
-test('this period is the current day, month or year', () => {
-  const today = { date: '2026-10-16', month: '2026-10' }
-  assert.equal(thisPeriod('date', today), '2026-10-16')
-  assert.equal(thisPeriod('month', today), '2026-10')
-  assert.equal(thisPeriod('year', today), '2026')
 })

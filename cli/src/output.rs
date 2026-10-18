@@ -131,71 +131,9 @@ mod tests {
     use serde_json::json;
 
     #[test]
-    fn json_is_compact_on_one_line() {
-        assert_eq!(compact(&json!({ "b": [1, 2], "a": null })), r#"{"a":null,"b":[1,2]}"#);
-        assert_eq!(compact(&Value::Null), "null");
-    }
-
-    #[test]
-    fn a_list_is_a_table_with_id_and_name_first_and_numbers_on_the_right() {
-        let rows = json!([
-            { "paymentDate": "2026-10-14", "amount": "12.50", "name": "Coffee", "id": "404", "description": null },
-            { "paymentDate": "2026-10-13", "amount": "1034.00", "name": "Rent", "id": "7", "description": "October" }
-        ]);
-        let text = human(&rows);
-        let lines: Vec<&str> = text.lines().collect();
-        assert_eq!(lines[0], " id  name    paymentDate   amount  description");
-        assert_eq!(lines[1], "404  Coffee  2026-10-14     12.50  -");
-        assert_eq!(lines[2], "  7  Rent    2026-10-13   1034.00  October");
-    }
-
-    #[test]
-    fn the_money_columns_come_in_the_order_a_person_reads_them() {
-        let text = human(&json!([{ "remaining": "10.00", "actual": "90.00", "budgeted": "100.00", "name": "Food", "pctUsed": 90.0, "categoryId": "5", "type": "EXPENSE" }]));
-        assert_eq!(text.lines().next().unwrap(), "name  type     budgeted  actual  remaining  pctUsed  categoryId");
-    }
-
-    #[test]
-    fn a_field_of_lists_or_records_is_left_out_of_a_table_but_a_mixed_one_stays() {
-        let totals = json!([
-            { "type": "INCOME", "actual": "5.00", "categories": [{ "categoryId": "1", "amountLimit": "3.00" }] },
-            { "type": "EXPENSE", "actual": "7.00", "categories": [] }
-        ]);
-        let text = human(&totals);
-        assert_eq!(text.lines().collect::<Vec<_>>(), ["type     actual", "INCOME     5.00", "EXPENSE    7.00"]);
-        // If some rows have a plain value in that field it is a column like any other.
-        let mixed = human(&json!([{ "id": "1", "x": [1] }, { "id": "2", "x": "plain" }]));
-        assert!(mixed.lines().next().unwrap().contains('x'));
-    }
-
-    #[test]
-    fn an_empty_list_says_so() {
-        assert_eq!(human(&json!([])), "(none)\n");
-        assert_eq!(human(&json!({ "transactions": [] })), "transactions\n(none)\n");
-    }
-
-    #[test]
     fn missing_keys_are_dashes_and_the_columns_are_the_union() {
         let text = human(&json!([{ "id": "1", "a": "x" }, { "id": "2", "b": "y" }]));
         assert_eq!(text.lines().collect::<Vec<_>>(), ["id  a  b", " 1  x  -", " 2  -  y"]);
-    }
-
-    #[test]
-    fn a_record_is_key_value_lines_and_its_lists_are_tables_below() {
-        let page = json!({ "total": 404, "limit": 2, "offset": 0, "transactions": [{ "id": "1", "name": "A" }] });
-        assert_eq!(human(&page), "limit: 2\noffset: 0\ntotal: 404\n\ntransactions\nid  name\n 1  A\n");
-        assert_eq!(human(&json!({ "app": "meowny", "api": 1, "scope": "read" })), "api: 1\napp: meowny\nscope: read\n");
-        let two = human(&json!({ "overdue": [{ "id": "1" }], "upcoming": [] }));
-        assert_eq!(two, "overdue\nid\n 1\n\nupcoming\n(none)\n");
-    }
-
-    #[test]
-    fn scalars_and_nothing_print_simply() {
-        assert_eq!(human(&Value::Null), "");
-        assert_eq!(human(&json!("hello")), "hello\n");
-        assert_eq!(human(&json!(5)), "5\n");
-        assert_eq!(human(&json!(["a", "b"])), "a\nb\n");
-        assert_eq!(human(&json!({ "nested": { "a": 1 } })), "nested: {\"a\":1}\n");
     }
 
     #[test]

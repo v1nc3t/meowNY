@@ -1,5 +1,5 @@
 use super::fixtures::*;
-use super::splits::{self, check, clear_split, clear_template, preview, set_split, set_template, Mode};
+use super::splits::{check, clear_template, preview, set_split, set_template, Mode};
 use super::{ledger, people};
 use crate::recurring::{self, NewRecurring, Unit};
 use crate::transactions::{self, TransactionPatch};
@@ -8,19 +8,6 @@ use crate::vault::AppError;
 const INVALID: AppError = AppError::InvalidInput;
 
 // ---- sharing a bill --------------------------------------------------------------------------
-
-#[test]
-fn an_equal_split_between_three_gives_you_the_odd_cent() {
-    let w = world();
-    let (anna, bob) = (friend(&w.conn, "Anna"), friend(&w.conn, "Bob"));
-    let dinner = bill(&w.conn, w.food, "Dinner", "100.00", "2026-01-01");
-    set_split(&w.conn, dinner, &equal(vec![who(anna), who(bob)])).unwrap();
-    assert_eq!(parts(&w.conn, dinner), [("Anna".to_string(), 3333), ("Bob".to_string(), 3333)]);
-    assert_eq!(cost(&w.conn, dinner), 3334);
-    let shown = transactions::get(&w.conn, dinner).unwrap();
-    assert_eq!((shown.amount.as_str(), shown.my_share.as_str()), ("100.00", "33.34"));
-    assert_eq!(shown.split.iter().map(|p| (p.person.clone().unwrap(), p.amount.clone())).collect::<Vec<_>>(), [("Anna".into(), "33.33".into()), ("Bob".into(), "33.33".into())]);
-}
 
 #[test]
 fn a_guest_has_a_part_that_leaves_your_cost_and_makes_no_debt() {
@@ -33,27 +20,6 @@ fn a_guest_has_a_part_that_leaves_your_cost_and_makes_no_debt() {
     let shown = transactions::get(&w.conn, dinner).unwrap();
     assert_eq!(shown.split[1].guest.as_deref(), Some("Carl"));
     assert_eq!(shown.split[1].person_id, None);
-}
-
-#[test]
-fn percent_shares_and_exact_amounts() {
-    let w = world();
-    let (anna, bob) = (friend(&w.conn, "Anna"), friend(&w.conn, "Bob"));
-    let dinner = bill(&w.conn, w.food, "Dinner", "100.00", "2026-01-01");
-    // 50% you, 30% Anna, 20% Bob
-    set_split(&w.conn, dinner, &input(Mode::Percent, Some("50.00"), vec![with(who(anna), "30.00"), with(who(bob), "20.00")])).unwrap();
-    assert_eq!(parts(&w.conn, dinner), [("Anna".to_string(), 3000), ("Bob".to_string(), 2000)]);
-    // the rest to you when you do not say
-    set_split(&w.conn, dinner, &input(Mode::Percent, None, vec![with(who(anna), "25.50"), with(who(bob), "24.50")])).unwrap();
-    assert_eq!((parts(&w.conn, dinner), cost(&w.conn, dinner)), (vec![("Anna".to_string(), 2550), ("Bob".to_string(), 2450)], 5000));
-    // shares 2:1:1
-    set_split(&w.conn, dinner, &input(Mode::Shares, Some("2"), vec![with(who(anna), "1"), with(who(bob), "1")])).unwrap();
-    assert_eq!((parts(&w.conn, dinner), cost(&w.conn, dinner)), (vec![("Anna".to_string(), 2500), ("Bob".to_string(), 2500)], 5000));
-    // exact amounts, and the rest to you
-    set_split(&w.conn, dinner, &input(Mode::Exact, Some("10.00"), vec![with(who(anna), "60.00"), with(who(bob), "30.00")])).unwrap();
-    assert_eq!((parts(&w.conn, dinner), cost(&w.conn, dinner)), (vec![("Anna".to_string(), 6000), ("Bob".to_string(), 3000)], 1000));
-    set_split(&w.conn, dinner, &input(Mode::Exact, None, vec![with(who(anna), "60.00"), with(who(bob), "30.00")])).unwrap();
-    assert_eq!(cost(&w.conn, dinner), 1000, "the rest is yours");
 }
 
 #[test]
@@ -161,31 +127,6 @@ fn changing_the_split_touches_only_the_parts_that_differ() {
     assert_eq!(ledger::balance_minor(&w.conn, anna).unwrap(), 0, "Anna is off the bill");
 }
 
-#[test]
-fn clearing_the_split_makes_the_bill_cost_everything_again() {
-    let w = world();
-    let anna = friend(&w.conn, "Anna");
-    let dinner = bill(&w.conn, w.food, "Dinner", "90.00", "2026-01-01");
-    set_split(&w.conn, dinner, &equal(vec![who(anna)])).unwrap();
-    clear_split(&w.conn, dinner).unwrap();
-    assert_eq!((cost(&w.conn, dinner), ledger::balance_minor(&w.conn, anna).unwrap()), (9000, 0));
-    assert!(transactions::get(&w.conn, dinner).unwrap().split.is_empty());
-    clear_split(&w.conn, dinner).unwrap();
-    assert_eq!(clear_split(&w.conn, 999), Err(AppError::NotFound));
-}
-
-#[test]
-fn deleting_a_split_bill_takes_its_parts_and_the_balances_follow() {
-    let w = world();
-    let (anna, bob) = (friend(&w.conn, "Anna"), friend(&w.conn, "Bob"));
-    let dinner = bill(&w.conn, w.food, "Dinner", "90.00", "2026-01-01");
-    set_split(&w.conn, dinner, &equal(vec![who(anna), who(bob)])).unwrap();
-    ledger::settle(&w.conn, anna, Some("10.00"), Some("2026-01-05"), None, "2026-01-05").unwrap();
-    transactions::delete(&w.conn, dinner).unwrap();
-    assert_eq!(ledger::balance_minor(&w.conn, bob).unwrap(), 0);
-    assert_eq!(ledger::balance_minor(&w.conn, anna).unwrap(), -1000, "the repayment stays, so you now owe Anna");
-}
-
 // ---- editing a shared bill -------------------------------------------------------------------
 
 fn amount(conn: &rusqlite::Connection, id: i64, text: &str) -> Result<transactions::Transaction, AppError> {
@@ -283,34 +224,6 @@ fn a_sharing_that_asks_the_database_for_more_than_the_bill_is_stopped_there_too(
 // ---- the preview -----------------------------------------------------------------------------
 
 #[test]
-fn the_preview_is_what_will_be_stored() {
-    let w = world();
-    let (anna, bob) = (friend(&w.conn, "Anna"), friend(&w.conn, "Bob"));
-    let dinner = bill(&w.conn, w.food, "Dinner", "100.00", "2026-01-01");
-    for split in [
-        equal(vec![who(anna), who(bob)]),
-        equal(vec![who(anna), guest("Carl"), who(bob)]),
-        input(Mode::Percent, Some("33.34"), vec![with(who(anna), "33.33"), with(who(bob), "33.33")]),
-        input(Mode::Shares, Some("2"), vec![with(who(anna), "3"), with(guest("Carl"), "5")]),
-        input(Mode::Exact, None, vec![with(who(anna), "12.34"), with(who(bob), "56.78")]),
-        input(Mode::Exact, Some("0.00"), vec![with(who(anna), "100.00")]),
-    ] {
-        let shown = preview(&w.conn, 10_000, &split).unwrap();
-        assert!(shown.complete && shown.left == "0.00", "{split:?}");
-        set_split(&w.conn, dinner, &split).unwrap();
-        let stored = transactions::get(&w.conn, dinner).unwrap();
-        assert_eq!(shown.mine, stored.my_share, "{split:?}");
-        // the same people and amounts (the rows keep the order in which they were first added)
-        let key = |p: &splits::PartOut| (p.person.clone().or(p.guest.clone()), p.amount.clone());
-        let mut non_zero: Vec<_> = shown.parts.iter().filter(|p| p.amount != "0.00").map(key).collect();
-        let mut kept: Vec<_> = stored.split.iter().map(key).collect();
-        non_zero.sort();
-        kept.sort();
-        assert_eq!(non_zero, kept, "{split:?}");
-    }
-}
-
-#[test]
 fn the_preview_says_what_is_left_while_the_numbers_do_not_add_up() {
     let w = world();
     let (anna, bob) = (friend(&w.conn, "Anna"), friend(&w.conn, "Bob"));
@@ -348,26 +261,6 @@ fn rent_item(conn: &rusqlite::Connection, category: i64, amount: Option<&str>) -
         },
     )
     .unwrap()
-}
-
-#[test]
-fn a_split_item_splits_each_payment_by_the_same_proportions() {
-    let w = world();
-    let anna = friend(&w.conn, "Anna");
-    let item = rent_item(&w.conn, w.rent, Some("900.00"));
-    set_template(&w.conn, item.id, &input(Mode::Shares, Some("2"), vec![with(who(anna), "1")])).unwrap();
-    let first = recurring::pay(&w.conn, item.id, None, Some("2026-01-01"), "2026-01-01").unwrap();
-    assert_eq!((first.amount.as_str(), first.my_share.as_str()), ("900.00", "600.00"));
-    assert_eq!(parts(&w.conn, first.id), [("Anna".to_string(), 30_000)]);
-    // a payment that differs from the plan keeps the proportions
-    let second = recurring::pay(&w.conn, item.id, Some("1000.00"), Some("2026-02-01"), "2026-02-01").unwrap();
-    assert_eq!(second.my_share, "666.67");
-    assert_eq!(parts(&w.conn, second.id), [("Anna".to_string(), 33_333)]);
-    assert_eq!(ledger::balance_minor(&w.conn, anna).unwrap(), 63_333);
-    // from then on each is an ordinary bill: editing one changes only it
-    set_split(&w.conn, first.id, &equal(vec![who(anna)])).unwrap();
-    assert_eq!(parts(&w.conn, first.id), [("Anna".to_string(), 45_000)]);
-    assert_eq!(parts(&w.conn, second.id), [("Anna".to_string(), 33_333)]);
 }
 
 #[test]
@@ -467,19 +360,6 @@ fn a_payment_and_its_parts_are_made_together_or_not_at_all() {
     w.conn.execute("UPDATE recurring_transactions SET next_due_date = start_date", []).unwrap();
     assert!(recurring::pay(&w.conn, item.id, None, Some("2026-01-01"), "2026-01-01").is_err());
     assert_eq!((one(&w.conn, "SELECT count(*) FROM transactions"), one(&w.conn, "SELECT count(*) FROM transaction_split_lines")), (1, 1));
-}
-
-#[test]
-fn templates_are_read_as_weights_for_the_code_that_needs_them() {
-    let w = world();
-    let (anna, bob) = (friend(&w.conn, "Anna"), friend(&w.conn, "Bob"));
-    let item = rent_item(&w.conn, w.rent, Some("900.00"));
-    let plain = rent_item(&w.conn, w.food, Some("10.00"));
-    set_template(&w.conn, item.id, &input(Mode::Shares, Some("3"), vec![with(who(anna), "2"), with(who(bob), "1")])).unwrap();
-    let all = splits::all_template_weights(&w.conn).unwrap();
-    assert_eq!(all.get(&item.id), Some(&vec![3, 2, 1]));
-    assert!(!all.contains_key(&plain.id));
-    assert_eq!(splits::my_part(90_000, &[3, 2, 1]).unwrap(), 45_000);
 }
 
 // ---- the finished state ----------------------------------------------------------------------

@@ -208,6 +208,7 @@ pub const COMMANDS: &[&str] = &[
     "export_debts",
     "export_debts_preview",
     "bill_code",
+    "recurring_code",
     "bill_preview",
     "bill_accept",
     "debts_reminders",
@@ -1118,6 +1119,13 @@ pub fn clear_recurring_split(vault: Shared, id: String) -> Result<Recurring, App
 pub fn bill_code(vault: Shared, transaction_id: String, person_id: String, from: String) -> Result<String, AppError> {
     let (transaction, person) = (categories::parse_id(&transaction_id)?, categories::parse_id(&person_id)?);
     vault.with_conn(|c| codes::make(c, transaction, person, &from))
+}
+
+/// The text of the code for one friend's part of the next payment of a recurring item that is split (see `codes::make_recurring`).
+#[tauri::command]
+pub fn recurring_code(vault: Shared, recurring_id: String, person_id: String, from: String) -> Result<String, AppError> {
+    let (recurring, person) = (categories::parse_id(&recurring_id)?, categories::parse_id(&person_id)?);
+    vault.with_conn(|c| codes::make_recurring(c, recurring, person, &from))
 }
 
 /// What a code holds, for the dialog before the person accepts or denies it. Writes nothing.

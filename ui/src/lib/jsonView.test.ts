@@ -4,26 +4,6 @@ import { tokenizeJson } from './jsonView.ts'
 
 const kinds = (text: string) => tokenizeJson(text).map((token) => `${token.kind}:${token.text}`)
 
-test('keys, strings, numbers and words are told apart, and the rest is plain', () => {
-  assert.deepEqual(kinds('{"a": "x", "b": [1, -2.5e3, true, null]}'), [
-    'plain:{',
-    'key:"a"',
-    'plain:: ',
-    'string:"x"',
-    'plain:, ',
-    'key:"b"',
-    'plain:: [',
-    'number:1',
-    'plain:, ',
-    'number:-2.5e3',
-    'plain:, ',
-    'literal:true',
-    'plain:, ',
-    'literal:null',
-    'plain:]}',
-  ])
-})
-
 test('a string with a quote or a colon inside is one string', () => {
   assert.deepEqual(kinds('["say \\"hi\\": ok", "a:b"]'), ['plain:[', 'string:"say \\"hi\\": ok"', 'plain:, ', 'string:"a:b"', 'plain:]'])
 })

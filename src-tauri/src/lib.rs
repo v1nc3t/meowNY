@@ -319,6 +319,7 @@ pub fn run() {
             commands::export_debts,
             commands::export_debts_preview,
             commands::bill_code,
+            commands::recurring_code,
             commands::bill_preview,
             commands::bill_accept,
             commands::debts_reminders,

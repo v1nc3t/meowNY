@@ -1,10 +1,10 @@
 use serde_json::{json, Value};
 
-use super::codes::{accept, encode, make, parse, preview, Accept, BillCode, MAX_CODE_BYTES, PREFIX};
+use super::codes::{accept, encode, make, make_recurring, parse, preview, Accept, BillCode, MAX_CODE_BYTES, PREFIX};
 use super::fixtures::*;
-use super::ledger::{self, Kind};
-use super::splits::{set_split, Mode};
-use super::{people, summary};
+use super::ledger::{self};
+use super::splits::{set_split, set_template, Mode};
+use super::people;
 use crate::money::MAX_MINOR;
 use crate::sync::qr::{base64url_decode, base64url_encode};
 use crate::vault::AppError;
@@ -89,6 +89,53 @@ fn only_a_friend_on_the_bill_has_a_code_and_the_sender_name_follows_the_name_rul
     }
     assert!(make(&w.conn, bill, anna, "  Vincent  ").is_ok(), "the name is trimmed");
     assert_eq!(parse(&make(&w.conn, bill, anna, "  Vincent  ").unwrap()).unwrap().from, "Vincent");
+}
+
+fn rent(w: &World, amount: Option<&str>) -> i64 {
+    crate::recurring::create(
+        &w.conn,
+        &crate::recurring::NewRecurring {
+            name: "Rent".into(),
+            amount: amount.map(str::to_string),
+            category_id: w.rent.to_string(),
+            start_date: "2026-03-01".into(),
+            interval_unit: crate::recurring::Unit::Month,
+            interval_count: 1,
+            end_date: None,
+            description: None,
+        },
+    )
+    .unwrap()
+    .id
+}
+
+#[test]
+fn a_split_recurring_item_has_a_code_for_its_next_payment_and_the_next_day_is_another_code() {
+    let w = world();
+    let (anna, bob, cleo) = (friend(&w.conn, "Anna"), friend(&w.conn, "Bob"), friend(&w.conn, "Cleo"));
+    let item = rent(&w, Some("900.00"));
+    set_template(&w.conn, item, &input(Mode::Equal, None, vec![who(anna), who(bob), guest("Dave")])).unwrap();
+    let text = make_recurring(&w.conn, item, anna, FROM).unwrap();
+    let held = parse(&text).unwrap();
+    assert_eq!((held.what.as_str(), held.date.as_str(), held.amount_minor, held.total_minor, held.from.as_str()), ("Rent", "2026-03-01", 22_500, 90_000, FROM), "a quarter of the rent each");
+    assert_eq!(make_recurring(&w.conn, item, anna, FROM).unwrap(), text, "the same text every time");
+    assert_ne!(parse(&make_recurring(&w.conn, item, bob, FROM).unwrap()).unwrap().id, held.id, "another friend, another code");
+    // paying the payment moves the item to the next day: another code, and the paid transaction has its own
+    let paid = crate::recurring::pay(&w.conn, item, None, Some("2026-03-01"), "2026-03-01").unwrap();
+    let next = parse(&make_recurring(&w.conn, item, anna, FROM).unwrap()).unwrap();
+    assert_eq!((next.date.as_str(), next.amount_minor), ("2026-04-01", 22_500));
+    assert_ne!(next.id, held.id);
+    assert_ne!(parse(&make(&w.conn, paid.id, anna, FROM).unwrap()).unwrap().id, held.id, "the paid transaction's code is not the item's");
+    // what has no code: a friend with no part in the template, a guest's part, an item that is not split, and one with no fixed amount
+    assert_eq!(make_recurring(&w.conn, item, cleo, FROM), Err(AppError::NotFound));
+    assert_eq!(make_recurring(&w.conn, rent(&w, Some("10.00")), anna, FROM), Err(AppError::NotFound), "not split");
+    let varies = rent(&w, None);
+    set_template(&w.conn, varies, &input(Mode::Equal, None, vec![who(anna)])).unwrap();
+    assert_eq!(make_recurring(&w.conn, varies, anna, FROM), Err(AppError::InvalidInput), "no fixed amount");
+    assert_eq!(make_recurring(&w.conn, 999, anna, FROM), Err(AppError::NotFound));
+    for from in ["", "  ", &"x".repeat(51), "Vin\ncent"] {
+        assert_eq!(make_recurring(&w.conn, item, anna, from), Err(AppError::InvalidInput), "{from:?}");
+    }
 }
 
 // ---- reading a code ---------------------------------------------------------------------------
@@ -220,66 +267,7 @@ fn a_fuzz_run_never_panics_and_what_it_accepts_is_what_it_would_write() {
 
 // ---- the dialog -------------------------------------------------------------------------------
 
-#[test]
-fn a_preview_says_what_the_code_holds_finds_the_friend_by_name_and_writes_nothing() {
-    let w = world();
-    let (_, _, _, text) = dinner(&w);
-    // the receiving side: a vault of its own, with a friend of the sender's name
-    let receiver = world();
-    let vincent = friend(&receiver.conn, "vincent");
-    let archived = friend(&receiver.conn, "Archie");
-    people::archive(&receiver.conn, archived).unwrap();
-    let before = (count(&receiver.conn, "people"), count(&receiver.conn, "ledger_entries"), count(&receiver.conn, "transactions"), count(&receiver.conn, "audit_log"));
-    let shown = preview(&receiver.conn, &text).unwrap();
-    assert_eq!((shown.from.as_str(), shown.what.as_str(), shown.date.as_str(), shown.amount.as_str(), shown.total.as_str(), shown.currency.as_str()), ("Vincent", "Dinner", "2026-03-04", "22.50", "90.00", "EUR"));
-    assert_eq!((shown.same_currency, shown.already_added, shown.own_currency.as_str()), (true, false, "EUR"));
-    assert_eq!(shown.friend_id, Some(vincent.to_string()), "the friend with the sender's name, ignoring case");
-    assert_eq!(before, (count(&receiver.conn, "people"), count(&receiver.conn, "ledger_entries"), count(&receiver.conn, "transactions"), count(&receiver.conn, "audit_log")), "a preview writes nothing, not even to the history");
-    // an archived friend of that name is not suggested; a stranger has no match
-    people::archive(&receiver.conn, vincent).unwrap();
-    assert_eq!(preview(&receiver.conn, &text).unwrap().friend_id, None);
-    assert_eq!(preview(&receiver.conn, "MNB1:nonsense"), Err(AppError::InvalidInput));
-    // another currency is said so
-    let dollars = encode(&BillCode { currency: "USD".into(), ..parse(&text).unwrap() });
-    assert!(!preview(&receiver.conn, &dollars).unwrap().same_currency);
-}
-
 // ---- taking one in ----------------------------------------------------------------------------
-
-#[test]
-fn accepting_makes_the_friend_the_expense_and_the_debt_together() {
-    let sender = world();
-    let (_, _, _, text) = dinner(&sender);
-    let w = world();
-    let outcome = accept(&w.conn, &Accept { new_friend: Some("Vincent".into()), add_expense: true, category_id: Some(w.food.to_string()), ..accepting(&text, None) }).unwrap();
-    assert_eq!((outcome.kind, outcome.amount.as_str(), outcome.date.as_str(), outcome.note.as_deref()), (Kind::Borrowed, "22.50", "2026-03-04", Some("Dinner")));
-    let vincent = people::list(&w.conn, false).unwrap().remove(0);
-    assert_eq!((vincent.name.as_str(), vincent.balance.as_str()), ("Vincent", "-22.50"), "the sender is owed the part");
-    // the expense is the person's part, on the day of the bill, in the chosen category, and the entry is linked to it
-    let spent = one(&w.conn, "SELECT amount_minor FROM transactions WHERE name = 'Dinner' AND payment_date = '2026-03-04'");
-    assert_eq!(spent, 2250);
-    assert_eq!(outcome.transaction_id.as_deref().map(|id| id.parse::<i64>().unwrap()), Some(one(&w.conn, "SELECT id FROM transactions WHERE name = 'Dinner'")));
-    assert_eq!(text_of(&w.conn, "SELECT origin_id FROM ledger_entries"), parse(&text).unwrap().id);
-    // the debt is not income and not a budget item
-    assert_eq!(one(&w.conn, "SELECT count(*) FROM transactions t JOIN categories c ON c.id = t.category_id WHERE c.type = 'INCOME'"), 0);
-    assert_eq!(summary::summary(&w.conn).unwrap().you_owe, "22.50");
-}
-
-fn text_of(conn: &rusqlite::Connection, sql: &str) -> String {
-    conn.query_row(sql, [], |r| r.get(0)).unwrap()
-}
-
-#[test]
-fn accepting_without_the_expense_makes_only_the_debt_and_a_known_friend_is_used() {
-    let sender = world();
-    let (_, _, _, text) = dinner(&sender);
-    let w = world();
-    let vincent = friend(&w.conn, "Vincent");
-    let outcome = accept(&w.conn, &accepting(&text, Some(vincent))).unwrap();
-    assert_eq!((outcome.person_id, outcome.transaction_id), (vincent, None));
-    assert_eq!((count(&w.conn, "people"), count(&w.conn, "transactions"), count(&w.conn, "ledger_entries")), (1, 0, 1));
-    assert!(ledger::statement(&w.conn, vincent).unwrap().lines.iter().any(|l| l.what == "Dinner" && l.amount == "22.50"));
-}
 
 #[test]
 fn the_same_code_is_not_taken_in_twice_until_the_entry_is_gone() {

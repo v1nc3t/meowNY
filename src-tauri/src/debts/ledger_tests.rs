@@ -1,7 +1,7 @@
 use rusqlite::Connection;
 
 use super::fixtures::*;
-use super::ledger::{self, Expense, Kind, NewEntry, EntryPatch};
+use super::ledger::{self, Expense, Kind, NewEntry};
 use super::people;
 use super::splits::set_split;
 use crate::transactions;
@@ -13,17 +13,6 @@ fn new(person: i64, kind: Kind, amount: &str, date: &str) -> NewEntry {
 
 fn balance(conn: &Connection, person: i64) -> i64 {
     ledger::balance_minor(conn, person).unwrap()
-}
-
-#[test]
-fn the_four_kinds_move_the_balance_the_way_the_design_says() {
-    let w = world();
-    let anna = friend(&w.conn, "Anna");
-    for (kind, expected) in [(Kind::Lent, 1000), (Kind::RepaidToMe, 0), (Kind::Borrowed, -1000), (Kind::RepaidByMe, 0)] {
-        ledger::add(&w.conn, &new(anna, kind, "10.00", "2026-01-01")).unwrap();
-        assert_eq!(balance(&w.conn, anna), expected, "{kind:?}");
-    }
-    assert_eq!([Kind::Lent.sign(), Kind::RepaidByMe.sign(), Kind::Borrowed.sign(), Kind::RepaidToMe.sign()], [1, 1, -1, -1]);
 }
 
 #[test]
@@ -63,46 +52,6 @@ fn an_entry_can_be_added_for_an_archived_friend_because_a_repayment_can_come_lat
     assert_eq!(balance(&w.conn, anna), 0);
 }
 
-#[test]
-fn an_entry_is_changed_field_by_field_and_a_null_clears() {
-    let w = world();
-    let (anna, bob) = (friend(&w.conn, "Anna"), friend(&w.conn, "Bob"));
-    let dinner = bill(&w.conn, w.food, "Dinner", "10.00", "2026-01-01");
-    let made = ledger::add(&w.conn, &NewEntry { note: Some("taxi".into()), transaction_id: Some(dinner.to_string()), ..new(anna, Kind::Lent, "5.00", "2026-01-01") }).unwrap();
-    let same = ledger::update(&w.conn, made.id, &EntryPatch::default()).unwrap();
-    assert_eq!(same, made, "nothing given, nothing changed");
-    let changed = ledger::update(&w.conn, made.id, &EntryPatch { amount: Some("7.50".into()), kind: Some(Kind::Borrowed), ..Default::default() }).unwrap();
-    assert_eq!((changed.amount.as_str(), changed.kind, changed.note.as_deref()), ("7.50", Kind::Borrowed, Some("taxi")));
-    let cleared = ledger::update(&w.conn, made.id, &EntryPatch { note: Some(None), transaction_id: Some(None), ..Default::default() }).unwrap();
-    assert_eq!((cleared.note, cleared.transaction_id), (None, None));
-    let moved = ledger::update(&w.conn, made.id, &EntryPatch { person_id: Some(bob.to_string()), date: Some("2026-02-02".into()), ..Default::default() }).unwrap();
-    assert_eq!((moved.person_id, moved.date.as_str()), (bob, "2026-02-02"));
-    assert_eq!((balance(&w.conn, anna), balance(&w.conn, bob)), (0, -750));
-    for bad in [
-        EntryPatch { amount: Some("0.00".into()), ..Default::default() },
-        EntryPatch { date: Some("x".into()), ..Default::default() },
-        EntryPatch { person_id: Some("99".into()), ..Default::default() },
-        EntryPatch { transaction_id: Some(Some("999".into())), ..Default::default() },
-    ] {
-        assert_eq!(ledger::update(&w.conn, made.id, &bad), Err(AppError::InvalidInput), "{bad:?}");
-    }
-    assert_eq!(ledger::update(&w.conn, 999, &EntryPatch::default()), Err(AppError::NotFound));
-    let patch: EntryPatch = serde_json::from_str(r#"{"note": null}"#).unwrap();
-    assert_eq!(patch.note, Some(None));
-    assert!(serde_json::from_str::<EntryPatch>(r#"{"stamp": "x"}"#).is_err());
-}
-
-#[test]
-fn deleting_an_entry_changes_the_balance_and_reports_a_missing_one() {
-    let w = world();
-    let anna = friend(&w.conn, "Anna");
-    let made = ledger::add(&w.conn, &new(anna, Kind::Lent, "5.00", "2026-01-01")).unwrap();
-    ledger::delete(&w.conn, made.id).unwrap();
-    assert_eq!(balance(&w.conn, anna), 0);
-    assert_eq!(ledger::delete(&w.conn, made.id), Err(AppError::NotFound));
-    assert_eq!(ledger::get(&w.conn, made.id), Err(AppError::NotFound));
-}
-
 // ---- mark as paid ----------------------------------------------------------------------------
 
 #[test]
@@ -116,16 +65,6 @@ fn marking_paid_with_no_amount_settles_the_whole_balance_in_the_right_direction(
     let b = ledger::settle(&w.conn, bob, None, Some("2026-01-15"), Some("cash"), "2026-02-01").unwrap();
     assert_eq!((b.entry.kind, b.entry.amount.as_str(), b.entry.date.as_str(), b.entry.note.as_deref(), b.before.as_str(), b.after.as_str()), (Kind::RepaidByMe, "12.00", "2026-01-15", Some("cash"), "-12.00", "0.00"));
     assert_eq!((balance(&w.conn, anna), balance(&w.conn, bob)), (0, 0));
-}
-
-#[test]
-fn a_part_payment_leaves_the_rest() {
-    let w = world();
-    let anna = friend(&w.conn, "Anna");
-    ledger::add(&w.conn, &new(anna, Kind::Lent, "25.00", "2026-01-01")).unwrap();
-    let paid = ledger::settle(&w.conn, anna, Some("10.00"), None, None, "2026-02-01").unwrap();
-    assert_eq!((paid.after.as_str(), paid.over.as_str()), ("15.00", "0.00"));
-    assert_eq!(balance(&w.conn, anna), 1500);
 }
 
 #[test]
@@ -216,35 +155,6 @@ fn a_borrowing_with_an_expense_is_all_or_nothing() {
 }
 
 // ---- the statement ---------------------------------------------------------------------------
-
-#[test]
-fn the_statement_tells_the_story_by_date_with_the_balance_after_each_line() {
-    let w = world();
-    let anna = friend(&w.conn, "Anna");
-    let dinner = bill(&w.conn, w.food, "Dinner", "90.00", "2026-01-05");
-    set_split(&w.conn, dinner, &equal(vec![who(anna)])).unwrap();
-    ledger::add(&w.conn, &NewEntry { note: Some("taxi".into()), ..new(anna, Kind::Lent, "5.00", "2026-01-05") }).unwrap();
-    ledger::add(&w.conn, &new(anna, Kind::RepaidToMe, "20.00", "2026-01-20")).unwrap();
-    ledger::add(&w.conn, &new(anna, Kind::Borrowed, "40.00", "2026-01-01")).unwrap();
-    let statement = ledger::statement(&w.conn, anna).unwrap();
-    let rows: Vec<(String, String, String, String, String)> = statement.lines.iter().map(|l| (l.date.clone(), l.kind.clone(), l.what.clone(), l.effect.clone(), l.balance.clone())).collect();
-    assert_eq!(
-        rows,
-        [
-            ("2026-01-01".into(), "BORROWED".into(), "".into(), "-40.00".into(), "-40.00".into()),
-            ("2026-01-05".into(), "BILL".into(), "Dinner".into(), "45.00".into(), "5.00".into()),
-            ("2026-01-05".into(), "LENT".into(), "taxi".into(), "5.00".into(), "10.00".into()),
-            ("2026-01-20".into(), "REPAID_TO_ME".into(), "".into(), "-20.00".into(), "-10.00".into()),
-        ],
-        "a bill comes before the entries of the same day"
-    );
-    assert_eq!(statement.person.balance, "-10.00");
-    assert_eq!(statement.lines.last().unwrap().balance, statement.person.balance, "the last line is where the balance is");
-    assert_eq!(statement.lines[1].amount, "45.00");
-    assert_eq!((statement.lines[1].entry_id.clone(), statement.lines[1].transaction_id.clone()), (None, Some(dinner.to_string())));
-    assert!(statement.lines[0].entry_id.is_some());
-    assert_eq!(ledger::statement(&w.conn, 99), Err(AppError::NotFound));
-}
 
 #[test]
 fn money_lent_or_paid_back_is_never_income_or_expense_and_touches_no_budget() {

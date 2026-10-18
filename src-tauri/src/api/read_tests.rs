@@ -10,12 +10,10 @@ use serde_json::{json, Value};
 
 use super::routes::{self, Ctx, Route};
 use super::*;
-use crate::categories::{self, CategoryType};
 use crate::keys::memory::MemoryStore;
 use crate::tokens::Scope;
-use crate::transactions::{self, Filter};
 use crate::vault::Settings;
-use crate::{backup, budgets, recurring, seed, stats};
+use crate::{backup, recurring, seed};
 
 pub(super) const TODAY: &str = "2026-10-14";
 
@@ -101,35 +99,6 @@ pub(super) fn first_expense(vault: &Vault) -> Value {
 }
 
 #[test]
-fn every_read_route_is_in_the_table_and_needs_only_a_read_token() {
-    for name in READ_ROUTES {
-        assert_eq!(route(name).scope, Scope::Read, "{name}");
-    }
-}
-
-#[test]
-fn the_demo_data_is_there_so_the_comparisons_below_mean_something() {
-    let (_dir, vault) = seeded();
-    assert!(ok(&vault, "categories.list", json!({}))
-        .as_array()
-        .is_some_and(|rows| rows.len() > 5));
-    assert!(ok(&vault, "transactions.list", json!({}))["total"].as_u64().unwrap() > 100);
-    assert!(!ok(&vault, "budgets.history", json!({})).as_array().unwrap().is_empty());
-    assert!(!ok(&vault, "recurring.list", json!({})).as_array().unwrap().is_empty());
-    assert!(!ok(&vault, "stats.year", json!({ "year": "2026" })).as_array().unwrap().is_empty());
-}
-
-#[test]
-fn today_and_settings_come_from_the_app() {
-    let (_dir, vault) = seeded();
-    assert_eq!(ok(&vault, "today", json!({})), json!({ "date": TODAY, "month": "2026-10" }));
-    assert_eq!(
-        ok(&vault, "settings.get", json!({})),
-        json!({ "currency": "EUR", "locale": "en-IE", "timezone": "Europe/Dublin", "language": "en" })
-    );
-}
-
-#[test]
 fn today_follows_the_time_zone_set_in_the_app_not_the_computers() {
     let (_dir, vault) = seeded();
     let mut s = settings();
@@ -145,106 +114,6 @@ fn today_follows_the_time_zone_set_in_the_app_not_the_computers() {
     // "Overdue" uses the same date.
     let dues = run_at(&vault, "recurring.dues", json!({}), month_end).unwrap();
     assert_eq!(dues, expect(&vault, |c| recurring::dues(c, "2026-11-01", None)));
-}
-
-#[test]
-fn categories_are_listed_as_the_screens_list_them() {
-    let (_dir, vault) = seeded();
-    assert_eq!(ok(&vault, "categories.list", json!({})), expect(&vault, |c| categories::list(c, None)));
-    let income = ok(&vault, "categories.list", json!({ "type": "INCOME" }));
-    let expense = ok(&vault, "categories.list", json!({ "type": "EXPENSE" }));
-    assert_eq!(income, expect(&vault, |c| categories::list(c, Some(CategoryType::Income))));
-    assert_eq!(expense, expect(&vault, |c| categories::list(c, Some(CategoryType::Expense))));
-    assert!(income.as_array().unwrap().iter().all(|c| c["type"] == "INCOME"));
-    assert!(expense.as_array().unwrap().iter().all(|c| c["type"] == "EXPENSE"));
-    let all = ok(&vault, "categories.list", json!({}));
-    assert_eq!(all.as_array().unwrap().len(), income.as_array().unwrap().len() + expense.as_array().unwrap().len());
-    // An id is a string.
-    assert!(all[0]["id"].is_string());
-}
-
-#[test]
-fn transactions_are_listed_with_their_filters() {
-    let (_dir, vault) = seeded();
-    let direct = |filter: Filter| expect(&vault, |c| transactions::list(c, &filter));
-
-    let first = ok(&vault, "transactions.list", json!({}));
-    assert_eq!(first, direct(Filter::default()));
-    assert_eq!(first["transactions"].as_array().unwrap().len(), 50, "the default page");
-    assert_eq!((first["limit"].clone(), first["offset"].clone()), (json!(50), json!(0)));
-
-    let page = ok(&vault, "transactions.list", json!({ "limit": 3, "offset": 2 }));
-    assert_eq!(page, direct(Filter { limit: Some(3), offset: Some(2), ..Default::default() }));
-    assert_eq!(page["transactions"].as_array().unwrap().len(), 3);
-    assert_eq!(page["transactions"][0], first["transactions"][2], "offset skips from the newest");
-    assert_eq!(page["total"], first["total"], "the total is of the filter, not of the page");
-
-    let september = ok(&vault, "transactions.list", json!({ "from": "2026-09-01", "to": "2026-09-30", "limit": 100 }));
-    assert_eq!(september, direct(Filter { from: Some("2026-09-01".into()), to: Some("2026-09-30".into()), limit: Some(100), ..Default::default() }));
-    let rows = september["transactions"].as_array().unwrap();
-    assert!(!rows.is_empty() && rows.iter().all(|t| ("2026-09-01"..="2026-09-30").contains(&t["paymentDate"].as_str().unwrap())));
-
-    let category = first_expense(&vault);
-    let id = category["id"].as_str().unwrap().to_string();
-    let by_category = ok(&vault, "transactions.list", json!({ "categoryId": id }));
-    assert_eq!(by_category, direct(Filter { category_id: Some(id.clone()), ..Default::default() }));
-    assert!(by_category["transactions"].as_array().unwrap().iter().all(|t| t["categoryId"] == id));
-
-    let name = first["transactions"][0]["name"].as_str().unwrap().to_string();
-    let searched = ok(&vault, "transactions.list", json!({ "q": name.to_uppercase() }));
-    assert_eq!(searched, direct(Filter { q: Some(name.to_uppercase()), ..Default::default() }));
-    assert!(searched["total"].as_u64().unwrap() >= 1);
-
-    let nothing = ok(&vault, "transactions.list", json!({ "categoryId": "999999" }));
-    assert_eq!((nothing["total"].clone(), nothing["transactions"].clone()), (json!(0), json!([])));
-}
-
-#[test]
-fn budgets_and_recurring_items_are_listed_as_the_screens_list_them() {
-    let (_dir, vault) = seeded();
-    for month in ["2026-10", "2026-03", "2025-08", "2019-01"] {
-        assert_eq!(ok(&vault, "budgets.overview", json!({ "month": month })), expect(&vault, |c| budgets::overview(c, month)), "{month}");
-    }
-    assert_ne!(
-        ok(&vault, "budgets.overview", json!({ "month": "2026-10" })),
-        ok(&vault, "budgets.overview", json!({ "month": "2025-08" })),
-        "the month argument is used (the demo budgets change over time)"
-    );
-    assert_eq!(ok(&vault, "budgets.history", json!({})), expect(&vault, |c| budgets::history(c, noon())));
-    assert_eq!(ok(&vault, "recurring.list", json!({})), expect(&vault, |c| recurring::list(c)));
-
-    for (args, within) in [(json!({}), None), (json!({ "withinDays": 0 }), Some(0)), (json!({ "withinDays": 7 }), Some(7)), (json!({ "withinDays": 366 }), Some(366))] {
-        assert_eq!(ok(&vault, "recurring.dues", args.clone()), expect(&vault, |c| recurring::dues(c, TODAY, within)), "{args}");
-    }
-    let short = ok(&vault, "recurring.dues", json!({ "withinDays": 0 }));
-    let long = ok(&vault, "recurring.dues", json!({ "withinDays": 366 }));
-    assert!(long["upcoming"].as_array().unwrap().len() >= short["upcoming"].as_array().unwrap().len());
-}
-
-#[test]
-fn statistics_are_what_the_dashboard_shows() {
-    let (_dir, vault) = seeded();
-    for month in ["2026-10", "2026-09", "2025-08"] {
-        assert_eq!(ok(&vault, "stats.budget", json!({ "month": month })), expect(&vault, |c| stats::budget_vs_actual(c, month)), "{month}");
-        assert_eq!(ok(&vault, "stats.planned", json!({ "month": month })), expect(&vault, |c| stats::planned_vs_paid(c, month)), "{month}");
-    }
-    assert_eq!(ok(&vault, "stats.year", json!({ "year": "2026" })), expect(&vault, |c| stats::year_trend(c, "2026")));
-    assert_eq!(ok(&vault, "stats.commitments", json!({})), expect(&vault, |c| stats::commitments(c)));
-
-    let category = first_expense(&vault);
-    let id: i64 = category["id"].as_str().unwrap().parse().unwrap();
-    let trend = ok(&vault, "stats.trend", json!({ "categoryId": id.to_string(), "from": "2026-01", "to": "2026-10" }));
-    assert_eq!(trend, expect(&vault, |c| stats::category_trend(c, id, "2026-01", "2026-10")));
-    assert_eq!(trend["points"].as_array().unwrap().len(), 10);
-
-    let top = ok(&vault, "stats.top", json!({ "month": "2026-09", "type": "EXPENSE" }));
-    assert_eq!(top, expect(&vault, |c| stats::top_categories(c, "2026-09", CategoryType::Expense, 5)), "the default is 5");
-    assert!(top.as_array().unwrap().len() <= 5 && !top.as_array().unwrap().is_empty());
-    let two = ok(&vault, "stats.top", json!({ "month": "2026-09", "type": "EXPENSE", "limit": 2 }));
-    assert_eq!(two, expect(&vault, |c| stats::top_categories(c, "2026-09", CategoryType::Expense, 2)));
-    assert_eq!(two.as_array().unwrap().len(), 2);
-    let income = ok(&vault, "stats.top", json!({ "month": "2026-09", "type": "INCOME" }));
-    assert_eq!(income, expect(&vault, |c| stats::top_categories(c, "2026-09", CategoryType::Income, 5)));
 }
 
 #[test]

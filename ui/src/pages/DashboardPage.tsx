@@ -4,6 +4,8 @@ import { debts, type Summary } from '../api/debts'
 import { errorText } from '../api/invoke'
 import { monthNames, shiftMonth, withYear, yearChoices } from '../api/months'
 import Dropdown from '../components/Dropdown'
+import RecurringDashboard, { SOON_DAYS } from '../components/RecurringDashboard'
+import { recurring, type Dues, type Recurring } from '../api/recurring'
 import { stats, type BudgetVsActual, type Commitments, type PlannedVsPaid, type TopCategory, type YearPoint } from '../api/stats'
 import { useToday, type Today } from '../api/today'
 import { formatMoney, formatPercent, toMinor } from '../lib/money'
@@ -11,7 +13,7 @@ import { useMoneySettings, type MoneySettings } from '../hooks/useMoneySettings'
 import { useNotice } from '../hooks/useNotice'
 import { useI18n, useT } from '../i18n/context'
 import { useShortcut } from '../keys/registry'
-import { changePercent, niceCeil, savingsRateText, usedPercent } from './dashboardMath'
+import { changePercent, niceCeil, savingsRateText, slicePath, usedPercent } from './dashboardMath'
 
 const TOP_CATEGORIES = 7
 
@@ -37,6 +39,8 @@ function DashboardView({ settings, now }: { settings: MoneySettings; now: Today 
   const [data, setData] = useState<MonthData | null>(null)
   // who owes what, over all time: it does not follow the month
   const [owed, setOwed] = useState<Summary | null>(null)
+  // the recurring items that are overdue or due soon, and all of them (for those that are split): they do not follow the month either
+  const [recurringNow, setRecurringNow] = useState<{ dues: Dues; items: Recurring[] } | null>(null)
   const [message, setMessage] = useNotice()
 
   useEffect(() => {
@@ -44,6 +48,19 @@ function DashboardView({ settings, now }: { settings: MoneySettings; now: Today 
     void debts.summary().then(
       (summary) => {
         if (!cancelled) setOwed(summary)
+      },
+      () => undefined,
+    )
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  useEffect(() => {
+    let cancelled = false
+    void Promise.all([recurring.dues(SOON_DAYS), recurring.list()]).then(
+      ([dues, items]) => {
+        if (!cancelled) setRecurringNow({ dues, items })
       },
       () => undefined,
     )
@@ -153,6 +170,9 @@ function DashboardView({ settings, now }: { settings: MoneySettings; now: Today 
               <BudgetBars bva={data.bva} settings={settings} />
             </div>
           </div>
+          {recurringNow ? (
+            <RecurringDashboard dues={recurringNow.dues} items={recurringNow.items} today={now.date} currency={settings.currency} locale={settings.locale} />
+          ) : null}
         </div>
       ) : null}
     </section>
@@ -378,8 +398,8 @@ function YearCharts({ year, month, onPick, settings }: { year: YearPoint[]; mont
   )
 }
 
-const DONUT_R = 40
-const DONUT_LEN = 2 * Math.PI * DONUT_R
+// How far a slice runs under the next one (a fraction of the way round), so that no thin gap shows between two slices.
+const DONUT_OVERLAP = 0.0015
 
 /** Expenses by category as a donut and a list. Hovering a list row or a slice highlights both. */
 function Spending({ top, total, settings }: { top: TopCategory[]; total: string; settings: MoneySettings }) {
@@ -397,18 +417,21 @@ function Spending({ top, total, settings }: { top: TopCategory[]; total: string;
     <div className="dash-donut">
       <div className="donut-wrap">
         <svg className="donut" viewBox="0 0 100 100" aria-hidden="true">
-          {items.map((item) => {
-            const len = (item.value / sum) * DONUT_LEN
+          {items.map((item, at) => {
+            // The slice is a shape with two straight edges (not a dash of a circle, whose ends came out deformed when a slice was thin).
+            // Each runs a hair under the next one, which is drawn after it and covers it; the last stops where it should (it would cover
+            // the start of the first). While a slice is hovered the others are see-through, so where two overlapped a lighter line would
+            // show: there they end where they end.
+            const from = starts[item.key] / sum
+            const to = Math.min((starts[item.key] + item.value) / sum, 1)
+            const next = items[at + 1]
+            const run = next === undefined || hover !== null ? 0 : Math.min(DONUT_OVERLAP, next.value / sum)
             return (
-              <circle
+              <path
                 key={item.key}
                 className={`seg-${item.key}${hover !== null && hover !== item.key ? ' dim' : ''}`}
-                cx="50"
-                cy="50"
-                r={DONUT_R}
-                strokeWidth={hover === item.key ? 18 : 14}
-                strokeDasharray={`${len} ${DONUT_LEN - len}`}
-                strokeDashoffset={-(starts[item.key] / sum) * DONUT_LEN}
+                d={slicePath(from, Math.min(to + run, 1))}
+                fillRule="evenodd"
                 onMouseEnter={() => setHover(item.key)}
                 onMouseLeave={() => setHover(null)}
               />

@@ -118,6 +118,7 @@ const COMMANDS: &[&str] = &[
     "export_debts",
     "export_debts_preview",
     "bill_code",
+    "recurring_code",
     "bill_preview",
     "bill_accept",
     "debts_reminders",

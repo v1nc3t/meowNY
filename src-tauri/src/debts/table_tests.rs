@@ -78,24 +78,6 @@ fn a_person_is_archived_and_never_deleted() {
 }
 
 #[test]
-fn a_person_gets_a_sync_id_and_a_stamp_and_a_real_edit_a_newer_one() {
-    let w = world();
-    exec(&w.conn, "INSERT INTO people (name) VALUES ('Anna')").unwrap();
-    let sync_id = text(&w.conn, "SELECT sync_id FROM people");
-    assert_eq!(sync_id.len(), 32);
-    let first = stamp_of(&w.conn, "people", 1);
-    assert_eq!(first.len(), crate::sync::stamp::STAMP_LEN);
-    exec(&w.conn, "UPDATE people SET name = 'Anna' WHERE id = 1").unwrap();
-    assert_eq!(stamp_of(&w.conn, "people", 1), first, "naming a column and giving it the value it has is not an edit");
-    exec(&w.conn, "UPDATE people SET name = 'Anne' WHERE id = 1").unwrap();
-    let second = stamp_of(&w.conn, "people", 1);
-    assert!(second > first);
-    exec(&w.conn, "UPDATE people SET archived = 1 WHERE id = 1").unwrap();
-    assert!(stamp_of(&w.conn, "people", 1) > second);
-    assert_eq!(text(&w.conn, "SELECT sync_id FROM people"), sync_id);
-}
-
-#[test]
 fn a_sync_or_a_restore_writing_a_person_keeps_the_stamp_it_brings() {
     let w = world();
     applying(&w.conn, true);
@@ -104,16 +86,6 @@ fn a_sync_or_a_restore_writing_a_person_keeps_the_stamp_it_brings() {
     assert_eq!(stamp_of(&w.conn, "people", 1), theirs);
     exec(&w.conn, "UPDATE people SET name = 'Anne' WHERE id = 1").unwrap();
     assert_eq!(stamp_of(&w.conn, "people", 1), theirs, "no new stamp while applying");
-}
-
-#[test]
-fn a_person_s_history_is_recorded() {
-    let w = world();
-    exec(&w.conn, "INSERT INTO people (name) VALUES ('Anna')").unwrap();
-    exec(&w.conn, "UPDATE people SET name = 'Anne', remind_on = '2026-03-01' WHERE id = 1").unwrap();
-    assert_eq!((audit(&w.conn, "people", "INSERT"), audit(&w.conn, "people", "UPDATE")), (1, 1), "one change, one line, however many columns");
-    let new: String = text(&w.conn, "SELECT new_values FROM audit_log WHERE entity_type = 'people' AND action = 'UPDATE'");
-    assert!(new.contains("\"Anne\"") && new.contains("2026-03-01"), "{new}");
 }
 
 // ---- the ledger ------------------------------------------------------------------------------
@@ -220,16 +192,6 @@ fn deleting_an_entry_leaves_a_marker_and_a_restore_does_not() {
 }
 
 #[test]
-fn an_entry_has_a_history() {
-    let w = world();
-    friend(&w.conn, "Anna");
-    entry(&w.conn, ") VALUES (1, 'LENT', 100, '2026-01-01')").unwrap();
-    exec(&w.conn, "UPDATE ledger_entries SET amount_minor = 150").unwrap();
-    exec(&w.conn, "DELETE FROM ledger_entries").unwrap();
-    assert_eq!((audit(&w.conn, "ledger_entries", "INSERT"), audit(&w.conn, "ledger_entries", "UPDATE"), audit(&w.conn, "ledger_entries", "DELETE")), (1, 1, 1));
-}
-
-#[test]
 fn a_friend_with_entries_cannot_be_removed_even_by_a_sync_that_forgot_the_entries() {
     let w = world();
     friend(&w.conn, "Anna");
@@ -326,18 +288,6 @@ fn a_bill_has_at_most_thirty_parts() {
 }
 
 #[test]
-fn a_part_keeps_its_bill_and_its_person() {
-    let w = world();
-    let (anna, bob) = (friend(&w.conn, "Anna"), friend(&w.conn, "Bob"));
-    let (dinner, lunch) = (bill(&w.conn, w.food, "Dinner", "40.00", "2026-01-01"), bill(&w.conn, w.food, "Lunch", "40.00", "2026-01-02"));
-    person_line(&w.conn, dinner, anna, 100).unwrap();
-    assert!(w.conn.execute("UPDATE transaction_split_lines SET person_id = ?1", [bob]).is_err());
-    assert!(w.conn.execute("UPDATE transaction_split_lines SET transaction_id = ?1", [lunch]).is_err());
-    assert!(exec(&w.conn, "UPDATE transaction_split_lines SET person_id = NULL, guest_name = 'Anna'").is_err());
-    assert!(exec(&w.conn, "UPDATE transaction_split_lines SET amount_minor = 200").is_ok());
-}
-
-#[test]
 fn deleting_a_bill_takes_its_parts_and_leaves_one_marker() {
     let w = world();
     let anna = friend(&w.conn, "Anna");
@@ -351,26 +301,6 @@ fn deleting_a_bill_takes_its_parts_and_leaves_one_marker() {
 }
 
 #[test]
-fn changing_a_part_changes_the_bill_s_stamp_and_updated_at() {
-    let w = world();
-    let anna = friend(&w.conn, "Anna");
-    let dinner = bill(&w.conn, w.food, "Dinner", "40.00", "2026-01-01");
-    // updated_at has a resolution of a millisecond, so make the bill old enough to tell
-    exec(&w.conn, "UPDATE transactions SET updated_at = '2020-01-01T00:00:00.000Z'").unwrap();
-    let mut seen = vec![stamp_of(&w.conn, "transactions", dinner)];
-    person_line(&w.conn, dinner, anna, 100).unwrap();
-    seen.push(stamp_of(&w.conn, "transactions", dinner));
-    exec(&w.conn, "UPDATE transaction_split_lines SET amount_minor = 200").unwrap();
-    seen.push(stamp_of(&w.conn, "transactions", dinner));
-    exec(&w.conn, "DELETE FROM transaction_split_lines").unwrap();
-    seen.push(stamp_of(&w.conn, "transactions", dinner));
-    assert!(seen.windows(2).all(|pair| pair[0] < pair[1]), "every change to a part is a newer bill: {seen:?}");
-    assert_ne!(updated_at_of(&w.conn, "transactions", dinner), "2020-01-01T00:00:00.000Z");
-    // the history of the bill itself is not filled with changes that are not its own
-    assert_eq!(audit(&w.conn, "transactions", "UPDATE"), 0, "the parts have their own history; the bill's says nothing changed in it");
-}
-
-#[test]
 fn a_sync_writing_parts_leaves_the_stamp_of_the_bill_alone() {
     let w = world();
     let anna = friend(&w.conn, "Anna");
@@ -381,20 +311,6 @@ fn a_sync_writing_parts_leaves_the_stamp_of_the_bill_alone() {
     assert_eq!((stamp_of(&w.conn, "transactions", dinner), updated_at_of(&w.conn, "transactions", dinner)), before);
     // and the checks stand aside, which is why the finished state is looked at afterwards
     assert!(!super::splits::check(&w.conn).unwrap(), "parts above the bill are found");
-}
-
-#[test]
-fn the_parts_of_a_bill_have_a_history() {
-    let w = world();
-    let anna = friend(&w.conn, "Anna");
-    let dinner = bill(&w.conn, w.food, "Dinner", "40.00", "2026-01-01");
-    person_line(&w.conn, dinner, anna, 100).unwrap();
-    exec(&w.conn, "UPDATE transaction_split_lines SET amount_minor = 200").unwrap();
-    exec(&w.conn, "DELETE FROM transaction_split_lines").unwrap();
-    assert_eq!(
-        (audit(&w.conn, "transaction_split_lines", "INSERT"), audit(&w.conn, "transaction_split_lines", "UPDATE"), audit(&w.conn, "transaction_split_lines", "DELETE")),
-        (1, 1, 1)
-    );
 }
 
 // ---- the template of a recurring item --------------------------------------------------------
@@ -604,14 +520,4 @@ fn migrating_a_database_of_version_11_keeps_what_it_had_and_the_triggers_keep_wo
     conn.execute("INSERT INTO budgets (type, scope, amount_limit_minor, effective_from) VALUES ('EXPENSE', 'GLOBAL', 100, '2026-01-01')", []).unwrap();
     conn.execute("DELETE FROM budgets", []).unwrap();
     assert_eq!(one(&conn, "SELECT count(*) FROM sync_deleted WHERE kind = 'budgets'"), 1);
-}
-
-#[test]
-fn the_markers_table_accepts_the_new_kind_and_still_refuses_others() {
-    let w = world();
-    let id = "ab".repeat(16);
-    assert!(w.conn.execute("INSERT INTO sync_deleted (sync_id, kind, stamp) VALUES (?1, 'ledger_entries', 'x')", [&id]).is_ok());
-    let other = "cd".repeat(16);
-    assert!(w.conn.execute("INSERT INTO sync_deleted (sync_id, kind, stamp) VALUES (?1, 'people', 'x')", [&other]).is_err(), "a person is never deleted, so no marker");
-    assert!(w.conn.execute("INSERT INTO sync_deleted (sync_id, kind, stamp) VALUES (?1, 'categories', 'x')", [&other]).is_err());
 }

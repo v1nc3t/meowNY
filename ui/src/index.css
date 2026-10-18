@@ -2048,12 +2048,11 @@ kbd {
   width: 100%;
   height: 100%;
   overflow: visible;
-  transform: rotate(-90deg);
 }
 
-.donut circle {
-  fill: none;
-  transition: opacity 0.15s, stroke-width 0.15s;
+.donut path {
+  fill: var(--seg);
+  transition: opacity 0.15s;
 }
 
 .donut .dim {
@@ -2088,14 +2087,14 @@ kbd {
   white-space: nowrap;
 }
 
-.seg-0 { stroke: #2e8b57; } .seg-bg-0 { background: #2e8b57; }
-.seg-1 { stroke: #7aa2f7; } .seg-bg-1 { background: #7aa2f7; }
-.seg-2 { stroke: #e0af68; } .seg-bg-2 { background: #e0af68; }
-.seg-3 { stroke: #bb9af7; } .seg-bg-3 { background: #bb9af7; }
-.seg-4 { stroke: #5fb3a1; } .seg-bg-4 { background: #5fb3a1; }
-.seg-5 { stroke: #f7768e; } .seg-bg-5 { background: #f7768e; }
-.seg-6 { stroke: #7dcfff; } .seg-bg-6 { background: #7dcfff; }
-.seg-7 { stroke: #8a8f98; } .seg-bg-7 { background: #8a8f98; }
+.seg-0 { --seg: #2e8b57; } .seg-bg-0 { background: #2e8b57; }
+.seg-1 { --seg: #7aa2f7; } .seg-bg-1 { background: #7aa2f7; }
+.seg-2 { --seg: #e0af68; } .seg-bg-2 { background: #e0af68; }
+.seg-3 { --seg: #bb9af7; } .seg-bg-3 { background: #bb9af7; }
+.seg-4 { --seg: #5fb3a1; } .seg-bg-4 { background: #5fb3a1; }
+.seg-5 { --seg: #f7768e; } .seg-bg-5 { background: #f7768e; }
+.seg-6 { --seg: #7dcfff; } .seg-bg-6 { background: #7dcfff; }
+.seg-7 { --seg: #8a8f98; } .seg-bg-7 { background: #8a8f98; }
 
 .dash-legend {
   flex: 1 1 17rem;
@@ -2103,6 +2102,11 @@ kbd {
   flex-direction: column;
   min-width: 0;
   font-size: 0.8125rem;
+}
+
+/* A list straight in a card (the recurring cards) takes the height of its rows; beside a donut it takes its share of the width. */
+.dash-card > .dash-legend {
+  flex: none;
 }
 
 .dash .dash-legend li {
@@ -2936,8 +2940,15 @@ html.is-scanning #root {
    gesture bar) are left free, and the height is the visible height (the address-bar-free `dvh`). */
 html.is-phone .gate {
   min-height: 100dvh;
-  padding-top: calc(2rem + env(safe-area-inset-top, 0px));
+  /* at the top, not in the middle: the keyboard comes up over the lower half, and would cover the field and the button */
+  align-items: start;
+  padding-top: calc(1.5rem + env(safe-area-inset-top, 0px));
   padding-bottom: calc(2rem + env(safe-area-inset-bottom, 0px));
+}
+
+html.is-phone .gate > form,
+html.is-phone .gate > .panel {
+  padding-top: 0;
 }
 
 html.is-phone button,
@@ -3114,42 +3125,15 @@ html.is-phone .fab {
   text-align: center;
 }
 
-.quick-kind {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 0.5rem;
-}
-
-.quick-kind button,
-.quick-chips button {
-  background: var(--surface);
-  color: var(--text);
-}
-
-.quick-kind button[aria-pressed='true'],
-.quick-chips button[aria-pressed='true'] {
-  color: var(--text-h);
-  box-shadow: inset 0 -2px 0 var(--accent);
-}
-
-.quick-amount {
-  min-height: 3.5rem;
-  font-size: 1.75rem;
-  text-align: right;
-}
-
-html.is-phone .quick-amount {
-  font-size: 1.75rem;
-}
-
-.quick-chips {
+.quick-menu {
   display: flex;
-  flex-wrap: wrap;
+  flex-direction: column;
   gap: 0.5rem;
 }
 
-.quick-chips button {
-  padding: 0 0.875rem;
+.quick-menu button {
+  background: var(--surface);
+  color: var(--text-h);
 }
 
 /* A short list of choices that opens inside a form. */

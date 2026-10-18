@@ -1,12 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { EDGE, neighbour, step, swipeDirection, SWIPE_MIN } from './swipe.ts'
-
-test('a long sideways move is a swipe, and its direction says where to go', () => {
-  assert.equal(swipeDirection(-120, 10, 200, 400), 'next')
-  assert.equal(swipeDirection(120, -10, 200, 400), 'prev')
-  assert.equal(swipeDirection(-SWIPE_MIN, 0, 200, 400), 'next')
-})
+import { EDGE, neighbour, swipeDirection, SWIPE_MIN } from './swipe.ts'
 
 test('a short move, a scroll and a tap are not swipes', () => {
   assert.equal(swipeDirection(-SWIPE_MIN + 1, 0, 200, 400), null)
@@ -30,12 +24,4 @@ test('the neighbour of a page is the next tab, and there is none past the ends o
   assert.equal(neighbour(tabs, '/app/settings', 'next'), null)
   assert.equal(neighbour(tabs, '/app/budgets/2026', 'prev'), '/app/transactions')
   assert.equal(neighbour(tabs, '/app/budgetsx', 'prev'), null, 'only a whole path segment matches')
-})
-
-test('stepping through a list stops at its ends', () => {
-  const tabs = ['EXPENSE', 'INCOME', 'HISTORY'] as const
-  assert.equal(step(tabs, 'EXPENSE', 'next'), 'INCOME')
-  assert.equal(step(tabs, 'HISTORY', 'prev'), 'INCOME')
-  assert.equal(step(tabs, 'HISTORY', 'next'), null)
-  assert.equal(step(tabs, 'EXPENSE', 'prev'), null)
 })

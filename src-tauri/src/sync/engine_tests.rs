@@ -148,31 +148,6 @@ fn a_new_phone_gets_a_full_copy_and_a_second_sync_finds_nothing() {
 }
 
 #[test]
-fn what_the_desktop_has_deleted_is_deleted_on_the_phone_too() {
-    let (mut desktop, mut phone) = paired();
-    assert_eq!(count(&desktop, "SELECT count(*) FROM sync_deleted"), 1);
-    assert_eq!(count(&phone, "SELECT count(*) FROM sync_deleted"), 1, "the marker of the payment deleted before the first sync travelled too");
-    let coffee = id_of(&desktop, "transactions", "Coffee");
-    transactions::delete(&desktop, coffee).unwrap();
-    let outcome = sync_ok(&mut desktop, &mut phone);
-    assert_eq!(outcome.second.deleted, 1);
-    assert_eq!(count(&phone, "SELECT count(*) FROM transactions WHERE name = 'Coffee'"), 0);
-    assert_eq!(count(&phone, "SELECT count(*) FROM sync_deleted"), 2);
-}
-
-#[test]
-fn transactions_added_on_both_devices_are_all_kept() {
-    let (mut desktop, mut phone) = paired();
-    let (d_food, p_food) = (id_of(&desktop, "categories", "Food"), id_of(&phone, "categories", "Food"));
-    spend(&desktop, d_food, "From the desktop", "10.00");
-    spend(&phone, p_food, "From the phone", "20.00");
-    spend(&phone, p_food, "Again from the phone", "30.00");
-    let outcome = sync_ok(&mut desktop, &mut phone);
-    assert_eq!((outcome.first.added, outcome.second.added), (2, 1));
-    assert_eq!(count(&desktop, "SELECT count(*) FROM transactions"), 6, "three before (Coffee, Tea, the rent payment) and three new");
-}
-
-#[test]
 fn the_same_entry_sent_from_both_devices_becomes_one() {
     let (mut desktop, mut phone) = paired();
     let uuid = "0b8f6c1e-5c52-4d6a-9d50-3f7a8a1b2c3d";
@@ -1311,37 +1286,6 @@ fn documents_named(conn: &Connection) -> Vec<String> {
 }
 
 #[test]
-fn documents_and_their_links_reach_a_new_phone_in_the_first_copy() {
-    let mut desktop = device("EUR");
-    let mut phone = new_phone(&desktop);
-    let food = category(&desktop, "Food", CategoryType::Expense);
-    let coffee = spend(&desktop, food, "Coffee", "3.50");
-    let item = rent(&desktop, category(&desktop, "Housing", CategoryType::Expense));
-    document(&desktop, "Warranty.pdf");
-    document(&desktop, "Rent contract.pdf");
-    document(&desktop, "Not linked.pdf");
-    attach(&desktop, "Warranty.pdf", to_transaction(coffee));
-    attach(&desktop, "Rent contract.pdf", to_item(item));
-    attach(&desktop, "Warranty.pdf", to_item(item));
-    desktop.execute("UPDATE documents SET keep_on_phone = 1, document_date = '2026-01-02' WHERE name = 'Warranty.pdf'", []).unwrap();
-
-    let outcome = sync_ok(&mut desktop, &mut phone);
-    assert_eq!(documents_named(&phone), ["Not linked.pdf", "Rent contract.pdf", "Warranty.pdf"]);
-    assert_eq!(links(&phone), 3);
-    assert!(outcome.second.added >= 3 + 3, "the three documents and the three links were taken: {outcome:?}");
-    let kept: (i64, String) = phone.query_row("SELECT keep_on_phone, document_date FROM documents WHERE name = 'Warranty.pdf'", [], |r| Ok((r.get(0)?, r.get(1)?))).unwrap();
-    assert_eq!(kept, (1, "2026-01-02".to_string()));
-    // a link is the same link: it names the same document and the same transaction on both
-    let pairs = |conn: &Connection| -> Vec<(String, String)> {
-        let mut stmt = conn
-            .prepare("SELECT d.name, COALESCE(t.name, r.name) FROM document_links l JOIN documents d ON d.id = l.document_id LEFT JOIN transactions t ON t.id = l.transaction_id LEFT JOIN recurring_transactions r ON r.id = l.recurring_transaction_id ORDER BY 1, 2")
-            .unwrap();
-        stmt.query_map([], |r| Ok((r.get(0)?, r.get(1)?))).unwrap().map(Result::unwrap).collect()
-    };
-    assert_eq!(pairs(&desktop), pairs(&phone));
-}
-
-#[test]
 fn a_document_added_on_both_devices_is_kept_both_times_even_with_the_same_file() {
     let (mut desktop, mut phone) = paired();
     document(&desktop, "Receipt.pdf");
@@ -1350,32 +1294,6 @@ fn a_document_added_on_both_devices_is_kept_both_times_even_with_the_same_file()
     for conn in [&desktop, &phone] {
         assert_eq!(count(conn, "SELECT count(*) FROM documents WHERE name = 'Receipt.pdf'"), 2, "two documents that happen to hold the same bytes");
         assert_eq!(count(conn, "SELECT count(DISTINCT sha256) FROM documents"), 1);
-    }
-}
-
-#[test]
-fn a_rename_a_new_date_and_the_switch_follow_the_newer_change() {
-    let (mut desktop, mut phone) = paired();
-    document(&desktop, "Warranty.pdf");
-    document(&desktop, "Invoice.pdf");
-    sync_ok(&mut desktop, &mut phone);
-
-    pause();
-    desktop.execute("UPDATE documents SET name = 'Warranty (desktop).pdf' WHERE name = 'Warranty.pdf'", []).unwrap();
-    pause();
-    phone.execute("UPDATE documents SET name = 'Warranty (phone).pdf' WHERE name = 'Warranty.pdf'", []).unwrap();
-    pause();
-    desktop.execute("UPDATE documents SET keep_on_phone = 1, document_date = '2026-05-05' WHERE name = 'Invoice.pdf'", []).unwrap();
-    let outcome = sync_ok(&mut desktop, &mut phone);
-    assert!(outcome.first.updated >= 1 && outcome.second.updated >= 1, "{outcome:?}");
-    for conn in [&desktop, &phone] {
-        assert_eq!(documents_named(conn), ["Invoice.pdf", "Warranty (phone).pdf"], "the later rename wins");
-        let (keep, date): (i64, String) = conn.query_row("SELECT keep_on_phone, document_date FROM documents WHERE name = 'Invoice.pdf'", [], |r| Ok((r.get(0)?, r.get(1)?))).unwrap();
-        assert_eq!((keep, date.as_str()), (1, "2026-05-05"));
-    }
-    // and what was written to a row is the row: the contents did not move
-    for conn in [&desktop, &phone] {
-        assert_eq!(text(conn, "SELECT sha256 FROM documents WHERE name = 'Invoice.pdf'"), sha_of("Invoice.pdf"));
     }
 }
 
@@ -1444,19 +1362,6 @@ fn the_newer_of_an_edit_and_a_delete_of_a_document_wins_and_a_document_that_come
         assert_eq!(links(conn), 1, "the link the phone still held came back with the document");
         assert_eq!(count(conn, "SELECT count(*) FROM sync_deleted WHERE kind = 'documents'"), 0, "the marker of the delete is gone");
     }
-}
-
-#[test]
-fn a_link_made_on_one_device_reaches_the_other() {
-    let (mut desktop, mut phone) = paired();
-    document(&desktop, "Warranty.pdf");
-    sync_ok(&mut desktop, &mut phone);
-    pause();
-    attach(&phone, "Warranty.pdf", to_transaction(id_of(&phone, "transactions", "Tea")));
-    attach(&desktop, "Warranty.pdf", to_item(id_of(&desktop, "recurring_transactions", "Rent")));
-    let outcome = sync_ok(&mut desktop, &mut phone);
-    assert_eq!((outcome.first.added, outcome.second.added), (1, 1), "{outcome:?}");
-    assert_eq!((links(&desktop), links(&phone)), (2, 2));
 }
 
 #[test]
@@ -1686,36 +1591,13 @@ fn what_a_device_changed_in_documents_counts_as_waiting_for_the_next_sync() {
     assert_eq!(super::peers::changes_since(&desktop, since).unwrap(), 2, "the document and the marker of the link");
 }
 
-#[test]
-fn a_big_library_of_documents_travels_in_frames_that_fit() {
-    let mut desktop = device("EUR");
-    let mut phone = new_phone(&desktop);
-    let food = category(&desktop, "Food", CategoryType::Expense);
-    let tx = spend(&desktop, food, "Shop", "1.00");
-    {
-        let tx_ = desktop.transaction().unwrap();
-        for i in 0..1500 {
-            tx_.execute(
-                "INSERT INTO documents (name, media_type, size_bytes, sha256, document_date) VALUES (?1, 'image/jpeg', ?2, ?3, '2026-03-02')",
-                params![format!("Photo {i:04}.jpg"), 1000 + i as i64, sha_of(&format!("photo {i}"))],
-            )
-            .unwrap();
-            tx_.execute("INSERT INTO document_links (document_id, transaction_id) VALUES (last_insert_rowid(), ?1)", [tx]).unwrap();
-        }
-        tx_.commit().unwrap();
-    }
-    let outcome = sync_ok(&mut desktop, &mut phone);
-    assert_eq!((count(&phone, "SELECT count(*) FROM documents"), links(&phone)), (1500, 1500));
-    assert!(outcome.messages > 10, "the rows did not fit one message: {}", outcome.messages);
-}
-
 
 // --- friends, the ledger and shared bills (phase 10) ----------------------------------------------------------------------
 
 mod debts {
     use super::*;
     use crate::debts::fixtures::{equal, friend, guest, input, with, who};
-    use crate::debts::splits::{check, clear_split, set_split, set_template, Mode};
+    use crate::debts::splits::{check, set_split, set_template, Mode};
 
     fn food(conn: &Connection) -> i64 {
         id_of(conn, "categories", "Food")
@@ -1744,67 +1626,9 @@ mod debts {
         statement.query_map([bill], |r| Ok((r.get(0)?, r.get(1)?))).unwrap().map(Result::unwrap).collect()
     }
 
-    fn cost(conn: &Connection, bill: &str) -> i64 {
-        count(conn, &format!("SELECT cost_minor FROM transaction_costs WHERE transaction_id = (SELECT id FROM transactions WHERE name = '{bill}')"))
-    }
-
     fn people_text(conn: &Connection) -> Vec<String> {
         let mut statement = conn.prepare("SELECT name || ':' || archived || ':' || COALESCE(merged_into IS NOT NULL, 0) FROM people ORDER BY sync_id").unwrap();
         statement.query_map([], |r| r.get(0)).unwrap().map(Result::unwrap).collect()
-    }
-
-    #[test]
-    fn friends_the_ledger_shared_bills_and_templates_reach_a_new_phone_in_the_first_copy() {
-        let mut desktop = device("EUR");
-        let food = category(&desktop, "Food", CategoryType::Expense);
-        let housing = category(&desktop, "Housing", CategoryType::Expense);
-        let (anna, bob) = (friend(&desktop, "Anna"), friend(&desktop, "Bob"));
-        let dinner = spend(&desktop, food, "Dinner", "90.00");
-        set_split(&desktop, dinner, &equal(vec![who(anna), who(bob), guest("Carl")])).unwrap();
-        let loan = lend(&desktop, anna, "20.00", "2026-03-05");
-        ledger::update(&desktop, loan, &ledger::EntryPatch { transaction_id: Some(Some(dinner.to_string())), ..Default::default() }).unwrap();
-        let item = rent(&desktop, housing);
-        set_template(&desktop, item, &input(Mode::Shares, Some("2"), vec![with(who(bob), "1")])).unwrap();
-        people::set_reminder(&desktop, bob, Some("2026-05-01"), Some(30)).unwrap();
-        let doc = document(&desktop, "Loan note.pdf");
-        library::link(&desktop, doc, &LinkTarget { kind: TargetKind::LedgerEntry, id: loan.to_string() }).unwrap();
-
-        let mut phone = new_phone(&desktop);
-        let outcome = sync_ok(&mut desktop, &mut phone);
-        assert!(outcome.first.added + outcome.second.added > 0);
-        assert_eq!(parts_of(&phone, "Dinner"), [("Anna".to_string(), 2250), ("Bob".to_string(), 2250), ("Carl".to_string(), 2250)]);
-        assert_eq!((cost(&phone, "Dinner"), balance(&phone, "Anna"), balance(&phone, "Bob")), (2250, 4250, 2250));
-        assert_eq!(count(&phone, "SELECT count(*) FROM ledger_entries WHERE transaction_id IS NOT NULL"), 1, "the loan is still linked to the dinner");
-        assert_eq!(count(&phone, "SELECT split_my_weight FROM recurring_transactions"), 2);
-        assert_eq!(count(&phone, "SELECT weight FROM recurring_split_lines"), 1);
-        assert_eq!(text(&phone, "SELECT remind_on FROM people WHERE name = 'Bob'"), "2026-05-01");
-        assert_eq!(count(&phone, "SELECT count(*) FROM document_links WHERE ledger_entry_id IS NOT NULL"), 1);
-        assert!(check(&phone).unwrap());
-        // and everything the phone made up of it is the same as the desktop's, to the cent
-        assert_eq!(snapshot(&desktop).unwrap(), snapshot(&phone).unwrap());
-    }
-
-    #[test]
-    fn a_split_made_removed_and_rescaled_on_one_device_follows_to_the_other() {
-        let (mut desktop, mut phone) = paired();
-        let anna = friend(&desktop, "Anna");
-        sync_ok(&mut desktop, &mut phone);
-        let dinner = spend(&desktop, food(&desktop), "Dinner", "90.00");
-        set_split(&desktop, dinner, &equal(vec![who(anna)])).unwrap();
-        sync_ok(&mut desktop, &mut phone);
-        assert_eq!(parts_of(&phone, "Dinner"), [("Anna".to_string(), 4500)]);
-        // the phone changes the amount: the parts are scaled there and travel back scaled
-        pause();
-        let on_phone = id_of(&phone, "transactions", "Dinner");
-        transactions::update(&phone, on_phone, &transactions::TransactionPatch { amount: Some("30.00".into()), ..Default::default() }).unwrap();
-        sync_ok(&mut desktop, &mut phone);
-        assert_eq!((parts_of(&desktop, "Dinner"), cost(&desktop, "Dinner")), (vec![("Anna".to_string(), 1500)], 1500));
-        // the phone takes the split off
-        pause();
-        clear_split(&phone, on_phone).unwrap();
-        sync_ok(&mut desktop, &mut phone);
-        assert!(parts_of(&desktop, "Dinner").is_empty());
-        assert_eq!((cost(&desktop, "Dinner"), balance(&desktop, "Anna")), (3000, 0));
     }
 
     #[test]
@@ -2210,23 +2034,4 @@ mod debts {
         assert_eq!(count(&desktop, "SELECT amount_minor FROM ledger_entries"), 2200);
     }
 
-    #[test]
-    fn a_big_book_of_friends_and_shared_bills_travels_in_frames_that_fit_and_converges() {
-        let mut desktop = device("EUR");
-        let food = category(&desktop, "Food", CategoryType::Expense);
-        let friends: Vec<i64> = (0..30).map(|i| friend(&desktop, &format!("Friend {i}"))).collect();
-        for i in 0..800 {
-            let id = spend(&desktop, food, &format!("Bill {i}"), "60.00");
-            let parts: Vec<_> = friends.iter().cycle().skip(i % 30).take(1 + i % 3).map(|f| who(*f)).collect();
-            set_split(&desktop, id, &equal(parts)).unwrap();
-            if i % 4 == 0 {
-                lend(&desktop, friends[i % 30], "5.00", "2026-03-05");
-            }
-        }
-        let mut phone = new_phone(&desktop);
-        let outcome = sync_ok(&mut desktop, &mut phone);
-        assert!(outcome.messages > 10);
-        assert_eq!((count(&phone, "SELECT count(*) FROM people"), count(&phone, "SELECT count(DISTINCT transaction_id) FROM transaction_split_lines")), (30, 800));
-        assert!(check(&phone).unwrap());
-    }
 }

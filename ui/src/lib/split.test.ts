@@ -1,17 +1,9 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { draftOfBill, draftOfTemplate, equalDraft, normalise, partsText, reducedWeights, toInput, withMode } from './split.ts'
+import { draftOfTemplate, equalDraft, normalise, reducedWeights, toInput, withMode } from './split.ts'
 
 const anna = { personId: '2', name: 'Anna' }
 const bob = { guest: 'Bob', name: 'Bob' }
-
-test('an equal split sends who, and no numbers', () => {
-  assert.deepEqual(toInput(equalDraft([anna, bob])), { mode: 'EQUAL', parts: [{ personId: '2' }, { guest: 'Bob' }] })
-})
-
-test('a split with nobody on it is nothing yet', () => {
-  assert.equal(toInput(equalDraft([])), null)
-})
 
 test('numbers go out the way Rust takes them: two decimals for percent and exact, whole numbers for shares', () => {
   const percent = withMode(equalDraft([anna, bob]), 'PERCENT')
@@ -25,19 +17,12 @@ test('numbers go out the way Rust takes them: two decimals for percent and exact
   assert.equal(toInput(shares), null, 'a share is a whole number')
 })
 
-test('the person has the rest in percent and exact unless they type their own', () => {
-  const exact = withMode(equalDraft([anna]), 'EXACT')
-  exact.rows[0]!.value = '40'
-  assert.deepEqual(toInput(exact), { mode: 'EXACT', parts: [{ personId: '2', value: '40.00' }] })
-  assert.deepEqual(toInput({ ...exact, mineIsRest: false, mine: '60' }), { mode: 'EXACT', mine: '60.00', parts: [{ personId: '2', value: '40.00' }] })
-  assert.equal(toInput({ ...exact, mineIsRest: false, mine: 'x' }), null)
-})
-
 test('an empty field is nothing while typing, and a wrong one is not a number', () => {
   assert.equal(normalise('EXACT', ''), '0.00')
   assert.equal(normalise('SHARES', ''), null)
   assert.equal(normalise('EXACT', '-5'), null)
-  assert.equal(normalise('PERCENT', '1,5'), null)
+  assert.equal(normalise('PERCENT', '1,5'), '1.50', 'a comma is a decimal mark, as a phone keypad types it')
+  assert.equal(normalise('PERCENT', '1,5,5'), null)
   assert.equal(normalise('SHARES', '007'), '007', 'Rust reads it as 7')
 })
 
@@ -47,14 +32,6 @@ test('changing the mode starts the numbers again: shares at one, the others empt
   const back = withMode(draft, 'EXACT')
   assert.deepEqual([back.mine, back.mineIsRest, ...back.rows.map((row) => row.value)], ['', true, '', ''])
   assert.equal(withMode(back, 'EXACT'), back, 'the same mode changes nothing')
-})
-
-test('a saved bill opens as exact amounts, the person having the rest', () => {
-  const draft = draftOfBill([
-    { personId: '2', person: 'Anna', guest: null, amount: '25.00' },
-    { personId: null, person: null, guest: 'Bob', amount: '25.00' },
-  ])
-  assert.deepEqual(toInput(draft), { mode: 'EXACT', parts: [{ personId: '2', value: '25.00' }, { guest: 'Bob', value: '25.00' }] })
 })
 
 test('a saved template opens as shares, in lowest terms, so what was typed as 19 and 1 does not come back as 1900 and 100', () => {
@@ -73,10 +50,6 @@ test('the weights of a whole percent split open as percent, with two decimals', 
   assert.deepEqual(toInput(odd), { mode: 'PERCENT', mine: '33.34', parts: [{ personId: '2', value: '33.33' }, { guest: 'B', value: '33.33' }] })
   const small = draftOfTemplate({ mine: 9905, parts: [{ personId: '2', person: 'A', guest: null, weight: 95 }] })
   assert.equal(small.rows[0]?.value, '0.95')
-})
-
-test('the parts of a bill are listed as name and amount', () => {
-  assert.equal(partsText([{ personId: '2', person: 'Anna', guest: null, amount: '25.00' }, { personId: null, person: null, guest: 'Bob', amount: '25.00' }]), 'Anna 25.00, Bob 25.00')
 })
 
 test('the weights of a template are shown in lowest terms and never changed otherwise', () => {

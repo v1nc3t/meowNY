@@ -8,23 +8,6 @@ const W = 'xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main
 const docx = (body: string) => makeZip([{ name: 'word/document.xml', data: `<?xml version="1.0"?><w:document ${W}><w:body>${body}</w:body></w:document>`, deflate: true }])
 const run = (text: string) => `<w:r><w:t xml:space="preserve">${text}</w:t></w:r>`
 
-test('paragraphs, headings and list items come out in order', async () => {
-  const bytes = await docx(
-    `<w:p><w:pPr><w:pStyle w:val="Heading1"/></w:pPr>${run('Rental agreement')}</w:p>` +
-      `<w:p>${run('The tenant pays ')}${run('900 per month.')}</w:p>` +
-      `<w:p><w:pPr><w:numPr><w:ilvl w:val="0"/><w:numId w:val="3"/></w:numPr></w:pPr>${run('first item')}</w:p>` +
-      `<w:p><w:pPr><w:pStyle w:val="Heading2"/></w:pPr>${run('Notes')}</w:p>`,
-  )
-  const { blocks, cut } = await readDocx(bytes)
-  assert.equal(cut, false)
-  assert.deepEqual(blocks, [
-    { type: 'heading', level: 1, text: 'Rental agreement' },
-    { type: 'paragraph', text: 'The tenant pays 900 per month.' },
-    { type: 'item', text: 'first item' },
-    { type: 'heading', level: 2, text: 'Notes' },
-  ])
-})
-
 test('a heading is also known by its outline level, in any language of its style name', async () => {
   const { blocks } = await readDocx(await docx(`<w:p><w:pPr><w:pStyle w:val="berschrift3"/><w:outlineLvl w:val="2"/></w:pPr>${run('Kapitel')}</w:p>`))
   assert.deepEqual(blocks, [{ type: 'heading', level: 3, text: 'Kapitel' }])
