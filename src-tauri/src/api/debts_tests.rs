@@ -158,7 +158,7 @@ fn the_history_the_overdue_payments_and_the_reminders_are_read_within_their_limi
 
     // a reminder is due a period after the debt last changed, and the period has its limits
     let r = ok(&vault, "debts.reminders", json!({ "everyDays": 30 }));
-    assert_eq!(r["due"][0]["name"], "Anna");
+    assert!(r["due"].as_array().unwrap().iter().any(|d| d["name"] == "Anna"), "the debt of 2020 is due: {r}");
     assert_eq!(ok(&vault, "debts.reminders", json!({ "everyDays": 0 }))["due"], json!([]));
     for body in [json!({}), json!({ "everyDays": 366 }), json!({ "everyDays": -1 }), json!({ "everyDays": "7" })] {
         assert_eq!(refused(&vault, "debts.reminders", body.clone()).0, 400, "{body}");

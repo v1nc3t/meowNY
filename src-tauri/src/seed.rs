@@ -56,9 +56,6 @@ pub fn run_for(conn: &mut Connection, today: &str) -> Result<(), SeedError> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
-    
-    
 
     const DAYS: [&str; 10] = [
         "2026-10-14", "2026-01-01", "2026-03-31", "2026-12-31", "2024-02-29", "2025-02-28", "2026-05-31", "2027-01-02",
@@ -89,9 +86,35 @@ mod tests {
             assert_eq!(count(&conn, "settings"), 1, "{today}");
             assert_eq!(count(&conn, "categories"), 15, "{today}");
             assert!(count(&conn, "budgets") >= 12, "{today}");
-            assert_eq!(count(&conn, "recurring_transactions"), 9, "{today}");
+            assert_eq!(count(&conn, "recurring_transactions"), 12, "{today}");
+            assert_eq!(count(&conn, "people"), 4, "{today}");
+            assert!(count(&conn, "ledger_entries") >= 9 && count(&conn, "transaction_split_lines") >= 16, "{today}: debts");
             assert!(count(&conn, "transactions") > 250, "{today}: {} transactions", count(&conn, "transactions"));
             assert_eq!(count(&conn, "audit_log"), 0, "{today}: demo rows are not user history");
+        }
+    }
+
+    #[test]
+    fn the_debts_of_the_seed_follow_the_rules_and_show_every_state_on_any_day() {
+        for today in DAYS {
+            let conn = seeded(today);
+            assert!(crate::debts::splits::check(&conn).unwrap(), "{today}: the parts and templates follow the rules");
+            // overdue: the yoga class (two or three occurrences) and the top-up with no fixed amount; due soon: the veg box
+            let due = crate::debts::dues::due_payments(&conn, today).unwrap();
+            for name in ["Yoga class", "Mobile top-up"] {
+                assert!(due.iter().any(|d| d.name == name), "{today}: {name} is overdue");
+            }
+            assert!(due.iter().any(|d| d.name == "Mobile top-up" && d.amount.is_none()), "{today}: a bill with no fixed amount");
+            assert!(crate::recurring::dues(&conn, today, Some(7)).unwrap().upcoming.iter().any(|r| r.name == "Veg box"), "{today}: due in five days");
+            // who owes what: Marta and Sorin owe, Tomás is owed, Priya has paid back everything
+            let summary = crate::debts::summary::summary(&conn).unwrap();
+            let owes: Vec<(&str, bool)> = summary.people.iter().map(|p| (p.name.as_str(), p.balance.starts_with('-'))).collect();
+            assert_eq!(owes.len(), 3, "{today}: {owes:?}");
+            assert!(owes.contains(&("Tomás", true)) && owes.contains(&("Marta", false)) && owes.contains(&("Sorin", false)), "{today}: {owes:?}");
+            // the history has the friends' lines and the payments that were late or are overdue, and nothing that was paid on time
+            let lines = crate::debts::history::lines(&conn, today, &Default::default()).unwrap();
+            assert!(lines.iter().any(|l| l.kind == "PAYMENT_PAID") && lines.iter().any(|l| l.kind == "PAYMENT_DUE") && lines.iter().any(|l| l.kind == "BILL"), "{today}");
+            assert!(lines.iter().filter(|l| l.kind == "PAYMENT_PAID").all(|l| l.due_date.as_deref().is_some_and(|due| due < l.date.as_str())), "{today}: only the late ones");
         }
     }
 
@@ -102,5 +125,4 @@ mod tests {
         assert_eq!(count(&conn, "categories"), 15);
         assert!(matches!(run_for(&mut db(), "tomorrow"), Err(SeedError::BadDate)));
     }
-
 }

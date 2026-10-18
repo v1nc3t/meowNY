@@ -115,7 +115,7 @@
       "human": {
         "exit": 0,
         "stderr": "waiting for you to allow this in the meowNY app...\n",
-        "stdout": "bytes: 191542\npath: /home/you/meowny.meowbak\n"
+        "stdout": "bytes: 206446\npath: /home/you/meowny.meowbak\n"
       }
     },
     "backup schedule": {
@@ -136,13 +136,13 @@
       "human": {
         "exit": 0,
         "stderr": "",
-        "stdout": "month    expenseActual  expenseBudget  incomeActual  incomeBudget\n2026-10        1516.50        2450.00          0.00       3600.00\n2026-09        1913.64        2450.00       3690.00       3600.00\n2026-08        3912.69        2450.00       3240.00       3600.00\n2026-07        1904.70        2450.00       3253.11       3600.00\n2026-06        1905.88        2450.00       3520.00       3600.00\n2026-05        2792.37        2450.00       3240.00       3600.00\n2026-04        1872.86        2450.00       3214.22       3600.00\n2026-03        2079.23        2300.00       3520.00       3600.00\n2026-02        2162.65        2300.00       3200.00       3600.00\n2026-01        1890.68        2300.00   …",
+        "stdout": "month    expenseActual  expenseBudget  incomeActual  incomeBudget\n2026-10        1485.45        2450.00          0.00       3600.00\n2026-09        1961.64        2450.00       3690.00       3600.00\n2026-08        3992.69        2450.00       3240.00       3600.00\n2026-07        1961.20        2450.00       3253.11       3600.00\n2026-06        1955.38        2450.00       3520.00       3600.00\n2026-05        2834.37        2450.00       3240.00       3600.00\n2026-04        1904.86        2450.00       3214.22       3600.00\n2026-03        2079.23        2300.00       3520.00       3600.00\n2026-02        2162.65        2300.00       3200.00       3600.00\n2026-01        1890.68        2300.00   …",
         "truncated": true
       },
       "json": {
         "exit": 0,
         "stderr": "",
-        "stdout": "[{\"expenseActual\":\"1516.50\",\"expenseBudget\":\"2450.00\",\"incomeActual\":\"0.00\",\"incomeBudget\":\"3600.00\",\"month\":\"2026-10\"},{\"expenseActual\":\"1913.64\",\"expenseBudget\":\"2450.00\",\"incomeActual\":\"3690.00\",\"incomeBudget\":\"3600.00\",\"month\":\"2026-09\"},{\"expenseActual\":\"3912.69\",\"expenseBudget\":\"2450.00\",\"incomeActual\":\"3240.00\",\"incomeBudget\":\"3600.00\",\"month\":\"2026-08\"},{\"expenseActual\":\"1904.70\",\"expenseBudget\":\"2450.00\",\"incomeActual\":\"3253.11\",\"incomeBudget\":\"3600.00\",\"month\":\"2026-07\"},{\"expenseActual\":\"1905.88\",\"expenseBudget\":\"2450.00\",\"incomeActual\":\"3520.00\",\"incomeBudget\":\"3600.00\",\"month\":\"2026-06\"},{\"expenseActual\":\"2792.37\",\"expenseBudget\":\"2450.00\",\"incomeActual\":\"3240.00\",\"incomeBudget\"…",
+        "stdout": "[{\"expenseActual\":\"1485.45\",\"expenseBudget\":\"2450.00\",\"incomeActual\":\"0.00\",\"incomeBudget\":\"3600.00\",\"month\":\"2026-10\"},{\"expenseActual\":\"1961.64\",\"expenseBudget\":\"2450.00\",\"incomeActual\":\"3690.00\",\"incomeBudget\":\"3600.00\",\"month\":\"2026-09\"},{\"expenseActual\":\"3992.69\",\"expenseBudget\":\"2450.00\",\"incomeActual\":\"3240.00\",\"incomeBudget\":\"3600.00\",\"month\":\"2026-08\"},{\"expenseActual\":\"1961.20\",\"expenseBudget\":\"2450.00\",\"incomeActual\":\"3253.11\",\"incomeBudget\":\"3600.00\",\"month\":\"2026-07\"},{\"expenseActual\":\"1955.38\",\"expenseBudget\":\"2450.00\",\"incomeActual\":\"3520.00\",\"incomeBudget\":\"3600.00\",\"month\":\"2026-06\"},{\"expenseActual\":\"2834.37\",\"expenseBudget\":\"2450.00\",\"incomeActual\":\"3240.00\",\"incomeBudget\"…",
         "truncated": true
       }
     },
@@ -151,12 +151,12 @@
       "human": {
         "exit": 0,
         "stderr": "",
-        "stdout": "type     budgeted   actual  remaining  allocated  overAllocated  unallocated\nINCOME    3600.00  3690.00     -90.00    3200.00  false               400.00\nEXPENSE   2450.00  1913.64     536.36    2015.00  false               435.00\n"
+        "stdout": "type     budgeted   actual  remaining  allocated  overAllocated  unallocated\nINCOME    3600.00  3690.00     -90.00    3200.00  false               400.00\nEXPENSE   2450.00  1961.64     488.36    2015.00  false               435.00\n"
       },
       "json": {
         "exit": 0,
         "stderr": "",
-        "stdout": "[{\"actual\":\"3690.00\",\"allocated\":\"3200.00\",\"budgeted\":\"3600.00\",\"categories\":[{\"amountLimit\":\"3200.00\",\"categoryId\":\"1\"}],\"overAllocated\":false,\"remaining\":\"-90.00\",\"type\":\"INCOME\",\"unallocated\":\"400.00\"},{\"actual\":\"1913.64\",\"allocated\":\"2015.00\",\"budgeted\":\"2450.00\",\"categories\":[{\"amountLimit\":\"950.00\",\"categoryId\":\"4\"},{\"amountLimit\":\"500.00\",\"categoryId\":\"5\"},{\"amountLimit\":\"70.00\",\"categoryId\":\"6\"},{\"amountLimit\":\"200.00\",\"categoryId\":\"7\"},{\"amountLimit\":\"45.00\",\"categoryId\":\"9\"},{\"amountLimit\":\"250.00\",\"categoryId\":\"10\"}],\"overAllocated\":false,\"remaining\":\"536.36\",\"type\":\"EXPENSE\",\"unallocated\":\"435.00\"}]\n"
+        "stdout": "[{\"actual\":\"3690.00\",\"allocated\":\"3200.00\",\"budgeted\":\"3600.00\",\"categories\":[{\"amountLimit\":\"3200.00\",\"categoryId\":\"1\"}],\"overAllocated\":false,\"remaining\":\"-90.00\",\"type\":\"INCOME\",\"unallocated\":\"400.00\"},{\"actual\":\"1961.64\",\"allocated\":\"2015.00\",\"budgeted\":\"2450.00\",\"categories\":[{\"amountLimit\":\"950.00\",\"categoryId\":\"4\"},{\"amountLimit\":\"500.00\",\"categoryId\":\"5\"},{\"amountLimit\":\"70.00\",\"categoryId\":\"6\"},{\"amountLimit\":\"200.00\",\"categoryId\":\"7\"},{\"amountLimit\":\"45.00\",\"categoryId\":\"9\"},{\"amountLimit\":\"250.00\",\"categoryId\":\"10\"}],\"overAllocated\":false,\"remaining\":\"488.36\",\"type\":\"EXPENSE\",\"unallocated\":\"435.00\"}]\n"
       }
     },
     "budgets remove": {
@@ -217,26 +217,27 @@
       "human": {
         "exit": 0,
         "stderr": "",
-        "stdout": "total: 30.00\nunknown: 0\n\npayments\nname              amount  category   categoryId  daysOverdue  dueDate     recurringId\nCleaning service   30.00  Utilities          10            7  2026-10-11            6\n"
+        "stdout": "total: 126.00\nunknown: 2\n\npayments\nname              amount  category       categoryId  daysOverdue  dueDate     recurringId\nYoga class         32.00  Entertainment           8           74  2026-08-05           11\nMobile top-up          -  Utilities              10           45  2026-09-03           12\nYoga class         32.00  Entertainment           8           43  2026-09-05           11\nMobile top-up          -  Utilities              10           15  2026-10-03           12\nYoga class         32.00  Entertainment           8           13  2026-10-05           11\nCleaning service   30.00  Utilities              10            7  2026-10-11            6\n"
       },
       "json": {
         "exit": 0,
         "stderr": "",
-        "stdout": "{\"payments\":[{\"amount\":\"30.00\",\"category\":\"Utilities\",\"categoryId\":\"10\",\"daysOverdue\":7,\"dueDate\":\"2026-10-11\",\"name\":\"Cleaning service\",\"recurringId\":\"6\"}],\"total\":\"30.00\",\"unknown\":0}\n"
+        "stdout": "{\"payments\":[{\"amount\":\"32.00\",\"category\":\"Entertainment\",\"categoryId\":\"8\",\"daysOverdue\":74,\"dueDate\":\"2026-08-05\",\"name\":\"Yoga class\",\"recurringId\":\"11\"},{\"amount\":null,\"category\":\"Utilities\",\"categoryId\":\"10\",\"daysOverdue\":45,\"dueDate\":\"2026-09-03\",\"name\":\"Mobile top-up\",\"recurringId\":\"12\"},{\"amount\":\"32.00\",\"category\":\"Entertainment\",\"categoryId\":\"8\",\"daysOverdue\":43,\"dueDate\":\"2026-09-05\",\"name\":\"Yoga class\",\"recurringId\":\"11\"},{\"amount\":null,\"category\":\"Utilities\",\"categoryId\":\"10\",\"daysOverdue\":15,\"dueDate\":\"2026-10-03\",\"name\":\"Mobile top-up\",\"recurringId\":\"12\"},{\"amount\":\"32.00\",\"category\":\"Entertainment\",\"categoryId\":\"8\",\"daysOverdue\":13,\"dueDate\":\"2026-10-05\",\"name\":\"Yoga class\",\"re…",
+        "truncated": true
       }
     },
     "debts history": {
       "command": "meowny debts history --limit 5",
       "human": {
         "exit": 0,
-        "stderr": "showing 1-5 of 15; next page: --offset 5\n",
-        "stdout": "limit: 5\noffset: 0\ntotal: 15\n\nlines\namount  balance  date        dueDate     effect  entryId  friend  kind          personId  recurringId  transactionId  what\n 12.00    42.00  2026-10-13  -            12.00        1  Anna    LENT                 1            -              -  taxi\n 30.00    30.00  2026-10-12  -            30.00        -  Bob     BILL                 2            -            405  Dinner\n 30.00    30.00  2026-10-12  -            30.00        -  Anna    BILL                 1            -            405  Dinner\n 30.00        -  2026-10-11  2026-10-11       -        -  -       PAYMENT_DUE          -            6              -  Cleaning service\n 80.30        -  2026-09-21  2026…",
+        "stderr": "showing 1-5 of 49; next page: --offset 5\n",
+        "stdout": "limit: 5\noffset: 0\ntotal: 49\n\nlines\namount  balance  date        dueDate     effect  entryId  friend  kind         personId  recurringId  transactionId  what\n 12.00    42.00  2026-10-13  -            12.00       11  Anna    LENT                5            -              -  taxi\n 30.00    30.00  2026-10-12  -            30.00        -  Bob     BILL                6            -            425  Dinner\n 30.00    30.00  2026-10-12  -            30.00        -  Anna    BILL                5            -            425  Dinner\n 12.00    85.05  2026-10-12  -            12.00        -  Marta   BILL                1            -            404  Veg box\n 30.00        -  2026-10-11  2026-10-11       -…",
         "truncated": true
       },
       "json": {
         "exit": 0,
         "stderr": "",
-        "stdout": "{\"limit\":5,\"lines\":[{\"amount\":\"12.00\",\"balance\":\"42.00\",\"date\":\"2026-10-13\",\"dueDate\":null,\"effect\":\"12.00\",\"entryId\":\"1\",\"friend\":\"Anna\",\"kind\":\"LENT\",\"personId\":\"1\",\"recurringId\":null,\"transactionId\":null,\"what\":\"taxi\"},{\"amount\":\"30.00\",\"balance\":\"30.00\",\"date\":\"2026-10-12\",\"dueDate\":null,\"effect\":\"30.00\",\"entryId\":null,\"friend\":\"Bob\",\"kind\":\"BILL\",\"personId\":\"2\",\"recurringId\":null,\"transactionId\":\"405\",\"what\":\"Dinner\"},{\"amount\":\"30.00\",\"balance\":\"30.00\",\"date\":\"2026-10-12\",\"dueDate\":null,\"effect\":\"30.00\",\"entryId\":null,\"friend\":\"Anna\",\"kind\":\"BILL\",\"personId\":\"1\",\"recurringId\":null,\"transactionId\":\"405\",\"what\":\"Dinner\"},{\"amount\":\"30.00\",\"balance\":null,\"date\":\"2026-10-11\",\"dueDate\":\"202…",
+        "stdout": "{\"limit\":5,\"lines\":[{\"amount\":\"12.00\",\"balance\":\"42.00\",\"date\":\"2026-10-13\",\"dueDate\":null,\"effect\":\"12.00\",\"entryId\":\"11\",\"friend\":\"Anna\",\"kind\":\"LENT\",\"personId\":\"5\",\"recurringId\":null,\"transactionId\":null,\"what\":\"taxi\"},{\"amount\":\"30.00\",\"balance\":\"30.00\",\"date\":\"2026-10-12\",\"dueDate\":null,\"effect\":\"30.00\",\"entryId\":null,\"friend\":\"Bob\",\"kind\":\"BILL\",\"personId\":\"6\",\"recurringId\":null,\"transactionId\":\"425\",\"what\":\"Dinner\"},{\"amount\":\"30.00\",\"balance\":\"30.00\",\"date\":\"2026-10-12\",\"dueDate\":null,\"effect\":\"30.00\",\"entryId\":null,\"friend\":\"Anna\",\"kind\":\"BILL\",\"personId\":\"5\",\"recurringId\":null,\"transactionId\":\"425\",\"what\":\"Dinner\"},{\"amount\":\"12.00\",\"balance\":\"85.05\",\"date\":\"2026-10-12\",\"dueDate\":…",
         "truncated": true
       }
     },
@@ -245,12 +246,12 @@
       "human": {
         "exit": 0,
         "stderr": "",
-        "stdout": "today: 2026-10-18\n\ndue\n(none)\n\nupcoming\ncount  date\n    1  2026-10-19\n    1  2026-10-20\n    1  2026-10-26\n    1  2026-10-27\n"
+        "stdout": "today: 2026-10-18\n\ndue\nname   dueOn       personId\nSorin  2026-10-17         4\nTomás  2026-10-18         2\n\nupcoming\ncount  date\n    1  2026-10-18\n    2  2026-10-19\n    1  2026-10-20\n    1  2026-10-24\n"
       },
       "json": {
         "exit": 0,
         "stderr": "",
-        "stdout": "{\"due\":[],\"today\":\"2026-10-18\",\"upcoming\":[{\"count\":1,\"date\":\"2026-10-19\"},{\"count\":1,\"date\":\"2026-10-20\"},{\"count\":1,\"date\":\"2026-10-26\"},{\"count\":1,\"date\":\"2026-10-27\"}]}\n"
+        "stdout": "{\"due\":[{\"dueOn\":\"2026-10-17\",\"name\":\"Sorin\",\"personId\":\"4\"},{\"dueOn\":\"2026-10-18\",\"name\":\"Tomás\",\"personId\":\"2\"}],\"today\":\"2026-10-18\",\"upcoming\":[{\"count\":1,\"date\":\"2026-10-18\"},{\"count\":2,\"date\":\"2026-10-19\"},{\"count\":1,\"date\":\"2026-10-20\"},{\"count\":1,\"date\":\"2026-10-24\"}]}\n"
       }
     },
     "debts summary": {
@@ -258,12 +259,12 @@
       "human": {
         "exit": 0,
         "stderr": "",
-        "stdout": "net: 72.00\nowedToYou: 72.00\nyouOwe: 0.00\n\npeople\nid  name  archived  balance  remindEveryDays  remindOn\n 1  Anna  false       42.00                -  -\n 2  Bob   false       30.00                7  2026-11-01\n"
+        "stdout": "net: 143.10\nowedToYou: 167.05\nyouOwe: 23.95\n\npeople\nid  name   archived  balance  remindEveryDays  remindOn\n 1  Marta  false       85.05                -  -\n 5  Anna   false       42.00                -  -\n 6  Bob    false       30.00                7  2026-11-01\n 2  Tomás  false      -23.95                -  -\n 4  Sorin  true        10.00                -  -\n"
       },
       "json": {
         "exit": 0,
         "stderr": "",
-        "stdout": "{\"net\":\"72.00\",\"owedToYou\":\"72.00\",\"people\":[{\"archived\":false,\"balance\":\"42.00\",\"id\":\"1\",\"name\":\"Anna\",\"remindEveryDays\":null,\"remindOn\":null},{\"archived\":false,\"balance\":\"30.00\",\"id\":\"2\",\"name\":\"Bob\",\"remindEveryDays\":7,\"remindOn\":\"2026-11-01\"}],\"youOwe\":\"0.00\"}\n"
+        "stdout": "{\"net\":\"143.10\",\"owedToYou\":\"167.05\",\"people\":[{\"archived\":false,\"balance\":\"85.05\",\"id\":\"1\",\"name\":\"Marta\",\"remindEveryDays\":null,\"remindOn\":null},{\"archived\":false,\"balance\":\"42.00\",\"id\":\"5\",\"name\":\"Anna\",\"remindEveryDays\":null,\"remindOn\":null},{\"archived\":false,\"balance\":\"30.00\",\"id\":\"6\",\"name\":\"Bob\",\"remindEveryDays\":7,\"remindOn\":\"2026-11-01\"},{\"archived\":false,\"balance\":\"-23.95\",\"id\":\"2\",\"name\":\"Tomás\",\"remindEveryDays\":null,\"remindOn\":null},{\"archived\":true,\"balance\":\"10.00\",\"id\":\"4\",\"name\":\"Sorin\",\"remindEveryDays\":null,\"remindOn\":null}],\"youOwe\":\"23.95\"}\n"
       }
     },
     "documents add": {
@@ -271,7 +272,7 @@
       "json": {
         "exit": 0,
         "stderr": "",
-        "stdout": "{\"alreadyThere\":false,\"createdAt\":\"2026-10-18T08:50:24.710Z\",\"documentDate\":\"2026-10-01\",\"hasFile\":true,\"id\":\"1\",\"keepOnPhone\":false,\"linkCount\":0,\"mediaType\":\"application/pdf\",\"name\":\"boiler-receipt.pdf\",\"sha256\":\"735a7713978716d1e65eb6bf069e2f410eb72ec5b285861be417aeca0feeb935\",\"sizeBytes\":45}\n"
+        "stdout": "{\"alreadyThere\":false,\"createdAt\":\"2026-10-18T09:46:38.898Z\",\"documentDate\":\"2026-10-01\",\"hasFile\":true,\"id\":\"1\",\"keepOnPhone\":false,\"linkCount\":0,\"mediaType\":\"application/pdf\",\"name\":\"boiler-receipt.pdf\",\"sha256\":\"735a7713978716d1e65eb6bf069e2f410eb72ec5b285861be417aeca0feeb935\",\"sizeBytes\":45}\n"
       }
     },
     "documents delete": {
@@ -291,7 +292,7 @@
       }
     },
     "documents link": {
-      "command": "meowny documents link 1 --transaction-id 404",
+      "command": "meowny documents link 1 --transaction-id 424",
       "human": {
         "exit": 0,
         "stderr": "done.\n",
@@ -303,12 +304,12 @@
       "human": {
         "exit": 0,
         "stderr": "",
-        "stdout": "limit: 50\noffset: 0\ntotal: 1\n\ndocuments\nid  name                createdAt                 documentDate  hasFile  keepOnPhone  linkCount  mediaType        sha256                                                        sizeBytes\n 1  boiler-receipt.pdf  2026-10-18T08:50:24.710Z  2026-10-01    true     false                0  application/pdf  735a7713978716d1e65eb6bf069e2f410eb72ec5b285861be417aeca0fe…         45\n"
+        "stdout": "limit: 50\noffset: 0\ntotal: 1\n\ndocuments\nid  name                createdAt                 documentDate  hasFile  keepOnPhone  linkCount  mediaType        sha256                                                        sizeBytes\n 1  boiler-receipt.pdf  2026-10-18T09:46:38.898Z  2026-10-01    true     false                0  application/pdf  735a7713978716d1e65eb6bf069e2f410eb72ec5b285861be417aeca0fe…         45\n"
       },
       "json": {
         "exit": 0,
         "stderr": "",
-        "stdout": "{\"documents\":[{\"createdAt\":\"2026-10-18T08:50:24.710Z\",\"documentDate\":\"2026-10-01\",\"hasFile\":true,\"id\":\"1\",\"keepOnPhone\":false,\"linkCount\":0,\"mediaType\":\"application/pdf\",\"name\":\"boiler-receipt.pdf\",\"sha256\":\"735a7713978716d1e65eb6bf069e2f410eb72ec5b285861be417aeca0feeb935\",\"sizeBytes\":45}],\"limit\":50,\"offset\":0,\"total\":1}\n"
+        "stdout": "{\"documents\":[{\"createdAt\":\"2026-10-18T09:46:38.898Z\",\"documentDate\":\"2026-10-01\",\"hasFile\":true,\"id\":\"1\",\"keepOnPhone\":false,\"linkCount\":0,\"mediaType\":\"application/pdf\",\"name\":\"boiler-receipt.pdf\",\"sha256\":\"735a7713978716d1e65eb6bf069e2f410eb72ec5b285861be417aeca0feeb935\",\"sizeBytes\":45}],\"limit\":50,\"offset\":0,\"total\":1}\n"
       }
     },
     "documents show": {
@@ -316,16 +317,16 @@
       "human": {
         "exit": 0,
         "stderr": "",
-        "stdout": "createdAt: 2026-10-18T08:50:24.710Z\ndocumentDate: 2026-10-01\nhasFile: true\nid: 1\nkeepOnPhone: false\nlinkCount: 0\nmediaType: application/pdf\nname: boiler-receipt.pdf\nsha256: 735a7713978716d1e65eb6bf069e2f410eb72ec5b285861be417aeca0feeb935\nsizeBytes: 45\n\nlinks\n(none)\n"
+        "stdout": "createdAt: 2026-10-18T09:46:38.898Z\ndocumentDate: 2026-10-01\nhasFile: true\nid: 1\nkeepOnPhone: false\nlinkCount: 0\nmediaType: application/pdf\nname: boiler-receipt.pdf\nsha256: 735a7713978716d1e65eb6bf069e2f410eb72ec5b285861be417aeca0feeb935\nsizeBytes: 45\n\nlinks\n(none)\n"
       },
       "json": {
         "exit": 0,
         "stderr": "",
-        "stdout": "{\"createdAt\":\"2026-10-18T08:50:24.710Z\",\"documentDate\":\"2026-10-01\",\"hasFile\":true,\"id\":\"1\",\"keepOnPhone\":false,\"linkCount\":0,\"links\":[],\"mediaType\":\"application/pdf\",\"name\":\"boiler-receipt.pdf\",\"sha256\":\"735a7713978716d1e65eb6bf069e2f410eb72ec5b285861be417aeca0feeb935\",\"sizeBytes\":45}\n"
+        "stdout": "{\"createdAt\":\"2026-10-18T09:46:38.898Z\",\"documentDate\":\"2026-10-01\",\"hasFile\":true,\"id\":\"1\",\"keepOnPhone\":false,\"linkCount\":0,\"links\":[],\"mediaType\":\"application/pdf\",\"name\":\"boiler-receipt.pdf\",\"sha256\":\"735a7713978716d1e65eb6bf069e2f410eb72ec5b285861be417aeca0feeb935\",\"sizeBytes\":45}\n"
       }
     },
     "documents unlink": {
-      "command": "meowny documents unlink 1 --transaction-id 404",
+      "command": "meowny documents unlink 1 --transaction-id 424",
       "human": {
         "exit": 0,
         "stderr": "done.\n",
@@ -337,7 +338,7 @@
       "json": {
         "exit": 0,
         "stderr": "",
-        "stdout": "{\"createdAt\":\"2026-10-18T08:50:24.710Z\",\"documentDate\":\"2026-10-01\",\"hasFile\":true,\"id\":\"1\",\"keepOnPhone\":true,\"linkCount\":0,\"mediaType\":\"application/pdf\",\"name\":\"Boiler repair\",\"sha256\":\"735a7713978716d1e65eb6bf069e2f410eb72ec5b285861be417aeca0feeb935\",\"sizeBytes\":45}\n"
+        "stdout": "{\"createdAt\":\"2026-10-18T09:46:38.898Z\",\"documentDate\":\"2026-10-01\",\"hasFile\":true,\"id\":\"1\",\"keepOnPhone\":true,\"linkCount\":0,\"mediaType\":\"application/pdf\",\"name\":\"Boiler repair\",\"sha256\":\"735a7713978716d1e65eb6bf069e2f410eb72ec5b285861be417aeca0feeb935\",\"sizeBytes\":45}\n"
       }
     },
     "export csv": {
@@ -345,7 +346,7 @@
       "human": {
         "exit": 0,
         "stderr": "",
-        "stdout": "bytes: 16066\npath: /home/you/budget-2026.csv\n"
+        "stdout": "bytes: 17589\npath: /home/you/budget-2026.csv\n"
       }
     },
     "export debts": {
@@ -353,7 +354,7 @@
       "human": {
         "exit": 0,
         "stderr": "",
-        "stdout": "bytes: 121\npath: /home/you/who-owes-what.txt\n"
+        "stdout": "bytes: 195\npath: /home/you/who-owes-what.txt\n"
       }
     },
     "export json": {
@@ -361,7 +362,7 @@
       "human": {
         "exit": 0,
         "stderr": "",
-        "stdout": "bytes: 6613\npath: /home/you/debts.json\n"
+        "stdout": "bytes: 21356\npath: /home/you/debts.json\n"
       }
     },
     "export pdf": {
@@ -369,7 +370,7 @@
       "human": {
         "exit": 0,
         "stderr": "",
-        "stdout": "bytes: 45011\npath: /home/you/report.pdf\n"
+        "stdout": "bytes: 45159\npath: /home/you/report.pdf\n"
       }
     },
     "export preview": {
@@ -377,12 +378,12 @@
       "human": {
         "exit": 0,
         "stderr": "",
-        "stdout": "budgets: 14\ncategories: 15\ndebtHistory: 7\ndocuments: 0\nduePayments: 1\nexpense: 20434.70\nfirstDate: 2026-01-01\nhistory: 0\nincome: 31592.66\nlastDate: 2026-09-29\nledger: 0\npeople: 0\nrecurring: 9\nsplitBills: 0\ntransactions: 239\n"
+        "stdout": "budgets: 14\ncategories: 15\ndebtHistory: 24\ndocuments: 0\nduePayments: 6\nexpense: 20742.70\nfirstDate: 2026-01-01\nhistory: 0\nincome: 31592.66\nlastDate: 2026-09-29\nledger: 0\npeople: 1\nrecurring: 12\nsplitBills: 10\ntransactions: 257\n"
       },
       "json": {
         "exit": 0,
         "stderr": "",
-        "stdout": "{\"budgets\":14,\"categories\":15,\"debtHistory\":7,\"documents\":0,\"duePayments\":1,\"expense\":\"20434.70\",\"firstDate\":\"2026-01-01\",\"history\":0,\"income\":\"31592.66\",\"lastDate\":\"2026-09-29\",\"ledger\":0,\"people\":0,\"recurring\":9,\"splitBills\":0,\"transactions\":239}\n"
+        "stdout": "{\"budgets\":14,\"categories\":15,\"debtHistory\":24,\"documents\":0,\"duePayments\":6,\"expense\":\"20742.70\",\"firstDate\":\"2026-01-01\",\"history\":0,\"income\":\"31592.66\",\"lastDate\":\"2026-09-29\",\"ledger\":0,\"people\":1,\"recurring\":12,\"splitBills\":10,\"transactions\":257}\n"
       }
     },
     "export xlsx": {
@@ -390,19 +391,19 @@
       "human": {
         "exit": 0,
         "stderr": "",
-        "stdout": "bytes: 27846\npath: /home/you/budget.xlsx\n"
+        "stdout": "bytes: 30656\npath: /home/you/budget.xlsx\n"
       }
     },
     "ledger add": {
-      "command": "meowny ledger add --person-id 1 --kind lent --amount 10.00 --date 2026-10-13 --note taxi",
+      "command": "meowny ledger add --person-id 5 --kind lent --amount 10.00 --date 2026-10-13 --note taxi",
       "json": {
         "exit": 0,
         "stderr": "",
-        "stdout": "{\"amount\":\"10.00\",\"date\":\"2026-10-13\",\"id\":\"1\",\"kind\":\"LENT\",\"note\":\"taxi\",\"personId\":\"1\",\"transactionId\":null}\n"
+        "stdout": "{\"amount\":\"10.00\",\"date\":\"2026-10-13\",\"id\":\"11\",\"kind\":\"LENT\",\"note\":\"taxi\",\"personId\":\"5\",\"transactionId\":null}\n"
       }
     },
     "ledger delete": {
-      "command": "meowny ledger delete 1 --yes",
+      "command": "meowny ledger delete 11 --yes",
       "human": {
         "exit": 0,
         "stderr": "done.\n",
@@ -410,11 +411,11 @@
       }
     },
     "ledger update": {
-      "command": "meowny ledger update 1 --amount 12.00",
+      "command": "meowny ledger update 11 --amount 12.00",
       "json": {
         "exit": 0,
         "stderr": "",
-        "stdout": "{\"amount\":\"12.00\",\"date\":\"2026-10-13\",\"id\":\"1\",\"kind\":\"LENT\",\"note\":\"taxi\",\"personId\":\"1\",\"transactionId\":null}\n"
+        "stdout": "{\"amount\":\"12.00\",\"date\":\"2026-10-13\",\"id\":\"11\",\"kind\":\"LENT\",\"note\":\"taxi\",\"personId\":\"5\",\"transactionId\":null}\n"
       }
     },
     "login": {
@@ -434,11 +435,11 @@
       }
     },
     "people archive": {
-      "command": "meowny people archive 2",
+      "command": "meowny people archive 6",
       "json": {
         "exit": 0,
         "stderr": "",
-        "stdout": "{\"archived\":true,\"balance\":\"0.00\",\"id\":\"2\",\"name\":\"Bob\",\"remindEveryDays\":7,\"remindOn\":\"2026-11-01\"}\n"
+        "stdout": "{\"archived\":true,\"balance\":\"0.00\",\"id\":\"6\",\"name\":\"Bob\",\"remindEveryDays\":7,\"remindOn\":\"2026-11-01\"}\n"
       }
     },
     "people create": {
@@ -446,7 +447,7 @@
       "json": {
         "exit": 0,
         "stderr": "",
-        "stdout": "{\"archived\":false,\"balance\":\"0.00\",\"id\":\"1\",\"name\":\"Anna\",\"remindEveryDays\":null,\"remindOn\":null}\n"
+        "stdout": "{\"archived\":false,\"balance\":\"0.00\",\"id\":\"5\",\"name\":\"Anna\",\"remindEveryDays\":null,\"remindOn\":null}\n"
       }
     },
     "people list": {
@@ -454,49 +455,49 @@
       "human": {
         "exit": 0,
         "stderr": "",
-        "stdout": "id  name  archived  balance  remindEveryDays  remindOn\n 1  Anna  false       42.00                -  -\n 2  Bob   false       30.00                7  2026-11-01\n"
+        "stdout": "id  name   archived  balance  remindEveryDays  remindOn\n 1  Marta  false       85.05                -  -\n 5  Anna   false       42.00                -  -\n 6  Bob    false       30.00                7  2026-11-01\n 2  Tomás  false      -23.95                -  -\n 3  Priya  false        0.00                -  -\n"
       },
       "json": {
         "exit": 0,
         "stderr": "",
-        "stdout": "[{\"archived\":false,\"balance\":\"42.00\",\"id\":\"1\",\"name\":\"Anna\",\"remindEveryDays\":null,\"remindOn\":null},{\"archived\":false,\"balance\":\"30.00\",\"id\":\"2\",\"name\":\"Bob\",\"remindEveryDays\":7,\"remindOn\":\"2026-11-01\"}]\n"
+        "stdout": "[{\"archived\":false,\"balance\":\"85.05\",\"id\":\"1\",\"name\":\"Marta\",\"remindEveryDays\":null,\"remindOn\":null},{\"archived\":false,\"balance\":\"42.00\",\"id\":\"5\",\"name\":\"Anna\",\"remindEveryDays\":null,\"remindOn\":null},{\"archived\":false,\"balance\":\"30.00\",\"id\":\"6\",\"name\":\"Bob\",\"remindEveryDays\":7,\"remindOn\":\"2026-11-01\"},{\"archived\":false,\"balance\":\"-23.95\",\"id\":\"2\",\"name\":\"Tomás\",\"remindEveryDays\":null,\"remindOn\":null},{\"archived\":false,\"balance\":\"0.00\",\"id\":\"3\",\"name\":\"Priya\",\"remindEveryDays\":null,\"remindOn\":null}]\n"
       }
     },
     "people settle": {
-      "command": "meowny people settle 1 --amount 50.00 --date 2026-10-15",
+      "command": "meowny people settle 5 --amount 50.00 --date 2026-10-15",
       "json": {
         "exit": 0,
         "stderr": "",
-        "stdout": "{\"after\":\"-8.00\",\"before\":\"42.00\",\"entry\":{\"amount\":\"50.00\",\"date\":\"2026-10-15\",\"id\":\"2\",\"kind\":\"REPAID_TO_ME\",\"note\":null,\"personId\":\"1\",\"transactionId\":null},\"over\":\"8.00\"}\n"
+        "stdout": "{\"after\":\"-8.00\",\"before\":\"42.00\",\"entry\":{\"amount\":\"50.00\",\"date\":\"2026-10-15\",\"id\":\"12\",\"kind\":\"REPAID_TO_ME\",\"note\":null,\"personId\":\"5\",\"transactionId\":null},\"over\":\"8.00\"}\n"
       }
     },
     "people show": {
-      "command": "meowny people show 1",
+      "command": "meowny people show 5",
       "human": {
         "exit": 0,
         "stderr": "",
-        "stdout": "person: {\"archived\":false,\"balance\":\"42.00\",\"id\":\"1\",\"name\":\"Anna\",\"remindEveryDays\":null,\"remindOn\":null}\n\nlines\namount  balance  date        effect  entryId  kind  transactionId  what\n 30.00    30.00  2026-10-12   30.00        -  BILL            405  Dinner\n 12.00    42.00  2026-10-13   12.00        1  LENT              -  taxi\n"
+        "stdout": "person: {\"archived\":false,\"balance\":\"42.00\",\"id\":\"5\",\"name\":\"Anna\",\"remindEveryDays\":null,\"remindOn\":null}\n\nlines\namount  balance  date        effect  entryId  kind  transactionId  what\n 30.00    30.00  2026-10-12   30.00        -  BILL            425  Dinner\n 12.00    42.00  2026-10-13   12.00       11  LENT              -  taxi\n"
       },
       "json": {
         "exit": 0,
         "stderr": "",
-        "stdout": "{\"lines\":[{\"amount\":\"30.00\",\"balance\":\"30.00\",\"date\":\"2026-10-12\",\"effect\":\"30.00\",\"entryId\":null,\"kind\":\"BILL\",\"transactionId\":\"405\",\"what\":\"Dinner\"},{\"amount\":\"12.00\",\"balance\":\"42.00\",\"date\":\"2026-10-13\",\"effect\":\"12.00\",\"entryId\":\"1\",\"kind\":\"LENT\",\"transactionId\":null,\"what\":\"taxi\"}],\"person\":{\"archived\":false,\"balance\":\"42.00\",\"id\":\"1\",\"name\":\"Anna\",\"remindEveryDays\":null,\"remindOn\":null}}\n"
+        "stdout": "{\"lines\":[{\"amount\":\"30.00\",\"balance\":\"30.00\",\"date\":\"2026-10-12\",\"effect\":\"30.00\",\"entryId\":null,\"kind\":\"BILL\",\"transactionId\":\"425\",\"what\":\"Dinner\"},{\"amount\":\"12.00\",\"balance\":\"42.00\",\"date\":\"2026-10-13\",\"effect\":\"12.00\",\"entryId\":\"11\",\"kind\":\"LENT\",\"transactionId\":null,\"what\":\"taxi\"}],\"person\":{\"archived\":false,\"balance\":\"42.00\",\"id\":\"5\",\"name\":\"Anna\",\"remindEveryDays\":null,\"remindOn\":null}}\n"
       }
     },
     "people unarchive": {
-      "command": "meowny people unarchive 2",
+      "command": "meowny people unarchive 6",
       "json": {
         "exit": 0,
         "stderr": "",
-        "stdout": "{\"archived\":false,\"balance\":\"0.00\",\"id\":\"2\",\"name\":\"Bob\",\"remindEveryDays\":7,\"remindOn\":\"2026-11-01\"}\n"
+        "stdout": "{\"archived\":false,\"balance\":\"0.00\",\"id\":\"6\",\"name\":\"Bob\",\"remindEveryDays\":7,\"remindOn\":\"2026-11-01\"}\n"
       }
     },
     "people update": {
-      "command": "meowny people update 2 --remind-on 2026-11-01 --remind-every-days 7",
+      "command": "meowny people update 6 --remind-on 2026-11-01 --remind-every-days 7",
       "json": {
         "exit": 0,
         "stderr": "",
-        "stdout": "{\"archived\":false,\"balance\":\"0.00\",\"id\":\"2\",\"name\":\"Bob\",\"remindEveryDays\":7,\"remindOn\":\"2026-11-01\"}\n"
+        "stdout": "{\"archived\":false,\"balance\":\"0.00\",\"id\":\"6\",\"name\":\"Bob\",\"remindEveryDays\":7,\"remindOn\":\"2026-11-01\"}\n"
       }
     },
     "recurring create": {
@@ -504,11 +505,11 @@
       "json": {
         "exit": 0,
         "stderr": "",
-        "stdout": "{\"amount\":\"20.00\",\"categoryId\":\"16\",\"description\":null,\"endDate\":null,\"id\":\"10\",\"intervalCount\":1,\"intervalUnit\":\"MONTH\",\"isActive\":true,\"name\":\"Vet plan\",\"nextDueDate\":\"2026-10-20\",\"split\":null,\"startDate\":\"2026-10-20\"}\n"
+        "stdout": "{\"amount\":\"20.00\",\"categoryId\":\"16\",\"description\":null,\"endDate\":null,\"id\":\"13\",\"intervalCount\":1,\"intervalUnit\":\"MONTH\",\"isActive\":true,\"name\":\"Vet plan\",\"nextDueDate\":\"2026-10-20\",\"split\":null,\"startDate\":\"2026-10-20\"}\n"
       }
     },
     "recurring delete": {
-      "command": "meowny recurring delete 10 --yes",
+      "command": "meowny recurring delete 13 --yes",
       "human": {
         "exit": 0,
         "stderr": "done.\n",
@@ -520,22 +521,22 @@
       "human": {
         "exit": 0,
         "stderr": "",
-        "stdout": "overdue\nid  name              nextDueDate  amount  categoryId  description  endDate  intervalCount  intervalUnit  isActive  split  startDate\n 6  Cleaning service  2026-10-11    30.00          10  -            -                    2  WEEK          true      -      2026-04-26\n\nupcoming\nid  name         nextDueDate   amount  categoryId  description            endDate  intervalCount  intervalUnit  isActive  split  startDate\n 4  Electricity  2026-10-20         -          10  Varies with the meter  -                    1  MONTH         true      -      2025-07-20\n 7  Salary       2026-10-25   3240.00           1  Monthly pay            -                    1  MONTH         true      -      2025-07…",
+        "stdout": "overdue\nid  name              nextDueDate  amount  categoryId  description                endDate  intervalCount  intervalUnit  isActive  split  startDate\n11  Yoga class        2026-08-05    32.00           8  Monthly pass               -                    1  MONTH         true      -      2026-04-05\n12  Mobile top-up     2026-09-03        -          10  Whatever the shop charges  -                    1  MONTH         true      -      2026-05-03\n 6  Cleaning service  2026-10-11    30.00          10  -                          -                    2  WEEK          true      -      2026-04-26\n\nupcoming\nid  name         nextDueDate   amount  categoryId  description            endDate  interval…",
         "truncated": true
       },
       "json": {
         "exit": 0,
         "stderr": "",
-        "stdout": "{\"overdue\":[{\"amount\":\"30.00\",\"categoryId\":\"10\",\"description\":null,\"endDate\":null,\"id\":\"6\",\"intervalCount\":2,\"intervalUnit\":\"WEEK\",\"isActive\":true,\"name\":\"Cleaning service\",\"nextDueDate\":\"2026-10-11\",\"split\":null,\"startDate\":\"2026-04-26\"}],\"upcoming\":[{\"amount\":null,\"categoryId\":\"10\",\"description\":\"Varies with the meter\",\"endDate\":null,\"id\":\"4\",\"intervalCount\":1,\"intervalUnit\":\"MONTH\",\"isActive\":true,\"name\":\"Electricity\",\"nextDueDate\":\"2026-10-20\",\"split\":null,\"startDate\":\"2025-07-20\"},{\"amount\":\"3240.00\",\"categoryId\":\"1\",\"description\":\"Monthly pay\",\"endDate\":null,\"id\":\"7\",\"intervalCount\":1,\"intervalUnit\":\"MONTH\",\"isActive\":true,\"name\":\"Salary\",\"nextDueDate\":\"2026-10-25\",\"split\":null,\"startD…",
+        "stdout": "{\"overdue\":[{\"amount\":\"32.00\",\"categoryId\":\"8\",\"description\":\"Monthly pass\",\"endDate\":null,\"id\":\"11\",\"intervalCount\":1,\"intervalUnit\":\"MONTH\",\"isActive\":true,\"name\":\"Yoga class\",\"nextDueDate\":\"2026-08-05\",\"split\":null,\"startDate\":\"2026-04-05\"},{\"amount\":null,\"categoryId\":\"10\",\"description\":\"Whatever the shop charges\",\"endDate\":null,\"id\":\"12\",\"intervalCount\":1,\"intervalUnit\":\"MONTH\",\"isActive\":true,\"name\":\"Mobile top-up\",\"nextDueDate\":\"2026-09-03\",\"split\":null,\"startDate\":\"2026-05-03\"},{\"amount\":\"30.00\",\"categoryId\":\"10\",\"description\":null,\"endDate\":null,\"id\":\"6\",\"intervalCount\":2,\"intervalUnit\":\"WEEK\",\"isActive\":true,\"name\":\"Cleaning service\",\"nextDueDate\":\"2026-10-11\",\"split\":null,\"startDat…",
         "truncated": true
       }
     },
     "recurring end": {
-      "command": "meowny recurring end 10 --yes",
+      "command": "meowny recurring end 13 --yes",
       "json": {
         "exit": 0,
         "stderr": "",
-        "stdout": "{\"amount\":\"20.00\",\"categoryId\":\"16\",\"description\":null,\"endDate\":\"2026-10-20\",\"id\":\"10\",\"intervalCount\":1,\"intervalUnit\":\"MONTH\",\"isActive\":false,\"name\":\"Vet plan plus\",\"nextDueDate\":\"2026-12-20\",\"split\":null,\"startDate\":\"2026-10-20\"}\n"
+        "stdout": "{\"amount\":\"20.00\",\"categoryId\":\"16\",\"description\":null,\"endDate\":\"2026-10-20\",\"id\":\"13\",\"intervalCount\":1,\"intervalUnit\":\"MONTH\",\"isActive\":false,\"name\":\"Vet plan plus\",\"nextDueDate\":\"2026-12-20\",\"split\":null,\"startDate\":\"2026-10-20\"}\n"
       }
     },
     "recurring list": {
@@ -543,70 +544,70 @@
       "human": {
         "exit": 0,
         "stderr": "",
-        "stdout": "id  name              nextDueDate   amount  categoryId  description             endDate     intervalCount  intervalUnit  isActive  split  startDate\n 6  Cleaning service  2026-10-11     30.00          10  -                       -                       2  WEEK          true      -      2026-04-26\n 4  Electricity       2026-10-20         -          10  Varies with the meter   -                       1  MONTH         true      -      2025-07-20\n 7  Salary            2026-10-25   3240.00           1  Monthly pay             -                       1  MONTH         true      -      2025-07-25\n 1  Rent              2026-11-01    950.00           4  Flat, paid by transfer  -                       1…",
+        "stdout": "id  name              nextDueDate   amount  categoryId  description                endDate     intervalCount  intervalUnit  isActive  split                                                         startDate\n11  Yoga class        2026-08-05     32.00           8  Monthly pass               -                       1  MONTH         true      -                                                             2026-04-05\n12  Mobile top-up     2026-09-03         -          10  Whatever the shop charges  -                       1  MONTH         true      -                                                             2026-05-03\n 6  Cleaning service  2026-10-11     30.00          10  -                       …",
         "truncated": true
       },
       "json": {
         "exit": 0,
         "stderr": "",
-        "stdout": "[{\"amount\":\"30.00\",\"categoryId\":\"10\",\"description\":null,\"endDate\":null,\"id\":\"6\",\"intervalCount\":2,\"intervalUnit\":\"WEEK\",\"isActive\":true,\"name\":\"Cleaning service\",\"nextDueDate\":\"2026-10-11\",\"split\":null,\"startDate\":\"2026-04-26\"},{\"amount\":null,\"categoryId\":\"10\",\"description\":\"Varies with the meter\",\"endDate\":null,\"id\":\"4\",\"intervalCount\":1,\"intervalUnit\":\"MONTH\",\"isActive\":true,\"name\":\"Electricity\",\"nextDueDate\":\"2026-10-20\",\"split\":null,\"startDate\":\"2025-07-20\"},{\"amount\":\"3240.00\",\"categoryId\":\"1\",\"description\":\"Monthly pay\",\"endDate\":null,\"id\":\"7\",\"intervalCount\":1,\"intervalUnit\":\"MONTH\",\"isActive\":true,\"name\":\"Salary\",\"nextDueDate\":\"2026-10-25\",\"split\":null,\"startDate\":\"2025-07-25\"},{\"amo…",
+        "stdout": "[{\"amount\":\"32.00\",\"categoryId\":\"8\",\"description\":\"Monthly pass\",\"endDate\":null,\"id\":\"11\",\"intervalCount\":1,\"intervalUnit\":\"MONTH\",\"isActive\":true,\"name\":\"Yoga class\",\"nextDueDate\":\"2026-08-05\",\"split\":null,\"startDate\":\"2026-04-05\"},{\"amount\":null,\"categoryId\":\"10\",\"description\":\"Whatever the shop charges\",\"endDate\":null,\"id\":\"12\",\"intervalCount\":1,\"intervalUnit\":\"MONTH\",\"isActive\":true,\"name\":\"Mobile top-up\",\"nextDueDate\":\"2026-09-03\",\"split\":null,\"startDate\":\"2026-05-03\"},{\"amount\":\"30.00\",\"categoryId\":\"10\",\"description\":null,\"endDate\":null,\"id\":\"6\",\"intervalCount\":2,\"intervalUnit\":\"WEEK\",\"isActive\":true,\"name\":\"Cleaning service\",\"nextDueDate\":\"2026-10-11\",\"split\":null,\"startDate\":\"2026-04…",
         "truncated": true
       }
     },
     "recurring pause": {
-      "command": "meowny recurring pause 10",
+      "command": "meowny recurring pause 13",
       "json": {
         "exit": 0,
         "stderr": "",
-        "stdout": "{\"amount\":\"20.00\",\"categoryId\":\"16\",\"description\":null,\"endDate\":null,\"id\":\"10\",\"intervalCount\":1,\"intervalUnit\":\"MONTH\",\"isActive\":false,\"name\":\"Vet plan plus\",\"nextDueDate\":\"2026-12-20\",\"split\":null,\"startDate\":\"2026-10-20\"}\n"
+        "stdout": "{\"amount\":\"20.00\",\"categoryId\":\"16\",\"description\":null,\"endDate\":null,\"id\":\"13\",\"intervalCount\":1,\"intervalUnit\":\"MONTH\",\"isActive\":false,\"name\":\"Vet plan plus\",\"nextDueDate\":\"2026-12-20\",\"split\":null,\"startDate\":\"2026-10-20\"}\n"
       }
     },
     "recurring pay": {
-      "command": "meowny recurring pay 10 --paid-on 2026-10-14",
+      "command": "meowny recurring pay 13 --paid-on 2026-10-14",
       "json": {
         "exit": 0,
         "stderr": "",
-        "stdout": "{\"amount\":\"20.00\",\"categoryId\":\"16\",\"clientUuid\":null,\"description\":null,\"id\":\"406\",\"myShare\":\"20.00\",\"name\":\"Vet plan plus\",\"paymentDate\":\"2026-10-14\",\"split\":[]}\n"
+        "stdout": "{\"amount\":\"20.00\",\"categoryId\":\"16\",\"clientUuid\":null,\"description\":null,\"id\":\"426\",\"myShare\":\"20.00\",\"name\":\"Vet plan plus\",\"paymentDate\":\"2026-10-14\",\"split\":[]}\n"
       }
     },
     "recurring resume": {
-      "command": "meowny recurring resume 10",
+      "command": "meowny recurring resume 13",
       "json": {
         "exit": 0,
         "stderr": "",
-        "stdout": "{\"amount\":\"20.00\",\"categoryId\":\"16\",\"description\":null,\"endDate\":null,\"id\":\"10\",\"intervalCount\":1,\"intervalUnit\":\"MONTH\",\"isActive\":true,\"name\":\"Vet plan plus\",\"nextDueDate\":\"2026-12-20\",\"split\":null,\"startDate\":\"2026-10-20\"}\n"
+        "stdout": "{\"amount\":\"20.00\",\"categoryId\":\"16\",\"description\":null,\"endDate\":null,\"id\":\"13\",\"intervalCount\":1,\"intervalUnit\":\"MONTH\",\"isActive\":true,\"name\":\"Vet plan plus\",\"nextDueDate\":\"2026-12-20\",\"split\":null,\"startDate\":\"2026-10-20\"}\n"
       }
     },
     "recurring skip": {
-      "command": "meowny recurring skip 10",
+      "command": "meowny recurring skip 13",
       "json": {
         "exit": 0,
         "stderr": "",
-        "stdout": "{\"amount\":\"20.00\",\"categoryId\":\"16\",\"description\":null,\"endDate\":null,\"id\":\"10\",\"intervalCount\":1,\"intervalUnit\":\"MONTH\",\"isActive\":true,\"name\":\"Vet plan plus\",\"nextDueDate\":\"2026-12-20\",\"split\":null,\"startDate\":\"2026-10-20\"}\n"
+        "stdout": "{\"amount\":\"20.00\",\"categoryId\":\"16\",\"description\":null,\"endDate\":null,\"id\":\"13\",\"intervalCount\":1,\"intervalUnit\":\"MONTH\",\"isActive\":true,\"name\":\"Vet plan plus\",\"nextDueDate\":\"2026-12-20\",\"split\":null,\"startDate\":\"2026-10-20\"}\n"
       }
     },
     "recurring split": {
-      "command": "meowny recurring split 10 --mode shares --mine 2 --people 1 --values 1",
+      "command": "meowny recurring split 13 --mode shares --mine 2 --people 5 --values 1",
       "json": {
         "exit": 0,
         "stderr": "",
-        "stdout": "{\"amount\":\"20.00\",\"categoryId\":\"16\",\"description\":null,\"endDate\":null,\"id\":\"10\",\"intervalCount\":1,\"intervalUnit\":\"MONTH\",\"isActive\":true,\"name\":\"Vet plan plus\",\"nextDueDate\":\"2026-10-20\",\"split\":{\"mine\":2,\"parts\":[{\"guest\":null,\"person\":\"Anna\",\"personId\":\"1\",\"weight\":1}]},\"startDate\":\"2026-10-20\"}\n"
+        "stdout": "{\"amount\":\"20.00\",\"categoryId\":\"16\",\"description\":null,\"endDate\":null,\"id\":\"13\",\"intervalCount\":1,\"intervalUnit\":\"MONTH\",\"isActive\":true,\"name\":\"Vet plan plus\",\"nextDueDate\":\"2026-10-20\",\"split\":{\"mine\":2,\"parts\":[{\"guest\":null,\"person\":\"Anna\",\"personId\":\"5\",\"weight\":1}]},\"startDate\":\"2026-10-20\"}\n"
       }
     },
     "recurring unsplit": {
-      "command": "meowny recurring unsplit 10",
+      "command": "meowny recurring unsplit 13",
       "json": {
         "exit": 0,
         "stderr": "",
-        "stdout": "{\"amount\":\"20.00\",\"categoryId\":\"16\",\"description\":null,\"endDate\":null,\"id\":\"10\",\"intervalCount\":1,\"intervalUnit\":\"MONTH\",\"isActive\":true,\"name\":\"Vet plan plus\",\"nextDueDate\":\"2026-10-20\",\"split\":null,\"startDate\":\"2026-10-20\"}\n"
+        "stdout": "{\"amount\":\"20.00\",\"categoryId\":\"16\",\"description\":null,\"endDate\":null,\"id\":\"13\",\"intervalCount\":1,\"intervalUnit\":\"MONTH\",\"isActive\":true,\"name\":\"Vet plan plus\",\"nextDueDate\":\"2026-10-20\",\"split\":null,\"startDate\":\"2026-10-20\"}\n"
       }
     },
     "recurring update": {
-      "command": "meowny recurring update 10 --name \"Vet plan plus\" --clear-end-date",
+      "command": "meowny recurring update 13 --name \"Vet plan plus\" --clear-end-date",
       "json": {
         "exit": 0,
         "stderr": "",
-        "stdout": "{\"amount\":\"20.00\",\"categoryId\":\"16\",\"description\":null,\"endDate\":null,\"id\":\"10\",\"intervalCount\":1,\"intervalUnit\":\"MONTH\",\"isActive\":true,\"name\":\"Vet plan plus\",\"nextDueDate\":\"2026-10-20\",\"split\":null,\"startDate\":\"2026-10-20\"}\n"
+        "stdout": "{\"amount\":\"20.00\",\"categoryId\":\"16\",\"description\":null,\"endDate\":null,\"id\":\"13\",\"intervalCount\":1,\"intervalUnit\":\"MONTH\",\"isActive\":true,\"name\":\"Vet plan plus\",\"nextDueDate\":\"2026-10-20\",\"split\":null,\"startDate\":\"2026-10-20\"}\n"
       }
     },
     "schema": {
@@ -640,16 +641,16 @@
       }
     },
     "splits preview": {
-      "command": "meowny splits preview --amount 90.00 --mode percent --people 1,2 --values 30.00,30.00",
+      "command": "meowny splits preview --amount 90.00 --mode percent --people 5,6 --values 30.00,30.00",
       "human": {
         "exit": 0,
         "stderr": "",
-        "stdout": "complete: true\nleft: 0.00\nmine: 36.00\n\nparts\namount  guest  person  personId\n 27.00  -      Anna           1\n 27.00  -      Bob            2\n"
+        "stdout": "complete: true\nleft: 0.00\nmine: 36.00\n\nparts\namount  guest  person  personId\n 27.00  -      Anna           5\n 27.00  -      Bob            6\n"
       },
       "json": {
         "exit": 0,
         "stderr": "",
-        "stdout": "{\"complete\":true,\"left\":\"0.00\",\"mine\":\"36.00\",\"parts\":[{\"amount\":\"27.00\",\"guest\":null,\"person\":\"Anna\",\"personId\":\"1\"},{\"amount\":\"27.00\",\"guest\":null,\"person\":\"Bob\",\"personId\":\"2\"}]}\n"
+        "stdout": "{\"complete\":true,\"left\":\"0.00\",\"mine\":\"36.00\",\"parts\":[{\"amount\":\"27.00\",\"guest\":null,\"person\":\"Anna\",\"personId\":\"5\"},{\"amount\":\"27.00\",\"guest\":null,\"person\":\"Bob\",\"personId\":\"6\"}]}\n"
       }
     },
     "stats budget": {
@@ -657,13 +658,13 @@
       "human": {
         "exit": 0,
         "stderr": "",
-        "stdout": "month: 2026-09\n\ncategories\nname                 type     budgeted   actual  remaining  pctUsed  categoryId\nEating out           EXPENSE    200.00   177.00      23.00     88.5           7\nEntertainment        EXPENSE         -    52.07          -        -           8\nGifts                EXPENSE         -     0.00          -        -          13\nGroceries            EXPENSE    500.00   365.00     135.00     73.0           5\nHealth               EXPENSE         -    12.34          -        -          11\nRent                 EXPENSE    950.00   950.00       0.00    100.0           4\nSubscriptions        EXPENSE     45.00    23.98      21.02     53.3           9\nTransport            EXPENSE     …",
+        "stdout": "month: 2026-09\n\ncategories\nname                 type     budgeted   actual  remaining  pctUsed  categoryId\nEating out           EXPENSE    200.00   177.00      23.00     88.5           7\nEntertainment        EXPENSE         -    52.07          -        -           8\nGifts                EXPENSE         -     0.00          -        -          13\nGroceries            EXPENSE    500.00   413.00      87.00     82.6           5\nHealth               EXPENSE         -    12.34          -        -          11\nRent                 EXPENSE    950.00   950.00       0.00    100.0           4\nSubscriptions        EXPENSE     45.00    23.98      21.02     53.3           9\nTransport            EXPENSE     …",
         "truncated": true
       },
       "json": {
         "exit": 0,
         "stderr": "",
-        "stdout": "{\"categories\":[{\"actual\":\"177.00\",\"budgeted\":\"200.00\",\"categoryId\":\"7\",\"name\":\"Eating out\",\"pctUsed\":88.5,\"remaining\":\"23.00\",\"type\":\"EXPENSE\"},{\"actual\":\"52.07\",\"budgeted\":null,\"categoryId\":\"8\",\"name\":\"Entertainment\",\"pctUsed\":null,\"remaining\":null,\"type\":\"EXPENSE\"},{\"actual\":\"0.00\",\"budgeted\":null,\"categoryId\":\"13\",\"name\":\"Gifts\",\"pctUsed\":null,\"remaining\":null,\"type\":\"EXPENSE\"},{\"actual\":\"365.00\",\"budgeted\":\"500.00\",\"categoryId\":\"5\",\"name\":\"Groceries\",\"pctUsed\":73.0,\"remaining\":\"135.00\",\"type\":\"EXPENSE\"},{\"actual\":\"12.34\",\"budgeted\":null,\"categoryId\":\"11\",\"name\":\"Health\",\"pctUsed\":null,\"remaining\":null,\"type\":\"EXPENSE\"},{\"actual\":\"950.00\",\"budgeted\":\"950.00\",\"categoryId\":\"4\",\"name\":\"Rent\"…",
+        "stdout": "{\"categories\":[{\"actual\":\"177.00\",\"budgeted\":\"200.00\",\"categoryId\":\"7\",\"name\":\"Eating out\",\"pctUsed\":88.5,\"remaining\":\"23.00\",\"type\":\"EXPENSE\"},{\"actual\":\"52.07\",\"budgeted\":null,\"categoryId\":\"8\",\"name\":\"Entertainment\",\"pctUsed\":null,\"remaining\":null,\"type\":\"EXPENSE\"},{\"actual\":\"0.00\",\"budgeted\":null,\"categoryId\":\"13\",\"name\":\"Gifts\",\"pctUsed\":null,\"remaining\":null,\"type\":\"EXPENSE\"},{\"actual\":\"413.00\",\"budgeted\":\"500.00\",\"categoryId\":\"5\",\"name\":\"Groceries\",\"pctUsed\":82.6,\"remaining\":\"87.00\",\"type\":\"EXPENSE\"},{\"actual\":\"12.34\",\"budgeted\":null,\"categoryId\":\"11\",\"name\":\"Health\",\"pctUsed\":null,\"remaining\":null,\"type\":\"EXPENSE\"},{\"actual\":\"950.00\",\"budgeted\":\"950.00\",\"categoryId\":\"4\",\"name\":\"Rent\",…",
         "truncated": true
       }
     },
@@ -672,12 +673,13 @@
       "human": {
         "exit": 0,
         "stderr": "",
-        "stdout": "expense: 1064.98\nincome: 3240.00\n\nitems\nid  name              type     perMonth\n 6  Cleaning service  EXPENSE     65.00\n 4  Electricity       EXPENSE         -\n 5  Home insurance    EXPENSE     26.00\n 2  Netflix           EXPENSE     12.99\n 1  Rent              EXPENSE    950.00\n 3  Spotify           EXPENSE     10.99\n 7  Salary            INCOME    3240.00\n"
+        "stdout": "expense: 1148.98\nincome: 3240.00\n\nitems\nid  name              type     perMonth\n 6  Cleaning service  EXPENSE     65.00\n 4  Electricity       EXPENSE         -\n 5  Home insurance    EXPENSE     26.00\n12  Mobile top-up     EXPENSE         -\n 2  Netflix           EXPENSE     12.99\n 1  Rent              EXPENSE    950.00\n 3  Spotify           EXPENSE     10.99\n10  Veg box           EXPENSE     52.00\n11  Yoga class        EXPENSE     32.00\n 7  Salary            INCOME    3240.00\n"
       },
       "json": {
         "exit": 0,
         "stderr": "",
-        "stdout": "{\"expense\":\"1064.98\",\"income\":\"3240.00\",\"items\":[{\"id\":\"6\",\"name\":\"Cleaning service\",\"perMonth\":\"65.00\",\"type\":\"EXPENSE\"},{\"id\":\"4\",\"name\":\"Electricity\",\"perMonth\":null,\"type\":\"EXPENSE\"},{\"id\":\"5\",\"name\":\"Home insurance\",\"perMonth\":\"26.00\",\"type\":\"EXPENSE\"},{\"id\":\"2\",\"name\":\"Netflix\",\"perMonth\":\"12.99\",\"type\":\"EXPENSE\"},{\"id\":\"1\",\"name\":\"Rent\",\"perMonth\":\"950.00\",\"type\":\"EXPENSE\"},{\"id\":\"3\",\"name\":\"Spotify\",\"perMonth\":\"10.99\",\"type\":\"EXPENSE\"},{\"id\":\"7\",\"name\":\"Salary\",\"perMonth\":\"3240.00\",\"type\":\"INCOME\"}]}\n"
+        "stdout": "{\"expense\":\"1148.98\",\"income\":\"3240.00\",\"items\":[{\"id\":\"6\",\"name\":\"Cleaning service\",\"perMonth\":\"65.00\",\"type\":\"EXPENSE\"},{\"id\":\"4\",\"name\":\"Electricity\",\"perMonth\":null,\"type\":\"EXPENSE\"},{\"id\":\"5\",\"name\":\"Home insurance\",\"perMonth\":\"26.00\",\"type\":\"EXPENSE\"},{\"id\":\"12\",\"name\":\"Mobile top-up\",\"perMonth\":null,\"type\":\"EXPENSE\"},{\"id\":\"2\",\"name\":\"Netflix\",\"perMonth\":\"12.99\",\"type\":\"EXPENSE\"},{\"id\":\"1\",\"name\":\"Rent\",\"perMonth\":\"950.00\",\"type\":\"EXPENSE\"},{\"id\":\"3\",\"name\":\"Spotify\",\"perMonth\":\"10.99\",\"type\":\"EXPENSE\"},{\"id\":\"10\",\"name\":\"Veg box\",\"perMonth\":\"52.00\",\"type\":\"EXPENSE\"},{\"id\":\"11\",\"name\":\"Yoga class\",\"perMonth\":\"32.00\",\"type\":\"EXPENSE\"},{\"id\":\"7\",\"name\":\"Salary\",\"perMonth\":\"3240.00\",\"typ…",
+        "truncated": true
       }
     },
     "stats planned": {
@@ -685,12 +687,13 @@
       "human": {
         "exit": 0,
         "stderr": "",
-        "stdout": "name              difference     paid  paidCount  planned  recurringId\nCleaning service        5.00    65.00          2    60.00            6\nElectricity                -    80.30          1        -            4\nNetflix                 0.00    12.99          1    12.99            2\nRent                    0.00   950.00          1   950.00            1\nSalary                  0.00  3240.00          1  3240.00            7\nSpotify                 0.00    10.99          1    10.99            3\n"
+        "stdout": "name              difference     paid  paidCount  planned  recurringId\nCleaning service        5.00    65.00          2    60.00            6\nElectricity                -    80.30          1        -            4\nNetflix                 0.00    12.99          1    12.99            2\nRent                    0.00   950.00          1   950.00            1\nSalary                  0.00  3240.00          1  3240.00            7\nSpotify                 0.00    10.99          1    10.99            3\nVeg box                 0.00    96.00          4    96.00           10\n"
       },
       "json": {
         "exit": 0,
         "stderr": "",
-        "stdout": "[{\"difference\":\"5.00\",\"name\":\"Cleaning service\",\"paid\":\"65.00\",\"paidCount\":2,\"planned\":\"60.00\",\"recurringId\":\"6\"},{\"difference\":null,\"name\":\"Electricity\",\"paid\":\"80.30\",\"paidCount\":1,\"planned\":null,\"recurringId\":\"4\"},{\"difference\":\"0.00\",\"name\":\"Netflix\",\"paid\":\"12.99\",\"paidCount\":1,\"planned\":\"12.99\",\"recurringId\":\"2\"},{\"difference\":\"0.00\",\"name\":\"Rent\",\"paid\":\"950.00\",\"paidCount\":1,\"planned\":\"950.00\",\"recurringId\":\"1\"},{\"difference\":\"0.00\",\"name\":\"Salary\",\"paid\":\"3240.00\",\"paidCount\":1,\"planned\":\"3240.00\",\"recurringId\":\"7\"},{\"difference\":\"0.00\",\"name\":\"Spotify\",\"paid\":\"10.99\",\"paidCount\":1,\"planned\":\"10.99\",\"recurringId\":\"3\"}]\n"
+        "stdout": "[{\"difference\":\"5.00\",\"name\":\"Cleaning service\",\"paid\":\"65.00\",\"paidCount\":2,\"planned\":\"60.00\",\"recurringId\":\"6\"},{\"difference\":null,\"name\":\"Electricity\",\"paid\":\"80.30\",\"paidCount\":1,\"planned\":null,\"recurringId\":\"4\"},{\"difference\":\"0.00\",\"name\":\"Netflix\",\"paid\":\"12.99\",\"paidCount\":1,\"planned\":\"12.99\",\"recurringId\":\"2\"},{\"difference\":\"0.00\",\"name\":\"Rent\",\"paid\":\"950.00\",\"paidCount\":1,\"planned\":\"950.00\",\"recurringId\":\"1\"},{\"difference\":\"0.00\",\"name\":\"Salary\",\"paid\":\"3240.00\",\"paidCount\":1,\"planned\":\"3240.00\",\"recurringId\":\"7\"},{\"difference\":\"0.00\",\"name\":\"Spotify\",\"paid\":\"10.99\",\"paidCount\":1,\"planned\":\"10.99\",\"recurringId\":\"3\"},{\"difference\":\"0.00\",\"name\":\"Veg box\",\"paid\":\"96.00\",\"paidCount\":…",
+        "truncated": true
       }
     },
     "stats top": {
@@ -698,12 +701,12 @@
       "human": {
         "exit": 0,
         "stderr": "",
-        "stdout": "name       actual  categoryId  share\nRent       950.00           4   49.6\nGroceries  365.00           5   19.1\nUtilities  180.29          10    9.4\n"
+        "stdout": "name       actual  categoryId  share\nRent       950.00           4   48.4\nGroceries  413.00           5   21.1\nUtilities  180.29          10    9.2\n"
       },
       "json": {
         "exit": 0,
         "stderr": "",
-        "stdout": "[{\"actual\":\"950.00\",\"categoryId\":\"4\",\"name\":\"Rent\",\"share\":49.6},{\"actual\":\"365.00\",\"categoryId\":\"5\",\"name\":\"Groceries\",\"share\":19.1},{\"actual\":\"180.29\",\"categoryId\":\"10\",\"name\":\"Utilities\",\"share\":9.4}]\n"
+        "stdout": "[{\"actual\":\"950.00\",\"categoryId\":\"4\",\"name\":\"Rent\",\"share\":48.4},{\"actual\":\"413.00\",\"categoryId\":\"5\",\"name\":\"Groceries\",\"share\":21.1},{\"actual\":\"180.29\",\"categoryId\":\"10\",\"name\":\"Utilities\",\"share\":9.2}]\n"
       }
     },
     "stats trend": {
@@ -711,12 +714,12 @@
       "human": {
         "exit": 0,
         "stderr": "",
-        "stdout": "categoryId: 5\n\npoints\nmonth    budgeted  actual\n2026-07    500.00  391.30\n2026-08    500.00  255.15\n2026-09    500.00  365.00\n"
+        "stdout": "categoryId: 5\n\npoints\nmonth    budgeted  actual\n2026-07    500.00  403.30\n2026-08    500.00  315.15\n2026-09    500.00  413.00\n"
       },
       "json": {
         "exit": 0,
         "stderr": "",
-        "stdout": "{\"categoryId\":\"5\",\"points\":[{\"actual\":\"391.30\",\"budgeted\":\"500.00\",\"month\":\"2026-07\"},{\"actual\":\"255.15\",\"budgeted\":\"500.00\",\"month\":\"2026-08\"},{\"actual\":\"365.00\",\"budgeted\":\"500.00\",\"month\":\"2026-09\"}]}\n"
+        "stdout": "{\"categoryId\":\"5\",\"points\":[{\"actual\":\"403.30\",\"budgeted\":\"500.00\",\"month\":\"2026-07\"},{\"actual\":\"315.15\",\"budgeted\":\"500.00\",\"month\":\"2026-08\"},{\"actual\":\"413.00\",\"budgeted\":\"500.00\",\"month\":\"2026-09\"}]}\n"
       }
     },
     "stats year": {
@@ -724,12 +727,12 @@
       "human": {
         "exit": 0,
         "stderr": "",
-        "stdout": "month    expense   income   savings  savingsRate\n2026-01  1890.68  4715.33   2824.65         59.9\n2026-02  2162.65  3200.00   1037.35         32.4\n2026-03  2079.23  3520.00   1440.77         40.9\n2026-04  1872.86  3214.22   1341.36         41.7\n2026-05  2792.37  3240.00    447.63         13.8\n2026-06  1905.88  3520.00   1614.12         45.9\n2026-07  1904.70  3253.11   1348.41         41.4\n2026-08  3912.69  3240.00   -672.69        -20.8\n2026-09  1913.64  3690.00   1776.36         48.1\n2026-10  1516.50     0.00  -1516.50            -\n2026-11     0.00     0.00      0.00            -\n2026-12     0.00     0.00      0.00            -\n"
+        "stdout": "month    expense   income   savings  savingsRate\n2026-01  1890.68  4715.33   2824.65         59.9\n2026-02  2162.65  3200.00   1037.35         32.4\n2026-03  2079.23  3520.00   1440.77         40.9\n2026-04  1904.86  3214.22   1309.36         40.7\n2026-05  2834.37  3240.00    405.63         12.5\n2026-06  1955.38  3520.00   1564.62         44.4\n2026-07  1961.20  3253.11   1291.91         39.7\n2026-08  3992.69  3240.00   -752.69        -23.2\n2026-09  1961.64  3690.00   1728.36         46.8\n2026-10  1485.45     0.00  -1485.45            -\n2026-11     0.00     0.00      0.00            -\n2026-12     0.00     0.00      0.00            -\n"
       },
       "json": {
         "exit": 0,
         "stderr": "",
-        "stdout": "[{\"expense\":\"1890.68\",\"income\":\"4715.33\",\"month\":\"2026-01\",\"savings\":\"2824.65\",\"savingsRate\":59.9},{\"expense\":\"2162.65\",\"income\":\"3200.00\",\"month\":\"2026-02\",\"savings\":\"1037.35\",\"savingsRate\":32.4},{\"expense\":\"2079.23\",\"income\":\"3520.00\",\"month\":\"2026-03\",\"savings\":\"1440.77\",\"savingsRate\":40.9},{\"expense\":\"1872.86\",\"income\":\"3214.22\",\"month\":\"2026-04\",\"savings\":\"1341.36\",\"savingsRate\":41.7},{\"expense\":\"2792.37\",\"income\":\"3240.00\",\"month\":\"2026-05\",\"savings\":\"447.63\",\"savingsRate\":13.8},{\"expense\":\"1905.88\",\"income\":\"3520.00\",\"month\":\"2026-06\",\"savings\":\"1614.12\",\"savingsRate\":45.9},{\"expense\":\"1904.70\",\"income\":\"3253.11\",\"month\":\"2026-07\",\"savings\":\"1348.41\",\"savingsRate\":41.4},{\"expense\":\"39…",
+        "stdout": "[{\"expense\":\"1890.68\",\"income\":\"4715.33\",\"month\":\"2026-01\",\"savings\":\"2824.65\",\"savingsRate\":59.9},{\"expense\":\"2162.65\",\"income\":\"3200.00\",\"month\":\"2026-02\",\"savings\":\"1037.35\",\"savingsRate\":32.4},{\"expense\":\"2079.23\",\"income\":\"3520.00\",\"month\":\"2026-03\",\"savings\":\"1440.77\",\"savingsRate\":40.9},{\"expense\":\"1904.86\",\"income\":\"3214.22\",\"month\":\"2026-04\",\"savings\":\"1309.36\",\"savingsRate\":40.7},{\"expense\":\"2834.37\",\"income\":\"3240.00\",\"month\":\"2026-05\",\"savings\":\"405.63\",\"savingsRate\":12.5},{\"expense\":\"1955.38\",\"income\":\"3520.00\",\"month\":\"2026-06\",\"savings\":\"1564.62\",\"savingsRate\":44.4},{\"expense\":\"1961.20\",\"income\":\"3253.11\",\"month\":\"2026-07\",\"savings\":\"1291.91\",\"savingsRate\":39.7},{\"expense\":\"39…",
         "truncated": true
       }
     },
@@ -764,11 +767,11 @@
       "json": {
         "exit": 0,
         "stderr": "",
-        "stdout": "{\"amount\":\"2.40\",\"categoryId\":\"16\",\"clientUuid\":\"9b2f5d44-6e1a-4c3b-8f2d-1a2b3c4d5e6f\",\"description\":null,\"id\":\"404\",\"myShare\":\"2.40\",\"name\":\"Bread\",\"paymentDate\":\"2026-10-14\",\"split\":[]}\n"
+        "stdout": "{\"amount\":\"2.40\",\"categoryId\":\"16\",\"clientUuid\":\"9b2f5d44-6e1a-4c3b-8f2d-1a2b3c4d5e6f\",\"description\":null,\"id\":\"424\",\"myShare\":\"2.40\",\"name\":\"Bread\",\"paymentDate\":\"2026-10-14\",\"split\":[]}\n"
       }
     },
     "transactions delete": {
-      "command": "meowny transactions delete 404 --yes",
+      "command": "meowny transactions delete 424 --yes",
       "human": {
         "exit": 0,
         "stderr": "done.\n",
@@ -779,37 +782,37 @@
       "command": "meowny transactions list --limit 4",
       "human": {
         "exit": 0,
-        "stderr": "showing 1-4 of 403; next page: --offset 4\n",
-        "stdout": "limit: 4\noffset: 0\ntotal: 403\n\ntransactions\n id  name             paymentDate  amount  categoryId  clientUuid  description  myShare\n403  Coffee           2026-10-13     3.20           7  -           Flat white      3.20\n402  Bus ticket       2026-10-13     2.80           6  -           -               2.80\n401  Corner shop      2026-10-13     4.50           5  -           -               4.50\n291  Board game cafe  2026-10-13    51.83           8  -           -              51.83\n"
+        "stderr": "showing 1-4 of 423; next page: --offset 4\n",
+        "stdout": "limit: 4\noffset: 0\ntotal: 423\n\ntransactions\n id  name             paymentDate  amount  categoryId  clientUuid  description  myShare\n403  Coffee           2026-10-13     3.20           7  -           Flat white      3.20\n402  Bus ticket       2026-10-13     2.80           6  -           -               2.80\n401  Corner shop      2026-10-13     4.50           5  -           -               4.50\n291  Board game cafe  2026-10-13    51.83           8  -           -              51.83\n"
       },
       "json": {
         "exit": 0,
         "stderr": "",
-        "stdout": "{\"limit\":4,\"offset\":0,\"total\":403,\"transactions\":[{\"amount\":\"3.20\",\"categoryId\":\"7\",\"clientUuid\":null,\"description\":\"Flat white\",\"id\":\"403\",\"myShare\":\"3.20\",\"name\":\"Coffee\",\"paymentDate\":\"2026-10-13\",\"split\":[]},{\"amount\":\"2.80\",\"categoryId\":\"6\",\"clientUuid\":null,\"description\":null,\"id\":\"402\",\"myShare\":\"2.80\",\"name\":\"Bus ticket\",\"paymentDate\":\"2026-10-13\",\"split\":[]},{\"amount\":\"4.50\",\"categoryId\":\"5\",\"clientUuid\":null,\"description\":null,\"id\":\"401\",\"myShare\":\"4.50\",\"name\":\"Corner shop\",\"paymentDate\":\"2026-10-13\",\"split\":[]},{\"amount\":\"51.83\",\"categoryId\":\"8\",\"clientUuid\":null,\"description\":null,\"id\":\"291\",\"myShare\":\"51.83\",\"name\":\"Board game cafe\",\"paymentDate\":\"2026-10-13\",\"split\":[]}]}\n"
+        "stdout": "{\"limit\":4,\"offset\":0,\"total\":423,\"transactions\":[{\"amount\":\"3.20\",\"categoryId\":\"7\",\"clientUuid\":null,\"description\":\"Flat white\",\"id\":\"403\",\"myShare\":\"3.20\",\"name\":\"Coffee\",\"paymentDate\":\"2026-10-13\",\"split\":[]},{\"amount\":\"2.80\",\"categoryId\":\"6\",\"clientUuid\":null,\"description\":null,\"id\":\"402\",\"myShare\":\"2.80\",\"name\":\"Bus ticket\",\"paymentDate\":\"2026-10-13\",\"split\":[]},{\"amount\":\"4.50\",\"categoryId\":\"5\",\"clientUuid\":null,\"description\":null,\"id\":\"401\",\"myShare\":\"4.50\",\"name\":\"Corner shop\",\"paymentDate\":\"2026-10-13\",\"split\":[]},{\"amount\":\"51.83\",\"categoryId\":\"8\",\"clientUuid\":null,\"description\":null,\"id\":\"291\",\"myShare\":\"51.83\",\"name\":\"Board game cafe\",\"paymentDate\":\"2026-10-13\",\"split\":[]}]}\n"
       }
     },
     "transactions split": {
-      "command": "meowny transactions split 405 --mode equal --people 1,2",
+      "command": "meowny transactions split 425 --mode equal --people 5,6",
       "json": {
         "exit": 0,
         "stderr": "",
-        "stdout": "{\"amount\":\"90.00\",\"categoryId\":\"16\",\"clientUuid\":\"5c1d8e07-3b2a-4f6e-9a41-7d0c2b9e8f13\",\"description\":null,\"id\":\"405\",\"myShare\":\"30.00\",\"name\":\"Dinner\",\"paymentDate\":\"2026-10-12\",\"split\":[{\"amount\":\"30.00\",\"guest\":null,\"person\":\"Anna\",\"personId\":\"1\"},{\"amount\":\"30.00\",\"guest\":null,\"person\":\"Bob\",\"personId\":\"2\"}]}\n"
+        "stdout": "{\"amount\":\"90.00\",\"categoryId\":\"16\",\"clientUuid\":\"5c1d8e07-3b2a-4f6e-9a41-7d0c2b9e8f13\",\"description\":null,\"id\":\"425\",\"myShare\":\"30.00\",\"name\":\"Dinner\",\"paymentDate\":\"2026-10-12\",\"split\":[{\"amount\":\"30.00\",\"guest\":null,\"person\":\"Anna\",\"personId\":\"5\"},{\"amount\":\"30.00\",\"guest\":null,\"person\":\"Bob\",\"personId\":\"6\"}]}\n"
       }
     },
     "transactions unsplit": {
-      "command": "meowny transactions unsplit 405",
+      "command": "meowny transactions unsplit 425",
       "json": {
         "exit": 0,
         "stderr": "",
-        "stdout": "{\"amount\":\"90.00\",\"categoryId\":\"16\",\"clientUuid\":\"5c1d8e07-3b2a-4f6e-9a41-7d0c2b9e8f13\",\"description\":null,\"id\":\"405\",\"myShare\":\"90.00\",\"name\":\"Dinner\",\"paymentDate\":\"2026-10-12\",\"split\":[]}\n"
+        "stdout": "{\"amount\":\"90.00\",\"categoryId\":\"16\",\"clientUuid\":\"5c1d8e07-3b2a-4f6e-9a41-7d0c2b9e8f13\",\"description\":null,\"id\":\"425\",\"myShare\":\"90.00\",\"name\":\"Dinner\",\"paymentDate\":\"2026-10-12\",\"split\":[]}\n"
       }
     },
     "transactions update": {
-      "command": "meowny transactions update 404 --amount 2.95 --description Sourdough",
+      "command": "meowny transactions update 424 --amount 2.95 --description Sourdough",
       "json": {
         "exit": 0,
         "stderr": "",
-        "stdout": "{\"amount\":\"2.95\",\"categoryId\":\"16\",\"clientUuid\":\"9b2f5d44-6e1a-4c3b-8f2d-1a2b3c4d5e6f\",\"description\":\"Sourdough\",\"id\":\"404\",\"myShare\":\"2.95\",\"name\":\"Bread\",\"paymentDate\":\"2026-10-14\",\"split\":[]}\n"
+        "stdout": "{\"amount\":\"2.95\",\"categoryId\":\"16\",\"clientUuid\":\"9b2f5d44-6e1a-4c3b-8f2d-1a2b3c4d5e6f\",\"description\":\"Sourdough\",\"id\":\"424\",\"myShare\":\"2.95\",\"name\":\"Bread\",\"paymentDate\":\"2026-10-14\",\"split\":[]}\n"
       }
     }
   }

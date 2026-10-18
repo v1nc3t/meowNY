@@ -408,7 +408,7 @@ Money is stored as integer minor units (`*_minor` columns). Constraint tests are
 
 ### Demo data
 
-There are sixteen months of demo data, with dates relative to today (`src-tauri/seeds/dev.sql`): categories, budgets that change over time, recurring items that are paid, overdue, paused and ended, a deleted category and a few hundred transactions, including awkward text (accents, Romanian and Japanese letters, quotes, cells that look like formulas) for trying the exports.
+There are sixteen months of demo data, with dates relative to today (`src-tauri/seeds/dev.sql`): categories, budgets that change over time, recurring items that are paid, overdue, paused and ended, a deleted category and a few hundred transactions, debts (four friends: one who owes you, one you owe, one who has paid back everything and one taken off the list who still owes; a ledger; bills shared with friends and a guest; a veg box shared every week, payments that are overdue for months, one with no fixed amount, and one due in five days), including awkward text (accents, Romanian and Japanese letters, quotes, cells that look like formulas) for trying the exports.
 
 To put it in the desktop app, quit the app and run:
 

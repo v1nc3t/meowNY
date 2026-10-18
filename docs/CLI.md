@@ -541,7 +541,7 @@ $ meowny transactions list --limit 4
 
 limit: 4
 offset: 0
-total: 403
+total: 423
 
 transactions
  id  name             paymentDate  amount  categoryId  clientUuid  description  myShare
@@ -550,7 +550,7 @@ transactions
 401  Corner shop      2026-10-13     4.50           5  -           -               4.50
 291  Board game cafe  2026-10-13    51.83           8  -           -              51.83
 
-showing 1-4 of 403; next page: --offset 4
+showing 1-4 of 423; next page: --offset 4
 ```
 
 With `--json` (one line; shown indented):
@@ -559,7 +559,7 @@ With `--json` (one line; shown indented):
 {
   "limit": 4,
   "offset": 0,
-  "total": 403,
+  "total": 423,
   "transactions": [
     {
       "amount": "3.20",
@@ -644,7 +644,7 @@ With `--json` (one line; shown indented):
   "categoryId": "16",
   "clientUuid": "9b2f5d44-6e1a-4c3b-8f2d-1a2b3c4d5e6f",
   "description": null,
-  "id": "404",
+  "id": "424",
   "myShare": "2.40",
   "name": "Bread",
   "paymentDate": "2026-10-14",
@@ -677,7 +677,7 @@ Only the flags you give change. `--clear-description` removes the description.
 The id can be given as a plain word, as in `meowny transactions update 42`, or with `--id`.
 
 ```console
-$ meowny transactions update 404 --amount 2.95 --description Sourdough
+$ meowny transactions update 424 --amount 2.95 --description Sourdough
 ```
 
 With `--json` (one line; shown indented):
@@ -688,7 +688,7 @@ With `--json` (one line; shown indented):
   "categoryId": "16",
   "clientUuid": "9b2f5d44-6e1a-4c3b-8f2d-1a2b3c4d5e6f",
   "description": "Sourdough",
-  "id": "404",
+  "id": "424",
   "myShare": "2.95",
   "name": "Bread",
   "paymentDate": "2026-10-14",
@@ -715,7 +715,7 @@ The id can be given as a plain word, as in `meowny transactions delete 42`, or w
 This cannot be undone, so it needs `--yes`.
 
 ```console
-$ meowny transactions delete 404 --yes
+$ meowny transactions delete 424 --yes
 
 done.
 ```
@@ -746,7 +746,7 @@ Changing the amount of a shared transaction scales every part, yours included, s
 The id can be given as a plain word, as in `meowny transactions split 42`, or with `--id`.
 
 ```console
-$ meowny transactions split 405 --mode equal --people 1,2
+$ meowny transactions split 425 --mode equal --people 5,6
 ```
 
 With `--json` (one line; shown indented):
@@ -757,7 +757,7 @@ With `--json` (one line; shown indented):
   "categoryId": "16",
   "clientUuid": "5c1d8e07-3b2a-4f6e-9a41-7d0c2b9e8f13",
   "description": null,
-  "id": "405",
+  "id": "425",
   "myShare": "30.00",
   "name": "Dinner",
   "paymentDate": "2026-10-12",
@@ -766,13 +766,13 @@ With `--json` (one line; shown indented):
       "amount": "30.00",
       "guest": null,
       "person": "Anna",
-      "personId": "1"
+      "personId": "5"
     },
     {
       "amount": "30.00",
       "guest": null,
       "person": "Bob",
-      "personId": "2"
+      "personId": "6"
     }
   ]
 }
@@ -797,7 +797,7 @@ The transaction costs you its whole amount again, and the friends' balances go d
 The id can be given as a plain word, as in `meowny transactions unsplit 42`, or with `--id`.
 
 ```console
-$ meowny transactions unsplit 405
+$ meowny transactions unsplit 425
 ```
 
 With `--json` (one line; shown indented):
@@ -808,7 +808,7 @@ With `--json` (one line; shown indented):
   "categoryId": "16",
   "clientUuid": "5c1d8e07-3b2a-4f6e-9a41-7d0c2b9e8f13",
   "description": null,
-  "id": "405",
+  "id": "425",
   "myShare": "90.00",
   "name": "Dinner",
   "paymentDate": "2026-10-12",
@@ -837,7 +837,7 @@ $ meowny budgets overview --month 2026-09
 
 type     budgeted   actual  remaining  allocated  overAllocated  unallocated
 INCOME    3600.00  3690.00     -90.00    3200.00  false               400.00
-EXPENSE   2450.00  1913.64     536.36    2015.00  false               435.00
+EXPENSE   2450.00  1961.64     488.36    2015.00  false               435.00
 ```
 
 With `--json` (one line; shown indented):
@@ -860,7 +860,7 @@ With `--json` (one line; shown indented):
     "unallocated": "400.00"
   },
   {
-    "actual": "1913.64",
+    "actual": "1961.64",
     "allocated": "2015.00",
     "budgeted": "2450.00",
     "categories": [
@@ -890,7 +890,7 @@ With `--json` (one line; shown indented):
       }
     ],
     "overAllocated": false,
-    "remaining": "536.36",
+    "remaining": "488.36",
     "type": "EXPENSE",
     "unallocated": "435.00"
   }
@@ -911,13 +911,13 @@ meowny budgets history
 $ meowny budgets history
 
 month    expenseActual  expenseBudget  incomeActual  incomeBudget
-2026-10        1516.50        2450.00          0.00       3600.00
-2026-09        1913.64        2450.00       3690.00       3600.00
-2026-08        3912.69        2450.00       3240.00       3600.00
-2026-07        1904.70        2450.00       3253.11       3600.00
-2026-06        1905.88        2450.00       3520.00       3600.00
-2026-05        2792.37        2450.00       3240.00       3600.00
-2026-04        1872.86        2450.00       3214.22       3600.00
+2026-10        1485.45        2450.00          0.00       3600.00
+2026-09        1961.64        2450.00       3690.00       3600.00
+2026-08        3992.69        2450.00       3240.00       3600.00
+2026-07        1961.20        2450.00       3253.11       3600.00
+2026-06        1955.38        2450.00       3520.00       3600.00
+2026-05        2834.37        2450.00       3240.00       3600.00
+2026-04        1904.86        2450.00       3214.22       3600.00
 2026-03        2079.23        2300.00       3520.00       3600.00
 2026-02        2162.65        2300.00       3200.00       3600.00
 2026-01        1890.68        2300.00   …
@@ -926,7 +926,7 @@ month    expenseActual  expenseBudget  incomeActual  incomeBudget
 With `--json` (one line; shown indented):
 
 ```json
-[{"expenseActual":"1516.50","expenseBudget":"2450.00","incomeActual":"0.00","incomeBudget":"3600.00","month":"2026-10"},{"expenseActual":"1913.64","expenseBudget":"2450.00","incomeActual":"3690.00","incomeBudget":"3600.00","month":"2026-09"},{"expenseActual":"3912.69","expenseBudget":"2450.00","incomeActual":"3240.00","incomeBudget":"3600.00","month":"2026-08"},{"expenseActual":"1904.70","expenseBudget":"2450.00","incomeActual":"3253.11","incomeBudget":"3600.00","month":"2026-07"},{"expenseActual":"1905.88","expenseBudget":"2450.00","incomeActual":"3520.00","incomeBudget":"3600.00","month":"2026-06"},{"expenseActual":"2792.37","expenseBudget":"2450.00","incomeActual":"3240.00","incomeBudget"…
+[{"expenseActual":"1485.45","expenseBudget":"2450.00","incomeActual":"0.00","incomeBudget":"3600.00","month":"2026-10"},{"expenseActual":"1961.64","expenseBudget":"2450.00","incomeActual":"3690.00","incomeBudget":"3600.00","month":"2026-09"},{"expenseActual":"3992.69","expenseBudget":"2450.00","incomeActual":"3240.00","incomeBudget":"3600.00","month":"2026-08"},{"expenseActual":"1961.20","expenseBudget":"2450.00","incomeActual":"3253.11","incomeBudget":"3600.00","month":"2026-07"},{"expenseActual":"1955.38","expenseBudget":"2450.00","incomeActual":"3520.00","incomeBudget":"3600.00","month":"2026-06"},{"expenseActual":"2834.37","expenseBudget":"2450.00","incomeActual":"3240.00","incomeBudget"…
 ```
 
 #### `budgets set`
@@ -1017,17 +1017,16 @@ meowny recurring list
 ```console
 $ meowny recurring list
 
-id  name              nextDueDate   amount  categoryId  description             endDate     intervalCount  intervalUnit  isActive  split  startDate
- 6  Cleaning service  2026-10-11     30.00          10  -                       -                       2  WEEK          true      -      2026-04-26
- 4  Electricity       2026-10-20         -          10  Varies with the meter   -                       1  MONTH         true      -      2025-07-20
- 7  Salary            2026-10-25   3240.00           1  Monthly pay             -                       1  MONTH         true      -      2025-07-25
- 1  Rent              2026-11-01    950.00           4  Flat, paid by transfer  -                       1…
+id  name              nextDueDate   amount  categoryId  description                endDate     intervalCount  intervalUnit  isActive  split                                                         startDate
+11  Yoga class        2026-08-05     32.00           8  Monthly pass               -                       1  MONTH         true      -                                                             2026-04-05
+12  Mobile top-up     2026-09-03         -          10  Whatever the shop charges  -                       1  MONTH         true      -                                                             2026-05-03
+ 6  Cleaning service  2026-10-11     30.00          10  -                       …
 ```
 
 With `--json` (one line; shown indented):
 
 ```json
-[{"amount":"30.00","categoryId":"10","description":null,"endDate":null,"id":"6","intervalCount":2,"intervalUnit":"WEEK","isActive":true,"name":"Cleaning service","nextDueDate":"2026-10-11","split":null,"startDate":"2026-04-26"},{"amount":null,"categoryId":"10","description":"Varies with the meter","endDate":null,"id":"4","intervalCount":1,"intervalUnit":"MONTH","isActive":true,"name":"Electricity","nextDueDate":"2026-10-20","split":null,"startDate":"2025-07-20"},{"amount":"3240.00","categoryId":"1","description":"Monthly pay","endDate":null,"id":"7","intervalCount":1,"intervalUnit":"MONTH","isActive":true,"name":"Salary","nextDueDate":"2026-10-25","split":null,"startDate":"2025-07-25"},{"amo…
+[{"amount":"32.00","categoryId":"8","description":"Monthly pass","endDate":null,"id":"11","intervalCount":1,"intervalUnit":"MONTH","isActive":true,"name":"Yoga class","nextDueDate":"2026-08-05","split":null,"startDate":"2026-04-05"},{"amount":null,"categoryId":"10","description":"Whatever the shop charges","endDate":null,"id":"12","intervalCount":1,"intervalUnit":"MONTH","isActive":true,"name":"Mobile top-up","nextDueDate":"2026-09-03","split":null,"startDate":"2026-05-03"},{"amount":"30.00","categoryId":"10","description":null,"endDate":null,"id":"6","intervalCount":2,"intervalUnit":"WEEK","isActive":true,"name":"Cleaning service","nextDueDate":"2026-10-11","split":null,"startDate":"2026-04…
 ```
 
 #### `recurring dues`
@@ -1048,19 +1047,19 @@ meowny recurring dues [--within-days <number>]
 $ meowny recurring dues --within-days 10
 
 overdue
-id  name              nextDueDate  amount  categoryId  description  endDate  intervalCount  intervalUnit  isActive  split  startDate
- 6  Cleaning service  2026-10-11    30.00          10  -            -                    2  WEEK          true      -      2026-04-26
+id  name              nextDueDate  amount  categoryId  description                endDate  intervalCount  intervalUnit  isActive  split  startDate
+11  Yoga class        2026-08-05    32.00           8  Monthly pass               -                    1  MONTH         true      -      2026-04-05
+12  Mobile top-up     2026-09-03        -          10  Whatever the shop charges  -                    1  MONTH         true      -      2026-05-03
+ 6  Cleaning service  2026-10-11    30.00          10  -                          -                    2  WEEK          true      -      2026-04-26
 
 upcoming
-id  name         nextDueDate   amount  categoryId  description            endDate  intervalCount  intervalUnit  isActive  split  startDate
- 4  Electricity  2026-10-20         -          10  Varies with the meter  -                    1  MONTH         true      -      2025-07-20
- 7  Salary       2026-10-25   3240.00           1  Monthly pay            -                    1  MONTH         true      -      2025-07…
+id  name         nextDueDate   amount  categoryId  description            endDate  interval…
 ```
 
 With `--json` (one line; shown indented):
 
 ```json
-{"overdue":[{"amount":"30.00","categoryId":"10","description":null,"endDate":null,"id":"6","intervalCount":2,"intervalUnit":"WEEK","isActive":true,"name":"Cleaning service","nextDueDate":"2026-10-11","split":null,"startDate":"2026-04-26"}],"upcoming":[{"amount":null,"categoryId":"10","description":"Varies with the meter","endDate":null,"id":"4","intervalCount":1,"intervalUnit":"MONTH","isActive":true,"name":"Electricity","nextDueDate":"2026-10-20","split":null,"startDate":"2025-07-20"},{"amount":"3240.00","categoryId":"1","description":"Monthly pay","endDate":null,"id":"7","intervalCount":1,"intervalUnit":"MONTH","isActive":true,"name":"Salary","nextDueDate":"2026-10-25","split":null,"startD…
+{"overdue":[{"amount":"32.00","categoryId":"8","description":"Monthly pass","endDate":null,"id":"11","intervalCount":1,"intervalUnit":"MONTH","isActive":true,"name":"Yoga class","nextDueDate":"2026-08-05","split":null,"startDate":"2026-04-05"},{"amount":null,"categoryId":"10","description":"Whatever the shop charges","endDate":null,"id":"12","intervalCount":1,"intervalUnit":"MONTH","isActive":true,"name":"Mobile top-up","nextDueDate":"2026-09-03","split":null,"startDate":"2026-05-03"},{"amount":"30.00","categoryId":"10","description":null,"endDate":null,"id":"6","intervalCount":2,"intervalUnit":"WEEK","isActive":true,"name":"Cleaning service","nextDueDate":"2026-10-11","split":null,"startDat…
 ```
 
 #### `recurring create`
@@ -1098,7 +1097,7 @@ With `--json` (one line; shown indented):
   "categoryId": "16",
   "description": null,
   "endDate": null,
-  "id": "10",
+  "id": "13",
   "intervalCount": 1,
   "intervalUnit": "MONTH",
   "isActive": true,
@@ -1139,7 +1138,7 @@ meowny recurring update <id> [--name <text>] [--amount <amount>] [--category-id 
 The id can be given as a plain word, as in `meowny recurring update 42`, or with `--id`.
 
 ```console
-$ meowny recurring update 10 --name "Vet plan plus" --clear-end-date
+$ meowny recurring update 13 --name "Vet plan plus" --clear-end-date
 ```
 
 With `--json` (one line; shown indented):
@@ -1150,7 +1149,7 @@ With `--json` (one line; shown indented):
   "categoryId": "16",
   "description": null,
   "endDate": null,
-  "id": "10",
+  "id": "13",
   "intervalCount": 1,
   "intervalUnit": "MONTH",
   "isActive": true,
@@ -1180,7 +1179,7 @@ The id can be given as a plain word, as in `meowny recurring delete 42`, or with
 This cannot be undone, so it needs `--yes`.
 
 ```console
-$ meowny recurring delete 10 --yes
+$ meowny recurring delete 13 --yes
 
 done.
 ```
@@ -1206,7 +1205,7 @@ A bill with no fixed amount needs `--amount`. The next due date moves on by itse
 The id can be given as a plain word, as in `meowny recurring pay 42`, or with `--id`.
 
 ```console
-$ meowny recurring pay 10 --paid-on 2026-10-14
+$ meowny recurring pay 13 --paid-on 2026-10-14
 ```
 
 With `--json` (one line; shown indented):
@@ -1217,7 +1216,7 @@ With `--json` (one line; shown indented):
   "categoryId": "16",
   "clientUuid": null,
   "description": null,
-  "id": "406",
+  "id": "426",
   "myShare": "20.00",
   "name": "Vet plan plus",
   "paymentDate": "2026-10-14",
@@ -1242,7 +1241,7 @@ meowny recurring skip <id>
 The id can be given as a plain word, as in `meowny recurring skip 42`, or with `--id`.
 
 ```console
-$ meowny recurring skip 10
+$ meowny recurring skip 13
 ```
 
 With `--json` (one line; shown indented):
@@ -1253,7 +1252,7 @@ With `--json` (one line; shown indented):
   "categoryId": "16",
   "description": null,
   "endDate": null,
-  "id": "10",
+  "id": "13",
   "intervalCount": 1,
   "intervalUnit": "MONTH",
   "isActive": true,
@@ -1281,7 +1280,7 @@ meowny recurring pause <id>
 The id can be given as a plain word, as in `meowny recurring pause 42`, or with `--id`.
 
 ```console
-$ meowny recurring pause 10
+$ meowny recurring pause 13
 ```
 
 With `--json` (one line; shown indented):
@@ -1292,7 +1291,7 @@ With `--json` (one line; shown indented):
   "categoryId": "16",
   "description": null,
   "endDate": null,
-  "id": "10",
+  "id": "13",
   "intervalCount": 1,
   "intervalUnit": "MONTH",
   "isActive": false,
@@ -1320,7 +1319,7 @@ meowny recurring resume <id>
 The id can be given as a plain word, as in `meowny recurring resume 42`, or with `--id`.
 
 ```console
-$ meowny recurring resume 10
+$ meowny recurring resume 13
 ```
 
 With `--json` (one line; shown indented):
@@ -1331,7 +1330,7 @@ With `--json` (one line; shown indented):
   "categoryId": "16",
   "description": null,
   "endDate": null,
-  "id": "10",
+  "id": "13",
   "intervalCount": 1,
   "intervalUnit": "MONTH",
   "isActive": true,
@@ -1361,7 +1360,7 @@ The id can be given as a plain word, as in `meowny recurring end 42`, or with `-
 This cannot be undone, so it needs `--yes`.
 
 ```console
-$ meowny recurring end 10 --yes
+$ meowny recurring end 13 --yes
 ```
 
 With `--json` (one line; shown indented):
@@ -1372,7 +1371,7 @@ With `--json` (one line; shown indented):
   "categoryId": "16",
   "description": null,
   "endDate": "2026-10-20",
-  "id": "10",
+  "id": "13",
   "intervalCount": 1,
   "intervalUnit": "MONTH",
   "isActive": false,
@@ -1407,7 +1406,7 @@ Splits every payment of a recurring item the same way from now on, kept as propo
 The id can be given as a plain word, as in `meowny recurring split 42`, or with `--id`.
 
 ```console
-$ meowny recurring split 10 --mode shares --mine 2 --people 1 --values 1
+$ meowny recurring split 13 --mode shares --mine 2 --people 5 --values 1
 ```
 
 With `--json` (one line; shown indented):
@@ -1418,7 +1417,7 @@ With `--json` (one line; shown indented):
   "categoryId": "16",
   "description": null,
   "endDate": null,
-  "id": "10",
+  "id": "13",
   "intervalCount": 1,
   "intervalUnit": "MONTH",
   "isActive": true,
@@ -1430,7 +1429,7 @@ With `--json` (one line; shown indented):
       {
         "guest": null,
         "person": "Anna",
-        "personId": "1",
+        "personId": "5",
         "weight": 1
       }
     ]
@@ -1458,7 +1457,7 @@ The payments are not split from now on. Payments already made keep theirs.
 The id can be given as a plain word, as in `meowny recurring unsplit 42`, or with `--id`.
 
 ```console
-$ meowny recurring unsplit 10
+$ meowny recurring unsplit 13
 ```
 
 With `--json` (one line; shown indented):
@@ -1469,7 +1468,7 @@ With `--json` (one line; shown indented):
   "categoryId": "16",
   "description": null,
   "endDate": null,
-  "id": "10",
+  "id": "13",
   "intervalCount": 1,
   "intervalUnit": "MONTH",
   "isActive": true,
@@ -1506,7 +1505,7 @@ name                 type     budgeted   actual  remaining  pctUsed  categoryId
 Eating out           EXPENSE    200.00   177.00      23.00     88.5           7
 Entertainment        EXPENSE         -    52.07          -        -           8
 Gifts                EXPENSE         -     0.00          -        -          13
-Groceries            EXPENSE    500.00   365.00     135.00     73.0           5
+Groceries            EXPENSE    500.00   413.00      87.00     82.6           5
 Health               EXPENSE         -    12.34          -        -          11
 Rent                 EXPENSE    950.00   950.00       0.00    100.0           4
 Subscriptions        EXPENSE     45.00    23.98      21.02     53.3           9
@@ -1516,7 +1515,7 @@ Transport            EXPENSE     …
 With `--json` (one line; shown indented):
 
 ```json
-{"categories":[{"actual":"177.00","budgeted":"200.00","categoryId":"7","name":"Eating out","pctUsed":88.5,"remaining":"23.00","type":"EXPENSE"},{"actual":"52.07","budgeted":null,"categoryId":"8","name":"Entertainment","pctUsed":null,"remaining":null,"type":"EXPENSE"},{"actual":"0.00","budgeted":null,"categoryId":"13","name":"Gifts","pctUsed":null,"remaining":null,"type":"EXPENSE"},{"actual":"365.00","budgeted":"500.00","categoryId":"5","name":"Groceries","pctUsed":73.0,"remaining":"135.00","type":"EXPENSE"},{"actual":"12.34","budgeted":null,"categoryId":"11","name":"Health","pctUsed":null,"remaining":null,"type":"EXPENSE"},{"actual":"950.00","budgeted":"950.00","categoryId":"4","name":"Rent"…
+{"categories":[{"actual":"177.00","budgeted":"200.00","categoryId":"7","name":"Eating out","pctUsed":88.5,"remaining":"23.00","type":"EXPENSE"},{"actual":"52.07","budgeted":null,"categoryId":"8","name":"Entertainment","pctUsed":null,"remaining":null,"type":"EXPENSE"},{"actual":"0.00","budgeted":null,"categoryId":"13","name":"Gifts","pctUsed":null,"remaining":null,"type":"EXPENSE"},{"actual":"413.00","budgeted":"500.00","categoryId":"5","name":"Groceries","pctUsed":82.6,"remaining":"87.00","type":"EXPENSE"},{"actual":"12.34","budgeted":null,"categoryId":"11","name":"Health","pctUsed":null,"remaining":null,"type":"EXPENSE"},{"actual":"950.00","budgeted":"950.00","categoryId":"4","name":"Rent",…
 ```
 
 #### `stats trend`
@@ -1542,9 +1541,9 @@ categoryId: 5
 
 points
 month    budgeted  actual
-2026-07    500.00  391.30
-2026-08    500.00  255.15
-2026-09    500.00  365.00
+2026-07    500.00  403.30
+2026-08    500.00  315.15
+2026-09    500.00  413.00
 ```
 
 With `--json` (one line; shown indented):
@@ -1554,17 +1553,17 @@ With `--json` (one line; shown indented):
   "categoryId": "5",
   "points": [
     {
-      "actual": "391.30",
+      "actual": "403.30",
       "budgeted": "500.00",
       "month": "2026-07"
     },
     {
-      "actual": "255.15",
+      "actual": "315.15",
       "budgeted": "500.00",
       "month": "2026-08"
     },
     {
-      "actual": "365.00",
+      "actual": "413.00",
       "budgeted": "500.00",
       "month": "2026-09"
     }
@@ -1593,13 +1592,13 @@ month    expense   income   savings  savingsRate
 2026-01  1890.68  4715.33   2824.65         59.9
 2026-02  2162.65  3200.00   1037.35         32.4
 2026-03  2079.23  3520.00   1440.77         40.9
-2026-04  1872.86  3214.22   1341.36         41.7
-2026-05  2792.37  3240.00    447.63         13.8
-2026-06  1905.88  3520.00   1614.12         45.9
-2026-07  1904.70  3253.11   1348.41         41.4
-2026-08  3912.69  3240.00   -672.69        -20.8
-2026-09  1913.64  3690.00   1776.36         48.1
-2026-10  1516.50     0.00  -1516.50            -
+2026-04  1904.86  3214.22   1309.36         40.7
+2026-05  2834.37  3240.00    405.63         12.5
+2026-06  1955.38  3520.00   1564.62         44.4
+2026-07  1961.20  3253.11   1291.91         39.7
+2026-08  3992.69  3240.00   -752.69        -23.2
+2026-09  1961.64  3690.00   1728.36         46.8
+2026-10  1485.45     0.00  -1485.45            -
 2026-11     0.00     0.00      0.00            -
 2026-12     0.00     0.00      0.00            -
 ```
@@ -1607,7 +1606,7 @@ month    expense   income   savings  savingsRate
 With `--json` (one line; shown indented):
 
 ```json
-[{"expense":"1890.68","income":"4715.33","month":"2026-01","savings":"2824.65","savingsRate":59.9},{"expense":"2162.65","income":"3200.00","month":"2026-02","savings":"1037.35","savingsRate":32.4},{"expense":"2079.23","income":"3520.00","month":"2026-03","savings":"1440.77","savingsRate":40.9},{"expense":"1872.86","income":"3214.22","month":"2026-04","savings":"1341.36","savingsRate":41.7},{"expense":"2792.37","income":"3240.00","month":"2026-05","savings":"447.63","savingsRate":13.8},{"expense":"1905.88","income":"3520.00","month":"2026-06","savings":"1614.12","savingsRate":45.9},{"expense":"1904.70","income":"3253.11","month":"2026-07","savings":"1348.41","savingsRate":41.4},{"expense":"39…
+[{"expense":"1890.68","income":"4715.33","month":"2026-01","savings":"2824.65","savingsRate":59.9},{"expense":"2162.65","income":"3200.00","month":"2026-02","savings":"1037.35","savingsRate":32.4},{"expense":"2079.23","income":"3520.00","month":"2026-03","savings":"1440.77","savingsRate":40.9},{"expense":"1904.86","income":"3214.22","month":"2026-04","savings":"1309.36","savingsRate":40.7},{"expense":"2834.37","income":"3240.00","month":"2026-05","savings":"405.63","savingsRate":12.5},{"expense":"1955.38","income":"3520.00","month":"2026-06","savings":"1564.62","savingsRate":44.4},{"expense":"1961.20","income":"3253.11","month":"2026-07","savings":"1291.91","savingsRate":39.7},{"expense":"39…
 ```
 
 #### `stats top`
@@ -1630,9 +1629,9 @@ meowny stats top --month <month> --type <INCOME|EXPENSE> [--limit <number>]
 $ meowny stats top --month 2026-09 --type expense --limit 3
 
 name       actual  categoryId  share
-Rent       950.00           4   49.6
-Groceries  365.00           5   19.1
-Utilities  180.29          10    9.4
+Rent       950.00           4   48.4
+Groceries  413.00           5   21.1
+Utilities  180.29          10    9.2
 ```
 
 With `--json` (one line; shown indented):
@@ -1643,19 +1642,19 @@ With `--json` (one line; shown indented):
     "actual": "950.00",
     "categoryId": "4",
     "name": "Rent",
-    "share": 49.6
+    "share": 48.4
   },
   {
-    "actual": "365.00",
+    "actual": "413.00",
     "categoryId": "5",
     "name": "Groceries",
-    "share": 19.1
+    "share": 21.1
   },
   {
     "actual": "180.29",
     "categoryId": "10",
     "name": "Utilities",
-    "share": 9.4
+    "share": 9.2
   }
 ]
 ```
@@ -1673,7 +1672,7 @@ meowny stats commitments
 ```console
 $ meowny stats commitments
 
-expense: 1064.98
+expense: 1148.98
 income: 3240.00
 
 items
@@ -1681,63 +1680,19 @@ id  name              type     perMonth
  6  Cleaning service  EXPENSE     65.00
  4  Electricity       EXPENSE         -
  5  Home insurance    EXPENSE     26.00
+12  Mobile top-up     EXPENSE         -
  2  Netflix           EXPENSE     12.99
  1  Rent              EXPENSE    950.00
  3  Spotify           EXPENSE     10.99
+10  Veg box           EXPENSE     52.00
+11  Yoga class        EXPENSE     32.00
  7  Salary            INCOME    3240.00
 ```
 
 With `--json` (one line; shown indented):
 
 ```json
-{
-  "expense": "1064.98",
-  "income": "3240.00",
-  "items": [
-    {
-      "id": "6",
-      "name": "Cleaning service",
-      "perMonth": "65.00",
-      "type": "EXPENSE"
-    },
-    {
-      "id": "4",
-      "name": "Electricity",
-      "perMonth": null,
-      "type": "EXPENSE"
-    },
-    {
-      "id": "5",
-      "name": "Home insurance",
-      "perMonth": "26.00",
-      "type": "EXPENSE"
-    },
-    {
-      "id": "2",
-      "name": "Netflix",
-      "perMonth": "12.99",
-      "type": "EXPENSE"
-    },
-    {
-      "id": "1",
-      "name": "Rent",
-      "perMonth": "950.00",
-      "type": "EXPENSE"
-    },
-    {
-      "id": "3",
-      "name": "Spotify",
-      "perMonth": "10.99",
-      "type": "EXPENSE"
-    },
-    {
-      "id": "7",
-      "name": "Salary",
-      "perMonth": "3240.00",
-      "type": "INCOME"
-    }
-  ]
-}
+{"expense":"1148.98","income":"3240.00","items":[{"id":"6","name":"Cleaning service","perMonth":"65.00","type":"EXPENSE"},{"id":"4","name":"Electricity","perMonth":null,"type":"EXPENSE"},{"id":"5","name":"Home insurance","perMonth":"26.00","type":"EXPENSE"},{"id":"12","name":"Mobile top-up","perMonth":null,"type":"EXPENSE"},{"id":"2","name":"Netflix","perMonth":"12.99","type":"EXPENSE"},{"id":"1","name":"Rent","perMonth":"950.00","type":"EXPENSE"},{"id":"3","name":"Spotify","perMonth":"10.99","type":"EXPENSE"},{"id":"10","name":"Veg box","perMonth":"52.00","type":"EXPENSE"},{"id":"11","name":"Yoga class","perMonth":"32.00","type":"EXPENSE"},{"id":"7","name":"Salary","perMonth":"3240.00","typ…
 ```
 
 #### `stats planned`
@@ -1764,61 +1719,13 @@ Netflix                 0.00    12.99          1    12.99            2
 Rent                    0.00   950.00          1   950.00            1
 Salary                  0.00  3240.00          1  3240.00            7
 Spotify                 0.00    10.99          1    10.99            3
+Veg box                 0.00    96.00          4    96.00           10
 ```
 
 With `--json` (one line; shown indented):
 
 ```json
-[
-  {
-    "difference": "5.00",
-    "name": "Cleaning service",
-    "paid": "65.00",
-    "paidCount": 2,
-    "planned": "60.00",
-    "recurringId": "6"
-  },
-  {
-    "difference": null,
-    "name": "Electricity",
-    "paid": "80.30",
-    "paidCount": 1,
-    "planned": null,
-    "recurringId": "4"
-  },
-  {
-    "difference": "0.00",
-    "name": "Netflix",
-    "paid": "12.99",
-    "paidCount": 1,
-    "planned": "12.99",
-    "recurringId": "2"
-  },
-  {
-    "difference": "0.00",
-    "name": "Rent",
-    "paid": "950.00",
-    "paidCount": 1,
-    "planned": "950.00",
-    "recurringId": "1"
-  },
-  {
-    "difference": "0.00",
-    "name": "Salary",
-    "paid": "3240.00",
-    "paidCount": 1,
-    "planned": "3240.00",
-    "recurringId": "7"
-  },
-  {
-    "difference": "0.00",
-    "name": "Spotify",
-    "paid": "10.99",
-    "paidCount": 1,
-    "planned": "10.99",
-    "recurringId": "3"
-  }
-]
+[{"difference":"5.00","name":"Cleaning service","paid":"65.00","paidCount":2,"planned":"60.00","recurringId":"6"},{"difference":null,"name":"Electricity","paid":"80.30","paidCount":1,"planned":null,"recurringId":"4"},{"difference":"0.00","name":"Netflix","paid":"12.99","paidCount":1,"planned":"12.99","recurringId":"2"},{"difference":"0.00","name":"Rent","paid":"950.00","paidCount":1,"planned":"950.00","recurringId":"1"},{"difference":"0.00","name":"Salary","paid":"3240.00","paidCount":1,"planned":"3240.00","recurringId":"7"},{"difference":"0.00","name":"Spotify","paid":"10.99","paidCount":1,"planned":"10.99","recurringId":"3"},{"difference":"0.00","name":"Veg box","paid":"96.00","paidCount":…
 ```
 
 ### Export
@@ -1853,19 +1760,19 @@ $ meowny export preview --from 2026-01-01 --to 2026-09-30
 
 budgets: 14
 categories: 15
-debtHistory: 7
+debtHistory: 24
 documents: 0
-duePayments: 1
-expense: 20434.70
+duePayments: 6
+expense: 20742.70
 firstDate: 2026-01-01
 history: 0
 income: 31592.66
 lastDate: 2026-09-29
 ledger: 0
-people: 0
-recurring: 9
-splitBills: 0
-transactions: 239
+people: 1
+recurring: 12
+splitBills: 10
+transactions: 257
 ```
 
 With `--json` (one line; shown indented):
@@ -1874,19 +1781,19 @@ With `--json` (one line; shown indented):
 {
   "budgets": 14,
   "categories": 15,
-  "debtHistory": 7,
+  "debtHistory": 24,
   "documents": 0,
-  "duePayments": 1,
-  "expense": "20434.70",
+  "duePayments": 6,
+  "expense": "20742.70",
   "firstDate": "2026-01-01",
   "history": 0,
   "income": "31592.66",
   "lastDate": "2026-09-29",
   "ledger": 0,
-  "people": 0,
-  "recurring": 9,
-  "splitBills": 0,
-  "transactions": 239
+  "people": 1,
+  "recurring": 12,
+  "splitBills": 10,
+  "transactions": 257
 }
 ```
 
@@ -1921,7 +1828,7 @@ The app asks you to allow this each time, in a dialog; nothing is written until 
 ```console
 $ meowny export json --out /home/you/debts.json --sections people,due,ledger
 
-bytes: 6613
+bytes: 21356
 path: /home/you/debts.json
 ```
 
@@ -1954,7 +1861,7 @@ The app asks you to allow this each time, in a dialog; nothing is written until 
 ```console
 $ meowny export csv --out /home/you/budget-2026.csv --from 2026-01-01 --kind expense --min-amount 5.00
 
-bytes: 16066
+bytes: 17589
 path: /home/you/budget-2026.csv
 ```
 
@@ -1989,7 +1896,7 @@ The app asks you to allow this each time, in a dialog; nothing is written until 
 ```console
 $ meowny export xlsx --out /home/you/budget.xlsx
 
-bytes: 27846
+bytes: 30656
 path: /home/you/budget.xlsx
 ```
 
@@ -2023,7 +1930,7 @@ The app asks you to allow this each time, in a dialog; nothing is written until 
 ```console
 $ meowny export pdf --out /home/you/report.pdf --from-month 2026-01 --to-month 2026-03 --include-transactions --include-debts
 
-bytes: 45011
+bytes: 45159
 path: /home/you/report.pdf
 ```
 
@@ -2051,7 +1958,7 @@ The app asks you to allow this each time, in a dialog; nothing is written until 
 ```console
 $ meowny export debts --out /home/you/who-owes-what.txt
 
-bytes: 121
+bytes: 195
 path: /home/you/who-owes-what.txt
 ```
 
@@ -2105,7 +2012,7 @@ The app asks you to allow this each time, in a dialog; nothing is written until 
 ```console
 $ echo "correct horse battery staple" | meowny backup create --out /home/you/meowny.meowbak --passphrase -
 
-bytes: 191542
+bytes: 206446
 path: /home/you/meowny.meowbak
 
 waiting for you to allow this in the meowNY app...
@@ -2146,7 +2053,7 @@ total: 1
 
 documents
 id  name                createdAt                 documentDate  hasFile  keepOnPhone  linkCount  mediaType        sha256                                                        sizeBytes
- 1  boiler-receipt.pdf  2026-10-18T08:50:24.710Z  2026-10-01    true     false                0  application/pdf  735a7713978716d1e65eb6bf069e2f410eb72ec5b285861be417aeca0fe…         45
+ 1  boiler-receipt.pdf  2026-10-18T09:46:38.898Z  2026-10-01    true     false                0  application/pdf  735a7713978716d1e65eb6bf069e2f410eb72ec5b285861be417aeca0fe…         45
 ```
 
 With `--json` (one line; shown indented):
@@ -2155,7 +2062,7 @@ With `--json` (one line; shown indented):
 {
   "documents": [
     {
-      "createdAt": "2026-10-18T08:50:24.710Z",
+      "createdAt": "2026-10-18T09:46:38.898Z",
       "documentDate": "2026-10-01",
       "hasFile": true,
       "id": "1",
@@ -2194,7 +2101,7 @@ The id can be given as a plain word, as in `meowny documents show 42`, or with `
 ```console
 $ meowny documents show 1
 
-createdAt: 2026-10-18T08:50:24.710Z
+createdAt: 2026-10-18T09:46:38.898Z
 documentDate: 2026-10-01
 hasFile: true
 id: 1
@@ -2213,7 +2120,7 @@ With `--json` (one line; shown indented):
 
 ```json
 {
-  "createdAt": "2026-10-18T08:50:24.710Z",
+  "createdAt": "2026-10-18T09:46:38.898Z",
   "documentDate": "2026-10-01",
   "hasFile": true,
   "id": "1",
@@ -2262,7 +2169,7 @@ With `--json` (one line; shown indented):
 ```json
 {
   "alreadyThere": false,
-  "createdAt": "2026-10-18T08:50:24.710Z",
+  "createdAt": "2026-10-18T09:46:38.898Z",
   "documentDate": "2026-10-01",
   "hasFile": true,
   "id": "1",
@@ -2304,7 +2211,7 @@ With `--json` (one line; shown indented):
 
 ```json
 {
-  "createdAt": "2026-10-18T08:50:24.710Z",
+  "createdAt": "2026-10-18T09:46:38.898Z",
   "documentDate": "2026-10-01",
   "hasFile": true,
   "id": "1",
@@ -2365,7 +2272,7 @@ Give exactly one of `--transaction-id`, `--recurring-id` and `--ledger-entry-id`
 The id can be given as a plain word, as in `meowny documents link 42`, or with `--id`.
 
 ```console
-$ meowny documents link 1 --transaction-id 404
+$ meowny documents link 1 --transaction-id 424
 
 done.
 ```
@@ -2392,7 +2299,7 @@ Detaches it. The document and the transaction stay.
 The id can be given as a plain word, as in `meowny documents unlink 42`, or with `--id`.
 
 ```console
-$ meowny documents unlink 1 --transaction-id 404
+$ meowny documents unlink 1 --transaction-id 424
 
 done.
 ```
@@ -2448,9 +2355,12 @@ Your friends with what each owes you, the largest first. A friend is a name and 
 ```console
 $ meowny people list
 
-id  name  archived  balance  remindEveryDays  remindOn
- 1  Anna  false       42.00                -  -
- 2  Bob   false       30.00                7  2026-11-01
+id  name   archived  balance  remindEveryDays  remindOn
+ 1  Marta  false       85.05                -  -
+ 5  Anna   false       42.00                -  -
+ 6  Bob    false       30.00                7  2026-11-01
+ 2  Tomás  false      -23.95                -  -
+ 3  Priya  false        0.00                -  -
 ```
 
 With `--json` (one line; shown indented):
@@ -2459,8 +2369,16 @@ With `--json` (one line; shown indented):
 [
   {
     "archived": false,
-    "balance": "42.00",
+    "balance": "85.05",
     "id": "1",
+    "name": "Marta",
+    "remindEveryDays": null,
+    "remindOn": null
+  },
+  {
+    "archived": false,
+    "balance": "42.00",
+    "id": "5",
     "name": "Anna",
     "remindEveryDays": null,
     "remindOn": null
@@ -2468,10 +2386,26 @@ With `--json` (one line; shown indented):
   {
     "archived": false,
     "balance": "30.00",
-    "id": "2",
+    "id": "6",
     "name": "Bob",
     "remindEveryDays": 7,
     "remindOn": "2026-11-01"
+  },
+  {
+    "archived": false,
+    "balance": "-23.95",
+    "id": "2",
+    "name": "Tomás",
+    "remindEveryDays": null,
+    "remindOn": null
+  },
+  {
+    "archived": false,
+    "balance": "0.00",
+    "id": "3",
+    "name": "Priya",
+    "remindEveryDays": null,
+    "remindOn": null
   }
 ]
 ```
@@ -2495,14 +2429,14 @@ A friend and their ledger: their parts of shared bills (`BILL`) and the entries 
 The id can be given as a plain word, as in `meowny people show 42`, or with `--id`.
 
 ```console
-$ meowny people show 1
+$ meowny people show 5
 
-person: {"archived":false,"balance":"42.00","id":"1","name":"Anna","remindEveryDays":null,"remindOn":null}
+person: {"archived":false,"balance":"42.00","id":"5","name":"Anna","remindEveryDays":null,"remindOn":null}
 
 lines
 amount  balance  date        effect  entryId  kind  transactionId  what
- 30.00    30.00  2026-10-12   30.00        -  BILL            405  Dinner
- 12.00    42.00  2026-10-13   12.00        1  LENT              -  taxi
+ 30.00    30.00  2026-10-12   30.00        -  BILL            425  Dinner
+ 12.00    42.00  2026-10-13   12.00       11  LENT              -  taxi
 ```
 
 With `--json` (one line; shown indented):
@@ -2517,7 +2451,7 @@ With `--json` (one line; shown indented):
       "effect": "30.00",
       "entryId": null,
       "kind": "BILL",
-      "transactionId": "405",
+      "transactionId": "425",
       "what": "Dinner"
     },
     {
@@ -2525,7 +2459,7 @@ With `--json` (one line; shown indented):
       "balance": "42.00",
       "date": "2026-10-13",
       "effect": "12.00",
-      "entryId": "1",
+      "entryId": "11",
       "kind": "LENT",
       "transactionId": null,
       "what": "taxi"
@@ -2534,7 +2468,7 @@ With `--json` (one line; shown indented):
   "person": {
     "archived": false,
     "balance": "42.00",
-    "id": "1",
+    "id": "5",
     "name": "Anna",
     "remindEveryDays": null,
     "remindOn": null
@@ -2568,7 +2502,7 @@ With `--json` (one line; shown indented):
 {
   "archived": false,
   "balance": "0.00",
-  "id": "1",
+  "id": "5",
   "name": "Anna",
   "remindEveryDays": null,
   "remindOn": null
@@ -2599,7 +2533,7 @@ Only the flags you give change. The reminder flags (`--remind-on`, `--remind-eve
 The id can be given as a plain word, as in `meowny people update 42`, or with `--id`.
 
 ```console
-$ meowny people update 2 --remind-on 2026-11-01 --remind-every-days 7
+$ meowny people update 6 --remind-on 2026-11-01 --remind-every-days 7
 ```
 
 With `--json` (one line; shown indented):
@@ -2608,7 +2542,7 @@ With `--json` (one line; shown indented):
 {
   "archived": false,
   "balance": "0.00",
-  "id": "2",
+  "id": "6",
   "name": "Bob",
   "remindEveryDays": 7,
   "remindOn": "2026-11-01"
@@ -2634,7 +2568,7 @@ Hides a friend from the lists. Their balance and history stay, and the name can 
 The id can be given as a plain word, as in `meowny people archive 42`, or with `--id`.
 
 ```console
-$ meowny people archive 2
+$ meowny people archive 6
 ```
 
 With `--json` (one line; shown indented):
@@ -2643,7 +2577,7 @@ With `--json` (one line; shown indented):
 {
   "archived": true,
   "balance": "0.00",
-  "id": "2",
+  "id": "6",
   "name": "Bob",
   "remindEveryDays": 7,
   "remindOn": "2026-11-01"
@@ -2669,7 +2603,7 @@ Brings the friend back, if no other friend has taken the name.
 The id can be given as a plain word, as in `meowny people unarchive 42`, or with `--id`.
 
 ```console
-$ meowny people unarchive 2
+$ meowny people unarchive 6
 ```
 
 With `--json` (one line; shown indented):
@@ -2678,7 +2612,7 @@ With `--json` (one line; shown indented):
 {
   "archived": false,
   "balance": "0.00",
-  "id": "2",
+  "id": "6",
   "name": "Bob",
   "remindEveryDays": 7,
   "remindOn": "2026-11-01"
@@ -2709,7 +2643,7 @@ An amount larger than the debt is accepted: the balance turns around and the ans
 The id can be given as a plain word, as in `meowny people settle 42`, or with `--id`.
 
 ```console
-$ meowny people settle 1 --amount 50.00 --date 2026-10-15
+$ meowny people settle 5 --amount 50.00 --date 2026-10-15
 ```
 
 With `--json` (one line; shown indented):
@@ -2721,10 +2655,10 @@ With `--json` (one line; shown indented):
   "entry": {
     "amount": "50.00",
     "date": "2026-10-15",
-    "id": "2",
+    "id": "12",
     "kind": "REPAID_TO_ME",
     "note": null,
-    "personId": "1",
+    "personId": "5",
     "transactionId": null
   },
   "over": "8.00"
@@ -2748,27 +2682,38 @@ What friends owe you and what you owe them, in all and for each friend whose bal
 ```console
 $ meowny debts summary
 
-net: 72.00
-owedToYou: 72.00
-youOwe: 0.00
+net: 143.10
+owedToYou: 167.05
+youOwe: 23.95
 
 people
-id  name  archived  balance  remindEveryDays  remindOn
- 1  Anna  false       42.00                -  -
- 2  Bob   false       30.00                7  2026-11-01
+id  name   archived  balance  remindEveryDays  remindOn
+ 1  Marta  false       85.05                -  -
+ 5  Anna   false       42.00                -  -
+ 6  Bob    false       30.00                7  2026-11-01
+ 2  Tomás  false      -23.95                -  -
+ 4  Sorin  true        10.00                -  -
 ```
 
 With `--json` (one line; shown indented):
 
 ```json
 {
-  "net": "72.00",
-  "owedToYou": "72.00",
+  "net": "143.10",
+  "owedToYou": "167.05",
   "people": [
     {
       "archived": false,
-      "balance": "42.00",
+      "balance": "85.05",
       "id": "1",
+      "name": "Marta",
+      "remindEveryDays": null,
+      "remindOn": null
+    },
+    {
+      "archived": false,
+      "balance": "42.00",
+      "id": "5",
       "name": "Anna",
       "remindEveryDays": null,
       "remindOn": null
@@ -2776,13 +2721,29 @@ With `--json` (one line; shown indented):
     {
       "archived": false,
       "balance": "30.00",
-      "id": "2",
+      "id": "6",
       "name": "Bob",
       "remindEveryDays": 7,
       "remindOn": "2026-11-01"
+    },
+    {
+      "archived": false,
+      "balance": "-23.95",
+      "id": "2",
+      "name": "Tomás",
+      "remindEveryDays": null,
+      "remindOn": null
+    },
+    {
+      "archived": true,
+      "balance": "10.00",
+      "id": "4",
+      "name": "Sorin",
+      "remindEveryDays": null,
+      "remindOn": null
     }
   ],
-  "youOwe": "0.00"
+  "youOwe": "23.95"
 }
 ```
 
@@ -2801,32 +2762,23 @@ The recurring payments you have not paid or skipped and whose day has gone by: o
 ```console
 $ meowny debts due
 
-total: 30.00
-unknown: 0
+total: 126.00
+unknown: 2
 
 payments
-name              amount  category   categoryId  daysOverdue  dueDate     recurringId
-Cleaning service   30.00  Utilities          10            7  2026-10-11            6
+name              amount  category       categoryId  daysOverdue  dueDate     recurringId
+Yoga class         32.00  Entertainment           8           74  2026-08-05           11
+Mobile top-up          -  Utilities              10           45  2026-09-03           12
+Yoga class         32.00  Entertainment           8           43  2026-09-05           11
+Mobile top-up          -  Utilities              10           15  2026-10-03           12
+Yoga class         32.00  Entertainment           8           13  2026-10-05           11
+Cleaning service   30.00  Utilities              10            7  2026-10-11            6
 ```
 
 With `--json` (one line; shown indented):
 
 ```json
-{
-  "payments": [
-    {
-      "amount": "30.00",
-      "category": "Utilities",
-      "categoryId": "10",
-      "daysOverdue": 7,
-      "dueDate": "2026-10-11",
-      "name": "Cleaning service",
-      "recurringId": "6"
-    }
-  ],
-  "total": "30.00",
-  "unknown": 0
-}
+{"payments":[{"amount":"32.00","category":"Entertainment","categoryId":"8","daysOverdue":74,"dueDate":"2026-08-05","name":"Yoga class","recurringId":"11"},{"amount":null,"category":"Utilities","categoryId":"10","daysOverdue":45,"dueDate":"2026-09-03","name":"Mobile top-up","recurringId":"12"},{"amount":"32.00","category":"Entertainment","categoryId":"8","daysOverdue":43,"dueDate":"2026-09-05","name":"Yoga class","recurringId":"11"},{"amount":null,"category":"Utilities","categoryId":"10","daysOverdue":15,"dueDate":"2026-10-03","name":"Mobile top-up","recurringId":"12"},{"amount":"32.00","category":"Entertainment","categoryId":"8","daysOverdue":13,"dueDate":"2026-10-05","name":"Yoga class","re…
 ```
 
 #### `debts history`
@@ -2854,22 +2806,22 @@ $ meowny debts history --limit 5
 
 limit: 5
 offset: 0
-total: 15
+total: 49
 
 lines
-amount  balance  date        dueDate     effect  entryId  friend  kind          personId  recurringId  transactionId  what
- 12.00    42.00  2026-10-13  -            12.00        1  Anna    LENT                 1            -              -  taxi
- 30.00    30.00  2026-10-12  -            30.00        -  Bob     BILL                 2            -            405  Dinner
- 30.00    30.00  2026-10-12  -            30.00        -  Anna    BILL                 1            -            405  Dinner
- 30.00        -  2026-10-11  2026-10-11       -        -  -       PAYMENT_DUE          -            6              -  Cleaning service
- 80.30        -  2026-09-21  2026…
-showing 1-5 of 15; next page: --offset 5
+amount  balance  date        dueDate     effect  entryId  friend  kind         personId  recurringId  transactionId  what
+ 12.00    42.00  2026-10-13  -            12.00       11  Anna    LENT                5            -              -  taxi
+ 30.00    30.00  2026-10-12  -            30.00        -  Bob     BILL                6            -            425  Dinner
+ 30.00    30.00  2026-10-12  -            30.00        -  Anna    BILL                5            -            425  Dinner
+ 12.00    85.05  2026-10-12  -            12.00        -  Marta   BILL                1            -            404  Veg box
+ 30.00        -  2026-10-11  2026-10-11       -…
+showing 1-5 of 49; next page: --offset 5
 ```
 
 With `--json` (one line; shown indented):
 
 ```json
-{"limit":5,"lines":[{"amount":"12.00","balance":"42.00","date":"2026-10-13","dueDate":null,"effect":"12.00","entryId":"1","friend":"Anna","kind":"LENT","personId":"1","recurringId":null,"transactionId":null,"what":"taxi"},{"amount":"30.00","balance":"30.00","date":"2026-10-12","dueDate":null,"effect":"30.00","entryId":null,"friend":"Bob","kind":"BILL","personId":"2","recurringId":null,"transactionId":"405","what":"Dinner"},{"amount":"30.00","balance":"30.00","date":"2026-10-12","dueDate":null,"effect":"30.00","entryId":null,"friend":"Anna","kind":"BILL","personId":"1","recurringId":null,"transactionId":"405","what":"Dinner"},{"amount":"30.00","balance":null,"date":"2026-10-11","dueDate":"202…
+{"limit":5,"lines":[{"amount":"12.00","balance":"42.00","date":"2026-10-13","dueDate":null,"effect":"12.00","entryId":"11","friend":"Anna","kind":"LENT","personId":"5","recurringId":null,"transactionId":null,"what":"taxi"},{"amount":"30.00","balance":"30.00","date":"2026-10-12","dueDate":null,"effect":"30.00","entryId":null,"friend":"Bob","kind":"BILL","personId":"6","recurringId":null,"transactionId":"425","what":"Dinner"},{"amount":"30.00","balance":"30.00","date":"2026-10-12","dueDate":null,"effect":"30.00","entryId":null,"friend":"Anna","kind":"BILL","personId":"5","recurringId":null,"transactionId":"425","what":"Dinner"},{"amount":"12.00","balance":"85.05","date":"2026-10-12","dueDate":…
 ```
 
 #### `debts reminders`
@@ -2894,25 +2846,42 @@ $ meowny debts reminders --every-days 7
 today: 2026-10-18
 
 due
-(none)
+name   dueOn       personId
+Sorin  2026-10-17         4
+Tomás  2026-10-18         2
 
 upcoming
 count  date
-    1  2026-10-19
+    1  2026-10-18
+    2  2026-10-19
     1  2026-10-20
-    1  2026-10-26
-    1  2026-10-27
+    1  2026-10-24
 ```
 
 With `--json` (one line; shown indented):
 
 ```json
 {
-  "due": [],
+  "due": [
+    {
+      "dueOn": "2026-10-17",
+      "name": "Sorin",
+      "personId": "4"
+    },
+    {
+      "dueOn": "2026-10-18",
+      "name": "Tomás",
+      "personId": "2"
+    }
+  ],
   "today": "2026-10-18",
   "upcoming": [
     {
       "count": 1,
+      "date": "2026-10-18"
+    },
+    {
+      "count": 2,
       "date": "2026-10-19"
     },
     {
@@ -2921,11 +2890,7 @@ With `--json` (one line; shown indented):
     },
     {
       "count": 1,
-      "date": "2026-10-26"
-    },
-    {
-      "count": 1,
-      "date": "2026-10-27"
+      "date": "2026-10-24"
     }
   ]
 }
@@ -2957,7 +2922,7 @@ Shows what a split would give each person for a bill of this amount, and saves n
 `--values` has one value for each friend in the order of `--people`, then one for each guest in the order of `--guests`. The parts always add up to the bill to the cent: the odd cents go to the largest remainders, and to you first.
 
 ```console
-$ meowny splits preview --amount 90.00 --mode percent --people 1,2 --values 30.00,30.00
+$ meowny splits preview --amount 90.00 --mode percent --people 5,6 --values 30.00,30.00
 
 complete: true
 left: 0.00
@@ -2965,8 +2930,8 @@ mine: 36.00
 
 parts
 amount  guest  person  personId
- 27.00  -      Anna           1
- 27.00  -      Bob            2
+ 27.00  -      Anna           5
+ 27.00  -      Bob            6
 ```
 
 With `--json` (one line; shown indented):
@@ -2981,13 +2946,13 @@ With `--json` (one line; shown indented):
       "amount": "27.00",
       "guest": null,
       "person": "Anna",
-      "personId": "1"
+      "personId": "5"
     },
     {
       "amount": "27.00",
       "guest": null,
       "person": "Bob",
-      "personId": "2"
+      "personId": "6"
     }
   ]
 }
@@ -3021,7 +2986,7 @@ Money lent, borrowed or paid back. It is never income or expense and appears in 
 For a borrowing, give `--expense-name` and `--expense-category-id` to add your share to your expenses in the same step, with the entry linked to it. Paying them back later is another entry and never a second expense.
 
 ```console
-$ meowny ledger add --person-id 1 --kind lent --amount 10.00 --date 2026-10-13 --note taxi
+$ meowny ledger add --person-id 5 --kind lent --amount 10.00 --date 2026-10-13 --note taxi
 ```
 
 With `--json` (one line; shown indented):
@@ -3030,10 +2995,10 @@ With `--json` (one line; shown indented):
 {
   "amount": "10.00",
   "date": "2026-10-13",
-  "id": "1",
+  "id": "11",
   "kind": "LENT",
   "note": "taxi",
-  "personId": "1",
+  "personId": "5",
   "transactionId": null
 }
 ```
@@ -3065,7 +3030,7 @@ Only the flags you give change. `--clear-note` and `--clear-transaction-id` remo
 The id can be given as a plain word, as in `meowny ledger update 42`, or with `--id`.
 
 ```console
-$ meowny ledger update 1 --amount 12.00
+$ meowny ledger update 11 --amount 12.00
 ```
 
 With `--json` (one line; shown indented):
@@ -3074,10 +3039,10 @@ With `--json` (one line; shown indented):
 {
   "amount": "12.00",
   "date": "2026-10-13",
-  "id": "1",
+  "id": "11",
   "kind": "LENT",
   "note": "taxi",
-  "personId": "1",
+  "personId": "5",
   "transactionId": null
 }
 ```
@@ -3103,7 +3068,7 @@ The id can be given as a plain word, as in `meowny ledger delete 42`, or with `-
 This cannot be undone, so it needs `--yes`.
 
 ```console
-$ meowny ledger delete 1 --yes
+$ meowny ledger delete 11 --yes
 
 done.
 ```
