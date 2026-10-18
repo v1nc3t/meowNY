@@ -658,7 +658,6 @@ export const ro: Messages = {
   'sync.field.split': 'împărțit cu',
   'code.show': 'arată codul',
   'code.title': 'codul cheltuielii pentru {name}',
-  'code.hint': 'arată-l lui {name}: aplicația lui îl poate scana sau primi lipit. conține această cheltuială, partea lui și numele tău, nimic altceva.',
   'code.part': 'partea lui {name}: {amount} din {total}',
   'code.senderAsk': 'ce nume să vadă prietenul tău?',
   'code.next': 'următoarea plată, scadentă la {date}',

@@ -212,6 +212,47 @@
         "stdout": "{\"id\":\"16\",\"name\":\"Animals\",\"type\":\"EXPENSE\"}\n"
       }
     },
+    "debts due": {
+      "command": "meowny debts due",
+      "human": {
+        "exit": 0,
+        "stderr": "",
+        "stdout": "total: 30.00\nunknown: 0\n\npayments\nname              amount  category   categoryId  daysOverdue  dueDate     recurringId\nCleaning service   30.00  Utilities          10            7  2026-10-11            6\n"
+      },
+      "json": {
+        "exit": 0,
+        "stderr": "",
+        "stdout": "{\"payments\":[{\"amount\":\"30.00\",\"category\":\"Utilities\",\"categoryId\":\"10\",\"daysOverdue\":7,\"dueDate\":\"2026-10-11\",\"name\":\"Cleaning service\",\"recurringId\":\"6\"}],\"total\":\"30.00\",\"unknown\":0}\n"
+      }
+    },
+    "debts history": {
+      "command": "meowny debts history --limit 5",
+      "human": {
+        "exit": 0,
+        "stderr": "showing 1-5 of 15; next page: --offset 5\n",
+        "stdout": "limit: 5\noffset: 0\ntotal: 15\n\nlines\namount  balance  date        dueDate     effect  entryId  friend  kind          personId  recurringId  transactionId  what\n 12.00    42.00  2026-10-13  -            12.00        1  Anna    LENT                 1            -              -  taxi\n 30.00    30.00  2026-10-12  -            30.00        -  Bob     BILL                 2            -            405  Dinner\n 30.00    30.00  2026-10-12  -            30.00        -  Anna    BILL                 1            -            405  Dinner\n 30.00        -  2026-10-11  2026-10-11       -        -  -       PAYMENT_DUE          -            6              -  Cleaning service\n 80.30        -  2026-09-21  2026…",
+        "truncated": true
+      },
+      "json": {
+        "exit": 0,
+        "stderr": "",
+        "stdout": "{\"limit\":5,\"lines\":[{\"amount\":\"12.00\",\"balance\":\"42.00\",\"date\":\"2026-10-13\",\"dueDate\":null,\"effect\":\"12.00\",\"entryId\":\"1\",\"friend\":\"Anna\",\"kind\":\"LENT\",\"personId\":\"1\",\"recurringId\":null,\"transactionId\":null,\"what\":\"taxi\"},{\"amount\":\"30.00\",\"balance\":\"30.00\",\"date\":\"2026-10-12\",\"dueDate\":null,\"effect\":\"30.00\",\"entryId\":null,\"friend\":\"Bob\",\"kind\":\"BILL\",\"personId\":\"2\",\"recurringId\":null,\"transactionId\":\"405\",\"what\":\"Dinner\"},{\"amount\":\"30.00\",\"balance\":\"30.00\",\"date\":\"2026-10-12\",\"dueDate\":null,\"effect\":\"30.00\",\"entryId\":null,\"friend\":\"Anna\",\"kind\":\"BILL\",\"personId\":\"1\",\"recurringId\":null,\"transactionId\":\"405\",\"what\":\"Dinner\"},{\"amount\":\"30.00\",\"balance\":null,\"date\":\"2026-10-11\",\"dueDate\":\"202…",
+        "truncated": true
+      }
+    },
+    "debts reminders": {
+      "command": "meowny debts reminders --every-days 7",
+      "human": {
+        "exit": 0,
+        "stderr": "",
+        "stdout": "today: 2026-10-18\n\ndue\n(none)\n\nupcoming\ncount  date\n    1  2026-10-19\n    1  2026-10-20\n    1  2026-10-26\n    1  2026-10-27\n"
+      },
+      "json": {
+        "exit": 0,
+        "stderr": "",
+        "stdout": "{\"due\":[],\"today\":\"2026-10-18\",\"upcoming\":[{\"count\":1,\"date\":\"2026-10-19\"},{\"count\":1,\"date\":\"2026-10-20\"},{\"count\":1,\"date\":\"2026-10-26\"},{\"count\":1,\"date\":\"2026-10-27\"}]}\n"
+      }
+    },
     "debts summary": {
       "command": "meowny debts summary",
       "human": {
@@ -230,7 +271,7 @@
       "json": {
         "exit": 0,
         "stderr": "",
-        "stdout": "{\"alreadyThere\":false,\"createdAt\":\"2026-10-17T21:03:43.076Z\",\"documentDate\":\"2026-10-01\",\"hasFile\":true,\"id\":\"1\",\"keepOnPhone\":false,\"linkCount\":0,\"mediaType\":\"application/pdf\",\"name\":\"boiler-receipt.pdf\",\"sha256\":\"735a7713978716d1e65eb6bf069e2f410eb72ec5b285861be417aeca0feeb935\",\"sizeBytes\":45}\n"
+        "stdout": "{\"alreadyThere\":false,\"createdAt\":\"2026-10-18T08:50:24.710Z\",\"documentDate\":\"2026-10-01\",\"hasFile\":true,\"id\":\"1\",\"keepOnPhone\":false,\"linkCount\":0,\"mediaType\":\"application/pdf\",\"name\":\"boiler-receipt.pdf\",\"sha256\":\"735a7713978716d1e65eb6bf069e2f410eb72ec5b285861be417aeca0feeb935\",\"sizeBytes\":45}\n"
       }
     },
     "documents delete": {
@@ -262,12 +303,12 @@
       "human": {
         "exit": 0,
         "stderr": "",
-        "stdout": "limit: 50\noffset: 0\ntotal: 1\n\ndocuments\nid  name                createdAt                 documentDate  hasFile  keepOnPhone  linkCount  mediaType        sha256                                                        sizeBytes\n 1  boiler-receipt.pdf  2026-10-17T21:03:43.076Z  2026-10-01    true     false                0  application/pdf  735a7713978716d1e65eb6bf069e2f410eb72ec5b285861be417aeca0fe…         45\n"
+        "stdout": "limit: 50\noffset: 0\ntotal: 1\n\ndocuments\nid  name                createdAt                 documentDate  hasFile  keepOnPhone  linkCount  mediaType        sha256                                                        sizeBytes\n 1  boiler-receipt.pdf  2026-10-18T08:50:24.710Z  2026-10-01    true     false                0  application/pdf  735a7713978716d1e65eb6bf069e2f410eb72ec5b285861be417aeca0fe…         45\n"
       },
       "json": {
         "exit": 0,
         "stderr": "",
-        "stdout": "{\"documents\":[{\"createdAt\":\"2026-10-17T21:03:43.076Z\",\"documentDate\":\"2026-10-01\",\"hasFile\":true,\"id\":\"1\",\"keepOnPhone\":false,\"linkCount\":0,\"mediaType\":\"application/pdf\",\"name\":\"boiler-receipt.pdf\",\"sha256\":\"735a7713978716d1e65eb6bf069e2f410eb72ec5b285861be417aeca0feeb935\",\"sizeBytes\":45}],\"limit\":50,\"offset\":0,\"total\":1}\n"
+        "stdout": "{\"documents\":[{\"createdAt\":\"2026-10-18T08:50:24.710Z\",\"documentDate\":\"2026-10-01\",\"hasFile\":true,\"id\":\"1\",\"keepOnPhone\":false,\"linkCount\":0,\"mediaType\":\"application/pdf\",\"name\":\"boiler-receipt.pdf\",\"sha256\":\"735a7713978716d1e65eb6bf069e2f410eb72ec5b285861be417aeca0feeb935\",\"sizeBytes\":45}],\"limit\":50,\"offset\":0,\"total\":1}\n"
       }
     },
     "documents show": {
@@ -275,12 +316,12 @@
       "human": {
         "exit": 0,
         "stderr": "",
-        "stdout": "createdAt: 2026-10-17T21:03:43.076Z\ndocumentDate: 2026-10-01\nhasFile: true\nid: 1\nkeepOnPhone: false\nlinkCount: 0\nmediaType: application/pdf\nname: boiler-receipt.pdf\nsha256: 735a7713978716d1e65eb6bf069e2f410eb72ec5b285861be417aeca0feeb935\nsizeBytes: 45\n\nlinks\n(none)\n"
+        "stdout": "createdAt: 2026-10-18T08:50:24.710Z\ndocumentDate: 2026-10-01\nhasFile: true\nid: 1\nkeepOnPhone: false\nlinkCount: 0\nmediaType: application/pdf\nname: boiler-receipt.pdf\nsha256: 735a7713978716d1e65eb6bf069e2f410eb72ec5b285861be417aeca0feeb935\nsizeBytes: 45\n\nlinks\n(none)\n"
       },
       "json": {
         "exit": 0,
         "stderr": "",
-        "stdout": "{\"createdAt\":\"2026-10-17T21:03:43.076Z\",\"documentDate\":\"2026-10-01\",\"hasFile\":true,\"id\":\"1\",\"keepOnPhone\":false,\"linkCount\":0,\"links\":[],\"mediaType\":\"application/pdf\",\"name\":\"boiler-receipt.pdf\",\"sha256\":\"735a7713978716d1e65eb6bf069e2f410eb72ec5b285861be417aeca0feeb935\",\"sizeBytes\":45}\n"
+        "stdout": "{\"createdAt\":\"2026-10-18T08:50:24.710Z\",\"documentDate\":\"2026-10-01\",\"hasFile\":true,\"id\":\"1\",\"keepOnPhone\":false,\"linkCount\":0,\"links\":[],\"mediaType\":\"application/pdf\",\"name\":\"boiler-receipt.pdf\",\"sha256\":\"735a7713978716d1e65eb6bf069e2f410eb72ec5b285861be417aeca0feeb935\",\"sizeBytes\":45}\n"
       }
     },
     "documents unlink": {
@@ -296,15 +337,15 @@
       "json": {
         "exit": 0,
         "stderr": "",
-        "stdout": "{\"createdAt\":\"2026-10-17T21:03:43.076Z\",\"documentDate\":\"2026-10-01\",\"hasFile\":true,\"id\":\"1\",\"keepOnPhone\":true,\"linkCount\":0,\"mediaType\":\"application/pdf\",\"name\":\"Boiler repair\",\"sha256\":\"735a7713978716d1e65eb6bf069e2f410eb72ec5b285861be417aeca0feeb935\",\"sizeBytes\":45}\n"
+        "stdout": "{\"createdAt\":\"2026-10-18T08:50:24.710Z\",\"documentDate\":\"2026-10-01\",\"hasFile\":true,\"id\":\"1\",\"keepOnPhone\":true,\"linkCount\":0,\"mediaType\":\"application/pdf\",\"name\":\"Boiler repair\",\"sha256\":\"735a7713978716d1e65eb6bf069e2f410eb72ec5b285861be417aeca0feeb935\",\"sizeBytes\":45}\n"
       }
     },
     "export csv": {
-      "command": "meowny export csv --out /home/you/budget-2026.csv --from 2026-01-01",
+      "command": "meowny export csv --out /home/you/budget-2026.csv --from 2026-01-01 --kind expense --min-amount 5.00",
       "human": {
         "exit": 0,
         "stderr": "",
-        "stdout": "bytes: 17480\npath: /home/you/budget-2026.csv\n"
+        "stdout": "bytes: 16066\npath: /home/you/budget-2026.csv\n"
       }
     },
     "export debts": {
@@ -316,19 +357,19 @@
       }
     },
     "export json": {
-      "command": "meowny export json --out /home/you/everything.json",
+      "command": "meowny export json --out /home/you/debts.json --sections people,due,ledger",
       "human": {
         "exit": 0,
         "stderr": "",
-        "stdout": "bytes: 171754\npath: /home/you/everything.json\n"
+        "stdout": "bytes: 6613\npath: /home/you/debts.json\n"
       }
     },
     "export pdf": {
-      "command": "meowny export pdf --out /home/you/report.pdf --from-month 2026-01 --to-month 2026-03 --include-transactions",
+      "command": "meowny export pdf --out /home/you/report.pdf --from-month 2026-01 --to-month 2026-03 --include-transactions --include-debts",
       "human": {
         "exit": 0,
         "stderr": "",
-        "stdout": "bytes: 44345\npath: /home/you/report.pdf\n"
+        "stdout": "bytes: 45011\npath: /home/you/report.pdf\n"
       }
     },
     "export preview": {
@@ -710,12 +751,12 @@
       "human": {
         "exit": 0,
         "stderr": "",
-        "stdout": "date: 2026-10-17\nmonth: 2026-10\n"
+        "stdout": "date: 2026-10-18\nmonth: 2026-10\n"
       },
       "json": {
         "exit": 0,
         "stderr": "",
-        "stdout": "{\"date\":\"2026-10-17\",\"month\":\"2026-10\"}\n"
+        "stdout": "{\"date\":\"2026-10-18\",\"month\":\"2026-10\"}\n"
       }
     },
     "transactions create": {

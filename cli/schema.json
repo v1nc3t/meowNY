@@ -713,10 +713,54 @@
           "required": false,
           "summary": "With dates or categories chosen, also include the ledger of money lent and borrowed (the friends and their parts of the bills in the selection are in it anyway). Without a choice everything is in.",
           "type": "boolean"
+        },
+        {
+          "name": "kind",
+          "required": false,
+          "summary": "Only INCOME or only EXPENSE. Leave out for both.",
+          "type": "string",
+          "values": [
+            "INCOME",
+            "EXPENSE"
+          ]
+        },
+        {
+          "name": "minAmount",
+          "required": false,
+          "summary": "Only transactions that cost you at least this (a bill shared with friends counts for your part).",
+          "type": "money"
+        },
+        {
+          "name": "maxAmount",
+          "required": false,
+          "summary": "Only transactions that cost you at most this (a bill shared with friends counts for your part).",
+          "type": "money"
+        },
+        {
+          "name": "text",
+          "required": false,
+          "summary": "Only transactions with this text in the name or the description, whatever the case.",
+          "type": "string"
+        },
+        {
+          "name": "split",
+          "required": false,
+          "summary": "Only the bills shared with friends (split) or only those that are not (not_split). Leave out for both.",
+          "type": "string",
+          "values": [
+            "split",
+            "not_split"
+          ]
+        },
+        {
+          "name": "sections",
+          "required": false,
+          "summary": "The parts of the file, separated by commas, from: transactions, categories, budgets, recurring, documents, people (the friends and what they owe), due (the overdue recurring payments), ledger (the history of debts) and history (the change history, only in a file with no limits). Leave out for all of them.",
+          "type": "string"
         }
       ],
       "scope": "read",
-      "summary": "What an export of this selection would contain: how many transactions, their dates, the income and expense totals, and the other records."
+      "summary": "What an export of this selection would contain: how many transactions, their dates, the income and expense totals, and the other records (the friends, the history of debts, the overdue payments, the documents)."
     },
     {
       "name": "backup.schedule",
@@ -757,10 +801,54 @@
           "required": false,
           "summary": "With dates or categories chosen, also include the ledger of money lent and borrowed (the friends and their parts of the bills in the selection are in it anyway). Without a choice everything is in.",
           "type": "boolean"
+        },
+        {
+          "name": "kind",
+          "required": false,
+          "summary": "Only INCOME or only EXPENSE. Leave out for both.",
+          "type": "string",
+          "values": [
+            "INCOME",
+            "EXPENSE"
+          ]
+        },
+        {
+          "name": "minAmount",
+          "required": false,
+          "summary": "Only transactions that cost you at least this (a bill shared with friends counts for your part).",
+          "type": "money"
+        },
+        {
+          "name": "maxAmount",
+          "required": false,
+          "summary": "Only transactions that cost you at most this (a bill shared with friends counts for your part).",
+          "type": "money"
+        },
+        {
+          "name": "text",
+          "required": false,
+          "summary": "Only transactions with this text in the name or the description, whatever the case.",
+          "type": "string"
+        },
+        {
+          "name": "split",
+          "required": false,
+          "summary": "Only the bills shared with friends (split) or only those that are not (not_split). Leave out for both.",
+          "type": "string",
+          "values": [
+            "split",
+            "not_split"
+          ]
+        },
+        {
+          "name": "sections",
+          "required": false,
+          "summary": "The parts of the file, separated by commas, from: transactions, categories, budgets, recurring, documents, people (the friends and what they owe), due (the overdue recurring payments), ledger (the history of debts) and history (the change history, only in a file with no limits). Leave out for all of them.",
+          "type": "string"
         }
       ],
       "scope": "read",
-      "summary": "Writes the data as a JSON file, after the person allows it in the app. An existing file is never replaced."
+      "summary": "Writes the data as a JSON file, after the person allows it in the app: the transactions, categories, budgets, recurring items, documents, and the debts (friends, the overdue recurring payments, the history of debts), or the parts and the limits chosen. An existing file is never replaced."
     },
     {
       "confirm": true,
@@ -789,10 +877,48 @@
           "required": false,
           "summary": "Only these categories and what belongs to them. Leave out for all of them.",
           "type": "ids"
+        },
+        {
+          "name": "kind",
+          "required": false,
+          "summary": "Only INCOME or only EXPENSE. Leave out for both.",
+          "type": "string",
+          "values": [
+            "INCOME",
+            "EXPENSE"
+          ]
+        },
+        {
+          "name": "minAmount",
+          "required": false,
+          "summary": "Only transactions that cost you at least this (a bill shared with friends counts for your part).",
+          "type": "money"
+        },
+        {
+          "name": "maxAmount",
+          "required": false,
+          "summary": "Only transactions that cost you at most this (a bill shared with friends counts for your part).",
+          "type": "money"
+        },
+        {
+          "name": "text",
+          "required": false,
+          "summary": "Only transactions with this text in the name or the description, whatever the case.",
+          "type": "string"
+        },
+        {
+          "name": "split",
+          "required": false,
+          "summary": "Only the bills shared with friends (split) or only those that are not (not_split). Leave out for both.",
+          "type": "string",
+          "values": [
+            "split",
+            "not_split"
+          ]
         }
       ],
       "scope": "read",
-      "summary": "Writes the transactions as a CSV file, after the person allows it in the app. An existing file is never replaced."
+      "summary": "Writes the transactions as a CSV file, after the person allows it in the app, limited by the dates, the categories, the kind, what they cost you, a text and whether they are shared. An existing file is never replaced."
     },
     {
       "confirm": true,
@@ -827,10 +953,54 @@
           "required": false,
           "summary": "With dates or categories chosen, also include the ledger of money lent and borrowed (the friends and their parts of the bills in the selection are in it anyway). Without a choice everything is in.",
           "type": "boolean"
+        },
+        {
+          "name": "kind",
+          "required": false,
+          "summary": "Only INCOME or only EXPENSE. Leave out for both.",
+          "type": "string",
+          "values": [
+            "INCOME",
+            "EXPENSE"
+          ]
+        },
+        {
+          "name": "minAmount",
+          "required": false,
+          "summary": "Only transactions that cost you at least this (a bill shared with friends counts for your part).",
+          "type": "money"
+        },
+        {
+          "name": "maxAmount",
+          "required": false,
+          "summary": "Only transactions that cost you at most this (a bill shared with friends counts for your part).",
+          "type": "money"
+        },
+        {
+          "name": "text",
+          "required": false,
+          "summary": "Only transactions with this text in the name or the description, whatever the case.",
+          "type": "string"
+        },
+        {
+          "name": "split",
+          "required": false,
+          "summary": "Only the bills shared with friends (split) or only those that are not (not_split). Leave out for both.",
+          "type": "string",
+          "values": [
+            "split",
+            "not_split"
+          ]
+        },
+        {
+          "name": "sections",
+          "required": false,
+          "summary": "The parts of the file, separated by commas, from: transactions, categories, budgets, recurring, documents, people (the friends and what they owe), due (the overdue recurring payments), ledger (the history of debts) and history (the change history, only in a file with no limits). Leave out for all of them.",
+          "type": "string"
         }
       ],
       "scope": "read",
-      "summary": "Writes a workbook (.xlsx) with sheets for transactions, categories, budgets, recurring items and a monthly summary, after the person allows it in the app. Dates are ISO and amounts plain numbers. An existing file is never replaced."
+      "summary": "Writes a workbook (.xlsx) with sheets for transactions, categories, budgets, recurring items, documents, the debts (friends, due payments, history of debts) and a monthly summary, after the person allows it in the app. Dates are ISO and amounts plain numbers. An existing file is never replaced."
     },
     {
       "confirm": true,
@@ -881,6 +1051,24 @@
             "A4",
             "LETTER"
           ]
+        },
+        {
+          "name": "includeDebts",
+          "required": false,
+          "summary": "Also list who owes what on the last day of each month: one line for each friend.",
+          "type": "boolean"
+        },
+        {
+          "name": "includeDuePayments",
+          "required": false,
+          "summary": "Also list the recurring payments that are overdue today, with the day each fell due and a total.",
+          "type": "boolean"
+        },
+        {
+          "name": "includeDebtHistory",
+          "required": false,
+          "summary": "Also list every line of the debts of every friend in the months, with the balance after it, and the recurring payments paid late or overdue.",
+          "type": "boolean"
         }
       ],
       "scope": "read",
@@ -1191,6 +1379,62 @@
       "params": [],
       "scope": "read",
       "summary": "What friends owe you and what you owe them, in all and for each friend whose balance is not zero. Neither is income or expense."
+    },
+    {
+      "name": "debts.due",
+      "params": [],
+      "scope": "read",
+      "summary": "The recurring payments that are overdue and not paid or skipped, one for each occurrence that was missed (at most 24 for an item), the oldest first, with the day each fell due, what it is for (null for a bill with no fixed amount), the days late and what they come to. A payment is overdue from the day after its day; income and paused or ended items are not listed."
+    },
+    {
+      "name": "debts.history",
+      "params": [
+        {
+          "name": "from",
+          "required": false,
+          "summary": "Only lines on or after this date.",
+          "type": "date"
+        },
+        {
+          "name": "to",
+          "required": false,
+          "summary": "Only lines on or before this date.",
+          "type": "date"
+        },
+        {
+          "name": "personId",
+          "required": false,
+          "summary": "Only the lines of this friend (and none of the recurring payments).",
+          "type": "id"
+        },
+        {
+          "name": "limit",
+          "required": false,
+          "summary": "How many to return, 1 to 200. Default 50.",
+          "type": "integer"
+        },
+        {
+          "name": "offset",
+          "required": false,
+          "summary": "How many to skip, for the next page. Default 0.",
+          "type": "integer"
+        }
+      ],
+      "scope": "read",
+      "summary": "The history of debts, newest first, a page at a time: the lines of every friend (lent, borrowed, paid back, their parts of shared bills, with the balance after each) and the recurring payments that were paid late or are overdue. A payment made on its day or before it is not in it."
+    },
+    {
+      "name": "debts.reminders",
+      "params": [
+        {
+          "name": "everyDays",
+          "required": true,
+          "summary": "The period in days, 0 to 365.",
+          "type": "integer"
+        }
+      ],
+      "scope": "read",
+      "summary": "Which friends a reminder is due for today, and the next days with one. Every friend whose balance is not zero is reminded this many days after the day their debt last changed (the latest line of their statement), and again after as many; 0 is none. The app rings them (a device sets its own period and time of day); this only reads what they would be about."
     },
     {
       "name": "splits.preview",

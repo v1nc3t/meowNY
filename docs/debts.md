@@ -83,7 +83,7 @@ On a friend's page, **save statement** writes that friend's lines and the balanc
 - Friends, entries and parts are in **backups** and in the **exports** (all of it with no limit; with a date or category limit only the bills in it and the friends they name, by name, with no balance and no reminder).
 - They **sync** with the phone like everything else. If two devices each added a friend of the same name, the two become one.
 - In an export (JSON and Excel) the **due payments** and the **history of debts** are parts of their own next to the **debts** (the friends); a PDF report has three options: a **list of debts** (who owes what), a **list of due payments** and the **history of debts**.
-- From a script: `meowny people|ledger|debts|splits ...`, `meowny transactions split`, `meowny recurring split`, and `meowny export debts`. A bill code and a reminder need you at the app, so they are not in the command line.
+- From a script: `meowny people|ledger|debts|splits ...`, `meowny transactions split`, `meowny recurring split`, and `meowny export debts`. `debts due` lists the overdue recurring payments, `debts history` the history of debts (paged), and `debts reminders --every-days N` says which friends a reminder is due for; the export commands (`export json|csv|xlsx|pdf`) take the same choices as the export screen, including the due payments and the history of debts as parts (`--sections`) and in a PDF (`--include-due-payments`, `--include-debt-history`). A bill code and the ringing of a reminder need you at the app, so they are not in the command line.
 
 ## What to know
 

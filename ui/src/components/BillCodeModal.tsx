@@ -101,7 +101,6 @@ export default function BillCodeModal({
             {held ? <p>{held.total ? t('code.part', { name: person.name, amount: money(held.part), total: money(held.total) }) : `${person.name}: ${money(held.part)}`}</p> : null}
             {code ? <QrCode text={code} label={t('code.title', { name: person.name })} level="L" onTooLong={onTooLong} /> : null}
             {tooLong ? <p className="notice">{t('code.tooLong')}</p> : null}
-            <p className="hint">{t('code.hint', { name: person.name })}</p>
             <div className="card-actions">
               <button type="button" disabled={!code} onClick={() => void copy()}>
                 {copied ? t('common.copied') : t('common.copy')}

@@ -673,7 +673,6 @@ export const en = {
   'sync.field.split': 'shared with',
   'code.show': 'show code',
   'code.title': 'bill code for {name}',
-  'code.hint': 'show this to {name}: their app can scan it or take it pasted. it holds this bill, their part and your name, nothing else.',
   'code.part': "{name}'s part: {amount} of {total}",
   'code.senderAsk': 'what name should your friend see?',
   'code.next': 'the next payment, due {date}',

@@ -82,7 +82,7 @@ Without `--json` you get a plain table or `key: value` lines, and messages (such
 
 ## Commands
 
-Every command is `meowny <noun> <verb>`, or a single word, with its flags after it. `--help` works at every level, with no app running. There are 67 commands; each is listed here with what it prints.
+Every command is `meowny <noun> <verb>`, or a single word, with its flags after it. `--help` works at every level, with no app running. There are 70 commands; each is listed here with what it prints.
 
 | Command | What it does | Needs |
 | --- | --- | --- |
@@ -119,11 +119,11 @@ Every command is `meowny <noun> <verb>`, or a single word, with its flags after 
 | [`recurring pause`](#cmd-recurring-pause) | Pauses a recurring item: it stops coming due until it is resumed. | write token |
 | [`recurring resume`](#cmd-recurring-resume) | Resumes a paused recurring item, unless its next date is past its end date. | write token |
 | [`recurring end`](#cmd-recurring-end) | Ends a recurring item for good: it becomes inactive and its end date is today. What it already paid stays. | write token |
-| [`export preview`](#cmd-export-preview) | What an export of this selection would contain: how many transactions, their dates, the income and expense totals, and the other records. | read token |
+| [`export preview`](#cmd-export-preview) | What an export of this selection would contain: how many transactions, their dates, the income and expense totals, and the other records (the friends, the history of debts, the overdue payments, the documents). | read token |
 | [`backup schedule`](#cmd-backup-schedule) | The scheduled backup, if one is set up: the folder, how often and how the last one went, or null. Its passphrase is never shown. | read token |
-| [`export json`](#cmd-export-json) | Writes the data as a JSON file, after the person allows it in the app. An existing file is never replaced. | read token, and your yes |
-| [`export csv`](#cmd-export-csv) | Writes the transactions as a CSV file, after the person allows it in the app. An existing file is never replaced. | read token, and your yes |
-| [`export xlsx`](#cmd-export-xlsx) | Writes a workbook (.xlsx) with sheets for transactions, categories, budgets, recurring items and a monthly summary, after the person allows it in the app. Dates are ISO and amounts plain numbers. An existing file is never replaced. | read token, and your yes |
+| [`export json`](#cmd-export-json) | Writes the data as a JSON file, after the person allows it in the app: the transactions, categories, budgets, recurring items, documents, and the debts (friends, the overdue recurring payments, the history of debts), or the parts and the limits chosen. An existing file is never replaced. | read token, and your yes |
+| [`export csv`](#cmd-export-csv) | Writes the transactions as a CSV file, after the person allows it in the app, limited by the dates, the categories, the kind, what they cost you, a text and whether they are shared. An existing file is never replaced. | read token, and your yes |
+| [`export xlsx`](#cmd-export-xlsx) | Writes a workbook (.xlsx) with sheets for transactions, categories, budgets, recurring items, documents, the debts (friends, due payments, history of debts) and a monthly summary, after the person allows it in the app. Dates are ISO and amounts plain numbers. An existing file is never replaced. | read token, and your yes |
 | [`export pdf`](#cmd-export-pdf) | Writes a PDF report for whole months, in English, after the person allows it in the app: totals, charts and budget against actual, and the transactions if asked. An existing file is never replaced. | read token, and your yes |
 | [`backup create`](#cmd-backup-create) | Writes an encrypted backup of all the data, after the person allows it in the app. It opens only with the passphrase given here, and only the app can restore it. An existing file is never replaced. | read token, and your yes |
 | [`documents list`](#cmd-documents-list) | Documents, newest paper first, with the total that match: names, dates, types, sizes and hashes, never the files. Up to 100 a page, 50 unless limit says otherwise. | read token |
@@ -137,6 +137,9 @@ Every command is `meowny <noun> <verb>`, or a single word, with its flags after 
 | [`people list`](#cmd-people-list) | The friends with what each owes you (negative: you owe them), the largest first. Archived friends only if asked. | read token |
 | [`people show`](#cmd-people-show) | One friend and their ledger: their parts of shared bills and the entries by date, with the balance after each line. | read token |
 | [`debts summary`](#cmd-debts-summary) | What friends owe you and what you owe them, in all and for each friend whose balance is not zero. Neither is income or expense. | read token |
+| [`debts due`](#cmd-debts-due) | The recurring payments that are overdue and not paid or skipped, one for each occurrence that was missed (at most 24 for an item), the oldest first, with the day each fell due, what it is for (null for a bill with no fixed amount), the days late and what they come to. A payment is overdue from the day after its day; income and paused or ended items are not listed. | read token |
+| [`debts history`](#cmd-debts-history) | The history of debts, newest first, a page at a time: the lines of every friend (lent, borrowed, paid back, their parts of shared bills, with the balance after each) and the recurring payments that were paid late or are overdue. A payment made on its day or before it is not in it. | read token |
+| [`debts reminders`](#cmd-debts-reminders) | Which friends a reminder is due for today, and the next days with one. Every friend whose balance is not zero is reminded this many days after the day their debt last changed (the latest line of their statement), and again after as many; 0 is none. The app rings them (a device sets its own period and time of day); this only reads what they would be about. | read token |
 | [`splits preview`](#cmd-splits-preview) | What a split would give each person for a bill of this amount, without saving anything: your part, theirs, whether the numbers add up and how much is left. | read token |
 | [`people create`](#cmd-people-create) | Adds a friend. A friend is a name, 1 to 50 characters, unique among the friends who are not archived. Nothing else about a person is kept. | write token |
 | [`people update`](#cmd-people-update) | Renames a friend. Fields left out stay as they are. The reminder fields are kept for data written before reminders became a setting of each device (every so many days after a debt last changed), and nothing rings from them. | write token |
@@ -201,7 +204,7 @@ meowny today
 ```console
 $ meowny today
 
-date: 2026-10-17
+date: 2026-10-18
 month: 2026-10
 ```
 
@@ -209,7 +212,7 @@ With `--json` (one line; shown indented):
 
 ```json
 {
-  "date": "2026-10-17",
+  "date": "2026-10-18",
   "month": "2026-10"
 }
 ```
@@ -1824,10 +1827,10 @@ With `--json` (one line; shown indented):
 
 *read token*
 
-What an export of this selection would contain: how many transactions, their dates, the income and expense totals, and the other records.
+What an export of this selection would contain: how many transactions, their dates, the income and expense totals, and the other records (the friends, the history of debts, the overdue payments, the documents).
 
 ```text
-meowny export preview [--from <date>] [--to <date>] [--category-ids <id,id,...>] [--include-debts <boolean>]
+meowny export preview [--from <date>] [--to <date>] [--category-ids <id,id,...>] [--include-debts <boolean>] [--kind <INCOME|EXPENSE>] [--min-amount <amount>] [--max-amount <amount>] [--text <text>] [--split <split|not_split>] [--sections <text>]
 ```
 
 | Flag | Type | Description |
@@ -1836,8 +1839,14 @@ meowny export preview [--from <date>] [--to <date>] [--category-ids <id,id,...>]
 | `--to` | date | Only transactions on or before this date. |
 | `--category-ids` | id,id,... | Only these categories and what belongs to them. Leave out for all of them. |
 | `--include-debts` | boolean | With dates or categories chosen, also include the ledger of money lent and borrowed (the friends and their parts of the bills in the selection are in it anyway). Without a choice everything is in. |
+| `--kind` | one of INCOME, EXPENSE | Only INCOME or only EXPENSE. Leave out for both. |
+| `--min-amount` | amount | Only transactions that cost you at least this (a bill shared with friends counts for your part). |
+| `--max-amount` | amount | Only transactions that cost you at most this (a bill shared with friends counts for your part). |
+| `--text` | text | Only transactions with this text in the name or the description, whatever the case. |
+| `--split` | one of split, not_split | Only the bills shared with friends (split) or only those that are not (not_split). Leave out for both. |
+| `--sections` | text | The parts of the file, separated by commas, from: transactions, categories, budgets, recurring, documents, people (the friends and what they owe), due (the overdue recurring payments), ledger (the history of debts) and history (the change history, only in a file with no limits). Leave out for all of them. |
 
-Nothing is written and nothing is asked: this only says how many transactions an export with these choices would contain. Use it to check a selection before exporting.
+Nothing is written and nothing is asked: this only says how many transactions an export with these choices would contain, and how many of the other records (friends, the history of debts, the overdue payments, documents). Use it to check a selection before exporting. It takes the same choices as `export json`.
 
 ```console
 $ meowny export preview --from 2026-01-01 --to 2026-09-30
@@ -1885,10 +1894,10 @@ With `--json` (one line; shown indented):
 
 *read token · asks you in the app*
 
-Writes the data as a JSON file, after the person allows it in the app. An existing file is never replaced.
+Writes the data as a JSON file, after the person allows it in the app: the transactions, categories, budgets, recurring items, documents, and the debts (friends, the overdue recurring payments, the history of debts), or the parts and the limits chosen. An existing file is never replaced.
 
 ```text
-meowny export json --out <path> [--from <date>] [--to <date>] [--category-ids <id,id,...>] [--include-debts <boolean>]
+meowny export json --out <path> [--from <date>] [--to <date>] [--category-ids <id,id,...>] [--include-debts <boolean>] [--kind <INCOME|EXPENSE>] [--min-amount <amount>] [--max-amount <amount>] [--text <text>] [--split <split|not_split>] [--sections <text>]
 ```
 
 | Flag | Type | Description |
@@ -1898,26 +1907,32 @@ meowny export json --out <path> [--from <date>] [--to <date>] [--category-ids <i
 | `--to` | date | Only transactions on or before this date. |
 | `--category-ids` | id,id,... | Only these categories and what belongs to them. Leave out for all of them. |
 | `--include-debts` | boolean | With dates or categories chosen, also include the ledger of money lent and borrowed (the friends and their parts of the bills in the selection are in it anyway). Without a choice everything is in. |
+| `--kind` | one of INCOME, EXPENSE | Only INCOME or only EXPENSE. Leave out for both. |
+| `--min-amount` | amount | Only transactions that cost you at least this (a bill shared with friends counts for your part). |
+| `--max-amount` | amount | Only transactions that cost you at most this (a bill shared with friends counts for your part). |
+| `--text` | text | Only transactions with this text in the name or the description, whatever the case. |
+| `--split` | one of split, not_split | Only the bills shared with friends (split) or only those that are not (not_split). Leave out for both. |
+| `--sections` | text | The parts of the file, separated by commas, from: transactions, categories, budgets, recurring, documents, people (the friends and what they owe), due (the overdue recurring payments), ledger (the history of debts) and history (the change history, only in a file with no limits). Leave out for all of them. |
 
-The whole data as one file, including the change history unless you chose categories. Documents are listed by name, date, type, size, hash and what they are attached to, never their files. Friends, the ledger and the parts of shared bills are in it; each transaction has `amount` (what was paid) and `myShare` (what it cost you). With dates or categories chosen the ledger is left out unless you give `--include-debts`. It is not encrypted.
+The whole data as one file, including the change history when nothing limits it. Documents are listed by name, date, type, size, hash and what they are attached to, never their files. Friends, the overdue recurring payments (`duePayments`), the history of debts (`debtHistory`) and the parts of shared bills are in it; each transaction has `amount` (what was paid) and `myShare` (what it cost you). The limits: dates, categories, `--kind` (income or expense), `--min-amount` and `--max-amount` (what it cost you), `--text` (in the name or description) and `--split` (only the bills shared with friends, or only those not). `--sections` names the parts to keep, separated by commas: transactions, categories, budgets, recurring, documents, people, due, ledger, history. With a limit the history of debts is left out unless you give `--include-debts` or name `ledger`. It is not encrypted.
 
 The app asks you to allow this each time, in a dialog; nothing is written until you do. See [Files need your yes](#files).
 
 ```console
-$ meowny export json --out /home/you/everything.json
+$ meowny export json --out /home/you/debts.json --sections people,due,ledger
 
-bytes: 171754
-path: /home/you/everything.json
+bytes: 6613
+path: /home/you/debts.json
 ```
 
 #### `export csv`
 
 *read token · asks you in the app*
 
-Writes the transactions as a CSV file, after the person allows it in the app. An existing file is never replaced.
+Writes the transactions as a CSV file, after the person allows it in the app, limited by the dates, the categories, the kind, what they cost you, a text and whether they are shared. An existing file is never replaced.
 
 ```text
-meowny export csv --out <path> [--from <date>] [--to <date>] [--category-ids <id,id,...>]
+meowny export csv --out <path> [--from <date>] [--to <date>] [--category-ids <id,id,...>] [--kind <INCOME|EXPENSE>] [--min-amount <amount>] [--max-amount <amount>] [--text <text>] [--split <split|not_split>]
 ```
 
 | Flag | Type | Description |
@@ -1926,15 +1941,20 @@ meowny export csv --out <path> [--from <date>] [--to <date>] [--category-ids <id
 | `--from` | date | Only transactions on or after this date. |
 | `--to` | date | Only transactions on or before this date. |
 | `--category-ids` | id,id,... | Only these categories and what belongs to them. Leave out for all of them. |
+| `--kind` | one of INCOME, EXPENSE | Only INCOME or only EXPENSE. Leave out for both. |
+| `--min-amount` | amount | Only transactions that cost you at least this (a bill shared with friends counts for your part). |
+| `--max-amount` | amount | Only transactions that cost you at most this (a bill shared with friends counts for your part). |
+| `--text` | text | Only transactions with this text in the name or the description, whatever the case. |
+| `--split` | one of split, not_split | Only the bills shared with friends (split) or only those that are not (not_split). Leave out for both. |
 
-One row per transaction, with a byte order mark so Excel reads the accents, a column with the names of the documents attached to it, and a last column `my_share` with what it cost you (the same as `amount` unless the bill is shared). Text that starts like a formula is written as text, so opening the file cannot run anything.
+One row per transaction, with a byte order mark so Excel reads the accents, a column with the names of the documents attached to it, and a last column `my_share` with what it cost you (the same as `amount` unless the bill is shared). It takes the limits of `export json` (dates, categories, `--kind`, `--min-amount`, `--max-amount`, `--text`, `--split`) but no parts. Text that starts like a formula is written as text, so opening the file cannot run anything.
 
 The app asks you to allow this each time, in a dialog; nothing is written until you do. See [Files need your yes](#files).
 
 ```console
-$ meowny export csv --out /home/you/budget-2026.csv --from 2026-01-01
+$ meowny export csv --out /home/you/budget-2026.csv --from 2026-01-01 --kind expense --min-amount 5.00
 
-bytes: 17480
+bytes: 16066
 path: /home/you/budget-2026.csv
 ```
 
@@ -1942,10 +1962,10 @@ path: /home/you/budget-2026.csv
 
 *read token · asks you in the app*
 
-Writes a workbook (.xlsx) with sheets for transactions, categories, budgets, recurring items and a monthly summary, after the person allows it in the app. Dates are ISO and amounts plain numbers. An existing file is never replaced.
+Writes a workbook (.xlsx) with sheets for transactions, categories, budgets, recurring items, documents, the debts (friends, due payments, history of debts) and a monthly summary, after the person allows it in the app. Dates are ISO and amounts plain numbers. An existing file is never replaced.
 
 ```text
-meowny export xlsx --out <path> [--from <date>] [--to <date>] [--category-ids <id,id,...>] [--include-debts <boolean>]
+meowny export xlsx --out <path> [--from <date>] [--to <date>] [--category-ids <id,id,...>] [--include-debts <boolean>] [--kind <INCOME|EXPENSE>] [--min-amount <amount>] [--max-amount <amount>] [--text <text>] [--split <split|not_split>] [--sections <text>]
 ```
 
 | Flag | Type | Description |
@@ -1955,8 +1975,14 @@ meowny export xlsx --out <path> [--from <date>] [--to <date>] [--category-ids <i
 | `--to` | date | Only transactions on or before this date. |
 | `--category-ids` | id,id,... | Only these categories and what belongs to them. Leave out for all of them. |
 | `--include-debts` | boolean | With dates or categories chosen, also include the ledger of money lent and borrowed (the friends and their parts of the bills in the selection are in it anyway). Without a choice everything is in. |
+| `--kind` | one of INCOME, EXPENSE | Only INCOME or only EXPENSE. Leave out for both. |
+| `--min-amount` | amount | Only transactions that cost you at least this (a bill shared with friends counts for your part). |
+| `--max-amount` | amount | Only transactions that cost you at most this (a bill shared with friends counts for your part). |
+| `--text` | text | Only transactions with this text in the name or the description, whatever the case. |
+| `--split` | one of split, not_split | Only the bills shared with friends (split) or only those that are not (not_split). Leave out for both. |
+| `--sections` | text | The parts of the file, separated by commas, from: transactions, categories, budgets, recurring, documents, people (the friends and what they owe), due (the overdue recurring payments), ledger (the history of debts) and history (the change history, only in a file with no limits). Leave out for all of them. |
 
-Sheets for transactions (with what each cost you), categories, budgets, recurring items, a monthly summary, the documents (listed, never the files), the friends, the ledger and the parts of shared bills. Dates are real dates and amounts are numbers.
+Sheets for transactions (with what each cost you), categories, budgets, recurring items, a monthly summary, the documents (listed, never the files), the friends, the due payments, the history of debts and the parts of shared bills. It takes the limits and `--sections` of `export json` (the change history has no sheet; a workbook of nothing but parts with no sheet is refused). Dates are real dates and amounts are numbers.
 
 The app asks you to allow this each time, in a dialog; nothing is written until you do. See [Files need your yes](#files).
 
@@ -1974,7 +2000,7 @@ path: /home/you/budget.xlsx
 Writes a PDF report for whole months, in English, after the person allows it in the app: totals, charts and budget against actual, and the transactions if asked. An existing file is never replaced.
 
 ```text
-meowny export pdf --out <path> --from-month <month> --to-month <month> [--category-ids <id,id,...>] [--include-transactions <boolean>] [--show-descriptions <boolean>] [--page <A4|LETTER>]
+meowny export pdf --out <path> --from-month <month> --to-month <month> [--category-ids <id,id,...>] [--include-transactions <boolean>] [--show-descriptions <boolean>] [--page <A4|LETTER>] [--include-debts <boolean>] [--include-due-payments <boolean>] [--include-debt-history <boolean>]
 ```
 
 | Flag | Type | Description |
@@ -1986,15 +2012,18 @@ meowny export pdf --out <path> --from-month <month> --to-month <month> [--catego
 | `--include-transactions` | boolean | Also list the transactions. Up to 20,000. |
 | `--show-descriptions` | boolean | Show each transaction's description. Leave off to share the report without private details. |
 | `--page` | one of A4, LETTER | A4 (the default) or LETTER. |
+| `--include-debts` | boolean | Also list who owes what on the last day of each month: one line for each friend. |
+| `--include-due-payments` | boolean | Also list the recurring payments that are overdue today, with the day each fell due and a total. |
+| `--include-debt-history` | boolean | Also list every line of the debts of every friend in the months, with the balance after it, and the recurring payments paid late or overdue. |
 
-A printable report of whole months, in English from the command line (the app writes it in your language). Leave out `--show-descriptions` to share it without private details.
+A printable report of whole months, in English from the command line (the app writes it in your language). Leave out `--show-descriptions` to share it without private details. `--include-debts` adds who owes what on the last day of each month, `--include-due-payments` the recurring payments that are overdue today, and `--include-debt-history` every line of the debts in those months, with the recurring payments paid late or overdue; these hold the names of your friends and amounts of money.
 
 The app asks you to allow this each time, in a dialog; nothing is written until you do. See [Files need your yes](#files).
 
 ```console
-$ meowny export pdf --out /home/you/report.pdf --from-month 2026-01 --to-month 2026-03 --include-transactions
+$ meowny export pdf --out /home/you/report.pdf --from-month 2026-01 --to-month 2026-03 --include-transactions --include-debts
 
-bytes: 44345
+bytes: 45011
 path: /home/you/report.pdf
 ```
 
@@ -2117,7 +2146,7 @@ total: 1
 
 documents
 id  name                createdAt                 documentDate  hasFile  keepOnPhone  linkCount  mediaType        sha256                                                        sizeBytes
- 1  boiler-receipt.pdf  2026-10-17T21:03:43.076Z  2026-10-01    true     false                0  application/pdf  735a7713978716d1e65eb6bf069e2f410eb72ec5b285861be417aeca0fe…         45
+ 1  boiler-receipt.pdf  2026-10-18T08:50:24.710Z  2026-10-01    true     false                0  application/pdf  735a7713978716d1e65eb6bf069e2f410eb72ec5b285861be417aeca0fe…         45
 ```
 
 With `--json` (one line; shown indented):
@@ -2126,7 +2155,7 @@ With `--json` (one line; shown indented):
 {
   "documents": [
     {
-      "createdAt": "2026-10-17T21:03:43.076Z",
+      "createdAt": "2026-10-18T08:50:24.710Z",
       "documentDate": "2026-10-01",
       "hasFile": true,
       "id": "1",
@@ -2165,7 +2194,7 @@ The id can be given as a plain word, as in `meowny documents show 42`, or with `
 ```console
 $ meowny documents show 1
 
-createdAt: 2026-10-17T21:03:43.076Z
+createdAt: 2026-10-18T08:50:24.710Z
 documentDate: 2026-10-01
 hasFile: true
 id: 1
@@ -2184,7 +2213,7 @@ With `--json` (one line; shown indented):
 
 ```json
 {
-  "createdAt": "2026-10-17T21:03:43.076Z",
+  "createdAt": "2026-10-18T08:50:24.710Z",
   "documentDate": "2026-10-01",
   "hasFile": true,
   "id": "1",
@@ -2233,7 +2262,7 @@ With `--json` (one line; shown indented):
 ```json
 {
   "alreadyThere": false,
-  "createdAt": "2026-10-17T21:03:43.076Z",
+  "createdAt": "2026-10-18T08:50:24.710Z",
   "documentDate": "2026-10-01",
   "hasFile": true,
   "id": "1",
@@ -2275,7 +2304,7 @@ With `--json` (one line; shown indented):
 
 ```json
 {
-  "createdAt": "2026-10-17T21:03:43.076Z",
+  "createdAt": "2026-10-18T08:50:24.710Z",
   "documentDate": "2026-10-01",
   "hasFile": true,
   "id": "1",
@@ -2565,7 +2594,7 @@ meowny people update <id> [--name <text>] [--remind-on <date>] [--remind-every-d
 | `--remind-every-days` | number | Not used for reminders any more; kept as it was written, 1 to 365, or null. |
 | `--clear-remind-every-days` | no value | Clears `--remind-every-days`. |
 
-Only the flags you give change. A reminder is a date and, optionally, a number of days after which it repeats; `--clear-remind-on` removes both. The app rings it (batch of the phase that is not built yet): for now it is kept.
+Only the flags you give change. The reminder flags (`--remind-on`, `--remind-every-days`, `--clear-remind-on`) are kept for data written before reminders became a setting of each device: nothing rings from them. What a reminder is about can be read with `debts reminders`.
 
 The id can be given as a plain word, as in `meowny people update 42`, or with `--id`.
 
@@ -2675,7 +2704,7 @@ meowny people settle <id> [--amount <amount>] [--date <date>] [--note <text>]
 
 Marks a payment between you and a friend. If they owe you, it is a repayment to you; if you owe them, a repayment by you. Without `--amount` it is the whole balance.
 
-An amount larger than the debt is accepted: the balance turns around and the answer says in `over` how much of the payment was more than the debt. When the balance reaches zero the friend's reminder is cleared. Repayments are never income or expenses.
+An amount larger than the debt is accepted: the balance turns around and the answer says in `over` how much of the payment was more than the debt. Repayments are never income or expenses.
 
 The id can be given as a plain word, as in `meowny people settle 42`, or with `--id`.
 
@@ -2754,6 +2783,151 @@ With `--json` (one line; shown indented):
     }
   ],
   "youOwe": "0.00"
+}
+```
+
+#### `debts due`
+
+*read token*
+
+The recurring payments that are overdue and not paid or skipped, one for each occurrence that was missed (at most 24 for an item), the oldest first, with the day each fell due, what it is for (null for a bill with no fixed amount), the days late and what they come to. A payment is overdue from the day after its day; income and paused or ended items are not listed.
+
+```text
+meowny debts due
+```
+
+The recurring payments you have not paid or skipped and whose day has gone by: one for each occurrence that was missed (a rent unpaid for three months is three), the oldest first, at most 24 for an item. A payment is overdue from the day after its day. `amount` is empty for a bill that changes every time. Income and paused or ended items are not listed. Paying one is `recurring pay`.
+
+```console
+$ meowny debts due
+
+total: 30.00
+unknown: 0
+
+payments
+name              amount  category   categoryId  daysOverdue  dueDate     recurringId
+Cleaning service   30.00  Utilities          10            7  2026-10-11            6
+```
+
+With `--json` (one line; shown indented):
+
+```json
+{
+  "payments": [
+    {
+      "amount": "30.00",
+      "category": "Utilities",
+      "categoryId": "10",
+      "daysOverdue": 7,
+      "dueDate": "2026-10-11",
+      "name": "Cleaning service",
+      "recurringId": "6"
+    }
+  ],
+  "total": "30.00",
+  "unknown": 0
+}
+```
+
+#### `debts history`
+
+*read token*
+
+The history of debts, newest first, a page at a time: the lines of every friend (lent, borrowed, paid back, their parts of shared bills, with the balance after each) and the recurring payments that were paid late or are overdue. A payment made on its day or before it is not in it.
+
+```text
+meowny debts history [--from <date>] [--to <date>] [--person-id <id>] [--limit <number>] [--offset <number>]
+```
+
+| Flag | Type | Description |
+| --- | --- | --- |
+| `--from` | date | Only lines on or after this date. |
+| `--to` | date | Only lines on or before this date. |
+| `--person-id` | id | Only the lines of this friend (and none of the recurring payments). |
+| `--limit` | number | How many to return, 1 to 200. Default 50. |
+| `--offset` | number | How many to skip, for the next page. Default 0. |
+
+Everything that changed what you owe or are owed, newest first, a page at a time (`--limit` up to 200, `--offset` for the next page): the lines of every friend with the balance after each, and the recurring payments that were paid **late** or are **overdue**. A payment made on its day or before it is not in it, and one you skipped leaves no line. `--person-id` keeps to one friend (and none of the recurring payments); `--from` and `--to` keep to some days.
+
+```console
+$ meowny debts history --limit 5
+
+limit: 5
+offset: 0
+total: 15
+
+lines
+amount  balance  date        dueDate     effect  entryId  friend  kind          personId  recurringId  transactionId  what
+ 12.00    42.00  2026-10-13  -            12.00        1  Anna    LENT                 1            -              -  taxi
+ 30.00    30.00  2026-10-12  -            30.00        -  Bob     BILL                 2            -            405  Dinner
+ 30.00    30.00  2026-10-12  -            30.00        -  Anna    BILL                 1            -            405  Dinner
+ 30.00        -  2026-10-11  2026-10-11       -        -  -       PAYMENT_DUE          -            6              -  Cleaning service
+ 80.30        -  2026-09-21  2026…
+showing 1-5 of 15; next page: --offset 5
+```
+
+With `--json` (one line; shown indented):
+
+```json
+{"limit":5,"lines":[{"amount":"12.00","balance":"42.00","date":"2026-10-13","dueDate":null,"effect":"12.00","entryId":"1","friend":"Anna","kind":"LENT","personId":"1","recurringId":null,"transactionId":null,"what":"taxi"},{"amount":"30.00","balance":"30.00","date":"2026-10-12","dueDate":null,"effect":"30.00","entryId":null,"friend":"Bob","kind":"BILL","personId":"2","recurringId":null,"transactionId":"405","what":"Dinner"},{"amount":"30.00","balance":"30.00","date":"2026-10-12","dueDate":null,"effect":"30.00","entryId":null,"friend":"Anna","kind":"BILL","personId":"1","recurringId":null,"transactionId":"405","what":"Dinner"},{"amount":"30.00","balance":null,"date":"2026-10-11","dueDate":"202…
+```
+
+#### `debts reminders`
+
+*read token*
+
+Which friends a reminder is due for today, and the next days with one. Every friend whose balance is not zero is reminded this many days after the day their debt last changed (the latest line of their statement), and again after as many; 0 is none. The app rings them (a device sets its own period and time of day); this only reads what they would be about.
+
+```text
+meowny debts reminders --every-days <number>
+```
+
+| Flag | Type | Description |
+| --- | --- | --- |
+| `--every-days` (required) | number | The period in days, 0 to 365. |
+
+Which friends a reminder is due for today and the next days with one. Every friend whose balance is not zero is reminded `--every-days` days after the day their debt last changed (the latest line of their statement), and again after as many; 0 is none. The app rings them, each device with its own period and time of day: this only reads what they would be about, and no notification is sent from the command line.
+
+```console
+$ meowny debts reminders --every-days 7
+
+today: 2026-10-18
+
+due
+(none)
+
+upcoming
+count  date
+    1  2026-10-19
+    1  2026-10-20
+    1  2026-10-26
+    1  2026-10-27
+```
+
+With `--json` (one line; shown indented):
+
+```json
+{
+  "due": [],
+  "today": "2026-10-18",
+  "upcoming": [
+    {
+      "count": 1,
+      "date": "2026-10-19"
+    },
+    {
+      "count": 1,
+      "date": "2026-10-20"
+    },
+    {
+      "count": 1,
+      "date": "2026-10-26"
+    },
+    {
+      "count": 1,
+      "date": "2026-10-27"
+    }
+  ]
 }
 ```
 
@@ -3215,12 +3389,12 @@ The port is in `api.json`. `meowny schema --app` prints every route with its arg
 | `recurring.pause` | write | `id` (required) | Pauses a recurring item: it stops coming due until it is resumed. |
 | `recurring.resume` | write | `id` (required) | Resumes a paused recurring item, unless its next date is past its end date. |
 | `recurring.end` | write | `id` (required) | Ends a recurring item for good: it becomes inactive and its end date is today. What it already paid stays. |
-| `export.preview` | read | `from`, `to`, `categoryIds`, `includeDebts` | What an export of this selection would contain: how many transactions, their dates, the income and expense totals, and the other records. |
+| `export.preview` | read | `from`, `to`, `categoryIds`, `includeDebts`, `kind`, `minAmount`, `maxAmount`, `text`, `split`, `sections` | What an export of this selection would contain: how many transactions, their dates, the income and expense totals, and the other records (the friends, the history of debts, the overdue payments, the documents). |
 | `backup.schedule` | read | none | The scheduled backup, if one is set up: the folder, how often and how the last one went, or null. Its passphrase is never shown. |
-| `export.json` | read, and your yes | `out` (required), `from`, `to`, `categoryIds`, `includeDebts` | Writes the data as a JSON file, after the person allows it in the app. An existing file is never replaced. |
-| `export.csv` | read, and your yes | `out` (required), `from`, `to`, `categoryIds` | Writes the transactions as a CSV file, after the person allows it in the app. An existing file is never replaced. |
-| `export.xlsx` | read, and your yes | `out` (required), `from`, `to`, `categoryIds`, `includeDebts` | Writes a workbook (.xlsx) with sheets for transactions, categories, budgets, recurring items and a monthly summary, after the person allows it in the app. Dates are ISO and amounts plain numbers. An existing file is never replaced. |
-| `export.pdf` | read, and your yes | `out` (required), `fromMonth` (required), `toMonth` (required), `categoryIds`, `includeTransactions`, `showDescriptions`, `page` | Writes a PDF report for whole months, in English, after the person allows it in the app: totals, charts and budget against actual, and the transactions if asked. An existing file is never replaced. |
+| `export.json` | read, and your yes | `out` (required), `from`, `to`, `categoryIds`, `includeDebts`, `kind`, `minAmount`, `maxAmount`, `text`, `split`, `sections` | Writes the data as a JSON file, after the person allows it in the app: the transactions, categories, budgets, recurring items, documents, and the debts (friends, the overdue recurring payments, the history of debts), or the parts and the limits chosen. An existing file is never replaced. |
+| `export.csv` | read, and your yes | `out` (required), `from`, `to`, `categoryIds`, `kind`, `minAmount`, `maxAmount`, `text`, `split` | Writes the transactions as a CSV file, after the person allows it in the app, limited by the dates, the categories, the kind, what they cost you, a text and whether they are shared. An existing file is never replaced. |
+| `export.xlsx` | read, and your yes | `out` (required), `from`, `to`, `categoryIds`, `includeDebts`, `kind`, `minAmount`, `maxAmount`, `text`, `split`, `sections` | Writes a workbook (.xlsx) with sheets for transactions, categories, budgets, recurring items, documents, the debts (friends, due payments, history of debts) and a monthly summary, after the person allows it in the app. Dates are ISO and amounts plain numbers. An existing file is never replaced. |
+| `export.pdf` | read, and your yes | `out` (required), `fromMonth` (required), `toMonth` (required), `categoryIds`, `includeTransactions`, `showDescriptions`, `page`, `includeDebts`, `includeDuePayments`, `includeDebtHistory` | Writes a PDF report for whole months, in English, after the person allows it in the app: totals, charts and budget against actual, and the transactions if asked. An existing file is never replaced. |
 | `backup.create` | read, and your yes | `out` (required), `passphrase` (required) | Writes an encrypted backup of all the data, after the person allows it in the app. It opens only with the passphrase given here, and only the app can restore it. An existing file is never replaced. |
 | `documents.list` | read | `q`, `kind`, `from`, `to`, `transactionId`, `recurringId`, `ledgerEntryId`, `limit`, `offset` | Documents, newest paper first, with the total that match: names, dates, types, sizes and hashes, never the files. Up to 100 a page, 50 unless limit says otherwise. |
 | `documents.show` | read | `id` (required) | One document: its name, date, type, size and hash, whether this computer holds its file, and in `links` what it is attached to (a debt entry also gives `personId`, the friend). Never the file. |
@@ -3233,6 +3407,9 @@ The port is in `api.json`. `meowny schema --app` prints every route with its arg
 | `people.list` | read | `archived` | The friends with what each owes you (negative: you owe them), the largest first. Archived friends only if asked. |
 | `people.show` | read | `id` (required) | One friend and their ledger: their parts of shared bills and the entries by date, with the balance after each line. |
 | `debts.summary` | read | none | What friends owe you and what you owe them, in all and for each friend whose balance is not zero. Neither is income or expense. |
+| `debts.due` | read | none | The recurring payments that are overdue and not paid or skipped, one for each occurrence that was missed (at most 24 for an item), the oldest first, with the day each fell due, what it is for (null for a bill with no fixed amount), the days late and what they come to. A payment is overdue from the day after its day; income and paused or ended items are not listed. |
+| `debts.history` | read | `from`, `to`, `personId`, `limit`, `offset` | The history of debts, newest first, a page at a time: the lines of every friend (lent, borrowed, paid back, their parts of shared bills, with the balance after each) and the recurring payments that were paid late or are overdue. A payment made on its day or before it is not in it. |
+| `debts.reminders` | read | `everyDays` (required) | Which friends a reminder is due for today, and the next days with one. Every friend whose balance is not zero is reminded this many days after the day their debt last changed (the latest line of their statement), and again after as many; 0 is none. The app rings them (a device sets its own period and time of day); this only reads what they would be about. |
 | `splits.preview` | read | `amount` (required), `mode` (required), `mine`, `people`, `guests`, `values` | What a split would give each person for a bill of this amount, without saving anything: your part, theirs, whether the numbers add up and how much is left. |
 | `people.create` | write | `name` (required) | Adds a friend. A friend is a name, 1 to 50 characters, unique among the friends who are not archived. Nothing else about a person is kept. |
 | `people.update` | write | `id` (required), `name`, `remindOn`, `remindEveryDays` | Renames a friend. Fields left out stay as they are. The reminder fields are kept for data written before reminders became a setting of each device (every so many days after a debt last changed), and nothing rings from them. |

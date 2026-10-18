@@ -131,3 +131,36 @@ fn a_request_that_could_never_work_does_not_ask_the_person_and_a_no_writes_nothi
     assert!(message.contains("did not allow"), "{message}");
     assert!(no.written().is_empty());
 }
+
+#[test]
+fn the_history_the_overdue_payments_and_the_reminders_are_read_within_their_limits() {
+    let (_dir, vault) = seeded();
+    let category = ok(&vault, "categories.list", json!({ "type": "EXPENSE" }))[0]["id"].as_str().unwrap().to_string();
+    let anna = id(&ok(&vault, "people.create", json!({ "name": "Anna" })));
+    ok(&vault, "ledger.add", json!({ "personId": anna, "kind": "LENT", "amount": "20.00", "date": "2020-01-01" }));
+    // an item forgotten for years: its oldest 24 occurrences are overdue, the oldest first, and none is today or later
+    ok(&vault, "recurring.create", json!({ "name": "Old gym", "amount": "10.00", "categoryId": category, "startDate": "2020-01-01", "intervalUnit": "MONTH", "intervalCount": 1 }));
+    let due = ok(&vault, "debts.due", json!({}));
+    let mine: Vec<&Value> = due["payments"].as_array().unwrap().iter().filter(|p| p["name"] == "Old gym").collect();
+    assert_eq!(mine.len(), 24, "the most an item shows");
+    assert_eq!(mine[0]["dueDate"], "2020-01-01");
+    assert!(mine.iter().all(|p| p["daysOverdue"].as_u64().unwrap() >= 1), "a payment is overdue from the day after its day");
+
+    // the history is paged, newest first, and a page that cannot be asked for is refused
+    let page = ok(&vault, "debts.history", json!({ "limit": 2 }));
+    assert_eq!((page["lines"].as_array().unwrap().len(), page["limit"].as_u64()), (2, Some(2)));
+    assert!(page["total"].as_u64().unwrap() > 25);
+    let only_anna = ok(&vault, "debts.history", json!({ "personId": anna }));
+    assert_eq!((only_anna["total"].as_u64(), only_anna["lines"][0]["friend"].as_str()), (Some(1), Some("Anna")), "a friend's lines have no recurring payments");
+    for body in [json!({ "limit": 0 }), json!({ "limit": 201 }), json!({ "offset": -1 }), json!({ "from": "2026-02-01", "to": "2026-01-01" }), json!({ "personId": "abc" })] {
+        assert_eq!(refused(&vault, "debts.history", body.clone()).0, 400, "{body}");
+    }
+
+    // a reminder is due a period after the debt last changed, and the period has its limits
+    let r = ok(&vault, "debts.reminders", json!({ "everyDays": 30 }));
+    assert_eq!(r["due"][0]["name"], "Anna");
+    assert_eq!(ok(&vault, "debts.reminders", json!({ "everyDays": 0 }))["due"], json!([]));
+    for body in [json!({}), json!({ "everyDays": 366 }), json!({ "everyDays": -1 }), json!({ "everyDays": "7" })] {
+        assert_eq!(refused(&vault, "debts.reminders", body.clone()).0, 400, "{body}");
+    }
+}

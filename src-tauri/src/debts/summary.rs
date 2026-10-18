@@ -37,7 +37,7 @@ fn summary_in(tx: &Connection) -> Result<Summary, AppError> {
 }
 
 /// The fixed words of the text files and the PDF. The screens give their own, in the person's language; the command line uses the English.
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, serde::Serialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct Labels {
     pub summary_title: String,

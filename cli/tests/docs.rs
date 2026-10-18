@@ -29,7 +29,7 @@ const HOME: &str = "/home/you";
 
 /// Outputs that legitimately differ from run to run (the clock, file sizes, timestamps inside files). They are
 /// compared by exit code, by the shape of their JSON and by the frame of their plain output, not word for word.
-const MOVES: &[&str] = &["today", "recurring dues", "budgets history", "recurring end", "documents add", "documents list", "documents show", "documents update", "export debts", "export json", "export csv", "export xlsx", "export pdf", "backup create", "schema"];
+const MOVES: &[&str] = &["today", "recurring dues", "debts due", "debts history", "debts reminders", "budgets history", "recurring end", "documents add", "documents list", "documents show", "documents update", "export debts", "export json", "export csv", "export xlsx", "export pdf", "backup create", "schema"];
 
 #[derive(Clone, Copy)]
 enum Who {
@@ -210,6 +210,9 @@ fn tour(app: &App) -> (Map<String, Value>, Vec<Value>) {
     t.example("people list", read, "meowny people list", &["people", "list"], true, true, None);
     t.example("people show", read, &format!("meowny people show {anna}"), &["people", "show", &anna], true, true, None);
     t.example("debts summary", read, "meowny debts summary", &["debts", "summary"], true, true, None);
+    t.example("debts due", read, "meowny debts due", &["debts", "due"], true, true, None);
+    t.example("debts history", read, "meowny debts history --limit 5", &["debts", "history", "--limit", "5"], true, true, None);
+    t.example("debts reminders", read, "meowny debts reminders --every-days 7", &["debts", "reminders", "--every-days", "7"], true, true, None);
     t.example(
         "people settle",
         write,
@@ -278,10 +281,26 @@ fn tour(app: &App) -> (Map<String, Value>, Vec<Value>) {
 
     // Files, which the person allows in the app.
     t.example("export debts", read, "meowny export debts --out /home/you/who-owes-what.txt", &["export", "debts", "--out", &path("who-owes-what.txt")], true, false, None);
-    t.example("export json", read, "meowny export json --out /home/you/everything.json", &["export", "json", "--out", &path("everything.json")], true, false, None);
-    t.example("export csv", read, "meowny export csv --out /home/you/budget-2026.csv --from 2026-01-01", &["export", "csv", "--out", &path("budget-2026.csv"), "--from", "2026-01-01"], true, false, None);
+    t.example("export json", read, "meowny export json --out /home/you/debts.json --sections people,due,ledger", &["export", "json", "--out", &path("debts.json"), "--sections", "people,due,ledger"], true, false, None);
+    t.example(
+        "export csv",
+        read,
+        "meowny export csv --out /home/you/budget-2026.csv --from 2026-01-01 --kind expense --min-amount 5.00",
+        &["export", "csv", "--out", &path("budget-2026.csv"), "--from", "2026-01-01", "--kind", "expense", "--min-amount", "5.00"],
+        true,
+        false,
+        None,
+    );
     t.example("export xlsx", read, "meowny export xlsx --out /home/you/budget.xlsx", &["export", "xlsx", "--out", &path("budget.xlsx")], true, false, None);
-    t.example("export pdf", read, "meowny export pdf --out /home/you/report.pdf --from-month 2026-01 --to-month 2026-03 --include-transactions", &["export", "pdf", "--out", &path("report.pdf"), "--from-month", "2026-01", "--to-month", "2026-03", "--include-transactions"], true, false, None);
+    t.example(
+        "export pdf",
+        read,
+        "meowny export pdf --out /home/you/report.pdf --from-month 2026-01 --to-month 2026-03 --include-transactions --include-debts",
+        &["export", "pdf", "--out", &path("report.pdf"), "--from-month", "2026-01", "--to-month", "2026-03", "--include-transactions", "--include-debts"],
+        true,
+        false,
+        None,
+    );
     t.example(
         "backup create",
         read,

@@ -660,7 +660,6 @@ export const es: Messages = {
   'sync.field.split': 'compartido con',
   'code.show': 'mostrar código',
   'code.title': 'código de la cuenta para {name}',
-  'code.hint': 'muéstraselo a {name}: su app puede escanearlo o recibirlo pegado. contiene este gasto, su parte y tu nombre, nada más.',
   'code.part': 'parte de {name}: {amount} de {total}',
   'code.senderAsk': '¿qué nombre debe ver tu amigo?',
   'code.next': 'el próximo pago, vence el {date}',

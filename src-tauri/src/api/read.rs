@@ -26,6 +26,24 @@ pub(super) const FROM: Param = Param::new("from", Kind::Date, "Only transactions
 pub(super) const TO: Param = Param::new("to", Kind::Date, "Only transactions on or before this date.");
 pub(super) const INCLUDE_DEBTS: Param = Param::new("includeDebts", Kind::Boolean, "With dates or categories chosen, also include the ledger of money lent and borrowed (the friends and their parts of the bills in the selection are in it anyway). Without a choice everything is in.");
 pub(super) const CATEGORY_IDS: Param = Param::new("categoryIds", Kind::Ids, "Only these categories and what belongs to them. Leave out for all of them.");
+pub(super) const KIND: Param = Param::new("kind", Kind::String, "Only INCOME or only EXPENSE. Leave out for both.").one_of(SIDES);
+pub(super) const MIN_AMOUNT: Param = Param::new("minAmount", Kind::Money, "Only transactions that cost you at least this (a bill shared with friends counts for your part).");
+pub(super) const MAX_AMOUNT: Param = Param::new("maxAmount", Kind::Money, "Only transactions that cost you at most this (a bill shared with friends counts for your part).");
+pub(super) const TEXT: Param = Param::new("text", Kind::String, "Only transactions with this text in the name or the description, whatever the case.");
+pub(super) const SPLIT: Param = Param::new("split", Kind::String, "Only the bills shared with friends (split) or only those that are not (not_split). Leave out for both.").one_of(&["split", "not_split"]);
+pub(super) const SECTIONS: Param = Param::new(
+    "sections",
+    Kind::String,
+    "The parts of the file, separated by commas, from: transactions, categories, budgets, recurring, documents, people (the friends and what they owe), due (the overdue recurring payments), ledger (the history of debts) and history (the change history, only in a file with no limits). Leave out for all of them.",
+);
+
+/// What an export covers, from the arguments: the parts come as one text separated by commas and are read as a list.
+pub(super) fn selection(mut args: Map<String, Value>) -> Result<Selection, ApiError> {
+    if let Some(Value::String(text)) = args.remove("sections") {
+        args.insert("sections".into(), Value::Array(text.split(',').map(|part| Value::String(part.trim().to_lowercase())).collect()));
+    }
+    parse(args)
+}
 
 #[derive(Deserialize)]
 struct MonthArg {
@@ -240,10 +258,10 @@ pub const EXPORT_PREVIEW: Route = Route {
     name: "export.preview",
     scope: Scope::Read,
     confirm: None,
-    summary: "What an export of this selection would contain: how many transactions, their dates, the income and expense totals, and the other records.",
-    params: &[FROM, TO, CATEGORY_IDS, INCLUDE_DEBTS],
+    summary: "What an export of this selection would contain: how many transactions, their dates, the income and expense totals, and the other records (the friends, the history of debts, the overdue payments, the documents).",
+    params: &[FROM, TO, CATEGORY_IDS, INCLUDE_DEBTS, KIND, MIN_AMOUNT, MAX_AMOUNT, TEXT, SPLIT, SECTIONS],
     run: |ctx, args| {
-        let selection: Selection = parse(args)?;
+        let selection = selection(args)?;
         reply(ctx.vault.with_conn(|c| export::preview(c, &selection))?)
     },
 };

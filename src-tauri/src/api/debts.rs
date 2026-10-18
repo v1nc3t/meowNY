@@ -5,7 +5,11 @@
 //! (the parts add up to the bill to the cent, only an expense is split, a loan is never income). Saving who owes what as a file is the one
 //! thing that also needs the person: `export.debts` is described to them in the app and writes only if they allow it.
 //!
-//! Not here on purpose, because they need the person at the app: bill codes (batch 3 of the phase) and the notifications.
+//! Not here on purpose, because they need the person at the app: bill codes (a code is shown to a friend and holds the person's name) and
+//! the notifications themselves. What a reminder would be about can be read (`debts.reminders`).
+//!
+//! What is owed by now besides the friends is read here too: the recurring payments that are overdue (`debts.due`), and the history of
+//! debts (`debts.history`), which holds the friends' lines and the recurring payments that were paid late or are overdue.
 //!
 //! A split is typed with flags a command line can take: `mode`, your own value (`mine`), the friends (`people`, ids), the guests (`guests`,
 //! names separated by commas) and `values`, one for each friend and then each guest, in that order. An equal split needs no values.
@@ -21,7 +25,7 @@ use crate::categories::parse_id;
 use crate::debts::ledger::{self, EntryPatch, Expense, NewEntry};
 use crate::debts::splits::{self, Mode, Part, SplitInput};
 use crate::debts::people::{self, PersonPatch};
-use crate::debts::summary;
+use crate::debts::{dues, history, reminders, summary};
 use crate::money::parse_positive_amount;
 use crate::tokens::Scope;
 use crate::{recurring, transactions};
@@ -115,6 +119,55 @@ pub const DEBTS_SUMMARY: Route = Route {
     params: &[],
     confirm: None,
     run: |ctx, _| reply(ctx.vault.with_conn(|c| summary::summary(c))?),
+};
+
+pub const DEBTS_DUE: Route = Route {
+    name: "debts.due",
+    scope: Scope::Read,
+    summary: "The recurring payments that are overdue and not paid or skipped, one for each occurrence that was missed (at most 24 for an item), the oldest first, with the day each fell due, what it is for (null for a bill with no fixed amount), the days late and what they come to. A payment is overdue from the day after its day; income and paused or ended items are not listed.",
+    params: &[],
+    confirm: None,
+    run: |ctx, _| {
+        let today = today(ctx)?;
+        reply(ctx.vault.with_conn(|c| dues::due(c, &today))?)
+    },
+};
+
+pub const DEBTS_HISTORY: Route = Route {
+    name: "debts.history",
+    scope: Scope::Read,
+    summary: "The history of debts, newest first, a page at a time: the lines of every friend (lent, borrowed, paid back, their parts of shared bills, with the balance after each) and the recurring payments that were paid late or are overdue. A payment made on its day or before it is not in it.",
+    params: &[
+        Param::new("from", Kind::Date, "Only lines on or after this date."),
+        Param::new("to", Kind::Date, "Only lines on or before this date."),
+        Param::new("personId", Kind::Id, "Only the lines of this friend (and none of the recurring payments)."),
+        Param::new("limit", Kind::Integer, "How many to return, 1 to 200. Default 50."),
+        Param::new("offset", Kind::Integer, "How many to skip, for the next page. Default 0."),
+    ],
+    confirm: None,
+    run: |ctx, args| {
+        let filter: history::Filter = parse(args)?;
+        let today = today(ctx)?;
+        reply(ctx.vault.with_conn(|c| history::history(c, &today, &filter))?)
+    },
+};
+
+pub const DEBTS_REMINDERS: Route = Route {
+    name: "debts.reminders",
+    scope: Scope::Read,
+    summary: "Which friends a reminder is due for today, and the next days with one. Every friend whose balance is not zero is reminded this many days after the day their debt last changed (the latest line of their statement), and again after as many; 0 is none. The app rings them (a device sets its own period and time of day); this only reads what they would be about.",
+    params: &[Param::new("everyDays", Kind::Integer, "The period in days, 0 to 365.").required()],
+    confirm: None,
+    run: |ctx, args| {
+        #[derive(Deserialize)]
+        #[serde(rename_all = "camelCase")]
+        struct Args {
+            every_days: u32,
+        }
+        let Args { every_days } = parse(args)?;
+        let today = today(ctx)?;
+        reply(ctx.vault.with_conn(|c| reminders::reminders(c, &today, every_days))?)
+    },
 };
 
 pub const SPLITS_PREVIEW: Route = Route {

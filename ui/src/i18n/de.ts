@@ -661,7 +661,6 @@ export const de: Messages = {
   'sync.field.split': 'geteilt mit',
   'code.show': 'code anzeigen',
   'code.title': 'rechnungscode für {name}',
-  'code.hint': 'zeig das {name}: die app kann es scannen oder eingefügt übernehmen. es enthält diese ausgabe, den anteil und deinen namen, sonst nichts.',
   'code.part': 'anteil von {name}: {amount} von {total}',
   'code.senderAsk': 'welchen namen soll dein freund sehen?',
   'code.next': 'die nächste zahlung, fällig am {date}',

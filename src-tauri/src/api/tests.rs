@@ -906,6 +906,7 @@ fn sample_args(name: &str, category: &str) -> String {
         "transactions.list" => r#"{"limit":5}"#.into(),
         "categories.list" => r#"{"type":"EXPENSE"}"#.into(),
         "recurring.dues" => r#"{"withinDays":10}"#.into(),
+        "debts.reminders" => r#"{"everyDays":7}"#.into(),
         "documents.show" => r#"{"id":"1"}"#.into(),
         "people.show" => r#"{"id":"1"}"#.into(),
         "splits.preview" => r#"{"amount":"100.00","mode":"EQUAL","people":["1"],"guests":"Bob"}"#.into(),
