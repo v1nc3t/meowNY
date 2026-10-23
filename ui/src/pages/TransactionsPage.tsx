@@ -8,6 +8,7 @@ import ConfirmModal from '../components/ConfirmModal'
 import Dropdown, { type DropdownOption } from '../components/Dropdown'
 import Modal, { modalFormId } from '../components/Modal'
 import Pick, { PickOption } from '../components/Pick'
+import Button from '../components/ui/Button'
 import DatePicker from '../components/DatePicker'
 import SplitEditor from '../components/SplitEditor'
 import { categories as categoriesApi, type Category } from '../api/categories'
@@ -24,7 +25,7 @@ import { useClipCounts } from '../hooks/useClipCounts'
 import { useFocusRequest, useJumpTo } from '../hooks/useFocusRequest'
 import { useMoneySettings, type MoneySettings } from '../hooks/useMoneySettings'
 import { useProfile } from '../hooks/profile'
-import { useNotice } from '../hooks/useNotice'
+import { useToast } from '../hooks/toast'
 import { useT } from '../i18n/context'
 import { useDebounced } from '../hooks/useDebounced'
 import { useShortcut } from '../keys/registry'
@@ -70,15 +71,14 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
   const [savedId, setSavedId] = useState<string | null>(null)
   const [pending, setPending] = useState(false)
   const [adding, setAdding] = useState(false)
-  const [draftMessage, setDraftMessage] = useNotice()
-  const [editing, setEditing] = useState<Transaction | null>(null)
+    const [editing, setEditing] = useState<Transaction | null>(null)
   const [split, setSplit] = useState<SplitState>(NOT_SPLIT)
   const [deleting, setDeleting] = useState<Transaction | null>(null)
   // the bill whose code for one friend is on the screen
   const [coding, setCoding] = useState<{ transaction: Transaction; personId: string; name: string; part: string } | null>(null)
   const location = useLocation()
   const navigate = useNavigate()
-  const [message, setMessage] = useNotice()
+  const say = useToast()
   const onSplitReady = useCallback((ready: boolean) => setSplit((current) => (current.ready === ready ? current : { ...current, ready })), [])
   // The documents of the transaction being edited are stored and linked at once; those of one being made wait for it to be saved.
   const attachments = useAttachments(editing ? { kind: 'transaction', id: editing.id } : null)
@@ -124,13 +124,13 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
           if (!cancelled) setPage(result)
         },
         (failure) => {
-          if (!cancelled) setMessage(errorText(failure))
+          if (!cancelled) say(errorText(failure), 'error')
         },
       )
     return () => {
       cancelled = true
     }
-  }, [filters.mode, filters.from, filters.to, filters.categoryId, searchText, limit, offset, reload, setMessage])
+  }, [filters.mode, filters.from, filters.to, filters.categoryId, searchText, limit, offset, reload, say])
 
   useEffect(() => {
     if (!focus) return
@@ -165,7 +165,6 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
   /** A new transaction; `split` opens it with the bill dialog on, `friend` with that friend already on the bill. */
   function openAdd(options: { split?: boolean; friend?: { id: string; name: string } } = {}) {
     setMenu(null)
-    setDraftMessage('')
     attachments.reset()
     setEditing(null)
     // a new dialog is a new transaction, whatever a cancelled one left
@@ -187,7 +186,6 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
 
   function openEdit(transaction: Transaction) {
     setMenu(null)
-    setDraftMessage('')
     attachments.reset()
     setAdding(false)
     // a saved bill opens as exact amounts, as they are stored
@@ -219,11 +217,11 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
     const categoryId = String(form.get('categoryId') ?? '')
     const description = String(form.get('description') ?? '').trim()
     if (!name || !paymentDate || !categoryId) {
-      setDraftMessage(t('tx.errorRequired'))
+      say(t('tx.errorRequired'), 'error')
       return
     }
     if (!amount) {
-      setDraftMessage(t('tx.errorAmount'))
+      say(t('tx.errorAmount'), 'error')
       return
     }
     const body = { name, amount, paymentDate, categoryId, description: description.length > 0 ? description : null }
@@ -233,11 +231,11 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
     const sendSplit = wantsSplit && (split.touched || !hadSplit)
     const input = sendSplit ? toInput(split.draft) : null
     if (sendSplit && (!split.ready || !input)) {
-      setDraftMessage(t('split.notComplete'))
+      say(t('split.notComplete'), 'error')
       return
     }
     setPending(true)
-    // what could not be attached to a new transaction: it is saved all the same, and the notice names the files
+    // what could not be attached to a new transaction: it is saved all the same, and the toast names the files
     let notAttached: string[] = []
     try {
       if (editing) {
@@ -252,13 +250,12 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
         notAttached = await attachments.commit({ kind: 'transaction', id: created.id })
       }
     } catch (failure) {
-      setDraftMessage(errorText(failure))
+      say(errorText(failure), 'error')
       return
     } finally {
       setPending(false)
     }
-    setDraftMessage('')
-    setMessage(notAttached.length > 0 ? t('docs.attachFailed', { names: notAttached.join(', ') }) : '')
+    if (notAttached.length > 0) say(t('docs.attachFailed', { names: notAttached.join(', ') }), 'warning')
     if (!editing) {
       setClientUuid(crypto.randomUUID())
       setSavedId(null)
@@ -271,12 +268,11 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
     try {
       await transactionsApi.remove(id)
     } catch (failure) {
-      setMessage(errorText(failure))
+      say(errorText(failure), 'error')
       return
     } finally {
       setDeleting(null)
     }
-    setMessage('')
     setReload((value) => value + 1)
   }
 
@@ -294,14 +290,14 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
   // The current-month button and the range: beside "add" on a phone, where room is short, and first in the filters elsewhere.
   const rangeControls = (
     <>
-      <button
-        type="button"
+      <Button
+        variant="outline"
         disabled={filters.mode === 'month' && filters.from === now.month && filters.to === now.month}
         onClick={goCurrentMonth}
         {...tip('today', t('tx.currentMonth'))}
       >
         {t('tx.currentMonth')}
-      </button>
+      </Button>
       <Pick
         label={t('tx.range')}
         className="mode"
@@ -332,9 +328,9 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
       <div className="tx-title">
         <h1>{t('tx.title')}</h1>
         <div className="tx-actions">
-          <button type="button" onClick={() => openAdd()} {...tip('new', t('tx.add'))}>
+          <Button onClick={() => openAdd()} {...tip('new', t('tx.add'))}>
             {t('tx.add')}
-          </button>
+          </Button>
           {phone ? rangeControls : null}
         </div>
       </div>
@@ -430,7 +426,6 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
           </div>
         </div>
       </div>
-      <p className="notice">{message}</p>
       {adding || editing ? (
         <TransactionModal
           key={editing ? editing.id : clientUuid}
@@ -438,7 +433,6 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
           todayDate={now.date}
           categories={categories}
           pending={pending}
-          message={draftMessage}
           attachments={attachments}
           split={split}
           onSplit={setSplit}
@@ -463,7 +457,7 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
       {page ? (
         <>
           <div className="tx-pane wide">
-            {page.transactions.length === 0 ? <p>{t('tx.empty')}</p> : null}
+            {page.transactions.length === 0 ? <p className="hint">{t('tx.empty')}</p> : null}
             <ul className="card-list">
               {page.transactions.map((transaction) => (
                 <li key={transaction.id} className="card-item" data-item={`transaction:${transaction.id}`}>
@@ -486,14 +480,14 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
                       ) : null}
                     </p>
                     {transaction.split.length > 0 || transaction.description?.trim() ? (
-                      <button
-                        type="button"
+                      <Button
+                        variant="link"
                         className="tx-desc"
                         aria-expanded={openId === transaction.id}
                         onClick={() => setOpenId((current) => (current === transaction.id ? null : transaction.id))}
                       >
                         {t('common.details')}
-                      </button>
+                      </Button>
                     ) : null}
                     {openId === transaction.id ? (
                       <div className="card-detail">
@@ -508,9 +502,13 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
                               <div className="split-part" key={`${part.personId ?? 'guest'}-${part.person ?? part.guest}`}>
                                 <span>{`${part.person ?? part.guest ?? ''} ${formatMoney(part.amount, settings.currency, settings.locale)}`}</span>
                                 {part.personId && part.person ? (
-                                  <button type="button" onClick={() => setCoding({ transaction, personId: part.personId ?? '', name: part.person ?? '', part: part.amount })}>
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => setCoding({ transaction, personId: part.personId ?? '', name: part.person ?? '', part: part.amount })}
+                                  >
                                     {t('code.show')}
-                                  </button>
+                                  </Button>
                                 ) : null}
                               </div>
                             ))}
@@ -526,17 +524,18 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
                     ) : null}
                   </div>
                   <div className="card-actions">
-                    <button type="button" data-row-focus onClick={() => openEdit(transaction)}>
+                    <Button variant="ghost" size="sm" data-row-focus onClick={() => openEdit(transaction)}>
                       {t('common.edit')}
-                    </button>
+                    </Button>
                     {(() => {
                       // a bill shared with friends has a code for each of them: one friend opens it, several open the details to choose
                       const friends = transaction.split.filter((part) => part.personId && part.person)
                       const [only] = friends
                       if (friends.length === 0) return null
                       return (
-                        <button
-                          type="button"
+                        <Button
+                          variant="ghost"
+                          size="sm"
                           onClick={() =>
                             friends.length === 1 && only
                               ? setCoding({ transaction, personId: only.personId ?? '', name: only.person ?? '', part: only.amount })
@@ -544,12 +543,12 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
                           }
                         >
                           {t('code.show')}
-                        </button>
+                        </Button>
                       )
                     })()}
-                    <button type="button" onClick={() => setDeleting(transaction)}>
+                    <Button variant="ghost" size="sm" className="row-danger" onClick={() => setDeleting(transaction)}>
                       {t('common.delete')}
-                    </button>
+                    </Button>
                   </div>
                 </li>
               ))}
@@ -582,7 +581,6 @@ function TransactionModal({
   todayDate,
   categories,
   pending,
-  message,
   attachments,
   split,
   onSplit,
@@ -595,7 +593,6 @@ function TransactionModal({
   todayDate: string
   categories: Category[]
   pending: boolean
-  message: string
   attachments: Attachments
   split: SplitState
   onSplit: (split: SplitState) => void
@@ -624,7 +621,6 @@ function TransactionModal({
   return (
     <>
       <Modal title={transaction ? t('tx.editTitle') : t('tx.addTitle')} pending={pending} onClose={onClose}>
-        <p className="notice">{message}</p>
         <form id={modalFormId} onSubmit={onSubmit}>
           <label>
             {t('common.name')}

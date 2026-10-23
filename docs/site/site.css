@@ -1,46 +1,44 @@
 /* The meowny command line docs. One file, no fonts or scripts from anywhere else: the page makes no requests
-   beyond itself. Light and dark follow the system. */
+   beyond itself. Neutral shadcn-style palette; light and dark follow the system. */
 
 :root {
   color-scheme: light dark;
-  --bg: #fbfbfa;
-  --fg: #1d2021;
-  --muted: #5a6168;
-  --line: #dcdcd6;
-  --soft: #f0f0eb;
-  --accent: #0b7a4b;
-  --accent-fg: #ffffff;
-  --link: #0b5fa5;
-  --code-bg: #14181b;
-  --code-fg: #e6e9eb;
-  --code-label: #8b949e;
-  --read: #0b5fa5;
-  --write: #a05a00;
-  --ask: #6b3fa0;
-  --danger: #b3261e;
-  --note-info: #e8f1fb;
-  --note-warn: #fdf0e1;
-  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
-  --sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --background: #ffffff;
+  --foreground: #0a0a0a;
+  --card: #ffffff;
+  --muted: #f5f5f5;
+  --muted-foreground: #737373;
+  --accent: #f5f5f5;
+  --border: #e5e5e5;
+  --primary: #171717;
+  --primary-foreground: #fafafa;
+  --destructive: #dc2626;
+  --success: #15803d;
+  --ring: #a3a3a3;
+  --radius: 0.5rem;
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --shadow-sm: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
+  /* One font for everything. Switching to a sans stack later is this one line. */
+  --font: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #14171a;
-    --fg: #e3e6e8;
-    --muted: #a0a8b0;
-    --line: #2e353b;
-    --soft: #1c2125;
-    --accent: #3ccf91;
-    --accent-fg: #07130d;
-    --link: #7ab8f0;
-    --code-bg: #0c0f11;
-    --read: #7ab8f0;
-    --write: #f0b45a;
-    --ask: #c4a2f0;
-    --danger: #f28b82;
-    --note-info: #18262f;
-    --note-warn: #2b2217;
+    --background: #0a0a0a;
+    --foreground: #fafafa;
+    --card: #171717;
+    --muted: #262626;
+    --muted-foreground: #a3a3a3;
+    --accent: #262626;
+    --border: #ffffff1a;
+    --primary: #e5e5e5;
+    --primary-foreground: #171717;
+    --destructive: #f87171;
+    --success: #4ade80;
+    --ring: #737373;
   }
 }
 
@@ -50,34 +48,52 @@
 
 html {
   scroll-behavior: smooth;
-  scroll-padding-top: 1rem;
+  scroll-padding-top: 1.5rem;
+  -webkit-text-size-adjust: 100%;
 }
 
 body {
   margin: 0;
-  background: var(--bg);
-  color: var(--fg);
-  font: 1rem/1.6 var(--sans);
+  background: var(--background);
+  color: var(--foreground);
+  font: 400 0.875rem/1.7 var(--font);
 }
 
 a {
-  color: var(--link);
+  color: var(--foreground);
+  text-decoration: underline;
+  text-decoration-color: var(--ring);
+  text-underline-offset: 3px;
+}
+
+a:hover {
+  text-decoration-color: var(--foreground);
 }
 
 a:focus-visible,
 summary:focus-visible {
-  outline: 3px solid var(--accent);
+  outline: 2px solid var(--ring);
   outline-offset: 2px;
-  border-radius: 2px;
+  border-radius: var(--radius-sm);
+}
+
+strong,
+th,
+h1,
+h2,
+h3,
+h4 {
+  font-weight: 600;
 }
 
 .skip {
   position: absolute;
   left: 0.5rem;
   top: -4rem;
-  background: var(--accent);
-  color: var(--accent-fg);
+  background: var(--primary);
+  color: var(--primary-foreground);
   padding: 0.5rem 0.75rem;
+  border-radius: var(--radius-md);
   z-index: 10;
 }
 
@@ -85,11 +101,11 @@ summary:focus-visible {
   top: 0.5rem;
 }
 
-/* ---- layout: a contents column and the page ---- */
+/* ---- layout: a quiet contents column and the page ---- */
 
 .layout {
   display: grid;
-  grid-template-columns: 17rem minmax(0, 1fr);
+  grid-template-columns: 15rem minmax(0, 1fr);
 }
 
 .side {
@@ -98,33 +114,33 @@ summary:focus-visible {
   align-self: start;
   height: 100vh;
   overflow-y: auto;
-  padding: 1.25rem 1rem 2rem 1.25rem;
-  border-right: 1px solid var(--line);
-  background: var(--soft);
-  font-size: 0.9rem;
+  padding: 1.5rem 0.75rem 2rem 1rem;
+  border-right: 1px solid var(--border);
+  font-size: 0.8125rem;
 }
 
 .side .brand {
-  margin: 0 0 1rem;
-  font: 700 1.15rem var(--mono);
+  margin: 0 0 1.25rem;
+  padding: 0 0.5rem;
+  font-weight: 600;
+  font-size: 1rem;
 }
 
 .side .brand a {
-  color: var(--fg);
+  color: var(--foreground);
   text-decoration: none;
 }
 
 .side .group {
-  margin-bottom: 1rem;
+  margin-bottom: 1.25rem;
 }
 
 .side .group-title {
   margin: 0 0 0.25rem;
-  font-weight: 700;
-  font-size: 0.78rem;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--muted);
+  padding: 0 0.5rem;
+  font-weight: 600;
+  font-size: 0.8125rem;
+  color: var(--foreground);
 }
 
 .side .group-title a {
@@ -138,65 +154,72 @@ summary:focus-visible {
   padding: 0;
 }
 
+.side li {
+  margin: 0;
+}
+
 .side li a {
   display: block;
-  padding: 0.15rem 0.5rem;
-  border-radius: 4px;
-  color: var(--fg);
+  padding: 0.2rem 0.5rem;
+  border-radius: var(--radius-md);
+  color: var(--muted-foreground);
   text-decoration: none;
 }
 
-.side li a:hover {
-  background: var(--line);
-}
-
-.side ul.commands li a {
-  font-family: var(--mono);
-  font-size: 0.85rem;
+.side li a:hover,
+.side li a:focus-visible {
+  background: var(--accent);
+  color: var(--foreground);
 }
 
 main {
   min-width: 0;
-  max-width: 54rem;
-  padding: 2rem 2rem 4rem;
+  width: 100%;
+  max-width: 52rem;
+  padding: 2.5rem 2rem 5rem;
+  margin: 0 auto;
 }
 
 .hero h1 {
   margin: 0 0 0.5rem;
-  font-size: 2.2rem;
-  line-height: 1.15;
+  font-size: 1.875rem;
+  line-height: 1.2;
+  letter-spacing: -0.02em;
 }
 
 .lead {
   margin: 0 0 2rem;
-  font-size: 1.15rem;
-  color: var(--muted);
+  font-size: 1rem;
+  color: var(--muted-foreground);
 }
 
 section.doc {
   margin-top: 3rem;
-  padding-top: 1.5rem;
-  border-top: 1px solid var(--line);
 }
 
 h2 {
-  margin: 0 0 1rem;
-  font-size: 1.6rem;
+  margin: 0 0 1.25rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid var(--border);
+  font-size: 1.5rem;
+  line-height: 1.3;
+  letter-spacing: -0.01em;
 }
 
 h3 {
-  margin: 2rem 0 0.75rem;
-  font-size: 1.2rem;
+  margin: 2.5rem 0 1rem;
+  font-size: 1.25rem;
+  line-height: 1.4;
 }
 
 h4 {
   margin: 0;
-  font-size: 1.05rem;
+  font-size: 1rem;
 }
 
 .anchor {
   margin-left: 0.35rem;
-  color: var(--muted);
+  color: var(--muted-foreground);
   text-decoration: none;
   opacity: 0;
   font-weight: 400;
@@ -215,42 +238,46 @@ ol {
   margin: 0 0 1rem;
 }
 
+ul,
+ol {
+  padding-left: 1.25rem;
+}
+
 li {
   margin-bottom: 0.35rem;
 }
 
 code {
-  font: 0.88em var(--mono);
-  background: var(--soft);
-  border: 1px solid var(--line);
-  border-radius: 4px;
-  padding: 0.05em 0.3em;
+  font: inherit;
+  font-size: 0.85em;
+  background: var(--muted);
+  border-radius: var(--radius-sm);
+  padding: 0.125rem 0.3rem;
 }
 
 /* ---- code blocks ---- */
 
 figure.code {
   margin: 0 0 1rem;
-  border-radius: 6px;
-  background: var(--code-bg);
-  color: var(--code-fg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--muted);
   overflow: hidden;
 }
 
 figure.code figcaption {
-  padding: 0.3rem 0.85rem;
-  font: 600 0.72rem var(--sans);
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--code-label);
-  border-bottom: 1px solid #2a3036;
+  padding: 0.35rem 1rem 0;
+  font-size: 0.75rem;
+  color: var(--muted-foreground);
 }
 
 figure.code pre {
   margin: 0;
-  padding: 0.75rem 0.85rem;
+  padding: 0.75rem 1rem;
   overflow-x: auto;
-  font: 0.85rem/1.5 var(--mono);
+  font: inherit;
+  font-size: 0.8125rem;
+  line-height: 1.6;
 }
 
 /* The line you would type is shown whole, wrapped, rather than scrolled out of sight. */
@@ -262,7 +289,6 @@ figure.command pre {
 
 figure.code code {
   background: none;
-  border: 0;
   padding: 0;
   font: inherit;
   color: inherit;
@@ -271,30 +297,31 @@ figure.code code {
 /* ---- tables ---- */
 
 .table-wrap {
-  margin: 0 0 1.25rem;
+  margin: 0 0 1.5rem;
   overflow-x: auto;
 }
 
 table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 0.92rem;
+  font-size: 0.8125rem;
 }
 
 th,
 td {
   text-align: left;
   vertical-align: top;
-  padding: 0.45rem 0.7rem;
-  border-bottom: 1px solid var(--line);
+  padding: 0.5rem 0.75rem 0.5rem 0;
+  border-bottom: 1px solid var(--border);
 }
 
 th {
-  font-size: 0.78rem;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--muted);
+  color: var(--muted-foreground);
   white-space: nowrap;
+}
+
+tbody tr:last-child td {
+  border-bottom: 0;
 }
 
 td:first-child {
@@ -310,44 +337,46 @@ table.flags td:first-child code {
   white-space: nowrap;
 }
 
-.req {
-  margin-left: 0.3rem;
-  font-size: 0.72rem;
-  font-weight: 700;
-  color: var(--danger);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
+td code {
+  background: none;
+  padding: 0;
+  font-size: inherit;
 }
 
-/* ---- one command, like an entry in an API reference ---- */
+.req {
+  margin-left: 0.3rem;
+  font-size: 0.75rem;
+  color: var(--destructive);
+}
+
+/* ---- one command, as a card ---- */
 
 section.command {
-  margin: 1.5rem 0 2.25rem;
-  padding: 1rem 1.25rem 0.25rem;
-  border: 1px solid var(--line);
-  border-left: 4px solid var(--accent);
-  border-radius: 6px;
-  background: var(--bg);
+  margin: 0 0 1.5rem;
+  padding: 1.25rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
+  background: var(--card);
+  box-shadow: var(--shadow-sm);
 }
 
 section.command:target {
-  outline: 3px solid var(--accent);
+  outline: 2px solid var(--ring);
   outline-offset: 2px;
 }
 
 section.command header {
   display: flex;
   flex-wrap: wrap;
-  align-items: baseline;
+  align-items: center;
   justify-content: space-between;
   gap: 0.5rem 1rem;
-  margin-bottom: 0.5rem;
+  margin-bottom: 0.75rem;
 }
 
 section.command h4 code {
-  font-size: 1.05rem;
+  font-size: 1rem;
   background: none;
-  border: 0;
   padding: 0;
 }
 
@@ -355,48 +384,45 @@ section.command h4 code {
   margin: 0;
   display: flex;
   flex-wrap: wrap;
-  gap: 0.35rem;
+  gap: 0.375rem;
 }
 
+/* shadcn Badge: secondary for read, outline for the rest, destructive only for --yes. */
 .badge {
   display: inline-block;
-  padding: 0.05rem 0.5rem;
-  border: 1px solid currentColor;
-  border-radius: 999px;
-  font-size: 0.74rem;
+  padding: 0.125rem 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  font-size: 0.75rem;
   font-weight: 600;
+  line-height: 1.4;
   white-space: nowrap;
+  color: var(--foreground);
 }
 
 .badge.read {
-  color: var(--read);
-}
-
-.badge.write {
-  color: var(--write);
-}
-
-.badge.ask {
-  color: var(--ask);
-}
-
-.badge.danger {
-  color: var(--danger);
+  border-color: transparent;
+  background: var(--muted);
 }
 
 .badge.local {
-  color: var(--muted);
+  color: var(--muted-foreground);
+}
+
+.badge.danger {
+  border-color: var(--destructive);
+  color: var(--destructive);
 }
 
 .small {
-  font-size: 0.92rem;
-  color: var(--muted);
+  font-size: 0.8125rem;
+  color: var(--muted-foreground);
 }
 
 .example {
-  margin: 1rem 0;
+  margin: 1rem 0 0;
   display: grid;
-  gap: 0.6rem;
+  gap: 0.75rem;
 }
 
 .example figure {
@@ -413,25 +439,38 @@ section.command h4 code {
   }
 }
 
+section.command > :last-child {
+  margin-bottom: 0;
+}
+
+/* ---- notes, as alerts ---- */
+
 aside.note {
   margin: 0 0 1rem;
-  padding: 0.1rem 1rem;
-  border-left: 4px solid var(--link);
-  border-radius: 0 6px 6px 0;
-  background: var(--note-info);
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+}
+
+aside.note p {
+  margin: 0;
 }
 
 aside.note.warn {
-  border-left-color: var(--write);
-  background: var(--note-warn);
+  border-color: var(--destructive);
+  color: var(--destructive);
+}
+
+aside.note.warn code {
+  color: var(--foreground);
 }
 
 footer {
   margin-top: 4rem;
   padding-top: 1rem;
-  border-top: 1px solid var(--line);
-  color: var(--muted);
-  font-size: 0.9rem;
+  border-top: 1px solid var(--border);
+  color: var(--muted-foreground);
+  font-size: 0.8125rem;
 }
 
 /* ---- narrow screens: the contents become a short strip above the page ---- */
@@ -445,7 +484,7 @@ footer {
     position: static;
     height: auto;
     border-right: 0;
-    border-bottom: 1px solid var(--line);
+    border-bottom: 1px solid var(--border);
     padding: 1rem;
   }
 
@@ -460,11 +499,15 @@ footer {
   }
 
   main {
-    padding: 1.25rem 1rem 3rem;
+    padding: 1.5rem 1rem 3rem;
   }
 
   .hero h1 {
-    font-size: 1.75rem;
+    font-size: 1.5rem;
+  }
+
+  section.command {
+    padding: 1rem;
   }
 }
 
@@ -481,6 +524,7 @@ footer {
 
   section.command {
     break-inside: avoid;
+    box-shadow: none;
   }
 }
 

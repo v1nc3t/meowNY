@@ -9,13 +9,15 @@ import ConfirmModal from '../components/ConfirmModal'
 import EditCategoryModal from '../components/EditCategoryModal'
 import MonthNav from '../components/MonthNav'
 import SectionTabs from '../components/SectionTabs'
+import Button from '../components/ui/Button'
+import { CardTitle } from '../components/ui/Card'
 import { useToday } from '../api/today'
 import { amountString, formatMoney } from '../lib/money'
 import { useMoneySettings, type MoneySettings } from '../hooks/useMoneySettings'
 import { useProfile } from '../hooks/profile'
 import { useSwipeHandler } from '../hooks/swipe'
 import { step } from '../lib/swipe'
-import { useNotice } from '../hooks/useNotice'
+import { useToast } from '../hooks/toast'
 import { useI18n, useT } from '../i18n/context'
 import { useShortcut } from '../keys/registry'
 import { tip } from '../keys/tip'
@@ -42,7 +44,7 @@ function CategoriesView({ settings, thisMonth }: { settings: MoneySettings; this
   const pageRef = useRef<HTMLElement>(null)
   const [categories, setCategories] = useState<Category[] | null>(null)
   const [reload, setReload] = useState(0)
-  const [message, setMessage] = useNotice()
+  const say = useToast()
   // the dialogs: a new category, the one being changed, the one about to be deleted
   const [adding, setAdding] = useState(false)
   const [editing, setEditing] = useState<Category | null>(null)
@@ -57,14 +59,14 @@ function CategoriesView({ settings, thisMonth }: { settings: MoneySettings; this
       },
       (failure) => {
         if (cancelled) return
-        setMessage(errorText(failure))
+        say(errorText(failure), 'error')
         setCategories([])
       },
     )
     return () => {
       cancelled = true
     }
-  }, [reload, setMessage])
+  }, [reload, say])
 
   useEffect(() => {
     if (!monthPattern.test(month)) {
@@ -78,14 +80,14 @@ function CategoriesView({ settings, thisMonth }: { settings: MoneySettings; this
       },
       (failure) => {
         if (cancelled) return
-        setMessage(errorText(failure))
+        say(errorText(failure), 'error')
         setOverview([])
       },
     )
     return () => {
       cancelled = true
     }
-  }, [month, reload, setMessage])
+  }, [month, reload, say])
 
   useEffect(() => {
     let cancelled = false
@@ -124,9 +126,8 @@ function CategoriesView({ settings, thisMonth }: { settings: MoneySettings; this
     setPending(true)
     try {
       await categoriesApi.remove(deleting.id)
-      setMessage('')
     } catch (failure) {
-      setMessage(errorText(failure))
+      say(errorText(failure), 'error')
     } finally {
       setPending(false)
     }
@@ -160,9 +161,12 @@ function CategoriesView({ settings, thisMonth }: { settings: MoneySettings; this
 
   async function onGlobal(type: Side, raw: string): Promise<string | null> {
     const amountLimit = amountFrom(raw)
-    if (amountLimit === undefined) return t('budgets.amountError')
+    if (amountLimit === undefined) {
+      say(t('budgets.amountError'), 'error')
+      return t('budgets.amountError')
+    }
     const errorText = await save({ type, scope: 'GLOBAL', amountLimit })
-    setMessage(errorText ?? '')
+    if (errorText) say(errorText, 'error')
     return errorText
   }
 
@@ -214,14 +218,14 @@ function CategoriesView({ settings, thisMonth }: { settings: MoneySettings; this
     />,
   ]
   const historyTable = history ? (
-    <table>
+    <table className="ui-table">
       <thead>
         <tr>
-          <th>{t('budgets.colMonth')}</th>
-          <th>{t('budgets.colExpenseBudget')}</th>
-          <th>{t('budgets.colSpent')}</th>
-          <th>{t('budgets.colIncomeBudget')}</th>
-          <th>{t('budgets.colEarned')}</th>
+          <th scope="col">{t('budgets.colMonth')}</th>
+          <th scope="col">{t('budgets.colExpenseBudget')}</th>
+          <th scope="col">{t('budgets.colSpent')}</th>
+          <th scope="col">{t('budgets.colIncomeBudget')}</th>
+          <th scope="col">{t('budgets.colEarned')}</th>
         </tr>
       </thead>
       <tbody>
@@ -232,15 +236,15 @@ function CategoriesView({ settings, thisMonth }: { settings: MoneySettings; this
           return (
             <tr key={row.month} className={row.month === month ? 'selected' : undefined}>
               <td>
-                <button
-                  type="button"
+                <Button
+                  variant="link"
                   onClick={() => {
                     setMonth(row.month)
                     pageRef.current?.scrollTo({ top: 0 })
                   }}
                 >
                   {monthLabel(row.month, language)}
-                </button>
+                </Button>
               </td>
               <td>{row.expenseBudget === null ? '-' : money(row.expenseBudget)}</td>
               <td>
@@ -262,20 +266,18 @@ function CategoriesView({ settings, thisMonth }: { settings: MoneySettings; this
       <div className="tx-title budget-title">
         <h1>{t('categories.title')}</h1>
         <div className="tx-actions">
-          <button type="button" onClick={() => setAdding(true)} {...tip('new', t('categories.add'))}>
+          <Button onClick={() => setAdding(true)} {...tip('new', t('categories.add'))}>
             {t('categories.add')}
-          </button>
+          </Button>
           <MonthNav month={month} thisMonth={thisMonth} onChange={setMonth} />
         </div>
       </div>
-      <p className="notice">{message}</p>
       {adding ? (
         <AddCategoryModal
           month={month}
           onClose={() => setAdding(false)}
           onCreated={() => {
             setAdding(false)
-            setMessage('')
             setReload((value) => value + 1)
           }}
         />
@@ -290,7 +292,6 @@ function CategoriesView({ settings, thisMonth }: { settings: MoneySettings; this
           onClose={() => setEditing(null)}
           onSaved={() => {
             setEditing(null)
-            setMessage('')
             setReload((value) => value + 1)
           }}
         />
@@ -315,8 +316,8 @@ function CategoriesView({ settings, thisMonth }: { settings: MoneySettings; this
             {tab === 'EXPENSE' ? halves[0] : null}
             {tab === 'INCOME' ? halves[1] : null}
             {tab === 'HISTORY' ? (
-              <div className="budget-history">
-                <div className="budget-history-scroll">{historyTable}</div>
+              <div className="ui-card budget-history">
+                <div className="ui-table-wrap budget-history-scroll">{historyTable}</div>
               </div>
             ) : null}
           </div>
@@ -325,9 +326,9 @@ function CategoriesView({ settings, thisMonth }: { settings: MoneySettings; this
         <>
           <div className="budget-split wide">{halves}</div>
           {history && history.length > 0 ? (
-            <section className="budget-history">
-              <h2>{t('budgets.history')}</h2>
-              <div className="budget-history-scroll">{historyTable}</div>
+            <section className="ui-card budget-history">
+              <CardTitle>{t('budgets.history')}</CardTitle>
+              <div className="ui-table-wrap budget-history-scroll">{historyTable}</div>
             </section>
           ) : null}
         </>
@@ -371,8 +372,8 @@ function BudgetHalf({
   const budgeted = overview?.budgeted ?? ''
   const over = overview !== null && overview.overAllocated && overview.budgeted !== null
   return (
-    <section className="budget-half">
-      {hideTitle ? null : <h2>{title}</h2>}
+    <section className="ui-card budget-half">
+      {hideTitle ? null : <CardTitle>{title}</CardTitle>}
       <div className="budget-table">
         <BudgetRow
           key={`${type}:${month}:${budgeted}`}
@@ -480,29 +481,30 @@ function BudgetRow({
         {/* Distinct keys: reusing one button node and flipping its type to submit mid-click submits the form at once. */}
         {editing ? (
           <>
-            <button key="save" type="submit">
+            <Button key="save" type="submit" size="sm">
               {t('common.save')}
-            </button>
+            </Button>
             {value !== '' ? (
-              <button key="clear" type="button" onClick={() => void save('')}>
+              <Button key="clear" variant="ghost" size="sm" onClick={() => void save('')}>
                 {t('common.clear')}
-              </button>
+              </Button>
             ) : null}
-            <button key="cancel" type="button" onClick={() => setEditing(false)}>
+            <Button key="cancel" variant="ghost" size="sm" onClick={() => setEditing(false)}>
               {t('common.cancel')}
-            </button>
+            </Button>
           </>
         ) : (
-          <button
+          <Button
             key="edit"
-            type="button"
+            variant="ghost"
+            size="sm"
             onClick={(event) => {
               event.preventDefault()
               setEditing(true)
             }}
           >
             {t('common.edit')}
-          </button>
+          </Button>
         )}
       </span>
     </form>
@@ -529,12 +531,12 @@ function CategoryRow({
       <span className="budget-label">{category.name}</span>
       <span className={value === '' || Number(value) === 0 ? 'budget-amount unset' : 'budget-amount'}>{value === '' ? '-' : money(value)}</span>
       <span className="budget-actions">
-        <button type="button" data-row-focus onClick={() => onEdit(category)}>
+        <Button variant="ghost" size="sm" data-row-focus onClick={() => onEdit(category)}>
           {t('common.edit')}
-        </button>
-        <button type="button" onClick={() => onDelete(category)}>
+        </Button>
+        <Button variant="ghost" size="sm" className="row-danger" onClick={() => onDelete(category)}>
           {t('common.delete')}
-        </button>
+        </Button>
       </span>
     </div>
   )

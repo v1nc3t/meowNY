@@ -48,7 +48,7 @@ export function Sheets({ sheets }: { sheets: { name: string; rows: string[][]; c
     <>
       <SheetGrid rows={sheet.rows} />
       {sheets.length > 1 ? (
-        <div className="sheet-tabs" role="tablist" aria-label={t('docs.previewSheets')}>
+        <div className="sheet-tabs ui-tabs" role="tablist" aria-label={t('docs.previewSheets')}>
           {sheets.map((each, at) => (
             <button key={at} type="button" role="tab" aria-selected={at === open} onClick={() => setOpen(at)}>
               {each.name}

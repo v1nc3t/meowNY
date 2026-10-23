@@ -2,6 +2,8 @@ import { Link, useNavigate } from 'react-router-dom'
 import type { Due } from '../api/debts'
 import { useT } from '../i18n/context'
 import { formatDate, formatMoney } from '../lib/money'
+import Button from './ui/Button'
+import { Card, CardContent } from './ui/Card'
 
 /**
  * The recurring payments that are overdue and not paid or skipped, one row for each occurrence that was missed, the oldest first. A
@@ -21,21 +23,20 @@ export default function DebtsDue({ due, currency, locale }: { due: Due; currency
   })
   return (
     <>
-      <p className="hint">{t('debts.dueHint')}</p>
-      <div className="dash-card">
-        <div className="dash-stats">
-          <div className="dash-stat">
-            <span className="dash-stat-label">{t('debts.dueTotal')}</span>
-            <span className="dash-stat-value">{money(due.total)}</span>
+      <Card>
+        <CardContent className="debts-stats">
+          <div className="debts-stat">
+            <span className="debts-stat-label">{t('debts.dueTotal')}</span>
+            <span className={`debts-stat-value ${Number(due.total) > 0 ? 'debt-owe' : 'debt-even'}`}>{money(due.total)}</span>
           </div>
           {due.unknown > 0 ? (
-            <div className="dash-stat">
-              <span className="dash-stat-label">{t('debts.dueUnknown', { count: due.unknown })}</span>
+            <div className="debts-stat">
+              <span className="debts-stat-label">{t('debts.dueUnknown', { count: due.unknown })}</span>
             </div>
           ) : null}
-        </div>
-      </div>
-      {due.payments.length === 0 ? <p>{t('debts.dueEmpty')}</p> : null}
+        </CardContent>
+      </Card>
+      {due.payments.length === 0 ? <p className="hint">{t('debts.dueEmpty')}</p> : null}
       <ul className="card-list">
         {due.payments.map((payment, at) => (
           <li key={`${payment.recurringId}-${payment.dueDate}`} className="card-item">
@@ -53,13 +54,14 @@ export default function DebtsDue({ due, currency, locale }: { due: Due; currency
             </div>
             {payable[at] ? (
               <div className="card-actions">
-                <button
-                  type="button"
+                <Button
+                  variant="outline"
+                  size="sm"
                   data-row-focus
                   onClick={() => navigate('/app/recurring', { state: { focus: { kind: 'recurring', id: payment.recurringId, date: payment.dueDate }, pay: true } })}
                 >
                   {t('rec.pay')}
-                </button>
+                </Button>
               </div>
             ) : null}
           </li>

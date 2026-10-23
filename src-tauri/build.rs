@@ -125,8 +125,20 @@ const COMMANDS: &[&str] = &[
 ];
 
 fn main() {
-    tauri_build::try_build(
-        tauri_build::Attributes::new().app_manifest(tauri_build::AppManifest::new().commands(COMMANDS)),
-    )
-    .expect("failed to run tauri build script");
+    let mut attributes = tauri_build::Attributes::new().app_manifest(tauri_build::AppManifest::new().commands(COMMANDS));
+
+    // On Windows the app needs version 6 of the common controls, which its manifest asks for. tauri-build puts that manifest in the
+    // app's program only, so the test programs started without it and Windows refused them (STATUS_ENTRYPOINT_NOT_FOUND). The same
+    // manifest (tauri-build's default, in windows-app-manifest.xml) is linked into every program of this crate instead: the app,
+    // its examples and its tests.
+    let var = |name: &str| std::env::var(name).unwrap_or_default();
+    if var("CARGO_CFG_TARGET_OS") == "windows" && var("CARGO_CFG_TARGET_ENV") == "msvc" {
+        let manifest = std::path::Path::new(&var("CARGO_MANIFEST_DIR")).join("windows-app-manifest.xml");
+        println!("cargo:rerun-if-changed={}", manifest.display());
+        println!("cargo:rustc-link-arg=/MANIFEST:EMBED");
+        println!("cargo:rustc-link-arg=/MANIFESTINPUT:{}", manifest.display());
+        attributes = attributes.windows_attributes(tauri_build::WindowsAttributes::new_without_app_manifest());
+    }
+
+    tauri_build::try_build(attributes).expect("failed to run tauri build script");
 }

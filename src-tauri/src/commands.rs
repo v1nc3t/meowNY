@@ -219,14 +219,16 @@ pub fn vault_status(vault: Shared) -> VaultStatus {
     vault.status()
 }
 
+// Opening or making the data stretches the passphrase, which takes a second or more. These three are async so the work runs off
+// the main thread: a plain command runs on it and the window could not draw the decrypting line until the work was done.
 #[tauri::command]
-pub fn create_vault(vault: Shared, settings: Settings, passphrase: Option<String>) -> Result<String, AppError> {
+pub async fn create_vault(vault: Shared<'_>, settings: Settings, passphrase: Option<String>) -> Result<String, AppError> {
     vault.create(&settings, passphrase.as_deref())
 }
 
 /// "Forgot my passphrase": unlock with the recovery key and choose a new passphrase (or none).
 #[tauri::command]
-pub fn recover_vault(vault: Shared, recovery_key: String, new_passphrase: Option<String>) -> Result<(), AppError> {
+pub async fn recover_vault(vault: Shared<'_>, recovery_key: String, new_passphrase: Option<String>) -> Result<(), AppError> {
     vault.recover(&recovery_key, new_passphrase.as_deref())
 }
 
@@ -247,7 +249,7 @@ pub fn new_recovery_key(vault: Shared, passphrase: Option<String>) -> Result<Str
 }
 
 #[tauri::command]
-pub fn unlock_vault(vault: Shared, passphrase: Option<String>) -> Result<(), AppError> {
+pub async fn unlock_vault(vault: Shared<'_>, passphrase: Option<String>) -> Result<(), AppError> {
     vault.unlock(passphrase.as_deref())
 }
 

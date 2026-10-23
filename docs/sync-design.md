@@ -1,14 +1,14 @@
 # Sync design (phase 8)
 
-Status: design agreed on 2026-10-15, nothing built yet. The decisions come from phase 8 of [PLAN.md](PLAN.md); this file says exactly how they work, so the code can follow it and a reviewer can check it. Section 15 lists what is still open.
+Status: built (phases 8 to 10). Decisions come from phase 8 of [PLAN.md](PLAN.md); this file says exactly how they work, so code can follow it and a reviewer can check it. Section 15 lists open points.
 
 ## 1. What it has to do
 
-- The phone (Android) is a full copy of the desktop's data, and both can change everything.
+- The phone (Android) is a full copy of the desktop's data; both can change everything.
 - Away from home the phone works alone. Back home, the two sync.
-- Both devices are online at the same time on the same network. Every sync is started on the unlocked desktop, which shows a QR code that the phone scans.
-- No server of any kind: no mailbox, relay, signalling or STUN service, and nothing opens a port on the router.
-- Very secure first, few dependencies second. The sync uses only crates the app already has: `chacha20poly1305`, `hkdf`, `sha2`, `getrandom`, `zeroize` (and `argon2` for the phone passphrase), `serde_json` for messages, and `std::net` for the connection. The only new crates are a QR encoder (desktop) and a barcode scanner plugin (phone).
+- Both devices are online together on the same network. Every sync starts on the unlocked desktop, which shows a QR code the phone scans.
+- No server of any kind: no mailbox, relay, signalling or STUN, no router port.
+- Very secure first, few dependencies second. Only crates the app already has (`chacha20poly1305`, `hkdf`, `sha2`, `getrandom`, `zeroize`, `argon2` for the phone passphrase), `serde_json` for messages, `std::net` for the connection. New crates: a QR encoder (desktop) and a barcode scanner plugin (phone).
 
 Not goals: sync over the internet, more than a few devices, merging text inside a field, syncing the CLI, API tokens or backup settings.
 
@@ -16,12 +16,12 @@ Not goals: sync over the internet, more than a few devices, merging text inside 
 
 | Name | What it is | Where it lives |
 |---|---|---|
-| Device id | 16 random bytes, made once per device | In the database (`sync_clock`) |
-| Pairing secret (PS) | 32 random bytes, made by the desktop when a phone is paired | In the encrypted database of both devices (`sync_peers`). Never in a backup, export, CLI answer or sync |
-| One-time secret (OTS) | 32 random bytes, made for one sync | On the desktop screen (the QR code) and in memory until used. Never stored |
-| Session id | 8 random bytes, made for one sync | In the QR code |
+| Device id | 16 random bytes, once per device | Database (`sync_clock`) |
+| Pairing secret (PS) | 32 random bytes, made by the desktop when pairing | Encrypted database of both devices (`sync_peers`). Never in a backup, export, CLI answer or sync |
+| One-time secret (OTS) | 32 random bytes, for one sync | Desktop screen (QR code) and memory until used. Never stored |
+| Session id | 8 random bytes, for one sync | QR code |
 
-A sync needs two things together: the paired phone (PS) and the screen at that moment (OTS). A stolen phone alone cannot sync, and neither can someone who photographs an old QR code.
+A sync needs the paired phone (PS) and the screen at that moment (OTS). A stolen phone alone cannot sync; neither can someone with an old QR photo.
 
 ## 3. One sync in one picture
 
@@ -43,11 +43,12 @@ scan the QR code
  close.  The listener closes and the OTS is gone.
 ```
 
-"Direct" here means the phone dials the desktop's address on the home network, like opening a page on your own network. There is no hole punching and no discovery. That is why both devices must be on the same network, and why a network that isolates devices (many hotels and campuses) does not work.
+- "Direct" means the phone dials the desktop's home-network address. No hole punching, no discovery.
+- So both devices must be on the same network; networks that isolate devices (many hotels, campuses) do not work.
 
 ## 4. The QR codes
 
-Text form: `MNY1:` followed by the bytes in base64url (no padding). All numbers are big-endian.
+Text form: `MNY1:` then the bytes in base64url (no padding). Numbers are big-endian.
 
 | Bytes | Field |
 |---|---|
@@ -57,32 +58,31 @@ Text form: `MNY1:` followed by the bytes in base64url (no padding). All numbers 
 | 32 | Secret: the OTS for a sync, the new PS for a pairing |
 | 2 | Port |
 | 1 | Number of addresses (1 to 4) |
-| 5 or 17 each | Address: 1 byte family (`4` or `6`) and 4 or 16 bytes |
+| 5 or 17 each | Address: 1 byte family (`4` or `6`), then 4 or 16 bytes |
 
-With one IPv4 address that is 50 bytes, so the code is small and easy to scan. The expiry is not in the code: the desktop enforces it with its own timer (2 minutes for a sync, 5 minutes for a pairing), so a wrong phone clock cannot break it.
-
-The desktop picks its address by asking the system which address it would use to reach the local network (a UDP socket connected to a private address; nothing is sent), and the screen also shows it in words, so a person can see when the two devices are on different networks. A field lets the person type another address.
+- One IPv4 address is 50 bytes: small, easy to scan.
+- Expiry is not in the code. The desktop enforces it with its own timer (2 minutes sync, 5 minutes pairing), so a wrong phone clock cannot break it.
+- The desktop asks the system which address reaches the local network (a UDP socket connected to a private address; nothing is sent). The screen shows it in words so the person can see mismatched networks. A field lets the person type another address.
 
 ## 5. Pairing (once)
 
-1. On the unlocked desktop: "Add phone". It makes a new PS, opens a listener (5 minutes, one connection) and shows a pairing QR code (kind 2) that carries the PS.
-2. The phone scans it and connects. The handshake of section 6 runs with the PS as the only secret.
-3. Both devices work out a 6-digit check code from the handshake (`HKDF-Expand(prk, "check")`, first 4 bytes as a number, modulo 1,000,000). The desktop shows it and the person **types it on the phone**; the phone compares it with its own, and only if they are the same does it send `accept` and the pairing continue. Typing makes the check real: there is no "yes" to tap without looking. Three wrong tries end the pairing, and since only the phone checks, nothing tells anyone else which digits were wrong.
-4. On yes, inside the encrypted channel the devices swap device ids and names, and each stores the other with the PS. The desktop then sends the full copy (section 8).
+1. Unlocked desktop: "Add phone". New PS, listener (5 minutes, one connection), pairing QR (kind 2) carrying the PS.
+2. The phone scans and connects; the section 6 handshake runs with the PS as the only secret.
+3. Both work out a 6-digit check code (`HKDF-Expand(prk, "check")`, first 4 bytes as a number, modulo 1,000,000). The desktop shows it; the person **types it on the phone**, which compares and only on a match sends `accept`. Typing makes the check real (no "yes" to tap). Three wrong tries end the pairing.
+4. Inside the encrypted channel the devices swap ids and names; each stores the other with the PS. The desktop then sends the full copy (section 8).
 
-A phone that already holds data is not paired: it must be new or erased. The one exception is a phone that is already paired with this very desktop (its data came from there): when the desktop forgot it, or the person wants new keys, it pairs again without being erased. It takes only the currency changes it has missed, keeps its data, and the first sync after that merges as any sync does. A phone with data from another desktop is turned down after the desktop's hello, and the desktop stores the phone only after the phone's answering hello, so a turned-down pairing leaves nothing on either side. Two sets of data, possibly in different currencies, cannot be merged safely, and the first copy simply sets the phone's currency, currency generation and shared settings to the desktop's.
+Order: phone `hello` → check code on both → person types it → `accept` (after three misses, `error` `cancelled`) → desktop `hello` and `currency` → phone takes currency and generation as they are, stores the desktop, sends a new `hello` → only then does the desktop store the phone → ordinary sync. Both wait up to five minutes; nothing is stored before the digits are right.
 
-The pairing QR code holds the PS in the clear, so it is the weak moment: anyone who photographs it during those minutes could try to connect first. That is why the code is single use, short lived, and needs the person to type the digits that the desktop shows into the real phone. A phone that is not in the same session as the desktop has a different code, so what the person types does not match and the pairing stops, with nothing stored. The PS is not used for anything until the digits are right.
-
-The messages of a pairing, in order, all inside the encrypted channel: the phone sends `hello` (its name and what it holds); both devices now have the check code; the desktop shows it and waits; the person types it on the phone, which on a match sends `accept` (on a miss, after three tries, `error` with the code `cancelled`); the desktop then sends its own `hello` and `currency` (its whole record of currency changes); the phone takes the currency and the generation as they are, stores the desktop and its secret, and sends a new `hello` that says what it holds now; only then does the desktop store the phone; from there it is an ordinary sync. Both wait up to five minutes for the person; neither side stores anything before the digits are right.
-
-To pair again (new phone, lost phone, or a phone that erased itself), remove the old device on the desktop and pair again. A new PS is made every time.
+- A phone that holds data is not paired: two data sets, possibly in different currencies, cannot be merged safely. The first copy sets the phone's currency, generation and shared settings to the desktop's.
+- Exception: a phone already paired with this desktop (desktop forgot it, or new keys wanted) pairs again without erasure, keeping its data and taking only missed currency changes. A phone with data from another desktop is turned down after the desktop's hello; the desktop stores the phone only after the phone's answering hello, so a turned-down pairing leaves nothing.
+- The pairing QR holds the PS in the clear, the weak moment. Defences: single use, short life, typed digits. A phone from another session gets a different code, so the pairing stops with nothing stored.
+- To pair again (new, lost or self-erased phone): remove the old device on the desktop and pair again. A new PS is made each time.
 
 ## 6. The connection and the handshake
 
-The desktop listens with `std::net::TcpListener`, bound to the one address it showed (not all addresses), on a random port. The phone tries the addresses in the code, 3 seconds each.
+The desktop listens with `std::net::TcpListener`, bound to the one address it showed, on a random port. The phone tries the addresses in the code, 3 seconds each.
 
-Notation: `seal(key, nonce, aad, plaintext)` is ChaCha20-Poly1305. `||` joins bytes. `ikm` is `PS || OTS` for a sync and `PS` for a pairing. `kind` and `session_id` come from the QR code.
+Notation: `seal(key, nonce, aad, plaintext)` is ChaCha20-Poly1305. `||` joins bytes. `ikm` is `PS || OTS` for a sync, `PS` for a pairing. `kind` and `session_id` come from the QR code.
 
 **M1 (phone to desktop), exactly 66 bytes:**
 
@@ -101,7 +101,7 @@ K2     = HKDF-Expand(prk, "k2")
 M2     = Nd || seal(K2, nonce = 12 zero bytes, aad = M1 || Nd, "reply")
 ```
 
-**Session keys**, from the same `prk`: `K_p2d = Expand(prk, "p2d")` (phone to desktop) and `K_d2p = Expand(prk, "d2p")`. Each key is used once per session, because `Np` and `Nd` are fresh and random, so a fixed zero nonce for M1 and M2 is never reused under the same key.
+**Session keys**, from the same `prk`: `K_p2d = Expand(prk, "p2d")` (phone to desktop), `K_d2p = Expand(prk, "d2p")`. Each key is used once per session (`Np`, `Nd` are fresh), so the zero nonce of M1 and M2 is never reused under a key.
 
 **Frames after the handshake:**
 
@@ -110,184 +110,202 @@ frame = length(4, = length of the sealed part) || seal(K_dir, nonce = 0x00000000
 dir   = 0x01 phone to desktop, 0x02 desktop to phone
 ```
 
-The counter starts at 0 for each direction and goes up by one per frame. The receiver expects exactly the next number. A frame with a wrong, repeated or skipped number, one that does not open, or one that is longer than 64 KiB plus the 16-byte tag ends the session. A frame sent back to its sender cannot open, because each direction has its own key and its own `dir` byte.
+- The counter starts at 0 per direction, +1 per frame. The receiver expects exactly the next number.
+- A wrong, repeated or skipped number, a frame that does not open, or one longer than 64 KiB plus the 16-byte tag ends the session.
+- A frame sent back to its sender cannot open: own key and own `dir` byte per direction.
 
-What the desktop does with a connection:
+Desktop, per connection:
 
-1. It reads 66 bytes within 3 seconds. Anything else, a wrong magic, or a kind that does not match the open window (a sync window takes only kind 1, a pairing window only kind 2) is closed with nothing sent.
-2. In a sync window it tries each paired secret (a few at most); in a pairing window it uses the new PS it just made. If nothing opens M1, it closes with nothing sent, so a scanner sees an open port that never answers.
-3. If one opens, that sync's OTS is burned at once, whatever happens next, and the desktop sends M2.
+1. Read 66 bytes within 3 seconds. Anything else, a wrong magic, or a kind not matching the open window (sync window: kind 1 only; pairing window: kind 2 only) is closed with nothing sent.
+2. Sync window: try each paired secret. Pairing window: use the new PS. If nothing opens M1, close with nothing sent (a scanner sees a port that never answers).
+3. If one opens, that sync's OTS is burned at once, whatever happens next; send M2.
 4. After 5 connections that sent a full M1 which did not open, or 30 connections in all, the listener closes.
 
-What the phone does: it opens M2 with K2. If that fails, it stops and says "this is not your desktop, or the code is old". Then it expects the first frame.
+Phone: open M2 with K2. On failure stop and say "this is not your desktop, or the code is old". Then expect the first frame.
 
-Limits on a session: 10 minutes, 30 seconds without a message, 256 MiB in all.
+Session limits: 10 minutes, 30 seconds without a message, 256 MiB in all.
 
 ## 7. What each secret is for
 
 | An attacker has | Can they sync? | Can they read a recorded sync? |
 |---|---|---|
 | Nothing but the network | No | No, only random-looking bytes |
-| A photo of the sync QR code (OTS) | No, they also need PS | No |
-| The phone's PS but not the screen | No, they also need the OTS | No |
-| PS now, a recording from the past | No | No: the OTS of the past session was never stored |
-| PS and the QR code of a session that is still open | Once, in that window (and they take the place of the real phone) | Yes, that session |
+| A photo of the sync QR code (OTS) | No, also needs PS | No |
+| The phone's PS but not the screen | No, also needs the OTS | No |
+| PS now, a recording from the past | No | No: that session's OTS was never stored |
+| PS and the QR code of a session still open | Once, in that window (taking the real phone's place) | Yes, that session |
 | PS and a photo of an old QR code, plus a recording of that session | No, the code is spent | Yes, that session |
 
-There is no Diffie-Hellman step, so there is no forward secrecy beyond the OTS. The last row is the honest limit. The secrets are 256 random bits, not passwords, so nothing can be guessed offline.
+- No Diffie-Hellman step, so no forward secrecy beyond the OTS. The last row is the honest limit.
+- Secrets are 256 random bits, not passwords: nothing can be guessed offline.
 
 ## 8. What is sent, and how the two sides end up equal
 
-Messages are JSON objects with a `t` field, each sealed into one frame of at most 64 KiB, so a long list is cut into several messages and the last one of a table is marked `last`. Money is an integer in minor units, as in the database. The message types are `hello`, `currency`, `hashes`, `digest`, `rows`, `done` and `error`; protocol 3 adds `have`, `need`, `file`, `chunk` and `stored` for the documents' files (see below, step 8). Protocol 4 (phase 10) adds two tables of rows, the friends (`people`) and the entries of the ledger (`ledger_entries`), and carries the parts of a shared bill inside the row of its transaction and the template of a recurring item inside the row of the item; no new message type.
+Messages are JSON objects with a `t` field, each sealed in one frame of at most 64 KiB; long lists are cut into several messages, the last marked `last`. Money is an integer in minor units.
 
-1. **`hello`** from both sides: device id and name, app version, schema version, protocol `4` (`3` before the friends and the ledger, `2` before documents: an app that speaks an older one is told to update), the clock (section 10), the currency generation (section 11), when this device last synced with the other one (`since`) and, in the desktop's, which way the sync goes (`mode`).
-   - Different schema versions: the sync stops with "update the phone app" or "update the desktop app".
-   - Clocks more than a minute apart: a warning. More than a day apart: the sync stops with "check the clock on the phone", because a clock far in the future would make its edits win forever.
-2. **`currency`**: the desktop sends the phone any currency changes it has not seen. The phone applies them first and converts its own rows, so both sides are in the same currency before anything is compared (section 11).
-3. **`hashes`**: each side sends one hash per table of its list of `(sync_id, stamp, deleted)`. A table with the same hash on both sides is the same on both and is left out of everything that follows. If no table differs, the sync is already done.
-4. **`digest`**: for each table that differs, each side lists `[sync_id, stamp, deleted]` for every row and every deletion marker. About 30 bytes a row, so a few MB for ten years of transactions.
-5. **`rows`**: both sides now know both lists, so each works out for itself what the other lacks or has older (a missing `sync_id`, or a lower stamp) and sends exactly that, with no request message. A deletion is sent as its marker.
-   **Which way, and conflicts.** The desktop chooses before it shows the code: both ways, phone to computer, or computer to phone. In a one-way sync the device that only receives sends empty `rows` messages and refuses any rows from the other, so nothing goes back, and the two are not meant to end equal (`done` is not compared; the summary says the sync went one way). Before the rows, both sides look for **conflicts**: a row (or a deletion) that is on both devices, differs, and was changed on both after their last sync (the later of the two `since` values in the hellos; none when they never met, so a first copy has none). The device that takes the changes in reviews them (the desktop when both ways), up to 200 at a time, the rest being settled by the newer change and counted. The other device sends its version of each conflicting row (`rows` messages for just those ids) and waits; the reviewer shows both versions side by side, with the fields that differ, and the person chooses for each which is true. The choice is carried out as stamps only: the version meant to win gets a fresh stamp, or the reviewer's own version gets the oldest possible stamp so the other device's version, which the ordinary exchange brings in next, is the newer. The reviewer then sends `reviewed`, both compare their lists again from `hashes`, and the rest goes on as before. Giving up the review ends the sync with nothing changed. A change that only one device made is never a conflict and is taken without asking.
-6. The receiver collects everything, validates it (section 12), and applies it in one database transaction. It counts what it did for the summary: rows added, rows taken over from the other device, of those how many had also been changed here since the last sync (a change of yours that was replaced by a newer one there), rows deleted, categories merged, and duplicates removed. (A row that is newer here is never sent, so the other device is the one that counts it as replaced.)
-7. **`done`**: each side sends a hash of its final list of `(table, sync_id, stamp, deleted)`. If they are equal the sync is finished and both show a summary. If not, both say "differences remain, sync again", and nothing is thrown away.
+- Types: `hello`, `currency`, `hashes`, `digest`, `rows`, `done`, `error`.
+- Protocol 3 adds `have`, `need`, `file`, `chunk`, `stored` (documents' files, step 8).
+- Protocol 4 (phase 10) adds the tables `people` and `ledger_entries`; a shared bill's parts travel inside its transaction's row, a recurring item's template inside the item's row.
 
-8. **The files of the documents** move after `done`, so the rows are finished and checked first and a connection that breaks while a file moves costs files, never the sync. The steps (`have`, `need`, `file` and `chunk`, `stored`), who may get which file, the budget and the resuming are in `docs/documents-design.md`, section 9. The sync reports them in their own lines ("documents received", "sent", "could not be moved", "waiting for the next sync", "taken off this phone"); a broken connection there is shown as a note, not as a failed sync.
+1. **`hello`** from both: device id and name, app version, schema version, protocol `4` (older apps are told to update), clock (section 10), currency generation (section 11), `since` (when this device last synced with the other), and in the desktop's, the direction (`mode`).
+   - Different schema versions: stop with "update the phone app" or "update the desktop app".
+   - Clocks over a minute apart: warning. Over a day: stop ("check the clock on the phone"); a far-future clock would make its edits win forever.
+2. **`currency`**: the desktop sends the currency changes the phone has not seen. The phone applies them and converts its rows first (section 11).
+3. **`hashes`**: one hash per table of each side's list of `(sync_id, stamp, deleted)`. Equal tables are left out. If none differs, the sync is done.
+4. **`digest`**: for each differing table, `[sync_id, stamp, deleted]` for every row and marker (about 30 bytes a row).
+5. **`rows`**: each side sends exactly what the other lacks or has older, with no request message. A deletion is sent as its marker.
+   - **Direction.** The desktop chooses before showing the code: both ways, phone to computer, or computer to phone. In a one-way sync the receiver sends empty `rows` and refuses rows from the other; `done` is not compared; the summary says it went one way.
+   - **Conflicts.** A row on both devices, different, and changed on both after their last sync (the later of the two `since` values; none if never met) is a conflict. The device taking the changes in reviews them (the desktop when both ways), up to 200 at a time; the rest go to the newer change and are counted. The other device sends its version and waits. The reviewer sees both side by side, with the differing fields, and chooses.
+   - The choice is carried out as stamps only: the winner gets a fresh stamp, or the reviewer's own gets the oldest possible stamp so the other version is newer. The reviewer sends `reviewed`, both compare lists again from `hashes`. Giving up ends the sync with nothing changed. A change only one device made is never a conflict.
+6. The receiver validates (section 12), applies in one database transaction, and counts for the summary: added, taken over (and how many were also changed here since the last sync), deleted, categories merged, duplicates removed.
+7. **`done`**: each side sends a hash of its final list of `(table, sync_id, stamp, deleted)`. Equal: finished. Not: "differences remain, sync again"; nothing is thrown away.
+8. **The documents' files** move after `done`, so a broken connection costs files, never the sync. Steps and rules: `docs/documents-design.md`, section 9. The sync reports them on their own lines; a break there is a note, not a failed sync.
 
-When both sides have a lot to send (the lists of a big database are megabytes), they must not both write at once, or neither would ever read. So the desktop always speaks first and the phone listens, and then the other way round: the lists, then the rows, then `done`. Each side works out what the other lacks from the lists, before it applies anything of what arrives.
-
-This is a comparison of states, not a log of changes, so it needs no record of what was sent before. A sync that stops half way, a restored backup or a wiped phone is repaired by the next sync without special cases. Applying is all or nothing on each side; if one side commits and the other does not, the next sync closes the gap.
+- Both sides cannot write at once when lists are megabytes: the desktop speaks first, then the phone.
+- This compares states, not a log of changes, so nothing records what was sent. A half-finished sync, a restored backup or a wiped phone is repaired by the next sync. Applying is all or nothing per side.
 
 ## 9. Database changes (migrations `0008`, `0009`, `0012` and `0013`)
 
 | Change | Why |
 |---|---|
-| `sync_id` (random 128 bits, as 32 hex characters, unique) on `categories`, `budgets`, `recurring_transactions`, `transactions`. Existing rows get one in the migration | Integer ids would collide between devices. They stay as the local ids. `transactions.client_uuid` stays |
+| `sync_id` (random 128 bits, 32 hex characters, unique) on `categories`, `budgets`, `recurring_transactions`, `transactions`; existing rows get one | Integer ids would collide between devices; they stay as local ids. `transactions.client_uuid` stays |
 | `stamp` (text, section 10) on the same tables and on the shared part of `settings` | Which change is newer |
 | `categories.merged_into` (a `sync_id`, may be empty) | Section 11, same-name categories |
-| `sync_deleted(sync_id, kind, stamp)`, filled by `DELETE` triggers on `transactions`, `budgets`, `recurring_transactions`, `documents` and `document_links` | Those rows are hard-deleted today, so the other device needs a marker. Markers are kept for good (about 50 bytes each). A link has one only when a person unlinked it; one that went with its document or its transaction has none |
-| `documents` and `document_links` (migrations `0010` and `0011`; phase 9) | Two more tables of rows, with a `sync_id` and a `stamp` like the others: a document (name, kind, size, hash, date, the switch "keep on phone") and a link from a document to one transaction or one recurring item. The rows travel here; the files of the documents travel after them (`docs/documents-design.md`, section 9) |
-| `people` and `ledger_entries` (migration `0012`; phase 10, `docs/debts-design.md`) | Two more tables of rows with a `sync_id` and a `stamp`: a friend (name, archived, a reminder, `merged_into` when two devices each added the same friend) and an entry of the ledger (friend, kind, amount, date, note, the expense it came with). A friend is never deleted, so has no marker; an entry has one (`sync_deleted` accepts the kind `ledger_entries`). The parts of a bill (`transaction_split_lines`) and the template lines of a recurring item (`recurring_split_lines`) have no `sync_id`, stamp or marker: they are part of their transaction and their item, a change to one gives the parent a new stamp (a trigger), and they travel inside the parent's row. `document_links` has a third target, a ledger entry |
-| Migration `0013` | A ledger entry loses its link to its expense when the expense is deleted (the foreign key does it). Written first as "no stamp", but that leaves an entry linked on one device and not on the other when the other brings the expense back with a newer edit, exactly the case that made the payments of a recurring item take a stamp. So the entries of a deleted expense take the stamp of the deletion marker, by a trigger before the delete that ticks the clock and the one after it that makes the marker with the same stamp. A device that learns of the deletion from a sync does the same |
-| `sync_clock(id = 1, device_id, last_stamp, applying)` | The device id, the clock state, and a flag that stops the triggers from replacing a stamp while a sync is applying rows |
-| `sync_peers(device_id, name, secret, paired_at, last_sync_at)` | The paired devices and their PS. Left out of backups, exports, the CLI and sync, like `api_tokens` |
+| `sync_deleted(sync_id, kind, stamp)`, filled by `DELETE` triggers on `transactions`, `budgets`, `recurring_transactions`, `documents`, `document_links` | Hard-deleted rows need a marker for the other device. Kept for good (about 50 bytes each). A link has one only when a person unlinked it |
+| `documents`, `document_links` (migrations `0010`, `0011`; phase 9) | Rows with `sync_id` and `stamp`; files travel after the rows (`docs/documents-design.md`, section 9) |
+| `people`, `ledger_entries` (migration `0012`; phase 10, `docs/debts-design.md`) | A friend (never deleted, so no marker) and a ledger entry (has a marker; `sync_deleted` accepts kind `ledger_entries`). Parts (`transaction_split_lines`) and template lines (`recurring_split_lines`) have no `sync_id`, stamp or marker: a change gives the parent a new stamp (trigger) and they travel in the parent's row. `document_links` has a third target, a ledger entry |
+| Migration `0013` | A ledger entry loses its expense link when the expense is deleted (foreign key). Without a stamp, an entry could end linked on one device and not the other. So the entries of a deleted expense take the deletion marker's stamp (a trigger before the delete ticks the clock, one after makes the marker with the same stamp). A device learning of the deletion by sync does the same |
+| `sync_clock(id = 1, device_id, last_stamp, applying)` | Device id, clock state, and a flag that stops triggers replacing a stamp while a sync applies rows |
+| `sync_peers(device_id, name, secret, paired_at, last_sync_at)` | Paired devices and their PS. Left out of backups, exports, CLI and sync |
 | `currency_changes(generation, from_currency, to_currency, rate, stamp)` and `settings.currency_generation` | Section 11 |
-| The language stays in `settings`, but the stamp of `settings` changes only when `locale` or `timezone` change | The UI language is per device, and a change to it must not touch a shared setting |
+| Language stays in `settings`; the `settings` stamp changes only on `locale` or `timezone` | UI language is per device |
 
-Stamps are set by triggers, like `updated_at` is today, so no write path (the screens, the command API, recurring items) can forget one. The triggers read `sync_clock`. While `applying = 1` they leave stamps as they are; a sync, a restore and a currency conversion turn it on inside their own transaction. The update triggers watch only the columns that are content (`UPDATE OF`), so `updated_at`, the sync columns and the link from a transaction to its recurring item never make a stamp on their own. There is one exception that follows from the link: deleting a recurring item clears the link of its payments (`ON DELETE SET NULL`), which is a change to them, so they take the stamp of the deletion marker (one tick for both, made by a trigger before the delete). A device that learns of the deletion from a sync does the same, and a payment that arrives for an item that is already deleted takes the marker's stamp unless it is newer. Migration `0009` also makes the `updated_at` triggers stand aside while `applying` is on and stop counting the recurring link, because two devices that each stamp "now" into one row would never hold equal rows. Built: `migrations/0008_sync.sql`, `sync/stamp.rs` and the tests in `sync/foundation_tests.rs`.
+- Stamps come from triggers, so no write path can forget one. While `applying = 1` triggers leave stamps alone; a sync, restore or currency conversion sets it inside its own transaction.
+- Update triggers watch only content columns (`UPDATE OF`), so `updated_at`, the sync columns and a transaction's link to its recurring item never make a stamp.
+- Exception: deleting a recurring item clears its payments' link (`ON DELETE SET NULL`), a change to them, so they take the deletion marker's stamp (one tick for both). A device learning of it by sync does the same; a payment arriving for an already deleted item takes the marker's stamp unless newer.
+- Migration `0009` makes the `updated_at` triggers stand aside while `applying` is on and ignore the recurring link.
+- Built in `migrations/0008_sync.sql`, `sync/stamp.rs`, tests in `sync/foundation_tests.rs`.
 
 Never synced: `audit_log`, `backup_schedule`, `api_tokens`, `sync_peers`, `sync_clock`, the language, the lock settings, and the currency field itself (it travels as a currency change).
 
 ## 10. Stamps and the clock
 
-A stamp is text that sorts like the tuple (milliseconds, counter, device id): `{ms:013}-{counter:04x}-{first 8 hex characters of the device id}`. A larger stamp is newer. Eight characters are enough: a tie needs two changes in the same millisecond with the same counter and the same first eight characters, and a tie only decides which of two equal-looking changes wins.
+A stamp is text that sorts like (milliseconds, counter, device id): `{ms:013}-{counter:04x}-{first 8 hex characters of the device id}`. Larger is newer. A tie needs two changes in the same millisecond, same counter, same first eight characters; it only decides which of two equal-looking changes wins.
 
-- A new local stamp: `ms = max(wall clock, last ms)`. If that equals the last ms, the counter goes up by one, otherwise it is 0. If the counter would pass `ffff`, `ms` goes up by one.
-- On receiving rows or a clock, the device sets its last stamp to the larger of its own and the received ones, so the next local stamp is newer than everything it has seen.
+- New local stamp: `ms = max(wall clock, last ms)`. If equal to last ms, counter +1, else 0. If the counter would pass `ffff`, `ms` goes up by one.
+- On receiving rows or a clock, the last stamp becomes the larger of own and received, so the next local stamp is newer than everything seen.
 - On start, `last_stamp` is the larger of the saved one and the largest stamp in the data.
-
-So a phone whose clock is a minute slow still produces stamps that are newer than anything it has already received.
+- So a phone with a slow clock still produces stamps newer than anything it received.
 
 ## 11. Merge rules
 
-For the same `sync_id` on both sides, the larger stamp wins as a whole row (a deletion marker has a stamp too, so the newer of an edit and a delete wins). The cases that need more:
+The larger stamp wins as a whole row (a marker has a stamp, so the newer of an edit and a delete wins). More cases:
 
 | Case | Rule |
 |---|---|
-| Transaction added on both | Both are kept, they have different `sync_id`s. Two with the same `client_uuid` are the same entry: the newer stays, the other becomes a deletion marker |
-| Recurring item paid on both | Both made a transaction for the same item and due date. The existing unique rule allows one: the newer stays, the other becomes a deletion marker |
-| Budget for the same type, scope, category and month on both | Same: matched by that key, the newer stays, the other becomes a deletion marker |
-| Category with the same type and name, both active, on both | The lower `sync_id` (byte order) is kept. The other is marked deleted with `merged_into` set to it, and the budgets, recurring items and transactions that point at it are moved to the kept one |
-| Category deleted on one, used on the other | It stays deleted. The new transactions stay attached to it, as old ones of a deleted category already are |
-| Recurring item edited or paid on both | The newer whole row wins. Then, if its next due date is not after the latest occurrence that has a transaction (`recurring_due_date`), the date moves forward by whole intervals, with the function the app uses after a payment, until it is. So an occurrence paid on the other device does not come due again. Known limit: an occurrence skipped on the losing side (a skip makes no transaction) can come due again, and the person can skip it again |
-| Shared settings (locale, time zone) | The newer wins |
-| Friend edited on both (name, archived, reminder) | The newer whole row wins; a real conflict goes to the review dialog (facts shown: name, removed, reminder) |
-| Friend with the same name, both active, on both | The lower `sync_id` is kept. The other is archived with `merged_into` set (a friend that is merged away is neither listed nor found by the app), and the ledger entries, the parts of bills and the template lines that name it move to the kept one with the `moved` stamps. If a bill would then hold two parts for one friend, they become one part with the amounts added (a template: the weights added). A friend can never come back from `merged_into` |
-| Entry added on both, edited on both, edited on one and deleted on the other | Both added are kept; otherwise the newer whole row wins, a deletion marker having a stamp. Entries are applied after the transactions, and the markers of entries before those of transactions, so an entry that the other device deleted is not brought back by the link rule below |
-| Bill split on both, or the amount edited on one and the split on the other | The newer whole transaction wins, with its parts: the parts are in the row, replaced as a unit, so two devices can never end with parts from both. The finished state is checked (`splits::check`) before the sync commits, and a sync that would leave parts above a bill, a part on an income or a template without a payer ends with an error and changes nothing |
-| Recurring item or its template edited on both | The newer whole row wins, with its template |
-| Expense deleted on one device, an entry linked to it on the other | The entry stays and its link is cleared, with the stamp of the deletion (migration `0013`), so a device that gets the expense back from a newer edit still ends the same |
-| Documents and their links | The rules are in `docs/documents-design.md`, section 10. In short: documents follow the newer-wins rule; the contents of a document never change, so a row that says otherwise is refused; a link is a row of its own, the same link made twice becomes one, and it goes with its document, transaction or recurring item without a marker of its own, so a parent deleted on one device while the other attaches to it ends the same in one sync |
+| Transaction added on both | Both kept. Same `client_uuid` is the same entry: newer stays, the other becomes a marker |
+| Recurring item paid on both | The existing unique rule allows one transaction: newer stays, other becomes a marker |
+| Budget for the same type, scope, category and month on both | Matched by that key; newer stays, other becomes a marker |
+| Same-name, same-type active category on both | Lower `sync_id` kept. The other is marked deleted with `merged_into`; budgets, recurring items and transactions pointing at it move to the kept one |
+| Category deleted on one, used on the other | Stays deleted; new transactions stay attached |
+| Recurring item edited or paid on both | Newer whole row wins; then if its next due date is not after the latest occurrence with a transaction (`recurring_due_date`), the date moves forward by whole intervals until it is. Known limit: an occurrence skipped on the losing side can come due again |
+| Shared settings (locale, time zone) | Newer wins |
+| Friend edited on both | Newer whole row wins; a real conflict goes to the review dialog |
+| Same-name active friend on both | Lower `sync_id` kept. The other is archived with `merged_into` (hidden, never listed or found, never comes back); entries, parts and template lines move to the kept one with `moved` stamps. Two parts for one friend on a bill become one with amounts added (template: weights added) |
+| Entry added, edited or deleted on both | Both added kept; otherwise newer whole row wins. Entries apply after transactions, entry markers before transaction markers |
+| Bill split on both, or amount on one and split on the other | Newer whole transaction wins, with its parts (replaced as a unit). `splits::check` runs before commit; a sync that would leave parts above a bill, a part on an income or a template without a payer ends with an error and changes nothing |
+| Recurring item or its template edited on both | Newer whole row wins, with its template |
+| Expense deleted on one, entry linked on the other | Entry stays, link cleared with the deletion's stamp (migration `0013`) |
+| Documents and links | `docs/documents-design.md`, section 10 |
 
-Stamps of the changes these rules make follow from the stamps involved, never from the clock, so both devices work out the same ones and a merge does not start another round of changes:
+Stamps of changes these rules make come from the stamps involved, never the clock, so both devices work out the same ones:
 
-- The marker of a duplicate that lost, and the merged-away category, get `derive(a, b)`: the larger of the two stamps with the counter one step on and the device id `00000000`. If the other device has already deleted the loser for good (its marker is in the same batch and covers the row), the loser takes that marker, so both end with the same one.
-- A row moved to the kept category gets `moved(x)`: its own time and counter with the device part `ffffffff`. That is newer than `x`, the other device moves its copy the same way, and two different versions of the row stay different and in order after the move. (A stamp made with `derive` would give them the same stamp whenever the merge is newer than both, and an edit would be lost.)
+- A duplicate that lost, and a merged-away category, get `derive(a, b)`: the larger stamp with the counter one step on and device id `00000000`. If the other device already deleted the loser (marker in the same batch), the loser takes that marker.
+- A row moved to the kept category gets `moved(x)`: its own time and counter with device part `ffffffff`, newer than `x`; the other device moves its copy the same way.
 
-Rules for the order things are done in, which the random tests found:
+Ordering rules the random tests found:
 
-- A category row that wants a name held by a category that the same batch is about to rename waits for it, so a chain of renames (one takes the name another just gave up) never looks like two categories with one name. A swap of two names puts one of them aside under a name no person can type until its own row arrives.
-- The budgets of a merged-away category are moved once every row is in, from the final versions, because the two versions of a budget that clash may not both be here yet.
-- The odd cents of a bill rescaled by a currency change go by position, and two devices each rescale their own copy, so the positions come from what they share (friends by `sync_id`, then guests by name), never from the order the parts happen to be stored in. (Found by the random test: two devices ended a cent apart.)
-- Deletions of payments come before the deletion of their recurring item, so a payment deleted on the other device does not get a newer stamp from its item's deletion and survive.
-- After everything is in, every active recurring item whose next due date is not after its latest payment moves on (not only the ones the sync touched), so both devices reach the same date.
+- A category wanting a name that one in the same batch is about to give up waits for it; a swap of two names puts one aside under a name no person can type until its own row arrives.
+- Budgets of a merged-away category move once every row is in, from the final versions.
+- The odd cents of a bill rescaled by a currency change go by position, and positions come from what devices share (friends by `sync_id`, then guests by name), never storage order.
+- Payment deletions come before their recurring item's deletion.
+- After everything is in, every active recurring item whose next due date is not after its latest payment moves on.
 
-Known limit, not worth a change of protocol: the stamp of a row that a category merge moved has no device part (`moved`), so two different versions of one row that were made on two devices in the same millisecond with the same counter, and that the merge moves both, end with equal stamps and different content, and the next sync sees nothing to send. The case needs the same row edited on two devices in one millisecond, with the same counter, and a merge: a person cannot do that; a loop in a test can (it showed as one failed seed in several thousand), so the random tests keep the two devices' edits in different milliseconds. The cause is that the device that merges moves its own copy before it compares it with the one that arrives, and the moved stamp beats an unmoved one of the same time and counter whichever device made it; a fix would compare by the stamps from before the move.
+Known limit: a row a category merge moved has no device part (`moved`), so two different versions made in the same millisecond with the same counter, both moved by the merge, end with equal stamps and different content. A person cannot do this; a test loop can, so random tests keep the devices' edits in different milliseconds.
 
-**Currency.** Only the desktop can change the currency, and afterwards it tells the person to sync the phone. A change adds a row to `currency_changes` and raises the desktop's `currency_generation`; the desktop converts its own rows at once, as it does today. A conversion does not change any row's stamp. At the start of a sync (step 2 above), the side with the lower generation applies the missing changes in order and converts all of its own rows, including ones added since the last sync, with the same function and rounding. Only then are the lists compared. If a converted amount would leave the allowed range, the sync stops with an error and nothing changes.
+**Currency.** Only the desktop changes the currency, then tells the person to sync the phone.
+
+- A change adds a row to `currency_changes`, raises `currency_generation`, and converts its rows at once. No stamp changes.
+- At sync start (step 2), the side with the lower generation applies the missing changes in order and converts all its rows (including ones added since the last sync) with the same function and rounding. Only then are lists compared.
+- If a converted amount would leave the allowed range, the sync stops with an error and nothing changes.
 
 ## 12. Applying changes safely
 
-Rows from the other device are untrusted input, even from a paired one, so a bug or a damaged phone cannot corrupt the desktop beyond what the app's own rules allow.
+Rows from the other device are untrusted input, even from a paired one.
 
-- Only the synced tables can be named. A row has exactly the known fields, no more.
-- Every field passes the same checks as the screens and the command API: money range, dates, allowed words, lengths, the first-of-month rule for budgets, and so on. A row that fails is refused, and the sync stops with an error that names the table (never the content).
-- Rows are applied with bound parameters, never built into SQL text.
-- Order: shared settings, categories, friends, recurring items, budgets, transactions (with their parts), ledger entries, documents, document links, then deletion markers (those of ledger entries before those of transactions). References arrive as `sync_id`s and are turned into local ids; a reference to an unknown `sync_id` stops the sync.
-- After applying, the database passes `foreign_key_check` and `integrity_check` before the transaction is committed.
-- Nothing from the sync (keys, rows, amounts, names) is written to a log.
+- Only synced tables can be named. A row has exactly the known fields.
+- Every field passes the same checks as the screens and the API: money range, dates, allowed words, lengths, first-of-month for budgets. A failing row is refused and the sync stops with an error naming the table (never the content).
+- Bound parameters only, never SQL text.
+- Order: shared settings, categories, friends, recurring items, budgets, transactions (with parts), ledger entries, documents, document links, then deletion markers (ledger entries' before transactions'). References arrive as `sync_id`s and become local ids; an unknown `sync_id` stops the sync.
+- After applying, `foreign_key_check` and `integrity_check` pass before commit.
+- Nothing from a sync (keys, rows, amounts, names) is logged.
 
 ## 13. The phone
 
-- **Vault** (`Policy::PHONE` in `vault.rs`): locked by a passphrase (Argon2, as on the desktop), with no OS keychain crate: the random secret that the keychain holds on the desktop is a file next to the data (`FileStore`), so the passphrase is the protection. The database key and the pairing secret live inside the encrypted vault. The app locks itself after a while.
-- **Erase**: after 5 wrong passphrases the phone deletes its database, its keys and its pairing secret. The counter is kept outside the encrypted database, so closing the app does not reset it; a warning shows from the 3rd miss and says how many tries are left. A correct passphrase resets the counter.
-- **After an erase**, or on a new phone, the person pairs again and the desktop sends a full copy. Changes made on the phone since its last sync are lost, and the warning says so.
-- Against someone who copies the file off the phone and guesses offline, the erase does not help. Only the length of the passphrase and Argon2 protect it, so the passphrase screen pushes for a long one. With no server there is also no remote wipe.
-- **After a backup restore** on either device, the device gets a new device id and its paired devices are removed, so it has to pair again and gets a full copy. This keeps the rules above free of special cases.
-- **The screens.** The app asks once which app it is (`app_profile`, which needs no unlock) and draws nothing before it knows. On a phone: the first start asks only for a language and a passphrase (twice; a warning shows while it is shorter than 12 characters, and the lowest the app takes is 8), says that 5 wrong tries erase the phone, and shows no recovery key, because a recovery key could only open data that is on the desktop too. The currency of that first start is a placeholder (`EUR`); the first pairing replaces it with the desktop's and converts nothing. The lock screen always asks for the passphrase, warns from the 3rd miss and says how many tries are left, and after the 5th shows "this phone was erased" and then the first start again. "Forgot my passphrase" is "erase this phone" (typing `DELETE`), since there is nothing to recover with. The settings of a phone have no command line block, no phone block, no recovery key block and no button to change the currency. The phone locks when it comes back from the background after the time chosen in "lock after". Its sync screen opens first until it is paired: one name field and one button, "scan the code".
-- **The phone's shell.** A bar at the top with the name on the left and sync, settings and lock on the right, four tabs at the bottom (dashboard, transactions, recurring, categories; the budgets are on the categories page), swiping left or right between them, and a round "+" on every page that opens the quick add: the amount first with the number keypad, the categories of the newest transactions as buttons, today as the date, and the category's name when no name is typed. There is no export page and no backup block on a phone: a file cannot be saved from the app on Android yet, and the data is on the desktop, which has the backups. Buttons and fields are at least 44 px high and inputs at least 16 px; the bars keep clear of the notch and the gesture bar.
-- **Android hardening** (`scripts/android-patch.py`, run after `tauri android init`): `allowBackup="false"`, because Android's backup would put the encrypted data, `vault.json` and the secret file in the person's Google account side by side and make the erase after 5 wrong passphrases pointless; and `FLAG_SECURE` on the window, so the screen cannot be captured and the list of recent apps shows nothing. The app asks for the camera only while a code is being scanned. The sync uses plain sockets from Rust, not the web view, so Android's rules for cleartext web traffic do not touch it; it needs the `INTERNET` permission that every Tauri app has.
-- **Desktop screens.** Everything is in the "phone" block of the settings: the paired phones (name, when paired, last sync, a two-step remove), a warning for each phone that has not synced since the currency was changed, the name of this computer (kept only on this computer, shown by the phone in its list), and the buttons "add a phone" and "sync with phone". While something runs the buttons are replaced by what it is doing: the QR code with the address in words and a countdown, then the six digits to type on the phone, then the progress, then the summary or the reason it stopped. Leaving the page while a code is on show closes the window. The screens only show what `sync_status` says, polled twice a second while something runs.
+- **Vault** (`Policy::PHONE` in `vault.rs`): passphrase (Argon2) and no OS keychain crate. The keychain's random secret is a file next to the data (`FileStore`), so the passphrase is the protection. The app locks after a while.
+- **Erase**: after 5 wrong passphrases the phone deletes its database, keys and pairing secret. The counter is kept outside the database; warning from the 3rd miss; a correct passphrase resets it.
+- **After an erase**, or on a new phone: pair again, full copy. Changes made on the phone since its last sync are lost, and the warning says so.
+- Against someone who copies the file and guesses offline, only passphrase length and Argon2 help, so the screen pushes for a long one. No server means no remote wipe.
+- **After a backup restore** on either device: new device id, paired devices removed, pair again.
+- **Phone screens.** The app asks once which app it is (`app_profile`, no unlock) and draws nothing before it knows.
+  - First start: language and passphrase (twice; warning under 12 characters, minimum 8); says 5 wrong tries erase the phone; no recovery key. Currency is a placeholder (`EUR`) until the first pairing, which converts nothing.
+  - Lock screen: warns from the 3rd miss; after the 5th shows "this phone was erased". "Forgot my passphrase" is "erase this phone" (type `DELETE`).
+  - Settings have no command line, phone or recovery-key block and no currency change. The phone locks on return from background after "lock after". The sync screen opens first until paired.
+- **Shell.** Top bar (name; sync, settings, lock), four swipeable bottom tabs (dashboard, transactions, recurring, categories; budgets are on the categories page), and a round "+" for quick add (amount first, recent categories as buttons, today's date). No export or backup block. Targets at least 44 px, inputs at least 16 px, safe areas respected.
+- **Android hardening** (`scripts/android-patch.py`, run after `tauri android init`):
+  - `allowBackup="false"`: Android's backup would put the encrypted data, `vault.json` and the secret file side by side in the person's Google account, making the erase pointless.
+  - `FLAG_SECURE` on the window: no screen capture, blank recent-apps picture.
+  - Camera only while scanning. Sync uses Rust sockets, not the web view; it needs the `INTERNET` permission every Tauri app has.
+- **Desktop screens.** All in the "phone" block of settings: paired phones (name, when paired, last sync, two-step remove), a warning per phone not synced since a currency change, this computer's name, "add a phone" and "sync with phone". While running: the QR code (address in words, countdown), the six digits, progress, then the summary or stop reason. Leaving the page closes the window. Screens only show `sync_status`, polled twice a second.
 
 ## 14. Threats and what stops them
 
 | Threat | What stops it |
 |---|---|
-| Someone listening on the network | Everything after the first 66 bytes is sealed; those bytes are random-looking. They learn that a sync happened, when, between which addresses, and about how much was sent |
-| Someone changing or replaying messages | Every frame is sealed and numbered. M1 and M2 are bound to each other and to fresh random values. A replayed M1 finds its OTS already burned |
-| A message sent back to its sender | Each direction has its own key and a direction byte |
-| A fake desktop | It cannot make M2 without PS and OTS, so the phone stops |
-| A fake phone | It cannot make M1 without PS and OTS, and the desktop stays silent |
-| A port scan or flood | One address, a short time, no answer without a valid M1, 5 bad handshakes or 30 connections close the listener. Someone on the network can still waste the window; the person just starts again |
-| A lost or stolen phone | The passphrase vault, the lock, the erase after 5 misses, and removing the device on the desktop. The phone's copy of the data stays until it is erased |
-| A photographed sync QR code | Useless without PS |
-| A photographed pairing QR code | Single use, 5 minutes, and the person types the check code that the desktop shows into the real phone |
+| Listening on the network | Everything after the first 66 bytes is sealed; those look random. They learn that a sync happened, when, between which addresses, and about how much |
+| Changing or replaying messages | Every frame sealed and numbered. M1 and M2 bound to each other and to fresh randoms. A replayed M1 finds its OTS burned |
+| A message sent back to its sender | Own key and direction byte per direction |
+| A fake desktop | Cannot make M2 without PS and OTS; the phone stops |
+| A fake phone | Cannot make M1 without PS and OTS; the desktop stays silent |
+| Port scan or flood | One address, short time, no answer without a valid M1, 5 bad handshakes or 30 connections close the listener. Someone on the network can still waste the window; the person starts again |
+| Lost or stolen phone | Passphrase vault, lock, erase after 5 misses, removing the device on the desktop. The copy stays until erased |
+| Photographed sync QR code | Useless without PS |
+| Photographed pairing QR code | Single use, 5 minutes, and the person types the check code into the real phone |
 | A bad row from a paired device | Section 12 |
-| Another version of the app | The schema versions must match |
-| A flaw in this design | It is a small protocol made here from standard parts. It gets test vectors, hostile-input tests and a review by someone else before release (section 16) |
+| Another app version | Schema versions must match |
+| A flaw in this design | Small protocol from standard parts; test vectors, hostile-input tests and a review by someone else before release (section 16) |
 
-Not protected: malware on the desktop or on an unlocked phone (they hold the data anyway); someone who has both the unlocked desktop and the phone; the metadata above; a sync window wasted by someone on the network.
+Not protected: malware on the desktop or an unlocked phone; someone with both the unlocked desktop and the phone; the metadata above; a sync window wasted by someone on the network.
 
 ## 15. Open points
 
-Settle these while building, and write the answer here:
-
-- Triggers for stamps need a closer look: the clock update must be one statement and must hold up with several writers in the app.
-- Whether the digest for transactions needs per-month hashes, once there are real numbers on a phone. Measured on a computer with ten years of heavy use (60 000 transactions, `cargo run --release --example bench`): a first copy sends 28 MB and takes 1.6 s in memory (taking the rows in is most of it, 0.9 s); a sync with nothing new sends 1.5 KB and takes 0.14 s; a sync with 500 changes sends 8.5 MB (the lists of ids and stamps of the table that differs, one from each side) and takes 0.4 s. A phone is several times slower, and the wifi carries 8 MB in a second, so for now the whole list is sent. If real data turns out to be much bigger, hashes per month of the payment date would cut the 8 MB to what changed; that is a change of the protocol (version 3), so it waits for a reason.
-- ~~Which address to show on machines with several networks.~~ The system's choice, shown in words under the code, and a field "another address…" in the phone block for the person to type one (`sync_start` and `sync_start_pairing` take it; only a home-network address that is not the loopback one is accepted).
-- IPv6: first version uses IPv4 only; the QR format already allows both.
-- Whether a deletion marker can ever be dropped. For now they stay for good.
-- ~~The wording of the screens: pairing, the check code, the sync summary, and the errors (never include row contents).~~ Written in all seven languages (`sync.*` and `phone.*` in `ui/src/i18n`). A summary is a list of "label: number" lines, so no language needs plural forms; the 22 reasons a sync can stop with each have one text, and no text names a row.
-- What Android asks for: the camera permission for scanning is asked by the plugin when a scan starts (it was already granted on the test phone, so the question itself was not seen). Whether the newest Android versions (the "local network" permission planned for Android 17, which apps targeting that version will need to ask for) stop a phone from dialling an address on the home network is for a real device to say; the build targets an older version for now. The notification permission of Android 13 and later, for the daily list of items that are due, is not asked for by the app yet either.
+- Stamp triggers: the clock update must be one statement and hold up with several writers.
+- Per-month hashes for the transactions digest, if real data gets much bigger. Measured with ten years of heavy use (60 000 transactions, `cargo run --release --example bench`): first copy 28 MB in 1.6 s in memory; a sync with nothing new 1.5 KB in 0.14 s; a sync with 500 changes 8.5 MB in 0.4 s. A phone is several times slower; wifi carries 8 MB in a second. So the whole list is sent for now; monthly hashes would be a protocol change.
+- ~~Which address to show with several networks.~~ Settled: the system's choice, shown in words, plus an "another address…" field (`sync_start`, `sync_start_pairing`; only a home-network, non-loopback address is accepted).
+- IPv6: first version uses IPv4 only; the QR format allows both.
+- Whether a deletion marker can ever be dropped. For now they stay.
+- ~~Screen wording.~~ Done in seven languages (`sync.*`, `phone.*` in `ui/src/i18n`); a summary is "label: number" lines; the 22 stop reasons each have one text.
+- Android: the camera permission is asked by the plugin when a scan starts. Whether newer Android's "local network" permission (planned for Android 17) stops dialling a home address is for a real device to say. The Android 13+ notification permission is not asked for yet.
 
 ## 16. Tests
 
-- **Test vectors**: fixed `PS`, `OTS`, `session_id`, `Np`, `Nd` and fixed frames, with every derived key and every output byte written down. `scripts/sync-vectors.py` is a second implementation (standard library only, checked against the test vectors of RFC 8439 and RFC 5869) that prints them, and `sync/crypto.rs` and `sync/qr.rs` hold them in their tests. Another implementation, or the reviewer, can reproduce them.
-- **Hostile input**, with a fixed-seed generator as elsewhere in the project: random and damaged M1, M2 and frames; a wrong counter, repeated, skipped and reflected frames; a changed byte anywhere; a wrong length; a frame over the limit; a slow sender. The session ends and nothing panics.
-- **Secrets**: an OTS works only once; a QR code with the wrong PS never gets an answer; 5 bad handshakes close the listener; secrets are zeroized after use; no key or row appears in any log line.
-- **Two devices, two in-memory databases, a real socket**: random edits on both sides from a fixed seed, then a sync. They hold the same rows, and a second sync changes nothing. Every rule of section 11 has its own case. Replaying the same sync changes nothing. A sync stopped half way (at every message) is repaired by the next one.
-- **Debts** (`sync::engine_tests::debts`, 16 tests, and the random tests, which now edit friends, entries, parts and templates too): parts travel with their bill and the newer bill wins whole; a template travels with its item; friends of one name become one with everything moved and duplicate parts summed; entries and their deletions; an entry whose expense was deleted on the other device; documents on entries; a hostile row for each rule of section 12 is refused; the finished-state check stops a sync that would break a rule. A hunt of 3,000 seeds of the plain test and 2,000 of the currency test (`MEOWNY_SYNC_SEEDS=500 MEOWNY_SYNC_FROM=1 cargo test --lib sync::engine_tests::random`) found three real faults while it was written: a friend merged away that could be brought back, an entry link cleared without a stamp, and entry markers applied after transaction markers; and later the odd-cent order above.
-- **Currency**: a change on the desktop, then edits on the phone, then a sync: the same amounts on both. A change that would go out of range stops the sync with nothing changed.
-- **Never synced**: the tables and fields of section 9 never appear in any message.
-- **Phone**: 5 wrong passphrases erase it; the counter survives a restart; pairing again restores a full copy.
-- **Screens** (`ui/src/api/sync.test.ts`, `ui/src/lib/qr.test.ts`): every status the app sends is accepted and anything it would never send is refused; the reasons the screens translate are read out of `sync/service.rs` and must be exactly those; the QR encoder equals a reference implementation module for module in 124 cases; the warning from the 3rd miss, the passphrase advice and the lock after the background are pure functions with their own tests. The screens were also looked at in a browser at desktop and phone width with the commands faked, and the QR code on screen was read back by an independent decoder.
-- **By hand**: a real Android phone at home, and on a network that isolates devices (it should fail with a clear message that mentions the phone's hotspot). Done on 2026-10-16 with one phone (Redmi Note 11, Android 13) and `src-tauri/examples/sync_desktop.rs`, a desktop without a window made of the same code: pairing with typed digits (wrong and right), the first copy, a sync both ways with a review on the desktop, a sync to the phone with a review on the phone (an edit against an edit, and an edit against a delete), pairing again after the desktop forgot the phone, and a code with an address that does not answer (the hotspot advice shows). Not checked by that test: a network that really isolates devices, other phone sizes, a newer Android, and scanning a real code with the camera (the camera and the see-through page start, but no code was held in front of it; the test fed the code through a paste field that only a test build has). The maintainer then reviewed the app on a real phone (2026-10-16); the details were not written down.
+- **Test vectors:** fixed `PS`, `OTS`, `session_id`, `Np`, `Nd` and frames with every derived key and output byte. `scripts/sync-vectors.py` (standard library only, checked against RFC 8439 and RFC 5869 vectors) prints them; `sync/crypto.rs` and `sync/qr.rs` hold them in tests.
+- **Hostile input** (fixed-seed generator): random and damaged M1, M2 and frames; wrong, repeated, skipped, reflected counters; a changed byte anywhere; wrong length; over-limit frame; slow sender. The session ends, nothing panics.
+- **Secrets:** an OTS works once; a wrong-PS QR never gets an answer; 5 bad handshakes close the listener; secrets zeroized; no key or row in any log.
+- **Two devices, in-memory databases, a real socket:** random edits on both from a fixed seed, then a sync; same rows, a second sync changes nothing. Every section 11 rule has its own case. A sync stopped at every message is repaired by the next. Replays change nothing.
+- **Debts** (`sync::engine_tests::debts`, 16 tests, plus random tests that edit friends, entries, parts and templates): parts travel with their bill; templates with their item; same-name friends merge; entries and deletions; hostile rows per section 12 refused; the finished-state check stops a rule-breaking sync. A hunt of 3,000 plain and 2,000 currency seeds (`MEOWNY_SYNC_SEEDS=500 MEOWNY_SYNC_FROM=1 cargo test --lib sync::engine_tests::random`) found four faults, now fixed.
+- **Currency:** a desktop change, phone edits, a sync: same amounts. An out-of-range change stops the sync with nothing changed.
+- **Never synced:** the tables and fields of section 9 never appear in a message.
+- **Phone:** 5 wrong passphrases erase; the counter survives a restart; pairing again restores a full copy.
+- **Screens** (`ui/src/api/sync.test.ts`, `ui/src/lib/qr.test.ts`): every status the app sends is accepted and others refused; translated reasons match `sync/service.rs` exactly; the QR encoder equals a reference module for module in 124 cases (also read back by an independent decoder).
+- **By hand:** a real Android phone at home, and on a network that isolates devices (should fail clearly, mentioning the hotspot). Done 2026-10-16 with one phone (Redmi Note 11, Android 13) and `src-tauri/examples/sync_desktop.rs`: pairing with typed digits (wrong and right), first copy, both-ways sync with review on the desktop, to-phone sync with review on the phone, re-pairing after the desktop forgot the phone, and an unanswered address (hotspot advice shows). Not checked: a really isolating network, other phone sizes, newer Android, scanning a real code with the camera. The maintainer then reviewed the app on a real phone (2026-10-16); details not written down.

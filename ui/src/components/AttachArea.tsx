@@ -10,6 +10,7 @@ import { canPreview } from '../lib/documents'
 import DocumentModal from './DocumentModal'
 import Icon from './NavIcon'
 import PreviewModal from './PreviewModal'
+import Button from './ui/Button'
 
 /** The documents of one item, in the dialog that edits it. `compact` is for the quick add of a phone: just the buttons and the list. */
 export default function AttachArea({ attachments, compact = false }: { attachments: Attachments; compact?: boolean }) {
@@ -34,9 +35,6 @@ export default function AttachArea({ attachments, compact = false }: { attachmen
   return (
     <section className="attach" aria-label={t('docs.title')}>
       {compact ? null : <h3>{t('docs.title')}</h3>}
-      <p className="notice" role="alert">
-        {attachments.message}
-      </p>
       {attachments.working ? <p className="hint">{t('docs.adding', { name: attachments.working })}</p> : null}
       {empty && !compact ? <p className="hint">{t('docs.attachNone')}</p> : null}
       {empty ? null : (
@@ -44,54 +42,54 @@ export default function AttachArea({ attachments, compact = false }: { attachmen
           {attachments.linked.map((doc) => (
             <li key={`linked-${doc.id}`}>
               <Icon name="documents" className="attach-icon" />
-              <button type="button" className="attach-name" onClick={() => setViewing(doc.id)}>
+              <Button variant="link" className="attach-name" onClick={() => setViewing(doc.id)}>
                 {doc.name}
-              </button>
+              </Button>
               <span className="attach-size">{formatSize(doc.sizeBytes, locale)}</span>
-              <button type="button" disabled={!canPreview(doc)} onClick={() => setPreviewing(doc)}>
+              <Button variant="ghost" size="sm" disabled={!canPreview(doc)} onClick={() => setPreviewing(doc)}>
                 {t('docs.previewButton')}
-              </button>
-              <button type="button" onClick={() => void attachments.detach(doc)}>
+              </Button>
+              <Button variant="ghost" size="sm" onClick={() => void attachments.detach(doc)}>
                 {t('docs.detach')}
-              </button>
+              </Button>
             </li>
           ))}
           {attachments.pending.map((item) => (
             <li key={`pending-${item.key}`}>
               <Icon name="documents" className="attach-icon" />
               {'doc' in item ? (
-                <button type="button" className="attach-name" onClick={() => setViewing(item.doc.id)}>
+                <Button variant="link" className="attach-name" onClick={() => setViewing(item.doc.id)}>
                   {item.doc.name}
-                </button>
+                </Button>
               ) : (
                 <span className="attach-name">{item.file.name}</span>
               )}
               <span className="attach-size">{formatSize('doc' in item ? item.doc.sizeBytes : item.file.size, locale)}</span>
               {'doc' in item ? (
-                <button type="button" disabled={!canPreview(item.doc)} onClick={() => setPreviewing(item.doc)}>
+                <Button variant="ghost" size="sm" disabled={!canPreview(item.doc)} onClick={() => setPreviewing(item.doc)}>
                   {t('docs.previewButton')}
-                </button>
+                </Button>
               ) : null}
-              <button type="button" onClick={() => attachments.removePending(item.key)}>
+              <Button variant="ghost" size="sm" onClick={() => attachments.removePending(item.key)}>
                 {t('docs.detach')}
-              </button>
+              </Button>
             </li>
           ))}
         </ul>
       )}
       <div className="attach-actions">
-        <button type="button" onClick={() => fileInput.current?.click()}>
+        <Button variant="outline" size="sm" onClick={() => fileInput.current?.click()}>
           {t('docs.add')}
-        </button>
+        </Button>
         {phone ? (
-          <button type="button" onClick={() => photoInput.current?.click()}>
+          <Button variant="outline" size="sm" onClick={() => photoInput.current?.click()}>
             {t('docs.takePhoto')}
-          </button>
+          </Button>
         ) : null}
         {compact ? null : (
-          <button type="button" aria-expanded={picking} onClick={() => setPicking((open) => !open)}>
+          <Button variant="outline" size="sm" aria-expanded={picking} onClick={() => setPicking((open) => !open)}>
             {t('docs.attachExisting')}
-          </button>
+          </Button>
         )}
       </div>
       <input ref={fileInput} type="file" multiple hidden tabIndex={-1} onChange={onChosen} />
@@ -146,9 +144,9 @@ function LibraryPicker({ attachments, locale }: { attachments: Attachments; loca
             <Icon name="documents" className="attach-icon" />
             <span className="attach-name">{doc.name}</span>
             <span className="attach-size">{formatSize(doc.sizeBytes, locale)}</span>
-            <button type="button" onClick={() => void attachments.attachExisting(doc)}>
+            <Button variant="ghost" size="sm" onClick={() => void attachments.attachExisting(doc)}>
               {t('docs.attachThis')}
-            </button>
+            </Button>
           </li>
         ))}
       </ul>

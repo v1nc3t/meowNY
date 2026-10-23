@@ -4,6 +4,7 @@ import { useMoneySettings } from '../hooks/useMoneySettings'
 import { useT } from '../i18n/context'
 import { formatMoney } from '../lib/money'
 import Modal, { modalFormId } from './Modal'
+import Button from './ui/Button'
 
 type Side = 'desktop' | 'phone'
 
@@ -60,12 +61,12 @@ export default function ReviewModal({
     <Modal title={t('sync.reviewTitle')} pending={pending || !allChosen(conflicts, chosen)} onClose={onGiveUp}>
       <form id={modalFormId} className="review" onSubmit={onSubmit}>
         <div className="review-all">
-          <button type="button" onClick={() => chooseAll('mine')}>
+          <Button variant="outline" size="sm" onClick={() => chooseAll('mine')}>
             {t('sync.allOf', { device: mineLabel })}
-          </button>
-          <button type="button" onClick={() => chooseAll('theirs')}>
+          </Button>
+          <Button variant="outline" size="sm" onClick={() => chooseAll('theirs')}>
             {t('sync.allOf', { device: theirsLabel })}
-          </button>
+          </Button>
         </div>
         {conflicts.map((conflict) => (
           <fieldset className="conflict" key={conflict.id}>

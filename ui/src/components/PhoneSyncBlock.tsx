@@ -3,11 +3,13 @@ import { whenText } from '../api/locales'
 import { ApiError, errorText } from '../api/invoke'
 import { cleanDeviceName, DEVICE_NAME_MAX, MODES, syncApi, type Mode, type Peer } from '../api/sync'
 import { useDeviceName } from '../hooks/useDeviceName'
-import { useNotice } from '../hooks/useNotice'
+import { useToast } from '../hooks/toast'
 import { useSyncStatus } from '../hooks/useSyncStatus'
 import Dropdown from './Dropdown'
+import Button from './ui/Button'
 import { useT } from '../i18n/context'
 import SyncStatusPanel from './SyncStatusPanel'
+import { Actions, Field, Rows } from '../pages/settings/layout'
 
 /**
  * Settings block of the desktop for the phone: add a phone (a code to scan, six digits to compare), sync with it (a code to
@@ -21,11 +23,11 @@ export default function PhoneSyncBlock({ locale, timezone }: { locale: string; t
   const [address, setAddress] = useState('')
   const [mode, setMode] = useState<Mode>('both')
   const [removing, setRemoving] = useState<string | null>(null)
-  const [message, setMessage] = useNotice()
+  const say = useToast()
 
   const loadDevices = useCallback(() => {
-    syncApi.devices().then(setDevices, (e) => setMessage(errorText(e)))
-  }, [setMessage])
+    syncApi.devices().then(setDevices, (e) => say(errorText(e), 'error'))
+  }, [say])
 
   useEffect(() => {
     loadDevices()
@@ -39,11 +41,11 @@ export default function PhoneSyncBlock({ locale, timezone }: { locale: string; t
 
   async function begin(pair: boolean) {
     const clean = cleanDeviceName(name)
-    if (!clean) return setMessage(t('sync.errorName'))
+    if (!clean) return say(t('sync.errorName'), 'error')
     try {
       await (pair ? syncApi.startPairing(clean, address) : syncApi.start(clean, address, mode))
     } catch (error) {
-      setMessage(error instanceof ApiError && error.code === 'invalid_input' && address.trim() !== '' ? t('sync.errorAddress') : errorText(error))
+      say(error instanceof ApiError && error.code === 'invalid_input' && address.trim() !== '' ? t('sync.errorAddress') : errorText(error), 'error')
     }
     await refresh()
   }
@@ -52,52 +54,50 @@ export default function PhoneSyncBlock({ locale, timezone }: { locale: string; t
     try {
       await syncApi.removeDevice(deviceId)
       setRemoving(null)
-      setMessage(t('sync.removed'))
+      say(t('sync.removed'), 'success')
       loadDevices()
     } catch (error) {
-      setMessage(errorText(error))
+      say(errorText(error), 'error')
     }
   }
 
   const idle = state === 'idle'
 
   return (
-    <div className="settings-block">
-      <h2>{t('sync.title')}</h2>
-      <p className="notice" role="status">
-        {message}
-      </p>
+    <div className="settings-stack">
 
       <h3 className="settings-subtitle">{t('sync.devices')}</h3>
       {devices && devices.length === 0 && <p className="hint">{t('sync.noDevices')}</p>}
       {devices && devices.length > 0 && (
-        <div className="token-list">
+        <ul className="card-list">
           {devices.map((device) => (
-            <div className="settings-row" key={device.deviceId}>
-              <span className="settings-row-label">{device.name}</span>
-              <span className="settings-row-value">
-                {t('sync.pairedOn', { time: whenText(device.pairedAt, locale, timezone) })}
-                {' · '}
-                {device.lastSyncAt ? t('sync.lastSync', { time: whenText(device.lastSyncAt, locale, timezone) }) : t('sync.neverSynced')}
-                {device.changesWaiting !== null ? ` · ${t('sync.changesWaiting', { count: device.changesWaiting })}` : ''}
-              </span>
+            <li className="card-item" key={device.deviceId}>
+              <div className="card-body">
+                <p className="card-name">{device.name}</p>
+                <p className="card-meta">
+                  {t('sync.pairedOn', { time: whenText(device.pairedAt, locale, timezone) })}
+                  {' · '}
+                  {device.lastSyncAt ? t('sync.lastSync', { time: whenText(device.lastSyncAt, locale, timezone) }) : t('sync.neverSynced')}
+                  {device.changesWaiting !== null ? ` · ${t('sync.changesWaiting', { count: device.changesWaiting })}` : ''}
+                </p>
+              </div>
               {removing === device.deviceId ? (
                 <span className="inline-actions">
-                  <button type="button" onClick={() => void onRemove(device.deviceId)}>
+                  <Button variant="destructive" size="sm" onClick={() => void onRemove(device.deviceId)}>
                     {t('sync.removeYes')}
-                  </button>
-                  <button type="button" onClick={() => setRemoving(null)}>
+                  </Button>
+                  <Button variant="outline" size="sm" onClick={() => setRemoving(null)}>
                     {t('common.cancel')}
-                  </button>
+                  </Button>
                 </span>
               ) : (
-                <button type="button" disabled={!idle} onClick={() => setRemoving(device.deviceId)}>
+                <Button variant="outline" size="sm" disabled={!idle} onClick={() => setRemoving(device.deviceId)}>
                   {t('sync.remove')}
-                </button>
+                </Button>
               )}
-            </div>
+            </li>
           ))}
-        </div>
+        </ul>
       )}
       {removing && <p className="hint">{t('sync.removeAsk')}</p>}
       {devices
@@ -109,39 +109,45 @@ export default function PhoneSyncBlock({ locale, timezone }: { locale: string; t
         ))}
 
       {idle ? (
-        <>
-          <label>
-            {t('sync.thisComputer')}
-            <input value={name} onChange={(e) => setName(e.target.value)} maxLength={DEVICE_NAME_MAX} autoComplete="off" />
-          </label>
-          <details className="more-options">
-            <summary>{t('sync.addressToggle')}</summary>
-            <label>
-              {t('sync.addressLabel')}
-              <input value={address} onChange={(e) => setAddress(e.target.value)} placeholder="192.168.1.20" inputMode="decimal" autoComplete="off" spellCheck={false} />
-            </label>
-          </details>
-          <Dropdown
-            label={t('sync.mode')}
-            value={mode}
-            options={MODES.map((value) => ({ value, label: t(value === 'both' ? 'sync.modeBoth' : value === 'to_desktop' ? 'sync.modeToDesktop' : 'sync.modeToPhone') }))}
-            onChange={(value) => setMode(MODES.find((m) => m === value) ?? 'both')}
-          />
-          <div className="actions">
-            <button type="button" onClick={() => void begin(true)}>
-              {t('sync.add')}
-            </button>
-            <button type="button" disabled={!devices || devices.length === 0} onClick={() => void begin(false)}>
+        <div className="settings-form">
+          <Rows>
+            <Field>
+              <label>
+                {t('sync.thisComputer')}
+                <input value={name} onChange={(e) => setName(e.target.value)} maxLength={DEVICE_NAME_MAX} autoComplete="off" />
+              </label>
+            </Field>
+            <Field>
+              <details className="more-options">
+                <summary>{t('sync.addressToggle')}</summary>
+                <label>
+                  {t('sync.addressLabel')}
+                  <input value={address} onChange={(e) => setAddress(e.target.value)} placeholder="192.168.1.20" inputMode="decimal" autoComplete="off" spellCheck={false} />
+                </label>
+              </details>
+            </Field>
+            <Field>
+              <Dropdown
+                label={t('sync.mode')}
+                value={mode}
+                options={MODES.map((value) => ({ value, label: t(value === 'both' ? 'sync.modeBoth' : value === 'to_desktop' ? 'sync.modeToDesktop' : 'sync.modeToPhone') }))}
+                onChange={(value) => setMode(MODES.find((m) => m === value) ?? 'both')}
+              />
+            </Field>
+          </Rows>
+          <Actions>
+            <Button onClick={() => void begin(true)}>{t('sync.add')}</Button>
+            <Button variant="outline" disabled={!devices || devices.length === 0} onClick={() => void begin(false)}>
               {t('sync.start')}
-            </button>
-          </div>
-        </>
+            </Button>
+          </Actions>
+        </div>
       ) : (
         <SyncStatusPanel
           status={status}
           side="desktop"
           onEnterCode={() => undefined}
-          onDecide={(choices) => void syncApi.decide(choices).then(refresh, (e) => setMessage(errorText(e)))}
+          onDecide={(choices) => void syncApi.decide(choices).then(refresh, (e) => say(errorText(e), 'error'))}
           onCancel={() => void cancel()}
           onDone={() => void acknowledge()}
         />

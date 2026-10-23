@@ -12,8 +12,9 @@ import EntryModal from '../components/EntryModal'
 import FriendNameModal from '../components/FriendNameModal'
 import SectionTabs from '../components/SectionTabs'
 import SettleModal from '../components/SettleModal'
+import Button from '../components/ui/Button'
 import { useMoneySettings, type MoneySettings } from '../hooks/useMoneySettings'
-import { useNotice } from '../hooks/useNotice'
+import { useToast } from '../hooks/toast'
 import { useProfile } from '../hooks/profile'
 import { useT } from '../i18n/context'
 import { useShortcut } from '../keys/registry'
@@ -49,7 +50,7 @@ function DebtsView({ settings, now }: { settings: MoneySettings; now: Today }) {
   const [scanning, setScanning] = useState(false)
   const [showRemoved, setShowRemoved] = useState(false)
   const [reload, setReload] = useState(0)
-  const [message, setMessage] = useNotice()
+  const say = useToast()
   const [addingFriend, setAddingFriend] = useState(false)
   const [entryKind, setEntryKind] = useState<EntryKind | null>(null)
   const [settling, setSettling] = useState<Person | null>(null)
@@ -69,13 +70,13 @@ function DebtsView({ settings, now }: { settings: MoneySettings; now: Today }) {
         setDue(owed)
       },
       (failure) => {
-        if (!cancelled) setMessage(errorText(failure))
+        if (!cancelled) say(errorText(failure), 'error')
       },
     )
     return () => {
       cancelled = true
     }
-  }, [showRemoved, reload, setMessage])
+  }, [showRemoved, reload, say])
 
   // the history is read a page at a time, only while it is shown
   useEffect(() => {
@@ -86,13 +87,13 @@ function DebtsView({ settings, now }: { settings: MoneySettings; now: Today }) {
         if (!cancelled) setHistory(loaded)
       },
       (failure) => {
-        if (!cancelled) setMessage(errorText(failure))
+        if (!cancelled) say(errorText(failure), 'error')
       },
     )
     return () => {
       cancelled = true
     }
-  }, [tab, historyOffset, reload, setMessage])
+  }, [tab, historyOffset, reload, say])
 
   // A friend is taken off the list, never erased: the balance and the history stay, and "show removed friends" brings them back.
   async function onDelete(person: Person) {
@@ -100,13 +101,13 @@ function DebtsView({ settings, now }: { settings: MoneySettings; now: Today }) {
     try {
       await debts.archive(person.id)
     } catch (failure) {
-      setMessage(errorText(failure))
+      say(errorText(failure), 'error')
       return
     } finally {
       setPending(false)
       setDeleting(null)
     }
-    setMessage(t('debts.deleted', { name: person.name }))
+    say(t('debts.deleted', { name: person.name }), 'success')
     setReload((value) => value + 1)
     remindersChanged()
   }
@@ -115,7 +116,7 @@ function DebtsView({ settings, now }: { settings: MoneySettings; now: Today }) {
     try {
       await debts.unarchive(person.id)
     } catch (failure) {
-      setMessage(errorText(failure))
+      say(errorText(failure), 'error')
       return
     }
     setReload((value) => value + 1)
@@ -133,8 +134,8 @@ function DebtsView({ settings, now }: { settings: MoneySettings; now: Today }) {
     const result = await scanQr()
     setScanning(false)
     if (result.kind === 'text') setTaking(result.text)
-    else if (result.kind === 'denied') setMessage(t('phone.cameraDenied'))
-    else if (result.kind === 'unavailable') setMessage(t('phone.noScanner'))
+    else if (result.kind === 'denied') say(t('phone.cameraDenied'), 'warning')
+    else if (result.kind === 'unavailable') say(t('phone.noScanner'), 'warning')
   }
 
   // The phone's round button sends the person here to scan a bill or add a friend: the camera or the form opens at once, once.
@@ -165,36 +166,36 @@ function DebtsView({ settings, now }: { settings: MoneySettings; now: Today }) {
     <section className="tx-page">
       <div className="tx-title">
         <h1>{t('debts.title')}</h1>
-        <div className="tx-actions">
-          <button type="button" onClick={() => setEntryKind('LENT')} {...tip('new', t('debts.lent'))}>
+        <div className="tx-actions debts-actions">
+          <Button onClick={() => setEntryKind('LENT')} {...tip('new', t('debts.lent'))}>
             {t('debts.lent')}
-          </button>
-          <button type="button" onClick={() => setEntryKind('BORROWED')}>
+          </Button>
+          <Button variant="outline" onClick={() => setEntryKind('BORROWED')}>
             {t('debts.borrowed')}
-          </button>
-          <button type="button" onClick={() => navigate('/app/transactions', { state: { split: true } })}>
-            {t('split.add')}
-          </button>
+          </Button>
+          {/* The phone has scan in its place: four buttons on both. A bill is still split from a new expense. */}
           {phone ? (
-            <button type="button" disabled={scanning} onClick={() => void onScan()}>
-              {t('code.scan')}
-            </button>
-          ) : null}
-          <button type="button" onClick={() => setTaking('')}>
+            <Button variant="outline" disabled={scanning} onClick={() => void onScan()}>
+              {t('code.scanShort')}
+            </Button>
+          ) : (
+            <Button variant="outline" onClick={() => navigate('/app/transactions', { state: { split: true } })}>
+              {t('split.add')}
+            </Button>
+          )}
+          <Button variant="outline" onClick={() => setTaking('')}>
             {t('code.paste')}
-          </button>
+          </Button>
         </div>
       </div>
-      <p className="notice">{message}</p>
       {reminders && reminders.due.length > 0 ? (
         <p className="notice">{t('debts.due', { names: reminders.due.map((friend) => friend.name).join(', ') })}</p>
       ) : null}
       {scanning ? (
         <div className="scan-overlay" role="dialog" aria-label={t('code.scan')}>
-          <p>{t('code.scanning')}</p>
-          <button type="button" onClick={() => void stopScan()}>
+          <Button variant="outline" onClick={() => void stopScan()}>
             {t('common.cancel')}
-          </button>
+          </Button>
         </div>
       ) : null}
       {taking !== null ? (
@@ -203,7 +204,7 @@ function DebtsView({ settings, now }: { settings: MoneySettings; now: Today }) {
           onClose={() => setTaking(null)}
           onAccepted={() => {
             setTaking(null)
-            setMessage(t('code.accepted'))
+            say(t('code.accepted'), 'success')
             setReload((value) => value + 1)
             remindersChanged()
           }}
@@ -227,7 +228,7 @@ function DebtsView({ settings, now }: { settings: MoneySettings; now: Today }) {
           onClose={() => setEntryKind(null)}
           onSaved={(notAttached) => {
             setEntryKind(null)
-            setMessage(notAttached.length > 0 ? t('docs.attachFailed', { names: notAttached.join(', ') }) : '')
+            if (notAttached.length > 0) say(t('docs.attachFailed', { names: notAttached.join(', ') }), 'warning')
             setReload((value) => value + 1)
             remindersChanged()
           }}
@@ -240,7 +241,7 @@ function DebtsView({ settings, now }: { settings: MoneySettings; now: Today }) {
           onClose={() => setSettling(null)}
           onDone={() => {
             setSettling(null)
-            setMessage(t('debts.settled'))
+            say(t('debts.settled'), 'success')
             setReload((value) => value + 1)
             remindersChanged()
           }}
@@ -271,27 +272,31 @@ function DebtsView({ settings, now }: { settings: MoneySettings; now: Today }) {
         tabs={[
           { id: 'friends', label: t('debts.tabFriends') },
           { id: 'due', label: due && due.payments.length > 0 ? `${t('debts.dueTitle')} (${due.payments.length})` : t('debts.dueTitle') },
-          { id: 'history', label: t('debts.historyTitle') },
+          { id: 'history', label: t('debts.historyTab') },
         ]}
       />
       {tab === 'due' && due ? (
-        <div className="tx-pane wide" role="tabpanel">
+        <div className="tx-pane wide pane-stack" role="tabpanel">
           <DebtsDue due={due} currency={settings.currency} locale={settings.locale} />
         </div>
       ) : null}
       {tab === 'history' && history ? (
-        <div className="tx-pane wide" role="tabpanel">
+        <div className="tx-pane wide pane-stack" role="tabpanel">
           <DebtsHistory history={history} currency={settings.currency} locale={settings.locale} onPage={setHistoryOffset} />
         </div>
       ) : null}
       {tab === 'friends' && people ? (
-        <div className="tx-pane wide" role="tabpanel">
-          <div>
-            <button type="button" onClick={() => setAddingFriend(true)}>
+        <div className="tx-pane wide pane-stack" role="tabpanel">
+          <div className="debts-bar">
+            <Button variant="outline" onClick={() => setAddingFriend(true)}>
               {t('debts.addFriend')}
-            </button>
+            </Button>
+            <label>
+              <input type="checkbox" checked={showRemoved} onChange={(event) => setShowRemoved(event.target.checked)} />
+              {t('debts.showRemoved')}
+            </label>
           </div>
-          {people.length === 0 ? <p>{t('debts.empty')}</p> : null}
+          {people.length === 0 ? <p className="hint">{t('debts.empty')}</p> : null}
           <ul className="card-list">
             {people.map((person) => {
               const { tone } = balanceView(person.balance)
@@ -308,32 +313,28 @@ function DebtsView({ settings, now }: { settings: MoneySettings; now: Today }) {
                     </p>
                   </div>
                   <div className="card-actions">
-                    <button type="button" data-row-focus onClick={() => setEditing(person)}>
+                    <Button variant="ghost" size="sm" data-row-focus onClick={() => setEditing(person)}>
                       {t('common.edit')}
-                    </button>
+                    </Button>
                     {person.archived ? (
-                      <button type="button" onClick={() => void bringBack(person)}>
+                      <Button variant="ghost" size="sm" onClick={() => void bringBack(person)}>
                         {t('debts.unarchive')}
-                      </button>
+                      </Button>
                     ) : (
-                      <button type="button" onClick={() => setDeleting(person)}>
+                      <Button variant="ghost" size="sm" className="row-danger" onClick={() => setDeleting(person)}>
                         {t('common.delete')}
-                      </button>
+                      </Button>
                     )}
                     {tone !== 'even' ? (
-                      <button type="button" onClick={() => setSettling(person)}>
+                      <Button variant="outline" size="sm" onClick={() => setSettling(person)}>
                         {t('debts.settle')}
-                      </button>
+                      </Button>
                     ) : null}
                   </div>
                 </li>
               )
             })}
           </ul>
-          <label>
-            <input type="checkbox" checked={showRemoved} onChange={(event) => setShowRemoved(event.target.checked)} />
-            {t('debts.showRemoved')}
-          </label>
         </div>
       ) : null}
     </section>

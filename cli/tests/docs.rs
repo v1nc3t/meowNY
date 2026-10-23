@@ -29,7 +29,8 @@ const HOME: &str = "/home/you";
 
 /// Outputs that legitimately differ from run to run (the clock, file sizes, timestamps inside files). They are
 /// compared by exit code, by the shape of their JSON and by the frame of their plain output, not word for word.
-const MOVES: &[&str] = &["today", "recurring dues", "debts due", "debts history", "debts reminders", "budgets history", "recurring end", "documents add", "documents list", "documents show", "documents update", "export debts", "export json", "export csv", "export xlsx", "export pdf", "backup create", "schema"];
+/// "export preview" counts the payments that are due, and more fall due as the days go by, as with "debts due".
+const MOVES: &[&str] = &["today", "recurring dues", "debts due", "debts history", "debts reminders", "budgets history", "recurring end", "documents add", "documents list", "documents show", "documents update", "export debts", "export preview", "export json", "export csv", "export xlsx", "export pdf", "backup create", "schema"];
 
 #[derive(Clone, Copy)]
 enum Who {

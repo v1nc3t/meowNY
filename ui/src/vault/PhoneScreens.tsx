@@ -5,8 +5,11 @@ import { useNotice } from '../hooks/useNotice'
 import { useI18n, useT } from '../i18n/context'
 import { languageOptions } from '../i18n/languages'
 import { errorText, vault } from './api'
+import Decrypting from './Decrypting'
+import { atLeast, closeKeyboard, useRefocus } from './decrypting'
 import PasswordField from './PasswordField'
 import { defaultSettings, phonePassphraseProblem } from './rules'
+import Button from '../components/ui/Button'
 
 /**
  * First start on a phone: a language and a passphrase, nothing else. The phone is a copy of the desktop, so its currency, number
@@ -17,7 +20,9 @@ export function PhoneFirstRun({ onDone }: { onDone: () => void }) {
   const { t, language, setLanguage } = useI18n()
   const [message, setMessage] = useNotice()
   const [busy, setBusy] = useState(false)
+  const [workDone, setWorkDone] = useState(false)
   const [typed, setTyped] = useState('')
+  const formRef = useRefocus(busy)
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -25,11 +30,15 @@ export function PhoneFirstRun({ onDone }: { onDone: () => void }) {
     const passphrase = String(form.get('passphrase'))
     const problem = phonePassphraseProblem(passphrase, String(form.get('confirm')))
     if (problem) return setMessage(problem)
+    closeKeyboard()
+    setWorkDone(false)
     setBusy(true)
     try {
       const { locale, timezone } = defaultSettings()
       // The recovery key is not shown: on a phone it could only open the data, and the data is on the desktop too.
-      await vault.create({ currency: PHONE_PLACEHOLDER_CURRENCY, locale, timezone, language }, passphrase)
+      await atLeast(vault.create({ currency: PHONE_PLACEHOLDER_CURRENCY, locale, timezone, language }, passphrase), () =>
+        setWorkDone(true),
+      )
       onDone()
     } catch (error) {
       setMessage(errorText(error))
@@ -39,7 +48,7 @@ export function PhoneFirstRun({ onDone }: { onDone: () => void }) {
 
   return (
     <main className="gate">
-      <form onSubmit={onSubmit}>
+      <form ref={formRef} onSubmit={onSubmit}>
         <p className="brand-mark">meowny</p>
         <h1>{t('phone.welcomeTitle')}</h1>
 
@@ -57,13 +66,14 @@ export function PhoneFirstRun({ onDone }: { onDone: () => void }) {
           {t('phone.eraseWarning')}
         </p>
 
-        <button type="submit" disabled={busy}>
+        <Button type="submit" disabled={busy}>
           {t('phone.welcomeCreate')}
-        </button>
+        </Button>
         <p className="notice" role="alert">
           {message}
         </p>
       </form>
+      {busy && <Decrypting below done={workDone} />}
     </main>
   )
 }
@@ -80,9 +90,7 @@ export function ErasedScreen({ onContinue }: { onContinue: () => void }) {
           {t('phone.erasedText')}
         </p>
         <p className="hint">{t('phone.erasedNext')}</p>
-        <button type="button" onClick={onContinue}>
-          {t('common.continue')}
-        </button>
+        <Button onClick={onContinue}>{t('common.continue')}</Button>
       </div>
     </main>
   )
@@ -117,12 +125,12 @@ export function ForgotPhone({ onBack }: { onBack: () => void }) {
           {t('settings.deleteConfirm')}
           <input value={word} onChange={(e) => setWord(e.target.value)} autoComplete="off" />
         </label>
-        <button type="submit" disabled={word !== 'DELETE'}>
+        <Button type="submit" variant="destructive" disabled={word !== 'DELETE'}>
           {t('phone.forgotErase')}
-        </button>
-        <button type="button" onClick={onBack}>
+        </Button>
+        <Button variant="outline" onClick={onBack}>
           {t('common.back')}
-        </button>
+        </Button>
         <p className="notice" role="alert">
           {message}
         </p>

@@ -65,6 +65,17 @@ fn make_vault(dir: std::path::PathBuf) -> Vault {
     phone_vault(dir)
 }
 
+/// WebKitGTK's GPU drawing leaves stale pixels behind on some Linux graphics setups (seen with WebKitGTK 2.52 on X11 with Intel
+/// and NVIDIA graphics): old card borders stay on screen as lines when the window is resized. Drawing on the CPU has no such
+/// lines and stays smooth; turning off the DMA-BUF renderer instead also removed them, but made every page lag. A value the
+/// person set themselves is kept. It must run before any thread or the webview starts.
+#[cfg(target_os = "linux")]
+fn avoid_webkit_repaint_glitch() {
+    if std::env::var_os("WEBKIT_SKIA_ENABLE_CPU_RENDERING").is_none() {
+        std::env::set_var("WEBKIT_SKIA_ENABLE_CPU_RENDERING", "1");
+    }
+}
+
 /// Panic messages can quote data (an amount, a description), so only the location is printed.
 fn install_safe_panic_hook() {
     std::panic::set_hook(Box::new(|info| match info.location() {
@@ -124,6 +135,8 @@ impl api::Show for AllowDialog {
 // On a phone the app starts through this entry point (Tauri's generated Android project calls it); on a computer `main` does.
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    #[cfg(target_os = "linux")]
+    avoid_webkit_repaint_glitch();
     install_safe_panic_hook();
 
     let builder = tauri::Builder::default()

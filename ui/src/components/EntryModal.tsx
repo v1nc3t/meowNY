@@ -3,7 +3,7 @@ import { categories as categoriesApi, type Category } from '../api/categories'
 import { debts, ENTRY_KINDS, type Entry, type EntryKind, type Person } from '../api/debts'
 import { errorText } from '../api/invoke'
 import { useAttachments } from '../hooks/useAttachments'
-import { useNotice } from '../hooks/useNotice'
+import { useToast } from '../hooks/toast'
 import { useT } from '../i18n/context'
 import { amountString } from '../lib/money'
 import AttachArea from './AttachArea'
@@ -44,7 +44,7 @@ export default function EntryModal({
   const [alsoExpense, setAlsoExpense] = useState(false)
   const [categoryId, setCategoryId] = useState('')
   const [addingFriend, setAddingFriend] = useState(false)
-  const [message, setMessage] = useNotice()
+  const say = useToast()
   const [pending, setPending] = useState(false)
   // The documents of an entry that exists are stored and linked at once; those of one being made wait for it to be saved.
   const attachments = useAttachments(entry ? { kind: 'ledger_entry', id: entry.id } : null)
@@ -59,13 +59,13 @@ export default function EntryModal({
         setExpenseCategories(expense)
       },
       (failure) => {
-        if (!cancelled) setMessage(errorText(failure))
+        if (!cancelled) say(errorText(failure), 'error')
       },
     )
     return () => {
       cancelled = true
     }
-  }, [entry, setMessage])
+  }, [entry, say])
 
   const friendOptions = friends.map((friend) => ({ value: friend.id, label: friend.name }))
 
@@ -77,16 +77,16 @@ export default function EntryModal({
     const note = String(form.get('note') ?? '').trim()
     const expenseName = String(form.get('expenseName') ?? '').trim()
     if (!personId || !date) {
-      setMessage(t('debts.errorRequired'))
+      say(t('debts.errorRequired'), 'error')
       return
     }
     if (!amount) {
-      setMessage(t('tx.errorAmount'))
+      say(t('tx.errorAmount'), 'error')
       return
     }
     const withExpense = !entry && kind === 'BORROWED' && alsoExpense
     if (withExpense && (!expenseName || !categoryId)) {
-      setMessage(t('debts.errorExpense'))
+      say(t('debts.errorExpense'), 'error')
       return
     }
     setPending(true)
@@ -102,7 +102,7 @@ export default function EntryModal({
         notAttached = await attachments.commit({ kind: 'ledger_entry', id: created.id })
       }
     } catch (failure) {
-      setMessage(errorText(failure))
+      say(errorText(failure), 'error')
       return
     } finally {
       setPending(false)
@@ -113,7 +113,6 @@ export default function EntryModal({
   return (
     <>
       <Modal title={entry ? t('debts.entryEditTitle') : t('debts.entryAddTitle')} pending={pending} onClose={onClose}>
-        <p className="notice">{message}</p>
         <form id={modalFormId} onSubmit={(event) => void onSubmit(event)}>
           <Dropdown
             label={t('debts.friend')}

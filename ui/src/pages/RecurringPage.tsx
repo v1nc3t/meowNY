@@ -9,6 +9,8 @@ import SplitEditor from '../components/SplitEditor'
 import Dropdown from '../components/Dropdown'
 import ConfirmModal from '../components/ConfirmModal'
 import Modal, { modalFormId } from '../components/Modal'
+import Badge from '../components/ui/Badge'
+import Button from '../components/ui/Button'
 import { categories as categoriesApi, type Category } from '../api/categories'
 import { debts, type Person } from '../api/debts'
 import { errorText } from '../api/invoke'
@@ -21,7 +23,7 @@ import { useAttachments, type Attachments } from '../hooks/useAttachments'
 import { useClipCounts } from '../hooks/useClipCounts'
 import { useFocusRequest, useJumpTo } from '../hooks/useFocusRequest'
 import { useMoneySettings, type MoneySettings } from '../hooks/useMoneySettings'
-import { useNotice } from '../hooks/useNotice'
+import { useToast } from '../hooks/toast'
 import { useT } from '../i18n/context'
 import { useShortcut } from '../keys/registry'
 import { tip } from '../keys/tip'
@@ -51,6 +53,8 @@ const CONFIRMED: Record<ConfirmKind, (item: Recurring) => Promise<unknown>> = {
   delete: (item) => recurringApi.remove(item.id),
 }
 const CONFIRM_TITLE = { skip: 'rec.skip', pause: 'rec.pause', end: 'rec.end', delete: 'common.delete' } as const
+/** The look of the word beside the date: overdue is red, the rest are calm. */
+const STATE_BADGE = { overdue: 'destructive', today: 'secondary', paused: 'outline', ended: 'outline' } as const
 
 export default function RecurringPage() {
   const { settings, error } = useMoneySettings()
@@ -77,8 +81,7 @@ function RecurringView({ settings, now }: { settings: MoneySettings; now: Today 
   const [coding, setCoding] = useState<{ item: Recurring; personId: string; name: string } | null>(null)
   const [confirming, setConfirming] = useState<{ kind: ConfirmKind; item: Recurring } | null>(null)
   const [pending, setPending] = useState(false)
-  const [draftMessage, setDraftMessage] = useNotice()
-  const [message, setMessage] = useNotice()
+  const say = useToast()
   // The documents of the item being edited are stored and linked at once; those of one being made wait for it to be saved.
   const attachments = useAttachments(editing ? { kind: 'recurring', id: editing.id } : null)
   const clips = useClipCounts('recurring', items?.map((item) => item.id) ?? [], reload)
@@ -119,13 +122,13 @@ function RecurringView({ settings, now }: { settings: MoneySettings; now: Today 
         setFriends(people)
       },
       (failure) => {
-        if (!cancelled) setMessage(errorText(failure))
+        if (!cancelled) say(errorText(failure), 'error')
       },
     )
     return () => {
       cancelled = true
     }
-  }, [reload, setMessage])
+  }, [reload, say])
 
   function closeModals() {
     // documents may have been attached or removed in the dialog, so the marks on the list are asked for again
@@ -137,7 +140,6 @@ function RecurringView({ settings, now }: { settings: MoneySettings; now: Today 
   }
 
   function openAdd() {
-    setDraftMessage('')
     closeModals()
     attachments.reset()
     setSplit(NOT_SPLIT)
@@ -145,7 +147,6 @@ function RecurringView({ settings, now }: { settings: MoneySettings; now: Today 
   }
 
   function openEdit(item: Recurring) {
-    setDraftMessage('')
     closeModals()
     attachments.reset()
     // a saved template opens as shares: the weights, as they are kept
@@ -154,7 +155,6 @@ function RecurringView({ settings, now }: { settings: MoneySettings; now: Today 
   }
 
   function openPay(item: Recurring) {
-    setDraftMessage('')
     closeModals()
     // the documents of a payment wait in the dialog and are attached to the transaction it makes
     attachments.reset()
@@ -175,15 +175,14 @@ function RecurringView({ settings, now }: { settings: MoneySettings; now: Today 
     setConfirming(null)
   }
 
-  // Runs one change, then reloads the list. Failures show as a notice.
+  // Runs one change, then reloads the list. Failures show as a toast.
   async function run(action: () => Promise<unknown>) {
     try {
       await action()
     } catch (failure) {
-      setMessage(errorText(failure))
+      say(errorText(failure), 'error')
       return false
     }
-    setMessage('')
     setReload((value) => value + 1)
     return true
   }
@@ -203,15 +202,15 @@ function RecurringView({ settings, now }: { settings: MoneySettings; now: Today 
     const endDate = String(form.get('endDate') ?? '')
     const description = String(form.get('description') ?? '').trim()
     if (!name || !categoryId || !startDate) {
-      setDraftMessage(t('rec.errorRequired'))
+      say(t('rec.errorRequired'), 'error')
       return
     }
     if (amountText !== '' && !amount) {
-      setDraftMessage(t('rec.errorAmount'))
+      say(t('rec.errorAmount'), 'error')
       return
     }
     if (!Number.isInteger(count) || count < 1 || count > MAX_COUNT || !INTERVAL_UNITS.includes(intervalUnit)) {
-      setDraftMessage(t('rec.errorCount'))
+      say(t('rec.errorCount'), 'error')
       return
     }
     const body = {
@@ -231,11 +230,11 @@ function RecurringView({ settings, now }: { settings: MoneySettings; now: Today 
     const sendSplit = wantsSplit && (split.touched || !hadSplit)
     const input = sendSplit ? toInput(split.draft) : null
     if (sendSplit && (!split.ready || !input)) {
-      setDraftMessage(t('split.notComplete'))
+      say(t('split.notComplete'), 'error')
       return
     }
     setPending(true)
-    // what could not be attached to a new item: it is saved all the same, and the notice names the files
+    // what could not be attached to a new item: it is saved all the same, and the toast names the files
     let notAttached: string[] = []
     try {
       if (editing) {
@@ -248,13 +247,12 @@ function RecurringView({ settings, now }: { settings: MoneySettings; now: Today 
         notAttached = await attachments.commit({ kind: 'recurring', id: created.id })
       }
     } catch (failure) {
-      setDraftMessage(errorText(failure))
+      say(errorText(failure), 'error')
       return
     } finally {
       setPending(false)
     }
-    setDraftMessage('')
-    setMessage(notAttached.length > 0 ? t('docs.attachFailed', { names: notAttached.join(', ') }) : '')
+    if (notAttached.length > 0) say(t('docs.attachFailed', { names: notAttached.join(', ') }), 'warning')
     closeModals()
     setReload((value) => value + 1)
   }
@@ -266,7 +264,7 @@ function RecurringView({ settings, now }: { settings: MoneySettings; now: Today 
     const amount = amountString(String(form.get('amount') ?? ''), false)
     const paidOn = String(form.get('paidOn') ?? '')
     if (!amount) {
-      setDraftMessage(t('rec.errorAmount'))
+      say(t('rec.errorAmount'), 'error')
       return
     }
     setPending(true)
@@ -275,13 +273,12 @@ function RecurringView({ settings, now }: { settings: MoneySettings; now: Today 
       const paid = await recurringApi.pay(paying.id, { amount, paidOn })
       notAttached = await attachments.commit({ kind: 'transaction', id: paid.id })
     } catch (failure) {
-      setDraftMessage(errorText(failure))
+      say(errorText(failure), 'error')
       return
     } finally {
       setPending(false)
     }
-    setDraftMessage('')
-    setMessage(notAttached.length > 0 ? t('docs.attachFailed', { names: notAttached.join(', ') }) : '')
+    if (notAttached.length > 0) say(t('docs.attachFailed', { names: notAttached.join(', ') }), 'warning')
     closeModals()
     setReload((value) => value + 1)
   }
@@ -312,12 +309,11 @@ function RecurringView({ settings, now }: { settings: MoneySettings; now: Today 
       <div className="tx-title">
         <h1>{t('rec.title')}</h1>
         <div className="tx-actions">
-          <button type="button" onClick={() => openAdd()} {...tip('new', t('rec.add'))}>
+          <Button onClick={() => openAdd()} {...tip('new', t('rec.add'))}>
             {t('rec.add')}
-          </button>
+          </Button>
         </div>
       </div>
-      <p className="notice">{message}</p>
       {adding || editing ? (
         <RecurringModal
           key={editing ? editing.id : 'new'}
@@ -325,7 +321,6 @@ function RecurringView({ settings, now }: { settings: MoneySettings; now: Today 
           todayDate={now.date}
           categories={categories}
           pending={pending}
-          message={draftMessage}
           attachments={attachments}
           split={split}
           onSplit={setSplit}
@@ -339,6 +334,7 @@ function RecurringView({ settings, now }: { settings: MoneySettings; now: Today 
         <ConfirmModal
           title={t('rec.confirmTitle', { action: t(CONFIRM_TITLE[confirming.kind]), name: confirming.item.name })}
           pending={pending}
+          danger={confirming.kind === 'end' || confirming.kind === 'delete'}
           onConfirm={() => void onConfirm()}
           onClose={() => setConfirming(null)}
         />
@@ -352,7 +348,6 @@ function RecurringView({ settings, now }: { settings: MoneySettings; now: Today 
       ) : null}
       {paying ? (
         <Modal title={t('rec.payTitle')} pending={pending} onClose={closeModals}>
-          <p className="notice">{draftMessage}</p>
           <form id={modalFormId} onSubmit={(event) => void onPay(event)}>
             <p>{paying.name}</p>
             {paying.amount === null ? <p className="hint">{t('rec.payHint')}</p> : null}
@@ -367,10 +362,13 @@ function RecurringView({ settings, now }: { settings: MoneySettings; now: Today 
       ) : null}
       {items ? (
         <div className="tx-pane wide">
-          {items.length === 0 ? <p>{t('rec.empty')}</p> : null}
+          {items.length === 0 ? <p className="hint">{t('rec.empty')}</p> : null}
           {groups.map((group) => (
             <Fragment key={group.id}>
-              <h2 className="rec-group">{group.name}</h2>
+              <h2 className="rec-group">
+                {group.name}
+                <span className="rec-count">{group.items.length}</span>
+              </h2>
               <ul className="rec-list">
                 {group.items.map((item) => {
                   const status = statusOf(item, now.date)
@@ -396,30 +394,29 @@ function RecurringView({ settings, now }: { settings: MoneySettings; now: Today 
                           <p className="hint">{t('split.archivedFriend')}</p>
                         ) : null}
                         {item.split || item.description?.trim() ? (
-                          <button
-                            type="button"
+                          <Button
+                            variant="link"
                             className="tx-desc"
                             aria-expanded={openId === item.id}
                             onClick={() => setOpenId((current) => (current === item.id ? null : item.id))}
                           >
                             {t('common.details')}
-                          </button>
+                          </Button>
                         ) : null}
                         {openId === item.id ? (
                           <div className="card-detail">
                             {item.split ? (
                               <section className="detail-section">
                                 <p className="detail-title">{t('split.section')}</p>
-                                <p>{t('split.templateHint')}</p>
                                 {(() => {
                                   const shares = reducedWeights([item.split.mine, ...item.split.parts.map((part) => part.weight)])
                                   return [t('split.you'), ...item.split.parts.map((part) => part.person ?? part.guest ?? '')].map((name, at) => (
                                     <div className="split-part" key={`${name}-${at}`}>
                                       <span>{`${name} ${shares[at] ?? 0}`}</span>
                                       {codeFor(item, at - 1) ? (
-                                        <button type="button" onClick={() => setCoding(codeFor(item, at - 1))}>
+                                        <Button variant="outline" size="sm" onClick={() => setCoding(codeFor(item, at - 1))}>
                                           {t('code.show')}
-                                        </button>
+                                        </Button>
                                       ) : null}
                                     </div>
                                   ))
@@ -436,52 +433,52 @@ function RecurringView({ settings, now }: { settings: MoneySettings; now: Today 
                         ) : null}
                       </div>
                       <div className="rec-due">
-                        <span className="rec-badge" data-status={status}>
+                        <span className="rec-status">
                           <span className="rec-date">{badge.date}</span>
-                          {badge.state ? <span className="rec-state">{badge.state}</span> : null}
+                          {status !== 'upcoming' ? <Badge variant={STATE_BADGE[status]}>{badge.state}</Badge> : null}
                         </span>
                         {item.isActive ? (
                           <span className="rec-actions">
-                            <button type="button" className="rec-pay" data-row-focus onClick={() => openPay(item)}>
+                            <Button size="sm" data-row-focus onClick={() => openPay(item)}>
                               {t('rec.pay')}
-                            </button>
-                            <button type="button" className="rec-act" onClick={() => setConfirming({ kind: 'skip', item })}>
+                            </Button>
+                            <Button variant="ghost" size="sm" onClick={() => setConfirming({ kind: 'skip', item })}>
                               {t('rec.skip')}
-                            </button>
-                            <button type="button" className="rec-act" onClick={() => setConfirming({ kind: 'pause', item })}>
+                            </Button>
+                            <Button variant="ghost" size="sm" onClick={() => setConfirming({ kind: 'pause', item })}>
                               {t('rec.pause')}
-                            </button>
+                            </Button>
                           </span>
                         ) : status === 'paused' ? (
                           <span className="rec-actions">
-                            <button type="button" className="rec-pay" data-row-focus onClick={() => void run(() => recurringApi.setActive(item.id, true))}>
+                            <Button variant="outline" size="sm" data-row-focus onClick={() => void run(() => recurringApi.setActive(item.id, true))}>
                               {t('rec.resume')}
-                            </button>
+                            </Button>
                           </span>
                         ) : null}
                       </div>
                       <div className="rec-more">
-                        <button type="button" onClick={() => openEdit(item)}>
+                        <Button variant="ghost" size="sm" onClick={() => openEdit(item)}>
                           {t('common.edit')}
-                        </button>
+                        </Button>
                         {(() => {
                           // an item split with friends has a code for each of them: one friend opens it, several open the details to choose
                           const friends = (item.split?.parts ?? []).map((_, at) => codeFor(item, at)).filter((code) => code !== null)
                           if (friends.length === 0) return null
                           return (
-                            <button type="button" onClick={() => (friends.length === 1 ? setCoding(friends[0] ?? null) : setOpenId(item.id))}>
+                            <Button variant="ghost" size="sm" onClick={() => (friends.length === 1 ? setCoding(friends[0] ?? null) : setOpenId(item.id))}>
                               {t('code.show')}
-                            </button>
+                            </Button>
                           )
                         })()}
                         {status !== 'ended' ? (
-                          <button type="button" onClick={() => setConfirming({ kind: 'end', item })}>
+                          <Button variant="ghost" size="sm" className="row-danger" onClick={() => setConfirming({ kind: 'end', item })}>
                             {t('rec.end')}
-                          </button>
+                          </Button>
                         ) : null}
-                        <button type="button" onClick={() => setConfirming({ kind: 'delete', item })}>
+                        <Button variant="ghost" size="sm" className="row-danger" onClick={() => setConfirming({ kind: 'delete', item })}>
                           {t('common.delete')}
-                        </button>
+                        </Button>
                       </div>
                     </li>
                   )
@@ -501,7 +498,6 @@ function RecurringModal({
   todayDate,
   categories,
   pending,
-  message,
   attachments,
   split,
   onSplit,
@@ -514,7 +510,6 @@ function RecurringModal({
   todayDate: string
   categories: Category[]
   pending: boolean
-  message: string
   attachments: Attachments
   split: SplitState
   onSplit: (split: SplitState) => void
@@ -535,7 +530,6 @@ function RecurringModal({
   return (
     <>
       <Modal title={item ? t('rec.editTitle') : t('rec.addTitle')} pending={pending} onClose={onClose}>
-        <p className="notice">{message}</p>
         <form id={modalFormId} onSubmit={onSubmit}>
           <label>
             {t('common.name')}
@@ -545,7 +539,6 @@ function RecurringModal({
             {t('tx.amount')}
             <input name="amount" inputMode="decimal" value={amount} onChange={(event) => setAmount(event.target.value)} autoComplete="off" />
           </label>
-          <p className="hint">{t('rec.amountHint')}</p>
           <Dropdown
             label={t('common.category')}
             name="categoryId"
@@ -580,15 +573,12 @@ function RecurringModal({
             <p className="hint">{t('split.onlyExpenses')}</p>
           ) : null}
           {canSplit && split.on ? (
-            <>
-              <p className="hint">{t('split.templateHint')}</p>
-              <SplitEditor
-                amount={amount.trim() === '' ? null : amount}
-                draft={split.draft}
-                onChange={(draft) => onSplit({ ...split, draft, touched: true })}
-                onReady={onSplitReady}
-              />
-            </>
+            <SplitEditor
+              amount={amount.trim() === '' ? null : amount}
+              draft={split.draft}
+              onChange={(draft) => onSplit({ ...split, draft, touched: true })}
+              onReady={onSplitReady}
+            />
           ) : null}
           <label>
             {t('common.description')}

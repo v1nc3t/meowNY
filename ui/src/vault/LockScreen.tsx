@@ -2,12 +2,15 @@ import { useEffect, useState, type FormEvent } from 'react'
 import { messageFor } from '../api/invoke'
 import { shouldWarn, syncApi, type Attempts } from '../api/sync'
 import { errorText, vault, VaultError } from './api'
+import Decrypting, { DecryptingPage } from './Decrypting'
+import { atLeast, closeKeyboard, useDecryptingGate, useRefocus } from './decrypting'
 import PasswordField from './PasswordField'
 import { ErasedScreen, ForgotPhone } from './PhoneScreens'
 import { passphraseProblem } from './rules'
 import { useNotice } from '../hooks/useNotice'
 import { useProfile } from '../hooks/profile'
 import { useT } from '../i18n/context'
+import Button from '../components/ui/Button'
 
 export default function LockScreen({ onUnlocked }: { onUnlocked: () => void }) {
   const t = useT()
@@ -19,6 +22,13 @@ export default function LockScreen({ onUnlocked }: { onUnlocked: () => void }) {
   const [recovering, setRecovering] = useState(false)
   const [message, setMessage] = useNotice()
   const [busy, setBusy] = useState(false)
+  // The data is open; the decrypting line may run to its end.
+  const [workDone, setWorkDone] = useState(false)
+  // The silent first try (desktop, keychain only) is a loading state of its own; `opened` waits for the loading screen to finish.
+  const [trying, setTrying] = useState(!phone)
+  const [opened, setOpened] = useState(false)
+  const loading = useDecryptingGate(trying)
+  const formRef = useRefocus(busy)
 
   // Try without a passphrase first: a keychain-only vault opens straight away. A phone always asks.
   useEffect(() => {
@@ -29,10 +39,13 @@ export default function LockScreen({ onUnlocked }: { onUnlocked: () => void }) {
     let cancelled = false
     vault.unlock('').then(
       () => {
-        if (!cancelled) onUnlocked()
+        if (cancelled) return
+        setTrying(false)
+        setOpened(true)
       },
       (error) => {
         if (cancelled) return
+        setTrying(false)
         if (error?.code === 'wrong_credentials') setNeedsPassphrase(true)
         else if (error?.code === 'key_unavailable') setKeyMissing(true)
         else setMessage(errorText(error))
@@ -41,14 +54,21 @@ export default function LockScreen({ onUnlocked }: { onUnlocked: () => void }) {
     return () => {
       cancelled = true
     }
-  }, [onUnlocked, phone, setMessage])
+  }, [phone, setMessage])
+
+  // Go on into the app once the data is open and the loading screen (if it came up) has had its time.
+  useEffect(() => {
+    if (opened && !loading.show) onUnlocked()
+  }, [opened, loading.show, onUnlocked])
 
   async function onUnlock(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     const passphrase = String(new FormData(event.currentTarget).get('passphrase'))
+    closeKeyboard()
+    setWorkDone(false)
     setBusy(true)
     try {
-      await vault.unlock(passphrase)
+      await atLeast(vault.unlock(passphrase), () => setWorkDone(true))
       onUnlocked()
     } catch (error) {
       if (error instanceof VaultError && error.code === 'erased') return setErased(true)
@@ -64,15 +84,20 @@ export default function LockScreen({ onUnlocked }: { onUnlocked: () => void }) {
     const passphrase = String(form.get('passphrase'))
     const problem = passphraseProblem(passphrase, String(form.get('confirm')))
     if (problem) return setMessage(problem)
+    closeKeyboard()
+    setWorkDone(false)
     setBusy(true)
     try {
-      await vault.recover(String(form.get('recoveryKey')), passphrase)
+      await atLeast(vault.recover(String(form.get('recoveryKey')), passphrase), () => setWorkDone(true))
       onUnlocked()
     } catch (error) {
       setMessage(errorText(error))
       setBusy(false)
     }
   }
+
+  if (loading.show) return <DecryptingPage done={!trying} />
+  if (loading.blank || opened) return null
 
   if (erased) return <ErasedScreen onContinue={onUnlocked} />
 
@@ -81,10 +106,9 @@ export default function LockScreen({ onUnlocked }: { onUnlocked: () => void }) {
   if (recovering) {
     return (
       <main className="gate">
-        <form onSubmit={onRecover}>
+        <form ref={formRef} onSubmit={onRecover}>
           <p className="brand-mark">meowny</p>
           <h1>{t('recovery.title')}</h1>
-          <p className="hint">{t('recovery.enter')}</p>
           <label>
             {t('recovery.label')}
             <input
@@ -98,29 +122,30 @@ export default function LockScreen({ onUnlocked }: { onUnlocked: () => void }) {
           </label>
           <PasswordField label={t('recovery.newPassphrase')} name="passphrase" />
           <PasswordField label={t('recovery.newPassphraseRepeat')} name="confirm" />
-          <button type="submit" disabled={busy}>
+          <Button type="submit" disabled={busy}>
             {t('common.unlock')}
-          </button>
-          <button
-            type="button"
+          </Button>
+          <Button
+            variant="outline"
             onClick={() => {
               setRecovering(false)
               setMessage('')
             }}
           >
             {t('common.back')}
-          </button>
+          </Button>
           <p className="notice" role="alert">
             {message}
           </p>
         </form>
+        {busy && <Decrypting below done={workDone} />}
       </main>
     )
   }
 
   return (
     <main className="gate">
-      <form onSubmit={onUnlock}>
+      <form ref={formRef} onSubmit={onUnlock}>
         <p className="brand-mark">meowny</p>
         <h1>{t('lock.title')}</h1>
         {needsPassphrase && (
@@ -131,21 +156,21 @@ export default function LockScreen({ onUnlocked }: { onUnlocked: () => void }) {
                 {t(attempts.left === 1 ? 'lock.lastAttempt' : 'lock.attemptsLeft', { count: attempts.left })}
               </p>
             ) : null}
-            <button type="submit" disabled={busy}>
+            <Button type="submit" disabled={busy}>
               {t('common.unlock')}
-            </button>
+            </Button>
           </>
         )}
         {(needsPassphrase || keyMissing) && (
-          <button
-            type="button"
+          <Button
+            variant={needsPassphrase ? 'ghost' : 'default'}
             onClick={() => {
               setRecovering(true)
               setMessage('')
             }}
           >
             {keyMissing && !phone ? t('lock.useRecovery') : t('lock.forgot')}
-          </button>
+          </Button>
         )}
         {/* This one stays: it explains why the app cannot open by itself. */}
         {keyMissing ? <p className="notice">{messageFor('key_unavailable')}</p> : null}
@@ -153,6 +178,7 @@ export default function LockScreen({ onUnlocked }: { onUnlocked: () => void }) {
           {message}
         </p>
       </form>
+      {busy && <Decrypting below done={workDone} />}
     </main>
   )
 }

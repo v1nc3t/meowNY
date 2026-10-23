@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { checkFileSize, documents, type Doc, type Target } from '../api/documents'
 import { errorText } from '../api/invoke'
-import { useNotice } from './useNotice'
+import { useToast } from './toast'
 import { useT } from '../i18n/context'
 
 export type Pending = { key: number; file: File } | { key: number; doc: Doc }
@@ -18,7 +18,7 @@ export function useAttachments(target: Target | null) {
   const [linked, setLinked] = useState<Doc[]>([])
   const [pending, setPending] = useState<Pending[]>([])
   const [working, setWorking] = useState('')
-  const [message, setMessage] = useNotice()
+  const say = useToast()
   const [serial, setSerial] = useState(0)
   const nextKey = useRef(0)
   const kind = target?.kind
@@ -32,13 +32,13 @@ export function useAttachments(target: Target | null) {
         if (!cancelled) setLinked(page.documents)
       },
       (failure) => {
-        if (!cancelled) setMessage(errorText(failure))
+        if (!cancelled) say(errorText(failure), 'error')
       },
     )
     return () => {
       cancelled = true
     }
-  }, [kind, id, serial, setMessage])
+  }, [kind, id, serial, say])
 
   const reload = useCallback(() => setSerial((value) => value + 1), [])
 
@@ -47,8 +47,7 @@ export function useAttachments(target: Target | null) {
     setLinked([])
     setPending([])
     setWorking('')
-    setMessage('')
-  }, [setMessage])
+  }, [])
 
   const addFiles = useCallback(
     async (files: File[]) => {
@@ -58,7 +57,7 @@ export function useAttachments(target: Target | null) {
           checkFileSize(file.size)
           accepted.push(file)
         } catch (failure) {
-          setMessage(`${file.name}: ${errorText(failure)}`)
+          say(`${file.name}: ${errorText(failure)}`, 'error')
         }
       }
       if (accepted.length === 0) return
@@ -70,15 +69,15 @@ export function useAttachments(target: Target | null) {
         setWorking(file.name)
         try {
           const outcome = await documents.add(file, { name: file.name, links: [{ kind, id }] })
-          if (outcome.alreadyThere) setMessage(t('docs.alreadyThere', { name: outcome.document.name }))
+          if (outcome.alreadyThere) say(t('docs.alreadyThere', { name: outcome.document.name }), 'info')
         } catch (failure) {
-          setMessage(`${file.name}: ${errorText(failure)}`)
+          say(`${file.name}: ${errorText(failure)}`, 'error')
         }
       }
       setWorking('')
       setSerial((value) => value + 1)
     },
-    [kind, id, setMessage, t],
+    [kind, id, say, t],
   )
 
   const attachExisting = useCallback(
@@ -91,10 +90,10 @@ export function useAttachments(target: Target | null) {
         await documents.link(doc.id, { kind, id })
         setSerial((value) => value + 1)
       } catch (failure) {
-        setMessage(errorText(failure))
+        say(errorText(failure), 'error')
       }
     },
-    [kind, id, setMessage],
+    [kind, id, say],
   )
 
   const detach = useCallback(
@@ -104,10 +103,10 @@ export function useAttachments(target: Target | null) {
         await documents.unlink(doc.id, { kind, id })
         setSerial((value) => value + 1)
       } catch (failure) {
-        setMessage(errorText(failure))
+        say(errorText(failure), 'error')
       }
     },
-    [kind, id, setMessage],
+    [kind, id, say],
   )
 
   const removePending = useCallback((key: number) => setPending((current) => current.filter((item) => item.key !== key)), [])
@@ -130,7 +129,7 @@ export function useAttachments(target: Target | null) {
     [pending],
   )
 
-  return { exists: target !== null, linked, pending, working, message, addFiles, attachExisting, detach, removePending, commit, reset, reload }
+  return { exists: target !== null, linked, pending, working, addFiles, attachExisting, detach, removePending, commit, reset, reload }
 }
 
 export type Attachments = ReturnType<typeof useAttachments>

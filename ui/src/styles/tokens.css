@@ -1,0 +1,173 @@
+/* Design tokens: colours for the light and dark themes, radii and shadows, and the root text settings. Plain hex and rgb only, because the Linux and Android web views differ in what newer colour syntax they know. */
+
+:root {
+  /* One font for everything: headings, text, buttons, fields and labels. */
+  --font: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+  /* Room that a scrolling area keeps around its content, so a scroll bar never covers the edge of a button
+     and a focus ring at the edge is not cut off. */
+  --edge: 0.25rem;
+  --room: 0.875rem;
+
+  /* Blocky: corners are nearly square, and only what floats (a menu, a dialog, a message) casts a shadow. */
+  --radius: 2px;
+  --radius-sm: 0;
+  --radius-md: 2px;
+  --radius-lg: 2px;
+  --radius-xl: 3px;
+  --shadow-xs: 0 0 #0000;
+  --shadow-sm: 0 0 #0000;
+  --shadow-md: 0 4px 12px -2px rgb(0 0 0 / 0.2);
+  --shadow-lg: 0 12px 28px -6px rgb(0 0 0 / 0.3);
+  /* The dim layer behind a modal. */
+  --overlay: rgb(0 0 0 / 50%);
+
+  color-scheme: light;
+  --background: #ffffff;
+  --foreground: #0a0a0a;
+  --card: #ffffff;
+  --card-foreground: #0a0a0a;
+  --popover: #ffffff;
+  --popover-foreground: #0a0a0a;
+  --primary: #166534;
+  --primary-foreground: #ffffff;
+  --secondary: #ededed;
+  --secondary-foreground: #0a0a0a;
+  --muted: #f0f0f0;
+  --muted-foreground: #4f4f4f;
+  --accent: #ebebeb;
+  --accent-foreground: #0a0a0a;
+  /* Red for text and borders, and the red that fills a button. */
+  --destructive: #c81e1e;
+  --destructive-solid: #c81e1e;
+  --destructive-foreground: #fafafa;
+  --border: #cfcfcf;
+  --input: #8f8f8f;
+  --ring: #166534;
+  --ring-soft: #16653440;
+  --sidebar: #f5f5f5;
+  --success: #15803d;
+  /* Amber for a warning that is not an error. */
+  --warning: #b45309;
+  /* Chart colours: income, expense, savings and the empty track behind a bar. */
+  --c-income: #2e8b57;
+  --c-expense: #e11d48;
+  --c-savings: #2563eb;
+  --c-track: #e0e0e0;
+  /* The colours of the categories in the dashboard's ring and legend. */
+  --seg-0: #2e8b57;
+  --seg-1: #2563eb;
+  --seg-2: #d97706;
+  --seg-3: #7c3aed;
+  --seg-4: #0d9488;
+  --seg-5: #e11d48;
+  --seg-6: #0284c7;
+  --seg-7: #737373;
+  /* The colours of the JSON in the export preview. */
+  --code-string: #15803d;
+  --code-number: #b45309;
+  --code-literal: #7c3aed;
+
+  font-family: var(--font);
+  line-height: 1.5;
+  /* Everything is in rem, so this one value scales spacing, text and controls with the window.
+     It starts from the browser's own font size, so the person's text-size setting still counts. */
+  font-size: clamp(0.875rem, 0.8rem + 0.3vw, 1.0625rem);
+  /* Amounts line up in columns everywhere. */
+  font-variant-numeric: tabular-nums;
+  color: var(--foreground);
+  background: var(--background);
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* The dark colours are written twice: once for a chosen dark theme and once for "follow the system".
+   Keep the two blocks identical. */
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --background: #0a0a0a;
+  --foreground: #fafafa;
+  --card: #141414;
+  --card-foreground: #fafafa;
+  --popover: #161616;
+  --popover-foreground: #fafafa;
+  --primary: #1b7a43;
+  --primary-foreground: #ffffff;
+  --secondary: #262626;
+  --secondary-foreground: #fafafa;
+  --muted: #1f1f1f;
+  --muted-foreground: #b8b8b8;
+  --accent: #2a2a2a;
+  --accent-foreground: #fafafa;
+  --destructive: #f87171;
+  --destructive-solid: #b91c1c;
+  --destructive-foreground: #fafafa;
+  --border: #3a3a3a;
+  --input: #5c5c5c;
+  --ring: #2e9e5e;
+  --ring-soft: #2e9e5e59;
+  --sidebar: #111111;
+  --success: #4ade80;
+  --warning: #e0af68;
+  --c-income: #2e8b57;
+  --c-expense: #f7768e;
+  --c-savings: #7aa2f7;
+  --c-track: #262626;
+  --seg-0: #2e8b57;
+  --seg-1: #7aa2f7;
+  --seg-2: #e0af68;
+  --seg-3: #bb9af7;
+  --seg-4: #5fb3a1;
+  --seg-5: #f7768e;
+  --seg-6: #7dcfff;
+  --seg-7: #8a8f98;
+  --code-string: #9ece6a;
+  --code-number: #e0af68;
+  --code-literal: #bb9af7;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    color-scheme: dark;
+    --background: #0a0a0a;
+    --foreground: #fafafa;
+    --card: #141414;
+    --card-foreground: #fafafa;
+    --popover: #161616;
+    --popover-foreground: #fafafa;
+    --primary: #1b7a43;
+    --primary-foreground: #ffffff;
+    --secondary: #262626;
+    --secondary-foreground: #fafafa;
+    --muted: #1f1f1f;
+    --muted-foreground: #b8b8b8;
+    --accent: #2a2a2a;
+    --accent-foreground: #fafafa;
+    --destructive: #f87171;
+    --destructive-solid: #b91c1c;
+    --destructive-foreground: #fafafa;
+    --border: #3a3a3a;
+    --input: #5c5c5c;
+    --ring: #2e9e5e;
+    --ring-soft: #2e9e5e59;
+    --sidebar: #111111;
+    --success: #4ade80;
+    --warning: #e0af68;
+    --c-income: #2e8b57;
+    --c-expense: #f7768e;
+    --c-savings: #7aa2f7;
+    --c-track: #262626;
+    --seg-0: #2e8b57;
+    --seg-1: #7aa2f7;
+    --seg-2: #e0af68;
+    --seg-3: #bb9af7;
+    --seg-4: #5fb3a1;
+    --seg-5: #f7768e;
+    --seg-6: #7dcfff;
+    --seg-7: #8a8f98;
+    --code-string: #9ece6a;
+    --code-number: #e0af68;
+    --code-literal: #bb9af7;
+  }
+}

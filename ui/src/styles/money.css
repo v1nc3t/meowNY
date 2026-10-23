@@ -1,0 +1,599 @@
+/* Transactions, recurring items and categories: budgets, history, cards and the split editor. */
+
+/* Transactions: the from / to range in the filter bar. */
+.tx-range {
+  display: flex;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.75rem 0.5rem;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.tx-range > label {
+  width: auto;
+  flex: 0 0 auto;
+}
+
+/* "details" under a row: a quiet link that opens the split and the description. */
+.card-body .tx-desc,
+.rec-body .tx-desc {
+  align-self: flex-start;
+  min-width: 0;
+  max-width: 100%;
+  font-size: 0.8125rem;
+  color: var(--muted-foreground);
+}
+
+/* What "details" opens on a list: the text goes under the button. */
+.card-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-top: 0.25rem;
+  font-size: 0.8125rem;
+  color: var(--foreground);
+  overflow-wrap: anywhere;
+}
+
+.card-detail p {
+  margin: 0;
+}
+
+.card-detail .detail-section {
+  width: 100%;
+  margin-top: 0;
+  gap: 0.25rem;
+}
+
+/* What a shared bill opens to on the list: what was paid and who has which part, a code for each friend. */
+.split-part {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem 0.75rem;
+  font-variant-numeric: tabular-nums;
+}
+
+/* The categories page: the budgets of expenses and income side by side (a card each), then the history. */
+.budget-page {
+  container-type: inline-size;
+  container-name: budget;
+}
+
+.budget-title .tx-actions {
+  flex-wrap: wrap;
+}
+
+/* Three bands: title, expenses | income (half each), history. The page itself never scrolls. */
+.tx-page > .budget-split {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
+  align-items: stretch;
+  gap: 1rem;
+}
+
+.app-main main section section.budget-half {
+  width: auto;
+  max-width: none;
+  min-width: 0;
+  min-height: 0;
+  align-items: stretch;
+  gap: 1rem;
+  overflow: hidden;
+}
+
+.budget-half > * {
+  flex-shrink: 0;
+}
+
+/* The category list is the part that scrolls. */
+.budget-pane {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  margin-right: -0.5rem;
+  padding-right: 0.5rem;
+}
+
+.budget-half > .budget-pane {
+  flex-shrink: 1;
+}
+
+.budget-pane:empty {
+  display: none;
+}
+
+.budget-pane > p {
+  margin: 0;
+  padding: 0.5rem 0;
+  font-size: 0.8125rem;
+  color: var(--muted-foreground);
+}
+
+/* Rows of label, amount and actions. Amounts are plain text until "edit" is clicked. */
+.budget-table {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+}
+
+/* The three totals of a side (budget, allocated, not allocated) sit on a grey tile. */
+.budget-half > .budget-table {
+  padding: 0 0.875rem;
+  background: var(--muted);
+  border-radius: var(--radius-md);
+}
+
+.budget-row {
+  display: grid;
+  /* The actions column keeps room for the longest "edit" word in any language, so amounts line up. */
+  grid-template-columns: minmax(0, 1fr) auto minmax(6.5rem, auto);
+  align-items: center;
+  gap: 0 1rem;
+  width: 100%;
+  min-height: 2.75rem;
+  margin: 0;
+  padding: 0.25rem 0;
+  border-top: 1px solid var(--border);
+}
+
+.budget-row:first-child {
+  border-top: 0;
+}
+
+.budget-label {
+  font-size: 0.8125rem;
+  color: var(--foreground);
+  overflow-wrap: anywhere;
+}
+
+.budget-row.quiet .budget-label {
+  color: var(--muted-foreground);
+}
+
+.budget-amount {
+  font-size: 0.8125rem;
+  color: var(--foreground);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.budget-amount.unset {
+  color: var(--muted-foreground);
+}
+
+.budget-amount.over {
+  font-weight: 600;
+  color: var(--destructive);
+}
+
+.budget-row input {
+  width: min(9rem, 100%);
+  text-align: right;
+}
+
+.budget-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.25rem;
+  min-width: 3rem;
+}
+
+/* Changing the amount of a side (allocated) takes the whole row: the amount and the label on one line, the buttons under them. */
+.budget-page .budget-row.editing {
+  grid-template-columns: minmax(0, 1fr) auto;
+  row-gap: 0.375rem;
+  padding-block: 0.5rem;
+}
+
+.budget-page .budget-row.editing .budget-label {
+  white-space: nowrap;
+}
+
+.budget-page .budget-row.editing .budget-actions {
+  grid-column: 1 / -1;
+  justify-content: flex-end;
+}
+
+/* Monthly history: one row per month since the first budget, in a card. */
+.app-main main section section.budget-history {
+  flex: 0 0 auto;
+  width: 100%;
+  max-width: none;
+  gap: 0.75rem;
+  height: clamp(12rem, 32svh, 18rem);
+  min-height: 0;
+}
+
+/* On the desktop layout the history gets more of the page. */
+@container budget (min-width: 43.75rem) {
+  .app-main main section section.budget-history {
+    height: clamp(14rem, 38svh, 21rem);
+  }
+}
+
+.budget-history-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  width: 100%;
+  overflow: auto;
+}
+
+.budget-history .ui-table th,
+.budget-history .ui-table td {
+  text-align: right;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.budget-history .ui-table th {
+  position: sticky;
+  top: 0;
+  background: var(--card);
+  box-shadow: inset 0 -1px 0 var(--border);
+}
+
+.budget-history .ui-table th:first-child,
+.budget-history .ui-table td:first-child {
+  text-align: left;
+}
+
+.budget-history .ui-table td:first-child .ui-btn {
+  text-transform: lowercase;
+}
+
+.budget-history .ui-table tr.selected {
+  background: var(--muted);
+}
+
+.budget-history .ui-table tr.selected td:first-child .ui-btn {
+  font-weight: 600;
+}
+
+.budget-history .over {
+  color: var(--destructive);
+}
+
+.budget-history .earned-over {
+  color: var(--success);
+}
+
+/* A narrow page: the sides are stacked and the page itself scrolls, with a gutter for its scroll bar. */
+@container budget (max-width: 43.75rem) {
+  .app-shell.is-locked .tx-page.budget-page {
+    overflow: auto;
+    margin-right: calc(var(--room) * -1);
+    padding-right: var(--room);
+  }
+
+  .tx-page > .budget-split {
+    flex: none;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .budget-pane {
+    flex: none;
+    max-height: 16rem;
+  }
+
+  .app-main main section section.budget-half {
+    overflow: visible;
+    height: auto;
+    flex: none;
+  }
+}
+
+html.is-phone .app-shell.is-locked .tx-page.budget-page {
+  overflow: hidden;
+  margin-right: calc(var(--edge) * -1);
+  padding-right: var(--edge);
+}
+
+/* The history keeps its table in one piece and scrolls sideways when it is wider than the screen. */
+.budget-view .budget-history-scroll {
+  flex: none;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+/* The page scrolls on a phone, so the lists inside do not scroll on their own. */
+.budget-view .budget-pane {
+  max-height: none;
+  overflow: visible;
+  margin-right: 0;
+  padding-right: 0;
+}
+
+/* Recurring: a card for each item, with its status as a badge, its actions on the right (under the date on a phone). */
+ul.rec-list > li.rec-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-areas: 'body' 'due' 'more';
+  align-items: start;
+  gap: 0.75rem 1.5rem;
+  padding: 1rem;
+  color: var(--card-foreground);
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-xs);
+}
+
+@media (min-width: 52em) {
+  ul.rec-list > li.rec-item {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      'body due'
+      'body more';
+    gap: 0.5rem 1.5rem;
+  }
+}
+
+.rec-body {
+  grid-area: body;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  min-width: 0;
+}
+
+.rec-name {
+  margin: 0;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: var(--foreground);
+  overflow-wrap: anywhere;
+}
+
+/* An item that is paused or ended is quieter than one that is running. */
+.rec-item[data-status='paused'] .rec-name,
+.rec-item[data-status='ended'] .rec-name,
+.rec-item[data-status='paused'] .rec-date,
+.rec-item[data-status='ended'] .rec-date {
+  color: var(--muted-foreground);
+}
+
+.rec-meta {
+  margin: 0;
+  font-size: 0.8125rem;
+  color: var(--muted-foreground);
+}
+
+.rec-amount {
+  color: var(--foreground);
+  font-variant-numeric: tabular-nums;
+}
+
+.rec-amount.rec-varies {
+  color: var(--muted-foreground);
+}
+
+.rec-due {
+  grid-area: due;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 1rem;
+}
+
+@media (min-width: 52em) {
+  .rec-due {
+    justify-content: flex-end;
+  }
+}
+
+/* The next due date, and a badge beside it when the item is not simply upcoming. */
+.rec-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.rec-date {
+  font-size: 0.875rem;
+  color: var(--foreground);
+}
+
+/* The actions stay together: they move under the date as a group when there is no room beside it. */
+.rec-actions {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.rec-more {
+  grid-area: more;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.125rem;
+}
+
+@media (min-width: 52em) {
+  .rec-more {
+    justify-self: end;
+  }
+}
+
+.rec-more .ui-btn {
+  color: var(--muted-foreground);
+}
+
+/* A category's heading in the list: its name and, quietly, how many items it has. */
+.tx-pane > h2.rec-group {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  margin: 1.5rem 0 0.75rem;
+  font-size: 1rem;
+  font-weight: 600;
+  line-height: 1.4;
+  letter-spacing: normal;
+}
+
+.tx-pane > h2.rec-group:first-child {
+  margin-top: 0.25rem;
+}
+
+.rec-count {
+  font-size: 0.8125rem;
+  font-weight: 400;
+  color: var(--muted-foreground);
+  font-variant-numeric: tabular-nums;
+}
+
+/* A phone: the title and amount on the left, the date and badge on the right; the actions are a full row of big buttons under them, then
+   edit, end and delete in a row of their own. */
+html.is-phone ul.rec-list > li.rec-item {
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas:
+    'body status'
+    'actions actions'
+    'more more';
+  gap: 0.5rem 1rem;
+}
+
+html.is-phone .rec-due {
+  display: contents;
+}
+
+html.is-phone .rec-status {
+  grid-area: status;
+  justify-self: end;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.25rem;
+}
+
+html.is-phone .rec-actions {
+  grid-area: actions;
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 0.5rem;
+}
+
+html.is-phone .rec-actions > .ui-btn {
+  flex: 1 1 0;
+}
+
+html.is-phone .rec-more {
+  justify-self: stretch;
+  justify-content: space-between;
+  padding-top: 0.5rem;
+  border-top: 1px solid var(--border);
+}
+
+html.is-phone .tx-range {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: end;
+  gap: 0.75rem 0.875rem;
+  width: 100%;
+}
+
+html.is-phone .tx-range .tx-date-group {
+  width: 100%;
+}
+
+html.is-phone .tx-range .date-picker {
+  width: 100%;
+  flex-wrap: wrap;
+}
+
+html.is-phone .tx-range .date-picker .pick.field {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+/* Choosing a day gives each of from and to a line of its own: three lists do not fit half a screen. */
+html.is-phone .tx-range[data-mode='date'] .tx-date-group {
+  grid-column: 1 / -1;
+}
+
+/* The bill dialog: the person first, then friends and guests, each with what was typed and what it comes to. */
+.split-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 1rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+}
+
+.split-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.split-row {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 0.25rem 0.5rem;
+  padding: 0;
+  border-top: 0;
+}
+
+.split-name {
+  flex: 1 1 0;
+  min-width: 2.5rem;
+  overflow-wrap: anywhere;
+  font-size: 0.8125rem;
+  line-height: 1.4;
+  color: var(--foreground);
+}
+
+.split-value {
+  flex: 0 1 7rem;
+  min-width: 0;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.split-amount {
+  flex: 0 0 auto;
+  min-width: 4.5rem;
+  text-align: right;
+  font-size: 0.8125rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--foreground);
+}
+
+.split-remove,
+.split-spacer {
+  flex: 0 0 5.5rem;
+}
+
+.split-remove {
+  padding-inline: 0.25rem;
+  color: var(--muted-foreground);
+}
+
+.split-rest {
+  align-self: flex-start;
+}
+
+/* How much of the bill is still to be given out (grey), or by how much the parts are over it (red). */
+.split-status {
+  margin: 0;
+  font-size: 0.8125rem;
+  color: var(--muted-foreground);
+  font-variant-numeric: tabular-nums;
+}
+
+.split-status.over {
+  color: var(--destructive);
+}

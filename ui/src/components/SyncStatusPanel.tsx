@@ -2,6 +2,7 @@ import { checkCodeText, cleanDigits, clockGapText, countdownText, filesLines, no
 import { useState, type FormEvent } from 'react'
 import { useT } from '../i18n/context'
 import QrCode from './QrCode'
+import Button from './ui/Button'
 import ReviewModal from './ReviewModal'
 
 /**
@@ -43,16 +44,15 @@ export default function SyncStatusPanel({
   if (status.state === 'waiting') {
     return (
       <div className="panel sync-panel">
-        <p className="hint">{t('sync.scanThis')}</p>
         <QrCode text={status.qr} label={t('sync.qrLabel')} />
         <p className="hint">{t('sync.address', { address: status.address })}</p>
         <p className="sync-countdown" role="timer">
           {t('sync.timeLeft', { time: countdownText(status.expiresInSecs) })}
         </p>
         <div className="actions">
-          <button type="button" onClick={onCancel}>
+          <Button variant="outline" onClick={onCancel}>
             {t('sync.stop')}
-          </button>
+          </Button>
         </div>
       </div>
     )
@@ -64,9 +64,9 @@ export default function SyncStatusPanel({
       <div className="panel sync-panel">
         <p role="status">{t(key)}</p>
         <div className="actions">
-          <button type="button" onClick={onCancel}>
+          <Button variant="outline" onClick={onCancel}>
             {t('sync.stop')}
-          </button>
+          </Button>
         </div>
       </div>
     )
@@ -81,9 +81,9 @@ export default function SyncStatusPanel({
         </p>
         <p className="hint">{t('sync.digitsShow')}</p>
         <div className="actions">
-          <button type="button" onClick={onCancel}>
+          <Button variant="outline" onClick={onCancel}>
             {t('sync.stop')}
-          </button>
+          </Button>
         </div>
       </div>
     )
@@ -112,12 +112,12 @@ export default function SyncStatusPanel({
           </p>
         ) : null}
         <div className="actions">
-          <button type="submit" disabled={typed.length !== 6}>
+          <Button type="submit" disabled={typed.length !== 6}>
             {t('common.continue')}
-          </button>
-          <button type="button" onClick={onCancel}>
+          </Button>
+          <Button variant="outline" onClick={onCancel}>
             {t('sync.stop')}
-          </button>
+          </Button>
         </div>
       </form>
     )
@@ -137,9 +137,9 @@ export default function SyncStatusPanel({
       <div className="panel sync-panel">
         <p role="status">{t('sync.waitingReview')}</p>
         <div className="actions">
-          <button type="button" onClick={onCancel}>
+          <Button variant="outline" onClick={onCancel}>
             {t('sync.stop')}
-          </button>
+          </Button>
         </div>
       </div>
     )
@@ -148,7 +148,9 @@ export default function SyncStatusPanel({
   if (status.state === 'done') {
     return (
       <div className="panel sync-panel">
-        <p role="status">{t(status.purpose === 'pair' ? 'sync.donePair' : 'sync.doneSync', { peer: status.peer })}</p>
+        <p className="notice" role="status">
+          {t(status.purpose === 'pair' ? 'sync.donePair' : 'sync.doneSync', { peer: status.peer })}
+        </p>
         {status.oneWay ? <p className="hint">{t('sync.oneWayDone')}</p> : null}
         {nothingChanged(status.summary) && filesLines(status.files).length === 0 ? (
           <p className="hint">{t('sync.sumNothing')}</p>
@@ -175,9 +177,7 @@ export default function SyncStatusPanel({
           </p>
         ) : null}
         <div className="actions">
-          <button type="button" onClick={onDone}>
-            {t('common.done')}
-          </button>
+          <Button onClick={onDone}>{t('common.done')}</Button>
         </div>
       </div>
     )
@@ -189,9 +189,7 @@ export default function SyncStatusPanel({
         {t(reasonKey(status.reason))}
       </p>
       <div className="actions">
-        <button type="button" onClick={onDone}>
-          {t('common.done')}
-        </button>
+        <Button onClick={onDone}>{t('common.done')}</Button>
       </div>
     </div>
   )

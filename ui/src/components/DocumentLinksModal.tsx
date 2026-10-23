@@ -2,11 +2,13 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { documents, type Doc, type LinkView } from '../api/documents'
 import { errorText } from '../api/invoke'
+import { useToast } from '../hooks/toast'
 import { useMoneySettings } from '../hooks/useMoneySettings'
 import { useT } from '../i18n/context'
 import { linkLabel, whereIs } from '../lib/documents'
 import { formatDate } from '../lib/money'
 import Modal from './Modal'
+import Button from './ui/Button'
 
 /**
  * What one document is attached to: each transaction, recurring item or debt entry, as a line to choose. Choosing one goes to its page,
@@ -17,7 +19,7 @@ export default function DocumentLinksModal({ doc, onClose }: { doc: Doc; onClose
   const navigate = useNavigate()
   const { settings } = useMoneySettings()
   const [links, setLinks] = useState<LinkView[] | null>(null)
-  const [message, setMessage] = useState('')
+  const say = useToast()
   const locale = settings?.locale ?? 'en'
 
   useEffect(() => {
@@ -27,13 +29,13 @@ export default function DocumentLinksModal({ doc, onClose }: { doc: Doc; onClose
         if (!cancelled) setLinks(list)
       },
       (failure) => {
-        if (!cancelled) setMessage(errorText(failure))
+        if (!cancelled) say(errorText(failure), 'error')
       },
     )
     return () => {
       cancelled = true
     }
-  }, [doc.id])
+  }, [doc.id, say])
 
   function go(link: LinkView) {
     const there = whereIs(link)
@@ -44,20 +46,16 @@ export default function DocumentLinksModal({ doc, onClose }: { doc: Doc; onClose
 
   return (
     <Modal title={t('docs.linksTitle', { name: doc.name })} onClose={onClose} cancelLabel={t('common.back')} readOnly>
-      <p className="notice" role="alert">
-        {message}
-      </p>
       {links === null ? null : links.length === 0 ? (
         <p className="hint">{t('docs.noLinks')}</p>
       ) : (
         <>
-          <p className="hint">{t('docs.linksHint')}</p>
           <ul className="link-list">
             {links.map((link) => (
               <li key={`${link.kind}-${link.id}`}>
-                <button type="button" disabled={whereIs(link) === null} onClick={() => go(link)}>
+                <Button variant="outline" disabled={whereIs(link) === null} onClick={() => go(link)}>
                   {linkLabel(link, t, formatDate(link.date, locale))}
-                </button>
+                </Button>
               </li>
             ))}
           </ul>

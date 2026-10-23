@@ -1,5 +1,6 @@
 import { useEffect, useId, useRef, type ReactNode } from 'react'
 import { useT } from '../i18n/context'
+import Button from './ui/Button'
 
 export const modalFormId = 'modal-form'
 
@@ -13,6 +14,7 @@ export default function Modal({
   cancelLabel,
   wide = false,
   readOnly = false,
+  danger = false,
   children,
 }: {
   title: string
@@ -27,6 +29,8 @@ export default function Modal({
   wide?: boolean
   /** A dialog that only shows: it has the one button that closes it and no button that submits. */
   readOnly?: boolean
+  /** The submit button is red: the dialog is about something that is hard to take back. */
+  danger?: boolean
   children: ReactNode
 }) {
   const t = useT()
@@ -67,13 +71,13 @@ export default function Modal({
         </div>
         {children}
         <div className="modal-actions">
-          <button type="button" onClick={onClose}>
+          <Button variant="outline" onClick={onClose}>
             {cancelLabel ?? t('common.cancel')}
-          </button>
+          </Button>
           {readOnly ? null : (
-            <button type="submit" form={formId} disabled={pending}>
+            <Button type="submit" variant={danger ? 'destructive' : 'default'} form={formId} disabled={pending}>
               {doneLabel ?? t('common.done')}
-            </button>
+            </Button>
           )}
         </div>
       </div>

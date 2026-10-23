@@ -1,4 +1,4 @@
-import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { categories as categoriesApi, type Category } from '../api/categories'
 import { dataExport, EXPORT_SECTIONS, report, type ExportSection, type Preview, type ReportOptions, type TextPreview } from '../api/dataExport'
 import { displayFormat } from '../api/displayFormat'
@@ -7,6 +7,7 @@ import { ApiError, errorText, inDesktopApp } from '../api/invoke'
 import { periodLabel, reportLabels } from '../api/reportLabels'
 import { useToday, type Today } from '../api/today'
 import DatePicker from '../components/DatePicker'
+import Button from '../components/ui/Button'
 import Dropdown from '../components/Dropdown'
 import Pick, { PickOption } from '../components/Pick'
 import { Sheets } from '../components/SheetView'
@@ -19,7 +20,7 @@ import { formatDate, formatMoney } from '../lib/money'
 import { thisPeriod, type RangeMode } from '../lib/range'
 import { useDebounced } from '../hooks/useDebounced'
 import { useMoneySettings, type MoneySettings } from '../hooks/useMoneySettings'
-import { useNotice } from '../hooks/useNotice'
+import { useToast } from '../hooks/toast'
 import {
   bounds,
   defaultChoice,
@@ -58,23 +59,24 @@ export default function ExportPage() {
   const today = useToday()
   const { settings } = useMoneySettings()
   const [categories, setCategories] = useState<Category[] | null>(null)
-  const [message, setMessage] = useNotice()
+  // The page cannot be drawn without the categories, so this failure stays in the place of the page; it is not a pop-up.
+  const [loadError, setLoadError] = useState('')
 
   useEffect(() => {
     if (!inDesktopApp()) return
-    categoriesApi.list().then(setCategories, (e) => setMessage(errorText(e)))
-  }, [setMessage])
+    categoriesApi.list().then(setCategories, (e) => setLoadError(errorText(e)))
+  }, [])
 
   if (!inDesktopApp()) return <p>{t('settings.unavailable')}</p>
   if (!today || !settings || !categories) {
-    return message ? <p className="notice">{message}</p> : null
+    return loadError ? <p className="notice">{loadError}</p> : null
   }
   return <ExportForm today={today} settings={settings} categories={categories} />
 }
 
 function ExportForm({ today, settings, categories }: { today: Today; settings: MoneySettings; categories: Category[] }) {
   const { t, language } = useI18n()
-  const [message, setMessage] = useNotice()
+  const say = useToast()
   const [busy, setBusy] = useState(false)
   const [format, setFormat] = useState<ExportFormat>('json')
   const [choice, setChoice] = useState<Choice>(() => defaultChoice(today))
@@ -125,13 +127,13 @@ function ExportForm({ today, settings, categories }: { today: Today; settings: M
         if (!cancelled) setPreview(loaded)
       },
       (e) => {
-        if (!cancelled) setMessage(errorText(e))
+        if (!cancelled) say(errorText(e), 'error')
       },
     )
     return () => {
       cancelled = true
     }
-  }, [settled, datesOk, setMessage])
+  }, [settled, datesOk, say])
 
   // A JSON or CSV file can be looked at before it is saved: the start of the text it would hold, following the choice.
   const textFormat = format === 'json' || format === 'csv' ? format : null
@@ -143,13 +145,13 @@ function ExportForm({ today, settings, categories }: { today: Today; settings: M
         if (!cancelled) setFileText({ format: textFormat, data })
       },
       (e) => {
-        if (!cancelled) setMessage(errorText(e))
+        if (!cancelled) say(errorText(e), 'error')
       },
     )
     return () => {
       cancelled = true
     }
-  }, [settled, textFormat, datesOk, problem, setMessage])
+  }, [settled, textFormat, datesOk, problem, say])
 
   // An Excel file is made as the saved one would be, and read by the screen.
   useEffect(() => {
@@ -215,9 +217,9 @@ function ExportForm({ today, settings, categories }: { today: Today; settings: M
             : format === 'xlsx'
               ? await dataExport.xlsx(selection, look)
               : await report.pdf(reportOptions)
-      if (saved) setMessage(t('export.saved'))
+      if (saved) say(t('export.saved'), 'success')
     } catch (error) {
-      setMessage(errorText(error))
+      say(errorText(error), 'error')
     }
     setBusy(false)
   }
@@ -294,299 +296,296 @@ function ExportForm({ today, settings, categories }: { today: Today; settings: M
     { type: 'INCOME', title: t('budgets.income') },
   ] as const
 
+  const textShown = textFormat !== null && problem === null && fileText?.format === textFormat
+  const viewBroken = (format === 'xlsx' || format === 'pdf') && problem === null && viewProblem !== ''
+  const viewReady = problem === null && viewProblem === ''
+  // the size line over the preview: the extension, the size of the whole file, and for a text file whether only its start is shown
+  const previewMeta =
+    textFormat && textShown && fileText
+      ? `.${textFormat} \u00b7 ${formatSize(fileText.data.bytes, settings.locale)}${
+          fileText.data.cut
+            ? ` \u00b7 ${t('export.previewCut', { shown: formatSize(new TextEncoder().encode(fileText.data.text).length, settings.locale), total: formatSize(fileText.data.bytes, settings.locale) })}`
+            : ''
+        }`
+      : format === 'xlsx' && viewReady && fileView?.format === 'xlsx'
+        ? `.xlsx \u00b7 ${formatSize(fileView.bytes, settings.locale)}`
+        : format === 'pdf' && viewReady && fileView?.format === 'pdf'
+          ? `.pdf \u00b7 ${formatSize(fileView.bytes, settings.locale)}`
+          : ''
+
   return (
     <section className="tx-page export-page">
       <div className="tx-title">
         <h1>{t('export.title')}</h1>
       </div>
-      <p className="notice" role="status">
-        {message}
-      </p>
 
-      <div className="tx-pane wide">
-      <div className="export-layout wide">
-        <div className="export-main">
-          <fieldset className="export-formats" aria-label={t('export.format')}>
-            {FORMATS.map((value) => (
-              <label className="export-format" key={value}>
-                <input type="radio" name="format" value={value} checked={format === value} onChange={() => chooseFormat(value)} />
-                <span className="export-format-name">{FORMAT_NAMES[value]}</span>
-                <span className="export-format-hint">{t(`export.${value}Hint`)}</span>
-              </label>
-            ))}
-          </fieldset>
+      <div className="tx-pane wide export-pane">
+        <div className="export-layout">
+          <aside className="export-options">
+            <div className="export-groups">
+              <Group title={t('export.format')}>
+                <fieldset className="export-formats" aria-label={t('export.format')}>
+                  {FORMATS.map((value) => (
+                    <label className="export-format" key={value}>
+                      <input type="radio" name="format" value={value} checked={format === value} onChange={() => chooseFormat(value)} />
+                      <span>{FORMAT_NAMES[value]}</span>
+                    </label>
+                  ))}
+                </fieldset>
+              </Group>
 
-          <div className="export-card">
-            <h2>{t('export.period')}</h2>
-            <label className="export-switch">
-              {t('export.allDates')}
-              <input type="checkbox" checked={!choice.limitDates} onChange={(e) => update({ limitDates: !e.target.checked })} />
-            </label>
-            {choice.limitDates && (
-              <>
-                <div className="export-range">
-                  <button type="button" onClick={goCurrentMonth}>
-                    {t('tx.currentMonth')}
-                  </button>
-                  <Pick
-                    label={t('tx.range')}
-                    className="mode"
-                    text={modeLabel(choice.mode)}
-                    open={modeMenu}
-                    onToggle={() => setModeMenu((open) => !open)}
-                    onClose={() => setModeMenu(false)}
-                  >
-                    {modesFor(format).map((mode) => (
-                      <PickOption
-                        key={mode}
-                        selected={choice.mode === mode}
-                        onClick={() => {
-                          setChoice((current) => withMode(current, mode))
-                          setModeMenu(false)
-                        }}
+              <Group title={t('export.period')}>
+                <Switch label={t('export.allDates')} checked={!choice.limitDates} onChange={(on) => update({ limitDates: !on })} />
+                {choice.limitDates && (
+                  <>
+                    <div className="export-range">
+                      <Button variant="outline" onClick={goCurrentMonth}>
+                        {t('tx.currentMonth')}
+                      </Button>
+                      <Pick
+                        label={t('tx.range')}
+                        className="mode"
+                        text={modeLabel(choice.mode)}
+                        open={modeMenu}
+                        onToggle={() => setModeMenu((open) => !open)}
+                        onClose={() => setModeMenu(false)}
                       >
-                        {modeLabel(mode)}
-                      </PickOption>
-                    ))}
-                  </Pick>
-                </div>
-                <div className="export-date">
-                  <span>{t('export.from')}</span>
-                  <DatePicker
-                    key={`from-${choice.mode}`}
-                    kind={choice.mode}
-                    label={t('export.from')}
-                    value={choice.from}
-                    today={today.date}
-                    onChange={(from) => update({ from })}
-                  />
-                </div>
-                <div className="export-date">
-                  <span>{t('export.to')}</span>
-                  <DatePicker
-                    key={`to-${choice.mode}`}
-                    kind={choice.mode}
-                    label={t('export.to')}
-                    value={choice.to}
-                    today={today.date}
-                    onChange={(to) => update({ to })}
-                  />
-                </div>
-                {format === 'pdf' && <p className="hint">{t('export.pdfWholeMonths')}</p>}
-                {(format === 'json' || format === 'xlsx') && <p className="hint">{t('export.datesHint')}</p>}
-              </>
-            )}
-          </div>
+                        {modesFor(format).map((mode) => (
+                          <PickOption
+                            key={mode}
+                            selected={choice.mode === mode}
+                            onClick={() => {
+                              setChoice((current) => withMode(current, mode))
+                              setModeMenu(false)
+                            }}
+                          >
+                            {modeLabel(mode)}
+                          </PickOption>
+                        ))}
+                      </Pick>
+                    </div>
+                    <div className="export-dates">
+                      <div className="export-date">
+                        <span>{t('export.from')}</span>
+                        <DatePicker
+                          key={`from-${choice.mode}`}
+                          kind={choice.mode}
+                          label={t('export.from')}
+                          value={choice.from}
+                          today={today.date}
+                          onChange={(from) => update({ from })}
+                        />
+                      </div>
+                      <div className="export-date">
+                        <span>{t('export.to')}</span>
+                        <DatePicker
+                          key={`to-${choice.mode}`}
+                          kind={choice.mode}
+                          label={t('export.to')}
+                          value={choice.to}
+                          today={today.date}
+                          onChange={(to) => update({ to })}
+                        />
+                      </div>
+                    </div>
+                  </>
+                )}
+              </Group>
 
-          <div className="export-card">
-            <h2>{t('export.categories')}</h2>
-            <label className="export-switch">
-              {t('export.allCategories')}
-              <input type="checkbox" checked={choice.allCategories} onChange={(e) => update({ allCategories: e.target.checked })} />
-            </label>
-            {!choice.allCategories && (
-              <>
-                <div className="export-groups">
-                  {groups.map((group) => {
+              <Group title={t('export.categories')}>
+                <Switch label={t('export.allCategories')} checked={choice.allCategories} onChange={(on) => update({ allCategories: on })} />
+                {!choice.allCategories &&
+                  groups.map((group) => {
                     const shown = categories.filter((category) => category.type === group.type)
                     return shown.length === 0 ? null : (
-                      <div key={group.type}>
+                      <div className="export-category-group" key={group.type}>
                         <h3>{group.title}</h3>
                         <div className="export-chips">
                           {shown.map((category) => (
-                            <label className="export-chip" key={category.id}>
-                              <input
-                                type="checkbox"
-                                checked={choice.categoryIds.includes(category.id)}
-                                onChange={(e) => toggleCategory(category.id, e.target.checked)}
-                              />
-                              <span>{category.name}</span>
-                            </label>
+                            <Chip key={category.id} checked={choice.categoryIds.includes(category.id)} onChange={(on) => toggleCategory(category.id, on)}>
+                              {category.name}
+                            </Chip>
                           ))}
                         </div>
                       </div>
                     )
                   })}
-                </div>
-              </>
-            )}
-          </div>
+              </Group>
 
-          {format !== 'pdf' && (
-            <div className="export-card">
-              <h2>{t('export.filters')}</h2>
-              <Dropdown
-                label={t('common.type')}
-                value={choice.kind}
-                options={KINDS.map((kind) => ({ value: kind, label: kindLabel(kind) }))}
-                onChange={(value) => update({ kind: value as Choice['kind'] })}
-              />
-              <Dropdown
-                label={t('export.split')}
-                value={choice.split}
-                options={SPLITS.map((split) => ({ value: split, label: splitLabel(split) }))}
-                onChange={(value) => update({ split: value as Choice['split'] })}
-              />
-              <div className="export-amounts">
-                <label>
-                  {t('export.amountFrom')}
-                  <input inputMode="decimal" autoComplete="off" maxLength={14} placeholder="0.00" value={choice.minAmount} onChange={(e) => update({ minAmount: e.target.value })} />
-                </label>
-                <label>
-                  {t('export.amountTo')}
-                  <input inputMode="decimal" autoComplete="off" maxLength={14} placeholder="0.00" value={choice.maxAmount} onChange={(e) => update({ maxAmount: e.target.value })} />
-                </label>
-              </div>
-              <p className="hint">{t('export.amountHint')}</p>
-              <label>
-                {t('export.textLabel')}
-                <input autoComplete="off" maxLength={TEXT_MAX_CHARS} value={choice.text} onChange={(e) => update({ text: e.target.value })} />
-              </label>
-            </div>
-          )}
-
-          {(format === 'json' || format === 'xlsx') && (
-            <div className="export-card">
-              <h2>{t('export.include')}</h2>
-              <div className="export-chips">
-                {partsOfFile.map((section) => {
-                  const off = section === 'history' && limited
-                  return (
-                    <label className="export-chip" key={section}>
-                      <input type="checkbox" checked={!off && choice.sections.includes(section)} disabled={off} onChange={(e) => togglePart(section, e.target.checked)} />
-                      <span>{partName[section]}</span>
+              {format !== 'pdf' && (
+                <Group title={t('export.filters')}>
+                  <div className="export-pair">
+                    <Dropdown
+                      label={t('common.type')}
+                      value={choice.kind}
+                      options={KINDS.map((kind) => ({ value: kind, label: kindLabel(kind) }))}
+                      onChange={(value) => update({ kind: value as Choice['kind'] })}
+                    />
+                    <Dropdown
+                      label={t('export.split')}
+                      value={choice.split}
+                      options={SPLITS.map((split) => ({ value: split, label: splitLabel(split) }))}
+                      onChange={(value) => update({ split: value as Choice['split'] })}
+                    />
+                  </div>
+                  <div className="export-pair">
+                    <label>
+                      {t('export.amountFrom')}
+                      <input inputMode="decimal" autoComplete="off" maxLength={14} placeholder="0.00" value={choice.minAmount} onChange={(e) => update({ minAmount: e.target.value })} />
                     </label>
-                  )
-                })}
-              </div>
-              {format === 'json' && limited && <p className="hint">{t('export.historyHint')}</p>}
+                    <label>
+                      {t('export.amountTo')}
+                      <input inputMode="decimal" autoComplete="off" maxLength={14} placeholder="0.00" value={choice.maxAmount} onChange={(e) => update({ maxAmount: e.target.value })} />
+                    </label>
+                  </div>
+                  <label>
+                    {t('export.textLabel')}
+                    <input autoComplete="off" maxLength={TEXT_MAX_CHARS} value={choice.text} onChange={(e) => update({ text: e.target.value })} />
+                  </label>
+                </Group>
+              )}
+
+              {(format === 'json' || format === 'xlsx') && (
+                <Group title={t('export.include')}>
+                  <div className="export-chips">
+                    {partsOfFile.map((section) => {
+                      const off = section === 'history' && limited
+                      return (
+                        <Chip key={section} checked={!off && choice.sections.includes(section)} disabled={off} onChange={(on) => togglePart(section, on)}>
+                          {partName[section]}
+                        </Chip>
+                      )
+                    })}
+                  </div>
+                  {format === 'json' && limited && <p className="hint">{t('export.historyHint')}</p>}
+                </Group>
+              )}
+
+              {format === 'pdf' && (
+                <Group title={t('export.include')}>
+                  <Dropdown label={t('export.pageSize')} value={page} options={PAGE_SIZES} onChange={(value) => setPage(value as 'A4' | 'LETTER')} />
+                  <Switch label={t('export.includeTransactions')} checked={includeTransactions} onChange={setIncludeTransactions} />
+                  <Switch label={t('export.showDescriptions')} checked={includeTransactions && showDescriptions} disabled={!includeTransactions} onChange={setShowDescriptions} />
+                  <Switch label={t('export.includeDebts')} checked={includeDebts} onChange={setIncludeDebts} />
+                  <Switch label={t('export.includeDuePayments')} checked={includeDuePayments} onChange={setIncludeDuePayments} />
+                  <Switch label={t('export.includeDebtHistory')} checked={includeDebtHistory} onChange={setIncludeDebtHistory} />
+                </Group>
+              )}
             </div>
-          )}
 
-          {format === 'pdf' && (
-            <div className="export-card">
-              <Dropdown label={t('export.pageSize')} value={page} options={PAGE_SIZES} onChange={(value) => setPage(value as 'A4' | 'LETTER')} />
-              <label className="export-switch">
-                {t('export.includeTransactions')}
-                <input type="checkbox" checked={includeTransactions} onChange={(e) => setIncludeTransactions(e.target.checked)} />
-              </label>
-              <label className="export-switch">
-                {t('export.showDescriptions')}
-                <input
-                  type="checkbox"
-                  checked={includeTransactions && showDescriptions}
-                  disabled={!includeTransactions}
-                  onChange={(e) => setShowDescriptions(e.target.checked)}
-                />
-              </label>
-              <label className="export-switch">
-                {t('export.includeDebts')}
-                <input type="checkbox" checked={includeDebts} onChange={(e) => setIncludeDebts(e.target.checked)} />
-              </label>
-              <label className="export-switch">
-                {t('export.includeDuePayments')}
-                <input type="checkbox" checked={includeDuePayments} onChange={(e) => setIncludeDuePayments(e.target.checked)} />
-              </label>
-              <label className="export-switch">
-                {t('export.includeDebtHistory')}
-                <input type="checkbox" checked={includeDebtHistory} onChange={(e) => setIncludeDebtHistory(e.target.checked)} />
-              </label>
+            <div className="export-summary">
+              <h2>{t('export.contains')}</h2>
+              {problemText ? (
+                <p className="notice" role="alert">
+                  {problemText}
+                </p>
+              ) : (
+                preview && (
+                  <div className="export-receipt">
+                    {hasPart('transactions') && <Row label={t('nav.transactions')} value={String(preview.transactions)} />}
+                    {hasPart('transactions') && preview.transactions > 0 ? (
+                      <>
+                        <Row label={t('export.period')} value={period} />
+                        <Row label={t('common.income')} value={money(preview.income)} tone="income" />
+                        <Row label={t('budgets.expenses')} value={money(preview.expense)} tone="expense" />
+                      </>
+                    ) : hasPart('transactions') ? (
+                      <p className="hint">{t('export.noTransactions')}</p>
+                    ) : null}
+                    {format !== 'pdf' && choice.kind !== '' && <Row label={t('common.type')} value={kindLabel(choice.kind)} />}
+                    {format !== 'pdf' && choice.split !== '' && <Row label={t('export.split')} value={splitLabel(choice.split)} />}
+                    {format !== 'pdf' && amountRange !== '' && <Row label={t('tx.amount')} value={amountRange} />}
+                    {format !== 'pdf' && searched !== '' && <Row label={t('common.search')} value={`\u201c${searched}\u201d`} />}
+                    {(format === 'csv' || format === 'pdf' || hasPart('categories')) && (
+                      <Row label={t('nav.categories')} value={format === 'pdf' && !includeTransactions ? (choice.allCategories ? t('common.all') : String(preview.categories)) : String(preview.categories)} />
+                    )}
+                    {!choice.allCategories && chosenNames.length > 0 && (format === 'csv' || format === 'pdf' || hasPart('categories')) && <p className="hint">{chosenNames.join(', ')}</p>}
+                    {listed && (
+                      <>
+                        {hasPart('budgets') && <Row label={t('nav.budgets')} value={String(preview.budgets)} />}
+                        {hasPart('recurring') && <Row label={t('nav.recurring')} value={String(preview.recurring)} />}
+                      </>
+                    )}
+                    {listed && hasPart('documents') && preview.documents > 0 && <Row label={t('nav.documents')} value={String(preview.documents)} />}
+                    {listed && (hasPart('transactions') || hasPart('ledger')) && preview.splitBills > 0 && <Row label={t('export.sharedBills')} value={String(preview.splitBills)} />}
+                    {listed && hasPart('people') && preview.people > 0 && <Row label={t('nav.debts')} value={String(preview.people)} />}
+                    {listed && hasPart('due') && preview.duePayments > 0 && <Row label={t('debts.dueTitle')} value={String(preview.duePayments)} />}
+                    {listed && hasPart('ledger') && preview.debtHistory > 0 && <Row label={t('debts.historyTitle')} value={String(preview.debtHistory)} />}
+                    {(format === 'json' || format === 'csv' || (format === 'pdf' && includeTransactions)) && preview.history > 0 && <Row label={t('export.history')} value={String(preview.history)} />}
+                  </div>
+                )
+              )}
+              <Button size="lg" className="export-go" disabled={busy || problem !== null} onClick={() => void run()}>
+                <span>{t('export.go')}</span>
+                <span className="export-ext">.{format}</span>
+              </Button>
             </div>
-          )}
-        </div>
+          </aside>
 
-        <aside className="export-card export-side">
-          <h2>{t('export.contains')}</h2>
-          {problemText ? (
-            <p className="notice" role="alert">
-              {problemText}
-            </p>
-          ) : (
-            preview && (
-              <div className="export-receipt">
-                {hasPart('transactions') && <Row label={t('nav.transactions')} value={String(preview.transactions)} />}
-                {hasPart('transactions') && preview.transactions > 0 ? (
-                  <>
-                    <Row label={t('export.period')} value={period} />
-                    <Row label={t('common.income')} value={money(preview.income)} tone="income" />
-                    <Row label={t('budgets.expenses')} value={money(preview.expense)} tone="expense" />
-                  </>
-                ) : hasPart('transactions') ? (
-                  <p className="hint">{t('export.noTransactions')}</p>
-                ) : null}
-                {format !== 'pdf' && choice.kind !== '' && <Row label={t('common.type')} value={kindLabel(choice.kind)} />}
-                {format !== 'pdf' && choice.split !== '' && <Row label={t('export.split')} value={splitLabel(choice.split)} />}
-                {format !== 'pdf' && amountRange !== '' && <Row label={t('tx.amount')} value={amountRange} />}
-                {format !== 'pdf' && searched !== '' && <Row label={t('common.search')} value={`\u201c${searched}\u201d`} />}
-                {(format === 'csv' || format === 'pdf' || hasPart('categories')) && (
-                  <Row label={t('nav.categories')} value={format === 'pdf' && !includeTransactions ? (choice.allCategories ? t('common.all') : String(preview.categories)) : String(preview.categories)} />
-                )}
-                {!choice.allCategories && chosenNames.length > 0 && (format === 'csv' || format === 'pdf' || hasPart('categories')) && <p className="hint">{chosenNames.join(', ')}</p>}
-                {listed && (
-                  <>
-                    {hasPart('budgets') && <Row label={t('nav.budgets')} value={String(preview.budgets)} />}
-                    {hasPart('recurring') && <Row label={t('nav.recurring')} value={String(preview.recurring)} />}
-                  </>
-                )}
-                {listed && hasPart('documents') && preview.documents > 0 && <Row label={t('nav.documents')} value={String(preview.documents)} />}
-                {listed && (hasPart('transactions') || hasPart('ledger')) && preview.splitBills > 0 && <Row label={t('export.sharedBills')} value={String(preview.splitBills)} />}
-                {listed && hasPart('people') && preview.people > 0 && <Row label={t('nav.debts')} value={String(preview.people)} />}
-                {listed && hasPart('due') && preview.duePayments > 0 && <Row label={t('debts.dueTitle')} value={String(preview.duePayments)} />}
-                {listed && hasPart('ledger') && preview.debtHistory > 0 && <Row label={t('debts.historyTitle')} value={String(preview.debtHistory)} />}
-                {(format === 'json' || format === 'csv' || (format === 'pdf' && includeTransactions)) && preview.history > 0 && <Row label={t('export.history')} value={String(preview.history)} />}
+          <section className="export-preview">
+            <header className="export-preview-head">
+              <h2>{t('export.previewTitle')}</h2>
+              {previewMeta ? <p className="hint">{previewMeta}</p> : null}
+            </header>
+
+            {textFormat && textShown && fileText ? (
+              <div className="export-frame is-text">
+                <FileText format={textFormat} text={fileText.data.text} />
               </div>
-            )
-          )}
-          <button type="button" className="export-go" disabled={busy || problem !== null} onClick={() => void run()}>
-            <span>{t('export.go')}</span>
-            <span className="export-ext">.{format}</span>
-          </button>
-        </aside>
-      </div>
-
-      {textFormat && problem === null && fileText?.format === textFormat ? (
-        <div className="export-card export-preview">
-          <h2>{t('export.previewTitle')}</h2>
-          <p className="hint">
-            {`.${textFormat} \u00b7 ${formatSize(fileText.data.bytes, settings.locale)}`}
-            {fileText.data.cut ? ` \u00b7 ${t('export.previewCut', { shown: formatSize(new TextEncoder().encode(fileText.data.text).length, settings.locale), total: formatSize(fileText.data.bytes, settings.locale) })}` : ''}
-          </p>
-          <FileText format={textFormat} text={fileText.data.text} />
+            ) : viewBroken ? (
+              <div className="export-frame is-empty">
+                <p className="hint">{t(viewProblem === 'big' ? 'export.previewTooBig' : 'docs.previewUnreadable')}</p>
+              </div>
+            ) : format === 'xlsx' && viewReady && fileView?.format === 'xlsx' ? (
+              <>
+                <div className="export-frame is-sheet">
+                  <Sheets sheets={fileView.content.sheets} />
+                </div>
+                {fileView.content.sheets.some((sheet) => sheet.cut) ? <p className="hint">{t('docs.previewCutCells', { rows: MAX_ROWS, columns: MAX_COLUMNS })}</p> : null}
+              </>
+            ) : format === 'pdf' && viewReady && fileView?.format === 'pdf' ? (
+              <div className="export-frame is-pdf">
+                <Suspense fallback={<p className="hint">{t('docs.previewLoading')}</p>}>
+                  <PdfView bytes={fileView.data} onFailed={viewFailed} wheel={false} />
+                </Suspense>
+              </div>
+            ) : (
+              <div className="export-frame is-empty" />
+            )}
+          </section>
         </div>
-      ) : null}
-
-      {(format === 'xlsx' || format === 'pdf') && problem === null && viewProblem !== '' ? (
-        <div className="export-card export-preview">
-          <h2>{t('export.previewTitle')}</h2>
-          <p className="hint">{t(viewProblem === 'big' ? 'export.previewTooBig' : 'docs.previewUnreadable')}</p>
-        </div>
-      ) : null}
-
-      {format === 'xlsx' && problem === null && viewProblem === '' && fileView?.format === 'xlsx' ? (
-        <div className="export-card export-preview">
-          <h2>{t('export.previewTitle')}</h2>
-          <p className="hint">{`.xlsx \u00b7 ${formatSize(fileView.bytes, settings.locale)}`}</p>
-          <div className="export-frame is-sheet">
-            <Sheets sheets={fileView.content.sheets} />
-          </div>
-          {fileView.content.sheets.some((sheet) => sheet.cut) ? <p className="hint">{t('docs.previewCutCells', { rows: MAX_ROWS, columns: MAX_COLUMNS })}</p> : null}
-          <p className="hint">{t('export.previewNoteExcel')}</p>
-        </div>
-      ) : null}
-
-      {format === 'pdf' && problem === null && viewProblem === '' && fileView?.format === 'pdf' ? (
-        <div className="export-card export-preview">
-          <h2>{t('export.previewTitle')}</h2>
-          <p className="hint">{`.pdf \u00b7 ${formatSize(fileView.bytes, settings.locale)}`}</p>
-          <div className="export-frame is-pdf">
-            <Suspense fallback={<p className="hint">{t('docs.previewLoading')}</p>}>
-              <PdfView bytes={fileView.data} onFailed={viewFailed} wheel={false} />
-            </Suspense>
-          </div>
-        </div>
-      ) : null}
       </div>
     </section>
+  )
+}
+
+/** A group of the options panel: a small heading and what it holds. */
+function Group({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <section className="export-group">
+      <h2>{title}</h2>
+      {children}
+    </section>
+  )
+}
+
+/** A yes-or-no row: the words on the left, the box at the far edge. */
+function Switch({ label, checked, disabled, onChange }: { label: string; checked: boolean; disabled?: boolean; onChange: (on: boolean) => void }) {
+  return (
+    <label className="export-switch">
+      <span>{label}</span>
+      <input type="checkbox" checked={checked} disabled={disabled} onChange={(e) => onChange(e.target.checked)} />
+    </label>
+  )
+}
+
+/** A small toggle button: a real checkbox, hidden but in the keyboard order, under its name. */
+function Chip({ checked, disabled, onChange, children }: { checked: boolean; disabled?: boolean; onChange: (on: boolean) => void; children: string }) {
+  return (
+    <label className="export-chip">
+      <input type="checkbox" checked={checked} disabled={disabled} onChange={(e) => onChange(e.target.checked)} />
+      <span>{children}</span>
+    </label>
   )
 }
 

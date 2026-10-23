@@ -13,8 +13,11 @@ import {
 import { whenText } from '../api/locales'
 import { errorText } from '../api/invoke'
 import { useT } from '../i18n/context'
-import { useNotice } from '../hooks/useNotice'
+import { useToast } from '../hooks/toast'
 import Dropdown from './Dropdown'
+import Badge from './ui/Badge'
+import Button from './ui/Button'
+import { Actions, Field, Rows, SwitchRow } from '../pages/settings/layout'
 
 /**
  * Settings block for the command API: the on/off switch and the access tokens the CLI needs.
@@ -30,19 +33,19 @@ export default function CommandApiBlock({ locale, timezone }: { locale: string; 
   const [scope, setScope] = useState<Scope>('read')
   const [days, setDays] = useState(String(DEFAULT_EXPIRY_DAYS))
   const [busy, setBusy] = useState(false)
-  const [message, setMessage] = useNotice()
+  const say = useToast()
 
   useEffect(() => {
-    commandApi.status().then(setStatus, (e) => setMessage(errorText(e)))
-    commandApi.tokens().then(setTokens, (e) => setMessage(errorText(e)))
-  }, [setMessage])
+    commandApi.status().then(setStatus, (e) => say(errorText(e), 'error'))
+    commandApi.tokens().then(setTokens, (e) => say(errorText(e), 'error'))
+  }, [say])
 
   async function onSwitch(on: boolean) {
     setBusy(true)
     try {
       setStatus(await commandApi.setEnabled(on))
     } catch (error) {
-      setMessage(errorText(error))
+      say(errorText(error), 'error')
       // The choice may have been put back (the listener could not start), so show what is true now.
       commandApi.status().then(setStatus, () => undefined)
     }
@@ -52,7 +55,7 @@ export default function CommandApiBlock({ locale, timezone }: { locale: string; 
   async function onCreate(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     const clean = cleanTokenName(name)
-    if (!clean) return setMessage(t('cli.errorName'))
+    if (!clean) return say(t('cli.errorName'), 'error')
     setBusy(true)
     try {
       const made = await commandApi.createToken({ name: clean, scope, expiresInDays: Number(days) })
@@ -61,7 +64,7 @@ export default function CommandApiBlock({ locale, timezone }: { locale: string; 
       setName('')
       setTokens(await commandApi.tokens())
     } catch (error) {
-      setMessage(errorText(error))
+      say(errorText(error), 'error')
     }
     setBusy(false)
   }
@@ -70,9 +73,9 @@ export default function CommandApiBlock({ locale, timezone }: { locale: string; 
     try {
       await commandApi.revokeToken(id)
       setTokens(await commandApi.tokens())
-      setMessage(t('cli.revoked'))
+      say(t('cli.revoked'), 'success')
     } catch (error) {
-      setMessage(errorText(error))
+      say(errorText(error), 'error')
     }
   }
 
@@ -93,81 +96,88 @@ export default function CommandApiBlock({ locale, timezone }: { locale: string; 
   }
 
   const statusKey = !status ? null : status.running ? 'cli.running' : status.enabled ? 'cli.notRunning' : 'cli.off'
+  const statusLook = !status ? 'secondary' : status.running ? 'success' : status.enabled ? 'destructive' : 'secondary'
 
   return (
-    <div className="settings-block">
-      <h2>{t('cli.title')}</h2>
-      <p className="notice" role="status">
-        {message}
-      </p>
+    <div className="settings-stack">
 
       {status && (
-        <>
-          <label className="check">
-            <input type="checkbox" checked={status.enabled} disabled={busy} onChange={(e) => void onSwitch(e.target.checked)} />
-            {t('cli.enable')}
-          </label>
-          {statusKey && <p className="hint">{t(statusKey, { port: status.port ?? '' })}</p>}
-        </>
+        <Rows>
+          <SwitchRow
+            label={t('cli.enable')}
+            aside={statusKey && <Badge variant={statusLook}>{t(statusKey, { port: status.port ?? '' })}</Badge>}
+            checked={status.enabled}
+            disabled={busy}
+            onChange={(e) => void onSwitch(e.target.checked)}
+          />
+        </Rows>
       )}
 
       <h3 className="settings-subtitle">{t('cli.tokens')}</h3>
       {tokens && tokens.length === 0 && <p className="hint">{t('cli.noTokens')}</p>}
       {tokens && tokens.length > 0 && (
-        <div className="token-list">
+        <ul className="card-list">
           {tokens.map((token) => (
-            <div className={`settings-row${token.expired ? ' is-expired' : ''}`} key={token.id}>
-              <span className="settings-row-label">{token.name}</span>
-              <span className="settings-row-value">{describe(token)}</span>
-              <button type="button" onClick={() => void onRevoke(token.id)}>
+            <li className={`card-item${token.expired ? ' is-expired' : ''}`} key={token.id}>
+              <div className="card-body">
+                <p className="card-name">{token.name}</p>
+                <p className="card-meta">{describe(token)}</p>
+              </div>
+              <Button variant="outline" size="sm" onClick={() => void onRevoke(token.id)}>
                 {t('cli.revoke')}
-              </button>
-            </div>
+              </Button>
+            </li>
           ))}
-        </div>
+        </ul>
       )}
 
       {created ? (
         <div className="panel">
-          <p className="hint">{t('cli.shownOnce')}</p>
+          <p className="warning">{t('cli.shownOnce')}</p>
           <p className="recovery-code" aria-label={t('cli.tokenLabel')}>
             {created.token}
           </p>
           <div className="actions">
-            <button type="button" onClick={() => void copy(created.token)}>
+            <Button variant="outline" onClick={() => void copy(created.token)}>
               {copied ? t('common.copied') : t('common.copy')}
-            </button>
-            <button type="button" onClick={() => setCreated(null)}>
-              {t('common.done')}
-            </button>
+            </Button>
+            <Button onClick={() => setCreated(null)}>{t('common.done')}</Button>
           </div>
         </div>
       ) : (
-        <form onSubmit={onCreate}>
-          <label>
-            {t('common.name')}
-            <input value={name} onChange={(e) => setName(e.target.value)} maxLength={TOKEN_NAME_MAX} autoComplete="off" />
-          </label>
-          <Dropdown
-            label={t('cli.tokenScope')}
-            value={scope}
-            options={[
-              { value: 'read', label: t('cli.scopeRead') },
-              { value: 'write', label: t('cli.scopeWrite') },
-            ]}
-            onChange={(value) => setScope(value === 'write' ? 'write' : 'read')}
-          />
-          <Dropdown
-            label={t('cli.tokenExpiry')}
-            value={days}
-            options={EXPIRY_CHOICES.map((count) => ({ value: String(count), label: t('cli.days', { count }) }))}
-            onChange={setDays}
-          />
-          <div className="actions">
-            <button type="submit" disabled={busy || name.trim() === ''}>
+        <form className="settings-form" onSubmit={onCreate}>
+          <Rows>
+            <Field>
+              <label>
+                {t('common.name')}
+                <input value={name} onChange={(e) => setName(e.target.value)} maxLength={TOKEN_NAME_MAX} autoComplete="off" />
+              </label>
+            </Field>
+            <Field>
+              <Dropdown
+                label={t('cli.tokenScope')}
+                value={scope}
+                options={[
+                  { value: 'read', label: t('cli.scopeRead') },
+                  { value: 'write', label: t('cli.scopeWrite') },
+                ]}
+                onChange={(value) => setScope(value === 'write' ? 'write' : 'read')}
+              />
+            </Field>
+            <Field>
+              <Dropdown
+                label={t('cli.tokenExpiry')}
+                value={days}
+                options={EXPIRY_CHOICES.map((count) => ({ value: String(count), label: t('cli.days', { count }) }))}
+                onChange={setDays}
+              />
+            </Field>
+          </Rows>
+          <Actions>
+            <Button type="submit" disabled={busy || name.trim() === ''}>
               {t('cli.tokenCreate')}
-            </button>
-          </div>
+            </Button>
+          </Actions>
         </form>
       )}
     </div>

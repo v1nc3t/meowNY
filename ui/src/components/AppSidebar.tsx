@@ -8,7 +8,6 @@ import { runShortcut } from '../keys/registry'
 import type { ShortcutId } from '../keys/shortcuts'
 import { tip } from '../keys/tip'
 
-const YEAR = new Date().getFullYear()
 
 const items = [
   { to: '/app/dashboard', label: 'nav.dashboard', icon: 'dashboard', page: 'dashboard', shortcut: 'goDashboard' },
@@ -115,10 +114,6 @@ export default function AppSidebar({
           <Icon name="help" />
           <span className="nav-label">{t('nav.shortcuts')}</span>
         </button>
-        <div className="sidebar-legal nav-label">
-          <span>© {YEAR} meowny</span>
-          <span>AGPL-3.0</span>
-        </div>
       </div>
     </aside>
   )

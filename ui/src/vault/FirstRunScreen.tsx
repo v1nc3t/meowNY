@@ -8,16 +8,21 @@ import { useI18n } from '../i18n/context'
 import { languageOptions } from '../i18n/languages'
 import { useNotice } from '../hooks/useNotice'
 import { errorText, vault } from './api'
+import Decrypting from './Decrypting'
+import { atLeast, closeKeyboard, useRefocus } from './decrypting'
 import PasswordField from './PasswordField'
 import RecoveryKeyPanel from './RecoveryKeyPanel'
 import RestoreFromBackup from './RestoreFromBackup'
 import { defaultSettings, isCurrency, normalizeCurrency, passphraseProblem } from './rules'
+import Button from '../components/ui/Button'
 
 /** First run: language, region, currency and security, all in one place, each starting from what the system suggests. */
 export default function FirstRunScreen({ onDone }: { onDone: () => void }) {
   const { t, language, setLanguage } = useI18n()
   const [message, setMessage] = useNotice()
   const [busy, setBusy] = useState(false)
+  const [workDone, setWorkDone] = useState(false)
+  const formRef = useRefocus(busy)
   const [recoveryKey, setRecoveryKey] = useState<string | null>(null)
   const [restoring, setRestoring] = useState(false)
   const [suggested] = useState(defaultSettings)
@@ -36,11 +41,16 @@ export default function FirstRunScreen({ onDone }: { onDone: () => void }) {
     if (!isCurrency(currency)) return setMessage(t('welcome.currencyError'))
     if (problem) return setMessage(problem)
 
+    closeKeyboard()
+    setWorkDone(false)
     setBusy(true)
     try {
       // The data file exists from here on, but the app stays on this screen until the key is saved.
       setRecoveryKey(
-        await vault.create({ currency: normalizeCurrency(currency), locale, timezone, language }, passphrase),
+        await atLeast(
+          vault.create({ currency: normalizeCurrency(currency), locale, timezone, language }, passphrase),
+          () => setWorkDone(true),
+        ),
       )
       saveSenderName(name)
     } catch (error) {
@@ -61,7 +71,7 @@ export default function FirstRunScreen({ onDone }: { onDone: () => void }) {
 
   return (
     <main className="gate">
-      <form onSubmit={onSubmit}>
+      <form ref={formRef} onSubmit={onSubmit}>
         <p className="brand-mark">meowny</p>
         <h1>{t('welcome.title')}</h1>
 
@@ -102,16 +112,17 @@ export default function FirstRunScreen({ onDone }: { onDone: () => void }) {
           {t('welcome.warning')}
         </p>
 
-        <button type="submit" disabled={busy}>
+        <Button type="submit" disabled={busy}>
           {t('welcome.create')}
-        </button>
-        <button type="button" onClick={() => setRestoring(true)}>
+        </Button>
+        <Button variant="outline" onClick={() => setRestoring(true)}>
           {t('welcome.restore')}
-        </button>
+        </Button>
         <p className="notice" role="alert">
           {message}
         </p>
       </form>
+      {busy && <Decrypting below done={workDone} />}
     </main>
   )
 }

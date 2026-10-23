@@ -1,244 +1,114 @@
-import { useEffect, useState, type FormEvent } from 'react'
-import { errorText, inDesktopApp, vault, type BackupSchedule, type LockPrefs } from '../vault/api'
-import { currencyLabel } from '../api/currencies'
-import { formatExample, localeOptions, whenText, zoneOptions } from '../api/locales'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { Link, useSearchParams } from 'react-router-dom'
+import { errorText, inDesktopApp, vault, type LockPrefs } from '../vault/api'
 import { useI18n } from '../i18n/context'
-import { languageOptions } from '../i18n/languages'
 import ChangeCurrencyModal from '../components/ChangeCurrencyModal'
 import CommandApiBlock from '../components/CommandApiBlock'
 import PhoneSyncBlock from '../components/PhoneSyncBlock'
-import Dropdown from '../components/Dropdown'
-import PasswordField from '../vault/PasswordField'
-import RecoveryKeyPanel from '../vault/RecoveryKeyPanel'
-import { backupDoneLines, backupPassphraseProblem, BACKUPS_KEPT, includeDocumentsByDefault, lockChoices, nearestLockChoice, type Settings } from '../vault/rules'
-import { useNotice } from '../hooks/useNotice'
+import { cn } from '../components/ui/cn'
+import type { Settings } from '../vault/rules'
+import { useToast } from '../hooks/toast'
 import { useProfile } from '../hooks/profile'
 import { syncApi } from '../api/sync'
-import { documents, type LibrarySize } from '../api/documents'
-import { formatSize } from '../lib/bytes'
-import { scheduleOnPhone } from '../api/debtReminders'
-import { cleanCategoryName } from '../api/categories'
-import { saveSenderName, senderName } from '../lib/senderName'
-import { parseTime, REMINDER_PERIODS, reminderEvery, reminderTime, remindersChanged, saveReminderEvery, saveReminderTime } from '../lib/reminders'
+import { AppearanceSection, AppLockSection, FriendNameSection, NotificationsSection, RegionSection } from './settings/GeneralSections'
+import { BackupSection, DataSection, RecoverySection } from './settings/DataSections'
 
-const PERIOD_LABELS = { 0: 'settings.debtEveryOff', 7: 'settings.scheduleWeekly', 14: 'settings.debtEveryTwoWeeks', 30: 'settings.scheduleMonthly' } as const
+// The copyright line at the foot of the settings, on the computer and the phone.
+const YEAR = new Date().getFullYear()
 
-const EVERY_CHOICES = [
-  { days: 1, labelKey: 'settings.scheduleDaily' },
-  { days: 7, labelKey: 'settings.scheduleWeekly' },
-  { days: 30, labelKey: 'settings.scheduleMonthly' },
+/** The sections of the page, in the order they are listed. The id is what `?section=` holds, so a link can open one. */
+const SECTIONS = [
+  { id: 'region', title: 'settings.region' },
+  { id: 'appearance', title: 'settings.appearance' },
+  { id: 'lock', title: 'settings.appLock' },
+  { id: 'notifications', title: 'settings.notifications' },
+  { id: 'friend', title: 'settings.friendName' },
+  { id: 'phone', title: 'sync.title' },
+  { id: 'cli', title: 'cli.title' },
+  { id: 'recovery', title: 'settings.recovery' },
+  { id: 'backup', title: 'settings.backup' },
+  { id: 'data', title: 'settings.data' },
 ] as const
 
+type SectionId = (typeof SECTIONS)[number]['id']
+
+/** What a phone has: the rest (pairing, command line, recovery key, backups, deleting) lives on the desktop. */
+const ON_PHONE: readonly SectionId[] = ['region', 'appearance', 'lock', 'notifications', 'friend']
+
 export default function SettingsPage() {
-  const { t, language, setLanguage } = useI18n()
+  const { t } = useI18n()
   const phone = useProfile() === 'phone'
-  const [chosenLanguage, setChosenLanguage] = useState(language)
+  const [params] = useSearchParams()
   const [settings, setSettings] = useState<Settings | null>(null)
   const [prefs, setPrefs] = useState<LockPrefs | null>(null)
-  const [location, setLocation] = useState('')
-  const [message, setMessage] = useNotice()
-  const [confirmation, setConfirmation] = useState('')
-  const [restoreWord, setRestoreWord] = useState('')
-  const [busy, setBusy] = useState(false)
-  const [schedule, setSchedule] = useState<BackupSchedule | null>(null)
-  const [every, setEvery] = useState('7')
-  const [library, setLibrary] = useState<LibrarySize | null>(null)
-  // null until the person chooses: then the default for the size of the library applies
-  const [manualDocuments, setManualDocuments] = useState<boolean | null>(null)
-  const [scheduleDocuments, setScheduleDocuments] = useState<boolean | null>(null)
-  const [newKey, setNewKey] = useState<string | null>(null)
   const [notifyDue, setNotifyDue] = useState<boolean | null>(null)
-  const [reminderAt, setReminderAt] = useState(reminderTime)
-  const [name, setName] = useState(senderName)
-  const [debtEvery, setDebtEvery] = useState(() => String(reminderEvery()))
-  const [lockAfter, setLockAfter] = useState('300')
+  const say = useToast()
   const [changingCurrency, setChangingCurrency] = useState(false)
-  const [locale, setLocale] = useState('')
-  const [timezone, setTimezone] = useState('')
+  const paneRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     if (!inDesktopApp()) return
-    vault.settings().then(
-      (loaded) => {
-        setSettings(loaded)
-        setLocale(loaded.locale)
-        setChosenLanguage(loaded.language)
-        setTimezone(loaded.timezone)
-      },
-      (e) => setMessage(errorText(e)),
-    )
-    vault.lockPrefs().then(
-      (loaded) => {
-        setPrefs(loaded)
-        setLockAfter(String(nearestLockChoice(loaded.lock_after_secs, lockChoices(phone))))
-      },
-      (e) => setMessage(errorText(e)),
-    )
-    vault.notifyDue().then(setNotifyDue, (e) => setMessage(errorText(e)))
-    vault.dataLocation().then(setLocation, () => undefined)
-    vault.backupSchedule().then(setSchedule, (e) => setMessage(errorText(e)))
-    if (!phone) documents.size().then(setLibrary, () => undefined)
-  }, [setMessage, phone])
+    vault.settings().then(setSettings, (e) => say(errorText(e), 'error'))
+    vault.lockPrefs().then(setPrefs, (e) => say(errorText(e), 'error'))
+    vault.notifyDue().then(setNotifyDue, (e) => say(errorText(e), 'error'))
+  }, [say])
+
+  const sections = SECTIONS.filter((section) => !phone || ON_PHONE.includes(section.id))
+  const asked = sections.find((section) => section.id === params.get('section'))
+  // The desktop always shows a section (the first, unless one is asked for); the phone shows the list until one is chosen.
+  const current = asked ?? (phone ? undefined : sections[0])
+  const currentId = current?.id
+
+  // A new section starts at the top.
+  useEffect(() => {
+    paneRef.current?.scrollTo({ top: 0 })
+  }, [currentId])
 
   if (!inDesktopApp()) return <p>{t('settings.unavailable')}</p>
-
-  async function onSettings(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    const next = {
-      currency: settings?.currency ?? '',
-      locale,
-      timezone,
-      language: chosenLanguage,
-    }
-    try {
-      await vault.saveSettings(next)
-      setSettings(next)
-      setLanguage(chosenLanguage)
-      setMessage(t('settings.saved'))
-    } catch (error) {
-      setMessage(errorText(error))
-    }
-  }
-
-  async function onLock(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    const form = new FormData(event.currentTarget)
-    const next: LockPrefs = {
-      lock_after_secs: Number(form.get('lock_after')),
-      // A phone has no window to minimise or close: what is stored stays.
-      lock_on_minimize: phone && prefs ? prefs.lock_on_minimize : form.get('lock_on_minimize') === 'on',
-      lock_on_close: phone && prefs ? prefs.lock_on_close : form.get('lock_on_close') === 'on',
-    }
-    try {
-      await vault.saveLockPrefs(next)
-      setPrefs(next)
-      setMessage(t('settings.saved'))
-    } catch (error) {
-      setMessage(errorText(error))
-    }
-  }
 
   async function onNotify(on: boolean) {
     try {
       await vault.setNotifyDue(on)
       setNotifyDue(on)
     } catch (error) {
-      setMessage(errorText(error))
+      say(errorText(error), 'error')
     }
   }
 
-  async function onRecoveryKey(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    const passphrase = String(new FormData(event.currentTarget).get('passphrase') ?? '')
-    try {
-      setNewKey(await vault.newRecoveryKey(passphrase))
-      setMessage('')
-    } catch (error) {
-      setMessage(errorText(error))
-    }
-  }
-
-  async function onBackup(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    const form = event.currentTarget
-    const data = new FormData(form)
-    const passphrase = String(data.get('backup_passphrase'))
-    const problem = backupPassphraseProblem(passphrase, String(data.get('backup_confirm')))
-    if (problem) return setMessage(problem)
-    setBusy(true)
-    try {
-      const done = await vault.createBackup(passphrase, includeManual)
-      if (done) {
-        form.reset()
-        setMessage([t('settings.backupSaved'), ...backupDoneLines(done).map((line) => t(line.key, { count: line.count }))].join(' '))
-      }
-    } catch (error) {
-      setMessage(errorText(error))
-    }
-    setBusy(false)
-  }
-
-  // Documents go into a backup by default while the library is small; this device holds all of them, and the backup holds what is held.
-  const byDefault = library ? includeDocumentsByDefault(library.heldBytes) : true
-  const includeManual = manualDocuments ?? byDefault
-  const includeSchedule = scheduleDocuments ?? byDefault
-  const documentsChoice = (checked: boolean, onChange: (value: boolean) => void) =>
-    library && (
-      <>
-        <label className="check">
-          <input type="checkbox" checked={checked} onChange={(event) => onChange(event.target.checked)} />
-          {t('settings.backupDocuments', { count: library.heldCount, size: formatSize(library.heldBytes, settings?.locale ?? '') })}
-        </label>
-        <p className="hint">{t('settings.backupDocumentsHint')}</p>
-      </>
-    )
-
-  const everyLabel = (days: number) => {
-    const choice = EVERY_CHOICES.find((c) => c.days === days)
-    return choice ? t(choice.labelKey) : String(days)
-  }
-
-  async function onSchedule(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    const form = event.currentTarget
-    const data = new FormData(form)
-    const passphrase = String(data.get('schedule_passphrase'))
-    const problem = backupPassphraseProblem(passphrase, String(data.get('schedule_confirm')))
-    if (problem) return setMessage(problem)
-    setBusy(true)
-    try {
-      if (await vault.startBackupSchedule(passphrase, Number(every), includeSchedule)) {
-        form.reset()
-        setSchedule(await vault.backupSchedule())
-        setMessage(t('settings.scheduleStarted'))
-      }
-    } catch (error) {
-      setMessage(errorText(error))
-    }
-    setBusy(false)
-  }
-
-  async function onStopSchedule() {
-    try {
-      await vault.stopBackupSchedule()
-      setSchedule(null)
-      setMessage(t('settings.scheduleStopped'))
-    } catch (error) {
-      setMessage(errorText(error))
-    }
-  }
-
-  async function onRestore(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    const passphrase = String(new FormData(event.currentTarget).get('restore_passphrase'))
-    setBusy(true)
-    try {
-      // Everything on screen is old data now, so start over from the top.
-      if (await vault.restoreBackup(passphrase, restoreWord)) window.location.assign('/')
-    } catch (error) {
-      setMessage(errorText(error))
-    }
-    setBusy(false)
-  }
-
-  async function onWipe(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    try {
-      await vault.wipe(confirmation)
-      window.location.assign('/')
-    } catch (error) {
-      setMessage(errorText(error))
+  function body(id: SectionId): ReactNode {
+    switch (id) {
+      case 'region':
+        return (
+          settings && (
+            <RegionSection settings={settings} phone={phone} onSaved={setSettings} onChangeCurrency={() => setChangingCurrency(true)} say={say} />
+          )
+        )
+      case 'appearance':
+        return <AppearanceSection />
+      case 'lock':
+        return prefs && <AppLockSection prefs={prefs} phone={phone} onSaved={setPrefs} say={say} />
+      case 'notifications':
+        return notifyDue !== null && <NotificationsSection notifyDue={notifyDue} phone={phone} onNotify={(on) => void onNotify(on)} say={say} />
+      case 'friend':
+        return <FriendNameSection say={say} />
+      case 'phone':
+        return settings && <PhoneSyncBlock locale={settings.locale} timezone={settings.timezone} />
+      case 'cli':
+        return settings && <CommandApiBlock locale={settings.locale} timezone={settings.timezone} />
+      case 'recovery':
+        return <RecoverySection say={say} />
+      case 'backup':
+        return settings && <BackupSection settings={settings} say={say} />
+      case 'data':
+        return <DataSection say={say} />
     }
   }
 
   return (
-    <section className="tx-page settings-page">
+    <section className={cn('tx-page', 'settings-page', phone && 'on-phone')}>
       <div className="tx-title">
         <h1>{t('settings.title')}</h1>
       </div>
-      <p className="notice" role="status">
-        {message}
-      </p>
 
       {changingCurrency && settings ? (
         <ChangeCurrencyModal
@@ -249,248 +119,62 @@ export default function SettingsPage() {
             setChangingCurrency(false)
             // A paired phone still shows the old currency until the next sync, so say so.
             syncApi.devices().then(
-              (paired) => setMessage(paired.length > 0 ? `${summary} ${t('currency.syncPhone')}` : summary),
-              () => setMessage(summary),
+              (paired) => (paired.length > 0 ? say(`${summary} ${t('currency.syncPhone')}`, 'warning') : say(summary, 'success')),
+              () => say(summary, 'success'),
             )
           }}
         />
       ) : null}
 
-      <div className="tx-pane wide settings-grid">
-        {settings && (
-          <form className="settings-block" onSubmit={onSettings}>
-            <h2>{t('settings.region')}</h2>
-            <Dropdown
-              label={t('settings.language')}
-              value={chosenLanguage}
-              options={languageOptions}
-              onChange={setChosenLanguage}
-            />
-            <Dropdown
-              label={t('settings.format')}
-              value={locale}
-              options={localeOptions(locale)}
-              onChange={setLocale}
-            />
-            <p className="hint">{formatExample(locale, settings.currency)}</p>
-            <Dropdown label={t('settings.timezone')} value={timezone} options={zoneOptions(timezone)} onChange={setTimezone} />
-            <div className="settings-row">
-              <span className="settings-row-label">{t('settings.currency')}</span>
-              <span className="settings-row-value">{currencyLabel(settings.currency)}</span>
-              {phone ? null : (
-                <button type="button" onClick={() => setChangingCurrency(true)}>
-                  {t('common.change')}
-                </button>
-              )}
-            </div>
-            {phone ? <p className="hint">{t('settings.currencyOnDesktop')}</p> : null}
-            <div className="actions">
-              <button type="submit">{t('common.save')}</button>
-            </div>
-          </form>
+      <div ref={paneRef} className={cn('tx-pane', 'wide', 'settings-layout', phone && 'is-list')}>
+        {phone ? (
+          current ? null : (
+            <nav className="settings-list" aria-label={t('settings.title')}>
+              {sections.map((section) => (
+                <Link key={section.id} className="settings-list-item" to={{ search: `?section=${section.id}` }}>
+                  <span>{t(section.title)}</span>
+                  <span className="settings-chevron" aria-hidden="true">
+                    ›
+                  </span>
+                </Link>
+              ))}
+            </nav>
+          )
+        ) : (
+          <nav className="settings-nav" aria-label={t('settings.title')}>
+            {sections.map((section) => (
+              <Link
+                key={section.id}
+                className="settings-nav-item"
+                to={{ search: `?section=${section.id}` }}
+                replace
+                aria-current={section.id === currentId ? 'page' : undefined}
+              >
+                {t(section.title)}
+              </Link>
+            ))}
+          </nav>
         )}
 
-        {prefs && (
-          <form className="settings-block" onSubmit={onLock}>
-            <h2>{t('settings.appLock')}</h2>
-            <Dropdown
-              label={t('settings.lockAfter')}
-              name="lock_after"
-              value={lockAfter}
-              options={lockChoices(phone).map((choice) => ({ value: String(choice.seconds), label: t(choice.labelKey) }))}
-              onChange={setLockAfter}
-            />
-            {phone ? null : (
-              <>
-                <label className="check">
-                  <input name="lock_on_minimize" type="checkbox" defaultChecked={prefs.lock_on_minimize} />
-                  {t('settings.lockMinimized')}
-                </label>
-                <label className="check">
-                  <input name="lock_on_close" type="checkbox" defaultChecked={prefs.lock_on_close} />
-                  {t('settings.lockClosed')}
-                </label>
-              </>
-            )}
-            <div className="actions">
-              <button type="submit">{t('common.save')}</button>
-              <button type="button" onClick={() => void vault.lock().then(() => window.location.reload())}>
-                {t('settings.lockNow')}
-              </button>
-            </div>
-          </form>
-        )}
-
-        <form
-          className="settings-block"
-          onSubmit={(event) => {
-            event.preventDefault()
-            // the rule of a friend's name; kept on this device, for the code of a shared bill
-            const clean = cleanCategoryName(name)
-            if (!clean) return setMessage(t('debts.errorName'))
-            saveSenderName(clean)
-            setName(clean)
-            setMessage(t('settings.saved'))
-          }}
-        >
-          <label>
-            {t('code.senderAsk')}
-            <input value={name} maxLength={50} autoComplete="name" onChange={(event) => setName(event.target.value)} />
-          </label>
-          <div className="actions">
-            <button type="submit">{t('common.save')}</button>
+        {current ? (
+          <div className="settings-section">
+            <header className="settings-section-head">
+              {phone ? (
+                <Link className="settings-back" to={{ search: '' }}>
+                  <span aria-hidden="true">‹</span> {t('settings.title')}
+                </Link>
+              ) : null}
+              <h2>{t(current.title)}</h2>
+            </header>
+            {body(current.id)}
           </div>
-        </form>
-
-        {notifyDue !== null && (
-          <div className="settings-block">
-            <h2>{t('settings.notifications')}</h2>
-            <label className="check">
-              <input type="checkbox" checked={notifyDue} onChange={(event) => void onNotify(event.target.checked)} />
-              {t('settings.notifyDue')}
-            </label>
-            <label>
-              {t('settings.reminderTime')}
-              <input
-                type="time"
-                value={reminderAt}
-                onChange={(event) => {
-                  setReminderAt(event.target.value)
-                  // the time of a reminder is this device's: kept here, and the phone hands the system the new time
-                  if (parseTime(event.target.value)) {
-                    saveReminderTime(event.target.value)
-                    remindersChanged()
-                  }
-                }}
-              />
-            </label>
-            <Dropdown
-              label={t('settings.debtEvery')}
-              value={debtEvery}
-              options={REMINDER_PERIODS.map((days) => ({ value: String(days), label: t(PERIOD_LABELS[days]) }))}
-              onChange={(value) => {
-                setDebtEvery(value)
-                // the period is this device's, like the time of day: kept here, and the phone hands the system the new days
-                saveReminderEvery(Number(value))
-                if (phone) {
-                  void scheduleOnPhone().then((result) => {
-                    if (result === 'denied') setMessage(t('debts.remindDenied'))
-                  })
-                } else {
-                  remindersChanged()
-                }
-              }}
-            />
-            <p className="hint">{t('settings.debtEveryHint')}</p>
-            <p className="hint">{t(phone ? 'settings.reminderPhone' : 'settings.reminderDesktop')}</p>
-          </div>
-        )}
-
-        {settings && !phone && <PhoneSyncBlock locale={settings.locale} timezone={settings.timezone} />}
-
-        {settings && !phone && <CommandApiBlock locale={settings.locale} timezone={settings.timezone} />}
-
-        {/* A phone has no recovery key (it is not shown there): a forgotten passphrase means erasing the phone and pairing again. */}
-        {!phone && (
-          <div className="settings-block">
-            <h2>{t('settings.recovery')}</h2>
-            {newKey ? (
-              <RecoveryKeyPanel code={newKey} inline doneLabel={t('common.done')} onDone={() => setNewKey(null)} />
-            ) : (
-              <form onSubmit={onRecoveryKey}>
-                <PasswordField label={t('settings.recoveryPassphrase')} name="passphrase" current />
-                <div className="actions">
-                  <button type="submit">{t('settings.recoveryNew')}</button>
-                </div>
-              </form>
-            )}
-          </div>
-        )}
-
-        {/* A backup is a file, and a phone cannot save one yet: its data is also on the desktop, which has the backups. */}
-        {!phone && (
-          <div className="settings-block">
-            <h2>{t('settings.backup')}</h2>
-            <form onSubmit={onBackup}>
-              <PasswordField label={t('settings.backupPassphrase')} name="backup_passphrase" />
-              <PasswordField label={t('settings.backupPassphraseRepeat')} name="backup_confirm" />
-              {documentsChoice(includeManual, setManualDocuments)}
-              <div className="actions">
-                <button type="submit" disabled={busy}>
-                  {t('settings.backupCreate')}
-                </button>
-              </div>
-            </form>
-            <form onSubmit={onSchedule}>
-              {schedule && (
-                <p className="hint">
-                  {t('settings.scheduleOn', { every: everyLabel(schedule.everyDays), folder: schedule.folder })}{' '}
-                  {schedule.lastAttemptAt &&
-                    t(schedule.lastOk ? 'settings.scheduleLast' : 'settings.scheduleFailed', {
-                      time: whenText(schedule.lastAttemptAt, locale, timezone),
-                    })}{' '}
-                  {schedule.includeDocuments
-                    ? t('settings.scheduleDocuments', { keep: BACKUPS_KEPT, size: formatSize((library?.heldBytes ?? 0) * BACKUPS_KEPT, locale) })
-                    : t('settings.scheduleNoDocuments')}
-                </p>
-              )}
-              <PasswordField label={t('settings.backupPassphrase')} name="schedule_passphrase" />
-              <PasswordField label={t('settings.backupPassphraseRepeat')} name="schedule_confirm" />
-              {documentsChoice(includeSchedule, setScheduleDocuments)}
-              <Dropdown
-                label={t('settings.scheduleEvery')}
-                value={every}
-                options={EVERY_CHOICES.map((choice) => ({ value: String(choice.days), label: t(choice.labelKey) }))}
-                onChange={setEvery}
-              />
-              <div className="actions">
-                <button type="submit" disabled={busy}>
-                  {t('settings.scheduleStart')}
-                </button>
-                {schedule && (
-                  <button type="button" onClick={() => void onStopSchedule()}>
-                    {t('settings.scheduleStop')}
-                  </button>
-                )}
-              </div>
-            </form>
-            <form onSubmit={onRestore}>
-              <p className="hint">{t('settings.restoreHint')}</p>
-              <PasswordField label={t('settings.backupPassphrase')} name="restore_passphrase" current />
-              <label>
-                {t('settings.restoreConfirm')}
-                <input value={restoreWord} onChange={(e) => setRestoreWord(e.target.value)} autoComplete="off" />
-              </label>
-              <div className="actions">
-                <button type="submit" disabled={busy || restoreWord !== 'RESTORE'}>
-                  {t('settings.restoreStart')}
-                </button>
-              </div>
-            </form>
-          </div>
-        )}
-
-        <div className="settings-block">
-          <h2>{t('settings.data')}</h2>
-          {location && (
-            <p className="hint">
-              {t('settings.storedIn')} <code>{location}</code>
-            </p>
-          )}
-          <form onSubmit={onWipe}>
-            <p className="hint">{t('settings.deleteHint')}</p>
-            <label>
-              {t('settings.deleteConfirm')}
-              <input value={confirmation} onChange={(e) => setConfirmation(e.target.value)} autoComplete="off" />
-            </label>
-            <div className="actions">
-              <button type="submit" disabled={confirmation !== 'DELETE'}>
-                {t('settings.deleteAll')}
-              </button>
-            </div>
-          </form>
-        </div>
+        ) : null}
       </div>
+
+      <footer className="settings-footer">
+        <span>© {YEAR} meowny</span>
+        <span>AGPL-3.0</span>
+      </footer>
     </section>
   )
 }

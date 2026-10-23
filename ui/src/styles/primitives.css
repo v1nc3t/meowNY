@@ -1,0 +1,426 @@
+/* Pieces shared by the whole app: the buttons, cards, badges, tables and tabs of the design (every class here starts with "ui-"),
+   and the lists of cards that several pages use. */
+
+/* Buttons. A plain <button> is already the ghost look (base.css); these classes pick another look and work on a link too. */
+.ui-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.375rem;
+  flex: 0 0 auto;
+  height: 2.25rem;
+  min-width: 0;
+  padding: 0 1rem;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  font-family: var(--font);
+  font-size: 0.8125rem;
+  font-weight: 400;
+  line-height: 1.4;
+  white-space: nowrap;
+  text-align: center;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background-color 0.15s, color 0.15s, border-color 0.15s, opacity 0.15s;
+}
+
+.ui-btn:disabled,
+.ui-btn[aria-disabled='true'] {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.ui-btn-default {
+  color: var(--primary-foreground);
+  background: var(--primary);
+}
+
+.ui-btn-secondary {
+  color: var(--secondary-foreground);
+  background: var(--secondary);
+}
+
+.ui-btn-outline {
+  color: var(--foreground);
+  background: var(--background);
+  border-color: var(--input);
+  box-shadow: var(--shadow-xs);
+}
+
+.ui-btn-ghost {
+  color: var(--foreground);
+  background: transparent;
+}
+
+.ui-btn-destructive {
+  color: var(--destructive-foreground);
+  background: var(--destructive-solid);
+}
+
+.ui-btn-link {
+  height: auto;
+  padding: 0;
+  color: var(--foreground);
+  background: transparent;
+  text-underline-offset: 4px;
+}
+
+@media (hover: hover) {
+  .ui-btn-default:hover:not(:disabled) {
+    color: var(--primary-foreground);
+    background: var(--primary);
+    opacity: 0.9;
+  }
+
+  .ui-btn-secondary:hover:not(:disabled) {
+    color: var(--secondary-foreground);
+    background: var(--secondary);
+    opacity: 0.8;
+  }
+
+  .ui-btn-outline:hover:not(:disabled),
+  .ui-btn-ghost:hover:not(:disabled) {
+    color: var(--accent-foreground);
+    background: var(--accent);
+  }
+
+  .ui-btn-destructive:hover:not(:disabled) {
+    color: var(--destructive-foreground);
+    background: var(--destructive-solid);
+    opacity: 0.9;
+  }
+
+  .ui-btn-link:hover:not(:disabled) {
+    color: var(--foreground);
+    background: transparent;
+    text-decoration: underline;
+  }
+}
+
+/* Delete in a row: red text, the same ghost button as the rest. After the hover rules above so the red stays on hover. */
+.row-danger,
+.row-danger:hover:not(:disabled) {
+  color: var(--destructive);
+}
+
+.ui-btn-sm {
+  height: 2rem;
+  padding: 0 0.75rem;
+}
+
+.ui-btn-lg {
+  height: 2.5rem;
+  padding: 0 1.5rem;
+}
+
+.ui-btn-icon {
+  width: 2.25rem;
+  min-width: 2.25rem;
+  padding: 0;
+}
+
+/* Cards. */
+.ui-card {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  min-width: 0;
+  padding: 1.25rem;
+  color: var(--card-foreground);
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-sm);
+}
+
+/* The title and description on the left, an optional action in the top right corner. */
+.ui-card-header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  column-gap: 1rem;
+}
+
+.ui-card-title {
+  grid-column: 1;
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
+  line-height: 1.4;
+  letter-spacing: normal;
+  color: var(--card-foreground);
+}
+
+.ui-card-title a {
+  color: inherit;
+  text-decoration: none;
+  text-underline-offset: 4px;
+}
+
+.ui-card-title a:focus-visible {
+  text-decoration: underline;
+}
+
+@media (hover: hover) {
+  .ui-card-title a:hover {
+    text-decoration: underline;
+  }
+}
+
+.ui-card-description {
+  grid-column: 1;
+  margin-top: 0.25rem;
+  font-size: 0.8125rem;
+  color: var(--muted-foreground);
+}
+
+.ui-card-action {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  align-self: start;
+  justify-self: end;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.ui-card-content {
+  min-width: 0;
+}
+
+.ui-card-footer {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+/* Badges. The coloured ones are outlined in their colour, so a row of them stays calm. */
+.ui-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  width: fit-content;
+  padding: 0.125rem 0.5rem;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  font-size: 0.75rem;
+  font-weight: 600;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+
+.ui-badge-default {
+  color: var(--primary-foreground);
+  background: var(--primary);
+}
+
+.ui-badge-secondary {
+  color: var(--secondary-foreground);
+  background: var(--secondary);
+}
+
+.ui-badge-outline {
+  color: var(--foreground);
+  border-color: var(--border);
+}
+
+.ui-badge-destructive {
+  color: var(--destructive);
+  border-color: var(--destructive);
+}
+
+.ui-badge-success {
+  color: var(--success);
+  border-color: var(--success);
+}
+
+/* Tables: the wrapper scrolls sideways when the table is wider than the screen. */
+.ui-table-wrap {
+  width: 100%;
+  overflow: auto;
+}
+
+.ui-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8125rem;
+}
+
+.ui-table caption {
+  padding-bottom: 0.5rem;
+  text-align: left;
+  color: var(--muted-foreground);
+}
+
+.ui-table th {
+  height: 2.5rem;
+  padding: 0 0.5rem;
+  text-align: left;
+  font-weight: 600;
+  white-space: nowrap;
+  color: var(--muted-foreground);
+}
+
+.ui-table td {
+  padding: 0.5rem;
+}
+
+.ui-table tr {
+  border-bottom: 1px solid var(--border);
+}
+
+.ui-table tbody tr:last-child {
+  border-bottom: 0;
+}
+
+.ui-table tbody tr:hover {
+  background: var(--muted);
+}
+
+/* Tabs: a grey track and a raised white tab on it. The triggers are equally wide. */
+.ui-tabs {
+  display: inline-grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+  align-items: stretch;
+  width: fit-content;
+  max-width: 100%;
+  height: 2.25rem;
+  padding: 3px;
+  color: var(--muted-foreground);
+  background: var(--muted);
+  border-radius: var(--radius-lg);
+}
+
+.ui-tabs > button {
+  min-width: 0;
+  min-height: 0;
+  padding: 0 0.75rem;
+  color: var(--muted-foreground);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  overflow: hidden;
+}
+
+.ui-tabs > button[aria-selected='true'] {
+  color: var(--foreground);
+  background: var(--background);
+  font-weight: 600;
+  box-shadow: inset 0 -2px 0 var(--primary);
+}
+
+@media (hover: hover) {
+  .ui-tabs > button:hover:not(:disabled, [aria-selected='true']) {
+    color: var(--foreground);
+    background: transparent;
+  }
+}
+
+/* Recurring: a card for each item (money.css draws the card itself). */
+.rec-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  width: 100%;
+  margin: 0 0 0.5rem;
+}
+
+/* Transactions, debts and documents: one bordered box, a row for each item with a line between rows. */
+.card-list {
+  width: 100%;
+  margin: 0 0 0.5rem;
+  overflow: hidden;
+  color: var(--card-foreground);
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+}
+
+.card-list:empty {
+  display: none;
+}
+
+ul.card-list > li.card-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: center;
+  gap: 0.5rem 1.5rem;
+  padding: 0.75rem 1rem;
+  border: 0;
+  border-top: 1px solid var(--border);
+  white-space: normal;
+}
+
+ul.card-list > li.card-item:first-child {
+  border-top: 0;
+}
+
+@media (min-width: 52em) {
+  ul.card-list > li.card-item {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+}
+
+.card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  min-width: 0;
+}
+
+.card-name {
+  margin: 0;
+  font-size: 0.9375rem;
+  color: var(--foreground);
+  overflow-wrap: anywhere;
+}
+
+.card-meta {
+  margin: 0;
+  font-size: 0.8125rem;
+  color: var(--muted-foreground);
+}
+
+.card-amount {
+  color: var(--foreground);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Edit and delete are plain (ghost) buttons side by side. */
+.card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+/* Debts and shared bills (phase 10). */
+.debt-owed {
+  color: var(--success);
+}
+
+.debt-owe {
+  color: var(--destructive);
+}
+
+.debt-even {
+  color: var(--muted-foreground);
+}
+
+/* A section of the details (the split, the description) with its small grey title. */
+.detail-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  margin-top: 0.5rem;
+}
+
+.detail-section .detail-title {
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--muted-foreground);
+}

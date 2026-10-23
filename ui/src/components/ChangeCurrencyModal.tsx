@@ -2,6 +2,7 @@ import { useState, type FormEvent } from 'react'
 import { currencyOptions } from '../api/currencies'
 import { useT } from '../i18n/context'
 import { errorText } from '../api/invoke'
+import { useToast } from '../hooks/toast'
 import { convertAmount, parseRate } from '../lib/money'
 import { vault } from '../vault/api'
 import Dropdown from './Dropdown'
@@ -26,7 +27,7 @@ export default function ChangeCurrencyModal({
   const [next, setNext] = useState('')
   const [rate, setRate] = useState('')
   const [labelOnly, setLabelOnly] = useState(false)
-  const [message, setMessage] = useState('')
+  const say = useToast()
   const [pending, setPending] = useState(false)
 
   const options = currencyOptions().filter((option) => option.value !== current)
@@ -35,8 +36,8 @@ export default function ChangeCurrencyModal({
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (pending) return
-    if (!next) return setMessage(t('currency.chooseError'))
-    if (!labelOnly && !parseRate(rate.trim())) return setMessage(t('currency.rateError'))
+    if (!next) return say(t('currency.chooseError'), 'error')
+    if (!labelOnly && !parseRate(rate.trim())) return say(t('currency.rateError'), 'error')
     setPending(true)
     try {
       const done = await vault.changeCurrency(next, labelOnly ? null : rate.trim())
@@ -47,14 +48,13 @@ export default function ChangeCurrencyModal({
           : t('currency.converted', { to: next, transactions: done.transactions, recurring: done.recurring, budgets: done.budgets }),
       )
     } catch (error) {
-      setMessage(errorText(error))
+      say(errorText(error), 'error')
       setPending(false)
     }
   }
 
   return (
     <Modal title={t('currency.changeTitle')} pending={pending} formId={formId} onClose={onClose}>
-      <p className="notice">{message}</p>
       <form id={formId} onSubmit={(event) => void onSubmit(event)}>
         <Dropdown
           label={t('currency.new')}

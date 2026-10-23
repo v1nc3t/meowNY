@@ -11,7 +11,7 @@ export default function SectionTabs<T extends string>({
   label: string
 }) {
   return (
-    <div className="section-tabs wide" role="tablist" aria-label={label}>
+    <div className="section-tabs ui-tabs wide" role="tablist" aria-label={label}>
       {tabs.map((tab) => (
         <button key={tab.id} type="button" role="tab" aria-selected={tab.id === value} onClick={() => onChange(tab.id)}>
           {tab.label}

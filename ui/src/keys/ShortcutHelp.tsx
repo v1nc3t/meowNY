@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react'
 import { useT } from '../i18n/context'
 import { keysFor, shortcutName } from './tip'
 import { SHORTCUTS, type ShortcutGroup, type ShortcutId } from './shortcuts'
+import Button from '../components/ui/Button'
 
 const GROUPS: { group: ShortcutGroup; title: 'keys.groupGo' | 'keys.groupActions' | 'keys.groupLists' | 'keys.groupGeneral' }[] = [
   { group: 'go', title: 'keys.groupGo' },
@@ -56,7 +57,12 @@ export default function ShortcutHelp({ onClose }: { onClose: () => void }) {
                     <div key={id} className="shortcut-row">
                       <dt>{shortcutName(id)}</dt>
                       <dd>
-                        <kbd>{keysFor(id)}</kbd>
+                        {/* "g d" is two keys one after the other: a chip for each. "Ctrl+L" is one chip. */}
+                        {keysFor(id)
+                          .split(' ')
+                          .map((key, at) => (
+                            <kbd key={at}>{key}</kbd>
+                          ))}
                       </dd>
                     </div>
                   ))}
@@ -65,9 +71,9 @@ export default function ShortcutHelp({ onClose }: { onClose: () => void }) {
           ))}
         </div>
         <div className="modal-actions">
-          <button type="button" onClick={onClose}>
+          <Button variant="outline" onClick={onClose}>
             {t('keys.close')}
-          </button>
+          </Button>
         </div>
       </div>
     </dialog>

@@ -2,7 +2,7 @@ import { useState, type FormEvent } from 'react'
 import { debts, type Person } from '../api/debts'
 import { errorText } from '../api/invoke'
 import { cleanCategoryName } from '../api/categories'
-import { useNotice } from '../hooks/useNotice'
+import { useToast } from '../hooks/toast'
 import { useT } from '../i18n/context'
 import Modal from './Modal'
 
@@ -20,7 +20,7 @@ export default function FriendNameModal({
   onSaved: (person: Person) => void
 }) {
   const t = useT()
-  const [message, setMessage] = useNotice()
+  const say = useToast()
   const [pending, setPending] = useState(false)
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
@@ -29,14 +29,14 @@ export default function FriendNameModal({
     // the same rule as a category's name: trimmed, not empty, 50 characters at most, no control characters
     const name = cleanCategoryName(String(new FormData(event.currentTarget).get('name') ?? ''))
     if (!name) {
-      setMessage(t('debts.errorName'))
+      say(t('debts.errorName'), 'error')
       return
     }
     setPending(true)
     try {
       onSaved(person ? await debts.updatePerson(person.id, { name }) : await debts.createPerson(name))
     } catch (failure) {
-      setMessage(errorText(failure))
+      say(errorText(failure), 'error')
     } finally {
       setPending(false)
     }
@@ -44,7 +44,6 @@ export default function FriendNameModal({
 
   return (
     <Modal title={person ? t('debts.renameTitle') : t('debts.addFriendTitle')} pending={pending} formId={formId} onClose={onClose}>
-      <p className="notice">{message}</p>
       <form id={formId} onSubmit={(event) => void onSubmit(event)}>
         <label>
           {t('common.name')}
