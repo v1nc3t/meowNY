@@ -621,33 +621,6 @@ section.command > :last-child {
   color: var(--muted-foreground);
 }
 
-/* The headline numbers, like the dashboard's. */
-.stats {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 1rem 1.5rem;
-  margin-top: 1.5rem;
-}
-
-.stat {
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-  min-width: 0;
-}
-
-.stat-label {
-  font-size: 0.8125rem;
-  color: var(--muted-foreground);
-}
-
-.stat-value {
-  font-size: 1.5rem;
-  font-weight: 600;
-  line-height: 1.3;
-  letter-spacing: -0.02em;
-}
-
 .grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(min(100%, 15rem), 1fr));
@@ -659,10 +632,18 @@ section.command > :last-child {
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 15rem), 1fr));
 }
 
+/* A feature is a card that is one link: an icon, a name and a line. */
 .feature {
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
+  text-decoration: none;
+  transition: background-color 0.15s, border-color 0.15s;
+}
+
+.feature:hover {
+  border-color: var(--input);
+  background: var(--accent);
 }
 
 .feature-icon {
@@ -685,12 +666,6 @@ section.command > :last-child {
   font-size: 0.8125rem;
   line-height: 1.6;
   color: var(--muted-foreground);
-}
-
-.feature .more {
-  margin-top: auto;
-  padding-top: 0.25rem;
-  font-size: 0.8125rem;
 }
 
 /* A list in one bordered box, a row for each item, as the app's lists. */
@@ -768,10 +743,6 @@ ul.rows span {
 
   section.command {
     padding: 1rem;
-  }
-
-  .stats {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   ul.rows li {

@@ -3,7 +3,7 @@
 // Screenshots: a picture named in SHOTS that exists as docs/site/images/<name>.png is shown; until then the page shows
 // an empty frame with its name.
 
-import { escapeHtml, icon, inlineHtml, REPO, shell } from './render.mjs'
+import { escapeHtml, icon, REPO, shell } from './render.mjs'
 
 export const SHOTS = {
   dashboard: { alt: "The dashboard: this month's budget, spending by category and what is due", caption: 'the dashboard' },
@@ -12,22 +12,15 @@ export const SHOTS = {
   phone: { alt: 'The phone app beside the desktop app', caption: 'phone and computer' },
 }
 
-const STATS = [
-  ['servers', '0'],
-  ['accounts', '0'],
-  ['trackers', '0'],
-  ['languages', '7'],
-]
-
 const FEATURES = [
-  { icon: 'budgets', title: 'budgets', text: 'Categories, income and expenses, and a budget for each month. A new limit never rewrites past months.', href: 'guide.html#budgeting' },
-  { icon: 'recurring', title: 'recurring', text: 'Rent, salary, subscriptions. See what is due, then pay, skip, pause or end it.', href: 'guide.html#budgeting' },
-  { icon: 'home', title: 'statistics', text: 'Budget against spending, trends, a year view and your top categories.', href: 'guide.html#budgeting' },
-  { icon: 'documents', title: 'documents', text: 'Receipts and invoices attached to transactions, stored encrypted, previewed inside the app.', href: 'guide.html#documents' },
-  { icon: 'debts', title: 'debts and splitting', text: 'Who owes whom, and bills split any way you like. Budgets count only your part.', href: 'guide.html#debts' },
-  { icon: 'sync', title: 'phone sync', text: 'An Android app with a full offline copy. It syncs with your computer over home wifi, with no server.', href: 'guide.html#phone' },
-  { icon: 'export', title: 'backup and export', text: 'Encrypted backups on a schedule. Exports to JSON, CSV, Excel and PDF.', href: 'guide.html#backup' },
-  { icon: 'terminal', title: 'command line', text: 'Scripts and AI agents use the running app through `meowny`, with tokens you make and revoke.', href: 'cli.html' },
+  { icon: 'budgets', title: 'budgets', text: 'Monthly budgets per category.', href: 'guide.html#budgeting' },
+  { icon: 'recurring', title: 'recurring', text: 'Rent, salary, subscriptions.', href: 'guide.html#budgeting' },
+  { icon: 'home', title: 'statistics', text: 'Spending, trends, top categories.', href: 'guide.html#budgeting' },
+  { icon: 'documents', title: 'documents', text: 'Receipts, kept encrypted.', href: 'guide.html#documents' },
+  { icon: 'debts', title: 'debts', text: 'Who owes whom. Split bills.', href: 'guide.html#debts' },
+  { icon: 'sync', title: 'phone', text: 'Android, synced over wifi.', href: 'guide.html#phone' },
+  { icon: 'export', title: 'backup', text: 'Encrypted backups and exports.', href: 'guide.html#backup' },
+  { icon: 'terminal', title: 'command line', text: 'For scripts and AI agents.', href: 'cli.html' },
 ]
 
 const PRIVATE = [
@@ -47,9 +40,8 @@ function shot(name, images) {
 
 /** The landing page. `images` holds the names of the screenshots that exist. */
 export function landingHtml({ images = new Set() } = {}) {
-  const stats = STATS.map(([label, value]) => `<div class="stat"><span class="stat-label">${label}</span><span class="stat-value">${value}</span></div>`).join('')
   const features = FEATURES.map(
-    (f) => `<article class="card feature"><span class="feature-icon">${icon(f.icon)}</span><h3>${escapeHtml(f.title)}</h3><p>${inlineHtml(f.text)}</p><a class="more" href="${f.href}">more <span aria-hidden="true">›</span></a></article>`,
+    (f) => `<a class="card feature" href="${f.href}"><span class="feature-icon">${icon(f.icon)}</span><h3>${escapeHtml(f.title)}</h3><p>${escapeHtml(f.text)}</p></a>`,
   ).join('\n')
   const rows = PRIVATE.map(([title, text]) => `<li><strong>${escapeHtml(title)}</strong><span>${escapeHtml(text)}</span></li>`).join('')
 
@@ -60,7 +52,6 @@ export function landingHtml({ images = new Set() } = {}) {
 <p class="actions"><a class="btn btn-primary btn-lg" href="guide.html">read the guide</a><a class="btn btn-outline btn-lg" href="cli.html">command line</a><a class="btn btn-ghost btn-lg" href="${REPO}">source on github</a></p>
 </header>
 ${shot('dashboard', images)}
-<section class="card stats" aria-label="At a glance">${stats}</section>
 <section class="block" id="features"><h2>features</h2>
 <div class="grid">
 ${features}
