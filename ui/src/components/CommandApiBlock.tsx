@@ -17,7 +17,7 @@ import { useNotice } from '../hooks/useNotice'
 import Dropdown from './Dropdown'
 import Badge from './ui/Badge'
 import Button from './ui/Button'
-import { Card, CardContent, CardHeader, CardTitle } from './ui/Card'
+import { Actions, Field, Rows, SwitchRow } from '../pages/settings/layout'
 
 /**
  * Settings block for the command API: the on/off switch and the access tokens the CLI needs.
@@ -99,85 +99,90 @@ export default function CommandApiBlock({ locale, timezone }: { locale: string; 
   const statusLook = !status ? 'secondary' : status.running ? 'success' : status.enabled ? 'destructive' : 'secondary'
 
   return (
-    <Card className="settings-block">
-      <CardHeader>
-        <CardTitle>{t('cli.title')}</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <p className="notice" role="status">
-          {message}
-        </p>
+    <div className="settings-stack">
+      <p className="notice" role="status">
+        {message}
+      </p>
 
-        {status && (
-          <>
-            <label className="check">
-              <input type="checkbox" checked={status.enabled} disabled={busy} onChange={(e) => void onSwitch(e.target.checked)} />
-              {t('cli.enable')}
-            </label>
-            {statusKey && <Badge variant={statusLook}>{t(statusKey, { port: status.port ?? '' })}</Badge>}
-          </>
-        )}
+      {status && (
+        <Rows>
+          <SwitchRow
+            label={t('cli.enable')}
+            aside={statusKey && <Badge variant={statusLook}>{t(statusKey, { port: status.port ?? '' })}</Badge>}
+            checked={status.enabled}
+            disabled={busy}
+            onChange={(e) => void onSwitch(e.target.checked)}
+          />
+        </Rows>
+      )}
 
-        <h3 className="settings-subtitle">{t('cli.tokens')}</h3>
-        {tokens && tokens.length === 0 && <p className="hint">{t('cli.noTokens')}</p>}
-        {tokens && tokens.length > 0 && (
-          <ul className="card-list">
-            {tokens.map((token) => (
-              <li className={`card-item${token.expired ? ' is-expired' : ''}`} key={token.id}>
-                <div className="card-body">
-                  <p className="card-name">{token.name}</p>
-                  <p className="card-meta">{describe(token)}</p>
-                </div>
-                <Button variant="outline" size="sm" onClick={() => void onRevoke(token.id)}>
-                  {t('cli.revoke')}
-                </Button>
-              </li>
-            ))}
-          </ul>
-        )}
-
-        {created ? (
-          <div className="panel">
-            <p className="warning">{t('cli.shownOnce')}</p>
-            <p className="recovery-code" aria-label={t('cli.tokenLabel')}>
-              {created.token}
-            </p>
-            <div className="actions">
-              <Button variant="outline" onClick={() => void copy(created.token)}>
-                {copied ? t('common.copied') : t('common.copy')}
+      <h3 className="settings-subtitle">{t('cli.tokens')}</h3>
+      {tokens && tokens.length === 0 && <p className="hint">{t('cli.noTokens')}</p>}
+      {tokens && tokens.length > 0 && (
+        <ul className="card-list">
+          {tokens.map((token) => (
+            <li className={`card-item${token.expired ? ' is-expired' : ''}`} key={token.id}>
+              <div className="card-body">
+                <p className="card-name">{token.name}</p>
+                <p className="card-meta">{describe(token)}</p>
+              </div>
+              <Button variant="outline" size="sm" onClick={() => void onRevoke(token.id)}>
+                {t('cli.revoke')}
               </Button>
-              <Button onClick={() => setCreated(null)}>{t('common.done')}</Button>
-            </div>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {created ? (
+        <div className="panel">
+          <p className="warning">{t('cli.shownOnce')}</p>
+          <p className="recovery-code" aria-label={t('cli.tokenLabel')}>
+            {created.token}
+          </p>
+          <div className="actions">
+            <Button variant="outline" onClick={() => void copy(created.token)}>
+              {copied ? t('common.copied') : t('common.copy')}
+            </Button>
+            <Button onClick={() => setCreated(null)}>{t('common.done')}</Button>
           </div>
-        ) : (
-          <form onSubmit={onCreate}>
-            <label>
-              {t('common.name')}
-              <input value={name} onChange={(e) => setName(e.target.value)} maxLength={TOKEN_NAME_MAX} autoComplete="off" />
-            </label>
-            <Dropdown
-              label={t('cli.tokenScope')}
-              value={scope}
-              options={[
-                { value: 'read', label: t('cli.scopeRead') },
-                { value: 'write', label: t('cli.scopeWrite') },
-              ]}
-              onChange={(value) => setScope(value === 'write' ? 'write' : 'read')}
-            />
-            <Dropdown
-              label={t('cli.tokenExpiry')}
-              value={days}
-              options={EXPIRY_CHOICES.map((count) => ({ value: String(count), label: t('cli.days', { count }) }))}
-              onChange={setDays}
-            />
-            <div className="actions">
-              <Button type="submit" disabled={busy || name.trim() === ''}>
-                {t('cli.tokenCreate')}
-              </Button>
-            </div>
-          </form>
-        )}
-      </CardContent>
-    </Card>
+        </div>
+      ) : (
+        <form className="settings-form" onSubmit={onCreate}>
+          <Rows>
+            <Field>
+              <label>
+                {t('common.name')}
+                <input value={name} onChange={(e) => setName(e.target.value)} maxLength={TOKEN_NAME_MAX} autoComplete="off" />
+              </label>
+            </Field>
+            <Field>
+              <Dropdown
+                label={t('cli.tokenScope')}
+                value={scope}
+                options={[
+                  { value: 'read', label: t('cli.scopeRead') },
+                  { value: 'write', label: t('cli.scopeWrite') },
+                ]}
+                onChange={(value) => setScope(value === 'write' ? 'write' : 'read')}
+              />
+            </Field>
+            <Field>
+              <Dropdown
+                label={t('cli.tokenExpiry')}
+                value={days}
+                options={EXPIRY_CHOICES.map((count) => ({ value: String(count), label: t('cli.days', { count }) }))}
+                onChange={setDays}
+              />
+            </Field>
+          </Rows>
+          <Actions>
+            <Button type="submit" disabled={busy || name.trim() === ''}>
+              {t('cli.tokenCreate')}
+            </Button>
+          </Actions>
+        </form>
+      )}
+    </div>
   )
 }

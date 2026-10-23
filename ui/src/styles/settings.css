@@ -1,4 +1,4 @@
-/* Settings, export and sync pages, plus the lock and first-run screens. */
+/* Settings and sync pages, plus the lock and first-run screens. */
 
 /* First-run and lock screens: one centred card on an empty page. */
 .gate {
@@ -105,19 +105,18 @@
   gap: 0.5rem;
 }
 
-/* Settings: a card for each block, in a grid that shows more columns as the window widens and one on a phone. */
+/* The sync page of the phone (pages/SyncPage) is one card in a column. */
 .settings-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(min(100%, 22rem), 1fr));
-  gap: 1rem;
-  align-items: start;
-  align-content: start;
+  display: block;
+  columns: 22rem;
+  column-gap: 1rem;
 }
 
 .settings-block {
   width: 100%;
   min-width: 0;
-  margin: 0;
+  margin: 0 0 1rem;
+  break-inside: avoid;
 }
 
 .settings-block .ui-card-content {
@@ -132,12 +131,6 @@
   gap: 0.75rem;
 }
 
-/* Forms of one card are told apart by a line. */
-.settings-block .ui-card-content > form + form {
-  padding-top: 1rem;
-  border-top: 1px solid var(--border);
-}
-
 .settings-block .actions {
   display: flex;
   flex-wrap: wrap;
@@ -148,72 +141,308 @@
   width: 100%;
 }
 
-.settings-block code {
+.settings-block .notice {
+  width: 100%;
+}
+
+.settings-block ul.card-list > li.card-item {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.settings-block .card-list {
+  margin: 0;
+}
+
+/* Settings page. Wide: a list of sections on the left, the chosen section on the right. Narrow: the list is a row of tabs above
+   the section. Phone: the list is the page, and a section opens in place of it. */
+.settings-page {
+  /* The columns of a row: its name, then its control (a control is at most this wide). */
+  --row-cols: minmax(0, 16rem) minmax(0, 1fr);
+  --control-max: 28rem;
+}
+
+.settings-layout {
+  display: grid;
+  grid-template-columns: 13rem minmax(0, 1fr);
+  gap: 2rem;
+  align-items: start;
+  /* The pane is as tall as the page: the rows keep their height instead of sharing the rest. */
+  align-content: start;
+}
+
+.settings-nav {
+  position: sticky;
+  top: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+}
+
+.settings-nav-item {
+  display: flex;
+  align-items: center;
+  min-height: 2.25rem;
+  padding: 0.375rem 0.75rem;
+  font-size: 0.8125rem;
+  color: var(--muted-foreground);
+  text-decoration: none;
+  border-radius: var(--radius-md);
+}
+
+@media (hover: hover) {
+  .settings-nav-item:hover {
+    color: var(--foreground);
+    background: var(--accent);
+  }
+}
+
+.settings-nav-item[aria-current='page'] {
+  font-weight: 600;
+  color: var(--accent-foreground);
+  background: var(--accent);
+}
+
+.settings-section {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  width: 100%;
+  max-width: 56rem;
+  min-width: 0;
+}
+
+.settings-section-head h2 {
+  margin: 0;
+  font-size: 1.125rem;
+  font-weight: 600;
+  line-height: 1.3;
+  letter-spacing: -0.01em;
+}
+
+.settings-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  margin-bottom: 0.5rem;
+  color: var(--muted-foreground);
+  font-size: 0.875rem;
+  text-decoration: none;
+}
+
+/* What a section holds: forms and rows, one below the other. */
+.settings-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  min-width: 0;
+}
+
+.settings-stack > .notice:empty {
+  display: none;
+}
+
+/* Forms of one section are told apart by the room between them. */
+.settings-stack > .settings-form + .settings-form {
+  margin-top: 0.5rem;
+}
+
+.settings-form {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  width: 100%;
+  margin: 0;
+  gap: 1rem;
+}
+
+/* The rows: a line above the first, and one under each. */
+.settings-rows {
+  width: 100%;
+  border-top: 1px solid var(--border);
+}
+
+.settings-row {
+  display: grid;
+  grid-template-columns: var(--row-cols);
+  align-items: center;
+  gap: 0.5rem 2rem;
+  width: 100%;
+  min-height: 3.5rem;
+  padding: 0.75rem 0;
+  border-bottom: 1px solid var(--border);
+}
+
+/* A field brings its own label; it fills the row and lines up with the others. */
+.settings-row > label,
+.settings-row > .pick.field,
+.settings-row > details > label {
+  display: grid;
+  grid-template-columns: var(--row-cols);
+  align-items: center;
+  gap: 0.5rem 2rem;
+  width: 100%;
+}
+
+.settings-row > label,
+.settings-row > .pick.field,
+.settings-row > details {
+  grid-column: 1 / -1;
+}
+
+.settings-row > details > summary {
+  padding: 0.25rem 0;
+}
+
+.settings-row > details[open] > summary {
+  margin-bottom: 0.5rem;
+}
+
+.settings-row > details > label {
+  margin-top: 0;
+}
+
+.settings-row :is(input:not([type='checkbox'], [type='radio']), .pick-button, .field-input) {
+  width: 100%;
+  max-width: var(--control-max);
+}
+
+.settings-row-text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  min-width: 0;
+}
+
+.settings-row-label {
+  font-size: 0.8125rem;
+  line-height: 1.4;
+  color: var(--foreground);
+}
+
+.settings-row-hint {
+  font-size: 0.75rem;
+  line-height: 1.5;
+  color: var(--muted-foreground);
+  overflow-wrap: anywhere;
+}
+
+.settings-row-control {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+  min-width: 0;
+  max-width: var(--control-max);
+}
+
+.settings-row-control > .pick {
+  flex: 1 1 100%;
+}
+
+.settings-value {
+  font-size: 0.8125rem;
+  color: var(--foreground);
+  overflow-wrap: anywhere;
+}
+
+/* A yes-or-no row is a label: the whole row can be pressed. */
+.settings-row.is-switch {
+  cursor: pointer;
+}
+
+/* A switch: a pill with a round knob that slides to the right when it is on. */
+.settings-rows input.settings-switch[type='checkbox'] {
+  position: relative;
+  width: 2.25rem;
+  min-width: 2.25rem;
+  height: 1.25rem;
+  background: var(--input);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  transition: background-color 0.15s, border-color 0.15s;
+}
+
+.settings-rows input.settings-switch[type='checkbox']::before {
+  content: '';
+  position: absolute;
+  top: 1px;
+  left: 1px;
+  width: calc(1.25rem - 4px);
+  height: calc(1.25rem - 4px);
+  border: 0;
+  border-radius: 50%;
+  background: var(--muted-foreground);
+  transform: none;
+  transition: transform 0.15s, background-color 0.15s;
+}
+
+.settings-rows input.settings-switch[type='checkbox']:checked {
+  background: var(--primary);
+  border-color: var(--primary);
+}
+
+.settings-rows input.settings-switch[type='checkbox']:checked::before {
+  background: var(--primary-foreground);
+  transform: translateX(1rem);
+}
+
+.settings-rows input.settings-switch[type='checkbox']:disabled {
+  cursor: not-allowed;
+}
+
+.settings-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.settings-section code {
   font-family: var(--font);
   font-size: 0.8125rem;
   color: var(--foreground);
   overflow-wrap: anywhere;
 }
 
-.settings-block .notice {
-  width: 100%;
+.settings-section .hint {
+  margin: 0;
 }
 
-/* What cannot be undone: a red outline round the card, or round the form inside it. */
-.settings-block.is-danger {
-  border-color: var(--destructive);
-}
-
-.settings-block.is-danger .ui-card-title {
-  color: var(--destructive);
-}
-
-.settings-block .ui-card-content > form.settings-danger {
+/* What cannot be undone: a red outline round the form. */
+.settings-danger {
   padding: 1rem;
   border: 1px solid var(--destructive);
   border-radius: var(--radius-lg);
 }
 
-/* A setting that shows its value and a button to change it. */
-.settings-row {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  width: 100%;
-  min-height: 2.5rem;
-  padding: 0.25rem 0.25rem 0.25rem 0.75rem;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-}
-
-.settings-row-label {
-  flex: 0 0 auto;
-  font-size: 0.8125rem;
-  color: var(--muted-foreground);
-}
-
-.settings-row-value {
-  flex: 1 1 auto;
-  min-width: 0;
-  color: var(--foreground);
-  font-size: 0.8125rem;
-  overflow-wrap: anywhere;
-}
-
 .settings-subtitle {
-  margin: 0.25rem 0 0;
-  font-size: 0.8125rem;
+  margin: 0.5rem 0 -0.5rem;
+  font-size: 0.875rem;
+  font-weight: 600;
   line-height: 1.4;
   color: var(--foreground);
 }
 
+.settings-stack > .settings-subtitle:first-child,
+.settings-stack > .notice:empty + .settings-subtitle {
+  margin-top: 0;
+}
+
 /* Access tokens and paired phones: the rows of a card list, with the button at the right edge. */
-.settings-block .card-list {
+.settings-section .card-list {
   margin: 0;
 }
 
-.settings-block ul.card-list > li.card-item {
+.settings-section ul.card-list > li.card-item {
   grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.settings-section .ui-badge {
+  max-width: 100%;
+  white-space: normal;
+}
+
+.settings-section .sync-panel {
+  max-width: 32rem;
 }
 
 .card-item.is-expired .card-name,
@@ -221,311 +450,116 @@
   color: var(--muted-foreground);
 }
 
-.settings-block .ui-badge {
-  max-width: 100%;
-  white-space: normal;
-}
-
 .inline-actions {
   display: inline-flex;
   gap: 0.25rem;
 }
 
-/* Export. The choices are cards on the left; what the file will contain is a card on the right. The page uses the whole width. */
-.export-page .tx-title {
-  margin-bottom: 0.5rem;
-}
+/* A narrow window: the sections are tabs in a row above the section, and a row stacks its name above its control. */
+@media (max-width: 48em) {
+  .settings-page {
+    --row-cols: minmax(0, 1fr);
+  }
 
-.export-layout {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: 1rem;
-  align-items: start;
-}
+  .settings-layout {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 1rem;
+  }
 
-@media (min-width: 64em) {
-  .export-layout {
-    grid-template-columns: minmax(0, 1fr) 22rem;
+  .settings-nav {
+    z-index: 2;
+    flex-direction: row;
+    gap: 0.25rem;
+    padding-bottom: 0.5rem;
+    overflow-x: auto;
+    white-space: nowrap;
+    background: var(--background);
+    border-bottom: 1px solid var(--border);
+    scrollbar-width: thin;
+  }
+
+  .settings-nav-item {
+    flex: 0 0 auto;
   }
 }
 
-/* The cards of the choices sit side by side where there is room. */
-.export-main {
-  display: flex;
-  flex-wrap: wrap;
+/* The phone: a grouped list of sections, then one section at a time with fields stacked and full width. */
+.settings-page.on-phone {
+  --row-cols: minmax(0, 1fr);
+  --control-max: none;
+}
+
+.settings-page.on-phone .settings-layout {
+  grid-template-columns: minmax(0, 1fr);
   gap: 1rem;
-  align-items: flex-start;
-  min-width: 0;
 }
 
-.export-main > .export-card {
-  flex: 1 1 18rem;
+/* A phone has overlay scroll bars: no wide gutter on the right, so the list is as far from the edge on both sides. */
+.settings-page.on-phone > .tx-pane.wide {
+  padding-right: var(--edge);
 }
 
-.export-card h2 {
-  margin: 0;
-  font-size: 1rem;
-  line-height: 1.4;
-  letter-spacing: normal;
-}
-
-.export-card .hint {
-  margin: 0;
-  font-size: 0.8125rem;
-}
-
-/* The format: four cards, one choice. The real radio button is hidden but still takes the keyboard. */
-.export-formats {
-  flex: 1 1 100%;
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 8rem), 1fr));
-  gap: 0.75rem;
-  min-width: 0;
-  margin: 0;
-  padding: 0;
-  border: 0;
-}
-
-.export-format {
-  position: relative;
-  padding: 0.875rem 1rem;
+.settings-list {
+  overflow: hidden;
   color: var(--card-foreground);
   background: var(--card);
   border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  cursor: pointer;
-  transition: border-color 0.15s, box-shadow 0.15s;
+  border-radius: var(--radius-xl);
 }
 
-.export-format:hover {
-  border-color: var(--ring);
-}
-
-.export-format input,
-.export-chip input {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  margin: 0;
-  opacity: 0;
-  cursor: pointer;
-}
-
-.export-format-name {
-  font-size: 1rem;
-  font-weight: 600;
-  color: var(--foreground);
-}
-
-.export-format:has(input:checked) {
-  border-color: var(--primary);
-  box-shadow: var(--shadow-md);
-}
-
-.export-format:has(input:focus-visible),
-.export-chip:has(input:focus-visible) {
-  outline: 2px solid var(--ring);
-  outline-offset: 2px;
-}
-
-/* A yes-or-no row: the words on the left, the box at the far edge. */
-.export-card label.export-switch {
-  justify-content: space-between;
-  width: 100%;
-}
-
-/* "current month" and the unit of the range side by side, as on the transactions page. */
-.export-range {
+.settings-list-item {
   display: flex;
-  flex-wrap: wrap;
-  align-items: flex-end;
-  gap: 0.5rem 1rem;
-}
-
-.export-date {
-  display: grid;
-  grid-template-columns: 4rem minmax(0, 1fr);
   align-items: center;
-  gap: 0.5rem 1rem;
-  font-size: 0.8125rem;
+  justify-content: space-between;
+  gap: 0.75rem;
+  min-height: 3.25rem;
+  padding: 0 1rem;
+  font-size: 0.9375rem;
   color: var(--foreground);
+  text-decoration: none;
+  border-top: 1px solid var(--border);
 }
 
-@media (max-width: 30em) {
-  .export-date {
-    grid-template-columns: minmax(0, 1fr);
-  }
+.settings-list-item:first-child {
+  border-top: 0;
 }
 
-.export-chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-}
-
-.export-card label.export-chip {
-  position: relative;
-  flex-direction: row;
-  width: auto;
-  max-width: 100%;
-  padding: 0.25rem 0.75rem;
-  border: 1px solid var(--input);
-  border-radius: var(--radius-md);
-  color: var(--muted-foreground);
-  font-size: 0.8125rem;
-  cursor: pointer;
-  transition: background-color 0.15s, border-color 0.15s, color 0.15s;
-}
-
-.export-card label.export-chip:has(input:checked) {
-  border-color: var(--primary);
-  color: var(--foreground);
+.settings-list-item:active {
   background: var(--accent);
 }
 
-.export-card label.export-chip:has(input:disabled) {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.export-groups {
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-}
-
-.export-groups h3 {
-  margin: 0 0 0.5rem;
-  font-size: 0.8125rem;
+.settings-chevron {
+  font-size: 1.5rem;
+  line-height: 1;
   color: var(--muted-foreground);
 }
 
-.export-amounts {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0.75rem;
+.settings-page.on-phone .settings-back {
+  min-height: 2.75rem;
+  margin-bottom: 0;
+  font-size: 1rem;
 }
 
-/* What the file will contain. */
-.export-side {
+.settings-page.on-phone .settings-row {
+  gap: 0.5rem;
+  min-height: 3.25rem;
+}
+
+.settings-page.on-phone .settings-row.is-switch {
+  grid-template-columns: minmax(0, 1fr) auto;
   gap: 1rem;
 }
 
-@media (min-width: 64em) {
-  .export-side {
-    position: sticky;
-    top: 0;
-  }
-}
-
-.export-receipt {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-  font-variant-numeric: tabular-nums;
-}
-
-.export-row {
-  display: flex;
-  align-items: baseline;
-  gap: 0.5rem;
-  font-size: 0.8125rem;
-  color: var(--muted-foreground);
-}
-
-.export-row .leader {
-  flex: 1 1 1rem;
-  min-width: 1rem;
-  border-bottom: 1px dotted var(--input);
-  transform: translateY(-0.2em);
-}
-
-.export-row strong {
-  min-width: 0;
-  font-weight: 600;
-  color: var(--foreground);
-  text-align: right;
-  overflow-wrap: anywhere;
-}
-
-.export-row.income strong {
-  color: var(--success);
-}
-
-.export-row.expense strong {
-  color: var(--c-expense);
-}
-
-.export-side .notice {
+.settings-page.on-phone .settings-row-control {
   width: 100%;
 }
 
-.export-side .export-go {
-  width: 100%;
-  justify-content: space-between;
-  gap: 1rem;
-}
-
-.export-go .export-ext {
-  opacity: 0.7;
-}
-
-/* The preview of an export, below the choices: the start of a JSON or CSV file as a text editor would show it, or a sheet or a
-   report in a frame of its own. */
-.export-preview {
-  margin-top: 1rem;
-}
-
-.export-file {
-  max-height: 26rem;
-  margin: 0;
-  padding: 0.75rem 0.875rem;
-  overflow: auto;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  background: var(--muted);
-  color: var(--foreground);
-  font: inherit;
-  font-size: 0.8125rem;
-  line-height: 1.5;
-  tab-size: 2;
-  white-space: pre;
-}
-
-.export-file .json-key {
-  color: var(--foreground);
-}
-
-.export-file .json-string {
-  color: var(--code-string);
-}
-
-.export-file .json-number {
-  color: var(--code-number);
-}
-
-.export-file .json-literal {
-  color: var(--code-literal);
-}
-
-/* The sheet scrolls in its frame and the page of a report is drawn whole, so the export screen keeps its wheel. */
-.export-frame {
-  display: flex;
+.settings-page.on-phone .settings-actions {
   flex-direction: column;
-  min-width: 0;
-  overflow: hidden;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
 }
 
-.export-frame.is-sheet {
-  max-height: 30rem;
-}
-
-.export-frame.is-pdf {
-  height: 40rem;
-  max-height: 85svh;
+.settings-page.on-phone .settings-actions > .ui-btn {
+  width: 100%;
 }
 
 /* Phone and sync (phase 8) */

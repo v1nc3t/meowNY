@@ -371,6 +371,7 @@ Decided 2026-10-16:
   - [x] Docs site restyled (`docs/site/site.css`; prose condensed in `content.mjs`; every id kept; `docs/CLI.md` regenerated)
   - [x] Markdown docs summarised (README, PLAN, user guides, data inventory, design notes; numbered sections and the real-phone checklists kept)
 - [x] Pages restyled: money, debts and documents, settings/sync/export/vault (Settings and Export use the full page width on desktop)
+- [x] Settings and Export without card grids: Settings has a section list on the left and label/control rows on the right (`?section=`), and on the phone a list that opens each section (`pages/settings/`); Export is laid out like a print dialog, options on the left and the preview filling the rest (`styles/export.css`)
 - [x] Linux rendering: stray card borders left on screen after a resize came from WebKitGTK's GPU drawing (2.52, X11, Intel + NVIDIA); the app draws on the CPU on Linux unless `WEBKIT_SKIA_ENABLE_CPU_RENDERING` is already set (`src-tauri/src/lib.rs`). Turning off the DMA-BUF renderer also removed the lines but made every page lag
 - [x] Verification (gates, greps, runtime hooks, contrast in both themes; fixed: nested-section rule, red row deletes everywhere, light contrast and focus ring, dead CSS and tokens. Still to do by eye: the live app in light and dark, and the phone layout)
 
