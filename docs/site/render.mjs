@@ -7,7 +7,12 @@
 // Every page of the site sits in the same frame as the app: a sidebar with the pages and this page's contents, and
 // the page beside it (on a narrow screen, the sidebar is a strip above the page).
 
+import { readFileSync } from 'node:fs'
+
 export const REPO = 'https://github.com/v1nc3t/meowNY'
+
+/** The logo, the app's own favicon (scripts/logo.py draws it), for the sidebar. */
+const LOGO = readFileSync(new URL('../../ui/public/favicon.svg', import.meta.url), 'utf8').trim().replace('<svg ', '<svg class="logo" aria-hidden="true" ')
 
 /** The pages of the site, in the order of the sidebar. */
 export const PAGES = [
@@ -158,13 +163,14 @@ export function shell({ file, title, description, toc = [], body, wide = false }
 <meta name="color-scheme" content="light dark">
 <title>${escapeHtml(title)}</title>
 <meta name="description" content="${escapeHtml(description)}">
+<link rel="icon" type="image/svg+xml" href="favicon.svg">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
 <a class="skip" href="#main">Skip to the content</a>
 <div class="shell">
 <aside class="side">
-<a class="brand" href="index.html">meowny</a>
+<a class="brand" href="index.html">${LOGO}<span>meowny</span></a>
 <nav class="side-nav" aria-label="Pages">
 ${pages}
 </nav>

@@ -26,7 +26,7 @@ export const inputs = () => ({ commands: readJson('commands.json'), examples: re
 export const images = () => new Set(Object.keys(SHOTS).filter((name) => existsSync(join(here, 'images', `${name}.png`))))
 
 /** Files on the site that are not pages. */
-const OTHER_FILES = ['style.css', 'CLI.md']
+const OTHER_FILES = ['style.css', 'CLI.md', 'favicon.svg']
 
 const idsOf = (html) => [...html.matchAll(/\sid="([^"]+)"/g)].map((m) => m[1])
 
@@ -123,6 +123,7 @@ function main() {
   for (const [file, html] of Object.entries(built.pages)) writeFileSync(join(site, file), html)
   writeFileSync(join(site, 'style.css'), built.css)
   copyFileSync(markdownPath, join(site, 'CLI.md'))
+  copyFileSync(join(here, '../../ui/public/favicon.svg'), join(site, 'favicon.svg'))
   if (built.shots.size) {
     mkdirSync(join(site, 'images'), { recursive: true })
     for (const name of built.shots) copyFileSync(join(here, 'images', `${name}.png`), join(site, 'images', `${name}.png`))

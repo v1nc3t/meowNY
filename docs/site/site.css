@@ -94,6 +94,7 @@ h4 {
 .brand {
   display: flex;
   align-items: center;
+  gap: 0.5rem;
   height: 2rem;
   padding: 0 0.5rem;
   color: var(--foreground);
@@ -101,6 +102,13 @@ h4 {
   font-weight: 600;
   letter-spacing: -0.015em;
   text-decoration: none;
+}
+
+/* Twice the logo's 16 pixel grid, so every pixel stays square. */
+.brand .logo {
+  width: 32px;
+  height: 32px;
+  flex: none;
 }
 
 .side-nav,

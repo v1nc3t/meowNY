@@ -380,6 +380,7 @@ Decided 2026-10-16:
 
 ## Phase 11: Packaging and release (M). Gate before sharing the app
 
+- [x] Logo and app icons (2026-10-24): a pixel gold coin shaped like a cat's head with a green M, on a 16 × 16 grid in `scripts/logo.py`. It writes `ui/public/favicon.svg` (app, website sidebar and README) and the 1024 px sources in `src-tauri/icons/`; the desktop icons come from `logo.png`. The Android and iOS jobs make the phone icons after `init`: Android the coin alone on a clear background, iOS on white (iOS has no clear icons)
 - [ ] Signed installers for Linux (AppImage/deb), macOS (dmg, notarised) and Windows (msi/exe); signed Android APK (sideloaded; Play or F-Droid optional)
 - [ ] Both programs on the PATH after an install: `meowny-desktop` (the Linux deb already installs `/usr/bin/meowny-desktop`) and `meowny`, built in release CI for the three systems with checksums. Moved here from phase 7. An `install.sh` may do the same for a plain download
 - [ ] Auto-update with signed updates only; the update check is a visible setting

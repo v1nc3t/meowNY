@@ -12,6 +12,7 @@ on:
       - 'docs/**'
       - 'cli/schema.json'
       - 'ui/src/styles/tokens.css'
+      - 'ui/public/favicon.svg'
       - '.github/workflows/pages.yml'
   workflow_dispatch:
 

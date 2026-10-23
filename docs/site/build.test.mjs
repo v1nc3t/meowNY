@@ -173,7 +173,11 @@ test('a page asks for nothing from anywhere else, and only reaches out with plai
   const { pages, css } = build(inputs(), new Set())
   for (const [file, html] of Object.entries(pages)) {
     assert.ok(!/<script|<iframe|<img|@import|\ssrc=/i.test(html), `${file}: no script, frame, image or source`)
-    assert.deepEqual([...html.matchAll(/<link[^>]*>/g)].map((m) => m[0]), ['<link rel="stylesheet" href="style.css">'], file)
+    assert.deepEqual(
+      [...html.matchAll(/<link[^>]*>/g)].map((m) => m[0]),
+      ['<link rel="icon" type="image/svg+xml" href="favicon.svg">', '<link rel="stylesheet" href="style.css">'],
+      file,
+    )
     for (const [, url] of html.matchAll(/href="(https?:[^"]+)"/g)) assert.ok(url.startsWith('https://'), `${file}: ${url}`)
   }
   assert.ok(!/url\(|@import|https?:\/\//i.test(css), 'the stylesheet loads nothing')
