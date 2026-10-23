@@ -188,13 +188,11 @@ body:has(.app-shell.is-locked) {
 }
 
 .app-main main > section > label,
-.app-main main > section > div,
-.app-main main section section {
+.app-main main > section > div {
   width: min(100%, 28rem);
 }
 
-.app-main main > section > .wide,
-.app-main main section section.wide {
+.app-main main > section > .wide {
   width: 100%;
   max-width: none;
 }
@@ -202,13 +200,6 @@ body:has(.app-shell.is-locked) {
 .app-main main > section > .tx-title {
   width: auto;
   max-width: 100%;
-}
-
-.app-main main section section {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 0.5rem;
 }
 
 @media (max-width: 45em) {
@@ -335,13 +326,6 @@ body:has(.app-shell.is-locked) {
 .app-shell.is-collapsed .sidebar-legal {
   display: flex;
   visibility: hidden;
-}
-
-@media (max-width: 45em) {
-  .app-shell .sidebar-legal,
-  .app-shell.is-collapsed .sidebar-legal {
-    display: none;
-  }
 }
 
 .sidebar-legal {

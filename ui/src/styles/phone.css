@@ -1,4 +1,4 @@
-/* The phone shell: header, bottom tabs, add button, toast, quick menu and slide animations. */
+/* The phone shell: header, bottom tabs, add button, quick menu and slide animations. */
 
 html.is-phone button,
 html.is-phone .pick-button {
@@ -155,24 +155,6 @@ html.is-phone .fab {
   width: 1.5rem;
   height: 1.5rem;
   stroke-width: 2;
-}
-
-/* A short message after adding: it sits above the tabs and goes away by itself. */
-.toast {
-  position: fixed;
-  left: 1rem;
-  right: 1rem;
-  bottom: calc(3.5rem + env(safe-area-inset-bottom, 0px) + 5.25rem);
-  z-index: 45;
-  margin: 0;
-  padding: 0.75rem 1rem;
-  background: var(--popover);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-lg);
-  color: var(--popover-foreground);
-  font-size: 0.8125rem;
-  text-align: center;
 }
 
 /* The ways to add something: a short list in a bordered box. */

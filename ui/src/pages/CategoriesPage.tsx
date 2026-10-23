@@ -535,7 +535,7 @@ function CategoryRow({
         <Button variant="ghost" size="sm" data-row-focus onClick={() => onEdit(category)}>
           {t('common.edit')}
         </Button>
-        <Button variant="ghost" size="sm" onClick={() => onDelete(category)}>
+        <Button variant="ghost" size="sm" className="row-danger" onClick={() => onDelete(category)}>
           {t('common.delete')}
         </Button>
       </span>

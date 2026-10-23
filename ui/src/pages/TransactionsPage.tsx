@@ -553,7 +553,7 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
                         </Button>
                       )
                     })()}
-                    <Button variant="ghost" size="sm" onClick={() => setDeleting(transaction)}>
+                    <Button variant="ghost" size="sm" className="row-danger" onClick={() => setDeleting(transaction)}>
                       {t('common.delete')}
                     </Button>
                   </div>

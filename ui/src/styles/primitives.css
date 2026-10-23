@@ -97,6 +97,12 @@
   }
 }
 
+/* Delete in a row: red text, the same ghost button as the rest. After the hover rules above so the red stays on hover. */
+.row-danger,
+.row-danger:hover:not(:disabled) {
+  color: var(--destructive);
+}
+
 .ui-btn-sm {
   height: 2rem;
   padding: 0 0.75rem;
@@ -113,9 +119,8 @@
   padding: 0;
 }
 
-/* Cards. The dashboard's old .dash-card (still used by the debts pages) is the same card. */
-.ui-card,
-.dash-card {
+/* Cards. */
+.ui-card {
   display: flex;
   flex-direction: column;
   gap: 1rem;

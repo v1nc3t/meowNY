@@ -450,7 +450,7 @@
 }
 
 .export-row.income strong {
-  color: var(--c-income);
+  color: var(--success);
 }
 
 .export-row.expense strong {

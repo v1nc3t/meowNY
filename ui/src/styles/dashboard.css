@@ -461,7 +461,7 @@
 
 .swatch-expense { background: var(--c-expense); }
 
-.rec-paid { color: var(--c-income); }
+.rec-paid { color: var(--success); }
 
 .dash .rec-over { color: var(--c-expense); }
 

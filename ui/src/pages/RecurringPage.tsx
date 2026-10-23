@@ -482,11 +482,11 @@ function RecurringView({ settings, now }: { settings: MoneySettings; now: Today 
                           )
                         })()}
                         {status !== 'ended' ? (
-                          <Button variant="ghost" size="sm" onClick={() => setConfirming({ kind: 'end', item })}>
+                          <Button variant="ghost" size="sm" className="row-danger" onClick={() => setConfirming({ kind: 'end', item })}>
                             {t('rec.end')}
                           </Button>
                         ) : null}
-                        <Button variant="ghost" size="sm" onClick={() => setConfirming({ kind: 'delete', item })}>
+                        <Button variant="ghost" size="sm" className="row-danger" onClick={() => setConfirming({ kind: 'delete', item })}>
                           {t('common.delete')}
                         </Button>
                       </div>

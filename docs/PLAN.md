@@ -370,8 +370,8 @@ Decided 2026-10-16:
 - [x] Docs: the docs site restyled; all docs summarised
   - [x] Docs site restyled (`docs/site/site.css`; prose condensed in `content.mjs`; every id kept; `docs/CLI.md` regenerated)
   - [x] Markdown docs summarised (README, PLAN, user guides, data inventory, design notes; numbered sections and the real-phone checklists kept)
-- [ ] Pages restyled: money, debts and documents, settings/sync/export/vault
-- [ ] Verification
+- [x] Pages restyled: money, debts and documents, settings/sync/export/vault (Settings and Export use the full page width on desktop)
+- [x] Verification (gates, greps, runtime hooks, contrast in both themes; fixed: nested-section rule, red row deletes everywhere, light contrast and focus ring, dead CSS and tokens. Still to do by eye: the live app in light and dark, and the phone layout)
 
 ## Phase 11: Packaging and release (M). Gate before sharing the app
 

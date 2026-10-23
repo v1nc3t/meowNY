@@ -40,12 +40,6 @@
   font-size: 0.8125rem;
 }
 
-/* Delete in a row: red text, the same ghost button as the rest. */
-.card-actions .row-danger,
-.card-actions .row-danger:hover:not(:disabled) {
-  color: var(--destructive);
-}
-
 .card-item[data-archived] .card-name {
   color: var(--muted-foreground);
 }
