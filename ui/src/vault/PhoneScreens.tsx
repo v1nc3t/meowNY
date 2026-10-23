@@ -6,7 +6,7 @@ import { useI18n, useT } from '../i18n/context'
 import { languageOptions } from '../i18n/languages'
 import { errorText, vault } from './api'
 import Decrypting from './Decrypting'
-import { atLeast, useRefocus } from './decrypting'
+import { atLeast, closeKeyboard, useRefocus } from './decrypting'
 import PasswordField from './PasswordField'
 import { defaultSettings, phonePassphraseProblem } from './rules'
 import Button from '../components/ui/Button'
@@ -29,6 +29,7 @@ export function PhoneFirstRun({ onDone }: { onDone: () => void }) {
     const passphrase = String(form.get('passphrase'))
     const problem = phonePassphraseProblem(passphrase, String(form.get('confirm')))
     if (problem) return setMessage(problem)
+    closeKeyboard()
     setBusy(true)
     try {
       const { locale, timezone } = defaultSettings()
@@ -43,8 +44,7 @@ export function PhoneFirstRun({ onDone }: { onDone: () => void }) {
 
   return (
     <main className="gate">
-      {busy && <Decrypting />}
-      <form ref={formRef} hidden={busy} onSubmit={onSubmit}>
+      <form ref={formRef} onSubmit={onSubmit}>
         <p className="brand-mark">meowny</p>
         <h1>{t('phone.welcomeTitle')}</h1>
 
@@ -69,6 +69,7 @@ export function PhoneFirstRun({ onDone }: { onDone: () => void }) {
           {message}
         </p>
       </form>
+      {busy && <Decrypting below />}
     </main>
   )
 }

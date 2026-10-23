@@ -5,14 +5,17 @@ export const SHOW_AFTER_MS = 150
 /** Once the loading screen is up it stays at least this long, so it is never just a flicker and can be read. */
 export const MIN_SHOW_MS = 5000
 
-/** Waits for the work and for the minimum time, whichever is later. A failure is passed on after the same wait. */
+/** Waits for the work and for the minimum time, whichever is later. A failure (a wrong passphrase) is passed on at once. */
 export async function atLeast<T>(work: Promise<T>, ms = MIN_SHOW_MS): Promise<T> {
   const timer = new Promise<void>((resolve) => setTimeout(resolve, ms))
-  try {
-    return await work
-  } finally {
-    await timer
-  }
+  const result = await work
+  await timer
+  return result
+}
+
+/** Takes the cursor out of the field, so a phone's keyboard closes and the decrypting line under the form can be seen. */
+export function closeKeyboard() {
+  if (document.activeElement instanceof HTMLElement) document.activeElement.blur()
 }
 
 /**

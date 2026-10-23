@@ -1,13 +1,14 @@
 import { useT } from '../i18n/context'
 
 /**
- * The loading screen after a password: a line that fills, with "decrypting..." under it. It only moves with CSS. A screen reader
+ * The loading line after a password: a line that fills, with "decrypting..." under it. `below` puts it at the foot of the password
+ * screen, which stays on show, so a wrong passphrase only has to say so. It only moves with CSS. A screen reader
  * reads the word and an ellipsis once; the three animated dots are hidden from it.
  */
-export default function Decrypting() {
+export default function Decrypting({ below = false }: { below?: boolean }) {
   const t = useT()
   return (
-    <div className="decrypting" role="status" aria-live="polite">
+    <div className={below ? 'decrypting is-below' : 'decrypting'} role="status" aria-live="polite">
       <span className="decrypting-line" aria-hidden="true">
         <span className="decrypting-fill" />
       </span>

@@ -13,6 +13,9 @@ import { syncApi } from '../api/sync'
 import { AppearanceSection, AppLockSection, FriendNameSection, NotificationsSection, RegionSection } from './settings/GeneralSections'
 import { BackupSection, DataSection, RecoverySection } from './settings/DataSections'
 
+// The copyright line at the foot of the settings, on the computer and the phone.
+const YEAR = new Date().getFullYear()
+
 /** The sections of the page, in the order they are listed. The id is what `?section=` holds, so a link can open one. */
 const SECTIONS = [
   { id: 'region', title: 'settings.region' },
@@ -167,6 +170,11 @@ export default function SettingsPage() {
           </div>
         ) : null}
       </div>
+
+      <footer className="settings-footer">
+        <span>© {YEAR} meowny</span>
+        <span>AGPL-3.0</span>
+      </footer>
     </section>
   )
 }

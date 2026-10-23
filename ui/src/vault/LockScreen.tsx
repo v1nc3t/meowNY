@@ -3,7 +3,7 @@ import { messageFor } from '../api/invoke'
 import { shouldWarn, syncApi, type Attempts } from '../api/sync'
 import { errorText, vault, VaultError } from './api'
 import Decrypting, { DecryptingPage } from './Decrypting'
-import { atLeast, useDecryptingGate, useRefocus } from './decrypting'
+import { atLeast, closeKeyboard, useDecryptingGate, useRefocus } from './decrypting'
 import PasswordField from './PasswordField'
 import { ErasedScreen, ForgotPhone } from './PhoneScreens'
 import { passphraseProblem } from './rules'
@@ -62,6 +62,7 @@ export default function LockScreen({ onUnlocked }: { onUnlocked: () => void }) {
   async function onUnlock(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     const passphrase = String(new FormData(event.currentTarget).get('passphrase'))
+    closeKeyboard()
     setBusy(true)
     try {
       await atLeast(vault.unlock(passphrase))
@@ -80,6 +81,7 @@ export default function LockScreen({ onUnlocked }: { onUnlocked: () => void }) {
     const passphrase = String(form.get('passphrase'))
     const problem = passphraseProblem(passphrase, String(form.get('confirm')))
     if (problem) return setMessage(problem)
+    closeKeyboard()
     setBusy(true)
     try {
       await atLeast(vault.recover(String(form.get('recoveryKey')), passphrase))
@@ -100,8 +102,7 @@ export default function LockScreen({ onUnlocked }: { onUnlocked: () => void }) {
   if (recovering) {
     return (
       <main className="gate">
-        {busy && <Decrypting />}
-        <form ref={formRef} hidden={busy} onSubmit={onRecover}>
+        <form ref={formRef} onSubmit={onRecover}>
           <p className="brand-mark">meowny</p>
           <h1>{t('recovery.title')}</h1>
           <label>
@@ -133,14 +134,14 @@ export default function LockScreen({ onUnlocked }: { onUnlocked: () => void }) {
             {message}
           </p>
         </form>
+        {busy && <Decrypting below />}
       </main>
     )
   }
 
   return (
     <main className="gate">
-      {busy && <Decrypting />}
-      <form ref={formRef} hidden={busy} onSubmit={onUnlock}>
+      <form ref={formRef} onSubmit={onUnlock}>
         <p className="brand-mark">meowny</p>
         <h1>{t('lock.title')}</h1>
         {needsPassphrase && (
@@ -173,6 +174,7 @@ export default function LockScreen({ onUnlocked }: { onUnlocked: () => void }) {
           {message}
         </p>
       </form>
+      {busy && <Decrypting below />}
     </main>
   )
 }

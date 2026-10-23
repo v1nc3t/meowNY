@@ -1,12 +1,30 @@
 /* Settings and sync pages, plus the lock and first-run screens. */
 
-/* First-run and lock screens: one centred card on an empty page. */
+/* First-run and lock screens: one card on an empty page, in its upper third rather than the middle, where the eye starts and a
+   phone's keyboard does not reach. */
 .gate {
   min-height: 100svh;
   display: grid;
-  place-items: center;
-  padding: 2rem 1rem;
+  justify-items: center;
+  align-items: start;
+  align-content: start;
+  padding: clamp(2rem, 16vh, 9rem) 1rem 2rem;
   background: var(--background);
+}
+
+/* The decrypting page of its own (at the start) is in the middle: there is nothing else on it. */
+.gate > .decrypting:not(.is-below) {
+  align-self: center;
+  min-height: calc(100svh - clamp(2rem, 16vh, 9rem) - 2rem);
+  align-content: center;
+}
+
+/* Under a password form the decrypting line sits at the foot of the screen, below where the keyboard was. */
+.gate > .decrypting.is-below {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: calc(2.5rem + env(safe-area-inset-bottom, 0px));
 }
 
 .gate > form,
@@ -488,6 +506,18 @@
   margin-top: 0;
 }
 
+/* Copyright and licence at the foot of the settings. */
+.settings-footer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 1rem;
+  margin-top: 1rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--border);
+  font-size: 0.75rem;
+  color: var(--muted-foreground);
+}
+
 /* Access tokens and paired phones: the rows of a card list, with the button at the right edge. */
 .settings-section .card-list {
   margin: 0;
@@ -712,19 +742,17 @@ html.is-scanning #root {
   text-align: center;
 }
 
-/* The phone's lock and first-run screens: at the top, not in the middle, because the keyboard comes up over the lower half and
-   would cover the field and the button. The screen edges (notch, gesture bar) are left free, and the height is the visible height
-   (the address-bar-free `dvh`). */
+/* The phone's lock and first-run screens: a little below the top, not in the middle, because the keyboard comes up over the lower
+   half and would cover the field and the button. The screen edges (notch, gesture bar) are left free, and the height is the
+   visible height (the address-bar-free `dvh`). */
 html.is-phone .gate {
   min-height: 100dvh;
-  align-items: start;
-  padding-top: calc(1.5rem + env(safe-area-inset-top, 0px));
+  padding-top: calc(10dvh + env(safe-area-inset-top, 0px));
   padding-bottom: calc(2rem + env(safe-area-inset-bottom, 0px));
 }
 
-/* The loading screen is centred, not at the top: there is no keyboard to make room for. */
-html.is-phone .gate > .decrypting {
-  align-self: center;
+html.is-phone .gate > .decrypting:not(.is-below) {
+  min-height: calc(100dvh - 10dvh - 2rem - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
 }
 
 /* The show button fills the 44px field. */

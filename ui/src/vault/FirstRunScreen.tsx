@@ -9,7 +9,7 @@ import { languageOptions } from '../i18n/languages'
 import { useNotice } from '../hooks/useNotice'
 import { errorText, vault } from './api'
 import Decrypting from './Decrypting'
-import { atLeast, useRefocus } from './decrypting'
+import { atLeast, closeKeyboard, useRefocus } from './decrypting'
 import PasswordField from './PasswordField'
 import RecoveryKeyPanel from './RecoveryKeyPanel'
 import RestoreFromBackup from './RestoreFromBackup'
@@ -40,6 +40,7 @@ export default function FirstRunScreen({ onDone }: { onDone: () => void }) {
     if (!isCurrency(currency)) return setMessage(t('welcome.currencyError'))
     if (problem) return setMessage(problem)
 
+    closeKeyboard()
     setBusy(true)
     try {
       // The data file exists from here on, but the app stays on this screen until the key is saved.
@@ -65,8 +66,7 @@ export default function FirstRunScreen({ onDone }: { onDone: () => void }) {
 
   return (
     <main className="gate">
-      {busy && <Decrypting />}
-      <form ref={formRef} hidden={busy} onSubmit={onSubmit}>
+      <form ref={formRef} onSubmit={onSubmit}>
         <p className="brand-mark">meowny</p>
         <h1>{t('welcome.title')}</h1>
 
@@ -117,6 +117,7 @@ export default function FirstRunScreen({ onDone }: { onDone: () => void }) {
           {message}
         </p>
       </form>
+      {busy && <Decrypting below />}
     </main>
   )
 }
