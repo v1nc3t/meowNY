@@ -208,7 +208,7 @@ p:empty {
   flex: 0 0 auto;
   cursor: pointer;
   background: transparent;
-  border-radius: 4px;
+  border-radius: var(--radius-md);
 }
 
 :where(input[type='radio']) {

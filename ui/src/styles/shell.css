@@ -125,6 +125,8 @@
   color: var(--accent-foreground);
   background: var(--accent);
   font-weight: 600;
+  /* The page you are on is marked in the green of the accents. */
+  box-shadow: inset 2px 0 0 var(--primary);
 }
 
 .sidebar-footer {
