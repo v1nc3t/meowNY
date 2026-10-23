@@ -9,6 +9,7 @@ import { formatDate, formatMoney } from '../lib/money'
 import { saveSenderName, senderName } from '../lib/senderName'
 import Modal, { modalFormId } from './Modal'
 import QrCode from './QrCode'
+import Button from './ui/Button'
 
 /**
  * The code of one friend's part of one bill, or of the next payment of a recurring item: a QR code a friend scans and the same text to copy
@@ -100,11 +101,11 @@ export default function BillCodeModal({
             {target.kind === 'recurring' && target.date && settings ? <p>{t('code.next', { date: formatDate(target.date, settings.locale) })}</p> : null}
             {held ? <p>{held.total ? t('code.part', { name: person.name, amount: money(held.part), total: money(held.total) }) : `${person.name}: ${money(held.part)}`}</p> : null}
             {code ? <QrCode text={code} label={t('code.title', { name: person.name })} level="L" onTooLong={onTooLong} /> : null}
-            {tooLong ? <p className="notice">{t('code.tooLong')}</p> : null}
+            {tooLong ? <p className="warning">{t('code.tooLong')}</p> : null}
             <div className="card-actions">
-              <button type="button" disabled={!code} onClick={() => void copy()}>
+              <Button variant="outline" size="sm" disabled={!code} onClick={() => void copy()}>
                 {copied ? t('common.copied') : t('common.copy')}
-              </button>
+              </Button>
             </div>
           </>
         )}

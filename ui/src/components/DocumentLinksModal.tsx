@@ -7,6 +7,7 @@ import { useT } from '../i18n/context'
 import { linkLabel, whereIs } from '../lib/documents'
 import { formatDate } from '../lib/money'
 import Modal from './Modal'
+import Button from './ui/Button'
 
 /**
  * What one document is attached to: each transaction, recurring item or debt entry, as a line to choose. Choosing one goes to its page,
@@ -54,9 +55,9 @@ export default function DocumentLinksModal({ doc, onClose }: { doc: Doc; onClose
           <ul className="link-list">
             {links.map((link) => (
               <li key={`${link.kind}-${link.id}`}>
-                <button type="button" disabled={whereIs(link) === null} onClick={() => go(link)}>
+                <Button variant="outline" disabled={whereIs(link) === null} onClick={() => go(link)}>
                   {linkLabel(link, t, formatDate(link.date, locale))}
-                </button>
+                </Button>
               </li>
             ))}
           </ul>

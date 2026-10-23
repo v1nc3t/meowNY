@@ -6,6 +6,7 @@ import { useMoneySettings } from '../hooks/useMoneySettings'
 import { useI18n } from '../i18n/context'
 import DebtsFilePreview from './DebtsFilePreview'
 import Pick, { PickOption } from './Pick'
+import Button from './ui/Button'
 
 const FORMATS = [
   { value: 'TEXT', name: 'TXT' },
@@ -63,9 +64,9 @@ export default function DebtsFiles({ personId, onSaved, onFailed }: { personId: 
           </PickOption>
         ))}
       </Pick>
-      <button type="button" onClick={() => ask(format)}>
+      <Button variant="outline" onClick={() => ask(format)}>
         {t('debts.saveStatement')}
-      </button>
+      </Button>
       {asking ? (
         <DebtsFilePreview
           request={asking.request}

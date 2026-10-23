@@ -11,6 +11,7 @@ import DocumentModal from './DocumentModal'
 import Icon from './NavIcon'
 import Modal from './Modal'
 import PreviewModal from './PreviewModal'
+import Button from './ui/Button'
 
 const FILTER = { transaction: 'transactionId', recurring: 'recurringTransactionId', ledger_entry: 'ledgerEntryId' } as const
 
@@ -80,13 +81,13 @@ function ItemDocuments({ name, docs, message, onChanged, onClose }: { name: stri
             {docs.map((doc) => (
               <li key={doc.id}>
                 <Icon name="documents" className="attach-icon" />
-                <button type="button" className="attach-name" onClick={() => setViewing(doc.id)}>
+                <Button variant="link" className="attach-name" onClick={() => setViewing(doc.id)}>
                   {doc.name}
-                </button>
+                </Button>
                 <span className="attach-size">{formatSize(doc.sizeBytes, locale)}</span>
-                <button type="button" disabled={!canPreview(doc)} onClick={() => setPreviewing(doc)}>
+                <Button variant="ghost" size="sm" disabled={!canPreview(doc)} onClick={() => setPreviewing(doc)}>
                   {t('docs.previewButton')}
-                </button>
+                </Button>
               </li>
             ))}
           </ul>

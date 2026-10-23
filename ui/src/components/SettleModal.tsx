@@ -63,12 +63,12 @@ export default function SettleModal({
     <Modal title={t('debts.settleTitle', { name: person.name })} pending={pending} onClose={onClose}>
       <p className="notice">{message}</p>
       <form id={modalFormId} onSubmit={(event) => void onSubmit(event)}>
-        <p>{owedToYou ? t('debts.owesYou', { name: person.name, amount: money(whole) }) : t('debts.youOweThem', { name: person.name, amount: money(whole) })}</p>
+        <p className={owedToYou ? 'debt-owed' : 'debt-owe'}>{owedToYou ? t('debts.owesYou', { name: person.name, amount: money(whole) }) : t('debts.youOweThem', { name: person.name, amount: money(whole) })}</p>
         <label>
           {t('debts.settleAmount')}
           <input name="amount" required inputMode="decimal" autoComplete="off" value={amount} onChange={(event) => setAmount(event.target.value)} />
         </label>
-        {over ? <p className="notice">{t(owedToYou ? 'debts.settleOver' : 'debts.settleOverYou', { over: money(over), name: person.name })}</p> : null}
+        {over ? <p className="warning">{t(owedToYou ? 'debts.settleOver' : 'debts.settleOverYou', { over: money(over), name: person.name })}</p> : null}
         <div className="tx-date-group">
           <span>{t('report.date')}</span>
           <DatePicker kind="date" value={date} label={t('report.date')} today={today} onChange={setDate} />

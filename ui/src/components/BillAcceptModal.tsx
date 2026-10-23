@@ -135,7 +135,7 @@ export default function BillAcceptModal({
           </label>
         ) : (
           <>
-            {preview.alreadyAdded ? <p className="notice">{t('code.already')}</p> : null}
+            {preview.alreadyAdded ? <p className="warning">{t('code.already')}</p> : null}
             <dl className="code-details">
               <dt>{t('code.from')}</dt>
               <dd>{preview.from}</dd>

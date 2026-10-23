@@ -12,6 +12,7 @@ import EntryModal from '../components/EntryModal'
 import FriendNameModal from '../components/FriendNameModal'
 import SectionTabs from '../components/SectionTabs'
 import SettleModal from '../components/SettleModal'
+import Button from '../components/ui/Button'
 import { useMoneySettings, type MoneySettings } from '../hooks/useMoneySettings'
 import { useNotice } from '../hooks/useNotice'
 import { useProfile } from '../hooks/profile'
@@ -165,24 +166,24 @@ function DebtsView({ settings, now }: { settings: MoneySettings; now: Today }) {
     <section className="tx-page">
       <div className="tx-title">
         <h1>{t('debts.title')}</h1>
-        <div className="tx-actions">
-          <button type="button" onClick={() => setEntryKind('LENT')} {...tip('new', t('debts.lent'))}>
+        <div className="tx-actions debts-actions">
+          <Button onClick={() => setEntryKind('LENT')} {...tip('new', t('debts.lent'))}>
             {t('debts.lent')}
-          </button>
-          <button type="button" onClick={() => setEntryKind('BORROWED')}>
+          </Button>
+          <Button variant="outline" onClick={() => setEntryKind('BORROWED')}>
             {t('debts.borrowed')}
-          </button>
-          <button type="button" onClick={() => navigate('/app/transactions', { state: { split: true } })}>
+          </Button>
+          <Button variant="outline" onClick={() => navigate('/app/transactions', { state: { split: true } })}>
             {t('split.add')}
-          </button>
+          </Button>
           {phone ? (
-            <button type="button" disabled={scanning} onClick={() => void onScan()}>
+            <Button variant="outline" disabled={scanning} onClick={() => void onScan()}>
               {t('code.scan')}
-            </button>
+            </Button>
           ) : null}
-          <button type="button" onClick={() => setTaking('')}>
+          <Button variant="outline" onClick={() => setTaking('')}>
             {t('code.paste')}
-          </button>
+          </Button>
         </div>
       </div>
       <p className="notice">{message}</p>
@@ -191,9 +192,9 @@ function DebtsView({ settings, now }: { settings: MoneySettings; now: Today }) {
       ) : null}
       {scanning ? (
         <div className="scan-overlay" role="dialog" aria-label={t('code.scan')}>
-          <button type="button" onClick={() => void stopScan()}>
+          <Button variant="outline" onClick={() => void stopScan()}>
             {t('common.cancel')}
-          </button>
+          </Button>
         </div>
       ) : null}
       {taking !== null ? (
@@ -274,23 +275,27 @@ function DebtsView({ settings, now }: { settings: MoneySettings; now: Today }) {
         ]}
       />
       {tab === 'due' && due ? (
-        <div className="tx-pane wide" role="tabpanel">
+        <div className="tx-pane wide pane-stack" role="tabpanel">
           <DebtsDue due={due} currency={settings.currency} locale={settings.locale} />
         </div>
       ) : null}
       {tab === 'history' && history ? (
-        <div className="tx-pane wide" role="tabpanel">
+        <div className="tx-pane wide pane-stack" role="tabpanel">
           <DebtsHistory history={history} currency={settings.currency} locale={settings.locale} onPage={setHistoryOffset} />
         </div>
       ) : null}
       {tab === 'friends' && people ? (
-        <div className="tx-pane wide" role="tabpanel">
-          <div>
-            <button type="button" onClick={() => setAddingFriend(true)}>
+        <div className="tx-pane wide pane-stack" role="tabpanel">
+          <div className="debts-bar">
+            <Button variant="outline" onClick={() => setAddingFriend(true)}>
               {t('debts.addFriend')}
-            </button>
+            </Button>
+            <label>
+              <input type="checkbox" checked={showRemoved} onChange={(event) => setShowRemoved(event.target.checked)} />
+              {t('debts.showRemoved')}
+            </label>
           </div>
-          {people.length === 0 ? <p>{t('debts.empty')}</p> : null}
+          {people.length === 0 ? <p className="hint">{t('debts.empty')}</p> : null}
           <ul className="card-list">
             {people.map((person) => {
               const { tone } = balanceView(person.balance)
@@ -307,32 +312,28 @@ function DebtsView({ settings, now }: { settings: MoneySettings; now: Today }) {
                     </p>
                   </div>
                   <div className="card-actions">
-                    <button type="button" data-row-focus onClick={() => setEditing(person)}>
+                    <Button variant="ghost" size="sm" data-row-focus onClick={() => setEditing(person)}>
                       {t('common.edit')}
-                    </button>
+                    </Button>
                     {person.archived ? (
-                      <button type="button" onClick={() => void bringBack(person)}>
+                      <Button variant="ghost" size="sm" onClick={() => void bringBack(person)}>
                         {t('debts.unarchive')}
-                      </button>
+                      </Button>
                     ) : (
-                      <button type="button" onClick={() => setDeleting(person)}>
+                      <Button variant="ghost" size="sm" className="row-danger" onClick={() => setDeleting(person)}>
                         {t('common.delete')}
-                      </button>
+                      </Button>
                     )}
                     {tone !== 'even' ? (
-                      <button type="button" onClick={() => setSettling(person)}>
+                      <Button variant="outline" size="sm" onClick={() => setSettling(person)}>
                         {t('debts.settle')}
-                      </button>
+                      </Button>
                     ) : null}
                   </div>
                 </li>
               )
             })}
           </ul>
-          <label>
-            <input type="checkbox" checked={showRemoved} onChange={(event) => setShowRemoved(event.target.checked)} />
-            {t('debts.showRemoved')}
-          </label>
         </div>
       ) : null}
     </section>

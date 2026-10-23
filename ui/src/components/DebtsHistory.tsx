@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom'
 import type { History, HistoryLine } from '../api/debts'
 import { useT } from '../i18n/context'
 import { formatDate, formatMoney } from '../lib/money'
+import Button from './ui/Button'
 
 /**
  * The history of debts, newest first, a page at a time: what changed with each friend, and the recurring payments that were paid or are
@@ -27,7 +28,7 @@ export default function DebtsHistory({
 
   return (
     <>
-      {lines.length === 0 ? <p>{t('debts.noLines')}</p> : null}
+      {lines.length === 0 ? <p className="hint">{t('debts.noLines')}</p> : null}
       <ul className="card-list">
         {lines.map((line, at) => {
           const recurring = line.recurringId !== null
@@ -67,13 +68,13 @@ export default function DebtsHistory({
         })}
       </ul>
       {total > limit ? (
-        <div className="tx-actions">
-          <button type="button" disabled={offset + limit >= total} onClick={() => onPage(offset + limit)}>
+        <div className="tx-actions debts-pager">
+          <Button variant="outline" size="sm" disabled={offset + limit >= total} onClick={() => onPage(offset + limit)}>
             {t('debts.older')}
-          </button>
-          <button type="button" disabled={offset === 0} onClick={() => onPage(Math.max(0, offset - limit))}>
+          </Button>
+          <Button variant="outline" size="sm" disabled={offset === 0} onClick={() => onPage(Math.max(0, offset - limit))}>
             {t('debts.newer')}
-          </button>
+          </Button>
           <span className="muted">{t('debts.historyPage', { from: offset + 1, to: Math.min(offset + limit, total), total })}</span>
         </div>
       ) : null}

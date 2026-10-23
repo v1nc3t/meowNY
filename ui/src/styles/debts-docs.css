@@ -1,21 +1,135 @@
-/* Debts, friends and documents: attachments, previews, the paper and sheet views. */
+/* Debts, friends and documents: the debts pages, attachments, previews, the paper and sheet views. */
 
-/* Documents (phase 9). Text buttons and outlines like the rest; the phone's 44 px rule for buttons and fields already applies. */
+/* Debts (phase 10). Panes with several parts stack them with an even space between. */
+.tx-pane.pane-stack > * + * {
+  margin-top: 1rem;
+}
+
+.tx-pane.pane-stack > .debts-heading {
+  margin-bottom: 0;
+  font-size: 1rem;
+}
+
+.tx-pane.pane-stack > .debts-heading + * {
+  margin-top: 0.5rem;
+}
+
+.tx-actions.debts-actions {
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+/* Adding a friend, and showing the ones that were taken off the list. */
+.debts-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem 1.25rem;
+}
+
+.debts-bar > label {
+  width: auto;
+}
+
+.debts-pager {
+  flex-wrap: wrap;
+  gap: 0.5rem 0.75rem;
+}
+
+.debts-pager .muted {
+  font-size: 0.8125rem;
+}
+
+/* Delete in a row: red text, the same ghost button as the rest. */
+.card-actions .row-danger,
+.card-actions .row-danger:hover:not(:disabled) {
+  color: var(--destructive);
+}
+
+.card-item[data-archived] .card-name {
+  color: var(--muted-foreground);
+}
+
+/* The balance with a friend at the top of the friend's page. */
+.ui-card-title.debt-total {
+  font-size: 1.25rem;
+  line-height: 1.3;
+  font-variant-numeric: tabular-nums;
+}
+
+/* What is due: the total, and how many payments have no amount. */
+.debts-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem 2.5rem;
+}
+
+.debts-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  min-width: 0;
+}
+
+.debts-stat-label {
+  font-size: 0.8125rem;
+  color: var(--muted-foreground);
+}
+
+.debts-stat-value {
+  font-size: 1.5rem;
+  font-weight: 600;
+  line-height: 1.3;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+}
+
+.debts-files {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.5rem 0.75rem;
+}
+
+/* A bill code that was read: who it is from, what, and when. */
+.code-details {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 0.25rem 1rem;
+  margin: 0;
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--muted);
+  font-size: 0.8125rem;
+}
+
+.code-details dt {
+  color: var(--muted-foreground);
+}
+
+.code-details dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+  color: var(--foreground);
+}
+
+/* Documents (phase 9). */
 
 /* The attach area inside the dialog of a transaction or a recurring item: what is attached, and the ways to attach more. */
 .attach {
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  gap: 0.75rem;
   width: 100%;
-  padding-top: 0.75rem;
-  border-top: 0.8px solid var(--border);
+  padding-top: 1rem;
+  border-top: 1px solid var(--border);
 }
 
 .attach h3 {
   margin: 0;
-  font-size: 0.9375rem;
-  font-weight: normal;
+  font-size: 0.875rem;
+  font-weight: 600;
   color: var(--foreground);
 }
 
@@ -24,27 +138,33 @@
   margin: 0;
 }
 
+/* The documents in one bordered box, a row for each with a line between rows: an icon, the name, the size, and what can be done. */
 .attach-list {
   display: flex;
   flex-direction: column;
-  gap: 0.375rem;
+  width: 100%;
   margin: 0;
   padding: 0;
+  overflow: hidden;
   list-style: none;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
 }
 
-/* A document in the list: an icon, the name, the size, and what can be done with it, in a quiet outlined row. */
 .attach-list > li {
   display: flex;
   flex-direction: row;
   flex-wrap: nowrap;
   align-items: center;
-  gap: 0.625rem;
-  padding: 0.375rem 0.625rem;
-  border: 0.8px solid var(--border);
-  border-radius: var(--radius-lg);
-  background: var(--muted);
+  gap: 0.5rem;
+  padding: 0.25rem 0.5rem 0.25rem 0.75rem;
+  border: 0;
+  border-top: 1px solid var(--border);
   font-size: 0.8125rem;
+}
+
+.attach-list > li:first-child {
+  border-top: 0;
 }
 
 .attach-icon {
@@ -54,7 +174,8 @@
   color: var(--muted-foreground);
 }
 
-.attach-name {
+.attach-list .attach-name {
+  display: block;
   flex: 1 1 0;
   min-width: 0;
   overflow: hidden;
@@ -64,32 +185,22 @@
   color: var(--foreground);
 }
 
-button.attach-name {
-  padding: 0.25rem 0;
-}
-
 .attach-size {
   flex: 0 0 auto;
   font-variant-numeric: tabular-nums;
   color: var(--muted-foreground);
 }
 
-.attach-list > li > button:not(.attach-name) {
-  flex: 0 0 auto;
-  padding: 0.25rem 0.5rem;
-  font-size: 0.8125rem;
-}
-
 .attach-actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.25rem 1.25rem;
+  gap: 0.5rem;
 }
 
 .attach-pick {
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  gap: 0.75rem;
 }
 
 /* One document in a dialog: the picture, the facts, what it is linked to, and what can be done with the file. */
@@ -99,7 +210,8 @@ button.attach-name {
   max-height: min(50svh, 24rem);
   margin: 0 auto;
   object-fit: contain;
-  border: 0.8px solid var(--border);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
 }
 
 .doc-facts {
@@ -123,7 +235,6 @@ button.attach-name {
 .doc-links {
   display: flex;
   flex-direction: column;
-  gap: 0.25rem;
   width: 100%;
   margin: 0;
   padding: 0;
@@ -131,35 +242,29 @@ button.attach-name {
 }
 
 .doc-links > li {
-  font-size: 0.8125rem;
   display: flex;
   flex-direction: row;
   flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: 0.125rem 0.75rem;
-  padding: 0.125rem 0;
+  padding: 0.25rem 0;
+  border-top: 1px solid var(--border);
+  font-size: 0.8125rem;
+}
+
+.doc-links > li:first-child {
   border-top: 0;
 }
 
-/* An action and, beside it, what it does. */
+/* The buttons that act on the file, side by side. */
 .doc-action {
-  display: grid;
-  grid-template-columns: 6.5rem minmax(0, 1fr);
-  align-items: baseline;
-  gap: 0 0.875rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
 }
 
-.doc-action button {
-  min-width: 6.5rem;
-  text-align: left;
-}
-
-.doc-action .hint {
-  margin: 0;
-}
-
-/* The page of documents. */
+/* The page of documents: what is here and where to add more. It lights up when files are held over the window. */
 .doc-drop {
   display: flex;
   flex-wrap: wrap;
@@ -169,9 +274,15 @@ button.attach-name {
   width: 100%;
   max-width: none;
   padding: 0.875rem 1rem;
-  border: 0.8px dashed var(--input);
+  border: 1px dashed var(--input);
   border-radius: var(--radius-lg);
   background: var(--muted);
+}
+
+.tx-page > .doc-drop {
+  width: auto;
+  max-width: none;
+  align-self: stretch;
 }
 
 .doc-drop-text {
@@ -186,12 +297,14 @@ button.attach-name {
 }
 
 .doc-count {
-  font-size: 0.9375rem;
+  font-size: 0.875rem;
   color: var(--foreground);
 }
 
-.doc-page > p.warn {
-  align-self: flex-start;
+.doc-page > p.warn,
+.doc-page > p.warning {
+  align-self: stretch;
+  max-width: 40rem;
   font-size: 0.8125rem;
 }
 
@@ -218,13 +331,6 @@ button.attach-name {
   color: var(--muted-foreground);
 }
 
-.doc-chip {
-  padding: 0.0625rem 0.5rem;
-  border: 0.8px solid var(--input);
-  border-radius: 999px;
-  font-size: 0.75rem;
-}
-
 .doc-marks {
   display: flex;
   flex-wrap: wrap;
@@ -232,13 +338,20 @@ button.attach-name {
   gap: 0.25rem 1rem;
 }
 
-/* The paper clip and a number, on a transaction or an item that has documents. */
+/* The documents are as wide as the search and the type together: the list keeps no gutter of its own on the right, only the width of
+   its scroll bar (and nothing when the list is short). */
+.app-main main > section.doc-page > .tx-pane.wide {
+  padding-right: 0;
+}
+
+/* The paper clip and a number, on a transaction or an item that has documents: a small quiet button. */
 .clip {
   display: inline-flex;
   align-items: center;
   align-self: flex-start;
   gap: 0.25rem;
-  padding: 0.25rem 0;
+  min-height: 1.5rem;
+  padding: 0.125rem 0.375rem;
   font-size: 0.8125rem;
   color: var(--muted-foreground);
 }
@@ -252,71 +365,27 @@ button.attach-name {
 /* The number of attachments inside a line of text, after the size of a document. */
 .clip.in-line {
   align-self: auto;
-  padding: 0;
+  padding: 0 0.25rem;
   vertical-align: middle;
 }
 
-.card-item[data-archived] .card-name {
-  color: var(--muted-foreground);
-}
-
-.debt-total {
-  margin: 0 0 0.5rem;
-  font-size: 1.25rem;
-  font-variant-numeric: tabular-nums;
-}
-
-.debts-files {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-end;
-  gap: 0.5rem 0.75rem;
-  margin-top: 1rem;
-}
-
-/* A bill code that was read: who it is from, what, and when. */
-.code-details {
-  display: grid;
-  grid-template-columns: max-content 1fr;
-  gap: 0.25rem 1rem;
-  margin: 0;
-}
-
-.code-details dt {
-  color: var(--muted-foreground);
-}
-
-.code-details dd {
-  margin: 0;
-  overflow-wrap: anywhere;
-  color: var(--foreground);
-}
-
-.tx-page > .doc-drop {
-  width: auto;
-  max-width: none;
-  align-self: stretch;
-}
-
-/* The documents are as wide as the search and the type together: the list keeps no gutter of its own on the right, only the width of
-   its scroll bar (and nothing when the list is short). */
-.app-main main > section.doc-page > .tx-pane.wide {
-  padding-right: 0;
-}
-
+/* Looking into a document: the frame it is shown in. */
 .preview-body {
   flex: 1 1 auto;
   min-height: 10rem;
   max-height: calc(100svh - 12rem);
   padding: var(--edge) var(--room) var(--edge) var(--edge);
   overflow: auto;
-  border: 0.8px solid var(--border);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
 }
 
 .preview-body > .hint,
-.preview-body > .notice {
+.preview-body > p.notice:not(:empty) {
   margin: 0;
   padding: 0.75rem;
+  border: 0;
+  background: transparent;
 }
 
 .preview-note {
@@ -378,6 +447,7 @@ button.attach-name {
 .preview-canvas canvas {
   display: block;
   background: #fff; /* fixed: a PDF page is drawn on white */
+  box-shadow: var(--shadow-md);
 }
 
 .preview-pages {
@@ -385,7 +455,9 @@ button.attach-name {
   flex: 0 0 auto;
   align-items: center;
   justify-content: center;
-  gap: 1.5rem;
+  gap: 1rem;
+  font-size: 0.8125rem;
+  color: var(--muted-foreground);
 }
 
 /* A Word file: a sheet of white paper with dark ink on it, in a frame that scrolls. */
@@ -394,6 +466,7 @@ button.attach-name {
   min-height: 0;
   padding: 1rem;
   overflow: auto;
+  background: var(--muted);
 }
 
 .paper {
@@ -406,6 +479,7 @@ button.attach-name {
   padding: 2.5rem 3rem;
   background: #fff; /* fixed: paper look of a docx */
   color: #1b1b1b; /* fixed: paper look of a docx */
+  box-shadow: var(--shadow-md);
   font-family: 'Segoe UI', system-ui, -apple-system, Arial, 'Liberation Sans', sans-serif;
   font-size: 0.9375rem;
   line-height: 1.55;
@@ -534,24 +608,12 @@ button.attach-name {
   z-index: 3;
 }
 
+/* The tabs of the sheets are the app's own tabs, under the grid. */
 .sheet-tabs {
-  display: flex;
   flex: 0 0 auto;
-  flex-wrap: wrap;
-  background: #e6e6e6; /* fixed: spreadsheet look */
-  border-top: 1px solid #c4c4c4; /* fixed: spreadsheet look */
-}
-
-.sheet-tabs button {
-  padding: 0.375rem 1rem;
-  border-right: 1px solid #c4c4c4; /* fixed: spreadsheet look */
-  color: #444; /* fixed: spreadsheet look */
-}
-
-.sheet-tabs button[aria-selected='true'] {
-  background: #fff; /* fixed: spreadsheet look */
-  color: #111; /* fixed: spreadsheet look */
-  font-weight: 700;
+  align-self: flex-start;
+  margin: 0.5rem;
+  overflow-x: auto;
 }
 
 /* What a document is linked to: a line to choose for each item, which takes the person to it. */
@@ -571,21 +633,26 @@ button.attach-name {
   border: 0;
 }
 
-.link-list button {
+.link-list .ui-btn {
   width: 100%;
-  min-width: 0;
+  height: auto;
+  min-height: 2.25rem;
+  justify-content: flex-start;
   padding: 0.5rem 0.75rem;
-  border: 0.8px solid var(--border);
-  border-radius: var(--radius-lg);
-  background: var(--muted);
   text-align: left;
   white-space: normal;
   overflow-wrap: anywhere;
 }
 
-/* The debts tabs: a little room under what comes before the list. */
-.tx-pane > .dash-card,
-.tx-pane > .hint,
-.tx-pane > .tx-actions {
-  margin-bottom: 0.75rem;
+/* A phone: the rows of attached documents wrap so the name keeps room, and a link made to look like a button is as tall as one. */
+html.is-phone .attach-list > li {
+  flex-wrap: wrap;
+}
+
+html.is-phone .attach-list .attach-name {
+  flex: 1 1 6rem;
+}
+
+html.is-phone a.ui-btn {
+  min-height: 2.75rem;
 }

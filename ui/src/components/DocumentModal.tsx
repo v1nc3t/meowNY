@@ -12,6 +12,7 @@ import { formatDate } from '../lib/money'
 import DatePicker from './DatePicker'
 import Modal from './Modal'
 import PreviewModal from './PreviewModal'
+import Button from './ui/Button'
 
 const FORM_ID = 'document-form'
 const WARNING_FORM_ID = 'document-open-form'
@@ -188,16 +189,16 @@ export default function DocumentModal({ id, onClose, onChanged }: { id: string; 
           {doc.hasFile && !canOpen(doc) && !canPreview(doc) ? <p className="hint">{t('docs.cannotOpen')}</p> : null}
           {canPreview(doc) ? (
             <div className="doc-action">
-              <button type="button" onClick={() => setPreviewing(true)}>
+              <Button variant="outline" size="sm" onClick={() => setPreviewing(true)}>
                 {t('docs.previewButton')}
-              </button>
+              </Button>
             </div>
           ) : null}
           {canOpen(doc) ? (
             <div className="doc-action">
-              <button type="button" onClick={onOpen}>
+              <Button variant="outline" size="sm" onClick={onOpen}>
                 {t('docs.open')}
-              </button>
+              </Button>
             </div>
           ) : null}
         </section>
@@ -212,9 +213,9 @@ export default function DocumentModal({ id, onClose, onChanged }: { id: string; 
                   <span>
                     {t(link.kind === 'transaction' ? 'docs.kindTransaction' : link.kind === 'recurring' ? 'docs.kindRecurring' : 'docs.kindLedger')}: {link.name} ({formatDate(link.date, locale)})
                   </span>
-                  <button type="button" onClick={() => void onDetach(link)}>
+                  <Button variant="ghost" size="sm" onClick={() => void onDetach(link)}>
                     {t('docs.detach')}
-                  </button>
+                  </Button>
                 </li>
               ))}
             </ul>
@@ -225,7 +226,7 @@ export default function DocumentModal({ id, onClose, onChanged }: { id: string; 
       {warning ? (
         <Modal title={t('docs.openTitle')} formId={WARNING_FORM_ID} doneLabel={t('docs.open')} onClose={() => setWarning(false)}>
           <form id={WARNING_FORM_ID} onSubmit={(event) => void onWarned(event)}>
-            <p className="confirm-text">{t('docs.openWarning')}</p>
+            <p className="warning">{t('docs.openWarning')}</p>
           </form>
         </Modal>
       ) : null}

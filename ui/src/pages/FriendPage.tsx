@@ -10,6 +10,9 @@ import DebtsFiles from '../components/DebtsFiles'
 import EntryModal from '../components/EntryModal'
 import FriendNameModal from '../components/FriendNameModal'
 import SettleModal from '../components/SettleModal'
+import Button from '../components/ui/Button'
+import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/Card'
+import { buttonClass } from '../components/ui/cn'
 import { useClipCounts } from '../hooks/useClipCounts'
 import { useFocusRequest, useJumpTo } from '../hooks/useFocusRequest'
 import { useMoneySettings, type MoneySettings } from '../hooks/useMoneySettings'
@@ -104,9 +107,9 @@ function FriendView({ settings, now }: { settings: MoneySettings; now: Today }) 
   if (missing) {
     return (
       <section className="tx-page">
-        <p>
-          <Link to="/app/debts">{t('debts.back')}</Link>
-        </p>
+        <Link to="/app/debts" className={buttonClass('outline', 'sm')}>
+          {t('debts.back')}
+        </Link>
         <p className="notice">{errorText(new ApiError('not_found'))}</p>
       </section>
     )
@@ -129,20 +132,18 @@ function FriendView({ settings, now }: { settings: MoneySettings; now: Today }) 
     <section className="tx-page">
       <div className="tx-title">
         <h1>{person.name}</h1>
-        <div className="tx-actions">
-          <button type="button" onClick={() => setDialog({ kind: 'entry', entry: null, as: 'LENT' })}>
-            {t('debts.lent')}
-          </button>
-          <button type="button" onClick={() => setDialog({ kind: 'entry', entry: null, as: 'BORROWED' })}>
+        <div className="tx-actions debts-actions">
+          <Button onClick={() => setDialog({ kind: 'entry', entry: null, as: 'LENT' })}>{t('debts.lent')}</Button>
+          <Button variant="outline" onClick={() => setDialog({ kind: 'entry', entry: null, as: 'BORROWED' })}>
             {t('debts.borrowed')}
-          </button>
-          <button type="button" onClick={() => navigate('/app/transactions', { state: { split: true, friendId: person.id, friendName: person.name } })}>
+          </Button>
+          <Button variant="outline" onClick={() => navigate('/app/transactions', { state: { split: true, friendId: person.id, friendName: person.name } })}>
             {t('split.add')}
-          </button>
+          </Button>
           {tone !== 'even' ? (
-            <button type="button" onClick={() => setDialog({ kind: 'settle' })}>
+            <Button variant="outline" onClick={() => setDialog({ kind: 'settle' })}>
               {t('debts.settle')}
-            </button>
+            </Button>
           ) : null}
         </div>
       </div>
@@ -173,21 +174,30 @@ function FriendView({ settings, now }: { settings: MoneySettings; now: Today }) 
           onClose={() => setDialog(null)}
         />
       ) : null}
-      <div className="tx-pane wide">
-        <div className="dash-card">
-          <p className={`debt-total debt-${tone}`}>{summaryText}</p>
-          <div className="card-actions">
-            <Link to="/app/debts">{t('debts.back')}</Link>
-            <button type="button" onClick={() => setDialog({ kind: 'rename' })}>
+      <div className="tx-pane wide pane-stack">
+        <Card>
+          <CardHeader>
+            <CardTitle className={`debt-total debt-${tone}`}>{summaryText}</CardTitle>
+          </CardHeader>
+          <CardContent className="card-actions">
+            <Link to="/app/debts" className={buttonClass('outline', 'sm')}>
+              {t('debts.back')}
+            </Link>
+            <Button variant="outline" size="sm" onClick={() => setDialog({ kind: 'rename' })}>
               {t('common.rename')}
-            </button>
-            <button type="button" disabled={pending} onClick={() => void run(() => (person.archived ? debts.unarchive(person.id) : debts.archive(person.id)))}>
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={pending}
+              onClick={() => void run(() => (person.archived ? debts.unarchive(person.id) : debts.archive(person.id)))}
+            >
               {t(person.archived ? 'debts.unarchive' : 'debts.archive')}
-            </button>
-          </div>
-        </div>
-        <h2>{t('debts.ledger')}</h2>
-        {lines.length === 0 ? <p>{t('debts.noLines')}</p> : null}
+            </Button>
+          </CardContent>
+        </Card>
+        <h2 className="debts-heading">{t('debts.ledger')}</h2>
+        {lines.length === 0 ? <p className="hint">{t('debts.noLines')}</p> : null}
         <ul className="card-list">
           {lines.map((line, at) => {
             const entry = entryOfLine(line, person.id)
@@ -205,19 +215,19 @@ function FriendView({ settings, now }: { settings: MoneySettings; now: Today }) 
                 </div>
                 {line.kind === 'BILL' && line.transactionId ? (
                   <div className="card-actions">
-                    <button type="button" data-row-focus onClick={() => setDialog({ kind: 'code', transactionId: line.transactionId ?? '', amount: line.amount })}>
+                    <Button variant="ghost" size="sm" data-row-focus onClick={() => setDialog({ kind: 'code', transactionId: line.transactionId ?? '', amount: line.amount })}>
                       {t('code.show')}
-                    </button>
+                    </Button>
                   </div>
                 ) : null}
                 {entry ? (
                   <div className="card-actions">
-                    <button type="button" data-row-focus onClick={() => setDialog({ kind: 'entry', entry })}>
+                    <Button variant="ghost" size="sm" data-row-focus onClick={() => setDialog({ kind: 'entry', entry })}>
                       {t('common.edit')}
-                    </button>
-                    <button type="button" onClick={() => setDialog({ kind: 'delete', entry })}>
+                    </Button>
+                    <Button variant="ghost" size="sm" className="row-danger" onClick={() => setDialog({ kind: 'delete', entry })}>
                       {t('common.delete')}
-                    </button>
+                    </Button>
                   </div>
                 ) : null}
               </li>

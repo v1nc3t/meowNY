@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { PDFDocumentProxy, PDFDocumentLoadingTask, RenderTask } from 'pdfjs-dist/legacy/build/pdf.mjs'
 import { useT } from '../i18n/context'
+import Button from './ui/Button'
 
 /**
  * A PDF drawn one page at a time on a canvas, as large as fits its frame, with the buttons for the previous and the next page and the
@@ -111,13 +112,13 @@ export default function PdfView({ bytes, onFailed, wheel = true }: { bytes: Uint
       </div>
       {pdf ? (
         <div className="preview-pages">
-          <button type="button" disabled={page <= 1} onClick={() => turn(-1)}>
+          <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => turn(-1)}>
             {t('docs.previewPrevious')}
-          </button>
+          </Button>
           <span aria-live="polite">{t('docs.previewPage', { page, pages })}</span>
-          <button type="button" disabled={page >= pages} onClick={() => turn(1)}>
+          <Button variant="outline" size="sm" disabled={page >= pages} onClick={() => turn(1)}>
             {t('docs.previewNext')}
-          </button>
+          </Button>
         </div>
       ) : null}
     </div>

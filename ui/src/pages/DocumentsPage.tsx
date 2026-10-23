@@ -6,6 +6,8 @@ import DocumentModal from '../components/DocumentModal'
 import PreviewModal from '../components/PreviewModal'
 import Icon from '../components/NavIcon'
 import Pick, { PickOption } from '../components/Pick'
+import Badge from '../components/ui/Badge'
+import Button from '../components/ui/Button'
 import { documents, type Doc, type DocPage, type LibrarySize, type Report } from '../api/documents'
 import { errorText } from '../api/invoke'
 import { useMoneySettings, type MoneySettings } from '../hooks/useMoneySettings'
@@ -197,18 +199,18 @@ function DocumentsView({ settings }: { settings: MoneySettings }) {
           {size && phone ? <p className="hint">{t('docs.heldSummary', { count: size.heldCount, size: formatSize(size.heldBytes, locale) })}</p> : null}
         </div>
         <div className="tx-actions">
-          <button type="button" disabled={busy} onClick={() => fileInput.current?.click()} {...tip('new', t('docs.add'))}>
+          <Button disabled={busy} onClick={() => fileInput.current?.click()} {...tip('new', t('docs.add'))}>
             {t('docs.add')}
-          </button>
+          </Button>
           {phone ? (
-            <button type="button" disabled={busy} onClick={() => photoInput.current?.click()}>
+            <Button variant="outline" disabled={busy} onClick={() => photoInput.current?.click()}>
               {t('docs.takePhoto')}
-            </button>
+            </Button>
           ) : null}
         </div>
       </div>
       {lines.map((line) => (
-        <p key={line.key} className="warn">
+        <p key={line.key} className={line.key === 'docs.damaged' ? 'warning' : 'warn'}>
           {t(line.key, { count: line.count })}
         </p>
       ))}
@@ -252,7 +254,7 @@ function DocumentsView({ settings }: { settings: MoneySettings }) {
           ))}
         </Pick>
       </div>
-      <p className="notice" role="status">
+      <p className={message === t('docs.copySaved') ? 'warning' : 'notice'} role="status">
         {message}
       </p>
       {viewing ? <DocumentModal id={viewing} onClose={() => setViewing(null)} onChanged={refresh} /> : null}
@@ -264,7 +266,7 @@ function DocumentsView({ settings }: { settings: MoneySettings }) {
       {page ? (
         <>
           <div className="tx-pane wide">
-            {page.documents.length === 0 ? <p>{search || kind ? t('docs.noMatch') : t('docs.empty')}</p> : null}
+            {page.documents.length === 0 ? <p className="hint">{search || kind ? t('docs.noMatch') : t('docs.empty')}</p> : null}
             <ul className="card-list">
               {page.documents.map((doc) => {
                 const state = fileStateText(fileState(doc, phone))
@@ -287,25 +289,25 @@ function DocumentsView({ settings }: { settings: MoneySettings }) {
                       </p>
                       {doc.keepOnPhone ? (
                         <p className="card-meta doc-marks">
-                          <span className="doc-chip">{t('docs.keepOnPhone')}</span>
+                          <Badge variant="outline">{t('docs.keepOnPhone')}</Badge>
                         </p>
                       ) : null}
                     </div>
                     <div className="card-actions">
-                      <button type="button" disabled={!canPreview(doc)} onClick={() => setPreviewing(doc)}>
+                      <Button variant="ghost" size="sm" disabled={!canPreview(doc)} onClick={() => setPreviewing(doc)}>
                         {t('docs.previewButton')}
-                      </button>
-                      <button type="button" data-row-focus onClick={() => setViewing(doc.id)}>
+                      </Button>
+                      <Button variant="ghost" size="sm" data-row-focus onClick={() => setViewing(doc.id)}>
                         {t('docs.details')}
-                      </button>
+                      </Button>
                       {doc.hasFile && !phone ? (
-                        <button type="button" aria-label={t('docs.saveCopy')} onClick={() => void onSaveCopy(doc)}>
+                        <Button variant="ghost" size="sm" aria-label={t('docs.saveCopy')} onClick={() => void onSaveCopy(doc)}>
                           {t('common.save')}
-                        </button>
+                        </Button>
                       ) : null}
-                      <button type="button" onClick={() => setDeleting(doc)}>
+                      <Button variant="ghost" size="sm" className="row-danger" onClick={() => setDeleting(doc)}>
                         {t('common.delete')}
-                      </button>
+                      </Button>
                     </div>
                   </li>
                 )
