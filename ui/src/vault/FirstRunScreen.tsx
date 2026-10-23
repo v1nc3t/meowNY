@@ -21,6 +21,7 @@ export default function FirstRunScreen({ onDone }: { onDone: () => void }) {
   const { t, language, setLanguage } = useI18n()
   const [message, setMessage] = useNotice()
   const [busy, setBusy] = useState(false)
+  const [workDone, setWorkDone] = useState(false)
   const formRef = useRefocus(busy)
   const [recoveryKey, setRecoveryKey] = useState<string | null>(null)
   const [restoring, setRestoring] = useState(false)
@@ -41,11 +42,15 @@ export default function FirstRunScreen({ onDone }: { onDone: () => void }) {
     if (problem) return setMessage(problem)
 
     closeKeyboard()
+    setWorkDone(false)
     setBusy(true)
     try {
       // The data file exists from here on, but the app stays on this screen until the key is saved.
       setRecoveryKey(
-        await atLeast(vault.create({ currency: normalizeCurrency(currency), locale, timezone, language }, passphrase)),
+        await atLeast(
+          vault.create({ currency: normalizeCurrency(currency), locale, timezone, language }, passphrase),
+          () => setWorkDone(true),
+        ),
       )
       saveSenderName(name)
     } catch (error) {
@@ -117,7 +122,7 @@ export default function FirstRunScreen({ onDone }: { onDone: () => void }) {
           {message}
         </p>
       </form>
-      {busy && <Decrypting below />}
+      {busy && <Decrypting below done={workDone} />}
     </main>
   )
 }

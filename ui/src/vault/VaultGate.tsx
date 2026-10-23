@@ -84,7 +84,7 @@ export default function VaultGate({ children }: { children: ReactNode }) {
     return () => document.removeEventListener('visibilitychange', onVisibility)
   }, [desktop, phone, status])
 
-  if (loading.show) return <DecryptingPage />
+  if (loading.show) return <DecryptingPage done={status !== 'loading'} />
   if (status === 'loading') return null
   if (status === 'not_set_up') return phone ? <PhoneFirstRun onDone={refresh} /> : <FirstRunScreen onDone={refresh} />
   if (status === 'locked') return <LockScreen onUnlocked={refresh} />

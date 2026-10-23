@@ -22,6 +22,8 @@ export default function LockScreen({ onUnlocked }: { onUnlocked: () => void }) {
   const [recovering, setRecovering] = useState(false)
   const [message, setMessage] = useNotice()
   const [busy, setBusy] = useState(false)
+  // The data is open; the decrypting line may run to its end.
+  const [workDone, setWorkDone] = useState(false)
   // The silent first try (desktop, keychain only) is a loading state of its own; `opened` waits for the loading screen to finish.
   const [trying, setTrying] = useState(!phone)
   const [opened, setOpened] = useState(false)
@@ -63,9 +65,10 @@ export default function LockScreen({ onUnlocked }: { onUnlocked: () => void }) {
     event.preventDefault()
     const passphrase = String(new FormData(event.currentTarget).get('passphrase'))
     closeKeyboard()
+    setWorkDone(false)
     setBusy(true)
     try {
-      await atLeast(vault.unlock(passphrase))
+      await atLeast(vault.unlock(passphrase), () => setWorkDone(true))
       onUnlocked()
     } catch (error) {
       if (error instanceof VaultError && error.code === 'erased') return setErased(true)
@@ -82,9 +85,10 @@ export default function LockScreen({ onUnlocked }: { onUnlocked: () => void }) {
     const problem = passphraseProblem(passphrase, String(form.get('confirm')))
     if (problem) return setMessage(problem)
     closeKeyboard()
+    setWorkDone(false)
     setBusy(true)
     try {
-      await atLeast(vault.recover(String(form.get('recoveryKey')), passphrase))
+      await atLeast(vault.recover(String(form.get('recoveryKey')), passphrase), () => setWorkDone(true))
       onUnlocked()
     } catch (error) {
       setMessage(errorText(error))
@@ -92,7 +96,7 @@ export default function LockScreen({ onUnlocked }: { onUnlocked: () => void }) {
     }
   }
 
-  if (loading.show) return <DecryptingPage />
+  if (loading.show) return <DecryptingPage done={!trying} />
   if (loading.blank || opened) return null
 
   if (erased) return <ErasedScreen onContinue={onUnlocked} />
@@ -134,7 +138,7 @@ export default function LockScreen({ onUnlocked }: { onUnlocked: () => void }) {
             {message}
           </p>
         </form>
-        {busy && <Decrypting below />}
+        {busy && <Decrypting below done={workDone} />}
       </main>
     )
   }
@@ -174,7 +178,7 @@ export default function LockScreen({ onUnlocked }: { onUnlocked: () => void }) {
           {message}
         </p>
       </form>
-      {busy && <Decrypting below />}
+      {busy && <Decrypting below done={workDone} />}
     </main>
   )
 }
