@@ -46,6 +46,8 @@
   --ring-soft: #16653440;
   --sidebar: #f5f5f5;
   --success: #15803d;
+  /* Amber for a warning that is not an error. */
+  --warning: #b45309;
   /* Chart colours: income, expense, savings and the empty track behind a bar. */
   --c-income: #2e8b57;
   --c-expense: #e11d48;
@@ -107,6 +109,7 @@
   --ring-soft: #2e9e5e59;
   --sidebar: #111111;
   --success: #4ade80;
+  --warning: #e0af68;
   --c-income: #2e8b57;
   --c-expense: #f7768e;
   --c-savings: #7aa2f7;
@@ -150,6 +153,7 @@
     --ring-soft: #2e9e5e59;
     --sidebar: #111111;
     --success: #4ade80;
+    --warning: #e0af68;
     --c-income: #2e8b57;
     --c-expense: #f7768e;
     --c-savings: #7aa2f7;
