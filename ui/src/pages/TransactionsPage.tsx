@@ -8,6 +8,7 @@ import ConfirmModal from '../components/ConfirmModal'
 import Dropdown, { type DropdownOption } from '../components/Dropdown'
 import Modal, { modalFormId } from '../components/Modal'
 import Pick, { PickOption } from '../components/Pick'
+import Button from '../components/ui/Button'
 import DatePicker from '../components/DatePicker'
 import SplitEditor from '../components/SplitEditor'
 import { categories as categoriesApi, type Category } from '../api/categories'
@@ -294,14 +295,14 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
   // The current-month button and the range: beside "add" on a phone, where room is short, and first in the filters elsewhere.
   const rangeControls = (
     <>
-      <button
-        type="button"
+      <Button
+        variant="outline"
         disabled={filters.mode === 'month' && filters.from === now.month && filters.to === now.month}
         onClick={goCurrentMonth}
         {...tip('today', t('tx.currentMonth'))}
       >
         {t('tx.currentMonth')}
-      </button>
+      </Button>
       <Pick
         label={t('tx.range')}
         className="mode"
@@ -332,9 +333,9 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
       <div className="tx-title">
         <h1>{t('tx.title')}</h1>
         <div className="tx-actions">
-          <button type="button" onClick={() => openAdd()} {...tip('new', t('tx.add'))}>
+          <Button onClick={() => openAdd()} {...tip('new', t('tx.add'))}>
             {t('tx.add')}
-          </button>
+          </Button>
           {phone ? rangeControls : null}
         </div>
       </div>
@@ -463,7 +464,7 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
       {page ? (
         <>
           <div className="tx-pane wide">
-            {page.transactions.length === 0 ? <p>{t('tx.empty')}</p> : null}
+            {page.transactions.length === 0 ? <p className="hint">{t('tx.empty')}</p> : null}
             <ul className="card-list">
               {page.transactions.map((transaction) => (
                 <li key={transaction.id} className="card-item" data-item={`transaction:${transaction.id}`}>
@@ -486,14 +487,14 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
                       ) : null}
                     </p>
                     {transaction.split.length > 0 || transaction.description?.trim() ? (
-                      <button
-                        type="button"
+                      <Button
+                        variant="link"
                         className="tx-desc"
                         aria-expanded={openId === transaction.id}
                         onClick={() => setOpenId((current) => (current === transaction.id ? null : transaction.id))}
                       >
                         {t('common.details')}
-                      </button>
+                      </Button>
                     ) : null}
                     {openId === transaction.id ? (
                       <div className="card-detail">
@@ -508,9 +509,13 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
                               <div className="split-part" key={`${part.personId ?? 'guest'}-${part.person ?? part.guest}`}>
                                 <span>{`${part.person ?? part.guest ?? ''} ${formatMoney(part.amount, settings.currency, settings.locale)}`}</span>
                                 {part.personId && part.person ? (
-                                  <button type="button" onClick={() => setCoding({ transaction, personId: part.personId ?? '', name: part.person ?? '', part: part.amount })}>
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => setCoding({ transaction, personId: part.personId ?? '', name: part.person ?? '', part: part.amount })}
+                                  >
                                     {t('code.show')}
-                                  </button>
+                                  </Button>
                                 ) : null}
                               </div>
                             ))}
@@ -526,17 +531,18 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
                     ) : null}
                   </div>
                   <div className="card-actions">
-                    <button type="button" data-row-focus onClick={() => openEdit(transaction)}>
+                    <Button variant="ghost" size="sm" data-row-focus onClick={() => openEdit(transaction)}>
                       {t('common.edit')}
-                    </button>
+                    </Button>
                     {(() => {
                       // a bill shared with friends has a code for each of them: one friend opens it, several open the details to choose
                       const friends = transaction.split.filter((part) => part.personId && part.person)
                       const [only] = friends
                       if (friends.length === 0) return null
                       return (
-                        <button
-                          type="button"
+                        <Button
+                          variant="ghost"
+                          size="sm"
                           onClick={() =>
                             friends.length === 1 && only
                               ? setCoding({ transaction, personId: only.personId ?? '', name: only.person ?? '', part: only.amount })
@@ -544,12 +550,12 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
                           }
                         >
                           {t('code.show')}
-                        </button>
+                        </Button>
                       )
                     })()}
-                    <button type="button" onClick={() => setDeleting(transaction)}>
+                    <Button variant="ghost" size="sm" onClick={() => setDeleting(transaction)}>
                       {t('common.delete')}
-                    </button>
+                    </Button>
                   </div>
                 </li>
               ))}

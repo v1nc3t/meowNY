@@ -80,12 +80,10 @@ export default function AddCategoryModal({
         </label>
         <Dropdown label={t('common.type')} value={type} options={typeOptions} onChange={setType} />
         {budgetMonth ? (
-          <>
-            <label>
-              {t('categories.budgetFrom', { month: monthLabel(budgetMonth, language) })}
-              <input name="budget" inputMode="decimal" placeholder="0.00" autoComplete="off" />
-            </label>
-          </>
+          <label>
+            {t('categories.budgetFrom', { month: monthLabel(budgetMonth, language) })}
+            <input name="budget" inputMode="decimal" placeholder="0.00" autoComplete="off" />
+          </label>
         ) : null}
       </form>
     </Modal>

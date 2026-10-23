@@ -9,6 +9,7 @@ import { amountString, formatMoney } from '../lib/money'
 import { rowKey, toInput, withMode, type SplitDraft, type SplitRow } from '../lib/split'
 import Dropdown from './Dropdown'
 import PersonCombo from './PersonCombo'
+import Button from './ui/Button'
 
 /**
  * Who shares a bill and how: the person (always first), friends and guests, and a mode that says how the numbers are typed. Every
@@ -137,30 +138,30 @@ export default function SplitEditor({
         {draft.rows.map((row, at) => {
           const part = current?.parts[at]
           return (
-          <li className="split-row" key={row.key}>
-            <span className="split-name">{row.name}</span>
-            {typed ? (
-              <input
-                className="split-value"
-                aria-label={row.name}
-                inputMode={draft.mode === 'SHARES' ? 'numeric' : 'decimal'}
-                autoComplete="off"
-                value={row.value}
-                onChange={(event) => setValue(at, event.target.value)}
-              />
-            ) : null}
-            <span className="split-amount">{part ? money(part.amount) : ''}</span>
-            <button type="button" className="split-remove" onClick={() => onChange({ ...draft, rows: draft.rows.filter((other) => other.key !== row.key) })}>
-              {t('split.remove')}
-            </button>
-          </li>
+            <li className="split-row" key={row.key}>
+              <span className="split-name">{row.name}</span>
+              {typed ? (
+                <input
+                  className="split-value"
+                  aria-label={row.name}
+                  inputMode={draft.mode === 'SHARES' ? 'numeric' : 'decimal'}
+                  autoComplete="off"
+                  value={row.value}
+                  onChange={(event) => setValue(at, event.target.value)}
+                />
+              ) : null}
+              <span className="split-amount">{part ? money(part.amount) : ''}</span>
+              <Button variant="ghost" size="sm" className="split-remove" onClick={() => onChange({ ...draft, rows: draft.rows.filter((other) => other.key !== row.key) })}>
+                {t('split.remove')}
+              </Button>
+            </li>
           )
         })}
       </ul>
       {draft.mode !== 'EQUAL' && draft.mode !== 'SHARES' && !draft.mineIsRest ? (
-        <button type="button" onClick={() => onChange({ ...draft, mine: '', mineIsRest: true })}>
+        <Button variant="outline" size="sm" className="split-rest" onClick={() => onChange({ ...draft, mine: '', mineIsRest: true })}>
           {t('split.rest')}
-        </button>
+        </Button>
       ) : null}
       <PersonCombo
         label={t('debts.addFriend')}
@@ -173,7 +174,9 @@ export default function SplitEditor({
       {draft.rows.length === 0 ? (
         <p className="hint">{t('split.needParts')}</p>
       ) : left !== null ? (
-        <p className="notice">{left.startsWith('-') ? t('split.over', { left: leftText }) : t('split.left', { left: leftText })}</p>
+        <p className={left.startsWith('-') ? 'split-status over' : 'split-status'}>
+          {left.startsWith('-') ? t('split.over', { left: leftText }) : t('split.left', { left: leftText })}
+        </p>
       ) : current && !proportions && bill ? (
         <p className="hint">{t('split.yourPartOf', { mine: money(current.mine), amount: money(bill) })}</p>
       ) : null}

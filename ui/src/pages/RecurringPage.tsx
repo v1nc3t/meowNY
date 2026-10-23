@@ -9,6 +9,8 @@ import SplitEditor from '../components/SplitEditor'
 import Dropdown from '../components/Dropdown'
 import ConfirmModal from '../components/ConfirmModal'
 import Modal, { modalFormId } from '../components/Modal'
+import Badge from '../components/ui/Badge'
+import Button from '../components/ui/Button'
 import { categories as categoriesApi, type Category } from '../api/categories'
 import { debts, type Person } from '../api/debts'
 import { errorText } from '../api/invoke'
@@ -51,6 +53,8 @@ const CONFIRMED: Record<ConfirmKind, (item: Recurring) => Promise<unknown>> = {
   delete: (item) => recurringApi.remove(item.id),
 }
 const CONFIRM_TITLE = { skip: 'rec.skip', pause: 'rec.pause', end: 'rec.end', delete: 'common.delete' } as const
+/** The look of the word beside the date: overdue is red, the rest are calm. */
+const STATE_BADGE = { overdue: 'destructive', today: 'secondary', paused: 'outline', ended: 'outline' } as const
 
 export default function RecurringPage() {
   const { settings, error } = useMoneySettings()
@@ -312,9 +316,9 @@ function RecurringView({ settings, now }: { settings: MoneySettings; now: Today 
       <div className="tx-title">
         <h1>{t('rec.title')}</h1>
         <div className="tx-actions">
-          <button type="button" onClick={() => openAdd()} {...tip('new', t('rec.add'))}>
+          <Button onClick={() => openAdd()} {...tip('new', t('rec.add'))}>
             {t('rec.add')}
-          </button>
+          </Button>
         </div>
       </div>
       <p className="notice">{message}</p>
@@ -339,6 +343,7 @@ function RecurringView({ settings, now }: { settings: MoneySettings; now: Today 
         <ConfirmModal
           title={t('rec.confirmTitle', { action: t(CONFIRM_TITLE[confirming.kind]), name: confirming.item.name })}
           pending={pending}
+          danger={confirming.kind === 'end' || confirming.kind === 'delete'}
           onConfirm={() => void onConfirm()}
           onClose={() => setConfirming(null)}
         />
@@ -367,10 +372,13 @@ function RecurringView({ settings, now }: { settings: MoneySettings; now: Today 
       ) : null}
       {items ? (
         <div className="tx-pane wide">
-          {items.length === 0 ? <p>{t('rec.empty')}</p> : null}
+          {items.length === 0 ? <p className="hint">{t('rec.empty')}</p> : null}
           {groups.map((group) => (
             <Fragment key={group.id}>
-              <h2 className="rec-group">{group.name}</h2>
+              <h2 className="rec-group">
+                {group.name}
+                <span className="rec-count">{group.items.length}</span>
+              </h2>
               <ul className="rec-list">
                 {group.items.map((item) => {
                   const status = statusOf(item, now.date)
@@ -396,14 +404,14 @@ function RecurringView({ settings, now }: { settings: MoneySettings; now: Today 
                           <p className="hint">{t('split.archivedFriend')}</p>
                         ) : null}
                         {item.split || item.description?.trim() ? (
-                          <button
-                            type="button"
+                          <Button
+                            variant="link"
                             className="tx-desc"
                             aria-expanded={openId === item.id}
                             onClick={() => setOpenId((current) => (current === item.id ? null : item.id))}
                           >
                             {t('common.details')}
-                          </button>
+                          </Button>
                         ) : null}
                         {openId === item.id ? (
                           <div className="card-detail">
@@ -416,9 +424,9 @@ function RecurringView({ settings, now }: { settings: MoneySettings; now: Today 
                                     <div className="split-part" key={`${name}-${at}`}>
                                       <span>{`${name} ${shares[at] ?? 0}`}</span>
                                       {codeFor(item, at - 1) ? (
-                                        <button type="button" onClick={() => setCoding(codeFor(item, at - 1))}>
+                                        <Button variant="outline" size="sm" onClick={() => setCoding(codeFor(item, at - 1))}>
                                           {t('code.show')}
-                                        </button>
+                                        </Button>
                                       ) : null}
                                     </div>
                                   ))
@@ -435,52 +443,52 @@ function RecurringView({ settings, now }: { settings: MoneySettings; now: Today 
                         ) : null}
                       </div>
                       <div className="rec-due">
-                        <span className="rec-badge" data-status={status}>
+                        <span className="rec-status">
                           <span className="rec-date">{badge.date}</span>
-                          {badge.state ? <span className="rec-state">{badge.state}</span> : null}
+                          {status !== 'upcoming' ? <Badge variant={STATE_BADGE[status]}>{badge.state}</Badge> : null}
                         </span>
                         {item.isActive ? (
                           <span className="rec-actions">
-                            <button type="button" className="rec-pay" data-row-focus onClick={() => openPay(item)}>
+                            <Button size="sm" data-row-focus onClick={() => openPay(item)}>
                               {t('rec.pay')}
-                            </button>
-                            <button type="button" className="rec-act" onClick={() => setConfirming({ kind: 'skip', item })}>
+                            </Button>
+                            <Button variant="ghost" size="sm" onClick={() => setConfirming({ kind: 'skip', item })}>
                               {t('rec.skip')}
-                            </button>
-                            <button type="button" className="rec-act" onClick={() => setConfirming({ kind: 'pause', item })}>
+                            </Button>
+                            <Button variant="ghost" size="sm" onClick={() => setConfirming({ kind: 'pause', item })}>
                               {t('rec.pause')}
-                            </button>
+                            </Button>
                           </span>
                         ) : status === 'paused' ? (
                           <span className="rec-actions">
-                            <button type="button" className="rec-pay" data-row-focus onClick={() => void run(() => recurringApi.setActive(item.id, true))}>
+                            <Button variant="outline" size="sm" data-row-focus onClick={() => void run(() => recurringApi.setActive(item.id, true))}>
                               {t('rec.resume')}
-                            </button>
+                            </Button>
                           </span>
                         ) : null}
                       </div>
                       <div className="rec-more">
-                        <button type="button" onClick={() => openEdit(item)}>
+                        <Button variant="ghost" size="sm" onClick={() => openEdit(item)}>
                           {t('common.edit')}
-                        </button>
+                        </Button>
                         {(() => {
                           // an item split with friends has a code for each of them: one friend opens it, several open the details to choose
                           const friends = (item.split?.parts ?? []).map((_, at) => codeFor(item, at)).filter((code) => code !== null)
                           if (friends.length === 0) return null
                           return (
-                            <button type="button" onClick={() => (friends.length === 1 ? setCoding(friends[0] ?? null) : setOpenId(item.id))}>
+                            <Button variant="ghost" size="sm" onClick={() => (friends.length === 1 ? setCoding(friends[0] ?? null) : setOpenId(item.id))}>
                               {t('code.show')}
-                            </button>
+                            </Button>
                           )
                         })()}
                         {status !== 'ended' ? (
-                          <button type="button" onClick={() => setConfirming({ kind: 'end', item })}>
+                          <Button variant="ghost" size="sm" onClick={() => setConfirming({ kind: 'end', item })}>
                             {t('rec.end')}
-                          </button>
+                          </Button>
                         ) : null}
-                        <button type="button" onClick={() => setConfirming({ kind: 'delete', item })}>
+                        <Button variant="ghost" size="sm" onClick={() => setConfirming({ kind: 'delete', item })}>
                           {t('common.delete')}
-                        </button>
+                        </Button>
                       </div>
                     </li>
                   )
@@ -578,14 +586,12 @@ function RecurringModal({
             <p className="hint">{t('split.onlyExpenses')}</p>
           ) : null}
           {canSplit && split.on ? (
-            <>
-              <SplitEditor
-                amount={amount.trim() === '' ? null : amount}
-                draft={split.draft}
-                onChange={(draft) => onSplit({ ...split, draft, touched: true })}
-                onReady={onSplitReady}
-              />
-            </>
+            <SplitEditor
+              amount={amount.trim() === '' ? null : amount}
+              draft={split.draft}
+              onChange={(draft) => onSplit({ ...split, draft, touched: true })}
+              onReady={onSplitReady}
+            />
           ) : null}
           <label>
             {t('common.description')}
