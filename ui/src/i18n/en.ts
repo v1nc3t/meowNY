@@ -7,6 +7,7 @@ export const en = {
   // Common words
   'common.save': 'save',
   'common.cancel': 'cancel',
+  'common.close': 'close',
   'common.done': 'done',
   'common.edit': 'edit',
   'common.delete': 'delete',
@@ -372,6 +373,7 @@ export const en = {
   'nav.sync': 'sync',
   'settings.currencyOnDesktop': 'change the currency on your computer.',
   'currency.syncPhone': 'your phone still shows the old currency: sync it to update.',
+  'lock.decrypting': 'decrypting',
   'lock.attemptsLeft': '{count} tries left. then this phone erases itself.',
   'lock.lastAttempt': 'last try. a wrong passphrase erases this phone.',
   'phone.title': 'sync with your computer',

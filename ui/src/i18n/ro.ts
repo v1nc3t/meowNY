@@ -3,6 +3,7 @@ import type { Messages } from './translate'
 export const ro: Messages = {
   'common.save': 'salvează',
   'common.cancel': 'anulează',
+  'common.close': 'închide',
   'common.done': 'gata',
   'common.edit': 'editează',
   'common.delete': 'șterge',
@@ -357,6 +358,7 @@ export const ro: Messages = {
   'nav.sync': 'sincronizare',
   'settings.currencyOnDesktop': 'schimbă moneda pe calculator.',
   'currency.syncPhone': 'telefonul tău încă arată moneda veche: sincronizează-l ca să se actualizeze.',
+  'lock.decrypting': 'se decriptează',
   'lock.attemptsLeft': 'au mai rămas {count} încercări. apoi telefonul se șterge singur.',
   'lock.lastAttempt': 'ultima încercare. o frază de acces greșită șterge telefonul.',
   'phone.title': 'sincronizare cu calculatorul',

@@ -3,6 +3,7 @@ import type { Messages } from './translate'
 export const de: Messages = {
   'common.save': 'speichern',
   'common.cancel': 'abbrechen',
+  'common.close': 'schließen',
   'common.done': 'fertig',
   'common.edit': 'bearbeiten',
   'common.delete': 'löschen',
@@ -360,6 +361,7 @@ export const de: Messages = {
   'nav.sync': 'sync',
   'settings.currencyOnDesktop': 'ändere die währung an deinem computer.',
   'currency.syncPhone': 'dein handy zeigt noch die alte währung: synchronisiere es, damit es sich aktualisiert.',
+  'lock.decrypting': 'wird entschlüsselt',
   'lock.attemptsLeft': 'noch {count} versuche. danach löscht sich dieses handy selbst.',
   'lock.lastAttempt': 'letzter versuch. eine falsche passphrase löscht dieses handy.',
   'phone.title': 'mit deinem computer synchronisieren',

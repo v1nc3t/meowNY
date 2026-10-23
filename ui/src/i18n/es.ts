@@ -3,6 +3,7 @@ import type { Messages } from './translate'
 export const es: Messages = {
   'common.save': 'guardar',
   'common.cancel': 'cancelar',
+  'common.close': 'cerrar',
   'common.done': 'listo',
   'common.edit': 'editar',
   'common.delete': 'eliminar',
@@ -359,6 +360,7 @@ export const es: Messages = {
   'nav.sync': 'sincronizar',
   'settings.currencyOnDesktop': 'cambia la moneda en tu ordenador.',
   'currency.syncPhone': 'tu móvil todavía muestra la moneda anterior: sincronízalo para actualizarlo.',
+  'lock.decrypting': 'descifrando',
   'lock.attemptsLeft': 'quedan {count} intentos. después este móvil se borra solo.',
   'lock.lastAttempt': 'último intento. una frase de contraseña incorrecta borra este móvil.',
   'phone.title': 'sincronizar con tu ordenador',
