@@ -8,9 +8,10 @@ import { readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { test } from 'node:test'
 import { fileURLToPath } from 'node:url'
-import { build, inputs, lint } from './build.mjs'
+import { build, inputs, lint, lintLinks, lintPage } from './build.mjs'
 import { buildPage } from './content.mjs'
-import { escapeHtml, inlineHtml, safeLink, toHtml, toMarkdown } from './render.mjs'
+import { landingHtml, SHOTS } from './landing.mjs'
+import { escapeHtml, inlineHtml, PAGES, safeLink, toHtml, toMarkdown } from './render.mjs'
 
 const here = dirname(fileURLToPath(import.meta.url))
 const fresh = () => structuredClone(inputs())
@@ -33,7 +34,7 @@ test('the little markup works and nothing else does', () => {
 })
 
 test('only links to this page, this site and the web are links', () => {
-  for (const ok of ['#top', 'CLI.md', './CLI.md', '../x', 'https://example.org', 'http://127.0.0.1:80/x', 'a/b']) assert.ok(safeLink(ok), ok)
+  for (const ok of ['#top', 'CLI.md', './CLI.md', '../x', 'https://example.org', 'http://127.0.0.1:80/x', 'a/b', 'cli.html', 'guide.html#phone']) assert.ok(safeLink(ok), ok)
   for (const bad of ['javascript:alert(1)', 'JavaScript:alert(1)', 'data:text/html,x', 'vbscript:x', 'file:///etc/passwd', 'mailto:a@b.c', 'x:y']) assert.ok(!safeLink(bad), bad)
   assert.equal(inlineHtml('[click](javascript:void)'), 'click', 'an unsafe link is only its text')
   assert.ok(!inlineHtml('[click](data:text/html,<script>)').includes('<a'))
@@ -136,23 +137,58 @@ test('the checks catch what a reader would trip over', () => {
 
 // ---- what the page is like ----
 
-test('the page is one document with a language, a title, a skip link and a header on every table', () => {
-  const { html } = build()
-  assert.match(html, /^<!doctype html>\n<html lang="en">/)
-  assert.equal((html.match(/<h1[\s>]/g) ?? []).length, 1)
-  assert.ok(html.includes('class="skip" href="#main"') && html.includes('<main id="main">'))
+test('every page is one document with a language, a title, a skip link and a header on every table', () => {
+  const { html, pages } = build()
+  for (const [file, page] of Object.entries(pages)) {
+    assert.match(page, /^<!doctype html>\n<html lang="en">/, file)
+    assert.equal((page.match(/<h1[\s>]/g) ?? []).length, 1, file)
+    assert.ok(page.includes('class="skip" href="#main"') && /<main id="main"[ >]/.test(page), file)
+    assert.ok(!/<th>/.test(page), `${file}: no header cell without a scope`)
+  }
   const tables = html.match(/<table/g)?.length ?? 0
   assert.ok(tables > 30 && (html.match(/<th scope="col">/g) ?? []).length >= tables * 2, 'every table has column headers')
-  assert.ok(!/<th>/.test(html), 'no header cell without a scope')
 })
 
-test('the page asks for nothing from anywhere else, and only reaches out with plain links', () => {
-  const { html } = build()
-  assert.ok(!/<script|<iframe|<img|@import|\ssrc=/i.test(html), 'no script, frame, image or source')
-  assert.deepEqual([...html.matchAll(/<link[^>]*>/g)].map((m) => m[0]), ['<link rel="stylesheet" href="style.css">'])
-  for (const [, url] of html.matchAll(/href="(https?:[^"]+)"/g)) assert.ok(url.startsWith('https://'), url)
-  const css = readFileSync(join(here, 'site.css'), 'utf8')
+test('the site has the landing page, the guide and the command line reference, each in the same sidebar', () => {
+  const { pages } = build()
+  assert.deepEqual(Object.keys(pages), PAGES.map((p) => p.file))
+  for (const [file, page] of Object.entries(pages)) {
+    for (const p of PAGES) assert.ok(page.includes(`<a class="nav-item" href="${p.file}"`), `${file} links to ${p.file}`)
+    assert.equal((page.match(/aria-current="page"/g) ?? []).length, 1, `${file} marks one page as the one you are on`)
+    assert.ok(page.includes(`href="${file}" aria-current="page"`), `${file} marks itself`)
+  }
+  assert.ok(pages['index.html'].includes('href="guide.html"') && pages['index.html'].includes('href="cli.html"'), 'the landing page leads to the docs')
+})
+
+test('a link to another page, or to a place on it, must exist', () => {
+  const { pages } = build()
+  assert.deepEqual(lintLinks(pages), [])
+  const broken = { ...pages, 'index.html': pages['index.html'].replace('</main>', '<a href="guide.html#nowhere">x</a><a href="faq.html">y</a></main>') }
+  const problems = lintLinks(broken)
+  assert.ok(problems.some((p) => p.includes('guide.html#nowhere')), 'a place that is not on the page')
+  assert.ok(problems.some((p) => p.includes('faq.html')), 'a page that is not on the site')
+})
+
+test('a page asks for nothing from anywhere else, and only reaches out with plain links', () => {
+  const { pages, css } = build(inputs(), new Set())
+  for (const [file, html] of Object.entries(pages)) {
+    assert.ok(!/<script|<iframe|<img|@import|\ssrc=/i.test(html), `${file}: no script, frame, image or source`)
+    assert.deepEqual([...html.matchAll(/<link[^>]*>/g)].map((m) => m[0]), ['<link rel="stylesheet" href="style.css">'], file)
+    for (const [, url] of html.matchAll(/href="(https?:[^"]+)"/g)) assert.ok(url.startsWith('https://'), `${file}: ${url}`)
+  }
   assert.ok(!/url\(|@import|https?:\/\//i.test(css), 'the stylesheet loads nothing')
+  assert.ok(css.includes('--primary:') && css.includes('.nav-item'), "the stylesheet is the app's tokens and the site's rules")
+})
+
+test('a screenshot is shown once its file exists, and an empty frame until then', () => {
+  const empty = landingHtml()
+  assert.equal((empty.match(/class="shot-frame"/g) ?? []).length, Object.keys(SHOTS).length, 'a frame for each screenshot')
+  for (const name of Object.keys(SHOTS)) assert.ok(empty.includes(`<figcaption>${SHOTS[name].caption}</figcaption>`), name)
+  const one = landingHtml({ images: new Set(['dashboard']) })
+  assert.ok(one.includes('<img src="images/dashboard.png" alt="'))
+  assert.equal((one.match(/class="shot-frame"/g) ?? []).length, Object.keys(SHOTS).length - 1, 'the frame is gone once its picture is there')
+  assert.deepEqual(lintPage(one), [])
+  assert.ok(lintPage(one.replace('images/dashboard.png', 'https://example.org/x.png')).length > 0, 'a picture from elsewhere')
 })
 
 test('the Markdown file has one heading for the page and one for each section', () => {

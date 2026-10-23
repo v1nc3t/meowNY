@@ -1,49 +1,13 @@
-/* The meowny command line docs. One file, no fonts or scripts from anywhere else: the page makes no requests
-   beyond itself. Neutral shadcn-style palette; light and dark follow the system. */
+/* The meowNY website: the landing page, the guide and the command line reference. It looks like the app: the build puts
+   ui/src/styles/tokens.css (the app's colours, font, corners and shadows, light and dark) in front of this file. Nothing is
+   loaded from anywhere else. */
 
-:root {
-  color-scheme: light dark;
-  --background: #ffffff;
-  --foreground: #0a0a0a;
-  --card: #ffffff;
-  --muted: #f5f5f5;
-  --muted-foreground: #737373;
-  --accent: #f5f5f5;
-  --border: #e5e5e5;
-  --primary: #171717;
-  --primary-foreground: #fafafa;
-  --destructive: #dc2626;
-  --success: #15803d;
-  --ring: #a3a3a3;
-  --radius: 0.5rem;
-  --radius-sm: calc(var(--radius) - 4px);
-  --radius-md: calc(var(--radius) - 2px);
-  --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) + 4px);
-  --shadow-sm: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
-  /* One font for everything. Switching to a sans stack later is this one line. */
-  --font: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #fafafa;
-    --card: #171717;
-    --muted: #262626;
-    --muted-foreground: #a3a3a3;
-    --accent: #262626;
-    --border: #ffffff1a;
-    --primary: #e5e5e5;
-    --primary-foreground: #171717;
-    --destructive: #f87171;
-    --success: #4ade80;
-    --ring: #737373;
-  }
-}
-
-* {
+*,
+*::before,
+*::after {
   box-sizing: border-box;
+  scrollbar-width: thin;
+  scrollbar-color: var(--muted-foreground) transparent;
 }
 
 html {
@@ -54,6 +18,7 @@ html {
 
 body {
   margin: 0;
+  min-height: 100svh;
   background: var(--background);
   color: var(--foreground);
   font: 400 0.875rem/1.7 var(--font);
@@ -63,18 +28,16 @@ a {
   color: var(--foreground);
   text-decoration: underline;
   text-decoration-color: var(--ring);
-  text-underline-offset: 3px;
+  text-underline-offset: 4px;
 }
 
 a:hover {
   text-decoration-color: var(--foreground);
 }
 
-a:focus-visible,
-summary:focus-visible {
+:focus-visible {
   outline: 2px solid var(--ring);
   outline-offset: 2px;
-  border-radius: var(--radius-sm);
 }
 
 strong,
@@ -90,106 +53,166 @@ h4 {
   position: absolute;
   left: 0.5rem;
   top: -4rem;
-  background: var(--primary);
-  color: var(--primary-foreground);
+  z-index: 10;
   padding: 0.5rem 0.75rem;
   border-radius: var(--radius-md);
-  z-index: 10;
+  background: var(--primary);
+  color: var(--primary-foreground);
 }
 
 .skip:focus {
   top: 0.5rem;
 }
 
-/* ---- layout: a quiet contents column and the page ---- */
+.icon {
+  width: 1rem;
+  height: 1rem;
+  flex: 0 0 auto;
+}
 
-.layout {
+/* ---- the frame: the app's sidebar, and the page beside it ---- */
+
+.shell {
   display: grid;
-  grid-template-columns: 15rem minmax(0, 1fr);
+  grid-template-columns: 13.75rem minmax(0, 1fr);
+  min-height: 100svh;
 }
 
 .side {
   position: sticky;
   top: 0;
-  align-self: start;
-  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  height: 100svh;
   overflow-y: auto;
-  padding: 1.5rem 0.75rem 2rem 1rem;
+  padding: 1rem 0.75rem;
   border-right: 1px solid var(--border);
-  font-size: 0.8125rem;
+  background: var(--sidebar);
 }
 
-.side .brand {
-  margin: 0 0 1.25rem;
+.brand {
+  display: flex;
+  align-items: center;
+  height: 2rem;
   padding: 0 0.5rem;
-  font-weight: 600;
-  font-size: 1rem;
-}
-
-.side .brand a {
   color: var(--foreground);
+  font-size: 0.9375rem;
+  font-weight: 600;
+  letter-spacing: -0.015em;
   text-decoration: none;
 }
 
-.side .group {
-  margin-bottom: 1.25rem;
+.side-nav,
+.side-foot {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
 }
 
-.side .group-title {
+.side-foot {
+  margin-top: auto;
+}
+
+/* A row of the sidebar: an icon and a name, quiet until the pointer is over it; the page you are on has a grey fill, bold
+   text and the green mark on its left, as in the app. */
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  height: 2rem;
+  padding: 0 0.5rem;
+  border-radius: var(--radius-md);
+  color: var(--muted-foreground);
+  font-size: 0.8125rem;
+  line-height: 1.4;
+  text-decoration: none;
+}
+
+.nav-item:hover {
+  color: var(--accent-foreground);
+  background: var(--accent);
+}
+
+.nav-item[aria-current='page'] {
+  color: var(--accent-foreground);
+  background: var(--accent);
+  font-weight: 600;
+  box-shadow: inset 2px 0 0 var(--primary);
+}
+
+/* This page's contents, under the pages. */
+.toc {
+  font-size: 0.8125rem;
+}
+
+.toc .group {
+  margin-bottom: 1rem;
+}
+
+.toc .group-title {
   margin: 0 0 0.25rem;
   padding: 0 0.5rem;
+  font-size: 0.75rem;
   font-weight: 600;
-  font-size: 0.8125rem;
-  color: var(--foreground);
+  letter-spacing: 0.04em;
+  color: var(--muted-foreground);
 }
 
-.side .group-title a {
+.toc .group-title a {
   color: inherit;
   text-decoration: none;
 }
 
-.side ul {
+.toc ul {
   list-style: none;
   margin: 0;
   padding: 0;
 }
 
-.side li {
+.toc li {
   margin: 0;
 }
 
-.side li a {
+.toc li a {
   display: block;
-  padding: 0.2rem 0.5rem;
+  padding: 0.15rem 0.5rem;
   border-radius: var(--radius-md);
   color: var(--muted-foreground);
+  line-height: 1.5;
   text-decoration: none;
 }
 
-.side li a:hover,
-.side li a:focus-visible {
+.toc li a:hover,
+.toc .group-title a:hover {
   background: var(--accent);
   color: var(--foreground);
 }
 
 main {
-  min-width: 0;
   width: 100%;
+  min-width: 0;
   max-width: 52rem;
-  padding: 2.5rem 2rem 5rem;
   margin: 0 auto;
+  padding: 2.5rem 2rem 5rem;
 }
 
-.hero h1 {
+main.wide {
+  max-width: 68rem;
+}
+
+/* ---- text ---- */
+
+h1 {
   margin: 0 0 0.5rem;
-  font-size: 1.875rem;
+  font-size: 1.5rem;
   line-height: 1.2;
-  letter-spacing: -0.02em;
+  letter-spacing: -0.025em;
 }
 
 .lead {
   margin: 0 0 2rem;
-  font-size: 1rem;
+  font-size: 0.9375rem;
   color: var(--muted-foreground);
 }
 
@@ -198,31 +221,31 @@ section.doc {
 }
 
 h2 {
-  margin: 0 0 1.25rem;
+  margin: 0 0 1rem;
   padding-bottom: 0.5rem;
   border-bottom: 1px solid var(--border);
-  font-size: 1.5rem;
+  font-size: 1.125rem;
   line-height: 1.3;
-  letter-spacing: -0.01em;
+  letter-spacing: -0.015em;
 }
 
 h3 {
-  margin: 2.5rem 0 1rem;
-  font-size: 1.25rem;
+  margin: 2rem 0 0.75rem;
+  font-size: 1rem;
   line-height: 1.4;
 }
 
 h4 {
   margin: 0;
-  font-size: 1rem;
+  font-size: 0.9375rem;
 }
 
 .anchor {
   margin-left: 0.35rem;
   color: var(--muted-foreground);
+  font-weight: 400;
   text-decoration: none;
   opacity: 0;
-  font-weight: 400;
 }
 
 h2:hover .anchor,
@@ -247,22 +270,31 @@ li {
   margin-bottom: 0.35rem;
 }
 
+li::marker {
+  color: var(--muted-foreground);
+}
+
 code {
+  padding: 0.1rem 0.3rem;
+  border-radius: var(--radius-sm);
+  background: var(--muted);
   font: inherit;
   font-size: 0.85em;
-  background: var(--muted);
-  border-radius: var(--radius-sm);
-  padding: 0.125rem 0.3rem;
+}
+
+.small {
+  font-size: 0.8125rem;
+  color: var(--muted-foreground);
 }
 
 /* ---- code blocks ---- */
 
 figure.code {
   margin: 0 0 1rem;
+  overflow: hidden;
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   background: var(--muted);
-  overflow: hidden;
 }
 
 figure.code figcaption {
@@ -288,13 +320,13 @@ figure.command pre {
 }
 
 figure.code code {
-  background: none;
   padding: 0;
+  background: none;
   font: inherit;
   color: inherit;
 }
 
-/* ---- tables ---- */
+/* ---- tables, as in the app ---- */
 
 .table-wrap {
   margin: 0 0 1.5rem;
@@ -309,10 +341,10 @@ table {
 
 th,
 td {
-  text-align: left;
-  vertical-align: top;
   padding: 0.5rem 0.75rem 0.5rem 0;
   border-bottom: 1px solid var(--border);
+  text-align: left;
+  vertical-align: top;
 }
 
 th {
@@ -338,8 +370,8 @@ table.flags td:first-child code {
 }
 
 td code {
-  background: none;
   padding: 0;
+  background: none;
   font-size: inherit;
 }
 
@@ -349,60 +381,34 @@ td code {
   color: var(--destructive);
 }
 
-/* ---- one command, as a card ---- */
+/* ---- cards, badges and buttons, as in the app ---- */
 
+.card,
 section.command {
-  margin: 0 0 1.5rem;
   padding: 1.25rem;
   border: 1px solid var(--border);
   border-radius: var(--radius-xl);
   background: var(--card);
+  color: var(--card-foreground);
   box-shadow: var(--shadow-sm);
 }
 
-section.command:target {
-  outline: 2px solid var(--ring);
-  outline-offset: 2px;
-}
-
-section.command header {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.5rem 1rem;
-  margin-bottom: 0.75rem;
-}
-
-section.command h4 code {
-  font-size: 1rem;
-  background: none;
-  padding: 0;
-}
-
-.badges {
-  margin: 0;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.375rem;
-}
-
-/* shadcn Badge: secondary for read, outline for the rest, destructive only for --yes. */
 .badge {
   display: inline-block;
   padding: 0.125rem 0.5rem;
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
+  color: var(--foreground);
   font-size: 0.75rem;
   font-weight: 600;
   line-height: 1.4;
   white-space: nowrap;
-  color: var(--foreground);
 }
 
 .badge.read {
   border-color: transparent;
-  background: var(--muted);
+  background: var(--secondary);
+  color: var(--secondary-foreground);
 }
 
 .badge.local {
@@ -414,42 +420,60 @@ section.command h4 code {
   color: var(--destructive);
 }
 
-.small {
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.375rem;
+  height: 2.25rem;
+  padding: 0 1rem;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
   font-size: 0.8125rem;
-  color: var(--muted-foreground);
+  line-height: 1.4;
+  white-space: nowrap;
+  text-decoration: none;
+  transition: background-color 0.15s, color 0.15s, opacity 0.15s;
 }
 
-.example {
-  margin: 1rem 0 0;
-  display: grid;
-  gap: 0.75rem;
+.btn-lg {
+  height: 2.5rem;
+  padding: 0 1.5rem;
 }
 
-.example figure {
-  margin: 0;
+.btn-primary {
+  color: var(--primary-foreground);
+  background: var(--primary);
 }
 
-@media (min-width: 70rem) {
-  .example {
-    grid-template-columns: 1fr 1fr;
-  }
-
-  .example .command {
-    grid-column: 1 / -1;
-  }
+.btn-outline {
+  color: var(--foreground);
+  background: var(--background);
+  border-color: var(--input);
 }
 
-section.command > :last-child {
-  margin-bottom: 0;
+.btn-ghost {
+  color: var(--foreground);
 }
 
-/* ---- notes, as alerts ---- */
+.btn-primary:hover {
+  opacity: 0.9;
+}
+
+.btn-outline:hover,
+.btn-ghost:hover {
+  color: var(--accent-foreground);
+  background: var(--accent);
+}
+
+/* ---- notes, as the app's notices ---- */
 
 aside.note {
   margin: 0 0 1rem;
   padding: 0.75rem 1rem;
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
+  background: var(--card);
 }
 
 aside.note p {
@@ -473,41 +497,285 @@ footer {
   font-size: 0.8125rem;
 }
 
-/* ---- narrow screens: the contents become a short strip above the page ---- */
+/* ---- the command line reference: one command, as a card ---- */
 
-@media (max-width: 56rem) {
-  .layout {
+section.command {
+  margin: 0 0 1.5rem;
+}
+
+section.command:target {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
+section.command header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem 1rem;
+  margin-bottom: 0.75rem;
+}
+
+section.command h4 code {
+  padding: 0;
+  background: none;
+  font-size: 1rem;
+}
+
+.badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.375rem;
+  margin: 0;
+}
+
+.example {
+  display: grid;
+  gap: 0.75rem;
+  margin: 1rem 0 0;
+}
+
+.example figure {
+  margin: 0;
+}
+
+@media (min-width: 70rem) {
+  .example {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  /* The command, and an output alone after it, take the whole row. */
+  .example .command,
+  .example figure:nth-child(2):last-child {
+    grid-column: 1 / -1;
+  }
+}
+
+section.command > :last-child {
+  margin-bottom: 0;
+}
+
+/* ---- the landing page ---- */
+
+.hero.landing {
+  margin-bottom: 2rem;
+}
+
+.hero.landing h1 {
+  margin: 0.75rem 0 0.75rem;
+  font-size: clamp(2rem, 1.4rem + 2vw, 2.75rem);
+  letter-spacing: -0.035em;
+}
+
+.hero.landing .lead {
+  max-width: 38rem;
+  margin-bottom: 1.5rem;
+  font-size: 1rem;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin: 0;
+}
+
+.block {
+  margin-top: 3.5rem;
+}
+
+/* A screenshot, or the empty frame that waits for one. */
+.shot {
+  margin: 0;
+}
+
+.shot img,
+.shot-frame {
+  display: block;
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
+}
+
+.shot img {
+  height: auto;
+}
+
+.shot-frame {
+  display: grid;
+  place-items: center;
+  aspect-ratio: 16 / 10;
+  padding: 1rem;
+  text-align: center;
+  border-style: dashed;
+  border-color: var(--input);
+  background: var(--muted);
+  color: var(--muted-foreground);
+  font-size: 0.8125rem;
+}
+
+.shot figcaption {
+  margin-top: 0.5rem;
+  font-size: 0.8125rem;
+  color: var(--muted-foreground);
+}
+
+/* The headline numbers, like the dashboard's. */
+.stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 1rem 1.5rem;
+  margin-top: 1.5rem;
+}
+
+.stat {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  min-width: 0;
+}
+
+.stat-label {
+  font-size: 0.8125rem;
+  color: var(--muted-foreground);
+}
+
+.stat-value {
+  font-size: 1.5rem;
+  font-weight: 600;
+  line-height: 1.3;
+  letter-spacing: -0.02em;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 15rem), 1fr));
+  gap: 1rem;
+}
+
+/* The screenshots share the row between them, however many there are. */
+.grid.shots {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 15rem), 1fr));
+}
+
+.feature {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.feature-icon {
+  display: grid;
+  place-items: center;
+  width: 2rem;
+  height: 2rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  color: var(--ring);
+}
+
+.feature h3 {
+  margin: 0.25rem 0 0;
+  font-size: 0.9375rem;
+}
+
+.feature p {
+  margin: 0;
+  font-size: 0.8125rem;
+  line-height: 1.6;
+  color: var(--muted-foreground);
+}
+
+.feature .more {
+  margin-top: auto;
+  padding-top: 0.25rem;
+  font-size: 0.8125rem;
+}
+
+/* A list in one bordered box, a row for each item, as the app's lists. */
+ul.rows {
+  margin: 0 0 1rem;
+  padding: 0;
+  list-style: none;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--card);
+}
+
+ul.rows li {
+  display: grid;
+  grid-template-columns: 12rem minmax(0, 1fr);
+  gap: 0.25rem 1.5rem;
+  margin: 0;
+  padding: 0.75rem 1rem;
+  border-top: 1px solid var(--border);
+}
+
+ul.rows li:first-child {
+  border-top: 0;
+}
+
+ul.rows span {
+  font-size: 0.8125rem;
+  color: var(--muted-foreground);
+}
+
+/* ---- narrow screens: the sidebar is a strip above the page, as in a narrow app window ---- */
+
+@media (max-width: 45em) {
+  .shell {
     grid-template-columns: 1fr;
   }
 
   .side {
     position: static;
     height: auto;
+    gap: 0.75rem;
+    padding: 0.75rem 1rem;
     border-right: 0;
     border-bottom: 1px solid var(--border);
-    padding: 1rem;
   }
 
-  .side .group ul.commands {
+  .side-nav,
+  .side-foot {
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
+
+  .side-foot {
+    margin-top: 0;
+  }
+
+  .nav-item .icon {
     display: none;
   }
 
-  .side .group {
+  .toc .group {
     display: inline-block;
     margin: 0 1rem 0.25rem 0;
     vertical-align: top;
   }
 
-  main {
-    padding: 1.5rem 1rem 3rem;
+  .toc ul.commands {
+    display: none;
   }
 
-  .hero h1 {
-    font-size: 1.5rem;
+  main {
+    padding: 1.75rem 1rem 3rem;
   }
 
   section.command {
     padding: 1rem;
+  }
+
+  .stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  ul.rows li {
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 
@@ -518,13 +786,12 @@ footer {
     display: none;
   }
 
-  .layout {
+  .shell {
     display: block;
   }
 
   section.command {
     break-inside: avoid;
-    box-shadow: none;
   }
 }
 

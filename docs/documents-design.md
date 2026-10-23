@@ -276,6 +276,8 @@ Eight routes in `src-tauri/src/api/documents.rs`. `show` returns the document wi
 
 ## 15. The spike on a real phone
 
+**Done 2026-10-23:** the maintainer checked the finished app on a real phone and found it working. Ticked on their word; the answers to each line were not written down.
+
 Before the screens, one small build on the Redmi Note 11, to settle what the web view can do without a plugin:
 
 1. A file field with `accept="image/*,application/pdf"`: does Android's chooser open, and can the page read the chosen file with `arrayBuffer()`?

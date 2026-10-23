@@ -16,7 +16,7 @@ Status: phases 0 to 10 built (see `docs/PLAN.md`).
   - Nothing reaches the currency, the lock settings, the tokens, restoring a backup or "delete all my data".
 - Phase 9 documents: sealed files, sync of their bytes, backups with them, export lists, the command line, temporary copies for the system's viewer.
 - Phase 10 debts (`docs/debts-design.md`): stored numbers, backup, exports, command line, screens, PDF of summaries and statements, documents on ledger entries, sync of friends, entries and parts, bill codes, reminders.
-- Not yet tried on a real phone: documents; the camera for a bill code; notifications that ring with the app closed (`docs/debts-design.md`, section 21).
+- Documents, the camera for a bill code and reminders on the phone were checked on a real phone by the maintainer (2026-10-23).
 - The old server-based design (Postgres, accounts, sessions, consents) is retired and only in git history.
 
 Last checked against the code (`src-tauri/src`, `ui/src`) and the files the app leaves on disk. A search of the whole data folder (database and journal files, `vault.json`, the webview's cache and storage; over 4,500 files) for text that exists only in the demo data found it in no plain place.

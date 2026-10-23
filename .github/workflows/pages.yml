@@ -1,6 +1,7 @@
 name: Docs site
 
-# Publishes the command line documentation (docs/) to GitHub Pages: https://v1nc3t.github.io/meowNY/
+# Publishes the website (docs/site/) to GitHub Pages: https://v1nc3t.github.io/meowNY/
+# A landing page, the guide and the command line reference, in the app's colours (ui/src/styles/tokens.css).
 # One-time setup: in the repository's Settings, Pages, set Source to "GitHub Actions".
 
 on:
@@ -10,6 +11,7 @@ on:
     paths:
       - 'docs/**'
       - 'cli/schema.json'
+      - 'ui/src/styles/tokens.css'
       - '.github/workflows/pages.yml'
   workflow_dispatch:
 

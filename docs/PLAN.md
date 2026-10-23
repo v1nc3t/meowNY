@@ -265,7 +265,7 @@ Decided 2026-10-15:
 - [x] Sync status in both apps
   - [x] Last sync, errors, summary
   - [x] Changes waiting per paired device
-- [ ] Android APK: built by hand and in CI, sideloaded. Release key and store belong to phase 11. **Open: the CI job has never run past its first step on GitHub; run it and confirm the APK**
+- [x] Android APK: built by hand and in CI, sideloaded. Release key and store belong to phase 11. CI green on `main` 2026-10-23 and uploads the APK (`meowny-android-debug`)
   - [x] Repository side: `run()` mobile entry, scanner plugin, `.github/workflows/android.yml`, `scripts/android-patch.py` (no Android backup, `FLAG_SECURE`)
   - [x] The APK builds (Linux, JDK 21, NDK 27.2) and installs on the Redmi Note 11 (314 MB debug build)
   - [x] First pairing and sync on the phone, 2026-10-16: pairing, both ways, to-phone with two conflicts, re-pairing, unreachable address message
@@ -305,7 +305,7 @@ Decided 2026-10-16:
 - Limit: 25 MiB per file.
 
 - [x] Design first (`docs/documents-design.md`, 17 sections)
-- [ ] Spike (S) on the real phone: file chooser, camera, image without a temporary copy. **Open, the only open box of this phase.** Checklist: `docs/documents-design.md` section 15
+- [x] Spike (S) on the real phone: file chooser, camera, image without a temporary copy. Done 2026-10-23 on the maintainer's word (all good; answers per line not written down). Checklist: `docs/documents-design.md` section 15
 - [x] Database: `documents` and `document_links` with `sync_id`, `stamp`, markers; sealed file store; row/file check
   - [x] Sealed file and file store (`documents/seal.rs`, `store.rs`; `scripts/doc-vectors.py`): STREAM layout, 64 KiB chunks
   - [x] Migrations `0010` and `0011`, `names.rs` (clean names, type from first bytes), `library.rs`. A `.pdf.exe`-style name is never opened by extension; kind "other" is only saved
@@ -318,7 +318,7 @@ Decided 2026-10-16:
 - [x] Export lists documents by name and links and never contains a file (`export/documents_tests.rs`)
 - [x] CLI and API: `documents list|show|add|update|delete|link|unlink|get`; reading contents needs the person's yes; read tokens see names only
 - [x] Docs: `docs/documents.md`, data inventory, README
-- [x] Tests: sealing and tamper, convergence with documents, withheld files never cross, resume, hostile names, backup cut/changed, export leaks, API gate. By hand still open: real phone (section 15), review by someone else
+- [x] Tests: sealing and tamper, convergence with documents, withheld files never cross, resume, hostile names, backup cut/changed, export leaks, API gate. Real phone done 2026-10-23; review by someone else still open
 - [x] Preview (2026-10-17): images, PDF (`pdfjs-dist`, the one new dependency), text, CSV, .docx, .xlsx inside the app, no plain copy; own readers in `ui/src/lib/preview/`; clip on items opens the list with previews. Not tried with files from real Word/Excel, or on the phone
 
 **Done when:** you can attach a receipt to a transaction on either device, open it, mark it "keep on phone", and see it on the phone after the next sync, while documents you did not mark never leave the desktop.
@@ -356,7 +356,7 @@ Decided 2026-10-16:
   - [x] Code show/copy/scan/paste, dialog with currency rate, accept and deny (`debts/codes.rs`, fuzzed parser)
   - [x] Reminders on desktop and phone (`debts/reminders.rs`); later one setting per device
   - [x] Docs: `docs/debts.md`, data inventory
-  - [ ] By hand on a real phone: a code scanned by a second phone; a reminder that rings with the app closed. Checklist: `docs/debts-design.md` section 21
+  - [x] By hand on a real phone: a code scanned by a second phone; a reminder that rings with the app closed. Done 2026-10-23 on the maintainer's word. Checklist: `docs/debts-design.md` section 21
 - Also done: "Split a bill" beside "add" on the transactions, recurring, debts and friend pages, and a switch in both forms.
 - Open: `budgets::history` over ten years takes 50 ms against a 40 ms line (maintainer to decide).
 
@@ -370,11 +370,13 @@ Decided 2026-10-16:
 - [x] Docs: the docs site restyled; all docs summarised
   - [x] Docs site restyled (`docs/site/site.css`; prose condensed in `content.mjs`; every id kept; `docs/CLI.md` regenerated)
   - [x] Markdown docs summarised (README, PLAN, user guides, data inventory, design notes; numbered sections and the real-phone checklists kept)
+  - [x] Website in the app's look (2026-10-23): a landing page (`index.html`, screenshot frames until `docs/site/images/*.png` exist), a guide to every feature (`guide.html`) and the CLI reference, moved to `cli.html`; one sidebar like the app's; the stylesheet starts from `ui/src/styles/tokens.css`. Links between pages are checked by `npm run check:docs`
+  - [x] README cut to a standard short form with a contents list; build, Android, layout, demo data and CI notes moved to `docs/development.md`
 - [x] Pages restyled: money, debts and documents, settings/sync/export/vault (Settings and Export use the full page width on desktop)
 - [x] Settings and Export without card grids: Settings has a section list on the left and label/control rows on the right (`?section=`), and on the phone a list that opens each section (`pages/settings/`); Export is laid out like a print dialog, options on the left and the preview filling the rest (`styles/export.css`)
 - [x] Blockier look with dark green accents (2px corners, stronger borders and text); messages as floating pop-ups with a bar that runs out (`hooks/toast.ts`, `components/Toaster.tsx`; the lock screens keep theirs inline); a decrypting screen while the data opens (`vault/Decrypting.tsx`)
 - [x] Linux rendering: stray card borders left on screen after a resize came from WebKitGTK's GPU drawing (2.52, X11, Intel + NVIDIA); the app draws on the CPU on Linux unless `WEBKIT_SKIA_ENABLE_CPU_RENDERING` is already set (`src-tauri/src/lib.rs`). Turning off the DMA-BUF renderer also removed the lines but made every page lag
-- [x] Verification (gates, greps, runtime hooks, contrast in both themes; fixed: nested-section rule, red row deletes everywhere, light contrast and focus ring, dead CSS and tokens. Still to do by eye: the live app in light and dark, and the phone layout)
+- [x] Verification (gates, greps, runtime hooks, contrast in both themes; fixed: nested-section rule, red row deletes everywhere, light contrast and focus ring, dead CSS and tokens. Still to do by eye: the live app in light and dark. The phone layout was looked at on a real phone 2026-10-23)
 
 ## Phase 11: Packaging and release (M). Gate before sharing the app
 
@@ -386,7 +388,7 @@ Decided 2026-10-16:
 - [ ] `CONTRIBUTING.md` and a short architecture note
 - [ ] Install, backup/restore and "move to a new PC" guides
 - [ ] Fresh-machine acceptance test: install, first run, add data, back up, restore on a second machine, pair a phone, sync
-- [ ] Review of the privacy claims in the README ("Privacy and security" section): no telemetry, no accounts, what leaves the device and when. Still to write: screenshots, install steps for signed installers, links to `SECURITY.md` and `CONTRIBUTING.md`
+- [ ] Review of the privacy claims in the README ("Privacy and security" section): no telemetry, no accounts, what leaves the device and when. Still to write: screenshots (README and the landing page; the site shows empty frames until `docs/site/images/*.png` exist), install steps for signed installers, links to `SECURITY.md` and `CONTRIBUTING.md`
 
 **Done when:** a stranger can download the app, install it in a few minutes, and keep their data safe without reading the source.
 

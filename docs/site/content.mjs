@@ -3,7 +3,7 @@
 // the program's own tests write and check. This file adds the prose around them. It stops with an error if the
 // program has something that the prose does not cover, so the page cannot quietly fall behind.
 
-const REPO = 'https://github.com/v1nc3t/meowNY'
+import { REPO } from './render.mjs'
 
 /** What each error code means and what to do about it. A test fails if the program has a code that is not here. */
 const MEANINGS = {
@@ -385,14 +385,14 @@ export function buildPage({ commands: data, examples: recorded, routes }) {
 
   // ---- the side navigation ----
   const nav = [
-    { title: 'Guide', links: [{ id: 'overview', text: 'Overview' }, { id: 'quick-start', text: 'Quick start' }, { id: 'concepts', text: 'How it works' }, { id: 'tokens', text: 'Tokens' }, { id: 'files', text: 'Files need your yes' }, { id: 'conventions', text: 'Conventions' }] },
+    { title: 'Basics', links: [{ id: 'overview', text: 'Overview' }, { id: 'quick-start', text: 'Quick start' }, { id: 'concepts', text: 'How it works' }, { id: 'tokens', text: 'Tokens' }, { id: 'files', text: 'Files need your yes' }, { id: 'conventions', text: 'Conventions' }] },
     { title: 'Commands', href: 'commands', cls: 'commands', links: [] },
     ...[...groups].map(([key, g]) => ({ title: g.title, href: `group-${key}`, cls: 'commands', links: g.commands.map((c) => ({ id: `cmd-${c.command.replace(/ /g, '-')}`, text: key === 'general' ? c.command : c.command.split(' ')[1] })) })),
     { title: 'Reference', links: [{ id: 'reference', text: 'Flags and settings' }, { id: 'errors', text: 'Exit codes and errors' }, { id: 'agents', text: 'For AI agents' }, { id: 'http-api', text: 'The HTTP API' }, { id: 'security', text: 'Security' }] },
   ]
 
   return {
-    brand: 'meowny',
+    file: 'cli.html',
     title: 'meowny command line',
     description: 'Use your meowNY budget from a terminal, a script or an AI agent. Commands, flags, examples, exit codes and the HTTP API behind it.',
     lead: 'Use your meowNY budget from a terminal, a script or an AI agent. It talks to the desktop app on the same computer; your data never leaves it.',

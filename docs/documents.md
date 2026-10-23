@@ -83,4 +83,4 @@ meowny documents delete 7 --yes
 - The `documents/` folder holds random-looking names: it shows how many files and roughly how big, nothing else. Do not edit it: a file no document names is removed at the next unlock; a document with no file is marked missing.
 - A plain copy exists only while a file is open in another program, in `open/`.
 - No thumbnails: images are drawn in details only.
-- Not yet seen on a real phone: the camera, the file chooser, opening a PDF, drawing a large photo. Checklist: [documents-design.md](documents-design.md), section 15.
+- The phone side was checked on a real phone by the maintainer on 2026-10-23. Checklist: [documents-design.md](documents-design.md), section 15.
