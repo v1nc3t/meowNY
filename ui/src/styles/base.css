@@ -212,7 +212,7 @@ p:empty {
 }
 
 :where(input[type='radio']) {
-  border-radius: 50%;
+  border-radius: 0;
 }
 
 :where(input[type='checkbox'], input[type='radio']):checked {
@@ -233,7 +233,7 @@ p:empty {
   content: '';
   width: 0.375rem;
   height: 0.375rem;
-  border-radius: 50%;
+  border-radius: 0;
   background: var(--primary-foreground);
 }
 
@@ -332,6 +332,31 @@ p.warn {
 
 .muted {
   color: var(--muted-foreground);
+}
+
+/* Pixel art (components/ui/Pixel.tsx): never smoothed, never squeezed. */
+.pixel-logo {
+  display: block;
+  flex: none;
+  image-rendering: pixelated;
+}
+
+/* A list with nothing in it: the dozing cat, in the hint's colour, over the hint. */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding-block: 1rem;
+  color: var(--muted-foreground);
+}
+
+.empty-state svg {
+  flex: none;
+}
+
+.empty-state .hint {
+  margin: 0;
 }
 
 :where(form > button) {

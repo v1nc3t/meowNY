@@ -256,12 +256,12 @@ function YearNav({ month, thisMonth, onChange }: { month: string; thisMonth: str
   )
 }
 
-/** A plain bar: `percent` of the track is filled, with the number beside it when `label` is given. */
-function Bar({ percent, over, label }: { percent: number; over?: boolean; label?: string }) {
+/** A plain bar: `percent` of the track is filled, with the number beside it when `label` is given. `near` turns it gold, `over` red. */
+function Bar({ percent, over, near, label }: { percent: number; over?: boolean; near?: boolean; label?: string }) {
   return (
     <span className="bar-row">
       <span className="bar" aria-hidden="true">
-        <span className={over ? 'bar-fill bar-over' : 'bar-fill'} style={{ width: `${Math.max(0, Math.min(100, percent))}%` }} />
+        <span className={over ? 'bar-fill bar-over' : near ? 'bar-fill bar-near' : 'bar-fill'} style={{ width: `${Math.max(0, Math.min(100, percent))}%` }} />
       </span>
       {label === undefined ? null : <span className="bar-label">{label}</span>}
     </span>
@@ -408,7 +408,6 @@ function YearCharts({ year, month, onPick, settings }: { year: YearPoint[]; mont
                   y={Math.min(by(v), by(0))}
                   width={barW}
                   height={Math.max(1, Math.abs(by(v) - by(0)))}
-                  rx={2}
                 />
               )
             })}
@@ -509,6 +508,8 @@ function BudgetBars({ bva, settings }: { bva: BudgetVsActual; settings: MoneySet
     <ul className="dash-bars">
       {rows.map((r) => {
         const over = r.type === 'EXPENSE' && r.pct !== null && r.pct > 100
+        // Nearly used up: 90 % of an expense budget or more, but not over it.
+        const near = r.type === 'EXPENSE' && r.pct !== null && r.pct >= 90 && !over
         return (
           <li key={r.key} className={r.total ? 'dash-total' : undefined}>
             <span className="dash-bar-text">
@@ -518,7 +519,7 @@ function BudgetBars({ bva, settings }: { bva: BudgetVsActual; settings: MoneySet
                 {r.budgeted === null ? null : <span className="muted"> / {money(r.budgeted)}</span>}
               </span>
             </span>
-            <Bar percent={r.pct ?? 0} over={over} label={r.pct === null ? '-' : formatPercent(r.pct, settings.locale)} />
+            <Bar percent={r.pct ?? 0} over={over} near={near} label={r.pct === null ? '-' : formatPercent(r.pct, settings.locale)} />
           </li>
         )
       })}

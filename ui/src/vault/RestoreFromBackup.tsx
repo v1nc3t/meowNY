@@ -5,6 +5,7 @@ import { errorText, vault } from './api'
 import PasswordField from './PasswordField'
 import { passphraseProblem } from './rules'
 import Button from '../components/ui/Button'
+import { Logo } from '../components/ui/Pixel'
 
 /** First run from a backup: the backup's passphrase, and the app passphrase for this new install. */
 export default function RestoreFromBackup({ onKey, onBack }: { onKey: (recoveryKey: string) => void; onBack: () => void }) {
@@ -31,7 +32,10 @@ export default function RestoreFromBackup({ onKey, onBack }: { onKey: (recoveryK
   return (
     <main className="gate">
       <form onSubmit={onSubmit}>
-        <p className="brand-mark">meowny</p>
+        <p className="brand-mark">
+          <Logo />
+          meowny
+        </p>
         <h1>{t('welcome.restore')}</h1>
         <PasswordField label={t('settings.backupPassphrase')} name="backup_passphrase" current autoFocus />
         <PasswordField label={t('welcome.passphrase')} name="passphrase" />

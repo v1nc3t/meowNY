@@ -10,6 +10,7 @@ import { atLeast, closeKeyboard, useRefocus } from './unlockFlow'
 import PasswordField from './PasswordField'
 import { defaultSettings, phonePassphraseProblem } from './rules'
 import Button from '../components/ui/Button'
+import { Logo } from '../components/ui/Pixel'
 
 /**
  * First start on a phone: a language and a passphrase, nothing else. The phone is a copy of the desktop, so its currency, number
@@ -49,7 +50,10 @@ export function PhoneFirstRun({ onDone }: { onDone: () => void }) {
   return (
     <main className="gate">
       <form ref={formRef} onSubmit={onSubmit}>
-        <p className="brand-mark">meowny</p>
+        <p className="brand-mark">
+          <Logo />
+          meowny
+        </p>
         <h1>{t('phone.welcomeTitle')}</h1>
 
         <Dropdown label={t('welcome.language')} value={language} options={languageOptions} onChange={setLanguage} />
@@ -84,7 +88,10 @@ export function ErasedScreen({ onContinue }: { onContinue: () => void }) {
   return (
     <main className="gate">
       <div className="panel">
-        <p className="brand-mark">meowny</p>
+        <p className="brand-mark">
+          <Logo />
+          meowny
+        </p>
         <h1>{t('phone.erasedTitle')}</h1>
         <p className="warning" role="alert">
           {t('phone.erasedText')}
@@ -115,7 +122,10 @@ export function ForgotPhone({ onBack }: { onBack: () => void }) {
   return (
     <main className="gate">
       <form onSubmit={onErase}>
-        <p className="brand-mark">meowny</p>
+        <p className="brand-mark">
+          <Logo />
+          meowny
+        </p>
         <h1>{t('phone.forgotTitle')}</h1>
         <p className="hint">{t('phone.forgotText')}</p>
         <p className="warning" role="note">

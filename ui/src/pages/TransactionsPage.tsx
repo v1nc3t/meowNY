@@ -9,6 +9,7 @@ import Dropdown, { type DropdownOption } from '../components/Dropdown'
 import Modal, { modalFormId } from '../components/Modal'
 import Pick, { PickOption } from '../components/Pick'
 import Button from '../components/ui/Button'
+import { EmptyState } from '../components/ui/Pixel'
 import DatePicker from '../components/DatePicker'
 import SplitEditor from '../components/SplitEditor'
 import { categories as categoriesApi, type Category } from '../api/categories'
@@ -457,7 +458,7 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
       {page ? (
         <>
           <div className="tx-pane wide">
-            {page.transactions.length === 0 ? <p className="hint">{t('tx.empty')}</p> : null}
+            {page.transactions.length === 0 ? <EmptyState text={t('tx.empty')} /> : null}
             <ul className="card-list">
               {page.transactions.map((transaction) => (
                 <li key={transaction.id} className="card-item" data-item={`transaction:${transaction.id}`}>

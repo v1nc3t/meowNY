@@ -3,6 +3,7 @@ import { preloadPage, type PageName } from '../pages'
 import { vault } from '../vault/api'
 import { useProfile } from '../hooks/profile'
 import Icon from './NavIcon'
+import { Logo } from './ui/Pixel'
 import { useT } from '../i18n/context'
 import { runShortcut } from '../keys/registry'
 import type { ShortcutId } from '../keys/shortcuts'
@@ -35,6 +36,7 @@ export default function AppSidebar({
     return (
       <header className="phone-header">
         <Link to="/app/dashboard" className="app-logo">
+          <Logo />
           meowny
         </Link>
         <nav className="phone-actions" aria-label={t('nav.settings')}>
@@ -73,6 +75,7 @@ export default function AppSidebar({
     <aside className="app-sidebar">
       <div className="sidebar-header">
         <Link to="/app/dashboard" className="app-logo">
+          <Logo />
           meowny
         </Link>
         <button
@@ -83,7 +86,7 @@ export default function AppSidebar({
           {...tip('sidebar', collapsed ? t('nav.expand') : t('nav.collapse'))}
           onClick={onToggle}
         >
-          {collapsed ? <span className="toggle-logo">m</span> : null}
+          {collapsed ? <Logo size={16} className="toggle-logo" /> : null}
           <Icon name={collapsed ? 'expand' : 'collapse'} />
         </button>
       </div>

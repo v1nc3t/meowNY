@@ -8,6 +8,7 @@ import Icon from '../components/NavIcon'
 import Pick, { PickOption } from '../components/Pick'
 import Badge from '../components/ui/Badge'
 import Button from '../components/ui/Button'
+import { EmptyState } from '../components/ui/Pixel'
 import { documents, type Doc, type DocPage, type LibrarySize, type Report } from '../api/documents'
 import { errorText } from '../api/invoke'
 import { useMoneySettings, type MoneySettings } from '../hooks/useMoneySettings'
@@ -268,7 +269,7 @@ function DocumentsView({ settings }: { settings: MoneySettings }) {
       {page ? (
         <>
           <div className="tx-pane wide">
-            {page.documents.length === 0 ? <p className="hint">{search || kind ? t('docs.noMatch') : t('docs.empty')}</p> : null}
+            {page.documents.length === 0 ? <EmptyState text={search || kind ? t('docs.noMatch') : t('docs.empty')} /> : null}
             <ul className="card-list">
               {page.documents.map((doc) => {
                 const state = fileStateText(fileState(doc, phone))
