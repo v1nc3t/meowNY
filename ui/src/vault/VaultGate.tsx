@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react'
 import { DecryptingPage } from './Decrypting'
-import { useDecryptingGate } from './decrypting'
+import { useDecryptingGate } from './unlockFlow'
 import FirstRunScreen from './FirstRunScreen'
 import LockScreen from './LockScreen'
 import { PhoneFirstRun } from './PhoneScreens'
