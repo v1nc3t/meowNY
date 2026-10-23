@@ -1,93 +1,96 @@
 # Debts and shared bills: a guide
 
-meowNY keeps track of who owes whom, and of bills you share. Everything is in your own ledger, on your own devices: nothing is uploaded, nobody else needs the app, and nothing is sent to a friend unless **you** show or send it.
+Who owes whom, and bills you share, in your own ledger on your own devices. Nothing is uploaded, nobody else needs the app, and nothing reaches a friend unless you show or send it.
 
-This is the guide for using it. How it is built is in [debts-design.md](debts-design.md), and exactly what is stored where is in [data-inventory.md](data-inventory.md).
+Built: [debts-design.md](debts-design.md). Stored where: [data-inventory.md](data-inventory.md).
 
 ## Friends
 
-A **friend** is a name and nothing else: no phone number, no email, no address, and nothing is read from your contacts. Add one on the **friends** tab of the **debts** page (**add friend**), or when you need one (on a bill, in an entry, when you take in a code). On the **friends** tab each friend has **edit** (the name, in a dialog), **delete** and **mark as paid**. A friend is never erased: **delete** takes them off the list (after asking), and **show removed friends** brings them back into view, with **bring back** on their row; their balance and history stay, and the name can be used again.
-
-A name typed on a bill becomes a friend at once. (A **guest**, a name on one bill who is not a friend and makes no debt, can still be made from the command line; a bill that has one opens and saves as before.)
+- A friend is a name and nothing else: no phone, email, address or contacts.
+- Add one on the **friends** tab (**add friend**), on a bill, in an entry, or when you take in a code.
+- Each friend has **edit** (name), **delete** and **mark as paid**.
+- **delete** takes a friend off the list after asking; **show removed friends** and **bring back** undo it. Balance and history stay.
+- A guest (a name on one bill, no debt) can be made from the command line.
 
 ## What you owe and are owed
 
-On a friend's page, the **history** lists every line by date with the balance after it. A positive balance is what they owe you, a negative one what you owe them.
-
-- **lend** and **borrow** (buttons at the top of the **debts** page and on a friend's page) make an entry. **Paid back to me** and **paid back by me** are the other two kinds (pick them in the entry's **kind**). An entry has a date, an amount, a note, and can carry documents (a loan note, an invoice), attached like a transaction's.
-- **Mark as paid** takes the whole balance, or an amount you type. An amount **larger than the debt** is accepted: the dialog says first that the balance will turn around (you then owe them the rest). When the balance reaches zero, the friend's reminder is cleared.
-- **borrow** can also tick **this was my share of a bill: add it to my expenses**. Someone else paid and you owe them: your share is an expense in the month, and what you owe is the debt. Paying them back later is an entry and never a second expense.
-- None of this is income or expense, and none of it touches a budget. A loan does not make your income higher, and a repayment does not hide a real cost.
-
-The totals (**owed to you**, **you owe**, **net**) are on a card of the **dashboard**; the **debts** page lists the friends, the payments that are overdue and the history.
+- **lend** and **borrow** (top of the debts page and a friend's page) make an entry. The other two kinds, **paid back to me** and **paid back by me**, are in the entry's **kind**.
+- An entry has a date, amount, note, and can carry documents (a loan note, an invoice).
+- **Mark as paid** takes the whole balance or an amount you type. An amount over the debt is accepted; the dialog says first that the balance turns around.
+- **borrow** can tick "this was my share of a bill: add it to my expenses". Paying back later is an entry, never a second expense.
+- A friend's page lists every line by date with the balance after it. Positive means they owe you.
+- None of it is income or expense, and none of it touches a budget.
+- Totals (**owed to you**, **you owe**, **net**) are on the dashboard.
 
 The **debts** page has three tabs:
 
-- **friends**: **add friend**, then a row for each friend with what is owed (green when they owe you, red when you owe them), a reminder that has come, and the buttons **edit**, **delete** and **mark as paid**. The name leads to the friend's page (the lines of the ledger, and **save statement**). The buttons at the top of the page are **lend**, **borrow**, **split a bill** and **paste a code** (**scan a bill** on a phone).
-- **due payments**: the recurring payments that are **overdue** (their day has gone by: one that falls due today is not here until tomorrow, though the recurring page shows it in red from its day) and are not paid or skipped, **one row for each occurrence** (a rent that was not paid for three months is three rows), the oldest first, with the day it fell due, what it is for (**varies** for a bill whose amount changes), how many days late it is, and a **total due**. Only payments count: a recurring income is not something you owe, and a paused or ended item is not listed. An item that was forgotten for years shows its oldest 24 occurrences. **Mark as paid** on a row opens the payment dialog of that item on the recurring page (it pays the oldest occurrence, so only the oldest row of an item has the button). Paying or skipping on the recurring page removes the row here.
-- **history of debts**: every change to what you owe or are owed, newest first, 50 lines to a page: the lines of every friend (lent, borrowed, paid back, the parts of shared bills, with the balance after each), the recurring payments that were **overdue**: those that were **paid late** (on the day they were paid, with the day they fell due) and those that are **overdue now**. A payment made on its day or before it is **not** in the history, since it was never late. A friend's line leads to the friend's page, a recurring payment's to the recurring page.
+| Tab | Shows |
+|---|---|
+| friends | each friend with what is owed (green: they owe you; red: you owe them), a reminder that has come, and the buttons. Page buttons: **lend**, **borrow**, **split a bill**, **paste a code** (**scan a bill** on a phone) |
+| due payments | recurring payments past their day and not paid or skipped, one row per missed occurrence, oldest first, with day, purpose (**varies** for a changing amount), days late and **total due**. A payment due today appears tomorrow. At most 24 per item. **Mark as paid** opens the item's pay dialog (oldest occurrence only) |
+| history of debts | newest first, 50 per page: every friend's lines with balance, recurring payments **paid late** and those **overdue now**. A payment made on time is not listed |
 
-None of this is stored on its own: the due payments and the history are worked out from the recurring items, the payments and the friends' ledgers, so they cannot disagree with those screens. One thing follows from that: a payment you **skipped** leaves no line in the history (it is only in the change history), and neither does a payment made before the app kept the day it fell due.
+- Due payments and history are worked out from the recurring items and ledgers; nothing is stored for them.
+- A skipped payment leaves no line.
 
 ## Splitting a bill
 
-You paid for a dinner; four of you shared it. Tick **split this bill** when you add or edit a transaction (or press **split a bill** on the debts page or a friend's page, which opens a new transaction with the split on and that friend on the bill):
+Tick **split this bill** on a transaction (or press **split a bill**):
 
-1. Choose **how to split**: **equally**, **by percent** (each person's percent; together exactly 100), **by shares** (2, 1, 1) or **by amounts** (each person's amount; together exactly the bill).
-2. Add people in the one field under the lines: choose a friend from the list (it narrows as you type), or type a name that is not in it and choose **add "name" as a friend**. A new name becomes a friend, and their part of the bill is what they owe you. You are always the first line.
-3. Every line shows what it comes to, worked out by the app as you type. For percent and amounts, **give the rest to me** makes your own line the difference. The dialog says what is **left to assign** until the numbers add up; it cannot be saved before.
+1. Choose how: **equally**, **by percent** (total 100), **by shares**, or **by amounts** (total the bill).
+2. Add people in the field under the lines: pick a friend, or type a name and choose **add "name" as a friend**. You are the first line.
+3. Each line shows its amount as you type. **give the rest to me** fills your line. It cannot be saved until nothing is **left to assign**.
 
-What changes:
-
-- The transaction keeps **what you paid**. **Budgets, statistics, reports and exports count only your part**, and the list shows your part as its amount; press **details** under it to see, in a section called split, what was paid and who has which part (and, if there is one, the description in its own section). To change a split, press **edit**: the same form has the switch.
+- The transaction keeps what you paid. **Budgets, statistics, reports and exports count only your part.** **details** shows who has which part.
 - Each friend's part is added to what they owe you.
-- The odd cent goes to whoever has the largest remainder, you first; the parts always add up to the bill to the cent.
-- Changing the **amount** of a shared bill scales every part, yours included. Deleting a transaction asks first (a shared bill's parts go with it, so the friends owe you less). A shared bill cannot be an income.
-- A saved bill opens as exact amounts. Changing how it is split starts the numbers again.
-
-A **recurring item** can be split too (tick **split this bill** in its form). Each payment is then split by the same proportions, whatever it was paid for. It is kept as proportions, so an item with no fixed amount can be split. The payments already made keep their parts. **Details** on the item in the list shows the proportions (you 2, Anna 1, …).
+- The odd cent goes to the largest remainder, you first.
+- Changing the amount scales every part. Deleting asks first. A shared bill cannot be an income.
+- A saved bill opens as exact amounts.
+- A recurring item can be split too; each payment keeps the same proportions. Payments already made keep their parts.
 
 ## Showing a bill to a friend: the bill code
 
-On a shared bill, press **show code** on the bill in the list (with one friend it opens at once; with several it opens the **details**, where each friend has their own **show code**), or on a bill line in the friend's page. A **recurring item** that is split has **show code** too, for the friend's part of its **next payment** (it needs a fixed amount; the dialog says which day it is for). The name your friend sees is the one you gave when you made the account; **settings** changes it (it is kept on this device), and the app only asks for it here when there is none (for instance after restoring a backup). Show the code of a payment once, either before it is paid (the item's) or after (the bill's): the two are different codes, and a friend who takes in both owes it twice. The dialog shows a **QR code** and **copy** copies the same text, so you can send it in the chat you already use.
-
-The code holds this bill's name and date, your name, your friend's part and the whole bill, and the currency. It holds nobody else's name or part. It is **not stored and not encrypted**: whoever sees the screen, or the text you copied, can read it. Show it only to the friend it is for. If a code is too long for a QR code (long names), the app says so and the text is the way.
+- **show code** is on the bill in the list (with several friends, open **details**) and on a friend's bill line.
+- A split recurring item has **show code** for the friend's part of its next payment (needs a fixed amount).
+- Show the code of a payment once: before it is paid (the item's) or after (the bill's). They are different codes; a friend who takes in both owes it twice.
+- The dialog shows a QR code; **copy** copies the text for your own chat.
+- The name friends see is set at first run; **settings** changes it.
+- The code holds the bill's name and date, your name, the friend's part, the whole bill and the currency. Nobody else's name or part.
+- It is not stored and not encrypted: show it only to its friend. If too long for a QR code, use the text.
 
 ## Taking a bill from a friend
 
-On the **debts** page, **scan a bill** (phone) opens the camera, and **paste a code** (computer, and the phone) takes the text. The app reads the code and **writes nothing** until you accept. It shows who it is from, the bill, the date and your part, and asks:
-
-- **Which friend**: the one whose name is the sender's is chosen if you have one, or **new friend** with the name filled in.
-- **Add my part to my expenses** (ticked) with a category: your share becomes an expense, and the entry you owe the sender is linked to it.
-- For a code in **another currency**: **how much is 1 USD in EUR?** The rate is yours to type; nothing is fetched. The converted amount is shown and you can change it. Accept waits for it.
-
-**Accept** makes the friend (if new), the expense (if ticked) and the entry together, or nothing. **Deny** closes it and stores nothing. A code you already took in is not taken twice. If your friend corrects a bill, ask for a new code: delete the old entry, then take in the new one.
-
-The sender is not told that you scanned it or paid. Each of you marks payments yourself.
+- **scan a bill** (phone) or **paste a code** (computer and phone). Nothing is written until you accept.
+- The dialog shows sender, bill, date and your part. Choose the **friend** (the sender if you have one, or **new friend**).
+- **Add my part to my expenses** (ticked) with a category.
+- In another currency, type the rate; nothing is fetched. The converted amount can be changed.
+- **Accept** makes the friend, expense and entry together, or nothing. **Deny** stores nothing. A code is not taken twice.
+- If the friend corrects a bill: delete the old entry, take in the new code.
+- The sender is not told.
 
 ## Reminders
 
-Reminders are **one setting for all debts**, in **settings** under **notifications**: **remind me about each debt**, **never**, **every week**, **every 2 weeks** or **every month** (every week unless you change it). Every friend whose balance is not zero is reminded that long after the **day their debt last changed** (the latest line of their statement), and again after as long, until it is settled. A new line (money lent, a part of a bill, a repayment) starts the count again. There is nothing to set on a friend's page.
-
-- The notification says **"meowNY: a debt reminder"** and how many friends there are to look at: **never a name or an amount**, because the app is locked when it rings and a notification can be seen on a lock screen and kept by the system. The **debts** page then names who is due.
-- **On the computer**, it rings only while meowNY is open and unlocked, at the **time of day** you set in **settings** (09:00 by default), or at once if the day came while the app was closed. The **notifications** switch in settings turns these off, with the recurring items' reminders.
-- **On the phone**, the app hands the system the next few days, so they ring **with the app closed**, and it does so again at each unlock, after each sync and when the setting or a debt changes. The first time it needs the notification permission and asks. A friend you settle on another device can still ring on the phone until you open the app.
-- The time of day and the period are set for each device.
+- One setting for all debts: **settings**, **notifications**, **remind me about each debt**: never, every week, every 2 weeks, every month (default every week). Set per device.
+- Each friend with a balance is reminded that long after the day their debt last changed, and again after as long, until settled. A new line restarts the count.
+- The text holds a count, never a name or amount. The **debts** page names who is due.
+- Computer: rings while meowNY is open and unlocked, at the time of day you set (09:00 default). The notifications switch turns it off.
+- Phone: the next days are handed to the system, so it rings with the app closed. First use asks for the notification permission. Battery saving on some phones can delay or drop it.
 
 ## Files to send
 
-On a friend's page, **save statement** writes that friend's lines and the balance after each. Choose **TXT**, **CSV** or **PDF** (the PDF is in your language). The button first shows a **preview** of the file (the text, the CSV, or the pages of the PDF), exactly as it will be saved; nothing is written until you press **save** in the preview, and only then does the app ask where. These are plain files, **not encrypted**, written where you choose and sent to nobody; sending is up to you. The phone has no save button. (Who owes what and the whole ledger can still be written from the command line, `meowny export debts`, and a PDF report can list them.)
+- On a friend's page, **save statement** writes the lines and balances as **TXT**, **CSV** or **PDF**, after a **preview**. Nothing is written until **save**; then the app asks where.
+- Files are plain, not encrypted, and sent to nobody. The phone has no save button.
+- `meowny export debts` writes who owes what and the whole ledger.
 
 ## Backups, the phone and scripts
 
-- Friends, entries and parts are in **backups** and in the **exports** (all of it with no limit; with a date or category limit only the bills in it and the friends they name, by name, with no balance and no reminder).
-- They **sync** with the phone like everything else. If two devices each added a friend of the same name, the two become one.
-- In an export (JSON and Excel) the **due payments** and the **history of debts** are parts of their own next to the **debts** (the friends); a PDF report has three options: a **list of debts** (who owes what), a **list of due payments** and the **history of debts**.
-- From a script: `meowny people|ledger|debts|splits ...`, `meowny transactions split`, `meowny recurring split`, and `meowny export debts`. `debts due` lists the overdue recurring payments, `debts history` the history of debts (paged), and `debts reminders --every-days N` says which friends a reminder is due for; the export commands (`export json|csv|xlsx|pdf`) take the same choices as the export screen, including the due payments and the history of debts as parts (`--sections`) and in a PDF (`--include-due-payments`, `--include-debt-history`). A bill code and the ringing of a reminder need you at the app, so they are not in the command line.
+- Friends, entries and parts are in backups and exports. A limited export names only the friends on the bills it holds, with no balance or reminder.
+- They sync with the phone. Friends of the same name added on two devices become one.
+- Export parts: JSON and Excel have **debts**, **due payments** and **history of debts**; a PDF has **list of debts**, **list of due payments** and **history of debts**.
+- Scripts: `meowny people|ledger|debts|splits ...`, `meowny transactions split`, `meowny recurring split`, `meowny export debts`, `debts due`, `debts history`, `debts reminders --every-days N`. Export commands take `--sections` and, for a PDF, `--include-due-payments` and `--include-debt-history`. A bill code and the ringing of a reminder need you at the app.
 
 ## What to know
 
-- A friend's balance is a running sum, not matched to bills: a repayment is not tied to one bill.
-- Money is in your currency. A code in another currency is converted with the rate you type, once, when you accept.
-- The bill code is a notice, not a link: later edits of the bill do not follow it, and the sender is not told what you did.
-- Reminders on the phone depend on the system: on some phones the maker's battery saving can delay or drop scheduled notifications.
+- A balance is a running sum, not matched to bills.
+- A code in another currency is converted once, with the rate you type, when you accept.
+- A code is a notice, not a link: later edits do not follow.
