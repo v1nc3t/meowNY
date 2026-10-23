@@ -1,0 +1,789 @@
+/* Settings, export and sync pages, plus the lock and first-run screens. */
+
+/* First-run and lock screens: one centred column on an empty page. */
+.gate {
+  min-height: 100svh;
+  display: grid;
+  place-items: center;
+  padding: 2rem 1rem;
+}
+
+.gate > form,
+.gate > .panel {
+  width: min(100%, 40rem);
+  margin: 0;
+  padding: 2rem 0;
+}
+
+.gate .brand-mark {
+  font-family: var(--font);
+  font-size: 0.875rem;
+  letter-spacing: 0.04em;
+  color: var(--foreground);
+  margin: 0 0 1.5rem;
+}
+
+.gate h1 {
+  font-size: 1.75rem;
+  margin: 0;
+}
+
+.gate button[type='submit'] {
+  align-self: flex-start;
+}
+
+.gate code {
+  overflow-wrap: anywhere;
+}
+
+/* A field with a button inside it, at the right edge. */
+.field-input {
+  position: relative;
+  display: flex;
+}
+
+.field-input input {
+  padding-right: 4.5rem;
+}
+
+.field-input button {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  padding: 0 0.625rem;
+  font-size: 0.75rem;
+  color: var(--muted-foreground);
+}
+
+.field-input button:hover:not(:disabled) {
+  color: var(--foreground);
+}
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.875rem;
+}
+
+.recovery-code {
+  font-family: var(--font);
+  font-size: clamp(0.95rem, 0.5rem + 2.6vw, 1.375rem);
+  line-height: 1.6;
+  letter-spacing: 0.08em;
+  color: var(--foreground);
+  border: 1px solid var(--border);
+  padding: 1.25rem 1.5rem;
+  width: 100%;
+  overflow-wrap: anywhere;
+  user-select: all;
+}
+
+.panel .actions {
+  display: flex;
+  gap: 1.5rem;
+}
+
+/* Settings: blocks in a grid that wraps to one column as the window narrows. */
+.settings-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 20rem), 1fr));
+  gap: 2rem clamp(1.5rem, 4vw, 4rem);
+  align-items: start;
+  align-content: start;
+}
+
+.settings-block {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1rem;
+  width: 100%;
+  min-width: 0;
+  margin: 0;
+  padding-top: 1rem;
+  border-top: 0.8px solid var(--border);
+}
+
+.settings-block h2 {
+  margin: 0;
+}
+
+.settings-block form {
+  width: 100%;
+  margin: 0;
+}
+
+.settings-block .actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1.5rem;
+}
+
+.settings-block .panel {
+  width: 100%;
+}
+
+.settings-block code {
+  font-family: var(--font);
+  font-size: 0.8125rem;
+  color: var(--foreground);
+  overflow-wrap: anywhere;
+}
+
+/* A setting that shows its value and a text button to change it. */
+.settings-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  column-gap: 1rem;
+  width: 100%;
+  min-height: 2.5rem;
+  border-top: 0.8px solid var(--border);
+  border-bottom: 0.8px solid var(--border);
+}
+
+.settings-row-label {
+  font-size: 0.75rem;
+  letter-spacing: 0.04em;
+  color: var(--muted-foreground);
+}
+
+.settings-row-value {
+  color: var(--foreground);
+  font-size: 0.8125rem;
+  overflow-wrap: anywhere;
+}
+
+.settings-row.is-expired .settings-row-label,
+.settings-row.is-expired .settings-row-value {
+  color: var(--muted-foreground);
+}
+
+.settings-subtitle {
+  margin: 0.5rem 0 0;
+  font-size: 0.75rem;
+  font-weight: normal;
+  letter-spacing: 0.04em;
+  color: var(--muted-foreground);
+}
+
+/* Settings: one wider column, flush left. Each setting is a row: the label, a gap, then its control right after it. */
+.settings-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+  width: 100%;
+  max-width: 52rem;
+  margin-right: auto;
+}
+
+.settings-block {
+  align-items: stretch;
+}
+
+.settings-block .pick.field,
+.settings-block label,
+.settings-block .settings-row {
+  display: grid;
+  grid-template-columns: 16rem minmax(0, 20rem);
+  align-items: center;
+  justify-content: start;
+  gap: 0.5rem 1.5rem;
+}
+
+.settings-block .settings-row {
+  grid-template-columns: 16rem auto auto;
+}
+
+.settings-block .pick.field .pick-button,
+.settings-block label > input:not([type='checkbox']),
+.settings-block label > .field-input {
+  width: 100%;
+  min-width: 0;
+}
+
+/* A checkbox comes after its text, like the other controls. */
+.settings-block label > input[type='checkbox'] {
+  order: 2;
+  justify-self: start;
+}
+
+/* Its text looks like the text before a dropdown, and the box starts where the dropdowns start: the global rule for a
+   label with a checkbox sets its own colour, size and gap, which this one is more specific than. */
+.settings-block label:has(> input[type='checkbox']) {
+  gap: 0.5rem 1.5rem;
+  font-size: 0.75rem;
+  letter-spacing: 0.04em;
+  color: var(--muted-foreground);
+}
+
+@media (max-width: 40em) {
+  .settings-block .pick.field,
+  .settings-block label,
+  .settings-block .settings-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* A list of rows that share their columns, so the buttons line up, with one line between rows. */
+.settings-block .token-list {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+}
+
+.settings-block .token-list .settings-row {
+  grid-template-columns: 14rem minmax(0, 1fr) auto;
+  padding-block: 0.5rem;
+  border-bottom: 0;
+}
+
+.settings-block .token-list .settings-row:last-child {
+  border-bottom: 0.8px solid var(--border);
+}
+
+@media (max-width: 40em) {
+  .settings-block .token-list .settings-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* Export. The choices are cards on the left; what the file will contain is a receipt on the right. */
+.export-page .tx-title {
+  margin-bottom: 0.5rem;
+}
+
+.export-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 1.25rem;
+  align-items: start;
+  max-width: 64rem;
+}
+
+@media (min-width: 62em) {
+  .export-layout {
+    grid-template-columns: minmax(0, 1fr) 21rem;
+  }
+}
+
+.export-main {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  min-width: 0;
+}
+
+.export-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.875rem;
+  min-width: 0;
+  padding: 1rem 1.125rem;
+  border: 0.8px solid var(--border);
+  border-radius: 6px;
+}
+
+.export-card h2 {
+  margin: 0;
+  font-size: 0.75rem;
+  letter-spacing: 0.04em;
+  color: var(--muted-foreground);
+}
+
+.export-card .hint {
+  margin: 0;
+  font-size: 0.75rem;
+  color: var(--muted-foreground);
+}
+
+/* The format: four tiles, one choice. The real radio button is hidden but still takes the keyboard. */
+.export-formats {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+@media (max-width: 30em) {
+  .export-formats {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.export-format {
+  position: relative;
+  gap: 0.375rem;
+  padding: 0.875rem 1rem;
+  border: 0.8px solid var(--border);
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.export-format:hover {
+  border-color: var(--input);
+}
+
+.export-format input,
+.export-chip input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.export-format-name {
+  font-size: 1.0625rem;
+  color: var(--foreground);
+}
+
+.export-format-hint {
+  font-size: 0.75rem;
+  line-height: 1.5;
+  letter-spacing: 0;
+  color: var(--muted-foreground);
+}
+
+.export-format:has(input:checked),
+.export-chip:has(input:checked) {
+  border-color: var(--primary);
+}
+
+.export-format:has(input:focus-visible),
+.export-chip:has(input:focus-visible) {
+  outline: 1px solid var(--ring);
+  outline-offset: 2px;
+}
+
+/* A yes-or-no row: the words on the left, the box at the far edge. */
+.export-card label.export-switch {
+  justify-content: space-between;
+  width: 100%;
+}
+
+/* "current month" and the unit of the range side by side, as on the transactions page. */
+.export-range {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.5rem 1.25rem;
+}
+
+.export-range > button {
+  flex: 0 0 auto;
+  padding: 0.625rem 0;
+}
+
+.export-date {
+  display: grid;
+  grid-template-columns: 4rem minmax(0, 1fr);
+  align-items: center;
+  gap: 0.5rem 1rem;
+  font-size: 0.8125rem;
+  color: var(--foreground);
+}
+
+@media (max-width: 30em) {
+  .export-date {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.export-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.export-card label.export-chip {
+  position: relative;
+  flex-direction: row;
+  width: auto;
+  max-width: 100%;
+  padding: 0.25rem 0.75rem;
+  border: 0.8px solid var(--input);
+  color: var(--muted-foreground);
+  font-size: 0.8125rem;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+}
+
+.export-card label.export-chip:has(input:checked) {
+  border-color: var(--primary);
+  color: var(--foreground);
+}
+
+.export-card .pick.field {
+  max-width: 16rem;
+}
+
+.export-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.export-groups h3 {
+  margin: 0 0 0.5rem;
+  font-size: 0.75rem;
+  letter-spacing: 0.04em;
+  color: var(--muted-foreground);
+}
+
+/* The receipt. */
+.export-side {
+  gap: 1.125rem;
+}
+
+@media (min-width: 62em) {
+  .export-side {
+    position: sticky;
+    top: 1.5rem;
+  }
+}
+
+.export-receipt {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.export-row {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  font-size: 0.8125rem;
+  color: var(--muted-foreground);
+}
+
+.export-row .leader {
+  flex: 1 1 1rem;
+  min-width: 1rem;
+  border-bottom: 1px dotted var(--input);
+  transform: translateY(-0.2em);
+}
+
+.export-row strong {
+  min-width: 0;
+  font-weight: 400;
+  color: var(--foreground);
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+
+.export-row.income strong {
+  color: var(--c-income);
+}
+
+.export-row.expense strong {
+  color: var(--c-expense);
+}
+
+.export-side .warning {
+  padding: 0.75rem 0.875rem;
+  font-size: 0.75rem;
+  line-height: 1.55;
+}
+
+.export-side .notice {
+  width: 100%;
+}
+
+.export-side .export-go {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 1rem;
+  width: 100%;
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--foreground);
+  font-size: 0.9375rem;
+}
+
+.export-go .export-ext {
+  color: var(--muted-foreground);
+}
+
+/* Phone and sync (phase 8) */
+
+/* A QR code is always dark on white, whatever the theme: a camera needs that contrast. */
+.qr {
+  display: block;
+  width: min(100%, 20rem);
+  height: auto;
+  background: #fff; /* fixed: a QR code must be dark on white to scan */
+}
+
+.sync-panel {
+  width: 100%;
+}
+
+.sync-panel h3 {
+  margin: 0;
+}
+
+.sync-countdown {
+  margin: 0;
+  font-family: var(--font);
+  font-size: 0.875rem;
+  color: var(--foreground);
+}
+
+/* The six digits that the person compares with the other screen. */
+.check-code {
+  margin: 0;
+  width: 100%;
+  padding: 1rem 1.5rem;
+  border: 1px solid var(--border);
+  font-family: var(--font);
+  font-size: clamp(1.75rem, 1rem + 5vw, 2.75rem);
+  letter-spacing: 0.2em;
+  text-align: center;
+  color: var(--foreground);
+  user-select: none;
+}
+
+.sync-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.sync-summary p {
+  margin: 0;
+  font-size: 0.8125rem;
+}
+
+.sync-panel .warning {
+  width: 100%;
+  margin: 0;
+}
+
+.inline-actions {
+  display: inline-flex;
+  gap: 1rem;
+}
+
+/* While the camera scans it shows behind the page: everything but the cancel button steps aside. */
+html.is-scanning,
+html.is-scanning body {
+  background: transparent;
+}
+
+html.is-scanning #root {
+  visibility: hidden;
+}
+
+.scan-overlay {
+  position: fixed;
+  inset: auto 0 0 0;
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+  padding: 1.25rem 1rem calc(1.25rem + env(safe-area-inset-bottom, 0px));
+  background: rgba(0, 0, 0, 0.8); /* fixed: the camera view is dark whatever the theme */
+  visibility: visible;
+  text-align: center;
+}
+
+.scan-overlay p {
+  margin: 0;
+  color: var(--foreground);
+}
+
+/* The phone's shell (phase 8): a bar at the top with the name and the lock, the page, tabs at the bottom, and a round button for
+   adding a transaction. Sizes follow the phone: tap targets of at least 44 px, inputs of at least 16 px, the screen edges (notch,
+   gesture bar) are left free, and the height is the visible height (the address-bar-free `dvh`). */
+html.is-phone .gate {
+  min-height: 100dvh;
+  /* at the top, not in the middle: the keyboard comes up over the lower half, and would cover the field and the button */
+  align-items: start;
+  padding-top: calc(1.5rem + env(safe-area-inset-top, 0px));
+  padding-bottom: calc(2rem + env(safe-area-inset-bottom, 0px));
+}
+
+html.is-phone .gate > form,
+html.is-phone .gate > .panel {
+  padding-top: 0;
+}
+
+/* A short list of choices that opens inside a form. */
+.more-options > summary {
+  cursor: pointer;
+  padding: 0.375rem 0;
+  font-size: 0.8125rem;
+  color: var(--muted-foreground);
+}
+
+.more-options > label {
+  margin-top: 0.5rem;
+}
+
+/* Typing the six digits on the phone. */
+.digits-input {
+  max-width: 14rem;
+  font-size: 1.75rem;
+  letter-spacing: 0.4em;
+  text-align: center;
+}
+
+/* The same things were changed on both devices: two versions side by side, one to choose. */
+.modal:has(.review) {
+  width: min(40rem, calc(100vw - 2rem));
+}
+
+.review {
+  width: 100%;
+  max-width: none;
+  margin: 0;
+}
+
+.review-all {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 1.5rem;
+}
+
+fieldset.conflict {
+  min-width: 0;
+  margin: 0;
+  padding: 0.75rem 0 0;
+  border: 0;
+  border-top: 0.8px solid var(--border);
+}
+
+.conflict legend {
+  padding-right: 0.75rem;
+  color: var(--foreground);
+  font-size: 0.875rem;
+}
+
+.conflict-versions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.conflict-version {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.375rem;
+  min-width: 0;
+  padding: 0.75rem;
+  background: var(--muted);
+  color: var(--foreground);
+  text-align: left;
+  white-space: normal;
+}
+
+.conflict-version[aria-pressed='true'] {
+  color: var(--foreground);
+  box-shadow: inset 0 -2px 0 var(--foreground);
+}
+
+.conflict-who {
+  font-size: 0.75rem;
+  letter-spacing: 0.04em;
+  color: var(--muted-foreground);
+}
+
+.conflict-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+  max-width: 100%;
+}
+
+.conflict-field > span:first-child {
+  font-size: 0.6875rem;
+  color: var(--muted-foreground);
+}
+
+.conflict-field b {
+  font-weight: normal;
+  color: var(--foreground);
+  overflow-wrap: anywhere;
+}
+
+.conflict-deleted {
+  color: var(--muted-foreground);
+}
+
+/* The preview of a JSON or CSV export: the start of the file as a text editor would show it. */
+.export-preview {
+  max-width: 64rem;
+  margin-top: 1.25rem;
+}
+
+.export-preview .hint {
+  margin: 0;
+}
+
+.export-file {
+  max-height: 26rem;
+  margin: 0;
+  padding: 0.75rem 0.875rem;
+  overflow: auto;
+  border: 0.8px solid var(--border);
+  background: var(--muted);
+  color: var(--foreground);
+  font: inherit;
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  tab-size: 2;
+  white-space: pre;
+}
+
+.export-file .json-key {
+  color: var(--foreground);
+}
+
+.export-file .json-string {
+  color: var(--code-string);
+}
+
+.export-file .json-number {
+  color: var(--code-number);
+}
+
+.export-file .json-literal {
+  color: var(--code-literal);
+}
+
+/* Export: the amount range, from and to side by side. */
+.export-amounts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+/* The preview of an Excel file or a PDF report on the export screen: a frame of its own, in which the sheet scrolls or the page is
+   drawn whole. The page of the export screen keeps its wheel, so a report does not turn its pages with it. */
+.export-frame {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow: hidden;
+  border: 0.8px solid var(--border);
+}
+
+.export-frame.is-sheet {
+  max-height: 30rem;
+}
+
+.export-frame.is-pdf {
+  height: 40rem;
+  max-height: 85svh;
+}

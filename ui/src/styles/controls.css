@@ -1,0 +1,333 @@
+/* Shared controls: dropdown, modal, month and date pickers, section tabs and the shortcut help. */
+
+/* Kept above `.pick.field .pick-button` on purpose: inside a date picker the field has to win. */
+.toolbar.tx-bar .pick-button,
+.toolbar.tx-bar .tx-range input {
+  width: max-content;
+  max-width: 100%;
+}
+
+.pick {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.375rem;
+  width: auto;
+  flex: 0 0 auto;
+  min-width: 0;
+  font-family: var(--font);
+  font-size: 0.8125rem;
+  line-height: 1.4;
+  color: var(--foreground);
+}
+
+/* The trigger of a dropdown looks like a text field with a chevron on the right. */
+.pick-button {
+  position: relative;
+  justify-content: flex-start;
+  width: max-content;
+  min-width: max-content;
+  min-height: 2.25rem;
+  padding: 0.25rem 2.25rem 0.25rem 0.75rem;
+  text-align: left;
+  font-family: var(--font);
+  font-size: 0.8125rem;
+  color: var(--foreground);
+  background: transparent;
+  border: 1px solid var(--input);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-xs);
+  white-space: nowrap;
+  overflow: visible;
+}
+
+/* A thin chevron on the right; it flips while the list is open. */
+.pick-button::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  right: 0.875rem;
+  width: 0.3125rem;
+  height: 0.3125rem;
+  border-right: 1px solid currentColor;
+  border-bottom: 1px solid currentColor;
+  opacity: 0.5;
+  transform: translateY(-70%) rotate(45deg);
+  transition: transform 0.12s ease;
+}
+
+.pick-button[aria-expanded='true']::after {
+  transform: translateY(-30%) rotate(-135deg);
+}
+
+.pick-button[aria-expanded='true'] {
+  border-color: var(--ring);
+  box-shadow: 0 0 0 3px var(--ring-soft);
+}
+
+/* The list opens in a popover: a small raised card with a row for each choice. */
+.pick-list {
+  position: absolute;
+  z-index: 30;
+  top: calc(100% + 0.25rem);
+  left: 0;
+  width: max-content;
+  min-width: 100%;
+  max-height: 16rem;
+  margin: 0;
+  padding: 0.25rem;
+  overflow: auto;
+  background: var(--popover);
+  color: var(--popover-foreground);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
+}
+
+.pick-list > li {
+  display: block;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  gap: 0;
+  border: 0;
+}
+
+.pick-list > li.pick-group {
+  padding: 0.375rem 0.5rem 0.25rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--muted-foreground);
+  cursor: default;
+}
+
+.pick-list > li.pick-group:not(:first-child) {
+  margin-top: 0.25rem;
+  border-top: 1px solid var(--border);
+}
+
+.pick-list button {
+  position: relative;
+  display: block;
+  width: max-content;
+  min-width: 100%;
+  min-height: 0;
+  padding: 0.375rem 2rem 0.375rem 0.5rem;
+  color: var(--popover-foreground);
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-sm);
+  text-align: left;
+  font-size: 0.8125rem;
+  white-space: nowrap;
+}
+
+.pick-list button:hover:not(:disabled),
+.pick-list button:focus {
+  color: var(--accent-foreground);
+  background: var(--accent);
+  outline: none;
+}
+
+/* A list that has an id is a text field's suggestions (the name of a friend): there the marked row is the one the arrow keys are on. */
+.pick-list[id] button[aria-selected='true'] {
+  color: var(--accent-foreground);
+  background: var(--accent);
+}
+
+/* In a dropdown the marked row is the chosen value: a tick on the right. */
+.pick-list:not([id]) button[aria-selected='true']::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  right: 0.75rem;
+  width: 0.3125rem;
+  height: 0.5625rem;
+  border-right: 2px solid currentColor;
+  border-bottom: 2px solid currentColor;
+  transform: translateY(-65%) rotate(45deg);
+}
+
+/* Dropdown inside a form (modals): same look as a text field, full width. */
+.pick.field {
+  width: 100%;
+}
+
+.pick.field .pick-button {
+  width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pick-button.empty {
+  color: var(--muted-foreground);
+}
+
+html:has(dialog[open]),
+body:has(dialog[open]) {
+  overflow: hidden;
+}
+
+/* A dialog: a raised card in the middle of the screen over a dimmed page. */
+.modal {
+  width: min(32rem, calc(100vw - 2rem));
+  max-height: calc(100svh - 2rem);
+  margin: auto;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background-color: var(--background);
+  background-image: none;
+  color: var(--foreground);
+  overflow: visible;
+  box-shadow: var(--shadow-lg);
+}
+
+.modal::backdrop {
+  background: var(--overlay);
+}
+
+.modal-panel {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 1rem;
+  max-height: calc(100svh - 2rem);
+  padding: 1.5rem;
+  overflow: auto;
+  border-radius: var(--radius-lg);
+  background-color: var(--background);
+  background-image: none;
+}
+
+.modal-actions {
+  display: flex;
+  flex-wrap: nowrap;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.modal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.modal-head h2 {
+  margin: 0;
+  font-size: 1.125rem;
+  font-weight: 600;
+  letter-spacing: -0.015em;
+}
+
+.modal form,
+.modal p.notice {
+  width: 100%;
+  margin: 0;
+}
+
+/* Month picker: previous and next as icon buttons around the month and year. */
+.month-nav {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-family: var(--font);
+  font-size: 0.8125rem;
+  color: var(--foreground);
+}
+
+.month-nav .pick.field {
+  width: auto;
+}
+
+.month-nav .pick-button {
+  text-transform: lowercase;
+}
+
+/* The arrows are glyphs, not icons: a little larger so they read. */
+.month-nav > .ui-btn-icon {
+  font-size: 1.125rem;
+  line-height: 1;
+}
+
+/* Dates as dropdowns: day, month and year side by side. A label sits above, like other fields. */
+.date-picker {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 0.375rem;
+}
+
+.date-picker .pick.field {
+  width: auto;
+}
+
+/* Keyboard shortcut help. */
+.modal.modal-wide {
+  width: min(38rem, calc(100vw - 2rem));
+}
+
+.shortcut-groups {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 15rem), 1fr));
+  gap: 1.5rem 2rem;
+}
+
+.shortcut-group h3 {
+  margin: 0 0 0.5rem;
+  font-size: 0.75rem;
+  letter-spacing: 0.04em;
+  color: var(--muted-foreground);
+}
+
+.shortcut-group dl {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+}
+
+.shortcut-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.375rem 0;
+  border-top: 1px solid var(--border);
+}
+
+.shortcut-row dt {
+  font-size: 0.8125rem;
+  color: var(--foreground);
+  overflow-wrap: anywhere;
+}
+
+.shortcut-row dd {
+  display: flex;
+  gap: 0.25rem;
+  margin: 0;
+}
+
+.confirm-text {
+  margin: 0;
+  color: var(--foreground);
+}
+
+/* The question takes the focus when the dialog opens, so that neither answer does; it shows no outline. */
+.confirm-text:focus,
+.confirm-text:focus-visible {
+  outline: none;
+}
+
+/* The panel of a dialog takes the focus when nothing else in it can, and shows no outline for it. */
+.modal-panel:focus,
+.modal-panel:focus-visible {
+  outline: none;
+}
+
+/* Looking into a document: a wide dialog, and the document in a frame. */
+.modal.modal-look {
+  width: min(60rem, calc(100vw - 2rem));
+}

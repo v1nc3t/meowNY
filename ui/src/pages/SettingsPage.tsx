@@ -19,6 +19,7 @@ import { formatSize } from '../lib/bytes'
 import { scheduleOnPhone } from '../api/debtReminders'
 import { cleanCategoryName } from '../api/categories'
 import { saveSenderName, senderName } from '../lib/senderName'
+import { parseTheme, saveTheme, savedTheme } from '../lib/theme'
 import { parseTime, REMINDER_PERIODS, reminderEvery, reminderTime, remindersChanged, saveReminderEvery, saveReminderTime } from '../lib/reminders'
 
 const PERIOD_LABELS = { 0: 'settings.debtEveryOff', 7: 'settings.scheduleWeekly', 14: 'settings.debtEveryTwoWeeks', 30: 'settings.scheduleMonthly' } as const
@@ -33,6 +34,7 @@ export default function SettingsPage() {
   const { t, language, setLanguage } = useI18n()
   const phone = useProfile() === 'phone'
   const [chosenLanguage, setChosenLanguage] = useState(language)
+  const [theme, setTheme] = useState(savedTheme)
   const [settings, setSettings] = useState<Settings | null>(null)
   const [prefs, setPrefs] = useState<LockPrefs | null>(null)
   const [location, setLocation] = useState('')
@@ -289,6 +291,25 @@ export default function SettingsPage() {
             </div>
           </form>
         )}
+
+        {/* The theme is this device's and applies at once, on the phone as well. */}
+        <div className="settings-block">
+          <h2>{t('settings.appearance')}</h2>
+          <Dropdown
+            label={t('settings.theme')}
+            value={theme}
+            options={[
+              { value: 'system', label: t('settings.themeSystem') },
+              { value: 'light', label: t('settings.themeLight') },
+              { value: 'dark', label: t('settings.themeDark') },
+            ]}
+            onChange={(value) => {
+              const next = parseTheme(value)
+              saveTheme(next)
+              setTheme(next)
+            }}
+          />
+        </div>
 
         {prefs && (
           <form className="settings-block" onSubmit={onLock}>

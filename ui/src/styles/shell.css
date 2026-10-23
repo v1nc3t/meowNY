@@ -1,0 +1,361 @@
+/* The app frame: sidebar, main area, locked-page layout and the narrow-window sidebar. */
+
+.app-shell {
+  min-height: 100svh;
+  display: grid;
+  grid-template-columns: 13.75rem minmax(0, 1fr);
+}
+
+.app-shell.is-collapsed {
+  grid-template-columns: 4rem minmax(0, 1fr);
+}
+
+.app-sidebar {
+  position: sticky;
+  top: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  height: 100svh;
+  padding: 1rem 0.75rem;
+  border-right: 1px solid var(--border);
+  background: var(--sidebar);
+  color: var(--foreground);
+}
+
+.sidebar-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+/* The collapse button is a ghost icon button. */
+.sidebar-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  min-width: 2rem;
+  height: 2rem;
+  padding: 0;
+  flex: 0 0 auto;
+  color: var(--muted-foreground);
+}
+
+/* Collapsed: the toggle shows the logo; hovering or focusing it shows the expand icon instead. */
+.toggle-logo {
+  display: none;
+  font-family: var(--font);
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: var(--foreground);
+}
+
+.nav-icon {
+  width: 1rem;
+  height: 1rem;
+  flex: 0 0 auto;
+}
+
+/* Collapsing changes the width only: the icons keep the same vertical positions as when open. */
+.app-shell.is-collapsed .app-sidebar {
+  padding: 1rem 0.5rem;
+  align-items: stretch;
+}
+
+.app-shell.is-collapsed .sidebar-header {
+  justify-content: center;
+}
+
+.app-shell.is-collapsed .app-logo,
+.app-shell.is-collapsed .nav-label {
+  display: none;
+}
+
+.app-shell.is-collapsed .sidebar-toggle .toggle-logo {
+  display: inline;
+}
+
+.app-shell.is-collapsed .sidebar-toggle .nav-icon {
+  display: none;
+}
+
+.app-shell.is-collapsed .sidebar-toggle:hover .toggle-logo,
+.app-shell.is-collapsed .sidebar-toggle:focus-visible .toggle-logo {
+  display: none;
+}
+
+.app-shell.is-collapsed .sidebar-toggle:hover .nav-icon,
+.app-shell.is-collapsed .sidebar-toggle:focus-visible .nav-icon {
+  display: block;
+}
+
+.app-shell.is-collapsed .nav-item,
+.app-shell.is-collapsed .exit-btn {
+  justify-content: center;
+  padding-inline: 0.5rem;
+}
+
+.sidebar-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+/* A row of the sidebar: an icon and a name, quiet until the pointer is over it; the page you are on has a grey fill and bold text. */
+.nav-item,
+.exit-btn {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 0.5rem;
+  width: 100%;
+  height: 2rem;
+  padding: 0 0.5rem;
+  color: var(--muted-foreground);
+  font-size: 0.8125rem;
+  line-height: 1.4;
+  border: 0;
+  border-radius: var(--radius-md);
+}
+
+.nav-item.active {
+  color: var(--accent-foreground);
+  background: var(--accent);
+  font-weight: 600;
+}
+
+.sidebar-footer {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  margin-top: auto;
+}
+
+.app-main {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.app-main > main {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 2.5rem 2rem 2rem;
+}
+
+.app-shell.is-locked {
+  height: 100svh;
+  max-height: 100svh;
+  overflow: hidden;
+  grid-template-rows: minmax(0, 1fr);
+}
+
+.app-shell.is-locked .app-main {
+  min-height: 0;
+  overflow: hidden;
+}
+
+.app-shell.is-locked .app-main > main {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+  padding-bottom: 1rem;
+}
+
+.app-shell.is-locked .tx-page {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+}
+
+html:has(.app-shell.is-locked),
+body:has(.app-shell.is-locked) {
+  overflow: hidden;
+}
+
+.app-main main > section,
+.app-main main > div {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1rem;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.app-main main > section > label,
+.app-main main > section > div,
+.app-main main section section {
+  width: min(100%, 28rem);
+}
+
+.app-main main > section > .wide,
+.app-main main section section.wide {
+  width: 100%;
+  max-width: none;
+}
+
+.app-main main > section > .tx-title {
+  width: auto;
+  max-width: 100%;
+}
+
+.app-main main section section {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.5rem;
+}
+
+@media (max-width: 45em) {
+  .app-shell,
+  .app-shell.is-collapsed {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto minmax(auto, 1fr);
+  }
+
+  .sidebar-toggle,
+  .nav-icon {
+    display: none;
+  }
+
+  .app-sidebar,
+  .app-shell.is-collapsed .app-sidebar {
+    position: sticky;
+    top: 0;
+    z-index: 20;
+    height: auto;
+    align-items: stretch;
+    gap: 0.75rem;
+    padding: 0.75rem 1rem;
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .app-shell.is-collapsed .sidebar-header {
+    flex-direction: row;
+    justify-content: space-between;
+  }
+
+  .app-shell.is-collapsed .app-logo,
+  .app-shell.is-collapsed .nav-label {
+    display: inline;
+  }
+
+  .app-shell.is-collapsed .nav-item,
+  .app-shell.is-collapsed .exit-btn {
+    justify-content: flex-start;
+    padding: 0 0.5rem;
+  }
+
+  .toolbar.tx-bar,
+  .tx-bar .tx-range {
+    flex-wrap: wrap;
+  }
+
+  .sidebar-nav {
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 0.25rem;
+  }
+
+  .nav-item {
+    width: auto;
+  }
+
+  .sidebar-footer {
+    margin-top: 0;
+  }
+
+  .app-main > main {
+    padding: 1.75rem 1rem 2rem;
+  }
+
+  .app-shell.is-locked,
+  .app-shell.is-collapsed.is-locked {
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+
+  .app-shell.is-locked .app-main > main {
+    padding-bottom: 0.75rem;
+  }
+
+}
+
+/* Navigation text: mono, no underlines. */
+.app-logo,
+.nav-item,
+.exit-btn {
+  font-family: var(--font);
+  text-decoration: none;
+}
+
+.app-logo {
+  color: var(--foreground);
+  font-size: 0.9375rem;
+  font-weight: 600;
+  letter-spacing: -0.015em;
+}
+
+@media (hover: hover) {
+  .nav-item:hover,
+  .exit-btn:hover:not(:disabled) {
+    color: var(--accent-foreground);
+    background: var(--accent);
+  }
+}
+
+/* Copyright and licence under the lock button; hidden when the sidebar is collapsed or on small screens. */
+.sidebar-legal {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  margin-top: 0.75rem;
+  padding: 0.75rem 0.5rem 0;
+  border-top: 1px solid var(--border);
+  font-family: var(--font);
+  font-size: 0.6875rem;
+  color: var(--muted-foreground);
+}
+
+@media (max-width: 45em) {
+  .app-shell .sidebar-legal,
+  .app-shell.is-collapsed .sidebar-legal {
+    display: none;
+  }
+}
+
+/* Keep the legal block's space when collapsed (hidden, not removed) so the lock button does not move down. */
+.app-shell.is-collapsed .sidebar-legal {
+  display: flex;
+  visibility: hidden;
+}
+
+@media (max-width: 45em) {
+  .app-shell .sidebar-legal,
+  .app-shell.is-collapsed .sidebar-legal {
+    display: none;
+  }
+}
+
+.sidebar-legal {
+  white-space: nowrap;
+}
+
+/* Scrolling areas keep room around their content. The scroll bar sits in a gutter on the right instead of over the edge of a
+   button or a card, and a focus ring at the edge of the content is not cut off by the area. The page grows by the same
+   amount into the margin, so nothing moves. */
+.app-shell.is-locked .tx-page {
+  margin-inline: calc(var(--edge) * -1);
+  padding-inline: var(--edge);
+}
+
+.app-main main > section > .tx-pane.wide {
+  width: calc(100% + var(--edge));
+  margin: calc(var(--edge) * -1) 0 0 calc(var(--edge) * -1);
+  padding: var(--edge) var(--room) var(--edge) var(--edge);
+}

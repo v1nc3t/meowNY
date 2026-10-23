@@ -26,77 +26,52 @@ meowNY tracks income and expenses against monthly budgets. A [Tauri](https://tau
 
 > **Status: pre-release (0.1.0).** Desktop app and command line work and are tested. No installers yet: build from source. The phone app and its sync are built and being tested. Documents, and debts and expense splitting, are built; the camera for a bill code and the phone's reminders are not yet tried on a real phone. See the [roadmap](#roadmap).
 
-## Table of contents
-
-- [Features](#features)
-- [Privacy and security](#privacy-and-security)
-- [Getting started](#getting-started)
-- [Usage](#usage)
-- [Documentation](#documentation)
-- [Project structure](#project-structure)
-- [Development](#development)
-- [Roadmap](#roadmap)
-- [Contributing](#contributing)
-- [Reporting a security problem](#reporting-a-security-problem)
-- [License](#license)
-
 ## Features
 
 **Budgeting**
 
-- Categories; transactions (income and expenses) with search and filters.
-- Monthly budgets per category. Budgets are dated: changing a limit does not rewrite old months.
-- Recurring items: see what is due or overdue; pay, skip, pause or end each. Optional notifications.
-- Statistics and charts: budget against spending, trends, year view, top categories, upcoming payments.
-- Money is whole minor units (cents), never floats. Months and due dates follow your time zone.
-- Seven languages: English, Deutsch, Español, Français, Italiano, Português, Română.
-- Keyboard shortcuts for the main actions.
+- Categories; income and expense transactions with search and filters.
+- Dated monthly budgets per category (changing a limit does not rewrite old months).
+- Recurring items: see what is due, pay, skip, pause or end. Optional notifications.
+- Statistics and charts: budget against spending, trends, year view, top categories.
+- Money in whole minor units (cents), never floats. Time zone aware. Seven languages. Keyboard shortcuts.
 
-**Documents** ([guide](docs/documents.md); built, not yet tried on a real phone)
+**Documents** ([guide](docs/documents.md); not yet tried on a real phone)
 
-- Attach receipts, invoices and contracts to transactions and recurring items, on computer and phone (file chooser or camera).
-- Files are kept **encrypted** next to the database, up to 25 MiB each, readable only while the app is unlocked.
-- Preview of images, PDF, text, CSV, .docx and .xlsx inside the app: no plain copy, nothing run.
-- The type comes from the file's first bytes, never its name. A file of unknown type is never opened, only saved.
-- Opening a PDF or large picture hands a plain copy to the system viewer; it is removed on lock or close, and the screen says so first.
-- **Keep on phone** is a switch per document. A document you did not switch on never leaves the computer.
-- Backups can include the files (a choice). Exports list documents by name and never contain a file.
-- Script: `meowny documents add|list|show|update|link|unlink|delete|get`. A copy comes out only when you allow it in the app.
+- Attach receipts, invoices and contracts (file or phone camera) to transactions and recurring items. Files are kept **encrypted** next to the database, up to 25 MiB each, readable only while unlocked.
+- Preview of images, PDF, text, CSV, .docx and .xlsx inside the app; no plain copy, nothing run. The type comes from the first bytes, never the name; unknown types are only saved, never opened.
+- Opening a PDF or large picture hands a plain copy to the system viewer; it is removed on lock or close.
+- **Keep on phone** is a per-document switch. Unswitched documents never leave the computer.
+- Backups can include the files. Exports list documents by name and never contain a file.
 
-**Debts and shared bills** ([guide](docs/debts.md); built, camera and phone reminders not yet tried on a real phone)
+**Debts and shared bills** ([guide](docs/debts.md); camera and phone reminders not yet tried on a real phone)
 
-- A **friend is a name** and nothing else: no phone, address or contacts. Friends are archived, never deleted. A **guest** is a name typed for one bill.
-- A **ledger** per friend: lent, borrowed, repaid. None of it is income or expense or touches a budget.
-- **Split a bill**: equally, by percent, by shares or by exact amounts. Budgets, statistics, reports and exports count only your part.
-- **Who owes what** on the debts page and the dashboard, with overdue recurring payments and a history of debts. A friend's statement can be saved as text, CSV or PDF.
-- **Bill codes**: a QR code (and its text) with a friend's part, the bill and your name, nothing else. The friend scans or pastes it, then accepts or denies. Nothing is sent or stored.
-- **Reminders**: one setting per device (weekly, every 2 weeks, monthly, never). The text holds a count, never a name or amount.
-- Friends, entries and parts sync with the phone. Script: `meowny people|ledger|debts|splits ...`, `meowny transactions split`.
+- A **friend is a name** only: no phone, address or contacts. A **ledger** per friend (lent, borrowed, repaid), never income or expense and never in a budget.
+- **Split a bill** equally, by percent, shares or exact amounts. Budgets, statistics, reports and exports count only your part.
+- Who owes what, overdue recurring payments and a history of debts; a friend's statement as text, CSV or PDF.
+- **Bill codes**: a QR code with a friend's part, the bill and your name, nothing else. The friend scans or pastes it and accepts or denies. Nothing is sent or stored.
+- **Reminders** per device (weekly, every 2 weeks, monthly, never). The text holds a count, never a name or amount.
 
 **Safety of your data**
 
-- Database encrypted at rest. The key is in the OS keychain, optionally with a passphrase.
-- A recovery key, shown once.
-- Auto-lock when idle, and optionally on minimise or close. Locking drops the key from memory.
-- Encrypted backups (`.meowbak`), restore, and scheduled backups to a folder.
-- Export to JSON, CSV, Excel and PDF, with period, category and part choices and a preview. Export files are not encrypted; use a backup to keep data safe.
+- Encrypted database; key in the OS keychain, optionally with a passphrase; a recovery key shown once.
+- Auto-lock when idle (optionally on minimise or close); locking drops the key from memory.
+- Encrypted backups (`.meowbak`), restore, scheduled backups.
+- Export to JSON, CSV, Excel and PDF with period, category and part choices and a preview. Export files are not encrypted; use a backup to keep data safe.
 - "Delete all my data" removes the database, its key and the app's backups.
 
-**Your phone** (sync, screens and Android app built; reviewed on a real phone)
+**Your phone** (Android; reviewed on a real phone)
 
-- The phone keeps a full copy, works alone, and can change everything the desktop can. Back home, the two sync.
-- No server. The desktop shows a QR code, the phone scans it and connects straight to the desktop on the home network. The code works once, for about two minutes. Both devices must be on the same wifi.
-- Pairing shows six digits on the desktop that you type on the phone. Everything sent is encrypted with keys made from the pairing secret and that code.
-- A sync can go both ways, phone to computer only, or computer to phone only. Conflicting edits are shown side by side and you choose.
-- The phone is locked by a passphrase and erases itself after 5 wrong ones. Pair again to restore.
-- The currency is changed on the desktop only.
-- The first time the desktop listens, Windows or macOS may ask about network access. Allow private networks only.
-- The phone has no export or backup file, and Android's cloud backup of the app is off.
+- A full offline copy that can change everything the desktop can; the two sync at home.
+- No server. The desktop shows a one-time QR code (valid about two minutes); the phone connects straight to it on the same wifi. Pairing shows six digits to type on the phone. Everything sent is encrypted with keys from the pairing secret and that code.
+- Sync can go both ways or one way; conflicting edits are shown side by side for you to choose.
+- The phone is locked by a passphrase and erases itself after 5 wrong ones; pair again to restore. No export or backup file on the phone; Android's cloud backup is off. The currency is changed on the desktop only.
+- Windows or macOS may ask once whether meowNY may accept network connections. Allow private networks only.
 
 **For scripts and AI agents (desktop only)**
 
 - The [command line](#command-line) `meowny`: a command per feature, `--json` output, stable exit codes.
-- A local command API behind it, off until you turn it on. Access needs a token you make in the app: read-only if you like, expiring, revocable.
+- A local command API behind it, off until you turn it on. A token made in the app is required (read-only if you like, expiring, revocable).
 - Exports, backups and document copies started from a script need a yes in an app dialog, each time.
 
 ## Privacy and security
@@ -153,9 +128,9 @@ Builds a release app and the installer formats Tauri supports for your system. N
 
 ### Build the Android app
 
-Same UI and Rust core, packaged by Tauri mobile. Tried on one phone at home (see [docs/PLAN.md](docs/PLAN.md), phase 8). CI (`.github/workflows/android.yml`) builds a debug-signed APK on every app change. To build by hand you need:
+Same UI and Rust core, packaged by Tauri mobile. Tried on one phone at home (see [docs/PLAN.md](docs/PLAN.md), phase 8). CI (`.github/workflows/android.yml`) builds a debug-signed APK on every app change. By hand you need:
 
-- Java 21, the Android SDK, and NDK 27 (`sdkmanager "ndk;27.2.12479018"`), with `ANDROID_HOME`, `NDK_HOME` and `ANDROID_NDK_HOME` set, and the NDK's `toolchains/llvm/prebuilt/<system>/bin` on your `PATH` (SQLCipher builds its own OpenSSL)
+- Java 21, the Android SDK, NDK 27 (`sdkmanager "ndk;27.2.12479018"`), with `ANDROID_HOME`, `NDK_HOME` and `ANDROID_NDK_HOME` set and the NDK's `toolchains/llvm/prebuilt/<system>/bin` on your `PATH` (SQLCipher builds its own OpenSSL)
 - The Rust target: `rustup target add aarch64-linux-android`
 
 ```bash
@@ -165,11 +140,10 @@ npx tauri android build --apk --target aarch64 --debug
 adb install src-tauri/gen/android/app/build/outputs/apk/universal/debug/app-universal-debug.apk
 ```
 
-- Run `scripts/android-patch.py` again after every `tauri android init`. It stops Android from copying the encrypted data and its secret to a Google account, and makes the window secure.
-- The APK has a debug key: enough to install by hand. A release key and store listing belong to phase 11.
-- The phone build leaves out Excel and PDF export and file dialogs.
+- Run `scripts/android-patch.py` again after every `tauri android init`: it stops Android copying the encrypted data and its secret to a Google account.
+- The APK has a debug key (enough to sideload). A release key and store listing are phase 11. The phone build leaves out Excel/PDF export and file dialogs.
 - Dev only: `cargo run --example sync_desktop -- <folder> setup`, then `pair` or `sync both|to_desktop|to_phone`, tries the phone against a desktop without a window. `cargo run --release --example bench` times common work on ten years of data.
-- Test build (adds a field to paste the code, allows screenshots): `MEOWNY_ALLOW_SCREENSHOTS=1 python3 scripts/android-patch.py` and `VITE_MEOWNY_TEST_PASTE=1 npx tauri android build ...`. Never install it for real use.
+- Test build (a field to paste the code, screenshots allowed): `MEOWNY_ALLOW_SCREENSHOTS=1 python3 scripts/android-patch.py` and `VITE_MEOWNY_TEST_PASTE=1 npx tauri android build ...`. Never install it for real use.
 
 ### Where the data lives
 
@@ -179,31 +153,16 @@ adb install src-tauri/gen/android/app/build/outputs/apk/universal/debug/app-univ
 | macOS | `~/Library/Application Support/org.meowny.app/` |
 | Windows | `%APPDATA%\org.meowny.app\` |
 
-- `meowny.db`: encrypted (with `-wal` and `-shm` while the app runs, also encrypted).
-- `vault.json`: lock settings, wrapped keys, passphrase salt.
-- `documents/`: one sealed file per document, names say nothing about it.
-- `open/`: plain copies for the system viewer, only while a file is open; removed on lock or close.
-- `api.json`: API version and port, no secrets, only while the command API is on.
-- The key is in the OS keychain under the service name `org.meowny.app`.
-
-To start over in development, use Settings, delete all my data. Deleting the folder by hand leaves a stale keychain entry, which is harmless and replaced on the next first run.
+- `meowny.db` (encrypted, plus `-wal` and `-shm` while running) and `vault.json` (lock settings, wrapped keys, passphrase salt).
+- `documents/`: one sealed file per document, names say nothing. `open/`: plain copies for the system viewer, only while open, removed on lock or close. `api.json`: API version and port (no secrets), only while the API is on.
+- The key is in the OS keychain under `org.meowny.app`.
+- To start over in development use Settings, delete all my data. Deleting the folder by hand leaves a harmless stale keychain entry.
 
 ## Usage
 
 ### Keyboard shortcuts
 
-Press `?` in the app to see them all. Shortcuts are ignored while typing and inside dialogs. They are defined in `ui/src/keys/shortcuts.ts`.
-
-| Keys | Does |
-|---|---|
-| `g` then `d` `t` `c` `s` | go to dashboard, transactions, categories (and budgets), settings |
-| `n` | add a new transaction or category |
-| `/` | search |
-| `[` and `]` | previous and next month (budgets) |
-| `t` | jump to the current month |
-| `j` and `k` | next and previous row in a list (Enter opens it) |
-| `Ctrl+L` / `Cmd+L` | lock the app |
-| `Ctrl+B` / `Cmd+B` | show or hide the sidebar |
+Press `?` in the app for all of them (defined in `ui/src/keys/shortcuts.ts`; ignored while typing). Main ones: `g` then `d`/`t`/`c`/`s` go to dashboard/transactions/categories/settings; `n` new; `/` search; `[` `]` previous/next month; `t` current month; `j` `k` move in a list; `Ctrl/Cmd+L` lock; `Ctrl/Cmd+B` sidebar.
 
 ### Command line
 
@@ -244,7 +203,6 @@ meowny people create --name Anna                                            # a 
 meowny transactions split 42 --mode equal --people 1,2                     # you paid for dinner; budgets count only your part
 meowny people settle 1 --amount 20.00                                       # Anna paid you back
 meowny debts summary                                                        # who owes what
-meowny debts due                                                            # recurring payments that are overdue
 meowny export json --out ~/debts.json --sections people,due,ledger          # parts and limits as on the export screen
 meowny backup create --out ~/meowny.meowbak --passphrase -   # the passphrase on standard input
 meowny --help        # and meowny <command> --help
@@ -315,31 +273,10 @@ meowNY/
 
 ### Naming and layout
 
-- Top-level folders are one thing you build or run (`ui`, `src-tauri`, `cli`) or one kind of support file (`docs`, `scripts`, `.github`).
-- Anything written for people goes in `docs/`; code that makes a document sits next to it in `docs/site/`; whole-repo checks go in `scripts/`.
-- Nothing is named after a design that is gone.
-
-| Folder in `ui/src/` | Holds |
-|---|---|
-| `pages/` | One screen per route, `NamePage.tsx`; helpers only that page uses sit beside it |
-| `components/` | Pieces of UI that are not a whole screen |
-| `layouts/` | The frame around the pages |
-| `hooks/` | React hooks, `useName.ts` |
-| `lib/` | Plain TypeScript with no React |
-| `api/` | Calls into the Rust side, one file per area. `invoke.ts` is the one place that calls Tauri |
-| `vault/`, `i18n/`, `keys/` | A feature with its own screens, logic and tests |
-
-| File names | Rule | Example |
-|---|---|---|
-| Folders | Lowercase, `kebab-case` if needed | `ui`, `src-tauri` |
-| Rust files | `snake_case`. A module with children is `x.rs` plus a folder `x/`, never `mod.rs` (except `cli/tests/common/mod.rs`). Tests of `x` sit in `x_tests.rs` | `recovery_file.rs` |
-| Migrations | `NNNN_name.sql`, never edited once shipped | `0001_tables.sql` |
-| React components and pages | `PascalCase.tsx`, one per file | `DashboardPage.tsx` |
-| Other TypeScript | `camelCase.ts`; tests as `name.test.ts` | `money.test.ts` |
-| Markdown and text | `kebab-case`; the first-open files are UPPERCASE | `data-inventory.md`, `README.md` |
-| Workflows | Named for what they do | `ci.yml`, `pages.yml` |
-
-How the parts fit: the UI calls Rust commands through Tauri; Rust owns the database, keys and every rule. The command line is a client of the running app through the local command API. The list of API routes is one table in Rust; `meowny schema`, the commands and the docs are made from it.
+- Top-level folders: one thing you build or run (`ui`, `src-tauri`, `cli`) or one kind of support file (`docs`, `scripts`, `.github`). Anything written for people goes in `docs/`; code that makes a document sits in `docs/site/`; whole-repo checks go in `scripts/`.
+- `ui/src/`: `pages/` (one `NamePage.tsx` per route), `components/`, `layouts/`, `hooks/` (`useName.ts`), `lib/` (plain TypeScript, no React), `api/` (calls into Rust; `invoke.ts` is the one place that calls Tauri), and `vault/`, `i18n/`, `keys/` (a feature with its own screens, logic and tests).
+- Files: Rust `snake_case` (a module with children is `x.rs` plus `x/`, never `mod.rs`, except `cli/tests/common/mod.rs`; tests of `x` in `x_tests.rs`); migrations `NNNN_name.sql`, never edited once shipped; React `PascalCase.tsx`; other TypeScript `camelCase.ts` with `name.test.ts` beside it; Markdown `kebab-case` (first-open files UPPERCASE: `README.md`, `PLAN.md`); workflows named for what they do.
+- The UI calls Rust commands through Tauri; Rust owns the database, keys and every rule. The command line is a client of the running app through the local command API. The route table is one table in Rust; `meowny schema`, the commands and the docs come from it.
 
 ## Development
 
@@ -408,12 +345,10 @@ It refuses a database that already has data.
 
 ### Continuous integration
 
-| Workflow | What it does |
-|---|---|
-| `ci.yml` | Lints, builds and tests the UI, checks the docs, on every push and pull request |
-| `desktop.yml` | Outbound check and `cargo test` for the app and `cli/`, then builds the app. Pull requests build on Linux only; pushes to `main` also build on macOS and Windows. Can be run by hand for any branch |
-| `security.yml` | `npm audit`, `cargo audit` for the app and `cli/`, and a secret scan, on pushes to `main`, pull requests and weekly |
-| `pages.yml` | Builds and publishes the CLI reference site |
+- `ci.yml`: lint, build and test the UI, check the docs, on every push and pull request.
+- `desktop.yml`: outbound check and `cargo test` for the app and `cli/`, then build the app (Linux on pull requests; also macOS and Windows on `main`; can be run by hand for any branch).
+- `security.yml`: `npm audit`, `cargo audit` (app and `cli/`) and a secret scan, on `main`, pull requests and weekly.
+- `pages.yml`: builds and publishes the CLI reference site.
 
 ## Roadmap
 

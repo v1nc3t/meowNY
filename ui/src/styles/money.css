@@ -1,0 +1,751 @@
+/* Transactions, recurring items and categories: budgets, history, cards and the split editor. */
+
+.tx-range {
+  display: flex;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.75rem 0.875rem;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.tx-range > label {
+  width: auto;
+  flex: 0 0 auto;
+}
+
+.tx-desc {
+  font-family: var(--font);
+  font-size: 0.875rem;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.tx-page .tx-desc,
+.tx-page .tx-desc:hover {
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.tx-page .tx-desc {
+  align-self: flex-start;
+  width: auto;
+  max-width: 100%;
+  min-width: 0;
+  padding: 0;
+  text-align: left;
+  letter-spacing: normal;
+  /* the buttons that open split details and the description are a little quieter than what they open */
+  color: var(--muted-foreground);
+}
+
+.budget-page {
+  container-type: inline-size;
+  container-name: budget;
+}
+
+/* Three bands: title, expenses | income (half each), history. The page itself never scrolls. */
+.tx-page > .budget-split {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
+  align-items: stretch;
+}
+
+.app-main main section section.budget-half {
+  width: auto;
+  max-width: none;
+  min-width: 0;
+  min-height: 0;
+  align-items: stretch;
+  gap: 1.25rem;
+  overflow: hidden;
+}
+
+/* The category list is the part that scrolls. */
+.budget-pane {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+}
+
+.budget-half > .budget-pane {
+  flex-shrink: 1;
+}
+
+.budget-half:first-child {
+  padding-right: 2rem;
+}
+
+.budget-half + .budget-half {
+  border-left: 0.8px solid var(--border);
+  padding-left: 2rem;
+}
+
+.budget-half > * {
+  flex-shrink: 0;
+}
+
+.budget-half h2 {
+  margin: 0;
+  font-size: 1.25rem;
+}
+
+/* Rows of label, amount and actions. Amounts are plain text until "edit" is clicked. */
+.budget-table {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+}
+
+.budget-row {
+  display: grid;
+  /* The actions column keeps room for the longest "edit" word in any language, so amounts line up. */
+  grid-template-columns: minmax(0, 1fr) auto minmax(6.5rem, auto);
+  align-items: center;
+  column-gap: 1.25rem;
+  width: 100%;
+  min-height: 2.875rem;
+  margin: 0;
+  padding: 0.375rem 0;
+  border-top: 0.8px solid var(--border);
+}
+
+.budget-row:last-child {
+  border-bottom: 0.8px solid var(--border);
+}
+
+.budget-label {
+  font-family: var(--font);
+  font-size: 0.8125rem;
+  letter-spacing: 0.02em;
+  color: var(--foreground);
+  overflow-wrap: anywhere;
+}
+
+.budget-row.quiet .budget-label {
+  color: var(--muted-foreground);
+}
+
+.budget-amount {
+  font-family: var(--font);
+  font-size: 0.875rem;
+  color: var(--foreground);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.budget-amount.unset {
+  color: var(--muted-foreground);
+}
+
+.budget-amount.over {
+  border: 1px solid var(--destructive);
+  padding: 0.125rem 0.5rem;
+}
+
+.budget-row input {
+  width: min(9rem, 100%);
+  text-align: right;
+}
+
+.budget-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 1rem;
+  min-width: 3rem;
+}
+
+@container budget (max-width: 43.75rem) {
+  .app-shell.is-locked .tx-page.budget-page {
+    overflow: auto;
+  }
+
+  .tx-page > .budget-split {
+    flex: none;
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+  }
+
+  .budget-pane {
+    flex: none;
+    max-height: 16rem;
+  }
+
+  .app-main main section section.budget-half {
+    overflow: visible;
+    height: auto;
+    flex: none;
+  }
+
+  .budget-half:first-child {
+    padding-right: 0;
+  }
+
+  .budget-half + .budget-half {
+    border-left: none;
+    border-top: 0.8px solid var(--border);
+    padding-left: 0;
+    padding-top: 1.5rem;
+  }
+}
+
+/* Monthly history: one row per month since the first budget. */
+.app-main main section section.budget-history {
+  flex: 0 0 auto;
+  width: 100%;
+  max-width: none;
+  gap: 0.75rem;
+  height: clamp(11rem, 30svh, 17rem);
+  min-height: 0;
+  padding-top: 1rem;
+  border-top: 0.8px solid var(--border);
+}
+
+/* On the desktop layout the history gets 20% more of the page. */
+@container budget (min-width: 43.75rem) {
+  .app-main main section section.budget-history {
+    height: clamp(13.2rem, 36svh, 20.4rem);
+  }
+}
+
+.budget-history h2 {
+  margin: 0;
+  font-size: 1.25rem;
+}
+
+.budget-history-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  width: 100%;
+  overflow: auto;
+}
+
+.budget-history table {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: var(--font);
+  font-size: 0.8125rem;
+}
+
+.budget-history th {
+  position: sticky;
+  top: 0;
+  background: var(--background);
+  padding: 0.5rem 0 0.5rem 1rem;
+  font-size: 0.75rem;
+  font-weight: 400;
+  letter-spacing: 0.04em;
+  color: var(--muted-foreground);
+  text-align: right;
+  white-space: nowrap;
+  border-bottom: 0.8px solid var(--border);
+}
+
+.budget-history td {
+  padding: 0.625rem 0 0.625rem 1rem;
+  color: var(--foreground);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  border-bottom: 0.8px solid var(--border);
+}
+
+.budget-history th:first-child,
+.budget-history td:first-child {
+  padding-left: 0;
+  text-align: left;
+}
+
+.budget-history td:first-child button {
+  padding: 0.125rem 0;
+  font-size: 0.8125rem;
+  text-transform: lowercase;
+}
+
+.budget-history tr.selected td:first-child button {
+  color: var(--foreground);
+  text-decoration: underline;
+  text-underline-offset: 0.3em;
+}
+
+.budget-history .over {
+  color: var(--destructive);
+}
+
+.budget-history .earned-over {
+  color: var(--success);
+}
+
+/* From and to are kept whole: when the row is too narrow, "to" drops below "from". */
+.tx-range {
+  flex-wrap: wrap;
+}
+
+.tx-range > button {
+  padding: 0.5rem 0;
+}
+
+/* Narrow containers: while editing, the buttons take their own line under the label and amount. */
+@container budget (max-width: 30rem) {
+  .budget-row.editing {
+    grid-template-columns: minmax(0, 1fr) auto;
+    row-gap: 0.25rem;
+  }
+
+  .budget-row.editing .budget-actions {
+    grid-column: 1 / -1;
+    justify-content: flex-start;
+  }
+}
+
+ul.rec-list > li.rec-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-areas: 'body' 'due' 'more';
+  align-items: start;
+  gap: 0.875rem 1.5rem;
+  padding: var(--card-pad);
+  border: 0.8px solid var(--border);
+  border-radius: var(--radius-lg);
+  white-space: normal;
+}
+
+@media (min-width: 52em) {
+  ul.rec-list > li.rec-item {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      'body due'
+      'body more';
+    gap: 0.625rem 1.5rem;
+  }
+}
+
+/* Due is red: from its day on (today, or before) an item has to be paid. */
+ul.rec-list > li.rec-item[data-status='overdue'],
+ul.rec-list > li.rec-item[data-status='today'] {
+  border-color: var(--destructive);
+}
+
+ul.rec-list > li.rec-item[data-status='paused'],
+ul.rec-list > li.rec-item[data-status='ended'] {
+  border-style: dashed;
+}
+
+.rec-body {
+  grid-area: body;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  min-width: 0;
+}
+
+.rec-name {
+  margin: 0;
+  font-size: 1.0625rem;
+  color: var(--foreground);
+  overflow-wrap: anywhere;
+}
+
+.rec-item[data-status='paused'] .rec-name,
+.rec-item[data-status='ended'] .rec-name {
+  color: var(--foreground);
+}
+
+.rec-meta {
+  margin: 0;
+  font-size: 0.8125rem;
+  color: var(--muted-foreground);
+}
+
+.rec-amount {
+  color: var(--foreground);
+  font-variant-numeric: tabular-nums;
+}
+
+.rec-amount.rec-varies {
+  color: var(--muted-foreground);
+}
+
+.rec-due {
+  grid-area: due;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.625rem 1.25rem;
+}
+
+.rec-badge {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.625rem;
+  padding: 0.375rem 0.75rem;
+  border: 1px solid var(--muted-foreground);
+  color: var(--foreground);
+  font-variant-numeric: tabular-nums;
+}
+
+.rec-date {
+  font-size: 1rem;
+}
+
+.rec-state {
+  font-size: 0.75rem;
+  letter-spacing: 0.02em;
+}
+
+.rec-badge[data-status='overdue'],
+.rec-badge[data-status='today'] {
+  border-color: var(--destructive);
+}
+
+.rec-badge[data-status='overdue'] .rec-state,
+.rec-badge[data-status='today'] .rec-state {
+  color: var(--destructive);
+}
+
+.rec-badge[data-status='paused'],
+.rec-badge[data-status='ended'] {
+  border-style: dashed;
+  border-color: var(--input);
+  color: var(--muted-foreground);
+}
+
+/* The three actions stay together: they move under the date as a group when there is no room beside it. */
+.rec-actions {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.375rem 1.25rem;
+}
+
+.tx-pane > h2.rec-group {
+  margin: 1.5rem 0 0.625rem;
+}
+
+.tx-pane > h2.rec-group:first-child {
+  margin-top: 0.5rem;
+}
+
+.rec-due .rec-pay {
+  padding: 0.375rem 0.875rem;
+}
+
+.rec-due .rec-act {
+  padding: 0.375rem 0;
+}
+
+.rec-more {
+  grid-area: more;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 1.25rem;
+}
+
+@media (min-width: 52em) {
+  .rec-more {
+    justify-self: end;
+  }
+}
+
+.rec-more button {
+  padding: 0;
+  font-size: 0.75rem;
+  color: var(--muted-foreground);
+}
+
+/* Renaming a category: the field and its buttons inside the card. */
+.card-item > form.card-form {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 0.75rem 1.5rem;
+  width: 100%;
+  margin: 0;
+}
+
+.card-form > label {
+  flex: 1 1 14rem;
+  width: auto;
+}
+
+.budget-pane,
+.budget-history-scroll {
+  padding-right: var(--room);
+  padding-bottom: var(--edge);
+}
+
+@container budget (max-width: 43.75rem) {
+  .app-shell.is-locked .tx-page.budget-page {
+    margin-right: calc(var(--room) * -1);
+    padding-right: var(--room);
+  }
+
+  /* The page scrolls here, so its content already has the gutter; the lists inside need none of their own. */
+  .budget-pane,
+  .budget-history-scroll {
+    padding-right: 0;
+  }
+
+  .budget-history th,
+  .budget-history td {
+    padding-left: 0.625rem;
+  }
+}
+
+html.is-phone .app-shell.is-locked .tx-page.budget-page {
+  overflow: hidden;
+  margin-right: calc(var(--edge) * -1);
+  padding-right: var(--edge);
+}
+
+/* The history keeps its table in one piece and scrolls sideways when it is wider than the screen. */
+.budget-view .budget-history-scroll {
+  flex: none;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+/* The page scrolls on a phone, so the lists inside do not scroll on their own. */
+.budget-view .budget-pane {
+  max-height: none;
+  overflow: visible;
+}
+
+/* A phone: the title and the amount on the left with edit, end, delete under them; the date on the right with paid, skip, pause
+   under it. The buttons are one under another in both columns, all the same height, so each pair is on one line. */
+html.is-phone ul.rec-list > li.rec-item {
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas:
+    'body badge'
+    'more actions';
+  align-items: start;
+  gap: 0.25rem 1rem;
+}
+
+html.is-phone .rec-due {
+  display: contents;
+}
+
+html.is-phone .rec-badge {
+  grid-area: badge;
+  justify-self: end;
+}
+
+html.is-phone .rec-actions {
+  grid-area: actions;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0;
+}
+
+html.is-phone .rec-more {
+  grid-area: more;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-self: start;
+  gap: 0;
+}
+
+html.is-phone .rec-more button,
+html.is-phone .rec-actions button {
+  padding-block: 0.25rem;
+  font-size: 0.8125rem;
+  color: var(--foreground);
+}
+
+html.is-phone .rec-due .rec-pay {
+  padding-inline: 0;
+}
+
+html.is-phone .tx-range {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: end;
+  gap: 0.75rem 0.875rem;
+  width: 100%;
+}
+
+html.is-phone .tx-range .tx-date-group {
+  width: 100%;
+}
+
+html.is-phone .tx-range .date-picker {
+  width: 100%;
+  flex-wrap: wrap;
+}
+
+html.is-phone .tx-range .date-picker .pick.field {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+/* Choosing a day gives each of from and to a line of its own: three lists do not fit half a screen. */
+html.is-phone .tx-range[data-mode='date'] .tx-date-group {
+  grid-column: 1 / -1;
+}
+
+/* What "split details" and "description" open on a list: the text goes under the button. */
+.card-detail {
+  margin: 0.25rem 0 0.25rem;
+  font-size: 0.8125rem;
+  color: var(--foreground);
+  overflow-wrap: anywhere;
+}
+
+.card-detail p {
+  margin: 0;
+}
+
+/* The bill dialog: the person first, then friends and guests, each with what was typed and what it comes to. */
+.split-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 0.75rem;
+  border: 0.8px solid var(--border);
+  border-radius: var(--radius-lg);
+}
+
+.split-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.split-row {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 0.25rem 0.5rem;
+  padding: 0.125rem 0;
+  border-top: 0;
+}
+
+/* The names on a bill are set like the labels of the form: the same size and spacing, in grey. */
+.split-name {
+  flex: 1 1 0;
+  min-width: 2.5rem;
+  overflow-wrap: anywhere;
+  font-family: var(--font);
+  font-size: 0.75rem;
+  line-height: 1.4;
+  letter-spacing: 0.04em;
+  color: var(--muted-foreground);
+}
+
+.split-value {
+  flex: 0 1 8rem;
+  min-width: 0;
+}
+
+.split-amount {
+  flex: 0 0 auto;
+  min-width: 4.5rem;
+  text-align: right;
+  font-size: 0.8125rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--foreground);
+}
+
+.split-remove,
+.split-spacer {
+  flex: 0 0 4.5rem;
+}
+
+.split-remove {
+  padding: 0.25rem 0.375rem;
+  font-size: 0.8125rem;
+}
+
+/* What a shared bill opens to on the list: what was paid and who has which part, a code for each friend. */
+.split-part {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem 0.75rem;
+  font-size: 0.8125rem;
+  color: var(--foreground);
+}
+
+.split-part button {
+  padding: 0.125rem 0.5rem;
+  font-size: 0.8125rem;
+}
+
+/* The categories page. The controls (add, the month) share a row under the title, and the parts that scroll (the categories of each side, the history)
+   are framed with a track you can see, so it is plain where a list ends and that it moves. */
+.tx-page .tx-title.budget-title {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.75rem;
+}
+
+.budget-title .tx-actions {
+  flex-wrap: wrap;
+  gap: 0.75rem 1.5rem;
+}
+
+.budget-page .budget-pane,
+.budget-page .budget-history-scroll {
+  border: 0.8px solid var(--input);
+  border-radius: var(--radius-lg);
+  background: var(--muted);
+  padding: 0 0.875rem;
+  scrollbar-width: thin;
+  scrollbar-color: var(--muted-foreground) var(--border);
+}
+
+/* The three totals of a side (allocated, used, not used) sit in a frame of their own. */
+.budget-page .budget-half > .budget-table {
+  border: 0.8px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 0 0.875rem;
+}
+
+.budget-page .budget-half .budget-row:first-child {
+  border-top: 0;
+}
+
+.budget-page .budget-half .budget-row:last-child {
+  border-bottom: 0;
+}
+
+.budget-page .budget-pane:empty {
+  display: none;
+}
+
+/* Changing the amount of a side (allocated) takes the whole row: the amount and the label on one line, the buttons under them. */
+.budget-page .budget-row.editing {
+  grid-template-columns: minmax(0, 1fr) auto;
+  row-gap: 0.375rem;
+}
+
+.budget-page .budget-row.editing .budget-label {
+  white-space: nowrap;
+}
+
+.budget-page .budget-row.editing .budget-actions {
+  grid-column: 1 / -1;
+  justify-content: flex-end;
+}
+
+.budget-pane > p {
+  margin: 0;
+  padding: 0.875rem 0;
+  font-size: 0.8125rem;
+  color: var(--muted-foreground);
+}

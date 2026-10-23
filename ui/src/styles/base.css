@@ -1,0 +1,448 @@
+/* Page-wide defaults: scrollbars, plain elements, headings, buttons, fields, notices and tooltips. */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  scrollbar-width: thin;
+  scrollbar-color: var(--muted-foreground) transparent;
+}
+
+/* Chromium ignores ::-webkit-scrollbar while scrollbar-width is thin, which keeps a thick bar. */
+@supports selector(::-webkit-scrollbar) {
+  *,
+  *::before,
+  *::after {
+    scrollbar-width: auto;
+    scrollbar-color: auto;
+  }
+}
+
+*::-webkit-scrollbar {
+  width: 2px;
+  height: 2px;
+}
+
+*::-webkit-scrollbar-track,
+*::-webkit-scrollbar-track-piece,
+*::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: var(--muted-foreground);
+}
+
+*::-webkit-scrollbar-button {
+  display: none;
+  width: 0;
+  height: 0;
+  background: transparent;
+}
+
+body {
+  margin: 0;
+  min-height: 100svh;
+  background-color: var(--background);
+}
+
+#root {
+  min-height: 100svh;
+  text-align: left;
+}
+
+h1,
+h2,
+h3,
+h4 {
+  font-weight: 600;
+  color: var(--foreground);
+}
+
+h1 {
+  font-family: var(--font);
+  font-size: 1.5rem;
+  line-height: 1.2;
+  letter-spacing: -0.025em;
+  margin: 0 0 1rem;
+}
+
+h2 {
+  font-family: var(--font);
+  font-size: 1.125rem;
+  line-height: 1.3;
+  letter-spacing: -0.015em;
+  margin: 0.5rem 0 0;
+}
+
+h3 {
+  font-family: var(--font);
+  font-size: 1rem;
+  line-height: 1.4;
+  margin: 0 0 0.5rem;
+}
+
+h4 {
+  font-family: var(--font);
+  font-size: 0.75rem;
+  line-height: 1.4;
+  letter-spacing: 0.04em;
+  color: var(--muted-foreground);
+  margin: 0 0 0.5rem;
+}
+
+p {
+  margin: 0;
+  overflow-wrap: break-word;
+}
+
+a {
+  color: var(--foreground);
+  text-underline-offset: 4px;
+}
+
+p:empty {
+  display: none;
+}
+
+/* Plain elements are styled inside :where(), which has no weight of its own: any class (a button variant, a page's own rule)
+   wins over them without a fight. */
+:where(button, input, select, textarea) {
+  font: inherit;
+}
+
+/* A bare button is the ghost button of the design: no fill until the pointer is over it. The other looks are the .ui-btn classes. */
+:where(button) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.375rem;
+  min-height: 2rem;
+  min-width: max-content;
+  max-width: 100%;
+  padding: 0.25rem 0.75rem;
+  font-family: var(--font);
+  font-size: 0.8125rem;
+  font-weight: 400;
+  line-height: 1.4;
+  color: var(--foreground);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  box-shadow: none;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow-wrap: normal;
+  text-align: center;
+  transition: background-color 0.15s, color 0.15s, opacity 0.15s;
+}
+
+/* Only where there is a mouse: on a touch screen "hover" stays on after a tap, and the fill would stay on the button. */
+@media (hover: hover) {
+  :where(button:hover:not(:disabled)) {
+    background: var(--accent);
+    color: var(--accent-foreground);
+  }
+}
+
+/* A submit button is the one main action of its form. */
+:where(button[type='submit']) {
+  color: var(--primary-foreground);
+  background: var(--primary);
+}
+
+@media (hover: hover) {
+  :where(button[type='submit']:hover:not(:disabled)) {
+    color: var(--primary-foreground);
+    background: var(--primary);
+    opacity: 0.9;
+  }
+}
+
+:where(button:disabled) {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+:where(input, select, textarea) {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  height: 2.25rem;
+  color: var(--foreground);
+  background: transparent;
+  border: 1px solid var(--input);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-xs);
+  padding: 0.25rem 0.75rem;
+  font-family: var(--font);
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  letter-spacing: normal;
+  text-transform: none;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+:where(textarea) {
+  height: auto;
+  min-height: 4rem;
+  padding-block: 0.5rem;
+  resize: vertical;
+}
+
+:where(input:disabled, select:disabled, textarea:disabled) {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Checkbox and radio: a small box (or circle) that fills with the main colour when on. The tick is two borders of a box, turned. */
+:where(input[type='checkbox'], input[type='radio']) {
+  appearance: none;
+  display: inline-grid;
+  place-content: center;
+  width: 1rem;
+  height: 1rem;
+  min-width: 1rem;
+  margin: 0;
+  padding: 0;
+  flex: 0 0 auto;
+  cursor: pointer;
+  background: transparent;
+  border-radius: 4px;
+}
+
+:where(input[type='radio']) {
+  border-radius: 50%;
+}
+
+:where(input[type='checkbox'], input[type='radio']):checked {
+  background: var(--primary);
+  border-color: var(--primary);
+}
+
+:where(input[type='checkbox']):checked::before {
+  content: '';
+  width: 0.3125rem;
+  height: 0.5625rem;
+  border-right: 2px solid var(--primary-foreground);
+  border-bottom: 2px solid var(--primary-foreground);
+  transform: translateY(-1px) rotate(45deg);
+}
+
+:where(input[type='radio']):checked::before {
+  content: '';
+  width: 0.375rem;
+  height: 0.375rem;
+  border-radius: 50%;
+  background: var(--primary-foreground);
+}
+
+::placeholder {
+  color: var(--muted-foreground);
+}
+
+:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
+/* Fields show focus with a border and a soft ring instead of an outline. */
+input:focus:not([type='checkbox'], [type='radio']),
+textarea:focus,
+select:focus,
+.pick-button:focus {
+  outline: none;
+  border-color: var(--ring);
+  box-shadow: 0 0 0 3px var(--ring-soft);
+}
+
+:where(form) {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.875rem;
+  width: min(100%, 28rem);
+  margin: 0 0 0.5rem;
+}
+
+:where(label) {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.375rem;
+  width: 100%;
+  min-width: 0;
+  font-family: var(--font);
+  font-size: 0.8125rem;
+  line-height: 1.4;
+  color: var(--foreground);
+}
+
+:where(label:has(input[type='checkbox'], input[type='radio'])) {
+  flex-direction: row;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+:where(ul) {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  width: min(100%, 40rem);
+}
+
+:where(li) {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.5rem;
+  border-top: 1px solid var(--border);
+  padding: 1rem 0;
+  overflow-wrap: break-word;
+}
+
+:where(li > p, .app-main section > p) {
+  font-family: var(--font);
+  font-size: 0.875rem;
+  line-height: 1.5;
+  color: var(--foreground);
+}
+
+/* A notice is an alert: a bordered card with a short text in it. */
+p.notice:not(:empty),
+.app-main p.warn,
+p.warn {
+  color: var(--card-foreground);
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 0.75rem 1rem;
+  margin: 0;
+  font-size: 0.8125rem;
+  width: min(100%, 40rem);
+}
+
+.hint {
+  font-family: var(--font);
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  color: var(--muted-foreground);
+}
+
+.muted {
+  color: var(--muted-foreground);
+}
+
+:where(form > button) {
+  align-self: flex-start;
+}
+
+/* A warning is a red alert. */
+.warning {
+  border: 1px solid var(--destructive);
+  border-radius: var(--radius-lg);
+  padding: 0.75rem 1rem;
+  color: var(--destructive);
+  font-size: 0.875rem;
+  line-height: 1.6;
+}
+
+.check {
+  flex-direction: row;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+/* Hover hints for keyboard shortcuts: a small dark label that fades in shortly after hovering or focusing. */
+[data-tip] {
+  position: relative;
+}
+
+[data-tip]::after {
+  content: attr(data-tip);
+  position: absolute;
+  top: calc(100% + 0.4rem);
+  left: 0;
+  z-index: 60;
+  padding: 0.375rem 0.75rem;
+  background: var(--primary);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
+  color: var(--primary-foreground);
+  font-family: var(--font);
+  font-size: 0.75rem;
+  font-weight: 400;
+  letter-spacing: normal;
+  line-height: 1.4;
+  text-decoration: none;
+  text-transform: none;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  transform: translateY(-2px);
+  transition: opacity 0.12s ease 0.45s, transform 0.12s ease 0.45s;
+}
+
+[data-tip]:hover::after,
+[data-tip]:focus-visible::after {
+  opacity: 1;
+  transform: none;
+}
+
+/* With the sidebar collapsed the hints sit beside the icons, not under them. */
+.app-shell.is-collapsed .app-sidebar [data-tip]::after {
+  top: 50%;
+  left: calc(100% + 0.5rem);
+  transform: translateY(-50%);
+}
+
+.app-shell.is-collapsed .app-sidebar [data-tip]:hover::after,
+.app-shell.is-collapsed .app-sidebar [data-tip]:focus-visible::after {
+  transform: translateY(-50%);
+}
+
+kbd {
+  display: inline-block;
+  padding: 0.05rem 0.4rem;
+  background: var(--muted);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-family: var(--font);
+  font-size: 0.75rem;
+  line-height: 1.5;
+  color: var(--muted-foreground);
+  white-space: nowrap;
+}
+
+:where(code) {
+  padding: 0.1rem 0.3rem;
+  background: var(--muted);
+  border-radius: var(--radius-sm);
+  font-family: var(--font);
+  font-size: 0.8125rem;
+}
+
+:where(hr) {
+  height: 0;
+  margin: 1rem 0;
+  border: 0;
+  border-top: 1px solid var(--border);
+}
+
+/* Text that only a screen reader needs. */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* The item that a document sent the person to, for a moment after the page opens. */
+[data-item].is-found {
+  outline: 1.5px solid var(--ring);
+  outline-offset: 3px;
+}
