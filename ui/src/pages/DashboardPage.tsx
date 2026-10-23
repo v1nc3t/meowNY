@@ -162,7 +162,7 @@ function DashboardView({ settings, now }: { settings: MoneySettings; now: Today 
                       <Link to="/app/debts">{t('debts.title')}</Link>
                     </CardTitle>
                   </CardHeader>
-                  <CardContent>
+                  <CardContent className="dash-debts">
                     {owed.people.length === 0 ? (
                       <p className="dash-empty">{t('debts.nobody')}</p>
                     ) : (

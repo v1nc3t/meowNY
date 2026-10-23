@@ -2,8 +2,8 @@ import { useEffect, useRef, useState } from 'react'
 
 /** A start that is quicker than this shows no loading screen at all, so a fast start never flashes. */
 export const SHOW_AFTER_MS = 150
-/** Once the loading screen is up it stays at least this long, so it is never just a flicker. */
-export const MIN_SHOW_MS = 600
+/** Once the loading screen is up it stays at least this long, so it is never just a flicker and can be read. */
+export const MIN_SHOW_MS = 5000
 
 /** Waits for the work and for the minimum time, whichever is later. A failure is passed on after the same wait. */
 export async function atLeast<T>(work: Promise<T>, ms = MIN_SHOW_MS): Promise<T> {

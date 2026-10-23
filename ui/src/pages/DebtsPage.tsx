@@ -173,14 +173,16 @@ function DebtsView({ settings, now }: { settings: MoneySettings; now: Today }) {
           <Button variant="outline" onClick={() => setEntryKind('BORROWED')}>
             {t('debts.borrowed')}
           </Button>
-          <Button variant="outline" onClick={() => navigate('/app/transactions', { state: { split: true } })}>
-            {t('split.add')}
-          </Button>
+          {/* The phone has scan in its place: four buttons on both. A bill is still split from a new expense. */}
           {phone ? (
             <Button variant="outline" disabled={scanning} onClick={() => void onScan()}>
-              {t('code.scan')}
+              {t('code.scanShort')}
             </Button>
-          ) : null}
+          ) : (
+            <Button variant="outline" onClick={() => navigate('/app/transactions', { state: { split: true } })}>
+              {t('split.add')}
+            </Button>
+          )}
           <Button variant="outline" onClick={() => setTaking('')}>
             {t('code.paste')}
           </Button>
@@ -270,7 +272,7 @@ function DebtsView({ settings, now }: { settings: MoneySettings; now: Today }) {
         tabs={[
           { id: 'friends', label: t('debts.tabFriends') },
           { id: 'due', label: due && due.payments.length > 0 ? `${t('debts.dueTitle')} (${due.payments.length})` : t('debts.dueTitle') },
-          { id: 'history', label: t('debts.historyTitle') },
+          { id: 'history', label: t('debts.historyTab') },
         ]}
       />
       {tab === 'due' && due ? (

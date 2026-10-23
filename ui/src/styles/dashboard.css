@@ -37,8 +37,10 @@
   color: var(--muted-foreground);
 }
 
-/* Headline numbers: four across, two across when the card is narrow. */
-.dash-top {
+/* Headline numbers: four across, two across when the card is narrow. The debts card measures its own width too, or its two
+   amounts would each get a quarter of it. */
+.dash-top,
+.dash-debts {
   container-type: inline-size;
 }
 
