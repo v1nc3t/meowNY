@@ -5,6 +5,8 @@ import { whenText } from '../api/locales'
 import { scanQr, stopScan } from '../api/scanner'
 import { cleanDeviceName, DEVICE_NAME_MAX, syncApi, type Peer } from '../api/sync'
 import SyncStatusPanel from '../components/SyncStatusPanel'
+import Button from '../components/ui/Button'
+import { Card, CardContent } from '../components/ui/Card'
 import { useDeviceName } from '../hooks/useDeviceName'
 import { useNotice } from '../hooks/useNotice'
 import { useProfile } from '../hooks/profile'
@@ -91,66 +93,70 @@ function PhoneSync() {
 
       {scanning ? (
         <div className="scan-overlay" role="dialog" aria-label={t('phone.scan')}>
-          <button type="button" onClick={() => void stopScan()}>
+          <Button variant="outline" onClick={() => void stopScan()}>
             {t('common.cancel')}
-          </button>
+          </Button>
         </div>
       ) : null}
 
       <div className="tx-pane wide settings-grid">
-        <div className="settings-block">
-          <p className="hint">{t(paired ? 'phone.pairedHint' : 'phone.unpairedHint')}</p>
+        <Card className="settings-block">
+          <CardContent>
+            <p className="hint">{t(paired ? 'phone.pairedHint' : 'phone.unpairedHint')}</p>
 
-          {paired && (
-            <div className="token-list">
-              {devices.map((device) => (
-                <div className="settings-row" key={device.deviceId}>
-                  <span className="settings-row-label">{device.name}</span>
-                  <span className="settings-row-value">
-                    {device.lastSyncAt ? t('sync.lastSync', { time: whenText(device.lastSyncAt, locale, timezone) }) : t('sync.neverSynced')}
-                    {device.changesWaiting !== null ? ` · ${t('sync.changesWaiting', { count: device.changesWaiting })}` : ''}
-                  </span>
+            {paired && (
+              <ul className="card-list">
+                {devices.map((device) => (
+                  <li className="card-item" key={device.deviceId}>
+                    <div className="card-body">
+                      <p className="card-name">{device.name}</p>
+                      <p className="card-meta">
+                        {device.lastSyncAt ? t('sync.lastSync', { time: whenText(device.lastSyncAt, locale, timezone) }) : t('sync.neverSynced')}
+                        {device.changesWaiting !== null ? ` · ${t('sync.changesWaiting', { count: device.changesWaiting })}` : ''}
+                      </p>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+
+            {idle ? (
+              <>
+                <label>
+                  {t('sync.thisPhone')}
+                  <input value={name} onChange={(e) => setName(e.target.value)} maxLength={DEVICE_NAME_MAX} autoComplete="off" />
+                </label>
+                <div className="actions">
+                  <Button disabled={scanning} onClick={() => void onScan()}>
+                    {t('phone.scan')}
+                  </Button>
                 </div>
-              ))}
-            </div>
-          )}
-
-          {idle ? (
-            <>
-              <label>
-                {t('sync.thisPhone')}
-                <input value={name} onChange={(e) => setName(e.target.value)} maxLength={DEVICE_NAME_MAX} autoComplete="off" />
-              </label>
-              <div className="actions">
-                <button type="button" disabled={scanning} onClick={() => void onScan()}>
-                  {t('phone.scan')}
-                </button>
-              </div>
-              {(import.meta.env.DEV || import.meta.env.VITE_MEOWNY_TEST_PASTE === '1') && (
-                <>
-                  <label>
-                    {t('phone.paste')}
-                    <input value={pasted} onChange={(e) => setPasted(e.target.value)} autoComplete="off" spellCheck={false} />
-                  </label>
-                  <div className="actions">
-                    <button type="button" disabled={pasted.trim() === ''} onClick={() => void begin(pasted.trim())}>
-                      {t('phone.pasteUse')}
-                    </button>
-                  </div>
-                </>
-              )}
-            </>
-          ) : (
-            <SyncStatusPanel
-              status={status}
-              side="phone"
-              onEnterCode={(code) => void syncApi.enterCode(code).then(refresh, (e) => setMessage(errorText(e)))}
-              onDecide={(choices) => void syncApi.decide(choices).then(refresh, (e) => setMessage(errorText(e)))}
-              onCancel={() => void cancel()}
-              onDone={() => void acknowledge()}
-            />
-          )}
-        </div>
+                {(import.meta.env.DEV || import.meta.env.VITE_MEOWNY_TEST_PASTE === '1') && (
+                  <>
+                    <label>
+                      {t('phone.paste')}
+                      <input value={pasted} onChange={(e) => setPasted(e.target.value)} autoComplete="off" spellCheck={false} />
+                    </label>
+                    <div className="actions">
+                      <Button variant="outline" disabled={pasted.trim() === ''} onClick={() => void begin(pasted.trim())}>
+                        {t('phone.pasteUse')}
+                      </Button>
+                    </div>
+                  </>
+                )}
+              </>
+            ) : (
+              <SyncStatusPanel
+                status={status}
+                side="phone"
+                onEnterCode={(code) => void syncApi.enterCode(code).then(refresh, (e) => setMessage(errorText(e)))}
+                onDecide={(choices) => void syncApi.decide(choices).then(refresh, (e) => setMessage(errorText(e)))}
+                onCancel={() => void cancel()}
+                onDone={() => void acknowledge()}
+              />
+            )}
+          </CardContent>
+        </Card>
       </div>
     </section>
   )

@@ -12,6 +12,7 @@ import PasswordField from './PasswordField'
 import RecoveryKeyPanel from './RecoveryKeyPanel'
 import RestoreFromBackup from './RestoreFromBackup'
 import { defaultSettings, isCurrency, normalizeCurrency, passphraseProblem } from './rules'
+import Button from '../components/ui/Button'
 
 /** First run: language, region, currency and security, all in one place, each starting from what the system suggests. */
 export default function FirstRunScreen({ onDone }: { onDone: () => void }) {
@@ -102,12 +103,12 @@ export default function FirstRunScreen({ onDone }: { onDone: () => void }) {
           {t('welcome.warning')}
         </p>
 
-        <button type="submit" disabled={busy}>
+        <Button type="submit" disabled={busy}>
           {t('welcome.create')}
-        </button>
-        <button type="button" onClick={() => setRestoring(true)}>
+        </Button>
+        <Button variant="outline" onClick={() => setRestoring(true)}>
           {t('welcome.restore')}
-        </button>
+        </Button>
         <p className="notice" role="alert">
           {message}
         </p>

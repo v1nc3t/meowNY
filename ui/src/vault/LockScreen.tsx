@@ -8,6 +8,7 @@ import { passphraseProblem } from './rules'
 import { useNotice } from '../hooks/useNotice'
 import { useProfile } from '../hooks/profile'
 import { useT } from '../i18n/context'
+import Button from '../components/ui/Button'
 
 export default function LockScreen({ onUnlocked }: { onUnlocked: () => void }) {
   const t = useT()
@@ -97,18 +98,18 @@ export default function LockScreen({ onUnlocked }: { onUnlocked: () => void }) {
           </label>
           <PasswordField label={t('recovery.newPassphrase')} name="passphrase" />
           <PasswordField label={t('recovery.newPassphraseRepeat')} name="confirm" />
-          <button type="submit" disabled={busy}>
+          <Button type="submit" disabled={busy}>
             {t('common.unlock')}
-          </button>
-          <button
-            type="button"
+          </Button>
+          <Button
+            variant="outline"
             onClick={() => {
               setRecovering(false)
               setMessage('')
             }}
           >
             {t('common.back')}
-          </button>
+          </Button>
           <p className="notice" role="alert">
             {message}
           </p>
@@ -130,21 +131,21 @@ export default function LockScreen({ onUnlocked }: { onUnlocked: () => void }) {
                 {t(attempts.left === 1 ? 'lock.lastAttempt' : 'lock.attemptsLeft', { count: attempts.left })}
               </p>
             ) : null}
-            <button type="submit" disabled={busy}>
+            <Button type="submit" disabled={busy}>
               {t('common.unlock')}
-            </button>
+            </Button>
           </>
         )}
         {(needsPassphrase || keyMissing) && (
-          <button
-            type="button"
+          <Button
+            variant={needsPassphrase ? 'ghost' : 'default'}
             onClick={() => {
               setRecovering(true)
               setMessage('')
             }}
           >
             {keyMissing && !phone ? t('lock.useRecovery') : t('lock.forgot')}
-          </button>
+          </Button>
         )}
         {/* This one stays: it explains why the app cannot open by itself. */}
         {keyMissing ? <p className="notice">{messageFor('key_unavailable')}</p> : null}

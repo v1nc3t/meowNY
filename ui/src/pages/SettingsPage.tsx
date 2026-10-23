@@ -8,6 +8,8 @@ import ChangeCurrencyModal from '../components/ChangeCurrencyModal'
 import CommandApiBlock from '../components/CommandApiBlock'
 import PhoneSyncBlock from '../components/PhoneSyncBlock'
 import Dropdown from '../components/Dropdown'
+import Button from '../components/ui/Button'
+import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/Card'
 import PasswordField from '../vault/PasswordField'
 import RecoveryKeyPanel from '../vault/RecoveryKeyPanel'
 import { backupDoneLines, backupPassphraseProblem, BACKUPS_KEPT, includeDocumentsByDefault, lockChoices, nearestLockChoice, type Settings } from '../vault/rules'
@@ -259,150 +261,173 @@ export default function SettingsPage() {
 
       <div className="tx-pane wide settings-grid">
         {settings && (
-          <form className="settings-block" onSubmit={onSettings}>
-            <h2>{t('settings.region')}</h2>
-            <Dropdown
-              label={t('settings.language')}
-              value={chosenLanguage}
-              options={languageOptions}
-              onChange={setChosenLanguage}
-            />
-            <Dropdown
-              label={t('settings.format')}
-              value={locale}
-              options={localeOptions(locale)}
-              onChange={setLocale}
-            />
-            <p className="hint">{formatExample(locale, settings.currency)}</p>
-            <Dropdown label={t('settings.timezone')} value={timezone} options={zoneOptions(timezone)} onChange={setTimezone} />
-            <div className="settings-row">
-              <span className="settings-row-label">{t('settings.currency')}</span>
-              <span className="settings-row-value">{currencyLabel(settings.currency)}</span>
-              {phone ? null : (
-                <button type="button" onClick={() => setChangingCurrency(true)}>
-                  {t('common.change')}
-                </button>
-              )}
-            </div>
-            {phone ? <p className="hint">{t('settings.currencyOnDesktop')}</p> : null}
-            <div className="actions">
-              <button type="submit">{t('common.save')}</button>
-            </div>
-          </form>
+          <Card className="settings-block">
+            <CardHeader>
+              <CardTitle>{t('settings.region')}</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <form onSubmit={onSettings}>
+                <Dropdown
+                  label={t('settings.language')}
+                  value={chosenLanguage}
+                  options={languageOptions}
+                  onChange={setChosenLanguage}
+                />
+                <Dropdown
+                  label={t('settings.format')}
+                  value={locale}
+                  options={localeOptions(locale)}
+                  onChange={setLocale}
+                />
+                <p className="hint">{formatExample(locale, settings.currency)}</p>
+                <Dropdown label={t('settings.timezone')} value={timezone} options={zoneOptions(timezone)} onChange={setTimezone} />
+                <div className="settings-row">
+                  <span className="settings-row-label">{t('settings.currency')}</span>
+                  <span className="settings-row-value">{currencyLabel(settings.currency)}</span>
+                  {phone ? null : (
+                    <Button variant="outline" size="sm" onClick={() => setChangingCurrency(true)}>
+                      {t('common.change')}
+                    </Button>
+                  )}
+                </div>
+                {phone ? <p className="hint">{t('settings.currencyOnDesktop')}</p> : null}
+                <div className="actions">
+                  <Button type="submit">{t('common.save')}</Button>
+                </div>
+              </form>
+            </CardContent>
+          </Card>
         )}
 
         {/* The theme is this device's and applies at once, on the phone as well. */}
-        <div className="settings-block">
-          <h2>{t('settings.appearance')}</h2>
-          <Dropdown
-            label={t('settings.theme')}
-            value={theme}
-            options={[
-              { value: 'system', label: t('settings.themeSystem') },
-              { value: 'light', label: t('settings.themeLight') },
-              { value: 'dark', label: t('settings.themeDark') },
-            ]}
-            onChange={(value) => {
-              const next = parseTheme(value)
-              saveTheme(next)
-              setTheme(next)
-            }}
-          />
-        </div>
+        <Card className="settings-block">
+          <CardHeader>
+            <CardTitle>{t('settings.appearance')}</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <Dropdown
+              label={t('settings.theme')}
+              value={theme}
+              options={[
+                { value: 'system', label: t('settings.themeSystem') },
+                { value: 'light', label: t('settings.themeLight') },
+                { value: 'dark', label: t('settings.themeDark') },
+              ]}
+              onChange={(value) => {
+                const next = parseTheme(value)
+                saveTheme(next)
+                setTheme(next)
+              }}
+            />
+          </CardContent>
+        </Card>
 
         {prefs && (
-          <form className="settings-block" onSubmit={onLock}>
-            <h2>{t('settings.appLock')}</h2>
-            <Dropdown
-              label={t('settings.lockAfter')}
-              name="lock_after"
-              value={lockAfter}
-              options={lockChoices(phone).map((choice) => ({ value: String(choice.seconds), label: t(choice.labelKey) }))}
-              onChange={setLockAfter}
-            />
-            {phone ? null : (
-              <>
-                <label className="check">
-                  <input name="lock_on_minimize" type="checkbox" defaultChecked={prefs.lock_on_minimize} />
-                  {t('settings.lockMinimized')}
-                </label>
-                <label className="check">
-                  <input name="lock_on_close" type="checkbox" defaultChecked={prefs.lock_on_close} />
-                  {t('settings.lockClosed')}
-                </label>
-              </>
-            )}
-            <div className="actions">
-              <button type="submit">{t('common.save')}</button>
-              <button type="button" onClick={() => void vault.lock().then(() => window.location.reload())}>
-                {t('settings.lockNow')}
-              </button>
-            </div>
-          </form>
+          <Card className="settings-block">
+            <CardHeader>
+              <CardTitle>{t('settings.appLock')}</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <form onSubmit={onLock}>
+                <Dropdown
+                  label={t('settings.lockAfter')}
+                  name="lock_after"
+                  value={lockAfter}
+                  options={lockChoices(phone).map((choice) => ({ value: String(choice.seconds), label: t(choice.labelKey) }))}
+                  onChange={setLockAfter}
+                />
+                {phone ? null : (
+                  <>
+                    <label className="check">
+                      <input name="lock_on_minimize" type="checkbox" defaultChecked={prefs.lock_on_minimize} />
+                      {t('settings.lockMinimized')}
+                    </label>
+                    <label className="check">
+                      <input name="lock_on_close" type="checkbox" defaultChecked={prefs.lock_on_close} />
+                      {t('settings.lockClosed')}
+                    </label>
+                  </>
+                )}
+                <div className="actions">
+                  <Button type="submit">{t('common.save')}</Button>
+                  <Button variant="outline" onClick={() => void vault.lock().then(() => window.location.reload())}>
+                    {t('settings.lockNow')}
+                  </Button>
+                </div>
+              </form>
+            </CardContent>
+          </Card>
         )}
 
-        <form
-          className="settings-block"
-          onSubmit={(event) => {
-            event.preventDefault()
-            // the rule of a friend's name; kept on this device, for the code of a shared bill
-            const clean = cleanCategoryName(name)
-            if (!clean) return setMessage(t('debts.errorName'))
-            saveSenderName(clean)
-            setName(clean)
-            setMessage(t('settings.saved'))
-          }}
-        >
-          <label>
-            {t('code.senderAsk')}
-            <input value={name} maxLength={50} autoComplete="name" onChange={(event) => setName(event.target.value)} />
-          </label>
-          <div className="actions">
-            <button type="submit">{t('common.save')}</button>
-          </div>
-        </form>
+        <Card className="settings-block">
+          <CardContent>
+            <form
+              onSubmit={(event) => {
+                event.preventDefault()
+                // the rule of a friend's name; kept on this device, for the code of a shared bill
+                const clean = cleanCategoryName(name)
+                if (!clean) return setMessage(t('debts.errorName'))
+                saveSenderName(clean)
+                setName(clean)
+                setMessage(t('settings.saved'))
+              }}
+            >
+              <label>
+                {t('code.senderAsk')}
+                <input value={name} maxLength={50} autoComplete="name" onChange={(event) => setName(event.target.value)} />
+              </label>
+              <div className="actions">
+                <Button type="submit">{t('common.save')}</Button>
+              </div>
+            </form>
+          </CardContent>
+        </Card>
 
         {notifyDue !== null && (
-          <div className="settings-block">
-            <h2>{t('settings.notifications')}</h2>
-            <label className="check">
-              <input type="checkbox" checked={notifyDue} onChange={(event) => void onNotify(event.target.checked)} />
-              {t('settings.notifyDue')}
-            </label>
-            <label>
-              {t('settings.reminderTime')}
-              <input
-                type="time"
-                value={reminderAt}
-                onChange={(event) => {
-                  setReminderAt(event.target.value)
-                  // the time of a reminder is this device's: kept here, and the phone hands the system the new time
-                  if (parseTime(event.target.value)) {
-                    saveReminderTime(event.target.value)
+          <Card className="settings-block">
+            <CardHeader>
+              <CardTitle>{t('settings.notifications')}</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <label className="check">
+                <input type="checkbox" checked={notifyDue} onChange={(event) => void onNotify(event.target.checked)} />
+                {t('settings.notifyDue')}
+              </label>
+              <label>
+                {t('settings.reminderTime')}
+                <input
+                  type="time"
+                  value={reminderAt}
+                  onChange={(event) => {
+                    setReminderAt(event.target.value)
+                    // the time of a reminder is this device's: kept here, and the phone hands the system the new time
+                    if (parseTime(event.target.value)) {
+                      saveReminderTime(event.target.value)
+                      remindersChanged()
+                    }
+                  }}
+                />
+              </label>
+              <Dropdown
+                label={t('settings.debtEvery')}
+                value={debtEvery}
+                options={REMINDER_PERIODS.map((days) => ({ value: String(days), label: t(PERIOD_LABELS[days]) }))}
+                onChange={(value) => {
+                  setDebtEvery(value)
+                  // the period is this device's, like the time of day: kept here, and the phone hands the system the new days
+                  saveReminderEvery(Number(value))
+                  if (phone) {
+                    void scheduleOnPhone().then((result) => {
+                      if (result === 'denied') setMessage(t('debts.remindDenied'))
+                    })
+                  } else {
                     remindersChanged()
                   }
                 }}
               />
-            </label>
-            <Dropdown
-              label={t('settings.debtEvery')}
-              value={debtEvery}
-              options={REMINDER_PERIODS.map((days) => ({ value: String(days), label: t(PERIOD_LABELS[days]) }))}
-              onChange={(value) => {
-                setDebtEvery(value)
-                // the period is this device's, like the time of day: kept here, and the phone hands the system the new days
-                saveReminderEvery(Number(value))
-                if (phone) {
-                  void scheduleOnPhone().then((result) => {
-                    if (result === 'denied') setMessage(t('debts.remindDenied'))
-                  })
-                } else {
-                  remindersChanged()
-                }
-              }}
-            />
-            <p className="hint">{t(phone ? 'settings.reminderPhone' : 'settings.reminderDesktop')}</p>
-          </div>
+              <p className="hint">{t(phone ? 'settings.reminderPhone' : 'settings.reminderDesktop')}</p>
+            </CardContent>
+          </Card>
         )}
 
         {settings && !phone && <PhoneSyncBlock locale={settings.locale} timezone={settings.timezone} />}
@@ -411,104 +436,116 @@ export default function SettingsPage() {
 
         {/* A phone has no recovery key (it is not shown there): a forgotten passphrase means erasing the phone and pairing again. */}
         {!phone && (
-          <div className="settings-block">
-            <h2>{t('settings.recovery')}</h2>
-            {newKey ? (
-              <RecoveryKeyPanel code={newKey} inline doneLabel={t('common.done')} onDone={() => setNewKey(null)} />
-            ) : (
-              <form onSubmit={onRecoveryKey}>
-                <PasswordField label={t('settings.recoveryPassphrase')} name="passphrase" current />
-                <div className="actions">
-                  <button type="submit">{t('settings.recoveryNew')}</button>
-                </div>
-              </form>
-            )}
-          </div>
+          <Card className="settings-block">
+            <CardHeader>
+              <CardTitle>{t('settings.recovery')}</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {newKey ? (
+                <RecoveryKeyPanel code={newKey} inline doneLabel={t('common.done')} onDone={() => setNewKey(null)} />
+              ) : (
+                <form onSubmit={onRecoveryKey}>
+                  <PasswordField label={t('settings.recoveryPassphrase')} name="passphrase" current />
+                  <div className="actions">
+                    <Button type="submit">{t('settings.recoveryNew')}</Button>
+                  </div>
+                </form>
+              )}
+            </CardContent>
+          </Card>
         )}
 
         {/* A backup is a file, and a phone cannot save one yet: its data is also on the desktop, which has the backups. */}
         {!phone && (
-          <div className="settings-block">
-            <h2>{t('settings.backup')}</h2>
-            <form onSubmit={onBackup}>
-              <PasswordField label={t('settings.backupPassphrase')} name="backup_passphrase" />
-              <PasswordField label={t('settings.backupPassphraseRepeat')} name="backup_confirm" />
-              {documentsChoice(includeManual, setManualDocuments)}
-              <div className="actions">
-                <button type="submit" disabled={busy}>
-                  {t('settings.backupCreate')}
-                </button>
-              </div>
-            </form>
-            <form onSubmit={onSchedule}>
-              {schedule && (
-                <p className="hint">
-                  {t('settings.scheduleOn', { every: everyLabel(schedule.everyDays), folder: schedule.folder })}{' '}
-                  {schedule.lastAttemptAt &&
-                    t(schedule.lastOk ? 'settings.scheduleLast' : 'settings.scheduleFailed', {
-                      time: whenText(schedule.lastAttemptAt, locale, timezone),
-                    })}{' '}
-                  {schedule.includeDocuments
-                    ? t('settings.scheduleDocuments', { keep: BACKUPS_KEPT, size: formatSize((library?.heldBytes ?? 0) * BACKUPS_KEPT, locale) })
-                    : t('settings.scheduleNoDocuments')}
-                </p>
-              )}
-              <PasswordField label={t('settings.backupPassphrase')} name="schedule_passphrase" />
-              <PasswordField label={t('settings.backupPassphraseRepeat')} name="schedule_confirm" />
-              {documentsChoice(includeSchedule, setScheduleDocuments)}
-              <Dropdown
-                label={t('settings.scheduleEvery')}
-                value={every}
-                options={EVERY_CHOICES.map((choice) => ({ value: String(choice.days), label: t(choice.labelKey) }))}
-                onChange={setEvery}
-              />
-              <div className="actions">
-                <button type="submit" disabled={busy}>
-                  {t('settings.scheduleStart')}
-                </button>
+          <Card className="settings-block">
+            <CardHeader>
+              <CardTitle>{t('settings.backup')}</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <form onSubmit={onBackup}>
+                <PasswordField label={t('settings.backupPassphrase')} name="backup_passphrase" />
+                <PasswordField label={t('settings.backupPassphraseRepeat')} name="backup_confirm" />
+                {documentsChoice(includeManual, setManualDocuments)}
+                <div className="actions">
+                  <Button type="submit" disabled={busy}>
+                    {t('settings.backupCreate')}
+                  </Button>
+                </div>
+              </form>
+              <form onSubmit={onSchedule}>
                 {schedule && (
-                  <button type="button" onClick={() => void onStopSchedule()}>
-                    {t('settings.scheduleStop')}
-                  </button>
+                  <p className="hint">
+                    {t('settings.scheduleOn', { every: everyLabel(schedule.everyDays), folder: schedule.folder })}{' '}
+                    {schedule.lastAttemptAt &&
+                      t(schedule.lastOk ? 'settings.scheduleLast' : 'settings.scheduleFailed', {
+                        time: whenText(schedule.lastAttemptAt, locale, timezone),
+                      })}{' '}
+                    {schedule.includeDocuments
+                      ? t('settings.scheduleDocuments', { keep: BACKUPS_KEPT, size: formatSize((library?.heldBytes ?? 0) * BACKUPS_KEPT, locale) })
+                      : t('settings.scheduleNoDocuments')}
+                  </p>
                 )}
-              </div>
-            </form>
-            <form onSubmit={onRestore}>
-              <p className="hint">{t('settings.restoreHint')}</p>
-              <PasswordField label={t('settings.backupPassphrase')} name="restore_passphrase" current />
-              <label>
-                {t('settings.restoreConfirm')}
-                <input value={restoreWord} onChange={(e) => setRestoreWord(e.target.value)} autoComplete="off" />
-              </label>
-              <div className="actions">
-                <button type="submit" disabled={busy || restoreWord !== 'RESTORE'}>
-                  {t('settings.restoreStart')}
-                </button>
-              </div>
-            </form>
-          </div>
+                <PasswordField label={t('settings.backupPassphrase')} name="schedule_passphrase" />
+                <PasswordField label={t('settings.backupPassphraseRepeat')} name="schedule_confirm" />
+                {documentsChoice(includeSchedule, setScheduleDocuments)}
+                <Dropdown
+                  label={t('settings.scheduleEvery')}
+                  value={every}
+                  options={EVERY_CHOICES.map((choice) => ({ value: String(choice.days), label: t(choice.labelKey) }))}
+                  onChange={setEvery}
+                />
+                <div className="actions">
+                  <Button type="submit" disabled={busy}>
+                    {t('settings.scheduleStart')}
+                  </Button>
+                  {schedule && (
+                    <Button variant="outline" onClick={() => void onStopSchedule()}>
+                      {t('settings.scheduleStop')}
+                    </Button>
+                  )}
+                </div>
+              </form>
+              <form className="settings-danger" onSubmit={onRestore}>
+                <p className="hint">{t('settings.restoreHint')}</p>
+                <PasswordField label={t('settings.backupPassphrase')} name="restore_passphrase" current />
+                <label>
+                  {t('settings.restoreConfirm')}
+                  <input value={restoreWord} onChange={(e) => setRestoreWord(e.target.value)} autoComplete="off" />
+                </label>
+                <div className="actions">
+                  <Button type="submit" variant="destructive" disabled={busy || restoreWord !== 'RESTORE'}>
+                    {t('settings.restoreStart')}
+                  </Button>
+                </div>
+              </form>
+            </CardContent>
+          </Card>
         )}
 
-        <div className="settings-block">
-          <h2>{t('settings.data')}</h2>
-          {location && (
-            <p className="hint">
-              {t('settings.storedIn')} <code>{location}</code>
-            </p>
-          )}
-          <form onSubmit={onWipe}>
-            <p className="hint">{t('settings.deleteHint')}</p>
-            <label>
-              {t('settings.deleteConfirm')}
-              <input value={confirmation} onChange={(e) => setConfirmation(e.target.value)} autoComplete="off" />
-            </label>
-            <div className="actions">
-              <button type="submit" disabled={confirmation !== 'DELETE'}>
-                {t('settings.deleteAll')}
-              </button>
-            </div>
-          </form>
-        </div>
+        <Card className="settings-block is-danger">
+          <CardHeader>
+            <CardTitle>{t('settings.data')}</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {location && (
+              <p className="hint">
+                {t('settings.storedIn')} <code>{location}</code>
+              </p>
+            )}
+            <form onSubmit={onWipe}>
+              <p className="hint">{t('settings.deleteHint')}</p>
+              <label>
+                {t('settings.deleteConfirm')}
+                <input value={confirmation} onChange={(e) => setConfirmation(e.target.value)} autoComplete="off" />
+              </label>
+              <div className="actions">
+                <Button type="submit" variant="destructive" disabled={confirmation !== 'DELETE'}>
+                  {t('settings.deleteAll')}
+                </Button>
+              </div>
+            </form>
+          </CardContent>
+        </Card>
       </div>
     </section>
   )

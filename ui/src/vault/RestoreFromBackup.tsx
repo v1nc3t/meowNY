@@ -4,6 +4,7 @@ import { useNotice } from '../hooks/useNotice'
 import { errorText, vault } from './api'
 import PasswordField from './PasswordField'
 import { passphraseProblem } from './rules'
+import Button from '../components/ui/Button'
 
 /** First run from a backup: the backup's passphrase, and the app passphrase for this new install. */
 export default function RestoreFromBackup({ onKey, onBack }: { onKey: (recoveryKey: string) => void; onBack: () => void }) {
@@ -35,12 +36,12 @@ export default function RestoreFromBackup({ onKey, onBack }: { onKey: (recoveryK
         <PasswordField label={t('settings.backupPassphrase')} name="backup_passphrase" current autoFocus />
         <PasswordField label={t('welcome.passphrase')} name="passphrase" />
         <PasswordField label={t('welcome.passphraseRepeat')} name="confirm" />
-        <button type="submit" disabled={busy}>
+        <Button type="submit" disabled={busy}>
           {t('welcome.restoreSubmit')}
-        </button>
-        <button type="button" onClick={onBack}>
+        </Button>
+        <Button variant="outline" onClick={onBack}>
           {t('common.back')}
-        </button>
+        </Button>
         <p className="notice" role="alert">
           {message}
         </p>

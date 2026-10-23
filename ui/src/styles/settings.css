@@ -1,35 +1,49 @@
 /* Settings, export and sync pages, plus the lock and first-run screens. */
 
-/* First-run and lock screens: one centred column on an empty page. */
+/* First-run and lock screens: one centred card on an empty page. */
 .gate {
   min-height: 100svh;
   display: grid;
   place-items: center;
   padding: 2rem 1rem;
+  background: var(--background);
 }
 
 .gate > form,
 .gate > .panel {
-  width: min(100%, 40rem);
+  width: min(100%, 24rem);
   margin: 0;
-  padding: 2rem 0;
+  padding: 1.5rem;
+  gap: 1rem;
+  color: var(--card-foreground);
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-sm);
 }
 
 .gate .brand-mark {
+  margin: 0;
   font-family: var(--font);
   font-size: 0.875rem;
+  font-weight: 600;
   letter-spacing: 0.04em;
   color: var(--foreground);
-  margin: 0 0 1.5rem;
 }
 
 .gate h1 {
-  font-size: 1.75rem;
   margin: 0;
+  font-size: 1.25rem;
 }
 
-.gate button[type='submit'] {
-  align-self: flex-start;
+/* The buttons of a screen are as wide as the card. */
+.gate form > .ui-btn,
+.gate .panel > .ui-btn {
+  width: 100%;
+}
+
+.gate .panel .actions > .ui-btn {
+  flex: 1 1 0;
 }
 
 .gate code {
@@ -48,10 +62,11 @@
 
 .field-input button {
   position: absolute;
-  top: 0;
-  right: 0;
-  bottom: 0;
-  padding: 0 0.625rem;
+  top: 0.25rem;
+  right: 0.25rem;
+  bottom: 0.25rem;
+  min-height: 0;
+  padding: 0 0.5rem;
   font-size: 0.75rem;
   color: var(--muted-foreground);
 }
@@ -60,65 +75,73 @@
   color: var(--foreground);
 }
 
+/* A column of things that belong together: a pairing step, a recovery key. */
 .panel {
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
-  gap: 0.875rem;
+  align-items: stretch;
+  gap: 0.75rem;
 }
 
 .recovery-code {
+  margin: 0;
+  padding: 1rem;
+  width: 100%;
   font-family: var(--font);
-  font-size: clamp(0.95rem, 0.5rem + 2.6vw, 1.375rem);
+  font-size: clamp(0.95rem, 0.5rem + 2.6vw, 1.25rem);
   line-height: 1.6;
   letter-spacing: 0.08em;
   color: var(--foreground);
+  background: var(--muted);
   border: 1px solid var(--border);
-  padding: 1.25rem 1.5rem;
-  width: 100%;
+  border-radius: var(--radius-md);
   overflow-wrap: anywhere;
   user-select: all;
 }
 
 .panel .actions {
   display: flex;
-  gap: 1.5rem;
+  flex-wrap: wrap;
+  gap: 0.5rem;
 }
 
-/* Settings: blocks in a grid that wraps to one column as the window narrows. */
+/* Settings: a card for each block, in a grid that shows more columns as the window widens and one on a phone. */
 .settings-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 20rem), 1fr));
-  gap: 2rem clamp(1.5rem, 4vw, 4rem);
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 22rem), 1fr));
+  gap: 1rem;
   align-items: start;
   align-content: start;
 }
 
 .settings-block {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 1rem;
   width: 100%;
   min-width: 0;
   margin: 0;
-  padding-top: 1rem;
-  border-top: 0.8px solid var(--border);
 }
 
-.settings-block h2 {
-  margin: 0;
+.settings-block .ui-card-content {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
 }
 
 .settings-block form {
   width: 100%;
   margin: 0;
+  gap: 0.75rem;
+}
+
+/* Forms of one card are told apart by a line. */
+.settings-block .ui-card-content > form + form {
+  padding-top: 1rem;
+  border-top: 1px solid var(--border);
 }
 
 .settings-block .actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.5rem 1.5rem;
+  gap: 0.5rem;
 }
 
 .settings-block .panel {
@@ -132,125 +155,83 @@
   overflow-wrap: anywhere;
 }
 
-/* A setting that shows its value and a text button to change it. */
+.settings-block .notice {
+  width: 100%;
+}
+
+/* What cannot be undone: a red outline round the card, or round the form inside it. */
+.settings-block.is-danger {
+  border-color: var(--destructive);
+}
+
+.settings-block.is-danger .ui-card-title {
+  color: var(--destructive);
+}
+
+.settings-block .ui-card-content > form.settings-danger {
+  padding: 1rem;
+  border: 1px solid var(--destructive);
+  border-radius: var(--radius-lg);
+}
+
+/* A setting that shows its value and a button to change it. */
 .settings-row {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  display: flex;
   align-items: center;
-  column-gap: 1rem;
+  gap: 0.75rem;
   width: 100%;
   min-height: 2.5rem;
-  border-top: 0.8px solid var(--border);
-  border-bottom: 0.8px solid var(--border);
+  padding: 0.25rem 0.25rem 0.25rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
 }
 
 .settings-row-label {
-  font-size: 0.75rem;
-  letter-spacing: 0.04em;
+  flex: 0 0 auto;
+  font-size: 0.8125rem;
   color: var(--muted-foreground);
 }
 
 .settings-row-value {
+  flex: 1 1 auto;
+  min-width: 0;
   color: var(--foreground);
   font-size: 0.8125rem;
   overflow-wrap: anywhere;
 }
 
-.settings-row.is-expired .settings-row-label,
-.settings-row.is-expired .settings-row-value {
-  color: var(--muted-foreground);
-}
-
 .settings-subtitle {
-  margin: 0.5rem 0 0;
-  font-size: 0.75rem;
-  font-weight: normal;
-  letter-spacing: 0.04em;
+  margin: 0.25rem 0 0;
+  font-size: 0.8125rem;
+  line-height: 1.4;
+  color: var(--foreground);
+}
+
+/* Access tokens and paired phones: the rows of a card list, with the button at the right edge. */
+.settings-block .card-list {
+  margin: 0;
+}
+
+.settings-block ul.card-list > li.card-item {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.card-item.is-expired .card-name,
+.card-item.is-expired .card-meta {
   color: var(--muted-foreground);
 }
 
-/* Settings: one wider column, flush left. Each setting is a row: the label, a gap, then its control right after it. */
-.settings-grid {
-  display: flex;
-  flex-direction: column;
-  gap: 2rem;
-  width: 100%;
-  max-width: 52rem;
-  margin-right: auto;
+.settings-block .ui-badge {
+  max-width: 100%;
+  white-space: normal;
 }
 
-.settings-block {
-  align-items: stretch;
+.inline-actions {
+  display: inline-flex;
+  gap: 0.25rem;
 }
 
-.settings-block .pick.field,
-.settings-block label,
-.settings-block .settings-row {
-  display: grid;
-  grid-template-columns: 16rem minmax(0, 20rem);
-  align-items: center;
-  justify-content: start;
-  gap: 0.5rem 1.5rem;
-}
-
-.settings-block .settings-row {
-  grid-template-columns: 16rem auto auto;
-}
-
-.settings-block .pick.field .pick-button,
-.settings-block label > input:not([type='checkbox']),
-.settings-block label > .field-input {
-  width: 100%;
-  min-width: 0;
-}
-
-/* A checkbox comes after its text, like the other controls. */
-.settings-block label > input[type='checkbox'] {
-  order: 2;
-  justify-self: start;
-}
-
-/* Its text looks like the text before a dropdown, and the box starts where the dropdowns start: the global rule for a
-   label with a checkbox sets its own colour, size and gap, which this one is more specific than. */
-.settings-block label:has(> input[type='checkbox']) {
-  gap: 0.5rem 1.5rem;
-  font-size: 0.75rem;
-  letter-spacing: 0.04em;
-  color: var(--muted-foreground);
-}
-
-@media (max-width: 40em) {
-  .settings-block .pick.field,
-  .settings-block label,
-  .settings-block .settings-row {
-    grid-template-columns: minmax(0, 1fr);
-  }
-}
-
-/* A list of rows that share their columns, so the buttons line up, with one line between rows. */
-.settings-block .token-list {
-  display: flex;
-  flex-direction: column;
-  width: 100%;
-}
-
-.settings-block .token-list .settings-row {
-  grid-template-columns: 14rem minmax(0, 1fr) auto;
-  padding-block: 0.5rem;
-  border-bottom: 0;
-}
-
-.settings-block .token-list .settings-row:last-child {
-  border-bottom: 0.8px solid var(--border);
-}
-
-@media (max-width: 40em) {
-  .settings-block .token-list .settings-row {
-    grid-template-columns: minmax(0, 1fr);
-  }
-}
-
-/* Export. The choices are cards on the left; what the file will contain is a receipt on the right. */
+/* Export. The choices are cards on the left; what the file will contain is a card on the right. The page uses the whole width. */
 .export-page .tx-title {
   margin-bottom: 0.5rem;
 }
@@ -258,51 +239,46 @@
 .export-layout {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  gap: 1.25rem;
+  gap: 1rem;
   align-items: start;
-  max-width: 64rem;
 }
 
-@media (min-width: 62em) {
+@media (min-width: 64em) {
   .export-layout {
-    grid-template-columns: minmax(0, 1fr) 21rem;
+    grid-template-columns: minmax(0, 1fr) 22rem;
   }
 }
 
+/* The cards of the choices sit side by side where there is room. */
 .export-main {
   display: flex;
-  flex-direction: column;
-  gap: 1.25rem;
+  flex-wrap: wrap;
+  gap: 1rem;
+  align-items: flex-start;
   min-width: 0;
 }
 
-.export-card {
-  display: flex;
-  flex-direction: column;
-  gap: 0.875rem;
-  min-width: 0;
-  padding: 1rem 1.125rem;
-  border: 0.8px solid var(--border);
-  border-radius: 6px;
+.export-main > .export-card {
+  flex: 1 1 18rem;
 }
 
 .export-card h2 {
   margin: 0;
-  font-size: 0.75rem;
-  letter-spacing: 0.04em;
-  color: var(--muted-foreground);
+  font-size: 1rem;
+  line-height: 1.4;
+  letter-spacing: normal;
 }
 
 .export-card .hint {
   margin: 0;
-  font-size: 0.75rem;
-  color: var(--muted-foreground);
+  font-size: 0.8125rem;
 }
 
-/* The format: four tiles, one choice. The real radio button is hidden but still takes the keyboard. */
+/* The format: four cards, one choice. The real radio button is hidden but still takes the keyboard. */
 .export-formats {
+  flex: 1 1 100%;
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 8rem), 1fr));
   gap: 0.75rem;
   min-width: 0;
   margin: 0;
@@ -310,23 +286,19 @@
   border: 0;
 }
 
-@media (max-width: 30em) {
-  .export-formats {
-    grid-template-columns: minmax(0, 1fr);
-  }
-}
-
 .export-format {
   position: relative;
-  gap: 0.375rem;
   padding: 0.875rem 1rem;
-  border: 0.8px solid var(--border);
-  border-radius: 6px;
+  color: var(--card-foreground);
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
   cursor: pointer;
+  transition: border-color 0.15s, box-shadow 0.15s;
 }
 
 .export-format:hover {
-  border-color: var(--input);
+  border-color: var(--ring);
 }
 
 .export-format input,
@@ -341,25 +313,19 @@
 }
 
 .export-format-name {
-  font-size: 1.0625rem;
+  font-size: 1rem;
+  font-weight: 600;
   color: var(--foreground);
 }
 
-.export-format-hint {
-  font-size: 0.75rem;
-  line-height: 1.5;
-  letter-spacing: 0;
-  color: var(--muted-foreground);
-}
-
-.export-format:has(input:checked),
-.export-chip:has(input:checked) {
+.export-format:has(input:checked) {
   border-color: var(--primary);
+  box-shadow: var(--shadow-md);
 }
 
 .export-format:has(input:focus-visible),
 .export-chip:has(input:focus-visible) {
-  outline: 1px solid var(--ring);
+  outline: 2px solid var(--ring);
   outline-offset: 2px;
 }
 
@@ -374,12 +340,7 @@
   display: flex;
   flex-wrap: wrap;
   align-items: flex-end;
-  gap: 0.5rem 1.25rem;
-}
-
-.export-range > button {
-  flex: 0 0 auto;
-  padding: 0.625rem 0;
+  gap: 0.5rem 1rem;
 }
 
 .export-date {
@@ -409,20 +370,23 @@
   width: auto;
   max-width: 100%;
   padding: 0.25rem 0.75rem;
-  border: 0.8px solid var(--input);
+  border: 1px solid var(--input);
+  border-radius: var(--radius-md);
   color: var(--muted-foreground);
   font-size: 0.8125rem;
-  letter-spacing: 0.02em;
   cursor: pointer;
+  transition: background-color 0.15s, border-color 0.15s, color 0.15s;
 }
 
 .export-card label.export-chip:has(input:checked) {
   border-color: var(--primary);
   color: var(--foreground);
+  background: var(--accent);
 }
 
-.export-card .pick.field {
-  max-width: 16rem;
+.export-card label.export-chip:has(input:disabled) {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .export-groups {
@@ -433,20 +397,25 @@
 
 .export-groups h3 {
   margin: 0 0 0.5rem;
-  font-size: 0.75rem;
-  letter-spacing: 0.04em;
+  font-size: 0.8125rem;
   color: var(--muted-foreground);
 }
 
-/* The receipt. */
-.export-side {
-  gap: 1.125rem;
+.export-amounts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
 }
 
-@media (min-width: 62em) {
+/* What the file will contain. */
+.export-side {
+  gap: 1rem;
+}
+
+@media (min-width: 64em) {
   .export-side {
     position: sticky;
-    top: 1.5rem;
+    top: 0;
   }
 }
 
@@ -474,7 +443,7 @@
 
 .export-row strong {
   min-width: 0;
-  font-weight: 400;
+  font-weight: 600;
   color: var(--foreground);
   text-align: right;
   overflow-wrap: anywhere;
@@ -488,29 +457,75 @@
   color: var(--c-expense);
 }
 
-.export-side .warning {
-  padding: 0.75rem 0.875rem;
-  font-size: 0.75rem;
-  line-height: 1.55;
-}
-
 .export-side .notice {
   width: 100%;
 }
 
 .export-side .export-go {
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  gap: 1rem;
   width: 100%;
-  padding: 0.75rem 1rem;
-  border: 1px solid var(--foreground);
-  font-size: 0.9375rem;
+  justify-content: space-between;
+  gap: 1rem;
 }
 
 .export-go .export-ext {
-  color: var(--muted-foreground);
+  opacity: 0.7;
+}
+
+/* The preview of an export, below the choices: the start of a JSON or CSV file as a text editor would show it, or a sheet or a
+   report in a frame of its own. */
+.export-preview {
+  margin-top: 1rem;
+}
+
+.export-file {
+  max-height: 26rem;
+  margin: 0;
+  padding: 0.75rem 0.875rem;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--muted);
+  color: var(--foreground);
+  font: inherit;
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  tab-size: 2;
+  white-space: pre;
+}
+
+.export-file .json-key {
+  color: var(--foreground);
+}
+
+.export-file .json-string {
+  color: var(--code-string);
+}
+
+.export-file .json-number {
+  color: var(--code-number);
+}
+
+.export-file .json-literal {
+  color: var(--code-literal);
+}
+
+/* The sheet scrolls in its frame and the page of a report is drawn whole, so the export screen keeps its wheel. */
+.export-frame {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+}
+
+.export-frame.is-sheet {
+  max-height: 30rem;
+}
+
+.export-frame.is-pdf {
+  height: 40rem;
+  max-height: 85svh;
 }
 
 /* Phone and sync (phase 8) */
@@ -518,13 +533,18 @@
 /* A QR code is always dark on white, whatever the theme: a camera needs that contrast. */
 .qr {
   display: block;
+  align-self: center;
   width: min(100%, 20rem);
   height: auto;
+  border-radius: var(--radius-md);
   background: #fff; /* fixed: a QR code must be dark on white to scan */
 }
 
 .sync-panel {
   width: 100%;
+  padding: 1rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
 }
 
 .sync-panel h3 {
@@ -535,6 +555,7 @@
   margin: 0;
   font-family: var(--font);
   font-size: 0.875rem;
+  text-align: center;
   color: var(--foreground);
 }
 
@@ -544,8 +565,11 @@
   width: 100%;
   padding: 1rem 1.5rem;
   border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--muted);
   font-family: var(--font);
-  font-size: clamp(1.75rem, 1rem + 5vw, 2.75rem);
+  font-size: clamp(1.75rem, 1rem + 5vw, 2.5rem);
+  font-weight: 600;
   letter-spacing: 0.2em;
   text-align: center;
   color: var(--foreground);
@@ -563,14 +587,10 @@
   font-size: 0.8125rem;
 }
 
-.sync-panel .warning {
+.sync-panel .warning,
+.sync-panel .notice {
   width: 100%;
   margin: 0;
-}
-
-.inline-actions {
-  display: inline-flex;
-  gap: 1rem;
 }
 
 /* While the camera scans it shows behind the page: everything but the cancel button steps aside. */
@@ -597,25 +617,21 @@ html.is-scanning #root {
   text-align: center;
 }
 
-.scan-overlay p {
-  margin: 0;
-  color: var(--foreground);
-}
-
-/* The phone's shell (phase 8): a bar at the top with the name and the lock, the page, tabs at the bottom, and a round button for
-   adding a transaction. Sizes follow the phone: tap targets of at least 44 px, inputs of at least 16 px, the screen edges (notch,
-   gesture bar) are left free, and the height is the visible height (the address-bar-free `dvh`). */
+/* The phone's lock and first-run screens: at the top, not in the middle, because the keyboard comes up over the lower half and
+   would cover the field and the button. The screen edges (notch, gesture bar) are left free, and the height is the visible height
+   (the address-bar-free `dvh`). */
 html.is-phone .gate {
   min-height: 100dvh;
-  /* at the top, not in the middle: the keyboard comes up over the lower half, and would cover the field and the button */
   align-items: start;
   padding-top: calc(1.5rem + env(safe-area-inset-top, 0px));
   padding-bottom: calc(2rem + env(safe-area-inset-bottom, 0px));
 }
 
-html.is-phone .gate > form,
-html.is-phone .gate > .panel {
-  padding-top: 0;
+/* The show button fills the 44px field. */
+html.is-phone .field-input button {
+  top: 0;
+  right: 0;
+  bottom: 0;
 }
 
 /* A short list of choices that opens inside a form. */
@@ -633,6 +649,8 @@ html.is-phone .gate > .panel {
 /* Typing the six digits on the phone. */
 .digits-input {
   max-width: 14rem;
+  height: 3rem;
+  align-self: center;
   font-size: 1.75rem;
   letter-spacing: 0.4em;
   text-align: center;
@@ -652,7 +670,7 @@ html.is-phone .gate > .panel {
 .review-all {
   display: flex;
   flex-wrap: wrap;
-  gap: 0 1.5rem;
+  gap: 0.5rem;
 }
 
 fieldset.conflict {
@@ -660,13 +678,14 @@ fieldset.conflict {
   margin: 0;
   padding: 0.75rem 0 0;
   border: 0;
-  border-top: 0.8px solid var(--border);
+  border-top: 1px solid var(--border);
 }
 
 .conflict legend {
   padding-right: 0.75rem;
   color: var(--foreground);
   font-size: 0.875rem;
+  font-weight: 600;
 }
 
 .conflict-versions {
@@ -675,27 +694,42 @@ fieldset.conflict {
   gap: 0.75rem;
 }
 
+/* A version is an outline button; the chosen one is filled and framed. */
 .conflict-version {
-  display: flex;
   flex-direction: column;
   align-items: flex-start;
+  justify-content: flex-start;
   gap: 0.375rem;
   min-width: 0;
   padding: 0.75rem;
-  background: var(--muted);
   color: var(--foreground);
+  background: var(--background);
+  border-color: var(--input);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-xs);
   text-align: left;
   white-space: normal;
 }
 
+@media (hover: hover) {
+  .conflict-version:hover:not(:disabled) {
+    background: var(--accent);
+  }
+}
+
 .conflict-version[aria-pressed='true'] {
-  color: var(--foreground);
-  box-shadow: inset 0 -2px 0 var(--foreground);
+  background: var(--accent);
+  border-color: var(--ring);
+  box-shadow: 0 0 0 1px var(--ring);
+}
+
+.conflict-version[aria-pressed='true'] .conflict-who::before {
+  content: '\2713 ';
 }
 
 .conflict-who {
   font-size: 0.75rem;
-  letter-spacing: 0.04em;
+  font-weight: 600;
   color: var(--muted-foreground);
 }
 
@@ -712,78 +746,11 @@ fieldset.conflict {
 }
 
 .conflict-field b {
-  font-weight: normal;
+  font-weight: 400;
   color: var(--foreground);
   overflow-wrap: anywhere;
 }
 
 .conflict-deleted {
   color: var(--muted-foreground);
-}
-
-/* The preview of a JSON or CSV export: the start of the file as a text editor would show it. */
-.export-preview {
-  max-width: 64rem;
-  margin-top: 1.25rem;
-}
-
-.export-preview .hint {
-  margin: 0;
-}
-
-.export-file {
-  max-height: 26rem;
-  margin: 0;
-  padding: 0.75rem 0.875rem;
-  overflow: auto;
-  border: 0.8px solid var(--border);
-  background: var(--muted);
-  color: var(--foreground);
-  font: inherit;
-  font-size: 0.8125rem;
-  line-height: 1.5;
-  tab-size: 2;
-  white-space: pre;
-}
-
-.export-file .json-key {
-  color: var(--foreground);
-}
-
-.export-file .json-string {
-  color: var(--code-string);
-}
-
-.export-file .json-number {
-  color: var(--code-number);
-}
-
-.export-file .json-literal {
-  color: var(--code-literal);
-}
-
-/* Export: the amount range, from and to side by side. */
-.export-amounts {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0.75rem;
-}
-
-/* The preview of an Excel file or a PDF report on the export screen: a frame of its own, in which the sheet scrolls or the page is
-   drawn whole. The page of the export screen keeps its wheel, so a report does not turn its pages with it. */
-.export-frame {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-  overflow: hidden;
-  border: 0.8px solid var(--border);
-}
-
-.export-frame.is-sheet {
-  max-height: 30rem;
-}
-
-.export-frame.is-pdf {
-  height: 40rem;
-  max-height: 85svh;
 }

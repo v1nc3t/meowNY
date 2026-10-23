@@ -7,6 +7,7 @@ import { ApiError, errorText, inDesktopApp } from '../api/invoke'
 import { periodLabel, reportLabels } from '../api/reportLabels'
 import { useToday, type Today } from '../api/today'
 import DatePicker from '../components/DatePicker'
+import Button from '../components/ui/Button'
 import Dropdown from '../components/Dropdown'
 import Pick, { PickOption } from '../components/Pick'
 import { Sheets } from '../components/SheetView'
@@ -315,7 +316,7 @@ function ExportForm({ today, settings, categories }: { today: Today; settings: M
             ))}
           </fieldset>
 
-          <div className="export-card">
+          <div className="ui-card export-card">
             <h2>{t('export.period')}</h2>
             <label className="export-switch">
               {t('export.allDates')}
@@ -324,9 +325,9 @@ function ExportForm({ today, settings, categories }: { today: Today; settings: M
             {choice.limitDates && (
               <>
                 <div className="export-range">
-                  <button type="button" onClick={goCurrentMonth}>
+                  <Button variant="outline" onClick={goCurrentMonth}>
                     {t('tx.currentMonth')}
-                  </button>
+                  </Button>
                   <Pick
                     label={t('tx.range')}
                     className="mode"
@@ -375,7 +376,7 @@ function ExportForm({ today, settings, categories }: { today: Today; settings: M
             )}
           </div>
 
-          <div className="export-card">
+          <div className="ui-card export-card">
             <h2>{t('export.categories')}</h2>
             <label className="export-switch">
               {t('export.allCategories')}
@@ -410,7 +411,7 @@ function ExportForm({ today, settings, categories }: { today: Today; settings: M
           </div>
 
           {format !== 'pdf' && (
-            <div className="export-card">
+            <div className="ui-card export-card">
               <h2>{t('export.filters')}</h2>
               <Dropdown
                 label={t('common.type')}
@@ -442,7 +443,7 @@ function ExportForm({ today, settings, categories }: { today: Today; settings: M
           )}
 
           {(format === 'json' || format === 'xlsx') && (
-            <div className="export-card">
+            <div className="ui-card export-card">
               <h2>{t('export.include')}</h2>
               <div className="export-chips">
                 {partsOfFile.map((section) => {
@@ -460,7 +461,7 @@ function ExportForm({ today, settings, categories }: { today: Today; settings: M
           )}
 
           {format === 'pdf' && (
-            <div className="export-card">
+            <div className="ui-card export-card">
               <Dropdown label={t('export.pageSize')} value={page} options={PAGE_SIZES} onChange={(value) => setPage(value as 'A4' | 'LETTER')} />
               <label className="export-switch">
                 {t('export.includeTransactions')}
@@ -491,7 +492,7 @@ function ExportForm({ today, settings, categories }: { today: Today; settings: M
           )}
         </div>
 
-        <aside className="export-card export-side">
+        <aside className="ui-card export-card export-side">
           <h2>{t('export.contains')}</h2>
           {problemText ? (
             <p className="notice" role="alert">
@@ -533,15 +534,15 @@ function ExportForm({ today, settings, categories }: { today: Today; settings: M
               </div>
             )
           )}
-          <button type="button" className="export-go" disabled={busy || problem !== null} onClick={() => void run()}>
+          <Button size="lg" className="export-go" disabled={busy || problem !== null} onClick={() => void run()}>
             <span>{t('export.go')}</span>
             <span className="export-ext">.{format}</span>
-          </button>
+          </Button>
         </aside>
       </div>
 
       {textFormat && problem === null && fileText?.format === textFormat ? (
-        <div className="export-card export-preview">
+        <div className="ui-card export-card export-preview">
           <h2>{t('export.previewTitle')}</h2>
           <p className="hint">
             {`.${textFormat} \u00b7 ${formatSize(fileText.data.bytes, settings.locale)}`}
@@ -552,14 +553,14 @@ function ExportForm({ today, settings, categories }: { today: Today; settings: M
       ) : null}
 
       {(format === 'xlsx' || format === 'pdf') && problem === null && viewProblem !== '' ? (
-        <div className="export-card export-preview">
+        <div className="ui-card export-card export-preview">
           <h2>{t('export.previewTitle')}</h2>
           <p className="hint">{t(viewProblem === 'big' ? 'export.previewTooBig' : 'docs.previewUnreadable')}</p>
         </div>
       ) : null}
 
       {format === 'xlsx' && problem === null && viewProblem === '' && fileView?.format === 'xlsx' ? (
-        <div className="export-card export-preview">
+        <div className="ui-card export-card export-preview">
           <h2>{t('export.previewTitle')}</h2>
           <p className="hint">{`.xlsx \u00b7 ${formatSize(fileView.bytes, settings.locale)}`}</p>
           <div className="export-frame is-sheet">
@@ -570,7 +571,7 @@ function ExportForm({ today, settings, categories }: { today: Today; settings: M
       ) : null}
 
       {format === 'pdf' && problem === null && viewProblem === '' && fileView?.format === 'pdf' ? (
-        <div className="export-card export-preview">
+        <div className="ui-card export-card export-preview">
           <h2>{t('export.previewTitle')}</h2>
           <p className="hint">{`.pdf \u00b7 ${formatSize(fileView.bytes, settings.locale)}`}</p>
           <div className="export-frame is-pdf">

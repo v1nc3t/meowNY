@@ -6,6 +6,8 @@ import { useDeviceName } from '../hooks/useDeviceName'
 import { useNotice } from '../hooks/useNotice'
 import { useSyncStatus } from '../hooks/useSyncStatus'
 import Dropdown from './Dropdown'
+import Button from './ui/Button'
+import { Card, CardContent, CardHeader, CardTitle } from './ui/Card'
 import { useT } from '../i18n/context'
 import SyncStatusPanel from './SyncStatusPanel'
 
@@ -62,90 +64,94 @@ export default function PhoneSyncBlock({ locale, timezone }: { locale: string; t
   const idle = state === 'idle'
 
   return (
-    <div className="settings-block">
-      <h2>{t('sync.title')}</h2>
-      <p className="notice" role="status">
-        {message}
-      </p>
+    <Card className="settings-block">
+      <CardHeader>
+        <CardTitle>{t('sync.title')}</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <p className="notice" role="status">
+          {message}
+        </p>
 
-      <h3 className="settings-subtitle">{t('sync.devices')}</h3>
-      {devices && devices.length === 0 && <p className="hint">{t('sync.noDevices')}</p>}
-      {devices && devices.length > 0 && (
-        <div className="token-list">
-          {devices.map((device) => (
-            <div className="settings-row" key={device.deviceId}>
-              <span className="settings-row-label">{device.name}</span>
-              <span className="settings-row-value">
-                {t('sync.pairedOn', { time: whenText(device.pairedAt, locale, timezone) })}
-                {' · '}
-                {device.lastSyncAt ? t('sync.lastSync', { time: whenText(device.lastSyncAt, locale, timezone) }) : t('sync.neverSynced')}
-                {device.changesWaiting !== null ? ` · ${t('sync.changesWaiting', { count: device.changesWaiting })}` : ''}
-              </span>
-              {removing === device.deviceId ? (
-                <span className="inline-actions">
-                  <button type="button" onClick={() => void onRemove(device.deviceId)}>
-                    {t('sync.removeYes')}
-                  </button>
-                  <button type="button" onClick={() => setRemoving(null)}>
-                    {t('common.cancel')}
-                  </button>
-                </span>
-              ) : (
-                <button type="button" disabled={!idle} onClick={() => setRemoving(device.deviceId)}>
-                  {t('sync.remove')}
-                </button>
-              )}
-            </div>
+        <h3 className="settings-subtitle">{t('sync.devices')}</h3>
+        {devices && devices.length === 0 && <p className="hint">{t('sync.noDevices')}</p>}
+        {devices && devices.length > 0 && (
+          <ul className="card-list">
+            {devices.map((device) => (
+              <li className="card-item" key={device.deviceId}>
+                <div className="card-body">
+                  <p className="card-name">{device.name}</p>
+                  <p className="card-meta">
+                    {t('sync.pairedOn', { time: whenText(device.pairedAt, locale, timezone) })}
+                    {' · '}
+                    {device.lastSyncAt ? t('sync.lastSync', { time: whenText(device.lastSyncAt, locale, timezone) }) : t('sync.neverSynced')}
+                    {device.changesWaiting !== null ? ` · ${t('sync.changesWaiting', { count: device.changesWaiting })}` : ''}
+                  </p>
+                </div>
+                {removing === device.deviceId ? (
+                  <span className="inline-actions">
+                    <Button variant="destructive" size="sm" onClick={() => void onRemove(device.deviceId)}>
+                      {t('sync.removeYes')}
+                    </Button>
+                    <Button variant="outline" size="sm" onClick={() => setRemoving(null)}>
+                      {t('common.cancel')}
+                    </Button>
+                  </span>
+                ) : (
+                  <Button variant="outline" size="sm" disabled={!idle} onClick={() => setRemoving(device.deviceId)}>
+                    {t('sync.remove')}
+                  </Button>
+                )}
+              </li>
+            ))}
+          </ul>
+        )}
+        {removing && <p className="hint">{t('sync.removeAsk')}</p>}
+        {devices
+          ?.filter((device) => device.currencyBehind)
+          .map((device) => (
+            <p className="warning" role="note" key={device.deviceId}>
+              {t('sync.currencyBehind', { name: device.name })}
+            </p>
           ))}
-        </div>
-      )}
-      {removing && <p className="hint">{t('sync.removeAsk')}</p>}
-      {devices
-        ?.filter((device) => device.currencyBehind)
-        .map((device) => (
-          <p className="warning" role="note" key={device.deviceId}>
-            {t('sync.currencyBehind', { name: device.name })}
-          </p>
-        ))}
 
-      {idle ? (
-        <>
-          <label>
-            {t('sync.thisComputer')}
-            <input value={name} onChange={(e) => setName(e.target.value)} maxLength={DEVICE_NAME_MAX} autoComplete="off" />
-          </label>
-          <details className="more-options">
-            <summary>{t('sync.addressToggle')}</summary>
+        {idle ? (
+          <>
             <label>
-              {t('sync.addressLabel')}
-              <input value={address} onChange={(e) => setAddress(e.target.value)} placeholder="192.168.1.20" inputMode="decimal" autoComplete="off" spellCheck={false} />
+              {t('sync.thisComputer')}
+              <input value={name} onChange={(e) => setName(e.target.value)} maxLength={DEVICE_NAME_MAX} autoComplete="off" />
             </label>
-          </details>
-          <Dropdown
-            label={t('sync.mode')}
-            value={mode}
-            options={MODES.map((value) => ({ value, label: t(value === 'both' ? 'sync.modeBoth' : value === 'to_desktop' ? 'sync.modeToDesktop' : 'sync.modeToPhone') }))}
-            onChange={(value) => setMode(MODES.find((m) => m === value) ?? 'both')}
+            <details className="more-options">
+              <summary>{t('sync.addressToggle')}</summary>
+              <label>
+                {t('sync.addressLabel')}
+                <input value={address} onChange={(e) => setAddress(e.target.value)} placeholder="192.168.1.20" inputMode="decimal" autoComplete="off" spellCheck={false} />
+              </label>
+            </details>
+            <Dropdown
+              label={t('sync.mode')}
+              value={mode}
+              options={MODES.map((value) => ({ value, label: t(value === 'both' ? 'sync.modeBoth' : value === 'to_desktop' ? 'sync.modeToDesktop' : 'sync.modeToPhone') }))}
+              onChange={(value) => setMode(MODES.find((m) => m === value) ?? 'both')}
+            />
+            <div className="actions">
+              <Button onClick={() => void begin(true)}>{t('sync.add')}</Button>
+              <Button variant="outline" disabled={!devices || devices.length === 0} onClick={() => void begin(false)}>
+                {t('sync.start')}
+              </Button>
+            </div>
+          </>
+        ) : (
+          <SyncStatusPanel
+            status={status}
+            side="desktop"
+            onEnterCode={() => undefined}
+            onDecide={(choices) => void syncApi.decide(choices).then(refresh, (e) => setMessage(errorText(e)))}
+            onCancel={() => void cancel()}
+            onDone={() => void acknowledge()}
           />
-          <div className="actions">
-            <button type="button" onClick={() => void begin(true)}>
-              {t('sync.add')}
-            </button>
-            <button type="button" disabled={!devices || devices.length === 0} onClick={() => void begin(false)}>
-              {t('sync.start')}
-            </button>
-          </div>
-        </>
-      ) : (
-        <SyncStatusPanel
-          status={status}
-          side="desktop"
-          onEnterCode={() => undefined}
-          onDecide={(choices) => void syncApi.decide(choices).then(refresh, (e) => setMessage(errorText(e)))}
-          onCancel={() => void cancel()}
-          onDone={() => void acknowledge()}
-        />
-      )}
-    </div>
+        )}
+      </CardContent>
+    </Card>
   )
 }

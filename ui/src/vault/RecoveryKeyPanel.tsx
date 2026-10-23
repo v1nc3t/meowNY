@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { errorText, vault } from './api'
 import { useNotice } from '../hooks/useNotice'
 import { useT } from '../i18n/context'
+import Button from '../components/ui/Button'
 
 /**
  * Shows a recovery key. The app does not keep it, so this is the only time it can be read.
@@ -50,17 +51,19 @@ export default function RecoveryKeyPanel({
   return (
     <div className="panel">
       {inline ? null : <h1>{t('recovery.yourTitle')}</h1>}
-      <p className="hint">{t('recovery.shownOnce')}</p>
+      <p className="warning" role="note">
+        {t('recovery.shownOnce')}
+      </p>
       <p className="recovery-code" aria-label={t('recovery.label')}>
         {code}
       </p>
       <div className="actions">
-        <button type="button" onClick={() => void copy()}>
+        <Button variant="outline" onClick={() => void copy()}>
           {copied ? t('common.copied') : t('common.copy')}
-        </button>
-        <button type="button" onClick={() => void download()}>
+        </Button>
+        <Button variant="outline" onClick={() => void download()}>
           {downloaded ? t('common.downloaded') : t('common.download')}
-        </button>
+        </Button>
       </div>
       <p className="notice" role="alert">
         {message}
@@ -71,9 +74,9 @@ export default function RecoveryKeyPanel({
           {t('recovery.saved')}
         </label>
       )}
-      <button type="button" disabled={!saved} onClick={onDone}>
+      <Button disabled={!saved} onClick={onDone}>
         {doneLabel}
-      </button>
+      </Button>
     </div>
   )
 }

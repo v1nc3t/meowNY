@@ -7,6 +7,7 @@ import { languageOptions } from '../i18n/languages'
 import { errorText, vault } from './api'
 import PasswordField from './PasswordField'
 import { defaultSettings, phonePassphraseProblem } from './rules'
+import Button from '../components/ui/Button'
 
 /**
  * First start on a phone: a language and a passphrase, nothing else. The phone is a copy of the desktop, so its currency, number
@@ -57,9 +58,9 @@ export function PhoneFirstRun({ onDone }: { onDone: () => void }) {
           {t('phone.eraseWarning')}
         </p>
 
-        <button type="submit" disabled={busy}>
+        <Button type="submit" disabled={busy}>
           {t('phone.welcomeCreate')}
-        </button>
+        </Button>
         <p className="notice" role="alert">
           {message}
         </p>
@@ -80,9 +81,7 @@ export function ErasedScreen({ onContinue }: { onContinue: () => void }) {
           {t('phone.erasedText')}
         </p>
         <p className="hint">{t('phone.erasedNext')}</p>
-        <button type="button" onClick={onContinue}>
-          {t('common.continue')}
-        </button>
+        <Button onClick={onContinue}>{t('common.continue')}</Button>
       </div>
     </main>
   )
@@ -117,12 +116,12 @@ export function ForgotPhone({ onBack }: { onBack: () => void }) {
           {t('settings.deleteConfirm')}
           <input value={word} onChange={(e) => setWord(e.target.value)} autoComplete="off" />
         </label>
-        <button type="submit" disabled={word !== 'DELETE'}>
+        <Button type="submit" variant="destructive" disabled={word !== 'DELETE'}>
           {t('phone.forgotErase')}
-        </button>
-        <button type="button" onClick={onBack}>
+        </Button>
+        <Button variant="outline" onClick={onBack}>
           {t('common.back')}
-        </button>
+        </Button>
         <p className="notice" role="alert">
           {message}
         </p>
