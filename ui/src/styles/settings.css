@@ -50,6 +50,76 @@
   overflow-wrap: anywhere;
 }
 
+/* A form that is hidden while the loading screen shows keeps what was typed, so display must not override `hidden`. */
+.gate > [hidden] {
+  display: none;
+}
+
+/* The loading screen after a password: a line that fills, and "decrypting..." under it. Still when motion is reduced. */
+.decrypting {
+  display: grid;
+  justify-items: center;
+  gap: 0.75rem;
+}
+
+.decrypting-line {
+  width: 14rem;
+  max-width: 100%;
+  height: 2px;
+  overflow: hidden;
+  background: var(--border);
+}
+
+.decrypting-fill {
+  display: block;
+  height: 100%;
+  background: var(--primary);
+  transform: scaleX(0.4);
+  transform-origin: left;
+}
+
+.decrypting-text {
+  position: relative;
+  margin: 0;
+  font-size: 0.875rem;
+  color: var(--muted-foreground);
+}
+
+/* The dots hang off the end of the word, so the word itself stays centred under the line. */
+.decrypting-dots {
+  position: absolute;
+  left: 100%;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .decrypting-fill {
+    animation: decrypting-fill 1.4s ease-in-out infinite;
+  }
+
+  /* The dots are cut off from the right and let out one by one, so the word does not move. */
+  .decrypting-dots {
+    animation: decrypting-dots 1.2s steps(4, jump-none) infinite;
+  }
+}
+
+@keyframes decrypting-fill {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+
+@keyframes decrypting-dots {
+  from {
+    clip-path: inset(0 100% 0 0);
+  }
+  to {
+    clip-path: inset(0);
+  }
+}
+
 /* A field with a button inside it, at the right edge. */
 .field-input {
   position: relative;
@@ -659,6 +729,11 @@ html.is-phone .gate {
   align-items: start;
   padding-top: calc(1.5rem + env(safe-area-inset-top, 0px));
   padding-bottom: calc(2rem + env(safe-area-inset-bottom, 0px));
+}
+
+/* The loading screen is centred, not at the top: there is no keyboard to make room for. */
+html.is-phone .gate > .decrypting {
+  align-self: center;
 }
 
 /* The show button fills the 44px field. */

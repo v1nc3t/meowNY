@@ -8,6 +8,8 @@ import { useI18n } from '../i18n/context'
 import { languageOptions } from '../i18n/languages'
 import { useNotice } from '../hooks/useNotice'
 import { errorText, vault } from './api'
+import Decrypting from './Decrypting'
+import { atLeast, useRefocus } from './decrypting'
 import PasswordField from './PasswordField'
 import RecoveryKeyPanel from './RecoveryKeyPanel'
 import RestoreFromBackup from './RestoreFromBackup'
@@ -19,6 +21,7 @@ export default function FirstRunScreen({ onDone }: { onDone: () => void }) {
   const { t, language, setLanguage } = useI18n()
   const [message, setMessage] = useNotice()
   const [busy, setBusy] = useState(false)
+  const formRef = useRefocus(busy)
   const [recoveryKey, setRecoveryKey] = useState<string | null>(null)
   const [restoring, setRestoring] = useState(false)
   const [suggested] = useState(defaultSettings)
@@ -41,7 +44,7 @@ export default function FirstRunScreen({ onDone }: { onDone: () => void }) {
     try {
       // The data file exists from here on, but the app stays on this screen until the key is saved.
       setRecoveryKey(
-        await vault.create({ currency: normalizeCurrency(currency), locale, timezone, language }, passphrase),
+        await atLeast(vault.create({ currency: normalizeCurrency(currency), locale, timezone, language }, passphrase)),
       )
       saveSenderName(name)
     } catch (error) {
@@ -62,7 +65,8 @@ export default function FirstRunScreen({ onDone }: { onDone: () => void }) {
 
   return (
     <main className="gate">
-      <form onSubmit={onSubmit}>
+      {busy && <Decrypting />}
+      <form ref={formRef} hidden={busy} onSubmit={onSubmit}>
         <p className="brand-mark">meowny</p>
         <h1>{t('welcome.title')}</h1>
 

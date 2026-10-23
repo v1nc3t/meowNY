@@ -5,6 +5,8 @@ import { useNotice } from '../hooks/useNotice'
 import { useI18n, useT } from '../i18n/context'
 import { languageOptions } from '../i18n/languages'
 import { errorText, vault } from './api'
+import Decrypting from './Decrypting'
+import { atLeast, useRefocus } from './decrypting'
 import PasswordField from './PasswordField'
 import { defaultSettings, phonePassphraseProblem } from './rules'
 import Button from '../components/ui/Button'
@@ -19,6 +21,7 @@ export function PhoneFirstRun({ onDone }: { onDone: () => void }) {
   const [message, setMessage] = useNotice()
   const [busy, setBusy] = useState(false)
   const [typed, setTyped] = useState('')
+  const formRef = useRefocus(busy)
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -30,7 +33,7 @@ export function PhoneFirstRun({ onDone }: { onDone: () => void }) {
     try {
       const { locale, timezone } = defaultSettings()
       // The recovery key is not shown: on a phone it could only open the data, and the data is on the desktop too.
-      await vault.create({ currency: PHONE_PLACEHOLDER_CURRENCY, locale, timezone, language }, passphrase)
+      await atLeast(vault.create({ currency: PHONE_PLACEHOLDER_CURRENCY, locale, timezone, language }, passphrase))
       onDone()
     } catch (error) {
       setMessage(errorText(error))
@@ -40,7 +43,8 @@ export function PhoneFirstRun({ onDone }: { onDone: () => void }) {
 
   return (
     <main className="gate">
-      <form onSubmit={onSubmit}>
+      {busy && <Decrypting />}
+      <form ref={formRef} hidden={busy} onSubmit={onSubmit}>
         <p className="brand-mark">meowny</p>
         <h1>{t('phone.welcomeTitle')}</h1>
 

@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react'
+import { DecryptingPage } from './Decrypting'
+import { useDecryptingGate } from './decrypting'
 import FirstRunScreen from './FirstRunScreen'
 import LockScreen from './LockScreen'
 import { PhoneFirstRun } from './PhoneScreens'
@@ -32,6 +34,10 @@ export default function VaultGate({ children }: { children: ReactNode }) {
       void stop.then((unlisten) => unlisten())
     }
   }, [desktop, refresh])
+
+  // The first look at the vault can be slow (the data opens from the keychain key). A quick start shows nothing extra; a slow one
+  // shows the loading screen, and keeps it long enough to read.
+  const loading = useDecryptingGate(status === 'loading')
 
   // Once unlocked, show the app in the language saved with the data.
   useEffect(() => {
@@ -78,6 +84,7 @@ export default function VaultGate({ children }: { children: ReactNode }) {
     return () => document.removeEventListener('visibilitychange', onVisibility)
   }, [desktop, phone, status])
 
+  if (loading.show) return <DecryptingPage />
   if (status === 'loading') return null
   if (status === 'not_set_up') return phone ? <PhoneFirstRun onDone={refresh} /> : <FirstRunScreen onDone={refresh} />
   if (status === 'locked') return <LockScreen onUnlocked={refresh} />
