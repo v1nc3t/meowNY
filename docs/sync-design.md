@@ -266,6 +266,10 @@ Rows from the other device are untrusted input, even from a paired one.
   - `allowBackup="false"`: Android's backup would put the encrypted data, `vault.json` and the secret file side by side in the person's Google account, making the erase pointless.
   - `FLAG_SECURE` on the window: no screen capture, blank recent-apps picture.
   - Camera only while scanning. Sync uses Rust sockets, not the web view; it needs the `INTERNET` permission every Tauri app has.
+- **iOS hardening** (2026-10-23; built in CI, not yet tried on an iPhone):
+  - The data folder is kept out of iCloud backups (`NSURLIsExcludedFromBackupKey`), set at every start (`lib.rs`, `keep_out_of_backups`); the app does not start without it.
+  - `src-tauri/Info.ios.plist` gives the camera and local network texts. iOS asks once to allow the local network; the first connection may fail while it asks, so scan again.
+  - iOS cannot block screenshots, and the opener plugin cannot hand a file to another app there, so documents are previewed in the app only.
 - **Desktop screens.** All in the "phone" block of settings: paired phones (name, when paired, last sync, two-step remove), a warning per phone not synced since a currency change, this computer's name, "add a phone" and "sync with phone". While running: the QR code (address in words, countdown), the six digits, progress, then the summary or stop reason. Leaving the page closes the window. Screens only show `sync_status`, polled twice a second.
 
 ## 14. Threats and what stops them

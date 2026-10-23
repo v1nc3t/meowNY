@@ -10,7 +10,7 @@ const SECTIONS = [
     id: 'start',
     title: 'Getting started',
     blocks: [
-      { t: 'p', text: 'A budget app for your computer (Linux, macOS, Windows) and your Android phone. Your data stays on your devices, encrypted.' },
+      { t: 'p', text: 'A budget app for your computer (Linux, macOS, Windows) and your phone (Android or iPhone). Your data stays on your devices, encrypted.' },
       { t: 'note', kind: 'info', text: '**Pre-release:** no installers yet. Build from source.' },
       { t: 'h3', id: 'install', text: 'Build and run' },
       { t: 'p', text: "You need Node.js 22+, Rust 1.90+, [Tauri's system libraries](https://v2.tauri.app/start/prerequisites/) and a system keychain." },
@@ -82,7 +82,7 @@ const SECTIONS = [
     id: 'phone',
     title: 'Your phone',
     blocks: [
-      { t: 'p', text: 'The Android app keeps a full copy and works offline. It syncs over your home wifi, with no server.' },
+      { t: 'p', text: 'The phone app (Android or iPhone) keeps a full copy and works offline. It syncs over your home wifi, with no server.' },
       { t: 'h3', id: 'pairing', text: 'Pair once' },
       { t: 'ol', items: ['Computer: **settings › phone › add a phone**.', 'Phone: scan the QR code.', 'Type the six digits the computer shows.'] },
       { t: 'h3', id: 'syncing', text: 'Sync' },
@@ -93,11 +93,13 @@ const SECTIONS = [
           'Choose a direction: both ways, to the computer or to the phone.',
           'Conflicts are shown side by side; you pick.',
           'Both devices must be on the same network.',
+          'iPhone: allow **local network** when asked, then scan again.',
           'A passphrase locks the phone. Five wrong tries erase it; pair again to restore.',
         ],
       },
       { t: 'h3', id: 'get-apk', text: 'Get the app' },
-      { t: 'p', text: `Download the debug APK from the **Android** workflow in GitHub Actions, or [build it yourself](${doc('development.md')}#android).` },
+      { t: 'p', text: `**Android:** download the debug APK from the **Android** workflow in GitHub Actions, or [build it yourself](${doc('development.md')}#android).` },
+      { t: 'p', text: `**iPhone:** download the IPA from the **iOS** workflow and install it with [AltStore](https://altstore.io) or [SideStore](https://sidestore.io). A free Apple ID needs a refresh every 7 days. Documents are previewed in the app; iPhone has no "open". [Build it yourself](${doc('development.md')}#ios).` },
     ],
   },
   {

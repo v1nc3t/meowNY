@@ -7,6 +7,7 @@ Everything needed to build, test and change meowNY. The [README](../README.md) i
 - [Requirements](#requirements)
 - [Run and build the desktop app](#run-and-build-the-desktop-app)
 - [Android](#android)
+- [iOS](#ios)
 - [The data folder](#the-data-folder)
 - [Project structure](#project-structure)
 - [Tests and checks](#tests-and-checks)
@@ -63,6 +64,22 @@ adb install src-tauri/gen/android/app/build/outputs/apk/universal/debug/app-univ
 - `cargo run --example sync_desktop -- <folder> setup`, then `pair` or `sync both|to_desktop|to_phone`, tries the phone against a desktop without a window. `cargo run --release --example bench` times common work on ten years of data.
 - Test build (a field to paste the code, screenshots allowed): `MEOWNY_ALLOW_SCREENSHOTS=1 python3 scripts/android-patch.py` and `VITE_MEOWNY_TEST_PASTE=1 npx tauri android build ...`. Never install it for real use.
 
+## iOS
+
+Same UI and Rust core, packaged by Tauri mobile. CI (`.github/workflows/ios.yml`, a macOS runner) builds an unsigned IPA on every app change (artifact `meowny-ios-unsigned`). Install it with AltStore or SideStore, which sign it with your own Apple ID; a free Apple ID needs a refresh every 7 days.
+
+By hand you need a Mac with Xcode and `rustup target add aarch64-apple-ios`:
+
+```bash
+npx tauri ios init                                  # makes src-tauri/gen/apple, which is not kept in git
+npx tauri ios build --target aarch64 --no-sign      # src-tauri/gen/apple/build/arm64/meowNY.ipa
+```
+
+- `src-tauri/Info.ios.plist` holds the camera, photo and local network texts; `tauri ios build` merges it into the generated project (a plain `xcodebuild` does not).
+- At every start the app keeps its data folder out of iCloud backups, and does not start if it cannot (`keep_out_of_backups` in `src-tauri/src/lib.rs`).
+- Known iOS differences: the opener plugin opens URLs only, so documents are previewed in the app and have no "open"; the notification plugin reads dates as local time, so `pluginDate` in `ui/src/lib/reminders.ts` gives iOS the local clock time.
+- The App Store needs an Apple developer account (99 USD a year) and signing in CI; that is phase 11 or later.
+
 ## The data folder
 
 | OS | Folder |
@@ -92,7 +109,7 @@ meowNY/
 ├── cli/               The `meowny` command line program (Rust, one dependency)
 ├── docs/              Everything written for people; site/ builds the website and docs/CLI.md (plain Node)
 ├── scripts/           Whole-repo checks and helpers: check-outbound and its allowlist, android-patch, test vectors
-└── .github/workflows/ ci.yml, desktop.yml, android.yml, security.yml and pages.yml
+└── .github/workflows/ ci.yml, desktop.yml, android.yml, ios.yml, security.yml and pages.yml
 ```
 
 Naming and layout:
@@ -187,5 +204,6 @@ The site is published by `.github/workflows/pages.yml` on pushes to `main` that 
 - `ci.yml`: lint, build and test the UI, and check the website, on every push and pull request.
 - `desktop.yml`: outbound check and `cargo test` for the app and `cli/`, then build the app (Linux on pull requests; also macOS and Windows on `main`; can be run by hand for any branch).
 - `android.yml`: builds the debug APK and uploads it (`meowny-android-debug`).
+- `ios.yml`: builds an unsigned IPA on macOS and uploads it (`meowny-ios-unsigned`).
 - `security.yml`: `npm audit`, `cargo audit` (app and `cli/`) and a secret scan, on `main`, pull requests and weekly.
 - `pages.yml`: builds and publishes the website.

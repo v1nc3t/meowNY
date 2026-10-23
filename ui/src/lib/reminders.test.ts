@@ -2,7 +2,13 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { en } from '../i18n/en.ts'
 import { LANGUAGES } from '../i18n/languages.ts'
-import { localDay, notificationId, parseTime, ringNow, schedulePlan } from './reminders.ts'
+import { localDay, notificationId, parseTime, pluginDate, ringNow, schedulePlan } from './reminders.ts'
+
+test('the plugin gets the real instant, except on iOS, which gets the local clock time (it reads the date as local)', () => {
+  const at = new Date(2026, 9, 24, 9, 5)
+  assert.equal(pluginDate(at, false), at.toISOString())
+  assert.equal(pluginDate(at, true), '2026-10-24T09:05:00.000Z')
+})
 
 const reminders = (today: string, due: [string, string, string][] = [], upcoming: [string, number][] = []) => ({
   today,

@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- Merged into the generated iOS project by `tauri ios build` and `tauri ios dev`. iOS stops the app without these texts. -->
+<plist version="1.0">
+<dict>
+	<key>NSCameraUsageDescription</key>
+	<string>meowNY uses the camera to scan the code your computer shows, a friend's bill code, and photos of receipts.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>meowNY lets you pick a photo of a receipt to keep with your transactions.</string>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>meowNY syncs with your computer over your home wifi. Nothing goes to the internet.</string>
+</dict>
+</plist>

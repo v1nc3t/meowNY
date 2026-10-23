@@ -18,7 +18,7 @@ const FEATURES = [
   { icon: 'home', title: 'statistics', text: 'Spending, trends, top categories.', href: 'guide.html#budgeting' },
   { icon: 'documents', title: 'documents', text: 'Receipts, kept encrypted.', href: 'guide.html#documents' },
   { icon: 'debts', title: 'debts', text: 'Who owes whom. Split bills.', href: 'guide.html#debts' },
-  { icon: 'sync', title: 'phone', text: 'Android, synced over wifi.', href: 'guide.html#phone' },
+  { icon: 'sync', title: 'phone', text: 'Android and iPhone, synced over wifi.', href: 'guide.html#phone' },
   { icon: 'export', title: 'backup', text: 'Encrypted backups and exports.', href: 'guide.html#backup' },
   { icon: 'terminal', title: 'command line', text: 'For scripts and AI agents.', href: 'cli.html' },
 ]
@@ -70,7 +70,7 @@ ${features}
 cd meowNY
 npm install
 npm run tauri dev</code></pre></figure>
-<p>Then follow <a href="guide.html#start">getting started</a> in the guide. The Android app and its sync: <a href="guide.html#phone">your phone</a>.</p>
+<p>Then follow <a href="guide.html#start">getting started</a> in the guide. The phone app and its sync: <a href="guide.html#phone">your phone</a>.</p>
 </section>
 <footer><p>meowNY is free software under the AGPL-3.0. <a href="${REPO}">Source on GitHub</a>.</p></footer>`
 

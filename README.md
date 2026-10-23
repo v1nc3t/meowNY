@@ -9,9 +9,10 @@
   <a href="https://github.com/v1nc3t/meowNY/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/v1nc3t/meowNY/actions/workflows/ci.yml/badge.svg"></a>
   <a href="https://github.com/v1nc3t/meowNY/actions/workflows/desktop.yml"><img alt="Desktop build" src="https://github.com/v1nc3t/meowNY/actions/workflows/desktop.yml/badge.svg"></a>
   <a href="https://github.com/v1nc3t/meowNY/actions/workflows/android.yml"><img alt="Android build" src="https://github.com/v1nc3t/meowNY/actions/workflows/android.yml/badge.svg"></a>
+  <a href="https://github.com/v1nc3t/meowNY/actions/workflows/ios.yml"><img alt="iOS build" src="https://github.com/v1nc3t/meowNY/actions/workflows/ios.yml/badge.svg"></a>
   <a href="https://github.com/v1nc3t/meowNY/actions/workflows/security.yml"><img alt="Security" src="https://github.com/v1nc3t/meowNY/actions/workflows/security.yml/badge.svg"></a>
   <a href="LICENSE"><img alt="License: AGPL-3.0" src="https://img.shields.io/badge/license-AGPL--3.0-blue"></a>
-  <img alt="Platforms: Linux, macOS, Windows, Android" src="https://img.shields.io/badge/platforms-Linux%20%7C%20macOS%20%7C%20Windows%20%7C%20Android-lightgrey">
+  <img alt="Platforms: Linux, macOS, Windows, Android, iOS" src="https://img.shields.io/badge/platforms-Linux%20%7C%20macOS%20%7C%20Windows%20%7C%20Android%20%7C%20iOS-lightgrey">
 </p>
 
 <p align="center">
@@ -38,14 +39,14 @@
 
 ## About
 
-meowNY tracks income and expenses against monthly budgets. It is a [Tauri](https://tauri.app) app: a Rust core and a React UI, with all data in one encrypted SQLite file ([SQLCipher](https://www.zetetic.net/sqlcipher/)) on your machine. An Android app keeps a full offline copy and syncs with the computer over your home wifi. A command line program, `meowny`, lets scripts and AI agents use the running app.
+meowNY tracks income and expenses against monthly budgets. It is a [Tauri](https://tauri.app) app: a Rust core and a React UI, with all data in one encrypted SQLite file ([SQLCipher](https://www.zetetic.net/sqlcipher/)) on your machine. A phone app (Android and iPhone) keeps a full offline copy and syncs with the computer over your home wifi. A command line program, `meowny`, lets scripts and AI agents use the running app.
 
 ## Features
 
 - **Budgeting:** categories, transactions, monthly budgets, recurring items (pay, skip, pause, end), statistics and charts. Seven languages, light and dark themes, keyboard shortcuts.
 - **Documents:** receipts and invoices attached to transactions, stored encrypted, previewed inside the app (images, PDF, text, CSV, Word, Excel).
 - **Debts and shared bills:** a ledger per friend, bills split four ways (budgets count only your part), QR bill codes a friend can scan, reminders.
-- **Phone:** an Android app with a full offline copy. It syncs straight to the computer after a QR code, with no server, and shows conflicts side by side.
+- **Phone:** an Android and iPhone app with a full offline copy. It syncs straight to the computer after a QR code, with no server, and shows conflicts side by side.
 - **Backup and export:** encrypted `.meowbak` backups, on a schedule if you like. Exports to JSON, CSV, Excel and PDF.
 - **Command line:** `meowny` has a command per feature, `--json` output and stable exit codes, with tokens you make and revoke.
 
@@ -53,7 +54,7 @@ Each feature is explained in the [guide](https://v1nc3t.github.io/meowNY/guide.h
 
 ## Status
 
-**Pre-release (0.1.0).** The desktop app, command line and Android app are built, tested, and have been tried on a real phone (sync, documents, bill codes, reminders). There are no installers yet, so you build from source. Signed installers come with the first release ([phase 11](docs/PLAN.md)). Nobody outside the project has reviewed the sync protocol yet; that review comes before the first release.
+**Pre-release (0.1.0).** The desktop app, command line and Android app are built, tested, and have been tried on a real phone (sync, documents, bill codes, reminders). There are no installers yet, so you build from source. Signed installers come with the first release ([phase 11](docs/PLAN.md)). The iPhone app builds in CI but has not been tried on a real iPhone yet. Nobody outside the project has reviewed the sync protocol yet; that review comes before the first release.
 
 ## Getting started
 
@@ -69,6 +70,8 @@ npm run tauri dev        # the first run compiles the Rust side (a few minutes)
 The first launch asks for a currency and an optional passphrase, and shows your **recovery key once**: write it down. `npm run tauri build` makes an installer for your system (not signed yet).
 
 **Android:** every change builds a debug APK in GitHub Actions (the **Android** workflow, artifact `meowny-android-debug`) that you can sideload. To build it yourself, see [docs/development.md](docs/development.md#android).
+
+**iPhone:** every change builds an unsigned IPA (the **iOS** workflow, artifact `meowny-ios-unsigned`). Install it with [AltStore](https://altstore.io) or [SideStore](https://sidestore.io), which sign it with your own Apple ID. With a free Apple ID the app must be refreshed every 7 days; AltStore does that for you.
 
 **Your data** lives in `~/.local/share/org.meowny.app/` (Linux), `~/Library/Application Support/org.meowny.app/` (macOS) or `%APPDATA%\org.meowny.app\` (Windows). The key is in your system keychain.
 
@@ -142,7 +145,7 @@ Demo data, migrations, naming rules and CI: [docs/development.md](docs/developme
 | 9 | Documents: encrypted receipts and invoices | Done |
 | 10 | Debts and expense splitting | Done |
 | 11 | Signed installers, updates, `SECURITY.md`, `CONTRIBUTING.md`, install guides | Next |
-| 12 | iOS, shared bills between app users, widgets | Later |
+| 12 | iOS app (builds; App Store later), shared bills between app users, widgets | Started |
 
 Details and open points: [docs/PLAN.md](docs/PLAN.md).
 

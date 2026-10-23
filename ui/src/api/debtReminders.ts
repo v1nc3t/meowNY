@@ -2,7 +2,8 @@ import { invoke } from '@tauri-apps/api/core'
 import { debts } from './debts'
 import { t } from '../i18n/translate'
 import { vault } from '../vault/api'
-import { notifiedDays, reminderEvery, reminderTime, ringNow, saveNotifiedDays, saveScheduledIds, scheduledIds, schedulePlan } from '../lib/reminders'
+import { isIos } from '../lib/platform'
+import { notifiedDays, pluginDate, reminderEvery, reminderTime, ringNow, saveNotifiedDays, saveScheduledIds, scheduledIds, schedulePlan } from '../lib/reminders'
 
 // Reminders about debts (docs/debts-design.md, section 11). The text is the same for everyone and holds a count, never a name or an
 // amount: the app is locked when it rings, and a notification can be seen on a lock screen and kept by the system.
@@ -67,7 +68,7 @@ export async function scheduleOnPhone(now = new Date()): Promise<Scheduling> {
           id: item.id,
           title: t('notify.debtTitle'),
           body: t('notify.debtBody', { count: item.count }),
-          schedule: { at: { date: item.at.toISOString(), repeating: false, allowWhileIdle: false } },
+          schedule: { at: { date: pluginDate(item.at, isIos), repeating: false, allowWhileIdle: false } },
         },
       })
     }

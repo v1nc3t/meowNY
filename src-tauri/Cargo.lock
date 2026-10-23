@@ -2391,6 +2391,7 @@ dependencies = [
  "hkdf",
  "keyring",
  "krilla",
+ "objc2-foundation",
  "rusqlite",
  "rust_xlsxwriter",
  "serde",

@@ -394,7 +394,11 @@ Decided 2026-10-16:
 
 ## Phase 12: Later (optional)
 
-- [ ] **iOS app** after Android works: same Tauri mobile code and sync; `tauri ios init`, permission texts, passphrase vault, a macOS runner in CI, tests on a real iPhone. Needs a Mac with Xcode; installing for others needs an Apple developer account (99 USD a year); a free Apple ID installs only on your own iPhone for 7 days at a time (rules as of 2026-10-15, recheck)
+- [ ] **iOS app**: same Tauri mobile code and sync. Sideloaded with AltStore or SideStore for now (a free Apple ID needs a refresh every 7 days); the App Store needs an Apple developer account (99 USD a year)
+  - [x] Made to build for iOS (2026-10-23): keychain on the desktop only and the phone vault on any phone (`cfg(desktop)`/`cfg(mobile)`); `src-tauri/Info.ios.plist` (camera, photos, local network texts); the data folder kept out of iCloud backups at every start (`keep_out_of_backups`); reminders given the local clock time on iOS (`pluginDate`, plugins-workspace#3256); no "open" for documents on iOS (the opener plugin opens URLs only), preview stays
+  - [ ] CI: `.github/workflows/ios.yml` on `macos-26` builds an unsigned IPA (`tauri ios build --no-sign`, artifact `meowny-ios-unsigned`). **Written, not run on GitHub yet**
+  - [ ] On a real iPhone: install with AltStore, pair (allow local network), sync, scan a bill code, a reminder at the right hour, a document photo
+  - [ ] App Store: developer account, signing in CI, store listing
 - [ ] Bills shared between people who each use the app. Phase 10 keeps one person's ledger and lets a friend take a bill from a QR code as a one-way notice; shared group data needs a way to sync without a server
 - [ ] Home-screen widgets, shared budgets between two devices of the same household
 
