@@ -84,7 +84,6 @@ export default function LockScreen({ onUnlocked }: { onUnlocked: () => void }) {
         <form onSubmit={onRecover}>
           <p className="brand-mark">meowny</p>
           <h1>{t('recovery.title')}</h1>
-          <p className="hint">{t('recovery.enter')}</p>
           <label>
             {t('recovery.label')}
             <input

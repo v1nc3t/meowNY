@@ -195,7 +195,6 @@ function DocumentsView({ settings }: { settings: MoneySettings }) {
         <div className="doc-drop-text">
           {size ? <p className="doc-count">{t('docs.summary', { count: size.count, size: formatSize(size.bytes, locale) })}</p> : null}
           {size && phone ? <p className="hint">{t('docs.heldSummary', { count: size.heldCount, size: formatSize(size.heldBytes, locale) })}</p> : null}
-          {phone ? null : <p className="hint">{t('docs.dropHint')}</p>}
         </div>
         <div className="tx-actions">
           <button type="button" disabled={busy} onClick={() => fileInput.current?.click()} {...tip('new', t('docs.add'))}>

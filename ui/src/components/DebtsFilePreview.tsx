@@ -85,7 +85,6 @@ export default function DebtsFilePreview({
         }}
       />
       <div className={framed ? 'preview-body is-framed' : 'preview-body'}>{body}</div>
-      <p className="hint preview-note">{t('debts.previewHint')}</p>
     </Modal>
   )
 }

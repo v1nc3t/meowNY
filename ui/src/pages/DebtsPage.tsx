@@ -191,7 +191,6 @@ function DebtsView({ settings, now }: { settings: MoneySettings; now: Today }) {
       ) : null}
       {scanning ? (
         <div className="scan-overlay" role="dialog" aria-label={t('code.scan')}>
-          <p>{t('code.scanning')}</p>
           <button type="button" onClick={() => void stopScan()}>
             {t('common.cancel')}
           </button>

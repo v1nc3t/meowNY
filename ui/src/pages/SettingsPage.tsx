@@ -171,7 +171,6 @@ export default function SettingsPage() {
           <input type="checkbox" checked={checked} onChange={(event) => onChange(event.target.checked)} />
           {t('settings.backupDocuments', { count: library.heldCount, size: formatSize(library.heldBytes, settings?.locale ?? '') })}
         </label>
-        <p className="hint">{t('settings.backupDocumentsHint')}</p>
       </>
     )
 
@@ -402,7 +401,6 @@ export default function SettingsPage() {
                 }
               }}
             />
-            <p className="hint">{t('settings.debtEveryHint')}</p>
             <p className="hint">{t(phone ? 'settings.reminderPhone' : 'settings.reminderDesktop')}</p>
           </div>
         )}

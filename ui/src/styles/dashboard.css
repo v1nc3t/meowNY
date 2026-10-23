@@ -4,7 +4,7 @@
 .dash {
   display: flex;
   flex-direction: column;
-  gap: 1.25rem;
+  gap: 1rem;
   padding-bottom: 1.5rem;
 }
 
@@ -18,54 +18,18 @@
   gap: 0;
 }
 
-.dash h2 {
-  margin: 0;
-  font-size: 0.875rem;
-  letter-spacing: 0.04em;
-  color: var(--muted-foreground);
-}
-
-.dash h2 a {
-  color: inherit;
-  text-decoration: none;
-}
-
-.dash h2 a:focus-visible {
-  color: var(--foreground);
-  text-decoration: line-through;
-  text-decoration-thickness: 1px;
-  text-decoration-skip-ink: none;
-}
-
-@media (hover: hover) {
-  .dash h2 a:hover {
-    color: var(--foreground);
-    text-decoration: line-through;
-    text-decoration-thickness: 1px;
-    text-decoration-skip-ink: none;
-  }
-}
-
-.dash-card {
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-  min-width: 0;
-  padding: 1rem;
-  border: 0.8px solid var(--border);
-  border-radius: 6px;
-}
-
 .dash-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 24rem), 1fr));
-  gap: 1.25rem;
+  gap: 1rem;
   align-items: start;
 }
 
 .dash-empty {
   margin: 0;
-  font-size: 0.875rem;
+  padding: 0.75rem 0;
+  font-size: 0.8125rem;
+  text-align: center;
   color: var(--muted-foreground);
 }
 
@@ -84,10 +48,6 @@
   gap: 1rem 1.5rem;
 }
 
-.dash-top .dash-stats {
-  margin-bottom: 1.25rem;
-}
-
 @container (max-width: 34rem) {
   .dash-stats {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -102,26 +62,19 @@
 }
 
 .dash-stat-label {
-  font-size: 0.75rem;
-  letter-spacing: 0.04em;
+  font-size: 0.8125rem;
   color: var(--muted-foreground);
 }
 
 .dash-stat-value {
   font-family: var(--font);
-  font-size: 1.25rem;
+  font-size: 1.5rem;
+  font-weight: 600;
+  line-height: 1.3;
+  letter-spacing: -0.02em;
   color: var(--foreground);
   font-variant-numeric: tabular-nums;
 }
-
-.dash-change {
-  font-size: 0.75rem;
-  color: var(--muted-foreground);
-}
-
-.dash-change.good { color: var(--c-income); }
-
-.dash-change.bad { color: var(--c-expense); }
 
 /* Bars */
 .bar-row {
@@ -135,7 +88,7 @@
   flex: 1;
   display: block;
   height: 0.5rem;
-  border-radius: 4px;
+  border-radius: 9999px;
   overflow: hidden;
   background: var(--c-track);
 }
@@ -143,13 +96,13 @@
 .bar-fill {
   display: block;
   height: 100%;
-  border-radius: 4px;
+  border-radius: 9999px;
   background: var(--c-income);
   transition: width 0.3s;
 }
 
 .bar-over {
-  background: var(--c-expense);
+  background: var(--destructive);
 }
 
 .bar-label {
@@ -235,7 +188,7 @@
 }
 
 .year-readout b {
-  font-weight: normal;
+  font-weight: 600;
   color: var(--foreground);
 }
 
@@ -308,7 +261,7 @@
 }
 
 .donut-center b {
-  font-weight: normal;
+  font-weight: 600;
   font-size: 0.875rem;
   color: var(--foreground);
 }
@@ -344,21 +297,17 @@
   font-size: 0.8125rem;
 }
 
-/* A list straight in a card (the recurring cards) takes the height of its rows; beside a donut it takes its share of the width. */
-.dash-card > .dash-legend {
-  flex: none;
-}
-
 .dash .dash-legend li {
   flex-direction: row;
   align-items: center;
   gap: 0.625rem;
   padding: 0.3rem 0.5rem;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
 }
 
-.dash .dash-legend li.on {
-  background: var(--border);
+.dash .dash-legend li.on,
+.dash .dash-legend li:hover {
+  background: var(--accent);
 }
 
 .swatch {
@@ -401,11 +350,11 @@
   align-items: stretch;
   gap: 0.375rem;
   padding: 0.4rem 0.5rem;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
 }
 
 .dash .dash-bars li:hover {
-  background: var(--border);
+  background: var(--accent);
 }
 
 .dash .dash-bars .dash-total {
@@ -414,8 +363,8 @@
 
 .dash .dash-bars .dash-total + li:not(.dash-total) {
   margin-top: 0.25rem;
-  border-top: 0.8px solid var(--border);
-  border-radius: 0 0 4px 4px;
+  border-top: 1px solid var(--border);
+  border-radius: 0 0 var(--radius-sm) var(--radius-sm);
   padding-top: 0.75rem;
 }
 
@@ -428,15 +377,6 @@
 
 .year-readout.is-blank {
   display: none;
-}
-
-/* Card header with a control on the right, such as the year picker. */
-.dash-head {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.5rem 1rem;
 }
 
 /* Recurring items */
@@ -460,7 +400,7 @@
 }
 
 .dash-rec-sum b {
-  font-weight: normal;
+  font-weight: 600;
   font-size: 1.125rem;
   color: var(--foreground);
   font-variant-numeric: tabular-nums;
@@ -478,7 +418,7 @@
   align-items: center;
   gap: 0 1rem;
   padding: 0.35rem 0.5rem;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
 }
 
 /* The rows share one set of columns, so "per month" and "paid" line up from row to row and under their headings, whatever
@@ -497,12 +437,12 @@
 }
 
 .dash .dash-rec-rows li:not(.dash-rec-head):hover {
-  background: var(--border);
+  background: var(--accent);
 }
 
 .dash .dash-rec-rows .dash-rec-head {
-  font-size: 0.6875rem;
-  letter-spacing: 0.04em;
+  font-size: 0.75rem;
+  font-weight: 600;
   color: var(--muted-foreground);
   text-align: right;
 }
@@ -528,7 +468,7 @@
 .dash-col {
   display: flex;
   flex-direction: column;
-  gap: 1.25rem;
+  gap: 1rem;
   min-width: 0;
 }
 

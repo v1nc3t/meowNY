@@ -73,7 +73,6 @@ export default function EditCategoryModal({
           {t('categories.budgetFrom', { month: monthText })}
           <input name="amount" inputMode="decimal" placeholder="0.00" defaultValue={amount} autoComplete="off" />
         </label>
-        <p className="hint">{t('categories.budgetHint')}</p>
       </form>
     </Modal>
   )

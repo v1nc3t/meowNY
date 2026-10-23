@@ -410,7 +410,6 @@ function RecurringView({ settings, now }: { settings: MoneySettings; now: Today 
                             {item.split ? (
                               <section className="detail-section">
                                 <p className="detail-title">{t('split.section')}</p>
-                                <p>{t('split.templateHint')}</p>
                                 {(() => {
                                   const shares = reducedWeights([item.split.mine, ...item.split.parts.map((part) => part.weight)])
                                   return [t('split.you'), ...item.split.parts.map((part) => part.person ?? part.guest ?? '')].map((name, at) => (
@@ -545,7 +544,6 @@ function RecurringModal({
             {t('tx.amount')}
             <input name="amount" inputMode="decimal" value={amount} onChange={(event) => setAmount(event.target.value)} autoComplete="off" />
           </label>
-          <p className="hint">{t('rec.amountHint')}</p>
           <Dropdown
             label={t('common.category')}
             name="categoryId"
@@ -581,7 +579,6 @@ function RecurringModal({
           ) : null}
           {canSplit && split.on ? (
             <>
-              <p className="hint">{t('split.templateHint')}</p>
               <SplitEditor
                 amount={amount.trim() === '' ? null : amount}
                 draft={split.draft}

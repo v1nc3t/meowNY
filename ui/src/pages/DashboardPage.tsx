@@ -4,6 +4,9 @@ import { debts, type Summary } from '../api/debts'
 import { errorText } from '../api/invoke'
 import { monthNames, shiftMonth, withYear, yearChoices } from '../api/months'
 import Dropdown from '../components/Dropdown'
+import Badge from '../components/ui/Badge'
+import Button from '../components/ui/Button'
+import { Card, CardAction, CardContent, CardHeader, CardTitle } from '../components/ui/Card'
 import RecurringDashboard, { SOON_DAYS } from '../components/RecurringDashboard'
 import { recurring, type Dues, type Recurring } from '../api/recurring'
 import { stats, type BudgetVsActual, type Commitments, type PlannedVsPaid, type TopCategory, type YearPoint } from '../api/stats'
@@ -110,7 +113,12 @@ function DashboardView({ settings, now }: { settings: MoneySettings; now: Today 
       <p className="notice">{message}</p>
       {data && point ? (
         <div className="tx-pane wide dash">
-          <div className="dash-card dash-top">
+          <Card className="dash-top">
+            <CardHeader>
+              <CardAction>
+                <YearNav month={month} thisMonth={now.month} onChange={setMonth} />
+              </CardAction>
+            </CardHeader>
             <div className="dash-stats">
               <Stat label={t('common.income')} value={point.income} before={previous?.income} good="up" settings={settings} />
               <Stat label={t('common.expense')} value={point.expense} before={previous?.expense} good="down" settings={settings} />
@@ -121,54 +129,69 @@ function DashboardView({ settings, now }: { settings: MoneySettings; now: Today 
                 <Bar percent={point.savingsRate ?? 0} />
               </div>
             </div>
-            <YearNav month={month} thisMonth={now.month} onChange={setMonth} />
             <YearCharts year={year} month={month} onPick={setMonth} settings={settings} />
-          </div>
+          </Card>
           <div className="dash-grid">
             <div className="dash-col">
-              <div className="dash-card">
-                <h2>
-                  <Link to="/app/transactions">{t('dashboard.spending')}</Link>
-                </h2>
-                <Spending top={data.top} total={expenseTotal} settings={settings} />
-              </div>
-              <div className="dash-card">
-                <div className="dash-head">
-                  <h2>
+              <Card>
+                <CardHeader>
+                  <CardTitle>
+                    <Link to="/app/transactions">{t('dashboard.spending')}</Link>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <Spending top={data.top} total={expenseTotal} settings={settings} />
+                </CardContent>
+              </Card>
+              <Card>
+                <CardHeader>
+                  <CardTitle>
                     <Link to="/app/recurring">{t('nav.recurring')}</Link>
-                  </h2>
-                  <span className="dash-stat-label">{t('dashboard.perMonth')}</span>
-                </div>
-                <RecurringTable commitments={data.commitments} paid={data.paid} income={point.income} settings={settings} />
-              </div>
+                  </CardTitle>
+                  <CardAction>
+                    <span className="dash-stat-label">{t('dashboard.perMonth')}</span>
+                  </CardAction>
+                </CardHeader>
+                <CardContent>
+                  <RecurringTable commitments={data.commitments} paid={data.paid} income={point.income} settings={settings} />
+                </CardContent>
+              </Card>
               {owed ? (
-                <div className="dash-card">
-                  <h2>
-                    <Link to="/app/debts">{t('debts.title')}</Link>
-                  </h2>
-                  {owed.people.length === 0 ? (
-                    <p className="dash-empty">{t('debts.nobody')}</p>
-                  ) : (
-                    <div className="dash-stats">
-                      <div className="dash-stat">
-                        <span className="dash-stat-label">{t('debts.owedToYou')}</span>
-                        <span className="dash-stat-value">{formatMoney(owed.owedToYou, settings.currency, settings.locale)}</span>
+                <Card>
+                  <CardHeader>
+                    <CardTitle>
+                      <Link to="/app/debts">{t('debts.title')}</Link>
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    {owed.people.length === 0 ? (
+                      <p className="dash-empty">{t('debts.nobody')}</p>
+                    ) : (
+                      <div className="dash-stats">
+                        <div className="dash-stat">
+                          <span className="dash-stat-label">{t('debts.owedToYou')}</span>
+                          <span className="dash-stat-value">{formatMoney(owed.owedToYou, settings.currency, settings.locale)}</span>
+                        </div>
+                        <div className="dash-stat">
+                          <span className="dash-stat-label">{t('debts.youOwe')}</span>
+                          <span className="dash-stat-value">{formatMoney(owed.youOwe, settings.currency, settings.locale)}</span>
+                        </div>
                       </div>
-                      <div className="dash-stat">
-                        <span className="dash-stat-label">{t('debts.youOwe')}</span>
-                        <span className="dash-stat-value">{formatMoney(owed.youOwe, settings.currency, settings.locale)}</span>
-                      </div>
-                    </div>
-                  )}
-                </div>
+                    )}
+                  </CardContent>
+                </Card>
               ) : null}
             </div>
-            <div className="dash-card">
-              <h2>
-                <Link to="/app/categories">{t('nav.budgets')}</Link>
-              </h2>
-              <BudgetBars bva={data.bva} settings={settings} />
-            </div>
+            <Card>
+              <CardHeader>
+                <CardTitle>
+                  <Link to="/app/categories">{t('nav.budgets')}</Link>
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <BudgetBars bva={data.bva} settings={settings} />
+              </CardContent>
+            </Card>
           </div>
           {recurringNow ? (
             <RecurringDashboard dues={recurringNow.dues} items={recurringNow.items} today={now.date} currency={settings.currency} locale={settings.locale} />
@@ -179,7 +202,7 @@ function DashboardView({ settings, now }: { settings: MoneySettings; now: Today 
   )
 }
 
-/** A headline number with its change from the month before, green when the change is good. */
+/** A headline number with its change from the month before, in green when the change is good and red when it is bad. */
 function Stat({
   label,
   value,
@@ -194,15 +217,15 @@ function Stat({
   settings: MoneySettings
 }) {
   const change = changePercent(value, before)
-  const tone = change === null || Math.abs(change) < 0.05 ? '' : (change > 0) === (good === 'up') ? ' good' : ' bad'
+  const tone = change === null || Math.abs(change) < 0.05 ? 'secondary' : (change > 0) === (good === 'up') ? 'success' : 'destructive'
   return (
     <div className="dash-stat">
       <span className="dash-stat-label">{label}</span>
       <span className="dash-stat-value">{formatMoney(value, settings.currency, settings.locale)}</span>
       {change === null ? null : (
-        <span className={`dash-change${tone}`}>
+        <Badge variant={tone}>
           {change > 0 ? '▲' : change < 0 ? '▼' : ''} {formatPercent(Math.abs(Math.round(change * 10) / 10), settings.locale)}
-        </span>
+        </Badge>
       )}
     </div>
   )
@@ -214,9 +237,9 @@ function YearNav({ month, thisMonth, onChange }: { month: string; thisMonth: str
   const year = Number(month.slice(0, 4))
   return (
     <div className="month-nav dash-year-nav">
-      <button type="button" aria-label={t('dashboard.prevYear')} onClick={() => onChange(withYear(month, year - 1))}>
+      <Button variant="outline" size="icon" aria-label={t('dashboard.prevYear')} onClick={() => onChange(withYear(month, year - 1))}>
         &lsaquo;
-      </button>
+      </Button>
       <Dropdown
         compact
         label={t('common.year')}
@@ -224,12 +247,12 @@ function YearNav({ month, thisMonth, onChange }: { month: string; thisMonth: str
         options={yearChoices(month, Number(thisMonth.slice(0, 4))).map((y) => ({ value: String(y), label: String(y) }))}
         onChange={(value) => onChange(withYear(month, Number(value)))}
       />
-      <button type="button" aria-label={t('dashboard.nextYear')} onClick={() => onChange(withYear(month, year + 1))}>
+      <Button variant="outline" size="icon" aria-label={t('dashboard.nextYear')} onClick={() => onChange(withYear(month, year + 1))}>
         &rsaquo;
-      </button>
-      <button type="button" disabled={month.slice(0, 4) === thisMonth.slice(0, 4)} onClick={() => onChange(thisMonth)}>
+      </Button>
+      <Button variant="outline" disabled={month.slice(0, 4) === thisMonth.slice(0, 4)} onClick={() => onChange(thisMonth)}>
         {t('common.current')}
-      </button>
+      </Button>
     </div>
   )
 }

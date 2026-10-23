@@ -5,16 +5,28 @@ html.is-phone .pick-button {
   min-height: 2.75rem;
 }
 
-html.is-phone input:not([type='checkbox']),
+/* min-height beats the heights that base.css and primitives.css give, so a tap target stays 44px or more. */
+html.is-phone input:not([type='checkbox'], [type='radio']),
 html.is-phone select,
 html.is-phone textarea {
   min-height: 2.75rem;
   font-size: max(16px, 1rem);
 }
 
-html.is-phone input[type='checkbox'] {
+html.is-phone input[type='checkbox'],
+html.is-phone input[type='radio'] {
   width: 1.5rem;
   height: 1.5rem;
+}
+
+/* An icon button is as wide as it is tall, so it is also 44px wide. */
+html.is-phone .ui-btn-icon {
+  min-width: 2.75rem;
+}
+
+/* The tabs' buttons are 44px tall, so the track around them grows to fit. */
+html.is-phone .ui-tabs {
+  height: auto;
 }
 
 .app-shell.is-phone.is-locked {
@@ -29,7 +41,7 @@ html.is-phone input[type='checkbox'] {
   align-items: center;
   gap: 1rem;
   padding: calc(0.25rem + env(safe-area-inset-top, 0px)) 1rem 0.25rem;
-  border-bottom: 0.8px solid var(--border);
+  border-bottom: 1px solid var(--border);
   background: var(--background);
 }
 
@@ -52,11 +64,8 @@ html.is-phone input[type='checkbox'] {
 }
 
 .phone-action.active {
-  color: var(--foreground);
-}
-
-.phone-action:hover:not(:disabled) {
-  text-decoration: none;
+  color: var(--accent-foreground);
+  background: var(--accent);
 }
 
 .tab-icon {
@@ -78,7 +87,7 @@ html.is-phone input[type='checkbox'] {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
   padding-bottom: env(safe-area-inset-bottom, 0px);
-  border-top: 0.8px solid var(--border);
+  border-top: 1px solid var(--border);
   background: var(--background);
 }
 
@@ -104,16 +113,13 @@ html.is-phone input[type='checkbox'] {
   white-space: nowrap;
 }
 
-.phone-tab:hover:not(:disabled) {
-  text-decoration: none;
-}
-
 /* The page you are on: brighter, with a short line above it (a line, not a box). */
 .phone-tab.active {
   color: var(--foreground);
   box-shadow: inset 0 2px 0 var(--foreground);
 }
 
+/* The round add button: the main colour, raised over the page. */
 .fab {
   position: fixed;
   right: 1rem;
@@ -126,23 +132,28 @@ html.is-phone input[type='checkbox'] {
   height: 3.5rem;
   min-width: 0;
   padding: 0;
-  border: 2px solid var(--foreground);
-  border-radius: 50%;
-  background: transparent;
-  color: var(--foreground);
+  border: 0;
+  border-radius: 9999px;
+  background: var(--primary);
+  color: var(--primary-foreground);
+  box-shadow: var(--shadow-lg);
 }
 
 html.is-phone .fab {
   min-height: 3.5rem;
 }
 
-.fab:hover:not(:disabled) {
-  text-decoration: none;
+@media (hover: hover) {
+  .fab:hover:not(:disabled) {
+    background: var(--primary);
+    color: var(--primary-foreground);
+    opacity: 0.9;
+  }
 }
 
 .fab-icon {
-  width: 1.75rem;
-  height: 1.75rem;
+  width: 1.5rem;
+  height: 1.5rem;
   stroke-width: 2;
 }
 
@@ -157,19 +168,30 @@ html.is-phone .fab {
   padding: 0.75rem 1rem;
   background: var(--popover);
   border: 1px solid var(--border);
-  color: var(--foreground);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  color: var(--popover-foreground);
+  font-size: 0.8125rem;
   text-align: center;
 }
 
+/* The ways to add something: a short list in a bordered box. */
 .quick-menu {
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  gap: 0.125rem;
+  padding: 0.25rem;
+  background: var(--popover);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
 }
 
 .quick-menu button {
-  background: var(--muted);
-  color: var(--foreground);
+  justify-content: flex-start;
+  width: 100%;
+  color: var(--popover-foreground);
+  text-align: left;
 }
 
 /* Swiping to another section slides it in from the side the finger came from. */
@@ -195,10 +217,4 @@ html.is-phone .fab {
   .app-main > main[data-direction='prev'] > section {
     animation: slide-from-left 0.2s ease-out;
   }
-}
-
-/* The quick-add button is a little gray, so it does not shout over the page. */
-html.is-phone .fab {
-  border-color: var(--foreground);
-  color: var(--foreground);
 }

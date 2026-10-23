@@ -128,11 +128,9 @@ export default function PreviewModal({ doc, onClose }: { doc: Doc; onClose: () =
   } else if (shown?.kind === 'docx') {
     body = shown.content.blocks.length === 0 ? <p className="hint">{t('docs.previewEmpty')}</p> : <Paper blocks={shown.content.blocks} />
     if (shown.content.cut) notes.push('docs.previewCutText')
-    notes.push('docs.previewNoteWord')
   } else if (shown?.kind === 'xlsx') {
     body = <Sheets sheets={shown.content.sheets} />
     if (shown.content.sheets.some((sheet) => sheet.cut)) notes.push('docs.previewCutCells')
-    notes.push('docs.previewNoteExcel')
   }
 
   return (

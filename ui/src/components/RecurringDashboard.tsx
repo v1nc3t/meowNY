@@ -3,6 +3,7 @@ import type { Dues, Recurring } from '../api/recurring'
 import { useT } from '../i18n/context'
 import { formatDate, formatMoney } from '../lib/money'
 import { sharedItems, sharedWith } from '../lib/recurringView'
+import { Card, CardContent, CardHeader, CardTitle } from './ui/Card'
 
 /** How many days ahead "due soon" looks. */
 export const SOON_DAYS = 7
@@ -22,65 +23,77 @@ export default function RecurringDashboard({ dues, items, today, currency, local
   const shared = sharedItems(items)
   return (
     <div className="dash-grid">
-      <div className="dash-card">
-        <h2>
-          <Link to="/app/recurring">{t('dashboard.recOverdue')}</Link>
-        </h2>
-        {dues.overdue.length === 0 ? (
-          <p className="dash-empty">{t('dashboard.recOverdueEmpty')}</p>
-        ) : (
-          <ul className="dash-legend">
-            {dues.overdue.map((item) => (
-              <li key={item.id}>
-                <span className="legend-name">{link(item)}</span>
-                <span className="legend-pct rec-over">{formatDate(item.nextDueDate, locale)}</span>
-                <span className="legend-amount">{money(item)}</span>
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
-      <div className="dash-card">
-        <h2>
-          <Link to="/app/recurring">{t('dashboard.recSoon', { days: SOON_DAYS })}</Link>
-        </h2>
-        {dues.upcoming.length === 0 ? (
-          <p className="dash-empty">{t('dashboard.recSoonEmpty', { days: SOON_DAYS })}</p>
-        ) : (
-          <ul className="dash-legend">
-            {dues.upcoming.map((item) => (
-              <li key={item.id}>
-                <span className="legend-name">{link(item)}</span>
-                <span className="legend-pct">{item.nextDueDate === today ? t('rec.dueToday') : formatDate(item.nextDueDate, locale)}</span>
-                <span className="legend-amount">{money(item)}</span>
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
-      <div className="dash-card">
-        <h2>
-          <Link to="/app/recurring">{t('dashboard.recSplit')}</Link>
-        </h2>
-        {shared.length === 0 ? (
-          <p className="dash-empty">{t('dashboard.recSplitEmpty')}</p>
-        ) : (
-          <ul className="dash-legend">
-            {shared.map((item) => {
-              const names = t('dashboard.recWith', { names: sharedWith(item).join(', ') })
-              return (
-                <li key={item.id} title={`${item.name}: ${names}`}>
-                  <span className="legend-name">
-                    {link(item)}
-                    <span className="muted">{` · ${names}`}</span>
-                  </span>
+      <Card>
+        <CardHeader>
+          <CardTitle>
+            <Link to="/app/recurring">{t('dashboard.recOverdue')}</Link>
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {dues.overdue.length === 0 ? (
+            <p className="dash-empty">{t('dashboard.recOverdueEmpty')}</p>
+          ) : (
+            <ul className="dash-legend">
+              {dues.overdue.map((item) => (
+                <li key={item.id}>
+                  <span className="legend-name">{link(item)}</span>
+                  <span className="legend-pct rec-over">{formatDate(item.nextDueDate, locale)}</span>
                   <span className="legend-amount">{money(item)}</span>
                 </li>
-              )
-            })}
-          </ul>
-        )}
-      </div>
+              ))}
+            </ul>
+          )}
+        </CardContent>
+      </Card>
+      <Card>
+        <CardHeader>
+          <CardTitle>
+            <Link to="/app/recurring">{t('dashboard.recSoon', { days: SOON_DAYS })}</Link>
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {dues.upcoming.length === 0 ? (
+            <p className="dash-empty">{t('dashboard.recSoonEmpty', { days: SOON_DAYS })}</p>
+          ) : (
+            <ul className="dash-legend">
+              {dues.upcoming.map((item) => (
+                <li key={item.id}>
+                  <span className="legend-name">{link(item)}</span>
+                  <span className="legend-pct">{item.nextDueDate === today ? t('rec.dueToday') : formatDate(item.nextDueDate, locale)}</span>
+                  <span className="legend-amount">{money(item)}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </CardContent>
+      </Card>
+      <Card>
+        <CardHeader>
+          <CardTitle>
+            <Link to="/app/recurring">{t('dashboard.recSplit')}</Link>
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {shared.length === 0 ? (
+            <p className="dash-empty">{t('dashboard.recSplitEmpty')}</p>
+          ) : (
+            <ul className="dash-legend">
+              {shared.map((item) => {
+                const names = t('dashboard.recWith', { names: sharedWith(item).join(', ') })
+                return (
+                  <li key={item.id} title={`${item.name}: ${names}`}>
+                    <span className="legend-name">
+                      {link(item)}
+                      <span className="muted">{` · ${names}`}</span>
+                    </span>
+                    <span className="legend-amount">{money(item)}</span>
+                  </li>
+                )
+              })}
+            </ul>
+          )}
+        </CardContent>
+      </Card>
     </div>
   )
 }

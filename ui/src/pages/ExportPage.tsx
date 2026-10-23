@@ -311,7 +311,6 @@ function ExportForm({ today, settings, categories }: { today: Today; settings: M
               <label className="export-format" key={value}>
                 <input type="radio" name="format" value={value} checked={format === value} onChange={() => chooseFormat(value)} />
                 <span className="export-format-name">{FORMAT_NAMES[value]}</span>
-                <span className="export-format-hint">{t(`export.${value}Hint`)}</span>
               </label>
             ))}
           </fieldset>
@@ -372,8 +371,6 @@ function ExportForm({ today, settings, categories }: { today: Today; settings: M
                     onChange={(to) => update({ to })}
                   />
                 </div>
-                {format === 'pdf' && <p className="hint">{t('export.pdfWholeMonths')}</p>}
-                {(format === 'json' || format === 'xlsx') && <p className="hint">{t('export.datesHint')}</p>}
               </>
             )}
           </div>
@@ -437,7 +434,6 @@ function ExportForm({ today, settings, categories }: { today: Today; settings: M
                   <input inputMode="decimal" autoComplete="off" maxLength={14} placeholder="0.00" value={choice.maxAmount} onChange={(e) => update({ maxAmount: e.target.value })} />
                 </label>
               </div>
-              <p className="hint">{t('export.amountHint')}</p>
               <label>
                 {t('export.textLabel')}
                 <input autoComplete="off" maxLength={TEXT_MAX_CHARS} value={choice.text} onChange={(e) => update({ text: e.target.value })} />
@@ -570,7 +566,6 @@ function ExportForm({ today, settings, categories }: { today: Today; settings: M
             <Sheets sheets={fileView.content.sheets} />
           </div>
           {fileView.content.sheets.some((sheet) => sheet.cut) ? <p className="hint">{t('docs.previewCutCells', { rows: MAX_ROWS, columns: MAX_COLUMNS })}</p> : null}
-          <p className="hint">{t('export.previewNoteExcel')}</p>
         </div>
       ) : null}
 

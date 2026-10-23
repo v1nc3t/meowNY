@@ -85,7 +85,6 @@ export default function AddCategoryModal({
               {t('categories.budgetFrom', { month: monthLabel(budgetMonth, language) })}
               <input name="budget" inputMode="decimal" placeholder="0.00" autoComplete="off" />
             </label>
-            <p className="hint">{t('categories.budgetHint')}</p>
           </>
         ) : null}
       </form>

@@ -9,11 +9,14 @@ import Modal, { modalFormId } from './Modal'
 export default function ConfirmModal({
   title,
   pending = false,
+  danger = true,
   onConfirm,
   onClose,
 }: {
   title: string
   pending?: boolean
+  /** The yes button is red. Turn it off for something that is easy to undo (pausing an item). */
+  danger?: boolean
   onConfirm: () => void
   onClose: () => void
 }) {
@@ -23,7 +26,7 @@ export default function ConfirmModal({
     if (!pending) onConfirm()
   }
   return (
-    <Modal title={title} pending={pending} doneLabel={t('common.yes')} cancelLabel={t('common.no')} onClose={onClose}>
+    <Modal title={title} pending={pending} danger={danger} doneLabel={t('common.yes')} cancelLabel={t('common.no')} onClose={onClose}>
       <form id={modalFormId} onSubmit={onSubmit}>
         <p className="confirm-text" tabIndex={-1} data-autofocus>
           {t('common.areYouSure')}

@@ -1,25 +1,25 @@
 # meowny command line
 
-Use your meowNY budget from a terminal, a script or an AI agent. The command line talks to the desktop app on the same computer; your data never leaves it.
+Use your meowNY budget from a terminal, a script or an AI agent. It talks to the desktop app on the same computer; your data never leaves it.
 
 ## Overview
 
-`meowny` is a small program that drives the meowNY desktop app, for scripts, for AI agents and for anyone who prefers a terminal. It never opens your data file. It asks the running app, over a connection only this computer can reach, and the app does the work with the same rules as its own screens: the same amounts, the same budgets, the same checks.
+`meowny` drives the meowNY desktop app from a terminal, a script or an AI agent. It never opens your data file: it asks the running app over a connection only this computer can reach, and the app applies the same rules as its own screens.
 
-- **Look:** list transactions, budgets and recurring items; see budget against actual, the year, the top categories.
+- **Read:** transactions, budgets, recurring items, statistics.
 - **Change:** record a transaction, set a budget, pay a recurring bill.
-- **Documents:** add a receipt or a contract from a file, attach it to a transaction, list what is there and, with your yes, get a copy back.
-- **Take data out:** export to JSON, CSV, Excel or PDF, or make an encrypted backup, each only when you allow it in the app.
+- **Documents:** add, attach, list, and get a copy back with your yes.
+- **Take data out:** JSON, CSV, Excel, PDF or an encrypted backup, each only when you allow it.
 
-> **Note:** The app has to be running and unlocked, and command line access has to be turned on in its Settings. It is off by default. The phone app has no command line.
+> **Note:** The app must be running and unlocked, with command line access turned on in Settings (it is off by default). The phone app has no command line.
 
 ## Quick start
 
-**1. Turn it on.** In the app, open Settings, find *command line access* and tick *allow the command line to connect*.
+**1. Turn it on.** In the app: Settings, *command line access*, tick *allow the command line to connect*.
 
-**2. Make a token.** In the same block choose a name, read only or read and write, and how long it lasts, then *make token*. Copy it now: it is shown once, and the app keeps only a fingerprint of it.
+**2. Make a token.** Choose a name, read only or read and write, and a lifetime. Copy it now: it is shown once.
 
-**3. Install the program.** For now, build it from the source folder (you need Rust):
+**3. Install.** For now, build from the source folder (needs Rust):
 
 ```
 cargo install --path cli
@@ -30,7 +30,7 @@ cargo install --path cli
 ```
 export MEOWNY_TOKEN=mny_...
 
-# or, once, from standard input (never put it on a command line):
+# or, once, from standard input (never on a command line):
 echo "$TOKEN" | meowny login
 ```
 
@@ -42,47 +42,50 @@ meowny transactions list --limit 5
 meowny stats budget --month 2026-10
 ```
 
-> **Note:** Start with a read-only token. A token that can write can add, change and delete your data until it expires or you revoke it in Settings.
+> **Note:** Start with a read-only token. A token that can write can add, change and delete your data until it expires or you revoke it.
 
 ## How it works
 
 ### Tokens
 
-A token is a long secret that starts with `mny_`. You make it in the app. It is **read only** unless you choose read and write (which also reads), it lasts 1 to 365 days (30 by default), and you can revoke it at any time; it stops working at once. The app stores only a fingerprint of it, so nobody can read tokens back from your data file.
-
-There is deliberately no `--token` flag: a command line can be read by other users of the computer. Use `MEOWNY_TOKEN`, `--token-file`, or `meowny login`.
+- A token is a secret that starts with `mny_`, made in the app. Treat it like a password.
+- **Read only** unless you choose read and write (which also reads). It lasts 1 to 365 days (30 by default) and can be revoked at any time, at once.
+- The app keeps only a fingerprint, so tokens cannot be read back from your data file.
+- There is no `--token` flag, because other users can read a command line. Use `MEOWNY_TOKEN`, `--token-file` or `meowny login`.
 
 ### Files need your yes
 
-An export, a backup or a copy of a document writes a file on your computer, so a token alone is not enough. Each request shows a dialog in the app: which token is asking, what it will write, the exact file, and what is in it (how many transactions, or which document). Nothing is written until you click Allow.
+An export, a backup or a copy of a document writes a file, so a token alone is not enough. The app shows a dialog with the token, what will be written, the exact file and what is in it. Nothing is written until you click Allow.
 
-- The file must have the right ending (`.json`, `.csv`, `.xlsx`, `.pdf`, `.meowbak`, or for a document the extension of its kind), be in a folder that exists, and **not exist yet**. A file is never replaced.
-- A relative `--out` is made absolute from where you run the program, and the dialog shows the full path.
-- One question at a time. After a No, the same token is refused for 30 seconds, so a script cannot wear you down. No answer in two minutes counts as No.
-- On Linux and macOS the files are readable only by you. They are not encrypted, except a backup, which is locked with the passphrase you give.
-- Restoring a backup, changing the currency, the lock settings, tokens, setting up a scheduled backup and deleting everything cannot be done through the command line at all. They are done in the app.
+- The file needs the right ending (`.json`, `.csv`, `.xlsx`, `.pdf`, `.meowbak`, or a document's own), a folder that exists, and **must not exist yet**. A file is never replaced.
+- A relative `--out` is made absolute from where you run the program; the dialog shows the full path.
+- One question at a time. After a No the same token is refused for 30 seconds. No answer in two minutes counts as No.
+- On Linux and macOS the files are readable only by you. They are not encrypted, except a backup (your passphrase).
+- Restoring a backup, changing the currency, lock settings, tokens, scheduling a backup and deleting everything are app-only.
 
 ### A locked app, a closed app
 
-If the app is locked (it locks itself after a while, or when you minimise it, as you set it up), every command answers `locked` (exit code 3) and prints no data. The command line cannot unlock it, and using it does not keep the app awake. If the app is not running, or command line access is off, you get `app_unavailable` (exit code 1).
+- Locked: every command answers `locked` (exit code 3) and prints no data. The command line cannot unlock the app or keep it awake.
+- Not running, or command line access off: `app_unavailable` (exit code 1).
 
 ### What is printed
 
-Without `--json` you get a plain table or `key: value` lines, and messages (such as "done.") on standard error. With `--json` the data is one line of JSON on standard output, exactly as the app sent it, and an error is a JSON line on standard error. Data is always on standard output and messages on standard error, so `meowny ... | jq` works. A page of a longer list says on standard error where the next page starts.
+- Without `--json`: a plain table or `key: value` lines.
+- With `--json`: one line of JSON, exactly as the app sent it; an error is a JSON line on standard error.
+- Data goes to standard output and messages to standard error, so `meowny ... | jq` works. A longer list says on standard error where the next page starts.
 
 ### Conventions
 
-- **Money** is text with two decimals, like `12.50`. It is never a floating-point number anywhere, so nothing is rounded on the way.
-- **Ids** are text, as the app lists them. **Dates** are `YYYY-MM-DD`, **months** `YYYY-MM`, in the time zone set in the app.
-- **Words** such as `expense` or `INCOME` can be written in any case.
+- **Money** is text with two decimals (`12.50`), never a float.
+- **Ids** are text. **Dates** are `YYYY-MM-DD`, **months** `YYYY-MM`, in the time zone set in the app.
+- **Words** such as `expense` or `INCOME` ignore case.
 - **Deleting** (`delete`, `remove`, `end`) needs `--yes`.
-- **Clearing** a field uses `--clear-<flag>`; leaving a flag out leaves the field as it is.
-- A text flag given `-` reads its value from standard input.
-- The program never prompts and never waits for input you did not ask it to read (`login` reads the token from standard input, and a text flag given `-` reads its value there).
+- **Clearing** a field is `--clear-<flag>`; a flag left out leaves the field as it is.
+- A text flag given `-` reads its value from standard input. The program never prompts.
 
 ## Commands
 
-Every command is `meowny <noun> <verb>`, or a single word, with its flags after it. `--help` works at every level, with no app running. There are 70 commands; each is listed here with what it prints.
+70 commands, each `meowny <noun> <verb>` or one word, then flags. `--help` works at every level, with no app running.
 
 | Command | What it does | Needs |
 | --- | --- | --- |
@@ -227,7 +230,7 @@ Saves a token, read from standard input, for the commands that follow.
 meowny login
 ```
 
-Reads one line from standard input, so the token never appears in a command line (which other users can read). On Linux and macOS the file is written readable only by you, and a token file that other users can read is refused; on Linux it is `~/.config/meowny/token`.
+Reads the token from standard input, so it never shows in a command line. It is saved readable only by you (`~/.config/meowny/token` on Linux); a token file others can read is refused.
 
 ```console
 $ echo "$MEOWNY_TOKEN" | meowny login
@@ -245,7 +248,7 @@ Removes the saved token.
 meowny logout
 ```
 
-Removes the saved token. A token in `MEOWNY_TOKEN` is not touched.
+A token in `MEOWNY_TOKEN` is not touched.
 
 ```console
 $ meowny logout
@@ -263,7 +266,7 @@ Every route with its scope and arguments, so a client can discover them.
 meowny schema
 ```
 
-Answers from what the program was built with, so it works with no app and no token. With `--app` it asks the running app for its own list of routes instead (needs a token).
+Works offline with no token. `--app` asks the running app for its routes instead (needs a token).
 
 ```console
 $ meowny schema
@@ -319,7 +322,7 @@ meowny settings set [--locale <text>] [--timezone <text>] [--language <text>]
 | `--timezone` | text | A time zone name, like Europe/Dublin. |
 | `--language` | text | The language of the app, like en or ro. |
 
-The currency is not here: changing it can convert every amount, so it is done in the app.
+The currency is set in the app only: changing it can convert every amount.
 
 ```console
 $ meowny settings set --language ro
@@ -475,7 +478,7 @@ meowny categories rename <id> --name <text>
 | `--id` (required) | id | The category. |
 | `--name` (required) | text | The new name. |
 
-The id can be given as a plain word, as in `meowny categories rename 42`, or with `--id`.
+The id can also be a plain word: `meowny categories rename 42`.
 
 ```console
 $ meowny categories rename 16 --name Animals
@@ -505,9 +508,9 @@ meowny categories delete <id>
 | --- | --- | --- |
 | `--id` (required) | id | The category. |
 
-The id can be given as a plain word, as in `meowny categories delete 42`, or with `--id`.
+The id can also be a plain word: `meowny categories delete 42`.
 
-This cannot be undone, so it needs `--yes`.
+Cannot be undone, so it needs `--yes`.
 
 ```console
 $ meowny categories delete 16 --yes
@@ -628,9 +631,9 @@ meowny transactions create --name <text> --amount <amount> --payment-date <date>
 | `--description` | text | A note. |
 | `--client-uuid` | uuid | A fresh UUID per transaction, so a retry cannot record it twice. |
 
-A fresh `--client-uuid` is made if you do not give one, and it is in the answer. If a command fails or times out and you do not know whether the transaction was recorded, run it again with the same `--client-uuid`: the app returns the first transaction instead of making a second.
+Without `--client-uuid` one is made and returned. After a failure or timeout, run it again with the same `--client-uuid`: the app returns the first transaction instead of making a second.
 
-The category decides whether this is income or an expense.
+The category decides income or expense.
 
 ```console
 $ meowny transactions create --name Bread --amount 2.40 --payment-date 2026-10-14 --category-id 16 --client-uuid 9b2f5d44-6e1a-4c3b-8f2d-1a2b3c4d5e6f
@@ -672,9 +675,7 @@ meowny transactions update <id> [--name <text>] [--amount <amount>] [--payment-d
 | `--description` | text | The new note, or null to clear it. |
 | `--clear-description` | no value | Clears description. |
 
-Only the flags you give change. `--clear-description` removes the description.
-
-The id can be given as a plain word, as in `meowny transactions update 42`, or with `--id`.
+The id can also be a plain word: `meowny transactions update 42`.
 
 ```console
 $ meowny transactions update 424 --amount 2.95 --description Sourdough
@@ -710,9 +711,9 @@ meowny transactions delete <id>
 | --- | --- | --- |
 | `--id` (required) | id | The transaction. |
 
-The id can be given as a plain word, as in `meowny transactions delete 42`, or with `--id`.
+The id can also be a plain word: `meowny transactions delete 42`.
 
-This cannot be undone, so it needs `--yes`.
+Cannot be undone, so it needs `--yes`.
 
 ```console
 $ meowny transactions delete 424 --yes
@@ -739,11 +740,11 @@ meowny transactions split <id> --mode <EQUAL|PERCENT|SHARES|EXACT> [--mine <text
 | `--guests` | text | People who are not tracked, by name, separated by commas. Their part leaves your cost and makes no debt. |
 | `--values` | text | The value of each friend, in the order of --people, then of each guest, separated by commas. Not for an equal split. |
 
-Shares a transaction you paid with friends and guests (names typed for people you do not track; their part leaves your cost and makes no debt). It keeps the amount that was paid. `myShare` is what it costs you: **budgets, statistics, reports and exports count that, not the amount.** Only an expense can be shared. The flags are the ones of `splits preview`.
+Shares a paid expense with friends and guests (names for people you do not track; their part makes no debt). `myShare` is what it costs you: **budgets, statistics, reports and exports count that, not the amount.** The flags are those of `splits preview`.
 
-Changing the amount of a shared transaction scales every part, yours included, so they still add up to the cent.
+Changing the amount scales every part, so they still add up.
 
-The id can be given as a plain word, as in `meowny transactions split 42`, or with `--id`.
+The id can also be a plain word: `meowny transactions split 42`.
 
 ```console
 $ meowny transactions split 425 --mode equal --people 5,6
@@ -792,9 +793,9 @@ meowny transactions unsplit <id>
 | --- | --- | --- |
 | `--id` (required) | id | The transaction. |
 
-The transaction costs you its whole amount again, and the friends' balances go down by their parts.
+It costs you the whole amount again; the friends' balances go down by their parts.
 
-The id can be given as a plain word, as in `meowny transactions unsplit 42`, or with `--id`.
+The id can also be a plain word: `meowny transactions unsplit 42`.
 
 ```console
 $ meowny transactions unsplit 425
@@ -946,7 +947,7 @@ meowny budgets set --type <INCOME|EXPENSE> --month <month> --amount-limit <amoun
 | `--amount-limit` (required) | amount | The most to spend, or the aim to earn, each month. Zero is allowed. |
 | `--category-id` | id | The category. Leave out for the global budget of that side. |
 
-Without `--category-id` this is the global budget of that side (income or expense). A month that has already started changes only that month; this month and later ones carry the new amount forward, so past months keep what they showed.
+Without `--category-id` this is the global budget of that side. A past month changes only itself; this month and later ones carry the new amount on.
 
 ```console
 $ meowny budgets set --type expense --month 2026-12 --amount-limit 100.00 --category-id 16
@@ -981,9 +982,9 @@ meowny budgets remove --type <INCOME|EXPENSE> --month <month> [--category-id <id
 | `--month` (required) | month | The month, like 2026-10. |
 | `--category-id` | id | The category. Leave out for the global budget of that side. |
 
-The same month rules as `budgets set`. The change history keeps what the budget was.
+Same month rules as `budgets set`.
 
-This cannot be undone, so it needs `--yes`.
+Cannot be undone, so it needs `--yes`.
 
 ```console
 $ meowny budgets remove --type expense --month 2027-01 --category-id 16 --yes
@@ -1083,7 +1084,7 @@ meowny recurring create --name <text> [--amount <amount>] --category-id <id> --s
 | `--end-date` | date | The last day it can fall due. |
 | `--description` | text | A note. |
 
-Leave out `--amount` for a bill that changes every time (electricity, a phone bill). Paying it then needs `--amount`.
+Leave out `--amount` for a bill that changes each time; paying it then needs `--amount`.
 
 ```console
 $ meowny recurring create --name "Vet plan" --amount 20.00 --category-id 16 --start-date 2026-10-20 --interval-unit month --interval-count 1
@@ -1133,9 +1134,7 @@ meowny recurring update <id> [--name <text>] [--amount <amount>] [--category-id 
 | `--description` | text | The new note, or null to clear it. |
 | `--clear-description` | no value | Clears description. |
 
-`--clear-amount` makes it a bill with no fixed amount; `--clear-end-date` and `--clear-description` remove those.
-
-The id can be given as a plain word, as in `meowny recurring update 42`, or with `--id`.
+The id can also be a plain word: `meowny recurring update 42`.
 
 ```console
 $ meowny recurring update 13 --name "Vet plan plus" --clear-end-date
@@ -1174,9 +1173,9 @@ meowny recurring delete <id>
 | --- | --- | --- |
 | `--id` (required) | id | The recurring item. |
 
-The id can be given as a plain word, as in `meowny recurring delete 42`, or with `--id`.
+The id can also be a plain word: `meowny recurring delete 42`.
 
-This cannot be undone, so it needs `--yes`.
+Cannot be undone, so it needs `--yes`.
 
 ```console
 $ meowny recurring delete 13 --yes
@@ -1200,9 +1199,9 @@ meowny recurring pay <id> [--amount <amount>] [--paid-on <date>]
 | `--amount` | amount | What was paid. Defaults to the planned amount. |
 | `--paid-on` | date | The day it was paid. Defaults to today in the app's time zone. |
 
-A bill with no fixed amount needs `--amount`. The next due date moves on by itself.
+A bill with no fixed amount needs `--amount`.
 
-The id can be given as a plain word, as in `meowny recurring pay 42`, or with `--id`.
+The id can also be a plain word: `meowny recurring pay 42`.
 
 ```console
 $ meowny recurring pay 13 --paid-on 2026-10-14
@@ -1238,7 +1237,7 @@ meowny recurring skip <id>
 | --- | --- | --- |
 | `--id` (required) | id | The recurring item. |
 
-The id can be given as a plain word, as in `meowny recurring skip 42`, or with `--id`.
+The id can also be a plain word: `meowny recurring skip 42`.
 
 ```console
 $ meowny recurring skip 13
@@ -1277,7 +1276,7 @@ meowny recurring pause <id>
 | --- | --- | --- |
 | `--id` (required) | id | The recurring item. |
 
-The id can be given as a plain word, as in `meowny recurring pause 42`, or with `--id`.
+The id can also be a plain word: `meowny recurring pause 42`.
 
 ```console
 $ meowny recurring pause 13
@@ -1316,7 +1315,7 @@ meowny recurring resume <id>
 | --- | --- | --- |
 | `--id` (required) | id | The recurring item. |
 
-The id can be given as a plain word, as in `meowny recurring resume 42`, or with `--id`.
+The id can also be a plain word: `meowny recurring resume 42`.
 
 ```console
 $ meowny recurring resume 13
@@ -1355,9 +1354,9 @@ meowny recurring end <id>
 | --- | --- | --- |
 | `--id` (required) | id | The recurring item. |
 
-The id can be given as a plain word, as in `meowny recurring end 42`, or with `--id`.
+The id can also be a plain word: `meowny recurring end 42`.
 
-This cannot be undone, so it needs `--yes`.
+Cannot be undone, so it needs `--yes`.
 
 ```console
 $ meowny recurring end 13 --yes
@@ -1401,9 +1400,9 @@ meowny recurring split <id> --mode <EQUAL|PERCENT|SHARES|EXACT> [--mine <text>] 
 | `--guests` | text | People who are not tracked, by name, separated by commas. Their part leaves your cost and makes no debt. |
 | `--values` | text | The value of each friend, in the order of --people, then of each guest, separated by commas. Not for an equal split. |
 
-Splits every payment of a recurring item the same way from now on, kept as proportions: a payment that differs from the plan is shared in the same proportions. `exact` needs an item with an amount that the values add up to. Payments already made keep what they had. An income item cannot be split.
+Splits every payment from now on, kept as proportions. `exact` needs an item with an amount. Payments already made keep theirs. Income cannot be split.
 
-The id can be given as a plain word, as in `meowny recurring split 42`, or with `--id`.
+The id can also be a plain word: `meowny recurring split 42`.
 
 ```console
 $ meowny recurring split 13 --mode shares --mine 2 --people 5 --values 1
@@ -1452,9 +1451,9 @@ meowny recurring unsplit <id>
 | --- | --- | --- |
 | `--id` (required) | id | The recurring item. |
 
-The payments are not split from now on. Payments already made keep theirs.
+Payments already made keep their split.
 
-The id can be given as a plain word, as in `meowny recurring unsplit 42`, or with `--id`.
+The id can also be a plain word: `meowny recurring unsplit 42`.
 
 ```console
 $ meowny recurring unsplit 13
@@ -1753,7 +1752,7 @@ meowny export preview [--from <date>] [--to <date>] [--category-ids <id,id,...>]
 | `--split` | one of split, not_split | Only the bills shared with friends (split) or only those that are not (not_split). Leave out for both. |
 | `--sections` | text | The parts of the file, separated by commas, from: transactions, categories, budgets, recurring, documents, people (the friends and what they owe), due (the overdue recurring payments), ledger (the history of debts) and history (the change history, only in a file with no limits). Leave out for all of them. |
 
-Nothing is written and nothing is asked: this only says how many transactions an export with these choices would contain, and how many of the other records (friends, the history of debts, the overdue payments, documents). Use it to check a selection before exporting. It takes the same choices as `export json`.
+Writes and asks nothing: counts what an export with these choices would hold. Same choices as `export json`.
 
 ```console
 $ meowny export preview --from 2026-01-01 --to 2026-09-30
@@ -1821,9 +1820,9 @@ meowny export json --out <path> [--from <date>] [--to <date>] [--category-ids <i
 | `--split` | one of split, not_split | Only the bills shared with friends (split) or only those that are not (not_split). Leave out for both. |
 | `--sections` | text | The parts of the file, separated by commas, from: transactions, categories, budgets, recurring, documents, people (the friends and what they owe), due (the overdue recurring payments), ledger (the history of debts) and history (the change history, only in a file with no limits). Leave out for all of them. |
 
-The whole data as one file, including the change history when nothing limits it. Documents are listed by name, date, type, size, hash and what they are attached to, never their files. Friends, the overdue recurring payments (`duePayments`), the history of debts (`debtHistory`) and the parts of shared bills are in it; each transaction has `amount` (what was paid) and `myShare` (what it cost you). The limits: dates, categories, `--kind` (income or expense), `--min-amount` and `--max-amount` (what it cost you), `--text` (in the name or description) and `--split` (only the bills shared with friends, or only those not). `--sections` names the parts to keep, separated by commas: transactions, categories, budgets, recurring, documents, people, due, ledger, history. With a limit the history of debts is left out unless you give `--include-debts` or name `ledger`. It is not encrypted.
+The whole data as one file, with the change history unless limited. Documents are listed, never their files. Each transaction has `amount` (paid) and `myShare` (cost to you). Limits: dates, categories, `--kind`, `--min-amount` and `--max-amount` (what it cost you), `--text`, `--split`. `--sections` picks parts, comma-separated: transactions, categories, budgets, recurring, documents, people, due, ledger, history. With a limit, the debt history is left out unless you give `--include-debts` or name `ledger`. Not encrypted.
 
-The app asks you to allow this each time, in a dialog; nothing is written until you do. See [Files need your yes](#files).
+The app asks you to allow this each time. See [Files need your yes](#files).
 
 ```console
 $ meowny export json --out /home/you/debts.json --sections people,due,ledger
@@ -1854,9 +1853,9 @@ meowny export csv --out <path> [--from <date>] [--to <date>] [--category-ids <id
 | `--text` | text | Only transactions with this text in the name or the description, whatever the case. |
 | `--split` | one of split, not_split | Only the bills shared with friends (split) or only those that are not (not_split). Leave out for both. |
 
-One row per transaction, with a byte order mark so Excel reads the accents, a column with the names of the documents attached to it, and a last column `my_share` with what it cost you (the same as `amount` unless the bill is shared). It takes the limits of `export json` (dates, categories, `--kind`, `--min-amount`, `--max-amount`, `--text`, `--split`) but no parts. Text that starts like a formula is written as text, so opening the file cannot run anything.
+One row per transaction, with a byte order mark for Excel, the attached document names and a `my_share` column. Takes the limits of `export json`, no parts. Text that starts like a formula is written as text, so opening the file cannot run anything.
 
-The app asks you to allow this each time, in a dialog; nothing is written until you do. See [Files need your yes](#files).
+The app asks you to allow this each time. See [Files need your yes](#files).
 
 ```console
 $ meowny export csv --out /home/you/budget-2026.csv --from 2026-01-01 --kind expense --min-amount 5.00
@@ -1889,9 +1888,9 @@ meowny export xlsx --out <path> [--from <date>] [--to <date>] [--category-ids <i
 | `--split` | one of split, not_split | Only the bills shared with friends (split) or only those that are not (not_split). Leave out for both. |
 | `--sections` | text | The parts of the file, separated by commas, from: transactions, categories, budgets, recurring, documents, people (the friends and what they owe), due (the overdue recurring payments), ledger (the history of debts) and history (the change history, only in a file with no limits). Leave out for all of them. |
 
-Sheets for transactions (with what each cost you), categories, budgets, recurring items, a monthly summary, the documents (listed, never the files), the friends, the due payments, the history of debts and the parts of shared bills. It takes the limits and `--sections` of `export json` (the change history has no sheet; a workbook of nothing but parts with no sheet is refused). Dates are real dates and amounts are numbers.
+One sheet each for transactions, categories, budgets, recurring items, a monthly summary, documents (listed), friends, due payments, debt history and bill parts. Takes the limits and `--sections` of `export json`. Dates are real dates, amounts are numbers.
 
-The app asks you to allow this each time, in a dialog; nothing is written until you do. See [Files need your yes](#files).
+The app asks you to allow this each time. See [Files need your yes](#files).
 
 ```console
 $ meowny export xlsx --out /home/you/budget.xlsx
@@ -1923,9 +1922,9 @@ meowny export pdf --out <path> --from-month <month> --to-month <month> [--catego
 | `--include-due-payments` | boolean | Also list the recurring payments that are overdue today, with the day each fell due and a total. |
 | `--include-debt-history` | boolean | Also list every line of the debts of every friend in the months, with the balance after it, and the recurring payments paid late or overdue. |
 
-A printable report of whole months, in English from the command line (the app writes it in your language). Leave out `--show-descriptions` to share it without private details. `--include-debts` adds who owes what on the last day of each month, `--include-due-payments` the recurring payments that are overdue today, and `--include-debt-history` every line of the debts in those months, with the recurring payments paid late or overdue; these hold the names of your friends and amounts of money.
+A printable report of whole months, in English. Leave out `--show-descriptions` to share without private details. `--include-debts`, `--include-due-payments` and `--include-debt-history` add friends' names and amounts.
 
-The app asks you to allow this each time, in a dialog; nothing is written until you do. See [Files need your yes](#files).
+The app asks you to allow this each time. See [Files need your yes](#files).
 
 ```console
 $ meowny export pdf --out /home/you/report.pdf --from-month 2026-01 --to-month 2026-03 --include-transactions --include-debts
@@ -1951,9 +1950,9 @@ meowny export debts --out <path> [--what <SUMMARY|STATEMENT|LEDGER>] [--format <
 | `--format` | one of TEXT, CSV, PDF | TEXT (the default), CSV or PDF. LEDGER is CSV only. |
 | `--person-id` | id | The friend, for a STATEMENT. |
 
-Saves who owes what to a file you can send yourself; the app sends it to nobody. `--what` is `summary` (all friends), `statement` (one friend, with `--person-id`) or `ledger` (every entry, CSV only). `--format` is `text`, `csv` or `pdf` (the words are in English; the app writes them in your language). It holds the names of your friends and amounts of money, and is not encrypted. The person allows it in the app first.
+Saves who owes what to a file; the app sends it to nobody. `--what` is `summary`, `statement` (one friend, with `--person-id`) or `ledger` (CSV only). `--format` is `text`, `csv` or `pdf`. It holds names and amounts and is not encrypted. You allow it in the app first.
 
-The app asks you to allow this each time, in a dialog; nothing is written until you do. See [Files need your yes](#files).
+The app asks you to allow this each time. See [Files need your yes](#files).
 
 ```console
 $ meowny export debts --out /home/you/who-owes-what.txt
@@ -1974,7 +1973,7 @@ The scheduled backup, if one is set up: the folder, how often and how the last o
 meowny backup schedule
 ```
 
-Shows the scheduled backup the app makes (folder, how often, how the last one went). Setting it up is done in the app.
+Setting it up is done in the app.
 
 ```console
 $ meowny backup schedule
@@ -2003,11 +2002,11 @@ meowny backup create --out <path> --passphrase <text>
 | `--out` (required) | path | Where to write the file: an absolute path ending in .meowbak, in a folder that exists, that is not there yet. |
 | `--passphrase` (required) | text | Locks the backup. At least 8 characters. Keep it: without it the backup cannot be opened. |
 
-Everything in one encrypted file, except the files of the documents: their names, dates and links are in it, the files are not. A backup made in the app can include them. Give `--passphrase -` to read the passphrase from standard input so it does not show in the list of running programs. Keep it: without it the backup cannot be opened.
+One encrypted file with everything except the files of the documents (a backup made in the app can include them). `--passphrase -` reads it from standard input so it is not in the process list. Without the passphrase the backup cannot be opened.
 
-Restoring a backup is done in the app, never with a token.
+Restoring is done in the app, never with a token.
 
-The app asks you to allow this each time, in a dialog; nothing is written until you do. See [Files need your yes](#files).
+The app asks you to allow this each time. See [Files need your yes](#files).
 
 ```console
 $ echo "correct horse battery staple" | meowny backup create --out /home/you/meowny.meowbak --passphrase -
@@ -2042,7 +2041,7 @@ meowny documents list [--q <text>] [--kind <image|pdf|other>] [--from <date>] [-
 | `--limit` | number | How many to return, 1 to 100. |
 | `--offset` | number | How many to skip. |
 
-Names, dates, types, sizes and hashes of the documents, newest paper first, never the files. `--transaction-id`, `--recurring-id` and `--ledger-entry-id` show what is attached to one thing. A read-only token can do this.
+Details only, newest first, never the files.
 
 ```console
 $ meowny documents list --q boiler
@@ -2094,9 +2093,9 @@ meowny documents show <id>
 | --- | --- | --- |
 | `--id` (required) | id | The document. |
 
-One document, and the transactions and recurring items it is attached to. Never the file. `has_file` says whether this computer holds the file. A read-only token can do this.
+Includes what it is attached to, never the file. `has_file` says whether this computer holds it.
 
-The id can be given as a plain word, as in `meowny documents show 42`, or with `--id`.
+The id can also be a plain word: `meowny documents show 42`.
 
 ```console
 $ meowny documents show 1
@@ -2154,11 +2153,9 @@ meowny documents add <file> [--name <text>] [--date <date>] [--keep-on-phone <bo
 | `--recurring-ids` | id,id,... | Attach it to these recurring items. |
 | `--ledger-entry-ids` | id,id,... | Attach it to these entries of the ledger. |
 
-The program reads the file itself, as you, and sends its bytes to the app, which stores it encrypted. The app never opens a path on a token's behalf. The name is the name of the file unless you give `--name`. A file of at most 25 MiB; the same file added again is not stored twice: the answer says `alreadyThere` and the attachments are added to the document that is there.
+The program reads the file as you and sends its bytes to the app, which stores them encrypted. At most 25 MiB. The same file twice is stored once: the answer says `alreadyThere` and the new attachments go to the document that is there.
 
-`--transaction-ids`, `--recurring-ids` and `--ledger-entry-ids` attach it to what it belongs to, as comma-separated ids. `--keep-on-phone` also keeps the file on the phone after a sync.
-
-The data can be given as a plain word, as in `meowny documents add 42`, or with `--data`.
+The data can also be a plain word: `meowny documents add 42`.
 
 ```console
 $ meowny documents add /home/you/boiler-receipt.pdf --date 2026-10-01
@@ -2199,9 +2196,9 @@ meowny documents update <id> [--name <text>] [--date <date>] [--keep-on-phone <b
 | `--date` | date | The new day of the paper. |
 | `--keep-on-phone` | boolean | Whether the phone keeps the file. |
 
-Only the flags you give change. The contents of a document cannot be changed: add the new file and delete the old one.
+The contents cannot change: add the new file and delete the old one.
 
-The id can be given as a plain word, as in `meowny documents update 42`, or with `--id`.
+The id can also be a plain word: `meowny documents update 42`.
 
 ```console
 $ meowny documents update 1 --name "Boiler repair" --keep-on-phone
@@ -2238,11 +2235,11 @@ meowny documents delete <id>
 | --- | --- | --- |
 | `--id` (required) | id | The document. |
 
-Deletes the document, its file and its attachments. The transactions it was attached to stay.
+Removes the document, its file and its attachments. The transactions stay.
 
-The id can be given as a plain word, as in `meowny documents delete 42`, or with `--id`.
+The id can also be a plain word: `meowny documents delete 42`.
 
-This cannot be undone, so it needs `--yes`.
+Cannot be undone, so it needs `--yes`.
 
 ```console
 $ meowny documents delete 1 --yes
@@ -2267,9 +2264,9 @@ meowny documents link <id> [--transaction-id <id>] [--recurring-id <id>] [--ledg
 | `--recurring-id` | id | A recurring item. |
 | `--ledger-entry-id` | id | An entry of the ledger of money lent and borrowed. |
 
-Give exactly one of `--transaction-id`, `--recurring-id` and `--ledger-entry-id` (an entry of the ledger of money lent and borrowed, such as a loan note). Attaching what is attached already changes nothing.
+Give exactly one of `--transaction-id`, `--recurring-id` and `--ledger-entry-id`.
 
-The id can be given as a plain word, as in `meowny documents link 42`, or with `--id`.
+The id can also be a plain word: `meowny documents link 42`.
 
 ```console
 $ meowny documents link 1 --transaction-id 424
@@ -2294,9 +2291,7 @@ meowny documents unlink <id> [--transaction-id <id>] [--recurring-id <id>] [--le
 | `--recurring-id` | id | A recurring item. |
 | `--ledger-entry-id` | id | An entry of the ledger of money lent and borrowed. |
 
-Detaches it. The document and the transaction stay.
-
-The id can be given as a plain word, as in `meowny documents unlink 42`, or with `--id`.
+The id can also be a plain word: `meowny documents unlink 42`.
 
 ```console
 $ meowny documents unlink 1 --transaction-id 424
@@ -2319,13 +2314,13 @@ meowny documents get <id> --out <path>
 | `--id` (required) | id | The document. |
 | `--out` (required) | path | Where to write the file: an absolute path in a folder that exists, that is not there yet, ending in the extension of the kind of file (.pdf, .png, .jpg, .gif, .webp, .txt, .html, .csv, or .bin for a file of no known kind). |
 
-The only command that gives a file back, so it needs a token that can write **and your yes**: the app shows which token, which document, its size and the exact file, and writes it only if you click Allow. The copy is **not encrypted**.
+The only command that gives a file back. It needs a write token **and your yes**: the app shows the token, the document, its size and the exact file. The copy is **not encrypted**.
 
-The file name must end in the extension of the kind of file the app found, never one the caller picks: `.pdf`, `.png`, `.jpg`, `.gif`, `.webp`, `.txt`, `.html`, `.csv`, or `.bin` for a file of no known kind. So a copy cannot be given a name a system would run (`.sh`, `.bat`, `.desktop`). A file that exists is never replaced.
+The file name must end in the extension of the kind of file the app found (`.pdf`, `.png`, `.jpg`, `.gif`, `.webp`, `.txt`, `.html`, `.csv`, or `.bin`), so a copy never gets a name a system would run. An existing file is never replaced.
 
-The id can be given as a plain word, as in `meowny documents get 42`, or with `--id`.
+The id can also be a plain word: `meowny documents get 42`.
 
-The app asks you to allow this each time, in a dialog; nothing is written until you do. See [Files need your yes](#files).
+The app asks you to allow this each time. See [Files need your yes](#files).
 
 ```console
 $ meowny documents get 1 --out /home/you/boiler-receipt-copy.pdf
@@ -2350,7 +2345,7 @@ meowny people list [--archived <boolean>]
 | --- | --- | --- |
 | `--archived` | boolean | Also list the friends that were archived. |
 
-Your friends with what each owes you, the largest first. A friend is a name and nothing else: no phone number, email or address is kept. A balance below zero means you owe them. Archived friends only with `--archived`. A read-only token can do this.
+Largest balance first. A friend is a name only: no phone, email or address. Below zero means you owe them.
 
 ```console
 $ meowny people list
@@ -2424,9 +2419,9 @@ meowny people show <id>
 | --- | --- | --- |
 | `--id` (required) | id | The friend. |
 
-A friend and their ledger: their parts of shared bills (`BILL`) and the entries you made, by date, with the balance after each line. The last line is where the balance ends up.
+Their parts of shared bills and your entries, by date, with the balance after each line.
 
-The id can be given as a plain word, as in `meowny people show 42`, or with `--id`.
+The id can also be a plain word: `meowny people show 42`.
 
 ```console
 $ meowny people show 5
@@ -2490,7 +2485,7 @@ meowny people create --name <text>
 | --- | --- | --- |
 | `--name` (required) | text | The name. |
 
-The name is 1 to 50 characters and unique among the friends who are not archived, ignoring case.
+The name is 1 to 50 characters, unique among active friends, ignoring case.
 
 ```console
 $ meowny people create --name Anna
@@ -2528,9 +2523,9 @@ meowny people update <id> [--name <text>] [--remind-on <date>] [--remind-every-d
 | `--remind-every-days` | number | Not used for reminders any more; kept as it was written, 1 to 365, or null. |
 | `--clear-remind-every-days` | no value | Clears `--remind-every-days`. |
 
-Only the flags you give change. The reminder flags (`--remind-on`, `--remind-every-days`, `--clear-remind-on`) are kept for data written before reminders became a setting of each device: nothing rings from them. What a reminder is about can be read with `debts reminders`.
+The reminder flags are kept for old data and do nothing: reminders are per device now (see `debts reminders`).
 
-The id can be given as a plain word, as in `meowny people update 42`, or with `--id`.
+The id can also be a plain word: `meowny people update 42`.
 
 ```console
 $ meowny people update 6 --remind-on 2026-11-01 --remind-every-days 7
@@ -2563,9 +2558,9 @@ meowny people archive <id>
 | --- | --- | --- |
 | `--id` (required) | id | The friend. |
 
-Hides a friend from the lists. Their balance and history stay, and the name can be used again. A friend is never deleted.
+Balance and history stay, and the name can be reused. A friend is never deleted.
 
-The id can be given as a plain word, as in `meowny people archive 42`, or with `--id`.
+The id can also be a plain word: `meowny people archive 42`.
 
 ```console
 $ meowny people archive 6
@@ -2598,9 +2593,9 @@ meowny people unarchive <id>
 | --- | --- | --- |
 | `--id` (required) | id | The friend. |
 
-Brings the friend back, if no other friend has taken the name.
+Fails if another friend has taken the name.
 
-The id can be given as a plain word, as in `meowny people unarchive 42`, or with `--id`.
+The id can also be a plain word: `meowny people unarchive 42`.
 
 ```console
 $ meowny people unarchive 6
@@ -2636,11 +2631,9 @@ meowny people settle <id> [--amount <amount>] [--date <date>] [--note <text>]
 | `--date` | date | The day it was paid. Today if left out. |
 | `--note` | text | A note, up to 200 characters. |
 
-Marks a payment between you and a friend. If they owe you, it is a repayment to you; if you owe them, a repayment by you. Without `--amount` it is the whole balance.
+Without `--amount` it is the whole balance. More than the debt is accepted: the balance turns around and `over` in the answer says by how much. Repayments are never income or expense.
 
-An amount larger than the debt is accepted: the balance turns around and the answer says in `over` how much of the payment was more than the debt. Repayments are never income or expenses.
-
-The id can be given as a plain word, as in `meowny people settle 42`, or with `--id`.
+The id can also be a plain word: `meowny people settle 42`.
 
 ```console
 $ meowny people settle 5 --amount 50.00 --date 2026-10-15
@@ -2677,7 +2670,7 @@ What friends owe you and what you owe them, in all and for each friend whose bal
 meowny debts summary
 ```
 
-What friends owe you and what you owe them, in all and for each friend whose balance is not zero. Neither is income or expense, and neither touches a budget.
+Neither side is income or expense, and neither touches a budget.
 
 ```console
 $ meowny debts summary
@@ -2757,7 +2750,7 @@ The recurring payments that are overdue and not paid or skipped, one for each oc
 meowny debts due
 ```
 
-The recurring payments you have not paid or skipped and whose day has gone by: one for each occurrence that was missed (a rent unpaid for three months is three), the oldest first, at most 24 for an item. A payment is overdue from the day after its day. `amount` is empty for a bill that changes every time. Income and paused or ended items are not listed. Paying one is `recurring pay`.
+One line per missed occurrence (rent unpaid for three months is three), oldest first, at most 24 per item. Overdue from the day after its day. Income and paused or ended items are not listed. Pay with `recurring pay`.
 
 ```console
 $ meowny debts due
@@ -2799,7 +2792,7 @@ meowny debts history [--from <date>] [--to <date>] [--person-id <id>] [--limit <
 | `--limit` | number | How many to return, 1 to 200. Default 50. |
 | `--offset` | number | How many to skip, for the next page. Default 0. |
 
-Everything that changed what you owe or are owed, newest first, a page at a time (`--limit` up to 200, `--offset` for the next page): the lines of every friend with the balance after each, and the recurring payments that were paid **late** or are **overdue**. A payment made on its day or before it is not in it, and one you skipped leaves no line. `--person-id` keeps to one friend (and none of the recurring payments); `--from` and `--to` keep to some days.
+Newest first, paged (`--limit` up to 200, `--offset`). Includes recurring payments paid **late** or **overdue**; on-time and skipped ones leave no line. `--person-id` keeps one friend (no recurring payments).
 
 ```console
 $ meowny debts history --limit 5
@@ -2838,7 +2831,7 @@ meowny debts reminders --every-days <number>
 | --- | --- | --- |
 | `--every-days` (required) | number | The period in days, 0 to 365. |
 
-Which friends a reminder is due for today and the next days with one. Every friend whose balance is not zero is reminded `--every-days` days after the day their debt last changed (the latest line of their statement), and again after as many; 0 is none. The app rings them, each device with its own period and time of day: this only reads what they would be about, and no notification is sent from the command line.
+A friend with a balance is reminded `--every-days` after the debt last changed, then again after as many; 0 is none. This only reads: no notification is sent from the command line.
 
 ```console
 $ meowny debts reminders --every-days 7
@@ -2917,9 +2910,9 @@ meowny splits preview --amount <amount> --mode <EQUAL|PERCENT|SHARES|EXACT> [--m
 | `--guests` | text | People who are not tracked, by name, separated by commas. Their part leaves your cost and makes no debt. |
 | `--values` | text | The value of each friend, in the order of --people, then of each guest, separated by commas. Not for an equal split. |
 
-Shows what a split would give each person for a bill of this amount, and saves nothing. `--mode` is `equal`, `percent` (two decimals, 100.00 in all), `shares` (whole numbers) or `exact` (amounts that add up to the bill). `--mine` is your value; in `percent` and `exact` leave it out to take the rest.
+Saves nothing. `--mode` is `equal`, `percent` (two decimals, 100.00 in all), `shares` (whole numbers) or `exact` (amounts that add up to the bill). `--mine` is your value; in `percent` and `exact` leave it out to take the rest.
 
-`--values` has one value for each friend in the order of `--people`, then one for each guest in the order of `--guests`. The parts always add up to the bill to the cent: the odd cents go to the largest remainders, and to you first.
+`--values` has one value per friend in `--people` order, then one per guest in `--guests` order. Parts add up to the cent; odd cents go to the largest remainders, you first.
 
 ```console
 $ meowny splits preview --amount 90.00 --mode percent --people 5,6 --values 30.00,30.00
@@ -2981,9 +2974,9 @@ meowny ledger add --person-id <id> --kind <LENT|BORROWED|REPAID_TO_ME|REPAID_BY_
 | `--expense-name` | text | BORROWED only: the name of the expense that is made for your share (1 to 50 characters). Needs `--expense-category-id`. |
 | `--expense-category-id` | id | BORROWED only: the expense category for your share. Needs `--expense-name`. |
 
-Money lent, borrowed or paid back. It is never income or expense and appears in no budget or statistic. `--kind` is `lent`, `borrowed`, `repaid_to_me` or `repaid_by_me`.
+Money lent, borrowed or paid back; never income or expense, and in no budget or statistic. `--kind` is `lent`, `borrowed`, `repaid_to_me` or `repaid_by_me`.
 
-For a borrowing, give `--expense-name` and `--expense-category-id` to add your share to your expenses in the same step, with the entry linked to it. Paying them back later is another entry and never a second expense.
+For a borrowing, `--expense-name` and `--expense-category-id` add your share to your expenses in the same step. Paying back later is another entry, never a second expense.
 
 ```console
 $ meowny ledger add --person-id 5 --kind lent --amount 10.00 --date 2026-10-13 --note taxi
@@ -3025,9 +3018,9 @@ meowny ledger update <id> [--person-id <id>] [--kind <LENT|BORROWED|REPAID_TO_ME
 | `--transaction-id` | id | The transaction it belongs to, or null for none. |
 | `--clear-transaction-id` | no value | Clears `--transaction-id`. |
 
-Only the flags you give change. `--clear-note` and `--clear-transaction-id` remove those. The expense an entry came with is not changed.
+The expense an entry came with is not changed.
 
-The id can be given as a plain word, as in `meowny ledger update 42`, or with `--id`.
+The id can also be a plain word: `meowny ledger update 42`.
 
 ```console
 $ meowny ledger update 11 --amount 12.00
@@ -3061,11 +3054,11 @@ meowny ledger delete <id>
 | --- | --- | --- |
 | `--id` (required) | id | The entry. |
 
-The balance of the friend changes by that much. The change history keeps what the entry said.
+The friend's balance changes by that much.
 
-The id can be given as a plain word, as in `meowny ledger delete 42`, or with `--id`.
+The id can also be a plain word: `meowny ledger delete 42`.
 
-This cannot be undone, so it needs `--yes`.
+Cannot be undone, so it needs `--yes`.
 
 ```console
 $ meowny ledger delete 11 --yes
@@ -3098,7 +3091,7 @@ done.
 | `MEOWNY_DATA_DIR` | The app's data folder. Same as --data-dir. |
 | `MEOWNY_PORT` | The port to connect to. Same as --port. |
 
-The token is looked for in this order, and the first one found is used: `--token-file`, then `MEOWNY_TOKEN`, then `MEOWNY_TOKEN_FILE`, then the file `meowny login` saved. A token file that other users can read is refused.
+The token is looked for in this order: `--token-file`, `MEOWNY_TOKEN`, `MEOWNY_TOKEN_FILE`, then the file `meowny login` saved. A token file others can read is refused.
 
 ### Where things are
 
@@ -3109,7 +3102,7 @@ The token is looked for in this order, and the first one found is used: `--token
 
 ## Exit codes and errors
 
-A command ends with one of these exit codes, so a script can tell what happened without reading any text.
+Every command ends with one of these exit codes, so a script can tell what happened.
 
 | Exit code | Means |
 | --- | --- |
@@ -3119,32 +3112,32 @@ A command ends with one of these exit codes, so a script can tell what happened 
 | **3** | the token is missing, wrong, expired or may not do this, the person said no in the app, or the app is locked |
 | **4** | not found |
 
-With `--json`, an error is one line on standard error, `{"code": "...", "message": "..."}`. The `code` is one of these and does not change; the message is for people.
+With `--json`, an error is one line on standard error: `{"code": "...", "message": "..."}`. The `code` is stable; the message is for people.
 
 | Code | Exit | What it means and what to do |
 | --- | --- | --- |
-| `app_unavailable` | 1 | The app is not running, or command line access is off. Start the app, and turn it on in Settings, command line access. |
-| `bad_answer` | 1 | Something answered that is not the app. Check that `--port` or the data folder points at meowNY. |
-| `bad_token` | 3 | What was given is not a token. A token is `mny_` and 64 letters and digits. Copy it again from the app. |
-| `denied` | 3 | You (or nobody, in time) did not allow it in the app. After a No the same token is refused for 30 seconds. |
-| `file_exists` | 1 | The file already exists. A file is never replaced; choose another name. |
-| `forbidden` | 3 | The token may not do this, usually because it is read only. Make a token that can write. |
-| `internal` | 1 | Something went wrong inside the app. Nothing is shown about what, on purpose, because it could quote your data. |
-| `invalid_input` | 2 | The app refused a value (an amount with one decimal, a date that does not exist). The message says which. |
-| `locked` | 3 | The app is locked. Unlock it in the app and try again. The command line cannot unlock it. |
-| `method_not_allowed` | 1 | The request was not a POST. The program always sends one; you only see this when using the HTTP API by hand. |
-| `name_exists` | 1 | A category with that name is already there. |
-| `no_token` | 3 | No token was given. Set `MEOWNY_TOKEN`, use `--token-file`, or save one with `meowny login`. |
-| `not_found` | 4 | The transaction, category or other record is not there (maybe it was already deleted). |
-| `not_set_up` | 1 | The app has no data yet. Open it and finish the first-run screen. |
-| `timeout` | 1 | The app did not answer in time (30 seconds, or 3 minutes for a command you have to allow). Raise it with `--timeout`. |
-| `token_file_unsafe` | 3 | The token file can be read by other users of the computer, so it is not used. Run `chmod 600` on it. |
-| `too_large` | 1 | The request is too large (over 1 MiB), or the file is over 25 MiB, the most the app keeps. |
-| `unauthorized` | 3 | The app does not accept the token: it is unknown, expired or revoked. Make a new one in Settings. |
-| `unknown_route` | 1 | This app has no such command: the program is newer than the app. Update the app. |
-| `usage` | 2 | The command line is wrong: a flag is missing or unknown, or a delete has no `--yes`. Nothing was sent. Run the command with `--help`. |
+| `app_unavailable` | 1 | The app is not running, or command line access is off. Start it and turn it on in Settings. |
+| `bad_answer` | 1 | Something that is not the app answered. Check `--port` or the data folder. |
+| `bad_token` | 3 | Not a token. A token is `mny_` and 64 letters and digits. Copy it again from the app. |
+| `denied` | 3 | You did not allow it in the app, or did not answer in time. After a No the token is refused for 30 seconds. |
+| `file_exists` | 1 | The file exists. A file is never replaced; choose another name. |
+| `forbidden` | 3 | The token may not do this, usually because it is read only. Make one that can write. |
+| `internal` | 1 | Something failed inside the app. Nothing more is shown, on purpose: it could quote your data. |
+| `invalid_input` | 2 | The app refused a value, such as an amount with one decimal or a date that does not exist. The message says which. |
+| `locked` | 3 | The app is locked. Unlock it in the app; the command line cannot. |
+| `method_not_allowed` | 1 | The request was not a POST. Only seen when calling the HTTP API by hand. |
+| `name_exists` | 1 | A category with that name already exists. |
+| `no_token` | 3 | No token. Set `MEOWNY_TOKEN`, use `--token-file`, or run `meowny login`. |
+| `not_found` | 4 | The record is not there; maybe it was deleted. |
+| `not_set_up` | 1 | The app has no data yet. Finish its first-run screen. |
+| `timeout` | 1 | No answer in time (30 seconds; 3 minutes when you must allow it). Raise `--timeout`. |
+| `token_file_unsafe` | 3 | Other users can read the token file, so it is not used. Run `chmod 600` on it. |
+| `too_large` | 1 | The request is over 1 MiB, or the file is over 25 MiB. |
+| `unauthorized` | 3 | The token is unknown, expired or revoked. Make a new one in Settings. |
+| `unknown_route` | 1 | The app has no such command: the program is newer than the app. Update the app. |
+| `usage` | 2 | Wrong command line: a flag is missing or unknown, or a delete has no `--yes`. Nothing was sent. Try `--help`. |
 
-What failing really looks like, each recorded from the program:
+Recorded from the program:
 
 *There is no token (exit code 3)*
 
@@ -3274,14 +3267,12 @@ error: the person said no to this token a moment ago; try again later
 
 ## For AI agents and scripts
 
-Everything above holds for a script, and a few things make an agent's life easy.
-
-1. Give it a **read-only token** in `MEOWNY_TOKEN`, and a read-and-write token only if it must change things. Tokens expire; ask for a new one when you get exit code 3 with `unauthorized`.
-2. Run `meowny schema` once. It prints, offline and as JSON, every command with its flags, types, whether it needs a token that can write, whether it needs `--yes`, and every exit code and error code.
-3. Always pass `--json`. Read data from standard output; read errors, as `{code, message}`, from standard error. Branch on the **exit code** (0 done, 1 error, 2 bad usage, 3 token or locked, 4 not found).
-4. Create a transaction with a fixed `--client-uuid` of your own. If anything goes wrong, run the same command again: it cannot record the transaction twice.
-5. Exports, backups and copies of documents wait for the person to allow them in the app. Tell the user to look at the app, and do not retry in a loop: after a No the token is refused for 30 seconds. Exit code 3 with `denied` means no.
-6. Never print the token, and do not put it in a command line, a file in a shared folder or a chat.
+1. Give it a **read-only token** in `MEOWNY_TOKEN`; read and write only if it must change things. On exit code 3 with `unauthorized`, ask for a new token.
+2. Run `meowny schema` once: offline JSON of every command, flag, type, token scope, `--yes` need, exit code and error code.
+3. Always pass `--json`. Data is on standard output; errors, as `{code, message}`, on standard error. Branch on the **exit code** (0 done, 1 error, 2 bad usage, 3 token or locked, 4 not found).
+4. Create transactions with your own `--client-uuid`: a retry cannot record one twice.
+5. Exports, backups and document copies wait for the person to allow them in the app. Tell the user to look, and do not retry in a loop. Exit code 3 with `denied` means no.
+6. Never print the token or put it in a command line, a shared file or a chat.
 
 *A paragraph to paste into the agent's instructions*
 
@@ -3295,18 +3286,18 @@ do it when the user asked. Exports, backups and copies of documents need the use
 do not retry after a denial. Never reveal the token.
 ```
 
-To read the same facts from a file rather than a terminal, this page is also published as plain Markdown: [CLI.md](CLI.md).
+This page is also plain Markdown: [CLI.md](CLI.md).
 
 ## The HTTP API behind it
 
-The command line is a thin client. Anything it does you can do yourself with `curl`, because the app serves a small HTTP API on this computer only (`127.0.0.1`, a port the app picks and writes to `api.json` in its data folder). It is off until you turn it on.
+The command line is a thin client over a small HTTP API the app serves on this computer only (`127.0.0.1`, a port written to `api.json` in its data folder). It is off until you turn it on.
 
-- Every call is `POST /v1/<route>` with a JSON object as the body (nothing means `{}`) and the header `Authorization: Bearer <token>`.
-- The answer is JSON: `{"ok": true, "data": ...}`, or `{"ok": false, "error": {"code": "...", "message": "..."}}` with a matching HTTP status (400, 401, 403, 404, 409, 413, 423, 500).
-- The `Host` header must be `127.0.0.1:<port>` or `localhost:<port>`, and a request with an `Origin` header is refused, so a web page in your browser cannot use it.
-- Money is text with two decimals (`"12.50"`), ids are text, dates are `YYYY-MM-DD`, months `YYYY-MM`. Unknown or mistyped arguments are a 400 that names them.
-- Routes marked "and your yes" wait (up to two minutes) for you to allow them in the app, and answer `denied` if you do not.
-- A body is at most 1 MiB, except for `documents.add`: it takes the file as base64url text in the argument `data` (the command line does this for you), so its body may be up to 35 MiB, and is read only after the token and its scope have been checked from the request's head.
+- Every call is `POST /v1/<route>` with a JSON body (none means `{}`) and `Authorization: Bearer <token>`.
+- The answer is `{"ok": true, "data": ...}` or `{"ok": false, "error": {"code": "...", "message": "..."}}`, with a matching HTTP status.
+- `Host` must be `127.0.0.1:<port>` or `localhost:<port>`, and a request with an `Origin` header is refused, so a web page cannot use it.
+- Money is text (`"12.50"`), dates `YYYY-MM-DD`, months `YYYY-MM`. Unknown arguments are a 400 that names them.
+- Routes marked "and your yes" wait up to two minutes for you in the app, and answer `denied` if you refuse.
+- A body is at most 1 MiB, except `documents.add`: the file goes in `data` as base64url text, up to 35 MiB, read only after the token and its scope are checked.
 
 *Ask the app for its status*
 
@@ -3317,7 +3308,7 @@ curl -s -X POST "http://127.0.0.1:$PORT/v1/status" \
 {"data":{"api":1,"app":"meowny","schemaVersion":13,"scope":"read","version":"0.1.0"},"ok":true}
 ```
 
-The port is in `api.json`. `meowny schema --app` prints every route with its arguments as JSON.
+`meowny schema --app` prints every route with its arguments as JSON.
 
 | Route | Token | Arguments | What it does |
 | --- | --- | --- | --- |
@@ -3392,18 +3383,18 @@ The port is in `api.json`. `meowny schema --app` prints every route with its arg
 
 ## Security
 
-- **Off by default.** Nothing listens until you turn command line access on in the app.
-- **This computer only.** The app listens on `127.0.0.1`, never on the network, on a port the system picks.
-- **A token for every request,** checked against fingerprints kept in your encrypted data. A locked app cannot check any token, so it answers "locked" and gives nothing.
-- **Web pages cannot use it.** A request that carries an `Origin` header, or the wrong `Host`, is refused, and the API sends no cross-origin permissions.
-- **Least power by default.** Tokens are read only unless you choose otherwise, expire, and can be revoked.
-- **Your yes for files,** each time, with the exact file shown, and never over an existing file.
-- **No restore, no wipe, no currency change** through it, whatever the token.
-- **It does not keep the app awake.** Calls do not count as activity, so the idle lock still works.
-- **Nothing leaves the computer.** The command line only ever connects to the app on this computer. There is no telemetry.
+- **Off by default.** Nothing listens until you turn command line access on.
+- **This computer only.** `127.0.0.1`, never the network.
+- **A token for every request,** checked against fingerprints in your encrypted data. A locked app gives nothing.
+- **Web pages cannot use it:** a request with an `Origin` header or the wrong `Host` is refused.
+- **Least power.** Tokens are read only unless you choose otherwise, expire, and can be revoked.
+- **Your yes for files,** each time, with the exact file shown, never over an existing file.
+- **No restore, wipe or currency change** through it, whatever the token.
+- **It does not keep the app awake,** so the idle lock still works.
+- **Nothing leaves the computer.** No telemetry.
 
-> **Careful:** A leaked read-only token lets someone who can reach this computer read all your data until it expires; a leaked read-and-write token lets them change it too. Revoke a token in Settings, command line access, as soon as you suspect it. The saved token file is protected only by file permissions.
+> **Careful:** A leaked token is a key to your data. Read only lets someone who can reach this computer read everything until it expires; read and write lets them change it too. Revoke it in Settings, command line access, as soon as you suspect it. The saved token file is protected only by file permissions.
 
-To report a problem, open an issue at [the project page](https://github.com/v1nc3t/meowNY).
+Report a problem on [the project page](https://github.com/v1nc3t/meowNY).
 
-meowNY is free software (AGPL-3.0). Source: [github.com/v1nc3t/meowNY](https://github.com/v1nc3t/meowNY). This page was generated from `meowny` 0.1.0 (API 1); its examples are real output.
+meowNY is free software (AGPL-3.0). Source: [github.com/v1nc3t/meowNY](https://github.com/v1nc3t/meowNY). Generated from `meowny` 0.1.0 (API 1); the examples are real output.

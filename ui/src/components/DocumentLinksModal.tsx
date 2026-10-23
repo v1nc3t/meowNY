@@ -51,7 +51,6 @@ export default function DocumentLinksModal({ doc, onClose }: { doc: Doc; onClose
         <p className="hint">{t('docs.noLinks')}</p>
       ) : (
         <>
-          <p className="hint">{t('docs.linksHint')}</p>
           <ul className="link-list">
             {links.map((link) => (
               <li key={`${link.kind}-${link.id}`}>

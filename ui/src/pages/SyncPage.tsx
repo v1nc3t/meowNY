@@ -90,8 +90,7 @@ function PhoneSync() {
       </p>
 
       {scanning ? (
-        <div className="scan-overlay" role="dialog" aria-label={t('phone.scanning')}>
-          <p>{t('phone.scanning')}</p>
+        <div className="scan-overlay" role="dialog" aria-label={t('phone.scan')}>
           <button type="button" onClick={() => void stopScan()}>
             {t('common.cancel')}
           </button>

@@ -364,10 +364,12 @@ Decided 2026-10-16:
 
 ## UI look (shadcn style)
 
-- [ ] Tokens and theme: shadcn neutral colours in our own CSS (no new packages), light and dark, follows the system with a setting
-- [ ] Primitives: buttons, cards, badges, inputs, dialogs, dropdowns, tabs, sidebar; dashboard as the sample page
-- [ ] Copy cut: explanations the buttons already make clear are gone; safety text kept
-- [ ] Docs: the docs site restyled; all docs summarised
+- [x] Tokens and theme: shadcn neutral colours in our own CSS (no new packages), light and dark, follows the system with a setting (`ui/src/styles/tokens.css`, split from `index.css` by owner; `lib/theme.ts`, key `ui-theme`; Settings, appearance)
+- [x] Primitives: buttons, cards, badges, inputs, dialogs, dropdowns, tabs, sidebar; dashboard as the sample page (`components/ui/{Button,Card,Badge,cn}`; a bare button is ghost, a submit is primary; `Modal` `danger`)
+- [x] Copy cut: explanations the buttons already make clear are gone; safety text kept (29 keys removed, 16 shortened, in all 7 languages)
+- [x] Docs: the docs site restyled; all docs summarised
+  - [x] Docs site restyled (`docs/site/site.css`; prose condensed in `content.mjs`; every id kept; `docs/CLI.md` regenerated)
+  - [x] Markdown docs summarised (README, PLAN, user guides, data inventory, design notes; numbered sections and the real-phone checklists kept)
 - [ ] Pages restyled: money, debts and documents, settings/sync/export/vault
 - [ ] Verification
 

@@ -191,7 +191,6 @@ export default function DocumentModal({ id, onClose, onChanged }: { id: string; 
               <button type="button" onClick={() => setPreviewing(true)}>
                 {t('docs.previewButton')}
               </button>
-              <span className="hint">{t('docs.previewAbout')}</span>
             </div>
           ) : null}
           {canOpen(doc) ? (
@@ -199,7 +198,6 @@ export default function DocumentModal({ id, onClose, onChanged }: { id: string; 
               <button type="button" onClick={onOpen}>
                 {t('docs.open')}
               </button>
-              <span className="hint">{t('docs.openAbout')}</span>
             </div>
           ) : null}
         </section>

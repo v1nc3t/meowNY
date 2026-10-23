@@ -263,11 +263,13 @@ body:has(.app-shell.is-locked) {
     gap: 0.25rem;
   }
 
-  .nav-item {
+  .nav-item,
+  .exit-btn {
     width: auto;
   }
 
   .sidebar-footer {
+    flex-direction: row;
     margin-top: 0;
   }
 

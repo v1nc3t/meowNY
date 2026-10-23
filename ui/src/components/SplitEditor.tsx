@@ -170,7 +170,6 @@ export default function SplitEditor({
         onPickFriend={(friend) => addRow({ personId: friend.id, name: friend.name })}
         onAddNew={(name) => void addNew(name)}
       />
-      {proportions ? <p className="hint">{t('split.proportions')}</p> : null}
       {draft.rows.length === 0 ? (
         <p className="hint">{t('split.needParts')}</p>
       ) : left !== null ? (

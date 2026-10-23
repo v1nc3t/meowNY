@@ -21,7 +21,6 @@ export default function DebtsDue({ due, currency, locale }: { due: Due; currency
   })
   return (
     <>
-      <p className="hint">{t('debts.dueHint')}</p>
       <div className="dash-card">
         <div className="dash-stats">
           <div className="dash-stat">
