@@ -20,7 +20,7 @@ import { formatDate, formatMoney } from '../lib/money'
 import { thisPeriod, type RangeMode } from '../lib/range'
 import { useDebounced } from '../hooks/useDebounced'
 import { useMoneySettings, type MoneySettings } from '../hooks/useMoneySettings'
-import { useNotice } from '../hooks/useNotice'
+import { useToast } from '../hooks/toast'
 import {
   bounds,
   defaultChoice,
@@ -59,23 +59,24 @@ export default function ExportPage() {
   const today = useToday()
   const { settings } = useMoneySettings()
   const [categories, setCategories] = useState<Category[] | null>(null)
-  const [message, setMessage] = useNotice()
+  // The page cannot be drawn without the categories, so this failure stays in the place of the page; it is not a pop-up.
+  const [loadError, setLoadError] = useState('')
 
   useEffect(() => {
     if (!inDesktopApp()) return
-    categoriesApi.list().then(setCategories, (e) => setMessage(errorText(e)))
-  }, [setMessage])
+    categoriesApi.list().then(setCategories, (e) => setLoadError(errorText(e)))
+  }, [])
 
   if (!inDesktopApp()) return <p>{t('settings.unavailable')}</p>
   if (!today || !settings || !categories) {
-    return message ? <p className="notice">{message}</p> : null
+    return loadError ? <p className="notice">{loadError}</p> : null
   }
   return <ExportForm today={today} settings={settings} categories={categories} />
 }
 
 function ExportForm({ today, settings, categories }: { today: Today; settings: MoneySettings; categories: Category[] }) {
   const { t, language } = useI18n()
-  const [message, setMessage] = useNotice()
+  const say = useToast()
   const [busy, setBusy] = useState(false)
   const [format, setFormat] = useState<ExportFormat>('json')
   const [choice, setChoice] = useState<Choice>(() => defaultChoice(today))
@@ -126,13 +127,13 @@ function ExportForm({ today, settings, categories }: { today: Today; settings: M
         if (!cancelled) setPreview(loaded)
       },
       (e) => {
-        if (!cancelled) setMessage(errorText(e))
+        if (!cancelled) say(errorText(e), 'error')
       },
     )
     return () => {
       cancelled = true
     }
-  }, [settled, datesOk, setMessage])
+  }, [settled, datesOk, say])
 
   // A JSON or CSV file can be looked at before it is saved: the start of the text it would hold, following the choice.
   const textFormat = format === 'json' || format === 'csv' ? format : null
@@ -144,13 +145,13 @@ function ExportForm({ today, settings, categories }: { today: Today; settings: M
         if (!cancelled) setFileText({ format: textFormat, data })
       },
       (e) => {
-        if (!cancelled) setMessage(errorText(e))
+        if (!cancelled) say(errorText(e), 'error')
       },
     )
     return () => {
       cancelled = true
     }
-  }, [settled, textFormat, datesOk, problem, setMessage])
+  }, [settled, textFormat, datesOk, problem, say])
 
   // An Excel file is made as the saved one would be, and read by the screen.
   useEffect(() => {
@@ -216,9 +217,9 @@ function ExportForm({ today, settings, categories }: { today: Today; settings: M
             : format === 'xlsx'
               ? await dataExport.xlsx(selection, look)
               : await report.pdf(reportOptions)
-      if (saved) setMessage(t('export.saved'))
+      if (saved) say(t('export.saved'), 'success')
     } catch (error) {
-      setMessage(errorText(error))
+      say(errorText(error), 'error')
     }
     setBusy(false)
   }
@@ -317,9 +318,6 @@ function ExportForm({ today, settings, categories }: { today: Today; settings: M
       <div className="tx-title">
         <h1>{t('export.title')}</h1>
       </div>
-      <p className="notice" role="status">
-        {message}
-      </p>
 
       <div className="tx-pane wide export-pane">
         <div className="export-layout">

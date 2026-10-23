@@ -13,7 +13,7 @@ import { stats, type BudgetVsActual, type Commitments, type PlannedVsPaid, type 
 import { useToday, type Today } from '../api/today'
 import { formatMoney, formatPercent, toMinor } from '../lib/money'
 import { useMoneySettings, type MoneySettings } from '../hooks/useMoneySettings'
-import { useNotice } from '../hooks/useNotice'
+import { useToast } from '../hooks/toast'
 import { useI18n, useT } from '../i18n/context'
 import { useShortcut } from '../keys/registry'
 import { changePercent, niceCeil, savingsRateText, slicePath, usedPercent } from './dashboardMath'
@@ -44,7 +44,7 @@ function DashboardView({ settings, now }: { settings: MoneySettings; now: Today 
   const [owed, setOwed] = useState<Summary | null>(null)
   // the recurring items that are overdue or due soon, and all of them (for those that are split): they do not follow the month either
   const [recurringNow, setRecurringNow] = useState<{ dues: Dues; items: Recurring[] } | null>(null)
-  const [message, setMessage] = useNotice()
+  const say = useToast()
 
   useEffect(() => {
     let cancelled = false
@@ -85,13 +85,13 @@ function DashboardView({ settings, now }: { settings: MoneySettings; now: Today 
         if (!cancelled) setData({ bva, year, top, commitments, paid })
       },
       (failure) => {
-        if (!cancelled) setMessage(errorText(failure))
+        if (!cancelled) say(errorText(failure), 'error')
       },
     )
     return () => {
       cancelled = true
     }
-  }, [month, setMessage])
+  }, [month, say])
 
   // Keyboard: [ and ] step through months, t jumps to this month.
   useShortcut('prev', () => setMonth((current) => shiftMonth(current, -1)))
@@ -110,7 +110,6 @@ function DashboardView({ settings, now }: { settings: MoneySettings; now: Today 
       <div className="tx-title">
         <h1>{t('dashboard.title')}</h1>
       </div>
-      <p className="notice">{message}</p>
       {data && point ? (
         <div className="tx-pane wide dash">
           <Card className="dash-top">

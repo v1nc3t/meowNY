@@ -13,7 +13,7 @@ import {
 import { whenText } from '../api/locales'
 import { errorText } from '../api/invoke'
 import { useT } from '../i18n/context'
-import { useNotice } from '../hooks/useNotice'
+import { useToast } from '../hooks/toast'
 import Dropdown from './Dropdown'
 import Badge from './ui/Badge'
 import Button from './ui/Button'
@@ -33,19 +33,19 @@ export default function CommandApiBlock({ locale, timezone }: { locale: string; 
   const [scope, setScope] = useState<Scope>('read')
   const [days, setDays] = useState(String(DEFAULT_EXPIRY_DAYS))
   const [busy, setBusy] = useState(false)
-  const [message, setMessage] = useNotice()
+  const say = useToast()
 
   useEffect(() => {
-    commandApi.status().then(setStatus, (e) => setMessage(errorText(e)))
-    commandApi.tokens().then(setTokens, (e) => setMessage(errorText(e)))
-  }, [setMessage])
+    commandApi.status().then(setStatus, (e) => say(errorText(e), 'error'))
+    commandApi.tokens().then(setTokens, (e) => say(errorText(e), 'error'))
+  }, [say])
 
   async function onSwitch(on: boolean) {
     setBusy(true)
     try {
       setStatus(await commandApi.setEnabled(on))
     } catch (error) {
-      setMessage(errorText(error))
+      say(errorText(error), 'error')
       // The choice may have been put back (the listener could not start), so show what is true now.
       commandApi.status().then(setStatus, () => undefined)
     }
@@ -55,7 +55,7 @@ export default function CommandApiBlock({ locale, timezone }: { locale: string; 
   async function onCreate(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     const clean = cleanTokenName(name)
-    if (!clean) return setMessage(t('cli.errorName'))
+    if (!clean) return say(t('cli.errorName'), 'error')
     setBusy(true)
     try {
       const made = await commandApi.createToken({ name: clean, scope, expiresInDays: Number(days) })
@@ -64,7 +64,7 @@ export default function CommandApiBlock({ locale, timezone }: { locale: string; 
       setName('')
       setTokens(await commandApi.tokens())
     } catch (error) {
-      setMessage(errorText(error))
+      say(errorText(error), 'error')
     }
     setBusy(false)
   }
@@ -73,9 +73,9 @@ export default function CommandApiBlock({ locale, timezone }: { locale: string; 
     try {
       await commandApi.revokeToken(id)
       setTokens(await commandApi.tokens())
-      setMessage(t('cli.revoked'))
+      say(t('cli.revoked'), 'success')
     } catch (error) {
-      setMessage(errorText(error))
+      say(errorText(error), 'error')
     }
   }
 
@@ -100,9 +100,6 @@ export default function CommandApiBlock({ locale, timezone }: { locale: string; 
 
   return (
     <div className="settings-stack">
-      <p className="notice" role="status">
-        {message}
-      </p>
 
       {status && (
         <Rows>

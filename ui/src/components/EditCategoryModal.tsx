@@ -2,7 +2,7 @@ import { useRef, useState, type FormEvent } from 'react'
 import { budgets as budgetsApi } from '../api/budgets'
 import { categories as categoriesApi, cleanCategoryName, type Category } from '../api/categories'
 import { errorText } from '../api/invoke'
-import { useNotice } from '../hooks/useNotice'
+import { useToast } from '../hooks/toast'
 import { useT } from '../i18n/context'
 import { amountString } from '../lib/money'
 import Modal, { modalFormId } from './Modal'
@@ -29,7 +29,7 @@ export default function EditCategoryModal({
   onSaved: () => void
 }) {
   const t = useT()
-  const [message, setMessage] = useNotice()
+  const say = useToast()
   const [pending, setPending] = useState(false)
   // What is already saved, so a second try after an error does not do the first half again.
   const saved = useRef({ name: category.name })
@@ -39,10 +39,10 @@ export default function EditCategoryModal({
     if (pending) return
     const form = new FormData(event.currentTarget)
     const name = cleanCategoryName(String(form.get('name') ?? ''))
-    if (!name) return setMessage(t('categories.nameError'))
+    if (!name) return say(t('categories.nameError'), 'error')
     const raw = String(form.get('amount') ?? '').trim()
     const limit = raw === '' ? null : amountString(raw, true)
-    if (raw !== '' && limit === null) return setMessage(t('budgets.amountError'))
+    if (raw !== '' && limit === null) return say(t('budgets.amountError'), 'error')
     setPending(true)
     try {
       if (name !== saved.current.name) {
@@ -53,7 +53,7 @@ export default function EditCategoryModal({
         await budgetsApi.set({ type: category.type, scope: 'CATEGORY', month, amountLimit: limit, categoryId: category.id })
       }
     } catch (failure) {
-      setMessage(errorText(failure))
+      say(errorText(failure), 'error')
       return
     } finally {
       setPending(false)
@@ -63,7 +63,6 @@ export default function EditCategoryModal({
 
   return (
     <Modal title={t('categories.editTitle')} pending={pending} onClose={onClose}>
-      <p className="notice">{message}</p>
       <form id={modalFormId} onSubmit={(event) => void onSubmit(event)}>
         <label>
           {t('common.name')}

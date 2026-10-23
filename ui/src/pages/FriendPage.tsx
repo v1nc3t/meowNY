@@ -16,7 +16,7 @@ import { buttonClass } from '../components/ui/cn'
 import { useClipCounts } from '../hooks/useClipCounts'
 import { useFocusRequest, useJumpTo } from '../hooks/useFocusRequest'
 import { useMoneySettings, type MoneySettings } from '../hooks/useMoneySettings'
-import { useNotice } from '../hooks/useNotice'
+import { useToast } from '../hooks/toast'
 import { useProfile } from '../hooks/profile'
 import { useT } from '../i18n/context'
 import { useShortcut } from '../keys/registry'
@@ -51,7 +51,9 @@ function FriendView({ settings, now }: { settings: MoneySettings; now: Today }) 
   const [reload, setReload] = useState(0)
   const [dialog, setDialog] = useState<Dialog>(null)
   const [pending, setPending] = useState(false)
-  const [message, setMessage] = useNotice()
+  const say = useToast()
+  // Without the statement the page has nothing to show, so this failure stays in its place; it is not a pop-up.
+  const [loadError, setLoadError] = useState('')
   const money = (amount: string) => formatMoney(amount, settings.currency, settings.locale)
 
   useEffect(() => {
@@ -63,13 +65,13 @@ function FriendView({ settings, now }: { settings: MoneySettings; now: Today }) 
       (failure) => {
         if (cancelled) return
         if (failure instanceof ApiError && (failure.code === 'not_found' || failure.code === 'invalid_input')) setMissing(true)
-        else setMessage(errorText(failure))
+        else setLoadError(errorText(failure))
       },
     )
     return () => {
       cancelled = true
     }
-  }, [personId, reload, setMessage])
+  }, [personId, reload])
 
   // Newest first: the balance after each line still reads the same.
   const lines = useMemo(() => [...(statement?.lines ?? [])].reverse(), [statement])
@@ -83,9 +85,8 @@ function FriendView({ settings, now }: { settings: MoneySettings; now: Today }) 
   useShortcut('new', () => setDialog({ kind: 'entry', entry: null, as: 'LENT' }))
   useRowNavigation()
 
-  function done(text = '') {
+  function done() {
     setDialog(null)
-    setMessage(text)
     setReload((value) => value + 1)
     // a balance or a reminder may have changed: the phone schedules again
     remindersChanged()
@@ -96,7 +97,7 @@ function FriendView({ settings, now }: { settings: MoneySettings; now: Today }) 
     try {
       await action()
     } catch (failure) {
-      setMessage(errorText(failure))
+      say(errorText(failure), 'error')
       return
     } finally {
       setPending(false)
@@ -114,7 +115,7 @@ function FriendView({ settings, now }: { settings: MoneySettings; now: Today }) 
       </section>
     )
   }
-  if (!statement) return <p className="notice">{message}</p>
+  if (!statement) return loadError ? <p className="notice">{loadError}</p> : null
 
   const { person } = statement
   const { tone, abs } = balanceView(person.balance)
@@ -147,7 +148,6 @@ function FriendView({ settings, now }: { settings: MoneySettings; now: Today }) 
           ) : null}
         </div>
       </div>
-      <p className="notice">{message}</p>
       {dialog?.kind === 'entry' ? (
         <EntryModal
           entry={dialog.entry}
@@ -155,13 +155,19 @@ function FriendView({ settings, now }: { settings: MoneySettings; now: Today }) 
           personId={person.id}
           today={now.date}
           onClose={() => setDialog(null)}
-          onSaved={(notAttached) => done(notAttached.length > 0 ? t('docs.attachFailed', { names: notAttached.join(', ') }) : '')}
+          onSaved={(notAttached) => {
+            done()
+            if (notAttached.length > 0) say(t('docs.attachFailed', { names: notAttached.join(', ') }), 'warning')
+          }}
         />
       ) : null}
       {dialog?.kind === 'code' ? (
         <BillCodeModal target={{ kind: 'transaction', id: dialog.transactionId }} person={{ id: person.id, name: person.name }} part={dialog.amount} onClose={() => setDialog(null)} />
       ) : null}
-      {dialog?.kind === 'settle' ? <SettleModal person={person} today={now.date} onClose={() => setDialog(null)} onDone={() => done(t('debts.settled'))} /> : null}
+      {dialog?.kind === 'settle' ? <SettleModal person={person} today={now.date} onClose={() => setDialog(null)} onDone={() => {
+            done()
+            say(t('debts.settled'), 'success')
+          }} /> : null}
       {dialog?.kind === 'rename' ? <FriendNameModal person={person} onClose={() => setDialog(null)} onSaved={() => done()} /> : null}
       {dialog?.kind === 'delete' ? (
         <ConfirmModal
@@ -234,7 +240,7 @@ function FriendView({ settings, now }: { settings: MoneySettings; now: Today }) 
             )
           })}
         </ul>
-        {phone ? null : <DebtsFiles personId={person.id} onSaved={() => setMessage(t('export.saved'))} onFailed={setMessage} />}
+        {phone ? null : <DebtsFiles personId={person.id} onSaved={() => say(t('export.saved'), 'success')} onFailed={(text) => say(text, 'error')} />}
       </div>
     </section>
   )

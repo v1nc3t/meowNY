@@ -3,7 +3,7 @@ import { categories as categoriesApi, cleanCategoryName, type Category } from '.
 import { debts, type BillPreview, type Person } from '../api/debts'
 import { ApiError, errorText } from '../api/invoke'
 import { useMoneySettings } from '../hooks/useMoneySettings'
-import { useNotice } from '../hooks/useNotice'
+import { useToast } from '../hooks/toast'
 import { useT } from '../i18n/context'
 import { amountString, convertAmount, formatDate, formatMoney, parseRate } from '../lib/money'
 import Dropdown from './Dropdown'
@@ -48,13 +48,13 @@ export default function BillAcceptModal({
   const [rate, setRate] = useState('')
   const [amount, setAmount] = useState('')
   const [amountEdited, setAmountEdited] = useState(false)
-  const [message, setMessage] = useNotice()
+  const say = useToast()
   const [pending, setPending] = useState(false)
   const money = (value: string, currency: string) => (settings ? formatMoney(value, currency, settings.locale) : value)
 
   async function read(code: string) {
     const clean = code.trim()
-    if (clean.startsWith('MNY1:')) return setMessage(t('code.isPairing'))
+    if (clean.startsWith('MNY1:')) return say(t('code.isPairing'), 'error')
     try {
       const [shown, people, categories] = await Promise.all([debts.billPreview(clean), debts.people(false), categoriesApi.list('EXPENSE')])
       setFriends(people)
@@ -64,7 +64,7 @@ export default function BillAcceptModal({
       if (!categories.some((category) => category.id === categoryId)) setCategoryId(categories[0]?.id ?? '')
       setPreview(shown)
     } catch (failure) {
-      setMessage(failure instanceof ApiError && failure.code === 'invalid_input' ? t('code.notACode') : errorText(failure))
+      say(failure instanceof ApiError && failure.code === 'invalid_input' ? t('code.notACode') : errorText(failure), 'error')
     }
   }
 
@@ -92,7 +92,7 @@ export default function BillAcceptModal({
     event.preventDefault()
     if (pending) return
     if (!preview) return void read(text)
-    if (!ready) return setMessage(needsRate && !parsedRate ? t('code.needRate') : t('debts.errorRequired'))
+    if (!ready) return say(needsRate && !parsedRate ? t('code.needRate') : t('debts.errorRequired'), 'error')
     setPending(true)
     try {
       await debts.billAccept({
@@ -108,7 +108,7 @@ export default function BillAcceptModal({
         // Not remembered.
       }
     } catch (failure) {
-      setMessage(errorText(failure))
+      say(errorText(failure), 'error')
       return
     } finally {
       setPending(false)
@@ -126,7 +126,6 @@ export default function BillAcceptModal({
       cancelLabel={preview ? t('code.deny') : t('common.cancel')}
       onClose={onClose}
     >
-      <p className="notice">{message}</p>
       <form id={modalFormId} onSubmit={(event) => void onSubmit(event)}>
         {preview === null ? (
           <label>

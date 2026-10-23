@@ -7,7 +7,7 @@ import { monthLabel } from '../api/months'
 import { useToday } from '../api/today'
 import Dropdown from './Dropdown'
 import Modal from './Modal'
-import { useNotice } from '../hooks/useNotice'
+import { useToast } from '../hooks/toast'
 import { useI18n } from '../i18n/context'
 import { amountString } from '../lib/money'
 
@@ -38,7 +38,7 @@ export default function AddCategoryModal({
     { value: 'EXPENSE', label: t('common.expense') },
     { value: 'INCOME', label: t('common.income') },
   ]
-  const [message, setMessage] = useNotice()
+  const say = useToast()
   const [pending, setPending] = useState(false)
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
@@ -46,13 +46,13 @@ export default function AddCategoryModal({
     if (pending) return
     const name = cleanCategoryName(String(new FormData(event.currentTarget).get('name') ?? ''))
     if (!name) {
-      setMessage(t('categories.nameError'))
+      say(t('categories.nameError'), 'error')
       return
     }
     const raw = String(new FormData(event.currentTarget).get('budget') ?? '').trim()
     const limit = raw === '' ? null : amountString(raw, true)
     if (raw !== '' && limit === null) {
-      setMessage(t('budgets.amountError'))
+      say(t('budgets.amountError'), 'error')
       return
     }
     setPending(true)
@@ -64,7 +64,7 @@ export default function AddCategoryModal({
       }
       onCreated(category)
     } catch (error) {
-      setMessage(errorText(error))
+      say(errorText(error), 'error')
     } finally {
       setPending(false)
     }
@@ -72,7 +72,6 @@ export default function AddCategoryModal({
 
   return (
     <Modal title={t('categories.addTitle')} pending={pending} formId={formId} onClose={onClose}>
-      <p className="notice">{message}</p>
       <form id={formId} onSubmit={(event) => void onSubmit(event)}>
         <label>
           {t('common.name')}

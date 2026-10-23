@@ -3,7 +3,7 @@ import { whenText } from '../api/locales'
 import { ApiError, errorText } from '../api/invoke'
 import { cleanDeviceName, DEVICE_NAME_MAX, MODES, syncApi, type Mode, type Peer } from '../api/sync'
 import { useDeviceName } from '../hooks/useDeviceName'
-import { useNotice } from '../hooks/useNotice'
+import { useToast } from '../hooks/toast'
 import { useSyncStatus } from '../hooks/useSyncStatus'
 import Dropdown from './Dropdown'
 import Button from './ui/Button'
@@ -23,11 +23,11 @@ export default function PhoneSyncBlock({ locale, timezone }: { locale: string; t
   const [address, setAddress] = useState('')
   const [mode, setMode] = useState<Mode>('both')
   const [removing, setRemoving] = useState<string | null>(null)
-  const [message, setMessage] = useNotice()
+  const say = useToast()
 
   const loadDevices = useCallback(() => {
-    syncApi.devices().then(setDevices, (e) => setMessage(errorText(e)))
-  }, [setMessage])
+    syncApi.devices().then(setDevices, (e) => say(errorText(e), 'error'))
+  }, [say])
 
   useEffect(() => {
     loadDevices()
@@ -41,11 +41,11 @@ export default function PhoneSyncBlock({ locale, timezone }: { locale: string; t
 
   async function begin(pair: boolean) {
     const clean = cleanDeviceName(name)
-    if (!clean) return setMessage(t('sync.errorName'))
+    if (!clean) return say(t('sync.errorName'), 'error')
     try {
       await (pair ? syncApi.startPairing(clean, address) : syncApi.start(clean, address, mode))
     } catch (error) {
-      setMessage(error instanceof ApiError && error.code === 'invalid_input' && address.trim() !== '' ? t('sync.errorAddress') : errorText(error))
+      say(error instanceof ApiError && error.code === 'invalid_input' && address.trim() !== '' ? t('sync.errorAddress') : errorText(error), 'error')
     }
     await refresh()
   }
@@ -54,10 +54,10 @@ export default function PhoneSyncBlock({ locale, timezone }: { locale: string; t
     try {
       await syncApi.removeDevice(deviceId)
       setRemoving(null)
-      setMessage(t('sync.removed'))
+      say(t('sync.removed'), 'success')
       loadDevices()
     } catch (error) {
-      setMessage(errorText(error))
+      say(errorText(error), 'error')
     }
   }
 
@@ -65,9 +65,6 @@ export default function PhoneSyncBlock({ locale, timezone }: { locale: string; t
 
   return (
     <div className="settings-stack">
-      <p className="notice" role="status">
-        {message}
-      </p>
 
       <h3 className="settings-subtitle">{t('sync.devices')}</h3>
       {devices && devices.length === 0 && <p className="hint">{t('sync.noDevices')}</p>}
@@ -150,7 +147,7 @@ export default function PhoneSyncBlock({ locale, timezone }: { locale: string; t
           status={status}
           side="desktop"
           onEnterCode={() => undefined}
-          onDecide={(choices) => void syncApi.decide(choices).then(refresh, (e) => setMessage(errorText(e)))}
+          onDecide={(choices) => void syncApi.decide(choices).then(refresh, (e) => say(errorText(e), 'error'))}
           onCancel={() => void cancel()}
           onDone={() => void acknowledge()}
         />

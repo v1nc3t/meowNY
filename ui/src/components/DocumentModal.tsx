@@ -4,7 +4,7 @@ import { ApiError, errorText } from '../api/invoke'
 import { useToday } from '../api/today'
 import { useMoneySettings } from '../hooks/useMoneySettings'
 import { useProfile } from '../hooks/profile'
-import { useNotice } from '../hooks/useNotice'
+import { useToast } from '../hooks/toast'
 import { useT } from '../i18n/context'
 import { formatSize } from '../lib/bytes'
 import { canOpen, canPreview, canShowImage, fileState, fileStateText, typeText } from '../lib/documents'
@@ -36,7 +36,7 @@ export default function DocumentModal({ id, onClose, onChanged }: { id: string; 
   const [name, setName] = useState('')
   const [date, setDate] = useState('')
   const [keep, setKeep] = useState(false)
-  const [message, setMessage] = useNotice()
+  const say = useToast()
   const [pending, setPending] = useState(false)
   const [warning, setWarning] = useState(false)
   const [previewing, setPreviewing] = useState(false)
@@ -65,13 +65,13 @@ export default function DocumentModal({ id, onClose, onChanged }: { id: string; 
         )
       },
       (failure) => {
-        if (!cancelled) setMessage(errorText(failure))
+        if (!cancelled) say(errorText(failure), 'error')
       },
     )
     return () => {
       cancelled = true
     }
-  }, [id, setMessage, t])
+  }, [id, say, t])
 
   useEffect(() => {
     let cancelled = false
@@ -102,7 +102,7 @@ export default function DocumentModal({ id, onClose, onChanged }: { id: string; 
     try {
       await documents.update(id, patch)
     } catch (failure) {
-      setMessage(errorText(failure))
+      say(errorText(failure), 'error')
       return
     } finally {
       setPending(false)
@@ -115,7 +115,7 @@ export default function DocumentModal({ id, onClose, onChanged }: { id: string; 
     try {
       await action()
     } catch (failure) {
-      setMessage(errorText(failure))
+      say(errorText(failure), 'error')
     }
   }
 
@@ -142,7 +142,7 @@ export default function DocumentModal({ id, onClose, onChanged }: { id: string; 
   if (!doc || !now) {
     return (
       <Modal title={t('docs.detailsTitle')} onClose={onClose} cancelLabel={t('common.back')} formId={FORM_ID}>
-        <p className="notice">{message}</p>
+        {null}
       </Modal>
     )
   }
@@ -158,9 +158,6 @@ export default function DocumentModal({ id, onClose, onChanged }: { id: string; 
         cancelLabel={t('common.back')}
         onClose={onClose}
       >
-        <p className="notice" role="alert">
-          {message}
-        </p>
         {image ? <img className="doc-preview" src={imageSource(image)} alt={t('docs.preview', { name: doc.name })} /> : null}
         {imageNote ? <p className="hint">{imageNote}</p> : null}
         <form id={FORM_ID} onSubmit={(event) => void onSave(event)}>

@@ -13,7 +13,7 @@ import { errorText } from '../api/invoke'
 import { useMoneySettings, type MoneySettings } from '../hooks/useMoneySettings'
 import { useProfile } from '../hooks/profile'
 import { useDebounced } from '../hooks/useDebounced'
-import { useNotice } from '../hooks/useNotice'
+import { dismissToast, toast, useToast } from '../hooks/toast'
 import { useT } from '../i18n/context'
 import { formatSize } from '../lib/bytes'
 import { canPreview, dropNotice, fileState, fileStateText, KIND_CHOICES, reportLines, type KindChoice } from '../lib/documents'
@@ -51,7 +51,7 @@ function DocumentsView({ settings }: { settings: MoneySettings }) {
   // Held over the window by a drag. On the computer the window takes the drop itself (the web view cannot be relied on to hand a page the
   // files), and the page is told.
   const [dragging, setDragging] = useState(false)
-  const [message, setMessage] = useNotice()
+  const say = useToast()
   const search = useDebounced(q.trim(), 200)
   const fileInput = useRef<HTMLInputElement>(null)
   const photoInput = useRef<HTMLInputElement>(null)
@@ -71,13 +71,13 @@ function DocumentsView({ settings }: { settings: MoneySettings }) {
           if (!cancelled) setPage(result)
         },
         (failure) => {
-          if (!cancelled) setMessage(errorText(failure))
+          if (!cancelled) say(errorText(failure), 'error')
         },
       )
     return () => {
       cancelled = true
     }
-  }, [search, kind, offset, reload, setMessage])
+  }, [search, kind, offset, reload, say])
 
   // How many documents there are and what is wrong with the files. Asking also removes files that belong to no document.
   useEffect(() => {
@@ -105,17 +105,22 @@ function DocumentsView({ settings }: { settings: MoneySettings }) {
     if (files.length === 0 || busy) return
     setBusy(true)
     const notes: string[] = []
+    let failed = false
+    // "adding" is progress: it goes away when the result is there.
+    let progress = 0
     for (const file of files) {
-      setMessage(t('docs.adding', { name: file.name }))
+      progress = toast(t('docs.adding', { name: file.name }), 'info')
       try {
         const outcome = await documents.add(file, { name: file.name })
         notes.push(outcome.alreadyThere ? t('docs.alreadyThere', { name: outcome.document.name }) : t('docs.added', { name: outcome.document.name }))
       } catch (failure) {
+        failed = true
         notes.push(`${file.name}: ${errorText(failure)}`)
       }
     }
     setBusy(false)
-    setMessage(notes.join(' '))
+    dismissToast(progress)
+    say(notes.join(' '), failed ? 'error' : 'success')
     setOffset(0)
     refresh()
   }
@@ -124,14 +129,14 @@ function DocumentsView({ settings }: { settings: MoneySettings }) {
   const addDropped = useCallback(async () => {
     setBusy(true)
     try {
-      setMessage(dropNotice(await documents.addDropped(), t))
+      say(dropNotice(await documents.addDropped(), t), 'info')
     } catch (failure) {
-      setMessage(errorText(failure))
+      say(errorText(failure), 'error')
     }
     setBusy(false)
     setOffset(0)
     setReload((value) => value + 1)
-  }, [setMessage, t])
+  }, [say, t])
 
   useEffect(() => {
     if (phone) return
@@ -159,7 +164,7 @@ function DocumentsView({ settings }: { settings: MoneySettings }) {
     try {
       await documents.remove(deleting.id)
     } catch (failure) {
-      setMessage(errorText(failure))
+      say(errorText(failure), 'error')
     } finally {
       setBusy(false)
       setDeleting(null)
@@ -170,9 +175,9 @@ function DocumentsView({ settings }: { settings: MoneySettings }) {
   // Saves a copy of the file where the person says. The copy is not encrypted.
   async function onSaveCopy(doc: Doc) {
     try {
-      if (await documents.saveCopy(doc.id)) setMessage(t('docs.copySaved'))
+      if (await documents.saveCopy(doc.id)) say(t('docs.copySaved'), 'warning')
     } catch (failure) {
-      setMessage(errorText(failure))
+      say(errorText(failure), 'error')
     }
   }
 
@@ -254,9 +259,6 @@ function DocumentsView({ settings }: { settings: MoneySettings }) {
           ))}
         </Pick>
       </div>
-      <p className={message === t('docs.copySaved') ? 'warning' : 'notice'} role="status">
-        {message}
-      </p>
       {viewing ? <DocumentModal id={viewing} onClose={() => setViewing(null)} onChanged={refresh} /> : null}
       {previewing ? <PreviewModal doc={previewing} onClose={() => setPreviewing(null)} /> : null}
       {linking ? <DocumentLinksModal doc={linking} onClose={() => setLinking(null)} /> : null}

@@ -1,0 +1,171 @@
+/* Toasts: floating pop-ups for the short messages of the app (saved, a warning, an error). Each has a bar along its bottom edge that
+   fills while it stays; when the bar is full the toast fades away. Hovering or focusing a toast stops the bar, and the time with it. */
+
+.toaster {
+  position: fixed;
+  right: 1rem;
+  bottom: 1rem;
+  /* Above the page and its menus; in an open dialog the toasts are inside the dialog, so they are above it as well. */
+  z-index: 200;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.5rem;
+  width: min(24rem, calc(100vw - 2rem));
+  margin: 0;
+  padding: 0;
+  /* The empty space between toasts does not catch clicks meant for the page. */
+  pointer-events: none;
+}
+
+.toast {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 24rem;
+  padding: 0.75rem 1rem;
+  overflow: hidden;
+  background: var(--popover);
+  color: var(--popover-foreground);
+  border: 1px solid var(--border);
+  /* The stripe on the left is the kind's colour. */
+  border-left: 3px solid var(--toast-color);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
+  font-family: var(--font);
+  font-size: 0.8125rem;
+  font-weight: 400;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+  pointer-events: auto;
+  --toast-color: var(--primary);
+  animation: toast-in 160ms ease-out;
+}
+
+.toast-warning {
+  --toast-color: var(--warning);
+}
+
+.toast-error {
+  --toast-color: var(--destructive);
+}
+
+.toast.is-leaving {
+  animation: toast-out 200ms ease-in forwards;
+}
+
+.toast-text {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  font-size: inherit;
+  color: inherit;
+}
+
+/* The × sits in the corner and does not make the toast taller. */
+.toast-close {
+  flex: none;
+  width: 1.5rem;
+  height: 1.5rem;
+  min-width: 1.5rem;
+  margin: -0.125rem -0.5rem -0.125rem 0;
+  color: var(--muted-foreground);
+}
+
+/* The bar: a track along the bottom edge, and the fill that grows over the toast's lifetime (--toast-seconds, set on the element). */
+.toast-bar {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 3px;
+  background: var(--muted);
+}
+
+/* The fill is a real element, not a ::before: the end of its animation ends the toast, and not every web view reports the
+   animations of a pseudo-element. */
+.toast-bar-fill {
+  position: absolute;
+  inset: 0;
+  background: var(--toast-color);
+  transform-origin: left;
+  animation: toast-bar var(--toast-seconds, 6s) linear forwards;
+}
+
+.toast:hover .toast-bar-fill,
+.toast:focus-within .toast-bar-fill {
+  animation-play-state: paused;
+}
+
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(0.5rem);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes toast-out {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes toast-bar {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+
+/* On a phone the toasts are as wide as the screen, above the add button, which stands above the bottom tabs. */
+html.is-phone .toaster {
+  left: 1rem;
+  right: 1rem;
+  width: auto;
+  bottom: calc(3.5rem + env(safe-area-inset-bottom, 0px) + 1rem + 3.5rem + 0.5rem);
+  align-items: stretch;
+}
+
+html.is-phone .toast {
+  max-width: none;
+}
+
+/* The tap target of the × stays large on a phone, and still does not stretch the toast. */
+html.is-phone .toast-close {
+  width: 2.75rem;
+  height: 2.75rem;
+  min-width: 2.75rem;
+  margin: -0.875rem -1rem -0.875rem 0;
+}
+
+/* No slide; the fades are quick. The bar still runs: it tells how long the message stays. */
+@media (prefers-reduced-motion: reduce) {
+  .toast {
+    animation: toast-fade-in 80ms linear;
+  }
+
+  .toast.is-leaving {
+    animation: toast-out 80ms linear forwards;
+  }
+}
+
+@keyframes toast-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}

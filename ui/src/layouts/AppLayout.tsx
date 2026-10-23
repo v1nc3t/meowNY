@@ -3,6 +3,7 @@ import { Outlet, useLocation, useNavigate } from 'react-router-dom'
 import AppSidebar from '../components/AppSidebar'
 import PhoneTabs, { PHONE_TABS } from '../components/PhoneTabs'
 import QuickAdd from '../components/QuickAdd'
+import Toaster from '../components/Toaster'
 import { preloadAllWhenIdle } from '../pages'
 import { DataVersionContext } from '../hooks/dataVersion'
 import { blocksSwipe, SwipeContext, type SwipeHandler } from '../hooks/swipe'
@@ -99,6 +100,7 @@ export default function AppLayout() {
               </>
             ) : null}
           </div>
+          <Toaster />
         </ShortcutsProvider>
       </SwipeContext.Provider>
     </DataVersionContext.Provider>

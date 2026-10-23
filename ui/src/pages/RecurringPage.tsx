@@ -23,7 +23,7 @@ import { useAttachments, type Attachments } from '../hooks/useAttachments'
 import { useClipCounts } from '../hooks/useClipCounts'
 import { useFocusRequest, useJumpTo } from '../hooks/useFocusRequest'
 import { useMoneySettings, type MoneySettings } from '../hooks/useMoneySettings'
-import { useNotice } from '../hooks/useNotice'
+import { useToast } from '../hooks/toast'
 import { useT } from '../i18n/context'
 import { useShortcut } from '../keys/registry'
 import { tip } from '../keys/tip'
@@ -81,8 +81,7 @@ function RecurringView({ settings, now }: { settings: MoneySettings; now: Today 
   const [coding, setCoding] = useState<{ item: Recurring; personId: string; name: string } | null>(null)
   const [confirming, setConfirming] = useState<{ kind: ConfirmKind; item: Recurring } | null>(null)
   const [pending, setPending] = useState(false)
-  const [draftMessage, setDraftMessage] = useNotice()
-  const [message, setMessage] = useNotice()
+  const say = useToast()
   // The documents of the item being edited are stored and linked at once; those of one being made wait for it to be saved.
   const attachments = useAttachments(editing ? { kind: 'recurring', id: editing.id } : null)
   const clips = useClipCounts('recurring', items?.map((item) => item.id) ?? [], reload)
@@ -123,13 +122,13 @@ function RecurringView({ settings, now }: { settings: MoneySettings; now: Today 
         setFriends(people)
       },
       (failure) => {
-        if (!cancelled) setMessage(errorText(failure))
+        if (!cancelled) say(errorText(failure), 'error')
       },
     )
     return () => {
       cancelled = true
     }
-  }, [reload, setMessage])
+  }, [reload, say])
 
   function closeModals() {
     // documents may have been attached or removed in the dialog, so the marks on the list are asked for again
@@ -141,7 +140,6 @@ function RecurringView({ settings, now }: { settings: MoneySettings; now: Today 
   }
 
   function openAdd() {
-    setDraftMessage('')
     closeModals()
     attachments.reset()
     setSplit(NOT_SPLIT)
@@ -149,7 +147,6 @@ function RecurringView({ settings, now }: { settings: MoneySettings; now: Today 
   }
 
   function openEdit(item: Recurring) {
-    setDraftMessage('')
     closeModals()
     attachments.reset()
     // a saved template opens as shares: the weights, as they are kept
@@ -158,7 +155,6 @@ function RecurringView({ settings, now }: { settings: MoneySettings; now: Today 
   }
 
   function openPay(item: Recurring) {
-    setDraftMessage('')
     closeModals()
     // the documents of a payment wait in the dialog and are attached to the transaction it makes
     attachments.reset()
@@ -179,15 +175,14 @@ function RecurringView({ settings, now }: { settings: MoneySettings; now: Today 
     setConfirming(null)
   }
 
-  // Runs one change, then reloads the list. Failures show as a notice.
+  // Runs one change, then reloads the list. Failures show as a toast.
   async function run(action: () => Promise<unknown>) {
     try {
       await action()
     } catch (failure) {
-      setMessage(errorText(failure))
+      say(errorText(failure), 'error')
       return false
     }
-    setMessage('')
     setReload((value) => value + 1)
     return true
   }
@@ -207,15 +202,15 @@ function RecurringView({ settings, now }: { settings: MoneySettings; now: Today 
     const endDate = String(form.get('endDate') ?? '')
     const description = String(form.get('description') ?? '').trim()
     if (!name || !categoryId || !startDate) {
-      setDraftMessage(t('rec.errorRequired'))
+      say(t('rec.errorRequired'), 'error')
       return
     }
     if (amountText !== '' && !amount) {
-      setDraftMessage(t('rec.errorAmount'))
+      say(t('rec.errorAmount'), 'error')
       return
     }
     if (!Number.isInteger(count) || count < 1 || count > MAX_COUNT || !INTERVAL_UNITS.includes(intervalUnit)) {
-      setDraftMessage(t('rec.errorCount'))
+      say(t('rec.errorCount'), 'error')
       return
     }
     const body = {
@@ -235,11 +230,11 @@ function RecurringView({ settings, now }: { settings: MoneySettings; now: Today 
     const sendSplit = wantsSplit && (split.touched || !hadSplit)
     const input = sendSplit ? toInput(split.draft) : null
     if (sendSplit && (!split.ready || !input)) {
-      setDraftMessage(t('split.notComplete'))
+      say(t('split.notComplete'), 'error')
       return
     }
     setPending(true)
-    // what could not be attached to a new item: it is saved all the same, and the notice names the files
+    // what could not be attached to a new item: it is saved all the same, and the toast names the files
     let notAttached: string[] = []
     try {
       if (editing) {
@@ -252,13 +247,12 @@ function RecurringView({ settings, now }: { settings: MoneySettings; now: Today 
         notAttached = await attachments.commit({ kind: 'recurring', id: created.id })
       }
     } catch (failure) {
-      setDraftMessage(errorText(failure))
+      say(errorText(failure), 'error')
       return
     } finally {
       setPending(false)
     }
-    setDraftMessage('')
-    setMessage(notAttached.length > 0 ? t('docs.attachFailed', { names: notAttached.join(', ') }) : '')
+    if (notAttached.length > 0) say(t('docs.attachFailed', { names: notAttached.join(', ') }), 'warning')
     closeModals()
     setReload((value) => value + 1)
   }
@@ -270,7 +264,7 @@ function RecurringView({ settings, now }: { settings: MoneySettings; now: Today 
     const amount = amountString(String(form.get('amount') ?? ''), false)
     const paidOn = String(form.get('paidOn') ?? '')
     if (!amount) {
-      setDraftMessage(t('rec.errorAmount'))
+      say(t('rec.errorAmount'), 'error')
       return
     }
     setPending(true)
@@ -279,13 +273,12 @@ function RecurringView({ settings, now }: { settings: MoneySettings; now: Today 
       const paid = await recurringApi.pay(paying.id, { amount, paidOn })
       notAttached = await attachments.commit({ kind: 'transaction', id: paid.id })
     } catch (failure) {
-      setDraftMessage(errorText(failure))
+      say(errorText(failure), 'error')
       return
     } finally {
       setPending(false)
     }
-    setDraftMessage('')
-    setMessage(notAttached.length > 0 ? t('docs.attachFailed', { names: notAttached.join(', ') }) : '')
+    if (notAttached.length > 0) say(t('docs.attachFailed', { names: notAttached.join(', ') }), 'warning')
     closeModals()
     setReload((value) => value + 1)
   }
@@ -321,7 +314,6 @@ function RecurringView({ settings, now }: { settings: MoneySettings; now: Today 
           </Button>
         </div>
       </div>
-      <p className="notice">{message}</p>
       {adding || editing ? (
         <RecurringModal
           key={editing ? editing.id : 'new'}
@@ -329,7 +321,6 @@ function RecurringView({ settings, now }: { settings: MoneySettings; now: Today 
           todayDate={now.date}
           categories={categories}
           pending={pending}
-          message={draftMessage}
           attachments={attachments}
           split={split}
           onSplit={setSplit}
@@ -357,7 +348,6 @@ function RecurringView({ settings, now }: { settings: MoneySettings; now: Today 
       ) : null}
       {paying ? (
         <Modal title={t('rec.payTitle')} pending={pending} onClose={closeModals}>
-          <p className="notice">{draftMessage}</p>
           <form id={modalFormId} onSubmit={(event) => void onPay(event)}>
             <p>{paying.name}</p>
             {paying.amount === null ? <p className="hint">{t('rec.payHint')}</p> : null}
@@ -508,7 +498,6 @@ function RecurringModal({
   todayDate,
   categories,
   pending,
-  message,
   attachments,
   split,
   onSplit,
@@ -521,7 +510,6 @@ function RecurringModal({
   todayDate: string
   categories: Category[]
   pending: boolean
-  message: string
   attachments: Attachments
   split: SplitState
   onSplit: (split: SplitState) => void
@@ -542,7 +530,6 @@ function RecurringModal({
   return (
     <>
       <Modal title={item ? t('rec.editTitle') : t('rec.addTitle')} pending={pending} onClose={onClose}>
-        <p className="notice">{message}</p>
         <form id={modalFormId} onSubmit={onSubmit}>
           <label>
             {t('common.name')}

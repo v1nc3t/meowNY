@@ -8,7 +8,7 @@ import SyncStatusPanel from '../components/SyncStatusPanel'
 import Button from '../components/ui/Button'
 import { Card, CardContent } from '../components/ui/Card'
 import { useDeviceName } from '../hooks/useDeviceName'
-import { useNotice } from '../hooks/useNotice'
+import { useToast } from '../hooks/toast'
 import { useProfile } from '../hooks/profile'
 import { remindersChanged } from '../lib/reminders'
 import { useRegion } from '../hooks/useRegion'
@@ -34,11 +34,11 @@ function PhoneSync() {
   const [name, setName] = useDeviceName('phone')
   const [scanning, setScanning] = useState(false)
   const [pasted, setPasted] = useState('')
-  const [message, setMessage] = useNotice()
+  const say = useToast()
 
   const loadDevices = useCallback(() => {
-    syncApi.devices().then(setDevices, (e) => setMessage(errorText(e)))
-  }, [setMessage])
+    syncApi.devices().then(setDevices, (e) => say(errorText(e), 'error'))
+  }, [say])
 
   useEffect(() => {
     loadDevices()
@@ -60,23 +60,23 @@ function PhoneSync() {
 
   async function begin(text: string) {
     const clean = cleanDeviceName(name)
-    if (!clean) return setMessage(t('sync.errorName'))
+    if (!clean) return say(t('sync.errorName'), 'error')
     try {
       await syncApi.scan(text, clean)
     } catch (error) {
-      setMessage(error instanceof ApiError && error.code === 'invalid_input' ? t('phone.notACode') : errorText(error))
+      say(error instanceof ApiError && error.code === 'invalid_input' ? t('phone.notACode') : errorText(error), 'error')
     }
     await refresh()
   }
 
   async function onScan() {
-    if (!cleanDeviceName(name)) return setMessage(t('sync.errorName'))
+    if (!cleanDeviceName(name)) return say(t('sync.errorName'), 'error')
     setScanning(true)
     const result = await scanQr()
     setScanning(false)
     if (result.kind === 'text') await begin(result.text)
-    else if (result.kind === 'denied') setMessage(t('phone.cameraDenied'))
-    else if (result.kind === 'unavailable') setMessage(t('phone.noScanner'))
+    else if (result.kind === 'denied') say(t('phone.cameraDenied'), 'warning')
+    else if (result.kind === 'unavailable') say(t('phone.noScanner'), 'warning')
   }
 
   const idle = state === 'idle'
@@ -87,9 +87,6 @@ function PhoneSync() {
       <div className="tx-title">
         <h1>{t('phone.title')}</h1>
       </div>
-      <p className="notice" role="status">
-        {message}
-      </p>
 
       {scanning ? (
         <div className="scan-overlay" role="dialog" aria-label={t('phone.scan')}>
@@ -149,8 +146,8 @@ function PhoneSync() {
               <SyncStatusPanel
                 status={status}
                 side="phone"
-                onEnterCode={(code) => void syncApi.enterCode(code).then(refresh, (e) => setMessage(errorText(e)))}
-                onDecide={(choices) => void syncApi.decide(choices).then(refresh, (e) => setMessage(errorText(e)))}
+                onEnterCode={(code) => void syncApi.enterCode(code).then(refresh, (e) => say(errorText(e), 'error'))}
+                onDecide={(choices) => void syncApi.decide(choices).then(refresh, (e) => say(errorText(e), 'error'))}
                 onCancel={() => void cancel()}
                 onDone={() => void acknowledge()}
               />

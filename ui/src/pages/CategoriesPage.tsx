@@ -17,7 +17,7 @@ import { useMoneySettings, type MoneySettings } from '../hooks/useMoneySettings'
 import { useProfile } from '../hooks/profile'
 import { useSwipeHandler } from '../hooks/swipe'
 import { step } from '../lib/swipe'
-import { useNotice } from '../hooks/useNotice'
+import { useToast } from '../hooks/toast'
 import { useI18n, useT } from '../i18n/context'
 import { useShortcut } from '../keys/registry'
 import { tip } from '../keys/tip'
@@ -44,7 +44,7 @@ function CategoriesView({ settings, thisMonth }: { settings: MoneySettings; this
   const pageRef = useRef<HTMLElement>(null)
   const [categories, setCategories] = useState<Category[] | null>(null)
   const [reload, setReload] = useState(0)
-  const [message, setMessage] = useNotice()
+  const say = useToast()
   // the dialogs: a new category, the one being changed, the one about to be deleted
   const [adding, setAdding] = useState(false)
   const [editing, setEditing] = useState<Category | null>(null)
@@ -59,14 +59,14 @@ function CategoriesView({ settings, thisMonth }: { settings: MoneySettings; this
       },
       (failure) => {
         if (cancelled) return
-        setMessage(errorText(failure))
+        say(errorText(failure), 'error')
         setCategories([])
       },
     )
     return () => {
       cancelled = true
     }
-  }, [reload, setMessage])
+  }, [reload, say])
 
   useEffect(() => {
     if (!monthPattern.test(month)) {
@@ -80,14 +80,14 @@ function CategoriesView({ settings, thisMonth }: { settings: MoneySettings; this
       },
       (failure) => {
         if (cancelled) return
-        setMessage(errorText(failure))
+        say(errorText(failure), 'error')
         setOverview([])
       },
     )
     return () => {
       cancelled = true
     }
-  }, [month, reload, setMessage])
+  }, [month, reload, say])
 
   useEffect(() => {
     let cancelled = false
@@ -126,9 +126,8 @@ function CategoriesView({ settings, thisMonth }: { settings: MoneySettings; this
     setPending(true)
     try {
       await categoriesApi.remove(deleting.id)
-      setMessage('')
     } catch (failure) {
-      setMessage(errorText(failure))
+      say(errorText(failure), 'error')
     } finally {
       setPending(false)
     }
@@ -162,9 +161,12 @@ function CategoriesView({ settings, thisMonth }: { settings: MoneySettings; this
 
   async function onGlobal(type: Side, raw: string): Promise<string | null> {
     const amountLimit = amountFrom(raw)
-    if (amountLimit === undefined) return t('budgets.amountError')
+    if (amountLimit === undefined) {
+      say(t('budgets.amountError'), 'error')
+      return t('budgets.amountError')
+    }
     const errorText = await save({ type, scope: 'GLOBAL', amountLimit })
-    setMessage(errorText ?? '')
+    if (errorText) say(errorText, 'error')
     return errorText
   }
 
@@ -270,14 +272,12 @@ function CategoriesView({ settings, thisMonth }: { settings: MoneySettings; this
           <MonthNav month={month} thisMonth={thisMonth} onChange={setMonth} />
         </div>
       </div>
-      <p className="notice">{message}</p>
       {adding ? (
         <AddCategoryModal
           month={month}
           onClose={() => setAdding(false)}
           onCreated={() => {
             setAdding(false)
-            setMessage('')
             setReload((value) => value + 1)
           }}
         />
@@ -292,7 +292,6 @@ function CategoriesView({ settings, thisMonth }: { settings: MoneySettings; this
           onClose={() => setEditing(null)}
           onSaved={() => {
             setEditing(null)
-            setMessage('')
             setReload((value) => value + 1)
           }}
         />

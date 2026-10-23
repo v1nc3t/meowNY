@@ -12,9 +12,8 @@ import { cleanCategoryName } from '../../api/categories'
 import { saveSenderName, senderName } from '../../lib/senderName'
 import { parseTheme, saveTheme, savedTheme } from '../../lib/theme'
 import { parseTime, REMINDER_PERIODS, reminderEvery, reminderTime, remindersChanged, saveReminderEvery, saveReminderTime } from '../../lib/reminders'
+import type { Say } from '../../hooks/toast'
 import { Actions, Field, Row, Rows, SwitchRow } from './layout'
-
-type Say = (text: string) => void
 
 const PERIOD_LABELS = { 0: 'settings.debtEveryOff', 7: 'settings.scheduleWeekly', 14: 'settings.debtEveryTwoWeeks', 30: 'settings.scheduleMonthly' } as const
 
@@ -44,9 +43,9 @@ export function RegionSection({
       await vault.saveSettings(next)
       onSaved(next)
       setLanguage(chosenLanguage)
-      say(t('settings.saved'))
+      say(t('settings.saved'), 'success')
     } catch (error) {
-      say(errorText(error))
+      say(errorText(error), 'error')
     }
   }
 
@@ -120,9 +119,9 @@ export function AppLockSection({ prefs, phone, onSaved, say }: { prefs: LockPref
     try {
       await vault.saveLockPrefs(next)
       onSaved(next)
-      say(t('settings.saved'))
+      say(t('settings.saved'), 'success')
     } catch (error) {
-      say(errorText(error))
+      say(errorText(error), 'error')
     }
   }
 
@@ -192,7 +191,7 @@ export function NotificationsSection({ notifyDue, phone, onNotify, say }: { noti
               saveReminderEvery(Number(value))
               if (phone) {
                 void scheduleOnPhone().then((result) => {
-                  if (result === 'denied') say(t('debts.remindDenied'))
+                  if (result === 'denied') say(t('debts.remindDenied'), 'warning')
                 })
               } else {
                 remindersChanged()
@@ -218,10 +217,10 @@ export function FriendNameSection({ say }: { say: Say }) {
         event.preventDefault()
         // the rule of a friend's name
         const clean = cleanCategoryName(name)
-        if (!clean) return say(t('debts.errorName'))
+        if (!clean) return say(t('debts.errorName'), 'error')
         saveSenderName(clean)
         setName(clean)
-        say(t('settings.saved'))
+        say(t('settings.saved'), 'success')
       }}
     >
       <Rows>

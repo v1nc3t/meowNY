@@ -14,7 +14,7 @@ import SectionTabs from '../components/SectionTabs'
 import SettleModal from '../components/SettleModal'
 import Button from '../components/ui/Button'
 import { useMoneySettings, type MoneySettings } from '../hooks/useMoneySettings'
-import { useNotice } from '../hooks/useNotice'
+import { useToast } from '../hooks/toast'
 import { useProfile } from '../hooks/profile'
 import { useT } from '../i18n/context'
 import { useShortcut } from '../keys/registry'
@@ -50,7 +50,7 @@ function DebtsView({ settings, now }: { settings: MoneySettings; now: Today }) {
   const [scanning, setScanning] = useState(false)
   const [showRemoved, setShowRemoved] = useState(false)
   const [reload, setReload] = useState(0)
-  const [message, setMessage] = useNotice()
+  const say = useToast()
   const [addingFriend, setAddingFriend] = useState(false)
   const [entryKind, setEntryKind] = useState<EntryKind | null>(null)
   const [settling, setSettling] = useState<Person | null>(null)
@@ -70,13 +70,13 @@ function DebtsView({ settings, now }: { settings: MoneySettings; now: Today }) {
         setDue(owed)
       },
       (failure) => {
-        if (!cancelled) setMessage(errorText(failure))
+        if (!cancelled) say(errorText(failure), 'error')
       },
     )
     return () => {
       cancelled = true
     }
-  }, [showRemoved, reload, setMessage])
+  }, [showRemoved, reload, say])
 
   // the history is read a page at a time, only while it is shown
   useEffect(() => {
@@ -87,13 +87,13 @@ function DebtsView({ settings, now }: { settings: MoneySettings; now: Today }) {
         if (!cancelled) setHistory(loaded)
       },
       (failure) => {
-        if (!cancelled) setMessage(errorText(failure))
+        if (!cancelled) say(errorText(failure), 'error')
       },
     )
     return () => {
       cancelled = true
     }
-  }, [tab, historyOffset, reload, setMessage])
+  }, [tab, historyOffset, reload, say])
 
   // A friend is taken off the list, never erased: the balance and the history stay, and "show removed friends" brings them back.
   async function onDelete(person: Person) {
@@ -101,13 +101,13 @@ function DebtsView({ settings, now }: { settings: MoneySettings; now: Today }) {
     try {
       await debts.archive(person.id)
     } catch (failure) {
-      setMessage(errorText(failure))
+      say(errorText(failure), 'error')
       return
     } finally {
       setPending(false)
       setDeleting(null)
     }
-    setMessage(t('debts.deleted', { name: person.name }))
+    say(t('debts.deleted', { name: person.name }), 'success')
     setReload((value) => value + 1)
     remindersChanged()
   }
@@ -116,7 +116,7 @@ function DebtsView({ settings, now }: { settings: MoneySettings; now: Today }) {
     try {
       await debts.unarchive(person.id)
     } catch (failure) {
-      setMessage(errorText(failure))
+      say(errorText(failure), 'error')
       return
     }
     setReload((value) => value + 1)
@@ -134,8 +134,8 @@ function DebtsView({ settings, now }: { settings: MoneySettings; now: Today }) {
     const result = await scanQr()
     setScanning(false)
     if (result.kind === 'text') setTaking(result.text)
-    else if (result.kind === 'denied') setMessage(t('phone.cameraDenied'))
-    else if (result.kind === 'unavailable') setMessage(t('phone.noScanner'))
+    else if (result.kind === 'denied') say(t('phone.cameraDenied'), 'warning')
+    else if (result.kind === 'unavailable') say(t('phone.noScanner'), 'warning')
   }
 
   // The phone's round button sends the person here to scan a bill or add a friend: the camera or the form opens at once, once.
@@ -186,7 +186,6 @@ function DebtsView({ settings, now }: { settings: MoneySettings; now: Today }) {
           </Button>
         </div>
       </div>
-      <p className="notice">{message}</p>
       {reminders && reminders.due.length > 0 ? (
         <p className="notice">{t('debts.due', { names: reminders.due.map((friend) => friend.name).join(', ') })}</p>
       ) : null}
@@ -203,7 +202,7 @@ function DebtsView({ settings, now }: { settings: MoneySettings; now: Today }) {
           onClose={() => setTaking(null)}
           onAccepted={() => {
             setTaking(null)
-            setMessage(t('code.accepted'))
+            say(t('code.accepted'), 'success')
             setReload((value) => value + 1)
             remindersChanged()
           }}
@@ -227,7 +226,7 @@ function DebtsView({ settings, now }: { settings: MoneySettings; now: Today }) {
           onClose={() => setEntryKind(null)}
           onSaved={(notAttached) => {
             setEntryKind(null)
-            setMessage(notAttached.length > 0 ? t('docs.attachFailed', { names: notAttached.join(', ') }) : '')
+            if (notAttached.length > 0) say(t('docs.attachFailed', { names: notAttached.join(', ') }), 'warning')
             setReload((value) => value + 1)
             remindersChanged()
           }}
@@ -240,7 +239,7 @@ function DebtsView({ settings, now }: { settings: MoneySettings; now: Today }) {
           onClose={() => setSettling(null)}
           onDone={() => {
             setSettling(null)
-            setMessage(t('debts.settled'))
+            say(t('debts.settled'), 'success')
             setReload((value) => value + 1)
             remindersChanged()
           }}

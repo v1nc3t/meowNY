@@ -127,8 +127,7 @@
   color: var(--foreground);
 }
 
-.attach p.hint,
-.attach p.notice {
+.attach p.hint {
   margin: 0;
 }
 

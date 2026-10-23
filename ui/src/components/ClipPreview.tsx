@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom'
 import { documents, type Doc, type Target } from '../api/documents'
 import { errorText } from '../api/invoke'
 import { useMoneySettings } from '../hooks/useMoneySettings'
+import { useToast } from '../hooks/toast'
 import { useT } from '../i18n/context'
 import { formatSize } from '../lib/bytes'
 import { canPreview } from '../lib/documents'
@@ -22,7 +23,7 @@ const FILTER = { transaction: 'transactionId', recurring: 'recurringTransactionI
  */
 export default function ClipPreview({ target, name, count, inline = false }: { target: Target; name: string; count: number; inline?: boolean }) {
   const [list, setList] = useState<Doc[] | null>(null)
-  const [message, setMessage] = useState('')
+  const say = useToast()
   const [busy, setBusy] = useState(false)
 
   async function load(): Promise<Doc[]> {
@@ -32,11 +33,10 @@ export default function ClipPreview({ target, name, count, inline = false }: { t
   async function onClick() {
     if (busy) return
     setBusy(true)
-    setMessage('')
     try {
       setList(await load())
     } catch (failure) {
-      setMessage(errorText(failure))
+      say(errorText(failure), 'error')
       setList([])
     } finally {
       setBusy(false)
@@ -47,7 +47,7 @@ export default function ClipPreview({ target, name, count, inline = false }: { t
     try {
       setList(await load())
     } catch (failure) {
-      setMessage(errorText(failure))
+      say(errorText(failure), 'error')
     }
   }
 
@@ -55,14 +55,14 @@ export default function ClipPreview({ target, name, count, inline = false }: { t
     <>
       <ClipMark inline={inline} count={count} onClick={() => void onClick()} />
       {list
-        ? createPortal(<ItemDocuments name={name} docs={list} message={message} onChanged={() => void refresh()} onClose={() => setList(null)} />, document.body)
+        ? createPortal(<ItemDocuments name={name} docs={list} onChanged={() => void refresh()} onClose={() => setList(null)} />, document.body)
         : null}
     </>
   )
 }
 
 /** The documents of one item, each with a preview button (dimmed for a kind of file that is not shown) and its name, which opens its details. */
-function ItemDocuments({ name, docs, message, onChanged, onClose }: { name: string; docs: Doc[]; message: string; onChanged: () => void; onClose: () => void }) {
+function ItemDocuments({ name, docs, onChanged, onClose }: { name: string; docs: Doc[]; onChanged: () => void; onClose: () => void }) {
   const t = useT()
   const { settings } = useMoneySettings()
   const locale = settings?.locale ?? 'en'
@@ -71,9 +71,6 @@ function ItemDocuments({ name, docs, message, onChanged, onClose }: { name: stri
   return (
     <>
       <Modal title={t('docs.itemDocsTitle', { name })} onClose={onClose} cancelLabel={t('common.back')} readOnly>
-        <p className="notice" role="alert">
-          {message}
-        </p>
         {docs.length === 0 ? (
           <p className="hint">{t('docs.attachNone')}</p>
         ) : (

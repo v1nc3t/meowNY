@@ -3,7 +3,7 @@ import { debts, SPLIT_MODES, type Person, type SplitInput, type SplitMode, type 
 import { ApiError, errorText } from '../api/invoke'
 import { useDebounced } from '../hooks/useDebounced'
 import { useMoneySettings } from '../hooks/useMoneySettings'
-import { useNotice } from '../hooks/useNotice'
+import { useToast } from '../hooks/toast'
 import { useT } from '../i18n/context'
 import { amountString, formatMoney } from '../lib/money'
 import { rowKey, toInput, withMode, type SplitDraft, type SplitRow } from '../lib/split'
@@ -33,7 +33,7 @@ export default function SplitEditor({
   const { settings } = useMoneySettings()
   const [friends, setFriends] = useState<Person[]>([])
   const [shown, setShown] = useState<{ key: string; preview: SplitPreview } | null>(null)
-  const [message, setMessage] = useNotice()
+  const say = useToast()
   const proportions = amount === null
   const bill = proportions ? '100.00' : amountString(amount, false)
   const input = useMemo(() => toInput(draft), [draft])
@@ -47,13 +47,13 @@ export default function SplitEditor({
         if (!cancelled) setFriends(list)
       },
       (failure) => {
-        if (!cancelled) setMessage(errorText(failure))
+        if (!cancelled) say(errorText(failure), 'error')
       },
     )
     return () => {
       cancelled = true
     }
-  }, [setMessage])
+  }, [say])
 
   useEffect(() => {
     if (!settled) return
@@ -94,7 +94,7 @@ export default function SplitEditor({
     const name = typed.trim()
     if (!name) return
     if (draft.rows.some((row) => row.name.toLowerCase() === name.toLowerCase())) {
-      setMessage(errorText(new ApiError('name_exists')))
+      say(errorText(new ApiError('name_exists')), 'error')
       return
     }
     try {
@@ -102,7 +102,7 @@ export default function SplitEditor({
       setFriends((list) => [...list, person])
       addRow({ personId: person.id, name: person.name })
     } catch (failure) {
-      setMessage(errorText(failure))
+      say(errorText(failure), 'error')
     }
   }
 
@@ -111,7 +111,6 @@ export default function SplitEditor({
 
   return (
     <div className="split-editor">
-      <p className="notice">{message}</p>
       <Dropdown
         label={t('split.mode')}
         value={draft.mode}

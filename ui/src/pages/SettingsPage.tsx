@@ -7,7 +7,7 @@ import CommandApiBlock from '../components/CommandApiBlock'
 import PhoneSyncBlock from '../components/PhoneSyncBlock'
 import { cn } from '../components/ui/cn'
 import type { Settings } from '../vault/rules'
-import { useNotice } from '../hooks/useNotice'
+import { useToast } from '../hooks/toast'
 import { useProfile } from '../hooks/profile'
 import { syncApi } from '../api/sync'
 import { AppearanceSection, AppLockSection, FriendNameSection, NotificationsSection, RegionSection } from './settings/GeneralSections'
@@ -39,16 +39,16 @@ export default function SettingsPage() {
   const [settings, setSettings] = useState<Settings | null>(null)
   const [prefs, setPrefs] = useState<LockPrefs | null>(null)
   const [notifyDue, setNotifyDue] = useState<boolean | null>(null)
-  const [message, setMessage] = useNotice()
+  const say = useToast()
   const [changingCurrency, setChangingCurrency] = useState(false)
   const paneRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     if (!inDesktopApp()) return
-    vault.settings().then(setSettings, (e) => setMessage(errorText(e)))
-    vault.lockPrefs().then(setPrefs, (e) => setMessage(errorText(e)))
-    vault.notifyDue().then(setNotifyDue, (e) => setMessage(errorText(e)))
-  }, [setMessage])
+    vault.settings().then(setSettings, (e) => say(errorText(e), 'error'))
+    vault.lockPrefs().then(setPrefs, (e) => say(errorText(e), 'error'))
+    vault.notifyDue().then(setNotifyDue, (e) => say(errorText(e), 'error'))
+  }, [say])
 
   const sections = SECTIONS.filter((section) => !phone || ON_PHONE.includes(section.id))
   const asked = sections.find((section) => section.id === params.get('section'))
@@ -68,7 +68,7 @@ export default function SettingsPage() {
       await vault.setNotifyDue(on)
       setNotifyDue(on)
     } catch (error) {
-      setMessage(errorText(error))
+      say(errorText(error), 'error')
     }
   }
 
@@ -77,27 +77,27 @@ export default function SettingsPage() {
       case 'region':
         return (
           settings && (
-            <RegionSection settings={settings} phone={phone} onSaved={setSettings} onChangeCurrency={() => setChangingCurrency(true)} say={setMessage} />
+            <RegionSection settings={settings} phone={phone} onSaved={setSettings} onChangeCurrency={() => setChangingCurrency(true)} say={say} />
           )
         )
       case 'appearance':
         return <AppearanceSection />
       case 'lock':
-        return prefs && <AppLockSection prefs={prefs} phone={phone} onSaved={setPrefs} say={setMessage} />
+        return prefs && <AppLockSection prefs={prefs} phone={phone} onSaved={setPrefs} say={say} />
       case 'notifications':
-        return notifyDue !== null && <NotificationsSection notifyDue={notifyDue} phone={phone} onNotify={(on) => void onNotify(on)} say={setMessage} />
+        return notifyDue !== null && <NotificationsSection notifyDue={notifyDue} phone={phone} onNotify={(on) => void onNotify(on)} say={say} />
       case 'friend':
-        return <FriendNameSection say={setMessage} />
+        return <FriendNameSection say={say} />
       case 'phone':
         return settings && <PhoneSyncBlock locale={settings.locale} timezone={settings.timezone} />
       case 'cli':
         return settings && <CommandApiBlock locale={settings.locale} timezone={settings.timezone} />
       case 'recovery':
-        return <RecoverySection say={setMessage} />
+        return <RecoverySection say={say} />
       case 'backup':
-        return settings && <BackupSection settings={settings} say={setMessage} />
+        return settings && <BackupSection settings={settings} say={say} />
       case 'data':
-        return <DataSection say={setMessage} />
+        return <DataSection say={say} />
     }
   }
 
@@ -106,9 +106,6 @@ export default function SettingsPage() {
       <div className="tx-title">
         <h1>{t('settings.title')}</h1>
       </div>
-      <p className="notice" role="status">
-        {message}
-      </p>
 
       {changingCurrency && settings ? (
         <ChangeCurrencyModal
@@ -119,8 +116,8 @@ export default function SettingsPage() {
             setChangingCurrency(false)
             // A paired phone still shows the old currency until the next sync, so say so.
             syncApi.devices().then(
-              (paired) => setMessage(paired.length > 0 ? `${summary} ${t('currency.syncPhone')}` : summary),
-              () => setMessage(summary),
+              (paired) => (paired.length > 0 ? say(`${summary} ${t('currency.syncPhone')}`, 'warning') : say(summary, 'success')),
+              () => say(summary, 'success'),
             )
           }}
         />

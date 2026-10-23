@@ -35,9 +35,6 @@ export default function AttachArea({ attachments, compact = false }: { attachmen
   return (
     <section className="attach" aria-label={t('docs.title')}>
       {compact ? null : <h3>{t('docs.title')}</h3>}
-      <p className="notice" role="alert">
-        {attachments.message}
-      </p>
       {attachments.working ? <p className="hint">{t('docs.adding', { name: attachments.working })}</p> : null}
       {empty && !compact ? <p className="hint">{t('docs.attachNone')}</p> : null}
       {empty ? null : (

@@ -9,9 +9,8 @@ import RecoveryKeyPanel from '../../vault/RecoveryKeyPanel'
 import { backupDoneLines, backupPassphraseProblem, BACKUPS_KEPT, includeDocumentsByDefault, type Settings } from '../../vault/rules'
 import { documents, type LibrarySize } from '../../api/documents'
 import { formatSize } from '../../lib/bytes'
+import type { Say } from '../../hooks/toast'
 import { Actions, Field, Rows, SwitchRow } from './layout'
-
-type Say = (text: string) => void
 
 const EVERY_CHOICES = [
   { days: 1, labelKey: 'settings.scheduleDaily' },
@@ -29,9 +28,8 @@ export function RecoverySection({ say }: { say: Say }) {
     const passphrase = String(new FormData(event.currentTarget).get('passphrase') ?? '')
     try {
       setNewKey(await vault.newRecoveryKey(passphrase))
-      say('')
     } catch (error) {
-      say(errorText(error))
+      say(errorText(error), 'error')
     }
   }
 
@@ -64,7 +62,7 @@ export function BackupSection({ settings, say }: { settings: Settings; say: Say 
   const [restoreWord, setRestoreWord] = useState('')
 
   useEffect(() => {
-    vault.backupSchedule().then(setSchedule, (e) => say(errorText(e)))
+    vault.backupSchedule().then(setSchedule, (e) => say(errorText(e), 'error'))
     documents.size().then(setLibrary, () => undefined)
   }, [say])
 
@@ -92,16 +90,16 @@ export function BackupSection({ settings, say }: { settings: Settings; say: Say 
     const data = new FormData(form)
     const passphrase = String(data.get('backup_passphrase'))
     const problem = backupPassphraseProblem(passphrase, String(data.get('backup_confirm')))
-    if (problem) return say(problem)
+    if (problem) return say(problem, 'error')
     setBusy(true)
     try {
       const done = await vault.createBackup(passphrase, includeManual)
       if (done) {
         form.reset()
-        say([t('settings.backupSaved'), ...backupDoneLines(done).map((line) => t(line.key, { count: line.count }))].join(' '))
+        say([t('settings.backupSaved'), ...backupDoneLines(done).map((line) => t(line.key, { count: line.count }))].join(' '), 'success')
       }
     } catch (error) {
-      say(errorText(error))
+      say(errorText(error), 'error')
     }
     setBusy(false)
   }
@@ -112,16 +110,16 @@ export function BackupSection({ settings, say }: { settings: Settings; say: Say 
     const data = new FormData(form)
     const passphrase = String(data.get('schedule_passphrase'))
     const problem = backupPassphraseProblem(passphrase, String(data.get('schedule_confirm')))
-    if (problem) return say(problem)
+    if (problem) return say(problem, 'error')
     setBusy(true)
     try {
       if (await vault.startBackupSchedule(passphrase, Number(every), includeSchedule)) {
         form.reset()
         setSchedule(await vault.backupSchedule())
-        say(t('settings.scheduleStarted'))
+        say(t('settings.scheduleStarted'), 'success')
       }
     } catch (error) {
-      say(errorText(error))
+      say(errorText(error), 'error')
     }
     setBusy(false)
   }
@@ -130,9 +128,9 @@ export function BackupSection({ settings, say }: { settings: Settings; say: Say 
     try {
       await vault.stopBackupSchedule()
       setSchedule(null)
-      say(t('settings.scheduleStopped'))
+      say(t('settings.scheduleStopped'), 'success')
     } catch (error) {
-      say(errorText(error))
+      say(errorText(error), 'error')
     }
   }
 
@@ -144,7 +142,7 @@ export function BackupSection({ settings, say }: { settings: Settings; say: Say 
       // Everything on screen is old data now, so start over from the top.
       if (await vault.restoreBackup(passphrase, restoreWord)) window.location.assign('/')
     } catch (error) {
-      say(errorText(error))
+      say(errorText(error), 'error')
     }
     setBusy(false)
   }
@@ -253,7 +251,7 @@ export function DataSection({ say }: { say: Say }) {
       await vault.wipe(confirmation)
       window.location.assign('/')
     } catch (error) {
-      say(errorText(error))
+      say(errorText(error), 'error')
     }
   }
 

@@ -308,7 +308,8 @@ select:focus,
   color: var(--foreground);
 }
 
-/* A notice is an alert: a bordered card with a short text in it. */
+/* A notice is a bordered card with a short text that stays in its place (a page that could not load, a preview that cannot be shown).
+   Short messages that come and go are toasts (toast.css). */
 p.notice:not(:empty),
 .app-main p.warn,
 p.warn {
