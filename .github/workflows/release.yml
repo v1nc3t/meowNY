@@ -270,7 +270,7 @@ jobs:
           echo "$KEYSTORE" | base64 -d > "$RUNNER_TEMP/release.keystore"
           mkdir out
           tools="$ANDROID_HOME/build-tools/35.0.0"
-          "$tools/apksigner" sign --ks "$RUNNER_TEMP/release.keystore" --ks-key-alias "$ALIAS" \
+          "$tools/apksigner" sign --v4-signing-enabled false --ks "$RUNNER_TEMP/release.keystore" --ks-key-alias "$ALIAS" \
             --ks-pass env:ANDROID_KEYSTORE_PASSWORD --key-pass env:ANDROID_KEYSTORE_PASSWORD \
             --out "out/meowNY_${V}_android.apk" "$unsigned"
           "$tools/apksigner" verify --print-certs "out/meowNY_${V}_android.apk"
