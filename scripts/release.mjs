@@ -4,9 +4,10 @@
 // script and then builds and publishes everything. By hand:
 //
 //   npm run release patch          (or minor, major, or an exact version such as 0.3.0)
-//   git push origin HEAD v0.2.1    builds every installer and publishes them (.github/workflows/release.yml)
+//   git push origin main v0.2.1    builds every installer and publishes them (.github/workflows/release.yml)
 //
-// Run it on Linux with a clean working tree: the docs are recorded by a test that runs only there (cli/tests/docs.rs).
+// Run it on Linux, on main as it is on GitHub, with a clean working tree: releases come from main only, and the docs are
+// recorded by a test that runs only on Linux (cli/tests/docs.rs).
 // No dependencies.
 
 import { execFileSync } from 'node:child_process'
@@ -54,6 +55,12 @@ const newer = next.split('.').map(Number).reduce((r, n, i) => r || n - current.s
 if (!newer) fail(`${next} is not newer than ${current}`)
 if (output('git', ['status', '--porcelain'])) fail('commit or stash your changes first')
 if (output('git', ['tag', '--list', `v${next}`])) fail(`the tag v${next} already exists`)
+// Releases come from main, and from main as it is on GitHub, so a release never carries commits nobody else has.
+if (output('git', ['rev-parse', '--abbrev-ref', 'HEAD']) !== 'main') fail('releases are made from main: git checkout main && git pull')
+output('git', ['fetch', '--quiet', 'origin', 'main'])
+if (output('git', ['rev-parse', 'HEAD']) !== output('git', ['rev-parse', 'origin/main'])) {
+  fail('main here is not main on GitHub: git pull, or push your commits through a pull request first')
+}
 
 const v = current.replace(/\./g, '\\.')
 replaceOnce('src-tauri/tauri.conf.json', new RegExp(`"version": "${v}"`), `"version": "${next}"`)
@@ -75,6 +82,6 @@ run('node', ['docs/site/build.mjs', '--check'])
 run('git', ['add', '-A', 'src-tauri/tauri.conf.json', 'src-tauri/Cargo.toml', 'src-tauri/Cargo.lock', 'cli/Cargo.toml', 'cli/Cargo.lock', 'docs/site/commands.json', 'docs/site/examples.json'])
 run('git', ['commit', '-q', '-m', `chore: release v${next}`])
 run('git', ['tag', '-a', `v${next}`, '-m', `meowNY ${next}`])
-console.log(`release: committed and tagged v${next}. To build and publish it:\n\n  git push origin HEAD v${next}\n`)
+console.log(`release: committed and tagged v${next}. To build and publish it:\n\n  git push origin main v${next}\n`)
 // The workflow reads the version from this line.
 if (process.env.GITHUB_OUTPUT) writeFileSync(process.env.GITHUB_OUTPUT, `version=${next}\n`, { flag: 'a' })
