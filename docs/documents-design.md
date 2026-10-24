@@ -125,7 +125,7 @@ while a viewer holds it, and an outside review of the sealed format and the file
 
 ## 17. Tests
 
-Known answers from `scripts/doc-vectors.py` (a second implementation) for keys, names and files; every kind of damage
+Known answers from a second implementation (`scripts/doc-vectors.py`, now in git history) for keys, names and files; every kind of damage
 refused; hostile names and lying types; row constraints and triggers; the agreement check; every merge rule and random
 edits on two devices; transfers cut at every chunk; backups with and without documents; `open/` empty after a lock;
 API tokens that must not see contents.

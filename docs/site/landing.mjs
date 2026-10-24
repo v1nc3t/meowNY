@@ -1,20 +1,15 @@
 // The landing page: what meowNY is, in one screen, with links into the guide and the command line reference.
 //
-// Screenshots: a picture named in SHOTS that exists as docs/site/images/<name>.png is shown; until then the page shows
-// an empty frame with its name.
+// Screenshots: shots.mjs; one whose files are not in docs/site/images/ yet shows as an empty frame.
 
 import { readFileSync } from 'node:fs'
 import { escapeHtml, icon, REPO, shell } from './render.mjs'
+import { SHOTS, shot } from './shots.mjs'
+
+export { SHOTS }
 
 /** The app's version, from the one place it is set (scripts/release.mjs changes it). */
 const VERSION = JSON.parse(readFileSync(new URL('../../src-tauri/tauri.conf.json', import.meta.url), 'utf8')).version
-
-export const SHOTS = {
-  dashboard: { alt: "The dashboard: this month's budget, spending by category and what is due", caption: 'the dashboard' },
-  transactions: { alt: 'The transactions page with filters', caption: 'transactions' },
-  debts: { alt: 'The debts page: friends and what each one owes', caption: 'debts and shared bills' },
-  phone: { alt: 'The phone app beside the desktop app', caption: 'phone and computer' },
-}
 
 const FEATURES = [
   { icon: 'budgets', title: 'budgets', text: 'Monthly budgets per category.', href: 'guide.html#budgeting' },
@@ -34,13 +29,9 @@ const PRIVATE = [
   ['sync without a cloud', 'The phone connects straight to the computer on your wifi, after a QR code and six typed digits.'],
 ]
 
-function shot(name, images) {
-  const s = SHOTS[name]
-  const picture = images.has(name)
-    ? `<img src="images/${name}.png" alt="${escapeHtml(s.alt)}" loading="lazy">`
-    : `<div class="shot-frame" role="img" aria-label="${escapeHtml(`Screenshot to come: ${s.alt.toLowerCase()}`)}"><span>screenshot to come</span></div>`
-  return `<figure class="shot">${picture}<figcaption>${escapeHtml(s.caption)}</figcaption></figure>`
-}
+/** What the gallery shows, in order: the desktop first, then a row of the phone. */
+const DESKTOP_SHOTS = ['transactions', 'split', 'bill-code', 'debts', 'friend', 'preview-pdf', 'categories', 'recurring', 'export']
+const PHONE_SHOTS = ['phone-dashboard', 'phone-transactions', 'phone-quick-add', 'phone-debts']
 
 /** The landing page. `images` holds the names of the screenshots that exist. */
 export function landingHtml({ images = new Set() } = {}) {
@@ -55,14 +46,18 @@ export function landingHtml({ images = new Set() } = {}) {
 <p class="lead">A budget app that keeps your money data on your own computer and phone, encrypted. No server, no account, no telemetry.</p>
 <p class="actions"><a class="btn btn-primary btn-lg" href="${REPO}/releases/latest">download</a><a class="btn btn-outline btn-lg" href="guide.html">read the guide</a><a class="btn btn-ghost btn-lg" href="cli.html">command line</a><a class="btn btn-ghost btn-lg" href="${REPO}">source on github</a></p>
 </header>
-${shot('dashboard', images)}
+${shot('dashboard', images, { eager: true })}
 <section class="block" id="features"><h2>features</h2>
 <div class="grid">
 ${features}
 </div>
 </section>
 <section class="block" id="look"><h2>a look inside</h2>
-<div class="grid shots">${['transactions', 'debts', 'phone'].map((n) => shot(n, images)).join('')}</div>
+<div class="grid shots">${DESKTOP_SHOTS.map((n) => shot(n, images)).join('')}</div>
+</section>
+<section class="block" id="phone"><h2>on your phone</h2>
+<p>Android and iPhone. A full copy that works offline and syncs straight to the computer over your wifi.</p>
+<div class="grid shots phone">${PHONE_SHOTS.map((n) => shot(n, images)).join('')}</div>
 </section>
 <section class="block" id="private"><h2>private by design</h2>
 <ul class="rows">${rows}</ul>
@@ -78,7 +73,7 @@ ${features}
     file: 'index.html',
     title: 'meowNY: a private, local-first budget app',
     description: 'meowNY is a budget app that keeps your data on your own computer and phone, encrypted. No server, no account, no telemetry.',
-    toc: [{ title: 'On this page', links: [{ id: 'features', text: 'features' }, { id: 'look', text: 'a look inside' }, { id: 'private', text: 'private by design' }, { id: 'start', text: 'get started' }] }],
+    toc: [{ title: 'On this page', links: [{ id: 'features', text: 'features' }, { id: 'look', text: 'a look inside' }, { id: 'phone', text: 'on your phone' }, { id: 'private', text: 'private by design' }, { id: 'start', text: 'get started' }] }],
     body,
     wide: true,
   })

@@ -15,7 +15,8 @@ import { fileURLToPath } from 'node:url'
 import { buildPage } from './content.mjs'
 import { buildDevelop } from './develop.mjs'
 import { buildGuide } from './guide.mjs'
-import { landingHtml, SHOTS } from './landing.mjs'
+import { landingHtml } from './landing.mjs'
+import { SHOTS, shotFiles } from './shots.mjs'
 import { toHtml, toMarkdown } from './render.mjs'
 
 const here = dirname(fileURLToPath(import.meta.url))
@@ -23,8 +24,8 @@ const readJson = (relative) => JSON.parse(readFileSync(join(here, relative), 'ut
 
 export const inputs = () => ({ commands: readJson('commands.json'), examples: readJson('examples.json'), routes: readJson('../../cli/schema.json') })
 
-/** The screenshots that exist in docs/site/images/. */
-export const images = () => new Set(Object.keys(SHOTS).filter((name) => existsSync(join(here, 'images', `${name}.png`))))
+/** The screenshots whose two files (light and dark) are both in docs/site/images/. */
+export const images = () => new Set(Object.keys(SHOTS).filter((name) => shotFiles(name).every((f) => existsSync(join(here, 'images', f)))))
 
 /** Files on the site that are not pages. */
 const OTHER_FILES = ['style.css', 'CLI.md', 'favicon.svg']
@@ -40,7 +41,7 @@ export function lintPage(html) {
     if (!ids.includes(target)) problems.push(`a link points at #${target}, which is not on the page`)
   }
   if (/<script|<iframe|<object|<embed|@import|url\(\s*["']?https?:|<link[^>]+href="https?:|\ssrc="(https?:)?\/\//i.test(html)) problems.push('the page loads something from outside itself')
-  for (const [, src] of html.matchAll(/\ssrc="([^"]*)"/g)) {
+  for (const [, src] of html.matchAll(/\s(?:src|srcset)="([^"]*)"/g)) {
     if (!/^images\/[a-z-]+\.png$/.test(src)) problems.push(`the page loads ${src}, which is not one of the site's pictures`)
   }
   if (/\son[a-z]+="/i.test(html)) problems.push('the page has an inline event handler')
@@ -85,7 +86,7 @@ export function lintLinks(pages) {
 export function build(data = inputs(), shots = images()) {
   const page = buildPage(data)
   const html = toHtml(page)
-  const pages = { 'index.html': landingHtml({ images: shots }), 'guide.html': toHtml(buildGuide()), 'cli.html': html, 'develop.html': toHtml(buildDevelop()) }
+  const pages = { 'index.html': landingHtml({ images: shots }), 'guide.html': toHtml(buildGuide(shots)), 'cli.html': html, 'develop.html': toHtml(buildDevelop()) }
   const problems = [
     ...lint(html, data).map((p) => `cli.html: ${p}`),
     ...['index.html', 'guide.html', 'develop.html'].flatMap((file) => lintPage(pages[file]).map((p) => `${file}: ${p}`)),
@@ -120,7 +121,7 @@ function main() {
   copyFileSync(join(here, '../../ui/public/favicon.svg'), join(site, 'favicon.svg'))
   if (built.shots.size) {
     mkdirSync(join(site, 'images'), { recursive: true })
-    for (const name of built.shots) copyFileSync(join(here, 'images', `${name}.png`), join(site, 'images', `${name}.png`))
+    for (const name of built.shots) for (const f of shotFiles(name)) copyFileSync(join(here, 'images', f), join(site, 'images', f))
   }
   // The pages are plain files; GitHub must not run them through Jekyll.
   writeFileSync(join(site, '.nojekyll'), '')

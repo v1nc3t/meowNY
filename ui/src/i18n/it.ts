@@ -361,6 +361,7 @@ export const it: Messages = {
   'settings.currencyOnDesktop': 'cambia la valuta sul computer.',
   'currency.syncPhone': 'il tuo telefono mostra ancora la vecchia valuta: sincronizzalo per aggiornarlo.',
   'lock.decrypting': 'decifratura in corso',
+  'lock.creating': 'creazione in corso',
   'lock.attemptsLeft': 'restano {count} tentativi. poi questo telefono si cancella da solo.',
   'lock.lastAttempt': 'ultimo tentativo. una frase segreta sbagliata cancella questo telefono.',
   'phone.title': 'sincronizza con il computer',

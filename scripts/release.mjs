@@ -1,9 +1,10 @@
 #!/usr/bin/env node
 // Makes a release: sets the new version everywhere, records the command line docs again (they print the version), and
-// commits and tags it. Pushing the tag starts .github/workflows/release.yml, which builds every installer and publishes them.
+// commits and tags it. The usual way is the Release button in GitHub (Actions, Release, Run workflow), which runs this
+// script and then builds and publishes everything. By hand:
 //
-//   npm run release 0.2.0
-//   git push origin HEAD v0.2.0
+//   npm run release patch          (or minor, major, or an exact version such as 0.3.0)
+//   git push origin HEAD v0.2.1    builds every installer and publishes them (.github/workflows/release.yml)
 //
 // Run it on Linux with a clean working tree: the docs are recorded by a test that runs only there (cli/tests/docs.rs).
 // No dependencies.
@@ -33,12 +34,22 @@ function replaceOnce(relative, pattern, replacement) {
   writeFileSync(path, text.replace(pattern, replacement))
 }
 
-const next = process.argv[2]?.replace(/^v/, '')
-if (!next || !/^\d+\.\d+\.\d+$/.test(next)) fail('give the new version, for example: npm run release 0.2.0')
 if (process.platform !== 'linux') fail('run it on Linux, where the command line docs are recorded')
 
 const config = JSON.parse(readFileSync(at('src-tauri/tauri.conf.json'), 'utf8'))
 const current = config.version
+
+/** `patch`, `minor` or `major` counts on from the current version; anything else must be an exact version. */
+function nextVersion(wanted) {
+  const [major, minor, patch] = current.split('.').map(Number)
+  if (wanted === 'patch') return `${major}.${minor}.${patch + 1}`
+  if (wanted === 'minor') return `${major}.${minor + 1}.0`
+  if (wanted === 'major') return `${major + 1}.0.0`
+  return wanted?.replace(/^v/, '')
+}
+
+const next = nextVersion(process.argv[2])
+if (!next || !/^\d+\.\d+\.\d+$/.test(next)) fail('say how to count on: npm run release patch (or minor, major, or a version like 0.3.0)')
 const newer = next.split('.').map(Number).reduce((r, n, i) => r || n - current.split('.').map(Number)[i], 0) > 0
 if (!newer) fail(`${next} is not newer than ${current}`)
 if (output('git', ['status', '--porcelain'])) fail('commit or stash your changes first')
@@ -55,7 +66,7 @@ console.log(`release: ${current} -> ${next}`)
 
 // The docs show real output of `meowny`, and that output has the version in it.
 console.log('release: recording the command line docs (this builds the command line, a few minutes the first time)')
-run('cargo', ['test', '--offline', '--test', 'docs'], {
+run('cargo', ['test', '--test', 'docs'], {
   cwd: at('cli'),
   env: { ...process.env, UPDATE_DOCS: '1', CARGO_TARGET_DIR: at('src-tauri', 'target') },
 })
@@ -65,3 +76,5 @@ run('git', ['add', '-A', 'src-tauri/tauri.conf.json', 'src-tauri/Cargo.toml', 's
 run('git', ['commit', '-q', '-m', `chore: release v${next}`])
 run('git', ['tag', '-a', `v${next}`, '-m', `meowNY ${next}`])
 console.log(`release: committed and tagged v${next}. To build and publish it:\n\n  git push origin HEAD v${next}\n`)
+// The workflow reads the version from this line.
+if (process.env.GITHUB_OUTPUT) writeFileSync(process.env.GITHUB_OUTPUT, `version=${next}\n`, { flag: 'a' })

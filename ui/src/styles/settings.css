@@ -91,13 +91,23 @@
   background: var(--border);
 }
 
+/* Fills once, over the time the screen is shown (its duration is set by the component), paused near the end until the data
+   is open. A CSS animation, not script: the Linux app's web view plays these but not frame-by-frame script updates. */
 .decrypting-fill {
   display: block;
   height: 100%;
   background: var(--primary);
-  transform: scaleX(0);
   transform-origin: left;
-  transition: transform 0.15s linear;
+  animation: decrypting-fill 5s linear forwards;
+}
+
+@keyframes decrypting-fill {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
 }
 
 .decrypting-text {

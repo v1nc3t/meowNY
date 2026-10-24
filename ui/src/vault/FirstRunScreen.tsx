@@ -126,7 +126,7 @@ export default function FirstRunScreen({ onDone }: { onDone: () => void }) {
           {message}
         </p>
       </form>
-      {busy && <Decrypting below done={workDone} />}
+      {busy && <Decrypting below creating done={workDone} />}
     </main>
   )
 }

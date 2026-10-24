@@ -84,14 +84,16 @@ const SECTIONS = [
     blocks: [
       { t: 'p', text: 'Sixteen months of made-up data, dated from today: budgets, recurring items, debts, and awkward text for the exports. Quit the app, then:' },
       { t: 'code', text: 'cd src-tauri\ncargo run --example dev_vault -- ~/.local/share/org.meowny.app   # deletes the app data there first\ncargo run --example api_demo                                     # the command API on demo data, no app needed' },
+      { t: 'p', text: 'The website\'s screenshots are this demo data in a debug build (`MEOWNY_PROFILE=phone` with `MEOWNY_DEV_PASSPHRASE` for the phone\'s screens), at 1280 × 800 and 400 × 860, each in light and dark: `docs/site/images/<name>-light.png` and `<name>-dark.png`, named in `docs/site/shots.mjs`. Run it with its own `HOME` and keychain, so your own data is never touched.' },
     ],
   },
   {
     id: 'release',
     title: 'Releasing',
     blocks: [
-      { t: 'p', text: `On \`main\`, with CI green:` },
-      { t: 'code', text: 'npm run release 0.2.0          # sets the version everywhere, records the CLI docs, commits and tags\ngit push origin HEAD v0.2.0    # builds every installer and publishes the release (about 30 minutes)' },
+      { t: 'p', text: `With CI green on \`main\`: GitHub, **Actions › Release › Run workflow**, pick **patch** (0.2.0 to 0.2.1), **minor** or **major**, and run. Or from a terminal:` },
+      { t: 'code', text: 'gh workflow run release.yml -f bump=patch' },
+      { t: 'p', text: 'CI sets the version everywhere, records the command line docs, commits and tags on `main`, then builds and publishes (about 30 minutes). `git pull` afterwards to get the version commit. By hand on Linux: `npm run release patch`, then `git push origin HEAD v<version>`.' },
       { t: 'p', text: `${file('.github/workflows/release.yml')} builds the Linux \`.deb\` and AppImage, the Windows installer, a signed APK, the unsigned IPA, the command line for Linux and Windows, \`SHA256SUMS\`, a build attestation per file and \`altstore.json\`. If a build fails, fix it and release the next patch version.` },
       { t: 'h3', id: 'android-key', text: 'Once: the Android release key' },
       { t: 'p', text: 'Every Android version must be signed with the same key, or phones refuse the update. Make it outside the repository and keep it, with its password, in a password manager:' },

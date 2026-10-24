@@ -359,6 +359,7 @@ export const ro: Messages = {
   'settings.currencyOnDesktop': 'schimbă moneda pe calculator.',
   'currency.syncPhone': 'telefonul tău încă arată moneda veche: sincronizează-l ca să se actualizeze.',
   'lock.decrypting': 'se decriptează',
+  'lock.creating': 'se creează',
   'lock.attemptsLeft': 'au mai rămas {count} încercări. apoi telefonul se șterge singur.',
   'lock.lastAttempt': 'ultima încercare. o frază de acces greșită șterge telefonul.',
   'phone.title': 'sincronizare cu calculatorul',

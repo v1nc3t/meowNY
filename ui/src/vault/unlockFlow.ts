@@ -6,7 +6,7 @@ export const SHOW_AFTER_MS = 150
 export const MIN_SHOW_MS = 5000
 
 /** The decrypting line stops short of its end until the data is open: it never shows more done than there is. */
-const FILL_UNTIL_DONE = 0.95
+export const FILL_UNTIL_DONE = 0.95
 
 /**
  * Waits for the work and for the minimum time, whichever is later; `onDone` is told as soon as the work itself has finished,
@@ -21,21 +21,17 @@ export async function atLeast<T>(work: Promise<T>, onDone?: () => void, ms = MIN
 }
 
 /**
- * How far the decrypting line is filled, 0 to 1. It fills once, from the left, over the time the screen is shown (MIN_SHOW_MS),
- * but stays short of the end until `done`. The passphrase stretching gives no progress of its own to show.
+ * Whether the decrypting line has to wait. The line itself is a CSS animation over MIN_SHOW_MS (`decrypting-fill`), so it moves
+ * even where the window draws CSS animations but not frame-by-frame script updates (WebKitGTK, the Linux app). It is held at
+ * FILL_UNTIL_DONE of its length until `done`; the passphrase stretching gives no progress of its own to show.
  */
-export function useFill(done: boolean): number {
-  const [start] = useState(() => performance.now())
-  const [now, setNow] = useState(start)
+export function useFillHeld(done: boolean): boolean {
+  const [reached, setReached] = useState(false)
   useEffect(() => {
-    let frame = requestAnimationFrame(function tick(time) {
-      setNow(time)
-      if (time - start < MIN_SHOW_MS) frame = requestAnimationFrame(tick)
-    })
-    return () => cancelAnimationFrame(frame)
-  }, [start])
-  const byTime = Math.min(1, (now - start) / MIN_SHOW_MS)
-  return done ? byTime : Math.min(byTime, FILL_UNTIL_DONE)
+    const timer = setTimeout(() => setReached(true), FILL_UNTIL_DONE * MIN_SHOW_MS)
+    return () => clearTimeout(timer)
+  }, [])
+  return reached && !done
 }
 
 /** Takes the cursor out of the field, so a phone's keyboard closes and the decrypting line under the form can be seen. */

@@ -149,7 +149,7 @@ Per-month hashes if data grows a lot (ten years, 60,000 transactions: a first co
 
 ## 16. Tests
 
-Fixed test vectors (`scripts/sync-vectors.py`, checked against RFC 8439 and 5869; held in `sync/crypto.rs`,
+Fixed test vectors (from a second implementation checked against RFC 8439 and 5869, `scripts/sync-vectors.py` in git history; held in `sync/crypto.rs`,
 `sync/qr.rs`); hostile and damaged handshakes and frames; two in-memory devices over a real socket with random edits
 from fixed seeds (`MEOWNY_SYNC_SEEDS`), every merge rule, and syncs cut at every message; currency changes; tables that
 must never be sent. Tried by hand on a real Android phone (2026-10-16 and 2026-10-23).

@@ -2,10 +2,22 @@
 // documentation; there is no Markdown copy of it. How sync, documents and debts are built is in the design notes in docs/.
 
 import { REPO } from './render.mjs'
+import { gallery } from './shots.mjs'
 
 const doc = (name) => `${REPO}/blob/main/docs/${name}`
 const RELEASES = `${REPO}/releases/latest`
 const ALTSTORE = `${REPO}/releases/latest/download/altstore.json`
+
+/** The screenshots each section shows, under its text; missing files are left out. */
+const PICTURES = {
+  start: ['lock', 'phone-lock'],
+  budgeting: ['dashboard', 'categories', 'recurring', 'transactions'],
+  documents: ['documents', 'preview-pdf', 'preview-csv'],
+  debts: ['debts', 'friend', 'split', 'bill-code', 'debt-history'],
+  phone: ['phone-sync', 'phone-dashboard', 'phone-quick-add', 'phone-debts', 'phone-categories'],
+  backup: ['export'],
+  privacy: ['settings'],
+}
 
 const SECTIONS = [
   {
@@ -208,7 +220,12 @@ const SECTIONS = [
   },
 ]
 
-export function buildGuide() {
+/** The guide; `images` holds the screenshots whose files exist (build.mjs). */
+export function buildGuide(images = new Set()) {
+  const sections = SECTIONS.map((section) => {
+    const html = gallery(PICTURES[section.id] ?? [], images)
+    return html ? { ...section, blocks: [...section.blocks, { t: 'figures', html }] } : section
+  })
   return {
     file: 'guide.html',
     title: 'meowNY guide',
@@ -216,6 +233,6 @@ export function buildGuide() {
     lead: 'What each part of the app does, and what it keeps where.',
     footer: `meowNY is free software (AGPL-3.0). [Source](${REPO}).`,
     nav: [{ title: 'Guide', links: SECTIONS.map((s) => ({ id: s.id, text: s.title })) }],
-    sections: SECTIONS,
+    sections,
   }
 }

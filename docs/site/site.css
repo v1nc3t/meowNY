@@ -640,6 +640,24 @@ section.command > :last-child {
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 15rem), 1fr));
 }
 
+.shot picture {
+  display: block;
+}
+
+/* In the guide a row keeps its column width, so one screenshot does not stretch across the page. */
+.doc .grid.shots:not(.phone) {
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 16rem), 1fr));
+}
+
+/* Phone screenshots are narrow: several share a row, and an empty frame has a phone's shape. */
+.grid.shots.phone {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 9.5rem), 13rem));
+}
+
+.shot-frame.is-phone {
+  aspect-ratio: 400 / 860;
+}
+
 /* A feature is a card that is one link: an icon, a name and a line. */
 .feature {
   display: flex;
