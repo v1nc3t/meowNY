@@ -116,6 +116,9 @@ function blockHtml(block) {
         block.rows.map((r) => `<tr>${r.map((cell) => `<td>${inlineHtml(cell)}</td>`).join('')}</tr>`).join('') +
         `</tbody></table></div>`
       )
+    // Screenshots made by shots.mjs (gallery), already escaped.
+    case 'figures':
+      return block.html
     case 'h3':
       return `<h3 id="${block.id}">${escapeHtml(block.text)}${anchor(block.id)}</h3>`
     case 'command': {
@@ -221,6 +224,8 @@ function blockMd(block) {
       return (block.label ? `*${block.label}*\n\n` : '') + fence(block.text)
     case 'table':
       return [`| ${block.head.join(' | ')} |`, `| ${block.head.map(() => '---').join(' | ')} |`, ...block.rows.map((r) => `| ${r.map(inlineMd).join(' | ')} |`)].join('\n')
+    case 'figures':
+      return ''
     case 'h3':
       return `### ${block.text}`
     case 'command': {

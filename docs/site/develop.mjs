@@ -84,6 +84,7 @@ const SECTIONS = [
     blocks: [
       { t: 'p', text: 'Sixteen months of made-up data, dated from today: budgets, recurring items, debts, and awkward text for the exports. Quit the app, then:' },
       { t: 'code', text: 'cd src-tauri\ncargo run --example dev_vault -- ~/.local/share/org.meowny.app   # deletes the app data there first\ncargo run --example api_demo                                     # the command API on demo data, no app needed' },
+      { t: 'p', text: 'The website\'s screenshots are this demo data in a debug build (`MEOWNY_PROFILE=phone` with `MEOWNY_DEV_PASSPHRASE` for the phone\'s screens), at 1280 × 800 and 400 × 860, each in light and dark: `docs/site/images/<name>-light.png` and `<name>-dark.png`, named in `docs/site/shots.mjs`. Run it with its own `HOME` and keychain, so your own data is never touched.' },
     ],
   },
   {

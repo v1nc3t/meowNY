@@ -10,6 +10,7 @@ import { test } from 'node:test'
 import { fileURLToPath } from 'node:url'
 import { build, inputs, lint, lintLinks, lintPage } from './build.mjs'
 import { buildPage } from './content.mjs'
+import { buildGuide } from './guide.mjs'
 import { landingHtml, SHOTS } from './landing.mjs'
 import { escapeHtml, inlineHtml, PAGES, safeLink, toHtml, toMarkdown } from './render.mjs'
 
@@ -186,13 +187,26 @@ test('a page asks for nothing from anywhere else, and only reaches out with plai
 
 test('a screenshot is shown once its file exists, and an empty frame until then', () => {
   const empty = landingHtml()
-  assert.equal((empty.match(/class="shot-frame"/g) ?? []).length, Object.keys(SHOTS).length, 'a frame for each screenshot')
-  for (const name of Object.keys(SHOTS)) assert.ok(empty.includes(`<figcaption>${SHOTS[name].caption}</figcaption>`), name)
+  const figures = (empty.match(/<figure class="shot/g) ?? []).length
+  assert.ok(figures >= 10, 'the landing page shows a gallery')
+  assert.equal((empty.match(/class="shot-frame/g) ?? []).length, figures, 'a frame for each screenshot')
+  for (const caption of [...empty.matchAll(/<figcaption>([^<]+)<\/figcaption>/g)].map((m) => m[1])) {
+    assert.ok(Object.values(SHOTS).some((s) => s.caption === caption), caption)
+  }
   const one = landingHtml({ images: new Set(['dashboard']) })
-  assert.ok(one.includes('<img src="images/dashboard.png" alt="'))
-  assert.equal((one.match(/class="shot-frame"/g) ?? []).length, Object.keys(SHOTS).length - 1, 'the frame is gone once its picture is there')
+  assert.ok(one.includes('<source srcset="images/dashboard-dark.png" media="(prefers-color-scheme: dark)"><img src="images/dashboard-light.png" alt="'), 'a light picture, and a dark one for a dark theme')
+  assert.equal((one.match(/class="shot-frame/g) ?? []).length, figures - 1, 'the frame is gone once its picture is there')
   assert.deepEqual(lintPage(one), [])
-  assert.ok(lintPage(one.replace('images/dashboard.png', 'https://example.org/x.png')).length > 0, 'a picture from elsewhere')
+  assert.ok(lintPage(one.replace('images/dashboard-light.png', 'https://example.org/x.png')).length > 0, 'a picture from elsewhere')
+  assert.ok(lintPage(one.replace('images/dashboard-dark.png', 'https://example.org/x.png')).length > 0, 'a dark picture from elsewhere')
+})
+
+test('the guide shows only the screenshots whose files exist', () => {
+  assert.ok(!toHtml(buildGuide()).includes('<picture'), 'no pictures without files')
+  const html = toHtml(buildGuide(new Set(['export', 'phone-sync'])))
+  assert.equal((html.match(/<picture>/g) ?? []).length, 2)
+  assert.ok(html.includes('class="grid shots phone"'), 'phone shots sit in their own narrow grid')
+  assert.deepEqual(lintPage(html), [])
 })
 
 test('the Markdown file has one heading for the page and one for each section', () => {
