@@ -1,5 +1,5 @@
 // Turns a page (a list of sections made of blocks) into HTML and into Markdown. One model, two outputs, so the
-// website and docs/CLI.md say the same thing. No dependencies.
+// command line page and its Markdown copy (CLI.md on the site) say the same thing. No dependencies.
 //
 // Text may use a little markup: `code`, **bold**, *italic* and [text](link). Everything else is plain text and is
 // escaped, so nothing a command prints can become markup.
@@ -19,6 +19,7 @@ export const PAGES = [
   { file: 'index.html', label: 'home', icon: 'home' },
   { file: 'guide.html', label: 'guide', icon: 'guide' },
   { file: 'cli.html', label: 'command line', icon: 'terminal' },
+  { file: 'develop.html', label: 'develop', icon: 'build' },
 ]
 
 /** The app's line icons (ui/src/components/NavIcon.tsx), and a few for the site. */
@@ -35,6 +36,7 @@ const ICONS = {
   sync: 'M4 8h14M14 4l4 4-4 4M20 16H6M10 12l-4 4 4 4',
   export: 'M12 15V4M8 8l4-4 4 4M5 14v5h14v-5',
   lock: 'M6 11h12v9H6zM9 11V8a3 3 0 0 1 6 0v3',
+  build: 'M14.5 4.5a4 4 0 0 0-5 5L4 15l5 5 5.5-5.5a4 4 0 0 0 5-5l-2.5 2.5-2.5-.5-.5-2.5z',
 }
 
 export const icon = (name) => `<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="${ICONS[name]}"/></svg>`

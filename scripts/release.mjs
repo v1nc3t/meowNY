@@ -59,9 +59,9 @@ run('cargo', ['test', '--offline', '--test', 'docs'], {
   cwd: at('cli'),
   env: { ...process.env, UPDATE_DOCS: '1', CARGO_TARGET_DIR: at('src-tauri', 'target') },
 })
-run('node', ['docs/site/build.mjs'])
+run('node', ['docs/site/build.mjs', '--check'])
 
-run('git', ['add', '-A', 'src-tauri/tauri.conf.json', 'src-tauri/Cargo.toml', 'src-tauri/Cargo.lock', 'cli/Cargo.toml', 'cli/Cargo.lock', 'docs/CLI.md', 'docs/site/commands.json', 'docs/site/examples.json'])
+run('git', ['add', '-A', 'src-tauri/tauri.conf.json', 'src-tauri/Cargo.toml', 'src-tauri/Cargo.lock', 'cli/Cargo.toml', 'cli/Cargo.lock', 'docs/site/commands.json', 'docs/site/examples.json'])
 run('git', ['commit', '-q', '-m', `chore: release v${next}`])
 run('git', ['tag', '-a', `v${next}`, '-m', `meowNY ${next}`])
 console.log(`release: committed and tagged v${next}. To build and publish it:\n\n  git push origin HEAD v${next}\n`)

@@ -1,7 +1,7 @@
 name: Release
 
 # Builds every installer for a version and publishes them on a GitHub release. It starts when a tag like v0.2.0 is pushed,
-# which `npm run release 0.2.0` makes (docs/releasing.md):
+# which `npm run release 0.2.0` makes (the website's develop page, Releasing):
 #   Linux    meowNY_<v>_amd64.deb (installs meowny-desktop and the meowny command line) and meowNY_<v>_amd64.AppImage
 #   Windows  meowNY_<v>_x64-setup.exe
 #   Android  meowNY_<v>_android.apk, signed with the release key from the repository secrets
@@ -147,7 +147,7 @@ jobs:
           ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
         run: |
           if [ -z "$KEYSTORE" ] || [ -z "$PASSWORD" ] || [ -z "$ALIAS" ]; then
-            echo "::error::Add ANDROID_KEYSTORE_BASE64, ANDROID_KEYSTORE_PASSWORD and ANDROID_KEY_ALIAS to the repository secrets (docs/releasing.md)"
+            echo "::error::Add ANDROID_KEYSTORE_BASE64, ANDROID_KEYSTORE_PASSWORD and ANDROID_KEY_ALIAS to the repository secrets: see Releasing on the website's develop page"
             exit 1
           fi
 

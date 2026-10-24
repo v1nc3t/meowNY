@@ -1,9 +1,9 @@
 #!/usr/bin/env node
-// Builds the website for GitHub Pages, and docs/CLI.md. Three pages: the landing page, the guide and the command line
-// reference, which is made from the program's own description of itself.
+// Builds the website for GitHub Pages: the landing page, the guide, the command line reference (made from the program's
+// own description of itself, with a Markdown copy, CLI.md, for scripts and AI agents) and the develop page.
 //
-//   node docs/site/build.mjs            write docs/CLI.md and the site in docs/site/_site/
-//   node docs/site/build.mjs --check    build in memory, and fail if docs/CLI.md is out of date or a page has a problem
+//   node docs/site/build.mjs            write the site in docs/site/_site/
+//   node docs/site/build.mjs --check    build in memory, and fail if a page has a problem
 //
 // No dependencies. The facts come from docs/site/commands.json and docs/site/examples.json (written by the program's tests,
 // `cd cli && UPDATE_DOCS=1 cargo test --offline --test docs`) and from cli/schema.json (the app's routes). The colours,
@@ -13,6 +13,7 @@ import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { buildPage } from './content.mjs'
+import { buildDevelop } from './develop.mjs'
 import { buildGuide } from './guide.mjs'
 import { landingHtml, SHOTS } from './landing.mjs'
 import { toHtml, toMarkdown } from './render.mjs'
@@ -84,10 +85,10 @@ export function lintLinks(pages) {
 export function build(data = inputs(), shots = images()) {
   const page = buildPage(data)
   const html = toHtml(page)
-  const pages = { 'index.html': landingHtml({ images: shots }), 'guide.html': toHtml(buildGuide()), 'cli.html': html }
+  const pages = { 'index.html': landingHtml({ images: shots }), 'guide.html': toHtml(buildGuide()), 'cli.html': html, 'develop.html': toHtml(buildDevelop()) }
   const problems = [
     ...lint(html, data).map((p) => `cli.html: ${p}`),
-    ...['index.html', 'guide.html'].flatMap((file) => lintPage(pages[file]).map((p) => `${file}: ${p}`)),
+    ...['index.html', 'guide.html', 'develop.html'].flatMap((file) => lintPage(pages[file]).map((p) => `${file}: ${p}`)),
     ...lintLinks(pages),
   ]
   const css = readFileSync(join(here, '../../ui/src/styles/tokens.css'), 'utf8') + '\n' + readFileSync(join(here, 'site.css'), 'utf8')
@@ -107,22 +108,15 @@ function main() {
     for (const p of built.problems) console.error(`docs: ${p}`)
     process.exit(1)
   }
-  const markdownPath = join(here, '..', 'CLI.md')
   if (check) {
-    const current = existsSync(markdownPath) ? readFileSync(markdownPath, 'utf8') : ''
-    if (current !== built.markdown) {
-      console.error('docs: docs/CLI.md is out of date. Run: node docs/site/build.mjs')
-      process.exit(1)
-    }
     console.log(`docs: ok (${Object.keys(built.pages).length} pages, ${built.page.sections.length} sections in the command line reference)`)
     return
   }
   const site = join(here, '_site')
   mkdirSync(site, { recursive: true })
-  writeFileSync(markdownPath, built.markdown)
   for (const [file, html] of Object.entries(built.pages)) writeFileSync(join(site, file), html)
   writeFileSync(join(site, 'style.css'), built.css)
-  copyFileSync(markdownPath, join(site, 'CLI.md'))
+  writeFileSync(join(site, 'CLI.md'), built.markdown)
   copyFileSync(join(here, '../../ui/public/favicon.svg'), join(site, 'favicon.svg'))
   if (built.shots.size) {
     mkdirSync(join(site, 'images'), { recursive: true })
@@ -130,7 +124,7 @@ function main() {
   }
   // The pages are plain files; GitHub must not run them through Jekyll.
   writeFileSync(join(site, '.nojekyll'), '')
-  console.log(`docs: wrote docs/CLI.md and docs/site/_site/ (${Object.keys(built.pages).join(', ')})`)
+  console.log(`docs: wrote docs/site/_site/ (${[...Object.keys(built.pages), 'CLI.md'].join(', ')})`)
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) main()

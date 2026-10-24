@@ -36,7 +36,7 @@ jobs:
       - name: Test
         run: npm test
 
-  # The documentation site: its own tests, and a check that docs/CLI.md is what the generator makes. The facts on the
+  # The documentation site: its own tests, and a check that every page builds with no problem. The facts on the
   # site are checked against the program by the command line's own tests (see desktop.yml).
   docs:
     runs-on: ubuntu-latest
@@ -52,5 +52,5 @@ jobs:
       - name: Test the generator
         run: node --test docs/site/build.test.mjs
 
-      - name: Check the page and docs/CLI.md
+      - name: Check the pages
         run: node docs/site/build.mjs --check

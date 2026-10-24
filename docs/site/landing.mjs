@@ -53,7 +53,7 @@ export function landingHtml({ images = new Set() } = {}) {
 <p><span class="badge">pre-release ${VERSION}</span></p>
 <h1>meowNY</h1>
 <p class="lead">A budget app that keeps your money data on your own computer and phone, encrypted. No server, no account, no telemetry.</p>
-<p class="actions"><a class="btn btn-primary btn-lg" href="guide.html">read the guide</a><a class="btn btn-outline btn-lg" href="cli.html">command line</a><a class="btn btn-ghost btn-lg" href="${REPO}">source on github</a></p>
+<p class="actions"><a class="btn btn-primary btn-lg" href="${REPO}/releases/latest">download</a><a class="btn btn-outline btn-lg" href="guide.html">read the guide</a><a class="btn btn-ghost btn-lg" href="cli.html">command line</a><a class="btn btn-ghost btn-lg" href="${REPO}">source on github</a></p>
 </header>
 ${shot('dashboard', images)}
 <section class="block" id="features"><h2>features</h2>
@@ -69,12 +69,8 @@ ${features}
 <p class="small">More in the guide: <a href="guide.html#privacy">privacy and security</a>.</p>
 </section>
 <section class="block" id="start"><h2>get started</h2>
-<p>No installers yet: build it from source with Node.js 22, Rust 1.90 and <a href="https://v2.tauri.app/start/prerequisites/">Tauri's system libraries</a>.</p>
-<figure class="code"><pre><code>git clone https://github.com/v1nc3t/meowNY.git
-cd meowNY
-npm install
-npm run tauri dev</code></pre></figure>
-<p>Then follow <a href="guide.html#start">getting started</a> in the guide. The phone app and its sync: <a href="guide.html#phone">your phone</a>.</p>
+<p>Download meowNY for Linux, Windows, Android or iPhone from <a href="${REPO}/releases/latest">the latest release</a>. How to install and update each one: <a href="guide.html#install">install</a>.</p>
+<p>To build it yourself: <a href="develop.html">develop</a>. The phone app and its sync: <a href="guide.html#phone">your phone</a>.</p>
 </section>
 <footer><p>meowNY is free software under the AGPL-3.0. <a href="${REPO}">Source on GitHub</a>.</p></footer>`
 

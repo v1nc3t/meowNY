@@ -253,7 +253,7 @@ Eight routes in `src-tauri/src/api/documents.rs`. `show` returns the document wi
 - **Bigger body:** after the head and before the body, `admit_large` makes the first checks `handle` makes (host, no origin, POST, a route that takes a big body, known token, scope). A would-be-refused caller is refused from the head alone, so 30 MiB is never read without a token. A locked app lets none in.
 - **Getting a file out:** a read token is refused before anything is asked. The copy's name must end in the extension of the kind the app found (`.pdf`, `.png`, `.jpg`, `.gif`, `.webp`, `.txt`, `.html`, `.csv`, `.bin` for unknown), never one the caller picks (`start.desktop` or `run.sh` would run something). Created new in one step with the not-there check (`files::write_new`). No file here: `not_found` before asking. A file that no longer opens: `internal` after the yes, nothing written.
 - Errors: existing codes only (`invalid_input`, `not_found`, `too_large`, `file_exists`, `forbidden`, `denied`, `locked`, `internal`).
-- `cli/schema.json`, `docs/site/examples.json` and `docs/CLI.md` are regenerated with the code.
+- `cli/schema.json` and `docs/site/examples.json` are regenerated with the code.
 
 ## 14. The screens
 

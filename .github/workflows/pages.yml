@@ -40,7 +40,7 @@ jobs:
         with:
           node-version: 22
 
-      # The same checks as for every push: the generator's tests, and that docs/CLI.md is up to date.
+      # The same checks as for every push: the generator's tests, and that every page builds.
       - name: Test the generator
         run: node --test docs/site/build.test.mjs
 

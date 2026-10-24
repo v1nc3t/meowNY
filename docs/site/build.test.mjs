@@ -55,9 +55,9 @@ test('the built page has no problems and every command, route and code on it', (
   assert.ok(data.commands.commands.length >= 40)
 })
 
-test('building twice gives the same page, and docs/CLI.md is what the generator makes', () => {
-  assert.equal(build().html, build().html)
-  assert.equal(readFileSync(join(here, '..', 'CLI.md'), 'utf8'), build().markdown, 'docs/CLI.md is out of date: run node docs/site/build.mjs')
+test('building twice gives the same pages and the same Markdown', () => {
+  assert.deepEqual(build().pages, build().pages)
+  assert.equal(build().markdown, build().markdown)
 })
 
 test('every example on the page is a recorded one for a command that exists', () => {
