@@ -1,6 +1,6 @@
 // A QR code encoder: byte mode, versions 1 to 10, the four error levels. It is written out here, with no library, because the code
 // carries a secret and the app keeps its dependencies few. `qr.test.ts` compares its output module for module with the matrices of
-// an independent encoder (`scripts/qr-vectors.py` makes them), for every version and level and for all eight masks.
+// an independent encoder (`scripts/qr-vectors.py`, in git history up to 07a329b), for every version and level and for all eight masks.
 //
 // The sync codes are 70 to 160 characters, which is version 4 to 8: far below what version 10 holds (271 bytes at the lowest level).
 

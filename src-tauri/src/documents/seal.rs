@@ -3,8 +3,8 @@
 //! A document is stored as a header and a list of chunks, each sealed with ChaCha20-Poly1305 under a key of its own file.
 //! The layout is the usual STREAM one: the nonce of a chunk holds its number and a flag that is set on the last chunk, so a
 //! changed, cut, extended, reordered or moved file does not open. Nothing here touches the disk or the database: callers
-//! give it readers, writers and bytes. `scripts/doc-vectors.py` is a second implementation written from the RFCs; its
-//! output is in the tests.
+//! give it readers, writers and bytes. The known answers in the tests come from a second implementation written from the
+//! RFCs (`scripts/doc-vectors.py`, in git history up to 07a329b).
 
 use std::io::{Read, Write};
 

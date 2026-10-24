@@ -2,8 +2,8 @@ use super::seal::*;
 use crate::db::DbKey;
 use crate::keys;
 
-// Written by `python3 scripts/doc-vectors.py --rust`, a second implementation made from RFC 5869 and RFC 8439 that checks
-// itself against the RFCs' own test vectors before it prints anything.
+// Made by a second implementation written from RFC 5869 and RFC 8439, which checked itself against the RFCs' own test
+// vectors first (`scripts/doc-vectors.py --rust`, in git history up to 07a329b).
 const DB_KEY: &str = "101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f";
 const DOC_ID: &str = "c0c1c2c3c4c5c6c7c8c9cacbcccdcecf";
 const SALT: &str = "505152535455565758595a5b5c5d5e5f";

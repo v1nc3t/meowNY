@@ -3,7 +3,8 @@
 //! Made only of standard parts the app already uses: HKDF-SHA256 for keys and ChaCha20-Poly1305 for every message.
 //! There is no Diffie-Hellman. Both sides hold a pairing secret from when they were paired, and a sync adds a one-time
 //! secret that the desktop shows in a QR code, so a sync needs both the paired phone and the screen at that moment.
-//! `scripts/sync-vectors.py` is a second implementation written from the RFCs; its output is in the tests below.
+//! The known answers in the tests below come from a second implementation written from the RFCs
+//! (`scripts/sync-vectors.py`, in git history up to 07a329b).
 //!
 //! No function here reads the network, the clock or the database. The caller supplies the bytes, and the errors say as
 //! little as possible: a peer must not learn why a message was refused.
@@ -412,8 +413,8 @@ pub fn parse_frame_header(header: [u8; 4]) -> Result<usize, CryptoError> {
 mod tests {
     use super::*;
 
-    // Written by `python3 scripts/sync-vectors.py --rust`, a second implementation made from RFC 5869 and RFC 8439 that
-    // checks itself against the RFCs' own test vectors before it prints anything.
+    // Made by a second implementation written from RFC 5869 and RFC 8439, which checked itself against the RFCs' own test
+    // vectors first (`scripts/sync-vectors.py --rust`, in git history up to 07a329b).
     const PS: &str = "0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20";
     const OTS: &str = "4142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f60";
     const SESSION_ID: &str = "1122334455667788";

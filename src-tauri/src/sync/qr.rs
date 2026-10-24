@@ -248,7 +248,7 @@ mod tests {
     use super::*;
     use crate::keys;
 
-    // From `python3 scripts/sync-vectors.py --rust`.
+    // From the same second implementation as the vectors in `crypto.rs`.
     const QR_SYNC: &str = "MNY1:AQERIjNEVWZ3iEFCQ0RFRkdISUpLTE1OT1BRUlNUVVZXWFlaW1xdXl9gwAABBMCoARQ";
     const QR_PAIR: &str = "MNY1:AQIRIjNEVWZ3iAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8gw1ECBAoAAAUG_QAAAAAAAAAAAAAAAAAAAQ";
 

@@ -33,3 +33,6 @@ cli/target/
 
 # The documentation site, built by `node docs/site/build.mjs`
 docs/site/_site/
+
+# Python caches
+__pycache__/
