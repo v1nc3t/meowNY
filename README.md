@@ -45,7 +45,7 @@ Linux (`.deb`, AppImage), Windows, Android and iPhone builds are on the [release
 
 No server, no account, no telemetry. The database is encrypted with a key kept in your system keychain, the app locks when idle, and a CI check fails on any new network code. What is stored where and what ever leaves the device: [privacy](https://v1nc3t.github.io/meowNY/guide.html#privacy).
 
-To report a security problem, do not open a public issue: contact [@v1nc3t](https://github.com/v1nc3t) privately.
+To report a security problem, see [SECURITY.md](SECURITY.md). To help: [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Documentation
 

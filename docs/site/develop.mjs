@@ -114,7 +114,7 @@ const SECTIONS = [
           'Update the design note the change touches, and the privacy part of the guide (`docs/site/guide.mjs`) when what is stored or sent changes.',
         ],
       },
-      { t: 'p', text: 'A security problem: do not post details in a public issue. Contact [@v1nc3t](https://github.com/v1nc3t) privately.' },
+      { t: 'p', text: `The same rules: [CONTRIBUTING.md](${REPO}/blob/main/CONTRIBUTING.md). A security problem: do not open a public issue, see [SECURITY.md](${REPO}/blob/main/SECURITY.md).` },
     ],
   },
 ]
