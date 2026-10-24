@@ -1,0 +1,67 @@
+#!/usr/bin/env node
+// Makes a release: sets the new version everywhere, records the command line docs again (they print the version), and
+// commits and tags it. Pushing the tag starts .github/workflows/release.yml, which builds every installer and publishes them.
+//
+//   npm run release 0.2.0
+//   git push origin HEAD v0.2.0
+//
+// Run it on Linux with a clean working tree: the docs are recorded by a test that runs only there (cli/tests/docs.rs).
+// No dependencies.
+
+import { execFileSync } from 'node:child_process'
+import { readFileSync, writeFileSync } from 'node:fs'
+import { join } from 'node:path'
+import { fileURLToPath } from 'node:url'
+
+const root = join(fileURLToPath(import.meta.url), '..', '..')
+const at = (...parts) => join(root, ...parts)
+
+function fail(message) {
+  console.error(`release: ${message}`)
+  process.exit(1)
+}
+
+const run = (command, args, options = {}) => execFileSync(command, args, { cwd: root, stdio: 'inherit', ...options })
+const output = (command, args) => execFileSync(command, args, { cwd: root, encoding: 'utf8' }).trim()
+
+/** Replaces exactly one match of `pattern` in a file, or stops: a file that changed shape must not be half updated. */
+function replaceOnce(relative, pattern, replacement) {
+  const path = at(relative)
+  const text = readFileSync(path, 'utf8')
+  const matches = text.match(new RegExp(pattern.source, pattern.flags.includes('g') ? pattern.flags : pattern.flags + 'g'))
+  if (matches?.length !== 1) fail(`${relative}: expected one version to change, found ${matches?.length ?? 0}`)
+  writeFileSync(path, text.replace(pattern, replacement))
+}
+
+const next = process.argv[2]?.replace(/^v/, '')
+if (!next || !/^\d+\.\d+\.\d+$/.test(next)) fail('give the new version, for example: npm run release 0.2.0')
+if (process.platform !== 'linux') fail('run it on Linux, where the command line docs are recorded')
+
+const config = JSON.parse(readFileSync(at('src-tauri/tauri.conf.json'), 'utf8'))
+const current = config.version
+const newer = next.split('.').map(Number).reduce((r, n, i) => r || n - current.split('.').map(Number)[i], 0) > 0
+if (!newer) fail(`${next} is not newer than ${current}`)
+if (output('git', ['status', '--porcelain'])) fail('commit or stash your changes first')
+if (output('git', ['tag', '--list', `v${next}`])) fail(`the tag v${next} already exists`)
+
+const v = current.replace(/\./g, '\\.')
+replaceOnce('src-tauri/tauri.conf.json', new RegExp(`"version": "${v}"`), `"version": "${next}"`)
+replaceOnce('src-tauri/Cargo.toml', new RegExp(`^version = "${v}"`, 'm'), `version = "${next}"`)
+replaceOnce('cli/Cargo.toml', new RegExp(`^version = "${v}"`, 'm'), `version = "${next}"`)
+for (const [lock, name] of [['src-tauri/Cargo.lock', 'meowny-desktop'], ['cli/Cargo.lock', 'meowny-desktop'], ['cli/Cargo.lock', 'meowny-cli']]) {
+  replaceOnce(lock, new RegExp(`(name = "${name}"\\nversion = )"${v}"`), `$1"${next}"`)
+}
+console.log(`release: ${current} -> ${next}`)
+
+// The docs show real output of `meowny`, and that output has the version in it.
+console.log('release: recording the command line docs (this builds the command line, a few minutes the first time)')
+run('cargo', ['test', '--offline', '--test', 'docs'], {
+  cwd: at('cli'),
+  env: { ...process.env, UPDATE_DOCS: '1', CARGO_TARGET_DIR: at('src-tauri', 'target') },
+})
+run('node', ['docs/site/build.mjs'])
+
+run('git', ['add', '-A', 'src-tauri/tauri.conf.json', 'src-tauri/Cargo.toml', 'src-tauri/Cargo.lock', 'cli/Cargo.toml', 'cli/Cargo.lock', 'docs/CLI.md', 'docs/site/commands.json', 'docs/site/examples.json'])
+run('git', ['commit', '-q', '-m', `chore: release v${next}`])
+run('git', ['tag', '-a', `v${next}`, '-m', `meowNY ${next}`])
+console.log(`release: committed and tagged v${next}. To build and publish it:\n\n  git push origin HEAD v${next}\n`)

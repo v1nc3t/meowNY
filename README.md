@@ -56,7 +56,7 @@ Each feature is explained in the [guide](https://v1nc3t.github.io/meowNY/guide.h
 
 ## Status
 
-**Pre-release (0.1.0).** The desktop app, command line and Android app are built, tested, and have been tried on a real phone (sync, documents, bill codes, reminders). There are no installers yet, so you build from source. Signed installers come with the first release ([phase 11](docs/PLAN.md)). The iPhone app builds in CI but has not been tried on a real iPhone yet. Nobody outside the project has reviewed the sync protocol yet; that review comes before the first release.
+**Pre-release.** The desktop app, command line and Android app are built, tested, and have been tried on a real phone (sync, documents, bill codes, reminders). Installers for Linux, Windows, Android and iPhone are on the [releases page](https://github.com/v1nc3t/meowNY/releases) from the first tagged version ([how releases are made](docs/releasing.md)); the desktop installers are not signed yet. The iPhone app builds in CI but has not been tried on a real iPhone yet. Nobody outside the project has reviewed the sync protocol yet; that review comes before the first release.
 
 ## Getting started
 

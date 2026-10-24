@@ -207,3 +207,4 @@ The site is published by `.github/workflows/pages.yml` on pushes to `main` that 
 - `ios.yml`: builds an unsigned IPA on macOS and uploads it (`meowny-ios-unsigned`).
 - `security.yml`: `npm audit`, `cargo audit` (app and `cli/`) and a secret scan, on `main`, pull requests and weekly.
 - `pages.yml`: builds and publishes the website.
+- `release.yml`: on a version tag, builds every installer (Linux, Windows, Android, iPhone) and publishes a GitHub release. How to make one: [releasing.md](releasing.md).

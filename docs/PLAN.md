@@ -383,6 +383,9 @@ Decided 2026-10-16:
 
 - [x] Logo and app icons (2026-10-24): a pixel gold coin shaped like a cat's head with a green M, on a 16 × 16 grid in `scripts/logo.py`. It writes `ui/public/favicon.svg` (app, website sidebar and README) and the 1024 px sources in `src-tauri/icons/`; the desktop icons come from `logo.png`. The Android and iOS jobs make the phone icons after `init`: Android the coin alone on a clear background, iOS on white (iOS has no clear icons)
 - [ ] Signed installers for Linux (AppImage/deb), macOS (dmg, notarised) and Windows (msi/exe); signed Android APK (sideloaded; Play or F-Droid optional)
+  - [x] Release workflow (2026-10-24, `.github/workflows/release.yml`, [docs/releasing.md](releasing.md)): `npm run release X.Y.Z` sets the version everywhere, records the CLI docs, commits and tags; the tag builds a `.deb` (with `meowny` in `/usr/bin`) and an AppImage on Ubuntu 22.04, the Windows NSIS installer, an APK signed with the release key from the repository secrets (`apksigner`), the unsigned IPA, the CLI for Linux and Windows, `SHA256SUMS`, build attestations and `altstore.json` (an AltStore source at `releases/latest/download`, so iPhones get updates; Android updates through Obtainium). Not yet run on a real tag
+  - [ ] The Android release key made and its three secrets set (see releasing.md)
+  - [ ] Windows code signing; macOS dmg with notarisation (both paid)
 - [ ] Both programs on the PATH after an install: `meowny-desktop` (the Linux deb already installs `/usr/bin/meowny-desktop`) and `meowny`, built in release CI for the three systems with checksums. Moved here from phase 7. An `install.sh` may do the same for a plain download
 - [ ] Auto-update with signed updates only; the update check is a visible setting
 - [ ] Verifiable builds in CI, checksums published, SBOM generated

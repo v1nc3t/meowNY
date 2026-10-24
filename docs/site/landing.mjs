@@ -3,7 +3,11 @@
 // Screenshots: a picture named in SHOTS that exists as docs/site/images/<name>.png is shown; until then the page shows
 // an empty frame with its name.
 
+import { readFileSync } from 'node:fs'
 import { escapeHtml, icon, REPO, shell } from './render.mjs'
+
+/** The app's version, from the one place it is set (scripts/release.mjs changes it). */
+const VERSION = JSON.parse(readFileSync(new URL('../../src-tauri/tauri.conf.json', import.meta.url), 'utf8')).version
 
 export const SHOTS = {
   dashboard: { alt: "The dashboard: this month's budget, spending by category and what is due", caption: 'the dashboard' },
@@ -46,7 +50,7 @@ export function landingHtml({ images = new Set() } = {}) {
   const rows = PRIVATE.map(([title, text]) => `<li><strong>${escapeHtml(title)}</strong><span>${escapeHtml(text)}</span></li>`).join('')
 
   const body = `<header class="hero landing" id="top">
-<p><span class="badge">pre-release 0.1.0</span></p>
+<p><span class="badge">pre-release ${VERSION}</span></p>
 <h1>meowNY</h1>
 <p class="lead">A budget app that keeps your money data on your own computer and phone, encrypted. No server, no account, no telemetry.</p>
 <p class="actions"><a class="btn btn-primary btn-lg" href="guide.html">read the guide</a><a class="btn btn-outline btn-lg" href="cli.html">command line</a><a class="btn btn-ghost btn-lg" href="${REPO}">source on github</a></p>

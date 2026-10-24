@@ -13,6 +13,8 @@ on:
       - 'cli/schema.json'
       - 'ui/src/styles/tokens.css'
       - 'ui/public/favicon.svg'
+      # The landing page shows the version.
+      - 'src-tauri/tauri.conf.json'
       - '.github/workflows/pages.yml'
   workflow_dispatch:
 
