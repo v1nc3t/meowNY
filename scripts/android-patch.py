@@ -7,8 +7,10 @@ What it changes, and why (docs/sync-design.md section 13):
     then protect nothing. A phone that is lost or replaced gets its data back by pairing with the desktop.
   * MainActivity.kt: `FLAG_SECURE` on the window. The screen cannot be captured, and the picture of the app in the list of recent
     apps is blank, so no amounts or names show there.
+  * proguard-rules.pro: keeps the constructors of ML Kit's registrars (the QR reader of the camera). ML Kit makes them by
+    reflection; without the rule R8 drops them in the release build, and the app crashes on the first camera frame.
 
-Both changes are made once: running the script again changes nothing. It stops with an error when a file is not what it expects,
+Each change is made once: running the script again changes nothing. It stops with an error when a file is not what it expects,
 so a build never goes on with the protection missing.
 
 For a build that is only for trying things on a test phone over adb (screenshots of the screen, and a field to paste a code), set
@@ -82,6 +84,28 @@ def unpatch_activity(path: Path) -> bool:
     return True
 
 
+KEEP_REGISTRARS = """
+# meowNY (scripts/android-patch.py): ML Kit, which reads the QR code in the barcode scanner plugin, makes its registrars through
+# their no-argument constructor, by reflection. Its own rule (firebase-components 16.1.0) keeps only the class names, so R8 drops
+# the constructors, ML Kit finds none of its parts, and the release app crashes on the first camera frame.
+-keep class * implements com.google.firebase.components.ComponentRegistrar {
+    <init>();
+}
+"""
+
+
+def patch_proguard(rules: Path, build: Path) -> bool:
+    """Adds the ML Kit rule to the app's R8 rules. Returns whether the file changed."""
+    # The generated build reads every .pro file of the app folder; if that changes, the rule would be skipped without a word.
+    if 'include("**/*.pro")' not in build.read_text(encoding="utf-8"):
+        raise SystemExit(f"{build}: the release build does not read the .pro files of the app folder")
+    text = rules.read_text(encoding="utf-8")
+    if KEEP_REGISTRARS.strip() in text:
+        return False
+    rules.write_text(text.rstrip("\n") + "\n" + KEEP_REGISTRARS, encoding="utf-8")
+    return True
+
+
 def find_one(root: Path, pattern: str) -> Path:
     found = sorted(root.glob(pattern))
     if len(found) != 1:
@@ -95,7 +119,10 @@ def main(argv: list[str]) -> None:
         raise SystemExit(f"{root} is not a folder: run `npx tauri android init` first")
     manifest = find_one(root, "app/src/main/AndroidManifest.xml")
     activity = find_one(root, "app/src/main/java/**/MainActivity.kt")
+    rules = find_one(root, "app/proguard-rules.pro")
+    build = find_one(root, "app/build.gradle.kts")
     print(f"{manifest}: {'changed' if patch_manifest(manifest) else 'already done'}")
+    print(f"{rules}: {'changed' if patch_proguard(rules, build) else 'already done'}")
     if os.environ.get("MEOWNY_ALLOW_SCREENSHOTS") == "1":
         print("WARNING: the window is open to screenshots. This build is for a test phone only.")
         print(f"{activity}: {'changed' if unpatch_activity(activity) else 'already open'}")

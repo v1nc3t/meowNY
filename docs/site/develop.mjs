@@ -35,7 +35,7 @@ const SECTIONS = [
       },
       { t: 'h3', id: 'android', text: 'Android' },
       { t: 'p', text: 'Java 21, the Android SDK and NDK 27 (`sdkmanager "ndk;27.2.12479018"`, with `ANDROID_HOME`, `NDK_HOME` and the NDK compilers on the `PATH`), and `rustup target add aarch64-linux-android`.' },
-      { t: 'code', text: 'npx tauri android init                 # src-tauri/gen/android, not kept in git\npython3 scripts/android-patch.py       # again after every init: no Android backup, no screenshots\nnpx tauri android build --apk --target aarch64 --debug' },
+      { t: 'code', text: 'npx tauri android init                 # src-tauri/gen/android, not kept in git\npython3 scripts/android-patch.py       # again after every init: no Android backup, no screenshots, an R8 rule for the camera\nnpx tauri android build --apk --target aarch64 --debug' },
       { t: 'h3', id: 'ios', text: 'iPhone' },
       { t: 'p', text: `A Mac with Xcode and \`rustup target add aarch64-apple-ios\`. ${file('src-tauri/Info.ios.plist')} holds the camera, photo and local network texts.` },
       { t: 'code', text: 'npx tauri ios init\nnpx tauri ios build --target aarch64 --no-sign   # src-tauri/gen/apple/build/arm64/meowNY.ipa' },
