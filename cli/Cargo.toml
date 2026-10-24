@@ -1,6 +1,6 @@
 [package]
 name = "meowny-cli"
-version = "0.2.1"
+version = "0.2.2"
 description = "meowNY command line: a client of the running desktop app"
 license = "AGPL-3.0-only"
 edition = "2021"

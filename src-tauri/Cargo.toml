@@ -1,7 +1,7 @@
 [package]
 # The desktop program is `meowny-desktop`. The command line, in cli/, is `meowny`.
 name = "meowny-desktop"
-version = "0.2.1"
+version = "0.2.2"
 description = "meowNY: local-first expense tracker"
 license = "AGPL-3.0-only"
 edition = "2021"
