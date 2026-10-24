@@ -5,7 +5,7 @@ import { useI18n } from '../i18n/context'
 import ChangeCurrencyModal from '../components/ChangeCurrencyModal'
 import CommandApiBlock from '../components/CommandApiBlock'
 import PhoneSyncBlock from '../components/PhoneSyncBlock'
-import { cn } from '../components/ui/cn'
+import { buttonClass, cn } from '../components/ui/cn'
 import type { Settings } from '../vault/rules'
 import { useToast } from '../hooks/toast'
 import { useProfile } from '../hooks/profile'
@@ -15,6 +15,13 @@ import { BackupSection, DataSection, RecoverySection } from './settings/DataSect
 
 // The copyright line at the foot of the settings, on the computer and the phone.
 const YEAR = new Date().getFullYear()
+
+// The links at the foot of the settings. The person opens them in the browser; the app makes no request.
+const LINKS = {
+  source: 'https://github.com/v1nc3t/meowNY',
+  discussions: 'https://github.com/v1nc3t/meowNY/discussions',
+  sponsor: 'https://ko-fi.com/v1nc3t',
+}
 
 /** The sections of the page, in the order they are listed. The id is what `?section=` holds, so a link can open one. */
 const SECTIONS = [
@@ -172,8 +179,18 @@ export default function SettingsPage() {
       </div>
 
       <footer className="settings-footer">
-        <span>© {YEAR} meowny</span>
-        <span>AGPL-3.0</span>
+        <nav className="settings-links" aria-label={t('settings.linksLabel')}>
+          <a href={LINKS.source} target="_blank" rel="noreferrer">
+            {t('settings.linkSource')}
+          </a>
+          <a href={LINKS.discussions} target="_blank" rel="noreferrer">
+            {t('settings.linkDiscussions')}
+          </a>
+          <a className={buttonClass('outline', 'sm')} href={LINKS.sponsor} target="_blank" rel="noreferrer">
+            {t('settings.linkSponsor')}
+          </a>
+        </nav>
+        <p>© {YEAR} meowny · AGPL-3.0</p>
       </footer>
     </section>
   )

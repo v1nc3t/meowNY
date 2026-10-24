@@ -507,16 +507,50 @@
   margin-top: 0;
 }
 
-/* Copyright and licence at the foot of the settings. */
+/* The foot of the settings: a row of links (it wraps on a narrow screen), then the copyright and licence. */
 .settings-footer {
   display: flex;
-  flex-wrap: wrap;
-  gap: 0.25rem 1rem;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
   margin-top: 1rem;
   padding-top: 0.75rem;
   border-top: 1px solid var(--border);
   font-size: 0.75rem;
   color: var(--muted-foreground);
+  text-align: center;
+}
+
+.settings-footer p {
+  margin: 0;
+}
+
+.settings-links {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 0.25rem 1.25rem;
+}
+
+.settings-links a:not(.ui-btn) {
+  display: inline-flex;
+  align-items: center;
+  min-height: 2rem;
+  color: var(--muted-foreground);
+  font-size: 0.8125rem;
+  text-underline-offset: 4px;
+}
+
+@media (hover: hover) {
+  .settings-links a:not(.ui-btn):hover {
+    color: var(--foreground);
+  }
+}
+
+/* A tap target stays 44px or more on the phone. */
+html.is-phone .settings-links a {
+  min-height: 2.75rem;
 }
 
 /* Access tokens and paired phones: the rows of a card list, with the button at the right edge. */
