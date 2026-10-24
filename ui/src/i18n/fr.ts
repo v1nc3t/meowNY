@@ -112,6 +112,10 @@ export const fr: Messages = {
   'budgets.amountError': 'saisis un montant avec au plus deux décimales, ou laisse vide pour retirer.',
   'budgets.chooseMonth': 'choisis un mois.',
   'budgets.amountOf': 'montant pour {label}',
+  'budgets.spanTitle': 'jusqu\'où ce changement doit-il aller ?',
+  'budgets.spanOnly': 'ce mois-ci seulement',
+  'budgets.spanForward': 'ce mois-ci et les suivants',
+  'budgets.spanAll': 'tous les mois, avant et après',
 
   'settings.title': 'réglages',
   'settings.region': 'langue et région',

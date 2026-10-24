@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
-import { budgets as budgetsApi, MONTH, type MonthHistory, type Overview } from '../api/budgets'
+import { budgets as budgetsApi, MONTH, type MonthHistory, type Overview, type Span } from '../api/budgets'
 import { categories as categoriesApi, type Category } from '../api/categories'
 import { errorText } from '../api/invoke'
 import { monthLabel, shiftMonth } from '../api/months'
 import { useLocation, useNavigate } from 'react-router-dom'
 import AddCategoryModal from '../components/AddCategoryModal'
+import BudgetSpanModal from '../components/BudgetSpanModal'
 import ConfirmModal from '../components/ConfirmModal'
 import EditCategoryModal from '../components/EditCategoryModal'
 import MonthNav from '../components/MonthNav'
@@ -50,6 +51,8 @@ function CategoriesView({ settings, thisMonth }: { settings: MoneySettings; this
   const [editing, setEditing] = useState<Category | null>(null)
   const [deleting, setDeleting] = useState<Category | null>(null)
   const [pending, setPending] = useState(false)
+  // The answer to "how far should the change reach", while that question is open (null: cancelled).
+  const [spanAnswer, setSpanAnswer] = useState<((span: Span | null) => void) | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -140,10 +143,10 @@ function CategoriesView({ settings, thisMonth }: { settings: MoneySettings; this
     scope: 'GLOBAL' | 'CATEGORY'
     amountLimit: string | null
     categoryId?: string
-  }): Promise<string | null> {
+  }, span?: Span): Promise<string | null> {
     if (!monthPattern.test(month)) return t('budgets.chooseMonth')
     try {
-      await budgetsApi.set({ ...body, type: body.type as Side, month })
+      await budgetsApi.set({ ...body, type: body.type as Side, month }, span)
     } catch (failure) {
       return errorText(failure)
     }
@@ -165,7 +168,15 @@ function CategoriesView({ settings, thisMonth }: { settings: MoneySettings; this
       say(t('budgets.amountError'), 'error')
       return t('budgets.amountError')
     }
-    const errorText = await save({ type, scope: 'GLOBAL', amountLimit })
+    // In a past month the person says how far the change reaches; cancelling leaves the budget as it was.
+    let span: Span | undefined
+    const current = overview?.find((row) => row.type === type)?.budgeted ?? null
+    if (month < thisMonth && amountLimit !== current) {
+      const answer = await new Promise<Span | null>((resolve) => setSpanAnswer(() => resolve))
+      if (answer === null) return null
+      span = answer
+    }
+    const errorText = await save({ type, scope: 'GLOBAL', amountLimit }, span)
     if (errorText) say(errorText, 'error')
     return errorText
   }
@@ -296,6 +307,18 @@ function CategoriesView({ settings, thisMonth }: { settings: MoneySettings; this
           }}
         />
       ) : null}
+      {spanAnswer ? (
+        <BudgetSpanModal
+          onChoose={(span) => {
+            spanAnswer(span)
+            setSpanAnswer(null)
+          }}
+          onClose={() => {
+            spanAnswer(null)
+            setSpanAnswer(null)
+          }}
+        />
+      ) : null}
       {deleting ? (
         <ConfirmModal
           title={t('rec.confirmTitle', { action: t('common.delete'), name: deleting.name })}
@@ -370,7 +393,7 @@ function BudgetHalf({
 }) {
   const t = useT()
   const budgeted = overview?.budgeted ?? ''
-  const over = overview !== null && overview.overAllocated && overview.budgeted !== null
+  const over = overview !== null && Number(overview.notUsed) < 0
   return (
     <section className="ui-card budget-half">
       {hideTitle ? null : <CardTitle>{title}</CardTitle>}
@@ -386,13 +409,13 @@ function BudgetHalf({
           <>
             <div className="budget-row quiet">
               <span className="budget-label">{t('budgets.allocated')}</span>
-              <span className="budget-amount">{money(overview.allocated)}</span>
+              <span className="budget-amount">{money(overview.used)}</span>
               <span className="budget-actions" />
             </div>
             <div className="budget-row quiet">
               <span className="budget-label">{t('budgets.unallocated')}</span>
               <span className={over ? 'budget-amount over' : 'budget-amount'}>
-                {overview.unallocated === null ? '-' : money(overview.unallocated)}
+                {money(overview.notUsed)}
               </span>
               <span className="budget-actions" />
             </div>

@@ -112,6 +112,10 @@ export const pt: Messages = {
   'budgets.amountError': 'introduz um montante com no máximo duas casas decimais, ou deixa vazio para remover.',
   'budgets.chooseMonth': 'escolhe um mês.',
   'budgets.amountOf': 'montante de {label}',
+  'budgets.spanTitle': 'até onde esta alteração deve chegar?',
+  'budgets.spanOnly': 'só este mês',
+  'budgets.spanForward': 'este mês e os seguintes',
+  'budgets.spanAll': 'todos os meses, antes e depois',
 
   'settings.title': 'definições',
   'settings.region': 'idioma e região',

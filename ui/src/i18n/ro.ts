@@ -111,6 +111,10 @@ export const ro: Messages = {
   'budgets.amountError': 'introdu o sumă cu cel mult două zecimale sau lasă gol pentru a elimina.',
   'budgets.chooseMonth': 'alege o lună.',
   'budgets.amountOf': 'suma pentru {label}',
+  'budgets.spanTitle': 'cât de departe să ajungă această modificare?',
+  'budgets.spanOnly': 'doar luna aceasta',
+  'budgets.spanForward': 'luna aceasta și cele următoare',
+  'budgets.spanAll': 'toate lunile, dinainte și de după',
 
   'settings.title': 'setări',
   'settings.region': 'limbă și regiune',

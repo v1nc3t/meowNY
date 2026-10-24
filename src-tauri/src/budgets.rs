@@ -3,10 +3,14 @@
 //! someone changes it, and old months keep their old limits. A row with a NULL limit means
 //! "no budget from this month on" and keeps the history.
 //!
-//! Editing a month changes only that month. A month that has already started keeps what it
-//! showed: when you edit month M and the month after it has no value of its own and is not in
-//! the future, that month gets its own row holding what it used to show. Future months follow
-//! the newest earlier value, so a budget set this month carries forward until you change it.
+//! An edit reaches as far as its span says. Only (the default) changes just that month. A month
+//! that has already started keeps what it showed: when you edit month M and the month after it
+//! has no value of its own and is not in the future, that month gets its own row holding what it
+//! used to show. Future months follow the newest earlier value, so a budget set this month
+//! carries forward until you change it. Forward changes that month and every month after it:
+//! the later rows of that budget are dropped. All changes every month, before and after: the
+//! budget becomes one row at the first month that ever had a budget (or the edited month, if
+//! that is earlier).
 //!
 //! Two levels, for both income and expense: GLOBAL is the monthly total, CATEGORY is the part
 //! of it given to one category. Allocated and unallocated amounts are computed, not stored.
@@ -25,6 +29,19 @@ use crate::vault::AppError;
 pub enum Scope {
     Global,
     Category,
+}
+
+/// How far a budget change reaches.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Deserialize)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum Span {
+    /// Only that month.
+    #[default]
+    Only,
+    /// That month and every month after it.
+    Forward,
+    /// Every month, before and after.
+    All,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -74,6 +91,10 @@ pub struct Overview {
     pub unallocated: Option<String>,
     /// What the month's transactions of this type add up to.
     pub actual: String,
+    /// What the month's transactions add up to in categories that are not deleted.
+    pub used: String,
+    /// Allocated minus used; negative when the categories spent more than they were given.
+    pub not_used: String,
     /// Global budget minus actual; null without a global budget.
     pub remaining: Option<String>,
     pub over_allocated: bool,
@@ -140,6 +161,11 @@ fn has_row(conn: &Connection, kind: &str, category_id: Option<i64>, start: &str)
 /// Sets, changes or removes (null limit) a budget for `month`. Setting the same month twice replaces it.
 /// `now` decides which later month counts as already started (see the module notes).
 pub fn set(conn: &Connection, input: &SetBudget, now: DateTime<Utc>) -> Result<Budget, AppError> {
+    set_span(conn, input, now, Span::Only)
+}
+
+/// Like `set`, but `span` says how far the change reaches (see the module notes).
+pub fn set_span(conn: &Connection, input: &SetBudget, now: DateTime<Utc>, span: Span) -> Result<Budget, AppError> {
     let first = month_start(&input.month)?;
     let start = first.to_string();
     let limit = input.amount_limit.as_deref().map(parse_amount).transpose()?;
@@ -166,21 +192,13 @@ pub fn set(conn: &Connection, input: &SetBudget, now: DateTime<Utc>) -> Result<B
         Ok(())
     };
 
-    let id: i64 = match input.scope {
+    // Checked before anything is deleted or written.
+    let category_id: Option<i64> = match input.scope {
         Scope::Global => {
             if input.category_id.is_some() {
                 return Err(AppError::InvalidInput);
             }
-            pin(None)?;
-            conn.query_row(
-                "INSERT INTO budgets (type, scope, category_id, amount_limit_minor, effective_from)
-                 VALUES (?1, 'GLOBAL', NULL, ?2, ?3)
-                 ON CONFLICT (type, effective_from) WHERE scope = 'GLOBAL'
-                 DO UPDATE SET amount_limit_minor = excluded.amount_limit_minor
-                 RETURNING id",
-                params![kind, limit, start],
-                |r| r.get(0),
-            )?
+            None
         }
         Scope::Category => {
             let category_id = parse_id(input.category_id.as_deref().ok_or(AppError::InvalidInput)?)?;
@@ -195,8 +213,47 @@ pub fn set(conn: &Connection, input: &SetBudget, now: DateTime<Utc>) -> Result<B
             if !matches {
                 return Err(AppError::InvalidInput);
             }
-            pin(Some(category_id))?;
-            conn.query_row(
+            Some(category_id)
+        }
+    };
+
+    let write = || -> Result<(i64, String), AppError> {
+        let mut start = start.clone();
+        match span {
+            Span::Only => pin(category_id)?,
+            Span::Forward => {
+                conn.execute(
+                    "DELETE FROM budgets
+                     WHERE type = ?1 AND COALESCE(category_id, 0) = COALESCE(?2, 0) AND (scope = 'GLOBAL') = (?2 IS NULL)
+                       AND effective_from > ?3",
+                    params![kind, category_id, start],
+                )?;
+            }
+            Span::All => {
+                let earliest: Option<String> =
+                    conn.query_row("SELECT MIN(effective_from) FROM budgets WHERE amount_limit_minor IS NOT NULL", [], |r| r.get(0))?;
+                conn.execute(
+                    "DELETE FROM budgets
+                     WHERE type = ?1 AND COALESCE(category_id, 0) = COALESCE(?2, 0) AND (scope = 'GLOBAL') = (?2 IS NULL)",
+                    params![kind, category_id],
+                )?;
+                if let Some(earliest) = earliest.filter(|e| *e < start) {
+                    start = earliest;
+                }
+            }
+        }
+
+        let id: i64 = match category_id {
+            None => conn.query_row(
+                "INSERT INTO budgets (type, scope, category_id, amount_limit_minor, effective_from)
+                 VALUES (?1, 'GLOBAL', NULL, ?2, ?3)
+                 ON CONFLICT (type, effective_from) WHERE scope = 'GLOBAL'
+                 DO UPDATE SET amount_limit_minor = excluded.amount_limit_minor
+                 RETURNING id",
+                params![kind, limit, start],
+                |r| r.get(0),
+            )?,
+            Some(category_id) => conn.query_row(
                 "INSERT INTO budgets (type, scope, category_id, amount_limit_minor, effective_from)
                  VALUES (?1, 'CATEGORY', ?2, ?3, ?4)
                  ON CONFLICT (category_id, effective_from)
@@ -204,9 +261,16 @@ pub fn set(conn: &Connection, input: &SetBudget, now: DateTime<Utc>) -> Result<B
                  RETURNING id",
                 params![kind, category_id, limit, start],
                 |r| r.get(0),
-            )?
-        }
+            )?,
+        };
+        Ok((id, start))
     };
+
+    // One savepoint, so a failed insert never leaves the rows above deleted. It also nests inside a caller's transaction.
+    conn.execute_batch("SAVEPOINT set_budget")?;
+    let written = write();
+    conn.execute_batch(if written.is_ok() { "RELEASE set_budget" } else { "ROLLBACK TO set_budget; RELEASE set_budget" })?;
+    let (id, start) = written?;
 
     Ok(Budget {
         id,
@@ -226,7 +290,7 @@ pub(crate) struct Effective {
 }
 
 /// The budgets in force in the month: latest row at or before it per (type, scope, category),
-/// with removed (NULL) budgets dropped.
+/// with removed (NULL) budgets dropped. Budgets of deleted categories are left out.
 pub(crate) fn effective(conn: &Connection, start: &str) -> Result<Vec<Effective>, AppError> {
     let mut statement = conn.prepare(
         "SELECT type, scope, category_id, amount_limit_minor FROM (
@@ -237,6 +301,7 @@ pub(crate) fn effective(conn: &Connection, start: &str) -> Result<Vec<Effective>
                   ) AS rank
            FROM budgets
            WHERE effective_from <= ?1
+             AND (category_id IS NULL OR category_id IN (SELECT id FROM categories WHERE deleted_at IS NULL))
          )
          WHERE rank = 1 AND amount_limit_minor IS NOT NULL
          ORDER BY category_id",
@@ -252,13 +317,14 @@ pub(crate) fn effective(conn: &Connection, start: &str) -> Result<Vec<Effective>
     .collect()
 }
 
-fn actual_minor(conn: &Connection, kind: CategoryType, start: &str, end: &str) -> Result<i64, AppError> {
+/// What the month's transactions of this type add up to, and the part of it in categories that are not deleted.
+fn actual_minor(conn: &Connection, kind: CategoryType, start: &str, end: &str) -> Result<(i64, i64), AppError> {
     Ok(conn.query_row(
-        "SELECT COALESCE(SUM(t.cost_minor), 0)
+        "SELECT COALESCE(SUM(t.cost_minor), 0), COALESCE(SUM(CASE WHEN c.deleted_at IS NULL THEN t.cost_minor END), 0)
          FROM transaction_costs t JOIN categories c ON c.id = t.category_id
          WHERE c.type = ?1 AND t.payment_date >= ?2 AND t.payment_date < ?3",
         params![kind_sql(kind), start, end],
-        |r| r.get(0),
+        |r| Ok((r.get(0)?, r.get(1)?)),
     )?)
 }
 
@@ -276,7 +342,7 @@ pub fn overview(conn: &Connection, month: &str) -> Result<Vec<Overview>, AppErro
             let budgeted = side.iter().find(|b| b.scope == Scope::Global).map(|b| b.limit_minor);
             let lines: Vec<&&Effective> = side.iter().filter(|b| b.scope == Scope::Category).collect();
             let allocated: i64 = lines.iter().map(|b| b.limit_minor).sum();
-            let actual = actual_minor(conn, kind, &start, &end)?;
+            let (actual, used) = actual_minor(conn, kind, &start, &end)?;
             let unallocated = budgeted.map(|b| b - allocated);
             Ok(Overview {
                 kind,
@@ -284,6 +350,8 @@ pub fn overview(conn: &Connection, month: &str) -> Result<Vec<Overview>, AppErro
                 allocated: format_amount(allocated),
                 unallocated: unallocated.map(format_amount),
                 actual: format_amount(actual),
+                used: format_amount(used),
+                not_used: format_amount(allocated - used),
                 remaining: budgeted.map(|b| format_amount(b - actual)),
                 over_allocated: unallocated.is_some_and(|u| u < 0),
                 categories: lines
@@ -569,11 +637,11 @@ mod tests {
     }
 
     #[test]
-    fn a_deleted_category_drops_out_of_later_months_but_stays_in_earlier_ones() {
+    fn a_deleted_category_drops_out_of_every_month() {
         let (mut conn, food, _, _) = db();
         put(&conn, &category(CategoryType::Expense, food, "2026-03", Some("400.00"))).unwrap();
         categories::delete(&mut conn, food, "2026-06-15T10:00:00Z".parse().unwrap()).unwrap();
-        assert_eq!(side(&conn, "2026-05", CategoryType::Expense).categories.len(), 1);
+        assert_eq!(side(&conn, "2026-05", CategoryType::Expense).categories.len(), 0);
         assert_eq!(side(&conn, "2026-06", CategoryType::Expense).categories.len(), 0);
         assert_eq!(side(&conn, "2026-08", CategoryType::Expense).allocated, "0.00");
         assert_eq!(put(&conn, &category(CategoryType::Expense, food, "2026-07", Some("1.00"))).err(), Some(AppError::InvalidInput));
@@ -747,5 +815,78 @@ mod tests {
             assert_eq!(row.income_budget, income.budgeted, "{} income budget", row.month);
             assert_eq!(row.income_actual, income.actual, "{} income actual", row.month);
         }
+    }
+
+    fn rent_limit(conn: &Connection, rent: i64, month: &str) -> Option<String> {
+        side(conn, month, CategoryType::Expense).categories.into_iter().find(|c| c.category_id == rent.to_string()).map(|c| c.amount_limit)
+    }
+
+    #[test]
+    fn a_deleted_category_leaves_every_month_total() {
+        let (mut conn, food, _, _) = db();
+        put(&conn, &category(CategoryType::Expense, food, "2026-03", Some("100.00"))).unwrap();
+        put(&conn, &category(CategoryType::Expense, food, "2026-12", Some("150.00"))).unwrap();
+        spend(&conn, food, "30.00", "2026-05-10");
+        categories::delete(&mut conn, food, at(LATE)).unwrap();
+        for month in ["2026-05", "2026-12"] {
+            let o = side(&conn, month, CategoryType::Expense);
+            assert_eq!((o.allocated.as_str(), o.used.as_str(), o.not_used.as_str(), o.categories.len()), ("0.00", "0.00", "0.00", 0), "{month}");
+        }
+        assert_eq!(side(&conn, "2026-05", CategoryType::Expense).actual, "30.00");
+    }
+
+    #[test]
+    fn used_and_not_used_leave_out_deleted_categories_but_actual_keeps_them() {
+        let (mut conn, food, rent, _) = db();
+        put(&conn, &category(CategoryType::Expense, food, "2026-10", Some("500.00"))).unwrap();
+        put(&conn, &category(CategoryType::Expense, rent, "2026-10", Some("200.00"))).unwrap();
+        spend(&conn, food, "300.00", "2026-10-05");
+        let o = side(&conn, "2026-10", CategoryType::Expense);
+        assert_eq!((o.used.as_str(), o.not_used.as_str(), o.actual.as_str()), ("300.00", "400.00", "300.00"));
+
+        spend(&conn, rent, "50.00", "2026-10-06");
+        categories::delete(&mut conn, rent, at(LATE)).unwrap();
+        let o = side(&conn, "2026-10", CategoryType::Expense);
+        assert_eq!((o.allocated.as_str(), o.used.as_str(), o.not_used.as_str(), o.actual.as_str()), ("500.00", "300.00", "200.00", "350.00"));
+    }
+
+    #[test]
+    fn forward_changes_the_month_and_every_month_after_it() {
+        let (conn, _, rent, _) = db();
+        put(&conn, &category(CategoryType::Expense, rent, "2026-09", Some("50.00"))).unwrap();
+        let input = category(CategoryType::Expense, rent, "2026-08", Some("100.00"));
+        set_span(&conn, &input, at(LATE), Span::Forward).unwrap();
+        for month in ["2026-08", "2026-09", "2026-10", "2026-11"] {
+            assert_eq!(rent_limit(&conn, rent, month).as_deref(), Some("100.00"), "{month}");
+        }
+        assert_eq!(rent_limit(&conn, rent, "2026-07"), None);
+        assert_eq!(row_count(&conn), 1, "the 2026-09 row is gone");
+    }
+
+    #[test]
+    fn all_changes_every_month_from_the_first_budget() {
+        let (conn, _, rent, _) = db();
+        put(&conn, &global(CategoryType::Expense, "2026-03", Some("2000.00"))).unwrap();
+        put(&conn, &category(CategoryType::Expense, rent, "2026-05", Some("50.00"))).unwrap();
+        put(&conn, &category(CategoryType::Expense, rent, "2026-11", Some("70.00"))).unwrap();
+        let input = category(CategoryType::Expense, rent, "2026-09", Some("100.00"));
+        let saved = set_span(&conn, &input, at(LATE), Span::All).unwrap();
+        assert_eq!(saved.effective_from, "2026-03-01");
+        for month in ["2026-03", "2026-05", "2026-09", "2026-10", "2026-12"] {
+            assert_eq!(rent_limit(&conn, rent, month).as_deref(), Some("100.00"), "{month}");
+        }
+        assert_eq!(rent_limit(&conn, rent, "2026-02"), None);
+        assert_eq!(exp(&conn, "2026-06").as_deref(), Some("2000.00"), "the global budget is untouched");
+    }
+
+    #[test]
+    fn a_span_that_is_not_valid_changes_nothing() {
+        let (conn, food, _, salary) = db();
+        put(&conn, &category(CategoryType::Expense, food, "2026-05", Some("50.00"))).unwrap();
+        for span in [Span::Forward, Span::All] {
+            let bad = category(CategoryType::Expense, salary, "2026-04", Some("1.00"));
+            assert_eq!(set_span(&conn, &bad, at(LATE), span).err(), Some(AppError::InvalidInput));
+        }
+        assert_eq!(row_count(&conn), 1);
     }
 }

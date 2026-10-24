@@ -342,8 +342,8 @@ pub fn delete_transaction(vault: Shared, id: String) -> Result<(), AppError> {
 }
 
 #[tauri::command]
-pub fn set_budget(vault: Shared, input: SetBudget) -> Result<Budget, AppError> {
-    vault.with_conn(|c| budgets::set(c, &input, chrono::Utc::now()))
+pub fn set_budget(vault: Shared, input: SetBudget, span: Option<budgets::Span>) -> Result<Budget, AppError> {
+    vault.with_conn(|c| budgets::set_span(c, &input, chrono::Utc::now(), span.unwrap_or_default()))
 }
 
 #[derive(serde::Deserialize)]

@@ -122,6 +122,10 @@ export const en = {
   'budgets.amountError': 'enter an amount with at most two decimals, or leave it blank to clear.',
   'budgets.chooseMonth': 'choose a month.',
   'budgets.amountOf': '{label} amount',
+  'budgets.spanTitle': 'how far should this change reach?',
+  'budgets.spanOnly': 'only this month',
+  'budgets.spanForward': 'this month and later',
+  'budgets.spanAll': 'all months, before and after',
 
   // Settings
   'settings.title': 'settings',

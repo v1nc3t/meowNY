@@ -112,6 +112,10 @@ export const it: Messages = {
   'budgets.amountError': 'inserisci un importo con al massimo due decimali, oppure lascia vuoto per rimuovere.',
   'budgets.chooseMonth': 'scegli un mese.',
   'budgets.amountOf': 'importo per {label}',
+  'budgets.spanTitle': 'fin dove deve arrivare questa modifica?',
+  'budgets.spanOnly': 'solo questo mese',
+  'budgets.spanForward': 'questo mese e i successivi',
+  'budgets.spanAll': 'tutti i mesi, prima e dopo',
 
   'settings.title': 'impostazioni',
   'settings.region': 'lingua e regione',

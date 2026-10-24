@@ -1,10 +1,11 @@
 import { useRef, useState, type FormEvent } from 'react'
 import type { Category } from '../lib/categoriesView'
-import { budgets } from '../api/budgets'
+import { budgets, type Span } from '../api/budgets'
 import { categories, cleanCategoryName, type CategoryType } from '../api/categories'
 import { errorText } from '../api/invoke'
 import { monthLabel } from '../api/months'
 import { useToday } from '../api/today'
+import BudgetSpanModal from './BudgetSpanModal'
 import Dropdown from './Dropdown'
 import Modal from './Modal'
 import { useToast } from '../hooks/toast'
@@ -40,8 +41,10 @@ export default function AddCategoryModal({
   ]
   const say = useToast()
   const [pending, setPending] = useState(false)
+  // The saving that waits for the answer to "how far should the budget reach", for a past month.
+  const [asking, setAsking] = useState<((span: Span) => void) | null>(null)
 
-  async function onSubmit(event: FormEvent<HTMLFormElement>) {
+  function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (pending) return
     const name = cleanCategoryName(String(new FormData(event.currentTarget).get('name') ?? ''))
@@ -55,12 +58,18 @@ export default function AddCategoryModal({
       say(t('budgets.amountError'), 'error')
       return
     }
+    // Asked before anything is made, so cancelling creates nothing.
+    if (limit !== null && budgetMonth && today && budgetMonth < today.month) setAsking(() => (span: Span) => void create(name, limit, span))
+    else void create(name, limit)
+  }
+
+  async function create(name: string, limit: string | null, span?: Span) {
     setPending(true)
     try {
       const category = made.current ?? (await categories.create(name, type as CategoryType))
       made.current = category
       if (limit !== null && budgetMonth) {
-        await budgets.set({ type: category.type, scope: 'CATEGORY', month: budgetMonth, amountLimit: limit, categoryId: category.id })
+        await budgets.set({ type: category.type, scope: 'CATEGORY', month: budgetMonth, amountLimit: limit, categoryId: category.id }, span)
       }
       onCreated(category)
     } catch (error) {
@@ -71,20 +80,31 @@ export default function AddCategoryModal({
   }
 
   return (
-    <Modal title={t('categories.addTitle')} pending={pending} formId={formId} onClose={onClose}>
-      <form id={formId} onSubmit={(event) => void onSubmit(event)}>
-        <label>
-          {t('common.name')}
-          <input name="name" required maxLength={50} autoComplete="off" />
-        </label>
-        <Dropdown label={t('common.type')} value={type} options={typeOptions} onChange={setType} />
-        {budgetMonth ? (
+    <>
+      <Modal title={t('categories.addTitle')} pending={pending} formId={formId} onClose={onClose}>
+        <form id={formId} onSubmit={onSubmit}>
           <label>
-            {t('categories.budgetFrom', { month: monthLabel(budgetMonth, language) })}
-            <input name="budget" inputMode="decimal" placeholder="0.00" autoComplete="off" />
+            {t('common.name')}
+            <input name="name" required maxLength={50} autoComplete="off" />
           </label>
-        ) : null}
-      </form>
-    </Modal>
+          <Dropdown label={t('common.type')} value={type} options={typeOptions} onChange={setType} />
+          {budgetMonth ? (
+            <label>
+              {t('categories.budgetFrom', { month: monthLabel(budgetMonth, language) })}
+              <input name="budget" inputMode="decimal" placeholder="0.00" autoComplete="off" />
+            </label>
+          ) : null}
+        </form>
+      </Modal>
+      {asking ? (
+        <BudgetSpanModal
+          onChoose={(span) => {
+            setAsking(null)
+            asking(span)
+          }}
+          onClose={() => setAsking(null)}
+        />
+      ) : null}
+    </>
   )
 }

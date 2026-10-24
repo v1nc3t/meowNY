@@ -113,6 +113,10 @@ export const de: Messages = {
   'budgets.amountError': 'gib einen betrag mit höchstens zwei nachkommastellen ein oder lass das feld zum entfernen leer.',
   'budgets.chooseMonth': 'wähle einen monat.',
   'budgets.amountOf': 'betrag für {label}',
+  'budgets.spanTitle': 'wie weit soll diese änderung reichen?',
+  'budgets.spanOnly': 'nur dieser monat',
+  'budgets.spanForward': 'dieser und spätere monate',
+  'budgets.spanAll': 'alle monate, davor und danach',
 
   'settings.title': 'einstellungen',
   'settings.region': 'sprache und region',
