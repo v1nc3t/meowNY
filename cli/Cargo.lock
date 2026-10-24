@@ -2380,7 +2380,7 @@ dependencies = [
 
 [[package]]
 name = "meowny-cli"
-version = "0.2.2"
+version = "0.2.3"
 dependencies = [
  "chrono",
  "meowny-desktop",
@@ -2391,7 +2391,7 @@ dependencies = [
 
 [[package]]
 name = "meowny-desktop"
-version = "0.2.2"
+version = "0.2.3"
 dependencies = [
  "argon2",
  "chacha20poly1305",
