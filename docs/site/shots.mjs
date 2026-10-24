@@ -43,14 +43,23 @@ function picture(name, eager) {
   return `<picture><source srcset="images/${dark}" media="(prefers-color-scheme: dark)"><img src="images/${light}" alt="${escapeHtml(s.alt)}" width="${s.width}" height="${s.height}"${eager ? '' : ' loading="lazy"'}></picture>`
 }
 
-/** One screenshot with its caption; an empty frame (landing page) until its files exist. `eager` for one at the top of a page. */
+/**
+ * One screenshot with its caption; an empty frame (landing page) until its files exist. `eager` for one at the top of a page.
+ * A click on it opens it big, in a popover (HTML's own, no script): a click outside it, a click on it or Escape closes it.
+ */
 export function shot(name, images, { eager = false } = {}) {
   const s = SHOTS[name]
   if (!s) throw new Error(`unknown screenshot ${name}`)
-  const body = images.has(name)
-    ? picture(name, eager)
-    : `<div class="shot-frame${s.phone ? ' is-phone' : ''}" role="img" aria-label="${escapeHtml(`Screenshot to come: ${s.alt.toLowerCase()}`)}"><span>screenshot to come</span></div>`
-  return `<figure class="shot${s.phone ? ' is-phone' : ''}">${body}<figcaption>${escapeHtml(s.caption)}</figcaption></figure>`
+  const kind = s.phone ? ' is-phone' : ''
+  if (!images.has(name)) {
+    const frame = `<div class="shot-frame${kind}" role="img" aria-label="${escapeHtml(`Screenshot to come: ${s.alt.toLowerCase()}`)}"><span>screenshot to come</span></div>`
+    return `<figure class="shot${kind}">${frame}<figcaption>${escapeHtml(s.caption)}</figcaption></figure>`
+  }
+  const view = `view-${name}`
+  const open = `<button type="button" class="shot-open" popovertarget="${view}" aria-label="${escapeHtml(`Show bigger: ${s.caption}`)}">${picture(name, eager)}</button>`
+  // The big one loads only when it is opened: an image in a closed popover is not shown, so lazy loading waits for it.
+  const big = `<div class="shot-view${kind}" id="${view}" popover aria-label="${escapeHtml(s.caption)}"><button type="button" class="shot-close" popovertarget="${view}" popovertargetaction="hide" aria-label="Close">${picture(name, false).replace('<img ', '<img loading="lazy" ')}</button></div>`
+  return `<figure class="shot${kind}">${open}<figcaption>${escapeHtml(s.caption)}</figcaption>${big}</figure>`
 }
 
 /** Rows of screenshots for the guide: the desktop ones, then the narrow phone ones; only those whose files exist. */

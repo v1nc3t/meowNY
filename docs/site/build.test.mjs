@@ -204,7 +204,10 @@ test('a screenshot is shown once its file exists, and an empty frame until then'
 test('the guide shows only the screenshots whose files exist', () => {
   assert.ok(!toHtml(buildGuide()).includes('<picture'), 'no pictures without files')
   const html = toHtml(buildGuide(new Set(['export', 'phone-sync'])))
-  assert.equal((html.match(/<picture>/g) ?? []).length, 2)
+  assert.equal((html.match(/class="shot-open"/g) ?? []).length, 2)
+  // Each one opens big in a popover on the same page, and a click on the big one closes it.
+  for (const [, id] of html.matchAll(/popovertarget="([^"]+)"/g)) assert.ok(html.includes(`id="${id}" popover`), id)
+  assert.equal((html.match(/popovertargetaction="hide"/g) ?? []).length, 2)
   assert.ok(html.includes('class="grid shots phone"'), 'phone shots sit in their own narrow grid')
   assert.deepEqual(lintPage(html), [])
 })

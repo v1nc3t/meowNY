@@ -644,6 +644,54 @@ section.command > :last-child {
   display: block;
 }
 
+/* A screenshot is a button that opens it big. */
+.shot-open,
+.shot-close {
+  display: block;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  cursor: zoom-in;
+}
+
+.shot-open:focus-visible,
+.shot-close:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
+/* The big one: a popover in the middle of the window over a dark backdrop; a click outside it closes it. */
+.shot-view {
+  margin: auto;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  overflow: visible;
+}
+
+.shot-view::backdrop {
+  background: rgb(0 0 0 / 0.75); /* fixed: a dim layer in both themes */
+}
+
+.shot-close {
+  cursor: zoom-out;
+}
+
+.shot .shot-view img {
+  width: auto;
+  max-width: min(94vw, 1280px);
+  max-height: 92vh;
+  height: auto;
+  box-shadow: var(--shadow-lg);
+}
+
+.shot .shot-view.is-phone img {
+  max-width: 94vw;
+}
+
 /* In the guide a row keeps its column width, so one screenshot does not stretch across the page. */
 .doc .grid.shots:not(.phone) {
   grid-template-columns: repeat(auto-fill, minmax(min(100%, 16rem), 1fr));
