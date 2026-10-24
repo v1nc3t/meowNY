@@ -9,6 +9,7 @@ import { useT } from '../i18n/context'
 import { formatSize } from '../lib/bytes'
 import { canOpen, canPreview, canShowImage, fileState, fileStateText, typeText } from '../lib/documents'
 import { formatDate } from '../lib/money'
+import { isIos } from '../lib/platform'
 import DatePicker from './DatePicker'
 import Modal from './Modal'
 import PreviewModal from './PreviewModal'
@@ -148,6 +149,8 @@ export default function DocumentModal({ id, onClose, onChanged }: { id: string; 
   }
 
   const state = fileStateText(fileState(doc, phone))
+  // iOS cannot hand a file to another app through the opener plugin (URLs only); the preview still shows it.
+  const openable = canOpen(doc) && !isIos
   return (
     <>
       <Modal
@@ -183,7 +186,7 @@ export default function DocumentModal({ id, onClose, onChanged }: { id: string; 
             <dd>{formatSize(doc.sizeBytes, locale)}</dd>
           </dl>
           {state ? <p className="hint">{t(state)}</p> : null}
-          {doc.hasFile && !canOpen(doc) && !canPreview(doc) ? <p className="hint">{t('docs.cannotOpen')}</p> : null}
+          {doc.hasFile && !openable && !canPreview(doc) ? <p className="hint">{t('docs.cannotOpen')}</p> : null}
           {canPreview(doc) ? (
             <div className="doc-action">
               <Button variant="outline" size="sm" onClick={() => setPreviewing(true)}>
@@ -191,7 +194,7 @@ export default function DocumentModal({ id, onClose, onChanged }: { id: string; 
               </Button>
             </div>
           ) : null}
-          {canOpen(doc) ? (
+          {openable ? (
             <div className="doc-action">
               <Button variant="outline" size="sm" onClick={onOpen}>
                 {t('docs.open')}

@@ -14,6 +14,9 @@ Thumbs.db
 .env
 .env.local
 .env.development.local
+# The Android release key (develop page of the website, Releasing): kept in the repository secrets and a password manager, never in git
+*.keystore
+*.jks
 
 # Node
 node_modules/

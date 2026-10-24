@@ -53,12 +53,12 @@ pub trait SecretStore: Send + Sync {
     fn delete(&self) -> Result<(), KeyError>;
 }
 
-#[cfg(not(target_os = "android"))]
+#[cfg(desktop)]
 pub struct KeychainStore {
     entry: keyring::Entry,
 }
 
-#[cfg(not(target_os = "android"))]
+#[cfg(desktop)]
 impl KeychainStore {
     pub fn new() -> Result<Self, KeyError> {
         let entry = keyring::Entry::new("org.meowny.app", "database-key").map_err(|_| KeyError::Store)?;
@@ -66,7 +66,7 @@ impl KeychainStore {
     }
 }
 
-#[cfg(not(target_os = "android"))]
+#[cfg(desktop)]
 impl SecretStore for KeychainStore {
     fn get(&self) -> Result<Option<Zeroizing<[u8; SECRET_LEN]>>, KeyError> {
         match self.entry.get_password() {

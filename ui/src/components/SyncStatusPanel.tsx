@@ -3,6 +3,7 @@ import { useState, type FormEvent } from 'react'
 import { useT } from '../i18n/context'
 import QrCode from './QrCode'
 import Button from './ui/Button'
+import { Logo } from './ui/Pixel'
 import ReviewModal from './ReviewModal'
 
 /**
@@ -148,6 +149,7 @@ export default function SyncStatusPanel({
   if (status.state === 'done') {
     return (
       <div className="panel sync-panel">
+        <Logo size={48} />
         <p className="notice" role="status">
           {t(status.purpose === 'pair' ? 'sync.donePair' : 'sync.doneSync', { peer: status.peer })}
         </p>

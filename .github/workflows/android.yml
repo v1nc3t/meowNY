@@ -89,11 +89,13 @@ jobs:
       - name: Tests of the hardening script
         run: python3 scripts/android-patch.test.py
 
-      # The Android project is generated, not kept in git. The script then turns off Android's backup of the app's folder and
-      # makes the window secure (no screenshots, a blank picture in the list of recent apps).
+      # The Android project is generated, not kept in git. Its icon is the logo's coin on a clear background
+      # (scripts/logo.py). The script then turns off Android's backup of the app's folder and makes the window secure
+      # (no screenshots, a blank picture in the list of recent apps).
       - name: Make the Android project
         run: |
           npx tauri android init --ci
+          npx tauri icon src-tauri/icons/logo-android.png --ios-color transparent
           python3 scripts/android-patch.py src-tauri/gen/android
 
       - name: Build the APK

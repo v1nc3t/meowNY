@@ -3,7 +3,7 @@
 //! out. The website shows those outputs.
 //!
 //!   cd cli && UPDATE_DOCS=1 cargo test --offline --test docs      # rewrite docs/site/commands.json and docs/site/examples.json
-//!   node docs/site/build.mjs                                            # rebuild the site and docs/CLI.md
+//!   node docs/site/build.mjs                                            # rebuild the site
 //!
 //! Without `UPDATE_DOCS` the same tour runs and is compared with the recorded files, so a command that
 //! changes, a message that is reworded or a command with no example fails here until the docs are redone.

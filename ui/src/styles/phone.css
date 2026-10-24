@@ -119,7 +119,7 @@ html.is-phone .ui-tabs {
   box-shadow: inset 0 2px 0 var(--foreground);
 }
 
-/* The round add button: the main colour, raised over the page. */
+/* The square add button: the main colour, raised over the page. */
 .fab {
   position: fixed;
   right: 1rem;

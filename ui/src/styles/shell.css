@@ -47,10 +47,6 @@
 /* Collapsed: the toggle shows the logo; hovering or focusing it shows the expand icon instead. */
 .toggle-logo {
   display: none;
-  font-family: var(--font);
-  font-size: 0.9375rem;
-  font-weight: 600;
-  color: var(--foreground);
 }
 
 .nav-icon {
@@ -234,7 +230,10 @@ body:has(.app-shell.is-locked) {
     justify-content: space-between;
   }
 
-  .app-shell.is-collapsed .app-logo,
+  .app-shell.is-collapsed .app-logo {
+    display: inline-flex;
+  }
+
   .app-shell.is-collapsed .nav-label {
     display: inline;
   }
@@ -289,7 +288,11 @@ body:has(.app-shell.is-locked) {
   text-decoration: none;
 }
 
+/* The coin and the name side by side. */
 .app-logo {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
   color: var(--foreground);
   font-size: 0.9375rem;
   font-weight: 600;

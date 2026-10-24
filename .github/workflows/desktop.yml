@@ -85,7 +85,7 @@ jobs:
 
       - name: Rust tests
         working-directory: src-tauri
-        run: cargo test
+        run: cargo test --locked
 
       # The command line program. Its tests run the real binary against the app's own server code, so they
       # build the app library too; sharing the target folder reuses what `cargo test` just compiled.
@@ -93,10 +93,10 @@ jobs:
         working-directory: cli
         env:
           CARGO_TARGET_DIR: ${{ github.workspace }}/src-tauri/target
-        run: cargo test
+        run: cargo test --locked
 
       # Unsigned debug build with one bundle per OS. It reuses the compiled
-      # dependencies from `cargo test`. Release builds, all installer formats,
-      # signing and notarisation come with the release phase.
+      # dependencies from `cargo test`. Release builds and every installer are
+      # made by release.yml from a version tag.
       - name: Build app
         run: npm run tauri build -- --debug --bundles ${{ matrix.bundle }}

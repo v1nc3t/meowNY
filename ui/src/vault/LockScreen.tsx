@@ -11,6 +11,7 @@ import { useNotice } from '../hooks/useNotice'
 import { useProfile } from '../hooks/profile'
 import { useT } from '../i18n/context'
 import Button from '../components/ui/Button'
+import { Logo } from '../components/ui/Pixel'
 
 export default function LockScreen({ onUnlocked }: { onUnlocked: () => void }) {
   const t = useT()
@@ -107,7 +108,10 @@ export default function LockScreen({ onUnlocked }: { onUnlocked: () => void }) {
     return (
       <main className="gate">
         <form ref={formRef} onSubmit={onRecover}>
-          <p className="brand-mark">meowny</p>
+          <p className="brand-mark">
+            <Logo />
+            meowny
+          </p>
           <h1>{t('recovery.title')}</h1>
           <label>
             {t('recovery.label')}
@@ -146,7 +150,10 @@ export default function LockScreen({ onUnlocked }: { onUnlocked: () => void }) {
   return (
     <main className="gate">
       <form ref={formRef} onSubmit={onUnlock}>
-        <p className="brand-mark">meowny</p>
+        <p className="brand-mark">
+          <Logo />
+          meowny
+        </p>
         <h1>{t('lock.title')}</h1>
         {needsPassphrase && (
           <>

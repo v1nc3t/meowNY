@@ -15,6 +15,7 @@ import RecoveryKeyPanel from './RecoveryKeyPanel'
 import RestoreFromBackup from './RestoreFromBackup'
 import { defaultSettings, isCurrency, normalizeCurrency, passphraseProblem } from './rules'
 import Button from '../components/ui/Button'
+import { Logo } from '../components/ui/Pixel'
 
 /** First run: language, region, currency and security, all in one place, each starting from what the system suggests. */
 export default function FirstRunScreen({ onDone }: { onDone: () => void }) {
@@ -72,7 +73,10 @@ export default function FirstRunScreen({ onDone }: { onDone: () => void }) {
   return (
     <main className="gate">
       <form ref={formRef} onSubmit={onSubmit}>
-        <p className="brand-mark">meowny</p>
+        <p className="brand-mark">
+          <Logo />
+          meowny
+        </p>
         <h1>{t('welcome.title')}</h1>
 
         <label>

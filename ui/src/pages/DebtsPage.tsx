@@ -13,6 +13,7 @@ import FriendNameModal from '../components/FriendNameModal'
 import SectionTabs from '../components/SectionTabs'
 import SettleModal from '../components/SettleModal'
 import Button from '../components/ui/Button'
+import { EmptyState } from '../components/ui/Pixel'
 import { useMoneySettings, type MoneySettings } from '../hooks/useMoneySettings'
 import { useToast } from '../hooks/toast'
 import { useProfile } from '../hooks/profile'
@@ -296,7 +297,7 @@ function DebtsView({ settings, now }: { settings: MoneySettings; now: Today }) {
               {t('debts.showRemoved')}
             </label>
           </div>
-          {people.length === 0 ? <p className="hint">{t('debts.empty')}</p> : null}
+          {people.length === 0 ? <EmptyState text={t('debts.empty')} /> : null}
           <ul className="card-list">
             {people.map((person) => {
               const { tone } = balanceView(person.balance)

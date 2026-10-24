@@ -41,6 +41,9 @@
 }
 
 .gate .brand-mark {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
   margin: 0;
   font-family: var(--font);
   font-size: 0.875rem;
@@ -418,7 +421,7 @@
   cursor: pointer;
 }
 
-/* A switch: a pill with a round knob that slides to the right when it is on. */
+/* A switch: a box with a square knob that slides to the right when it is on. */
 .settings-rows input.settings-switch[type='checkbox'] {
   position: relative;
   width: 2.25rem;

@@ -8,16 +8,19 @@
   --edge: 0.25rem;
   --room: 0.875rem;
 
-  /* Blocky: corners are nearly square, and only what floats (a menu, a dialog, a message) casts a shadow. */
-  --radius: 2px;
+  /* Pixel-sharp, like the logo: square corners everywhere, and only what floats (a menu, a dialog, a message) casts a
+     shadow, a hard one with no blur, as in pixel art. */
+  --radius: 0;
   --radius-sm: 0;
-  --radius-md: 2px;
-  --radius-lg: 2px;
-  --radius-xl: 3px;
+  --radius-md: 0;
+  --radius-lg: 0;
+  --radius-xl: 0;
   --shadow-xs: 0 0 #0000;
   --shadow-sm: 0 0 #0000;
-  --shadow-md: 0 4px 12px -2px rgb(0 0 0 / 0.2);
-  --shadow-lg: 0 12px 28px -6px rgb(0 0 0 / 0.3);
+  --shadow-md: 3px 3px 0 rgb(0 0 0 / 0.16);
+  --shadow-lg: 4px 4px 0 rgb(0 0 0 / 0.24);
+  /* The gold of the logo's coin: a budget that is nearly used up. */
+  --gold: #e8a317;
   /* The dim layer behind a modal. */
   --overlay: rgb(0 0 0 / 50%);
 

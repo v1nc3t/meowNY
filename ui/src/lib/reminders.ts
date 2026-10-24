@@ -113,6 +113,13 @@ export function schedulePlan(reminders: Reminders, time: string, now: Date): Sch
   return plan
 }
 
+/** The date of a notification as the notification plugin takes it. On iOS the plugin reads it as local time despite its `Z`, so
+ * iOS is given the local clock time. */
+// shortcut: works around tauri-apps/plugins-workspace#3256; drop the iOS branch once the plugin reads the time zone.
+export function pluginDate(at: Date, ios: boolean): string {
+  return (ios ? new Date(at.getTime() - at.getTimezoneOffset() * 60_000) : at).toISOString()
+}
+
 /** The ids this device has scheduled before, to cancel them when it schedules again. */
 export function scheduledIds(): number[] {
   try {

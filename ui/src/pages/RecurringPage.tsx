@@ -11,6 +11,7 @@ import ConfirmModal from '../components/ConfirmModal'
 import Modal, { modalFormId } from '../components/Modal'
 import Badge from '../components/ui/Badge'
 import Button from '../components/ui/Button'
+import { EmptyState } from '../components/ui/Pixel'
 import { categories as categoriesApi, type Category } from '../api/categories'
 import { debts, type Person } from '../api/debts'
 import { errorText } from '../api/invoke'
@@ -362,7 +363,7 @@ function RecurringView({ settings, now }: { settings: MoneySettings; now: Today 
       ) : null}
       {items ? (
         <div className="tx-pane wide">
-          {items.length === 0 ? <p className="hint">{t('rec.empty')}</p> : null}
+          {items.length === 0 ? <EmptyState text={t('rec.empty')} /> : null}
           {groups.map((group) => (
             <Fragment key={group.id}>
               <h2 className="rec-group">

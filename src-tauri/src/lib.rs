@@ -39,30 +39,40 @@ use crate::vault::{Policy, Vault};
 const IDLE_CHECK_EVERY: Duration = Duration::from_secs(5);
 const SCHEDULE_CHECK_EVERY: Duration = Duration::from_secs(60);
 
-/// Whether this is the phone's app: always on a phone, and in a debug build when `MEOWNY_PROFILE=phone` is set, so the phone's
-/// screens can be tried in a window on a computer (with a separate data folder; the vault is of another kind).
-#[cfg(not(target_os = "android"))]
-fn is_phone() -> bool {
-    cfg!(any(target_os = "android", target_os = "ios")) || (cfg!(debug_assertions) && std::env::var("MEOWNY_PROFILE").is_ok_and(|v| v == "phone"))
-}
-
 /// The phone has no keychain to rely on, so its vault keeps the secret in a file and demands a passphrase.
 fn phone_vault(dir: std::path::PathBuf) -> Vault {
     let secret = dir.join("phone.secret");
     Vault::with_policy(dir, Box::new(FileStore::new(secret)), Policy::PHONE)
 }
 
-#[cfg(not(target_os = "android"))]
+/// A computer keeps the secret in the OS keychain. In a debug build `MEOWNY_PROFILE=phone` gives the phone's vault instead, so
+/// the phone's screens can be tried in a window on a computer (with a separate data folder; the vault is of another kind).
+#[cfg(desktop)]
 fn make_vault(dir: std::path::PathBuf) -> Vault {
-    if is_phone() {
+    if cfg!(debug_assertions) && std::env::var("MEOWNY_PROFILE").is_ok_and(|v| v == "phone") {
         return phone_vault(dir);
     }
     Vault::new(dir, Box::new(crate::keys::KeychainStore::new().expect("keychain entry")))
 }
 
-#[cfg(target_os = "android")]
+/// A phone (Android or iOS) always has the phone's vault.
+#[cfg(mobile)]
 fn make_vault(dir: std::path::PathBuf) -> Vault {
     phone_vault(dir)
+}
+
+/// iOS copies an app's folder to iCloud backups by default, with the encrypted data and the secret file side by side; the erase
+/// after 5 wrong passphrases would then protect nothing (Android's backup is off for the same reason). The flag on the folder
+/// covers everything in it. Without it the app does not start.
+#[cfg(target_os = "ios")]
+fn keep_out_of_backups(dir: &std::path::Path) -> std::io::Result<()> {
+    use objc2_foundation::{NSNumber, NSString, NSURLIsExcludedFromBackupKey, NSURL};
+    std::fs::create_dir_all(dir)?;
+    let url = NSURL::fileURLWithPath(&NSString::from_str(&dir.to_string_lossy()));
+    let yes = NSNumber::numberWithBool(true);
+    // SAFETY: the value for this key is an NSNumber holding a bool.
+    unsafe { url.setResourceValue_forKey_error(Some(yes.as_ref()), NSURLIsExcludedFromBackupKey) }
+        .map_err(|_| std::io::Error::other("the data folder could not be kept out of backups"))
 }
 
 /// WebKitGTK's GPU drawing leaves stale pixels behind on some Linux graphics setups (seen with WebKitGTK 2.52 on X11 with Intel
@@ -132,7 +142,8 @@ impl api::Show for AllowDialog {
     }
 }
 
-// On a phone the app starts through this entry point (Tauri's generated Android project calls it); on a computer `main` does.
+// On a phone the app starts through this entry point (Tauri's generated Android and iOS projects call it); on a computer `main`
+// does.
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     #[cfg(target_os = "linux")]
@@ -155,6 +166,8 @@ pub fn run() {
     builder
         .setup(|app| {
             let dir = app.path().app_data_dir()?;
+            #[cfg(target_os = "ios")]
+            keep_out_of_backups(&dir)?;
             let vault = Arc::new(make_vault(dir));
             app.manage(vault.clone());
             // Plain copies for the system's viewer are removed at every lock and exit; a crash may have left some.
