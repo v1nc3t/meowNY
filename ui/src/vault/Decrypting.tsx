@@ -1,21 +1,24 @@
 import { useT } from '../i18n/context'
-import { useFill } from './unlockFlow'
+import { MIN_SHOW_MS, useFillHeld } from './unlockFlow'
 
 /**
- * The loading line after a password: a line that fills, with "decrypting..." under it. `below` puts it at the foot of the password
- * screen, which stays on show, so a wrong passphrase only has to say so. The line fills once (see useFill); `done` lets it reach its
+ * The loading line after a password: a line that fills, with "decrypting..." under it ("creating..." while the data is first made). `below` puts it at the foot of the password
+ * screen, which stays on show, so a wrong passphrase only has to say so. The line fills once (see useFillHeld); `done` lets it reach its
  * end. A screen reader reads the word and an ellipsis once; the three animated dots are hidden from it.
  */
-export default function Decrypting({ below = false, done = false }: { below?: boolean; done?: boolean }) {
+export default function Decrypting({ below = false, done = false, creating = false }: { below?: boolean; done?: boolean; creating?: boolean }) {
   const t = useT()
-  const fill = useFill(done)
+  const held = useFillHeld(done)
   return (
     <div className={below ? 'decrypting is-below' : 'decrypting'} role="status" aria-live="polite">
       <span className="decrypting-line" aria-hidden="true">
-        <span className="decrypting-fill" style={{ transform: `scaleX(${fill})` }} />
+        <span
+          className="decrypting-fill"
+          style={{ animationDuration: `${MIN_SHOW_MS}ms`, animationPlayState: held ? 'paused' : 'running' }}
+        />
       </span>
       <p className="decrypting-text">
-        {t('lock.decrypting')}
+        {t(creating ? 'lock.creating' : 'lock.decrypting')}
         <span className="sr-only">...</span>
         <span className="decrypting-dots" aria-hidden="true">
           ...

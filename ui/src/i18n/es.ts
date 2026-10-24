@@ -361,6 +361,7 @@ export const es: Messages = {
   'settings.currencyOnDesktop': 'cambia la moneda en tu ordenador.',
   'currency.syncPhone': 'tu móvil todavía muestra la moneda anterior: sincronízalo para actualizarlo.',
   'lock.decrypting': 'descifrando',
+  'lock.creating': 'creando',
   'lock.attemptsLeft': 'quedan {count} intentos. después este móvil se borra solo.',
   'lock.lastAttempt': 'último intento. una frase de contraseña incorrecta borra este móvil.',
   'phone.title': 'sincronizar con tu ordenador',

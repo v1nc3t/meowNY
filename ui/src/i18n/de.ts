@@ -362,6 +362,7 @@ export const de: Messages = {
   'settings.currencyOnDesktop': 'ändere die währung an deinem computer.',
   'currency.syncPhone': 'dein handy zeigt noch die alte währung: synchronisiere es, damit es sich aktualisiert.',
   'lock.decrypting': 'wird entschlüsselt',
+  'lock.creating': 'wird erstellt',
   'lock.attemptsLeft': 'noch {count} versuche. danach löscht sich dieses handy selbst.',
   'lock.lastAttempt': 'letzter versuch. eine falsche passphrase löscht dieses handy.',
   'phone.title': 'mit deinem computer synchronisieren',

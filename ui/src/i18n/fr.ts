@@ -361,6 +361,7 @@ export const fr: Messages = {
   'settings.currencyOnDesktop': 'change la devise sur ton ordinateur.',
   'currency.syncPhone': "ton téléphone affiche encore l'ancienne devise : synchronise-le pour le mettre à jour.",
   'lock.decrypting': 'déchiffrement',
+  'lock.creating': 'création',
   'lock.attemptsLeft': "il reste {count} essais. ensuite ce téléphone s'efface tout seul.",
   'lock.lastAttempt': 'dernier essai. une phrase secrète fausse efface ce téléphone.',
   'phone.title': 'synchroniser avec ton ordinateur',

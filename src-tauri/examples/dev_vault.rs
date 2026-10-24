@@ -11,11 +11,14 @@
 //!
 //! The data file ends up without a passphrase unless `MEOWNY_DEV_PASSPHRASE` is set (it is read from the
 //! environment so it is not left in the shell history). Run it again to start over; it is meant to be repeated.
+//!
+//! `MEOWNY_PROFILE=phone` makes the phone's kind of vault instead (its secret in a file, a passphrase required), for a
+//! debug build of the app started with the same variable and the same data folder.
 
 use std::path::PathBuf;
 
-use meowny_lib::keys::{KeychainStore, SecretStore};
-use meowny_lib::vault::{AppError, Settings, Vault, VaultStatus};
+use meowny_lib::keys::{FileStore, KeychainStore, SecretStore};
+use meowny_lib::vault::{AppError, Policy, Settings, Vault, VaultStatus};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let Some(dir) = std::env::args().nth(1).map(PathBuf::from) else {
@@ -23,10 +26,19 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         std::process::exit(2);
     };
     let passphrase = std::env::var("MEOWNY_DEV_PASSPHRASE").ok().filter(|p| !p.is_empty());
-    // Nothing is deleted unless the keychain can be reached, so a failure leaves the data as it was.
-    let store = KeychainStore::new()?;
-    store.get().map_err(|_| "the OS keychain cannot be reached; nothing was changed")?;
-    let vault = Vault::new(dir.clone(), Box::new(store));
+    let phone = std::env::var("MEOWNY_PROFILE").is_ok_and(|v| v == "phone");
+    if phone && passphrase.is_none() {
+        return Err("the phone's vault needs a passphrase: set MEOWNY_DEV_PASSPHRASE".into());
+    }
+    let vault = if phone {
+        // The same file and policy as the app's phone vault (`phone_vault` in lib.rs).
+        Vault::with_policy(dir.clone(), Box::new(FileStore::new(dir.join("phone.secret"))), Policy::PHONE)
+    } else {
+        // Nothing is deleted unless the keychain can be reached, so a failure leaves the data as it was.
+        let store = KeychainStore::new()?;
+        store.get().map_err(|_| "the OS keychain cannot be reached; nothing was changed")?;
+        Vault::new(dir.clone(), Box::new(store))
+    };
 
     // The lock settings belong to the app, not to the data, and can be read while it is locked.
     let existing = vault.status() != VaultStatus::NotSetUp;

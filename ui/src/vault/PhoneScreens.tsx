@@ -77,7 +77,7 @@ export function PhoneFirstRun({ onDone }: { onDone: () => void }) {
           {message}
         </p>
       </form>
-      {busy && <Decrypting below done={workDone} />}
+      {busy && <Decrypting below creating done={workDone} />}
     </main>
   )
 }
