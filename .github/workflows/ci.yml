@@ -1,56 +1,311 @@
 name: CI
 
+# Checks every change: the UI, the website, the Rust core and the command line, that the app builds for every system, and
+# the dependencies and secrets. On main it also publishes the website. Releases are release.yml.
 on:
   push:
     branches:
-      - '**'
+      - main
   pull_request:
+  # Weekly, so new security advisories are caught even when nobody pushes (only the security job runs then).
+  schedule:
+    - cron: '17 6 * * 1'
+  workflow_dispatch:
+
+# A newer push to a pull request makes the older run pointless. Runs on main always finish (caches, the website).
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+env:
+  # CI never debugs these binaries: no incremental data and no debug symbols means less to compile, link and cache.
+  CARGO_INCREMENTAL: 0
+  CARGO_PROFILE_DEV_DEBUG: 0
+  NDK_VERSION: 27.2.12479018
 
 jobs:
-  ui:
+  # The quick checks, no Rust: the UI, the website, the list of network call sites, the Android hardening script.
+  checks:
+    if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: ui
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Set up Node
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
           cache-dependency-path: package-lock.json
 
-      - name: Install
-        working-directory: .
-        run: npm ci
+      - run: npm ci
 
-      - name: Lint
-        run: npm run lint
+      - name: UI lint
+        run: npm run lint --workspace ui
 
-      - name: Build
-        run: npm run build
+      - name: UI build
+        run: npm run build --workspace ui
 
-      - name: Test
-        run: npm test
+      - name: UI tests
+        run: npm test --workspace ui
 
-  # The documentation site: its own tests, and a check that every page builds with no problem. The facts on the
-  # site are checked against the program by the command line's own tests (see desktop.yml).
-  docs:
+      # The facts on the site are checked against the program by the command line's own tests (desktop job).
+      - name: Website tests and pages
+        run: npm run check:docs
+
+      - name: Outbound network call sites
+        run: npm run check:outbound
+
+      - name: Android hardening script tests
+        run: python3 scripts/android-patch.test.py
+
+  # The Rust tests (app and command line) and a debug build. Pull requests build on Linux only (a few minutes); macOS and
+  # Windows are slower (OpenSSL is compiled from source, about 10 minutes on Windows), so they run when code reaches main.
+  desktop:
+    if: github.event_name != 'schedule'
+    name: desktop (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(github.event_name == 'pull_request' && '[{"os":"ubuntu-latest","bundle":"deb"}]' || '[{"os":"ubuntu-latest","bundle":"deb"},{"os":"macos-latest","bundle":"app"},{"os":"windows-latest","bundle":"nsis"}]') }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Linux libraries
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev libssl-dev build-essential pkg-config
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      # Only main writes the cache; branches and pull requests restore it, so each system keeps one warm cache.
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+          cache-on-failure: true
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+
+      - run: npm ci
+
+      - name: Rust tests
+        working-directory: src-tauri
+        run: cargo test --locked
+
+      # The command line's tests run the real binary against the app's own server code, so they build the app library too;
+      # sharing the target folder reuses what the step before compiled.
+      - name: Rust tests (command line)
+        working-directory: cli
+        env:
+          CARGO_TARGET_DIR: ${{ github.workspace }}/src-tauri/target
+        run: cargo test --locked
+
+      - name: Build the app
+        run: npm run tauri build -- --debug --bundles ${{ matrix.bundle }}
+
+  # The phone app for Android: a debug-signed APK to sideload (artifact meowny-android-debug).
+  android:
+    if: github.event_name != 'schedule'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      # The Android Gradle plugin needs Java 17 or newer.
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      # Gradle's downloads (the Android Gradle plugin, Kotlin) are cached between runs, so a build rarely needs Maven Central,
+      # which sometimes refuses GitHub's runners (403).
+      - uses: gradle/actions/setup-gradle@v4
+
+      # The action's default list names a package, `tools`, that Google no longer has.
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+
+      # SQLCipher is built with its own OpenSSL, which needs the NDK compilers on the PATH (see OpenSSL's NOTES-ANDROID).
+      - name: Install the NDK
+        run: |
+          sdkmanager "ndk;${NDK_VERSION}" "platforms;android-37.0"
+          echo "NDK_HOME=${ANDROID_HOME}/ndk/${NDK_VERSION}" >> "$GITHUB_ENV"
+          echo "ANDROID_NDK_HOME=${ANDROID_HOME}/ndk/${NDK_VERSION}" >> "$GITHUB_ENV"
+          echo "ANDROID_NDK_ROOT=${ANDROID_HOME}/ndk/${NDK_VERSION}" >> "$GITHUB_ENV"
+          echo "${ANDROID_HOME}/ndk/${NDK_VERSION}/toolchains/llvm/prebuilt/linux-x86_64/bin" >> "$GITHUB_PATH"
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+          cache-on-failure: true
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+
+      - run: npm ci
+
+      # The Android project is generated, not kept in git. Its icon is the logo's coin on a clear background
+      # (scripts/logo.py); the script turns off Android's backup of the app's folder and makes the window secure.
+      - name: Make the Android project
+        run: |
+          npx tauri android init --ci
+          npx tauri icon src-tauri/icons/logo-android.png --ios-color transparent
+          python3 scripts/android-patch.py src-tauri/gen/android
+
+      # A refused download (Maven Central's 403 to GitHub's runners) is usually gone a minute later: up to three tries.
+      - name: Build the APK
+        run: |
+          for attempt in 1 2 3; do
+            npx tauri android build --apk --target aarch64 --debug && exit 0
+            [ "$attempt" = 3 ] && break
+            echo "::warning::Building the APK failed (try $attempt of 3); trying again in $((attempt * 60)) seconds"
+            sleep $((attempt * 60))
+          done
+          exit 1
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: meowny-android-debug
+          path: src-tauri/gen/android/app/build/outputs/apk/**/*.apk
+          if-no-files-found: error
+
+  # The phone app for iPhone: an unsigned IPA for AltStore or SideStore, which sign it on the phone (artifact
+  # meowny-ios-unsigned). Xcode 26: release builds fail to link on Xcode 27 until Tauri ships its fix (tauri PR #16246).
+  ios:
+    if: github.event_name != 'schedule'
+    runs-on: macos-26
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-ios
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+          cache-on-failure: true
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+
+      - run: npm ci
+
+      # The Xcode project is generated, not kept in git. `ios build` merges src-tauri/Info.ios.plist (the camera and home
+      # network texts) into it. The icon is the logo's coin on white: iOS has no clear icons (scripts/logo.py).
+      - name: Make the iOS project
+        run: |
+          npx tauri ios init --ci --skip-targets-install
+          npx tauri icon src-tauri/icons/logo-ios.png --ios-color '#ffffff'
+
+      - name: Build the IPA
+        run: npx tauri ios build --ci --target aarch64 --no-sign
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: meowny-ios-unsigned
+          path: src-tauri/gen/apple/build/arm64/*.ipa
+          if-no-files-found: error
+
+  # Known advisories in the dependencies, and secrets in the history. Also weekly, on its own.
+  security:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          # Full history, so the secret scan sees every commit.
+          fetch-depth: 0
 
-      - name: Set up Node
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - run: npm ci
+
+      # Fails on high or critical advisories in anything that ships.
+      - name: npm audit (what ships)
+        run: npm audit --omit=dev --audit-level=high
+
+      # Build tooling is reported but does not block: its fixes can need breaking upgrades.
+      - name: npm audit (all, report only)
+        continue-on-error: true
+        run: npm audit --audit-level=high
+
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-audit
+
+      - name: cargo audit (app)
+        working-directory: src-tauri
+        run: cargo audit
+
+      - name: cargo audit (command line)
+        working-directory: cli
+        run: cargo audit
+
+      - name: Secret scan
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # The website (docs/site/) on GitHub Pages, https://v1nc3t.github.io/meowNY/, from main once the checks pass.
+  # One-time setup: Settings, Pages, Source "GitHub Actions".
+  pages:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: checks
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    # One deployment at a time; a newer one waits rather than cancelling one that is half done.
+    concurrency:
+      group: pages
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
         with:
           node-version: 22
 
-      - name: Test the generator
-        run: node --test docs/site/build.test.mjs
+      - name: Build the site
+        run: node docs/site/build.mjs
 
-      - name: Check the pages
-        run: node docs/site/build.mjs --check
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: docs/site/_site
+
+      - name: Deploy
+        id: deployment
+        uses: actions/deploy-pages@v4

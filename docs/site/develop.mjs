@@ -54,7 +54,7 @@ const SECTIONS = [
         items: [
           'After a route changes: `cd cli && cargo run --example dump_schema > schema.json`.',
           'After a command changes: `cd cli && UPDATE_DOCS=1 cargo test --offline --test docs`, then `npm run docs`. The command line page is made from real output, and a test fails until it is recorded again.',
-          'CI runs the same on every pull request (`ci.yml`, `desktop.yml`, `android.yml`, `ios.yml`, `security.yml`).',
+          'CI (`.github/workflows/ci.yml`) runs all of this on every pull request, builds the desktop, Android and iPhone apps, audits the dependencies, and on `main` publishes this website. Releases are `release.yml`.',
         ],
       },
     ],

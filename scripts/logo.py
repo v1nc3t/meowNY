@@ -6,8 +6,8 @@
     npx tauri icon src-tauri/icons/logo.png -o /tmp/meowny-icons && cp /tmp/meowny-icons/*.* src-tauri/icons/
         then makes the desktop icons from the first picture (through another folder: given src-tauri/icons itself,
         `tauri icon` also writes this picture into a local phone project in src-tauri/gen/)
-The phone icons are made in CI, after the Android and iOS projects are generated (.github/workflows/android.yml and
-ios.yml): Android gets the coin alone on a clear background, iOS on white, as iOS always draws a solid square.
+The phone icons are made in CI, after the Android and iOS projects are generated (.github/workflows/ci.yml and
+release.yml): Android gets the coin alone on a clear background, iOS on white, as iOS always draws a solid square.
 
 The grid below is the logo; change a letter to change a pixel. No dependencies."""
 
