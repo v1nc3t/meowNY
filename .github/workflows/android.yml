@@ -56,6 +56,11 @@ jobs:
           # The version the project builds with by hand (the Android Gradle plugin the template uses needs 17 or newer).
           java-version: 21
 
+      # Gradle's downloads (the Android Gradle plugin, Kotlin) are cached between runs, so a build rarely needs Maven Central,
+      # which sometimes refuses GitHub's runners (403).
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
       - name: Set up the Android SDK
         uses: android-actions/setup-android@v3
         with:
@@ -98,8 +103,16 @@ jobs:
           npx tauri icon src-tauri/icons/logo-android.png --ios-color transparent
           python3 scripts/android-patch.py src-tauri/gen/android
 
+      # A refused download (Maven Central's 403 to GitHub's runners) is usually gone a minute later: up to three tries.
       - name: Build the APK
-        run: npx tauri android build --apk --target aarch64 --debug
+        run: |
+          for attempt in 1 2 3; do
+            npx tauri android build --apk --target aarch64 --debug && exit 0
+            [ "$attempt" = 3 ] && break
+            echo "::warning::Building the APK failed (try $attempt of 3); trying again in $((attempt * 60)) seconds"
+            sleep $((attempt * 60))
+          done
+          exit 1
 
       - name: Keep the APK
         uses: actions/upload-artifact@v4

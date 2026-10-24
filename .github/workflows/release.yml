@@ -229,6 +229,11 @@ jobs:
           distribution: temurin
           java-version: 21
 
+      # Gradle's downloads (the Android Gradle plugin, Kotlin) are cached between runs, so a build rarely needs Maven Central,
+      # which sometimes refuses GitHub's runners (403).
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
       - uses: android-actions/setup-android@v3
         with:
           packages: platform-tools
@@ -255,8 +260,16 @@ jobs:
           npx tauri icon src-tauri/icons/logo-android.png --ios-color transparent
           python3 scripts/android-patch.py src-tauri/gen/android
 
+      # A refused download (Maven Central's 403 to GitHub's runners) is usually gone a minute later: up to three tries.
       - name: Build the APK
-        run: npx tauri android build --apk --target aarch64
+        run: |
+          for attempt in 1 2 3; do
+            npx tauri android build --apk --target aarch64 && exit 0
+            [ "$attempt" = 3 ] && break
+            echo "::warning::Building the APK failed (try $attempt of 3); trying again in $((attempt * 60)) seconds"
+            sleep $((attempt * 60))
+          done
+          exit 1
 
       # Gradle leaves the release APK unsigned; apksigner signs it with the key that every later version must share.
       - name: Sign the APK
