@@ -20,8 +20,7 @@
   <a href="https://github.com/v1nc3t/meowNY/releases/latest">Download</a> ·
   <a href="https://v1nc3t.github.io/meowNY/guide.html">Guide</a> ·
   <a href="https://v1nc3t.github.io/meowNY/cli.html">Command line</a> ·
-  <a href="https://v1nc3t.github.io/meowNY/develop.html">Develop</a> ·
-  <a href="docs/PLAN.md">Roadmap</a>
+  <a href="https://v1nc3t.github.io/meowNY/develop.html">Develop</a>
 </p>
 
 ## About
@@ -53,7 +52,6 @@ To report a security problem, do not open a public issue: contact [@v1nc3t](http
 | Where | What |
 |---|---|
 | [Website](https://v1nc3t.github.io/meowNY/) | The guide, the command line reference (also as [Markdown](https://v1nc3t.github.io/meowNY/CLI.md)) and the develop page |
-| [docs/PLAN.md](docs/PLAN.md) | The plan, phase by phase |
 | [docs/sync-design.md](docs/sync-design.md), [docs/documents-design.md](docs/documents-design.md), [docs/debts-design.md](docs/debts-design.md) | How sync, documents and debts are built |
 
 ## License

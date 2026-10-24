@@ -65,7 +65,7 @@ const SECTIONS = [
     blocks: [
       {
         t: 'code',
-        text: 'ui/          React UI (Vite, TypeScript, Zod); every screen calls Rust through src/api/invoke.ts\nsrc-tauri/   the app and Rust core: database, vault, sync, documents, debts, the command API\n  migrations/  numbered SQL files, never edited once shipped\ncli/         the meowny command line (Rust, one dependency)\ndocs/        PLAN.md, the design notes, and site/, which builds this website\nscripts/     checks and helpers: outbound check, android-patch, logo, release',
+        text: 'ui/          React UI (Vite, TypeScript, Zod); every screen calls Rust through src/api/invoke.ts\nsrc-tauri/   the app and Rust core: database, vault, sync, documents, debts, the command API\n  migrations/  numbered SQL files, never edited once shipped\ncli/         the meowny command line (Rust, one dependency)\ndocs/        the design notes, and site/, which builds this website\nscripts/     checks and helpers: outbound check, android-patch, logo, release',
       },
       {
         t: 'ul',
@@ -73,7 +73,7 @@ const SECTIONS = [
           'Rust owns the database, the keys and every rule. The command line is a client of the running app over its local API, and its route table is one table in Rust.',
           'Money is integer minor units (`*_minor`). A schema change is the next numbered migration, appended to `MIGRATIONS` in `src-tauri/src/migrate.rs`.',
           'Files: Rust `snake_case` (`x.rs` plus `x/`, tests in `x_tests.rs`), React `PascalCase.tsx`, other TypeScript `camelCase.ts` with `name.test.ts` beside it.',
-          `Design notes: ${file('docs/sync-design.md')}, ${file('docs/documents-design.md')}, ${file('docs/debts-design.md')}. Plan: ${file('docs/PLAN.md')}.`,
+          `Design notes: ${file('docs/sync-design.md')}, ${file('docs/documents-design.md')}, ${file('docs/debts-design.md')}.`,
         ],
       },
     ],
@@ -111,7 +111,7 @@ const SECTIONS = [
           'Keep dependencies few, and say why when you add one.',
           'Keep it local-first: a new network call is on purpose, off until the user turns it on, and listed in `scripts/outbound-allowlist.txt`.',
           'A new desktop feature ships its command line commands in the same change.',
-          'Update `docs/PLAN.md`, and the privacy part of the guide (`docs/site/guide.mjs`) when what is stored or sent changes.',
+          'Update the design note the change touches, and the privacy part of the guide (`docs/site/guide.mjs`) when what is stored or sent changes.',
         ],
       },
       { t: 'p', text: 'A security problem: do not post details in a public issue. Contact [@v1nc3t](https://github.com/v1nc3t) privately.' },
