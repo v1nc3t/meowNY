@@ -1,7 +1,11 @@
 name: Release
 
-# Builds every installer for a version and publishes them on a GitHub release. It starts when a tag like v0.2.0 is pushed,
-# which `npm run release 0.2.0` makes (the website's develop page, Releasing):
+# Builds every installer for a version and publishes them on a GitHub release.
+#
+# The easy way: Actions, Release, Run workflow, and pick patch, minor or major (or `gh workflow run release.yml -f bump=patch`).
+# The first job then sets the new version, records the command line docs, commits and tags it on main. A tag pushed by
+# hand (`npm run release patch`, then `git push origin HEAD v<version>`) starts the same build.
+#
 #   Linux    meowNY_<v>_amd64.deb (installs meowny-desktop and the meowny command line) and meowNY_<v>_amd64.AppImage
 #   Windows  meowNY_<v>_x64-setup.exe
 #   Android  meowNY_<v>_android.apk, signed with the release key from the repository secrets
@@ -9,12 +13,19 @@ name: Release
 #   and      the meowny command line for Linux and Windows, SHA256SUMS, and a build attestation for every file
 # The desktop installers are not signed yet, so Windows shows a SmartScreen warning the first time.
 on:
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: 'How the version counts on (0.2.0: patch 0.2.1, minor 0.3.0, major 1.0.0)'
+        type: choice
+        options: [patch, minor, major]
+        default: patch
   push:
     tags:
       - 'v*.*.*'
 
 concurrency:
-  group: release-${{ github.ref }}
+  group: release
 
 permissions:
   contents: read
@@ -24,25 +35,73 @@ env:
   NDK_VERSION: 27.2.12479018
 
 jobs:
+  # Only for the button: the version commit and its tag, pushed to main. A tag pushed with this job's token starts no other
+  # workflow, so the build below carries on in this same run.
+  bump:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+    permissions:
+      contents: write
+    outputs:
+      tag: v${{ steps.release.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+
+      # The docs are recorded by running the command line against the app's own code, which needs the app's libraries.
+      - name: Install Linux libraries
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev libssl-dev build-essential pkg-config
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Set the version, record the docs, commit and tag
+        id: release
+        env:
+          BUMP: ${{ inputs.bump }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          node scripts/release.mjs "$BUMP"
+
+      - name: Push to main
+        run: git push --atomic origin HEAD:main "v${{ steps.release.outputs.version }}"
+
   version:
+    needs: bump
+    # Runs after the button's job, or on its own for a tag pushed by hand (the bump job is then skipped).
+    if: ${{ !failure() && !cancelled() }}
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.v.outputs.version }}
+      ref: ${{ steps.v.outputs.ref }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.bump.outputs.tag || github.ref }}
       # The tag and the app must agree, or the files would carry one version and the release another.
       - id: v
+        env:
+          TAG: ${{ needs.bump.outputs.tag || github.ref_name }}
         run: |
           app=$(node -p "require('./src-tauri/tauri.conf.json').version")
-          tag="${GITHUB_REF_NAME#v}"
-          if [ "$app" != "$tag" ]; then
-            echo "::error::The tag says $tag but src-tauri/tauri.conf.json says $app. Make releases with: npm run release $tag"
+          if [ "$app" != "${TAG#v}" ]; then
+            echo "::error::The tag says ${TAG#v} but src-tauri/tauri.conf.json says $app. Make releases with the Release button, or npm run release"
             exit 1
           fi
           echo "version=$app" >> "$GITHUB_OUTPUT"
+          echo "ref=refs/tags/$TAG" >> "$GITHUB_OUTPUT"
 
   linux:
     needs: version
+    if: ${{ !failure() && !cancelled() }}
     # The oldest supported Ubuntu, so the AppImage also runs on systems with an older glibc.
     runs-on: ubuntu-22.04
     timeout-minutes: 60
@@ -52,6 +111,8 @@ jobs:
       APPIMAGE_EXTRACT_AND_RUN: 1
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.version.outputs.ref }}
 
       - name: Install Linux libraries
         run: |
@@ -93,12 +154,15 @@ jobs:
 
   windows:
     needs: version
+    if: ${{ !failure() && !cancelled() }}
     runs-on: windows-latest
     timeout-minutes: 90
     env:
       V: ${{ needs.version.outputs.version }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.version.outputs.ref }}
 
       - uses: actions/setup-node@v4
         with:
@@ -132,12 +196,15 @@ jobs:
 
   android:
     needs: version
+    if: ${{ !failure() && !cancelled() }}
     runs-on: ubuntu-latest
     timeout-minutes: 60
     env:
       V: ${{ needs.version.outputs.version }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.version.outputs.ref }}
 
       # Without the release key a phone could not update from one version to the next, so the job stops here, not later.
       - name: Check the signing secrets
@@ -217,6 +284,7 @@ jobs:
 
   ios:
     needs: version
+    if: ${{ !failure() && !cancelled() }}
     # Xcode 26, as in the iOS workflow (release builds fail to link on Xcode 27 until tauri PR #16246 ships).
     runs-on: macos-26
     timeout-minutes: 60
@@ -224,6 +292,8 @@ jobs:
       V: ${{ needs.version.outputs.version }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.version.outputs.ref }}
 
       - uses: actions/setup-node@v4
         with:
@@ -259,6 +329,7 @@ jobs:
 
   publish:
     needs: [version, linux, windows, android, ios]
+    if: ${{ !failure() && !cancelled() }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -269,6 +340,8 @@ jobs:
       GH_TOKEN: ${{ github.token }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.version.outputs.ref }}
 
       - uses: actions/download-artifact@v4
         with:
