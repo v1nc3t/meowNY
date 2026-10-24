@@ -134,5 +134,49 @@ class ActivityTests(unittest.TestCase):
             self.run_on("package org.meowny.app\n\nclass Something\n")
 
 
+RULES = """# Add project specific ProGuard rules here.
+#-keepattributes SourceFile,LineNumberTable
+#-renamesourcefileattribute SourceFile"""
+
+BUILD = """android {
+    buildTypes {
+        getByName("release") {
+            proguardFiles(
+                *fileTree(".") {
+                  include("**/*.pro")
+                  exclude("build/**")
+                }.files.toTypedArray()
+            )
+        }
+    }
+}
+"""
+
+
+class ProguardTests(unittest.TestCase):
+    def run_on(self, rules, build=BUILD):
+        with tempfile.TemporaryDirectory() as folder:
+            rules_path = Path(folder) / "proguard-rules.pro"
+            build_path = Path(folder) / "build.gradle.kts"
+            rules_path.write_text(rules, encoding="utf-8")
+            build_path.write_text(build, encoding="utf-8")
+            first = patch.patch_proguard(rules_path, build_path)
+            once = rules_path.read_text(encoding="utf-8")
+            second = patch.patch_proguard(rules_path, build_path)
+            return first, second, once, rules_path.read_text(encoding="utf-8")
+
+    def test_the_registrar_constructors_are_kept_once_and_the_rest_is_kept(self):
+        first, second, once, twice = self.run_on(RULES)
+        self.assertTrue(first)
+        self.assertFalse(second)
+        self.assertEqual(once, twice)
+        self.assertTrue(once.startswith(RULES), "nothing else in the file changed")
+        self.assertIn("-keep class * implements com.google.firebase.components.ComponentRegistrar {\n    <init>();\n}", once)
+
+    def test_a_build_that_does_not_read_the_rules_stops(self):
+        with self.assertRaises(SystemExit):
+            self.run_on(RULES, build=BUILD.replace('include("**/*.pro")', 'include("proguard-tauri.pro")'))
+
+
 if __name__ == "__main__":
     unittest.main()

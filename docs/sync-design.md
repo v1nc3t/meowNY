@@ -131,8 +131,9 @@ Nothing from a sync is logged.
 - Passphrase vault (Argon2), no OS keychain; 5 wrong passphrases erase the data, keys and PS (warnings from the 3rd);
   pair again to get a full copy back. No recovery key, no remote wipe.
 - A backup restore on either device gives a new device id and removes the pairings.
-- Android (`scripts/android-patch.py`): `allowBackup="false"` and `FLAG_SECURE`. iOS: data folder kept out of iCloud
-  backups at every start; screenshots cannot be blocked; documents are previewed only.
+- Android (`scripts/android-patch.py`): `allowBackup="false"`, `FLAG_SECURE`, and an R8 rule that keeps ML Kit's
+  registrars (without it the release app crashes when the camera opens). iOS: data folder kept out of iCloud backups at every
+  start; screenshots cannot be blocked; documents are previewed only.
 - Desktop screens live in settings, phone: paired phones, add, sync, the QR with countdown, the six digits, the summary.
 
 ## 14. Threats and what stops them
