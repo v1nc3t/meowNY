@@ -238,7 +238,7 @@ jobs:
         with:
           packages: platform-tools
 
-      # The same NDK as the Android workflow, and the build tools for apksigner.
+      # The same NDK as the android job of ci.yml, and the build tools for apksigner.
       - name: Install the NDK
         run: |
           sdkmanager "ndk;${NDK_VERSION}" "platforms;android-37.0" "build-tools;35.0.0"
@@ -253,7 +253,7 @@ jobs:
 
       - run: npm ci
 
-      # As in the Android workflow: the icon, then no Android backup of the app's folder and a window that cannot be captured.
+      # As in ci.yml: the icon, then no Android backup of the app's folder and a window that cannot be captured.
       - name: Make the Android project
         run: |
           npx tauri android init --ci
@@ -298,7 +298,7 @@ jobs:
   ios:
     needs: version
     if: ${{ !failure() && !cancelled() }}
-    # Xcode 26, as in the iOS workflow (release builds fail to link on Xcode 27 until tauri PR #16246 ships).
+    # Xcode 26, as in ci.yml (release builds fail to link on Xcode 27 until tauri PR #16246 ships).
     runs-on: macos-26
     timeout-minutes: 60
     env:

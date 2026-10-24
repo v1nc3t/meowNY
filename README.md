@@ -9,10 +9,7 @@
 
 <p align="center">
   <a href="https://github.com/v1nc3t/meowNY/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/v1nc3t/meowNY/actions/workflows/ci.yml/badge.svg"></a>
-  <a href="https://github.com/v1nc3t/meowNY/actions/workflows/desktop.yml"><img alt="Desktop build" src="https://github.com/v1nc3t/meowNY/actions/workflows/desktop.yml/badge.svg"></a>
-  <a href="https://github.com/v1nc3t/meowNY/actions/workflows/android.yml"><img alt="Android build" src="https://github.com/v1nc3t/meowNY/actions/workflows/android.yml/badge.svg"></a>
-  <a href="https://github.com/v1nc3t/meowNY/actions/workflows/ios.yml"><img alt="iOS build" src="https://github.com/v1nc3t/meowNY/actions/workflows/ios.yml/badge.svg"></a>
-  <a href="https://github.com/v1nc3t/meowNY/actions/workflows/security.yml"><img alt="Security" src="https://github.com/v1nc3t/meowNY/actions/workflows/security.yml/badge.svg"></a>
+  <a href="https://github.com/v1nc3t/meowNY/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/v1nc3t/meowNY"></a>
   <a href="LICENSE"><img alt="License: AGPL-3.0" src="https://img.shields.io/badge/license-AGPL--3.0-blue"></a>
 </p>
 
