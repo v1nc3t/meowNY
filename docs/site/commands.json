@@ -2,7 +2,7 @@
   "cli": {
     "api": 1,
     "name": "meowny",
-    "version": "0.1.0"
+    "version": "0.2.0"
   },
   "commands": [
     {
