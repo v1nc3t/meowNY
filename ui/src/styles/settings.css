@@ -507,18 +507,19 @@
   margin-top: 0;
 }
 
-/* The foot of the settings: a row of links (it wraps on a narrow screen), then the copyright and licence. */
+/* The foot of the settings. Wide: one row across the page, the links on the left and the copyright on the right.
+   Narrow or phone: the links stack, one full-width row each, with the copyright under them. */
 .settings-footer {
   display: flex;
-  flex-direction: column;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 0.5rem;
+  justify-content: space-between;
+  gap: 0.5rem 1.5rem;
   margin-top: 1rem;
   padding-top: 0.75rem;
   border-top: 1px solid var(--border);
   font-size: 0.75rem;
   color: var(--muted-foreground);
-  text-align: center;
 }
 
 .settings-footer p {
@@ -529,13 +530,13 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  justify-content: center;
-  gap: 0.25rem 1.25rem;
+  gap: 0.25rem 1.5rem;
 }
 
 .settings-links a:not(.ui-btn) {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   min-height: 2rem;
   color: var(--muted-foreground);
   font-size: 0.8125rem;
@@ -546,6 +547,30 @@
   .settings-links a:not(.ui-btn):hover {
     color: var(--foreground);
   }
+}
+
+@media (max-width: 48em) {
+  .settings-footer {
+    flex-direction: column;
+    align-items: stretch;
+    text-align: center;
+  }
+
+  .settings-links {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.settings-page.on-phone .settings-footer {
+  flex-direction: column;
+  align-items: stretch;
+  text-align: center;
+}
+
+.settings-page.on-phone .settings-links {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
 }
 
 /* A tap target stays 44px or more on the phone. */
