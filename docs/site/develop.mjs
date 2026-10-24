@@ -93,7 +93,7 @@ const SECTIONS = [
     blocks: [
       { t: 'p', text: `With CI green on \`main\`: GitHub, **Actions › Release › Run workflow**, pick **patch** (0.2.0 to 0.2.1), **minor** or **major**, and run. Or from a terminal:` },
       { t: 'code', text: 'gh workflow run release.yml -f bump=patch' },
-      { t: 'p', text: 'CI sets the version everywhere, records the command line docs, commits and tags on `main`, then builds and publishes (about 30 minutes). `git pull` afterwards to get the version commit. By hand on Linux: `npm run release patch`, then `git push origin HEAD v<version>`.' },
+      { t: 'p', text: 'CI sets the version everywhere, records the command line docs, commits and tags on `main`, then builds and publishes (about 30 minutes). `git pull` afterwards to get the version commit. By hand, on Linux and on an up-to-date `main`: `npm run release patch`, then `git push origin main v<version>`. Releases come from `main` only: the script refuses another branch, and the workflow refuses a tag whose commit is not on `main`.' },
       { t: 'p', text: `${file('.github/workflows/release.yml')} builds the Linux \`.deb\` and AppImage, the Windows installer, a signed APK, the unsigned IPA, the command line for Linux and Windows, \`SHA256SUMS\`, a build attestation per file and \`altstore.json\`. If a build fails, fix it and release the next patch version.` },
       { t: 'h3', id: 'android-key', text: 'Once: the Android release key' },
       { t: 'p', text: 'Every Android version must be signed with the same key, or phones refuse the update. Make it outside the repository and keep it, with its password, in a password manager:' },
