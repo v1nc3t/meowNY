@@ -18,6 +18,7 @@ import { useProfile } from '../hooks/profile'
 import { useSwipeHandler } from '../hooks/swipe'
 import { applyOrder } from '../lib/reorder'
 import { step } from '../lib/swipe'
+import { useSticky } from '../lib/sticky'
 import { useReorder } from '../hooks/useReorder'
 import { useToast } from '../hooks/toast'
 import { useI18n, useT } from '../i18n/context'
@@ -40,7 +41,7 @@ export default function CategoriesPage() {
 function CategoriesView({ settings, thisMonth }: { settings: MoneySettings; thisMonth: string }) {
   const { t, language } = useI18n()
   const phone = useProfile() === 'phone'
-  const [month, setMonth] = useState(thisMonth)
+  const [month, setMonth] = useSticky('categories.month', () => thisMonth)
   const [overview, setOverview] = useState<Overview[] | null>(null)
   const [history, setHistory] = useState<MonthHistory[] | null>(null)
   const pageRef = useRef<HTMLElement>(null)

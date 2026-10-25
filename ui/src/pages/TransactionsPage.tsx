@@ -20,6 +20,7 @@ import { transactions as transactionsApi, type Transaction, type TransactionPage
 import { categoryOptions } from '../lib/categoriesView'
 import { amountString, formatDate, formatMoney } from '../lib/money'
 import { apiBound, shiftBound, type RangeMode } from '../lib/range'
+import { recall, useRemember } from '../lib/sticky'
 import { draftOfBill, equalDraft, NOT_SPLIT, toInput, type SplitState } from '../lib/split'
 import { useAttachments, type Attachments } from '../hooks/useAttachments'
 import { useClipCounts } from '../hooks/useClipCounts'
@@ -58,8 +59,10 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
   const [categoriesReady, setCategoriesReady] = useState(false)
   const [filters, setFilters] = useState<Filters>(() => {
     const month = now.month
-    return { mode: 'month', from: month, to: month, categoryId: '', q: '' }
+    return { mode: 'month', from: month, to: month, categoryId: '', q: '', ...recall<Partial<Filters>>('transactions.range', () => ({})) }
   })
+  const range = useMemo(() => ({ mode: filters.mode, from: filters.from, to: filters.to }), [filters.mode, filters.from, filters.to])
+  useRemember('transactions.range', range)
   const [limit, setLimit] = useState(50)
   const [offset, setOffset] = useState(0)
   const [reload, setReload] = useState(0)

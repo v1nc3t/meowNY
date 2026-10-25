@@ -12,6 +12,7 @@ import { recurring, type Dues, type Recurring } from '../api/recurring'
 import { stats, type BudgetVsActual, type Commitments, type PlannedVsPaid, type TopCategory, type YearPoint } from '../api/stats'
 import { useToday, type Today } from '../api/today'
 import { formatMoney, formatPercent, toMinor } from '../lib/money'
+import { useSticky } from '../lib/sticky'
 import { useMoneySettings, type MoneySettings } from '../hooks/useMoneySettings'
 import { useToast } from '../hooks/toast'
 import { useI18n, useT } from '../i18n/context'
@@ -38,7 +39,7 @@ export default function DashboardPage() {
 
 function DashboardView({ settings, now }: { settings: MoneySettings; now: Today }) {
   const t = useT()
-  const [month, setMonth] = useState(now.month)
+  const [month, setMonth] = useSticky('dashboard.month', () => now.month)
   const [data, setData] = useState<MonthData | null>(null)
   // who owes what, over all time: it does not follow the month
   const [owed, setOwed] = useState<Summary | null>(null)
