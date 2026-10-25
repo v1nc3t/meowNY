@@ -20,6 +20,8 @@ export const Overview = z.object({
   budgeted: Amount.nullable(),
   allocated: Amount,
   unallocated: Amount.nullable(),
+  /** Spent this month in the categories of this type. */
+  used: Amount,
   actual: Amount,
   remaining: Amount.nullable(),
   overAllocated: z.boolean(),
@@ -46,10 +48,13 @@ export type SetBudget = {
   categoryId?: string
 }
 
+/** How far a budget change reaches: this month only, this month and every later one, or every month. */
+export type Span = 'ONLY' | 'FORWARD' | 'ALL'
+
 export const MONTH = /^\d{4}-(?:0[1-9]|1[0-2])$/
 
 export const budgets = {
-  set: (input: SetBudget) => call('set_budget', Budget, { input }),
+  set: (input: SetBudget, span?: Span) => call('set_budget', Budget, span ? { input, span } : { input }),
   /** One row per month since the first budget, newest first. */
   history: () => call('budget_history', z.array(MonthHistory)),
   overview: (month: string) => call('budget_overview', z.array(Overview), { month }),

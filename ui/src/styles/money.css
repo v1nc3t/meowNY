@@ -47,13 +47,67 @@
   gap: 0.25rem;
 }
 
-/* What a shared bill opens to on the list: what was paid and who has which part, a code for each friend. */
-.split-part {
+/* What a shared bill opens to on the list: the title with what was paid, then a small table of who has which part, a code for
+   each friend. */
+.split-head {
   display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.25rem 0.75rem;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+  max-width: 28rem;
+}
+
+.split-paid {
+  color: var(--muted-foreground);
   font-variant-numeric: tabular-nums;
+}
+
+.split-table {
+  width: 100%;
+  max-width: 28rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  border-spacing: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.split-table th,
+.split-table td {
+  height: 2.5rem;
+  padding: 0.25rem 0.75rem;
+  font-weight: 400;
+  text-align: left;
+  vertical-align: middle;
+}
+
+.split-table tr + tr > * {
+  border-top: 1px solid var(--border);
+}
+
+.split-table th {
+  overflow-wrap: anywhere;
+}
+
+.split-table td:nth-child(2) {
+  text-align: right;
+  white-space: nowrap;
+}
+
+/* The code button: as narrow as it needs, at the right edge. */
+.split-table td:last-child {
+  width: 1%;
+  padding: 0 0.25rem 0 0;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.split-table .is-you > * {
+  font-weight: 600;
+}
+
+html.is-phone .split-table th,
+html.is-phone .split-table td {
+  height: 2.75rem;
 }
 
 /* The categories page: the budgets of expenses and income side by side (a card each), then the history. */
@@ -146,6 +200,28 @@
   border-top: 0;
 }
 
+/* Rows of a category list can be held and dragged: no text selection or touch menu when they are held. */
+.budget-row[data-reorder-id] {
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+
+/* While one is dragged, the others slide aside; the one in hand is lifted and follows the pointer. */
+.is-reordering > .budget-row:not(.is-lifted) {
+  transition: transform 0.12s;
+}
+
+.budget-row.is-lifted {
+  position: relative;
+  z-index: 2;
+  padding-inline: 0.5rem;
+  background: var(--muted);
+  box-shadow: var(--shadow-md);
+  cursor: grabbing;
+  touch-action: none;
+}
+
 .budget-label {
   font-size: 0.8125rem;
   color: var(--foreground);
@@ -174,6 +250,13 @@
 
 .budget-row input {
   width: min(9rem, 100%);
+  text-align: right;
+}
+
+.budget-note {
+  align-self: center;
+  font-size: 0.75rem;
+  color: var(--muted-foreground);
   text-align: right;
 }
 

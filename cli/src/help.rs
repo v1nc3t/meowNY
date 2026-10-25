@@ -16,7 +16,7 @@ pub const GLOBAL_FLAGS: &[(&str, &str)] = &[
 ];
 
 pub const ENVIRONMENT: &[(&str, &str)] = &[
-    ("MEOWNY_TOKEN", "The access token, made in the app (Settings, command line access)."),
+    ("MEOWNY_TOKEN", "The access token, made in the app (Settings, CLI access)."),
     ("MEOWNY_TOKEN_FILE", "A file holding the token. Same as --token-file."),
     ("MEOWNY_DATA_DIR", "The app's data folder. Same as --data-dir."),
     ("MEOWNY_PORT", "The port to connect to. Same as --port."),
@@ -127,7 +127,7 @@ fn top_help(catalog: &Catalog) -> String {
     format!(
         "meowny: the command line for the meowNY desktop app\n\n\
          usage: meowny <command> [flags]\n       meowny <command> --help\n\n\
-         The app has to be running and unlocked, with \"command line access\" turned on in Settings.\n\
+         The app has to be running and unlocked, with \"CLI access\" turned on in Settings.\n\
          Make a token there and give it to this program (see environment below, or: meowny login).\n\n\
          commands:\n{}\nglobal flags:\n{}\nenvironment:\n{}\nexit codes:\n{}",
         two_columns(&rows),

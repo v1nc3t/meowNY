@@ -85,7 +85,7 @@ pub fn port(env: Env, flag_port: Option<u16>, flag_dir: Option<&str>) -> Result<
     let off = || {
         CliError::new(
             "app_unavailable",
-            "the app is not running, or command line access is off (turn it on in Settings, command line access)",
+            "the app is not running, or CLI access is off (turn it on in Settings, CLI access)",
         )
     };
     let text = std::fs::read_to_string(&file).map_err(|_| off())?;
@@ -137,7 +137,7 @@ pub fn token(env: Env, flag_file: Option<&str>) -> Result<String, CliError> {
         if !path.exists() {
             return Err(CliError::new(
                 "no_token",
-                "no token: set MEOWNY_TOKEN, give --token-file, or save one with: meowny login  (make a token in the app, Settings, command line access)",
+                "no token: set MEOWNY_TOKEN, give --token-file, or save one with: meowny login  (make a token in the app, Settings, CLI access)",
             ));
         }
         read_token_file(&path)?
@@ -188,7 +188,7 @@ pub fn unwrap_answer(answer: &Value) -> Result<Value, CliError> {
 pub fn call(port: u16, token: &str, route: &str, body: &Value, timeout: Duration) -> Result<Value, CliError> {
     let payload = serde_json::to_vec(body).map_err(|_| CliError::new("internal", "cannot encode the request"))?;
     let addr = SocketAddr::from((Ipv4Addr::LOCALHOST, port));
-    let unavailable = || CliError::new("app_unavailable", format!("cannot connect to the app on port {port}; is it running with command line access on?"));
+    let unavailable = || CliError::new("app_unavailable", format!("cannot connect to the app on port {port}; is it running with CLI access on?"));
     let mut stream = TcpStream::connect_timeout(&addr, CONNECT_TIMEOUT).map_err(|_| unavailable())?;
     let _ = stream.set_read_timeout(Some(timeout));
     let _ = stream.set_write_timeout(Some(timeout));

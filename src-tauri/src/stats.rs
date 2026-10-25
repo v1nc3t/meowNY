@@ -50,7 +50,7 @@ pub(crate) fn pct_tenths(actual: i64, budget: i64) -> Option<f64> {
 }
 
 /// Every category for one month, income and expense. A category that was deleted is listed only
-/// if it still has transactions that month. Sorted by type, then name.
+/// if it still counts in that month (deleted from a later month) or has transactions in it. Sorted by type, then name.
 pub fn budget_vs_actual(conn: &Connection, month: &str) -> Result<BudgetVsActual, AppError> {
     let first = month_start(month)?;
     let start = first.to_string();
@@ -66,7 +66,7 @@ pub fn budget_vs_actual(conn: &Connection, month: &str) -> Result<BudgetVsActual
          FROM categories c
          LEFT JOIN transaction_costs t ON t.category_id = c.id AND t.payment_date >= ?1 AND t.payment_date < ?2
          GROUP BY c.id
-         HAVING c.deleted_at IS NULL OR COUNT(t.transaction_id) > 0
+         HAVING c.deleted_at IS NULL OR c.deleted_at >= ?2 OR COUNT(t.transaction_id) > 0
          ORDER BY c.type, c.name COLLATE NOCASE, c.id",
     )?;
     let rows = statement.query_map([&start, &end], |r| {
@@ -514,8 +514,8 @@ mod tests {
         assert_eq!(c.items.iter().find(|i| i.name == "Rent").unwrap().per_month.as_deref(), Some("900.00"));
 
         // Paid with whatever the bill was: there was no plan to compare it with.
-        recurring::pay(&conn, electricity.id, Some("78.40"), Some("2026-09-02"), "2026-09-02").unwrap();
-        recurring::pay(&conn, electricity.id, Some("81.10"), Some("2026-09-28"), "2026-09-28").unwrap();
+        recurring::pay(&conn, electricity.id, Some("78.40"), Some("2026-09-02"), "2026-09-02", None, None).unwrap();
+        recurring::pay(&conn, electricity.id, Some("81.10"), Some("2026-09-28"), "2026-09-28", None, None).unwrap();
         let row = planned_vs_paid(&conn, "2026-09").unwrap().into_iter().find(|r| r.name == "Electricity").unwrap();
         assert_eq!((row.planned, row.difference), (None, None));
         assert_eq!((row.paid.as_str(), row.paid_count), ("159.50", 2));

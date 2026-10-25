@@ -1,10 +1,12 @@
 import { useRef, useState, type FormEvent } from 'react'
-import { budgets as budgetsApi } from '../api/budgets'
+import { budgets as budgetsApi, type Span } from '../api/budgets'
 import { categories as categoriesApi, cleanCategoryName, type Category } from '../api/categories'
 import { errorText } from '../api/invoke'
+import { useToday } from '../api/today'
 import { useToast } from '../hooks/toast'
 import { useT } from '../i18n/context'
 import { amountString } from '../lib/money'
+import BudgetSpanModal from './BudgetSpanModal'
 import Modal, { modalFormId } from './Modal'
 
 /**
@@ -30,11 +32,14 @@ export default function EditCategoryModal({
 }) {
   const t = useT()
   const say = useToast()
+  const today = useToday()
   const [pending, setPending] = useState(false)
+  // The saving that waits for the answer to "how far should the budget reach", for a past month.
+  const [asking, setAsking] = useState<((span: Span) => void) | null>(null)
   // What is already saved, so a second try after an error does not do the first half again.
   const saved = useRef({ name: category.name })
 
-  async function onSubmit(event: FormEvent<HTMLFormElement>) {
+  function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (pending) return
     const form = new FormData(event.currentTarget)
@@ -43,6 +48,11 @@ export default function EditCategoryModal({
     const raw = String(form.get('amount') ?? '').trim()
     const limit = raw === '' ? null : amountString(raw, true)
     if (raw !== '' && limit === null) return say(t('budgets.amountError'), 'error')
+    if ((limit ?? '') !== amount && today && month < today.month) setAsking(() => (span: Span) => void save(name, limit, span))
+    else void save(name, limit)
+  }
+
+  async function save(name: string, limit: string | null, span?: Span) {
     setPending(true)
     try {
       if (name !== saved.current.name) {
@@ -50,7 +60,7 @@ export default function EditCategoryModal({
         saved.current.name = name
       }
       if ((limit ?? '') !== amount) {
-        await budgetsApi.set({ type: category.type, scope: 'CATEGORY', month, amountLimit: limit, categoryId: category.id })
+        await budgetsApi.set({ type: category.type, scope: 'CATEGORY', month, amountLimit: limit, categoryId: category.id }, span)
       }
     } catch (failure) {
       say(errorText(failure), 'error')
@@ -62,17 +72,28 @@ export default function EditCategoryModal({
   }
 
   return (
-    <Modal title={t('categories.editTitle')} pending={pending} onClose={onClose}>
-      <form id={modalFormId} onSubmit={(event) => void onSubmit(event)}>
-        <label>
-          {t('common.name')}
-          <input name="name" required maxLength={50} defaultValue={category.name} autoComplete="off" />
-        </label>
-        <label>
-          {t('categories.budgetFrom', { month: monthText })}
-          <input name="amount" inputMode="decimal" placeholder="0.00" defaultValue={amount} autoComplete="off" />
-        </label>
-      </form>
-    </Modal>
+    <>
+      <Modal title={t('categories.editTitle')} pending={pending} onClose={onClose}>
+        <form id={modalFormId} onSubmit={onSubmit}>
+          <label>
+            {t('common.name')}
+            <input name="name" required maxLength={50} defaultValue={category.name} autoComplete="off" />
+          </label>
+          <label>
+            {t('categories.budgetFrom', { month: monthText })}
+            <input name="amount" inputMode="decimal" placeholder="0.00" defaultValue={amount} autoComplete="off" />
+          </label>
+        </form>
+      </Modal>
+      {asking ? (
+        <BudgetSpanModal
+          onChoose={(span) => {
+            setAsking(null)
+            asking(span)
+          }}
+          onClose={() => setAsking(null)}
+        />
+      ) : null}
+    </>
   )
 }

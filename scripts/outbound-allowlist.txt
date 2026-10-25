@@ -31,3 +31,7 @@ listener src-tauri/src/sync/net.rs  # the window: one home-network address, one 
 std-net src-tauri/src/sync/net.rs  # the phone's connection to that address, finding this device's home-network address (a UDP socket that is only "connected", nothing is sent), and the tests
 url-literal src-tauri/src/sync/qr.rs  # a test: a web address is not a meowNY code and is refused
 url-literal src-tauri/src/sync/service.rs  # a test: a web address is not a meowNY code and is refused
+
+# Links in the settings footer (source code, discussions, sponsor). The person opens them in their own browser by
+# clicking; the app makes no request to them.
+url-literal ui/src/pages/SettingsPage.tsx  # links the person opens in their browser from the settings footer; the app makes no request

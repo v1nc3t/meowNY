@@ -10,6 +10,8 @@
 import { readFileSync } from 'node:fs'
 
 export const REPO = 'https://github.com/v1nc3t/meowNY'
+/** Where people can support the project; the money goes toward the App Store and Google Play. */
+export const SPONSOR = 'https://ko-fi.com/v1nc3t'
 
 /** The logo, the app's own favicon (scripts/logo.py draws it), for the sidebar. */
 const LOGO = readFileSync(new URL('../../ui/public/favicon.svg', import.meta.url), 'utf8').trim().replace('<svg ', '<svg class="logo" aria-hidden="true" ')

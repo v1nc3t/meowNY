@@ -3,7 +3,7 @@
     {
       "command": "meowny status",
       "exit": 3,
-      "stderr": "error: no token: set MEOWNY_TOKEN, give --token-file, or save one with: meowny login  (make a token in the app, Settings, command line access)\n",
+      "stderr": "error: no token: set MEOWNY_TOKEN, give --token-file, or save one with: meowny login  (make a token in the app, Settings, CLI access)\n",
       "title": "There is no token"
     },
     {
@@ -81,8 +81,8 @@
     {
       "command": "meowny status",
       "exit": 1,
-      "stderr": "error: the app is not running, or command line access is off (turn it on in Settings, command line access)\n",
-      "title": "The app is not running, or command line access is off"
+      "stderr": "error: the app is not running, or CLI access is off (turn it on in Settings, CLI access)\n",
+      "title": "The app is not running, or CLI access is off"
     },
     {
       "command": "meowny export csv --out /home/you/taken.csv",
@@ -115,7 +115,7 @@
       "human": {
         "exit": 0,
         "stderr": "waiting for you to allow this in the meowNY app...\n",
-        "stdout": "bytes: 206446\npath: /home/you/meowny.meowbak\n"
+        "stdout": "bytes: 206906\npath: /home/you/meowny.meowbak\n"
       }
     },
     "backup schedule": {
@@ -151,12 +151,12 @@
       "human": {
         "exit": 0,
         "stderr": "",
-        "stdout": "type     budgeted   actual  remaining  allocated  overAllocated  unallocated\nINCOME    3600.00  3690.00     -90.00    3200.00  false               400.00\nEXPENSE   2450.00  1961.64     488.36    2015.00  false               435.00\n"
+        "stdout": "type     budgeted   actual  remaining  allocated  overAllocated  unallocated     used\nINCOME    3600.00  3690.00     -90.00    3200.00  false               400.00  3690.00\nEXPENSE   2450.00  1961.64     488.36    2015.00  false               435.00  1961.64\n"
       },
       "json": {
         "exit": 0,
         "stderr": "",
-        "stdout": "[{\"actual\":\"3690.00\",\"allocated\":\"3200.00\",\"budgeted\":\"3600.00\",\"categories\":[{\"amountLimit\":\"3200.00\",\"categoryId\":\"1\"}],\"overAllocated\":false,\"remaining\":\"-90.00\",\"type\":\"INCOME\",\"unallocated\":\"400.00\"},{\"actual\":\"1961.64\",\"allocated\":\"2015.00\",\"budgeted\":\"2450.00\",\"categories\":[{\"amountLimit\":\"950.00\",\"categoryId\":\"4\"},{\"amountLimit\":\"500.00\",\"categoryId\":\"5\"},{\"amountLimit\":\"70.00\",\"categoryId\":\"6\"},{\"amountLimit\":\"200.00\",\"categoryId\":\"7\"},{\"amountLimit\":\"45.00\",\"categoryId\":\"9\"},{\"amountLimit\":\"250.00\",\"categoryId\":\"10\"}],\"overAllocated\":false,\"remaining\":\"488.36\",\"type\":\"EXPENSE\",\"unallocated\":\"435.00\"}]\n"
+        "stdout": "[{\"actual\":\"3690.00\",\"allocated\":\"3200.00\",\"budgeted\":\"3600.00\",\"categories\":[{\"amountLimit\":\"3200.00\",\"categoryId\":\"1\"}],\"overAllocated\":false,\"remaining\":\"-90.00\",\"type\":\"INCOME\",\"unallocated\":\"400.00\",\"used\":\"3690.00\"},{\"actual\":\"1961.64\",\"allocated\":\"2015.00\",\"budgeted\":\"2450.00\",\"categories\":[{\"amountLimit\":\"950.00\",\"categoryId\":\"4\"},{\"amountLimit\":\"500.00\",\"categoryId\":\"5\"},{\"amountLimit\":\"70.00\",\"categoryId\":\"6\"},{\"amountLimit\":\"200.00\",\"categoryId\":\"7\"},{\"amountLimit\":\"45.00\",\"categoryId\":\"9\"},{\"amountLimit\":\"250.00\",\"categoryId\":\"10\"}],\"overAllocated\":false,\"remaining\":\"488.36\",\"type\":\"EXPENSE\",\"unallocated\":\"435.00\",\"used\":\"1961.64\"}]\n"
       }
     },
     "budgets remove": {
@@ -212,18 +212,26 @@
         "stdout": "{\"id\":\"16\",\"name\":\"Animals\",\"type\":\"EXPENSE\"}\n"
       }
     },
+    "categories reorder": {
+      "command": "meowny categories reorder --ids 16,4,5,6,7,8,9,10,11,12,13,14",
+      "json": {
+        "exit": 0,
+        "stderr": "",
+        "stdout": "null\n"
+      }
+    },
     "debts due": {
       "command": "meowny debts due",
       "human": {
         "exit": 0,
         "stderr": "",
-        "stdout": "total: 150.00\nunknown: 3\n\npayments\nname              amount  category       categoryId  daysOverdue  dueDate     recurringId\nYoga class         32.00  Entertainment           8           80  2026-08-05           11\nMobile top-up          -  Utilities              10           51  2026-09-03           12\nYoga class         32.00  Entertainment           8           49  2026-09-05           11\nMobile top-up          -  Utilities              10           21  2026-10-03           12\nYoga class         32.00  Entertainment           8           19  2026-10-05           11\nCleaning service   30.00  Utilities              10           13  2026-10-11            6\nVeg box            24.00  Groceries…",
+        "stdout": "incomeTotal: 0.00\ntotal: 150.00\nunknown: 3\n\npayments\nname              amount  category       categoryId  daysOverdue  dueDate     income  recurringId\nYoga class         32.00  Entertainment           8           81  2026-08-05  false            11\nMobile top-up          -  Utilities              10           52  2026-09-03  false            12\nYoga class         32.00  Entertainment           8           50  2026-09-05  false            11\nMobile top-up          -  Utilities              10           22  2026-10-03  false            12\nYoga class         32.00  Entertainment           8           20  2026-10-05  false            11\nCleaning service   30.00  Utilities              10        …",
         "truncated": true
       },
       "json": {
         "exit": 0,
         "stderr": "",
-        "stdout": "{\"payments\":[{\"amount\":\"32.00\",\"category\":\"Entertainment\",\"categoryId\":\"8\",\"daysOverdue\":80,\"dueDate\":\"2026-08-05\",\"name\":\"Yoga class\",\"recurringId\":\"11\"},{\"amount\":null,\"category\":\"Utilities\",\"categoryId\":\"10\",\"daysOverdue\":51,\"dueDate\":\"2026-09-03\",\"name\":\"Mobile top-up\",\"recurringId\":\"12\"},{\"amount\":\"32.00\",\"category\":\"Entertainment\",\"categoryId\":\"8\",\"daysOverdue\":49,\"dueDate\":\"2026-09-05\",\"name\":\"Yoga class\",\"recurringId\":\"11\"},{\"amount\":null,\"category\":\"Utilities\",\"categoryId\":\"10\",\"daysOverdue\":21,\"dueDate\":\"2026-10-03\",\"name\":\"Mobile top-up\",\"recurringId\":\"12\"},{\"amount\":\"32.00\",\"category\":\"Entertainment\",\"categoryId\":\"8\",\"daysOverdue\":19,\"dueDate\":\"2026-10-05\",\"name\":\"Yoga class\",\"re…",
+        "stdout": "{\"incomeTotal\":\"0.00\",\"payments\":[{\"amount\":\"32.00\",\"category\":\"Entertainment\",\"categoryId\":\"8\",\"daysOverdue\":81,\"dueDate\":\"2026-08-05\",\"income\":false,\"name\":\"Yoga class\",\"recurringId\":\"11\"},{\"amount\":null,\"category\":\"Utilities\",\"categoryId\":\"10\",\"daysOverdue\":52,\"dueDate\":\"2026-09-03\",\"income\":false,\"name\":\"Mobile top-up\",\"recurringId\":\"12\"},{\"amount\":\"32.00\",\"category\":\"Entertainment\",\"categoryId\":\"8\",\"daysOverdue\":50,\"dueDate\":\"2026-09-05\",\"income\":false,\"name\":\"Yoga class\",\"recurringId\":\"11\"},{\"amount\":null,\"category\":\"Utilities\",\"categoryId\":\"10\",\"daysOverdue\":22,\"dueDate\":\"2026-10-03\",\"income\":false,\"name\":\"Mobile top-up\",\"recurringId\":\"12\"},{\"amount\":\"32.00\",\"category\":\"Entertainment\"…",
         "truncated": true
       }
     },
@@ -247,12 +255,12 @@
       "human": {
         "exit": 0,
         "stderr": "",
-        "stdout": "today: 2026-10-24\n\ndue\nname   dueOn       personId\nTomás  2026-10-18         2\nMarta  2026-10-19         1\nBob    2026-10-19         6\nAnna   2026-10-20         5\nSorin  2026-10-24         4\n\nupcoming\ncount  date\n    1  2026-10-24\n    1  2026-10-25\n    2  2026-10-26\n    1  2026-10-27\n"
+        "stdout": "today: 2026-10-25\n\ndue\nname   dueOn       personId\nMarta  2026-10-19         1\nBob    2026-10-19         6\nAnna   2026-10-20         5\nSorin  2026-10-24         4\nTomás  2026-10-25         2\n\nupcoming\ncount  date\n    1  2026-10-25\n    2  2026-10-26\n    1  2026-10-27\n    1  2026-10-31\n"
       },
       "json": {
         "exit": 0,
         "stderr": "",
-        "stdout": "{\"due\":[{\"dueOn\":\"2026-10-18\",\"name\":\"Tomás\",\"personId\":\"2\"},{\"dueOn\":\"2026-10-19\",\"name\":\"Marta\",\"personId\":\"1\"},{\"dueOn\":\"2026-10-19\",\"name\":\"Bob\",\"personId\":\"6\"},{\"dueOn\":\"2026-10-20\",\"name\":\"Anna\",\"personId\":\"5\"},{\"dueOn\":\"2026-10-24\",\"name\":\"Sorin\",\"personId\":\"4\"}],\"today\":\"2026-10-24\",\"upcoming\":[{\"count\":1,\"date\":\"2026-10-24\"},{\"count\":1,\"date\":\"2026-10-25\"},{\"count\":2,\"date\":\"2026-10-26\"},{\"count\":1,\"date\":\"2026-10-27\"}]}\n"
+        "stdout": "{\"due\":[{\"dueOn\":\"2026-10-19\",\"name\":\"Marta\",\"personId\":\"1\"},{\"dueOn\":\"2026-10-19\",\"name\":\"Bob\",\"personId\":\"6\"},{\"dueOn\":\"2026-10-20\",\"name\":\"Anna\",\"personId\":\"5\"},{\"dueOn\":\"2026-10-24\",\"name\":\"Sorin\",\"personId\":\"4\"},{\"dueOn\":\"2026-10-25\",\"name\":\"Tomás\",\"personId\":\"2\"}],\"today\":\"2026-10-25\",\"upcoming\":[{\"count\":1,\"date\":\"2026-10-25\"},{\"count\":2,\"date\":\"2026-10-26\"},{\"count\":1,\"date\":\"2026-10-27\"},{\"count\":1,\"date\":\"2026-10-31\"}]}\n"
       }
     },
     "debts summary": {
@@ -273,7 +281,7 @@
       "json": {
         "exit": 0,
         "stderr": "",
-        "stdout": "{\"alreadyThere\":false,\"createdAt\":\"2026-10-24T16:08:14.420Z\",\"documentDate\":\"2026-10-01\",\"hasFile\":true,\"id\":\"1\",\"keepOnPhone\":false,\"linkCount\":0,\"mediaType\":\"application/pdf\",\"name\":\"boiler-receipt.pdf\",\"sha256\":\"735a7713978716d1e65eb6bf069e2f410eb72ec5b285861be417aeca0feeb935\",\"sizeBytes\":45}\n"
+        "stdout": "{\"alreadyThere\":false,\"createdAt\":\"2026-10-25T16:42:12.051Z\",\"documentDate\":\"2026-10-01\",\"hasFile\":true,\"id\":\"1\",\"keepOnPhone\":false,\"linkCount\":0,\"mediaType\":\"application/pdf\",\"name\":\"boiler-receipt.pdf\",\"sha256\":\"735a7713978716d1e65eb6bf069e2f410eb72ec5b285861be417aeca0feeb935\",\"sizeBytes\":45}\n"
       }
     },
     "documents delete": {
@@ -305,12 +313,12 @@
       "human": {
         "exit": 0,
         "stderr": "",
-        "stdout": "limit: 50\noffset: 0\ntotal: 1\n\ndocuments\nid  name                createdAt                 documentDate  hasFile  keepOnPhone  linkCount  mediaType        sha256                                                        sizeBytes\n 1  boiler-receipt.pdf  2026-10-24T16:08:14.420Z  2026-10-01    true     false                0  application/pdf  735a7713978716d1e65eb6bf069e2f410eb72ec5b285861be417aeca0fe…         45\n"
+        "stdout": "limit: 50\noffset: 0\ntotal: 1\n\ndocuments\nid  name                createdAt                 documentDate  hasFile  keepOnPhone  linkCount  mediaType        sha256                                                        sizeBytes\n 1  boiler-receipt.pdf  2026-10-25T16:42:12.051Z  2026-10-01    true     false                0  application/pdf  735a7713978716d1e65eb6bf069e2f410eb72ec5b285861be417aeca0fe…         45\n"
       },
       "json": {
         "exit": 0,
         "stderr": "",
-        "stdout": "{\"documents\":[{\"createdAt\":\"2026-10-24T16:08:14.420Z\",\"documentDate\":\"2026-10-01\",\"hasFile\":true,\"id\":\"1\",\"keepOnPhone\":false,\"linkCount\":0,\"mediaType\":\"application/pdf\",\"name\":\"boiler-receipt.pdf\",\"sha256\":\"735a7713978716d1e65eb6bf069e2f410eb72ec5b285861be417aeca0feeb935\",\"sizeBytes\":45}],\"limit\":50,\"offset\":0,\"total\":1}\n"
+        "stdout": "{\"documents\":[{\"createdAt\":\"2026-10-25T16:42:12.051Z\",\"documentDate\":\"2026-10-01\",\"hasFile\":true,\"id\":\"1\",\"keepOnPhone\":false,\"linkCount\":0,\"mediaType\":\"application/pdf\",\"name\":\"boiler-receipt.pdf\",\"sha256\":\"735a7713978716d1e65eb6bf069e2f410eb72ec5b285861be417aeca0feeb935\",\"sizeBytes\":45}],\"limit\":50,\"offset\":0,\"total\":1}\n"
       }
     },
     "documents show": {
@@ -318,12 +326,12 @@
       "human": {
         "exit": 0,
         "stderr": "",
-        "stdout": "createdAt: 2026-10-24T16:08:14.420Z\ndocumentDate: 2026-10-01\nhasFile: true\nid: 1\nkeepOnPhone: false\nlinkCount: 0\nmediaType: application/pdf\nname: boiler-receipt.pdf\nsha256: 735a7713978716d1e65eb6bf069e2f410eb72ec5b285861be417aeca0feeb935\nsizeBytes: 45\n\nlinks\n(none)\n"
+        "stdout": "createdAt: 2026-10-25T16:42:12.051Z\ndocumentDate: 2026-10-01\nhasFile: true\nid: 1\nkeepOnPhone: false\nlinkCount: 0\nmediaType: application/pdf\nname: boiler-receipt.pdf\nsha256: 735a7713978716d1e65eb6bf069e2f410eb72ec5b285861be417aeca0feeb935\nsizeBytes: 45\n\nlinks\n(none)\n"
       },
       "json": {
         "exit": 0,
         "stderr": "",
-        "stdout": "{\"createdAt\":\"2026-10-24T16:08:14.420Z\",\"documentDate\":\"2026-10-01\",\"hasFile\":true,\"id\":\"1\",\"keepOnPhone\":false,\"linkCount\":0,\"links\":[],\"mediaType\":\"application/pdf\",\"name\":\"boiler-receipt.pdf\",\"sha256\":\"735a7713978716d1e65eb6bf069e2f410eb72ec5b285861be417aeca0feeb935\",\"sizeBytes\":45}\n"
+        "stdout": "{\"createdAt\":\"2026-10-25T16:42:12.051Z\",\"documentDate\":\"2026-10-01\",\"hasFile\":true,\"id\":\"1\",\"keepOnPhone\":false,\"linkCount\":0,\"links\":[],\"mediaType\":\"application/pdf\",\"name\":\"boiler-receipt.pdf\",\"sha256\":\"735a7713978716d1e65eb6bf069e2f410eb72ec5b285861be417aeca0feeb935\",\"sizeBytes\":45}\n"
       }
     },
     "documents unlink": {
@@ -339,7 +347,7 @@
       "json": {
         "exit": 0,
         "stderr": "",
-        "stdout": "{\"createdAt\":\"2026-10-24T16:08:14.420Z\",\"documentDate\":\"2026-10-01\",\"hasFile\":true,\"id\":\"1\",\"keepOnPhone\":true,\"linkCount\":0,\"mediaType\":\"application/pdf\",\"name\":\"Boiler repair\",\"sha256\":\"735a7713978716d1e65eb6bf069e2f410eb72ec5b285861be417aeca0feeb935\",\"sizeBytes\":45}\n"
+        "stdout": "{\"createdAt\":\"2026-10-25T16:42:12.051Z\",\"documentDate\":\"2026-10-01\",\"hasFile\":true,\"id\":\"1\",\"keepOnPhone\":true,\"linkCount\":0,\"mediaType\":\"application/pdf\",\"name\":\"Boiler repair\",\"sha256\":\"735a7713978716d1e65eb6bf069e2f410eb72ec5b285861be417aeca0feeb935\",\"sizeBytes\":45}\n"
       }
     },
     "export csv": {
@@ -363,7 +371,7 @@
       "human": {
         "exit": 0,
         "stderr": "",
-        "stdout": "bytes: 22400\npath: /home/you/debts.json\n"
+        "stdout": "bytes: 22584\npath: /home/you/debts.json\n"
       }
     },
     "export pdf": {
@@ -392,7 +400,7 @@
       "human": {
         "exit": 0,
         "stderr": "",
-        "stdout": "bytes: 31088\npath: /home/you/budget.xlsx\n"
+        "stdout": "bytes: 31084\npath: /home/you/budget.xlsx\n"
       }
     },
     "ledger add": {
@@ -537,7 +545,7 @@
       "json": {
         "exit": 0,
         "stderr": "",
-        "stdout": "{\"amount\":\"20.00\",\"categoryId\":\"16\",\"description\":null,\"endDate\":\"2026-10-24\",\"id\":\"13\",\"intervalCount\":1,\"intervalUnit\":\"MONTH\",\"isActive\":false,\"name\":\"Vet plan plus\",\"nextDueDate\":\"2026-12-20\",\"split\":null,\"startDate\":\"2026-10-20\"}\n"
+        "stdout": "{\"amount\":\"20.00\",\"categoryId\":\"16\",\"description\":null,\"endDate\":\"2026-10-25\",\"id\":\"13\",\"intervalCount\":1,\"intervalUnit\":\"MONTH\",\"isActive\":false,\"name\":\"Vet plan plus\",\"nextDueDate\":\"2026-12-20\",\"split\":null,\"startDate\":\"2026-10-20\"}\n"
       }
     },
     "recurring list": {
@@ -742,12 +750,12 @@
       "human": {
         "exit": 0,
         "stderr": "",
-        "stdout": "api: 1\napp: meowny\nschemaVersion: 13\nscope: read\nversion: 0.2.4\n"
+        "stdout": "api: 1\napp: meowny\nschemaVersion: 15\nscope: read\nversion: 0.2.4\n"
       },
       "json": {
         "exit": 0,
         "stderr": "",
-        "stdout": "{\"api\":1,\"app\":\"meowny\",\"schemaVersion\":13,\"scope\":\"read\",\"version\":\"0.2.4\"}\n"
+        "stdout": "{\"api\":1,\"app\":\"meowny\",\"schemaVersion\":15,\"scope\":\"read\",\"version\":\"0.2.4\"}\n"
       }
     },
     "today": {
@@ -755,12 +763,12 @@
       "human": {
         "exit": 0,
         "stderr": "",
-        "stdout": "date: 2026-10-24\nmonth: 2026-10\n"
+        "stdout": "date: 2026-10-25\nmonth: 2026-10\n"
       },
       "json": {
         "exit": 0,
         "stderr": "",
-        "stdout": "{\"date\":\"2026-10-24\",\"month\":\"2026-10\"}\n"
+        "stdout": "{\"date\":\"2026-10-25\",\"month\":\"2026-10\"}\n"
       }
     },
     "transactions create": {

@@ -23,8 +23,8 @@ use crate::{categories, transactions, vault};
 /// The version of this protocol, in `hello`.
 /// Protocol 3 adds the tables `documents` and `document_links`; protocol 4 adds `people` and `ledger_entries`, the parts of a shared
 /// bill inside its transaction's row, the split template inside a recurring item's row, and a third target for a document link (a
-/// ledger entry). A device that speaks an older protocol is told to update.
-pub const PROTOCOL: u32 = 4;
+/// ledger entry); protocol 5 adds the category order (`position`) and the skipped dates of a recurring item. A device that speaks an older protocol is told to update.
+pub const PROTOCOL: u32 = 5;
 /// Digest entries in one message, and rows in one message. Messages are also cut by size (`SOFT_MESSAGE_BYTES`).
 pub const MAX_ENTRIES_PER_MESSAGE: usize = 400;
 pub const MAX_ROWS_PER_MESSAGE: usize = 200;
@@ -36,6 +36,8 @@ pub const CHUNK_BYTES: usize = 24 * 1024;
 pub const MAX_CHUNK_TEXT: usize = CHUNK_BYTES / 3 * 4;
 /// More than this many rows of one table in a sync is not a budget of one person.
 pub const MAX_ROWS_PER_TABLE: usize = 2_000_000;
+/// The highest place a category can have in its list.
+const MAX_POSITION: i64 = 1_000_000;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -558,6 +560,17 @@ fn option_sync_id(value: &Option<String>) -> bool {
     value.as_deref().is_none_or(sync_id_ok)
 }
 
+/// The most skipped dates one recurring item carries.
+const MAX_SKIPPED_DATES: usize = 100;
+
+/// A JSON array of valid dates, sorted and without repeats, of at most `MAX_SKIPPED_DATES`.
+fn skipped_dates_ok(text: &str) -> bool {
+    match serde_json::from_str::<Vec<String>>(text) {
+        Ok(dates) => dates.len() <= MAX_SKIPPED_DATES && dates.iter().all(|d| date_ok(d)) && dates.windows(2).all(|pair| pair[0] < pair[1]),
+        Err(_) => false,
+    }
+}
+
 fn option_date(value: &Option<String>) -> bool {
     value.as_deref().is_none_or(date_ok)
 }
@@ -580,6 +593,8 @@ pub struct CategoryRow {
     pub name: String,
     pub deleted_at: Option<String>,
     pub merged_into: Option<String>,
+    /// Place in the list of its type, from 0.
+    pub position: i64,
     pub created_at: String,
     pub updated_at: String,
 }
@@ -598,6 +613,8 @@ pub struct RecurringRow {
     pub interval_unit: String,
     pub interval_count: i64,
     pub next_due_date: String,
+    /// The later occurrences that were skipped one by one: a JSON array of dates, sorted, without repeats (at most `MAX_SKIPPED_DATES`).
+    pub skipped_dates: String,
     pub end_date: Option<String>,
     pub is_active: i64,
     /// How each payment is shared, as weights; none when the payments are not split.
@@ -813,6 +830,7 @@ pub fn parse_row(table: Table, value: &Value) -> Result<Row, WireError> {
                 && r.deleted_at.as_deref().is_none_or(timestamp_ok)
                 && option_sync_id(&r.merged_into)
                 && r.merged_into.as_deref() != Some(r.sync_id.as_str())
+                && (0..=MAX_POSITION).contains(&r.position)
                 && timestamp_ok(&r.created_at)
                 && timestamp_ok(&r.updated_at)
         }
@@ -853,6 +871,7 @@ pub fn parse_row(table: Table, value: &Value) -> Result<Row, WireError> {
                 && (1..=1000).contains(&r.interval_count)
                 && date_ok(&r.next_due_date)
                 && r.next_due_date >= r.start_date
+                && skipped_dates_ok(&r.skipped_dates)
                 && option_date(&r.end_date)
                 && r.end_date.as_deref().is_none_or(|end| end >= r.start_date.as_str())
                 && [0, 1].contains(&r.is_active)
@@ -945,7 +964,7 @@ mod tests {
     const TS: &str = "2026-03-01T10:00:00.250Z";
 
     fn category() -> Value {
-        json!({"syncId": ID_A, "stamp": STAMP, "type": "EXPENSE", "name": "Food", "deletedAt": null, "mergedInto": null, "createdAt": TS, "updatedAt": TS})
+        json!({"syncId": ID_A, "stamp": STAMP, "type": "EXPENSE", "name": "Food", "deletedAt": null, "mergedInto": null, "position": 0, "createdAt": TS, "updatedAt": TS})
     }
 
     fn transaction() -> Value {
@@ -956,7 +975,7 @@ mod tests {
 
     fn recurring() -> Value {
         json!({"syncId": ID_B, "stamp": STAMP, "category": ID_A, "name": "Rent", "description": "Flat 4", "amountMinor": 90000,
-               "startDate": "2026-01-01", "intervalUnit": "MONTH", "intervalCount": 1, "nextDueDate": "2026-03-01", "endDate": null,
+               "startDate": "2026-01-01", "intervalUnit": "MONTH", "intervalCount": 1, "nextDueDate": "2026-03-01", "skippedDates": "[]", "endDate": null,
                "isActive": 1, "split": null, "createdAt": TS, "updatedAt": TS})
     }
 
@@ -1056,7 +1075,7 @@ mod tests {
 
     #[test]
     fn there_is_a_table_for_every_kind_of_row_and_the_protocol_knows_it() {
-        assert_eq!(PROTOCOL, 4);
+        assert_eq!(PROTOCOL, 5);
         let names: Vec<&str> = Table::ALL.iter().map(|t| t.name()).collect();
         assert_eq!(
             names,
@@ -1093,6 +1112,9 @@ mod tests {
             (Table::Categories, changed(category(), "name", json!("a".repeat(51)))),
             (Table::Categories, changed(category(), "name", json!("tab\there"))),
             (Table::Categories, changed(category(), "mergedInto", json!(ID_A))),
+            (Table::Categories, changed(category(), "position", json!(-1))),
+            (Table::Categories, changed(category(), "position", json!(1_000_001))),
+            (Table::Categories, changed(category(), "position", json!("1"))),
             (Table::Categories, changed(category(), "createdAt", json!("2026-03-01 10:00:00"))),
             (Table::Categories, changed(category(), "updatedAt", json!("2026-13-01T10:00:00.250Z"))),
             (Table::Categories, changed(category(), "deletedAt", json!("yesterday"))),
@@ -1115,6 +1137,11 @@ mod tests {
             (Table::RecurringTransactions, changed(recurring(), "intervalCount", json!(0))),
             (Table::RecurringTransactions, changed(recurring(), "intervalCount", json!(1001))),
             (Table::RecurringTransactions, changed(recurring(), "isActive", json!(2))),
+            (Table::RecurringTransactions, changed(recurring(), "skippedDates", json!("nope"))),
+            (Table::RecurringTransactions, changed(recurring(), "skippedDates", json!("[\"2026-05-01\",\"2026-04-01\"]"))),
+            (Table::RecurringTransactions, changed(recurring(), "skippedDates", json!("[\"2026-04-01\",\"2026-04-01\"]"))),
+            (Table::RecurringTransactions, changed(recurring(), "skippedDates", json!("[\"2026-4-1\"]"))),
+            (Table::RecurringTransactions, changed(recurring(), "skippedDates", json!("[1]"))),
             (Table::RecurringTransactions, changed(recurring(), "nextDueDate", json!("2025-12-31"))),
             (Table::RecurringTransactions, changed(recurring(), "endDate", json!("2025-12-31"))),
             (Table::RecurringTransactions, changed(recurring(), "amountMinor", json!(0))),

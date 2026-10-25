@@ -18,6 +18,8 @@ const MIGRATIONS: &[&str] = &[
     include_str!("../migrations/0011_document_link_markers.sql"),
     include_str!("../migrations/0012_debts.sql"),
     include_str!("../migrations/0013_debts_sync.sql"),
+    include_str!("../migrations/0014_category_order.sql"),
+    include_str!("../migrations/0015_recurring_skips.sql"),
 ];
 
 #[derive(Debug)]
@@ -214,6 +216,33 @@ mod tests {
         assert_eq!(version(&conn), 1, "the bad migration was not kept");
         assert_eq!(conn.query_row("SELECT count(*) FROM child", [], |r| r.get::<_, i64>(0)).unwrap(), 0);
         assert!(conn.query_row("PRAGMA foreign_keys", [], |r| r.get::<_, bool>(0)).unwrap(), "foreign keys are on again after a failure");
+    }
+
+    #[test]
+    fn the_category_order_keeps_what_the_lists_showed() {
+        let mut conn = Connection::open_in_memory().unwrap();
+        run_up_to(&mut conn, 13).unwrap();
+        for (kind, name) in [("EXPENSE", "Food"), ("INCOME", "Salary"), ("EXPENSE", "Rent"), ("INCOME", "Gifts"), ("EXPENSE", "Gym")] {
+            conn.execute("INSERT INTO categories (type, name) VALUES (?1, ?2)", [kind, name]).unwrap();
+        }
+        conn.execute("UPDATE categories SET deleted_at = '2026-01-01T00:00:00.000Z' WHERE name = 'Rent'", []).unwrap();
+        let stamps = |conn: &Connection| -> Vec<String> {
+            conn.prepare("SELECT stamp FROM categories ORDER BY id").unwrap().query_map([], |r| r.get(0)).unwrap().collect::<Result<_, _>>().unwrap()
+        };
+        let before = stamps(&conn);
+
+        run(&mut conn).unwrap();
+
+        let positions: Vec<(String, i64)> = conn
+            .prepare("SELECT name, position FROM categories ORDER BY id")
+            .unwrap()
+            .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))
+            .unwrap()
+            .collect::<Result<_, _>>()
+            .unwrap();
+        let expected = [("Food", 0), ("Salary", 0), ("Rent", 1), ("Gifts", 1), ("Gym", 2)].map(|(n, p)| (n.to_string(), p));
+        assert_eq!(positions, expected, "counted inside one type, in the order of the ids");
+        assert_eq!(stamps(&conn), before, "filling in the order is not an edit");
     }
 
     #[test]

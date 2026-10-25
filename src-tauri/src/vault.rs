@@ -44,6 +44,8 @@ pub enum AppError {
     InvalidBackup,
     NotFound,
     NameExists,
+    /// The category budgets of a month would add up to more than that month's monthly budget.
+    OverBudget,
     /// A document over the limit (25 MiB).
     TooLarge,
     /// This device does not hold the file of a document that exists.
@@ -69,6 +71,7 @@ impl std::fmt::Display for AppError {
             AppError::InvalidBackup => "that is not a meowNY backup, or it is damaged",
             AppError::NotFound => "not found",
             AppError::NameExists => "that name already exists",
+            AppError::OverBudget => "the category budgets would add up to more than the monthly budget",
             AppError::TooLarge => "that file is too large",
             AppError::FileMissing => "this device does not have that file",
             AppError::FileDamaged => "that file is damaged",
@@ -1386,7 +1389,7 @@ mod tests {
                     description: None,
                 },
             )?;
-            recurring::pay(c, plan.id, None, Some("2026-01-01"), "2026-01-01")?;
+            recurring::pay(c, plan.id, None, Some("2026-01-01"), "2026-01-01", None, None)?;
             for (name, amount, category) in [("Pay", "3200.00", salary.id), ("Coffee", "3.50", rent.id)] {
                 transactions::create(
                     c,

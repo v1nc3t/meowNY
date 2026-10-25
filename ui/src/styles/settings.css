@@ -507,16 +507,96 @@
   margin-top: 0;
 }
 
-/* Copyright and licence at the foot of the settings. */
+/* The foot of the settings. Wide: across the whole page, the links on the left, the two buttons on the right, the copyright
+   under them. Narrow or phone: the links stack, the buttons share a row, then the copyright. The page lines its children up at
+   the start, so the footer stretches itself; its own background repaints the whole strip (WebKitGTK left stale lines there). */
 .settings-footer {
+  align-self: stretch;
   display: flex;
   flex-wrap: wrap;
-  gap: 0.25rem 1rem;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem 1.5rem;
+  width: 100%;
   margin-top: 1rem;
   padding-top: 0.75rem;
   border-top: 1px solid var(--border);
+  background: var(--background);
   font-size: 0.75rem;
   color: var(--muted-foreground);
+}
+
+.settings-footer p {
+  flex-basis: 100%;
+  margin: 0;
+}
+
+.settings-links,
+.settings-footer-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem 1.5rem;
+}
+
+.settings-footer-actions {
+  gap: 0.5rem;
+}
+
+.settings-links a {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 2rem;
+  color: var(--muted-foreground);
+  font-size: 0.8125rem;
+  text-underline-offset: 4px;
+}
+
+@media (hover: hover) {
+  .settings-links a:hover {
+    color: var(--foreground);
+  }
+}
+
+@media (max-width: 48em) {
+  .settings-footer {
+    flex-direction: column;
+    align-items: stretch;
+    text-align: center;
+  }
+
+  .settings-links {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .settings-footer-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.settings-page.on-phone .settings-footer {
+  flex-direction: column;
+  align-items: stretch;
+  text-align: center;
+}
+
+.settings-page.on-phone .settings-links {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.settings-page.on-phone .settings-footer-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+/* A tap target stays 44px or more on the phone. */
+html.is-phone .settings-links a,
+html.is-phone .settings-footer-actions a {
+  min-height: 2.75rem;
 }
 
 /* Access tokens and paired phones: the rows of a card list, with the button at the right edge. */

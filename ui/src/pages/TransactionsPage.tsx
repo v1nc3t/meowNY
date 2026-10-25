@@ -20,6 +20,7 @@ import { transactions as transactionsApi, type Transaction, type TransactionPage
 import { categoryOptions } from '../lib/categoriesView'
 import { amountString, formatDate, formatMoney } from '../lib/money'
 import { apiBound, shiftBound, type RangeMode } from '../lib/range'
+import { recall, useRemember } from '../lib/sticky'
 import { draftOfBill, equalDraft, NOT_SPLIT, toInput, type SplitState } from '../lib/split'
 import { useAttachments, type Attachments } from '../hooks/useAttachments'
 import { useClipCounts } from '../hooks/useClipCounts'
@@ -58,8 +59,10 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
   const [categoriesReady, setCategoriesReady] = useState(false)
   const [filters, setFilters] = useState<Filters>(() => {
     const month = now.month
-    return { mode: 'month', from: month, to: month, categoryId: '', q: '' }
+    return { mode: 'month', from: month, to: month, categoryId: '', q: '', ...recall<Partial<Filters>>('transactions.range', () => ({})) }
   })
+  const range = useMemo(() => ({ mode: filters.mode, from: filters.from, to: filters.to }), [filters.mode, filters.from, filters.to])
+  useRemember('transactions.range', range)
   const [limit, setLimit] = useState(50)
   const [offset, setOffset] = useState(0)
   const [reload, setReload] = useState(0)
@@ -494,25 +497,36 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
                       <div className="card-detail">
                         {transaction.split.length > 0 ? (
                           <section className="detail-section">
-                            <p className="detail-title">{t('split.section')}</p>
-                            <p>{t('split.paid', { amount: formatMoney(transaction.amount, settings.currency, settings.locale) })}</p>
-                            <div className="split-part">
-                              <span>{`${t('split.you')} ${formatMoney(transaction.myShare, settings.currency, settings.locale)}`}</span>
+                            <div className="split-head">
+                              <p className="detail-title">{t('split.section')}</p>
+                              <p className="split-paid">{t('split.paid', { amount: formatMoney(transaction.amount, settings.currency, settings.locale) })}</p>
                             </div>
-                            {transaction.split.map((part) => (
-                              <div className="split-part" key={`${part.personId ?? 'guest'}-${part.person ?? part.guest}`}>
-                                <span>{`${part.person ?? part.guest ?? ''} ${formatMoney(part.amount, settings.currency, settings.locale)}`}</span>
-                                {part.personId && part.person ? (
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => setCoding({ transaction, personId: part.personId ?? '', name: part.person ?? '', part: part.amount })}
-                                  >
-                                    {t('code.show')}
-                                  </Button>
-                                ) : null}
-                              </div>
-                            ))}
+                            <table className="split-table">
+                              <tbody>
+                                <tr className="is-you">
+                                  <th scope="row">{t('split.you')}</th>
+                                  <td>{formatMoney(transaction.myShare, settings.currency, settings.locale)}</td>
+                                  <td />
+                                </tr>
+                                {transaction.split.map((part) => (
+                                  <tr key={`${part.personId ?? 'guest'}-${part.person ?? part.guest}`}>
+                                    <th scope="row">{part.person ?? part.guest ?? ''}</th>
+                                    <td>{formatMoney(part.amount, settings.currency, settings.locale)}</td>
+                                    <td>
+                                      {part.personId && part.person ? (
+                                        <Button
+                                          variant="ghost"
+                                          size="sm"
+                                          onClick={() => setCoding({ transaction, personId: part.personId ?? '', name: part.person ?? '', part: part.amount })}
+                                        >
+                                          {t('code.show')}
+                                        </Button>
+                                      ) : null}
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
                           </section>
                         ) : null}
                         {transaction.description?.trim() ? (

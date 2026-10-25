@@ -96,7 +96,7 @@
         }
       ],
       "scope": "read",
-      "summary": "For a month, per side (income, expense): the budget, how much of it is given to categories, what is left, and the actual so far."
+      "summary": "For a month, per side (income, expense): the budget, how much of it is given to categories, what is left, and the actual so far. used is what the categories that still count spent."
     },
     {
       "name": "budgets.history",
@@ -297,10 +297,40 @@
           "required": true,
           "summary": "The category.",
           "type": "id"
+        },
+        {
+          "name": "month",
+          "required": false,
+          "summary": "The month the span counts from, like 2026-10.",
+          "type": "month"
+        },
+        {
+          "name": "span",
+          "required": false,
+          "summary": "How far it reaches: ONLY (the default), FORWARD or ALL.",
+          "type": "string",
+          "values": [
+            "ONLY",
+            "FORWARD",
+            "ALL"
+          ]
         }
       ],
       "scope": "write",
-      "summary": "Deletes a category: it is no longer offered or budgeted, and its transactions keep it."
+      "summary": "Deletes a category: it is no longer offered or budgeted, and its transactions keep it. With a month and a span, ONLY keeps the category and removes just that month's budget, FORWARD removes it from that month on (earlier months keep its budget and spending), ALL removes it from every month. Give month and span together, or neither."
+    },
+    {
+      "name": "categories.reorder",
+      "params": [
+        {
+          "name": "ids",
+          "required": true,
+          "summary": "Every active category of one type, in the new order.",
+          "type": "ids"
+        }
+      ],
+      "scope": "write",
+      "summary": "Puts the categories of one type in a new order; give every active category of that type."
     },
     {
       "name": "transactions.create",
@@ -432,10 +462,21 @@
           "required": false,
           "summary": "The category. Leave out for the global budget of that side.",
           "type": "id"
+        },
+        {
+          "name": "span",
+          "required": false,
+          "summary": "How far it reaches: ONLY (the default), FORWARD or ALL.",
+          "type": "string",
+          "values": [
+            "ONLY",
+            "FORWARD",
+            "ALL"
+          ]
         }
       ],
       "scope": "write",
-      "summary": "Sets a monthly budget: the global budget of a side, or one category's. A month that has already started changes only that month; this month and later ones carry the new amount forward. A category budget must match the category's type."
+      "summary": "Sets a monthly budget: the global budget of a side, or one category's. Span ONLY (the default): a month that has already started changes only that month; this month and later ones carry the new amount forward. FORWARD: that month and every later one. ALL: every month back to the first budget month. A category budget must match the category's type."
     },
     {
       "name": "budgets.remove",
@@ -461,10 +502,21 @@
           "required": false,
           "summary": "The category. Leave out for the global budget of that side.",
           "type": "id"
+        },
+        {
+          "name": "span",
+          "required": false,
+          "summary": "How far it reaches: ONLY (the default), FORWARD or ALL.",
+          "type": "string",
+          "values": [
+            "ONLY",
+            "FORWARD",
+            "ALL"
+          ]
         }
       ],
       "scope": "write",
-      "summary": "Removes a budget, with the same month rules as setting one. The months before keep it, and the history stays."
+      "summary": "Removes a budget, with the same month and span rules as setting one (ONLY, FORWARD or ALL). With ONLY or FORWARD the months before keep it, and the history stays."
     },
     {
       "name": "recurring.create",
@@ -630,10 +682,22 @@
           "required": false,
           "summary": "The day it was paid. Defaults to today in the app's time zone.",
           "type": "date"
+        },
+        {
+          "name": "dueDate",
+          "required": false,
+          "summary": "Pay this one occurrence: on or after the next due date, and not already paid or skipped.",
+          "type": "date"
+        },
+        {
+          "name": "description",
+          "required": false,
+          "summary": "Replaces the item's note on the transaction. Empty clears it.",
+          "type": "string"
         }
       ],
       "scope": "write",
-      "summary": "Turns the current occurrence into a transaction and moves the item to the next one. A bill with no fixed amount needs the amount."
+      "summary": "Turns the current occurrence into a transaction and moves the item to the next one. With a due date, pays that one later occurrence instead and leaves the current one due. A bill with no fixed amount needs the amount."
     },
     {
       "name": "recurring.skip",
@@ -643,10 +707,16 @@
           "required": true,
           "summary": "The recurring item.",
           "type": "id"
+        },
+        {
+          "name": "dueDate",
+          "required": false,
+          "summary": "Skip this one occurrence: on or after the next due date, and not already paid or skipped.",
+          "type": "date"
         }
       ],
       "scope": "write",
-      "summary": "Passes over the current occurrence without making a transaction."
+      "summary": "Passes over the current occurrence without making a transaction. With a due date, skips that one later occurrence instead."
     },
     {
       "name": "recurring.pause",
@@ -1384,7 +1454,7 @@
       "name": "debts.due",
       "params": [],
       "scope": "read",
-      "summary": "The recurring payments that are overdue and not paid or skipped, one for each occurrence that was missed (at most 24 for an item), the oldest first, with the day each fell due, what it is for (null for a bill with no fixed amount), the days late and what they come to. A payment is overdue from the day after its day; income and paused or ended items are not listed."
+      "summary": "The recurring payments that are overdue and not paid or skipped, one for each occurrence that was missed (at most 24 for an item), the oldest first, with the day each fell due, what it is for (null for a bill with no fixed amount), the days late and what they come to. A payment is overdue from the day after its day; paused or ended items are not listed. Income that was not received is listed too (income true) and comes to incomeTotal, not to total."
     },
     {
       "name": "debts.history",

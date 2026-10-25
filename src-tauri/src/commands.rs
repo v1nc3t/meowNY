@@ -7,7 +7,7 @@ use tauri::State;
 
 use crate::api::{Host, HostStatus};
 use crate::backup;
-use crate::categories::{self, Category, CategoryType};
+use crate::categories::{self, Category, CategoryInMonth, CategoryType};
 use crate::budgets::{self, Budget, Overview, SetBudget};
 use crate::clock;
 use crate::currency::{self, Conversion};
@@ -107,6 +107,8 @@ pub const COMMANDS: &[&str] = &[
     "create_category",
     "rename_category",
     "delete_category",
+    "list_categories_in_month",
+    "reorder_categories",
     "list_transactions",
     "create_transaction",
     "update_transaction",
@@ -314,9 +316,25 @@ pub fn rename_category(vault: Shared, id: String, name: String) -> Result<Catego
 }
 
 #[tauri::command]
-pub fn delete_category(vault: Shared, id: String) -> Result<(), AppError> {
+pub fn list_categories_in_month(vault: Shared, kind: Option<CategoryType>, month: String) -> Result<Vec<CategoryInMonth>, AppError> {
+    vault.with_conn(|c| categories::list_in_month(c, kind, &month))
+}
+
+/// `ids` are all the active categories of one type, in the new order.
+#[tauri::command]
+pub fn reorder_categories(vault: Shared, ids: Vec<String>) -> Result<(), AppError> {
+    let ids = ids.iter().map(|id| categories::parse_id(id)).collect::<Result<Vec<_>, _>>()?;
+    vault.with_conn(|c| categories::reorder(c, &ids))
+}
+
+/// With a month and a span the category is deleted for that period, otherwise from now on.
+#[tauri::command]
+pub fn delete_category(vault: Shared, id: String, month: Option<String>, span: Option<budgets::Span>) -> Result<(), AppError> {
     let id = categories::parse_id(&id)?;
-    vault.with_conn(|c| categories::delete(c, id, chrono::Utc::now()))
+    match (month, span) {
+        (Some(month), Some(span)) => vault.with_conn(|c| categories::delete_span(c, id, &month, span, chrono::Utc::now())),
+        _ => vault.with_conn(|c| categories::delete(c, id, chrono::Utc::now())),
+    }
 }
 
 #[tauri::command]
@@ -342,8 +360,8 @@ pub fn delete_transaction(vault: Shared, id: String) -> Result<(), AppError> {
 }
 
 #[tauri::command]
-pub fn set_budget(vault: Shared, input: SetBudget) -> Result<Budget, AppError> {
-    vault.with_conn(|c| budgets::set(c, &input, chrono::Utc::now()))
+pub fn set_budget(vault: Shared, input: SetBudget, span: Option<budgets::Span>) -> Result<Budget, AppError> {
+    vault.with_conn(|c| budgets::set_span(c, &input, chrono::Utc::now(), span.unwrap_or_default()))
 }
 
 #[derive(serde::Deserialize)]
@@ -418,24 +436,26 @@ pub fn delete_recurring(vault: Shared, id: String) -> Result<(), AppError> {
     vault.with_conn(|c| recurring::delete(c, id))
 }
 
-/// Turns the current occurrence into a transaction. `amount` and `paid_on` default to the
-/// planned amount and today.
+/// Turns an occurrence into a transaction: the next one, or the later one named by `due_date`. `amount` and `paid_on` default to the
+/// planned amount and today. `description` replaces the item's on the transaction (empty means none).
 #[tauri::command]
 pub fn pay_recurring(
     vault: Shared,
     id: String,
     amount: Option<String>,
     paid_on: Option<String>,
+    due_date: Option<String>,
+    description: Option<String>,
 ) -> Result<Transaction, AppError> {
     let id = categories::parse_id(&id)?;
     let today = today_text(&vault)?;
-    vault.with_conn(|c| recurring::pay(c, id, amount.as_deref(), paid_on.as_deref(), &today))
+    vault.with_conn(|c| recurring::pay(c, id, amount.as_deref(), paid_on.as_deref(), &today, due_date.as_deref(), description.as_deref()))
 }
 
 #[tauri::command]
-pub fn skip_recurring(vault: Shared, id: String) -> Result<Recurring, AppError> {
+pub fn skip_recurring(vault: Shared, id: String, due_date: Option<String>) -> Result<Recurring, AppError> {
     let id = categories::parse_id(&id)?;
-    vault.with_conn(|c| recurring::skip(c, id))
+    vault.with_conn(|c| recurring::skip(c, id, due_date.as_deref()))
 }
 
 #[tauri::command]

@@ -109,11 +109,11 @@ export default function AppSidebar({
       </nav>
 
       <div className="sidebar-footer">
-        <button type="button" className="exit-btn" {...tip('lock', t('nav.lockTitle'))} onClick={lock}>
+        <button type="button" className="exit-btn" aria-label={t('nav.lockTitle')} {...tip('lock')} onClick={lock}>
           <Icon name="exit" />
           <span className="nav-label">{t('nav.lock')}</span>
         </button>
-        <button type="button" className="exit-btn" {...tip('help')} onClick={() => runShortcut('help')}>
+        <button type="button" className="exit-btn" aria-label={t('nav.shortcuts')} {...tip('help')} onClick={() => runShortcut('help')}>
           <Icon name="help" />
           <span className="nav-label">{t('nav.shortcuts')}</span>
         </button>

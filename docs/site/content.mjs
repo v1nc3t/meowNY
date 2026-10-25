@@ -12,7 +12,7 @@ const MEANINGS = {
   no_token: 'No token. Run `meowny login` or set `MEOWNY_TOKEN`.',
   bad_token: 'Not a valid token. Copy it again from the app.',
   token_file_unsafe: 'Others can read the token file. Run `chmod 600` on it.',
-  app_unavailable: 'The app is not running, or command line access is off.',
+  app_unavailable: 'The app is not running, or CLI access is off.',
   timeout: 'No answer in time. Raise `--timeout`.',
   bad_answer: 'Something else answered. Check `--port` or the data folder.',
   invalid_input: 'The app refused a value; the message says which.',
@@ -23,6 +23,7 @@ const MEANINGS = {
   unknown_route: 'The app is older than the program. Update the app.',
   method_not_allowed: 'Not a POST (only when calling the HTTP API by hand).',
   name_exists: 'A category with that name exists.',
+  over_budget: 'The category budgets would add up to more than the monthly budget.',
   file_exists: 'The file exists. Choose another name.',
   not_set_up: 'The app has no data yet. Finish its first run.',
   too_large: 'The request is over 1 MiB, or the file over 25 MiB.',
@@ -185,22 +186,37 @@ export function buildPage({ commands: data, examples: recorded, routes }) {
       title: 'Overview',
       blocks: [
         { t: 'p', text: '`meowny` talks to the meowNY desktop app running on this computer. It never opens your data file.' },
-        { t: 'note', kind: 'info', text: 'The app must be running and unlocked, with **settings › command line access** turned on.' },
+        { t: 'note', kind: 'info', text: 'The app must be running and unlocked, with **settings › CLI access** turned on.' },
       ],
     },
     {
       id: 'quick-start',
-      title: 'Quick start',
+      title: 'Set it up',
       blocks: [
+        { t: 'h3', id: 'get-it', text: '1. Get meowny' },
+        {
+          t: 'table',
+          head: ['You have', 'Do this'],
+          rows: [
+            ['Linux, installed with the `.deb`', 'Nothing: it is already there. Check with `meowny --version`.'],
+            ['Linux, AppImage', `Download \`meowny-<version>-linux-x86_64\` from [the latest release](${REPO}/releases/latest), then: \`mv meowny-*-linux-x86_64 ~/.local/bin/meowny && chmod +x ~/.local/bin/meowny\``],
+            ['Windows', `Download \`meowny-<version>-windows-x86_64.exe\` from [the latest release](${REPO}/releases/latest), rename it \`meowny.exe\` and put it in a folder on your PATH.`],
+            ['The source code', '`cargo install --path cli --root ~/.local`'],
+          ],
+        },
+        { t: 'h3', id: 'connect', text: '2. Connect it to the app' },
         {
           t: 'ol',
           items: [
-            'In the app: **settings › command line access**. Turn it on and make a token. It is shown once.',
-            'Install: `cargo install --path cli`',
-            'Save the token: `echo "$TOKEN" | meowny login`',
+            'Open meowNY and go to **settings › CLI access**. Turn it on.',
+            'Make a token. **Read only** is the safe choice; pick **read and write** if it should add or change things. Copy it: it is shown once.',
+            'Run `meowny login`, paste the token and press Enter.',
+            'Check: `meowny status` shows the app version and what the token may do.',
           ],
         },
         { t: 'code', text: 'meowny status\nmeowny transactions list --limit 5' },
+        { t: 'h3', id: 'agent-setup', text: '3. For an AI agent (optional)' },
+        { t: 'p', text: 'Paste the short instructions from [for AI agents](#agents) into the agent\'s instructions. The agent uses the token saved in step 2.' },
       ],
     },
     {
@@ -278,7 +294,7 @@ export function buildPage({ commands: data, examples: recorded, routes }) {
           'No restore, wipe or currency change through it.',
         ],
       },
-      { t: 'note', kind: 'warn', text: 'A leaked token is a key to your data. Revoke it in **settings › command line access**.' },
+      { t: 'note', kind: 'warn', text: 'A leaked token is a key to your data. Revoke it in **settings › CLI access**.' },
     ],
   }
 

@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
-import { budgets as budgetsApi, MONTH, type MonthHistory, type Overview } from '../api/budgets'
-import { categories as categoriesApi, type Category } from '../api/categories'
+import { budgets as budgetsApi, MONTH, type MonthHistory, type Overview, type Span } from '../api/budgets'
+import { categories as categoriesApi, type Category, type CategoryInMonth } from '../api/categories'
 import { errorText } from '../api/invoke'
 import { monthLabel, shiftMonth } from '../api/months'
 import { useLocation, useNavigate } from 'react-router-dom'
 import AddCategoryModal from '../components/AddCategoryModal'
-import ConfirmModal from '../components/ConfirmModal'
+import BudgetSpanModal from '../components/BudgetSpanModal'
 import EditCategoryModal from '../components/EditCategoryModal'
 import MonthNav from '../components/MonthNav'
 import SectionTabs from '../components/SectionTabs'
@@ -16,7 +16,10 @@ import { amountString, formatMoney } from '../lib/money'
 import { useMoneySettings, type MoneySettings } from '../hooks/useMoneySettings'
 import { useProfile } from '../hooks/profile'
 import { useSwipeHandler } from '../hooks/swipe'
+import { applyOrder } from '../lib/reorder'
 import { step } from '../lib/swipe'
+import { useSticky } from '../lib/sticky'
+import { useReorder } from '../hooks/useReorder'
 import { useToast } from '../hooks/toast'
 import { useI18n, useT } from '../i18n/context'
 import { useShortcut } from '../keys/registry'
@@ -38,11 +41,11 @@ export default function CategoriesPage() {
 function CategoriesView({ settings, thisMonth }: { settings: MoneySettings; thisMonth: string }) {
   const { t, language } = useI18n()
   const phone = useProfile() === 'phone'
-  const [month, setMonth] = useState(thisMonth)
+  const [month, setMonth] = useSticky('categories.month', () => thisMonth)
   const [overview, setOverview] = useState<Overview[] | null>(null)
   const [history, setHistory] = useState<MonthHistory[] | null>(null)
   const pageRef = useRef<HTMLElement>(null)
-  const [categories, setCategories] = useState<Category[] | null>(null)
+  const [categories, setCategories] = useState<CategoryInMonth[] | null>(null)
   const [reload, setReload] = useState(0)
   const say = useToast()
   // the dialogs: a new category, the one being changed, the one about to be deleted
@@ -50,10 +53,15 @@ function CategoriesView({ settings, thisMonth }: { settings: MoneySettings; this
   const [editing, setEditing] = useState<Category | null>(null)
   const [deleting, setDeleting] = useState<Category | null>(null)
   const [pending, setPending] = useState(false)
+  // The answer to "how far should the change reach", while that question is open (null: cancelled).
+  const [spanAnswer, setSpanAnswer] = useState<((span: Span | null) => void) | null>(null)
 
   useEffect(() => {
     let cancelled = false
-    void categoriesApi.list().then(
+    const loading = monthPattern.test(month)
+      ? categoriesApi.listInMonth(month)
+      : categoriesApi.list().then((list) => list.map((category) => ({ ...category, deleted: false })))
+    void loading.then(
       (list) => {
         if (!cancelled) setCategories(list)
       },
@@ -66,7 +74,7 @@ function CategoriesView({ settings, thisMonth }: { settings: MoneySettings; this
     return () => {
       cancelled = true
     }
-  }, [reload, say])
+  }, [month, reload, say])
 
   useEffect(() => {
     if (!monthPattern.test(month)) {
@@ -121,11 +129,11 @@ function CategoriesView({ settings, thisMonth }: { settings: MoneySettings; this
   }, [location.state])
   useRowNavigation()
 
-  async function onDelete() {
+  async function onDelete(span: Span) {
     if (!deleting || pending) return
     setPending(true)
     try {
-      await categoriesApi.remove(deleting.id)
+      await categoriesApi.remove(deleting.id, month, span)
     } catch (failure) {
       say(errorText(failure), 'error')
     } finally {
@@ -140,10 +148,10 @@ function CategoriesView({ settings, thisMonth }: { settings: MoneySettings; this
     scope: 'GLOBAL' | 'CATEGORY'
     amountLimit: string | null
     categoryId?: string
-  }): Promise<string | null> {
+  }, span?: Span): Promise<string | null> {
     if (!monthPattern.test(month)) return t('budgets.chooseMonth')
     try {
-      await budgetsApi.set({ ...body, type: body.type as Side, month })
+      await budgetsApi.set({ ...body, type: body.type as Side, month }, span)
     } catch (failure) {
       return errorText(failure)
     }
@@ -165,9 +173,28 @@ function CategoriesView({ settings, thisMonth }: { settings: MoneySettings; this
       say(t('budgets.amountError'), 'error')
       return t('budgets.amountError')
     }
-    const errorText = await save({ type, scope: 'GLOBAL', amountLimit })
+    // In a past month the person says how far the change reaches; cancelling leaves the budget as it was.
+    let span: Span | undefined
+    const current = overview?.find((row) => row.type === type)?.budgeted ?? null
+    if (month < thisMonth && amountLimit !== current) {
+      const answer = await new Promise<Span | null>((resolve) => setSpanAnswer(() => resolve))
+      if (answer === null) return null
+      span = answer
+    }
+    const errorText = await save({ type, scope: 'GLOBAL', amountLimit }, span)
     if (errorText) say(errorText, 'error')
     return errorText
+  }
+
+  // The new order shows at once; if it cannot be saved, the saved one comes back.
+  async function onReorder(ids: string[]) {
+    setCategories((current) => current && applyOrder(current, ids))
+    try {
+      await categoriesApi.reorder(ids)
+    } catch (failure) {
+      say(errorText(failure), 'error')
+      setReload((value) => value + 1)
+    }
   }
 
   // Zero and "not set" both read as a dash.
@@ -201,6 +228,7 @@ function CategoriesView({ settings, thisMonth }: { settings: MoneySettings; this
       onGlobal={onGlobal}
       onEdit={setEditing}
       onDelete={setDeleting}
+      onReorder={onReorder}
     />,
     <BudgetHalf
       key="INCOME"
@@ -215,6 +243,7 @@ function CategoriesView({ settings, thisMonth }: { settings: MoneySettings; this
       onGlobal={onGlobal}
       onEdit={setEditing}
       onDelete={setDeleting}
+      onReorder={onReorder}
     />,
   ]
   const historyTable = history ? (
@@ -296,11 +325,26 @@ function CategoriesView({ settings, thisMonth }: { settings: MoneySettings; this
           }}
         />
       ) : null}
+      {spanAnswer ? (
+        <BudgetSpanModal
+          onChoose={(span) => {
+            spanAnswer(span)
+            setSpanAnswer(null)
+          }}
+          onClose={() => {
+            spanAnswer(null)
+            setSpanAnswer(null)
+          }}
+        />
+      ) : null}
       {deleting ? (
-        <ConfirmModal
-          title={t('rec.confirmTitle', { action: t('common.delete'), name: deleting.name })}
+        <BudgetSpanModal
+          title={t('budgets.deleteTitle', { name: deleting.name })}
+          labels={{ ONLY: t('budgets.deleteOnly'), FORWARD: t('budgets.deleteForward'), ALL: t('budgets.deleteAll') }}
+          hints={{ ONLY: t('budgets.deleteOnlyHint'), FORWARD: t('budgets.deleteForwardHint'), ALL: t('budgets.deleteAllHint') }}
+          danger
           pending={pending}
-          onConfirm={() => void onDelete()}
+          onChoose={(span) => void onDelete(span)}
           onClose={() => setDeleting(null)}
         />
       ) : null}
@@ -354,6 +398,7 @@ function BudgetHalf({
   onGlobal,
   onEdit,
   onDelete,
+  onReorder,
 }: {
   title: string
   /** The title is already shown by a section around this one. */
@@ -362,15 +407,16 @@ function BudgetHalf({
   month: string
   overview: Overview | null
   amounts: Map<string, string>
-  categories: Category[] | null
+  categories: CategoryInMonth[] | null
   money: (amount: string) => string
   onGlobal: (type: Side, raw: string) => Promise<string | null>
   onEdit: (category: Category) => void
   onDelete: (category: Category) => void
+  onReorder: (ids: string[]) => void
 }) {
   const t = useT()
+  const { listRef, hintId, live } = useReorder(categories, onReorder)
   const budgeted = overview?.budgeted ?? ''
-  const over = overview !== null && overview.overAllocated && overview.budgeted !== null
   return (
     <section className="ui-card budget-half">
       {hideTitle ? null : <CardTitle>{title}</CardTitle>}
@@ -383,26 +429,17 @@ function BudgetHalf({
           onSave={(raw) => onGlobal(type, raw)}
         />
         {overview ? (
-          <>
-            <div className="budget-row quiet">
-              <span className="budget-label">{t('budgets.allocated')}</span>
-              <span className="budget-amount">{money(overview.allocated)}</span>
-              <span className="budget-actions" />
-            </div>
-            <div className="budget-row quiet">
-              <span className="budget-label">{t('budgets.unallocated')}</span>
-              <span className={over ? 'budget-amount over' : 'budget-amount'}>
-                {overview.unallocated === null ? '-' : money(overview.unallocated)}
-              </span>
-              <span className="budget-actions" />
-            </div>
-          </>
+          <div className="budget-row quiet">
+            <span className="budget-label">{t(type === 'EXPENSE' ? 'budgets.colSpent' : 'budgets.colEarned')}</span>
+            <span className="budget-amount">{money(overview.used)}</span>
+            <span className="budget-actions" />
+          </div>
         ) : null}
       </div>
       {/* The category list scrolls on its own, so the summary above and the history below stay in view. */}
       <div className="budget-pane">
         {categories && categories.length > 0 ? (
-          <div className="budget-table" key={month}>
+          <div className="budget-table" key={month} ref={listRef}>
             {categories.map((category) => (
               <CategoryRow
                 key={category.id}
@@ -411,11 +448,18 @@ function BudgetHalf({
                 money={money}
                 onEdit={onEdit}
                 onDelete={onDelete}
+                hintId={hintId}
               />
             ))}
           </div>
         ) : null}
         {categories && categories.length === 0 ? <p>{t('common.noCategories')}</p> : null}
+      </div>
+      <span id={hintId} className="sr-only">
+        {t('categories.reorderHint')}
+      </span>
+      <div className="sr-only" aria-live="polite">
+        {live}
       </div>
     </section>
   )
@@ -518,20 +562,33 @@ function CategoryRow({
   money,
   onEdit,
   onDelete,
+  hintId,
 }: {
-  category: Category
+  category: CategoryInMonth
   value: string
   money: (amount: string) => string
   onEdit: (category: Category) => void
   onDelete: (category: Category) => void
+  /** The text that tells how to reorder, for the screen reader. */
+  hintId: string
 }) {
   const t = useT()
+  // Deleted from a later month on: it still counts here, and there is nothing to change about it.
+  if (category.deleted) {
+    return (
+      <div className="budget-row quiet" data-reorder-id={category.id}>
+        <span className="budget-label">{category.name}</span>
+        <span className={value === '' || Number(value) === 0 ? 'budget-amount unset' : 'budget-amount'}>{value === '' ? '-' : money(value)}</span>
+        <span className="budget-note">{t('budgets.deletedLater')}</span>
+      </div>
+    )
+  }
   return (
-    <div className="budget-row">
+    <div className="budget-row" data-reorder-id={category.id}>
       <span className="budget-label">{category.name}</span>
       <span className={value === '' || Number(value) === 0 ? 'budget-amount unset' : 'budget-amount'}>{value === '' ? '-' : money(value)}</span>
       <span className="budget-actions">
-        <Button variant="ghost" size="sm" data-row-focus onClick={() => onEdit(category)}>
+        <Button variant="ghost" size="sm" data-row-focus aria-describedby={hintId} onClick={() => onEdit(category)}>
           {t('common.edit')}
         </Button>
         <Button variant="ghost" size="sm" className="row-danger" onClick={() => onDelete(category)}>

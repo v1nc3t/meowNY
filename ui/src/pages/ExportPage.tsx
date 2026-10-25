@@ -18,6 +18,7 @@ import { fromBase64Url } from '../lib/preview/load'
 import { MAX_COLUMNS, MAX_ROWS, readXlsx, type XlsxContent } from '../lib/preview/xlsx'
 import { formatDate, formatMoney } from '../lib/money'
 import { thisPeriod, type RangeMode } from '../lib/range'
+import { recall, useRemember } from '../lib/sticky'
 import { useDebounced } from '../hooks/useDebounced'
 import { useMoneySettings, type MoneySettings } from '../hooks/useMoneySettings'
 import { useToast } from '../hooks/toast'
@@ -79,7 +80,15 @@ function ExportForm({ today, settings, categories }: { today: Today; settings: M
   const say = useToast()
   const [busy, setBusy] = useState(false)
   const [format, setFormat] = useState<ExportFormat>('json')
-  const [choice, setChoice] = useState<Choice>(() => defaultChoice(today))
+  const [choice, setChoice] = useState<Choice>(() => ({
+    ...defaultChoice(today),
+    ...recall<Partial<Choice>>('export.range', () => ({})),
+  }))
+  const savedRange = useMemo(
+    () => ({ limitDates: choice.limitDates, mode: choice.mode, from: choice.from, to: choice.to }),
+    [choice.limitDates, choice.mode, choice.from, choice.to],
+  )
+  useRemember('export.range', savedRange)
   const [modeMenu, setModeMenu] = useState(false)
   const [page, setPage] = useState<'A4' | 'LETTER'>('A4')
   const [includeTransactions, setIncludeTransactions] = useState(false)

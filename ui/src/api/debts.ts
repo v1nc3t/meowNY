@@ -197,6 +197,8 @@ export const DuePayment = z.object({
   dueDate: date,
   /** What it is for; null for a bill whose amount changes every time. */
   amount: amount.nullable(),
+  /** A recurring income that was not received, not a payment you owe. */
+  income: z.boolean(),
   /** Whole days since it fell due; 0 is today. */
   daysOverdue: z.number().int().nonnegative(),
 })
@@ -209,6 +211,8 @@ export const Due = z.object({
   total: amount,
   /** How many say nothing about the amount. */
   unknown: z.number().int().nonnegative(),
+  /** What the income that was not received comes to, for those that say what it is. */
+  incomeTotal: amount,
 })
 export type Due = z.infer<typeof Due>
 

@@ -124,7 +124,7 @@ pub const DEBTS_SUMMARY: Route = Route {
 pub const DEBTS_DUE: Route = Route {
     name: "debts.due",
     scope: Scope::Read,
-    summary: "The recurring payments that are overdue and not paid or skipped, one for each occurrence that was missed (at most 24 for an item), the oldest first, with the day each fell due, what it is for (null for a bill with no fixed amount), the days late and what they come to. A payment is overdue from the day after its day; income and paused or ended items are not listed.",
+    summary: "The recurring payments that are overdue and not paid or skipped, one for each occurrence that was missed (at most 24 for an item), the oldest first, with the day each fell due, what it is for (null for a bill with no fixed amount), the days late and what they come to. A payment is overdue from the day after its day; paused or ended items are not listed. Income that was not received is listed too (income true) and comes to incomeTotal, not to total.",
     params: &[],
     confirm: None,
     run: |ctx, _| {

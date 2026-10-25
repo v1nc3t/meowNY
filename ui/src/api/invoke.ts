@@ -18,6 +18,7 @@ const ERROR_CODES = [
   'invalid_backup',
   'not_found',
   'name_exists',
+  'over_budget',
   'too_large',
   'file_missing',
   'file_damaged',

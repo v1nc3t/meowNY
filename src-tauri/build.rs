@@ -17,6 +17,8 @@ const COMMANDS: &[&str] = &[
     "create_category",
     "rename_category",
     "delete_category",
+    "list_categories_in_month",
+    "reorder_categories",
     "list_transactions",
     "create_transaction",
     "update_transaction",

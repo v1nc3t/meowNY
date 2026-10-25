@@ -14,6 +14,7 @@ const WRITE_ROUTES: &[&str] = &[
     "categories.create",
     "categories.rename",
     "categories.delete",
+    "categories.reorder",
     "transactions.create",
     "transactions.update",
     "transactions.delete",
@@ -90,6 +91,77 @@ fn deleting_a_category_keeps_its_transactions() {
     ok(&vault, "categories.delete", json!({ "id": rent }));
     let after = ok(&vault, "transactions.list", json!({ "categoryId": rent, "limit": 100 }));
     assert_eq!(before, after, "the transactions still have their category");
+}
+
+fn category_ids(vault: &Vault, kind: &str) -> Vec<String> {
+    ok(vault, "categories.list", json!({ "type": kind })).as_array().unwrap().iter().map(|c| c["id"].as_str().unwrap().to_string()).collect()
+}
+
+#[test]
+fn deleting_a_category_for_a_span_needs_the_month_and_follows_the_span() {
+    let (_dir, vault) = seeded();
+    let make = |name: &str| ok(&vault, "categories.create", json!({ "name": name, "type": "EXPENSE" }))["id"].as_str().unwrap().to_string();
+    let (only, forward, all) = (make("Only"), make("Forward"), make("All"));
+    ok(&vault, "categories.delete", json!({ "id": only, "month": "2026-10", "span": "ONLY" }));
+    assert!(category_ids(&vault, "EXPENSE").contains(&only), "ONLY keeps the category");
+    ok(&vault, "categories.delete", json!({ "id": forward, "month": "2026-08", "span": "FORWARD" }));
+    assert!(!category_ids(&vault, "EXPENSE").contains(&forward), "FORWARD from a past month removes it");
+    ok(&vault, "categories.delete", json!({ "id": all, "month": "2026-10", "span": "ALL" }));
+    assert!(!category_ids(&vault, "EXPENSE").contains(&all));
+    for args in [json!({ "id": only, "month": "2026-10" }), json!({ "id": only, "span": "ALL" }), json!({ "id": only, "month": "2026-10", "span": "SOON" })] {
+        assert_eq!(refused(&vault, "categories.delete", args), (400, "invalid_input".into()));
+    }
+}
+
+#[test]
+fn categories_are_reordered_by_giving_all_of_one_type() {
+    let (_dir, vault) = seeded();
+    let mut ids = category_ids(&vault, "EXPENSE");
+    ids.reverse();
+    ok(&vault, "categories.reorder", json!({ "ids": ids }));
+    assert_eq!(category_ids(&vault, "EXPENSE"), ids);
+    // Not all of the type, a repeat, and a mix of types are refused.
+    assert_eq!(refused(&vault, "categories.reorder", json!({ "ids": [ids[0]] })), (400, "invalid_input".into()));
+    assert_eq!(refused(&vault, "categories.reorder", json!({ "ids": [ids[0], ids[0]] })), (400, "invalid_input".into()));
+    assert_eq!(refused(&vault, "categories.reorder", json!({ "ids": [ids[0], category_ids(&vault, "INCOME")[0]] })), (400, "invalid_input".into()));
+    assert_eq!(category_ids(&vault, "EXPENSE"), ids, "refused changes left the order");
+}
+
+#[test]
+fn a_budget_span_reaches_the_months_it_says() {
+    let (_dir, vault) = seeded();
+    let budgeted = |month: &str| ok(&vault, "budgets.overview", json!({ "month": month }))[1]["budgeted"].clone();
+    let set = |span: &str, amount: &str| ok(&vault, "budgets.set", json!({ "type": "EXPENSE", "month": "2026-05", "amountLimit": amount, "span": span }));
+    set("FORWARD", "9777.00");
+    assert_eq!((budgeted("2026-05"), budgeted("2026-09")), (json!("9777.00"), json!("9777.00")));
+    assert_ne!(budgeted("2026-04"), json!("9777.00"), "the months before keep theirs");
+    set("ALL", "5555.00");
+    assert_eq!((budgeted("2026-04"), budgeted("2026-05")), (json!("5555.00"), json!("5555.00")));
+    ok(&vault, "budgets.remove", json!({ "type": "EXPENSE", "month": "2026-05", "span": "ALL" }));
+    assert_eq!(budgeted("2026-04"), Value::Null);
+    assert_eq!(refused(&vault, "budgets.set", json!({ "type": "EXPENSE", "month": "2026-05", "amountLimit": "1.00" })), (409, "over_budget".into()), "never less than the categories hold");
+    assert_eq!(refused(&vault, "budgets.set", json!({ "type": "EXPENSE", "month": "2026-05", "amountLimit": "1.00", "span": "sometimes" })), (400, "invalid_input".into()));
+}
+
+#[test]
+fn one_chosen_occurrence_of_a_recurring_item_can_be_paid_or_skipped() {
+    let (_dir, vault) = seeded();
+    let bills = category_id(&vault, "EXPENSE", "Rent");
+    let make = |name: &str| {
+        let item = json!({ "name": name, "amount": "10.00", "categoryId": bills, "startDate": "2026-10-20", "intervalUnit": "MONTH", "intervalCount": 1, "description": "plain" });
+        ok(&vault, "recurring.create", item)["id"].as_str().unwrap().to_string()
+    };
+    let (pay, skip) = (make("Pay"), make("Skip"));
+    let paid = ok(&vault, "recurring.pay", json!({ "id": pay, "dueDate": "2026-11-20", "description": "early" }));
+    assert_eq!(paid["description"], "early");
+    let item = |id: &str| ok(&vault, "recurring.list", json!({})).as_array().unwrap().iter().find(|r| r["id"] == id).unwrap().clone();
+    assert_eq!(item(&pay)["nextDueDate"], "2026-10-20", "the current occurrence is still due");
+    assert_eq!(refused(&vault, "recurring.pay", json!({ "id": pay, "dueDate": "2026-11-20" })), (400, "invalid_input".into()), "not twice");
+    assert_eq!(ok(&vault, "recurring.pay", json!({ "id": pay, "description": "" }))["description"], Value::Null, "empty clears the note");
+    ok(&vault, "recurring.skip", json!({ "id": skip, "dueDate": "2026-12-20" }));
+    assert_eq!(item(&skip)["nextDueDate"], "2026-10-20");
+    assert_eq!(refused(&vault, "recurring.skip", json!({ "id": skip, "dueDate": "2026-12-20" })), (400, "invalid_input".into()), "not twice");
+    assert_eq!(refused(&vault, "recurring.skip", json!({ "id": skip, "dueDate": "2026-10-01" })), (400, "invalid_input".into()), "not before the next one");
 }
 
 #[test]
@@ -320,6 +392,7 @@ fn a_locked_app_refuses_every_write_and_nothing_changes() {
         ("categories.create", json!({ "name": "Pets", "type": "EXPENSE" })),
         ("categories.rename", json!({ "id": food, "name": "Food" })),
         ("categories.delete", json!({ "id": food })),
+        ("categories.reorder", json!({ "ids": [food] })),
         ("transactions.create", json!({ "name": "X", "amount": "1.00", "paymentDate": "2026-10-14", "categoryId": food })),
         ("transactions.update", json!({ "id": "1", "name": "X" })),
         ("transactions.delete", json!({ "id": "1" })),

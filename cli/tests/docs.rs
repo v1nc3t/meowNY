@@ -318,6 +318,11 @@ fn tour(app: &App) -> (Map<String, Value>, Vec<Value>) {
     t.example("people unarchive", write, &format!("meowny people unarchive {bob}"), &["people", "unarchive", &bob], false, true, None);
     t.example("ledger delete", write, &format!("meowny ledger delete {loan} --yes"), &["ledger", "delete", &loan, "--yes"], true, false, None);
     t.example("transactions delete", write, &format!("meowny transactions delete {bread} --yes"), &["transactions", "delete", &bread, "--yes"], true, false, None);
+    let listed = t.capture(read, &Tour::strings(&["categories", "list", "--type", "expense", "--json"]), None, &[]);
+    let listed: Value = serde_json::from_str(listed["stdout"].as_str().unwrap()).unwrap();
+    let order: Vec<&str> = listed.as_array().unwrap().iter().map(|c| c["id"].as_str().unwrap()).filter(|id| *id != pets).collect();
+    let ids = format!("{pets},{}", order.join(","));
+    t.example("categories reorder", write, &format!("meowny categories reorder --ids {ids}"), &["categories", "reorder", "--ids", &ids], false, true, None);
     t.example("categories delete", write, &format!("meowny categories delete {pets} --yes"), &["categories", "delete", &pets, "--yes"], true, false, None);
 
     // About this program.
@@ -345,7 +350,7 @@ fn tour(app: &App) -> (Map<String, Value>, Vec<Value>) {
     t.error("The app is locked", "meowny categories list", read, &["categories", "list"], &[]);
     app.vault.unlock(None).unwrap();
     let elsewhere = tempfile::tempdir().unwrap();
-    t.error("The app is not running, or command line access is off", "meowny status", read, &["status"], &[("MEOWNY_DATA_DIR", elsewhere.path().to_str().unwrap().to_string())]);
+    t.error("The app is not running, or CLI access is off", "meowny status", read, &["status"], &[("MEOWNY_DATA_DIR", elsewhere.path().to_str().unwrap().to_string())]);
     std::fs::write(path("taken.csv"), "mine").unwrap();
     t.error("A file that already exists", "meowny export csv --out /home/you/taken.csv", read, &["export", "csv", "--out", &path("taken.csv")], &[]);
     t.error("A file name that is not an export", "meowny export json --out /home/you/data.txt", read, &["export", "json", "--out", &path("data.txt")], &[]);

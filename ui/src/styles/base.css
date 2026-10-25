@@ -1,4 +1,4 @@
-/* Page-wide defaults: scrollbars, plain elements, headings, buttons, fields, notices and tooltips. */
+/* Page-wide defaults: scrollbars, plain elements, headings, buttons, fields and notices. */
 
 *,
 *::before,
@@ -377,54 +377,6 @@ p.warn {
   flex-direction: row;
   align-items: center;
   gap: 0.5rem;
-}
-
-/* Hover hints for keyboard shortcuts: a small dark label that fades in shortly after hovering or focusing. */
-[data-tip] {
-  position: relative;
-}
-
-[data-tip]::after {
-  content: attr(data-tip);
-  position: absolute;
-  top: calc(100% + 0.4rem);
-  left: 0;
-  z-index: 60;
-  padding: 0.375rem 0.75rem;
-  background: var(--primary);
-  border-radius: var(--radius-md);
-  box-shadow: var(--shadow-md);
-  color: var(--primary-foreground);
-  font-family: var(--font);
-  font-size: 0.75rem;
-  font-weight: 400;
-  letter-spacing: normal;
-  line-height: 1.4;
-  text-decoration: none;
-  text-transform: none;
-  white-space: nowrap;
-  pointer-events: none;
-  opacity: 0;
-  transform: translateY(-2px);
-  transition: opacity 0.12s ease 0.45s, transform 0.12s ease 0.45s;
-}
-
-[data-tip]:hover::after,
-[data-tip]:focus-visible::after {
-  opacity: 1;
-  transform: none;
-}
-
-/* With the sidebar collapsed the hints sit beside the icons, not under them. */
-.app-shell.is-collapsed .app-sidebar [data-tip]::after {
-  top: 50%;
-  left: calc(100% + 0.5rem);
-  transform: translateY(-50%);
-}
-
-.app-shell.is-collapsed .app-sidebar [data-tip]:hover::after,
-.app-shell.is-collapsed .app-sidebar [data-tip]:focus-visible::after {
-  transform: translateY(-50%);
 }
 
 kbd {
