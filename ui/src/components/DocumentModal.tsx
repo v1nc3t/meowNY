@@ -179,28 +179,30 @@ export default function DocumentModal({ id, onClose, onChanged }: { id: string; 
         </form>
         <section className="detail-section">
           <p className="detail-title">{t('docs.sectionAbout')}</p>
-          <dl className="doc-facts">
-            <dt>{t('common.type')}</dt>
-            <dd>{t(typeText(doc.mediaType))}</dd>
-            <dt>{t('docs.size')}</dt>
-            <dd>{formatSize(doc.sizeBytes, locale)}</dd>
-          </dl>
+          <div className="doc-file">
+            <dl className="doc-facts">
+              <dt>{t('common.type')}</dt>
+              <dd>{t(typeText(doc.mediaType))}</dd>
+              <dt>{t('docs.size')}</dt>
+              <dd>{formatSize(doc.sizeBytes, locale)}</dd>
+            </dl>
+            {canPreview(doc) || openable ? (
+              <div className="doc-action">
+                {canPreview(doc) ? (
+                  <Button variant="outline" size="sm" onClick={() => setPreviewing(true)}>
+                    {t('docs.previewButton')}
+                  </Button>
+                ) : null}
+                {openable ? (
+                  <Button variant="outline" size="sm" onClick={onOpen}>
+                    {t('docs.open')}
+                  </Button>
+                ) : null}
+              </div>
+            ) : null}
+          </div>
           {state ? <p className="hint">{t(state)}</p> : null}
           {doc.hasFile && !openable && !canPreview(doc) ? <p className="hint">{t('docs.cannotOpen')}</p> : null}
-          {canPreview(doc) ? (
-            <div className="doc-action">
-              <Button variant="outline" size="sm" onClick={() => setPreviewing(true)}>
-                {t('docs.previewButton')}
-              </Button>
-            </div>
-          ) : null}
-          {openable ? (
-            <div className="doc-action">
-              <Button variant="outline" size="sm" onClick={onOpen}>
-                {t('docs.open')}
-              </Button>
-            </div>
-          ) : null}
         </section>
         <section className="detail-section">
           <p className="detail-title">{t('docs.links')}</p>
@@ -210,10 +212,13 @@ export default function DocumentModal({ id, onClose, onChanged }: { id: string; 
             <ul className="doc-links">
               {links.map((link) => (
                 <li key={`${link.kind}-${link.id}`}>
-                  <span>
-                    {t(link.kind === 'transaction' ? 'docs.kindTransaction' : link.kind === 'recurring' ? 'docs.kindRecurring' : 'docs.kindLedger')}: {link.name} ({formatDate(link.date, locale)})
+                  <span className="doc-link-text">
+                    <span className="doc-link-name">{link.name}</span>
+                    <span className="doc-link-meta">
+                      {t(link.kind === 'transaction' ? 'docs.kindTransaction' : link.kind === 'recurring' ? 'docs.kindRecurring' : 'docs.kindLedger')} · {formatDate(link.date, locale)}
+                    </span>
                   </span>
-                  <Button variant="ghost" size="sm" onClick={() => void onDetach(link)}>
+                  <Button variant="ghost" size="sm" className="row-danger" onClick={() => void onDetach(link)}>
                     {t('docs.detach')}
                   </Button>
                 </li>
