@@ -508,7 +508,7 @@ function BudgetBars({ bva, settings }: { bva: BudgetVsActual; settings: MoneySet
   return (
     <div className="dash-budgets">
       {groups.map((group) => (
-        <section key={group.type}>
+        <section key={group.type} className={group.type === 'EXPENSE' ? 'dash-budget-group is-expense' : 'dash-budget-group is-income'}>
           <h3 className="dash-group-title">{t(group.type === 'EXPENSE' ? 'budgets.expenses' : 'budgets.income')}</h3>
           <ul className="dash-bars">
             {group.rows.map((r) => {
