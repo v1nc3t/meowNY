@@ -126,6 +126,14 @@ export const en = {
   'budgets.spanOnly': 'only this month',
   'budgets.spanForward': 'this month and later',
   'budgets.spanAll': 'all months, before and after',
+  'budgets.deleteTitle': 'delete {name}: for which months?',
+  'budgets.deleteOnly': 'only this month',
+  'budgets.deleteForward': 'this month and later',
+  'budgets.deleteAll': 'all months',
+  'budgets.deleteOnlyHint': 'the category stays; only its budget for this month is removed.',
+  'budgets.deleteForwardHint': 'the category is gone from this month on. earlier months keep its budget and spending.',
+  'budgets.deleteAllHint': 'the category is gone everywhere: its budget and spending leave every month.',
+  'budgets.deletedLater': 'deleted later',
 
   // Settings
   'settings.title': 'settings',

@@ -177,6 +177,13 @@
   text-align: right;
 }
 
+.budget-note {
+  align-self: center;
+  font-size: 0.75rem;
+  color: var(--muted-foreground);
+  text-align: right;
+}
+
 .budget-actions {
   display: flex;
   justify-content: flex-end;

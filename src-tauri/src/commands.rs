@@ -7,7 +7,7 @@ use tauri::State;
 
 use crate::api::{Host, HostStatus};
 use crate::backup;
-use crate::categories::{self, Category, CategoryType};
+use crate::categories::{self, Category, CategoryInMonth, CategoryType};
 use crate::budgets::{self, Budget, Overview, SetBudget};
 use crate::clock;
 use crate::currency::{self, Conversion};
@@ -107,6 +107,7 @@ pub const COMMANDS: &[&str] = &[
     "create_category",
     "rename_category",
     "delete_category",
+    "list_categories_in_month",
     "list_transactions",
     "create_transaction",
     "update_transaction",
@@ -314,9 +315,18 @@ pub fn rename_category(vault: Shared, id: String, name: String) -> Result<Catego
 }
 
 #[tauri::command]
-pub fn delete_category(vault: Shared, id: String) -> Result<(), AppError> {
+pub fn list_categories_in_month(vault: Shared, kind: Option<CategoryType>, month: String) -> Result<Vec<CategoryInMonth>, AppError> {
+    vault.with_conn(|c| categories::list_in_month(c, kind, &month))
+}
+
+/// With a month and a span the category is deleted for that period, otherwise from now on.
+#[tauri::command]
+pub fn delete_category(vault: Shared, id: String, month: Option<String>, span: Option<budgets::Span>) -> Result<(), AppError> {
     let id = categories::parse_id(&id)?;
-    vault.with_conn(|c| categories::delete(c, id, chrono::Utc::now()))
+    match (month, span) {
+        (Some(month), Some(span)) => vault.with_conn(|c| categories::delete_span(c, id, &month, span, chrono::Utc::now())),
+        _ => vault.with_conn(|c| categories::delete(c, id, chrono::Utc::now())),
+    }
 }
 
 #[tauri::command]

@@ -50,7 +50,7 @@ pub(crate) fn pct_tenths(actual: i64, budget: i64) -> Option<f64> {
 }
 
 /// Every category for one month, income and expense. A category that was deleted is listed only
-/// if it still has transactions that month. Sorted by type, then name.
+/// if it still counts in that month (deleted from a later month) or has transactions in it. Sorted by type, then name.
 pub fn budget_vs_actual(conn: &Connection, month: &str) -> Result<BudgetVsActual, AppError> {
     let first = month_start(month)?;
     let start = first.to_string();
@@ -66,7 +66,7 @@ pub fn budget_vs_actual(conn: &Connection, month: &str) -> Result<BudgetVsActual
          FROM categories c
          LEFT JOIN transaction_costs t ON t.category_id = c.id AND t.payment_date >= ?1 AND t.payment_date < ?2
          GROUP BY c.id
-         HAVING c.deleted_at IS NULL OR COUNT(t.transaction_id) > 0
+         HAVING c.deleted_at IS NULL OR c.deleted_at >= ?2 OR COUNT(t.transaction_id) > 0
          ORDER BY c.type, c.name COLLATE NOCASE, c.id",
     )?;
     let rows = statement.query_map([&start, &end], |r| {

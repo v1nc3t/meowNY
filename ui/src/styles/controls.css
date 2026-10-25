@@ -310,6 +310,12 @@ body:has(dialog[open]) {
   margin: 0;
 }
 
+.span-hint {
+  margin: 0.75rem 0 0;
+  font-size: 0.8125rem;
+  color: var(--muted-foreground);
+}
+
 .confirm-text {
   margin: 0;
   color: var(--foreground);

@@ -1,12 +1,11 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { budgets as budgetsApi, MONTH, type MonthHistory, type Overview, type Span } from '../api/budgets'
-import { categories as categoriesApi, type Category } from '../api/categories'
+import { categories as categoriesApi, type Category, type CategoryInMonth } from '../api/categories'
 import { errorText } from '../api/invoke'
 import { monthLabel, shiftMonth } from '../api/months'
 import { useLocation, useNavigate } from 'react-router-dom'
 import AddCategoryModal from '../components/AddCategoryModal'
 import BudgetSpanModal from '../components/BudgetSpanModal'
-import ConfirmModal from '../components/ConfirmModal'
 import EditCategoryModal from '../components/EditCategoryModal'
 import MonthNav from '../components/MonthNav'
 import SectionTabs from '../components/SectionTabs'
@@ -43,7 +42,7 @@ function CategoriesView({ settings, thisMonth }: { settings: MoneySettings; this
   const [overview, setOverview] = useState<Overview[] | null>(null)
   const [history, setHistory] = useState<MonthHistory[] | null>(null)
   const pageRef = useRef<HTMLElement>(null)
-  const [categories, setCategories] = useState<Category[] | null>(null)
+  const [categories, setCategories] = useState<CategoryInMonth[] | null>(null)
   const [reload, setReload] = useState(0)
   const say = useToast()
   // the dialogs: a new category, the one being changed, the one about to be deleted
@@ -56,7 +55,10 @@ function CategoriesView({ settings, thisMonth }: { settings: MoneySettings; this
 
   useEffect(() => {
     let cancelled = false
-    void categoriesApi.list().then(
+    const loading = monthPattern.test(month)
+      ? categoriesApi.listInMonth(month)
+      : categoriesApi.list().then((list) => list.map((category) => ({ ...category, deleted: false })))
+    void loading.then(
       (list) => {
         if (!cancelled) setCategories(list)
       },
@@ -69,7 +71,7 @@ function CategoriesView({ settings, thisMonth }: { settings: MoneySettings; this
     return () => {
       cancelled = true
     }
-  }, [reload, say])
+  }, [month, reload, say])
 
   useEffect(() => {
     if (!monthPattern.test(month)) {
@@ -124,11 +126,11 @@ function CategoriesView({ settings, thisMonth }: { settings: MoneySettings; this
   }, [location.state])
   useRowNavigation()
 
-  async function onDelete() {
+  async function onDelete(span: Span) {
     if (!deleting || pending) return
     setPending(true)
     try {
-      await categoriesApi.remove(deleting.id)
+      await categoriesApi.remove(deleting.id, month, span)
     } catch (failure) {
       say(errorText(failure), 'error')
     } finally {
@@ -320,10 +322,13 @@ function CategoriesView({ settings, thisMonth }: { settings: MoneySettings; this
         />
       ) : null}
       {deleting ? (
-        <ConfirmModal
-          title={t('rec.confirmTitle', { action: t('common.delete'), name: deleting.name })}
+        <BudgetSpanModal
+          title={t('budgets.deleteTitle', { name: deleting.name })}
+          labels={{ ONLY: t('budgets.deleteOnly'), FORWARD: t('budgets.deleteForward'), ALL: t('budgets.deleteAll') }}
+          hints={{ ONLY: t('budgets.deleteOnlyHint'), FORWARD: t('budgets.deleteForwardHint'), ALL: t('budgets.deleteAllHint') }}
+          danger
           pending={pending}
-          onConfirm={() => void onDelete()}
+          onChoose={(span) => void onDelete(span)}
           onClose={() => setDeleting(null)}
         />
       ) : null}
@@ -385,7 +390,7 @@ function BudgetHalf({
   month: string
   overview: Overview | null
   amounts: Map<string, string>
-  categories: Category[] | null
+  categories: CategoryInMonth[] | null
   money: (amount: string) => string
   onGlobal: (type: Side, raw: string) => Promise<string | null>
   onEdit: (category: Category) => void
@@ -542,13 +547,23 @@ function CategoryRow({
   onEdit,
   onDelete,
 }: {
-  category: Category
+  category: CategoryInMonth
   value: string
   money: (amount: string) => string
   onEdit: (category: Category) => void
   onDelete: (category: Category) => void
 }) {
   const t = useT()
+  // Deleted from a later month on: it still counts here, and there is nothing to change about it.
+  if (category.deleted) {
+    return (
+      <div className="budget-row quiet">
+        <span className="budget-label">{category.name}</span>
+        <span className={value === '' || Number(value) === 0 ? 'budget-amount unset' : 'budget-amount'}>{value === '' ? '-' : money(value)}</span>
+        <span className="budget-note">{t('budgets.deletedLater')}</span>
+      </div>
+    )
+  }
   return (
     <div className="budget-row">
       <span className="budget-label">{category.name}</span>

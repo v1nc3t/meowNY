@@ -19,6 +19,7 @@
     "allow-create-category",
     "allow-rename-category",
     "allow-delete-category",
+    "allow-list-categories-in-month",
     "allow-list-transactions",
     "allow-create-transaction",
     "allow-update-transaction",

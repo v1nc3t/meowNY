@@ -1,11 +1,17 @@
 //! Categories. Deleting is soft: the row stays so old transactions keep their category, and a
 //! budget row with a NULL limit is written from the current month so the category stops being
 //! budgeted without losing its budget history (schema design decision 3).
+//!
+//! `deleted_at` marks the month a category is gone from: a deleted category still counts in month S
+//! (its budget in `allocated`, its spending in `used`) when `deleted_at` is at or after the start of
+//! the month after S. The plain `delete` sets it to now, so the category counts in the months before
+//! the current one. `delete_span` can set it to any month, or leave the category alive for one month.
 
 use chrono::{DateTime, Utc};
 use rusqlite::{params, Connection, OptionalExtension};
 use serde::{Deserialize, Serialize, Serializer};
 
+use crate::budgets::{self, Span};
 use crate::clock;
 use crate::vault::AppError;
 
@@ -56,6 +62,18 @@ pub struct Category {
     pub kind: CategoryType,
 }
 
+/// A category as the budget page of one month shows it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct CategoryInMonth {
+    #[serde(serialize_with = "serialize_id")]
+    pub id: i64,
+    pub name: String,
+    #[serde(rename = "type")]
+    pub kind: CategoryType,
+    /// Deleted from a later month on: it still counts in this one, and can only be looked at.
+    pub deleted: bool,
+}
+
 pub(crate) fn clean_name(name: &str) -> Result<String, AppError> {
     let name = name.trim();
     let length = name.chars().count();
@@ -98,6 +116,31 @@ pub fn list(conn: &Connection, kind: Option<CategoryType>) -> Result<Vec<Categor
     )?;
     let rows = statement.query_map([kind.map(CategoryType::as_sql)], from_row)?;
     rows.map(|row| build(row?)).collect()
+}
+
+/// The categories that count in `month` ("YYYY-MM"), oldest first: the active ones, and the ones deleted from a later month on
+/// that still have a budget or a transaction in it.
+pub fn list_in_month(conn: &Connection, kind: Option<CategoryType>, month: &str) -> Result<Vec<CategoryInMonth>, AppError> {
+    let first = budgets::month_start(month)?;
+    let start = first.to_string();
+    let after = budgets::next_month(first)?.to_string();
+    let mut statement = conn.prepare(
+        "SELECT c.id, c.name, c.type, c.deleted_at IS NOT NULL FROM categories c
+         WHERE (?1 IS NULL OR c.type = ?1)
+           AND (c.deleted_at IS NULL OR (c.deleted_at >= ?2 AND (
+                 EXISTS (SELECT 1 FROM transaction_costs t WHERE t.category_id = c.id AND t.payment_date >= ?3 AND t.payment_date < ?2)
+                 OR (SELECT b.amount_limit_minor FROM budgets b WHERE b.category_id = c.id AND b.effective_from <= ?3
+                     ORDER BY b.effective_from DESC LIMIT 1) IS NOT NULL)))
+         ORDER BY c.id",
+    )?;
+    let rows = statement.query_map(params![kind.map(CategoryType::as_sql), after, start], |r| {
+        Ok((r.get::<_, i64>(0)?, r.get::<_, String>(1)?, r.get::<_, String>(2)?, r.get::<_, bool>(3)?))
+    })?;
+    rows.map(|row| {
+        let (id, name, kind, deleted) = row?;
+        Ok(CategoryInMonth { id, name, kind: CategoryType::from_sql(&kind)?, deleted })
+    })
+    .collect()
 }
 
 pub fn create(conn: &Connection, name: &str, kind: CategoryType) -> Result<Category, AppError> {
@@ -144,6 +187,76 @@ pub fn delete(conn: &mut Connection, id: i64, now: DateTime<Utc>) -> Result<(), 
          ON CONFLICT (category_id, effective_from) DO UPDATE SET amount_limit_minor = NULL",
         params![kind, id, month],
     )?;
+    tx.commit()?;
+    Ok(())
+}
+
+/// Deletes a category for a period, seen from `month` ("YYYY-MM"), in one transaction. Only: the category stays and just its
+/// budget for that month goes. Forward: it is gone from that month on (months before keep its budget and spending); a month
+/// that has not started yet only loses its budget, as the category is still alive. All: it is gone from every month.
+pub fn delete_span(conn: &mut Connection, id: i64, month: &str, span: Span, now: DateTime<Utc>) -> Result<(), AppError> {
+    let first = budgets::month_start(month)?;
+    let start = first.to_string();
+    let tx = conn.transaction()?;
+    let timezone: String = tx.query_row("SELECT timezone FROM settings WHERE id = 1", [], |r| r.get(0))?;
+    let current = clock::month_start(now, &timezone)?;
+    let kind: String = tx
+        .query_row("SELECT type FROM categories WHERE id = ?1 AND deleted_at IS NULL", [id], |r| r.get(0))
+        .optional()?
+        .ok_or(AppError::NotFound)?;
+
+    let null_row = |month: &str| -> Result<(), AppError> {
+        tx.execute(
+            "INSERT INTO budgets (type, scope, category_id, amount_limit_minor, effective_from)
+             VALUES (?1, 'CATEGORY', ?2, NULL, ?3)
+             ON CONFLICT (category_id, effective_from) DO UPDATE SET amount_limit_minor = NULL",
+            params![kind, id, month],
+        )?;
+        Ok(())
+    };
+
+    match span {
+        Span::Only => {
+            // The month after keeps what it showed, even when it has not started: "only this month" must not leak forward.
+            let next = budgets::next_month(first)?.to_string();
+            if !budgets::has_row(&tx, &kind, Some(id), &next)? {
+                if let Some(limit) = budgets::series_limit(&tx, &kind, Some(id), &next)? {
+                    tx.execute(
+                        "INSERT INTO budgets (type, scope, category_id, amount_limit_minor, effective_from)
+                         VALUES (?1, 'CATEGORY', ?2, ?3, ?4)",
+                        params![kind, id, limit, next],
+                    )?;
+                }
+            }
+            null_row(&start)?;
+        }
+        Span::Forward if first > current => {
+            null_row(&start)?;
+            tx.execute("DELETE FROM budgets WHERE category_id = ?1 AND effective_from > ?2", params![id, start])?;
+        }
+        Span::Forward => {
+            tx.execute("UPDATE categories SET deleted_at = ?1 WHERE id = ?2", params![format!("{start}T00:00:00.000Z"), id])?;
+            null_row(&start)?;
+        }
+        Span::All => {
+            // The earliest month that has anything of the category, so that no month counts it. Never later than this month
+            // (the category is gone now, whichever month the question was asked in).
+            let earliest_budget: Option<String> = tx.query_row(
+                "SELECT MIN(effective_from) FROM budgets WHERE category_id = ?1 AND amount_limit_minor IS NOT NULL",
+                [id],
+                |r| r.get(0),
+            )?;
+            let earliest_payment: Option<String> =
+                tx.query_row("SELECT MIN(payment_date) FROM transaction_costs WHERE category_id = ?1", [id], |r| r.get(0))?;
+            let gone_from = [Some(start.clone()), Some(current.to_string()), earliest_budget, earliest_payment.map(|d| format!("{}-01", &d[..7]))]
+                .into_iter()
+                .flatten()
+                .min()
+                .unwrap_or(start);
+            tx.execute("UPDATE categories SET deleted_at = ?1 WHERE id = ?2", params![format!("{gone_from}T00:00:00.000Z"), id])?;
+            tx.execute("DELETE FROM budgets WHERE category_id = ?1", [id])?;
+        }
+    }
     tx.commit()?;
     Ok(())
 }

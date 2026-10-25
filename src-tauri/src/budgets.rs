@@ -91,7 +91,7 @@ pub struct Overview {
     pub unallocated: Option<String>,
     /// What the month's transactions of this type add up to.
     pub actual: String,
-    /// What the month's transactions add up to in categories that are not deleted.
+    /// What the month's transactions add up to in categories that still count in the month.
     pub used: String,
     /// Allocated minus used; negative when the categories spent more than they were given.
     pub not_used: String,
@@ -145,7 +145,7 @@ pub(crate) fn series_limit(conn: &Connection, kind: &str, category_id: Option<i6
         .flatten())
 }
 
-fn has_row(conn: &Connection, kind: &str, category_id: Option<i64>, start: &str) -> Result<bool, AppError> {
+pub(crate) fn has_row(conn: &Connection, kind: &str, category_id: Option<i64>, start: &str) -> Result<bool, AppError> {
     Ok(conn
         .query_row(
             "SELECT 1 FROM budgets
@@ -290,8 +290,10 @@ pub(crate) struct Effective {
 }
 
 /// The budgets in force in the month: latest row at or before it per (type, scope, category),
-/// with removed (NULL) budgets dropped. Budgets of deleted categories are left out.
+/// with removed (NULL) budgets dropped. A deleted category still counts in the months before the one its
+/// `deleted_at` falls in (see `categories::delete_span`), and is left out from that month on.
 pub(crate) fn effective(conn: &Connection, start: &str) -> Result<Vec<Effective>, AppError> {
+    let after = next_month(NaiveDate::parse_from_str(start, "%Y-%m-%d").map_err(|_| AppError::Internal)?)?.to_string();
     let mut statement = conn.prepare(
         "SELECT type, scope, category_id, amount_limit_minor FROM (
            SELECT type, scope, category_id, amount_limit_minor,
@@ -301,12 +303,12 @@ pub(crate) fn effective(conn: &Connection, start: &str) -> Result<Vec<Effective>
                   ) AS rank
            FROM budgets
            WHERE effective_from <= ?1
-             AND (category_id IS NULL OR category_id IN (SELECT id FROM categories WHERE deleted_at IS NULL))
+             AND (category_id IS NULL OR category_id IN (SELECT id FROM categories WHERE deleted_at IS NULL OR deleted_at >= ?2))
          )
          WHERE rank = 1 AND amount_limit_minor IS NOT NULL
          ORDER BY category_id",
     )?;
-    let rows = statement.query_map([start], |r| {
+    let rows = statement.query_map([start, after.as_str()], |r| {
         Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?, r.get::<_, Option<i64>>(2)?, r.get::<_, i64>(3)?))
     })?;
     rows.map(|row| {
@@ -317,10 +319,10 @@ pub(crate) fn effective(conn: &Connection, start: &str) -> Result<Vec<Effective>
     .collect()
 }
 
-/// What the month's transactions of this type add up to, and the part of it in categories that are not deleted.
+/// What the month's transactions of this type add up to, and the part of it in categories that still count in the month.
 fn actual_minor(conn: &Connection, kind: CategoryType, start: &str, end: &str) -> Result<(i64, i64), AppError> {
     Ok(conn.query_row(
-        "SELECT COALESCE(SUM(t.cost_minor), 0), COALESCE(SUM(CASE WHEN c.deleted_at IS NULL THEN t.cost_minor END), 0)
+        "SELECT COALESCE(SUM(t.cost_minor), 0), COALESCE(SUM(CASE WHEN c.deleted_at IS NULL OR c.deleted_at >= ?3 THEN t.cost_minor END), 0)
          FROM transaction_costs t JOIN categories c ON c.id = t.category_id
          WHERE c.type = ?1 AND t.payment_date >= ?2 AND t.payment_date < ?3",
         params![kind_sql(kind), start, end],
@@ -637,11 +639,13 @@ mod tests {
     }
 
     #[test]
-    fn a_deleted_category_drops_out_of_every_month() {
+    fn a_deleted_category_counts_in_the_months_before_the_deletion_and_not_from_it() {
         let (mut conn, food, _, _) = db();
         put(&conn, &category(CategoryType::Expense, food, "2026-03", Some("400.00"))).unwrap();
+        spend(&conn, food, "30.00", "2026-05-10");
         categories::delete(&mut conn, food, "2026-06-15T10:00:00Z".parse().unwrap()).unwrap();
-        assert_eq!(side(&conn, "2026-05", CategoryType::Expense).categories.len(), 0);
+        let may = side(&conn, "2026-05", CategoryType::Expense);
+        assert_eq!((may.categories.len(), may.allocated.as_str(), may.used.as_str()), (1, "400.00", "30.00"));
         assert_eq!(side(&conn, "2026-06", CategoryType::Expense).categories.len(), 0);
         assert_eq!(side(&conn, "2026-08", CategoryType::Expense).allocated, "0.00");
         assert_eq!(put(&conn, &category(CategoryType::Expense, food, "2026-07", Some("1.00"))).err(), Some(AppError::InvalidInput));
@@ -822,17 +826,21 @@ mod tests {
     }
 
     #[test]
-    fn a_deleted_category_leaves_every_month_total() {
+    fn a_category_deleted_for_all_months_leaves_every_month_total() {
         let (mut conn, food, _, _) = db();
         put(&conn, &category(CategoryType::Expense, food, "2026-03", Some("100.00"))).unwrap();
         put(&conn, &category(CategoryType::Expense, food, "2026-12", Some("150.00"))).unwrap();
         spend(&conn, food, "30.00", "2026-05-10");
-        categories::delete(&mut conn, food, at(LATE)).unwrap();
-        for month in ["2026-05", "2026-12"] {
+        spend(&conn, food, "7.00", "2026-04-02");
+        categories::delete_span(&mut conn, food, "2026-10", Span::All, at(LATE)).unwrap();
+        for month in ["2026-02", "2026-03", "2026-04", "2026-05", "2026-10", "2026-12"] {
             let o = side(&conn, month, CategoryType::Expense);
             assert_eq!((o.allocated.as_str(), o.used.as_str(), o.not_used.as_str(), o.categories.len()), ("0.00", "0.00", "0.00", 0), "{month}");
         }
         assert_eq!(side(&conn, "2026-05", CategoryType::Expense).actual, "30.00");
+        assert_eq!(side(&conn, "2026-04", CategoryType::Expense).actual, "7.00");
+        assert_eq!(listed(&conn, food, "2026-04"), None, "not listed in the month of its first payment");
+        assert_eq!(listed(&conn, food, "2026-02"), None);
     }
 
     #[test]
@@ -888,5 +896,93 @@ mod tests {
             assert_eq!(set_span(&conn, &bad, at(LATE), span).err(), Some(AppError::InvalidInput));
         }
         assert_eq!(row_count(&conn), 1);
+    }
+
+    fn limits(conn: &Connection, category: i64, months: &[&str]) -> Vec<Option<String>> {
+        months.iter().map(|m| rent_limit(conn, category, m)).collect()
+    }
+
+    /// None when the category is not listed in the month, otherwise whether it shows as deleted.
+    fn listed(conn: &Connection, category: i64, month: &str) -> Option<bool> {
+        categories::list_in_month(conn, None, month).unwrap().into_iter().find(|c| c.id == category).map(|c| c.deleted)
+    }
+
+    #[test]
+    fn deleting_only_one_month_removes_just_its_budget() {
+        let (mut conn, food, _, _) = db();
+        put(&conn, &category(CategoryType::Expense, food, "2026-03", Some("400.00"))).unwrap();
+        // a past month, the current one and a future one
+        for month in ["2026-06", "2026-10", "2026-12"] {
+            categories::delete_span(&mut conn, food, month, Span::Only, at(LATE)).unwrap();
+            let previous = shift(month, -1);
+            let following = shift(month, 1);
+            assert_eq!(limits(&conn, food, &[month]), [None], "{month} has no budget");
+            assert_eq!(limits(&conn, food, &[&previous, &following]), [Some("400.00".into()), Some("400.00".into())], "{month} neighbours");
+            assert_eq!(listed(&conn, food, month), Some(false), "{month}: the category stays");
+        }
+        assert_eq!(limits(&conn, food, &["2026-07", "2027-03"]), [Some("400.00".into()), Some("400.00".into())]);
+        assert_eq!(limits(&conn, food, &["2026-06", "2026-10", "2026-12"]), [None, None, None]);
+    }
+
+    fn shift(month: &str, by: i32) -> String {
+        let first = month_start(month).unwrap();
+        let moved = if by > 0 { next_month(first).unwrap() } else { first - chrono::Months::new(1) };
+        moved.format("%Y-%m").to_string()
+    }
+
+    #[test]
+    fn deleting_from_a_past_month_keeps_the_months_before_with_budget_and_spending() {
+        let (mut conn, food, _, _) = db();
+        put(&conn, &category(CategoryType::Expense, food, "2026-06", Some("400.00"))).unwrap();
+        spend(&conn, food, "30.00", "2026-07-10");
+        spend(&conn, food, "20.00", "2026-09-10");
+        categories::delete_span(&mut conn, food, "2026-08", Span::Forward, at(LATE)).unwrap();
+
+        let july = side(&conn, "2026-07", CategoryType::Expense);
+        assert_eq!((july.allocated.as_str(), july.used.as_str(), july.categories.len()), ("400.00", "30.00", 1));
+        for month in ["2026-08", "2026-09", "2026-10"] {
+            let o = side(&conn, month, CategoryType::Expense);
+            assert_eq!((o.allocated.as_str(), o.used.as_str(), o.categories.len()), ("0.00", "0.00", 0), "{month}");
+        }
+        assert_eq!(side(&conn, "2026-09", CategoryType::Expense).actual, "20.00", "actual keeps everything");
+        assert_eq!(listed(&conn, food, "2026-07"), Some(true));
+        assert_eq!(listed(&conn, food, "2026-09"), None);
+        assert!(categories::list(&conn, None).unwrap().iter().all(|c| c.id != food), "gone from the active list");
+    }
+
+    #[test]
+    fn deleting_from_a_future_month_keeps_the_category_and_ends_its_budget_there() {
+        let (mut conn, food, _, _) = db();
+        put(&conn, &category(CategoryType::Expense, food, "2026-03", Some("400.00"))).unwrap();
+        put(&conn, &category(CategoryType::Expense, food, "2027-02", Some("500.00"))).unwrap();
+        categories::delete_span(&mut conn, food, "2026-12", Span::Forward, at(LATE)).unwrap();
+        assert!(categories::list(&conn, None).unwrap().iter().any(|c| c.id == food), "still alive");
+        assert_eq!(limits(&conn, food, &["2026-10", "2026-11"]), [Some("400.00".into()), Some("400.00".into())]);
+        assert_eq!(limits(&conn, food, &["2026-12", "2027-02", "2027-06"]), [None, None, None]);
+        assert_eq!(listed(&conn, food, "2026-11"), Some(false));
+    }
+
+    #[test]
+    fn deleting_for_all_months_removes_the_budget_and_the_spending_everywhere() {
+        let (mut conn, food, _, _) = db();
+        put(&conn, &category(CategoryType::Expense, food, "2026-06", Some("400.00"))).unwrap();
+        spend(&conn, food, "30.00", "2026-04-20");
+        categories::delete_span(&mut conn, food, "2026-09", Span::All, at(LATE)).unwrap();
+        for month in ["2026-03", "2026-04", "2026-05", "2026-06", "2026-09", "2026-12"] {
+            let o = side(&conn, month, CategoryType::Expense);
+            assert_eq!((o.allocated.as_str(), o.used.as_str()), ("0.00", "0.00"), "{month}");
+        }
+        assert_eq!(side(&conn, "2026-04", CategoryType::Expense).actual, "30.00");
+        let rows: i64 = conn.query_row("SELECT count(*) FROM budgets WHERE category_id = ?1", [food], |r| r.get(0)).unwrap();
+        assert_eq!(rows, 0);
+    }
+
+    #[test]
+    fn deleting_for_a_period_checks_the_category_and_the_month_first() {
+        let (mut conn, food, _, _) = db();
+        assert_eq!(categories::delete_span(&mut conn, 999, "2026-06", Span::All, at(LATE)), Err(AppError::NotFound));
+        assert_eq!(categories::delete_span(&mut conn, food, "2026-6", Span::Only, at(LATE)), Err(AppError::InvalidInput));
+        categories::delete(&mut conn, food, at(LATE)).unwrap();
+        assert_eq!(categories::delete_span(&mut conn, food, "2026-06", Span::Only, at(LATE)), Err(AppError::NotFound));
     }
 }
