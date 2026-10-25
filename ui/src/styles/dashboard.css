@@ -355,13 +355,11 @@
   gap: 0.125rem;
 }
 
-/* The budget card: expenses and income, each in its own framed panel with a coloured mark. Side by side when the card is wide
-   enough, one under the other when not. */
+/* The budget card: expenses, then income under it, each in its own framed panel with a coloured mark. */
 .dash-budgets {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 18rem), 1fr));
+  display: flex;
+  flex-direction: column;
   gap: 0.75rem;
-  align-items: start;
 }
 
 .dash-budget-group {
