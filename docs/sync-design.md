@@ -82,7 +82,7 @@ There is no Diffie-Hellman step, so that last case is the honest limit. Secrets 
 
 JSON messages with a `t` field, one per frame, long lists split. Money in minor units.
 
-1. `hello`: id, name, versions (schema must match; protocol 4), clock (over a day apart stops), currency generation,
+1. `hello`: id, name, versions (schema must match; protocol 5), clock (over a day apart stops), currency generation,
    `since`, and the direction the desktop chose (both ways, to the computer, to the phone).
 2. `currency`: changes the phone has not seen, applied before anything else (section 11).
 3. `hashes` per table, then `digest` (`sync_id`, stamp, deleted) for tables that differ.
@@ -96,9 +96,10 @@ States are compared, not change logs, so a broken or half sync is repaired by th
 
 ## 9. Database changes
 
-Migrations `0008`, `0009`, `0012`, `0013`: a random `sync_id` and a `stamp` on every shared row (`categories`,
+Migrations `0008`, `0009`, `0012`, `0013`, `0014`: a random `sync_id` and a `stamp` on every shared row (`categories`,
 `budgets`, `recurring_transactions`, `transactions`, `people`, `ledger_entries`, `documents`, `document_links`, the
-shared part of `settings`); `sync_deleted` markers made by delete triggers; `categories.merged_into`; `sync_clock`;
+shared part of `settings`); `sync_deleted` markers made by delete triggers; `categories.merged_into`; `categories.position` (the order the person chose, per type; a move gives the row a new stamp,
+so it travels in the category row, and ties are settled by id); `sync_clock`;
 `sync_peers`; `currency_changes`. Stamps come from triggers, which stand aside while `sync_clock.applying` is on. A
 bill's parts and a recurring item's template travel inside their parent's row. Never synced: `audit_log`,
 `backup_schedule`, `api_tokens`, `sync_peers`, `sync_clock`, the language, lock settings.

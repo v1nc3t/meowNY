@@ -78,6 +78,8 @@ export const de: Messages = {
   'categories.add': 'kategorie hinzufügen',
   'categories.addTitle': 'kategorie hinzufügen',
   'categories.nameError': 'gib einen kategorienamen mit höchstens 50 zeichen ein.',
+  'categories.reorderHint': 'gedrückt halten und ziehen zum umsortieren, oder alt und die pfeiltasten benutzen',
+  'categories.reordered': '{name} an position {position} von {count} verschoben',
 
   'tx.title': 'buchungen',
   'tx.add': 'buchung hinzufügen',

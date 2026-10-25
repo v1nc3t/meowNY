@@ -85,6 +85,8 @@ export const en = {
   'categories.add': 'add category',
   'categories.addTitle': 'add category',
   'categories.nameError': 'enter a category name of up to 50 characters.',
+  'categories.reorderHint': 'hold and drag to reorder, or use alt and the arrow keys',
+  'categories.reordered': '{name} moved to position {position} of {count}',
 
   // Transactions
   'tx.title': 'transactions',

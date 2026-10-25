@@ -271,7 +271,7 @@ fn load_rows(conn: &Connection, table: Table, wanted: &HashSet<&String>) -> Resu
             }
         }
         Table::Categories => {
-            let mut stmt = conn.prepare("SELECT sync_id, stamp, type, name, deleted_at, merged_into, created_at, updated_at FROM categories ORDER BY sync_id")?;
+            let mut stmt = conn.prepare("SELECT sync_id, stamp, type, name, deleted_at, merged_into, position, created_at, updated_at FROM categories ORDER BY sync_id")?;
             for r in stmt.query_map([], |r| {
                 Ok(CategoryRow {
                     sync_id: r.get(0)?,
@@ -280,8 +280,9 @@ fn load_rows(conn: &Connection, table: Table, wanted: &HashSet<&String>) -> Resu
                     name: r.get(3)?,
                     deleted_at: r.get(4)?,
                     merged_into: r.get(5)?,
-                    created_at: r.get(6)?,
-                    updated_at: r.get(7)?,
+                    position: r.get(6)?,
+                    created_at: r.get(7)?,
+                    updated_at: r.get(8)?,
                 })
             })? {
                 let r = r?;
@@ -893,16 +894,16 @@ impl<'a> Applier<'a> {
                     return Err(SyncError::Invalid("category"));
                 }
                 self.run(
-                    "UPDATE categories SET name = ?2, deleted_at = ?3, merged_into = ?4, stamp = ?5, created_at = ?6 WHERE id = ?1",
-                    params![id, r.name, r.deleted_at, r.merged_into, r.stamp, r.created_at],
+                    "UPDATE categories SET name = ?2, deleted_at = ?3, merged_into = ?4, stamp = ?5, created_at = ?6, position = ?7 WHERE id = ?1",
+                    params![id, r.name, r.deleted_at, r.merged_into, r.stamp, r.created_at, r.position],
                 )?;
                 self.set_updated_at(Table::Categories, *id, &r.updated_at)?;
                 Ok(*id)
             }
             None => {
                 self.run(
-                    "INSERT INTO categories (sync_id, stamp, type, name, deleted_at, merged_into, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
-                    params![r.sync_id, r.stamp, r.kind, r.name, r.deleted_at, r.merged_into, r.created_at, r.updated_at],
+                    "INSERT INTO categories (sync_id, stamp, type, name, deleted_at, merged_into, position, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+                    params![r.sync_id, r.stamp, r.kind, r.name, r.deleted_at, r.merged_into, r.position, r.created_at, r.updated_at],
                 )?;
                 Ok(self.tx.last_insert_rowid())
             }

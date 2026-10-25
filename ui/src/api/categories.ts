@@ -35,4 +35,6 @@ export const categories = {
   /** Without a month and a span the category is deleted from now on. With them it is deleted for that period, seen from that month. */
   remove: (id: string, month?: string, span?: Span) =>
     call('delete_category', z.null(), month && span ? { id, month, span } : { id }).then(() => undefined),
+  /** The ids of all categories of one type that are not deleted, in the order to keep. */
+  reorder: (ids: string[]) => call('reorder_categories', z.null(), { ids }).then(() => undefined),
 }

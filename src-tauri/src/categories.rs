@@ -107,18 +107,18 @@ fn build(row: (i64, String, String)) -> Result<Category, AppError> {
     Ok(Category { id: row.0, name: row.1, kind: CategoryType::from_sql(&row.2)? })
 }
 
-/// Active categories, oldest first, optionally of one type.
+/// Active categories in the order the person chose (`position`, then id), optionally of one type.
 pub fn list(conn: &Connection, kind: Option<CategoryType>) -> Result<Vec<Category>, AppError> {
     let mut statement = conn.prepare(
         "SELECT id, name, type FROM categories
          WHERE deleted_at IS NULL AND (?1 IS NULL OR type = ?1)
-         ORDER BY id",
+         ORDER BY position, id",
     )?;
     let rows = statement.query_map([kind.map(CategoryType::as_sql)], from_row)?;
     rows.map(|row| build(row?)).collect()
 }
 
-/// The categories that count in `month` ("YYYY-MM"), oldest first: the active ones, and the ones deleted from a later month on
+/// The categories that count in `month` ("YYYY-MM"), in the order the person chose: the active ones, and the ones deleted from a later month on
 /// that still have a budget or a transaction in it.
 pub fn list_in_month(conn: &Connection, kind: Option<CategoryType>, month: &str) -> Result<Vec<CategoryInMonth>, AppError> {
     let first = budgets::month_start(month)?;
@@ -131,7 +131,7 @@ pub fn list_in_month(conn: &Connection, kind: Option<CategoryType>, month: &str)
                  EXISTS (SELECT 1 FROM transaction_costs t WHERE t.category_id = c.id AND t.payment_date >= ?3 AND t.payment_date < ?2)
                  OR (SELECT b.amount_limit_minor FROM budgets b WHERE b.category_id = c.id AND b.effective_from <= ?3
                      ORDER BY b.effective_from DESC LIMIT 1) IS NOT NULL)))
-         ORDER BY c.id",
+         ORDER BY c.position, c.id",
     )?;
     let rows = statement.query_map(params![kind.map(CategoryType::as_sql), after, start], |r| {
         Ok((r.get::<_, i64>(0)?, r.get::<_, String>(1)?, r.get::<_, String>(2)?, r.get::<_, bool>(3)?))
@@ -145,9 +145,43 @@ pub fn list_in_month(conn: &Connection, kind: Option<CategoryType>, month: &str)
 
 pub fn create(conn: &Connection, name: &str, kind: CategoryType) -> Result<Category, AppError> {
     let name = clean_name(name)?;
-    conn.execute("INSERT INTO categories (name, type) VALUES (?1, ?2)", params![name, kind.as_sql()])
-        .map_err(write_error)?;
+    // A new category goes to the end of its type.
+    conn.execute(
+        "INSERT INTO categories (name, type, position)
+         VALUES (?1, ?2, (SELECT COALESCE(MAX(position), -1) + 1 FROM categories WHERE type = ?2))",
+        params![name, kind.as_sql()],
+    )
+    .map_err(write_error)?;
     Ok(Category { id: conn.last_insert_rowid(), name, kind })
+}
+
+/// Sets the order of the active categories of one type: `ids` is all of them, in the new order. Only the rows that move are
+/// written, so the others keep their sync stamp.
+pub fn reorder(conn: &mut Connection, ids: &[i64]) -> Result<(), AppError> {
+    if ids.is_empty() || ids.iter().collect::<std::collections::HashSet<_>>().len() != ids.len() {
+        return Err(AppError::InvalidInput);
+    }
+    let tx = conn.transaction()?;
+    let mut kind: Option<String> = None;
+    for id in ids {
+        let found: String = tx
+            .query_row("SELECT type FROM categories WHERE id = ?1 AND deleted_at IS NULL", [id], |r| r.get(0))
+            .optional()?
+            .ok_or(AppError::InvalidInput)?;
+        if *kind.get_or_insert_with(|| found.clone()) != found {
+            return Err(AppError::InvalidInput);
+        }
+    }
+    let kind = kind.ok_or(AppError::InvalidInput)?;
+    let active: i64 = tx.query_row("SELECT count(*) FROM categories WHERE type = ?1 AND deleted_at IS NULL", [&kind], |r| r.get(0))?;
+    if active != ids.len() as i64 {
+        return Err(AppError::InvalidInput);
+    }
+    for (position, id) in ids.iter().enumerate() {
+        tx.execute("UPDATE categories SET position = ?1 WHERE id = ?2 AND position != ?1", params![position as i64, id])?;
+    }
+    tx.commit()?;
+    Ok(())
 }
 
 pub fn rename(conn: &Connection, id: i64, name: &str) -> Result<Category, AppError> {
@@ -367,6 +401,97 @@ mod tests {
         delete(&mut conn, food.id, at("2026-06-15T10:00:00Z")).unwrap();
         assert_eq!(rename(&conn, food.id, "Other"), Err(AppError::NotFound));
         assert!(create(&conn, "Food", CategoryType::Expense).is_ok());
+    }
+
+    fn make(conn: &Connection, names: &[&str], kind: CategoryType) -> Vec<i64> {
+        names.iter().map(|name| create(conn, name, kind).unwrap().id).collect()
+    }
+
+    fn stamp_of(conn: &Connection, id: i64) -> String {
+        conn.query_row("SELECT stamp FROM categories WHERE id = ?1", [id], |r| r.get(0)).unwrap()
+    }
+
+    #[test]
+    fn reorder_sets_the_order_for_both_lists_and_leaves_the_other_type_alone() {
+        let mut conn = db();
+        let expenses = make(&conn, &["Food", "Rent", "Gym"], CategoryType::Expense);
+        make(&conn, &["Salary", "Gifts"], CategoryType::Income);
+
+        reorder(&mut conn, &[expenses[2], expenses[0], expenses[1]]).unwrap();
+
+        assert_eq!(names(&conn, Some(CategoryType::Expense)), ["Gym", "Food", "Rent"]);
+        assert_eq!(names(&conn, Some(CategoryType::Income)), ["Salary", "Gifts"]);
+        let in_month: Vec<String> = list_in_month(&conn, Some(CategoryType::Expense), "2026-06").unwrap().into_iter().map(|c| c.name).collect();
+        assert_eq!(in_month, ["Gym", "Food", "Rent"]);
+        assert_eq!(names(&conn, None), ["Gym", "Salary", "Food", "Gifts", "Rent"], "all types: by position, then id");
+    }
+
+    #[test]
+    fn a_new_category_goes_to_the_end_of_its_type() {
+        let mut conn = db();
+        let expenses = make(&conn, &["Food", "Rent"], CategoryType::Expense);
+        make(&conn, &["Salary"], CategoryType::Income);
+        reorder(&mut conn, &[expenses[1], expenses[0]]).unwrap();
+        create(&conn, "Gym", CategoryType::Expense).unwrap();
+        create(&conn, "Gifts", CategoryType::Income).unwrap();
+        assert_eq!(names(&conn, Some(CategoryType::Expense)), ["Rent", "Food", "Gym"]);
+        assert_eq!(names(&conn, Some(CategoryType::Income)), ["Salary", "Gifts"]);
+
+        // a deleted one does not leave a hole that matters: the next still goes after the highest
+        delete(&mut conn, expenses[0], at("2026-06-15T10:00:00Z")).unwrap();
+        create(&conn, "Pets", CategoryType::Expense).unwrap();
+        assert_eq!(names(&conn, Some(CategoryType::Expense)), ["Rent", "Gym", "Pets"]);
+    }
+
+    #[test]
+    fn a_reorder_that_is_not_exactly_the_active_categories_of_one_type_changes_nothing() {
+        let mut conn = db();
+        let expenses = make(&conn, &["Food", "Rent", "Gym"], CategoryType::Expense);
+        let income = make(&conn, &["Salary"], CategoryType::Income);
+        let gone = create(&conn, "Old", CategoryType::Expense).unwrap().id;
+        delete(&mut conn, gone, at("2026-06-15T10:00:00Z")).unwrap();
+        let order = |conn: &Connection| -> Vec<(i64, i64)> {
+            conn.prepare("SELECT id, position FROM categories ORDER BY id").unwrap().query_map([], |r| Ok((r.get(0)?, r.get(1)?))).unwrap().collect::<Result<_, _>>().unwrap()
+        };
+        let before = order(&conn);
+
+        let bad: Vec<Vec<i64>> = vec![
+            vec![],
+            vec![expenses[2], expenses[0]],
+            vec![expenses[2], expenses[0], expenses[1], income[0]],
+            vec![expenses[2], expenses[0], income[0]],
+            vec![expenses[2], expenses[0], gone],
+            vec![expenses[2], expenses[0], expenses[1], gone],
+            vec![expenses[2], expenses[0], expenses[0]],
+            vec![expenses[2], expenses[0], expenses[1], expenses[1]],
+            vec![expenses[2], expenses[0], 9999],
+            vec![expenses[2], expenses[0], expenses[1], 9999],
+        ];
+        for ids in bad {
+            assert_eq!(reorder(&mut conn, &ids), Err(AppError::InvalidInput), "{ids:?}");
+            assert_eq!(order(&conn), before, "{ids:?}");
+        }
+        assert_eq!(reorder(&mut conn, &income), Ok(()), "the one active income category is all of its type");
+    }
+
+    #[test]
+    fn only_the_rows_that_move_get_a_new_sync_stamp() {
+        let mut conn = db();
+        let ids = make(&conn, &["Food", "Rent", "Gym", "Pets"], CategoryType::Expense);
+        let other = make(&conn, &["Salary"], CategoryType::Income);
+        let before: Vec<String> = ids.iter().chain(&other).map(|id| stamp_of(&conn, *id)).collect();
+
+        // Food and Rent stay, Gym and Pets swap
+        reorder(&mut conn, &[ids[0], ids[1], ids[3], ids[2]]).unwrap();
+        let after: Vec<String> = ids.iter().chain(&other).map(|id| stamp_of(&conn, *id)).collect();
+        assert_eq!(before[..2], after[..2], "unmoved rows keep their stamp");
+        assert_eq!(before[4], after[4], "the other type is not touched");
+        assert!(after[2] > before[2] && after[3] > before[3], "moved rows get a newer stamp");
+
+        // the same order again moves nothing
+        reorder(&mut conn, &[ids[0], ids[1], ids[3], ids[2]]).unwrap();
+        let again: Vec<String> = ids.iter().chain(&other).map(|id| stamp_of(&conn, *id)).collect();
+        assert_eq!(after, again);
     }
 
     #[test]

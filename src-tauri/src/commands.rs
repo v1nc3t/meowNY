@@ -108,6 +108,7 @@ pub const COMMANDS: &[&str] = &[
     "rename_category",
     "delete_category",
     "list_categories_in_month",
+    "reorder_categories",
     "list_transactions",
     "create_transaction",
     "update_transaction",
@@ -317,6 +318,13 @@ pub fn rename_category(vault: Shared, id: String, name: String) -> Result<Catego
 #[tauri::command]
 pub fn list_categories_in_month(vault: Shared, kind: Option<CategoryType>, month: String) -> Result<Vec<CategoryInMonth>, AppError> {
     vault.with_conn(|c| categories::list_in_month(c, kind, &month))
+}
+
+/// `ids` are all the active categories of one type, in the new order.
+#[tauri::command]
+pub fn reorder_categories(vault: Shared, ids: Vec<String>) -> Result<(), AppError> {
+    let ids = ids.iter().map(|id| categories::parse_id(id)).collect::<Result<Vec<_>, _>>()?;
+    vault.with_conn(|c| categories::reorder(c, &ids))
 }
 
 /// With a month and a span the category is deleted for that period, otherwise from now on.

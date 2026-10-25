@@ -16,7 +16,9 @@ import { amountString, formatMoney } from '../lib/money'
 import { useMoneySettings, type MoneySettings } from '../hooks/useMoneySettings'
 import { useProfile } from '../hooks/profile'
 import { useSwipeHandler } from '../hooks/swipe'
+import { applyOrder } from '../lib/reorder'
 import { step } from '../lib/swipe'
+import { useReorder } from '../hooks/useReorder'
 import { useToast } from '../hooks/toast'
 import { useI18n, useT } from '../i18n/context'
 import { useShortcut } from '../keys/registry'
@@ -183,6 +185,17 @@ function CategoriesView({ settings, thisMonth }: { settings: MoneySettings; this
     return errorText
   }
 
+  // The new order shows at once; if it cannot be saved, the saved one comes back.
+  async function onReorder(ids: string[]) {
+    setCategories((current) => current && applyOrder(current, ids))
+    try {
+      await categoriesApi.reorder(ids)
+    } catch (failure) {
+      say(errorText(failure), 'error')
+      setReload((value) => value + 1)
+    }
+  }
+
   // Zero and "not set" both read as a dash.
   const money = (amount: string) =>
     Number(amount) === 0 ? '-' : formatMoney(amount, settings.currency, settings.locale)
@@ -214,6 +227,7 @@ function CategoriesView({ settings, thisMonth }: { settings: MoneySettings; this
       onGlobal={onGlobal}
       onEdit={setEditing}
       onDelete={setDeleting}
+      onReorder={onReorder}
     />,
     <BudgetHalf
       key="INCOME"
@@ -228,6 +242,7 @@ function CategoriesView({ settings, thisMonth }: { settings: MoneySettings; this
       onGlobal={onGlobal}
       onEdit={setEditing}
       onDelete={setDeleting}
+      onReorder={onReorder}
     />,
   ]
   const historyTable = history ? (
@@ -382,6 +397,7 @@ function BudgetHalf({
   onGlobal,
   onEdit,
   onDelete,
+  onReorder,
 }: {
   title: string
   /** The title is already shown by a section around this one. */
@@ -395,8 +411,10 @@ function BudgetHalf({
   onGlobal: (type: Side, raw: string) => Promise<string | null>
   onEdit: (category: Category) => void
   onDelete: (category: Category) => void
+  onReorder: (ids: string[]) => void
 }) {
   const t = useT()
+  const { listRef, hintId, live } = useReorder(categories, onReorder)
   const budgeted = overview?.budgeted ?? ''
   const over = overview !== null && Number(overview.notUsed) < 0
   return (
@@ -430,7 +448,7 @@ function BudgetHalf({
       {/* The category list scrolls on its own, so the summary above and the history below stay in view. */}
       <div className="budget-pane">
         {categories && categories.length > 0 ? (
-          <div className="budget-table" key={month}>
+          <div className="budget-table" key={month} ref={listRef}>
             {categories.map((category) => (
               <CategoryRow
                 key={category.id}
@@ -439,11 +457,18 @@ function BudgetHalf({
                 money={money}
                 onEdit={onEdit}
                 onDelete={onDelete}
+                hintId={hintId}
               />
             ))}
           </div>
         ) : null}
         {categories && categories.length === 0 ? <p>{t('common.noCategories')}</p> : null}
+      </div>
+      <span id={hintId} className="sr-only">
+        {t('categories.reorderHint')}
+      </span>
+      <div className="sr-only" aria-live="polite">
+        {live}
       </div>
     </section>
   )
@@ -546,18 +571,21 @@ function CategoryRow({
   money,
   onEdit,
   onDelete,
+  hintId,
 }: {
   category: CategoryInMonth
   value: string
   money: (amount: string) => string
   onEdit: (category: Category) => void
   onDelete: (category: Category) => void
+  /** The text that tells how to reorder, for the screen reader. */
+  hintId: string
 }) {
   const t = useT()
   // Deleted from a later month on: it still counts here, and there is nothing to change about it.
   if (category.deleted) {
     return (
-      <div className="budget-row quiet">
+      <div className="budget-row quiet" data-reorder-id={category.id}>
         <span className="budget-label">{category.name}</span>
         <span className={value === '' || Number(value) === 0 ? 'budget-amount unset' : 'budget-amount'}>{value === '' ? '-' : money(value)}</span>
         <span className="budget-note">{t('budgets.deletedLater')}</span>
@@ -565,11 +593,11 @@ function CategoryRow({
     )
   }
   return (
-    <div className="budget-row">
+    <div className="budget-row" data-reorder-id={category.id}>
       <span className="budget-label">{category.name}</span>
       <span className={value === '' || Number(value) === 0 ? 'budget-amount unset' : 'budget-amount'}>{value === '' ? '-' : money(value)}</span>
       <span className="budget-actions">
-        <Button variant="ghost" size="sm" data-row-focus onClick={() => onEdit(category)}>
+        <Button variant="ghost" size="sm" data-row-focus aria-describedby={hintId} onClick={() => onEdit(category)}>
           {t('common.edit')}
         </Button>
         <Button variant="ghost" size="sm" className="row-danger" onClick={() => onDelete(category)}>

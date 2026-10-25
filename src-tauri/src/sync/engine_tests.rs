@@ -328,6 +328,32 @@ fn a_renamed_category_wins_by_time_and_a_rename_onto_a_taken_name_merges() {
 }
 
 #[test]
+fn a_reorder_on_one_device_arrives_on_the_other() {
+    let (mut desktop, mut phone) = paired();
+    category(&desktop, "Gym", CategoryType::Expense);
+    sync_ok(&mut desktop, &mut phone);
+    let order = |conn: &Connection| -> Vec<String> {
+        categories::list(conn, Some(CategoryType::Expense)).unwrap().into_iter().map(|c| c.name).collect()
+    };
+    let before = order(&desktop);
+    assert_eq!(order(&phone), before);
+
+    let mut reversed: Vec<i64> = categories::list(&desktop, Some(CategoryType::Expense)).unwrap().into_iter().map(|c| c.id).collect();
+    reversed.reverse();
+    categories::reorder(&mut desktop, &reversed).unwrap();
+    sync_ok(&mut desktop, &mut phone);
+
+    let mut expected = before;
+    expected.reverse();
+    assert_eq!(order(&desktop), expected);
+    assert_eq!(order(&phone), expected, "the order came over with the rows");
+    assert_eq!(
+        ids(&desktop, "SELECT position FROM categories WHERE type = 'EXPENSE' ORDER BY position"),
+        ids(&phone, "SELECT position FROM categories WHERE type = 'EXPENSE' ORDER BY position")
+    );
+}
+
+#[test]
 fn shared_settings_follow_the_newer_change_and_the_language_stays_with_the_device() {
     let (mut desktop, mut phone) = paired();
     desktop.execute("UPDATE settings SET timezone = 'UTC'", []).unwrap();
@@ -715,7 +741,13 @@ fn edit(conn: &mut Connection, rng: &mut Rng) {
         14..=20 => edit_documents(conn, rng),
         21..=30 => edit_debts(conn, rng),
         1 if !any_category.is_empty() => {
-            let _ = categories::rename(conn, *rng.pick(&any_category), rng.pick(NAMES));
+            if rng.below(4) == 0 {
+                let mut order = categories_now.clone();
+                order.reverse();
+                let _ = categories::reorder(conn, &order);
+            } else {
+                let _ = categories::rename(conn, *rng.pick(&any_category), rng.pick(NAMES));
+            }
         }
         2 if !any_category.is_empty() && rng.below(3) == 0 => {
             let _ = categories::delete(conn, *rng.pick(&any_category), chrono::Utc::now());

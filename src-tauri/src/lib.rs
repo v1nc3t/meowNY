@@ -245,6 +245,7 @@ pub fn run() {
             commands::rename_category,
             commands::delete_category,
             commands::list_categories_in_month,
+            commands::reorder_categories,
             commands::list_transactions,
             commands::create_transaction,
             commands::update_transaction,

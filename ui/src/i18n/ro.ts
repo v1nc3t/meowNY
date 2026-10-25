@@ -76,6 +76,8 @@ export const ro: Messages = {
   'categories.add': 'adaugă categorie',
   'categories.addTitle': 'adaugă categorie',
   'categories.nameError': 'introdu un nume de categorie de maximum 50 de caractere.',
+  'categories.reorderHint': 'ține apăsat și trage pentru a reordona, sau folosește alt și săgețile',
+  'categories.reordered': '{name} mutată pe poziția {position} din {count}',
 
   'tx.title': 'tranzacții',
   'tx.add': 'adaugă tranzacție',

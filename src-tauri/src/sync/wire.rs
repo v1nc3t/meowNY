@@ -23,8 +23,8 @@ use crate::{categories, transactions, vault};
 /// The version of this protocol, in `hello`.
 /// Protocol 3 adds the tables `documents` and `document_links`; protocol 4 adds `people` and `ledger_entries`, the parts of a shared
 /// bill inside its transaction's row, the split template inside a recurring item's row, and a third target for a document link (a
-/// ledger entry). A device that speaks an older protocol is told to update.
-pub const PROTOCOL: u32 = 4;
+/// ledger entry); protocol 5 adds the category order (`position`). A device that speaks an older protocol is told to update.
+pub const PROTOCOL: u32 = 5;
 /// Digest entries in one message, and rows in one message. Messages are also cut by size (`SOFT_MESSAGE_BYTES`).
 pub const MAX_ENTRIES_PER_MESSAGE: usize = 400;
 pub const MAX_ROWS_PER_MESSAGE: usize = 200;
@@ -36,6 +36,8 @@ pub const CHUNK_BYTES: usize = 24 * 1024;
 pub const MAX_CHUNK_TEXT: usize = CHUNK_BYTES / 3 * 4;
 /// More than this many rows of one table in a sync is not a budget of one person.
 pub const MAX_ROWS_PER_TABLE: usize = 2_000_000;
+/// The highest place a category can have in its list.
+const MAX_POSITION: i64 = 1_000_000;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -580,6 +582,8 @@ pub struct CategoryRow {
     pub name: String,
     pub deleted_at: Option<String>,
     pub merged_into: Option<String>,
+    /// Place in the list of its type, from 0.
+    pub position: i64,
     pub created_at: String,
     pub updated_at: String,
 }
@@ -813,6 +817,7 @@ pub fn parse_row(table: Table, value: &Value) -> Result<Row, WireError> {
                 && r.deleted_at.as_deref().is_none_or(timestamp_ok)
                 && option_sync_id(&r.merged_into)
                 && r.merged_into.as_deref() != Some(r.sync_id.as_str())
+                && (0..=MAX_POSITION).contains(&r.position)
                 && timestamp_ok(&r.created_at)
                 && timestamp_ok(&r.updated_at)
         }
@@ -945,7 +950,7 @@ mod tests {
     const TS: &str = "2026-03-01T10:00:00.250Z";
 
     fn category() -> Value {
-        json!({"syncId": ID_A, "stamp": STAMP, "type": "EXPENSE", "name": "Food", "deletedAt": null, "mergedInto": null, "createdAt": TS, "updatedAt": TS})
+        json!({"syncId": ID_A, "stamp": STAMP, "type": "EXPENSE", "name": "Food", "deletedAt": null, "mergedInto": null, "position": 0, "createdAt": TS, "updatedAt": TS})
     }
 
     fn transaction() -> Value {
@@ -1056,7 +1061,7 @@ mod tests {
 
     #[test]
     fn there_is_a_table_for_every_kind_of_row_and_the_protocol_knows_it() {
-        assert_eq!(PROTOCOL, 4);
+        assert_eq!(PROTOCOL, 5);
         let names: Vec<&str> = Table::ALL.iter().map(|t| t.name()).collect();
         assert_eq!(
             names,
@@ -1093,6 +1098,9 @@ mod tests {
             (Table::Categories, changed(category(), "name", json!("a".repeat(51)))),
             (Table::Categories, changed(category(), "name", json!("tab\there"))),
             (Table::Categories, changed(category(), "mergedInto", json!(ID_A))),
+            (Table::Categories, changed(category(), "position", json!(-1))),
+            (Table::Categories, changed(category(), "position", json!(1_000_001))),
+            (Table::Categories, changed(category(), "position", json!("1"))),
             (Table::Categories, changed(category(), "createdAt", json!("2026-03-01 10:00:00"))),
             (Table::Categories, changed(category(), "updatedAt", json!("2026-13-01T10:00:00.250Z"))),
             (Table::Categories, changed(category(), "deletedAt", json!("yesterday"))),

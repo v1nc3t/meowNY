@@ -77,6 +77,8 @@ export const es: Messages = {
   'categories.add': 'añadir categoría',
   'categories.addTitle': 'añadir categoría',
   'categories.nameError': 'escribe un nombre de categoría de hasta 50 caracteres.',
+  'categories.reorderHint': 'mantén pulsado y arrastra para reordenar, o usa alt y las flechas',
+  'categories.reordered': '{name} movida a la posición {position} de {count}',
 
   'tx.title': 'transacciones',
   'tx.add': 'añadir transacción',
