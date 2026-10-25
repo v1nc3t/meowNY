@@ -11,13 +11,15 @@
   <a href="https://github.com/v1nc3t/meowNY/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/v1nc3t/meowNY/actions/workflows/ci.yml/badge.svg"></a>
   <a href="https://github.com/v1nc3t/meowNY/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/v1nc3t/meowNY"></a>
   <a href="LICENSE"><img alt="License: AGPL-3.0" src="https://img.shields.io/badge/license-AGPL--3.0-blue"></a>
+  <a href="https://ko-fi.com/v1nc3t"><img alt="Support on Ko-fi" src="https://img.shields.io/badge/support-Ko--fi-ff5e5b?logo=ko-fi&logoColor=white"></a>
 </p>
 
 <p align="center">
   <a href="https://github.com/v1nc3t/meowNY/releases/latest">Download</a> ·
   <a href="https://v1nc3t.github.io/meowNY/guide.html">Guide</a> ·
   <a href="https://v1nc3t.github.io/meowNY/cli.html">Command line</a> ·
-  <a href="https://v1nc3t.github.io/meowNY/develop.html">Develop</a>
+  <a href="https://v1nc3t.github.io/meowNY/develop.html">Develop</a> ·
+  <a href="#support">Support</a>
 </p>
 
 ## About
@@ -50,6 +52,10 @@ To report a security problem, see [SECURITY.md](SECURITY.md). To help: [CONTRIBU
 |---|---|
 | [Website](https://v1nc3t.github.io/meowNY/) | The guide, the command line reference (also as [Markdown](https://v1nc3t.github.io/meowNY/CLI.md)) and the develop page |
 | [docs/sync-design.md](docs/sync-design.md), [docs/documents-design.md](docs/documents-design.md), [docs/debts-design.md](docs/debts-design.md) | How sync, documents and debts are built |
+
+## Support
+
+meowNY is free and stays free. Putting it on the App Store and Google Play costs money: the developer accounts and the yearly fees. If you would like to see it there, [support it on Ko-fi](https://ko-fi.com/v1nc3t). Questions, bugs and ideas: [discussions](https://github.com/v1nc3t/meowNY/discussions).
 
 ## License
 

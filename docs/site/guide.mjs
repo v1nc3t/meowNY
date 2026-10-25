@@ -1,7 +1,7 @@
 // The guide: what each part of meowNY does, and what it keeps where, in a few lines each. This page is the user
 // documentation; there is no Markdown copy of it. How sync, documents and debts are built is in the design notes in docs/.
 
-import { REPO } from './render.mjs'
+import { REPO, SPONSOR } from './render.mjs'
 import { gallery } from './shots.mjs'
 
 const doc = (name) => `${REPO}/blob/main/docs/${name}`
@@ -231,7 +231,7 @@ export function buildGuide(images = new Set()) {
     title: 'meowNY guide',
     description: 'How meowNY works: install, budgets, documents, debts, the phone, backups, privacy and the command line.',
     lead: 'What each part of the app does, and what it keeps where.',
-    footer: `meowNY is free software (AGPL-3.0). [Source](${REPO}).`,
+    footer: `meowNY is free software (AGPL-3.0). [Source](${REPO}) · [Support on Ko-fi](${SPONSOR}): it goes toward the App Store and Google Play.`,
     nav: [{ title: 'Guide', links: SECTIONS.map((s) => ({ id: s.id, text: s.title })) }],
     sections,
   }

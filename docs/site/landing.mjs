@@ -3,7 +3,7 @@
 // Screenshots: shots.mjs; one whose files are not in docs/site/images/ yet shows as an empty frame.
 
 import { readFileSync } from 'node:fs'
-import { escapeHtml, icon, REPO, shell } from './render.mjs'
+import { escapeHtml, icon, REPO, shell, SPONSOR } from './render.mjs'
 import { SHOTS, shot } from './shots.mjs'
 
 export { SHOTS }
@@ -67,13 +67,17 @@ ${features}
 <p>Download meowNY for Linux, Windows, Android or iPhone from <a href="${REPO}/releases/latest">the latest release</a>. How to install and update each one: <a href="guide.html#install">install</a>.</p>
 <p>To build it yourself: <a href="develop.html">develop</a>. The phone app and its sync: <a href="guide.html#phone">your phone</a>.</p>
 </section>
-<footer><p>meowNY is free software under the AGPL-3.0. <a href="${REPO}">Source on GitHub</a>.</p></footer>`
+<section class="block" id="support"><h2>support meowNY</h2>
+<p>meowNY is free and stays free. Putting it on the App Store and Google Play costs money: the developer accounts and the yearly fees. Support on Ko-fi goes toward publishing it there, so anyone can install it from their phone's store.</p>
+<p class="actions"><a class="btn btn-outline" href="${SPONSOR}">support on ko-fi</a></p>
+</section>
+<footer><p>meowNY is free software under the AGPL-3.0. <a href="${REPO}">Source on GitHub</a> · <a href="${SPONSOR}">Support on Ko-fi</a>.</p></footer>`
 
   return shell({
     file: 'index.html',
     title: 'meowNY: a private, local-first budget app',
     description: 'meowNY is a budget app that keeps your data on your own computer and phone, encrypted. No server, no account, no telemetry.',
-    toc: [{ title: 'On this page', links: [{ id: 'features', text: 'features' }, { id: 'look', text: 'a look inside' }, { id: 'phone', text: 'on your phone' }, { id: 'private', text: 'private by design' }, { id: 'start', text: 'get started' }] }],
+    toc: [{ title: 'On this page', links: [{ id: 'features', text: 'features' }, { id: 'look', text: 'a look inside' }, { id: 'phone', text: 'on your phone' }, { id: 'private', text: 'private by design' }, { id: 'start', text: 'get started' }, { id: 'support', text: 'support' }] }],
     body,
     wide: true,
   })
