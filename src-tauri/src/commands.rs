@@ -436,7 +436,7 @@ pub fn delete_recurring(vault: Shared, id: String) -> Result<(), AppError> {
     vault.with_conn(|c| recurring::delete(c, id))
 }
 
-/// Turns the current occurrence into a transaction. `amount` and `paid_on` default to the
+/// Turns an occurrence into a transaction: the next one, or the later one named by `due_date`. `amount` and `paid_on` default to the
 /// planned amount and today.
 #[tauri::command]
 pub fn pay_recurring(
@@ -444,16 +444,17 @@ pub fn pay_recurring(
     id: String,
     amount: Option<String>,
     paid_on: Option<String>,
+    due_date: Option<String>,
 ) -> Result<Transaction, AppError> {
     let id = categories::parse_id(&id)?;
     let today = today_text(&vault)?;
-    vault.with_conn(|c| recurring::pay(c, id, amount.as_deref(), paid_on.as_deref(), &today))
+    vault.with_conn(|c| recurring::pay(c, id, amount.as_deref(), paid_on.as_deref(), &today, due_date.as_deref()))
 }
 
 #[tauri::command]
-pub fn skip_recurring(vault: Shared, id: String) -> Result<Recurring, AppError> {
+pub fn skip_recurring(vault: Shared, id: String, due_date: Option<String>) -> Result<Recurring, AppError> {
     let id = categories::parse_id(&id)?;
-    vault.with_conn(|c| recurring::skip(c, id))
+    vault.with_conn(|c| recurring::skip(c, id, due_date.as_deref()))
 }
 
 #[tauri::command]

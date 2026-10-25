@@ -269,11 +269,22 @@ fn exact_amounts_in_a_template_give_exactly_what_was_typed_for_the_planned_amoun
     let (anna, bob) = (friend(&w.conn, "Anna"), friend(&w.conn, "Bob"));
     let item = rent_item(&w.conn, w.rent, Some("900.00"));
     set_template(&w.conn, item.id, &input(Mode::Exact, Some("350.00"), vec![with(who(anna), "300.00"), with(who(bob), "250.00")])).unwrap();
-    let paid = recurring::pay(&w.conn, item.id, None, Some("2026-01-01"), "2026-01-01").unwrap();
+    let paid = recurring::pay(&w.conn, item.id, None, Some("2026-01-01"), "2026-01-01", None).unwrap();
     assert_eq!((parts(&w.conn, paid.id), paid.my_share.as_str()), (vec![("Anna".to_string(), 30_000), ("Bob".to_string(), 25_000)], "350.00"));
     // the exact amounts must add up to the item's amount
     assert_eq!(set_template(&w.conn, item.id, &input(Mode::Exact, Some("350.00"), vec![with(who(anna), "300.01")])), Err(INVALID));
     assert_eq!(set_template(&w.conn, item.id, &input(Mode::Exact, None, vec![with(who(anna), "901.00")])), Err(INVALID));
+}
+
+#[test]
+fn paying_a_later_occurrence_on_its_own_applies_the_split_like_any_payment() {
+    let w = world();
+    let anna = friend(&w.conn, "Anna");
+    let item = rent_item(&w.conn, w.rent, Some("900.00"));
+    set_template(&w.conn, item.id, &equal(vec![who(anna)])).unwrap();
+    let paid = recurring::pay(&w.conn, item.id, None, Some("2026-03-05"), "2026-03-05", Some("2026-03-01")).unwrap();
+    assert_eq!((parts(&w.conn, paid.id), paid.my_share.as_str()), (vec![("Anna".to_string(), 45_000)], "450.00"));
+    assert_eq!(recurring::get(&w.conn, item.id).unwrap().next_due_date, "2026-01-01", "the item stays on its oldest open occurrence");
 }
 
 #[test]
@@ -283,7 +294,7 @@ fn an_item_with_no_amount_is_split_by_percent_or_shares() {
     let bill_item = rent_item(&w.conn, w.rent, None);
     assert_eq!(set_template(&w.conn, bill_item.id, &input(Mode::Exact, None, vec![with(who(anna), "10.00")])), Err(INVALID), "exact amounts need an amount to add up to");
     set_template(&w.conn, bill_item.id, &input(Mode::Percent, Some("60.00"), vec![with(who(anna), "40.00")])).unwrap();
-    let paid = recurring::pay(&w.conn, bill_item.id, Some("85.50"), Some("2026-01-01"), "2026-01-01").unwrap();
+    let paid = recurring::pay(&w.conn, bill_item.id, Some("85.50"), Some("2026-01-01"), "2026-01-01", None).unwrap();
     assert_eq!(parts(&w.conn, paid.id), [("Anna".to_string(), 3420)]);
     assert_eq!(paid.my_share, "51.30");
     let shown = recurring::get(&w.conn, bill_item.id).unwrap().split.unwrap();
@@ -296,13 +307,13 @@ fn editing_the_template_changes_the_payments_to_come_and_not_the_ones_made() {
     let (anna, bob) = (friend(&w.conn, "Anna"), friend(&w.conn, "Bob"));
     let item = rent_item(&w.conn, w.rent, Some("900.00"));
     set_template(&w.conn, item.id, &equal(vec![who(anna)])).unwrap();
-    let first = recurring::pay(&w.conn, item.id, None, Some("2026-01-01"), "2026-01-01").unwrap();
+    let first = recurring::pay(&w.conn, item.id, None, Some("2026-01-01"), "2026-01-01", None).unwrap();
     set_template(&w.conn, item.id, &equal(vec![who(bob), guest("Carl")])).unwrap();
-    let second = recurring::pay(&w.conn, item.id, None, Some("2026-02-01"), "2026-02-01").unwrap();
+    let second = recurring::pay(&w.conn, item.id, None, Some("2026-02-01"), "2026-02-01", None).unwrap();
     assert_eq!(parts(&w.conn, first.id), [("Anna".to_string(), 45_000)]);
     assert_eq!(parts(&w.conn, second.id), [("Bob".to_string(), 30_000), ("Carl".to_string(), 30_000)]);
     clear_template(&w.conn, item.id).unwrap();
-    let third = recurring::pay(&w.conn, item.id, None, Some("2026-03-01"), "2026-03-01").unwrap();
+    let third = recurring::pay(&w.conn, item.id, None, Some("2026-03-01"), "2026-03-01", None).unwrap();
     assert!(parts(&w.conn, third.id).is_empty() && third.my_share == "900.00");
     assert!(recurring::get(&w.conn, item.id).unwrap().split.is_none());
     assert_eq!(parts(&w.conn, second.id).len(), 2, "the payments made keep theirs");
@@ -315,7 +326,7 @@ fn an_archived_friend_keeps_their_place_in_a_template() {
     let item = rent_item(&w.conn, w.rent, Some("900.00"));
     set_template(&w.conn, item.id, &equal(vec![who(anna)])).unwrap();
     people::archive(&w.conn, anna).unwrap();
-    let paid = recurring::pay(&w.conn, item.id, None, Some("2026-01-01"), "2026-01-01").unwrap();
+    let paid = recurring::pay(&w.conn, item.id, None, Some("2026-01-01"), "2026-01-01", None).unwrap();
     assert_eq!(parts(&w.conn, paid.id), [("Anna".to_string(), 45_000)], "the debt goes on growing");
     set_template(&w.conn, item.id, &input(Mode::Percent, None, vec![with(who(anna), "40.00")])).unwrap();
     let other = rent_item(&w.conn, w.rent, Some("1.00"));
@@ -356,9 +367,9 @@ fn a_payment_and_its_parts_are_made_together_or_not_at_all() {
     let item = rent_item(&w.conn, w.rent, Some("900.00"));
     set_template(&w.conn, item.id, &equal(vec![who(anna)])).unwrap();
     // the same occurrence cannot be paid twice: the second payment fails and leaves nothing
-    recurring::pay(&w.conn, item.id, None, Some("2026-01-01"), "2026-01-01").unwrap();
+    recurring::pay(&w.conn, item.id, None, Some("2026-01-01"), "2026-01-01", None).unwrap();
     w.conn.execute("UPDATE recurring_transactions SET next_due_date = start_date", []).unwrap();
-    assert!(recurring::pay(&w.conn, item.id, None, Some("2026-01-01"), "2026-01-01").is_err());
+    assert!(recurring::pay(&w.conn, item.id, None, Some("2026-01-01"), "2026-01-01", None).is_err());
     assert_eq!((one(&w.conn, "SELECT count(*) FROM transactions"), one(&w.conn, "SELECT count(*) FROM transaction_split_lines")), (1, 1));
 }
 

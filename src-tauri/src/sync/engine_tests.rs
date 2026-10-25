@@ -120,7 +120,7 @@ fn paired() -> (Connection, Connection) {
     budget(&desktop, None, "2026-03", Some("2000.00"));
     budget(&desktop, Some(food), "2026-03", Some("300.00"));
     let item = rent(&desktop, housing);
-    recurring::pay(&desktop, item, None, Some("2026-03-02"), TODAY).unwrap();
+    recurring::pay(&desktop, item, None, Some("2026-03-02"), TODAY, None).unwrap();
     let doomed = spend(&desktop, food, "Mistake", "9.99");
     transactions::delete(&desktop, doomed).unwrap();
     sync_ok(&mut desktop, &mut phone);
@@ -217,9 +217,9 @@ fn a_recurring_item_paid_on_both_devices_gives_one_payment_and_is_not_due_twice(
     let (mut desktop, mut phone) = paired();
     let (d, p) = (id_of(&desktop, "recurring_transactions", "Rent"), id_of(&phone, "recurring_transactions", "Rent"));
     // the item is due on 2026-04-01 on both; each device pays it
-    recurring::pay(&desktop, d, Some("905.50"), Some("2026-04-01"), TODAY).unwrap();
+    recurring::pay(&desktop, d, Some("905.50"), Some("2026-04-01"), TODAY, None).unwrap();
     pause();
-    recurring::pay(&phone, p, Some("899.00"), Some("2026-04-02"), TODAY).unwrap();
+    recurring::pay(&phone, p, Some("899.00"), Some("2026-04-02"), TODAY, None).unwrap();
     let outcome = sync_ok(&mut desktop, &mut phone);
     assert_eq!(count(&desktop, "SELECT count(*) FROM transactions WHERE recurring_due_date = '2026-04-01'"), 1);
     assert_eq!(text(&desktop, "SELECT payment_date FROM transactions WHERE recurring_due_date = '2026-04-01'"), "2026-04-02", "the newer payment stays");
@@ -228,10 +228,36 @@ fn a_recurring_item_paid_on_both_devices_gives_one_payment_and_is_not_due_twice(
 }
 
 #[test]
+fn a_skipped_occurrence_arrives_on_the_other_device_and_a_later_payment_does_not_move_the_item() {
+    let (mut desktop, mut phone) = paired();
+    let (d, p) = (id_of(&desktop, "recurring_transactions", "Rent"), id_of(&phone, "recurring_transactions", "Rent"));
+    let today = "2026-07-10";
+    // the item is due on 2026-04-01; June is skipped on the desktop and May paid on its own on the phone
+    recurring::skip(&desktop, d, Some("2026-06-01")).unwrap();
+    pause();
+    recurring::pay(&phone, p, None, Some("2026-05-02"), today, Some("2026-05-01")).unwrap();
+    sync_ok(&mut desktop, &mut phone);
+    for device in [&desktop, &phone] {
+        assert_eq!(text(device, "SELECT next_due_date FROM recurring_transactions"), "2026-04-01");
+        let due: Vec<String> = crate::debts::dues::due_payments(device, today).unwrap().into_iter().map(|x| x.due_date).collect();
+        assert_eq!(due, ["2026-04-01", "2026-07-01"]);
+    }
+    assert_eq!(text(&phone, "SELECT skipped_dates FROM recurring_transactions"), r#"["2026-06-01"]"#);
+    // paying April on the phone moves the item past the paid May and the skipped June, on both devices
+    pause();
+    recurring::pay(&phone, p, None, Some("2026-04-02"), today, None).unwrap();
+    sync_ok(&mut desktop, &mut phone);
+    for device in [&desktop, &phone] {
+        assert_eq!(text(device, "SELECT next_due_date FROM recurring_transactions"), "2026-07-01");
+        assert_eq!(text(device, "SELECT skipped_dates FROM recurring_transactions"), "[]");
+    }
+}
+
+#[test]
 fn a_payment_made_on_one_device_survives_an_edit_of_the_item_on_the_other() {
     let (mut desktop, mut phone) = paired();
     let (d, p) = (id_of(&desktop, "recurring_transactions", "Rent"), id_of(&phone, "recurring_transactions", "Rent"));
-    recurring::pay(&phone, p, None, Some("2026-04-01"), TODAY).unwrap();
+    recurring::pay(&phone, p, None, Some("2026-04-01"), TODAY, None).unwrap();
     pause();
     desktop.execute("UPDATE recurring_transactions SET name = 'Flat rent' WHERE id = ?1", [d]).unwrap();
     sync_ok(&mut desktop, &mut phone);
@@ -818,7 +844,7 @@ fn edit(conn: &mut Connection, rng: &mut Rng) {
         10 | 11 => {
             let items = ids(conn, "SELECT id FROM recurring_transactions WHERE is_active = 1");
             if !items.is_empty() {
-                let _ = recurring::pay(conn, *rng.pick(&items), Some("12.50"), Some("2026-03-20"), TODAY);
+                let _ = recurring::pay(conn, *rng.pick(&items), Some("12.50"), Some("2026-03-20"), TODAY, None);
             }
         }
         12 => {
@@ -830,7 +856,7 @@ fn edit(conn: &mut Connection, rng: &mut Rng) {
                         let _ = recurring::delete(conn, id);
                     }
                     1 => {
-                        let _ = recurring::skip(conn, id);
+                        let _ = recurring::skip(conn, id, None);
                     }
                     2 => {
                         let _ = recurring::set_active(conn, id, rng.below(2) == 0);
@@ -1013,7 +1039,7 @@ fn edit_debts(conn: &mut Connection, rng: &mut Rng) {
             }
         }
         14 if !items.is_empty() => {
-            let _ = recurring::pay(conn, *rng.pick(&items), Some("30.00"), Some("2026-03-21"), TODAY);
+            let _ = recurring::pay(conn, *rng.pick(&items), Some("30.00"), Some("2026-03-21"), TODAY, None);
         }
         15 if !entries.is_empty() => {
             let docs = ids(conn, "SELECT id FROM documents");
@@ -1708,7 +1734,7 @@ mod debts {
         assert_eq!(count(&phone, "SELECT count(*) FROM recurring_transactions WHERE split_my_weight IS NOT NULL"), 0);
         // a payment of the item is split on the device that pays it, and the payment arrives with its parts
         set_template(&phone, on_phone, &equal(vec![who(id_of(&phone, "people", "Anna"))])).unwrap();
-        recurring::pay(&phone, on_phone, Some("600.00"), Some("2026-03-20"), TODAY).unwrap();
+        recurring::pay(&phone, on_phone, Some("600.00"), Some("2026-03-20"), TODAY, None).unwrap();
         sync_ok(&mut desktop, &mut phone);
         assert_eq!(parts_of(&desktop, "Rent"), [("Anna".to_string(), 30_000)]);
     }

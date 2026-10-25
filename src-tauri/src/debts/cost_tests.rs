@@ -356,7 +356,7 @@ fn planned_against_paid_stays_whole_because_a_split_does_not_move_the_price() {
     )
     .unwrap();
     crate::debts::splits::set_template(&w.conn, item.id, &equal(vec![who(anna)])).unwrap();
-    crate::recurring::pay(&w.conn, item.id, Some("120.00"), Some("2026-03-01"), "2026-03-01").unwrap();
+    crate::recurring::pay(&w.conn, item.id, Some("120.00"), Some("2026-03-01"), "2026-03-01", None).unwrap();
     let line = &stats::planned_vs_paid(&w.conn, "2026-03").unwrap()[0];
     assert_eq!((line.planned.as_deref(), line.paid.as_str(), line.difference.as_deref()), (Some("100.00"), "120.00", Some("20.00")));
 }

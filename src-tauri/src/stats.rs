@@ -514,8 +514,8 @@ mod tests {
         assert_eq!(c.items.iter().find(|i| i.name == "Rent").unwrap().per_month.as_deref(), Some("900.00"));
 
         // Paid with whatever the bill was: there was no plan to compare it with.
-        recurring::pay(&conn, electricity.id, Some("78.40"), Some("2026-09-02"), "2026-09-02").unwrap();
-        recurring::pay(&conn, electricity.id, Some("81.10"), Some("2026-09-28"), "2026-09-28").unwrap();
+        recurring::pay(&conn, electricity.id, Some("78.40"), Some("2026-09-02"), "2026-09-02", None).unwrap();
+        recurring::pay(&conn, electricity.id, Some("81.10"), Some("2026-09-28"), "2026-09-28", None).unwrap();
         let row = planned_vs_paid(&conn, "2026-09").unwrap().into_iter().find(|r| r.name == "Electricity").unwrap();
         assert_eq!((row.planned, row.difference), (None, None));
         assert_eq!((row.paid.as_str(), row.paid_count), ("159.50", 2));

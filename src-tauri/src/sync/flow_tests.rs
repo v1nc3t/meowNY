@@ -118,7 +118,7 @@ pub(super) fn desktop_with_data() -> Arc<LocalDb> {
         )
         .unwrap()
         .id;
-        recurring::pay(&conn, item, None, Some("2026-03-02"), "2026-03-15").unwrap();
+        recurring::pay(&conn, item, None, Some("2026-03-02"), "2026-03-15", None).unwrap();
     }
     desktop
 }

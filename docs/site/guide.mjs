@@ -83,7 +83,7 @@ const SECTIONS = [
         items: [
           '**Categories** sort transactions into income and expenses. Hold one and drag it to change the order (or Alt + arrow keys).',
           '**Budgets** per month and category. A budget carries into later months. Change a past month and choose: only that month, that month and later, or every month.',
-          '**Recurring items:** pay, skip, pause or end them. One with no fixed amount asks for it when paid.',
+          '**Recurring items:** pay, skip, pause or end them. One with no fixed amount asks for it when paid. The **due payments** tab lists each payment past its day; pay or skip any one of them.',
           '**Statistics:** budget against spending, trends, a year view.',
           'Seven languages, light and dark themes.',
         ],
@@ -119,7 +119,7 @@ const SECTIONS = [
           '**Lend, borrow, paid back:** a ledger per friend, outside your budget. Positive means they owe you. **Mark as paid** settles all or part.',
           '**Split a bill** equally, by percent, shares or amounts. Budgets, statistics and exports count only your part; each friend\'s part is added to what they owe.',
           '**Bill codes:** **show code** makes a QR code with one friend\'s part (and nobody else\'s). They **scan a bill** or **paste a code**, check it, and accept; nothing is written before that.',
-          '**Due payments** lists recurring payments past their day; **history of debts** shows every line with the balance after it.',
+          '**History of debts** shows every line with the balance after it. Recurring payments past their day are under **recurring → due payments**.',
           '**Reminders:** every week, 2 weeks or month after a debt last changed, set per device. The text holds a count, never a name or amount.',
           '**Save statement** writes one friend\'s lines as TXT, CSV or PDF, not encrypted.',
         ],

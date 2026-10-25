@@ -96,10 +96,11 @@ States are compared, not change logs, so a broken or half sync is repaired by th
 
 ## 9. Database changes
 
-Migrations `0008`, `0009`, `0012`, `0013`, `0014`: a random `sync_id` and a `stamp` on every shared row (`categories`,
+Migrations `0008`, `0009`, `0012`, `0013`, `0014`, `0015`: a random `sync_id` and a `stamp` on every shared row (`categories`,
 `budgets`, `recurring_transactions`, `transactions`, `people`, `ledger_entries`, `documents`, `document_links`, the
 shared part of `settings`); `sync_deleted` markers made by delete triggers; `categories.merged_into`; `categories.position` (the order the person chose, per type; a move gives the row a new stamp,
-so it travels in the category row, and ties are settled by id); `sync_clock`;
+so it travels in the category row, and ties are settled by id); `recurring_transactions.skipped_dates` (a JSON array of the later
+occurrences skipped one by one, sorted, at most 100; part of protocol 5, checked when a row arrives); `sync_clock`;
 `sync_peers`; `currency_changes`. Stamps come from triggers, which stand aside while `sync_clock.applying` is on. A
 bill's parts and a recurring item's template travel inside their parent's row. Never synced: `audit_log`,
 `backup_schedule`, `api_tokens`, `sync_peers`, `sync_clock`, the language, lock settings.
@@ -115,7 +116,8 @@ makes newer stamps.
 The larger stamp wins the whole row; a deletion marker is a row. Duplicates are matched by meaning (the same
 `client_uuid`, the same payment of a recurring item, the same budget key, the same category or friend name): the newer
 or lower `sync_id` stays, the other becomes a marker or is merged with `merged_into` and its rows move. A recurring
-item's next due date moves past its latest payment. A bill's parts are replaced with their bill. Stamps these rules
+item's next due date moves past a payment it already has, and on past the occurrences after it that are paid or skipped; a payment of a later
+occurrence leaves it where it is. A bill's parts are replaced with their bill. Stamps these rules
 make are derived from the stamps involved (`derive`, `moved`), never the clock, so both devices agree. Only the desktop
 changes the currency; the lower generation converts all its rows first, and an out-of-range result stops the sync.
 Documents: `documents-design.md`, section 10.

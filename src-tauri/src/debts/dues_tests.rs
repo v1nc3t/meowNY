@@ -49,12 +49,27 @@ fn paying_or_skipping_the_oldest_takes_it_off_the_list() {
     let w = world();
     let id = item(&w.conn, "Rent", Some("900.00"), w.rent, "2026-01-01", (Unit::Month, 1), None);
     assert_eq!(days(&w.conn, "2026-03-15").len(), 3);
-    recurring::pay(&w.conn, id, None, Some("2026-01-03"), "2026-03-15").unwrap();
+    recurring::pay(&w.conn, id, None, Some("2026-01-03"), "2026-03-15", None).unwrap();
     assert_eq!(days(&w.conn, "2026-03-15").iter().map(|d| d.1.as_str()).collect::<Vec<_>>(), ["2026-02-01", "2026-03-01"]);
-    recurring::skip(&w.conn, id).unwrap();
+    recurring::skip(&w.conn, id, None).unwrap();
     assert_eq!(days(&w.conn, "2026-03-15").iter().map(|d| d.1.as_str()).collect::<Vec<_>>(), ["2026-03-01"]);
-    recurring::pay(&w.conn, id, None, Some("2026-03-15"), "2026-03-15").unwrap();
+    recurring::pay(&w.conn, id, None, Some("2026-03-15"), "2026-03-15", None).unwrap();
     assert!(days(&w.conn, "2026-03-15").is_empty());
+}
+
+#[test]
+fn a_payment_paid_or_skipped_on_its_own_is_left_out_and_does_not_count_toward_the_most_per_item() {
+    let w = world();
+    let id = item(&w.conn, "Rent", Some("900.00"), w.rent, "2026-01-01", (Unit::Month, 1), None);
+    recurring::skip(&w.conn, id, Some("2026-02-01")).unwrap();
+    recurring::pay(&w.conn, id, None, Some("2026-03-15"), "2026-03-15", Some("2026-03-01")).unwrap();
+    assert_eq!(days(&w.conn, "2026-03-15").iter().map(|d| d.1.as_str()).collect::<Vec<_>>(), ["2026-01-01"]);
+    let daily = item(&w.conn, "Daily", Some("1.00"), w.food, "2020-01-01", (Unit::Day, 1), None);
+    recurring::skip(&w.conn, daily, Some("2020-01-03")).unwrap();
+    let list: Vec<String> = due_payments(&w.conn, "2026-03-15").unwrap().into_iter().filter(|d| d.name == "Daily").map(|d| d.due_date).collect();
+    assert_eq!(list.len(), MAX_PER_ITEM);
+    assert!(!list.contains(&"2020-01-03".to_string()));
+    assert_eq!(list[MAX_PER_ITEM - 1], "2020-01-25");
 }
 
 #[test]

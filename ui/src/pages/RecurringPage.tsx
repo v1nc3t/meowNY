@@ -1,5 +1,5 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
-import { useLocation } from 'react-router-dom'
+import { useSearchParams } from 'react-router-dom'
 import AddCategoryModal from '../components/AddCategoryModal'
 import AttachArea from '../components/AttachArea'
 import BillCodeModal from '../components/BillCodeModal'
@@ -8,12 +8,14 @@ import DatePicker from '../components/DatePicker'
 import SplitEditor from '../components/SplitEditor'
 import Dropdown from '../components/Dropdown'
 import ConfirmModal from '../components/ConfirmModal'
+import DuePayments from '../components/DuePayments'
+import SectionTabs from '../components/SectionTabs'
 import Modal, { modalFormId } from '../components/Modal'
 import Badge from '../components/ui/Badge'
 import Button from '../components/ui/Button'
 import { EmptyState } from '../components/ui/Pixel'
 import { categories as categoriesApi, type Category } from '../api/categories'
-import { debts, type Person } from '../api/debts'
+import { debts, type Due, type DuePayment, type Person } from '../api/debts'
 import { errorText } from '../api/invoke'
 import { INTERVAL_UNITS, recurring as recurringApi, type IntervalUnit, type Recurring } from '../api/recurring'
 import { useToday, type Today } from '../api/today'
@@ -77,7 +79,14 @@ function RecurringView({ settings, now }: { settings: MoneySettings; now: Today 
   const [reload, setReload] = useState(0)
   const [adding, setAdding] = useState(false)
   const [editing, setEditing] = useState<Recurring | null>(null)
-  const [paying, setPaying] = useState<Recurring | null>(null)
+  // the item being paid; `dueDate` is the one occurrence of it, or none for its next
+  const [paying, setPaying] = useState<{ item: Recurring; dueDate?: string } | null>(null)
+  // the overdue occurrence being skipped
+  const [skipping, setSkipping] = useState<DuePayment | null>(null)
+  const [due, setDue] = useState<Due | null>(null)
+  // the tab is in the address (`?tab=due`), so a link can open it
+  const [params, setParams] = useSearchParams()
+  const tab = params.get('tab') === 'due' ? 'due' : 'items'
   // the friend a code of an item's next payment is being shown for
   const [coding, setCoding] = useState<{ item: Recurring; personId: string; name: string } | null>(null)
   const [confirming, setConfirming] = useState<{ kind: ConfirmKind; item: Recurring } | null>(null)
@@ -89,17 +98,6 @@ function RecurringView({ settings, now }: { settings: MoneySettings; now: Today 
   // a document can send the person here for one of its recurring items: the row is scrolled to and outlined
   const { request: focus, done: focusDone } = useFocusRequest('recurring')
   useJumpTo(focus, focusDone, items)
-  // the debts screen can send the person to pay a recurring payment that is due: the dialog of that item opens, once
-  const location = useLocation()
-  const payAsked = (location.state as { pay?: boolean } | null)?.pay === true
-  const payOpened = useRef<string | null>(null)
-  useEffect(() => {
-    if (!focus || !payAsked || !items || payOpened.current === focus.id) return
-    const item = items.find((candidate) => candidate.id === focus.id)
-    if (!item) return
-    payOpened.current = focus.id
-    openPay(item)
-  })
   const onSplitReady = useCallback((ready: boolean) => setSplit((current) => (current.ready === ready ? current : { ...current, ready })), [])
   const removedFriends = useMemo(() => new Set(friends.filter((friend) => friend.archived).map((friend) => friend.id)), [friends])
   const categoryNames = useMemo(() => new Map(categories.map((category) => [category.id, category.name])), [categories])
@@ -115,12 +113,13 @@ function RecurringView({ settings, now }: { settings: MoneySettings; now: Today 
 
   useEffect(() => {
     let cancelled = false
-    void Promise.all([categoriesApi.list(), recurringApi.list(), debts.people(true)]).then(
-      ([categoryList, list, people]) => {
+    void Promise.all([categoriesApi.list(), recurringApi.list(), debts.people(true), debts.duePayments()]).then(
+      ([categoryList, list, people, owed]) => {
         if (cancelled) return
         setCategories(categoryList)
         setItems(list)
         setFriends(people)
+        setDue(owed)
       },
       (failure) => {
         if (!cancelled) say(errorText(failure), 'error')
@@ -137,6 +136,7 @@ function RecurringView({ settings, now }: { settings: MoneySettings; now: Today 
     setAdding(false)
     setEditing(null)
     setPaying(null)
+    setSkipping(null)
     setConfirming(null)
   }
 
@@ -155,11 +155,24 @@ function RecurringView({ settings, now }: { settings: MoneySettings; now: Today 
     setEditing(item)
   }
 
-  function openPay(item: Recurring) {
+  function openPay(item: Recurring, dueDate?: string) {
     closeModals()
     // the documents of a payment wait in the dialog and are attached to the transaction it makes
     attachments.reset()
-    setPaying(item)
+    setPaying({ item, dueDate })
+  }
+
+  function payDue(payment: DuePayment) {
+    const item = items?.find((candidate) => candidate.id === payment.recurringId)
+    if (item) openPay(item, payment.dueDate)
+  }
+
+  async function onSkipDue() {
+    if (!skipping) return
+    setPending(true)
+    await run(() => recurringApi.skip(skipping.recurringId, skipping.dueDate))
+    setPending(false)
+    setSkipping(null)
   }
 
   // Keyboard: n adds, j and k move between rows.
@@ -271,7 +284,7 @@ function RecurringView({ settings, now }: { settings: MoneySettings; now: Today 
     setPending(true)
     let notAttached: string[] = []
     try {
-      const paid = await recurringApi.pay(paying.id, { amount, paidOn })
+      const paid = await recurringApi.pay(paying.item.id, { amount, paidOn, dueDate: paying.dueDate })
       notAttached = await attachments.commit({ kind: 'transaction', id: paid.id })
     } catch (failure) {
       say(errorText(failure), 'error')
@@ -340,6 +353,15 @@ function RecurringView({ settings, now }: { settings: MoneySettings; now: Today 
           onClose={() => setConfirming(null)}
         />
       ) : null}
+      {skipping ? (
+        <ConfirmModal
+          title={t('rec.skipPayment', { name: skipping.name, date: formatDate(skipping.dueDate, settings.locale) })}
+          pending={pending}
+          danger={false}
+          onConfirm={() => void onSkipDue()}
+          onClose={() => setSkipping(null)}
+        />
+      ) : null}
       {coding ? (
         <BillCodeModal
           target={{ kind: 'recurring', id: coding.item.id, date: coding.item.nextDueDate }}
@@ -350,18 +372,33 @@ function RecurringView({ settings, now }: { settings: MoneySettings; now: Today 
       {paying ? (
         <Modal title={t('rec.payTitle')} pending={pending} onClose={closeModals}>
           <form id={modalFormId} onSubmit={(event) => void onPay(event)}>
-            <p>{paying.name}</p>
-            {paying.amount === null ? <p className="hint">{t('rec.payHint')}</p> : null}
+            <p>{paying.item.name}</p>
+            {paying.dueDate ? <p className="hint">{t('debts.dueOn', { date: formatDate(paying.dueDate, settings.locale) })}</p> : null}
+            {paying.item.amount === null ? <p className="hint">{t('rec.payHint')}</p> : null}
             <label>
               {t('rec.paidAmount')}
-              <input name="amount" required autoFocus={paying.amount === null} inputMode="decimal" defaultValue={paying.amount ?? ''} autoComplete="off" />
+              <input name="amount" required autoFocus={paying.item.amount === null} inputMode="decimal" defaultValue={paying.item.amount ?? ''} autoComplete="off" />
             </label>
             <DateField name="paidOn" label={t('rec.paidOn')} defaultValue={now.date} today={now.date} />
           </form>
           <AttachArea attachments={attachments} />
         </Modal>
       ) : null}
-      {items ? (
+      <SectionTabs
+        label={t('rec.title')}
+        value={tab}
+        onChange={(id) => setParams(id === 'due' ? { tab: 'due' } : {}, { replace: true })}
+        tabs={[
+          { id: 'items', label: t('rec.tabItems') },
+          { id: 'due', label: due && due.payments.length > 0 ? `${t('rec.tabDue')} (${due.payments.length})` : t('rec.tabDue') },
+        ]}
+      />
+      {tab === 'due' && due ? (
+        <div className="tx-pane wide pane-stack" role="tabpanel">
+          <DuePayments due={due} currency={settings.currency} locale={settings.locale} onPay={payDue} onSkip={setSkipping} />
+        </div>
+      ) : null}
+      {tab === 'items' && items ? (
         <div className="tx-pane wide">
           {items.length === 0 ? <EmptyState text={t('rec.empty')} /> : null}
           {groups.map((group) => (

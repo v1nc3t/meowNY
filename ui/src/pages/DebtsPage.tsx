@@ -1,12 +1,11 @@
 import { useEffect, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
-import { debts, type Due, type EntryKind, type History, type Person, type Reminders } from '../api/debts'
+import { debts, type EntryKind, type History, type Person, type Reminders } from '../api/debts'
 import { errorText } from '../api/invoke'
 import { scanQr, stopScan } from '../api/scanner'
 import { useToday, type Today } from '../api/today'
 import BillAcceptModal from '../components/BillAcceptModal'
 import ConfirmModal from '../components/ConfirmModal'
-import DebtsDue from '../components/DebtsDue'
 import DebtsHistory from '../components/DebtsHistory'
 import EntryModal from '../components/EntryModal'
 import FriendNameModal from '../components/FriendNameModal'
@@ -33,7 +32,7 @@ export default function DebtsPage() {
   return <DebtsView settings={settings} now={now} />
 }
 
-type Tab = 'friends' | 'due' | 'history'
+type Tab = 'friends' | 'history'
 
 function DebtsView({ settings, now }: { settings: MoneySettings; now: Today }) {
   const t = useT()
@@ -42,7 +41,6 @@ function DebtsView({ settings, now }: { settings: MoneySettings; now: Today }) {
   const location = useLocation()
   const [people, setPeople] = useState<Person[] | null>(null)
   const [reminders, setReminders] = useState<Reminders | null>(null)
-  const [due, setDue] = useState<Due | null>(null)
   const [tab, setTab] = useState<Tab>('friends')
   const [history, setHistory] = useState<History | null>(null)
   const [historyOffset, setHistoryOffset] = useState(0)
@@ -63,12 +61,11 @@ function DebtsView({ settings, now }: { settings: MoneySettings; now: Today }) {
 
   useEffect(() => {
     let cancelled = false
-    void Promise.all([debts.people(showRemoved), debts.reminders(reminderEvery()), debts.duePayments()]).then(
-      ([list, reminded, owed]) => {
+    void Promise.all([debts.people(showRemoved), debts.reminders(reminderEvery())]).then(
+      ([list, reminded]) => {
         if (cancelled) return
         setPeople(list)
         setReminders(reminded)
-        setDue(owed)
       },
       (failure) => {
         if (!cancelled) say(errorText(failure), 'error')
@@ -272,15 +269,9 @@ function DebtsView({ settings, now }: { settings: MoneySettings; now: Today }) {
         onChange={setTab}
         tabs={[
           { id: 'friends', label: t('debts.tabFriends') },
-          { id: 'due', label: due && due.payments.length > 0 ? `${t('debts.dueTitle')} (${due.payments.length})` : t('debts.dueTitle') },
           { id: 'history', label: t('debts.historyTab') },
         ]}
       />
-      {tab === 'due' && due ? (
-        <div className="tx-pane wide pane-stack" role="tabpanel">
-          <DebtsDue due={due} currency={settings.currency} locale={settings.locale} />
-        </div>
-      ) : null}
       {tab === 'history' && history ? (
         <div className="tx-pane wide pane-stack" role="tabpanel">
           <DebtsHistory history={history} currency={settings.currency} locale={settings.locale} onPage={setHistoryOffset} />

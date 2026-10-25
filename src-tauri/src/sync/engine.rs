@@ -344,7 +344,7 @@ fn load_rows(conn: &Connection, table: Table, wanted: &HashSet<&String>) -> Resu
             let mut templates = templates_by_item(conn)?;
             let mut stmt = conn.prepare(
                 "SELECT x.sync_id, x.stamp, c.sync_id, x.name, x.description, x.amount_minor, x.start_date, x.interval_unit, x.interval_count,
-                        x.next_due_date, x.end_date, x.is_active, x.created_at, x.updated_at
+                        x.next_due_date, x.end_date, x.is_active, x.created_at, x.updated_at, x.skipped_dates
                  FROM recurring_transactions x JOIN categories c ON c.id = x.category_id ORDER BY x.sync_id",
             )?;
             for r in stmt.query_map([], |r| {
@@ -364,6 +364,7 @@ fn load_rows(conn: &Connection, table: Table, wanted: &HashSet<&String>) -> Resu
                     split: None,
                     created_at: r.get(12)?,
                     updated_at: r.get(13)?,
+                    skipped_dates: r.get(14)?,
                 })
             })? {
                 let mut r = r?;
@@ -720,8 +721,8 @@ struct Applier<'a> {
 
 type Found = (i64, String);
 
-/// What `check_recurring` reads of a recurring item: start date, unit, next due date, stamp, count, end date, active flag, sync id.
-type RecurringItem = (String, String, String, String, i64, Option<String>, i64, String);
+/// What `check_recurring` reads of a recurring item: start date, unit, next due date, stamp, count, end date, active flag, sync id, skipped dates.
+type RecurringItem = (String, String, String, String, i64, Option<String>, i64, String, String);
 
 impl<'a> Applier<'a> {
     // One apply runs the same few statements for every row, so they are prepared once and kept (`prepare_cached`): parsing
@@ -1328,8 +1329,8 @@ impl<'a> Applier<'a> {
                     self.note_overwrite(local);
                     self.run(
                         "UPDATE recurring_transactions SET stamp = ?2, category_id = ?3, name = ?4, description = ?5, amount_minor = ?6, start_date = ?7,
-                         interval_unit = ?8, interval_count = ?9, next_due_date = ?10, end_date = ?11, is_active = ?12, created_at = ?13 WHERE id = ?1",
-                        params![id, stamp, category, r.name, r.description, r.amount_minor, r.start_date, r.interval_unit, r.interval_count, r.next_due_date, r.end_date, r.is_active, r.created_at],
+                         interval_unit = ?8, interval_count = ?9, next_due_date = ?10, end_date = ?11, is_active = ?12, created_at = ?13, skipped_dates = ?14 WHERE id = ?1",
+                        params![id, stamp, category, r.name, r.description, r.amount_minor, r.start_date, r.interval_unit, r.interval_count, r.next_due_date, r.end_date, r.is_active, r.created_at, r.skipped_dates],
                     )?;
                     self.set_updated_at(Table::RecurringTransactions, *id, &when)?;
                     self.summary.updated += 1;
@@ -1338,9 +1339,9 @@ impl<'a> Applier<'a> {
                 None => {
                     self.run(
                         "INSERT INTO recurring_transactions (sync_id, stamp, category_id, name, description, amount_minor, start_date, interval_unit,
-                         interval_count, next_due_date, end_date, is_active, created_at, updated_at)
-                         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)",
-                        params![r.sync_id, stamp, category, r.name, r.description, r.amount_minor, r.start_date, r.interval_unit, r.interval_count, r.next_due_date, r.end_date, r.is_active, r.created_at, when],
+                         interval_count, next_due_date, end_date, is_active, created_at, updated_at, skipped_dates)
+                         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)",
+                        params![r.sync_id, stamp, category, r.name, r.description, r.amount_minor, r.start_date, r.interval_unit, r.interval_count, r.next_due_date, r.end_date, r.is_active, r.created_at, when, r.skipped_dates],
                     )?;
                     self.summary.added += 1;
                     self.tx.last_insert_rowid()
@@ -1876,34 +1877,36 @@ impl<'a> Applier<'a> {
 
     // --- after everything is in ---------------------------------------------------------------------------------
 
-    /// An item whose next due date is not after a payment it already has (paid on the other device) moves on to its next
-    /// due date, so that payment does not come due again. Both devices work this out from the same rows.
+    /// An item whose next due date already has a payment (paid on the other device) moves on to the next occurrence that is neither
+    /// paid nor skipped, so that payment does not come due again. A later payment (another occurrence paid first) leaves it where
+    /// it is. Both devices work this out from the same rows.
     fn check_recurring(&mut self) -> Result<(), SyncError> {
         // every active item, touched by this sync or not: the answer depends only on the rows as they are once everything is in, so
         // both devices come to the same one
         let ids: Vec<i64> = self.tx.prepare_cached("SELECT id FROM recurring_transactions WHERE is_active = 1 ORDER BY id")?.query_map([], |r| r.get(0))?.collect::<Result<_, _>>()?;
         for id in ids {
             let item: Option<RecurringItem> = self.row(
-                    "SELECT start_date, interval_unit, next_due_date, stamp, interval_count, end_date, is_active, sync_id FROM recurring_transactions WHERE id = ?1",
+                    "SELECT start_date, interval_unit, next_due_date, stamp, interval_count, end_date, is_active, sync_id, skipped_dates FROM recurring_transactions WHERE id = ?1",
                     [id],
-                    |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?, r.get(5)?, r.get(6)?, r.get(7)?)),
+                    |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?, r.get(5)?, r.get(6)?, r.get(7)?, r.get(8)?)),
                 )
                 .optional()?;
-            let Some((start, unit, due, stamp, count, end, active, _)) = item else { continue };
+            let Some((start, unit, due, stamp, count, end, active, _, skipped_text)) = item else { continue };
             if active == 0 {
                 continue;
             }
-            let latest: Option<(String, String)> = self.row(
-                    "SELECT recurring_due_date, stamp FROM transactions WHERE recurring_transaction_id = ?1 AND recurring_due_date IS NOT NULL
-                     ORDER BY recurring_due_date DESC LIMIT 1",
-                    [id],
-                    |r| Ok((r.get(0)?, r.get(1)?)),
-                )
-                .optional()?;
-            let Some((paid_due, paid_stamp)) = latest else { continue };
-            if due > paid_due {
-                continue;
+            // the payments from the next due date on, by the occurrence they are for
+            let mut paid: std::collections::HashMap<String, String> = std::collections::HashMap::new();
+            {
+                let mut stmt = self.tx.prepare_cached(
+                    "SELECT recurring_due_date, stamp FROM transactions WHERE recurring_transaction_id = ?1 AND recurring_due_date >= ?2",
+                )?;
+                for row in stmt.query_map(params![id, due], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?)))? {
+                    let (date, paid_stamp) = row?;
+                    paid.insert(date, paid_stamp);
+                }
             }
+            let Some(first_stamp) = paid.get(&due) else { continue };
             let unit = match unit.as_str() {
                 "DAY" => recurring::Unit::Day,
                 "WEEK" => recurring::Unit::Week,
@@ -1911,16 +1914,34 @@ impl<'a> Applier<'a> {
                 "YEAR" => recurring::Unit::Year,
                 _ => return Err(SyncError::Invalid("recurring item")),
             };
+            let skipped: Vec<String> = serde_json::from_str(&skipped_text).map_err(|_| SyncError::Invalid("recurring item"))?;
             let parse_date = |text: &str| chrono::NaiveDate::parse_from_str(text, "%Y-%m-%d").map_err(|_| SyncError::Invalid("date"));
-            let (start, paid) = (parse_date(&start)?, parse_date(&paid_due)?);
-            let (next_text, still_active) = match recurring::next_after(start, unit, count as u32, paid) {
+            let start = parse_date(&start)?;
+            let mut newest_paid = parse(first_stamp)?;
+            let mut cursor = parse_date(&due)?;
+            let mut next = recurring::next_after(start, unit, count as u32, cursor);
+            while let Some(candidate) = next {
+                let text = candidate.to_string();
+                if end.as_deref().is_some_and(|e| text.as_str() > e) {
+                    break;
+                }
+                if let Some(paid_stamp) = paid.get(&text) {
+                    newest_paid = std::cmp::max(newest_paid, parse(paid_stamp)?);
+                } else if !skipped.contains(&text) {
+                    break;
+                }
+                cursor = candidate;
+                next = recurring::next_after(start, unit, count as u32, cursor);
+            }
+            let (next_text, still_active) = match next {
                 Some(next) => (next.to_string(), end.as_deref().is_none_or(|e| next.to_string().as_str() <= e)),
                 None => (due.clone(), false),
             };
-            let star = derive(&parse(&stamp)?, &parse(&paid_stamp)?);
+            let kept: Vec<&String> = skipped.iter().filter(|d| d.as_str() > next_text.as_str()).collect();
+            let star = derive(&parse(&stamp)?, &newest_paid);
             self.run(
-                "UPDATE recurring_transactions SET next_due_date = ?2, is_active = ?3, stamp = ?4 WHERE id = ?1",
-                params![id, next_text, still_active, star.format()],
+                "UPDATE recurring_transactions SET next_due_date = ?2, is_active = ?3, stamp = ?4, skipped_dates = ?5 WHERE id = ?1",
+                params![id, next_text, still_active, star.format(), serde_json::to_string(&kept).map_err(|_| SyncError::Invalid("recurring item"))?],
             )?;
             self.set_updated_at(Table::RecurringTransactions, id, &iso(star.ms))?;
         }

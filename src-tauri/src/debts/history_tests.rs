@@ -47,7 +47,7 @@ fn the_history_has_the_lines_of_the_friends_the_payments_that_were_paid_late_and
     let dinner = bill(&w.conn, w.food, "Dinner", "90.00", "2026-01-20");
     set_split(&w.conn, dinner, &equal(vec![who(anna)])).unwrap();
     let rent = item(&w.conn, "Rent", w.rent, "2026-01-01", "2026-04-15");
-    recurring::pay(&w.conn, rent, None, Some("2026-01-04"), TODAY).unwrap();
+    recurring::pay(&w.conn, rent, None, Some("2026-01-04"), TODAY, None).unwrap();
     // the payment on the day it was paid late (the 4th; it fell due on the 1st), the ones overdue now on the days they fell due
     assert_eq!(
         all(&w.conn, &Scope::default()),
@@ -76,10 +76,10 @@ fn a_payment_made_on_time_is_not_in_the_history_and_one_made_late_is() {
     let w = world();
     let rent = item(&w.conn, "Rent", w.rent, "2026-01-01", "2026-06-15");
     // January paid the day before it fell due, February on its day, March a day late; April (the 1st) is not overdue on the 15th of March
-    recurring::pay(&w.conn, rent, None, Some("2025-12-31"), TODAY).unwrap();
-    recurring::pay(&w.conn, rent, None, Some("2026-02-01"), TODAY).unwrap();
+    recurring::pay(&w.conn, rent, None, Some("2025-12-31"), TODAY, None).unwrap();
+    recurring::pay(&w.conn, rent, None, Some("2026-02-01"), TODAY, None).unwrap();
     assert_eq!(all(&w.conn, &Scope::default()), pairs(&[("2026-03-01", PAYMENT_DUE)]), "paid in time: never overdue, so no line; March is overdue now");
-    recurring::pay(&w.conn, rent, None, Some("2026-03-02"), TODAY).unwrap();
+    recurring::pay(&w.conn, rent, None, Some("2026-03-02"), TODAY, None).unwrap();
     assert_eq!(all(&w.conn, &Scope::default()), pairs(&[("2026-03-02", PAYMENT_PAID)]));
     let line = lines(&w.conn, TODAY, &Scope::default()).unwrap().remove(0);
     assert_eq!(line.due_date.as_deref(), Some("2026-03-01"), "it says which day it was late for");

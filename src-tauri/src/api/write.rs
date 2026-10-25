@@ -288,7 +288,7 @@ pub const RECURRING_PAY: Route = Route {
         }
         let Args { amount, paid_on } = parse(args)?;
         let today = today(ctx)?;
-        reply(ctx.vault.with_conn(|c| recurring::pay(c, id, amount.as_deref(), paid_on.as_deref(), &today))?)
+        reply(ctx.vault.with_conn(|c| recurring::pay(c, id, amount.as_deref(), paid_on.as_deref(), &today, None))?)
     },
 };
 
@@ -300,7 +300,7 @@ pub const RECURRING_SKIP: Route = Route {
     confirm: None,
     run: |ctx, mut args| {
         let id = take_id(&mut args, "id")?;
-        reply(ctx.vault.with_conn(|c| recurring::skip(c, id))?)
+        reply(ctx.vault.with_conn(|c| recurring::skip(c, id, None))?)
     },
 };
 

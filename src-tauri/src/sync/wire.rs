@@ -23,7 +23,7 @@ use crate::{categories, transactions, vault};
 /// The version of this protocol, in `hello`.
 /// Protocol 3 adds the tables `documents` and `document_links`; protocol 4 adds `people` and `ledger_entries`, the parts of a shared
 /// bill inside its transaction's row, the split template inside a recurring item's row, and a third target for a document link (a
-/// ledger entry); protocol 5 adds the category order (`position`). A device that speaks an older protocol is told to update.
+/// ledger entry); protocol 5 adds the category order (`position`) and the skipped dates of a recurring item. A device that speaks an older protocol is told to update.
 pub const PROTOCOL: u32 = 5;
 /// Digest entries in one message, and rows in one message. Messages are also cut by size (`SOFT_MESSAGE_BYTES`).
 pub const MAX_ENTRIES_PER_MESSAGE: usize = 400;
@@ -560,6 +560,17 @@ fn option_sync_id(value: &Option<String>) -> bool {
     value.as_deref().is_none_or(sync_id_ok)
 }
 
+/// The most skipped dates one recurring item carries.
+const MAX_SKIPPED_DATES: usize = 100;
+
+/// A JSON array of valid dates, sorted and without repeats, of at most `MAX_SKIPPED_DATES`.
+fn skipped_dates_ok(text: &str) -> bool {
+    match serde_json::from_str::<Vec<String>>(text) {
+        Ok(dates) => dates.len() <= MAX_SKIPPED_DATES && dates.iter().all(|d| date_ok(d)) && dates.windows(2).all(|pair| pair[0] < pair[1]),
+        Err(_) => false,
+    }
+}
+
 fn option_date(value: &Option<String>) -> bool {
     value.as_deref().is_none_or(date_ok)
 }
@@ -602,6 +613,8 @@ pub struct RecurringRow {
     pub interval_unit: String,
     pub interval_count: i64,
     pub next_due_date: String,
+    /// The later occurrences that were skipped one by one: a JSON array of dates, sorted, without repeats (at most `MAX_SKIPPED_DATES`).
+    pub skipped_dates: String,
     pub end_date: Option<String>,
     pub is_active: i64,
     /// How each payment is shared, as weights; none when the payments are not split.
@@ -858,6 +871,7 @@ pub fn parse_row(table: Table, value: &Value) -> Result<Row, WireError> {
                 && (1..=1000).contains(&r.interval_count)
                 && date_ok(&r.next_due_date)
                 && r.next_due_date >= r.start_date
+                && skipped_dates_ok(&r.skipped_dates)
                 && option_date(&r.end_date)
                 && r.end_date.as_deref().is_none_or(|end| end >= r.start_date.as_str())
                 && [0, 1].contains(&r.is_active)
@@ -961,7 +975,7 @@ mod tests {
 
     fn recurring() -> Value {
         json!({"syncId": ID_B, "stamp": STAMP, "category": ID_A, "name": "Rent", "description": "Flat 4", "amountMinor": 90000,
-               "startDate": "2026-01-01", "intervalUnit": "MONTH", "intervalCount": 1, "nextDueDate": "2026-03-01", "endDate": null,
+               "startDate": "2026-01-01", "intervalUnit": "MONTH", "intervalCount": 1, "nextDueDate": "2026-03-01", "skippedDates": "[]", "endDate": null,
                "isActive": 1, "split": null, "createdAt": TS, "updatedAt": TS})
     }
 
@@ -1123,6 +1137,11 @@ mod tests {
             (Table::RecurringTransactions, changed(recurring(), "intervalCount", json!(0))),
             (Table::RecurringTransactions, changed(recurring(), "intervalCount", json!(1001))),
             (Table::RecurringTransactions, changed(recurring(), "isActive", json!(2))),
+            (Table::RecurringTransactions, changed(recurring(), "skippedDates", json!("nope"))),
+            (Table::RecurringTransactions, changed(recurring(), "skippedDates", json!("[\"2026-05-01\",\"2026-04-01\"]"))),
+            (Table::RecurringTransactions, changed(recurring(), "skippedDates", json!("[\"2026-04-01\",\"2026-04-01\"]"))),
+            (Table::RecurringTransactions, changed(recurring(), "skippedDates", json!("[\"2026-4-1\"]"))),
+            (Table::RecurringTransactions, changed(recurring(), "skippedDates", json!("[1]"))),
             (Table::RecurringTransactions, changed(recurring(), "nextDueDate", json!("2025-12-31"))),
             (Table::RecurringTransactions, changed(recurring(), "endDate", json!("2025-12-31"))),
             (Table::RecurringTransactions, changed(recurring(), "amountMinor", json!(0))),

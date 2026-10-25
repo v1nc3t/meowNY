@@ -1386,7 +1386,7 @@ mod tests {
                     description: None,
                 },
             )?;
-            recurring::pay(c, plan.id, None, Some("2026-01-01"), "2026-01-01")?;
+            recurring::pay(c, plan.id, None, Some("2026-01-01"), "2026-01-01", None)?;
             for (name, amount, category) in [("Pay", "3200.00", salary.id), ("Coffee", "3.50", rent.id)] {
                 transactions::create(
                     c,
