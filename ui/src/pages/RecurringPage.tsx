@@ -451,19 +451,26 @@ function RecurringView({ settings, now }: { settings: MoneySettings; now: Today 
                             {item.split ? (
                               <section className="detail-section">
                                 <p className="detail-title">{t('split.section')}</p>
-                                {(() => {
-                                  const shares = reducedWeights([item.split.mine, ...item.split.parts.map((part) => part.weight)])
-                                  return [t('split.you'), ...item.split.parts.map((part) => part.person ?? part.guest ?? '')].map((name, at) => (
-                                    <div className="split-part" key={`${name}-${at}`}>
-                                      <span>{`${name} ${shares[at] ?? 0}`}</span>
-                                      {codeFor(item, at - 1) ? (
-                                        <Button variant="outline" size="sm" onClick={() => setCoding(codeFor(item, at - 1))}>
-                                          {t('code.show')}
-                                        </Button>
-                                      ) : null}
-                                    </div>
-                                  ))
-                                })()}
+                                <table className="split-table">
+                                  <tbody>
+                                    {(() => {
+                                      const shares = reducedWeights([item.split.mine, ...item.split.parts.map((part) => part.weight)])
+                                      return [t('split.you'), ...item.split.parts.map((part) => part.person ?? part.guest ?? '')].map((name, at) => (
+                                        <tr key={`${name}-${at}`} className={at === 0 ? 'is-you' : undefined}>
+                                          <th scope="row">{name}</th>
+                                          <td>{shares[at] ?? 0}</td>
+                                          <td>
+                                            {codeFor(item, at - 1) ? (
+                                              <Button variant="ghost" size="sm" onClick={() => setCoding(codeFor(item, at - 1))}>
+                                                {t('code.show')}
+                                              </Button>
+                                            ) : null}
+                                          </td>
+                                        </tr>
+                                      ))
+                                    })()}
+                                  </tbody>
+                                </table>
                               </section>
                             ) : null}
                             {item.description?.trim() ? (
