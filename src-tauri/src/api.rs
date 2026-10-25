@@ -102,6 +102,7 @@ impl ApiError {
     pub const FILE_EXISTS: Self = Self::fixed(409, "file_exists", "that file already exists; choose a name that does not");
     pub const CANNOT_WRITE: Self = Self::fixed(500, "internal", "cannot write the file; check the folder and its permissions");
     pub const NAME_EXISTS: Self = Self::fixed(409, "name_exists", "that name already exists");
+    pub const OVER_BUDGET: Self = Self::fixed(409, "over_budget", "the category budgets would add up to more than the monthly budget");
     pub const NOT_SET_UP: Self = Self::fixed(409, "not_set_up", "the app is not set up yet");
     pub const TOO_LARGE: Self = Self::fixed(413, "too_large", "the request is too large");
     pub const LOCKED: Self = Self::fixed(423, "locked", "the app is locked");
@@ -122,6 +123,7 @@ impl From<AppError> for ApiError {
             AppError::InvalidInput => Self::INVALID_INPUT,
             AppError::NotFound => Self::NOT_FOUND,
             AppError::NameExists => Self::NAME_EXISTS,
+            AppError::OverBudget => Self::OVER_BUDGET,
             AppError::TooLarge => Self::TOO_LARGE,
             AppError::FileMissing => Self::NOT_FOUND,
             AppError::AlreadySetUp

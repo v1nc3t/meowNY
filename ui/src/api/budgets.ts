@@ -22,8 +22,6 @@ export const Overview = z.object({
   unallocated: Amount.nullable(),
   /** Spent this month in the categories of this type. */
   used: Amount,
-  /** The category budgets minus `used`; below zero when more was spent than the budgets hold. */
-  notUsed: Amount,
   actual: Amount,
   remaining: Amount.nullable(),
   overAllocated: z.boolean(),

@@ -165,7 +165,7 @@
       "positional": null,
       "route": "budgets.overview",
       "scope": "read",
-      "summary": "For a month, per side (income, expense): the budget, how much of it is given to categories, what is left, and the actual so far. used is what the categories that still count spent, and notUsed is what they were given minus used.",
+      "summary": "For a month, per side (income, expense): the budget, how much of it is given to categories, what is left, and the actual so far. used is what the categories that still count spent.",
       "usage": "meowny budgets overview --month <month>"
     },
     {
@@ -3250,6 +3250,7 @@
     "no_token": 3,
     "not_found": 4,
     "not_set_up": 1,
+    "over_budget": 1,
     "timeout": 1,
     "token_file_unsafe": 3,
     "too_large": 1,

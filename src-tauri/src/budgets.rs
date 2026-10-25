@@ -93,8 +93,6 @@ pub struct Overview {
     pub actual: String,
     /// What the month's transactions add up to in categories that still count in the month.
     pub used: String,
-    /// Allocated minus used; negative when the categories spent more than they were given.
-    pub not_used: String,
     /// Global budget minus actual; null without a global budget.
     pub remaining: Option<String>,
     pub over_allocated: bool,
@@ -218,6 +216,8 @@ pub fn set_span(conn: &Connection, input: &SetBudget, now: DateTime<Utc>, span: 
     };
 
     let write = || -> Result<(i64, String), AppError> {
+        let months = boundary_months(conn, kind, &start, &next_start)?;
+        let over_before = months.iter().map(|m| over_by(conn, input.kind, m)).collect::<Result<Vec<_>, _>>()?;
         let mut start = start.clone();
         match span {
             Span::Only => pin(category_id)?,
@@ -263,6 +263,12 @@ pub fn set_span(conn: &Connection, input: &SetBudget, now: DateTime<Utc>, span: 
                 |r| r.get(0),
             )?,
         };
+        // Refused when a month ends up further over its monthly budget than before; an old overage can still shrink.
+        for (month, before) in months.iter().zip(over_before) {
+            if over_by(conn, input.kind, month)? > before {
+                return Err(AppError::OverBudget);
+            }
+        }
         Ok((id, start))
     };
 
@@ -280,6 +286,26 @@ pub fn set_span(conn: &Connection, input: &SetBudget, now: DateTime<Utc>, span: 
         amount_limit: limit.map(format_amount),
         effective_from: start,
     })
+}
+
+/// The months where the totals of one side can differ from the month before: where a row of that side starts,
+/// plus the months this write starts at or pins.
+fn boundary_months(conn: &Connection, kind: &str, start: &str, next_start: &str) -> Result<Vec<String>, AppError> {
+    let mut statement = conn.prepare(
+        "SELECT effective_from FROM budgets WHERE type = ?1
+         UNION SELECT ?2 UNION SELECT ?3
+         UNION SELECT MIN(effective_from) FROM budgets WHERE amount_limit_minor IS NOT NULL",
+    )?;
+    let months = statement.query_map(params![kind, start, next_start], |r| r.get::<_, Option<String>>(0))?;
+    Ok(months.collect::<Result<Vec<_>, _>>()?.into_iter().flatten().collect())
+}
+
+/// How far the category budgets of one side in a month are over that month's monthly budget; 0 without a monthly budget.
+fn over_by(conn: &Connection, kind: CategoryType, month: &str) -> Result<i64, AppError> {
+    let rows = effective(conn, month)?;
+    let side = || rows.iter().filter(|b| b.kind == kind);
+    let allocated: i64 = side().filter(|b| b.scope == Scope::Category).map(|b| b.limit_minor).sum();
+    Ok(side().find(|b| b.scope == Scope::Global).map_or(0, |b| (allocated - b.limit_minor).max(0)))
 }
 
 pub(crate) struct Effective {
@@ -353,7 +379,6 @@ pub fn overview(conn: &Connection, month: &str) -> Result<Vec<Overview>, AppErro
                 unallocated: unallocated.map(format_amount),
                 actual: format_amount(actual),
                 used: format_amount(used),
-                not_used: format_amount(allocated - used),
                 remaining: budgeted.map(|b| format_amount(b - actual)),
                 over_allocated: unallocated.is_some_and(|u| u < 0),
                 categories: lines
@@ -561,7 +586,12 @@ mod tests {
         let within = side(&conn, "2026-06", CategoryType::Expense);
         assert_eq!((within.unallocated.as_deref(), within.over_allocated), (Some("300.00"), false));
 
-        put(&conn, &category(CategoryType::Expense, food, "2026-06", Some("400.00"))).unwrap();
+        // Old data can be over the monthly budget, so the row goes in directly.
+        conn.execute(
+            "INSERT INTO budgets (type, scope, category_id, amount_limit_minor, effective_from) VALUES ('EXPENSE', 'CATEGORY', ?1, 40000, '2026-06-01')",
+            [food],
+        )
+        .unwrap();
         let over = side(&conn, "2026-06", CategoryType::Expense);
         assert_eq!((over.allocated.as_str(), over.unallocated.as_deref(), over.over_allocated), ("1100.00", Some("-100.00"), true));
         assert_eq!(over.categories.len(), 2);
@@ -569,6 +599,92 @@ mod tests {
         // Exactly fully allocated is not a warning.
         put(&conn, &category(CategoryType::Expense, food, "2026-06", Some("300.00"))).unwrap();
         assert!(!side(&conn, "2026-06", CategoryType::Expense).over_allocated);
+    }
+
+    fn refused(conn: &Connection, input: &SetBudget) -> bool {
+        let before = row_count(conn);
+        let refused = put(conn, input) == Err(AppError::OverBudget);
+        assert_eq!(row_count(conn), before, "a refused change writes nothing");
+        refused
+    }
+
+    #[test]
+    fn category_budgets_cannot_add_up_to_more_than_the_monthly_budget() {
+        let (conn, food, rent, _) = db();
+        put(&conn, &global(CategoryType::Expense, "2026-06", Some("1000.00"))).unwrap();
+        put(&conn, &category(CategoryType::Expense, rent, "2026-06", Some("600.00"))).unwrap();
+        assert!(refused(&conn, &category(CategoryType::Expense, food, "2026-06", Some("500.00"))));
+        assert!(refused(&conn, &category(CategoryType::Expense, rent, "2026-06", Some("1000.01"))));
+        put(&conn, &category(CategoryType::Expense, food, "2026-06", Some("400.00"))).unwrap();
+        assert_eq!(side(&conn, "2026-06", CategoryType::Expense).allocated, "1000.00");
+    }
+
+    #[test]
+    fn the_monthly_budget_cannot_go_below_the_category_budgets() {
+        let (conn, food, rent, _) = db();
+        put(&conn, &global(CategoryType::Expense, "2026-06", Some("1500.00"))).unwrap();
+        put(&conn, &category(CategoryType::Expense, rent, "2026-06", Some("600.00"))).unwrap();
+        put(&conn, &category(CategoryType::Expense, food, "2026-06", Some("400.00"))).unwrap();
+        assert!(refused(&conn, &global(CategoryType::Expense, "2026-06", Some("900.00"))));
+        assert_eq!(exp(&conn, "2026-06").as_deref(), Some("1500.00"));
+        put(&conn, &global(CategoryType::Expense, "2026-06", Some("1000.00"))).unwrap();
+    }
+
+    #[test]
+    fn without_a_monthly_budget_there_is_no_limit_until_one_is_set() {
+        let (conn, food, rent, _) = db();
+        put(&conn, &category(CategoryType::Expense, rent, "2026-06", Some("600.00"))).unwrap();
+        put(&conn, &category(CategoryType::Expense, food, "2026-06", Some("400.00"))).unwrap();
+        assert!(refused(&conn, &global(CategoryType::Expense, "2026-06", Some("500.00"))));
+        put(&conn, &global(CategoryType::Expense, "2026-06", Some("1000.00"))).unwrap();
+        // Removing the monthly budget is always allowed.
+        put(&conn, &global(CategoryType::Expense, "2026-06", None)).unwrap();
+    }
+
+    #[test]
+    fn an_existing_overage_can_shrink_but_not_grow() {
+        let (conn, food, rent, _) = db();
+        put(&conn, &global(CategoryType::Expense, "2026-06", Some("1000.00"))).unwrap();
+        for (category, minor) in [(rent, 70000), (food, 40000)] {
+            conn.execute(
+                "INSERT INTO budgets (type, scope, category_id, amount_limit_minor, effective_from) VALUES ('EXPENSE', 'CATEGORY', ?1, ?2, '2026-06-01')",
+                params![category, minor],
+            )
+            .unwrap();
+        }
+        assert!(refused(&conn, &category(CategoryType::Expense, rent, "2026-06", Some("750.00"))));
+        assert!(refused(&conn, &global(CategoryType::Expense, "2026-06", Some("900.00"))));
+        put(&conn, &category(CategoryType::Expense, rent, "2026-06", Some("650.00"))).unwrap();
+        put(&conn, &global(CategoryType::Expense, "2026-06", Some("1050.00"))).unwrap();
+        assert_eq!(side(&conn, "2026-06", CategoryType::Expense).allocated, "1050.00");
+    }
+
+    #[test]
+    fn a_span_is_refused_when_any_month_it_reaches_ends_up_over() {
+        let (conn, _, rent, _) = db();
+        put(&conn, &global(CategoryType::Expense, "2026-01", Some("1000.00"))).unwrap();
+        put(&conn, &global(CategoryType::Expense, "2026-06", Some("500.00"))).unwrap();
+        put(&conn, &category(CategoryType::Expense, rent, "2026-01", Some("400.00"))).unwrap();
+        let rows = row_count(&conn);
+        for span in [Span::Forward, Span::All] {
+            let input = category(CategoryType::Expense, rent, "2026-01", Some("600.00"));
+            assert_eq!(set_span(&conn, &input, at(LATE), span).err(), Some(AppError::OverBudget));
+            assert_eq!(row_count(&conn), rows, "nothing is written");
+        }
+        let input = category(CategoryType::Expense, rent, "2026-01", Some("500.00"));
+        set_span(&conn, &input, at(LATE), Span::Forward).unwrap();
+        assert_eq!(rent_limit(&conn, rent, "2026-09").as_deref(), Some("500.00"));
+    }
+
+    #[test]
+    fn income_follows_the_same_rule() {
+        let (conn, _, _, salary) = db();
+        put(&conn, &global(CategoryType::Income, "2026-06", Some("3000.00"))).unwrap();
+        assert!(refused(&conn, &category(CategoryType::Income, salary, "2026-06", Some("3000.01"))));
+        put(&conn, &category(CategoryType::Income, salary, "2026-06", Some("3000.00"))).unwrap();
+        assert!(refused(&conn, &global(CategoryType::Income, "2026-06", Some("2999.00"))));
+        // The expense side is its own.
+        put(&conn, &global(CategoryType::Expense, "2026-06", Some("10.00"))).unwrap();
     }
 
     #[test]
@@ -835,7 +951,7 @@ mod tests {
         categories::delete_span(&mut conn, food, "2026-10", Span::All, at(LATE)).unwrap();
         for month in ["2026-02", "2026-03", "2026-04", "2026-05", "2026-10", "2026-12"] {
             let o = side(&conn, month, CategoryType::Expense);
-            assert_eq!((o.allocated.as_str(), o.used.as_str(), o.not_used.as_str(), o.categories.len()), ("0.00", "0.00", "0.00", 0), "{month}");
+            assert_eq!((o.allocated.as_str(), o.used.as_str(), o.categories.len()), ("0.00", "0.00", 0), "{month}");
         }
         assert_eq!(side(&conn, "2026-05", CategoryType::Expense).actual, "30.00");
         assert_eq!(side(&conn, "2026-04", CategoryType::Expense).actual, "7.00");
@@ -844,18 +960,18 @@ mod tests {
     }
 
     #[test]
-    fn used_and_not_used_leave_out_deleted_categories_but_actual_keeps_them() {
+    fn used_leaves_out_deleted_categories_but_actual_keeps_them() {
         let (mut conn, food, rent, _) = db();
         put(&conn, &category(CategoryType::Expense, food, "2026-10", Some("500.00"))).unwrap();
         put(&conn, &category(CategoryType::Expense, rent, "2026-10", Some("200.00"))).unwrap();
         spend(&conn, food, "300.00", "2026-10-05");
         let o = side(&conn, "2026-10", CategoryType::Expense);
-        assert_eq!((o.used.as_str(), o.not_used.as_str(), o.actual.as_str()), ("300.00", "400.00", "300.00"));
+        assert_eq!((o.allocated.as_str(), o.used.as_str(), o.actual.as_str()), ("700.00", "300.00", "300.00"));
 
         spend(&conn, rent, "50.00", "2026-10-06");
         categories::delete(&mut conn, rent, at(LATE)).unwrap();
         let o = side(&conn, "2026-10", CategoryType::Expense);
-        assert_eq!((o.allocated.as_str(), o.used.as_str(), o.not_used.as_str(), o.actual.as_str()), ("500.00", "300.00", "200.00", "350.00"));
+        assert_eq!((o.allocated.as_str(), o.used.as_str(), o.actual.as_str()), ("500.00", "300.00", "350.00"));
     }
 
     #[test]

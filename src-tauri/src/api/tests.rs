@@ -544,6 +544,7 @@ fn every_app_error_maps_to_a_status_and_none_leaks_detail() {
         (InvalidBackup, 500, "internal"),
         (NotFound, 404, "not_found"),
         (NameExists, 409, "name_exists"),
+        (OverBudget, 409, "over_budget"),
         (TooLarge, 413, "too_large"),
         (FileMissing, 404, "not_found"),
         (FileDamaged, 500, "internal"),

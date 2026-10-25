@@ -151,12 +151,12 @@
       "human": {
         "exit": 0,
         "stderr": "",
-        "stdout": "type     budgeted   actual  remaining  allocated  notUsed  overAllocated  unallocated     used\nINCOME    3600.00  3690.00     -90.00    3200.00  -490.00  false               400.00  3690.00\nEXPENSE   2450.00  1961.64     488.36    2015.00    53.36  false               435.00  1961.64\n"
+        "stdout": "type     budgeted   actual  remaining  allocated  overAllocated  unallocated     used\nINCOME    3600.00  3690.00     -90.00    3200.00  false               400.00  3690.00\nEXPENSE   2450.00  1961.64     488.36    2015.00  false               435.00  1961.64\n"
       },
       "json": {
         "exit": 0,
         "stderr": "",
-        "stdout": "[{\"actual\":\"3690.00\",\"allocated\":\"3200.00\",\"budgeted\":\"3600.00\",\"categories\":[{\"amountLimit\":\"3200.00\",\"categoryId\":\"1\"}],\"notUsed\":\"-490.00\",\"overAllocated\":false,\"remaining\":\"-90.00\",\"type\":\"INCOME\",\"unallocated\":\"400.00\",\"used\":\"3690.00\"},{\"actual\":\"1961.64\",\"allocated\":\"2015.00\",\"budgeted\":\"2450.00\",\"categories\":[{\"amountLimit\":\"950.00\",\"categoryId\":\"4\"},{\"amountLimit\":\"500.00\",\"categoryId\":\"5\"},{\"amountLimit\":\"70.00\",\"categoryId\":\"6\"},{\"amountLimit\":\"200.00\",\"categoryId\":\"7\"},{\"amountLimit\":\"45.00\",\"categoryId\":\"9\"},{\"amountLimit\":\"250.00\",\"categoryId\":\"10\"}],\"notUsed\":\"53.36\",\"overAllocated\":false,\"remaining\":\"488.36\",\"type\":\"EXPENSE\",\"unallocated\":\"435.00\",\"used\":\"1961.64\"}]\n"
+        "stdout": "[{\"actual\":\"3690.00\",\"allocated\":\"3200.00\",\"budgeted\":\"3600.00\",\"categories\":[{\"amountLimit\":\"3200.00\",\"categoryId\":\"1\"}],\"overAllocated\":false,\"remaining\":\"-90.00\",\"type\":\"INCOME\",\"unallocated\":\"400.00\",\"used\":\"3690.00\"},{\"actual\":\"1961.64\",\"allocated\":\"2015.00\",\"budgeted\":\"2450.00\",\"categories\":[{\"amountLimit\":\"950.00\",\"categoryId\":\"4\"},{\"amountLimit\":\"500.00\",\"categoryId\":\"5\"},{\"amountLimit\":\"70.00\",\"categoryId\":\"6\"},{\"amountLimit\":\"200.00\",\"categoryId\":\"7\"},{\"amountLimit\":\"45.00\",\"categoryId\":\"9\"},{\"amountLimit\":\"250.00\",\"categoryId\":\"10\"}],\"overAllocated\":false,\"remaining\":\"488.36\",\"type\":\"EXPENSE\",\"unallocated\":\"435.00\",\"used\":\"1961.64\"}]\n"
       }
     },
     "budgets remove": {
@@ -281,7 +281,7 @@
       "json": {
         "exit": 0,
         "stderr": "",
-        "stdout": "{\"alreadyThere\":false,\"createdAt\":\"2026-10-25T13:23:50.106Z\",\"documentDate\":\"2026-10-01\",\"hasFile\":true,\"id\":\"1\",\"keepOnPhone\":false,\"linkCount\":0,\"mediaType\":\"application/pdf\",\"name\":\"boiler-receipt.pdf\",\"sha256\":\"735a7713978716d1e65eb6bf069e2f410eb72ec5b285861be417aeca0feeb935\",\"sizeBytes\":45}\n"
+        "stdout": "{\"alreadyThere\":false,\"createdAt\":\"2026-10-25T15:22:57.322Z\",\"documentDate\":\"2026-10-01\",\"hasFile\":true,\"id\":\"1\",\"keepOnPhone\":false,\"linkCount\":0,\"mediaType\":\"application/pdf\",\"name\":\"boiler-receipt.pdf\",\"sha256\":\"735a7713978716d1e65eb6bf069e2f410eb72ec5b285861be417aeca0feeb935\",\"sizeBytes\":45}\n"
       }
     },
     "documents delete": {
@@ -313,12 +313,12 @@
       "human": {
         "exit": 0,
         "stderr": "",
-        "stdout": "limit: 50\noffset: 0\ntotal: 1\n\ndocuments\nid  name                createdAt                 documentDate  hasFile  keepOnPhone  linkCount  mediaType        sha256                                                        sizeBytes\n 1  boiler-receipt.pdf  2026-10-25T13:23:50.106Z  2026-10-01    true     false                0  application/pdf  735a7713978716d1e65eb6bf069e2f410eb72ec5b285861be417aeca0fe…         45\n"
+        "stdout": "limit: 50\noffset: 0\ntotal: 1\n\ndocuments\nid  name                createdAt                 documentDate  hasFile  keepOnPhone  linkCount  mediaType        sha256                                                        sizeBytes\n 1  boiler-receipt.pdf  2026-10-25T15:22:57.322Z  2026-10-01    true     false                0  application/pdf  735a7713978716d1e65eb6bf069e2f410eb72ec5b285861be417aeca0fe…         45\n"
       },
       "json": {
         "exit": 0,
         "stderr": "",
-        "stdout": "{\"documents\":[{\"createdAt\":\"2026-10-25T13:23:50.106Z\",\"documentDate\":\"2026-10-01\",\"hasFile\":true,\"id\":\"1\",\"keepOnPhone\":false,\"linkCount\":0,\"mediaType\":\"application/pdf\",\"name\":\"boiler-receipt.pdf\",\"sha256\":\"735a7713978716d1e65eb6bf069e2f410eb72ec5b285861be417aeca0feeb935\",\"sizeBytes\":45}],\"limit\":50,\"offset\":0,\"total\":1}\n"
+        "stdout": "{\"documents\":[{\"createdAt\":\"2026-10-25T15:22:57.322Z\",\"documentDate\":\"2026-10-01\",\"hasFile\":true,\"id\":\"1\",\"keepOnPhone\":false,\"linkCount\":0,\"mediaType\":\"application/pdf\",\"name\":\"boiler-receipt.pdf\",\"sha256\":\"735a7713978716d1e65eb6bf069e2f410eb72ec5b285861be417aeca0feeb935\",\"sizeBytes\":45}],\"limit\":50,\"offset\":0,\"total\":1}\n"
       }
     },
     "documents show": {
@@ -326,12 +326,12 @@
       "human": {
         "exit": 0,
         "stderr": "",
-        "stdout": "createdAt: 2026-10-25T13:23:50.106Z\ndocumentDate: 2026-10-01\nhasFile: true\nid: 1\nkeepOnPhone: false\nlinkCount: 0\nmediaType: application/pdf\nname: boiler-receipt.pdf\nsha256: 735a7713978716d1e65eb6bf069e2f410eb72ec5b285861be417aeca0feeb935\nsizeBytes: 45\n\nlinks\n(none)\n"
+        "stdout": "createdAt: 2026-10-25T15:22:57.322Z\ndocumentDate: 2026-10-01\nhasFile: true\nid: 1\nkeepOnPhone: false\nlinkCount: 0\nmediaType: application/pdf\nname: boiler-receipt.pdf\nsha256: 735a7713978716d1e65eb6bf069e2f410eb72ec5b285861be417aeca0feeb935\nsizeBytes: 45\n\nlinks\n(none)\n"
       },
       "json": {
         "exit": 0,
         "stderr": "",
-        "stdout": "{\"createdAt\":\"2026-10-25T13:23:50.106Z\",\"documentDate\":\"2026-10-01\",\"hasFile\":true,\"id\":\"1\",\"keepOnPhone\":false,\"linkCount\":0,\"links\":[],\"mediaType\":\"application/pdf\",\"name\":\"boiler-receipt.pdf\",\"sha256\":\"735a7713978716d1e65eb6bf069e2f410eb72ec5b285861be417aeca0feeb935\",\"sizeBytes\":45}\n"
+        "stdout": "{\"createdAt\":\"2026-10-25T15:22:57.322Z\",\"documentDate\":\"2026-10-01\",\"hasFile\":true,\"id\":\"1\",\"keepOnPhone\":false,\"linkCount\":0,\"links\":[],\"mediaType\":\"application/pdf\",\"name\":\"boiler-receipt.pdf\",\"sha256\":\"735a7713978716d1e65eb6bf069e2f410eb72ec5b285861be417aeca0feeb935\",\"sizeBytes\":45}\n"
       }
     },
     "documents unlink": {
@@ -347,7 +347,7 @@
       "json": {
         "exit": 0,
         "stderr": "",
-        "stdout": "{\"createdAt\":\"2026-10-25T13:23:50.106Z\",\"documentDate\":\"2026-10-01\",\"hasFile\":true,\"id\":\"1\",\"keepOnPhone\":true,\"linkCount\":0,\"mediaType\":\"application/pdf\",\"name\":\"Boiler repair\",\"sha256\":\"735a7713978716d1e65eb6bf069e2f410eb72ec5b285861be417aeca0feeb935\",\"sizeBytes\":45}\n"
+        "stdout": "{\"createdAt\":\"2026-10-25T15:22:57.322Z\",\"documentDate\":\"2026-10-01\",\"hasFile\":true,\"id\":\"1\",\"keepOnPhone\":true,\"linkCount\":0,\"mediaType\":\"application/pdf\",\"name\":\"Boiler repair\",\"sha256\":\"735a7713978716d1e65eb6bf069e2f410eb72ec5b285861be417aeca0feeb935\",\"sizeBytes\":45}\n"
       }
     },
     "export csv": {
@@ -400,7 +400,7 @@
       "human": {
         "exit": 0,
         "stderr": "",
-        "stdout": "bytes: 31084\npath: /home/you/budget.xlsx\n"
+        "stdout": "bytes: 31085\npath: /home/you/budget.xlsx\n"
       }
     },
     "ledger add": {

@@ -54,6 +54,7 @@ export const ro: Messages = {
   'error.invalid_input': 'verifică valorile și încearcă din nou.',
   'error.not_found': 'acest element nu mai există.',
   'error.name_exists': 'acest nume există deja.',
+  'error.over_budget': 'bugetele categoriilor ar depăși împreună bugetul lunar.',
   'error.too_large': 'fișierul este prea mare. limita este de 25 MB.',
   'error.file_missing': 'acest dispozitiv nu are fișierul. sincronizează cu celălalt dispozitiv ca să-l recuperezi.',
   'error.file_damaged': 'fișierul nu a putut fi deschis. poate fi deteriorat.',
@@ -99,9 +100,7 @@ export const ro: Messages = {
 
   'budgets.expenses': 'cheltuieli',
   'budgets.income': 'venituri',
-  'budgets.budget': 'alocat',
-  'budgets.allocated': 'folosit',
-  'budgets.unallocated': 'nefolosit',
+  'budgets.budget': 'buget lunar',
   'budgets.history': 'istoric bugete',
   'budgets.colMonth': 'lună',
   'budgets.colExpenseBudget': 'buget cheltuieli',

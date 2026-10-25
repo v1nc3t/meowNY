@@ -96,7 +96,7 @@
         }
       ],
       "scope": "read",
-      "summary": "For a month, per side (income, expense): the budget, how much of it is given to categories, what is left, and the actual so far. used is what the categories that still count spent, and notUsed is what they were given minus used."
+      "summary": "For a month, per side (income, expense): the budget, how much of it is given to categories, what is left, and the actual so far. used is what the categories that still count spent."
     },
     {
       "name": "budgets.history",

@@ -55,6 +55,7 @@ export const it: Messages = {
   'error.invalid_input': 'controlla i valori e riprova.',
   'error.not_found': 'questo elemento non esiste più.',
   'error.name_exists': 'questo nome esiste già.',
+  'error.over_budget': 'i budget delle categorie sommati supererebbero il budget mensile.',
   'error.too_large': 'questo file è troppo grande. il limite è di 25 MB.',
   'error.file_missing': "questo dispositivo non ha il file. sincronizza con l'altro dispositivo per recuperarlo.",
   'error.file_damaged': 'impossibile aprire il file. potrebbe essere danneggiato.',
@@ -100,9 +101,7 @@ export const it: Messages = {
 
   'budgets.expenses': 'spese',
   'budgets.income': 'entrate',
-  'budgets.budget': 'assegnato',
-  'budgets.allocated': 'usato',
-  'budgets.unallocated': 'non usato',
+  'budgets.budget': 'budget mensile',
   'budgets.history': 'storico dei budget',
   'budgets.colMonth': 'mese',
   'budgets.colExpenseBudget': 'budget spese',

@@ -82,7 +82,7 @@ const SECTIONS = [
         t: 'ul',
         items: [
           '**Categories** sort transactions into income and expenses. Hold one and drag it to change the order (or Alt + arrow keys).',
-          '**Budgets** per month and category. A budget carries into later months. Change a past month and choose: only that month, that month and later, or every month.',
+          '**Budgets** per month and category. A budget carries into later months. Change a past month and choose: only that month, that month and later, or every month. Category budgets cannot add up to more than the monthly budget.',
           '**Recurring items:** pay, skip, pause or end them. One with no fixed amount asks for it when paid. The **due payments** tab lists each payment past its day; pay or skip any one of them.',
           '**Statistics:** budget against spending, trends, a year view.',
           'Seven languages, light and dark themes.',

@@ -417,7 +417,6 @@ function BudgetHalf({
   const t = useT()
   const { listRef, hintId, live } = useReorder(categories, onReorder)
   const budgeted = overview?.budgeted ?? ''
-  const over = overview !== null && Number(overview.notUsed) < 0
   return (
     <section className="ui-card budget-half">
       {hideTitle ? null : <CardTitle>{title}</CardTitle>}
@@ -430,20 +429,11 @@ function BudgetHalf({
           onSave={(raw) => onGlobal(type, raw)}
         />
         {overview ? (
-          <>
-            <div className="budget-row quiet">
-              <span className="budget-label">{t('budgets.allocated')}</span>
-              <span className="budget-amount">{money(overview.used)}</span>
-              <span className="budget-actions" />
-            </div>
-            <div className="budget-row quiet">
-              <span className="budget-label">{t('budgets.unallocated')}</span>
-              <span className={over ? 'budget-amount over' : 'budget-amount'}>
-                {money(overview.notUsed)}
-              </span>
-              <span className="budget-actions" />
-            </div>
-          </>
+          <div className="budget-row quiet">
+            <span className="budget-label">{t(type === 'EXPENSE' ? 'budgets.colSpent' : 'budgets.colEarned')}</span>
+            <span className="budget-amount">{money(overview.used)}</span>
+            <span className="budget-actions" />
+          </div>
         ) : null}
       </div>
       {/* The category list scrolls on its own, so the summary above and the history below stay in view. */}

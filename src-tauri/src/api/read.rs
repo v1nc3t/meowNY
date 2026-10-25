@@ -115,7 +115,7 @@ fn transactions_list(ctx: &Ctx, args: Map<String, Value>) -> Result<Value, ApiEr
 pub const BUDGETS_OVERVIEW: Route = Route {
     name: "budgets.overview",
     scope: Scope::Read,
-    summary: "For a month, per side (income, expense): the budget, how much of it is given to categories, what is left, and the actual so far. used is what the categories that still count spent, and notUsed is what they were given minus used.",
+    summary: "For a month, per side (income, expense): the budget, how much of it is given to categories, what is left, and the actual so far. used is what the categories that still count spent.",
     params: &[MONTH],
     confirm: None,
     run: |ctx, args| {

@@ -23,6 +23,7 @@ const MEANINGS = {
   unknown_route: 'The app is older than the program. Update the app.',
   method_not_allowed: 'Not a POST (only when calling the HTTP API by hand).',
   name_exists: 'A category with that name exists.',
+  over_budget: 'The category budgets would add up to more than the monthly budget.',
   file_exists: 'The file exists. Choose another name.',
   not_set_up: 'The app has no data yet. Finish its first run.',
   too_large: 'The request is over 1 MiB, or the file over 25 MiB.',

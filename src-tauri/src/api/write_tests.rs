@@ -132,13 +132,14 @@ fn a_budget_span_reaches_the_months_it_says() {
     let (_dir, vault) = seeded();
     let budgeted = |month: &str| ok(&vault, "budgets.overview", json!({ "month": month }))[1]["budgeted"].clone();
     let set = |span: &str, amount: &str| ok(&vault, "budgets.set", json!({ "type": "EXPENSE", "month": "2026-05", "amountLimit": amount, "span": span }));
-    set("FORWARD", "777.00");
-    assert_eq!((budgeted("2026-05"), budgeted("2026-09")), (json!("777.00"), json!("777.00")));
-    assert_ne!(budgeted("2026-04"), json!("777.00"), "the months before keep theirs");
-    set("ALL", "555.00");
-    assert_eq!((budgeted("2026-04"), budgeted("2026-05")), (json!("555.00"), json!("555.00")));
+    set("FORWARD", "9777.00");
+    assert_eq!((budgeted("2026-05"), budgeted("2026-09")), (json!("9777.00"), json!("9777.00")));
+    assert_ne!(budgeted("2026-04"), json!("9777.00"), "the months before keep theirs");
+    set("ALL", "5555.00");
+    assert_eq!((budgeted("2026-04"), budgeted("2026-05")), (json!("5555.00"), json!("5555.00")));
     ok(&vault, "budgets.remove", json!({ "type": "EXPENSE", "month": "2026-05", "span": "ALL" }));
     assert_eq!(budgeted("2026-04"), Value::Null);
+    assert_eq!(refused(&vault, "budgets.set", json!({ "type": "EXPENSE", "month": "2026-05", "amountLimit": "1.00" })), (409, "over_budget".into()), "never less than the categories hold");
     assert_eq!(refused(&vault, "budgets.set", json!({ "type": "EXPENSE", "month": "2026-05", "amountLimit": "1.00", "span": "sometimes" })), (400, "invalid_input".into()));
 }
 

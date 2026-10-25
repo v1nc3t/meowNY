@@ -60,6 +60,7 @@ export const en = {
   'error.invalid_input': 'check the values and try again.',
   'error.not_found': 'that item no longer exists.',
   'error.name_exists': 'that name already exists.',
+  'error.over_budget': 'the category budgets would add up to more than the monthly budget.',
   'error.too_large': 'that file is too large. the limit is 25 MB.',
   'error.file_missing': 'this device does not have the file. sync with the other device to bring it back.',
   'error.file_damaged': 'the file could not be opened. it may be damaged.',
@@ -110,9 +111,7 @@ export const en = {
   // Budgets
   'budgets.expenses': 'expenses',
   'budgets.income': 'income',
-  'budgets.budget': 'allocated',
-  'budgets.allocated': 'used',
-  'budgets.unallocated': 'not used',
+  'budgets.budget': 'monthly budget',
   'budgets.history': 'budget history',
   'budgets.colMonth': 'month',
   'budgets.colExpenseBudget': 'expense budget',
