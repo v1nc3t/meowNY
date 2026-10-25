@@ -350,7 +350,7 @@ fn tour(app: &App) -> (Map<String, Value>, Vec<Value>) {
     t.error("The app is locked", "meowny categories list", read, &["categories", "list"], &[]);
     app.vault.unlock(None).unwrap();
     let elsewhere = tempfile::tempdir().unwrap();
-    t.error("The app is not running, or command line access is off", "meowny status", read, &["status"], &[("MEOWNY_DATA_DIR", elsewhere.path().to_str().unwrap().to_string())]);
+    t.error("The app is not running, or CLI access is off", "meowny status", read, &["status"], &[("MEOWNY_DATA_DIR", elsewhere.path().to_str().unwrap().to_string())]);
     std::fs::write(path("taken.csv"), "mine").unwrap();
     t.error("A file that already exists", "meowny export csv --out /home/you/taken.csv", read, &["export", "csv", "--out", &path("taken.csv")], &[]);
     t.error("A file name that is not an export", "meowny export json --out /home/you/data.txt", read, &["export", "json", "--out", &path("data.txt")], &[]);

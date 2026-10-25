@@ -12,7 +12,7 @@ const MEANINGS = {
   no_token: 'No token. Run `meowny login` or set `MEOWNY_TOKEN`.',
   bad_token: 'Not a valid token. Copy it again from the app.',
   token_file_unsafe: 'Others can read the token file. Run `chmod 600` on it.',
-  app_unavailable: 'The app is not running, or command line access is off.',
+  app_unavailable: 'The app is not running, or CLI access is off.',
   timeout: 'No answer in time. Raise `--timeout`.',
   bad_answer: 'Something else answered. Check `--port` or the data folder.',
   invalid_input: 'The app refused a value; the message says which.',
@@ -186,7 +186,7 @@ export function buildPage({ commands: data, examples: recorded, routes }) {
       title: 'Overview',
       blocks: [
         { t: 'p', text: '`meowny` talks to the meowNY desktop app running on this computer. It never opens your data file.' },
-        { t: 'note', kind: 'info', text: 'The app must be running and unlocked, with **settings › command line access** turned on.' },
+        { t: 'note', kind: 'info', text: 'The app must be running and unlocked, with **settings › CLI access** turned on.' },
       ],
     },
     {
@@ -208,7 +208,7 @@ export function buildPage({ commands: data, examples: recorded, routes }) {
         {
           t: 'ol',
           items: [
-            'Open meowNY and go to **settings › command line access**. Turn it on.',
+            'Open meowNY and go to **settings › CLI access**. Turn it on.',
             'Make a token. **Read only** is the safe choice; pick **read and write** if it should add or change things. Copy it: it is shown once.',
             'Run `meowny login`, paste the token and press Enter.',
             'Check: `meowny status` shows the app version and what the token may do.',
@@ -294,7 +294,7 @@ export function buildPage({ commands: data, examples: recorded, routes }) {
           'No restore, wipe or currency change through it.',
         ],
       },
-      { t: 'note', kind: 'warn', text: 'A leaked token is a key to your data. Revoke it in **settings › command line access**.' },
+      { t: 'note', kind: 'warn', text: 'A leaked token is a key to your data. Revoke it in **settings › CLI access**.' },
     ],
   }
 

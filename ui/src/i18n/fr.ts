@@ -353,7 +353,7 @@ export const fr: Messages = {
   'export.errorDates': 'la date de fin est avant la date de début.',
   'export.errorCategories': 'coche au moins une catégorie.',
   'export.errorMonths': 'un rapport couvre au plus 10 ans. choisis une période plus courte.',
-  'cli.title': 'accès en ligne de commande',
+  'cli.title': 'accès CLI',
   'cli.enable': 'autoriser la ligne de commande à se connecter',
   'cli.off': 'désactivé.',
   'cli.running': 'activé : seulement cet ordinateur, port {port}.',

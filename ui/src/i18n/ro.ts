@@ -351,7 +351,7 @@ export const ro: Messages = {
   'export.errorDates': 'data de sfârșit este înainte de data de început.',
   'export.errorCategories': 'bifează cel puțin o categorie.',
   'export.errorMonths': 'un raport acoperă cel mult 10 ani. alege o perioadă mai scurtă.',
-  'cli.title': 'acces din linia de comandă',
+  'cli.title': 'acces CLI',
   'cli.enable': 'permite conectarea din linia de comandă',
   'cli.off': 'oprit.',
   'cli.running': 'pornit: doar acest calculator, portul {port}.',

@@ -252,7 +252,7 @@ fn an_app_that_is_not_running_or_has_the_api_off_is_exit_1() {
     assert_eq!(run(&app, &app.read, &["status"]).code, 0);
     let file = app.dir.path().join("api.json");
     assert!(file.exists());
-    // The app stops listening (command line access turned off, or the app closed).
+    // The app stops listening (CLI access turned off, or the app closed).
     app.server = None;
     assert!(!file.exists());
     let out = run(&app, &app.read, &["status", "--json"]);

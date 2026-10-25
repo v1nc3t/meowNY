@@ -235,7 +235,7 @@ const SECTIONS = [
     title: 'Command line',
     blocks: [
       { t: 'p', text: '`meowny` lets scripts and AI agents use the running desktop app. The Linux `.deb` installs it; the release also has it on its own for Linux and Windows.' },
-      { t: 'ol', items: ['Get `meowny`: the `.deb` installs it; otherwise see [set it up](cli.html#quick-start).', 'In the app: **settings › command line access**. Turn it on and make a token (it is shown once).', 'Run `meowny login`, paste the token and press Enter.', 'Check: `meowny status`.'] },
+      { t: 'ol', items: ['Get `meowny`: the `.deb` installs it; otherwise see [set it up](cli.html#quick-start).', 'In the app: **settings › CLI access**. Turn it on and make a token (it is shown once).', 'Run `meowny login`, paste the token and press Enter.', 'Check: `meowny status`.'] },
       { t: 'p', text: 'Full reference: [command line](cli.html).' },
     ],
   },

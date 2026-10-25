@@ -354,7 +354,7 @@ export const de: Messages = {
   'export.errorDates': 'das enddatum liegt vor dem startdatum.',
   'export.errorCategories': 'kreuze mindestens eine kategorie an.',
   'export.errorMonths': 'ein bericht umfasst höchstens 10 jahre. wähle einen kürzeren zeitraum.',
-  'cli.title': 'zugriff über die kommandozeile',
+  'cli.title': 'CLI-zugriff',
   'cli.enable': 'verbindung der kommandozeile erlauben',
   'cli.off': 'aus.',
   'cli.running': 'an: nur dieser computer, port {port}.',

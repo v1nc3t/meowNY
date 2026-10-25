@@ -366,7 +366,7 @@ export const en = {
   'export.errorDates': 'the end date is before the start date.',
   'export.errorCategories': 'tick at least one category.',
   'export.errorMonths': 'a report covers at most 10 years. choose a shorter period.',
-  'cli.title': 'command line access',
+  'cli.title': 'CLI access',
   'cli.enable': 'allow the command line to connect',
   'cli.off': 'off.',
   'cli.running': 'on: this computer only, port {port}.',

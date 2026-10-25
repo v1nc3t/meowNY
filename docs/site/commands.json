@@ -3220,7 +3220,7 @@
   "environment": [
     {
       "name": "MEOWNY_TOKEN",
-      "summary": "The access token, made in the app (Settings, command line access)."
+      "summary": "The access token, made in the app (Settings, CLI access)."
     },
     {
       "name": "MEOWNY_TOKEN_FILE",

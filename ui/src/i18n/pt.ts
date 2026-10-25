@@ -353,7 +353,7 @@ export const pt: Messages = {
   'export.errorDates': 'a data final é anterior à data inicial.',
   'export.errorCategories': 'assinala pelo menos uma categoria.',
   'export.errorMonths': 'um relatório abrange no máximo 10 anos. escolhe um período mais curto.',
-  'cli.title': 'acesso por linha de comandos',
+  'cli.title': 'acesso CLI',
   'cli.enable': 'permitir que a linha de comandos se ligue',
   'cli.off': 'desligado.',
   'cli.running': 'ligado: só este computador, porta {port}.',
