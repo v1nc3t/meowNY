@@ -371,6 +371,15 @@ mod tests {
     }
 
     #[test]
+    fn a_span_and_a_list_of_ids_become_what_the_app_takes() {
+        let line = "budgets set --type expense --month 2026-10 --amount-limit 5.00 --span forward";
+        assert_eq!(run(line).body["span"], json!("FORWARD"));
+        assert!(usage("budgets set --type expense --month 2026-10 --amount-limit 5.00 --span some").contains("--span must be one of: ONLY, FORWARD, ALL"));
+        assert_eq!(Value::Object(run("categories reorder --ids 3,7,12").body), json!({ "ids": ["3", "7", "12"] }));
+        assert_eq!(Value::Object(run("recurring skip 5 --due-date 2026-12-20").body), json!({ "id": "5", "dueDate": "2026-12-20" }));
+    }
+
+    #[test]
     fn missing_unknown_and_repeated_flags_are_usage_errors() {
         assert!(usage("transactions create --name X").contains("missing --amount"));
         assert!(usage("categories create --name Pets").contains("missing --type"));

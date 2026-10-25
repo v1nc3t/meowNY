@@ -16,7 +16,7 @@ use serde_json::{Map, Value};
 
 use super::routes::{parse, reply, take_id, today, Kind, Param, Route};
 use super::ApiError;
-use crate::budgets::{self, Scope as BudgetScope, SetBudget};
+use crate::budgets::{self, Scope as BudgetScope, SetBudget, Span};
 use crate::categories::{self, CategoryType};
 use crate::recurring::{self, NewRecurring, RecurringPatch};
 use crate::tokens::Scope;
@@ -25,9 +25,11 @@ use crate::vault::Settings;
 
 const SIDES: &[&str] = &["INCOME", "EXPENSE"];
 const UNITS: &[&str] = &["DAY", "WEEK", "MONTH", "YEAR"];
+const SPANS: &[&str] = &["ONLY", "FORWARD", "ALL"];
 
 const SIDE: Param = Param::new("type", Kind::String, "INCOME or EXPENSE.").required().one_of(SIDES);
 const MONTH: Param = Param::new("month", Kind::Month, "The month, like 2026-10.").required();
+const SPAN: Param = Param::new("span", Kind::String, "How far it reaches: ONLY (the default), FORWARD or ALL.").one_of(SPANS);
 const BUDGET_CATEGORY: Param = Param::new("categoryId", Kind::Id, "The category. Leave out for the global budget of that side.");
 
 pub const SETTINGS_SET: Route = Route {
@@ -101,12 +103,42 @@ pub const CATEGORIES_RENAME: Route = Route {
 pub const CATEGORIES_DELETE: Route = Route {
     name: "categories.delete",
     scope: Scope::Write,
-    summary: "Deletes a category: it is no longer offered or budgeted, and its transactions keep it.",
-    params: &[Param::new("id", Kind::Id, "The category.").required()],
+    summary: "Deletes a category: it is no longer offered or budgeted, and its transactions keep it. With a month and a span, ONLY keeps the category and removes just that month's budget, FORWARD removes it from that month on (earlier months keep its budget and spending), ALL removes it from every month. Give month and span together, or neither.",
+    params: &[Param::new("id", Kind::Id, "The category.").required(), Param::new("month", Kind::Month, "The month the span counts from, like 2026-10."), SPAN],
     confirm: None,
     run: |ctx, mut args| {
         let id = take_id(&mut args, "id")?;
-        ctx.vault.with_conn(|c| categories::delete(c, id, ctx.now))?;
+        #[derive(Deserialize)]
+        struct Args {
+            #[serde(default)]
+            month: Option<String>,
+            #[serde(default)]
+            span: Option<Span>,
+        }
+        let Args { month, span } = parse(args)?;
+        match (month, span) {
+            (None, None) => ctx.vault.with_conn(|c| categories::delete(c, id, ctx.now))?,
+            (Some(month), Some(span)) => ctx.vault.with_conn(|c| categories::delete_span(c, id, &month, span, ctx.now))?,
+            _ => return Err(ApiError::invalid("give month and span together, or neither")),
+        }
+        Ok(Value::Null)
+    },
+};
+
+pub const CATEGORIES_REORDER: Route = Route {
+    name: "categories.reorder",
+    scope: Scope::Write,
+    summary: "Puts the categories of one type in a new order; give every active category of that type.",
+    params: &[Param::new("ids", Kind::Ids, "Every active category of one type, in the new order.").required()],
+    confirm: None,
+    run: |ctx, args| {
+        #[derive(Deserialize)]
+        struct Args {
+            ids: Vec<String>,
+        }
+        let Args { ids } = parse(args)?;
+        let ids = ids.iter().map(|id| categories::parse_id(id)).collect::<Result<Vec<_>, _>>()?;
+        ctx.vault.with_conn(|c| categories::reorder(c, &ids))?;
         Ok(Value::Null)
     },
 };
@@ -163,7 +195,7 @@ pub const TRANSACTIONS_DELETE: Route = Route {
     },
 };
 
-fn budget_input(args: Map<String, Value>, amount_limit: bool) -> Result<SetBudget, ApiError> {
+fn budget_input(args: Map<String, Value>, amount_limit: bool) -> Result<(SetBudget, Span), ApiError> {
     #[derive(Deserialize)]
     #[serde(rename_all = "camelCase")]
     struct Args {
@@ -174,38 +206,42 @@ fn budget_input(args: Map<String, Value>, amount_limit: bool) -> Result<SetBudge
         amount_limit: Option<String>,
         #[serde(default)]
         category_id: Option<String>,
+        #[serde(default)]
+        span: Option<Span>,
     }
     let a: Args = parse(args)?;
     let scope = if a.category_id.is_some() { BudgetScope::Category } else { BudgetScope::Global };
-    Ok(SetBudget { kind: a.kind, scope, month: a.month, amount_limit: if amount_limit { a.amount_limit } else { None }, category_id: a.category_id })
+    let input = SetBudget { kind: a.kind, scope, month: a.month, amount_limit: if amount_limit { a.amount_limit } else { None }, category_id: a.category_id };
+    Ok((input, a.span.unwrap_or_default()))
 }
 
 pub const BUDGETS_SET: Route = Route {
     name: "budgets.set",
     scope: Scope::Write,
-    summary: "Sets a monthly budget: the global budget of a side, or one category's. A month that has already started changes only that month; this month and later ones carry the new amount forward. A category budget must match the category's type.",
+    summary: "Sets a monthly budget: the global budget of a side, or one category's. Span ONLY (the default): a month that has already started changes only that month; this month and later ones carry the new amount forward. FORWARD: that month and every later one. ALL: every month back to the first budget month. A category budget must match the category's type.",
     params: &[
         SIDE,
         MONTH,
         Param::new("amountLimit", Kind::Money, "The most to spend, or the aim to earn, each month. Zero is allowed.").required(),
         BUDGET_CATEGORY,
+        SPAN,
     ],
     confirm: None,
     run: |ctx, args| {
-        let input = budget_input(args, true)?;
-        reply(ctx.vault.with_conn(|c| budgets::set(c, &input, ctx.now))?)
+        let (input, span) = budget_input(args, true)?;
+        reply(ctx.vault.with_conn(|c| budgets::set_span(c, &input, ctx.now, span))?)
     },
 };
 
 pub const BUDGETS_REMOVE: Route = Route {
     name: "budgets.remove",
     scope: Scope::Write,
-    summary: "Removes a budget, with the same month rules as setting one. The months before keep it, and the history stays.",
-    params: &[SIDE, MONTH, BUDGET_CATEGORY],
+    summary: "Removes a budget, with the same month and span rules as setting one (ONLY, FORWARD or ALL). With ONLY or FORWARD the months before keep it, and the history stays.",
+    params: &[SIDE, MONTH, BUDGET_CATEGORY, SPAN],
     confirm: None,
     run: |ctx, args| {
-        let input = budget_input(args, false)?;
-        reply(ctx.vault.with_conn(|c| budgets::set(c, &input, ctx.now))?)
+        let (input, span) = budget_input(args, false)?;
+        reply(ctx.vault.with_conn(|c| budgets::set_span(c, &input, ctx.now, span))?)
     },
 };
 
@@ -269,11 +305,13 @@ pub const RECURRING_DELETE: Route = Route {
 pub const RECURRING_PAY: Route = Route {
     name: "recurring.pay",
     scope: Scope::Write,
-    summary: "Turns the current occurrence into a transaction and moves the item to the next one. A bill with no fixed amount needs the amount.",
+    summary: "Turns the current occurrence into a transaction and moves the item to the next one. With a due date, pays that one later occurrence instead and leaves the current one due. A bill with no fixed amount needs the amount.",
     params: &[
         Param::new("id", Kind::Id, "The recurring item.").required(),
         Param::new("amount", Kind::Money, "What was paid. Defaults to the planned amount."),
         Param::new("paidOn", Kind::Date, "The day it was paid. Defaults to today in the app's time zone."),
+        Param::new("dueDate", Kind::Date, "Pay this one occurrence: on or after the next due date, and not already paid or skipped."),
+        Param::new("description", Kind::String, "Replaces the item's note on the transaction. Empty clears it."),
     ],
     confirm: None,
     run: |ctx, mut args| {
@@ -285,22 +323,38 @@ pub const RECURRING_PAY: Route = Route {
             amount: Option<String>,
             #[serde(default)]
             paid_on: Option<String>,
+            #[serde(default)]
+            due_date: Option<String>,
+            #[serde(default)]
+            description: Option<String>,
         }
-        let Args { amount, paid_on } = parse(args)?;
+        let Args { amount, paid_on, due_date, description } = parse(args)?;
         let today = today(ctx)?;
-        reply(ctx.vault.with_conn(|c| recurring::pay(c, id, amount.as_deref(), paid_on.as_deref(), &today, None, None))?)
+        reply(ctx.vault.with_conn(|c| {
+            recurring::pay(c, id, amount.as_deref(), paid_on.as_deref(), &today, due_date.as_deref(), description.as_deref())
+        })?)
     },
 };
 
 pub const RECURRING_SKIP: Route = Route {
     name: "recurring.skip",
     scope: Scope::Write,
-    summary: "Passes over the current occurrence without making a transaction.",
-    params: &[Param::new("id", Kind::Id, "The recurring item.").required()],
+    summary: "Passes over the current occurrence without making a transaction. With a due date, skips that one later occurrence instead.",
+    params: &[
+        Param::new("id", Kind::Id, "The recurring item.").required(),
+        Param::new("dueDate", Kind::Date, "Skip this one occurrence: on or after the next due date, and not already paid or skipped."),
+    ],
     confirm: None,
     run: |ctx, mut args| {
         let id = take_id(&mut args, "id")?;
-        reply(ctx.vault.with_conn(|c| recurring::skip(c, id, None))?)
+        #[derive(Deserialize)]
+        #[serde(rename_all = "camelCase")]
+        struct Args {
+            #[serde(default)]
+            due_date: Option<String>,
+        }
+        let Args { due_date } = parse(args)?;
+        reply(ctx.vault.with_conn(|c| recurring::skip(c, id, due_date.as_deref()))?)
     },
 };
 

@@ -311,6 +311,7 @@ pub static ALL: &[Route] = &[
     write::CATEGORIES_CREATE,
     write::CATEGORIES_RENAME,
     write::CATEGORIES_DELETE,
+    write::CATEGORIES_REORDER,
     write::TRANSACTIONS_CREATE,
     write::TRANSACTIONS_UPDATE,
     write::TRANSACTIONS_DELETE,

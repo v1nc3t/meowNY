@@ -165,7 +165,7 @@
       "positional": null,
       "route": "budgets.overview",
       "scope": "read",
-      "summary": "For a month, per side (income, expense): the budget, how much of it is given to categories, what is left, and the actual so far.",
+      "summary": "For a month, per side (income, expense): the budget, how much of it is given to categories, what is left, and the actual so far. used is what the categories that still count spent, and notUsed is what they were given minus used.",
       "usage": "meowny budgets overview --month <month>"
     },
     {
@@ -499,13 +499,59 @@
           "type": "id",
           "value": "id",
           "values": []
+        },
+        {
+          "flag": "--month",
+          "nullable": false,
+          "param": "month",
+          "required": false,
+          "summary": "The month the span counts from, like 2026-10.",
+          "type": "month",
+          "value": "month",
+          "values": []
+        },
+        {
+          "flag": "--span",
+          "nullable": false,
+          "param": "span",
+          "required": false,
+          "summary": "How far it reaches: ONLY (the default), FORWARD or ALL.",
+          "type": "string",
+          "value": "ONLY|FORWARD|ALL",
+          "values": [
+            "ONLY",
+            "FORWARD",
+            "ALL"
+          ]
         }
       ],
       "positional": "id",
       "route": "categories.delete",
       "scope": "write",
-      "summary": "Deletes a category: it is no longer offered or budgeted, and its transactions keep it.",
-      "usage": "meowny categories delete <id>"
+      "summary": "Deletes a category: it is no longer offered or budgeted, and its transactions keep it. With a month and a span, ONLY keeps the category and removes just that month's budget, FORWARD removes it from that month on (earlier months keep its budget and spending), ALL removes it from every month. Give month and span together, or neither.",
+      "usage": "meowny categories delete <id> [--month <month>] [--span <ONLY|FORWARD|ALL>]"
+    },
+    {
+      "command": "categories reorder",
+      "confirm": false,
+      "destructive": false,
+      "flags": [
+        {
+          "flag": "--ids",
+          "nullable": false,
+          "param": "ids",
+          "required": true,
+          "summary": "Every active category of one type, in the new order.",
+          "type": "ids",
+          "value": "id,id,...",
+          "values": []
+        }
+      ],
+      "positional": null,
+      "route": "categories.reorder",
+      "scope": "write",
+      "summary": "Puts the categories of one type in a new order; give every active category of that type.",
+      "usage": "meowny categories reorder --ids <id,id,...>"
     },
     {
       "command": "transactions create",
@@ -725,13 +771,27 @@
           "type": "id",
           "value": "id",
           "values": []
+        },
+        {
+          "flag": "--span",
+          "nullable": false,
+          "param": "span",
+          "required": false,
+          "summary": "How far it reaches: ONLY (the default), FORWARD or ALL.",
+          "type": "string",
+          "value": "ONLY|FORWARD|ALL",
+          "values": [
+            "ONLY",
+            "FORWARD",
+            "ALL"
+          ]
         }
       ],
       "positional": null,
       "route": "budgets.set",
       "scope": "write",
-      "summary": "Sets a monthly budget: the global budget of a side, or one category's. A month that has already started changes only that month; this month and later ones carry the new amount forward. A category budget must match the category's type.",
-      "usage": "meowny budgets set --type <INCOME|EXPENSE> --month <month> --amount-limit <amount> [--category-id <id>]"
+      "summary": "Sets a monthly budget: the global budget of a side, or one category's. Span ONLY (the default): a month that has already started changes only that month; this month and later ones carry the new amount forward. FORWARD: that month and every later one. ALL: every month back to the first budget month. A category budget must match the category's type.",
+      "usage": "meowny budgets set --type <INCOME|EXPENSE> --month <month> --amount-limit <amount> [--category-id <id>] [--span <ONLY|FORWARD|ALL>]"
     },
     {
       "command": "budgets remove",
@@ -770,13 +830,27 @@
           "type": "id",
           "value": "id",
           "values": []
+        },
+        {
+          "flag": "--span",
+          "nullable": false,
+          "param": "span",
+          "required": false,
+          "summary": "How far it reaches: ONLY (the default), FORWARD or ALL.",
+          "type": "string",
+          "value": "ONLY|FORWARD|ALL",
+          "values": [
+            "ONLY",
+            "FORWARD",
+            "ALL"
+          ]
         }
       ],
       "positional": null,
       "route": "budgets.remove",
       "scope": "write",
-      "summary": "Removes a budget, with the same month rules as setting one. The months before keep it, and the history stays.",
-      "usage": "meowny budgets remove --type <INCOME|EXPENSE> --month <month> [--category-id <id>]"
+      "summary": "Removes a budget, with the same month and span rules as setting one (ONLY, FORWARD or ALL). With ONLY or FORWARD the months before keep it, and the history stays.",
+      "usage": "meowny budgets remove --type <INCOME|EXPENSE> --month <month> [--category-id <id>] [--span <ONLY|FORWARD|ALL>]"
     },
     {
       "command": "recurring create",
@@ -1053,13 +1127,33 @@
           "type": "date",
           "value": "date",
           "values": []
+        },
+        {
+          "flag": "--due-date",
+          "nullable": false,
+          "param": "dueDate",
+          "required": false,
+          "summary": "Pay this one occurrence: on or after the next due date, and not already paid or skipped.",
+          "type": "date",
+          "value": "date",
+          "values": []
+        },
+        {
+          "flag": "--description",
+          "nullable": false,
+          "param": "description",
+          "required": false,
+          "summary": "Replaces the item's note on the transaction. Empty clears it.",
+          "type": "string",
+          "value": "text",
+          "values": []
         }
       ],
       "positional": "id",
       "route": "recurring.pay",
       "scope": "write",
-      "summary": "Turns the current occurrence into a transaction and moves the item to the next one. A bill with no fixed amount needs the amount.",
-      "usage": "meowny recurring pay <id> [--amount <amount>] [--paid-on <date>]"
+      "summary": "Turns the current occurrence into a transaction and moves the item to the next one. With a due date, pays that one later occurrence instead and leaves the current one due. A bill with no fixed amount needs the amount.",
+      "usage": "meowny recurring pay <id> [--amount <amount>] [--paid-on <date>] [--due-date <date>] [--description <text>]"
     },
     {
       "command": "recurring skip",
@@ -1075,13 +1169,23 @@
           "type": "id",
           "value": "id",
           "values": []
+        },
+        {
+          "flag": "--due-date",
+          "nullable": false,
+          "param": "dueDate",
+          "required": false,
+          "summary": "Skip this one occurrence: on or after the next due date, and not already paid or skipped.",
+          "type": "date",
+          "value": "date",
+          "values": []
         }
       ],
       "positional": "id",
       "route": "recurring.skip",
       "scope": "write",
-      "summary": "Passes over the current occurrence without making a transaction.",
-      "usage": "meowny recurring skip <id>"
+      "summary": "Passes over the current occurrence without making a transaction. With a due date, skips that one later occurrence instead.",
+      "usage": "meowny recurring skip <id> [--due-date <date>]"
     },
     {
       "command": "recurring pause",
