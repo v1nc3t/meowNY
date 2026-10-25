@@ -717,6 +717,7 @@ export const en = {
   'settings.linkSource': 'source code',
   'settings.linkDiscussions': 'questions & bugs',
   'settings.linkSponsor': 'sponsor',
+  'settings.linkUpdate': 'check for updates',
   'split.add': 'split a bill',
   'code.tooLong': 'this code is too long for a QR code: copy it and send it instead.',
   'split.pickOrType': 'choose a friend or type a name',

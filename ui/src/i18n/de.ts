@@ -705,6 +705,7 @@ export const de: Messages = {
   'settings.linkSource': 'quellcode',
   'settings.linkDiscussions': 'fragen & fehler',
   'settings.linkSponsor': 'unterstützen',
+  'settings.linkUpdate': 'nach Updates suchen',
   'split.add': 'rechnung aufteilen',
   'code.tooLong': 'dieser code ist zu lang für einen QR-code: kopiere ihn und schick ihn stattdessen.',
   'split.pickOrType': 'freund wählen oder namen eingeben',

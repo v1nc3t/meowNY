@@ -21,6 +21,7 @@ const LINKS = {
   source: 'https://github.com/v1nc3t/meowNY',
   discussions: 'https://github.com/v1nc3t/meowNY/discussions',
   sponsor: 'https://ko-fi.com/v1nc3t',
+  releases: 'https://github.com/v1nc3t/meowNY/releases/latest',
 }
 
 /** The sections of the page, in the order they are listed. The id is what `?section=` holds, so a link can open one. */
@@ -186,10 +187,15 @@ export default function SettingsPage() {
           <a href={LINKS.discussions} target="_blank" rel="noreferrer">
             {t('settings.linkDiscussions')}
           </a>
+        </nav>
+        <div className="settings-footer-actions">
+          <a className={buttonClass('outline', 'sm')} href={LINKS.releases} target="_blank" rel="noreferrer">
+            {t('settings.linkUpdate')}
+          </a>
           <a className={buttonClass('outline', 'sm')} href={LINKS.sponsor} target="_blank" rel="noreferrer">
             {t('settings.linkSponsor')}
           </a>
-        </nav>
+        </div>
         <p>© {YEAR} meowny · AGPL-3.0</p>
       </footer>
     </section>

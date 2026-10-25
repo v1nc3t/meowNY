@@ -704,6 +704,7 @@ export const pt: Messages = {
   'settings.linkSource': 'código-fonte',
   'settings.linkDiscussions': 'perguntas e erros',
   'settings.linkSponsor': 'apoiar',
+  'settings.linkUpdate': 'procurar atualizações',
   'split.add': 'dividir uma despesa',
   'code.tooLong': 'este código é demasiado longo para um QR: copia-o e envia-o em vez disso.',
   'split.pickOrType': 'escolhe um amigo ou escreve um nome',

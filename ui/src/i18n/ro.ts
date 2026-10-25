@@ -702,6 +702,7 @@ export const ro: Messages = {
   'settings.linkSource': 'cod sursă',
   'settings.linkDiscussions': 'întrebări și bug-uri',
   'settings.linkSponsor': 'susține',
+  'settings.linkUpdate': 'caută actualizări',
   'split.add': 'împarte o cheltuială',
   'code.tooLong': 'acest cod este prea lung pentru un cod QR: copiază-l și trimite-l în schimb.',
   'split.pickOrType': 'alege un prieten sau scrie un nume',
