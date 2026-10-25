@@ -121,7 +121,7 @@ fn a_split_recurring_item_has_a_code_for_its_next_payment_and_the_next_day_is_an
     assert_eq!(make_recurring(&w.conn, item, anna, FROM).unwrap(), text, "the same text every time");
     assert_ne!(parse(&make_recurring(&w.conn, item, bob, FROM).unwrap()).unwrap().id, held.id, "another friend, another code");
     // paying the payment moves the item to the next day: another code, and the paid transaction has its own
-    let paid = crate::recurring::pay(&w.conn, item, None, Some("2026-03-01"), "2026-03-01", None).unwrap();
+    let paid = crate::recurring::pay(&w.conn, item, None, Some("2026-03-01"), "2026-03-01", None, None).unwrap();
     let next = parse(&make_recurring(&w.conn, item, anna, FROM).unwrap()).unwrap();
     assert_eq!((next.date.as_str(), next.amount_minor), ("2026-04-01", 22_500));
     assert_ne!(next.id, held.id);

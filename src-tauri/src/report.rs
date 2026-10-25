@@ -1232,7 +1232,7 @@ mod tests {
         )
         .unwrap();
         let now: chrono::DateTime<chrono::Utc> = "2026-03-15T12:00:00Z".parse().unwrap();
-        crate::recurring::pay(&w.conn, rent.id, None, Some("2026-01-04"), "2026-03-01", None).unwrap();
+        crate::recurring::pay(&w.conn, rent.id, None, Some("2026-01-04"), "2026-03-01", None, None).unwrap();
         let o = with_debts("2026-01", "2026-02", false, true);
         let report = read_at(&w.conn, &o, now).unwrap();
         let text: Vec<String> = layout::build(&report.0, &o).unwrap().texts().iter().map(|t| t.to_string()).collect();

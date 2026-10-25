@@ -438,7 +438,8 @@ fn later_occurrence(conn: &Connection, item: &Recurring, due_date: Option<&str>)
 
 /// Turns an occurrence into a normal transaction, all or nothing. Without `due_date` it is the next one (the oldest still open)
 /// and the item moves on to the one after; with the date of a later occurrence only that one is paid and the item stays where it
-/// is. `amount` defaults to the planned amount and `paid_on` to `today`; the planned amount is kept on the transaction. An
+/// is. `amount` defaults to the planned amount and `paid_on` to `today`; the planned amount is kept on the transaction. The
+/// transaction takes the item's description unless `description` is given, cleaned like a transaction's (empty means none). An
 /// occurrence that already has a transaction is refused.
 pub fn pay(
     conn: &Connection,
@@ -447,13 +448,16 @@ pub fn pay(
     paid_on: Option<&str>,
     today: &str,
     due_date: Option<&str>,
+    description: Option<&str>,
 ) -> Result<crate::transactions::Transaction, AppError> {
     let paid_on = clean_date(paid_on.unwrap_or(today))?;
     let actual = amount.map(parse_positive_amount).transpose()?;
+    let description = description.map(|text| clean_description(Some(text))).transpose()?;
 
     let tx = conn.unchecked_transaction()?;
     let item = find_active(&tx, id)?;
     let later = later_occurrence(&tx, &item, due_date)?;
+    let description = description.unwrap_or_else(|| item.description.clone());
     // A bill with no fixed amount has nothing planned, so the payment must say what was paid.
     let planned = optional_amount(item.amount.as_deref())?;
     let paid = actual.or(planned).ok_or(AppError::InvalidInput)?;
@@ -463,7 +467,7 @@ pub fn pay(
            (category_id, recurring_transaction_id, recurring_due_date, name, amount_minor,
             planned_amount_minor, payment_date, description)
          VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
-        params![item.category_id, id, occurrence, item.name, paid, planned, paid_on, item.description],
+        params![item.category_id, id, occurrence, item.name, paid, planned, paid_on, description],
     );
     match inserted {
         Ok(_) => {}
@@ -631,13 +635,13 @@ mod tests {
         let item = create(&conn, &varying(rent, "2026-01-20")).unwrap();
 
         // It cannot be paid without saying how much, and a failed attempt changes nothing.
-        assert_eq!(pay(&conn, item.id, None, Some("2026-01-21"), TODAY, None).unwrap_err(), AppError::InvalidInput);
-        assert_eq!(pay(&conn, item.id, Some("0.00"), Some("2026-01-21"), TODAY, None).unwrap_err(), AppError::InvalidInput);
+        assert_eq!(pay(&conn, item.id, None, Some("2026-01-21"), TODAY, None, None).unwrap_err(), AppError::InvalidInput);
+        assert_eq!(pay(&conn, item.id, Some("0.00"), Some("2026-01-21"), TODAY, None, None).unwrap_err(), AppError::InvalidInput);
         assert_eq!(get(&conn, item.id).unwrap().next_due_date, "2026-01-20");
         assert_eq!(conn.query_row("SELECT count(*) FROM transactions", [], |r| r.get::<_, i64>(0)).unwrap(), 0);
 
-        let january = pay(&conn, item.id, Some("78.40"), Some("2026-01-21"), TODAY, None).unwrap();
-        let february = pay(&conn, item.id, Some("91.05"), Some("2026-02-19"), TODAY, None).unwrap();
+        let january = pay(&conn, item.id, Some("78.40"), Some("2026-01-21"), TODAY, None, None).unwrap();
+        let february = pay(&conn, item.id, Some("91.05"), Some("2026-02-19"), TODAY, None, None).unwrap();
         assert_eq!((january.amount.as_str(), february.amount.as_str()), ("78.40", "91.05"));
         assert_eq!(get(&conn, item.id).unwrap().next_due_date, "2026-03-20", "it moves on like any other item");
         // Nothing was planned, so nothing is stored as planned.
@@ -701,10 +705,10 @@ mod tests {
     fn an_occurrence_cannot_be_paid_twice() {
         let (conn, rent, _) = db();
         let item = create(&conn, &new(rent, "2026-01-31")).unwrap();
-        pay(&conn, item.id, None, None, TODAY, None).unwrap();
+        pay(&conn, item.id, None, None, TODAY, None, None).unwrap();
         // Move the item back onto the paid occurrence, as a stale edit could.
         conn.execute("UPDATE recurring_transactions SET next_due_date = '2026-01-31'", []).unwrap();
-        assert_eq!(pay(&conn, item.id, None, None, TODAY, None).unwrap_err(), AppError::InvalidInput);
+        assert_eq!(pay(&conn, item.id, None, None, TODAY, None, None).unwrap_err(), AppError::InvalidInput);
         // The failed attempt changed nothing.
         assert_eq!(get(&conn, item.id).unwrap().next_due_date, "2026-01-31");
         let count: i64 = conn.query_row("SELECT count(*) FROM transactions", [], |r| r.get(0)).unwrap();
@@ -712,14 +716,33 @@ mod tests {
     }
 
     #[test]
+    fn a_payment_can_replace_the_description_of_its_transaction() {
+        let (conn, rent, _) = db();
+        let item = create(&conn, &NewRecurring { description: Some("March rent".into()), ..new(rent, "2026-01-31") }).unwrap();
+        let kept = pay(&conn, item.id, None, None, TODAY, None, None).unwrap();
+        assert_eq!(kept.description.as_deref(), Some("March rent"));
+        let replaced = pay(&conn, item.id, None, None, TODAY, None, Some("  with the late fee ")).unwrap();
+        assert_eq!(replaced.description.as_deref(), Some("with the late fee"));
+        // Empty (or blank) text is no description, not the item's.
+        let blank = pay(&conn, item.id, None, None, TODAY, None, Some("  ")).unwrap();
+        assert_eq!(blank.description, None);
+        // The item itself keeps its description.
+        assert_eq!(get(&conn, item.id).unwrap().description.as_deref(), Some("March rent"));
+        // Too long: refused, nothing paid.
+        let before = get(&conn, item.id).unwrap();
+        assert_eq!(pay(&conn, item.id, None, None, TODAY, None, Some(&"x".repeat(5000))).unwrap_err(), AppError::InvalidInput);
+        assert_eq!(get(&conn, item.id).unwrap(), before);
+    }
+
+    #[test]
     fn pay_rejects_bad_amount_and_inactive_items() {
         let (conn, rent, _) = db();
         let item = create(&conn, &new(rent, "2026-01-31")).unwrap();
-        assert_eq!(pay(&conn, item.id, Some("0.00"), None, TODAY, None).unwrap_err(), AppError::InvalidInput);
-        assert_eq!(pay(&conn, item.id, None, Some("nope"), TODAY, None).unwrap_err(), AppError::InvalidInput);
+        assert_eq!(pay(&conn, item.id, Some("0.00"), None, TODAY, None, None).unwrap_err(), AppError::InvalidInput);
+        assert_eq!(pay(&conn, item.id, None, Some("nope"), TODAY, None, None).unwrap_err(), AppError::InvalidInput);
         set_active(&conn, item.id, false).unwrap();
-        assert_eq!(pay(&conn, item.id, None, None, TODAY, None).unwrap_err(), AppError::InvalidInput);
-        assert_eq!(pay(&conn, 999, None, None, TODAY, None).unwrap_err(), AppError::NotFound);
+        assert_eq!(pay(&conn, item.id, None, None, TODAY, None, None).unwrap_err(), AppError::InvalidInput);
+        assert_eq!(pay(&conn, 999, None, None, TODAY, None, None).unwrap_err(), AppError::NotFound);
     }
 
     #[test]
@@ -728,9 +751,9 @@ mod tests {
         let mut input = new(rent, "2026-01-31");
         input.end_date = Some("2026-02-28".into());
         let item = create(&conn, &input).unwrap();
-        pay(&conn, item.id, None, None, TODAY, None).unwrap();
+        pay(&conn, item.id, None, None, TODAY, None, None).unwrap();
         assert!(get(&conn, item.id).unwrap().is_active);
-        pay(&conn, item.id, None, None, TODAY, None).unwrap();
+        pay(&conn, item.id, None, None, TODAY, None, None).unwrap();
         let done = get(&conn, item.id).unwrap();
         assert!(!done.is_active);
         assert_eq!(set_active(&conn, item.id, true).unwrap_err(), AppError::InvalidInput);
@@ -775,7 +798,7 @@ mod tests {
         assert_eq!(skipped(&conn, item.id), r#"["2026-09-01"]"#);
         assert_eq!(due_days(&conn, today), ["2026-08-01", "2026-10-01"]);
         // pay October on its own: a transaction for that occurrence, the item still on August
-        let paid = pay(&conn, item.id, None, Some(today), today, Some("2026-10-01")).unwrap();
+        let paid = pay(&conn, item.id, None, Some(today), today, Some("2026-10-01"), None).unwrap();
         let marked: String = conn.query_row("SELECT recurring_due_date FROM transactions WHERE id = ?1", [paid.id], |r| r.get(0)).unwrap();
         assert_eq!(marked, "2026-10-01");
         assert_eq!(get(&conn, item.id).unwrap().next_due_date, "2026-08-01");
@@ -783,7 +806,7 @@ mod tests {
         // an upcoming occurrence is not due yet, and is not offered until it is
         assert_eq!(dues(&conn, today, Some(30)).unwrap().overdue.len(), 1);
         // paying August moves past the skipped September and the paid October
-        pay(&conn, item.id, None, Some(today), today, None).unwrap();
+        pay(&conn, item.id, None, Some(today), today, None, None).unwrap();
         let moved = get(&conn, item.id).unwrap();
         assert_eq!(moved.next_due_date, "2026-11-01");
         assert!(moved.is_active);
@@ -808,7 +831,7 @@ mod tests {
         input.end_date = Some("2026-12-15".into());
         let item = create(&conn, &input).unwrap();
         skip(&conn, item.id, Some("2026-10-01")).unwrap();
-        pay(&conn, item.id, None, Some(TODAY), TODAY, Some("2026-11-01")).unwrap();
+        pay(&conn, item.id, None, Some(TODAY), TODAY, Some("2026-11-01"), None).unwrap();
         let before = get(&conn, item.id).unwrap();
         let transactions_before: i64 = conn.query_row("SELECT count(*) FROM transactions", [], |r| r.get(0)).unwrap();
         let refused = [
@@ -820,7 +843,7 @@ mod tests {
             "nope",
         ];
         for date in refused {
-            assert_eq!(pay(&conn, item.id, None, None, TODAY, Some(date)).unwrap_err(), AppError::InvalidInput, "pay {date}");
+            assert_eq!(pay(&conn, item.id, None, None, TODAY, Some(date), None).unwrap_err(), AppError::InvalidInput, "pay {date}");
             assert_eq!(skip(&conn, item.id, Some(date)).unwrap_err(), AppError::InvalidInput, "skip {date}");
         }
         assert_eq!(get(&conn, item.id).unwrap(), before);
@@ -829,7 +852,7 @@ mod tests {
         assert_eq!(transactions_after, transactions_before);
         // a paused item takes neither
         set_active(&conn, item.id, false).unwrap();
-        assert_eq!(pay(&conn, item.id, None, None, TODAY, Some("2026-12-01")).unwrap_err(), AppError::InvalidInput);
+        assert_eq!(pay(&conn, item.id, None, None, TODAY, Some("2026-12-01"), None).unwrap_err(), AppError::InvalidInput);
         assert_eq!(skip(&conn, item.id, Some("2026-12-01")).unwrap_err(), AppError::InvalidInput);
         assert_eq!(skipped(&conn, item.id), r#"["2026-10-01"]"#);
     }

@@ -111,7 +111,7 @@ fn a_template_holds_proportions_so_it_is_left_alone() {
     assert_eq!(super::splits::all_template_weights(&conn).unwrap(), before);
     let item = recurring::list(&conn).unwrap().remove(0);
     assert_eq!(item.amount.as_deref(), Some("2250.00"), "the item's own amount is converted as before");
-    let paid = recurring::pay(&conn, item.id, None, Some("2026-01-01"), "2026-01-01", None).unwrap();
+    let paid = recurring::pay(&conn, item.id, None, Some("2026-01-01"), "2026-01-01", None, None).unwrap();
     assert_eq!(paid.my_share, "1500.00");
 }
 

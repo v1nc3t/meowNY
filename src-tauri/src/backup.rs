@@ -776,7 +776,7 @@ mod tests {
             },
         )
         .unwrap();
-        recurring::pay(&conn, plan.id, Some("905.50"), Some("2026-01-02"), "2026-01-02", None).unwrap();
+        recurring::pay(&conn, plan.id, Some("905.50"), Some("2026-01-02"), "2026-01-02", None, None).unwrap();
         for (name, amount, date, category, description) in [
             ("Salary", "3200.00", "2026-01-25", &salary, Some("Café “bonus” \\ 日本語 'x'; DROP TABLE transactions;--")),
             ("Gym", "30.00", "2026-01-10", &gym, None),
@@ -837,7 +837,7 @@ mod tests {
             },
         )
         .unwrap();
-        recurring::pay(&conn, plan.id, Some("900.00"), Some("2026-02-01"), "2026-02-01", None).unwrap();
+        recurring::pay(&conn, plan.id, Some("900.00"), Some("2026-02-01"), "2026-02-01", None, None).unwrap();
         let loan = ledger::add(
             &conn,
             &ledger::NewEntry {

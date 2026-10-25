@@ -59,13 +59,17 @@ export const recurring = {
   create: (input: NewRecurring) => call('create_recurring', Recurring, { input }),
   update: (id: string, patch: RecurringPatch) => call('update_recurring', Recurring, { id, patch }),
   remove: (id: string) => call('delete_recurring', z.null(), { id }).then(() => undefined),
-  /** Turns an occurrence into a transaction: the one on `dueDate`, or the next. `amount` defaults to the planned one, `paidOn` to today. */
-  pay: (id: string, options: { amount?: string; paidOn?: string; dueDate?: string } = {}) =>
+  /**
+   * Turns an occurrence into a transaction: the one on `dueDate`, or the next. `amount` defaults to the planned one, `paidOn` to today,
+   * `description` to the item's (an empty one is no description).
+   */
+  pay: (id: string, options: { amount?: string; paidOn?: string; dueDate?: string; description?: string } = {}) =>
     call('pay_recurring', Transaction, {
       id,
       amount: options.amount ?? null,
       paidOn: options.paidOn ?? null,
       ...(options.dueDate ? { dueDate: options.dueDate } : {}),
+      ...(options.description !== undefined ? { description: options.description } : {}),
     }),
   /** Skips the occurrence on `dueDate`, or the next. */
   skip: (id: string, dueDate?: string) => call('skip_recurring', Recurring, dueDate ? { id, dueDate } : { id }),

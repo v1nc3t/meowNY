@@ -277,6 +277,7 @@ function RecurringView({ settings, now }: { settings: MoneySettings; now: Today 
     const form = new FormData(event.currentTarget)
     const amount = amountString(String(form.get('amount') ?? ''), false)
     const paidOn = String(form.get('paidOn') ?? '')
+    const description = String(form.get('description') ?? '')
     if (!amount) {
       say(t('rec.errorAmount'), 'error')
       return
@@ -284,7 +285,7 @@ function RecurringView({ settings, now }: { settings: MoneySettings; now: Today 
     setPending(true)
     let notAttached: string[] = []
     try {
-      const paid = await recurringApi.pay(paying.item.id, { amount, paidOn, dueDate: paying.dueDate })
+      const paid = await recurringApi.pay(paying.item.id, { amount, paidOn, dueDate: paying.dueDate, description })
       notAttached = await attachments.commit({ kind: 'transaction', id: paid.id })
     } catch (failure) {
       say(errorText(failure), 'error')
@@ -379,7 +380,11 @@ function RecurringView({ settings, now }: { settings: MoneySettings; now: Today 
               {t('rec.paidAmount')}
               <input name="amount" required autoFocus={paying.item.amount === null} inputMode="decimal" defaultValue={paying.item.amount ?? ''} autoComplete="off" />
             </label>
-            <DateField name="paidOn" label={t('rec.paidOn')} defaultValue={now.date} today={now.date} />
+            <DateField name="paidOn" label={t('rec.paidOn')} defaultValue={paying.dueDate ?? paying.item.nextDueDate} today={now.date} />
+            <label>
+              {t('common.description')}
+              <input name="description" maxLength={255} placeholder={t('common.optional')} defaultValue={paying.item.description ?? ''} autoComplete="off" />
+            </label>
           </form>
           <AttachArea attachments={attachments} />
         </Modal>

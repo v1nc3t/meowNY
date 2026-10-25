@@ -1013,7 +1013,7 @@ fn the_history_of_debts_in_a_file_has_the_friends_and_the_recurring_payments_pai
     )
     .unwrap()
     .id;
-    crate::recurring::pay(&paid, id, None, Some("2026-01-04"), "2026-03-01", None).unwrap();
+    crate::recurring::pay(&paid, id, None, Some("2026-01-04"), "2026-03-01", None, None).unwrap();
     let file = parsed(&paid, &only(&[Section::Ledger]));
     let lines = file["debtHistory"].as_array().unwrap();
     let kinds: Vec<(&str, &str)> = lines.iter().map(|l| (l["kind"].as_str().unwrap(), l["date"].as_str().unwrap())).collect();
