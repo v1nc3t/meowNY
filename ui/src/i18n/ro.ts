@@ -579,6 +579,7 @@ export const ro: Messages = {
   'debts.historyTab': 'istoric',
   'debts.dueTitle': 'plăți scadente',
   'debts.dueTotal': 'total scadent',
+  'debts.dueIncome': 'venituri de încasat',
   'debts.tabFriends': 'prieteni',
   'debts.dueOn': 'scadent la {date}',
   'debts.daysLate': 'zile de întârziere: {count}',

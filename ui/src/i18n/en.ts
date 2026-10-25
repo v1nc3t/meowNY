@@ -594,6 +594,7 @@ export const en = {
   'debts.historyTab': 'history',
   'debts.dueTitle': 'due payments',
   'debts.dueTotal': 'total due',
+  'debts.dueIncome': 'income due',
   'debts.tabFriends': 'friends',
   'debts.dueOn': 'due {date}',
   'debts.daysLate': 'days late: {count}',

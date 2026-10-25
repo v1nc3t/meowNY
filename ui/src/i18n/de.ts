@@ -582,6 +582,7 @@ export const de: Messages = {
   'debts.historyTab': 'verlauf',
   'debts.dueTitle': 'fällige zahlungen',
   'debts.dueTotal': 'fällig insgesamt',
+  'debts.dueIncome': 'einnahmen fällig',
   'debts.tabFriends': 'freunde',
   'debts.dueOn': 'fällig am {date}',
   'debts.daysLate': 'tage überfällig: {count}',

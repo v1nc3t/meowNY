@@ -86,6 +86,18 @@ fn what_is_not_a_payment_you_owe_is_not_listed() {
 }
 
 #[test]
+fn an_income_that_was_not_received_is_on_the_screen_but_not_a_payment_you_owe() {
+    let w = world();
+    item(&w.conn, "Rent", Some("900.00"), w.rent, "2026-03-01", (Unit::Month, 1), Some("2026-03-15"));
+    item(&w.conn, "Wages", Some("3000.00"), w.salary, "2026-03-01", (Unit::Month, 1), Some("2026-03-15"));
+    let screen = due(&w.conn, "2026-03-15").unwrap();
+    assert_eq!(screen.payments.iter().map(|p| (p.name.as_str(), p.income)).collect::<Vec<_>>(), [("Rent", false), ("Wages", true)]);
+    assert_eq!((screen.total.as_str(), screen.income_total.as_str(), screen.unknown), ("900.00", "3000.00", 0));
+    assert_eq!(serde_json::to_value(&screen.payments[1]).unwrap()["income"], true);
+    assert_eq!(days(&w.conn, "2026-03-15"), [("Rent".to_string(), "2026-03-01".to_string())], "the debts views leave it out");
+}
+
+#[test]
 fn an_item_forgotten_for_years_is_cut_at_the_most_per_item() {
     let w = world();
     item(&w.conn, "Daily", Some("1.00"), w.food, "2020-01-01", (Unit::Day, 1), None);

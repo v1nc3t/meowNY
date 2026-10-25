@@ -581,6 +581,7 @@ export const it: Messages = {
   'debts.historyTab': 'storico',
   'debts.dueTitle': 'pagamenti scaduti',
   'debts.dueTotal': 'totale scaduto',
+  'debts.dueIncome': 'entrate da incassare',
   'debts.tabFriends': 'amici',
   'debts.dueOn': 'scade il {date}',
   'debts.daysLate': 'giorni di ritardo: {count}',

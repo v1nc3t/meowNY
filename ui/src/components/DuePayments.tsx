@@ -6,9 +6,9 @@ import Button from './ui/Button'
 import { Card, CardContent } from './ui/Card'
 
 /**
- * The recurring payments that are overdue and not paid or skipped, one row for each occurrence that was missed, the oldest first. A
- * payment is a debt only once its day has gone by: one that falls due today is not here yet. Each row can be paid or skipped on its own,
- * and every name leads to the item in the list.
+ * The recurring payments that are overdue and not paid or skipped, one row for each occurrence that was missed, the oldest first; an
+ * income that was not received is listed too, in green. A payment is a debt only once its day has gone by: one that falls due today is
+ * not here yet. Each row can be paid or skipped on its own, and every name leads to the item in the list.
  */
 export default function DuePayments({
   due,
@@ -33,6 +33,12 @@ export default function DuePayments({
             <span className="debts-stat-label">{t('debts.dueTotal')}</span>
             <span className={`debts-stat-value ${Number(due.total) > 0 ? 'debt-owe' : 'debt-even'}`}>{money(due.total)}</span>
           </div>
+          {due.payments.some((payment) => payment.income) ? (
+            <div className="debts-stat">
+              <span className="debts-stat-label">{t('debts.dueIncome')}</span>
+              <span className="debts-stat-value debt-owed">{money(due.incomeTotal)}</span>
+            </div>
+          ) : null}
           {due.unknown > 0 ? (
             <div className="debts-stat">
               <span className="debts-stat-label">{t('debts.dueUnknown', { count: due.unknown })}</span>
@@ -49,10 +55,10 @@ export default function DuePayments({
                 <Link to={{ search: '' }} state={{ focus: { kind: 'recurring', id: payment.recurringId, date: payment.dueDate } }}>
                   {payment.name}
                 </Link>
-                <span className="muted">{` · ${payment.category}`}</span>
+                <span className="muted">{` · ${payment.category}${payment.income ? ` · ${t('common.income')}` : ''}`}</span>
               </p>
               <p className="card-meta">
-                <span className="card-amount debt-owe">{payment.amount === null ? t('rec.varies') : money(payment.amount)}</span>
+                <span className={`card-amount ${payment.income ? 'debt-owed' : 'debt-owe'}`}>{payment.amount === null ? t('rec.varies') : money(payment.amount)}</span>
                 {` · ${t('debts.dueOn', { date: formatDate(payment.dueDate, locale) })} · ${t('debts.daysLate', { count: payment.daysOverdue })}`}
               </p>
             </div>

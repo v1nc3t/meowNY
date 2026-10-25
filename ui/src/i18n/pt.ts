@@ -581,6 +581,7 @@ export const pt: Messages = {
   'debts.historyTab': 'histórico',
   'debts.dueTitle': 'pagamentos vencidos',
   'debts.dueTotal': 'total vencido',
+  'debts.dueIncome': 'receitas pendentes',
   'debts.tabFriends': 'amigos',
   'debts.dueOn': 'vence em {date}',
   'debts.daysLate': 'dias de atraso: {count}',
