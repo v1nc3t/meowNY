@@ -484,47 +484,57 @@ function Spending({ top, total, settings }: { top: TopCategory[]; total: string;
   )
 }
 
-/** Overall budgets first, then one bar per category that has a budget or any activity. */
+/**
+ * Budget against actual, in two groups (expenses, then income): the monthly budget first, then one row per category that has a budget
+ * or any activity. Each row says in words what was spent or earned and of which budget.
+ */
 function BudgetBars({ bva, settings }: { bva: BudgetVsActual; settings: MoneySettings }) {
   const t = useT()
   const money = (amount: string) => formatMoney(amount, settings.currency, settings.locale)
-  const rows = [
-    ...bva.totals
-      .filter((o) => o.budgeted !== null)
-      .map((o) => ({
-        key: `total-${o.type}`,
-        name: t(o.type === 'EXPENSE' ? 'common.expense' : 'common.income'),
-        type: o.type,
-        budgeted: o.budgeted,
-        actual: o.actual,
-        pct: usedPercent(o.actual, o.budgeted),
-        total: true,
-      })),
-    ...bva.categories
-      .filter((c) => c.budgeted !== null || toMinor(c.actual) !== 0n)
-      .map((c) => ({ key: String(c.categoryId), name: c.name, type: c.type, budgeted: c.budgeted, actual: c.actual, pct: c.pctUsed, total: false })),
-  ]
-  if (rows.length === 0) return <p className="dash-empty">{t('dashboard.empty')}</p>
+  const groups = (['EXPENSE', 'INCOME'] as const)
+    .map((type) => ({
+      type,
+      rows: [
+        ...bva.totals
+          .filter((o) => o.type === type && o.budgeted !== null)
+          .map((o) => ({ key: `total-${type}`, name: t('budgets.budget'), budgeted: o.budgeted, actual: o.actual, pct: usedPercent(o.actual, o.budgeted), total: true })),
+        ...bva.categories
+          .filter((c) => c.type === type && (c.budgeted !== null || toMinor(c.actual) !== 0n))
+          .map((c) => ({ key: String(c.categoryId), name: c.name, budgeted: c.budgeted, actual: c.actual, pct: c.pctUsed, total: false })),
+      ],
+    }))
+    .filter((group) => group.rows.length > 0)
+  if (groups.length === 0) return <p className="dash-empty">{t('dashboard.empty')}</p>
   return (
-    <ul className="dash-bars">
-      {rows.map((r) => {
-        const over = r.type === 'EXPENSE' && r.pct !== null && r.pct > 100
-        // Nearly used up: 90 % of an expense budget or more, but not over it.
-        const near = r.type === 'EXPENSE' && r.pct !== null && r.pct >= 90 && !over
-        return (
-          <li key={r.key} className={r.total ? 'dash-total' : undefined}>
-            <span className="dash-bar-text">
-              <span className="legend-name">{r.name}</span>
-              <span className="legend-amount">
-                {money(r.actual)}
-                {r.budgeted === null ? null : <span className="muted"> / {money(r.budgeted)}</span>}
-              </span>
-            </span>
-            <Bar percent={r.pct ?? 0} over={over} near={near} label={r.pct === null ? '-' : formatPercent(r.pct, settings.locale)} />
-          </li>
-        )
-      })}
-    </ul>
+    <div className="dash-budgets">
+      {groups.map((group) => (
+        <section key={group.type}>
+          <h3 className="dash-group-title">{t(group.type === 'EXPENSE' ? 'budgets.expenses' : 'budgets.income')}</h3>
+          <ul className="dash-bars">
+            {group.rows.map((r) => {
+              const over = group.type === 'EXPENSE' && r.pct !== null && r.pct > 100
+              // Nearly used up: 90 % of an expense budget or more, but not over it.
+              const near = group.type === 'EXPENSE' && r.pct !== null && r.pct >= 90 && !over
+              const actual = t(group.type === 'EXPENSE' ? 'dashboard.spent' : 'dashboard.earned', { amount: money(r.actual) })
+              return (
+                <li key={r.key} className={r.total ? 'dash-total' : undefined}>
+                  <span className="dash-bar-text">
+                    <span className="legend-name">{r.name}</span>
+                    <span className="legend-amount">
+                      {actual}
+                      <span className="muted"> {r.budgeted === null ? `· ${t('dashboard.noBudget')}` : t('dashboard.ofBudget', { amount: money(r.budgeted) })}</span>
+                    </span>
+                  </span>
+                  {r.budgeted === null ? null : (
+                    <Bar percent={r.pct ?? 0} over={over} near={near} label={r.pct === null ? '-' : formatPercent(r.pct, settings.locale)} />
+                  )}
+                </li>
+              )
+            })}
+          </ul>
+        </section>
+      ))}
+    </div>
   )
 }
 
