@@ -24,7 +24,7 @@
 
 ## About
 
-meowNY tracks income and expenses against monthly budgets. It is a [Tauri](https://tauri.app) app: a Rust core and a React UI, with all data in one encrypted SQLite file on your machine. A phone app (Android and iPhone) keeps a full offline copy and syncs with the computer over your home wifi. A command line program, `meowny`, lets scripts and AI agents use the running app.
+meowNY tracks income and expenses against monthly budgets. It is a [Tauri](https://tauri.app) app: a Rust core and a React UI, with all data in one encrypted SQLite file on your machine. A phone app (Android; iPhone later) keeps a full offline copy and syncs with the computer over your home wifi. A command line program, `meowny`, lets scripts and AI agents use the running app.
 
 - **Budgeting:** categories, transactions, monthly budgets, recurring items, statistics. Seven languages, light and dark themes, keyboard shortcuts.
 - **Documents:** receipts and invoices attached to transactions, encrypted, previewed inside the app.
@@ -36,7 +36,7 @@ Everything is explained on the [website](https://v1nc3t.github.io/meowNY/guide.h
 
 ## Install
 
-Linux (`.deb`, AppImage), Windows, Android and iPhone builds are on the [releases page](https://github.com/v1nc3t/meowNY/releases/latest). How to install and update each one: [the guide](https://v1nc3t.github.io/meowNY/guide.html#install). To build it yourself: [develop](https://v1nc3t.github.io/meowNY/develop.html).
+Linux (`.deb`, AppImage), Windows and Android builds are on the [releases page](https://github.com/v1nc3t/meowNY/releases/latest). Step-by-step install and update: [the guide](https://v1nc3t.github.io/meowNY/guide.html#install). iPhone and Mac are not available yet: see [support](#support). To build it yourself: [develop](https://v1nc3t.github.io/meowNY/develop.html).
 
 **Pre-release.** Tried on a real Android phone, not yet on a real iPhone. The desktop installers are not signed yet. Nobody outside the project has reviewed the sync protocol; that review comes before 1.0.
 

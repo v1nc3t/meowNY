@@ -6,7 +6,6 @@ import { gallery } from './shots.mjs'
 
 const doc = (name) => `${REPO}/blob/main/docs/${name}`
 const RELEASES = `${REPO}/releases/latest`
-const ALTSTORE = `${REPO}/releases/latest/download/altstore.json`
 
 /** The screenshots each section shows, under its text; missing files are left out. */
 const PICTURES = {
@@ -24,20 +23,42 @@ const SECTIONS = [
     id: 'start',
     title: 'Getting started',
     blocks: [
-      { t: 'p', text: 'A budget app for your computer (Linux, Windows; macOS from source) and your phone (Android or iPhone). Your data stays on your devices, encrypted.' },
+      { t: 'p', text: 'A budget app for your computer (Linux, Windows) and your Android phone. Your data stays on your devices, encrypted.' },
       { t: 'note', kind: 'info', text: '**Pre-release.** Back up before you update. Nobody outside the project has reviewed the sync protocol yet.' },
       { t: 'h3', id: 'install', text: 'Install' },
+      { t: 'p', text: `Every download is on [the latest release](${RELEASES}). Pick your system below. Updating keeps your data.` },
+      { t: 'p', text: '**Linux** (Ubuntu, Debian and the like)' },
       {
-        t: 'table',
-        head: ['System', 'From the latest release', 'Updates'],
-        rows: [
-          ['Linux', '`sudo apt install ./meowNY_<v>_amd64.deb` (also puts `meowny` on the PATH), or the AppImage', 'Install the new file the same way'],
-          ['Windows', 'Run `meowNY_<v>_x64-setup.exe`. Not signed yet: on the SmartScreen warning choose *More info*, *Run anyway*', 'Run the new installer'],
-          ['Android', 'Open `meowNY_<v>_android.apk` on the phone', '[Obtainium](https://github.com/ImranR98/Obtainium) with this repository, or the new APK'],
-          ['iPhone', `In [AltStore](https://altstore.io) or [SideStore](https://sidestore.io) add the source \`${ALTSTORE}\``, 'AltStore offers each new version. A free Apple ID needs a refresh every 7 days'],
+        t: 'ol',
+        items: [
+          'Download `meowNY_<version>_amd64.deb`.',
+          'Install it: `sudo apt install ./meowNY_<version>_amd64.deb`. This also adds the `meowny` command line.',
+          'Open **meowNY** from your app menu.',
         ],
       },
-      { t: 'p', text: `Downloads: [the latest release](${RELEASES}). Check a file with \`sha256sum -c SHA256SUMS --ignore-missing\`. To build it yourself: [develop](develop.html).` },
+      { t: 'p', text: 'Other Linux: download the `.AppImage`, make it runnable with `chmod +x meowNY_<version>_amd64.AppImage`, then run it. **To update**, install or run the new file the same way.' },
+      { t: 'p', text: '**Windows**' },
+      {
+        t: 'ol',
+        items: [
+          'Download `meowNY_<version>_x64-setup.exe`.',
+          'Run it. The installer is not signed yet, so Windows warns you: choose **More info**, then **Run anyway**.',
+          'Open **meowNY** from the Start menu.',
+        ],
+      },
+      { t: 'p', text: '**To update**, run the new installer.' },
+      { t: 'p', text: '**Android**' },
+      {
+        t: 'ol',
+        items: [
+          'On the phone, download `meowNY_<version>_android.apk`.',
+          'Open it. If Android asks, allow your browser or file manager to install apps.',
+          'Open **meowNY**, then pair it with your computer: [your phone](#phone).',
+        ],
+      },
+      { t: 'p', text: '**To update**, open the new APK, or add this repository to [Obtainium](https://github.com/ImranR98/Obtainium) to get each new version.' },
+      { t: 'note', kind: 'warn', text: `**iPhone and Mac: not available yet.** There is no way to install meowNY on an iPhone or a Mac today. Publishing on the App Store and Google Play needs paid developer accounts. To help make that happen, [support meowNY on Ko-fi](${SPONSOR}).` },
+      { t: 'p', text: 'Check a download with `sha256sum -c SHA256SUMS --ignore-missing`. To build meowNY yourself: [develop](develop.html).' },
       { t: 'h3', id: 'first-run', text: 'First run' },
       { t: 'ol', items: ['Pick a currency and the name friends see on a bill code.', 'Add a passphrase, if you want one.', '**Write down the recovery key.** It is shown once, and it is the only way back in after a forgotten passphrase.'] },
       { t: 'h3', id: 'data', text: 'Where your data lives' },
@@ -109,7 +130,7 @@ const SECTIONS = [
     id: 'phone',
     title: 'Your phone',
     blocks: [
-      { t: 'p', text: 'The phone app (Android or iPhone) keeps a full copy and works offline. It syncs over your home wifi, with no server.' },
+      { t: 'p', text: 'The phone app (Android; iPhone is not available yet) keeps a full copy and works offline. It syncs over your home wifi, with no server.' },
       { t: 'h3', id: 'pairing', text: 'Pair once' },
       { t: 'ol', items: ['Computer: **settings › phone › add a phone**.', 'Phone: scan the QR code.', 'Type the six digits the computer shows.'] },
       { t: 'h3', id: 'syncing', text: 'Sync' },

@@ -17,7 +17,7 @@ const FEATURES = [
   { icon: 'home', title: 'statistics', text: 'Spending, trends, top categories.', href: 'guide.html#budgeting' },
   { icon: 'documents', title: 'documents', text: 'Receipts, kept encrypted.', href: 'guide.html#documents' },
   { icon: 'debts', title: 'debts', text: 'Who owes whom. Split bills.', href: 'guide.html#debts' },
-  { icon: 'sync', title: 'phone', text: 'Android and iPhone, synced over wifi.', href: 'guide.html#phone' },
+  { icon: 'sync', title: 'phone', text: 'Android, synced over wifi.', href: 'guide.html#phone' },
   { icon: 'export', title: 'backup', text: 'Encrypted backups and exports.', href: 'guide.html#backup' },
   { icon: 'terminal', title: 'command line', text: 'For scripts and AI agents.', href: 'cli.html' },
 ]
@@ -56,7 +56,7 @@ ${features}
 <div class="grid shots">${DESKTOP_SHOTS.map((n) => shot(n, images)).join('')}</div>
 </section>
 <section class="block" id="phone"><h2>on your phone</h2>
-<p>Android and iPhone. A full copy that works offline and syncs straight to the computer over your wifi.</p>
+<p>Android today, iPhone later. A full copy that works offline and syncs straight to the computer over your wifi.</p>
 <div class="grid shots phone">${PHONE_SHOTS.map((n) => shot(n, images)).join('')}</div>
 </section>
 <section class="block" id="private"><h2>private by design</h2>
@@ -64,7 +64,7 @@ ${features}
 <p class="small">More in the guide: <a href="guide.html#privacy">privacy and security</a>.</p>
 </section>
 <section class="block" id="start"><h2>get started</h2>
-<p>Download meowNY for Linux, Windows, Android or iPhone from <a href="${REPO}/releases/latest">the latest release</a>. How to install and update each one: <a href="guide.html#install">install</a>.</p>
+<p>Download meowNY for Linux, Windows or Android from <a href="${REPO}/releases/latest">the latest release</a>. Step by step: <a href="guide.html#install">install</a>. iPhone and Mac are not available yet: <a href="#support">help make it happen</a>.</p>
 <p>To build it yourself: <a href="develop.html">develop</a>. The phone app and its sync: <a href="guide.html#phone">your phone</a>.</p>
 </section>
 <section class="block" id="support"><h2>support meowNY</h2>
