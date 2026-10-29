@@ -97,6 +97,10 @@ export const ro: Messages = {
   'tx.chooseCategory': 'alege o categorie',
   'tx.errorRequired': 'numele, categoria și data plății sunt obligatorii.',
   'tx.errorAmount': 'introdu o sumă mai mare ca zero, cu cel mult două zecimale.',
+  'tx.filters': 'filtre',
+  'tx.filtersCount': 'filtre: {count} active',
+  'tx.perPage': 'rânduri pe pagină',
+  'tx.shared': 'împărțit',
 
   'budgets.expenses': 'cheltuieli',
   'budgets.income': 'venituri',

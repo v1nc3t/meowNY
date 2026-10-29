@@ -16,6 +16,77 @@
   flex: 0 0 auto;
 }
 
+/* The transactions as a table: name, category, date, amount, then the buttons (edit, delete, the chevron: three of 2.25rem). */
+.card-list.tx-list {
+  --cols: minmax(0, 2.2fr) minmax(0, 1.2fr) 7rem 8rem 7rem;
+}
+
+/* An open transaction: the split and the description side by side where there is room, one under the other where there is not. */
+.tx-detail {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 1rem 3rem;
+  padding: 0.5rem 0 0.375rem;
+  font-size: 0.875rem;
+  color: var(--foreground);
+  overflow-wrap: anywhere;
+}
+
+.tx-detail > .detail-section {
+  flex: 1 1 18rem;
+  max-width: 30rem;
+  margin: 0;
+  gap: 0.5rem;
+}
+
+.tx-detail .detail-text {
+  white-space: pre-wrap;
+}
+
+.tx-detail .split-table {
+  background: var(--card);
+}
+
+/* The phone's list, by day: a small heading over the rows of each day. */
+.list-day + .list-day {
+  margin-top: 1.25rem;
+}
+
+.list-day > h2 {
+  margin: 0 0 0.5rem;
+  font-family: var(--font);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  line-height: 1.4;
+  color: var(--muted-foreground);
+}
+
+.list-day > .card-list {
+  margin: 0;
+}
+
+.tap-row > .tx-detail {
+  flex-direction: column;
+  flex-wrap: nowrap;
+  gap: 1rem;
+  padding: 0.25rem 1rem 1rem;
+}
+
+.tap-row > .tx-detail > .detail-section {
+  flex: none;
+  width: 100%;
+  max-width: none;
+}
+
+/* The documents of an open row on the phone: the paper clip and their number, as a button of the same size as the others. */
+.tap-row > .tx-detail .clip {
+  min-height: 2.75rem;
+  padding: 0 0.875rem;
+  color: var(--foreground);
+  border-color: var(--input);
+}
+
 /* "details" under a row: a quiet link that opens the split and the description. */
 .card-body .tx-desc,
 .rec-body .tx-desc {
@@ -65,7 +136,7 @@
 .split-table {
   width: 100%;
   max-width: 28rem;
-  border: 1px solid var(--border);
+  border: var(--border-width) solid var(--border);
   border-radius: var(--radius-md);
   border-spacing: 0;
   font-variant-numeric: tabular-nums;
@@ -93,10 +164,10 @@
   white-space: nowrap;
 }
 
-/* The code button: as narrow as it needs, at the right edge. */
+/* The code button: as narrow as it needs, at the right edge, with room for its shadow. */
 .split-table td:last-child {
   width: 1%;
-  padding: 0 0.25rem 0 0;
+  padding: 0.25rem 0.5rem 0.25rem 0;
   text-align: right;
   white-space: nowrap;
 }
@@ -107,7 +178,7 @@
 
 html.is-phone .split-table th,
 html.is-phone .split-table td {
-  height: 2.75rem;
+  height: 3.5rem;
 }
 
 /* The categories page: the budgets of expenses and income side by side (a card each), then the history. */
@@ -403,7 +474,7 @@ ul.rec-list > li.rec-item {
   padding: 1rem;
   color: var(--card-foreground);
   background: var(--card);
-  border: 1px solid var(--border);
+  border: var(--border-width) solid var(--border);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-xs);
 }
@@ -513,12 +584,10 @@ ul.rec-list > li.rec-item {
 .tx-pane > h2.rec-group {
   display: flex;
   align-items: baseline;
-  gap: 0.5rem;
+  gap: 0.75rem;
   margin: 1.5rem 0 0.75rem;
-  font-size: 1rem;
-  font-weight: 600;
-  line-height: 1.4;
-  letter-spacing: normal;
+  font-size: var(--pixel-md);
+  line-height: 1.2;
 }
 
 .tx-pane > h2.rec-group:first-child {
@@ -606,7 +675,7 @@ html.is-phone .tx-range[data-mode='date'] .tx-date-group {
   flex-direction: column;
   gap: 0.75rem;
   padding: 1rem;
-  border: 1px solid var(--border);
+  border: var(--border-width) solid var(--border);
   border-radius: var(--radius-lg);
 }
 

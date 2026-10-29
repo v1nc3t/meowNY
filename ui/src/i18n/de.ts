@@ -99,6 +99,10 @@ export const de: Messages = {
   'tx.chooseCategory': 'kategorie wählen',
   'tx.errorRequired': 'name, kategorie und zahlungsdatum sind erforderlich.',
   'tx.errorAmount': 'gib einen betrag größer als null mit höchstens zwei nachkommastellen ein.',
+  'tx.filters': 'filter',
+  'tx.filtersCount': 'filter: {count} aktiv',
+  'tx.perPage': 'zeilen pro seite',
+  'tx.shared': 'geteilt',
 
   'budgets.expenses': 'ausgaben',
   'budgets.income': 'einnahmen',

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
+import { useCallback, useEffect, useId, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import AddCategoryModal from '../components/AddCategoryModal'
 import AttachArea from '../components/AttachArea'
@@ -7,6 +7,7 @@ import ClipPreview from '../components/ClipPreview'
 import ConfirmModal from '../components/ConfirmModal'
 import Dropdown, { type DropdownOption } from '../components/Dropdown'
 import Modal, { modalFormId } from '../components/Modal'
+import Icon from '../components/NavIcon'
 import Pick, { PickOption } from '../components/Pick'
 import Button from '../components/ui/Button'
 import { EmptyState } from '../components/ui/Pixel'
@@ -17,6 +18,7 @@ import { debts } from '../api/debts'
 import { errorText } from '../api/invoke'
 import { useToday, type Today } from '../api/today'
 import { transactions as transactionsApi, type Transaction, type TransactionPage } from '../api/transactions'
+import { memoByKey } from '../lib/cache'
 import { categoryOptions } from '../lib/categoriesView'
 import { amountString, formatDate, formatMoney } from '../lib/money'
 import { apiBound, shiftBound, type RangeMode } from '../lib/range'
@@ -93,6 +95,11 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
   // The list waits for a short pause in typing instead of asking the database on every key.
   const searchText = useDebounced(filters.q, 200)
   const categoryNames = useMemo(() => new Map(categories.map((category) => [category.id, category.name])), [categories])
+  const incomeCategories = useMemo(() => new Set(categories.filter((category) => category.type === 'INCOME').map((category) => category.id)), [categories])
+  // the phone keeps the period and the category behind a "filters" button
+  const [filtersOpen, setFiltersOpen] = useState(false)
+  const filtersId = useId()
+  const panelId = useId()
 
   useEffect(() => {
     let cancelled = false
@@ -291,21 +298,32 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
   const pageCount = page && page.limit > 0 ? Math.max(1, Math.ceil(page.total / page.limit)) : 0
   const currentPage = page && page.limit > 0 ? Math.floor(page.offset / page.limit) + 1 : 1
 
-  // The current-month button and the range: beside "add" on a phone, where room is short, and first in the filters elsewhere.
+  const atCurrentMonth = filters.mode === 'month' && filters.from === now.month && filters.to === now.month
+  // how many filters are not as they start (this month, every category): the phone's filters button counts them
+  const activeFilters = (atCurrentMonth ? 0 : 1) + (filters.categoryId ? 1 : 0)
+  const toggle = (id: string) => setOpenId((current) => (current === id ? null : id))
+  const categoryName = (transaction: Transaction) => categoryNames.get(transaction.categoryId) ?? (categoriesReady ? t('tx.deletedCategory') : '')
+
+  // The phone's list is by day, under a heading for each day.
+  const days = useMemo(() => {
+    const groups: { date: string; rows: Transaction[] }[] = []
+    for (const transaction of page?.transactions ?? []) {
+      const last = groups[groups.length - 1]
+      if (last && last.date === transaction.paymentDate) last.rows.push(transaction)
+      else groups.push({ date: transaction.paymentDate, rows: [transaction] })
+    }
+    return groups
+  }, [page])
+
+  // The period: the current month, the kind of range, from and to.
   const rangeControls = (
-    <>
-      <Button
-        variant="outline"
-        disabled={filters.mode === 'month' && filters.from === now.month && filters.to === now.month}
-        onClick={goCurrentMonth}
-        {...tip('today', t('tx.currentMonth'))}
-      >
+    <div className="tx-range" data-mode={filters.mode}>
+      <Button variant="outline" disabled={atCurrentMonth} onClick={goCurrentMonth} {...tip('today', t('tx.currentMonth'))}>
         {t('tx.currentMonth')}
       </Button>
       <Pick
         label={t('tx.range')}
         className="mode"
-        inline={phone}
         text={modeLabel(filters.mode)}
         open={menu === 'range'}
         onToggle={() => setMenu((current) => (current === 'range' ? null : 'range'))}
@@ -324,37 +342,88 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
           </PickOption>
         ))}
       </Pick>
-    </>
+      <div className="tx-date-group">
+        <span>{t('tx.from')}</span>
+        <DatePicker
+          key={`from-${filters.mode}`}
+          kind={filters.mode}
+          value={filters.from}
+          label={t('tx.from')}
+          today={now.date}
+          onChange={(from) => patchFilters({ from })}
+        />
+      </div>
+      <div className="tx-date-group">
+        <span>{t('tx.to')}</span>
+        <DatePicker
+          key={`to-${filters.mode}`}
+          kind={filters.mode}
+          value={filters.to}
+          label={t('tx.to')}
+          today={now.date}
+          onChange={(to) => patchFilters({ to })}
+        />
+      </div>
+    </div>
   )
 
-  return (
-    <section className="tx-page">
-      <div className="tx-title">
-        <h1>{t('tx.title')}</h1>
-        <div className="tx-actions">
-          <Button onClick={() => openAdd()} {...tip('new', t('tx.add'))}>
-            {t('tx.add')}
-          </Button>
-          {phone ? rangeControls : null}
-        </div>
-      </div>
-      <div className="toolbar wide tx-bar">
-        <label className="grow" {...tip('search')}>
-          {t('common.search')}
-          <input
-            ref={searchRef}
-            onKeyDown={(event) => {
-              if (event.key === 'Escape') event.currentTarget.blur()
-            }}
-            value={filters.q}
-            maxLength={255}
-            autoComplete="off"
-            onChange={(event) => patchFilters({ q: event.target.value })}
-          />
-        </label>
+  const categoryPick = (
+    <Pick
+      label={t('common.category')}
+      className="scope"
+      text={scopeLabel()}
+      open={menu === 'category'}
+      onToggle={() => setMenu((current) => (current === 'category' ? null : 'category'))}
+      onClose={() => setMenu(null)}
+    >
+      <PickOption
+        selected={!filters.categoryId}
+        onClick={() => {
+          patchFilters({ categoryId: '' })
+          setMenu(null)
+        }}
+      >
+        {t('tx.allCategories')}
+      </PickOption>
+      {categories.map((category) => (
+        <PickOption
+          key={`category-${category.id}`}
+          selected={filters.categoryId === category.id}
+          onClick={() => {
+            patchFilters({ categoryId: category.id })
+            setMenu(null)
+          }}
+        >
+          {category.name}
+        </PickOption>
+      ))}
+    </Pick>
+  )
+
+  // Under the list: the pages, and how many rows a page has.
+  const foot =
+    page && page.total > 0 ? (
+      <div className="list-foot wide">
+        {pageCount > 1 ? (
+          <div className="page-numbers">
+            {Array.from({ length: pageCount }, (_, index) => {
+              const number = index + 1
+              return (
+                <button
+                  key={number}
+                  type="button"
+                  aria-current={number === currentPage ? 'page' : undefined}
+                  onClick={() => setOffset((number - 1) * (page?.limit ?? limit))}
+                >
+                  {number}
+                </button>
+              )
+            })}
+          </div>
+        ) : null}
         <Pick
-          label={t('tx.show')}
-          className="limit"
+          label={t('tx.perPage')}
+          className="limit per-page"
           text={String(limit)}
           open={menu === 'show'}
           onToggle={() => setMenu((current) => (current === 'show' ? null : 'show'))}
@@ -374,61 +443,239 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
             </PickOption>
           ))}
         </Pick>
-        <Pick
-          label={t('common.category')}
-          className="scope"
-          text={scopeLabel()}
-          open={menu === 'category'}
-          onToggle={() => setMenu((current) => (current === 'category' ? null : 'category'))}
-          onClose={() => setMenu(null)}
-        >
-          <PickOption
-            selected={!filters.categoryId}
-            onClick={() => {
-              patchFilters({ categoryId: '' })
-              setMenu(null)
-            }}
-          >
-            {t('tx.allCategories')}
-          </PickOption>
-          {categories.map((category) => (
-            <PickOption
-              key={`category-${category.id}`}
-              selected={filters.categoryId === category.id}
-              onClick={() => {
-                patchFilters({ categoryId: category.id })
-                setMenu(null)
-              }}
-            >
-              {category.name}
-            </PickOption>
-          ))}
-        </Pick>
-        <div className="tx-range" data-mode={filters.mode}>
-          {phone ? null : rangeControls}
-          <div className="tx-date-group">
-            <span>{t('tx.from')}</span>
-            <DatePicker
-              key={`from-${filters.mode}`}
-              kind={filters.mode}
-              value={filters.from}
-              label={t('tx.from')}
-              today={now.date}
-              onChange={(from) => patchFilters({ from })}
-            />
-          </div>
-          <div className="tx-date-group">
-            <span>{t('tx.to')}</span>
-            <DatePicker
-              key={`to-${filters.mode}`}
-              kind={filters.mode}
-              value={filters.to}
-              label={t('tx.to')}
-              today={now.date}
-              onChange={(to) => patchFilters({ to })}
-            />
-          </div>
+      </div>
+    ) : null
+
+  /** What the person's share was: income in green with a plus, spending plain. */
+  function amount(transaction: Transaction) {
+    const income = incomeCategories.has(transaction.categoryId)
+    const text = formatMoney(transaction.myShare, settings.currency, settings.locale)
+    return <span className={income ? 'cell-amount is-income' : 'cell-amount'}>{income ? `+${text}` : text}</span>
+  }
+
+  /** What a row opens to: the split, with a code for each friend on it, and the description. */
+  function details(transaction: Transaction): ReactNode {
+    return (
+      <>
+        {transaction.split.length > 0 ? (
+          <section className="detail-section">
+            <div className="split-head">
+              <p className="detail-title">{t('split.section')}</p>
+              <p className="split-paid">{t('split.paid', { amount: formatMoney(transaction.amount, settings.currency, settings.locale) })}</p>
+            </div>
+            <table className="split-table">
+              <tbody>
+                <tr className="is-you">
+                  <th scope="row">{t('split.you')}</th>
+                  <td>{formatMoney(transaction.myShare, settings.currency, settings.locale)}</td>
+                  <td />
+                </tr>
+                {transaction.split.map((part) => (
+                  <tr key={`${part.personId ?? 'guest'}-${part.person ?? part.guest}`}>
+                    <th scope="row">{part.person ?? part.guest ?? ''}</th>
+                    <td>{formatMoney(part.amount, settings.currency, settings.locale)}</td>
+                    <td>
+                      {part.personId && part.person ? (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setCoding({ transaction, personId: part.personId ?? '', name: part.person ?? '', part: part.amount })}
+                        >
+                          <Icon name="qr" className="btn-icon" />
+                          {t('code.show')}
+                        </Button>
+                      ) : null}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </section>
+        ) : null}
+        {transaction.description?.trim() ? (
+          <section className="detail-section">
+            <p className="detail-title">{t('common.description')}</p>
+            <p className="detail-text">{transaction.description}</p>
+          </section>
+        ) : null}
+      </>
+    )
+  }
+
+  /** The small marks after a name: shared with friends, and a note. */
+  function marks(transaction: Transaction) {
+    return (
+      <>
+        {transaction.split.length > 0 ? <span className="row-mark">{t('tx.shared')}</span> : null}
+        {transaction.description?.trim() ? (
+          <span className="row-mark-icon" title={t('common.description')}>
+            <Icon name="note" className="mark-icon" />
+            <span className="sr-only">{t('common.description')}</span>
+          </span>
+        ) : null}
+      </>
+    )
+  }
+
+  // A desktop row: name, category, date, amount, then edit, delete and (when there is more to show) the chevron.
+  function tableRow(transaction: Transaction) {
+    const open = openId === transaction.id
+    const more = transaction.split.length > 0 || Boolean(transaction.description?.trim())
+    const count = clips[transaction.id] ?? 0
+    return (
+      <li key={transaction.id} className={open ? 'card-item is-open' : 'card-item'} data-item={`transaction:${transaction.id}`}>
+        <div className="cell-name">
+          <span className="card-name" title={transaction.name}>
+            {transaction.name}
+          </span>
+          {marks(transaction)}
+          {count ? <ClipPreview inline target={{ kind: 'transaction', id: transaction.id }} name={transaction.name} count={count} /> : null}
         </div>
+        <span className="cell-sub">{categoryName(transaction)}</span>
+        <span className="cell-sub-end">{formatDate(transaction.paymentDate, settings.locale)}</span>
+        {amount(transaction)}
+        <div className="cell-actions">
+          <Button variant="ghost" size="icon" className="icon-btn" aria-label={t('common.edit')} title={t('common.edit')} data-row-focus onClick={() => openEdit(transaction)}>
+            <Icon name="pencil" className="btn-icon" />
+          </Button>
+          <Button variant="ghost" size="icon" className="icon-btn is-danger" aria-label={t('common.delete')} title={t('common.delete')} onClick={() => setDeleting(transaction)}>
+            <Icon name="trash" className="btn-icon" />
+          </Button>
+          {more ? (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="icon-btn"
+              aria-expanded={open}
+              aria-controls={open ? `${panelId}-${transaction.id}` : undefined}
+              aria-label={t('common.details')}
+              title={t('common.details')}
+              onClick={() => toggle(transaction.id)}
+            >
+              <Icon name="chevron-down" className="btn-icon chevron" />
+            </Button>
+          ) : (
+            <span className="icon-slot" />
+          )}
+        </div>
+        {open ? (
+          <div className="row-panel tx-detail" id={`${panelId}-${transaction.id}`}>
+            {details(transaction)}
+          </div>
+        ) : null}
+      </li>
+    )
+  }
+
+  // A phone row: one button with the name and amount, the category and marks under them. It opens to the details and to labelled
+  // buttons for everything that can be done with the transaction.
+  function tapRow(transaction: Transaction) {
+    const open = openId === transaction.id
+    const count = clips[transaction.id] ?? 0
+    return (
+      <li key={transaction.id} className={open ? 'card-item tap-row is-open' : 'card-item tap-row'} data-item={`transaction:${transaction.id}`}>
+        <button
+          type="button"
+          className="row-toggle"
+          aria-expanded={open}
+          aria-controls={open ? `${panelId}-${transaction.id}` : undefined}
+          onClick={() => toggle(transaction.id)}
+        >
+          <span className="cell-name">
+            <span className="card-name">{transaction.name}</span>
+          </span>
+          {amount(transaction)}
+          <span className="cell-sub">
+            <span>{categoryName(transaction)}</span>
+            {marks(transaction)}
+            {count ? (
+              <span className="row-mark-icon">
+                <Icon name="clip" className="mark-icon" />
+                <span aria-hidden="true">{count}</span>
+                <span className="sr-only">{t('docs.clip', { count })}</span>
+              </span>
+            ) : null}
+          </span>
+          <Icon name="chevron-down" className="chevron" />
+        </button>
+        {open ? (
+          <div className="row-panel tx-detail" id={`${panelId}-${transaction.id}`}>
+            {details(transaction)}
+            {count ? (
+              <section className="detail-section">
+                <p className="detail-title">{t('docs.title')}</p>
+                <ClipPreview target={{ kind: 'transaction', id: transaction.id }} name={transaction.name} count={count} />
+              </section>
+            ) : null}
+            <div className="row-panel-actions">
+              <Button variant="outline" onClick={() => openEdit(transaction)}>
+                <Icon name="pencil" className="btn-icon" />
+                {t('common.edit')}
+              </Button>
+              <Button variant="outline" className="row-danger" onClick={() => setDeleting(transaction)}>
+                <Icon name="trash" className="btn-icon" />
+                {t('common.delete')}
+              </Button>
+            </div>
+          </div>
+        ) : null}
+      </li>
+    )
+  }
+
+  return (
+    <section className="tx-page">
+      <div className="tx-title one-line">
+        <h1>{t('tx.title')}</h1>
+        <Button onClick={() => openAdd()} {...tip('new', t('tx.add'))}>
+          {t('tx.add')}
+        </Button>
+      </div>
+      <div className="toolbar wide tx-bar filter-bar">
+        <label className="grow" {...tip('search')}>
+          {t('common.search')}
+          <input
+            ref={searchRef}
+            onKeyDown={(event) => {
+              if (event.key === 'Escape') event.currentTarget.blur()
+            }}
+            value={filters.q}
+            maxLength={255}
+            autoComplete="off"
+            onChange={(event) => patchFilters({ q: event.target.value })}
+          />
+        </label>
+        {phone ? (
+          <>
+            <Button
+              variant="outline"
+              className="filter-toggle"
+              aria-expanded={filtersOpen}
+              aria-controls={filtersOpen ? filtersId : undefined}
+              aria-label={activeFilters > 0 ? t('tx.filtersCount', { count: activeFilters }) : undefined}
+              onClick={() => setFiltersOpen((open) => !open)}
+            >
+              <Icon name="filter" className="btn-icon" />
+              {t('tx.filters')}
+              {activeFilters > 0 ? (
+                <span className="count-badge" aria-hidden="true">
+                  {activeFilters}
+                </span>
+              ) : null}
+            </Button>
+            {filtersOpen ? (
+              <div className="filter-panel" id={filtersId}>
+                {rangeControls}
+                {categoryPick}
+              </div>
+            ) : null}
+          </>
+        ) : (
+          <>
+            {rangeControls}
+            {categoryPick}
+          </>
+        )}
       </div>
       {adding || editing ? (
         <TransactionModal
@@ -461,133 +708,53 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
       {page ? (
         <>
           <div className="tx-pane wide">
-            {page.transactions.length === 0 ? <EmptyState text={t('tx.empty')} /> : null}
-            <ul className="card-list">
-              {page.transactions.map((transaction) => (
-                <li key={transaction.id} className="card-item" data-item={`transaction:${transaction.id}`}>
-                  <div className="card-body">
-                    <p className="card-name">{transaction.name}</p>
-                    <p className="card-meta">
-                      <span className="card-amount">{formatMoney(transaction.myShare, settings.currency, settings.locale)}</span>
-                      {[
-                        categoryNames.get(transaction.categoryId) ?? (categoriesReady ? t('tx.deletedCategory') : ''),
-                        formatDate(transaction.paymentDate, settings.locale),
-                      ]
-                        .filter(Boolean)
-                        .map((part) => ` \u00b7 ${part}`)
-                        .join('')}
-                      {clips[transaction.id] ? (
-                        <>
-                          {' \u00b7 '}
-                          <ClipPreview inline target={{ kind: 'transaction', id: transaction.id }} name={transaction.name} count={clips[transaction.id] ?? 0} />
-                        </>
-                      ) : null}
-                    </p>
-                    {transaction.split.length > 0 || transaction.description?.trim() ? (
-                      <Button
-                        variant="link"
-                        className="tx-desc"
-                        aria-expanded={openId === transaction.id}
-                        onClick={() => setOpenId((current) => (current === transaction.id ? null : transaction.id))}
-                      >
-                        {t('common.details')}
-                      </Button>
-                    ) : null}
-                    {openId === transaction.id ? (
-                      <div className="card-detail">
-                        {transaction.split.length > 0 ? (
-                          <section className="detail-section">
-                            <div className="split-head">
-                              <p className="detail-title">{t('split.section')}</p>
-                              <p className="split-paid">{t('split.paid', { amount: formatMoney(transaction.amount, settings.currency, settings.locale) })}</p>
-                            </div>
-                            <table className="split-table">
-                              <tbody>
-                                <tr className="is-you">
-                                  <th scope="row">{t('split.you')}</th>
-                                  <td>{formatMoney(transaction.myShare, settings.currency, settings.locale)}</td>
-                                  <td />
-                                </tr>
-                                {transaction.split.map((part) => (
-                                  <tr key={`${part.personId ?? 'guest'}-${part.person ?? part.guest}`}>
-                                    <th scope="row">{part.person ?? part.guest ?? ''}</th>
-                                    <td>{formatMoney(part.amount, settings.currency, settings.locale)}</td>
-                                    <td>
-                                      {part.personId && part.person ? (
-                                        <Button
-                                          variant="ghost"
-                                          size="sm"
-                                          onClick={() => setCoding({ transaction, personId: part.personId ?? '', name: part.person ?? '', part: part.amount })}
-                                        >
-                                          {t('code.show')}
-                                        </Button>
-                                      ) : null}
-                                    </td>
-                                  </tr>
-                                ))}
-                              </tbody>
-                            </table>
-                          </section>
-                        ) : null}
-                        {transaction.description?.trim() ? (
-                          <section className="detail-section">
-                            <p className="detail-title">{t('common.description')}</p>
-                            <p>{transaction.description}</p>
-                          </section>
-                        ) : null}
-                      </div>
-                    ) : null}
-                  </div>
-                  <div className="card-actions">
-                    <Button variant="ghost" size="sm" data-row-focus onClick={() => openEdit(transaction)}>
-                      {t('common.edit')}
-                    </Button>
-                    {(() => {
-                      // a bill shared with friends has a code for each of them: one friend opens it, several open the details to choose
-                      const friends = transaction.split.filter((part) => part.personId && part.person)
-                      const [only] = friends
-                      if (friends.length === 0) return null
-                      return (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() =>
-                            friends.length === 1 && only
-                              ? setCoding({ transaction, personId: only.personId ?? '', name: only.person ?? '', part: only.amount })
-                              : setOpenId(transaction.id)
-                          }
-                        >
-                          {t('code.show')}
-                        </Button>
-                      )
-                    })()}
-                    <Button variant="ghost" size="sm" className="row-danger" onClick={() => setDeleting(transaction)}>
-                      {t('common.delete')}
-                    </Button>
-                  </div>
+            {page.transactions.length === 0 ? (
+              <EmptyState text={t('tx.empty')} />
+            ) : phone ? (
+              days.map((day) => (
+                <div key={day.date} className="list-day">
+                  <h2>{dayHeading(day.date, settings.locale, now.date.slice(0, 4))}</h2>
+                  <ul className="card-list tx-list">{day.rows.map(tapRow)}</ul>
+                </div>
+              ))
+            ) : (
+              <ul className="card-list is-table tx-list">
+                <li className="list-head" aria-hidden="true">
+                  <span>{t('common.name')}</span>
+                  <span>{t('common.category')}</span>
+                  <span>{t('sync.field.date')}</span>
+                  <span className="is-end">{t('tx.amount')}</span>
+                  <span />
                 </li>
-              ))}
-            </ul>
+                {page.transactions.map(tableRow)}
+              </ul>
+            )}
+            {phone ? foot : null}
           </div>
-          <div className="page-numbers">
-            {Array.from({ length: pageCount }, (_, index) => {
-              const number = index + 1
-              return (
-                <button
-                  key={number}
-                  type="button"
-                  aria-current={number === currentPage ? 'page' : undefined}
-                  onClick={() => setOffset((number - 1) * (page?.limit ?? limit))}
-                >
-                  {number}
-                </button>
-              )
-            })}
-          </div>
+          {phone ? null : foot}
         </>
       ) : null}
     </section>
   )
+}
+
+const dayFormat = memoByKey(
+  (locale: string, withYear: boolean) => `${locale}|${withYear}`,
+  (locale: string, withYear: boolean) => {
+    try {
+      return new Intl.DateTimeFormat(locale, { weekday: 'short', day: 'numeric', month: 'short', ...(withYear ? { year: 'numeric' } : {}), timeZone: 'UTC' })
+    } catch {
+      return null
+    }
+  },
+)
+
+/** "wed 28 oct": the heading of a day in the phone's list, in the words of the locale, with the year when it is not this one. */
+function dayHeading(isoDate: string, locale: string, thisYear: string): string {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(isoDate)
+  if (!match) return isoDate
+  const date = new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3])))
+  return dayFormat(locale, match[1] !== thisYear)?.format(date).toLowerCase() ?? isoDate
 }
 
 // Add and edit share this modal. Field order: name, amount, category, date, description.

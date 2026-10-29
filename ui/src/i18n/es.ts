@@ -98,6 +98,10 @@ export const es: Messages = {
   'tx.chooseCategory': 'elige una categoría',
   'tx.errorRequired': 'el nombre, la categoría y la fecha de pago son obligatorios.',
   'tx.errorAmount': 'escribe un importe mayor que cero, con como máximo dos decimales.',
+  'tx.filters': 'filtros',
+  'tx.filtersCount': 'filtros: {count} activos',
+  'tx.perPage': 'filas por página',
+  'tx.shared': 'compartido',
 
   'budgets.expenses': 'gastos',
   'budgets.income': 'ingresos',

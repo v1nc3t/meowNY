@@ -107,6 +107,10 @@ export const en = {
   'tx.chooseCategory': 'choose a category',
   'tx.errorRequired': 'name, category, and payment date are required.',
   'tx.errorAmount': 'enter an amount greater than zero, with at most two decimals.',
+  'tx.filters': 'filters',
+  'tx.filtersCount': 'filters: {count} on',
+  'tx.perPage': 'rows per page',
+  'tx.shared': 'shared',
 
   // Budgets
   'budgets.expenses': 'expenses',

@@ -1,15 +1,29 @@
 /* Design tokens: colours for the light and dark themes, radii and shadows, and the root text settings. Plain hex and rgb only, because the Linux and Android web views differ in what newer colour syntax they know. */
 
+/* The pixel font of titles, buttons, tabs and column headers (Departure Mono, SIL Open Font License: assets/fonts/OFL.txt). It is drawn on
+   an 11px grid, so it is set in multiples of 11px, where every pixel of a letter is a whole pixel of the screen. */
+@font-face {
+  font-family: 'Departure Mono';
+  src: url('../assets/fonts/DepartureMono-Regular.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
 :root {
-  /* One font for everything: headings, text, buttons, fields and labels. */
+  /* One font for text, buttons, fields and labels; the pixel font (above) for titles, at 22px and more. */
   --font: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+  --font-pixel: 'Departure Mono', var(--font);
+  --pixel-md: 22px;
+  --pixel-lg: 33px;
+  --pixel-xl: 44px;
   /* Room that a scrolling area keeps around its content, so a scroll bar never covers the edge of a button
      and a focus ring at the edge is not cut off. */
   --edge: 0.25rem;
   --room: 0.875rem;
 
-  /* Pixel-sharp, like the logo: square corners everywhere, and only what floats (a menu, a dialog, a message) casts a
-     shadow, a hard one with no blur, as in pixel art. */
+  /* Pixel-sharp, like the logo: square corners everywhere, and hard shadows with no blur, as in pixel art: a button stands on one
+     (it goes when the button is pressed), and what floats (a menu, a dialog, a message) casts a bigger one. */
   --radius: 0;
   --radius-sm: 0;
   --radius-md: 0;
@@ -17,8 +31,17 @@
   --radius-xl: 0;
   --shadow-xs: 0 0 #0000;
   --shadow-sm: 0 0 #0000;
-  --shadow-md: 3px 3px 0 rgb(0 0 0 / 0.16);
-  --shadow-lg: 4px 4px 0 rgb(0 0 0 / 0.24);
+  --shadow-press: 2px 2px 0 var(--press-shadow);
+  --shadow-md: 3px 3px 0 var(--press-shadow);
+  --shadow-lg: 4px 4px 0 var(--press-shadow);
+  /* Boxes (lists, cards, fields, buttons, dialogs) have pixel-thick lines. */
+  --border-width: 2px;
+  /* Motion answers an action, briefly. Small changes of state snap in steps, like a sprite. base.css turns it all off when the system
+     asks for less motion. */
+  --ease-snap: cubic-bezier(0.2, 0.9, 0.3, 1);
+  --ease-step: steps(3, end);
+  --t-fast: 110ms;
+  --t-med: 180ms;
   /* The gold of the logo's coin: a budget that is nearly used up. */
   --gold: #e8a317;
   /* The dim layer behind a modal. */
@@ -47,6 +70,8 @@
   --input: #8f8f8f;
   --ring: #166534;
   --ring-soft: #16653440;
+  /* The hard shadow under a button or a raised box: dark on the light theme, a light tint on the dark one, so it always shows. */
+  --press-shadow: rgb(0 0 0 / 0.25);
   --sidebar: #f5f5f5;
   --success: #15803d;
   /* Amber for a warning that is not an error. */
@@ -110,6 +135,7 @@
   --input: #5c5c5c;
   --ring: #2e9e5e;
   --ring-soft: #2e9e5e59;
+  --press-shadow: rgb(255 255 255 / 0.2);
   --sidebar: #111111;
   --success: #4ade80;
   --warning: #e0af68;
@@ -154,6 +180,7 @@
     --input: #5c5c5c;
     --ring: #2e9e5e;
     --ring-soft: #2e9e5e59;
+    --press-shadow: rgb(255 255 255 / 0.2);
     --sidebar: #111111;
     --success: #4ade80;
     --warning: #e0af68;

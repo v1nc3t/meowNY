@@ -1,27 +1,52 @@
 /* The top of a list page: title, actions, filter bar and page numbers, shared by several pages. */
 
+/* Page numbers are small square buttons; the page you are on is a solid block in the main colour. */
 .page-numbers {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 0.5rem;
-}
-
-/* Page numbers are small ghost buttons; the page you are on is outlined. */
-.page-numbers {
   gap: 0.25rem;
 }
 
 .page-numbers button {
-  min-width: 2rem;
+  min-width: 2.25rem;
+  min-height: 2.25rem;
   padding: 0 0.5rem;
+  font-size: 0.875rem;
+  border-color: var(--border);
 }
 
 .page-numbers button[aria-current='page'] {
-  color: var(--foreground);
-  background: var(--background);
-  border-color: var(--input);
-  box-shadow: var(--shadow-xs);
+  color: var(--primary-foreground);
+  background: var(--primary);
+  border-color: var(--primary);
+}
+
+/* Under a list: the page numbers on the left, how many rows a page shows on the right, its label beside it. Its list opens upwards,
+   at the bottom of the window. */
+.list-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem 1.5rem;
+  width: 100%;
+  max-width: none;
+}
+
+.list-foot > .per-page {
+  flex-direction: row;
+  align-items: center;
+  gap: 0.75rem;
+  margin-left: auto;
+  color: var(--muted-foreground);
+}
+
+.list-foot > .per-page .pick-list {
+  top: auto;
+  bottom: calc(100% + 0.25rem);
+  right: 0;
+  left: auto;
 }
 
 .toolbar {
@@ -61,10 +86,8 @@
 
 .tx-title h1 {
   margin: 0;
-  font-size: 1.5rem;
-  font-weight: 600;
+  font-size: var(--pixel-md);
   line-height: 1.2;
-  letter-spacing: -0.025em;
 }
 
 .tx-title:has(> .tx-actions),
@@ -78,6 +101,16 @@
   display: flex;
   align-items: center;
   gap: 0.75rem;
+}
+
+/* A title with its one action on the same line: the title on the left, the action at the right edge (under it when there is no room). */
+.app-main main > section > .tx-title.one-line {
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem 1.5rem;
+  width: 100%;
 }
 
 .toolbar.tx-bar {
@@ -193,6 +226,60 @@
 .toolbar.tx-bar {
   flex-wrap: wrap-reverse;
   align-items: flex-start;
+}
+
+/* The filters of the transactions: the search grows, then the period and the category, on one line where they fit; what does not
+   fit goes to the next line, under the search. Labels stay above their fields, and the fields line up at the bottom. */
+.toolbar.tx-bar.filter-bar {
+  container-type: inline-size;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 1rem;
+}
+
+.filter-bar > .grow {
+  flex: 1 1 10rem;
+}
+
+/* Not room for all of it on one line: the search has the first line to itself, the period and the category share the next. */
+@container (max-width: 64rem) {
+  .filter-bar > .grow {
+    flex-basis: 100%;
+  }
+}
+
+.filter-bar .tx-range {
+  gap: 0.75rem 0.5rem;
+}
+
+/* The phone: the search and the "filters" button on one line; the button opens the period and the category under them, in a box. */
+.filter-toggle[aria-expanded='true'] {
+  --btn-fill: var(--accent);
+  box-shadow: none;
+}
+
+.filter-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  flex: 1 1 100%;
+  min-width: 0;
+  padding: 1rem;
+  background: var(--card);
+  border: var(--border-width) solid var(--border);
+  animation: panel-in var(--t-med) var(--ease-step);
+}
+
+.filter-panel .pick.scope,
+.filter-panel .pick.scope .pick-button,
+.filter-panel .pick.mode .pick-button,
+.filter-panel .tx-range > .ui-btn {
+  width: 100%;
+}
+
+.filter-panel .tx-range > .ui-btn {
+  align-self: end;
+  height: 2.75rem;
 }
 
 /* A phone: "current month" and the range sit beside "add transaction"; from and to are side by side, level with each other. */
