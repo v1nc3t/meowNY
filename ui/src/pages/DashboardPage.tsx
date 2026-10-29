@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { debts, type Summary } from '../api/debts'
 import { errorText } from '../api/invoke'
 import { monthNames, shiftMonth, withYear, yearChoices } from '../api/months'
@@ -7,15 +7,19 @@ import Dropdown from '../components/Dropdown'
 import Badge from '../components/ui/Badge'
 import Button from '../components/ui/Button'
 import { Card, CardAction, CardContent, CardHeader, CardTitle } from '../components/ui/Card'
+import { EmptyState, Illustration, type PictureName } from '../components/ui/Pixel'
 import RecurringDashboard, { SOON_DAYS } from '../components/RecurringDashboard'
 import { recurring, type Dues, type Recurring } from '../api/recurring'
 import { stats, type BudgetVsActual, type Commitments, type PlannedVsPaid, type TopCategory, type YearPoint } from '../api/stats'
 import { useToday, type Today } from '../api/today'
+import { transactions } from '../api/transactions'
 import { formatMoney, formatPercent, toMinor } from '../lib/money'
 import { useSticky } from '../lib/sticky'
 import { useMoneySettings, type MoneySettings } from '../hooks/useMoneySettings'
 import { useToast } from '../hooks/toast'
+import { useProfile } from '../hooks/profile'
 import { useI18n, useT } from '../i18n/context'
+import type { MessageKey } from '../i18n/en'
 import { useShortcut } from '../keys/registry'
 import { changePercent, niceCeil, savingsRateText, slicePath, usedPercent } from './dashboardMath'
 
@@ -45,7 +49,23 @@ function DashboardView({ settings, now }: { settings: MoneySettings; now: Today 
   const [owed, setOwed] = useState<Summary | null>(null)
   // the recurring items that are overdue or due soon, and all of them (for those that are split): they do not follow the month either
   const [recurringNow, setRecurringNow] = useState<{ dues: Dues; items: Recurring[] } | null>(null)
+  // Whether nothing at all has been recorded yet (no transaction in any month): then the first steps show. Unknown at first.
+  const [fresh, setFresh] = useState<boolean | null>(null)
   const say = useToast()
+  const navigate = useNavigate()
+
+  useEffect(() => {
+    let cancelled = false
+    void transactions.list({ limit: 1 }).then(
+      (page) => {
+        if (!cancelled) setFresh(page.total === 0)
+      },
+      () => undefined,
+    )
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   useEffect(() => {
     let cancelled = false
@@ -113,6 +133,7 @@ function DashboardView({ settings, now }: { settings: MoneySettings; now: Today 
       </div>
       {data && point ? (
         <div className="tx-pane wide dash">
+          {fresh ? <FirstSteps /> : null}
           <Card className="dash-top">
             <CardHeader>
               <CardAction>
@@ -140,7 +161,12 @@ function DashboardView({ settings, now }: { settings: MoneySettings; now: Today 
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <Spending top={data.top} total={expenseTotal} settings={settings} />
+                  <Spending
+                    top={data.top}
+                    total={expenseTotal}
+                    settings={settings}
+                    onAdd={fresh === false ? () => navigate('/app/transactions', { state: { add: true } }) : undefined}
+                  />
                 </CardContent>
               </Card>
               <Card>
@@ -198,6 +224,45 @@ function DashboardView({ settings, now }: { settings: MoneySettings; now: Today 
           ) : null}
         </div>
       ) : null}
+    </section>
+  )
+}
+
+type FirstStep = { picture: PictureName; title: MessageKey; text: MessageKey; to: string; state?: object; desktopOnly?: boolean }
+
+/**
+ * The ways to start, each a picture and a link to the page that does it. The transaction form (and on a phone the friend form) opens
+ * at once.
+ */
+const FIRST_STEPS: FirstStep[] = [
+  { picture: 'spend', title: 'dashboard.firstAdd', text: 'dashboard.firstAddText', to: '/app/transactions', state: { add: true } },
+  { picture: 'budget', title: 'dashboard.firstBudget', text: 'dashboard.firstBudgetText', to: '/app/categories' },
+  { picture: 'share', title: 'dashboard.firstFriend', text: 'dashboard.firstFriendText', to: '/app/debts', state: { addFriend: true } },
+  { picture: 'sync', title: 'dashboard.firstPhone', text: 'dashboard.firstPhoneText', to: '/app/settings?section=phone',
+    desktopOnly: true },
+]
+
+/** For someone who has recorded nothing yet: what to do first. It goes once there is a transaction. */
+function FirstSteps() {
+  const t = useT()
+  const phone = useProfile() === 'phone'
+  return (
+    <section className="first-steps notch" aria-labelledby="first-steps-title">
+      <h2 id="first-steps-title">{t('dashboard.firstTitle')}</h2>
+      <p className="hint">{t('dashboard.firstText')}</p>
+      <ul className="first-steps-list">
+        {FIRST_STEPS.filter((step) => !(phone && step.desktopOnly)).map((step) => (
+          <li key={step.picture}>
+            <Link className="first-step notch" to={step.to} state={step.state}>
+              <Illustration name={step.picture} scale={3} />
+              <span className="first-step-text">
+                <b>{t(step.title)}</b>
+                <span>{t(step.text)}</span>
+              </span>
+            </Link>
+          </li>
+        ))}
+      </ul>
     </section>
   )
 }
@@ -423,12 +488,18 @@ function YearCharts({ year, month, onPick, settings }: { year: YearPoint[]; mont
 // How far a slice runs under the next one (a fraction of the way round), so that no thin gap shows between two slices.
 const DONUT_OVERLAP = 0.0015
 
-/** Expenses by category as a donut and a list. Hovering a list row or a slice highlights both. */
-function Spending({ top, total, settings }: { top: TopCategory[]; total: string; settings: MoneySettings }) {
+/**
+ * Expenses by category as a donut and a list. Hovering a list row or a slice highlights both. A month with nothing in it offers to
+ * add a transaction (`onAdd`), unless the first steps already do.
+ */
+function Spending({ top, total, settings, onAdd }: { top: TopCategory[]; total: string; settings: MoneySettings; onAdd?: () => void }) {
   const t = useT()
   const [hover, setHover] = useState<number | null>(null)
   const sum = Number(total)
-  if (!(sum > 0)) return <p className="dash-empty">{t('dashboard.empty')}</p>
+  if (!(sum > 0)) {
+    if (onAdd) return <EmptyState text={t('dashboard.empty')} action={{ label: t('tx.add'), onClick: onAdd }} />
+    return <p className="dash-empty">{t('dashboard.empty')}</p>
+  }
   const money = (amount: string) => formatMoney(amount, settings.currency, settings.locale)
   const items = top.map((c, i) => ({ key: i, name: c.name, amount: c.actual, value: Number(c.actual) }))
   const rest = sum - items.reduce((left, item) => left + item.value, 0)

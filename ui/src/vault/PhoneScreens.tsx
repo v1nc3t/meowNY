@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react'
+import { useRef, useState, type FormEvent } from 'react'
 import { PHONE_PLACEHOLDER_CURRENCY, wantsLongerPassphrase } from '../api/sync'
 import Dropdown from '../components/Dropdown'
 import { useNotice } from '../hooks/useNotice'
@@ -10,12 +10,20 @@ import { atLeast, closeKeyboard, useRefocus } from './unlockFlow'
 import PasswordField from './PasswordField'
 import { defaultSettings, phonePassphraseProblem } from './rules'
 import Button from '../components/ui/Button'
-import { Logo } from '../components/ui/Pixel'
+import { Illustration, Logo, type PictureName } from '../components/ui/Pixel'
+import type { MessageKey } from '../i18n/en'
+
+/** What the phone is for, on its first screen. */
+const PHONE_FEATURES: { picture: PictureName; title: MessageKey; text: MessageKey }[] = [
+  { picture: 'spend', title: 'phone.featAddTitle', text: 'phone.featAddText' },
+  { picture: 'sync', title: 'phone.featPairTitle', text: 'phone.featPairText' },
+  { picture: 'lock', title: 'phone.featPrivateTitle', text: 'phone.featPrivateText' },
+]
 
 /**
- * First start on a phone: a language and a passphrase, nothing else. The phone is a copy of the desktop, so its currency, number
- * format and time zone come from the desktop with the first pairing (the placeholder currency is replaced, not converted), and
- * there is no recovery key: if the passphrase is lost, the phone is erased and paired again.
+ * First start on a phone: what the phone is for, then a language and a passphrase, nothing else. The phone is a copy of the
+ * desktop, so its currency, number format and time zone come from the desktop with the first pairing (the placeholder currency is
+ * replaced, not converted), and there is no recovery key: if the passphrase is lost, the phone is erased and paired again.
  */
 export function PhoneFirstRun({ onDone }: { onDone: () => void }) {
   const { t, language, setLanguage } = useI18n()
@@ -24,6 +32,18 @@ export function PhoneFirstRun({ onDone }: { onDone: () => void }) {
   const [workDone, setWorkDone] = useState(false)
   const [typed, setTyped] = useState('')
   const formRef = useRefocus(busy)
+  // The form stays drawn (hidden) behind the first screen, so going back to it keeps what was typed.
+  const [intro, setIntro] = useState(true)
+  const [back, setBack] = useState(false)
+  const introRef = useRef<HTMLElement>(null)
+
+  function showForm(show: boolean) {
+    setIntro(!show)
+    setBack(!show)
+    setMessage('')
+    // the first thing of the new screen takes the focus, for the keyboard and a screen reader
+    requestAnimationFrame(() => (show ? formRef.current : introRef.current)?.querySelector<HTMLElement>('.pick-button, .ui-btn')?.focus())
+  }
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -48,8 +68,38 @@ export function PhoneFirstRun({ onDone }: { onDone: () => void }) {
   }
 
   return (
-    <main className="gate">
-      <form ref={formRef} onSubmit={onSubmit}>
+    <main className="gate onboard">
+      <section
+        ref={introRef}
+        className={`panel onboard-welcome ${back ? 'is-back' : 'is-forward'}`}
+        hidden={!intro}
+        aria-labelledby="phone-intro-title"
+      >
+        <p className="brand-mark">
+          <Logo />
+          meowny
+        </p>
+        <h1 id="phone-intro-title" className="onboard-headline">
+          {t('phone.introHeadline')}
+        </h1>
+        <p className="onboard-lead">{t('phone.introText')}</p>
+        <ul className="onboard-features">
+          {PHONE_FEATURES.map((feature) => (
+            <li key={feature.picture} className="onboard-tile notch">
+              <Illustration name={feature.picture} scale={3} />
+              <span className="onboard-tile-text">
+                <b>{t(feature.title)}</b>
+                <span>{t(feature.text)}</span>
+              </span>
+            </li>
+          ))}
+        </ul>
+        <div className="onboard-actions">
+          <Button onClick={() => showForm(true)}>{t('welcome.start')}</Button>
+        </div>
+      </section>
+
+      <form ref={formRef} className="onboard-form is-forward" onSubmit={onSubmit} hidden={intro}>
         <p className="brand-mark">
           <Logo />
           meowny
@@ -72,6 +122,9 @@ export function PhoneFirstRun({ onDone }: { onDone: () => void }) {
 
         <Button type="submit" disabled={busy}>
           {t('phone.welcomeCreate')}
+        </Button>
+        <Button variant="outline" disabled={busy} onClick={() => showForm(false)}>
+          {t('common.back')}
         </Button>
         <p className="notice" role="alert">
           {message}

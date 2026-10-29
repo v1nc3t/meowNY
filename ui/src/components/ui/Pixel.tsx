@@ -1,6 +1,9 @@
+import Button from './Button'
+
 /**
- * The pixel art of the app: the logo (the coin cat of scripts/logo.py, served as /favicon.svg) and a dozing cat for a
- * list with nothing in it yet. Both are drawn on a pixel grid, so they are shown at whole multiples of the grid.
+ * The pixel art of the app: the logo (the coin cat of scripts/logo.py, served as /favicon.svg), a dozing cat for a list with nothing
+ * in it yet, and the small pictures of what the app does (first start, first steps). All are drawn on a pixel grid, so they are
+ * shown at whole multiples of the grid.
  */
 
 /** The logo. `size` in CSS pixels, a multiple of 16 so every pixel stays square. */
@@ -8,7 +11,7 @@ export function Logo({ size = 32, className }: { size?: number; className?: stri
   return <img src="/favicon.svg" width={size} height={size} alt="" className={className ? `pixel-logo ${className}` : 'pixel-logo'} />
 }
 
-// K is the text colour (muted where it is used), Y the gold of the logo.
+// K is the text colour (muted where it is used), Y the gold of the logo, G the green of the app.
 const DOZING_CAT = [
   '................YYYY',
   '...................Y',
@@ -23,7 +26,7 @@ const DOZING_CAT = [
   '.KKKKKKKKKKKKKKKKKK.',
 ]
 
-const FILLS: Record<string, string> = { K: 'currentColor', Y: 'var(--gold)' }
+const FILLS: Record<string, string> = { K: 'currentColor', Y: 'var(--gold)', G: 'var(--primary)' }
 
 /** One path per colour, each pixel run along a row as a rectangle. */
 function paths(rows: readonly string[]) {
@@ -46,8 +49,8 @@ function paths(rows: readonly string[]) {
 
 const CAT_PATHS = paths(DOZING_CAT)
 
-/** A list with nothing in it: the dozing cat over the hint. */
-export function EmptyState({ text }: { text: string }) {
+/** A list with nothing in it: the dozing cat over the hint, and a button for the first thing to do when there is one. */
+export function EmptyState({ text, action }: { text: string; action?: { label: string; onClick: () => void } }) {
   const w = DOZING_CAT[0].length
   const h = DOZING_CAT.length
   return (
@@ -56,6 +59,125 @@ export function EmptyState({ text }: { text: string }) {
         {CAT_PATHS}
       </svg>
       <p className="hint">{text}</p>
+      {action ? <Button onClick={action.onClick}>{action.label}</Button> : null}
     </div>
+  )
+}
+
+// What the app does, one 16x16 picture each: a receipt with a coin (spending), a jar that fills (budgets), two cats and a coin
+// (bills shared with friends), a padlock (private, on this device) and a laptop with a phone (the two kept in step).
+const PICTURES = {
+  spend: [
+    '................',
+    '.KKKKKKKKKK.....',
+    '.K........K.....',
+    '.K.KKKKKK.K.....',
+    '.K........K.....',
+    '.K.KKKK...K.....',
+    '.K........K.....',
+    '.K.KKKKK..K.....',
+    '.K........KKKK..',
+    '.K.KKK...KYYYYK.',
+    '.K......KYYYYYYK',
+    '.K......KYYKKYYK',
+    '.K.K.K.KKYYKKYYK',
+    '..K.K.K.KYYYYYYK',
+    '.........KYYYYK.',
+    '..........KKKK..',
+  ],
+  budget: [
+    '......YYYY......',
+    '.....YYYYYY.....',
+    '.....YYYYYY.....',
+    '......YYYY......',
+    '................',
+    '...KKKK..KKKK...',
+    '...KKKKKKKKKK...',
+    '....K......K....',
+    '...K........K...',
+    '...K........K...',
+    '...KGGGGGGGGK...',
+    '...KGGGGGGGGK...',
+    '...KGGGGGGGGK...',
+    '...KGGGGGGGGK...',
+    '...KKKKKKKKKK...',
+    '................',
+  ],
+  share: [
+    '................',
+    '................',
+    '......YYYY......',
+    '.....YYYYYY.....',
+    '.....YYYYYY.....',
+    '......YYYY......',
+    '................',
+    'K....K....G....G',
+    'KK..KK....GG..GG',
+    'KKKKKK....GGGGGG',
+    'K.KK.K....G.GG.G',
+    'KKKKKK....GGGGGG',
+    'KKKKKK....GGGGGG',
+    '.KKKK......GGGG.',
+    '................',
+    '................',
+  ],
+  lock: [
+    '................',
+    '................',
+    '.....KKKKKK.....',
+    '....KK....KK....',
+    '....K......K....',
+    '....K......K....',
+    '....K......K....',
+    '..KKKKKKKKKKKK..',
+    '..KYYYYYYYYYYK..',
+    '..KYYYYYYYYYYK..',
+    '..KYYYYKKYYYYK..',
+    '..KYYYYKKYYYYK..',
+    '..KYYYYKKYYYYK..',
+    '..KYYYYYYYYYYK..',
+    '..KKKKKKKKKKKK..',
+    '................',
+  ],
+  sync: [
+    '................',
+    '................',
+    '................',
+    '................',
+    '...........KKKKK',
+    '.KKKKKKKK..KGGGK',
+    '.K......K..KGGGK',
+    '.K.GGGG.K..KGGGK',
+    '.K......K..KGGGK',
+    '.K.GG...K..KGGGK',
+    '.K......K..KGGGK',
+    '.KKKKKKKK..KGGGK',
+    'KKKKKKKKKK.KKKKK',
+    '................',
+    '................',
+    '................',
+  ],
+} as const
+
+export type PictureName = keyof typeof PICTURES
+
+const PICTURE_PATHS = Object.fromEntries(Object.entries(PICTURES).map(([name, rows]) => [name, paths(rows)])) as Record<
+  PictureName,
+  ReturnType<typeof paths>
+>
+
+/** One of the pictures of what the app does. `scale` is how many CSS pixels one pixel of the grid takes (a whole number). */
+export function Illustration({ name, scale = 3, className }: { name: PictureName; scale?: number; className?: string }) {
+  return (
+    <svg
+      className={className ? `pixel-art ${className}` : 'pixel-art'}
+      viewBox="0 0 16 16"
+      width={16 * scale}
+      height={16 * scale}
+      shapeRendering="crispEdges"
+      aria-hidden="true"
+    >
+      {PICTURE_PATHS[name]}
+    </svg>
   )
 }

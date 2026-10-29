@@ -27,17 +27,27 @@
   bottom: calc(2.5rem + env(safe-area-inset-bottom, 0px));
 }
 
+/* The card is a pixel panel like a game's title screen: a 2px frame in the text colour with its corner pixels left out, on a hard
+   shadow (the lines of .notch in primitives.css, here for every password screen without a class on each). */
 .gate > form,
 .gate > .panel {
+  display: flex;
+  flex-direction: column;
   width: min(100%, 24rem);
-  margin: 0;
+  margin: 2px 6px 6px 2px;
   padding: 1.5rem;
   gap: 1rem;
   color: var(--card-foreground);
   background: var(--card);
-  border: 1px solid var(--border);
+  border: 0;
   border-radius: var(--radius-xl);
-  box-shadow: var(--shadow-sm);
+  box-shadow:
+    0 -2px 0 var(--foreground),
+    0 2px 0 var(--foreground),
+    -2px 0 0 var(--foreground),
+    2px 0 0 var(--foreground),
+    6px 4px 0 var(--press-shadow),
+    4px 6px 0 var(--press-shadow);
 }
 
 .gate .brand-mark {
@@ -45,16 +55,18 @@
   align-items: center;
   gap: 0.5rem;
   margin: 0;
-  font-family: var(--font);
-  font-size: 0.875rem;
-  font-weight: 600;
-  letter-spacing: 0.04em;
+  font-family: var(--font-pixel);
+  font-size: var(--pixel-md);
+  font-weight: 400;
+  line-height: 1;
   color: var(--foreground);
 }
 
+/* The title of a screen, in the pixel font (base.css), with room under it for two lines. */
 .gate h1 {
   margin: 0;
-  font-size: 1.25rem;
+  font-size: var(--pixel-md);
+  line-height: 33px;
 }
 
 /* The buttons of a screen are as wide as the card. */

@@ -66,13 +66,14 @@ export function useDecryptingGate(active: boolean): { show: boolean; blank: bool
 
 /**
  * A form that is hidden (not removed) while the loading screen shows keeps what was typed. When it comes back after a failure,
- * the cursor goes back into its first field, where it was before the submit.
+ * the cursor goes back into its first field on show (a form in steps hides the others), where it was before the submit.
  */
 export function useRefocus(busy: boolean) {
   const form = useRef<HTMLFormElement>(null)
   const wasBusy = useRef(false)
   useEffect(() => {
-    if (wasBusy.current && !busy) form.current?.querySelector('input')?.focus()
+    const fields = form.current?.querySelectorAll('input') ?? []
+    if (wasBusy.current && !busy) Array.from(fields).find((input) => input.getClientRects().length > 0)?.focus()
     wasBusy.current = busy
   }, [busy])
   return form
