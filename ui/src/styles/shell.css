@@ -101,7 +101,7 @@
   gap: 0.25rem;
 }
 
-/* A row of the sidebar: an icon and a name, quiet until the pointer is over it; the page you are on has a grey fill and bold text. */
+/* A row of the sidebar: an icon and a name, quiet until the pointer is over it; the page you are on has bold text and a green mark. */
 .nav-item,
 .exit-btn {
   display: flex;
@@ -119,8 +119,7 @@
 }
 
 .nav-item.active {
-  color: var(--accent-foreground);
-  background: var(--accent);
+  color: var(--foreground);
   font-weight: 600;
   /* The page you are on is marked in the green of the accents. */
   box-shadow: inset 2px 0 0 var(--primary);

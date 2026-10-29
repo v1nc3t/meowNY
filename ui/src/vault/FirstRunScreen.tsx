@@ -151,7 +151,7 @@ export default function FirstRunScreen({ onDone }: { onDone: () => void }) {
         <p className="onboard-lead">{t('welcome.intro')}</p>
         <ul className="onboard-features">
           {FEATURES.map((feature) => (
-            <li key={feature.picture} className="onboard-tile notch">
+            <li key={feature.picture} className="onboard-tile">
               <Illustration name={feature.picture} scale={4} />
               <span className="onboard-tile-text">
                 <b>{t(feature.title)}</b>

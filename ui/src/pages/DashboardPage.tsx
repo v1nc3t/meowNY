@@ -4,7 +4,6 @@ import { debts, type Summary } from '../api/debts'
 import { errorText } from '../api/invoke'
 import { monthNames, shiftMonth, withYear, yearChoices } from '../api/months'
 import Dropdown from '../components/Dropdown'
-import Badge from '../components/ui/Badge'
 import Button from '../components/ui/Button'
 import { Card, CardAction, CardContent, CardHeader, CardTitle } from '../components/ui/Card'
 import { EmptyState, Illustration, type PictureName } from '../components/ui/Pixel'
@@ -247,13 +246,13 @@ function FirstSteps() {
   const t = useT()
   const phone = useProfile() === 'phone'
   return (
-    <section className="first-steps notch" aria-labelledby="first-steps-title">
+    <section className="first-steps" aria-labelledby="first-steps-title">
       <h2 id="first-steps-title">{t('dashboard.firstTitle')}</h2>
       <p className="hint">{t('dashboard.firstText')}</p>
       <ul className="first-steps-list">
         {FIRST_STEPS.filter((step) => !(phone && step.desktopOnly)).map((step) => (
           <li key={step.picture}>
-            <Link className="first-step notch" to={step.to} state={step.state}>
+            <Link className="first-step" to={step.to} state={step.state}>
               <Illustration name={step.picture} scale={3} />
               <span className="first-step-text">
                 <b>{t(step.title)}</b>
@@ -282,15 +281,15 @@ function Stat({
   settings: MoneySettings
 }) {
   const change = changePercent(value, before)
-  const tone = change === null || Math.abs(change) < 0.05 ? 'secondary' : (change > 0) === (good === 'up') ? 'success' : 'destructive'
+  const tone = change === null || Math.abs(change) < 0.05 ? '' : (change > 0) === (good === 'up') ? ' is-good' : ' is-bad'
   return (
     <div className="dash-stat">
       <span className="dash-stat-label">{label}</span>
       <span className="dash-stat-value">{formatMoney(value, settings.currency, settings.locale)}</span>
       {change === null ? null : (
-        <Badge variant={tone}>
+        <span className={`dash-delta${tone}`}>
           {change > 0 ? '▲' : change < 0 ? '▼' : ''} {formatPercent(Math.abs(Math.round(change * 10) / 10), settings.locale)}
-        </Badge>
+        </span>
       )}
     </div>
   )
@@ -302,7 +301,7 @@ function YearNav({ month, thisMonth, onChange }: { month: string; thisMonth: str
   const year = Number(month.slice(0, 4))
   return (
     <div className="month-nav dash-year-nav">
-      <Button variant="outline" size="icon" aria-label={t('dashboard.prevYear')} onClick={() => onChange(withYear(month, year - 1))}>
+      <Button variant="ghost" size="icon" aria-label={t('dashboard.prevYear')} onClick={() => onChange(withYear(month, year - 1))}>
         &lsaquo;
       </Button>
       <Dropdown
@@ -312,7 +311,7 @@ function YearNav({ month, thisMonth, onChange }: { month: string; thisMonth: str
         options={yearChoices(month, Number(thisMonth.slice(0, 4))).map((y) => ({ value: String(y), label: String(y) }))}
         onChange={(value) => onChange(withYear(month, Number(value)))}
       />
-      <Button variant="outline" size="icon" aria-label={t('dashboard.nextYear')} onClick={() => onChange(withYear(month, year + 1))}>
+      <Button variant="ghost" size="icon" aria-label={t('dashboard.nextYear')} onClick={() => onChange(withYear(month, year + 1))}>
         &rsaquo;
       </Button>
       <Button variant="outline" disabled={month.slice(0, 4) === thisMonth.slice(0, 4)} onClick={() => onChange(thisMonth)}>
@@ -593,7 +592,7 @@ function BudgetBars({ bva, settings }: { bva: BudgetVsActual; settings: MoneySet
                     <span className="legend-name">{r.name}</span>
                     <span className="legend-amount">
                       {actual}
-                      <span className="muted"> {r.budgeted === null ? `· ${t('dashboard.noBudget')}` : t('dashboard.ofBudget', { amount: money(r.budgeted) })}</span>
+                      <span className="muted">{r.budgeted === null ? `, ${t('dashboard.noBudget')}` : ` ${t('dashboard.ofBudget', { amount: money(r.budgeted) })}`}</span>
                     </span>
                   </span>
                   {r.budgeted === null ? null : (

@@ -66,24 +66,22 @@ h4 {
   color: var(--foreground);
 }
 
-/* Page and section titles are in the pixel font, at 22px, where each of its pixels is a whole pixel of the screen. It has one weight,
-   and no letter spacing, which would put its pixels between those of the screen. */
-h1,
-h2 {
+/* Page titles are in the pixel font, at 22px, where each of its pixels is a whole pixel of the screen. It has one weight, and no letter
+   spacing, which would put its pixels between those of the screen. Everything below a page title is in the text font. */
+h1 {
   font-family: var(--font-pixel);
+  font-size: var(--pixel-md);
   font-weight: 400;
   letter-spacing: 0;
-}
-
-h1 {
-  font-size: var(--pixel-md);
   line-height: 1.2;
   margin: 0 0 1rem;
 }
 
 h2 {
-  font-size: var(--pixel-md);
-  line-height: 1.3;
+  font-family: var(--font);
+  font-size: 1.0625rem;
+  font-weight: 700;
+  line-height: 1.4;
   margin: 0.5rem 0 0;
 }
 
@@ -98,7 +96,6 @@ h4 {
   font-family: var(--font);
   font-size: 0.75rem;
   line-height: 1.4;
-  letter-spacing: 0.04em;
   color: var(--muted-foreground);
   margin: 0 0 0.5rem;
 }
@@ -157,7 +154,7 @@ p:empty {
   }
 }
 
-/* A submit button is the one main action of its form: solid, standing on its hard shadow (the press, as in primitives.css). */
+/* A submit button is the one main action of its form: solid green, standing on its hard shadow (the press, as in primitives.css). */
 :where(button[type='submit']) {
   color: var(--primary-foreground);
   background: var(--primary);
@@ -221,7 +218,7 @@ p:empty {
   cursor: not-allowed;
 }
 
-/* Checkbox and radio: pixel squares with a 2px line that fill with the main colour when on. The tick is drawn pixel by pixel: a 2px
+/* Checkbox and radio: pixel squares with a thin line that fill with the main colour when on. The tick is drawn pixel by pixel: a 2px
    square and its hard shadows, each one a pixel of the tick. The radio's dot is a square. */
 :where(input[type='checkbox'], input[type='radio']) {
   appearance: none;
@@ -274,14 +271,14 @@ p:empty {
   outline-offset: 2px;
 }
 
-/* Fields show focus with a border and a soft ring instead of an outline. */
+/* Fields show focus with a border in the ring colour, one pixel thicker (a spread with no offset), instead of an outline. */
 input:focus:not([type='checkbox'], [type='radio']),
 textarea:focus,
 select:focus,
 .pick-button:focus {
   outline: none;
   border-color: var(--ring);
-  box-shadow: 0 0 0 3px var(--ring-soft);
+  box-shadow: 0 0 0 1px var(--ring);
 }
 
 :where(form) {
@@ -460,13 +457,6 @@ kbd {
 
 /* Motion. Each animation answers something the person did: a page opens, a dialog opens, a row opens. They are short, and the
    small ones snap in steps (--ease-step), like a sprite. */
-@keyframes rise-in {
-  from {
-    opacity: 0;
-    transform: translateY(6px);
-  }
-}
-
 @keyframes panel-in {
   from {
     opacity: 0;
@@ -487,9 +477,9 @@ kbd {
   }
 }
 
-/* A new page rises into place, once each time the person goes to another page (each page is drawn anew then). */
+/* A new page fades in, once each time the person goes to another page (each page is drawn anew then). */
 .app-main > main > * {
-  animation: rise-in var(--t-med) var(--ease-step);
+  animation: fade-in var(--t-med) var(--ease-step);
 }
 
 /* Less motion, when the system asks for it: nothing moves, every change is at once. */

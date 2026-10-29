@@ -2,9 +2,8 @@
    and the lists of cards that several pages use. */
 
 /* Buttons. A plain <button> is already the ghost look (base.css); these classes pick another look and work on a link too.
-   A button is a pixel block: its fill and its 2px edge are painted as three layers that leave the four corner pixels out (notched
-   corners). --btn-fill and --btn-edge pick the colours. The solid looks stand on a hard shadow and
-   sink onto it when pressed; the quiet looks (ghost, link, icon) shrink a little instead. */
+   A button is a flat block with a thin edge; --btn-fill and --btn-edge pick the colours. Only the solid green one (default) stands on
+   a hard shadow and sinks onto it when pressed; every other look is flat and shrinks a little instead. */
 .ui-btn {
   --btn-fill: transparent;
   --btn-edge: transparent;
@@ -16,12 +15,10 @@
   height: 2.25rem;
   min-width: 0;
   padding: 0 1rem;
-  border: var(--border-width) solid transparent;
+  border: var(--border-width) solid var(--btn-edge);
   border-radius: var(--radius-md);
-  background:
-    linear-gradient(var(--btn-fill) 0 0) 2px 2px / calc(100% - 4px) calc(100% - 4px) no-repeat border-box,
-    linear-gradient(var(--btn-edge) 0 0) 2px 0 / calc(100% - 4px) 100% no-repeat border-box,
-    linear-gradient(var(--btn-edge) 0 0) 0 2px / 100% calc(100% - 4px) no-repeat border-box;
+  background: var(--btn-fill);
+  box-shadow: none;
   font-family: var(--font);
   font-size: 0.875rem;
   font-weight: 400;
@@ -30,7 +27,6 @@
   text-align: center;
   text-decoration: none;
   cursor: pointer;
-  /* The press is not eased: the button snaps down and back, like a sprite's two frames. */
   transition:
     color var(--t-fast),
     opacity var(--t-fast);
@@ -54,14 +50,12 @@
   --btn-fill: var(--secondary);
   --btn-edge: var(--secondary);
   color: var(--secondary-foreground);
-  box-shadow: var(--shadow-press);
 }
 
 .ui-btn-outline {
-  --btn-fill: var(--background);
+  --btn-fill: transparent;
   --btn-edge: var(--input);
   color: var(--foreground);
-  box-shadow: var(--shadow-press);
 }
 
 .ui-btn-ghost {
@@ -72,7 +66,6 @@
   --btn-fill: var(--destructive-solid);
   --btn-edge: var(--destructive-solid);
   color: var(--destructive-foreground);
-  box-shadow: var(--shadow-press);
 }
 
 /* A link reads as text: no block. */
@@ -84,26 +77,23 @@
   text-underline-offset: 4px;
 }
 
-/* Pressed: the solid looks lose their shadow, and (with motion) sink onto where it was; the quiet looks shrink a little. */
-.ui-btn-default:active:not(:disabled),
-.ui-btn-secondary:active:not(:disabled),
-.ui-btn-outline:active:not(:disabled),
-.ui-btn-destructive:active:not(:disabled) {
+/* Pressed: the green button loses its shadow, and (with motion) sinks onto where it was; the others shrink a little. */
+.ui-btn-default:active:not(:disabled) {
   box-shadow: none;
 }
 
 @media (prefers-reduced-motion: no-preference) {
-  .ui-btn-default:active:not(:disabled),
-  .ui-btn-secondary:active:not(:disabled),
-  .ui-btn-outline:active:not(:disabled),
-  .ui-btn-destructive:active:not(:disabled) {
+  .ui-btn-default:active:not(:disabled) {
     transform: translate(2px, 2px);
   }
 
+  .ui-btn-secondary:active:not(:disabled),
+  .ui-btn-outline:active:not(:disabled),
+  .ui-btn-destructive:active:not(:disabled),
   .ui-btn-ghost:active:not(:disabled),
   .ui-btn-link:active:not(:disabled),
   .ui-btn-icon:active:not(:disabled) {
-    transform: scale(0.96);
+    transform: scale(0.97);
   }
 }
 
@@ -198,21 +188,6 @@
   background: var(--primary);
 }
 
-/* Notched pixel corners for a raised box (a dialog, a panel): a 2px line drawn outside the box with hard shadows, its four corner
-   pixels left out, and under it, if --notch-drop is set, a hard drop shadow notched the same way. It takes no room: leave 2px
-   around the box (6px right and below with a drop). It replaces the box's border and box-shadow. */
-.notch,
-.modal {
-  border-color: transparent;
-  box-shadow:
-    0 -2px 0 var(--notch-color, var(--border)),
-    0 2px 0 var(--notch-color, var(--border)),
-    -2px 0 0 var(--notch-color, var(--border)),
-    2px 0 0 var(--notch-color, var(--border)),
-    6px 4px 0 var(--notch-drop, transparent),
-    4px 6px 0 var(--notch-drop, transparent);
-}
-
 /* Cards. */
 .ui-card {
   display: flex;
@@ -238,11 +213,9 @@
 .ui-card-title {
   grid-column: 1;
   margin: 0;
-  font-family: var(--font-pixel);
-  font-size: var(--pixel-md);
-  font-weight: 400;
-  line-height: 1.2;
-  letter-spacing: 0;
+  font-size: 1.0625rem;
+  font-weight: 700;
+  line-height: 1.4;
   color: var(--card-foreground);
 }
 
@@ -374,7 +347,7 @@
   background: var(--muted);
 }
 
-/* Tabs: a grey track and a raised white tab on it. The triggers are equally wide. */
+/* Tabs: a grey track and a flat white tab on it, marked with a green line below. The triggers are equally wide. */
 .ui-tabs {
   display: inline-grid;
   grid-auto-flow: column;
@@ -425,7 +398,7 @@
   margin: 0 0 0.5rem;
 }
 
-/* Lists (transactions, debts, documents, tokens...): one box with a 2px line, a row for each item, and dashed lines between the rows,
+/* Lists (transactions, debts, documents, tokens...): one box with a thin line, a row for each item, and dashed lines between the rows,
    like a ledger. The row is a grid whose columns are the list's --cols: one column on a narrow screen, the text and its actions from
    52em. A list with columns of its own (a table) is `.card-list.is-table`, sets its --cols, and may start with a `.list-head` row of
    column names; when the list is narrower than 40em it has no head, and each row is two lines (see "Tables", below). */
@@ -596,14 +569,12 @@ ul.card-list > li.list-head > .is-end {
   flex: none;
 }
 
-/* Small grey marks after a name: shared, a note, the documents. */
+/* Small grey words after a name: shared, a note, the documents. */
 .row-mark {
   flex: none;
-  padding: 0 0.375rem;
   font-size: 0.75rem;
   line-height: 1.5;
   color: var(--muted-foreground);
-  border: 1px solid var(--border);
 }
 
 .row-mark-icon {

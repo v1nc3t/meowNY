@@ -17,7 +17,7 @@ export default function MonthNav({
   const { t, language } = useI18n()
   return (
     <div className="month-nav">
-      <Button variant="outline" size="icon" aria-label={t('budgets.prevMonth')} {...tip('prev')} onClick={() => onChange(shiftMonth(month, -1))}>
+      <Button variant="ghost" size="icon" aria-label={t('budgets.prevMonth')} {...tip('prev')} onClick={() => onChange(shiftMonth(month, -1))}>
         &lsaquo;
       </Button>
       <Dropdown
@@ -37,7 +37,7 @@ export default function MonthNav({
         }))}
         onChange={(value) => onChange(withYear(month, Number(value)))}
       />
-      <Button variant="outline" size="icon" aria-label={t('budgets.nextMonth')} {...tip('next')} onClick={() => onChange(shiftMonth(month, 1))}>
+      <Button variant="ghost" size="icon" aria-label={t('budgets.nextMonth')} {...tip('next')} onClick={() => onChange(shiftMonth(month, 1))}>
         &rsaquo;
       </Button>
       <Button variant="outline" disabled={month === thisMonth} {...tip('today')} onClick={() => onChange(thisMonth)}>

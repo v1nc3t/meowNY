@@ -133,7 +133,7 @@ html.is-phone *::-webkit-scrollbar-thumb {
   box-shadow: inset 0 2px 0 var(--foreground);
 }
 
-/* The square add button: a block of the main colour with notched corners (like a button), raised over the page on a hard shadow. */
+/* The square add button: a block of the main colour, like the green button, over the page on the same small hard shadow. */
 .fab {
   position: fixed;
   right: 1rem;
@@ -148,11 +148,9 @@ html.is-phone *::-webkit-scrollbar-thumb {
   padding: 0;
   border: 0;
   border-radius: var(--radius-lg);
-  background:
-    linear-gradient(var(--primary) 0 0) 2px 0 / calc(100% - 4px) 100% no-repeat,
-    linear-gradient(var(--primary) 0 0) 0 2px / 100% calc(100% - 4px) no-repeat;
+  background: var(--primary);
   color: var(--primary-foreground);
-  box-shadow: var(--shadow-lg);
+  box-shadow: var(--shadow-press);
 }
 
 .fab:active:not(:disabled) {
@@ -161,7 +159,7 @@ html.is-phone *::-webkit-scrollbar-thumb {
 
 @media (prefers-reduced-motion: no-preference) {
   .fab:active:not(:disabled) {
-    transform: translate(4px, 4px);
+    transform: translate(2px, 2px);
   }
 }
 
@@ -188,9 +186,8 @@ html.is-phone .fab {
   gap: 0.125rem;
   padding: 0.25rem;
   background: var(--popover);
-  border: var(--border-width) solid var(--border);
+  border: var(--border-width) solid var(--input);
   border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-md);
 }
 
 .quick-menu button {

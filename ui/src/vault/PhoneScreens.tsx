@@ -85,7 +85,7 @@ export function PhoneFirstRun({ onDone }: { onDone: () => void }) {
         <p className="onboard-lead">{t('phone.introText')}</p>
         <ul className="onboard-features">
           {PHONE_FEATURES.map((feature) => (
-            <li key={feature.picture} className="onboard-tile notch">
+            <li key={feature.picture} className="onboard-tile">
               <Illustration name={feature.picture} scale={3} />
               <span className="onboard-tile-text">
                 <b>{t(feature.title)}</b>

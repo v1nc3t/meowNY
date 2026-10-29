@@ -255,7 +255,6 @@
 /* The phone: the search and the "filters" button on one line; the button opens the period and the category under them, in a box. */
 .filter-toggle[aria-expanded='true'] {
   --btn-fill: var(--accent);
-  box-shadow: none;
 }
 
 .filter-panel {

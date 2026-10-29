@@ -33,23 +33,19 @@
 .onboard-features {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 18rem), 1fr));
-  gap: 1rem 1.25rem;
+  gap: 1.25rem 1.5rem;
   width: auto;
   margin: 0.25rem 0 0.5rem;
-  padding: 2px 6px 6px 2px; /* the room of the tiles' frames and drop shadows */
 }
 
-/* A tile is a pixel panel: a 2px frame with its corner pixels left out, on a hard shadow (.notch, primitives.css). */
+/* A tile is a picture beside a title and a line, with air around it: no box. */
 .onboard-features > .onboard-tile {
-  --notch-color: var(--input);
-  --notch-drop: var(--press-shadow);
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
   align-items: center;
   gap: 1rem;
-  padding: 0.875rem 1rem;
+  padding: 0;
   border: 0;
-  background: var(--muted);
 }
 
 .onboard-tile .pixel-art,
@@ -92,7 +88,7 @@
   flex: 1 1 12rem;
 }
 
-/* Where the person is: "step 1 of 3" and three pixel blocks, filled up to this step. */
+/* Where the person is: "step 1 of 3" and three thin blocks, filled up to this step. */
 .onboard-progress {
   display: flex;
   align-items: center;
@@ -102,9 +98,8 @@
 }
 
 .onboard-count {
-  font-family: var(--font-pixel, var(--font));
-  font-size: var(--pixel-md, 22px);
-  line-height: 1;
+  font-size: 0.875rem;
+  line-height: 1.4;
   color: var(--muted-foreground);
 }
 
@@ -115,24 +110,18 @@
 
 .onboard-blocks > span {
   width: 2.75rem;
-  height: 14px;
-  border: 2px solid var(--input);
-  background: transparent;
-  transition:
-    background-color var(--t-fast, 110ms) steps(2, end),
-    border-color var(--t-fast, 110ms) steps(2, end);
+  height: 8px;
+  background-color: var(--c-track);
+  transition: background-color var(--t-fast, 110ms) steps(2, end);
 }
 
-.onboard-blocks > .is-done,
-.onboard-blocks > .is-now {
-  border-color: var(--primary);
-  background: var(--primary);
+.onboard-blocks > .is-done {
+  background-color: var(--primary);
 }
 
 /* This step's block is cut into segments, like a bar that is filling up. */
 .onboard-blocks > .is-now {
-  background: repeating-linear-gradient(90deg, var(--primary) 0 6px, transparent 6px 8px) content-box;
-  padding: 2px;
+  background-image: repeating-linear-gradient(90deg, var(--primary) 0 6px, transparent 6px 8px);
 }
 
 /* A step: its title, its fields and its hints, with the gaps of the form. The steps that are not on show are hidden, not removed. */
@@ -198,7 +187,7 @@
   }
 }
 
-/* The phone: the headline at 22px, smaller pictures, one tile under the other. */
+/* The phone: the headline at 22px, one tile under the other. */
 html.is-phone .gate.onboard {
   padding-top: calc(5dvh + env(safe-area-inset-top, 0px));
 }
@@ -214,28 +203,21 @@ html.is-phone .onboard-lead {
 }
 
 html.is-phone .onboard-features {
-  gap: 0.875rem;
+  gap: 1rem;
   margin: 0;
 }
 
 html.is-phone .onboard-features > .onboard-tile {
   gap: 0.875rem;
-  padding: 0.75rem 0.875rem;
 }
 
-/* The first steps on a dashboard with nothing in it yet: a few big links, each with its picture. */
+/* The first steps on a dashboard with nothing in it yet: a few big links, each with its picture, under a title, with no box around them. */
 .first-steps {
   container-type: inline-size;
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
-  padding: 1.25rem;
-  color: var(--card-foreground);
-  background: var(--card);
-  border: 0;
-  --notch-color: var(--primary);
-  --notch-drop: var(--press-shadow);
-  margin: 2px 6px 6px 2px;
+  margin-bottom: 0.5rem;
 }
 
 .first-steps > h2 {
@@ -252,7 +234,6 @@ html.is-phone .onboard-features > .onboard-tile {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 1rem 1.25rem;
   width: auto;
-  padding: 2px 6px 6px 2px;
 }
 
 /* Two by two, or one under the other when the panel is narrow (a phone). */
@@ -267,10 +248,8 @@ html.is-phone .onboard-features > .onboard-tile {
   padding: 0;
 }
 
-/* A step is a link that looks like a pixel panel (.notch); pressed, it sinks onto its shadow like a button. */
+/* A step is a link with a thin line, so it reads as something to press; pressed, it shrinks a little, like a button. */
 .first-step {
-  --notch-color: var(--input);
-  --notch-drop: var(--press-shadow);
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
   align-items: center;
@@ -279,11 +258,10 @@ html.is-phone .onboard-features > .onboard-tile {
   padding: 0.875rem 1rem;
   color: inherit;
   text-decoration: none;
-  background: var(--background);
+  border: var(--border-width) solid var(--border);
   transition:
     background-color var(--t-fast, 110ms),
-    transform var(--t-fast, 110ms) steps(1, end),
-    box-shadow var(--t-fast, 110ms) steps(1, end);
+    transform var(--t-fast, 110ms) steps(1, end);
 }
 
 .first-step:focus-visible {
@@ -302,18 +280,10 @@ html.is-phone .onboard-features > .onboard-tile {
   }
 }
 
-.first-step:active {
-  --notch-drop: transparent;
-}
-
 @media (prefers-reduced-motion: no-preference) {
   .first-step:active {
-    transform: translate(2px, 2px);
+    transform: scale(0.97);
   }
-}
-
-html.is-phone .first-steps {
-  padding: 1rem;
 }
 
 html.is-phone .first-step {
