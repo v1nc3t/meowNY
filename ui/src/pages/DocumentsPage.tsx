@@ -4,6 +4,7 @@ import ConfirmModal from '../components/ConfirmModal'
 import DocumentLinksModal from '../components/DocumentLinksModal'
 import DocumentModal from '../components/DocumentModal'
 import KeepToPreview from '../components/KeepToPreview'
+import Pager from '../components/Pager'
 import PreviewModal from '../components/PreviewModal'
 import Icon from '../components/NavIcon'
 import Pick, { PickOption } from '../components/Pick'
@@ -192,6 +193,8 @@ function DocumentsView({ settings }: { settings: MoneySettings }) {
 
   const pageCount = page && page.limit > 0 ? Math.max(1, Math.ceil(page.total / page.limit)) : 0
   const currentPage = page && page.limit > 0 ? Math.floor(page.offset / page.limit) + 1 : 1
+  // on a phone the pages are the end of the scrolling list (the round add button covers the corner under it)
+  const pager = <Pager page={currentPage} count={pageCount} onPage={(number) => setOffset((number - 1) * LIMIT)} />
   const lines = report ? reportLines(report, phone) : []
 
   /** Where the file is, in words, when that is not simply here. */
@@ -368,17 +371,9 @@ function DocumentsView({ settings }: { settings: MoneySettings }) {
                 {page.documents.map(tableRow)}
               </ul>
             )}
+            {phone ? pager : null}
           </div>
-          <div className="page-numbers">
-            {Array.from({ length: pageCount }, (_, index) => {
-              const number = index + 1
-              return (
-                <button key={number} type="button" aria-current={number === currentPage ? 'page' : undefined} onClick={() => setOffset((number - 1) * page.limit)}>
-                  {number}
-                </button>
-              )
-            })}
-          </div>
+          {phone ? null : pager}
         </>
       ) : null}
     </section>

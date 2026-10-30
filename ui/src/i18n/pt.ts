@@ -101,6 +101,10 @@ export const pt: Messages = {
   'tx.filters': 'filtros',
   'tx.filtersCount': 'filtros: {count} ativos',
   'tx.perPage': 'linhas por página',
+  'pager.label': 'navegação entre páginas',
+  'pager.prev': 'página anterior',
+  'pager.next': 'página seguinte',
+  'pager.page': 'página {page} de {pages}',
   'tx.shared': 'partilhado',
 
   'budgets.expenses': 'despesas',

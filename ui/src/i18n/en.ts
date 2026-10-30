@@ -110,6 +110,10 @@ export const en = {
   'tx.filters': 'filters',
   'tx.filtersCount': 'filters: {count} on',
   'tx.perPage': 'rows per page',
+  'pager.label': 'page navigation',
+  'pager.prev': 'previous page',
+  'pager.next': 'next page',
+  'pager.page': 'page {page} of {pages}',
   'tx.shared': 'shared',
 
   // Budgets

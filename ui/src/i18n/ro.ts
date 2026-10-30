@@ -100,6 +100,10 @@ export const ro: Messages = {
   'tx.filters': 'filtre',
   'tx.filtersCount': 'filtre: {count} active',
   'tx.perPage': 'rânduri pe pagină',
+  'pager.label': 'navigare între pagini',
+  'pager.prev': 'pagina anterioară',
+  'pager.next': 'pagina următoare',
+  'pager.page': 'pagina {page} din {pages}',
   'tx.shared': 'împărțit',
 
   'budgets.expenses': 'cheltuieli',

@@ -1,6 +1,6 @@
 /* Transactions, recurring items and categories: budgets, history, cards and the split editor. */
 
-/* Transactions: the from / to range in the filter bar. */
+/* Transactions: the period in the filter bar (a year, a month, or from and to). */
 .tx-range {
   display: flex;
   flex: 0 0 auto;
@@ -514,21 +514,22 @@ ul.card-list.rec-table .cell-actions {
   color: var(--muted-foreground);
 }
 
+/* The phone: the period fills the filter box. A month or a year sits beside the choice of period; from and to take a line each. */
 html.is-phone .tx-range {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  align-items: end;
-  gap: 0.75rem 0.875rem;
   width: 100%;
 }
 
+html.is-phone .tx-range > .date-picker {
+  flex: 1 1 10rem;
+  min-width: 0;
+}
+
 html.is-phone .tx-range .tx-date-group {
-  width: 100%;
+  flex: 1 1 100%;
 }
 
 html.is-phone .tx-range .date-picker {
   width: 100%;
-  flex-wrap: wrap;
 }
 
 html.is-phone .tx-range .date-picker .pick.field {
@@ -536,9 +537,8 @@ html.is-phone .tx-range .date-picker .pick.field {
   min-width: 0;
 }
 
-/* Choosing a day gives each of from and to a line of its own: three lists do not fit half a screen. */
-html.is-phone .tx-range[data-mode='date'] .tx-date-group {
-  grid-column: 1 / -1;
+html.is-phone .tx-range > .ui-btn {
+  flex: 1 1 100%;
 }
 
 /* The bill dialog: the person first, then friends and guests, each with what was typed and what it comes to. */

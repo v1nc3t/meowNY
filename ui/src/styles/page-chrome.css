@@ -1,6 +1,7 @@
 /* The top of a list page: title, actions, filter bar and page numbers, shared by several pages. */
 
-/* Page numbers are small square buttons; the page you are on is a solid block in the main colour. */
+/* The pager (previous, page numbers, next) is a row of small square buttons; the page you are on is a solid block in the main colour.
+   A gap between the numbers is a plain "…". */
 .page-numbers {
   display: flex;
   flex-wrap: wrap;
@@ -20,6 +21,28 @@
   color: var(--primary-foreground);
   background: var(--primary);
   border-color: var(--primary);
+}
+
+.page-numbers > span {
+  min-width: 1.5rem;
+  text-align: center;
+  color: var(--muted-foreground);
+}
+
+/* The phone: one centred line of 44px buttons (the pager shows fewer numbers there). */
+html.is-phone .page-numbers {
+  flex-wrap: nowrap;
+  justify-content: center;
+  width: 100%;
+  gap: 0.125rem;
+}
+
+html.is-phone .page-numbers > span {
+  min-width: 1.25rem;
+}
+
+html.is-phone .tx-pane > .page-numbers {
+  margin-top: 1.25rem;
 }
 
 /* Under a list: the page numbers on the left, how many rows a page shows on the right, its label beside it. Its list opens upwards,
@@ -228,12 +251,11 @@
   align-items: flex-start;
 }
 
-/* The filters of the transactions: the search grows, then the period and the category, on one line where they fit; what does not
-   fit goes to the next line, under the search. Labels stay above their fields, and the fields line up at the bottom. */
+/* The filters of the transactions: the search and the category share what is left of the line, then the period; what does not fit goes
+   to the next line. Labels stay above their fields and line up at the top (a long category name makes its field two lines high). */
 .toolbar.tx-bar.filter-bar {
-  container-type: inline-size;
   flex-wrap: wrap;
-  align-items: flex-end;
+  align-items: flex-start;
   gap: 1rem;
 }
 
@@ -241,18 +263,37 @@
   flex: 1 1 10rem;
 }
 
-/* Not room for all of it on one line: the search has the first line to itself, the period and the category share the next. */
-@container (max-width: 64rem) {
-  .filter-bar > .grow {
-    flex-basis: 100%;
-  }
+.filter-bar > .pick.scope {
+  flex: 1 1 14rem;
+  min-width: 10rem;
+  max-width: 24rem;
 }
 
-.filter-bar .tx-range {
-  gap: 0.75rem 0.5rem;
+/* A long category name is never cut off: the button and the list are as wide as the field and the name wraps in them. */
+.filter-bar .pick.scope .pick-button {
+  width: 100%;
+  min-width: 0;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
-/* The phone: the search and the "filters" button on one line; the button opens the period and the category under them, in a box. */
+.filter-bar .pick.scope .pick-list {
+  width: 100%;
+}
+
+.filter-bar .pick.scope .pick-list button {
+  width: 100%;
+  min-width: 0;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+/* The phone: the search and the "filters" button on one line, level at the bottom; the button opens the category and the period under
+   them, in a box. */
+html.is-phone .toolbar.tx-bar.filter-bar {
+  align-items: flex-end;
+}
+
 .filter-toggle[aria-expanded='true'] {
   --btn-fill: var(--accent);
 }
@@ -267,18 +308,6 @@
   background: var(--card);
   border: var(--border-width) solid var(--border);
   animation: panel-in var(--t-med) var(--ease-step);
-}
-
-.filter-panel .pick.scope,
-.filter-panel .pick.scope .pick-button,
-.filter-panel .pick.mode .pick-button,
-.filter-panel .tx-range > .ui-btn {
-  width: 100%;
-}
-
-.filter-panel .tx-range > .ui-btn {
-  align-self: end;
-  height: 2.75rem;
 }
 
 /* A phone: "current month" and the range sit beside "add transaction"; from and to are side by side, level with each other. */

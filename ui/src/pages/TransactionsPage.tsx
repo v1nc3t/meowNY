@@ -8,6 +8,7 @@ import ConfirmModal from '../components/ConfirmModal'
 import Dropdown, { type DropdownOption } from '../components/Dropdown'
 import Modal, { modalFormId } from '../components/Modal'
 import Icon from '../components/NavIcon'
+import Pager from '../components/Pager'
 import Pick, { PickOption } from '../components/Pick'
 import Button from '../components/ui/Button'
 import { EmptyState } from '../components/ui/Pixel'
@@ -157,13 +158,14 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
     setOffset(0)
   }
 
+  // A year or a month is one value for both ends; a range keeps the first and the last day of what was shown. The current year, shown
+  // by month, is this month.
   function onMode(mode: RangeMode) {
-    setFilters((current) => ({
-      ...current,
-      mode,
-      from: shiftBound(current.from, current.mode, mode, 'from'),
-      to: shiftBound(current.to, current.mode, mode, 'to'),
-    }))
+    setFilters((current) => {
+      const from =
+        mode === 'month' && current.mode === 'year' && current.from === now.date.slice(0, 4) ? now.month : shiftBound(current.from, current.mode, mode, 'from')
+      return { ...current, mode, from, to: mode === 'date' ? shiftBound(current.to, current.mode, mode, 'to') : from }
+    })
     setOffset(0)
   }
 
@@ -293,9 +295,8 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
     return t('tx.allCategories')
   }
 
-  const modeLabel = (mode: RangeMode) => (mode === 'date' ? t('common.day') : mode === 'month' ? t('common.month') : t('common.year'))
+  const modeLabel = (mode: RangeMode) => (mode === 'date' ? t('tx.range') : mode === 'month' ? t('common.month') : t('common.year'))
 
-  // shortcut: one button per page, upgrade if lists run past a few dozen pages
   const pageCount = page && page.limit > 0 ? Math.max(1, Math.ceil(page.total / page.limit)) : 0
   const currentPage = page && page.limit > 0 ? Math.floor(page.offset / page.limit) + 1 : 1
 
@@ -308,21 +309,18 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
   // The phone's list is by day, under a heading for each day.
   const days = useMemo(() => byDay(page?.transactions ?? [], (transaction) => transaction.paymentDate), [page])
 
-  // The period: the current month, the kind of range, from and to.
+  // The period: a year, a month of a year, or exact dates (from one day to another, the end never before the start).
   const rangeControls = (
-    <div className="tx-range" data-mode={filters.mode}>
-      <Button variant="outline" disabled={atCurrentMonth} onClick={goCurrentMonth} {...tip('today', t('tx.currentMonth'))}>
-        {t('tx.currentMonth')}
-      </Button>
+    <div className="tx-range">
       <Pick
-        label={t('tx.range')}
+        label={t('tx.show')}
         className="mode"
         text={modeLabel(filters.mode)}
         open={menu === 'range'}
         onToggle={() => setMenu((current) => (current === 'range' ? null : 'range'))}
         onClose={() => setMenu(null)}
       >
-        {(['date', 'month', 'year'] as const).map((mode) => (
+        {(['year', 'month', 'date'] as const).map((mode) => (
           <PickOption
             key={mode}
             selected={filters.mode === mode}
@@ -335,28 +333,37 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
           </PickOption>
         ))}
       </Pick>
-      <div className="tx-date-group">
-        <span>{t('tx.from')}</span>
-        <DatePicker
-          key={`from-${filters.mode}`}
-          kind={filters.mode}
-          value={filters.from}
-          label={t('tx.from')}
-          today={now.date}
-          onChange={(from) => patchFilters({ from })}
-        />
-      </div>
-      <div className="tx-date-group">
-        <span>{t('tx.to')}</span>
-        <DatePicker
-          key={`to-${filters.mode}`}
-          kind={filters.mode}
-          value={filters.to}
-          label={t('tx.to')}
-          today={now.date}
-          onChange={(to) => patchFilters({ to })}
-        />
-      </div>
+      {filters.mode === 'date' ? (
+        <>
+          <div className="tx-date-group">
+            <span>{t('tx.from')}</span>
+            <DatePicker
+              kind="date"
+              value={filters.from}
+              label={t('tx.from')}
+              today={now.date}
+              onChange={(from) => patchFilters(from > filters.to ? { from, to: from } : { from })}
+            />
+          </div>
+          <div className="tx-date-group">
+            <span>{t('tx.to')}</span>
+            <DatePicker
+              kind="date"
+              value={filters.to}
+              label={t('tx.to')}
+              today={now.date}
+              onChange={(to) => patchFilters(to < filters.from ? { from: to, to } : { to })}
+            />
+          </div>
+        </>
+      ) : (
+        <DatePicker kind={filters.mode} value={filters.from} label={t('tx.show')} today={now.date} onChange={(value) => patchFilters({ from: value, to: value })} />
+      )}
+      {atCurrentMonth ? null : (
+        <Button variant="outline" onClick={goCurrentMonth} {...tip('today', t('tx.currentMonth'))}>
+          {t('tx.currentMonth')}
+        </Button>
+      )}
     </div>
   )
 
@@ -397,23 +404,7 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
   const foot =
     page && page.total > 0 ? (
       <div className="list-foot wide">
-        {pageCount > 1 ? (
-          <div className="page-numbers">
-            {Array.from({ length: pageCount }, (_, index) => {
-              const number = index + 1
-              return (
-                <button
-                  key={number}
-                  type="button"
-                  aria-current={number === currentPage ? 'page' : undefined}
-                  onClick={() => setOffset((number - 1) * (page?.limit ?? limit))}
-                >
-                  {number}
-                </button>
-              )
-            })}
-          </div>
-        ) : null}
+        <Pager page={currentPage} count={pageCount} onPage={(number) => setOffset((number - 1) * page.limit)} />
         <Pick
           label={t('tx.perPage')}
           className="limit per-page"
@@ -658,15 +649,15 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
             </Button>
             {filtersOpen ? (
               <div className="filter-panel" id={filtersId}>
-                {rangeControls}
                 {categoryPick}
+                {rangeControls}
               </div>
             ) : null}
           </>
         ) : (
           <>
-            {rangeControls}
             {categoryPick}
+            {rangeControls}
           </>
         )}
       </div>
