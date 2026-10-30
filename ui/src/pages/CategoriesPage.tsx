@@ -261,7 +261,6 @@ function CategoriesView({ settings, thisMonth }: { settings: MoneySettings; this
         <span className="is-end">{t('budgets.colIncomeBudget')}</span>
       </li>
       {history.map((row) => {
-        const overearned = row.incomeBudget !== null && Number(row.incomeActual) > Number(row.incomeBudget)
         return (
           <li key={row.month} className={row.month === month ? 'card-item is-selected' : 'card-item'}>
             <span className="cell-name">
@@ -284,7 +283,7 @@ function CategoriesView({ settings, thisMonth }: { settings: MoneySettings; this
               {row.expenseBudget === null ? '-' : money(row.expenseBudget)}
             </span>
             <span className="sr-only hist-label">{t('budgets.colEarned')}</span>
-            <span className={overearned ? 'cell-amount is-income' : 'cell-amount'}>{money(row.incomeActual)}</span>
+            <span className={earnedClass(row.incomeActual, row.incomeBudget)}>{money(row.incomeActual)}</span>
             <span className="cell-sub-end hist-budget">
               <span className="sr-only">{t('budgets.colIncomeBudget')}</span>
               {row.incomeBudget === null ? '-' : money(row.incomeBudget)}
@@ -388,6 +387,11 @@ function spentClass(spent: string, budget: string | null): string {
   return Number(spent) > Number(budget) ? 'cell-amount is-over' : 'cell-amount is-income'
 }
 
+/** Earning against its budget: green above it, plain otherwise. */
+function earnedClass(earned: string, budget: string | null): string {
+  return budget !== null && Number(earned) > Number(budget) ? 'cell-amount is-income' : 'cell-amount'
+}
+
 function amountsFor(overview: Overview[] | null, type: Side): Map<string, string> {
   const row = overview?.find((item) => item.type === type)
   return new Map((row?.categories ?? []).map((line) => [line.categoryId, line.amountLimit]))
@@ -442,7 +446,7 @@ function BudgetHalf({
             <span className="cell-name">
               <span className="cell-sub">{t(type === 'EXPENSE' ? 'budgets.colSpent' : 'budgets.colEarned')}</span>
             </span>
-            <span className={type === 'EXPENSE' ? spentClass(overview.used, overview.budgeted) : 'cell-amount'}>{money(overview.used)}</span>
+            <span className={type === 'EXPENSE' ? spentClass(overview.used, overview.budgeted) : earnedClass(overview.used, overview.budgeted)}>{money(overview.used)}</span>
           </li>
         ) : null}
       </ul>
