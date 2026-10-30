@@ -2,14 +2,14 @@
 
 html.is-phone button,
 html.is-phone .pick-button {
-  min-height: 2.75rem;
+  min-height: 44px;
 }
 
 /* min-height beats the heights that base.css and primitives.css give, so a tap target stays 44px or more. */
 html.is-phone input:not([type='checkbox'], [type='radio']),
 html.is-phone select,
 html.is-phone textarea {
-  min-height: 2.75rem;
+  min-height: 44px;
   font-size: max(16px, 1rem);
 }
 
@@ -22,7 +22,7 @@ html.is-phone input[type='radio'] {
 
 /* An icon button is as wide as it is tall, so it is also 44px wide. */
 html.is-phone .ui-btn-icon {
-  min-width: 2.75rem;
+  min-width: 44px;
 }
 
 /* The tabs' buttons are 44px tall, so the track around them grows to fit. */
@@ -57,9 +57,9 @@ html.is-phone .ui-tabs {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 2.75rem;
+  width: 44px;
   min-width: 0;
-  height: 2.75rem;
+  height: 44px;
   padding: 0;
   color: var(--muted-foreground);
 }
@@ -219,7 +219,7 @@ html.is-phone .filter-bar > .grow {
 }
 
 html.is-phone .filter-toggle {
-  height: 2.75rem;
+  height: 44px;
 }
 
 html.is-phone .list-foot {
@@ -227,5 +227,5 @@ html.is-phone .list-foot {
 }
 
 html.is-phone .page-numbers button {
-  min-width: 2.75rem;
+  min-width: 44px;
 }
