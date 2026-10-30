@@ -91,7 +91,9 @@ export default function DuePayments({
                   }
                 >
                   <div className="row-panel-actions">
-                    <Button onClick={() => onPay(payment)}>{t('rec.pay')}</Button>
+                    <Button variant="outline" onClick={() => onPay(payment)}>
+                      {t('rec.pay')}
+                    </Button>
                     <Button variant="outline" onClick={() => onSkip(payment)}>
                       {t('rec.skip')}
                     </Button>
@@ -120,7 +122,7 @@ export default function DuePayments({
                   <Button variant="ghost" size="sm" onClick={() => onSkip(payment)}>
                     {t('rec.skip')}
                   </Button>
-                  <Button size="sm" className="row-primary" data-row-focus onClick={() => onPay(payment)}>
+                  <Button variant="outline" size="sm" className="row-primary" data-row-focus onClick={() => onPay(payment)}>
                     {t('rec.pay')}
                   </Button>
                 </div>

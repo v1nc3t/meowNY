@@ -389,15 +389,6 @@
   }
 }
 
-/* Recurring: a card for each item (money.css draws the card itself). */
-.rec-list {
-  display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
-  width: 100%;
-  margin: 0 0 0.5rem;
-}
-
 /* Lists (transactions, debts, documents, tokens...): one box with a thin line, a row for each item, and dashed lines between the rows,
    like a ledger. The row is a grid whose columns are the list's --cols: one column on a narrow screen, the text and its actions from
    52em. A list with columns of its own (a table) is `.card-list.is-table`, sets its --cols, and may start with a `.list-head` row of

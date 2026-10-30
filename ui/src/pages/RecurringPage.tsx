@@ -1,4 +1,4 @@
-import { Fragment, useCallback, useEffect, useId, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react'
+import { useCallback, useEffect, useId, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import AddCategoryModal from '../components/AddCategoryModal'
 import AttachArea from '../components/AttachArea'
@@ -108,13 +108,13 @@ function RecurringView({ settings, now }: { settings: MoneySettings; now: Today 
   const categoryNames = useMemo(() => new Map(categories.map((category) => [category.id, category.name])), [categories])
   const incomeCategories = useMemo(() => new Set(categories.filter((category) => category.type === 'INCOME').map((category) => category.id)), [categories])
 
-  // One group per category, in the category list's order; items of a deleted category go last.
-  const groups = useMemo(() => {
+  // In the category list's order, the items of a category together; items of a deleted category go last. Each comes with its category's name.
+  const rows = useMemo(() => {
     const byCategory = new Map<string, Recurring[]>()
     for (const item of items ?? []) byCategory.set(item.categoryId, [...(byCategory.get(item.categoryId) ?? []), item])
-    const known = categories.filter((c) => byCategory.has(c.id)).map((c) => ({ id: c.id, name: c.name, items: byCategory.get(c.id) ?? [] }))
-    const unknown = [...byCategory].filter(([id]) => !categoryNames.has(id))
-    return [...known, ...unknown.map(([id, list]) => ({ id, name: t('tx.deletedCategory'), items: list }))]
+    const known = categories.filter((c) => byCategory.has(c.id)).map((c) => ({ name: c.name, items: byCategory.get(c.id) ?? [] }))
+    const unknown = [...byCategory].filter(([id]) => !categoryNames.has(id)).map(([, list]) => ({ name: t('tx.deletedCategory'), items: list }))
+    return [...known, ...unknown].flatMap((group) => group.items.map((item) => ({ item, category: group.name })))
   }, [items, categories, categoryNames, t])
 
   useEffect(() => {
@@ -401,9 +401,9 @@ function RecurringView({ settings, now }: { settings: MoneySettings; now: Today 
 
   const resume = (item: Recurring) => void run(() => recurringApi.setActive(item.id, true))
 
-  // A desktop row: name, how often, next due date, amount, then the one thing to do (mark as paid), edit, delete and the chevron. Skip,
-  // pause and end are in the panel the chevron opens.
-  function tableRow(item: Recurring) {
+  // A desktop row: name, category, how often, next due date, amount, then the one thing to do (mark as paid), edit, delete and the
+  // chevron. Skip, pause and end are in the panel the chevron opens.
+  function tableRow({ item, category }: { item: Recurring; category: string }) {
     const status = statusOf(item, now.date)
     const badge = badgeOf(item, status)
     const open = openId === item.id
@@ -418,12 +418,19 @@ function RecurringView({ settings, now }: { settings: MoneySettings; now: Today 
           {status !== 'upcoming' ? <Badge variant={STATE_BADGE[status]}>{badge.state}</Badge> : null}
           {marks(item)}
         </div>
-        <span className="cell-sub">{everyText(item)}</span>
+        <div className="rec-sub">
+          <span className="cell-sub" title={category}>
+            {category}
+          </span>
+          <span className="cell-sub" title={everyText(item)}>
+            {everyText(item)}
+          </span>
+        </div>
         <span className="cell-sub-end">{badge.date}</span>
         {amount(item)}
         <div className="cell-actions">
           {item.isActive ? (
-            <Button size="sm" className="row-primary" data-row-focus onClick={() => openPay(item)}>
+            <Button variant="outline" size="sm" className="row-primary" data-row-focus onClick={() => openPay(item)}>
               {t('rec.pay')}
             </Button>
           ) : status === 'paused' ? (
@@ -463,7 +470,7 @@ function RecurringView({ settings, now }: { settings: MoneySettings; now: Today 
 
   // A phone row: the name and amount, how often and the next due date under them. It opens to the details and a labelled button for
   // everything that can be done with the item.
-  function tapRow(item: Recurring) {
+  function tapRow({ item, category }: { item: Recurring; category: string }) {
     const status = statusOf(item, now.date)
     const badge = badgeOf(item, status)
     const label = `${panelId}-${item.id}`
@@ -479,8 +486,7 @@ function RecurringView({ settings, now }: { settings: MoneySettings; now: Today 
         amount={amount(item)}
         sub={
           <>
-            <span>{everyText(item)}</span>
-            <span>{status === 'ended' ? badge.date : t('debts.dueOn', { date: badge.date })}</span>
+            <span>{`${category}, ${everyText(item)}, ${status === 'ended' ? badge.date : t('debts.dueOn', { date: badge.date })}`}</span>
             {status !== 'upcoming' ? <Badge variant={STATE_BADGE[status]}>{badge.state}</Badge> : null}
             {marks(item)}
           </>
@@ -495,9 +501,13 @@ function RecurringView({ settings, now }: { settings: MoneySettings; now: Today 
         ) : null}
         <div className="row-panel-actions">
           {item.isActive ? (
-            <Button onClick={() => openPay(item)}>{t('rec.pay')}</Button>
+            <Button variant="outline" onClick={() => openPay(item)}>
+              {t('rec.pay')}
+            </Button>
           ) : status === 'paused' ? (
-            <Button onClick={() => resume(item)}>{t('rec.resume')}</Button>
+            <Button variant="outline" onClick={() => resume(item)}>
+              {t('rec.resume')}
+            </Button>
           ) : null}
           <Button variant="outline" onClick={() => openEdit(item)}>
             <Icon name="pencil" className="btn-icon" />
@@ -614,35 +624,18 @@ function RecurringView({ settings, now }: { settings: MoneySettings; now: Today 
       {tab === 'items' && items ? (
         <div className="tx-pane wide">
           {items.length === 0 ? <EmptyState text={t('rec.empty')} action={{ label: t('rec.add'), onClick: openAdd }} /> : null}
-          {items.length > 0 && phone
-            ? groups.map((group) => (
-                <div key={group.id} className="list-day">
-                  <h2>
-                    {group.name}
-                    {group.items.length > 1 ? <span className="rec-count">{group.items.length}</span> : null}
-                  </h2>
-                  <ul className="card-list">{group.items.map(tapRow)}</ul>
-                </div>
-              ))
-            : null}
+          {items.length > 0 && phone ? <ul className="card-list">{rows.map((row) => tapRow(row))}</ul> : null}
           {items.length > 0 && !phone ? (
             <ul className="card-list is-table has-action rec-table">
               <li className="list-head" aria-hidden="true">
                 <span>{t('common.name')}</span>
+                <span>{t('common.category')}</span>
                 <span>{t('sync.field.every')}</span>
                 <span>{t('sync.field.nextDue')}</span>
                 <span className="is-end">{t('tx.amount')}</span>
                 <span />
               </li>
-              {groups.map((group) => (
-                <Fragment key={group.id}>
-                  <li className="list-group">
-                    <span>{group.name}</span>
-                    {group.items.length > 1 ? <span className="rec-count">{group.items.length}</span> : null}
-                  </li>
-                  {group.items.map(tableRow)}
-                </Fragment>
-              ))}
+              {rows.map((row) => tableRow(row))}
             </ul>
           ) : null}
         </div>

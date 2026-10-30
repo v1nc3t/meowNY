@@ -618,8 +618,26 @@ html.is-phone .settings-footer-actions a {
   margin: 0;
 }
 
+/* The tokens: the name gets the room (a long one wraps), the times fit on a line when the section is as wide as it is at 1280px, and
+   the last column is as wide as its button (the head has a hidden copy of the word, so both are the same in every language). */
 .card-list.token-table {
-  --cols: minmax(0, 1.2fr) minmax(0, 1fr) minmax(0, 1.4fr) minmax(0, 1.4fr) 7rem;
+  --cols: minmax(0, 1.3fr) minmax(0, 0.75fr) minmax(0, 1.45fr) minmax(0, 1.45fr) max-content;
+}
+
+ul.card-list.token-table > li.card-item,
+ul.card-list.token-table > li.list-head {
+  column-gap: 0.75rem;
+}
+
+.token-table .cell-name > .card-name {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.token-table .head-spacer {
+  padding-inline: calc(0.75rem + 1px);
+  font-size: 0.875rem;
+  visibility: hidden;
 }
 
 .card-list.device-table {

@@ -115,7 +115,7 @@ export default function CommandApiBlock({ locale, timezone }: { locale: string; 
             <span>{t('cli.tokenScope')}</span>
             <span>{t('cli.colExpires')}</span>
             <span>{t('cli.colLastUsed')}</span>
-            <span />
+            <span className="head-spacer">{t('cli.revoke')}</span>
           </li>
           {tokens.map((token) => (
             <li className={`card-item${token.expired ? ' is-expired' : ''}`} key={token.id}>

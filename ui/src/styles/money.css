@@ -529,38 +529,51 @@ html.is-phone .app-shell.is-locked .tx-page.budget-page {
   }
 }
 
-/* Recurring: name, how often, next due date, amount, then mark as paid, edit, delete and the chevron. The items of a category are under
-   its name. */
+/* Recurring: name, category, how often, next due date, amount, then mark as paid, edit, delete and the chevron. Six columns are a lot for
+   a list, so the gaps and the padding are a little narrower, the columns are as wide as their words (at 1280px nothing is cut), and a
+   name that is longer than its room wraps. The category and how often are two columns on a wide list and one line of small print
+   (the wrapper is the cell) on a narrow one. */
 .card-list.rec-table {
-  --cols: minmax(0, 2.4fr) minmax(0, 1.1fr) minmax(0, 1.2fr) 6.5rem 16.5rem;
+  --cols: minmax(0, 1fr) 7.25rem 7.25rem 5.75rem 6.5rem 15.5rem;
 }
 
-ul.card-list > li.list-group {
-  display: flex;
-  flex-direction: row;
-  align-items: baseline;
-  gap: 0.75rem;
-  padding: 1rem 1.25rem 0.375rem;
-  border-top: 1px solid var(--border);
-  font-size: 0.8125rem;
-  font-weight: 600;
-  color: var(--muted-foreground);
+ul.card-list.rec-table > li.card-item,
+ul.card-list.rec-table > li.list-head {
+  column-gap: 0.75rem;
+  padding-inline: 1rem;
 }
 
-ul.card-list > li.list-head + li.list-group,
-ul.card-list > li.list-group + li {
-  border-top: 0;
+.rec-table .cell-name {
+  flex-wrap: wrap;
+  row-gap: 0.125rem;
 }
 
-.rec-count {
-  font-size: 0.8125rem;
-  font-weight: 400;
-  color: var(--muted-foreground);
-  font-variant-numeric: tabular-nums;
+.rec-table .cell-name > .card-name {
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
-.list-day > h2 .rec-count {
-  margin-left: 0.5rem;
+.rec-table .row-primary {
+  padding-inline: 0.5rem;
+}
+
+/* The same room for the buttons in every row (an item that is paused or ended has no "mark as paid"), so the amounts line up when the
+   head is gone. */
+ul.card-list.rec-table .cell-actions {
+  min-width: 15.5rem;
+}
+
+.rec-table .rec-sub {
+  display: contents;
+}
+
+@container (max-width: 56em) {
+  ul.card-list.rec-table .rec-sub {
+    display: flex;
+    grid-area: sub;
+    gap: 0.25rem 1rem;
+    min-width: 0;
+  }
 }
 
 /* An item that is paused or ended is quieter than one that is running. */
@@ -569,12 +582,12 @@ ul.card-list > li.list-group + li {
   color: var(--muted-foreground);
 }
 
-/* What is written under a row on the phone when it has nothing to open: no chevron, so no room for one. */
 /* A line of its own in the small print under a phone row. */
 .row-toggle > .cell-sub > .is-line {
   flex: 1 1 100%;
 }
 
+/* A phone row that has nothing to open has no chevron, so no room for one. */
 .row-toggle.is-plain {
   grid-template-columns: minmax(0, 1fr) auto;
   grid-template-areas:

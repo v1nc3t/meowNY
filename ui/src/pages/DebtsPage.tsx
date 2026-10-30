@@ -234,9 +234,13 @@ function DebtsView({ settings, now }: { settings: MoneySettings; now: Today }) {
       >
         <div className="row-panel-actions">
           {person.archived ? (
-            <Button onClick={() => void bringBack(person)}>{t('debts.unarchive')}</Button>
+            <Button variant="outline" onClick={() => void bringBack(person)}>
+              {t('debts.unarchive')}
+            </Button>
           ) : tone !== 'even' ? (
-            <Button onClick={() => setSettling(person)}>{t('debts.settle')}</Button>
+            <Button variant="outline" onClick={() => setSettling(person)}>
+              {t('debts.settle')}
+            </Button>
           ) : null}
           <Link to={friendLink(person)} className={buttonClass('outline')}>
             {t('debts.ledger')}

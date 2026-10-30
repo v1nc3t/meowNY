@@ -18,8 +18,8 @@ import { debts } from '../api/debts'
 import { errorText } from '../api/invoke'
 import { useToday, type Today } from '../api/today'
 import { transactions as transactionsApi, type Transaction, type TransactionPage } from '../api/transactions'
-import { memoByKey } from '../lib/cache'
 import { categoryOptions } from '../lib/categoriesView'
+import { byDay, dayHeading } from '../lib/dayHeading'
 import { amountString, formatDate, formatMoney } from '../lib/money'
 import { apiBound, shiftBound, type RangeMode } from '../lib/range'
 import { recall, useRemember } from '../lib/sticky'
@@ -305,15 +305,7 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
   const categoryName = (transaction: Transaction) => categoryNames.get(transaction.categoryId) ?? (categoriesReady ? t('tx.deletedCategory') : '')
 
   // The phone's list is by day, under a heading for each day.
-  const days = useMemo(() => {
-    const groups: { date: string; rows: Transaction[] }[] = []
-    for (const transaction of page?.transactions ?? []) {
-      const last = groups[groups.length - 1]
-      if (last && last.date === transaction.paymentDate) last.rows.push(transaction)
-      else groups.push({ date: transaction.paymentDate, rows: [transaction] })
-    }
-    return groups
-  }, [page])
+  const days = useMemo(() => byDay(page?.transactions ?? [], (transaction) => transaction.paymentDate), [page])
 
   // The period: the current month, the kind of range, from and to.
   const rangeControls = (
@@ -736,25 +728,6 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
       ) : null}
     </section>
   )
-}
-
-const dayFormat = memoByKey(
-  (locale: string, withYear: boolean) => `${locale}|${withYear}`,
-  (locale: string, withYear: boolean) => {
-    try {
-      return new Intl.DateTimeFormat(locale, { weekday: 'short', day: 'numeric', month: 'short', ...(withYear ? { year: 'numeric' } : {}), timeZone: 'UTC' })
-    } catch {
-      return null
-    }
-  },
-)
-
-/** "wed 28 oct": the heading of a day in the phone's list, in the words of the locale, with the year when it is not this one. */
-function dayHeading(isoDate: string, locale: string, thisYear: string): string {
-  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(isoDate)
-  if (!match) return isoDate
-  const date = new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3])))
-  return dayFormat(locale, match[1] !== thisYear)?.format(date).toLowerCase() ?? isoDate
 }
 
 // Add and edit share this modal. Field order: name, amount, category, date, description.
