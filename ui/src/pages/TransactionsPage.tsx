@@ -22,8 +22,8 @@ import { transactions as transactionsApi, type Transaction, type TransactionPage
 import { categoryOptions } from '../lib/categoriesView'
 import { byDay, dayHeading } from '../lib/dayHeading'
 import { amountString, formatDate, formatMoney } from '../lib/money'
-import { apiBound, shiftBound, type RangeMode } from '../lib/range'
-import { recall, useRemember } from '../lib/sticky'
+import { apiBound, presentRange, shiftBound, type RangeMode } from '../lib/range'
+import { recall, saveChoice, storedChoice, storedId, useRemember } from '../lib/sticky'
 import { draftOfBill, equalDraft, NOT_SPLIT, toInput, type SplitState } from '../lib/split'
 import { toggleRow } from '../lib/toggleRow'
 import { useAttachments, type Attachments } from '../hooks/useAttachments'
@@ -40,6 +40,8 @@ import { useRowNavigation } from '../keys/useRowNavigation'
 
 type TransactionList = TransactionPage
 type MenuName = 'range' | 'show' | 'category'
+const MODES = ['year', 'month', 'date'] as const
+const LIMITS = [10, 50, 100] as const
 type Filters = {
   mode: RangeMode
   from: string
@@ -61,13 +63,17 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
   const phone = useProfile() === 'phone'
   const [categories, setCategories] = useState<Category[]>([])
   const [categoriesReady, setCategoriesReady] = useState(false)
-  const [filters, setFilters] = useState<Filters>(() => {
-    const month = now.month
-    return { mode: 'month', from: month, to: month, categoryId: '', q: '', ...recall<Partial<Filters>>('transactions.range', () => ({})) }
-  })
+  // The kind of period, the category and the rows per page are remembered after a restart; the dates only while the app stays open (after a
+  // restart the page opens on the present, in the kind of period that was chosen).
+  const [filters, setFilters] = useState<Filters>(() => ({
+    ...presentRange(storedChoice('tx.period', MODES, 'month'), now),
+    categoryId: storedId('tx.category'),
+    q: '',
+    ...recall<Partial<Filters>>('transactions.range', () => ({})),
+  }))
   const range = useMemo(() => ({ mode: filters.mode, from: filters.from, to: filters.to }), [filters.mode, filters.from, filters.to])
   useRemember('transactions.range', range)
-  const [limit, setLimit] = useState(50)
+  const [limit, setLimit] = useState(() => storedChoice('tx.limit', LIMITS, 50))
   const [offset, setOffset] = useState(0)
   const [reload, setReload] = useState(0)
   const [page, setPage] = useState<TransactionList | null>(null)
@@ -98,6 +104,13 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
   const searchText = useDebounced(filters.q, 200)
   const categoryNames = useMemo(() => new Map(categories.map((category) => [category.id, category.name])), [categories])
   const incomeCategories = useMemo(() => new Set(categories.filter((category) => category.type === 'INCOME').map((category) => category.id)), [categories])
+  // a remembered category that has been deleted since is no longer a filter, and the list is not asked for it before that is known
+  const categoryKnown = filters.categoryId === '' || categoryNames.has(filters.categoryId)
+  useEffect(() => {
+    if (!categoriesReady || categoryKnown) return
+    saveChoice('tx.category', '')
+    setFilters((current) => ({ ...current, categoryId: '' }))
+  }, [categoriesReady, categoryKnown])
   // the phone keeps the period and the category behind a "filters" button
   const [filtersOpen, setFiltersOpen] = useState(false)
   const filtersId = useId()
@@ -119,6 +132,7 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
   }, [reload])
 
   useEffect(() => {
+    if (!categoryKnown) return
     let cancelled = false
     const from = apiBound(filters.mode, filters.from, 'from')
     const to = apiBound(filters.mode, filters.to, 'to')
@@ -143,7 +157,7 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
     return () => {
       cancelled = true
     }
-  }, [filters.mode, filters.from, filters.to, filters.categoryId, searchText, limit, offset, reload, say])
+  }, [filters.mode, filters.from, filters.to, filters.categoryId, categoryKnown, searchText, limit, offset, reload, say])
 
   useEffect(() => {
     if (!focus) return
@@ -161,6 +175,7 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
   // A year or a month is one value for both ends; a range keeps the first and the last day of what was shown. The current year, shown
   // by month, is this month.
   function onMode(mode: RangeMode) {
+    saveChoice('tx.period', mode)
     setFilters((current) => {
       const from =
         mode === 'month' && current.mode === 'year' && current.from === now.date.slice(0, 4) ? now.month : shiftBound(current.from, current.mode, mode, 'from')
@@ -172,6 +187,7 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
   const searchRef = useRef<HTMLInputElement>(null)
 
   function goCurrentMonth() {
+    saveChoice('tx.period', 'month')
     setFilters((current) => ({ ...current, mode: 'month', from: now.month, to: now.month }))
     setOffset(0)
   }
@@ -291,8 +307,14 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
   }
 
   function scopeLabel(): string {
-    if (filters.categoryId) return categoryNames.get(filters.categoryId) ?? t('tx.deletedCategory')
+    if (filters.categoryId) return categoryNames.get(filters.categoryId) ?? ''
     return t('tx.allCategories')
+  }
+
+  function pickCategory(categoryId: string) {
+    saveChoice('tx.category', categoryId)
+    patchFilters({ categoryId })
+    setMenu(null)
   }
 
   const modeLabel = (mode: RangeMode) => (mode === 'date' ? t('tx.range') : mode === 'month' ? t('common.month') : t('common.year'))
@@ -313,14 +335,14 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
   const rangeControls = (
     <div className="tx-range">
       <Pick
-        label={t('tx.show')}
+        label={t('tx.period')}
         className="mode"
         text={modeLabel(filters.mode)}
         open={menu === 'range'}
         onToggle={() => setMenu((current) => (current === 'range' ? null : 'range'))}
         onClose={() => setMenu(null)}
       >
-        {(['year', 'month', 'date'] as const).map((mode) => (
+        {MODES.map((mode) => (
           <PickOption
             key={mode}
             selected={filters.mode === mode}
@@ -357,7 +379,7 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
           </div>
         </>
       ) : (
-        <DatePicker kind={filters.mode} value={filters.from} label={t('tx.show')} today={now.date} onChange={(value) => patchFilters({ from: value, to: value })} />
+        <DatePicker kind={filters.mode} value={filters.from} label={t('tx.period')} today={now.date} onChange={(value) => patchFilters({ from: value, to: value })} />
       )}
       {atCurrentMonth ? null : (
         <Button variant="outline" onClick={goCurrentMonth} {...tip('today', t('tx.currentMonth'))}>
@@ -372,27 +394,19 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
       label={t('common.category')}
       className="scope"
       text={scopeLabel()}
+      title={scopeLabel()}
       open={menu === 'category'}
       onToggle={() => setMenu((current) => (current === 'category' ? null : 'category'))}
       onClose={() => setMenu(null)}
     >
-      <PickOption
-        selected={!filters.categoryId}
-        onClick={() => {
-          patchFilters({ categoryId: '' })
-          setMenu(null)
-        }}
-      >
+      <PickOption selected={!filters.categoryId} onClick={() => pickCategory('')}>
         {t('tx.allCategories')}
       </PickOption>
       {categories.map((category) => (
         <PickOption
           key={`category-${category.id}`}
           selected={filters.categoryId === category.id}
-          onClick={() => {
-            patchFilters({ categoryId: category.id })
-            setMenu(null)
-          }}
+          onClick={() => pickCategory(category.id)}
         >
           {category.name}
         </PickOption>
@@ -413,17 +427,18 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
           onToggle={() => setMenu((current) => (current === 'show' ? null : 'show'))}
           onClose={() => setMenu(null)}
         >
-          {['10', '50', '100'].map((value) => (
+          {LIMITS.map((value) => (
             <PickOption
               key={value}
-              selected={String(limit) === value}
+              selected={limit === value}
               onClick={() => {
-                setLimit(Number(value))
+                saveChoice('tx.limit', value)
+                setLimit(value)
                 setOffset(0)
                 setMenu(null)
               }}
             >
-              {value}
+              {String(value)}
             </PickOption>
           ))}
         </Pick>

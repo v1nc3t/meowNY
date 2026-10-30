@@ -26,6 +26,7 @@ import { useRowNavigation } from '../keys/useRowNavigation'
 import { balanceView } from '../lib/balance'
 import { formatDate, formatMoney } from '../lib/money'
 import { reminderEvery, remindersChanged } from '../lib/reminders'
+import { saveChoice, storedChoice } from '../lib/sticky'
 
 export default function DebtsPage() {
   const { settings, error } = useMoneySettings()
@@ -52,7 +53,7 @@ function DebtsView({ settings, now }: { settings: MoneySettings; now: Today }) {
   // a code that was scanned or is being pasted, and the camera while it looks
   const [taking, setTaking] = useState<string | null>(null)
   const [scanning, setScanning] = useState(false)
-  const [showRemoved, setShowRemoved] = useState(false)
+  const [showRemoved, setShowRemoved] = useState(() => storedChoice('debts.removed', [false, true], false))
   const [reload, setReload] = useState(0)
   const say = useToast()
   const [addingFriend, setAddingFriend] = useState(false)
@@ -384,7 +385,14 @@ function DebtsView({ settings, now }: { settings: MoneySettings; now: Today }) {
               {t('debts.addFriend')}
             </Button>
             <label>
-              <input type="checkbox" checked={showRemoved} onChange={(event) => setShowRemoved(event.target.checked)} />
+              <input
+                type="checkbox"
+                checked={showRemoved}
+                onChange={(event) => {
+                  saveChoice('debts.removed', event.target.checked)
+                  setShowRemoved(event.target.checked)
+                }}
+              />
               {t('debts.showRemoved')}
             </label>
           </div>

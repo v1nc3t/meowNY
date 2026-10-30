@@ -84,7 +84,7 @@ export const ro: Messages = {
   'tx.add': 'adaugă tranzacție',
   'tx.addTitle': 'adaugă tranzacție',
   'tx.editTitle': 'editează tranzacția',
-  'tx.show': 'arată',
+  'tx.period': 'perioadă',
   'tx.range': 'interval',
   'tx.from': 'de la',
   'tx.to': 'până la',

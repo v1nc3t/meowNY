@@ -264,17 +264,21 @@ html.is-phone .tx-pane > .page-numbers {
 }
 
 .filter-bar > .pick.scope {
-  flex: 1 1 14rem;
+  flex: 0 1 13rem;
   min-width: 10rem;
-  max-width: 24rem;
 }
 
-/* A long category name is never cut off: the button and the list are as wide as the field and the name wraps in them. */
+/* The field is kept narrow, so the search has the room. A long category name is cut short in the closed field (the whole name is its
+   tooltip) and wraps in the open list, which is as wide as the field. */
 .filter-bar .pick.scope .pick-button {
   width: 100%;
   min-width: 0;
-  white-space: normal;
-  overflow-wrap: anywhere;
+}
+
+.filter-bar .pick.scope .pick-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .filter-bar .pick.scope .pick-list {
@@ -292,6 +296,12 @@ html.is-phone .tx-pane > .page-numbers {
    them, in a box. */
 html.is-phone .toolbar.tx-bar.filter-bar {
   align-items: flex-end;
+}
+
+/* In that box the field is as wide as the box and a phone has no tooltip: the whole name shows, on as many lines as it needs. */
+.filter-panel .pick.scope .pick-button {
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .filter-toggle[aria-expanded='true'] {

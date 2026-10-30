@@ -9,6 +9,7 @@ export default function Pick({
   inline = false,
   className,
   text,
+  title,
   open,
   onToggle,
   onClose,
@@ -19,6 +20,8 @@ export default function Pick({
   inline?: boolean
   className?: string
   text: string
+  /** For a choice that may be cut short in a narrow field: the whole of it, as a tooltip. */
+  title?: string
   open: boolean
   onToggle: () => void
   onClose: () => void
@@ -45,8 +48,8 @@ export default function Pick({
   return (
     <div className={className ? `pick ${className}` : 'pick'} ref={ref}>
       <span className={inline ? 'sr-only' : undefined}>{label}</span>
-      <button type="button" className="pick-button" aria-expanded={open} aria-haspopup="listbox" onClick={onToggle}>
-        {text}
+      <button type="button" className="pick-button" title={title} aria-expanded={open} aria-haspopup="listbox" onClick={onToggle}>
+        <span className="pick-text">{text}</span>
       </button>
       {open ? (
         <ul className="pick-list" role="listbox">

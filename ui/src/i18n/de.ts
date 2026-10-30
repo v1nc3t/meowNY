@@ -86,7 +86,7 @@ export const de: Messages = {
   'tx.add': 'buchung hinzufügen',
   'tx.addTitle': 'buchung hinzufügen',
   'tx.editTitle': 'buchung bearbeiten',
-  'tx.show': 'anzeigen',
+  'tx.period': 'zeitraum',
   'tx.range': 'zeitraum',
   'tx.from': 'von',
   'tx.to': 'bis',

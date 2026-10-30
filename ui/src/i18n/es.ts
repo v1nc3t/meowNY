@@ -85,7 +85,7 @@ export const es: Messages = {
   'tx.add': 'añadir transacción',
   'tx.addTitle': 'añadir transacción',
   'tx.editTitle': 'editar transacción',
-  'tx.show': 'mostrar',
+  'tx.period': 'período',
   'tx.range': 'periodo',
   'tx.from': 'desde',
   'tx.to': 'hasta',

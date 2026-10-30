@@ -1,6 +1,7 @@
 import { listen } from '@tauri-apps/api/event'
 import { z } from 'zod'
 import { call, errorText, inDesktopApp, ApiError, type ErrorCode } from '../api/invoke'
+import { forgetChoices } from '../lib/sticky'
 import type { Settings } from './rules'
 
 export { errorText, inDesktopApp, ApiError as VaultError }
@@ -46,12 +47,17 @@ export type BackupDone = z.infer<typeof BackupDone>
 
 const none = (passphrase: string) => (passphrase === '' ? null : passphrase)
 const done = <T>(promise: Promise<T>) => promise.then(() => undefined)
+/** All data is new (erased, created or restored): what the lists remembered about the old data (a category) means nothing now. */
+const fresh = <T>(answer: T) => {
+  forgetChoices()
+  return answer
+}
 
 export const vault = {
   status: () => call('vault_status', Status),
   /** Creates the data file and returns the recovery key, which is shown once and never stored. */
   create: (settings: Settings, passphrase: string) =>
-    call('create_vault', RecoveryKey, { settings, passphrase: none(passphrase) }),
+    call('create_vault', RecoveryKey, { settings, passphrase: none(passphrase) }).then(fresh),
   /** Unlocks with the recovery key and sets a new passphrase (empty means none). */
   recover: (recoveryKey: string, newPassphrase: string) =>
     done(call('recover_vault', Nothing, { recoveryKey, newPassphrase: none(newPassphrase) })),
@@ -75,10 +81,10 @@ export const vault = {
    * False when the person cancels.
    */
   restoreBackup: (passphrase: string, confirmation: string) =>
-    call('restore_backup', z.boolean(), { passphrase, confirmation }),
+    call('restore_backup', z.boolean(), { passphrase, confirmation }).then((restored) => restored && fresh(restored)),
   /** First run: new data file filled from a backup. Returns the recovery key, or null when the person cancels. */
   restoreFromBackup: (backupPassphrase: string, passphrase: string) =>
-    call('restore_backup_new_vault', RecoveryKey.nullable(), { passphrase: backupPassphrase, vaultPassphrase: none(passphrase) }),
+    call('restore_backup_new_vault', RecoveryKey.nullable(), { passphrase: backupPassphrase, vaultPassphrase: none(passphrase) }).then((key) => key && fresh(key)),
   /** The scheduled backup setup, never its passphrase. Null when there is none. */
   backupSchedule: () => call('get_backup_schedule', BackupSchedule.nullable()),
   /**
@@ -99,6 +105,6 @@ export const vault = {
   setNotifyDue: (on: boolean) => done(call('set_notify_due', Nothing, { on })),
   showDueNotification: (title: string, body: string) => done(call('show_due_notification', Nothing, { title, body })),
   dataLocation: () => call('data_location', z.string()),
-  wipe: (confirmation: string) => done(call('wipe_all_data', Nothing, { confirmation })),
+  wipe: (confirmation: string) => done(call('wipe_all_data', Nothing, { confirmation }).then(fresh)),
   onLocked: (handler: () => void) => listen('vault-locked', handler),
 }

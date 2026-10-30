@@ -94,7 +94,7 @@ export const en = {
   'tx.add': 'add transaction',
   'tx.addTitle': 'add transaction',
   'tx.editTitle': 'edit transaction',
-  'tx.show': 'show',
+  'tx.period': 'period',
   'tx.range': 'range',
   'tx.from': 'from',
   'tx.to': 'to',

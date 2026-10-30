@@ -21,6 +21,7 @@ import { useT } from '../i18n/context'
 import { formatSize } from '../lib/bytes'
 import { canKeepToPreview, canPreview, dropNotice, fileState, fileStateText, KIND_CHOICES, reportLines, type KindChoice } from '../lib/documents'
 import { formatDate } from '../lib/money'
+import { saveChoice, storedChoice } from '../lib/sticky'
 import { useShortcut } from '../keys/registry'
 import { tip } from '../keys/tip'
 import { useRowNavigation } from '../keys/useRowNavigation'
@@ -41,7 +42,7 @@ function DocumentsView({ settings }: { settings: MoneySettings }) {
   const panelId = useId()
   const [openId, setOpenId] = useState<string | null>(null)
   const [q, setQ] = useState('')
-  const [kind, setKind] = useState<KindChoice>('')
+  const [kind, setKind] = useState<KindChoice>(() => storedChoice('docs.kind', KIND_CHOICES.map((choice) => choice.value), ''))
   const [kindMenu, setKindMenu] = useState(false)
   const [offset, setOffset] = useState(0)
   const [reload, setReload] = useState(0)
@@ -334,6 +335,7 @@ function DocumentsView({ settings }: { settings: MoneySettings }) {
               key={choice.value}
               selected={kind === choice.value}
               onClick={() => {
+                saveChoice('docs.kind', choice.value)
                 setKind(choice.value)
                 setKindMenu(false)
                 setOffset(0)

@@ -45,3 +45,8 @@ export function thisPeriod(mode: RangeMode, today: { date: string; month: string
   if (mode === 'month') return today.month
   return today.date.slice(0, 4)
 }
+
+/** Where a list opens when nothing was shown before: this year, this month, or (for dates) the first and last day of this month. */
+export function presentRange(mode: RangeMode, today: { month: string }): { mode: RangeMode; from: string; to: string } {
+  return { mode, from: shiftBound(today.month, 'month', mode, 'from'), to: shiftBound(today.month, 'month', mode, 'to') }
+}
