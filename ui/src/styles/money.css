@@ -150,7 +150,8 @@ html.is-phone .split-table td {
   height: 3.5rem;
 }
 
-/* The categories page: the budgets of expenses and income side by side (a card each), then the history. */
+/* The categories page: the budgets of expenses and income side by side, then the history, all in the pane under the title, which
+   scrolls as the pane of the other pages does. */
 .budget-page {
   container-type: inline-size;
   container-name: budget;
@@ -160,104 +161,59 @@ html.is-phone .split-table td {
   flex-wrap: wrap;
 }
 
-/* Three bands: title, expenses | income (half each), history. The page itself never scrolls. */
-.tx-page > .budget-split {
-  flex: 1 1 auto;
-  min-height: 0;
+.budget-view > * + * {
+  margin-top: 1.5rem;
+}
+
+.budget-split {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  grid-template-rows: minmax(0, 1fr);
-  align-items: stretch;
-  gap: 1rem;
+  align-items: start;
+  gap: 1.5rem;
 }
 
-.app-main main section section.budget-half {
-  width: auto;
-  max-width: none;
-  min-width: 0;
-  min-height: 0;
-  align-items: stretch;
-  gap: 1rem;
-  overflow: hidden;
+/* No room for two sides: one under the other. */
+@container budget (max-width: 50rem) {
+  .budget-split {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
-/* A side has no frame of its own: the list in it is the box. */
-.app-main main section section.budget-half {
-  padding: 0;
-  background: transparent;
-  border: 0;
-  box-shadow: none;
-}
-
-.budget-half > * {
-  flex-shrink: 0;
-}
-
-/* The category list is the part that scrolls. */
-.budget-pane {
-  flex: 1 1 auto;
-  min-height: 0;
-  overflow: auto;
-  margin-right: -0.5rem;
-  padding-right: 0.5rem;
-}
-
-.budget-half > .budget-pane {
-  flex-shrink: 1;
-}
-
-.budget-pane:empty {
-  display: none;
-}
-
-.budget-pane > p {
-  margin: 0;
-  padding: 0.5rem 0;
-  font-size: 0.8125rem;
-  color: var(--muted-foreground);
-}
-
-/* Rows of label, amount and actions. Amounts are plain text until "edit" is clicked. */
-.budget-table {
+/* A side, and the history: a title over its boxes. */
+.budget-half,
+.budget-history {
   display: flex;
   flex-direction: column;
-  width: 100%;
+  gap: 1rem;
+  min-width: 0;
 }
 
-/* The three totals of a side (budget, allocated, not allocated) sit on a grey tile. */
-.budget-half > .budget-table {
-  padding: 0 0.875rem;
-  background: var(--muted);
-  border-radius: var(--radius-md);
-}
-
-.budget-row {
-  display: grid;
-  /* The actions column keeps room for the longest "edit" word in any language, so amounts line up. */
-  grid-template-columns: minmax(0, 1fr) auto minmax(6.5rem, auto);
-  align-items: center;
-  gap: 0 1rem;
-  width: 100%;
-  min-height: 2.75rem;
+.budget-half > .card-list,
+.budget-history > .card-list {
   margin: 0;
-  padding: 0.25rem 0;
-  border-top: 1px solid var(--border);
 }
 
-.budget-row:first-child {
-  border-top: 0;
-}
-
-/* The categories of one side are a table (name, budget, edit and delete). A row can be held and dragged: no text selection or touch
-   menu when it is held. */
+/* The totals of a side (the budget, what was spent) and its categories (name, budget, edit and delete) share their columns, so the
+   amounts line up. A category row can be held and dragged: no text selection or touch menu when it is held. */
+.card-list.sum-list,
 .card-list.cat-list {
   --cols: minmax(0, 1fr) 7rem 4.75rem;
 }
 
+ul.card-list.sum-list > li.card-item,
+ul.card-list.cat-list > li.card-item,
+ul.card-list.cat-list > li.list-head {
+  gap: 0.25rem 1rem;
+}
+
+/* Every row is as tall as the least height says (the first one too, which has no line over it): a dragged row is put in the first and the
+   last place by the middle of that place, which only works when the rows are equally tall. */
+ul.card-list.sum-list > li.card-item,
 ul.card-list.cat-list > li.card-item {
-  min-height: 2.75rem;
-  padding-block: 0.25rem;
-  padding-inline: 1rem;
+  padding-block: 0.5rem;
+}
+
+ul.card-list.cat-list > li.card-item {
   user-select: none;
   -webkit-user-select: none;
   -webkit-touch-callout: none;
@@ -283,187 +239,134 @@ ul.card-list > li.card-item.is-lifted {
   color: var(--muted-foreground);
 }
 
+/* The phone: no head, higher rows, buttons of 44px, a long name wraps rather than being cut. */
+html.is-phone .card-list.sum-list,
 html.is-phone .card-list.cat-list {
-  --cols: minmax(0, 1fr) auto 5.5rem;
+  --cols: minmax(0, 1fr) auto 92px;
 }
 
+html.is-phone ul.card-list.sum-list > li.card-item,
 html.is-phone ul.card-list.cat-list > li.card-item {
-  min-height: 3.5rem;
-}
-
-ul.card-list.cat-list > li.list-head {
-  padding-block: 0.5rem;
+  min-height: 4.5rem;
   padding-inline: 1rem;
 }
 
-/* On the phone a long name wraps rather than being cut. */
+html.is-phone .sum-list .ui-btn,
+html.is-phone .cat-list .ui-btn {
+  min-height: 44px;
+}
+
+html.is-phone .sum-list .ui-btn-icon,
+html.is-phone .cat-list .ui-btn-icon {
+  min-width: 44px;
+}
+
+html.is-phone ul.card-list.cat-list > li.list-head {
+  display: none;
+}
+
+html.is-phone .sum-list .cell-name > .card-name,
 html.is-phone .cat-list .cell-name > .card-name {
   white-space: normal;
   overflow-wrap: anywhere;
 }
 
-.budget-label {
-  font-size: 0.8125rem;
-  color: var(--foreground);
-  overflow-wrap: anywhere;
+/* The form of the budget is the row itself, so its parts sit on the columns of the list. Changing the amount takes the whole row: the
+   field beside the name, the buttons under them. */
+.budget-form {
+  display: contents;
 }
 
-.budget-row.quiet .budget-label {
-  color: var(--muted-foreground);
+ul.card-list.sum-list > li.card-item.is-editing {
+  grid-template-columns: minmax(0, 1fr) 9rem;
 }
 
-.budget-amount {
-  font-size: 0.8125rem;
-  color: var(--foreground);
-  text-align: right;
-  font-variant-numeric: tabular-nums;
-}
-
-.budget-amount.unset {
-  color: var(--muted-foreground);
-}
-
-.budget-amount.over {
-  font-weight: 600;
-  color: var(--destructive);
-}
-
-.budget-row input {
-  width: min(9rem, 100%);
+.sum-list input {
   text-align: right;
 }
 
-.budget-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 0.25rem;
-  min-width: 3rem;
+/* The pencil is over the pencils of the categories. */
+.sum-list .cell-actions {
+  justify-content: flex-start;
 }
 
-/* Changing the amount of a side (allocated) takes the whole row: the amount and the label on one line, the buttons under them. */
-.budget-page .budget-row.editing {
-  grid-template-columns: minmax(0, 1fr) auto;
-  row-gap: 0.375rem;
-  padding-block: 0.5rem;
-}
-
-.budget-page .budget-row.editing .budget-label {
-  white-space: nowrap;
-}
-
-.budget-page .budget-row.editing .budget-actions {
+.sum-list .is-editing .cell-actions {
   grid-column: 1 / -1;
+  flex-wrap: wrap;
   justify-content: flex-end;
+  gap: 0.5rem;
 }
 
-/* Monthly history: one row per month since the first budget, in a card. */
-.app-main main section section.budget-history {
-  flex: 0 0 auto;
-  width: 100%;
-  max-width: none;
-  gap: 0.75rem;
-  height: clamp(12rem, 32svh, 18rem);
-  min-height: 0;
+/* The history: the month, then what was spent and its budget, what was earned and its budget. The button with the month is stretched
+   over the row, so a click anywhere on it shows that month above. Narrower than 48em: no head, and three lines a row (the month, what
+   was spent, what was earned), the words of the head in front of the amounts. */
+.card-list.hist-list {
+  --cols: minmax(9rem, 1.4fr) repeat(4, minmax(0, 1fr));
+  container-type: inline-size;
 }
 
-/* On the desktop layout the history gets more of the page. */
-@container budget (min-width: 43.75rem) {
-  .app-main main section section.budget-history {
-    height: clamp(14rem, 38svh, 21rem);
-  }
+ul.card-list.hist-list > li.card-item,
+ul.card-list.hist-list > li.list-head {
+  gap: 0.25rem 1rem;
 }
 
-.budget-history-scroll {
-  flex: 1 1 auto;
-  min-height: 0;
-  width: 100%;
-  overflow: auto;
+ul.card-list.hist-list > li.card-item {
+  position: relative;
+  padding-block: 0.625rem;
+  cursor: pointer;
 }
 
-.budget-history .ui-table th,
-.budget-history .ui-table td {
-  text-align: right;
-  white-space: nowrap;
-  font-variant-numeric: tabular-nums;
-}
-
-.budget-history .ui-table th {
-  position: sticky;
-  top: 0;
-  background: var(--card);
-  box-shadow: inset 0 -1px 0 var(--border);
-}
-
-.budget-history .ui-table th:first-child,
-.budget-history .ui-table td:first-child {
-  text-align: left;
-}
-
-.budget-history .ui-table td:first-child .ui-btn {
+.hist-list .cell-name > .card-name {
   text-transform: lowercase;
 }
 
-.budget-history .ui-table tr.selected {
-  background: var(--muted);
+.hist-list .card-name::after {
+  content: '';
+  position: absolute;
+  inset: 0;
 }
 
-.budget-history .ui-table tr.selected td:first-child .ui-btn {
-  font-weight: 600;
+.hist-list .hist-budget {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
 }
 
-.budget-history .over {
-  color: var(--destructive);
-}
-
-.budget-history .earned-over {
-  color: var(--success);
-}
-
-/* A narrow page: the sides are stacked and the page itself scrolls, with a gutter for its scroll bar. */
-@container budget (max-width: 43.75rem) {
-  .app-shell.is-locked .tx-page.budget-page {
-    overflow: auto;
-    margin-right: calc(var(--room) * -1);
-    padding-right: var(--room);
+@container (max-width: 48em) {
+  ul.card-list.hist-list > li.list-head {
+    display: none;
   }
 
-  .tx-page > .budget-split {
-    flex: none;
-    display: flex;
-    flex-direction: column;
+  ul.card-list.hist-list > li.list-head + li {
+    border-top: 0;
   }
 
-  .budget-pane {
-    flex: none;
-    max-height: 16rem;
+  ul.card-list.hist-list > li.card-item {
+    grid-template-columns: max-content max-content minmax(0, 1fr);
+    gap: 0 0.75rem;
   }
 
-  .app-main main section section.budget-half {
-    overflow: visible;
+  .hist-list .cell-name {
+    grid-column: 1 / -1;
+  }
+
+  .hist-list .hist-label.sr-only {
+    position: static;
+    width: auto;
     height: auto;
-    flex: none;
+    margin: 0;
+    overflow: visible;
+    clip-path: none;
+    font-size: 0.875rem;
+    color: var(--muted-foreground);
   }
-}
 
-html.is-phone .app-shell.is-locked .tx-page.budget-page {
-  overflow: hidden;
-  margin-right: calc(var(--edge) * -1);
-  padding-right: var(--edge);
-}
+  .hist-list .hist-budget {
+    text-align: left;
+  }
 
-/* The history keeps its table in one piece and scrolls sideways when it is wider than the screen. */
-.budget-view .budget-history-scroll {
-  flex: none;
-  overflow-x: auto;
-  overflow-y: hidden;
-}
-
-/* The page scrolls on a phone, so the lists inside do not scroll on their own. */
-.budget-view .budget-pane {
-  max-height: none;
-  overflow: visible;
-  margin-right: 0;
-  padding-right: 0;
+  .hist-list .hist-budget::before {
+    content: '/ ';
+  }
 }
 
 /* Lists with one labelled button in each row (mark as paid, bring back): its words may wrap onto a second line rather than push the

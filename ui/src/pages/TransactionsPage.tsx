@@ -24,6 +24,7 @@ import { amountString, formatDate, formatMoney } from '../lib/money'
 import { apiBound, shiftBound, type RangeMode } from '../lib/range'
 import { recall, useRemember } from '../lib/sticky'
 import { draftOfBill, equalDraft, NOT_SPLIT, toInput, type SplitState } from '../lib/split'
+import { toggleRow } from '../lib/toggleRow'
 import { useAttachments, type Attachments } from '../hooks/useAttachments'
 import { useClipCounts } from '../hooks/useClipCounts'
 import { useFocusRequest, useJumpTo } from '../hooks/useFocusRequest'
@@ -710,7 +711,7 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
                 </div>
               ))
             ) : (
-              <ul className="card-list is-table tx-list">
+              <ul className="card-list is-table tx-list" onClick={toggleRow}>
                 <li className="list-head" aria-hidden="true">
                   <span>{t('common.name')}</span>
                   <span>{t('common.category')}</span>

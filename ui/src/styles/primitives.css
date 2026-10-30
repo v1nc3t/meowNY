@@ -302,51 +302,6 @@
   border-color: var(--success);
 }
 
-/* Tables: the wrapper scrolls sideways when the table is wider than the screen. */
-.ui-table-wrap {
-  width: 100%;
-  overflow: auto;
-}
-
-.ui-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 0.8125rem;
-}
-
-.ui-table caption {
-  padding-bottom: 0.5rem;
-  text-align: left;
-  color: var(--muted-foreground);
-}
-
-/* Column headers: small and grey. */
-.ui-table th {
-  height: 2.5rem;
-  padding: 0 0.5rem;
-  text-align: left;
-  font-size: 0.8125rem;
-  font-weight: 500;
-  white-space: nowrap;
-  color: var(--muted-foreground);
-}
-
-.ui-table td {
-  padding: 0.5rem;
-}
-
-.ui-table tr {
-  border-bottom: 1px solid var(--border);
-}
-
-.ui-table tbody tr:last-child {
-  border-bottom: 0;
-}
-
-.ui-table tbody tr:hover {
-  background: var(--muted);
-}
-
 /* Tabs: a grey track and a flat white tab on it, marked with a green line below. The triggers are equally wide. */
 .ui-tabs {
   display: inline-grid;
@@ -432,16 +387,34 @@ ul.card-list > li.list-head + li {
   border-top: 0;
 }
 
-/* The row the pointer is on is shaded; a row that is open is shaded and marked on its left in green, like the page in the sidebar. */
+/* The row the pointer is on is shaded; a row that is open (or the chosen month of the history) is shaded and marked on its left in green, like
+   the page in the sidebar. */
 @media (hover: hover) {
   ul.card-list > li.card-item:hover {
     background: var(--muted);
   }
 }
 
-ul.card-list > li.card-item.is-open {
+ul.card-list > li.card-item.is-open,
+ul.card-list > li.card-item.is-selected {
   background: var(--muted);
   box-shadow: inset 2px 0 0 var(--primary);
+}
+
+/* The transactions and the recurring items open on a click anywhere on the row (toggleRow in lib/toggleRow.ts): the pointer and the shade
+   are for the rows that have a chevron, and the open panel is plain again. */
+ul.card-list.is-table > li.card-item:has(> .cell-actions [aria-expanded]) {
+  cursor: pointer;
+}
+
+ul.card-list.is-table > li.card-item > .row-panel {
+  cursor: auto;
+}
+
+@media (hover: hover) {
+  ul.card-list:is(.tx-list, .rec-table) > li.card-item:not(:has(> .cell-actions [aria-expanded])):hover {
+    background: transparent;
+  }
 }
 
 .card-body {
@@ -545,6 +518,10 @@ ul.card-list > li.list-head > .is-end {
 
 .cell-amount.is-income {
   color: var(--success);
+}
+
+.cell-amount.is-over {
+  color: var(--destructive);
 }
 
 .cell-actions {
