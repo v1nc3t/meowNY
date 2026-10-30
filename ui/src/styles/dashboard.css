@@ -329,8 +329,11 @@
 }
 
 .dash .dash-legend li.on,
-.dash .dash-legend li:hover {
-  background: var(--accent);
+/* Only with a mouse: on a phone a tap would leave the shade stuck. */
+@media (hover: hover) {
+  .dash .dash-legend li:hover {
+    background: var(--accent);
+  }
 }
 
 .swatch {
@@ -409,8 +412,10 @@
   border-radius: var(--radius-sm);
 }
 
-.dash .dash-bars li:hover {
-  background: var(--accent);
+@media (hover: hover) {
+  .dash .dash-bars li:hover {
+    background: var(--accent);
+  }
 }
 
 .dash .dash-bars .dash-total {
@@ -492,8 +497,10 @@
   }
 }
 
-.dash .dash-rec-rows li:not(.dash-rec-head):hover {
-  background: var(--accent);
+@media (hover: hover) {
+  .dash .dash-rec-rows li:not(.dash-rec-head):hover {
+    background: var(--accent);
+  }
 }
 
 .dash .dash-rec-rows .dash-rec-head {
