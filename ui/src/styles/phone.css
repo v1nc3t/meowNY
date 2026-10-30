@@ -30,6 +30,23 @@ html.is-phone .ui-tabs {
   height: auto;
 }
 
+/* The phone's own press replaces the grey box that Android draws on a tapped element (and iOS on a link). Every tappable thing below
+   and in primitives.css answers a press with a change of its own, so a tap is never silent. */
+html.is-phone {
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* A touch screen has no hover, so a press shows what hover shows on a desktop: the quiet fill. Rows and buttons have their own press (primitives.css). */
+html.is-phone :is(.phone-tab, .phone-action, .quick-menu button, .pick-button, .ui-tabs > button:not([aria-selected='true'])):active:not(:disabled) {
+  color: var(--accent-foreground);
+  background: var(--accent);
+}
+
+/* A link or a title with no box of its own dims for as long as it is pressed. */
+html.is-phone :is(.app-logo, .settings-back, .app-main a:not([class])):active {
+  opacity: 0.6;
+}
+
 .app-shell.is-phone.is-locked {
   grid-template-columns: minmax(0, 1fr);
   grid-template-rows: auto minmax(0, 1fr) auto;
@@ -62,6 +79,7 @@ html.is-phone .ui-tabs {
   height: 44px;
   padding: 0;
   color: var(--muted-foreground);
+  transition: background-color var(--t-fast), color var(--t-fast);
 }
 
 .phone-action.active {
@@ -118,6 +136,7 @@ html.is-phone *::-webkit-scrollbar-thumb {
   color: var(--muted-foreground);
   font-size: 0.75rem;
   text-decoration: none;
+  transition: background-color var(--t-fast), color var(--t-fast);
 }
 
 .phone-tab > span {
@@ -228,4 +247,10 @@ html.is-phone .list-foot {
 
 html.is-phone .page-numbers button {
   min-width: 44px;
+}
+
+/* A section of the settings opens in place of their list (and the list comes back) without the route changing, so the page's own
+   entrance does not play: the new part fades in the same quick steps. */
+html.is-phone .settings-layout > :is(.settings-list, .settings-section) {
+  animation: fade-in var(--t-med) steps(4, jump-start);
 }

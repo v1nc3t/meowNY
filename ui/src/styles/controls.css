@@ -127,6 +127,7 @@
 }
 
 .pick-list button:hover:not(:disabled),
+.pick-list button:active:not(:disabled),
 .pick-list button:focus {
   color: var(--accent-foreground);
   background: var(--accent);

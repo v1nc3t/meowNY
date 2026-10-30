@@ -12,6 +12,8 @@ import { installExternalLinkHandler } from './vault/externalLinks.ts'
 applyTheme(savedTheme())
 installExternalLinkHandler()
 installNoDragHandler()
+// iOS draws a press (:active) only on a page that has a touchstart listener, and the phone's buttons, tabs and rows are all pressed.
+document.addEventListener('touchstart', () => undefined, { passive: true })
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
