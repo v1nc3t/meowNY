@@ -8,9 +8,11 @@ import AddCategoryModal from '../components/AddCategoryModal'
 import BudgetSpanModal from '../components/BudgetSpanModal'
 import EditCategoryModal from '../components/EditCategoryModal'
 import MonthNav from '../components/MonthNav'
+import { IconAction } from '../components/RowParts'
 import SectionTabs from '../components/SectionTabs'
 import Button from '../components/ui/Button'
 import { CardTitle } from '../components/ui/Card'
+import { EmptyState } from '../components/ui/Pixel'
 import { useToday } from '../api/today'
 import { amountString, formatMoney } from '../lib/money'
 import { useMoneySettings, type MoneySettings } from '../hooks/useMoneySettings'
@@ -229,6 +231,7 @@ function CategoriesView({ settings, thisMonth }: { settings: MoneySettings; this
       onEdit={setEditing}
       onDelete={setDeleting}
       onReorder={onReorder}
+      onAdd={() => setAdding(true)}
     />,
     <BudgetHalf
       key="INCOME"
@@ -244,6 +247,7 @@ function CategoriesView({ settings, thisMonth }: { settings: MoneySettings; this
       onEdit={setEditing}
       onDelete={setDeleting}
       onReorder={onReorder}
+      onAdd={() => setAdding(true)}
     />,
   ]
   const historyTable = history ? (
@@ -399,6 +403,7 @@ function BudgetHalf({
   onEdit,
   onDelete,
   onReorder,
+  onAdd,
 }: {
   title: string
   /** The title is already shown by a section around this one. */
@@ -413,6 +418,7 @@ function BudgetHalf({
   onEdit: (category: Category) => void
   onDelete: (category: Category) => void
   onReorder: (ids: string[]) => void
+  onAdd: () => void
 }) {
   const t = useT()
   const { listRef, hintId, live } = useReorder(categories, onReorder)
@@ -439,7 +445,12 @@ function BudgetHalf({
       {/* The category list scrolls on its own, so the summary above and the history below stay in view. */}
       <div className="budget-pane">
         {categories && categories.length > 0 ? (
-          <div className="budget-table" key={month} ref={listRef}>
+          <ul className="card-list cat-list" key={month} ref={listRef}>
+            <li className="list-head" aria-hidden="true">
+              <span>{t('common.category')}</span>
+              <span className="is-end">{t('budgets.budget')}</span>
+              <span />
+            </li>
             {categories.map((category) => (
               <CategoryRow
                 key={category.id}
@@ -451,9 +462,12 @@ function BudgetHalf({
                 hintId={hintId}
               />
             ))}
-          </div>
+          </ul>
         ) : null}
-        {categories && categories.length === 0 ? <p>{t('common.noCategories')}</p> : null}
+        {/* the button is on the expenses side only: when both sides are empty, two of them would say the same */}
+        {categories && categories.length === 0 ? (
+          <EmptyState text={t('common.noCategories')} action={type === 'EXPENSE' ? { label: t('categories.add'), onClick: onAdd } : undefined} />
+        ) : null}
       </div>
       <span id={hintId} className="sr-only">
         {t('categories.reorderHint')}
@@ -481,10 +495,6 @@ function BudgetRow({
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState(value)
   const inputRef = useRef<HTMLInputElement>(null)
-
-  useEffect(() => {
-    if (!editing) setDraft(value)
-  }, [value, editing])
 
   useEffect(() => {
     if (editing) inputRef.current?.focus()
@@ -544,6 +554,7 @@ function BudgetRow({
             size="sm"
             onClick={(event) => {
               event.preventDefault()
+              setDraft(value)
               setEditing(true)
             }}
           >
@@ -573,28 +584,36 @@ function CategoryRow({
   hintId: string
 }) {
   const t = useT()
+  const amount = (
+    <span className={value === '' || Number(value) === 0 ? 'cell-amount is-varies' : 'cell-amount'}>{value === '' ? '-' : money(value)}</span>
+  )
   // Deleted from a later month on: it still counts here, and there is nothing to change about it.
   if (category.deleted) {
     return (
-      <div className="budget-row quiet" data-reorder-id={category.id}>
-        <span className="budget-label">{category.name}</span>
-        <span className={value === '' || Number(value) === 0 ? 'budget-amount unset' : 'budget-amount'}>{value === '' ? '-' : money(value)}</span>
-        <span className="budget-note">{t('budgets.deletedLater')}</span>
-      </div>
+      <li className="card-item is-quiet" data-reorder-id={category.id}>
+        <div className="cell-name">
+          <span className="card-name" title={category.name}>
+            {category.name}
+          </span>
+          <span className="row-mark">{t('budgets.deletedLater')}</span>
+        </div>
+        {amount}
+        <div className="cell-actions" />
+      </li>
     )
   }
   return (
-    <div className="budget-row" data-reorder-id={category.id}>
-      <span className="budget-label">{category.name}</span>
-      <span className={value === '' || Number(value) === 0 ? 'budget-amount unset' : 'budget-amount'}>{value === '' ? '-' : money(value)}</span>
-      <span className="budget-actions">
-        <Button variant="ghost" size="sm" data-row-focus aria-describedby={hintId} onClick={() => onEdit(category)}>
-          {t('common.edit')}
-        </Button>
-        <Button variant="ghost" size="sm" className="row-danger" onClick={() => onDelete(category)}>
-          {t('common.delete')}
-        </Button>
-      </span>
-    </div>
+    <li className="card-item" data-reorder-id={category.id}>
+      <div className="cell-name">
+        <span className="card-name" title={category.name}>
+          {category.name}
+        </span>
+      </div>
+      {amount}
+      <div className="cell-actions">
+        <IconAction icon="pencil" label={t('common.edit')} data-row-focus aria-describedby={hintId} onClick={() => onEdit(category)} />
+        <IconAction icon="trash" label={t('common.delete')} danger onClick={() => onDelete(category)} />
+      </div>
+    </li>
   )
 }

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useId, useMemo, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { debts, type Entry, type EntryKind, type Line, type Statement } from '../api/debts'
 import { ApiError, errorText } from '../api/invoke'
@@ -9,9 +9,10 @@ import ConfirmModal from '../components/ConfirmModal'
 import DebtsFiles from '../components/DebtsFiles'
 import EntryModal from '../components/EntryModal'
 import FriendNameModal from '../components/FriendNameModal'
+import Icon from '../components/NavIcon'
+import { IconAction, TapRow } from '../components/RowParts'
 import SettleModal from '../components/SettleModal'
 import Button from '../components/ui/Button'
-import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/Card'
 import { buttonClass } from '../components/ui/cn'
 import { useClipCounts } from '../hooks/useClipCounts'
 import { useFocusRequest, useJumpTo } from '../hooks/useFocusRequest'
@@ -22,6 +23,7 @@ import { useT } from '../i18n/context'
 import { useShortcut } from '../keys/registry'
 import { useRowNavigation } from '../keys/useRowNavigation'
 import { balanceView, entryOfLine } from '../lib/balance'
+import { byDay, dayHeading } from '../lib/dayHeading'
 import { formatDate, formatMoney } from '../lib/money'
 import { remindersChanged } from '../lib/reminders'
 
@@ -46,6 +48,8 @@ function FriendView({ settings, now }: { settings: MoneySettings; now: Today }) 
   const phone = useProfile() === 'phone'
   const { personId = '' } = useParams()
   const navigate = useNavigate()
+  const panelId = useId()
+  const [openKey, setOpenKey] = useState<string | null>(null)
   const [statement, setStatement] = useState<Statement | null>(null)
   const [missing, setMissing] = useState(false)
   const [reload, setReload] = useState(0)
@@ -128,6 +132,103 @@ function FriendView({ settings, now }: { settings: MoneySettings; now: Today }) 
     return line.what ? `${kind}: ${line.what}` : kind
   }
   const effectText = (line: Line) => `${line.effect.startsWith('-') ? '-' : '+'}${money(line.effect.replace('-', ''))}`
+  const lineKey = (line: Line, at: number) => `${line.entryId ?? 'bill'}-${line.transactionId ?? ''}-${at}`
+  const lineItem = (line: Line) => (line.entryId ? `ledger_entry:${line.entryId}` : undefined)
+  /** What a line changed: what the friend owes you more (green) or less (red). */
+  const change = (line: Line) => <span className={`cell-amount debt-${line.effect.startsWith('-') ? 'owe' : 'owed'}`}>{effectText(line)}</span>
+  const showCode = (line: Line) => setDialog({ kind: 'code', transactionId: line.transactionId ?? '', amount: line.amount })
+
+  // A desktop row: what it was, when, how much it changed, the balance after it, then its buttons (show code for a bill; edit and delete
+  // for an entry of the person's own).
+  function tableRow(line: Line, at: number) {
+    const entry = entryOfLine(line, person.id)
+    const count = line.entryId ? (clips[line.entryId] ?? 0) : 0
+    return (
+      <li key={lineKey(line, at)} className="card-item" data-item={lineItem(line)}>
+        <div className="cell-name">
+          <span className="card-name" title={lineLabel(line)}>
+            {lineLabel(line)}
+          </span>
+          {count && line.entryId ? <ClipPreview inline target={{ kind: 'ledger_entry', id: line.entryId }} name={lineLabel(line)} count={count} /> : null}
+        </div>
+        <span className="cell-sub">{formatDate(line.date, settings.locale)}</span>
+        {change(line)}
+        <span className="cell-sub-end">{money(line.balance)}</span>
+        <div className="cell-actions">
+          {line.kind === 'BILL' && line.transactionId ? <IconAction icon="qr" label={t('code.show')} data-row-focus onClick={() => showCode(line)} /> : null}
+          {entry ? (
+            <>
+              <IconAction icon="pencil" label={t('common.edit')} data-row-focus onClick={() => setDialog({ kind: 'entry', entry })} />
+              <IconAction icon="trash" label={t('common.delete')} danger onClick={() => setDialog({ kind: 'delete', entry })} />
+            </>
+          ) : null}
+        </div>
+      </li>
+    )
+  }
+
+  // A phone row: what it was and how much it changed, the balance under them. It opens to its documents and a labelled button for
+  // each thing that can be done; a line with neither is plain.
+  function tapRow(line: Line, at: number) {
+    const entry = entryOfLine(line, person.id)
+    const count = line.entryId ? (clips[line.entryId] ?? 0) : 0
+    const bill = line.kind === 'BILL' && line.transactionId
+    const key = lineKey(line, at)
+    return (
+      <TapRow
+        key={key}
+        id={`${panelId}-${key}`}
+        item={lineItem(line)}
+        open={openKey === key}
+        onToggle={() => setOpenKey(openKey === key ? null : key)}
+        name={lineLabel(line)}
+        amount={change(line)}
+        sub={
+          <>
+            <span>{`${t('debts.balance')} ${money(line.balance)}`}</span>
+            {count ? (
+              <span className="row-mark-icon">
+                <Icon name="clip" className="mark-icon" />
+                <span aria-hidden="true">{count}</span>
+                <span className="sr-only">{t('docs.clip', { count })}</span>
+              </span>
+            ) : null}
+          </>
+        }
+      >
+        {bill || entry || count ? (
+          <>
+            {count && line.entryId ? (
+              <section className="detail-section">
+                <p className="detail-title">{t('docs.title')}</p>
+                <ClipPreview target={{ kind: 'ledger_entry', id: line.entryId }} name={lineLabel(line)} count={count} />
+              </section>
+            ) : null}
+            <div className="row-panel-actions">
+              {bill ? (
+                <Button variant="outline" onClick={() => showCode(line)}>
+                  <Icon name="qr" className="btn-icon" />
+                  {t('code.show')}
+                </Button>
+              ) : null}
+              {entry ? (
+                <>
+                  <Button variant="outline" onClick={() => setDialog({ kind: 'entry', entry })}>
+                    <Icon name="pencil" className="btn-icon" />
+                    {t('common.edit')}
+                  </Button>
+                  <Button variant="outline" className="row-danger" onClick={() => setDialog({ kind: 'delete', entry })}>
+                    <Icon name="trash" className="btn-icon" />
+                    {t('common.delete')}
+                  </Button>
+                </>
+              ) : null}
+            </div>
+          </>
+        ) : null}
+      </TapRow>
+    )
+  }
 
   return (
     <section className="tx-page">
@@ -181,11 +282,9 @@ function FriendView({ settings, now }: { settings: MoneySettings; now: Today }) 
         />
       ) : null}
       <div className="tx-pane wide pane-stack">
-        <Card>
-          <CardHeader>
-            <CardTitle className={`debt-total debt-${tone}`}>{summaryText}</CardTitle>
-          </CardHeader>
-          <CardContent className="card-actions">
+        <div className="debts-summary">
+          <p className={`debt-total debt-${tone}`}>{summaryText}</p>
+          <div className="card-actions">
             <Link to="/app/debts" className={buttonClass('outline', 'sm')}>
               {t('debts.back')}
             </Link>
@@ -200,46 +299,30 @@ function FriendView({ settings, now }: { settings: MoneySettings; now: Today }) 
             >
               {t(person.archived ? 'debts.unarchive' : 'debts.archive')}
             </Button>
-          </CardContent>
-        </Card>
+          </div>
+        </div>
         <h2 className="debts-heading">{t('debts.ledger')}</h2>
         {lines.length === 0 ? <p className="hint">{t('debts.noLines')}</p> : null}
-        <ul className="card-list">
-          {lines.map((line, at) => {
-            const entry = entryOfLine(line, person.id)
-            return (
-              <li key={`${line.entryId ?? 'bill'}-${line.transactionId ?? ''}-${at}`} className="card-item" data-item={line.entryId ? `ledger_entry:${line.entryId}` : undefined}>
-                <div className="card-body">
-                  <p className="card-name">{lineLabel(line)}</p>
-                  <p className="card-meta">
-                    <span className={`card-amount debt-${line.effect.startsWith('-') ? 'owe' : 'owed'}`}>{effectText(line)}</span>
-                    {` · ${formatDate(line.date, settings.locale)} · ${t('debts.balance')} ${money(line.balance)}`}
-                  </p>
-                  {line.entryId && clips[line.entryId] ? (
-                    <ClipPreview target={{ kind: 'ledger_entry', id: line.entryId }} name={lineLabel(line)} count={clips[line.entryId] ?? 0} />
-                  ) : null}
-                </div>
-                {line.kind === 'BILL' && line.transactionId ? (
-                  <div className="card-actions">
-                    <Button variant="ghost" size="sm" data-row-focus onClick={() => setDialog({ kind: 'code', transactionId: line.transactionId ?? '', amount: line.amount })}>
-                      {t('code.show')}
-                    </Button>
-                  </div>
-                ) : null}
-                {entry ? (
-                  <div className="card-actions">
-                    <Button variant="ghost" size="sm" data-row-focus onClick={() => setDialog({ kind: 'entry', entry })}>
-                      {t('common.edit')}
-                    </Button>
-                    <Button variant="ghost" size="sm" className="row-danger" onClick={() => setDialog({ kind: 'delete', entry })}>
-                      {t('common.delete')}
-                    </Button>
-                  </div>
-                ) : null}
-              </li>
-            )
-          })}
-        </ul>
+        {lines.length > 0 && phone
+          ? byDay(lines, (line) => line.date).map((day) => (
+              <div key={day.date} className="list-day">
+                <h2>{dayHeading(day.date, settings.locale, now.date.slice(0, 4))}</h2>
+                <ul className="card-list">{day.rows.map((line) => tapRow(line, lines.indexOf(line)))}</ul>
+              </div>
+            ))
+          : null}
+        {lines.length > 0 && !phone ? (
+          <ul className="card-list is-table ledger-table">
+            <li className="list-head" aria-hidden="true">
+              <span>{t('debts.what')}</span>
+              <span>{t('sync.field.date')}</span>
+              <span className="is-end">{t('debts.change')}</span>
+              <span className="is-end">{t('debts.balance')}</span>
+              <span />
+            </li>
+            {lines.map(tableRow)}
+          </ul>
+        ) : null}
         {phone ? null : <DebtsFiles personId={person.id} onSaved={() => say(t('export.saved'), 'success')} onFailed={(text) => say(text, 'error')} />}
       </div>
     </section>

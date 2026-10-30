@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type ChangeEvent } from 'react'
+import { useCallback, useEffect, useId, useRef, useState, type ChangeEvent } from 'react'
 import ClipMark from '../components/ClipMark'
 import ConfirmModal from '../components/ConfirmModal'
 import DocumentLinksModal from '../components/DocumentLinksModal'
@@ -6,7 +6,7 @@ import DocumentModal from '../components/DocumentModal'
 import PreviewModal from '../components/PreviewModal'
 import Icon from '../components/NavIcon'
 import Pick, { PickOption } from '../components/Pick'
-import Badge from '../components/ui/Badge'
+import { IconAction, TapRow } from '../components/RowParts'
 import Button from '../components/ui/Button'
 import { EmptyState } from '../components/ui/Pixel'
 import { documents, type Doc, type DocPage, type LibrarySize, type Report } from '../api/documents'
@@ -36,6 +36,8 @@ function DocumentsView({ settings }: { settings: MoneySettings }) {
   const t = useT()
   const phone = useProfile() === 'phone'
   const locale = settings.locale
+  const panelId = useId()
+  const [openId, setOpenId] = useState<string | null>(null)
   const [q, setQ] = useState('')
   const [kind, setKind] = useState<KindChoice>('')
   const [kindMenu, setKindMenu] = useState(false)
@@ -191,6 +193,78 @@ function DocumentsView({ settings }: { settings: MoneySettings }) {
   const currentPage = page && page.limit > 0 ? Math.floor(page.offset / page.limit) + 1 : 1
   const lines = report ? reportLines(report, phone) : []
 
+  /** Where the file is, in words, when that is not simply here. */
+  const stateOf = (doc: Doc) => fileStateText(fileState(doc, phone))
+
+  // A desktop row: the name, the day, the size, then preview, details, save a copy and delete.
+  function tableRow(doc: Doc) {
+    const state = stateOf(doc)
+    return (
+      <li key={doc.id} className="card-item">
+        <div className="cell-name">
+          <Icon name="documents" className="doc-icon" />
+          <span className="card-name" title={doc.name}>
+            {doc.name}
+          </span>
+          {doc.keepOnPhone ? <span className="row-mark">{t('docs.keepOnPhone')}</span> : null}
+          {doc.linkCount > 0 ? <ClipMark inline count={doc.linkCount} onClick={() => setLinking(doc)} /> : null}
+        </div>
+        <span className="cell-sub">{formatDate(doc.documentDate, locale)}</span>
+        <span className="cell-sub-end">{formatSize(doc.sizeBytes, locale)}</span>
+        <div className="cell-actions">
+          <IconAction icon="eye" label={t('docs.previewButton')} disabled={!canPreview(doc)} onClick={() => setPreviewing(doc)} />
+          <IconAction icon="pencil" label={t('docs.details')} data-row-focus onClick={() => setViewing(doc.id)} />
+          {doc.hasFile && !phone ? <IconAction icon="download" label={t('docs.saveCopy')} onClick={() => void onSaveCopy(doc)} /> : <span className="icon-slot" />}
+          <IconAction icon="trash" label={t('common.delete')} danger onClick={() => setDeleting(doc)} />
+        </div>
+        {state ? <p className="cell-note">{t(state)}</p> : null}
+      </li>
+    )
+  }
+
+  // A phone row: the name and the size, the day and where the file is under them. It opens to a labelled button for each thing to do.
+  function tapRow(doc: Doc) {
+    const state = stateOf(doc)
+    return (
+      <TapRow
+        key={doc.id}
+        id={`${panelId}-${doc.id}`}
+        open={openId === doc.id}
+        onToggle={() => setOpenId(openId === doc.id ? null : doc.id)}
+        name={doc.name}
+        amount={<span className="cell-size">{formatSize(doc.sizeBytes, locale)}</span>}
+        sub={
+          <>
+            <span>{formatDate(doc.documentDate, locale)}</span>
+            {doc.keepOnPhone ? <span className="row-mark">{t('docs.keepOnPhone')}</span> : null}
+            {state ? <span className="is-line">{t(state)}</span> : null}
+          </>
+        }
+      >
+        {doc.linkCount > 0 ? (
+          <section className="detail-section">
+            <p className="detail-title">{t('docs.links')}</p>
+            <ClipMark count={doc.linkCount} onClick={() => setLinking(doc)} />
+          </section>
+        ) : null}
+        <div className="row-panel-actions">
+          <Button variant="outline" disabled={!canPreview(doc)} onClick={() => setPreviewing(doc)}>
+            <Icon name="eye" className="btn-icon" />
+            {t('docs.previewButton')}
+          </Button>
+          <Button variant="outline" onClick={() => setViewing(doc.id)}>
+            <Icon name="pencil" className="btn-icon" />
+            {t('docs.details')}
+          </Button>
+          <Button variant="outline" className="row-danger" onClick={() => setDeleting(doc)}>
+            <Icon name="trash" className="btn-icon" />
+            {t('common.delete')}
+          </Button>
+        </div>
+      </TapRow>
+    )
+  }
+
   return (
     <section className={dragging ? 'tx-page doc-page is-dragging' : 'tx-page doc-page'}>
       <div className="tx-title">
@@ -269,53 +343,24 @@ function DocumentsView({ settings }: { settings: MoneySettings }) {
       {page ? (
         <>
           <div className="tx-pane wide">
-            {page.documents.length === 0 ? <EmptyState text={search || kind ? t('docs.noMatch') : t('docs.empty')} /> : null}
-            <ul className="card-list">
-              {page.documents.map((doc) => {
-                const state = fileStateText(fileState(doc, phone))
-                return (
-                  <li key={doc.id} className="card-item">
-                    <div className="card-body">
-                      <div className="doc-title">
-                        <Icon name="documents" className="doc-icon" />
-                        <p className="card-name">{doc.name}</p>
-                      </div>
-                      <p className="card-meta">
-                        {formatDate(doc.documentDate, locale)} · {formatSize(doc.sizeBytes, locale)}
-                        {doc.linkCount > 0 ? (
-                          <>
-                            {' · '}
-                            <ClipMark inline count={doc.linkCount} onClick={() => setLinking(doc)} />
-                          </>
-                        ) : null}
-                        {state ? ` · ${t(state)}` : ''}
-                      </p>
-                      {doc.keepOnPhone ? (
-                        <p className="card-meta doc-marks">
-                          <Badge variant="outline">{t('docs.keepOnPhone')}</Badge>
-                        </p>
-                      ) : null}
-                    </div>
-                    <div className="card-actions">
-                      <Button variant="ghost" size="sm" disabled={!canPreview(doc)} onClick={() => setPreviewing(doc)}>
-                        {t('docs.previewButton')}
-                      </Button>
-                      <Button variant="ghost" size="sm" data-row-focus onClick={() => setViewing(doc.id)}>
-                        {t('docs.details')}
-                      </Button>
-                      {doc.hasFile && !phone ? (
-                        <Button variant="ghost" size="sm" aria-label={t('docs.saveCopy')} onClick={() => void onSaveCopy(doc)}>
-                          {t('common.save')}
-                        </Button>
-                      ) : null}
-                      <Button variant="ghost" size="sm" className="row-danger" onClick={() => setDeleting(doc)}>
-                        {t('common.delete')}
-                      </Button>
-                    </div>
-                  </li>
-                )
-              })}
-            </ul>
+            {page.documents.length === 0 ? (
+              <EmptyState
+                text={search || kind ? t('docs.noMatch') : t('docs.empty')}
+                action={search || kind ? undefined : { label: t('docs.add'), onClick: () => fileInput.current?.click() }}
+              />
+            ) : phone ? (
+              <ul className="card-list">{page.documents.map(tapRow)}</ul>
+            ) : (
+              <ul className="card-list is-table doc-table">
+                <li className="list-head" aria-hidden="true">
+                  <span>{t('common.name')}</span>
+                  <span>{t('sync.field.date')}</span>
+                  <span>{t('docs.size')}</span>
+                  <span />
+                </li>
+                {page.documents.map(tableRow)}
+              </ul>
+            )}
           </div>
           <div className="page-numbers">
             {Array.from({ length: pageCount }, (_, index) => {

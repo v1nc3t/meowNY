@@ -27,8 +27,8 @@
   bottom: calc(2.5rem + env(safe-area-inset-bottom, 0px));
 }
 
-/* The card is a pixel panel like a game's title screen: a 2px frame in the text colour with its corner pixels left out, on a hard
-   shadow (the lines of .notch in primitives.css, here for every password screen without a class on each). */
+/* The card is the one pixel frame of the app, like a game's title screen: a 2px line in the text colour with its corner pixels left
+   out, on a hard shadow (box-shadows, no border), here for every password screen. */
 .gate > form,
 .gate > .panel {
   display: flex;
@@ -213,10 +213,15 @@
   column-gap: 1rem;
 }
 
+/* The whole page is this one block, so it has no frame: the device list inside it is the box. */
 .settings-block {
   width: 100%;
   min-width: 0;
   margin: 0 0 1rem;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  box-shadow: none;
   break-inside: avoid;
 }
 
@@ -240,10 +245,6 @@
 
 .settings-block .panel {
   width: 100%;
-}
-
-.settings-block ul.card-list > li.card-item {
-  grid-template-columns: minmax(0, 1fr) auto;
 }
 
 .settings-block .card-list {
@@ -611,13 +612,61 @@ html.is-phone .settings-footer-actions a {
   min-height: 2.75rem;
 }
 
-/* Access tokens and paired phones: the rows of a card list, with the button at the right edge. */
+/* Access tokens and paired phones: tables in the section. A time is a few words, so the cells wrap rather than being cut, and
+   where the heads are gone (a narrow section) each time says what it is. */
 .settings-section .card-list {
   margin: 0;
 }
 
-.settings-section ul.card-list > li.card-item {
-  grid-template-columns: minmax(0, 1fr) auto;
+.card-list.token-table {
+  --cols: minmax(0, 1.2fr) minmax(0, 1fr) minmax(0, 1.4fr) minmax(0, 1.4fr) 7rem;
+}
+
+.card-list.device-table {
+  --cols: minmax(0, 1.2fr) minmax(0, 1.4fr) minmax(0, 1.6fr) 7rem;
+}
+
+.token-table .cell-sub,
+.token-table .cell-sub-end,
+.device-table .cell-sub,
+.device-table .cell-sub-end {
+  overflow: visible;
+  white-space: normal;
+}
+
+.cell-extra {
+  min-width: 0;
+  font-size: 0.875rem;
+  color: var(--muted-foreground);
+}
+
+.device-table .cell-actions {
+  flex-wrap: wrap;
+  gap: 0.25rem;
+}
+
+@container (max-width: 40em) {
+  ul.card-list.token-table > li.card-item {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      'name actions'
+      'sub sub'
+      'sub-end sub-end'
+      'extra extra';
+  }
+
+  ul.card-list.token-table .cell-sub-end {
+    text-align: left;
+  }
+
+  .token-table .cell-extra {
+    grid-area: extra;
+  }
+
+  .token-table [data-label]::before,
+  .device-table [data-label]::before {
+    content: attr(data-label) ' ';
+  }
 }
 
 .settings-section .ui-badge {
@@ -630,13 +679,9 @@ html.is-phone .settings-footer-actions a {
 }
 
 .card-item.is-expired .card-name,
-.card-item.is-expired .card-meta {
+.card-item.is-expired .cell-sub,
+.card-item.is-expired .cell-sub-end {
   color: var(--muted-foreground);
-}
-
-.inline-actions {
-  display: inline-flex;
-  gap: 0.25rem;
 }
 
 /* A narrow window: the sections are tabs in a row above the section, and a row stacks its name above its control. */

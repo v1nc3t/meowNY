@@ -87,37 +87,6 @@
   border-color: var(--input);
 }
 
-/* "details" under a row: a quiet link that opens the split and the description. */
-.card-body .tx-desc,
-.rec-body .tx-desc {
-  align-self: flex-start;
-  min-width: 0;
-  max-width: 100%;
-  font-size: 0.8125rem;
-  color: var(--muted-foreground);
-}
-
-/* What "details" opens on a list: the text goes under the button. */
-.card-detail {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-  margin-top: 0.25rem;
-  font-size: 0.8125rem;
-  color: var(--foreground);
-  overflow-wrap: anywhere;
-}
-
-.card-detail p {
-  margin: 0;
-}
-
-.card-detail .detail-section {
-  width: 100%;
-  margin-top: 0;
-  gap: 0.25rem;
-}
-
 /* What a shared bill opens to on the list: the title with what was paid, then a small table of who has which part, a code for
    each friend. */
 .split-head {
@@ -212,6 +181,14 @@ html.is-phone .split-table td {
   overflow: hidden;
 }
 
+/* A side has no frame of its own: the list in it is the box. */
+.app-main main section section.budget-half {
+  padding: 0;
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+}
+
 .budget-half > * {
   flex-shrink: 0;
 }
@@ -271,26 +248,58 @@ html.is-phone .split-table td {
   border-top: 0;
 }
 
-/* Rows of a category list can be held and dragged: no text selection or touch menu when they are held. */
-.budget-row[data-reorder-id] {
+/* The categories of one side are a table (name, budget, edit and delete). A row can be held and dragged: no text selection or touch
+   menu when it is held. */
+.card-list.cat-list {
+  --cols: minmax(0, 1fr) 7rem 4.75rem;
+}
+
+ul.card-list.cat-list > li.card-item {
+  min-height: 2.75rem;
+  padding-block: 0.25rem;
+  padding-inline: 1rem;
   user-select: none;
   -webkit-user-select: none;
   -webkit-touch-callout: none;
 }
 
 /* While one is dragged, the others slide aside; the one in hand is lifted and follows the pointer. */
-.is-reordering > .budget-row:not(.is-lifted) {
+.is-reordering > .card-item:not(.is-lifted) {
   transition: transform 0.12s;
 }
 
-.budget-row.is-lifted {
+ul.card-list > li.card-item.is-lifted {
   position: relative;
   z-index: 2;
-  padding-inline: 0.5rem;
   background: var(--muted);
-  box-shadow: var(--shadow-md);
+  box-shadow: inset 2px 0 0 var(--primary);
   cursor: grabbing;
   touch-action: none;
+}
+
+/* A category that is deleted from a later month on is quiet. */
+.card-item.is-quiet .card-name,
+.card-item.is-quiet .cell-amount {
+  color: var(--muted-foreground);
+}
+
+html.is-phone .card-list.cat-list {
+  --cols: minmax(0, 1fr) auto 5.5rem;
+}
+
+html.is-phone ul.card-list.cat-list > li.card-item {
+  min-height: 3.5rem;
+}
+
+ul.card-list.cat-list > li.list-head {
+  padding-block: 0.5rem;
+  padding-inline: 1rem;
+}
+
+/* On the phone a long name wraps rather than being cut. */
+html.is-phone .cat-list .cell-name > .card-name {
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .budget-label {
@@ -321,13 +330,6 @@ html.is-phone .split-table td {
 
 .budget-row input {
   width: min(9rem, 100%);
-  text-align: right;
-}
-
-.budget-note {
-  align-self: center;
-  font-size: 0.75rem;
-  color: var(--muted-foreground);
   text-align: right;
 }
 
@@ -464,134 +466,90 @@ html.is-phone .app-shell.is-locked .tx-page.budget-page {
   padding-right: 0;
 }
 
-/* Recurring: a card for each item, with its status as a badge, its actions on the right (under the date on a phone). */
-ul.rec-list > li.rec-item {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  grid-template-areas: 'body' 'due' 'more';
-  align-items: start;
-  gap: 0.75rem 1.5rem;
-  padding: 1rem;
-  color: var(--card-foreground);
-  background: var(--card);
-  border: var(--border-width) solid var(--border);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-xs);
-}
-
-@media (min-width: 52em) {
-  ul.rec-list > li.rec-item {
-    grid-template-columns: minmax(0, 1fr) auto;
-    grid-template-areas:
-      'body due'
-      'body more';
-    gap: 0.5rem 1.5rem;
-  }
-}
-
-.rec-body {
-  grid-area: body;
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
+/* Lists with one labelled button in each row (mark as paid, bring back): its words may wrap onto a second line rather than push the
+   columns about, whatever the language. A list that has them is `.has-action`, and is wide, so it gets its short two-line rows from 56em
+   instead of 40em. */
+.row-primary {
+  flex: 0 1 auto;
   min-width: 0;
+  max-width: 8.5rem;
+  height: auto;
+  min-height: 2rem;
+  padding: 0.25rem 0.75rem;
+  line-height: 1.25;
+  text-align: center;
+  white-space: normal;
 }
 
-.rec-name {
-  margin: 0;
-  font-size: 0.9375rem;
-  font-weight: 600;
-  color: var(--foreground);
-  overflow-wrap: anywhere;
+.cell-actions > .row-primary:not(:last-child) {
+  margin-right: 0.5rem;
 }
 
-/* An item that is paused or ended is quieter than one that is running. */
-.rec-item[data-status='paused'] .rec-name,
-.rec-item[data-status='ended'] .rec-name,
-.rec-item[data-status='paused'] .rec-date,
-.rec-item[data-status='ended'] .rec-date {
+.cell-amount.is-varies {
+  font-weight: 400;
   color: var(--muted-foreground);
 }
 
-.rec-meta {
-  margin: 0;
-  font-size: 0.8125rem;
-  color: var(--muted-foreground);
-}
+@container (max-width: 56em) {
+  ul.card-list.has-action > li.list-head {
+    display: none;
+  }
 
-.rec-amount {
-  color: var(--foreground);
-  font-variant-numeric: tabular-nums;
-}
+  ul.card-list.has-action > li.list-head + li {
+    border-top: 0;
+  }
 
-.rec-amount.rec-varies {
-  color: var(--muted-foreground);
-}
+  ul.card-list.has-action > li.card-item {
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    grid-template-areas:
+      'name amount actions'
+      'sub sub-end actions';
+    row-gap: 0;
+  }
 
-.rec-due {
-  grid-area: due;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.5rem 1rem;
-}
+  ul.card-list.has-action .cell-name {
+    grid-area: name;
+  }
 
-@media (min-width: 52em) {
-  .rec-due {
-    justify-content: flex-end;
+  ul.card-list.has-action .cell-amount {
+    grid-area: amount;
+  }
+
+  ul.card-list.has-action .cell-sub {
+    grid-area: sub;
+  }
+
+  ul.card-list.has-action .cell-sub-end {
+    grid-area: sub-end;
+    text-align: right;
+  }
+
+  ul.card-list.has-action .cell-actions {
+    grid-area: actions;
   }
 }
 
-/* The next due date, and a badge beside it when the item is not simply upcoming. */
-.rec-status {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5rem;
-  font-variant-numeric: tabular-nums;
+/* Recurring: name, how often, next due date, amount, then mark as paid, edit, delete and the chevron. The items of a category are under
+   its name. */
+.card-list.rec-table {
+  --cols: minmax(0, 2.4fr) minmax(0, 1.1fr) minmax(0, 1.2fr) 6.5rem 16.5rem;
 }
 
-.rec-date {
-  font-size: 0.875rem;
-  color: var(--foreground);
-}
-
-/* The actions stay together: they move under the date as a group when there is no room beside it. */
-.rec-actions {
-  display: inline-flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.25rem;
-}
-
-.rec-more {
-  grid-area: more;
+ul.card-list > li.list-group {
   display: flex;
-  flex-wrap: wrap;
-  gap: 0.125rem;
-}
-
-@media (min-width: 52em) {
-  .rec-more {
-    justify-self: end;
-  }
-}
-
-.rec-more .ui-btn {
-  color: var(--muted-foreground);
-}
-
-/* A category's heading in the list: its name and, quietly, how many items it has. */
-.tx-pane > h2.rec-group {
-  display: flex;
+  flex-direction: row;
   align-items: baseline;
   gap: 0.75rem;
-  margin: 1.5rem 0 0.75rem;
-  font-size: var(--pixel-md);
-  line-height: 1.2;
+  padding: 1rem 1.25rem 0.375rem;
+  border-top: 1px solid var(--border);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--muted-foreground);
 }
 
-.tx-pane > h2.rec-group:first-child {
-  margin-top: 0.25rem;
+ul.card-list > li.list-head + li.list-group,
+ul.card-list > li.list-group + li {
+  border-top: 0;
 }
 
 .rec-count {
@@ -601,45 +559,43 @@ ul.rec-list > li.rec-item {
   font-variant-numeric: tabular-nums;
 }
 
-/* A phone: the title and amount on the left, the date and badge on the right; the actions are a full row of big buttons under them, then
-   edit, end and delete in a row of their own. */
-html.is-phone ul.rec-list > li.rec-item {
+.list-day > h2 .rec-count {
+  margin-left: 0.5rem;
+}
+
+/* An item that is paused or ended is quieter than one that is running. */
+.card-item[data-status='paused'] .card-name,
+.card-item[data-status='ended'] .card-name {
+  color: var(--muted-foreground);
+}
+
+/* What is written under a row on the phone when it has nothing to open: no chevron, so no room for one. */
+/* A line of its own in the small print under a phone row. */
+.row-toggle > .cell-sub > .is-line {
+  flex: 1 1 100%;
+}
+
+.row-toggle.is-plain {
   grid-template-columns: minmax(0, 1fr) auto;
   grid-template-areas:
-    'body status'
-    'actions actions'
-    'more more';
-  gap: 0.5rem 1rem;
+    'name amount'
+    'sub sub';
 }
 
-html.is-phone .rec-due {
-  display: contents;
+.row-toggle.is-plain:active {
+  background: transparent;
 }
 
-html.is-phone .rec-status {
-  grid-area: status;
-  justify-self: end;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 0.25rem;
+/* The buttons of an open row sit under the details, on a line of their own. */
+.tx-detail > .row-panel-actions {
+  flex: 1 1 100%;
 }
 
-html.is-phone .rec-actions {
-  grid-area: actions;
-  display: flex;
-  flex-wrap: nowrap;
-  gap: 0.5rem;
-}
-
-html.is-phone .rec-actions > .ui-btn {
-  flex: 1 1 0;
-}
-
-html.is-phone .rec-more {
-  justify-self: stretch;
-  justify-content: space-between;
-  padding-top: 0.5rem;
-  border-top: 1px solid var(--border);
+/* A second, smaller line in a cell (when it was due, how many changes wait). */
+.cell-fine {
+  display: block;
+  font-size: 0.8125rem;
+  color: var(--muted-foreground);
 }
 
 html.is-phone .tx-range {

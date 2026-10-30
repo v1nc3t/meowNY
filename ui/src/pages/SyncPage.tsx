@@ -4,6 +4,7 @@ import { ApiError, errorText } from '../api/invoke'
 import { whenText } from '../api/locales'
 import { scanQr, stopScan } from '../api/scanner'
 import { cleanDeviceName, DEVICE_NAME_MAX, syncApi, type Peer } from '../api/sync'
+import { TapRow } from '../components/RowParts'
 import SyncStatusPanel from '../components/SyncStatusPanel'
 import Button from '../components/ui/Button'
 import { Card, CardContent } from '../components/ui/Card'
@@ -104,15 +105,17 @@ function PhoneSync() {
             {paired && (
               <ul className="card-list">
                 {devices.map((device) => (
-                  <li className="card-item" key={device.deviceId}>
-                    <div className="card-body">
-                      <p className="card-name">{device.name}</p>
-                      <p className="card-meta">
-                        {device.lastSyncAt ? t('sync.lastSync', { time: whenText(device.lastSyncAt, locale, timezone) }) : t('sync.neverSynced')}
-                        {device.changesWaiting !== null ? ` · ${t('sync.changesWaiting', { count: device.changesWaiting })}` : ''}
-                      </p>
-                    </div>
-                  </li>
+                  <TapRow
+                    key={device.deviceId}
+                    id={device.deviceId}
+                    name={device.name}
+                    sub={
+                      <>
+                        <span className="is-line">{device.lastSyncAt ? t('sync.lastSync', { time: whenText(device.lastSyncAt, locale, timezone) }) : t('sync.neverSynced')}</span>
+                        {device.changesWaiting !== null ? <span className="is-line">{t('sync.changesWaiting', { count: device.changesWaiting })}</span> : null}
+                      </>
+                    }
+                  />
                 ))}
               </ul>
             )}

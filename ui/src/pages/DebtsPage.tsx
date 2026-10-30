@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useId, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { debts, type EntryKind, type History, type Person, type Reminders } from '../api/debts'
 import { errorText } from '../api/invoke'
@@ -9,9 +9,12 @@ import ConfirmModal from '../components/ConfirmModal'
 import DebtsHistory from '../components/DebtsHistory'
 import EntryModal from '../components/EntryModal'
 import FriendNameModal from '../components/FriendNameModal'
+import Icon from '../components/NavIcon'
+import { IconAction, TapRow } from '../components/RowParts'
 import SectionTabs from '../components/SectionTabs'
 import SettleModal from '../components/SettleModal'
 import Button from '../components/ui/Button'
+import { buttonClass } from '../components/ui/cn'
 import { EmptyState } from '../components/ui/Pixel'
 import { useMoneySettings, type MoneySettings } from '../hooks/useMoneySettings'
 import { useToast } from '../hooks/toast'
@@ -39,6 +42,8 @@ function DebtsView({ settings, now }: { settings: MoneySettings; now: Today }) {
   const phone = useProfile() === 'phone'
   const navigate = useNavigate()
   const location = useLocation()
+  const panelId = useId()
+  const [openId, setOpenId] = useState<string | null>(null)
   const [people, setPeople] = useState<Person[] | null>(null)
   const [reminders, setReminders] = useState<Reminders | null>(null)
   const [tab, setTab] = useState<Tab>('friends')
@@ -136,13 +141,15 @@ function DebtsView({ settings, now }: { settings: MoneySettings; now: Today }) {
     else if (result.kind === 'unavailable') say(t('phone.noScanner'), 'warning')
   }
 
-  // The phone's round button sends the person here to scan a bill or add a friend: the camera or the form opens at once, once.
+  // The phone's round button sends the person here to scan a bill, and the first steps on the dashboard to add a friend: the camera or the form opens at once, once.
   useEffect(() => {
     const asked = location.state as { scan?: boolean; addFriend?: boolean } | null
-    if (!phone || (!asked?.scan && !asked?.addFriend)) return
+    if (!asked?.scan && !asked?.addFriend) return
     navigate(location.pathname, { replace: true, state: null })
-    if (asked.scan) void onScan()
-    else setAddingFriend(true)
+    // the camera is the phone's; the form opens on both
+    if (asked.scan) {
+      if (phone) void onScan()
+    } else setAddingFriend(true)
     // each time the page is asked, when it opens and when it is open already; the request is taken out of the location, so once
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.state])
@@ -154,10 +161,99 @@ function DebtsView({ settings, now }: { settings: MoneySettings; now: Today }) {
   useShortcut('new', () => setEntryKind('LENT'))
   useRowNavigation()
 
-  const balanceText = (person: Person) => {
+  /** Who owes whom, in words: "owes you", "you owe", "all settled". */
+  const statusText = (tone: 'owed' | 'owe' | 'even') => t(tone === 'owed' ? 'debts.labelOwesYou' : tone === 'owe' ? 'debts.labelYouOwe' : 'debts.settledUp')
+  const friendLink = (person: Person) => `/app/debts/${person.id}`
+
+  /** The buttons that change a friend, as a row's icons: edit, and delete (or nothing, for one that is removed already). */
+  function icons(person: Person) {
+    return (
+      <>
+        <IconAction icon="pencil" label={t('common.edit')} data-row-focus onClick={() => setEditing(person)} />
+        {person.archived ? <span className="icon-slot" /> : <IconAction icon="trash" label={t('common.delete')} danger onClick={() => setDeleting(person)} />}
+      </>
+    )
+  }
+
+  // A desktop row: name, who owes whom, the reminder, the amount, then the one thing to do (mark as paid, or bring back), edit and delete.
+  function tableRow(person: Person) {
     const { tone, abs } = balanceView(person.balance)
-    if (tone === 'even') return t('debts.settledUp')
-    return t(tone === 'owed' ? 'debts.owesYou' : 'debts.youOweThem', { name: person.name, amount: money(abs) })
+    const reminded = dueIds.has(person.id) && tone !== 'even'
+    return (
+      <li key={person.id} className="card-item" data-archived={person.archived || undefined}>
+        <div className="cell-name">
+          <Link className="card-name" to={friendLink(person)} title={person.name}>
+            {person.name}
+          </Link>
+          {person.archived ? <span className="row-mark">{t('debts.removed')}</span> : null}
+        </div>
+        <span className={`cell-sub debt-${tone}`}>{statusText(tone)}</span>
+        <span className="cell-sub-end">{reminded ? t('debts.dueBadge', { date: formatDate(dueOn.get(person.id) ?? '', settings.locale) }) : ''}</span>
+        <span className={`cell-amount debt-${tone}`}>{tone === 'even' ? '' : money(abs)}</span>
+        <div className="cell-actions">
+          {person.archived ? (
+            <Button variant="outline" size="sm" className="row-primary" onClick={() => void bringBack(person)}>
+              {t('debts.unarchive')}
+            </Button>
+          ) : tone !== 'even' ? (
+            <Button variant="outline" size="sm" className="row-primary" onClick={() => setSettling(person)}>
+              {t('debts.settle')}
+            </Button>
+          ) : null}
+          {icons(person)}
+        </div>
+      </li>
+    )
+  }
+
+  // A phone row: the name and what is owed, who owes whom under them. It opens to a labelled button for everything that can be done.
+  function tapRow(person: Person) {
+    const { tone, abs } = balanceView(person.balance)
+    const reminded = dueIds.has(person.id) && tone !== 'even'
+    const id = `${panelId}-${person.id}`
+    return (
+      <TapRow
+        key={person.id}
+        id={id}
+        data-archived={person.archived || undefined}
+        open={openId === person.id}
+        onToggle={() => setOpenId(openId === person.id ? null : person.id)}
+        name={
+          <>
+            {person.name}
+            {person.archived ? <span className="row-mark">{t('debts.removed')}</span> : null}
+          </>
+        }
+        amount={<span className={`cell-amount debt-${tone}`}>{tone === 'even' ? '' : money(abs)}</span>}
+        sub={
+          <>
+            <span className={`debt-${tone}`}>{statusText(tone)}</span>
+            {reminded ? <span className="is-line">{t('debts.dueBadge', { date: formatDate(dueOn.get(person.id) ?? '', settings.locale) })}</span> : null}
+          </>
+        }
+      >
+        <div className="row-panel-actions">
+          {person.archived ? (
+            <Button onClick={() => void bringBack(person)}>{t('debts.unarchive')}</Button>
+          ) : tone !== 'even' ? (
+            <Button onClick={() => setSettling(person)}>{t('debts.settle')}</Button>
+          ) : null}
+          <Link to={friendLink(person)} className={buttonClass('outline')}>
+            {t('debts.ledger')}
+          </Link>
+          <Button variant="outline" onClick={() => setEditing(person)}>
+            <Icon name="pencil" className="btn-icon" />
+            {t('common.edit')}
+          </Button>
+          {person.archived ? null : (
+            <Button variant="outline" className="row-danger" onClick={() => setDeleting(person)}>
+              <Icon name="trash" className="btn-icon" />
+              {t('common.delete')}
+            </Button>
+          )}
+        </div>
+      </TapRow>
+    )
   }
 
   return (
@@ -274,7 +370,7 @@ function DebtsView({ settings, now }: { settings: MoneySettings; now: Today }) {
       />
       {tab === 'history' && history ? (
         <div className="tx-pane wide pane-stack" role="tabpanel">
-          <DebtsHistory history={history} currency={settings.currency} locale={settings.locale} onPage={setHistoryOffset} />
+          <DebtsHistory history={history} currency={settings.currency} locale={settings.locale} today={now.date} onPage={setHistoryOffset} />
         </div>
       ) : null}
       {tab === 'friends' && people ? (
@@ -288,45 +384,20 @@ function DebtsView({ settings, now }: { settings: MoneySettings; now: Today }) {
               {t('debts.showRemoved')}
             </label>
           </div>
-          {people.length === 0 ? <EmptyState text={t('debts.empty')} /> : null}
-          <ul className="card-list">
-            {people.map((person) => {
-              const { tone } = balanceView(person.balance)
-              return (
-                <li key={person.id} className="card-item" data-archived={person.archived || undefined}>
-                  <div className="card-body">
-                    <p className="card-name">
-                      <Link to={`/app/debts/${person.id}`}>{person.name}</Link>
-                      {person.archived ? <span className="muted">{` · ${t('debts.removed')}`}</span> : null}
-                    </p>
-                    <p className="card-meta">
-                      <span className={`card-amount debt-${tone}`}>{balanceText(person)}</span>
-                      {dueIds.has(person.id) && tone !== 'even' ? ` · ${t('debts.dueBadge', { date: formatDate(dueOn.get(person.id) ?? '', settings.locale) })}` : ''}
-                    </p>
-                  </div>
-                  <div className="card-actions">
-                    <Button variant="ghost" size="sm" data-row-focus onClick={() => setEditing(person)}>
-                      {t('common.edit')}
-                    </Button>
-                    {person.archived ? (
-                      <Button variant="ghost" size="sm" onClick={() => void bringBack(person)}>
-                        {t('debts.unarchive')}
-                      </Button>
-                    ) : (
-                      <Button variant="ghost" size="sm" className="row-danger" onClick={() => setDeleting(person)}>
-                        {t('common.delete')}
-                      </Button>
-                    )}
-                    {tone !== 'even' ? (
-                      <Button variant="outline" size="sm" onClick={() => setSettling(person)}>
-                        {t('debts.settle')}
-                      </Button>
-                    ) : null}
-                  </div>
+          {people.length === 0 ? <EmptyState text={t('debts.empty')} action={{ label: t('debts.addFriend'), onClick: () => setAddingFriend(true) }} /> : null}
+          {people.length > 0 ? (
+            <ul className={phone ? 'card-list' : 'card-list is-table has-action friends-table'}>
+              {phone ? null : (
+                <li className="list-head" aria-hidden="true">
+                  <span>{t('common.name')}</span>
+                  <span className="span-2">{t('debts.colStatus')}</span>
+                  <span className="is-end">{t('debts.balance')}</span>
+                  <span />
                 </li>
-              )
-            })}
-          </ul>
+              )}
+              {people.map(phone ? tapRow : tableRow)}
+            </ul>
+          ) : null}
         </div>
       ) : null}
     </section>

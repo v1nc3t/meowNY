@@ -88,13 +88,6 @@ export default function CommandApiBlock({ locale, timezone }: { locale: string; 
     }
   }
 
-  function describe(token: TokenInfo): string {
-    const scopeText = t(token.scope === 'write' ? 'cli.scopeWrite' : 'cli.scopeRead')
-    const expiry = t(token.expired ? 'cli.expired' : 'cli.expires', { time: whenText(token.expiresAt, locale, timezone) })
-    const used = token.lastUsedAt ? t('cli.lastUsed', { time: whenText(token.lastUsedAt, locale, timezone) }) : t('cli.neverUsed')
-    return [scopeText, expiry, used].join(' · ')
-  }
-
   const statusKey = !status ? null : status.running ? 'cli.running' : status.enabled ? 'cli.notRunning' : 'cli.off'
   const statusLook = !status ? 'secondary' : status.running ? 'success' : status.enabled ? 'destructive' : 'secondary'
 
@@ -116,16 +109,41 @@ export default function CommandApiBlock({ locale, timezone }: { locale: string; 
       <h3 className="settings-subtitle">{t('cli.tokens')}</h3>
       {tokens && tokens.length === 0 && <p className="hint">{t('cli.noTokens')}</p>}
       {tokens && tokens.length > 0 && (
-        <ul className="card-list">
+        <ul className="card-list is-table token-table">
+          <li className="list-head" aria-hidden="true">
+            <span>{t('common.name')}</span>
+            <span>{t('cli.tokenScope')}</span>
+            <span>{t('cli.colExpires')}</span>
+            <span>{t('cli.colLastUsed')}</span>
+            <span />
+          </li>
           {tokens.map((token) => (
             <li className={`card-item${token.expired ? ' is-expired' : ''}`} key={token.id}>
-              <div className="card-body">
-                <p className="card-name">{token.name}</p>
-                <p className="card-meta">{describe(token)}</p>
+              <div className="cell-name">
+                <span className="card-name" title={token.name}>
+                  {token.name}
+                </span>
               </div>
-              <Button variant="outline" size="sm" onClick={() => void onRevoke(token.id)}>
-                {t('cli.revoke')}
-              </Button>
+              <span className="cell-sub">{t(token.scope === 'write' ? 'cli.scopeWrite' : 'cli.scopeRead')}</span>
+              {token.expired ? (
+                <span className="cell-sub-end">{t('cli.expired', { time: whenText(token.expiresAt, locale, timezone) })}</span>
+              ) : (
+                <span className="cell-sub-end" data-label={t('cli.colExpires')}>
+                  {whenText(token.expiresAt, locale, timezone)}
+                </span>
+              )}
+              {token.lastUsedAt ? (
+                <span className="cell-extra" data-label={t('cli.colLastUsed')}>
+                  {whenText(token.lastUsedAt, locale, timezone)}
+                </span>
+              ) : (
+                <span className="cell-extra">{t('cli.neverUsed')}</span>
+              )}
+              <div className="cell-actions">
+                <Button variant="outline" size="sm" className="row-primary" onClick={() => void onRevoke(token.id)}>
+                  {t('cli.revoke')}
+                </Button>
+              </div>
             </li>
           ))}
         </ul>
