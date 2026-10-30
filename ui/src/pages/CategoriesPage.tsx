@@ -250,7 +250,7 @@ function CategoriesView({ settings, thisMonth }: { settings: MoneySettings; this
       onAdd={() => setAdding(true)}
     />,
   ]
-  // The months, each a row you click to see that month above; red where more was spent than was budgeted, green where more was earned.
+  // The months, each a row you click to see that month above; spent is green within its budget and red above it, earned green above its budget.
   const historyList = history ? (
     <ul className="card-list hist-list">
       <li className="list-head" aria-hidden="true">
@@ -261,7 +261,6 @@ function CategoriesView({ settings, thisMonth }: { settings: MoneySettings; this
         <span className="is-end">{t('budgets.colIncomeBudget')}</span>
       </li>
       {history.map((row) => {
-        const overspent = row.expenseBudget !== null && Number(row.expenseActual) > Number(row.expenseBudget)
         const overearned = row.incomeBudget !== null && Number(row.incomeActual) > Number(row.incomeBudget)
         return (
           <li key={row.month} className={row.month === month ? 'card-item is-selected' : 'card-item'}>
@@ -279,7 +278,7 @@ function CategoriesView({ settings, thisMonth }: { settings: MoneySettings; this
               </Button>
             </span>
             <span className="sr-only hist-label">{t('budgets.colSpent')}</span>
-            <span className={overspent ? 'cell-amount is-over' : 'cell-amount'}>{money(row.expenseActual)}</span>
+            <span className={spentClass(row.expenseActual, row.expenseBudget)}>{money(row.expenseActual)}</span>
             <span className="cell-sub-end hist-budget">
               <span className="sr-only">{t('budgets.colExpenseBudget')}</span>
               {row.expenseBudget === null ? '-' : money(row.expenseBudget)}
@@ -383,6 +382,12 @@ function CategoriesView({ settings, thisMonth }: { settings: MoneySettings; this
   )
 }
 
+/** Spending against its budget: green at or under it, red above it, plain when there is no budget. */
+function spentClass(spent: string, budget: string | null): string {
+  if (budget === null) return 'cell-amount'
+  return Number(spent) > Number(budget) ? 'cell-amount is-over' : 'cell-amount is-income'
+}
+
 function amountsFor(overview: Overview[] | null, type: Side): Map<string, string> {
   const row = overview?.find((item) => item.type === type)
   return new Map((row?.categories ?? []).map((line) => [line.categoryId, line.amountLimit]))
@@ -437,7 +442,7 @@ function BudgetHalf({
             <span className="cell-name">
               <span className="cell-sub">{t(type === 'EXPENSE' ? 'budgets.colSpent' : 'budgets.colEarned')}</span>
             </span>
-            <span className="cell-amount">{money(overview.used)}</span>
+            <span className={type === 'EXPENSE' ? spentClass(overview.used, overview.budgeted) : 'cell-amount'}>{money(overview.used)}</span>
           </li>
         ) : null}
       </ul>
