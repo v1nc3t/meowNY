@@ -328,7 +328,10 @@
   border-radius: var(--radius-sm);
 }
 
-.dash .dash-legend li.on,
+.dash .dash-legend li.on {
+  background: var(--accent);
+}
+
 /* Only with a mouse: on a phone a tap would leave the shade stuck. */
 @media (hover: hover) {
   .dash .dash-legend li:hover {
