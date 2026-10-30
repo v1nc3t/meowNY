@@ -1,4 +1,4 @@
-/* The phone shell: header, bottom tabs, add button, quick menu and slide animations. */
+/* The phone shell: header, bottom tabs, add button and quick menu. */
 
 html.is-phone button,
 html.is-phone .pick-button {
@@ -197,29 +197,15 @@ html.is-phone .fab {
   text-align: left;
 }
 
-/* Swiping to another section slides it in from the side the finger came from. */
-@keyframes slide-from-right {
-  from {
-    opacity: 0;
-    transform: translateX(2rem);
-  }
+/* Swiping to another section brings the page in (base.css, page-in) from the side the finger came from, not from below. */
+.app-main > main[data-direction='next'] {
+  --enter-x: 2rem;
+  --enter-y: 0;
 }
 
-@keyframes slide-from-left {
-  from {
-    opacity: 0;
-    transform: translateX(-2rem);
-  }
-}
-
-@media (prefers-reduced-motion: no-preference) {
-  .app-main > main[data-direction='next'] > section {
-    animation: slide-from-right 0.2s ease-out;
-  }
-
-  .app-main > main[data-direction='prev'] > section {
-    animation: slide-from-left 0.2s ease-out;
-  }
+.app-main > main[data-direction='prev'] {
+  --enter-x: -2rem;
+  --enter-y: 0;
 }
 
 /* The transactions on a phone: no shortcuts to show, and a row needs no hover. The filters button sits at the bottom of the search

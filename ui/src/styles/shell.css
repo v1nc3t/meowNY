@@ -1,9 +1,11 @@
 /* The app frame: sidebar, main area, locked-page layout and the narrow-window sidebar. */
 
+/* Opening or closing the sidebar slides its column in a short moment, and its names fade (reduced motion: base.css, at once). */
 .app-shell {
   min-height: 100svh;
   display: grid;
   grid-template-columns: 13.75rem minmax(0, 1fr);
+  transition: grid-template-columns var(--t-med) ease-out;
 }
 
 .app-shell.is-collapsed {
@@ -18,6 +20,7 @@
   gap: 1.5rem;
   height: 100svh;
   padding: 1rem 0.75rem;
+  overflow: hidden;
   border-right: var(--border-width) solid var(--border);
   background: var(--sidebar);
   color: var(--foreground);
@@ -27,17 +30,16 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 0.5rem;
   min-width: 0;
 }
 
-/* The collapse button is a ghost icon button. */
+/* The collapse button is a ghost icon button, as wide as the closed sidebar's column, so it is in the middle of it when closed. */
 .sidebar-toggle {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 2rem;
-  min-width: 2rem;
+  width: 2.5rem;
+  min-width: 2.5rem;
   height: 2rem;
   padding: 0;
   flex: 0 0 auto;
@@ -56,23 +58,25 @@
   flex: 0 0 auto;
 }
 
-/* Collapsing changes the width only: the icons keep the same vertical positions as when open. */
-.app-shell.is-collapsed .app-sidebar {
-  padding: 1rem 0.5rem;
-  align-items: stretch;
-}
-
-.app-shell.is-collapsed .sidebar-header {
-  justify-content: center;
+/* Closing changes the width only: the icons keep their places (an icon sits 14px in from the edge of the column's 40px, so it is in the
+   middle when the sidebar is 64px wide). The names and the logo stay where they are and fade out, while the narrowing column cuts
+   them off; after that they are hidden, so the keyboard skips them. */
+.app-logo,
+.nav-label {
+  transition:
+    opacity var(--t-med) ease-out,
+    visibility var(--t-med);
 }
 
 .app-shell.is-collapsed .app-logo,
 .app-shell.is-collapsed .nav-label {
-  display: none;
+  opacity: 0;
+  visibility: hidden;
 }
 
 .app-shell.is-collapsed .sidebar-toggle .toggle-logo {
   display: inline;
+  animation: fade-in var(--t-med) ease-out;
 }
 
 .app-shell.is-collapsed .sidebar-toggle .nav-icon {
@@ -89,12 +93,6 @@
   display: block;
 }
 
-.app-shell.is-collapsed .nav-item,
-.app-shell.is-collapsed .exit-btn {
-  justify-content: center;
-  padding-inline: 0.5rem;
-}
-
 .sidebar-nav {
   display: flex;
   flex-direction: column;
@@ -109,8 +107,10 @@
   justify-content: flex-start;
   gap: 0.625rem;
   width: 100%;
+  min-width: 0;
   height: 2rem;
-  padding: 0 0.5rem;
+  padding: 0 0.875rem;
+  overflow: hidden;
   color: var(--muted-foreground);
   font-size: 0.9375rem;
   line-height: 1.4;
@@ -225,23 +225,11 @@ body:has(.app-shell.is-locked) {
     border-bottom: 1px solid var(--border);
   }
 
-  .app-shell.is-collapsed .sidebar-header {
-    flex-direction: row;
-    justify-content: space-between;
-  }
-
-  .app-shell.is-collapsed .app-logo {
-    display: inline-flex;
-  }
-
+  /* A window this narrow has no sidebar to close: whatever was saved, the names show. */
+  .app-shell.is-collapsed .app-logo,
   .app-shell.is-collapsed .nav-label {
-    display: inline;
-  }
-
-  .app-shell.is-collapsed .nav-item,
-  .app-shell.is-collapsed .exit-btn {
-    justify-content: flex-start;
-    padding: 0 0.5rem;
+    opacity: 1;
+    visibility: visible;
   }
 
   .toolbar.tx-bar,
@@ -258,6 +246,7 @@ body:has(.app-shell.is-locked) {
   .nav-item,
   .exit-btn {
     width: auto;
+    padding-inline: 0.5rem;
   }
 
   .sidebar-footer {
@@ -288,11 +277,18 @@ body:has(.app-shell.is-locked) {
   text-decoration: none;
 }
 
-/* The coin and the name side by side. */
+.nav-label {
+  white-space: nowrap;
+}
+
+/* The coin and the name side by side. They shrink with the sidebar (and are cut off) instead of pushing the button out. */
 .app-logo {
   display: inline-flex;
   align-items: center;
   gap: 0.5rem;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
   color: var(--foreground);
   font-family: var(--font-pixel);
   font-size: var(--pixel-md);

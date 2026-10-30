@@ -477,9 +477,18 @@ kbd {
   }
 }
 
-/* A new page fades in, once each time the person goes to another page (each page is drawn anew then). */
+/* A new page comes in as one piece: it fades in and rises a few pixels in four quick steps, once each time the person goes to another
+   page (each page draws its one top element anew then, not when something changes inside it). A swipe on a phone sets --enter-x
+   (phone.css) to bring it in from the side instead. */
+@keyframes page-in {
+  from {
+    opacity: 0;
+    transform: translate(var(--enter-x, 0), var(--enter-y, 6px));
+  }
+}
+
 .app-main > main > * {
-  animation: fade-in var(--t-med) var(--ease-step);
+  animation: page-in var(--t-med) steps(4, jump-start);
 }
 
 /* Less motion, when the system asks for it: nothing moves, every change is at once. */

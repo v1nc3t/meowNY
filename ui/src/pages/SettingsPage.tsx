@@ -16,13 +16,13 @@ import { BackupSection, DataSection, RecoverySection } from './settings/DataSect
 // The copyright line at the foot of the settings, on the computer and the phone.
 const YEAR = new Date().getFullYear()
 
-// The links at the foot of the settings. The person opens them in the browser; the app makes no request.
-const LINKS = {
-  source: 'https://github.com/v1nc3t/meowNY',
-  discussions: 'https://github.com/v1nc3t/meowNY/discussions',
-  sponsor: 'https://ko-fi.com/v1nc3t',
-  releases: 'https://github.com/v1nc3t/meowNY/releases/latest',
-}
+// The buttons at the foot of the settings, in the order they are shown. The person opens them in the browser; the app makes no request.
+const LINKS = [
+  { label: 'settings.linkUpdate', href: 'https://github.com/v1nc3t/meowNY/releases/latest' },
+  { label: 'settings.linkDiscussions', href: 'https://github.com/v1nc3t/meowNY/discussions' },
+  { label: 'settings.linkSource', href: 'https://github.com/v1nc3t/meowNY' },
+  { label: 'settings.linkSponsor', href: 'https://ko-fi.com/v1nc3t' },
+] as const
 
 /** The sections of the page, in the order they are listed. The id is what `?section=` holds, so a link can open one. */
 const SECTIONS = [
@@ -112,6 +112,20 @@ export default function SettingsPage() {
     }
   }
 
+  // On the computer the foot stays at the bottom of the window; on a phone it ends the scrolling page, above the bottom tabs.
+  const footer = (
+    <footer className="settings-footer">
+      <nav className="settings-links" aria-label={t('settings.linksLabel')}>
+        {LINKS.map((link) => (
+          <a key={link.href} className={buttonClass('outline', 'sm')} href={link.href} target="_blank" rel="noreferrer">
+            {t(link.label)}
+          </a>
+        ))}
+      </nav>
+      <p>© {YEAR} meowny · AGPL-3.0</p>
+    </footer>
+  )
+
   return (
     <section className={cn('tx-page', 'settings-page', phone && 'on-phone')}>
       <div className="tx-title">
@@ -134,7 +148,7 @@ export default function SettingsPage() {
         />
       ) : null}
 
-      <div ref={paneRef} className={cn('tx-pane', 'wide', 'settings-layout', phone && 'is-list')}>
+      <div ref={paneRef} className="tx-pane wide settings-layout">
         {phone ? (
           current ? null : (
             <nav className="settings-list" aria-label={t('settings.title')}>
@@ -177,27 +191,11 @@ export default function SettingsPage() {
             {body(current.id)}
           </div>
         ) : null}
+
+        {phone ? footer : null}
       </div>
 
-      <footer className="settings-footer">
-        <nav className="settings-links" aria-label={t('settings.linksLabel')}>
-          <a href={LINKS.source} target="_blank" rel="noreferrer">
-            {t('settings.linkSource')}
-          </a>
-          <a href={LINKS.discussions} target="_blank" rel="noreferrer">
-            {t('settings.linkDiscussions')}
-          </a>
-        </nav>
-        <div className="settings-footer-actions">
-          <a className={buttonClass('outline', 'sm')} href={LINKS.releases} target="_blank" rel="noreferrer">
-            {t('settings.linkUpdate')}
-          </a>
-          <a className={buttonClass('outline', 'sm')} href={LINKS.sponsor} target="_blank" rel="noreferrer">
-            {t('settings.linkSponsor')}
-          </a>
-        </div>
-        <p>© {YEAR} meowny · AGPL-3.0</p>
-      </footer>
+      {phone ? null : footer}
     </section>
   )
 }
