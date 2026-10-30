@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from 'react'
 /** A start that is quicker than this shows no loading screen at all, so a fast start never flashes. */
 export const SHOW_AFTER_MS = 150
 /** Once the loading screen is up it stays at least this long, so it is never just a flicker and can be read. */
-export const MIN_SHOW_MS = 5000
+export const MIN_SHOW_MS = 3500
 
 /** The decrypting line stops short of its end until the data is open: it never shows more done than there is. */
 export const FILL_UNTIL_DONE = 0.95
