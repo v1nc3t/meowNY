@@ -615,6 +615,8 @@ export const fr: Messages = {
   'docs.preview': 'aperçu de {name}',
   'docs.attachNone': 'aucun document joint.',
   'docs.attachExisting': 'joindre',
+  'docs.previewOnComputer': 'ce fichier est sur ton ordinateur.',
+  'docs.keptOnPhone': 'gardé sur le téléphone. il arrive à la prochaine synchronisation.',
   'docs.attachThis': 'joindre',
   'docs.attachFailed': "enregistré, mais ces fichiers n'ont pas pu être joints : {names}",
   'docs.clip': 'documents joints : {count}',

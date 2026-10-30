@@ -615,6 +615,8 @@ export const es: Messages = {
   'docs.preview': 'vista previa de {name}',
   'docs.attachNone': 'no hay documentos adjuntos.',
   'docs.attachExisting': 'adjuntar',
+  'docs.previewOnComputer': 'este archivo está en tu ordenador.',
+  'docs.keptOnPhone': 'mantenido en el móvil. llega con la próxima sincronización.',
   'docs.attachThis': 'adjuntar',
   'docs.attachFailed': 'guardado, pero no se pudieron adjuntar estos archivos: {names}',
   'docs.clip': 'documentos adjuntos: {count}',

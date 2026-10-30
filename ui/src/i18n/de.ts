@@ -616,6 +616,8 @@ export const de: Messages = {
   'docs.preview': 'vorschau von {name}',
   'docs.attachNone': 'keine dokumente angehängt.',
   'docs.attachExisting': 'anhängen',
+  'docs.previewOnComputer': 'diese datei ist auf deinem computer.',
+  'docs.keptOnPhone': 'auf dem handy behalten. sie kommt bei der nächsten synchronisierung.',
   'docs.attachThis': 'anhängen',
   'docs.attachFailed': 'gespeichert, aber diese dateien ließen sich nicht anhängen: {names}',
   'docs.clip': 'angehängte dokumente: {count}',

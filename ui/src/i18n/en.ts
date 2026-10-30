@@ -628,6 +628,8 @@ export const en = {
   'docs.preview': 'preview of {name}',
   'docs.attachNone': 'no documents attached.',
   'docs.attachExisting': 'attach',
+  'docs.previewOnComputer': 'this file is on your computer.',
+  'docs.keptOnPhone': 'kept on phone. it arrives with the next sync.',
   'docs.attachThis': 'attach',
   'docs.attachFailed': 'saved, but these files could not be attached: {names}',
   'docs.clip': 'documents attached: {count}',

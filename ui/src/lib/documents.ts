@@ -82,6 +82,14 @@ export function canPreview(doc: Pick<Doc, 'hasFile' | 'name' | 'mediaType' | 'si
   return doc.sizeBytes <= (kind === 'image' ? MAX_DRAW_BYTES : MAX_PREVIEW_BYTES)
 }
 
+/**
+ * Whether a phone offers to keep the file so it can be previewed: the file stays on the computer, and it would show once it is here.
+ * A file that is too big, or of a kind the preview does not show, is not offered (keeping it would not help).
+ */
+export function canKeepToPreview(doc: Pick<Doc, 'hasFile' | 'keepOnPhone' | 'name' | 'mediaType' | 'sizeBytes'>, phone: boolean): boolean {
+  return fileState(doc, phone) === 'onComputer' && canPreview({ ...doc, hasFile: true })
+}
+
 /** The lines the page shows under its title about the files, each a text key and a number. Nothing for zero. */
 export function reportLines(report: Report, phone: boolean): { key: MessageKey; count: number }[] {
   const lines: { key: MessageKey; count: number }[] = []

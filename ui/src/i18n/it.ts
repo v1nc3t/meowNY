@@ -615,6 +615,8 @@ export const it: Messages = {
   'docs.preview': 'anteprima di {name}',
   'docs.attachNone': 'nessun documento allegato.',
   'docs.attachExisting': 'allega',
+  'docs.previewOnComputer': 'questo file è sul tuo computer.',
+  'docs.keptOnPhone': 'tenuto sul telefono. arriva alla prossima sincronizzazione.',
   'docs.attachThis': 'allega',
   'docs.attachFailed': 'salvato, ma non è stato possibile allegare questi file: {names}',
   'docs.clip': 'documenti allegati: {count}',

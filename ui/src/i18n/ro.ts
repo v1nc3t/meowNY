@@ -613,6 +613,8 @@ export const ro: Messages = {
   'docs.preview': 'previzualizare pentru {name}',
   'docs.attachNone': 'niciun document atașat.',
   'docs.attachExisting': 'atașează',
+  'docs.previewOnComputer': 'acest fișier este pe calculatorul tău.',
+  'docs.keptOnPhone': 'păstrat pe telefon. vine la următoarea sincronizare.',
   'docs.attachThis': 'atașează',
   'docs.attachFailed': 'salvat, dar aceste fișiere nu au putut fi atașate: {names}',
   'docs.clip': 'documente atașate: {count}',

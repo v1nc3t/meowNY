@@ -3,6 +3,7 @@ import ClipMark from '../components/ClipMark'
 import ConfirmModal from '../components/ConfirmModal'
 import DocumentLinksModal from '../components/DocumentLinksModal'
 import DocumentModal from '../components/DocumentModal'
+import KeepToPreview from '../components/KeepToPreview'
 import PreviewModal from '../components/PreviewModal'
 import Icon from '../components/NavIcon'
 import Pick, { PickOption } from '../components/Pick'
@@ -17,7 +18,7 @@ import { useDebounced } from '../hooks/useDebounced'
 import { dismissToast, toast, useToast } from '../hooks/toast'
 import { useT } from '../i18n/context'
 import { formatSize } from '../lib/bytes'
-import { canPreview, dropNotice, fileState, fileStateText, KIND_CHOICES, reportLines, type KindChoice } from '../lib/documents'
+import { canKeepToPreview, canPreview, dropNotice, fileState, fileStateText, KIND_CHOICES, reportLines, type KindChoice } from '../lib/documents'
 import { formatDate } from '../lib/money'
 import { useShortcut } from '../keys/registry'
 import { tip } from '../keys/tip'
@@ -222,9 +223,11 @@ function DocumentsView({ settings }: { settings: MoneySettings }) {
     )
   }
 
-  // A phone row: the name and the size, the day and where the file is under them. It opens to a labelled button for each thing to do.
+  // A phone row: the name and the size, the day and where the file is under them. It opens to a labelled button for each thing to do
+  // (a file that stays on the computer gets a note and a button to keep it, instead of the preview; the note then replaces the small line).
   function tapRow(doc: Doc) {
     const state = stateOf(doc)
+    const offer = canKeepToPreview(doc, phone)
     return (
       <TapRow
         key={doc.id}
@@ -237,7 +240,7 @@ function DocumentsView({ settings }: { settings: MoneySettings }) {
           <>
             <span>{formatDate(doc.documentDate, locale)}</span>
             {doc.keepOnPhone ? <span className="row-mark">{t('docs.keepOnPhone')}</span> : null}
-            {state ? <span className="is-line">{t(state)}</span> : null}
+            {state && !(offer && openId === doc.id) ? <span className="is-line">{t(state)}</span> : null}
           </>
         }
       >
@@ -248,10 +251,14 @@ function DocumentsView({ settings }: { settings: MoneySettings }) {
           </section>
         ) : null}
         <div className="row-panel-actions">
-          <Button variant="outline" disabled={!canPreview(doc)} onClick={() => setPreviewing(doc)}>
-            <Icon name="eye" className="btn-icon" />
-            {t('docs.previewButton')}
-          </Button>
+          {offer ? (
+            <KeepToPreview doc={doc} onKept={refresh} />
+          ) : (
+            <Button variant="outline" disabled={!canPreview(doc)} onClick={() => setPreviewing(doc)}>
+              <Icon name="eye" className="btn-icon" />
+              {t('docs.previewButton')}
+            </Button>
+          )}
           <Button variant="outline" onClick={() => setViewing(doc.id)}>
             <Icon name="pencil" className="btn-icon" />
             {t('docs.details')}

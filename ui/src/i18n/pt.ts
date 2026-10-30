@@ -615,6 +615,8 @@ export const pt: Messages = {
   'docs.preview': 'pré-visualização de {name}',
   'docs.attachNone': 'sem documentos anexados.',
   'docs.attachExisting': 'anexar',
+  'docs.previewOnComputer': 'este ficheiro está no teu computador.',
+  'docs.keptOnPhone': 'mantido no telemóvel. chega na próxima sincronização.',
   'docs.attachThis': 'anexar',
   'docs.attachFailed': 'guardado, mas não foi possível anexar estes ficheiros: {names}',
   'docs.clip': 'documentos anexados: {count}',
