@@ -402,7 +402,7 @@ function RecurringView({ settings, now }: { settings: MoneySettings; now: Today 
 
   const resume = (item: Recurring) => void run(() => recurringApi.setActive(item.id, true))
 
-  // A desktop row: name, category, how often, next due date, amount, then the one thing to do (mark as paid), edit, delete and the
+  // A desktop row: name, amount, next due date, category, how often, then the one thing to do (mark as paid), edit, delete and the
   // chevron. Skip, pause and end are in the panel the chevron opens.
   function tableRow({ item, category }: { item: Recurring; category: string }) {
     const status = statusOf(item, now.date)
@@ -419,6 +419,8 @@ function RecurringView({ settings, now }: { settings: MoneySettings; now: Today 
           {status !== 'upcoming' ? <Badge variant={STATE_BADGE[status]}>{badge.state}</Badge> : null}
           {marks(item)}
         </div>
+        {amount(item)}
+        <span className="cell-sub-end">{badge.date}</span>
         <div className="rec-sub">
           <span className="cell-sub" title={category}>
             {category}
@@ -427,8 +429,6 @@ function RecurringView({ settings, now }: { settings: MoneySettings; now: Today 
             {everyText(item)}
           </span>
         </div>
-        <span className="cell-sub-end">{badge.date}</span>
-        {amount(item)}
         <div className="cell-actions">
           {item.isActive ? (
             <Button variant="outline" size="sm" className="row-primary" data-row-focus onClick={() => openPay(item)}>
@@ -630,10 +630,10 @@ function RecurringView({ settings, now }: { settings: MoneySettings; now: Today 
             <ul className="card-list is-table has-action rec-table" onClick={toggleRow}>
               <li className="list-head" aria-hidden="true">
                 <span>{t('common.name')}</span>
+                <span className="is-end">{t('tx.amount')}</span>
+                <span>{t('sync.field.nextDue')}</span>
                 <span>{t('common.category')}</span>
                 <span>{t('sync.field.every')}</span>
-                <span>{t('sync.field.nextDue')}</span>
-                <span className="is-end">{t('tx.amount')}</span>
                 <span />
               </li>
               {rows.map((row) => tableRow(row))}

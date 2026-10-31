@@ -435,12 +435,12 @@ ul.card-list.hist-list > li.card-item {
   }
 }
 
-/* Recurring: name, category, how often, next due date, amount, then mark as paid, edit, delete and the chevron. Six columns are a lot for
+/* Recurring: name, amount, next due date, category, how often, then mark as paid, edit, delete and the chevron. Six columns are a lot for
    a list, so the gaps and the padding are a little narrower, the columns are as wide as their words (at 1280px nothing is cut), and a
    name that is longer than its room wraps. The category and how often are two columns on a wide list and one line of small print
    (the wrapper is the cell) on a narrow one. */
 .card-list.rec-table {
-  --cols: minmax(0, 1fr) 7.25rem 7.25rem 5.75rem 6.5rem 15.5rem;
+  --cols: minmax(0, 1fr) 6.5rem 5.75rem 7.25rem 7.25rem 15.5rem;
 }
 
 ul.card-list.rec-table > li.card-item,
