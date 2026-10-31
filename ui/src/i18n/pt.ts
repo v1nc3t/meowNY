@@ -100,7 +100,7 @@ export const pt: Messages = {
   'tx.errorAmount': 'introduz um montante superior a zero, com no máximo duas casas decimais.',
   'tx.filters': 'filtros',
   'tx.filtersCount': 'filtros: {count} ativos',
-  'tx.perPage': 'linhas por página',
+  'tx.perPage': 'linhas',
   'pager.label': 'navegação entre páginas',
   'pager.prev': 'página anterior',
   'pager.next': 'página seguinte',

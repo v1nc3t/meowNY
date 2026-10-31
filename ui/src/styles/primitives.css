@@ -520,6 +520,10 @@ ul.card-list > li.list-head > .is-end {
   color: var(--success);
 }
 
+.cell-amount.is-expense {
+  color: var(--destructive);
+}
+
 .cell-amount.is-over {
   color: var(--destructive);
 }

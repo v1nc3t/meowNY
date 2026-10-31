@@ -109,7 +109,7 @@ export const en = {
   'tx.errorAmount': 'enter an amount greater than zero, with at most two decimals.',
   'tx.filters': 'filters',
   'tx.filtersCount': 'filters: {count} on',
-  'tx.perPage': 'rows per page',
+  'tx.perPage': 'rows',
   'pager.label': 'page navigation',
   'pager.prev': 'previous page',
   'pager.next': 'next page',

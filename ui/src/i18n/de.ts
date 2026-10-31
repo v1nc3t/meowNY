@@ -101,7 +101,7 @@ export const de: Messages = {
   'tx.errorAmount': 'gib einen betrag größer als null mit höchstens zwei nachkommastellen ein.',
   'tx.filters': 'filter',
   'tx.filtersCount': 'filter: {count} aktiv',
-  'tx.perPage': 'zeilen pro seite',
+  'tx.perPage': 'zeilen',
   'pager.label': 'seitennavigation',
   'pager.prev': 'vorherige seite',
   'pager.next': 'nächste seite',

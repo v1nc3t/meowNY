@@ -100,7 +100,7 @@ export const es: Messages = {
   'tx.errorAmount': 'escribe un importe mayor que cero, con como máximo dos decimales.',
   'tx.filters': 'filtros',
   'tx.filtersCount': 'filtros: {count} activos',
-  'tx.perPage': 'filas por página',
+  'tx.perPage': 'filas',
   'pager.label': 'navegación de páginas',
   'pager.prev': 'página anterior',
   'pager.next': 'página siguiente',

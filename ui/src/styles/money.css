@@ -16,9 +16,28 @@
   flex: 0 0 auto;
 }
 
-/* The transactions as a table: name, category, date, amount, then the buttons (edit, delete, the chevron: three of 2.25rem). */
+/* The transactions as a table: name, amount, date, category, then the buttons (edit, delete, the chevron: three of 2rem). */
 .card-list.tx-list {
-  --cols: minmax(0, 2.2fr) minmax(0, 1.2fr) 7rem 8rem 7rem;
+  --cols: minmax(0, 2.2fr) 8rem 7rem minmax(0, 1.2fr) 6.5rem;
+}
+
+/* Its rows are lower than those of other lists, and so are the buttons that would keep them tall. */
+ul.card-list.tx-list.is-table > li.card-item {
+  min-height: 2.5rem;
+  padding-block: 0.25rem;
+}
+
+ul.card-list.tx-list.is-table > li.list-head {
+  padding-block: 0.375rem;
+}
+
+.tx-list.is-table .cell-actions > :is(.icon-btn, .icon-slot) {
+  width: 2rem;
+  min-width: 2rem;
+}
+
+.tx-list.is-table .cell-actions > .icon-btn {
+  height: 2rem;
 }
 
 /* An open transaction: the split and the description side by side where there is room, one under the other where there is not. */

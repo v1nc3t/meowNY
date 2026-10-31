@@ -445,15 +445,16 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
       </div>
     ) : null
 
-  /** What the person's share was: income in green with a plus, spending plain. */
+  /** What the person's share was: income in green with a plus, spending in red with a minus, and nothing at all plain. */
   function amount(transaction: Transaction) {
-    const income = incomeCategories.has(transaction.categoryId)
     const text = formatMoney(transaction.myShare, settings.currency, settings.locale)
-    return <span className={income ? 'cell-amount is-income' : 'cell-amount'}>{income ? `+${text}` : text}</span>
+    if (Number(transaction.myShare) === 0) return <span className="cell-amount">{text}</span>
+    const income = incomeCategories.has(transaction.categoryId)
+    return <span className={income ? 'cell-amount is-income' : 'cell-amount is-expense'}>{income ? `+${text}` : `-${text}`}</span>
   }
 
-  /** What a row opens to: the split, with a code for each friend on it, and the description. */
-  function details(transaction: Transaction): ReactNode {
+  /** What a row opens to: the split, with a code for each friend on it, the description and the documents (`count` of them). */
+  function details(transaction: Transaction, count: number): ReactNode {
     return (
       <>
         {transaction.split.length > 0 ? (
@@ -497,16 +498,22 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
             <p className="detail-text">{transaction.description}</p>
           </section>
         ) : null}
+        {count > 0 ? (
+          <section className="detail-section">
+            <p className="detail-title">{t('docs.title')}</p>
+            <ClipPreview target={{ kind: 'transaction', id: transaction.id }} name={transaction.name} count={count} />
+          </section>
+        ) : null}
       </>
     )
   }
 
-  /** The small marks after a name: shared with friends, and a note. */
-  function marks(transaction: Transaction) {
+  /** The small marks after a name: shared with friends and, for the phone's rows, a note. */
+  function marks(transaction: Transaction, withNote: boolean) {
     return (
       <>
         {transaction.split.length > 0 ? <span className="row-mark">{t('tx.shared')}</span> : null}
-        {transaction.description?.trim() ? (
+        {withNote && transaction.description?.trim() ? (
           <span className="row-mark-icon" title={t('common.description')}>
             <Icon name="note" className="mark-icon" />
             <span className="sr-only">{t('common.description')}</span>
@@ -516,23 +523,22 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
     )
   }
 
-  // A desktop row: name, category, date, amount, then edit, delete and (when there is more to show) the chevron.
+  // A desktop row: name, amount, date, category, then edit, delete and (when there is more to show) the chevron.
   function tableRow(transaction: Transaction) {
     const open = openId === transaction.id
-    const more = transaction.split.length > 0 || Boolean(transaction.description?.trim())
     const count = clips[transaction.id] ?? 0
+    const more = transaction.split.length > 0 || Boolean(transaction.description?.trim()) || count > 0
     return (
       <li key={transaction.id} className={open ? 'card-item is-open' : 'card-item'} data-item={`transaction:${transaction.id}`}>
         <div className="cell-name">
           <span className="card-name" title={transaction.name}>
             {transaction.name}
           </span>
-          {marks(transaction)}
-          {count ? <ClipPreview inline target={{ kind: 'transaction', id: transaction.id }} name={transaction.name} count={count} /> : null}
+          {marks(transaction, false)}
         </div>
-        <span className="cell-sub">{categoryName(transaction)}</span>
-        <span className="cell-sub-end">{formatDate(transaction.paymentDate, settings.locale)}</span>
         {amount(transaction)}
+        <span className="cell-sub-end">{formatDate(transaction.paymentDate, settings.locale)}</span>
+        <span className="cell-sub">{categoryName(transaction)}</span>
         <div className="cell-actions">
           <Button variant="ghost" size="icon" className="icon-btn" aria-label={t('common.edit')} title={t('common.edit')} data-row-focus onClick={() => openEdit(transaction)}>
             <Icon name="pencil" className="btn-icon" />
@@ -559,7 +565,7 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
         </div>
         {open ? (
           <div className="row-panel tx-detail" id={`${panelId}-${transaction.id}`}>
-            {details(transaction)}
+            {details(transaction, count)}
           </div>
         ) : null}
       </li>
@@ -586,7 +592,7 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
           {amount(transaction)}
           <span className="cell-sub">
             <span>{categoryName(transaction)}</span>
-            {marks(transaction)}
+            {marks(transaction, true)}
             {count ? (
               <span className="row-mark-icon">
                 <Icon name="clip" className="mark-icon" />
@@ -599,13 +605,7 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
         </button>
         {open ? (
           <div className="row-panel tx-detail" id={`${panelId}-${transaction.id}`}>
-            {details(transaction)}
-            {count ? (
-              <section className="detail-section">
-                <p className="detail-title">{t('docs.title')}</p>
-                <ClipPreview target={{ kind: 'transaction', id: transaction.id }} name={transaction.name} count={count} />
-              </section>
-            ) : null}
+            {details(transaction, count)}
             <div className="row-panel-actions">
               <Button variant="outline" onClick={() => openEdit(transaction)}>
                 <Icon name="pencil" className="btn-icon" />
@@ -720,9 +720,9 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
               <ul className="card-list is-table tx-list" onClick={toggleRow}>
                 <li className="list-head" aria-hidden="true">
                   <span>{t('common.name')}</span>
-                  <span>{t('common.category')}</span>
-                  <span>{t('sync.field.date')}</span>
                   <span className="is-end">{t('tx.amount')}</span>
+                  <span>{t('sync.field.date')}</span>
+                  <span>{t('common.category')}</span>
                   <span />
                 </li>
                 {page.transactions.map(tableRow)}

@@ -1,7 +1,7 @@
 /* The top of a list page: title, actions, filter bar and page numbers, shared by several pages. */
 
-/* The pager (previous, page numbers, next) is a row of small square buttons; the page you are on is a solid block in the main colour.
-   A gap between the numbers is a plain "…". */
+/* The pager (previous, page numbers, next) is a row of plain words with no box; the page you are on is bold, underlined and in the
+   main colour. A gap between the numbers is a plain "…". */
 .page-numbers {
   display: flex;
   flex-wrap: wrap;
@@ -14,13 +14,27 @@
   min-height: 2.25rem;
   padding: 0 0.5rem;
   font-size: 0.875rem;
-  border-color: var(--border);
+  color: var(--foreground);
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+}
+
+@media (hover: hover) {
+  .page-numbers button:hover:not(:disabled) {
+    color: var(--primary);
+  }
+}
+
+.page-numbers button:active:not(:disabled) {
+  color: var(--primary);
 }
 
 .page-numbers button[aria-current='page'] {
-  color: var(--primary-foreground);
-  background: var(--primary);
-  border-color: var(--primary);
+  font-weight: 700;
+  color: var(--primary);
+  text-decoration: underline;
+  text-underline-offset: 4px;
 }
 
 .page-numbers > span {
@@ -29,7 +43,7 @@
   color: var(--muted-foreground);
 }
 
-/* The phone: one centred line of 44px buttons (the pager shows fewer numbers there). */
+/* The phone: one centred line of 44px tall buttons (the pager shows fewer numbers there). */
 html.is-phone .page-numbers {
   flex-wrap: nowrap;
   justify-content: center;
@@ -45,24 +59,47 @@ html.is-phone .tx-pane > .page-numbers {
   margin-top: 1.25rem;
 }
 
-/* Under a list: the page numbers on the left, how many rows a page shows on the right, its label beside it. Its list opens upwards,
-   at the bottom of the window. */
+/* Under a list: the page numbers in the middle of the width, how many rows a page shows on the right, its label beside it. The rows
+   have their own column, so they stay on the right when there is only one page and no numbers. Its list opens upwards, at the bottom
+   of the window. */
 .list-foot {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
   align-items: center;
-  justify-content: space-between;
   gap: 0.75rem 1.5rem;
   width: 100%;
   max-width: none;
 }
 
+.list-foot > .page-numbers {
+  grid-column: 2;
+}
+
 .list-foot > .per-page {
+  grid-column: 3;
+  justify-self: end;
   flex-direction: row;
   align-items: center;
   gap: 0.75rem;
-  margin-left: auto;
   color: var(--muted-foreground);
+}
+
+/* The phone: the numbers and the rows on one line (the numbers take what the rows leave), and onto two lines when a large text size
+   leaves no room. */
+html.is-phone .list-foot {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem 0.5rem;
+}
+
+html.is-phone .list-foot > .page-numbers {
+  flex: 1 1 auto;
+  width: auto;
+}
+
+html.is-phone .list-foot > .per-page {
+  gap: 0.5rem;
+  margin-left: auto;
 }
 
 .list-foot > .per-page .pick-list {

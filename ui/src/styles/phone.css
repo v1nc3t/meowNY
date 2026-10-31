@@ -249,6 +249,13 @@ html.is-phone .page-numbers button {
   min-width: 44px;
 }
 
+/* Under the transactions the numbers share the line with the rows picker: the buttons keep their 44px height but are narrower, so
+   that seven of them and the picker fit a 360px screen. */
+html.is-phone .list-foot .page-numbers button {
+  min-width: 28px;
+  padding-inline: 0.25rem;
+}
+
 /* A section of the settings opens in place of their list (and the list comes back) without the route changing, so the page's own
    entrance does not play: the new part fades in the same quick steps. */
 html.is-phone .settings-layout > :is(.settings-list, .settings-section) {

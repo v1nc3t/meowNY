@@ -99,7 +99,7 @@ export const ro: Messages = {
   'tx.errorAmount': 'introdu o sumă mai mare ca zero, cu cel mult două zecimale.',
   'tx.filters': 'filtre',
   'tx.filtersCount': 'filtre: {count} active',
-  'tx.perPage': 'rânduri pe pagină',
+  'tx.perPage': 'rânduri',
   'pager.label': 'navigare între pagini',
   'pager.prev': 'pagina anterioară',
   'pager.next': 'pagina următoare',
