@@ -402,8 +402,19 @@ fn a_phone_with_data_from_another_desktop_is_turned_down_and_the_desktop_keeps_n
         let c = categories::create(&conn, "Elsewhere", CategoryType::Expense).unwrap().id;
         spend(&conn, c, "Other", "1.00");
     }
+    // the phone follows the clock of a desktop it is going to sync with, not of one it turns down
+    let held = |db: &LocalDb| {
+        db.with(|c| {
+            let clock = c.query_row("SELECT offset_ms, last_ms, last_counter FROM sync_clock", [], |r| Ok((r.get::<_, i64>(0)?, r.get::<_, i64>(1)?, r.get::<_, i64>(2)?)));
+            Ok((clock.unwrap(), snapshot(c).unwrap()))
+        })
+        .unwrap()
+    };
+    pause();
+    let before = held(&phone);
     let result = pair(&other, &phone, true);
     assert!(matches!(result.phone, Err(FlowError::Sync(SyncError::NotEmpty))), "{:?}", result.phone);
+    assert_eq!(held(&phone), before, "a turned-down pairing leaves the phone's clock and stamps alone");
     assert!(result.desktop.is_err());
     assert_eq!(other.with(|c| peers::list(c)).unwrap().len(), 0, "the other desktop stored nothing");
     assert_eq!(phone.with(|c| peers::list(c)).unwrap().len(), 1, "the phone is still paired with its own");
@@ -630,7 +641,7 @@ fn the_phone_is_told_why_a_sync_stops() {
         thread::spawn(move || flow::sync_as_desktop(window, &Arc::new(AtomicBool::new(false)), &*desktop, "Desktop", &ids, Mode::Both, &mut Person::default()))
     };
     let mut channel = net::connect(&payload, Ikm::for_sync(&paired[0].1, &payload.secret), limits(), None).unwrap();
-    let mut hello = phone.with(|c| engine::hello(c, "Phone", "9.9.9")).unwrap();
+    let mut hello = phone.with(|c| engine::hello(c, "Phone", "9.9.9", super::stamp::now_ms())).unwrap();
     hello.schema += 1;
     channel.send(&Message::Hello(hello)).unwrap();
     let _desktops_hello = channel.receive();
@@ -646,6 +657,41 @@ fn the_phone_is_told_why_a_sync_stops() {
     };
     assert_eq!(code, "schema_mismatch");
     assert!(matches!(handle.join().unwrap(), Err(FlowError::Sync(SyncError::SchemaMismatch { newer_here: false }))));
+}
+
+#[test]
+fn a_phone_with_stamps_from_the_future_is_pulled_back_over_a_real_connection_and_the_computers_clock_stays_as_it_is() {
+    const DAY: i64 = 86_400_000;
+    let (desktop, phone) = met();
+    // the phone's clock was 3 days ahead when it changed Coffee (the triggers read the real clock, so the skew goes in the offset)
+    {
+        let conn = phone.conn.lock().unwrap();
+        conn.execute("UPDATE sync_clock SET offset_ms = ?1", [3 * DAY]).unwrap();
+        conn.execute("UPDATE transactions SET amount_minor = 999 WHERE name = 'Coffee'", []).unwrap();
+        conn.execute("UPDATE sync_clock SET offset_ms = 0", []).unwrap();
+    }
+    let ahead: String = text(&phone, "SELECT stamp FROM transactions WHERE name = 'Coffee'");
+    assert!(super::stamp::Stamp::parse(&ahead).unwrap().ms > super::stamp::now_ms() + 2 * DAY as u64);
+
+    let run = sync_run(&desktop, &phone, 0x42, 0x42, Mode::Both, Person::default(), Person::default());
+    let (on_desktop, _) = run.desktop.unwrap();
+    let on_phone = run.phone.unwrap();
+    assert!(!on_desktop.differences && !on_phone.differences);
+    assert_eq!(amount(&desktop, "Coffee"), 999, "the phone's change was not refused for its date");
+    same(&desktop, &phone);
+
+    let newest = phone.with(|c| Ok(super::stamp::max_stamp(c).unwrap().unwrap())).unwrap();
+    assert!(newest.ms <= super::stamp::now_ms(), "nothing on the phone is dated after the computer's time");
+    assert_eq!(desktop.with(|c| Ok(super::stamp::offset_ms(c).unwrap())).unwrap(), 0, "the computer's offset is always 0");
+    let offset = phone.with(|c| Ok(super::stamp::offset_ms(c).unwrap())).unwrap();
+    assert!(offset.abs() < 5_000, "two clocks on one machine: {offset}");
+    assert!(on_phone.warnings.is_empty() && on_desktop.warnings.is_empty());
+
+    // the time of the last sync is on the same clock as the stamps, so a change made now counts as made since then
+    pause();
+    phone.conn.lock().unwrap().execute("UPDATE transactions SET amount_minor = 111 WHERE name = 'Tea'", []).unwrap();
+    let waiting = phone.with(|c| Ok(peers::list(c).unwrap()[0].changes_waiting)).unwrap();
+    assert_eq!(waiting, Some(1));
 }
 
 #[test]

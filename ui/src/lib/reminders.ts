@@ -69,6 +69,14 @@ export function saveNotifiedDays(days: Record<string, string>): void {
 
 const pad = (n: number) => String(n).padStart(2, '0')
 
+/**
+ * The time the app goes by for the dates and times of reminders: this device's clock moved by `offsetMs`, how far it is from the
+ * computer's (the computer's clock is the reference, and its offset is 0). The one place the UI adds the offset; never for a timer.
+ */
+export function clockNow(offsetMs: number, wall: number = Date.now()): Date {
+  return new Date(wall + offsetMs)
+}
+
 /** The day of a date on this device's clock, "YYYY-MM-DD". */
 export function localDay(now: Date): string {
   return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`
@@ -77,7 +85,7 @@ export function localDay(now: Date): string {
 /**
  * The friends this device should ring about now: the day of their reminder has come, this device has not shown that day yet, and either
  * the day is past (it came while the app was closed) or the time of day has been reached. `today` is the day in the person's time zone,
- * as the app says it; the clock of the device gives the time.
+ * as the app says it; `now` (from `clockNow`) gives the time.
  */
 export function ringNow(reminders: Reminders, time: string, now: Date, notified: Record<string, string>): Reminders['due'] {
   const at = parseTime(time)
@@ -96,9 +104,10 @@ export function notificationId(day: string): number {
 
 /**
  * The notifications to schedule for the days that come: each at the chosen time of day on that day, and only those still ahead. One
- * notification for each day, however many friends it is for.
+ * notification for each day, however many friends it is for. `now` is the time the app goes by (`clockNow`); the system rings by this
+ * device's own clock, which is `offsetMs` away from it, so each notification is handed over that much earlier or later.
  */
-export function schedulePlan(reminders: Reminders, time: string, now: Date): Scheduled[] {
+export function schedulePlan(reminders: Reminders, time: string, now: Date, offsetMs = 0): Scheduled[] {
   const at = parseTime(time)
   if (!at) return []
   const plan: Scheduled[] = []
@@ -108,7 +117,7 @@ export function schedulePlan(reminders: Reminders, time: string, now: Date): Sch
     const when = new Date(year, month - 1, day, at.hours, at.minutes)
     // `Date` moves 40 October to November; a day that is not a day is left out
     if (when.getFullYear() !== year || when.getMonth() !== month - 1 || when.getDate() !== day) continue
-    if (when.getTime() > now.getTime() + 30_000) plan.push({ id: notificationId(date), at: when, count })
+    if (when.getTime() > now.getTime() + 30_000) plan.push({ id: notificationId(date), at: new Date(when.getTime() - offsetMs), count })
   }
   return plan
 }

@@ -1,9 +1,10 @@
 import { invoke } from '@tauri-apps/api/core'
 import { debts } from './debts'
+import { today } from './today'
 import { t } from '../i18n/translate'
 import { vault } from '../vault/api'
 import { isIos } from '../lib/platform'
-import { notifiedDays, pluginDate, reminderEvery, reminderTime, ringNow, saveNotifiedDays, saveScheduledIds, scheduledIds, schedulePlan } from '../lib/reminders'
+import { clockNow, notifiedDays, pluginDate, reminderEvery, reminderTime, ringNow, saveNotifiedDays, saveScheduledIds, scheduledIds, schedulePlan } from '../lib/reminders'
 
 // Reminders about debts (docs/debts-design.md, section 11). The text is the same for everyone and holds a count, never a name or an
 // amount: the app is locked when it rings, and a notification can be seen on a lock screen and kept by the system.
@@ -17,11 +18,11 @@ const PLUGIN = 'plugin:notification'
 export type Scheduling = 'scheduled' | 'off' | 'denied' | 'unavailable'
 
 /** Shows one notification for the friends whose reminder has come and which this device has not shown yet. Returns how many. */
-export async function ringOnComputer(now = new Date()): Promise<number> {
+export async function ringOnComputer(): Promise<number> {
   if (!(await vault.notifyDue())) return 0
   const reminders = await debts.reminders(reminderEvery())
   const notified = notifiedDays()
-  const ring = ringNow(reminders, reminderTime(), now, notified)
+  const ring = ringNow(reminders, reminderTime(), clockNow((await today()).offsetMs), notified)
   // days of friends who are no longer due are forgotten, so the list does not grow
   const kept = Object.fromEntries(Object.entries(notified).filter(([id]) => reminders.due.some((friend) => friend.personId === id)))
   if (ring.length > 0) {
@@ -50,15 +51,17 @@ async function cancelScheduled(): Promise<void> {
 /**
  * Phone: cancels what was scheduled and schedules again the next days with a reminder, at the time of day of this device. Called at each
  * unlock, after each sync and when a reminder or a balance changes. A friend settled by a sync on a phone that is not opened keeps their
- * notification until the next unlock: that is said in the settings.
+ * notification until the next unlock: that is said in the settings. The days and the time are the computer's: the phone's clock is
+ * moved by its offset, so a phone that runs ahead still rings at nine by the computer's time.
  */
-export async function scheduleOnPhone(now = new Date()): Promise<Scheduling> {
+export async function scheduleOnPhone(): Promise<Scheduling> {
   try {
+    const { offsetMs } = await today()
     if (!(await vault.notifyDue())) {
       await cancelScheduled()
       return 'off'
     }
-    const plan = schedulePlan(await debts.reminders(reminderEvery()), reminderTime(), now)
+    const plan = schedulePlan(await debts.reminders(reminderEvery()), reminderTime(), clockNow(offsetMs), offsetMs)
     await cancelScheduled()
     if (plan.length === 0) return 'scheduled'
     if (!(await allowed())) return 'denied'

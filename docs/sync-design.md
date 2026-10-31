@@ -82,8 +82,9 @@ There is no Diffie-Hellman step, so that last case is the honest limit. Secrets 
 
 JSON messages with a `t` field, one per frame, long lists split. Money in minor units.
 
-1. `hello`: id, name, versions (schema must match; protocol 5), clock (over a day apart stops), currency generation,
-   `since`, and the direction the desktop chose (both ways, to the computer, to the phone).
+1. `hello`: id, name, versions (schema must match; protocol 6), wall clock (a gap above a minute is told to the person, never
+   stops the sync; section 10), currency generation, `since`, and the direction the desktop chose (both ways, to the computer,
+   to the phone). Right after it the phone takes the computer's clock as the reference (section 10).
 2. `currency`: changes the phone has not seen, applied before anything else (section 11).
 3. `hashes` per table, then `digest` (`sync_id`, stamp, deleted) for tables that differ.
 4. `rows`: each side sends what the other lacks or has older; deletions as markers. One-way syncs refuse the other side's rows.
@@ -96,20 +97,42 @@ States are compared, not change logs, so a broken or half sync is repaired by th
 
 ## 9. Database changes
 
-Migrations `0008`, `0009`, `0012`, `0013`, `0014`, `0015`: a random `sync_id` and a `stamp` on every shared row (`categories`,
+Migrations `0008`, `0009`, `0012`, `0013`, `0014`, `0015`, `0016`: a random `sync_id` and a `stamp` on every shared row (`categories`,
 `budgets`, `recurring_transactions`, `transactions`, `people`, `ledger_entries`, `documents`, `document_links`, the
 shared part of `settings`); `sync_deleted` markers made by delete triggers; `categories.merged_into`; `categories.position` (the order the person chose, per type; a move gives the row a new stamp,
 so it travels in the category row, and ties are settled by id); `recurring_transactions.skipped_dates` (a JSON array of the later
 occurrences skipped one by one, sorted, at most 100; part of protocol 5, checked when a row arrives); `sync_clock`;
-`sync_peers`; `currency_changes`. Stamps come from triggers, which stand aside while `sync_clock.applying` is on. A
+`sync_peers`; `currency_changes`. Stamps come from triggers, which stand aside while `sync_clock.applying` is on (`0016` adds
+`sync_clock.offset_ms` to the clock they read, section 10). A
 bill's parts and a recurring item's template travel inside their parent's row. Never synced: `audit_log`,
 `backup_schedule`, `api_tokens`, `sync_peers`, `sync_clock`, the language, lock settings.
 
 ## 10. Stamps and the clock
 
-`{ms:013}-{counter:04x}-{first 8 hex of the device id}`; larger is newer. A new stamp uses `max(wall clock, last ms)`
-and counts up within a millisecond; receiving rows moves the clock past everything seen, so a slow phone clock still
-makes newer stamps.
+`{ms:013}-{counter:04x}-{first 8 hex of the device id}`; larger is newer. A new stamp uses `max(clock, last ms)` and counts
+up within a millisecond; receiving rows moves the clock past everything seen. The dates a person types (a payment's day, a
+due date) are fields and never come from a device clock.
+
+**The computer's clock wins.** A phone with a wrong clock must not decide which change is newer or what day it is, and a sync
+is never refused for a gap between the two clocks.
+
+- The reference time is the computer's wall clock; its offset is always 0. The `clock` of a hello is the sender's wall clock
+  (with no offset). A gap above a minute is shown as a warning on both devices after the sync, never an error.
+- At every sync, when the computer's hello arrives, the phone sets `offset_ms = computer's hello ms - its own wall clock ms` (also when
+  small). It is stored in `sync_clock`, so it belongs to the device like the rest of that table: not in a backup, a restore or a sync.
+- The phone goes by `wall clock + offset_ms` for everything that is a date or a stamp: the clock the stamp triggers read
+  (`0016`) and `stamp::tick`, the `now` of a sync (the check on incoming stamps, a currency change), the time of the last
+  sync, and the app's "today", current month and due dates, which the UI gets from the same command, together with the offset,
+  for the times of reminders. Durations, timeouts, the lock timer, the pairing and sync windows are not dated, and use the system's
+  clock; neither do `created_at` and `updated_at`, which only note when a row was written here and are never compared.
+  A pairing follows the computer's clock the same way, unless the phone turns that computer down.
+- **Pull-back.** Right after the hello and before the lists, in one transaction with the triggers standing aside, the phone
+  rewrites every stamp of its own data (rows, deletion markers, the record of currency changes) later than the computer's time `H`
+  to a stamp at `H` that keeps its counter and device part, and sets `last_ms` to `H`. This is the one deliberate exception to
+  "the clock never goes backwards": without it a phone that was set days ahead would win every fight over every row it ever
+  touched. The rest of the conversation runs as before, so both devices end equal.
+- The computer still refuses incoming stamps more than a day ahead of its own clock (`ClockFarOff`, reason `clock_far_off`): the
+  net under a broken or hostile peer. An honest phone never trips it.
 
 ## 11. Merge rules
 

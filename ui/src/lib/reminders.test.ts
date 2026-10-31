@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { en } from '../i18n/en.ts'
 import { LANGUAGES } from '../i18n/languages.ts'
-import { localDay, notificationId, parseTime, pluginDate, ringNow, schedulePlan } from './reminders.ts'
+import { clockNow, localDay, notificationId, parseTime, pluginDate, ringNow, schedulePlan } from './reminders.ts'
 
 test('the plugin gets the real instant, except on iOS, which gets the local clock time (it reads the date as local)', () => {
   const at = new Date(2026, 9, 24, 9, 5)
@@ -50,6 +50,31 @@ test('the phone schedules each coming day once, at the time of day, and only wha
   assert.deepEqual(schedulePlan(upcoming, '11:00', now).map((p) => localDay(p.at)), ['2026-10-20', '2026-10-21', '2026-10-28'])
   assert.deepEqual(schedulePlan(upcoming, 'x', now), [])
   assert.deepEqual(schedulePlan(reminders('2026-10-20', [], [['2026-13-40', 1]]), '09:00', now).length, 0, 'a day that is not a day is skipped')
+})
+
+test('the app goes by the device clock moved by the offset, and a device that is on time is not moved', () => {
+  assert.equal(clockNow(0, 1_000_000).getTime(), 1_000_000)
+  assert.equal(clockNow(-259_200_000, 1_000_000_000).getTime(), 1_000_000_000 - 259_200_000, 'a phone 3 days ahead is brought back')
+  assert.equal(clockNow(259_200_000, 1_000_000_000).getTime(), 1_000_000_000 + 259_200_000, 'a phone 3 days behind is brought forward')
+})
+
+test('a phone that runs 3 days ahead still rings at the time of day by the computer, and decides what is ahead by the computer too', () => {
+  const day = 86_400_000
+  // by the computer it is 20 October, 10:00; the phone says 23 October, 10:00 (the offset is the computer's minus the phone's)
+  const phoneNow = new Date(2026, 9, 23, 10, 0)
+  const offsetMs = -3 * day
+  const now = clockNow(offsetMs, phoneNow.getTime())
+  assert.deepEqual([now.getDate(), now.getHours()], [20, 10], 'the date and hour are the computer\'s')
+  const upcoming = reminders('2026-10-20', [], [['2026-10-20', 2], ['2026-10-21', 1]])
+  const plan = schedulePlan(upcoming, '09:00', now, offsetMs)
+  assert.deepEqual(plan.map((p) => [p.id, p.count]), [[notificationId('2026-10-21'), 1]], 'today at nine has gone by the computer')
+  // the system rings by the phone's own clock: the computer's 21 October, 09:00 is the phone's 24 October, 09:00
+  assert.deepEqual([plan[0].at.getDate(), plan[0].at.getHours()], [24, 9])
+  // with no offset nothing moves
+  assert.deepEqual(schedulePlan(upcoming, '09:00', new Date(2026, 9, 20, 10, 0)).map((p) => localDay(p.at)), ['2026-10-21'])
+  // and a reminder rings by the computer's hour, not the phone's
+  assert.deepEqual(ringNow(reminders('2026-10-20', [['1', 'Anna', '2026-10-20']]), '09:00', now, {}).map((f) => f.personId), ['1'])
+  assert.deepEqual(ringNow(reminders('2026-10-20', [['1', 'Anna', '2026-10-20']]), '11:00', now, {}), [])
 })
 
 test('the notification never holds a name or an amount, in any language, only a count', () => {

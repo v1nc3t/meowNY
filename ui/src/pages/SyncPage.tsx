@@ -3,7 +3,8 @@ import { Navigate } from 'react-router-dom'
 import { ApiError, errorText } from '../api/invoke'
 import { whenText } from '../api/locales'
 import { scanQr, stopScan } from '../api/scanner'
-import { cleanDeviceName, DEVICE_NAME_MAX, syncApi, type Peer } from '../api/sync'
+import { cleanDeviceName, clockGapText, DEVICE_NAME_MAX, phoneClockGap, syncApi, type Peer } from '../api/sync'
+import { today } from '../api/today'
 import { TapRow } from '../components/RowParts'
 import SyncStatusPanel from '../components/SyncStatusPanel'
 import Button from '../components/ui/Button'
@@ -32,6 +33,7 @@ function PhoneSync() {
   const { locale, timezone } = useRegion()
   const { status, refresh, cancel, acknowledge } = useSyncStatus()
   const [devices, setDevices] = useState<Peer[] | null>(null)
+  const [offsetMs, setOffsetMs] = useState(0)
   const [name, setName] = useDeviceName('phone')
   const [scanning, setScanning] = useState(false)
   const [pasted, setPasted] = useState('')
@@ -41,17 +43,24 @@ function PhoneSync() {
     syncApi.devices().then(setDevices, (e) => say(errorText(e), 'error'))
   }, [say])
 
+  // how far this phone's clock is from the computer's, as the last sync measured it
+  const loadClock = useCallback(() => {
+    today().then((now) => setOffsetMs(now.offsetMs), () => undefined)
+  }, [])
+
   useEffect(() => {
     loadDevices()
-  }, [loadDevices])
+    loadClock()
+  }, [loadDevices, loadClock])
 
   const state = status.state
   useEffect(() => {
     if (state !== 'done') return
     loadDevices()
+    loadClock()
     // a sync may have brought, changed or settled debts and reminders: the phone hands the system the days again
     remindersChanged()
-  }, [state, loadDevices])
+  }, [state, loadDevices, loadClock])
 
   // The camera shows behind the page while it scans, so the page must not paint over it.
   useEffect(() => {
@@ -82,6 +91,7 @@ function PhoneSync() {
 
   const idle = state === 'idle'
   const paired = devices !== null && devices.length > 0
+  const clockGap = phoneClockGap(offsetMs)
 
   return (
     <section className="tx-page settings-page">
@@ -119,6 +129,8 @@ function PhoneSync() {
                 ))}
               </ul>
             )}
+
+            {clockGap !== null ? <p className="hint">{t('sync.phoneClockOff', { gap: clockGapText(clockGap) })}</p> : null}
 
             {idle ? (
               <>

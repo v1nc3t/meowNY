@@ -23,8 +23,10 @@ use crate::{categories, transactions, vault};
 /// The version of this protocol, in `hello`.
 /// Protocol 3 adds the tables `documents` and `document_links`; protocol 4 adds `people` and `ledger_entries`, the parts of a shared
 /// bill inside its transaction's row, the split template inside a recurring item's row, and a third target for a document link (a
-/// ledger entry); protocol 5 adds the category order (`position`) and the skipped dates of a recurring item. A device that speaks an older protocol is told to update.
-pub const PROTOCOL: u32 = 5;
+/// ledger entry); protocol 5 adds the category order (`position`) and the skipped dates of a recurring item; protocol 6 makes the
+/// computer's clock the reference (the `clock` of a hello is the wall clock, a gap between the clocks no longer stops a sync, and the
+/// phone pulls its stamps back to the computer's time). A device that speaks an older protocol is told to update.
+pub const PROTOCOL: u32 = 6;
 /// Digest entries in one message, and rows in one message. Messages are also cut by size (`SOFT_MESSAGE_BYTES`).
 pub const MAX_ENTRIES_PER_MESSAGE: usize = 400;
 pub const MAX_ROWS_PER_MESSAGE: usize = 200;
@@ -243,7 +245,8 @@ pub struct Hello {
     pub app_version: String,
     pub schema: u32,
     pub protocol: u32,
-    /// The device's newest stamp, as its clock reads. Only its time is used.
+    /// The device's wall clock when it made the hello (as a stamp, so it has the same shape; only its time is used), with no offset.
+    /// The computer's is the reference time of the sync.
     pub clock: String,
     pub currency: String,
     pub generation: i64,
@@ -1075,7 +1078,7 @@ mod tests {
 
     #[test]
     fn there_is_a_table_for_every_kind_of_row_and_the_protocol_knows_it() {
-        assert_eq!(PROTOCOL, 5);
+        assert_eq!(PROTOCOL, 6);
         let names: Vec<&str> = Table::ALL.iter().map(|t| t.name()).collect();
         assert_eq!(
             names,

@@ -149,6 +149,29 @@ fn the_clock_never_goes_backwards_even_when_the_wall_clock_does() {
 }
 
 #[test]
+fn the_time_the_app_goes_by_is_the_wall_clock_plus_the_offset_in_rust_and_in_the_triggers() {
+    const DAY: i64 = 86_400_000;
+    let close = |ms: u64, expected: i64| (ms as i64 - expected).abs() < 2_000;
+    for offset in [0, 3 * DAY, -3 * DAY, 90_000] {
+        let conn = db();
+        // (the clock never goes backwards, so a negative offset only shows when nothing was stamped later than that yet)
+        conn.execute("UPDATE sync_clock SET offset_ms = ?1, last_ms = 0", [offset]).unwrap();
+        assert_eq!(stamp::offset_ms(&conn).unwrap(), offset);
+        let wall = stamp::now_ms() as i64;
+        assert!(close(stamp::clock_ms(&conn).unwrap(), wall + offset), "clock_ms with {offset}");
+        assert!(close(stamp::clock_now(&conn).unwrap().timestamp_millis() as u64, wall + offset), "clock_now with {offset}");
+        let c = category(&conn, "Food");
+        let from_trigger = Stamp::parse(&stamp_of(&conn, "transactions", transaction(&conn, c, "a"))).unwrap();
+        assert!(close(from_trigger.ms, wall + offset), "a stamp from a trigger with {offset}: {}", from_trigger.ms);
+        assert!(close(stamp::tick(&conn).unwrap().ms, wall + offset), "a stamp from tick with {offset}");
+    }
+    assert_eq!(stamp::shifted(5, -10), 0, "never below zero");
+    assert_eq!(stamp::shifted(5, 10), 15);
+    let fresh = db();
+    assert_eq!(stamp::offset_ms(&fresh).unwrap(), 0, "a device that has not synced goes by its own clock");
+}
+
+#[test]
 fn the_clock_in_rust_and_the_triggers_make_one_ordered_sequence() {
     let conn = db();
     let c = category(&conn, "Food");

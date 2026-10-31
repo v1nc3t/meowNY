@@ -140,6 +140,7 @@ const SECTIONS = [
           'Computer: **settings › phone › sync with phone**, then scan.',
           'Choose a direction: both ways, to the computer or to the phone.',
           'Conflicts are shown side by side; you pick.',
+          'If the clocks of the two devices differ, the sync still runs and both say so afterwards. The dates you typed stay as they are; the computer\'s time decides which change is newer and gives the phone its dates and reminders.',
           'Both devices must be on the same network. A network that keeps devices apart blocks it: use the phone\'s hotspot.',
           'iPhone: allow **local network** when asked, then scan again. Documents are previewed in the app; iPhone has no "open".',
           'A passphrase locks the phone. Five wrong tries erase it; pair again to get the data back.',
