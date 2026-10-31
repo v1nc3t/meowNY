@@ -229,7 +229,19 @@ ul.card-list.cat-list > li.list-head {
    last place by the middle of that place, which only works when the rows are equally tall. */
 ul.card-list.sum-list > li.card-item,
 ul.card-list.cat-list > li.card-item {
-  padding-block: 0.5rem;
+  min-height: 2.5rem;
+  padding-block: 0.125rem;
+}
+
+/* The rows are low, so their buttons are too: a row with its buttons, padding and line stays under the least height. The phone keeps
+   its 44px buttons and higher rows (below). */
+:is(.sum-list, .cat-list) .cell-actions > :is(.icon-btn, .icon-slot) {
+  width: 2rem;
+  min-width: 2rem;
+}
+
+:is(.sum-list, .cat-list) .cell-actions > .icon-btn {
+  height: 2rem;
 }
 
 ul.card-list.cat-list > li.card-item {
@@ -331,7 +343,8 @@ ul.card-list.hist-list > li.list-head {
 
 ul.card-list.hist-list > li.card-item {
   position: relative;
-  padding-block: 0.625rem;
+  min-height: 2.5rem;
+  padding-block: 0.25rem;
   cursor: pointer;
 }
 
