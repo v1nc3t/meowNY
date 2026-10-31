@@ -21,22 +21,22 @@
   --cols: minmax(0, 2.2fr) 8rem 7rem minmax(0, 1.2fr) 6.5rem;
 }
 
-/* Its rows are lower than those of other lists, and so are the buttons that would keep them tall. */
-ul.card-list.tx-list.is-table > li.card-item {
+/* The transactions and the recurring items have lower rows than other lists, and so lower buttons, which would keep them tall. */
+ul.card-list.is-table:is(.tx-list, .rec-table) > li.card-item {
   min-height: 2.5rem;
   padding-block: 0.25rem;
 }
 
-ul.card-list.tx-list.is-table > li.list-head {
+ul.card-list.is-table:is(.tx-list, .rec-table) > li.list-head {
   padding-block: 0.375rem;
 }
 
-.tx-list.is-table .cell-actions > :is(.icon-btn, .icon-slot) {
+.is-table:is(.tx-list, .rec-table) .cell-actions > :is(.icon-btn, .icon-slot) {
   width: 2rem;
   min-width: 2rem;
 }
 
-.tx-list.is-table .cell-actions > .icon-btn {
+.is-table:is(.tx-list, .rec-table) .cell-actions > .icon-btn {
   height: 2rem;
 }
 
