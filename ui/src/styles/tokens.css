@@ -99,8 +99,9 @@
   font-family: var(--font);
   line-height: 1.5;
   /* Everything is in rem, so this one value scales spacing, text and controls with the window.
-     It starts from the browser's own font size, so the person's text-size setting still counts. */
-  font-size: clamp(0.875rem, 0.8rem + 0.3vw, 1.0625rem);
+     It starts from the browser's own font size, so the person's text-size setting still counts.
+     --text-scale is the text size chosen in the settings (lib/textSize.ts). */
+  font-size: calc(clamp(0.875rem, 0.8rem + 0.3vw, 1.0625rem) * var(--text-scale, 1));
   /* Amounts line up in columns everywhere. */
   font-variant-numeric: tabular-nums;
   color: var(--foreground);

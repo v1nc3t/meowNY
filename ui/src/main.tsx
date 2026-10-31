@@ -6,10 +6,12 @@ import { ProfileProvider } from './hooks/ProfileProvider.tsx'
 import { I18nProvider } from './i18n/I18nProvider.tsx'
 import { installNoDragHandler } from './lib/noDrag.ts'
 import { applyTheme, savedTheme } from './lib/theme.ts'
+import { applyTextSize, savedTextSize } from './lib/textSize.ts'
 import { installExternalLinkHandler } from './vault/externalLinks.ts'
 
 // Before anything is drawn, so a saved theme does not flash the other one first.
 applyTheme(savedTheme())
+applyTextSize(savedTextSize())
 installExternalLinkHandler()
 installNoDragHandler()
 // iOS draws a press (:active) only on a page that has a touchstart listener, and the phone's buttons, tabs and rows are all pressed.

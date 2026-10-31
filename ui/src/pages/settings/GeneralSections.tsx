@@ -11,6 +11,7 @@ import { scheduleOnPhone } from '../../api/debtReminders'
 import { cleanCategoryName } from '../../api/categories'
 import { saveSenderName, senderName } from '../../lib/senderName'
 import { parseTheme, saveTheme, savedTheme } from '../../lib/theme'
+import { parseTextSize, saveTextSize, savedTextSize } from '../../lib/textSize'
 import { parseTime, REMINDER_PERIODS, reminderEvery, reminderTime, remindersChanged, saveReminderEvery, saveReminderTime } from '../../lib/reminders'
 import type { Say } from '../../hooks/toast'
 import { Actions, Field, Row, Rows, SwitchRow } from './layout'
@@ -77,10 +78,11 @@ export function RegionSection({
   )
 }
 
-/** The theme is this device's and applies at once, on the phone as well. */
+/** The theme and text size are this device's and apply at once, on the phone as well. */
 export function AppearanceSection() {
   const { t } = useI18n()
   const [theme, setTheme] = useState(savedTheme)
+  const [textSize, setTextSize] = useState(savedTextSize)
   return (
     <Rows>
       <Field>
@@ -96,6 +98,23 @@ export function AppearanceSection() {
             const next = parseTheme(value)
             saveTheme(next)
             setTheme(next)
+          }}
+        />
+      </Field>
+      <Field>
+        <Dropdown
+          label={t('settings.textSize')}
+          value={textSize}
+          options={[
+            { value: 'small', label: t('settings.textSizeSmall') },
+            { value: 'default', label: t('settings.textSizeDefault') },
+            { value: 'large', label: t('settings.textSizeLarge') },
+            { value: 'larger', label: t('settings.textSizeLarger') },
+          ]}
+          onChange={(value) => {
+            const next = parseTextSize(value)
+            saveTextSize(next)
+            setTextSize(next)
           }}
         />
       </Field>
