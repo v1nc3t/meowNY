@@ -400,7 +400,7 @@ ul.card-list > li.list-head > .span-2 {
   gap: 0.5rem;
 }
 
-/* The documents: name, day, size, then preview, details, save a copy and delete (four buttons of 2.25rem). */
+/* The documents: name, day, size, then preview, details, save a copy and delete (four buttons of 2rem). */
 .card-list.doc-table {
   --cols: minmax(0, 3fr) 7rem 6rem 9.5rem;
 }

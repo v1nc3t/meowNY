@@ -21,25 +21,6 @@
   --cols: minmax(0, 2.2fr) 8rem 7rem minmax(0, 1.2fr) 6.5rem;
 }
 
-/* The transactions and the recurring items have lower rows than other lists, and so lower buttons, which would keep them tall. */
-ul.card-list.is-table:is(.tx-list, .rec-table) > li.card-item {
-  min-height: 2.5rem;
-  padding-block: 0.25rem;
-}
-
-ul.card-list.is-table:is(.tx-list, .rec-table) > li.list-head {
-  padding-block: 0.375rem;
-}
-
-.is-table:is(.tx-list, .rec-table) .cell-actions > :is(.icon-btn, .icon-slot) {
-  width: 2rem;
-  min-width: 2rem;
-}
-
-.is-table:is(.tx-list, .rec-table) .cell-actions > .icon-btn {
-  height: 2rem;
-}
-
 /* An open transaction: the split and the description side by side where there is room, one under the other where there is not. */
 .tx-detail {
   display: flex;
@@ -226,22 +207,12 @@ ul.card-list.cat-list > li.list-head {
 }
 
 /* Every row is as tall as the least height says (the first one too, which has no line over it): a dragged row is put in the first and the
-   last place by the middle of that place, which only works when the rows are equally tall. */
+   last place by the middle of that place, which only works when the rows are equally tall. A row with its 2rem buttons (primitives.css),
+   padding and line stays under that height. */
 ul.card-list.sum-list > li.card-item,
 ul.card-list.cat-list > li.card-item {
   min-height: 2.5rem;
   padding-block: 0.125rem;
-}
-
-/* The rows are low, so their buttons are too: a row with its buttons, padding and line stays under the least height. The phone keeps
-   its 44px buttons and higher rows (below). */
-:is(.sum-list, .cat-list) .cell-actions > :is(.icon-btn, .icon-slot) {
-  width: 2rem;
-  min-width: 2rem;
-}
-
-:is(.sum-list, .cat-list) .cell-actions > .icon-btn {
-  height: 2rem;
 }
 
 ul.card-list.cat-list > li.card-item {

@@ -463,8 +463,14 @@ ul.card-list.is-table > li.list-head {
   gap: 0.25rem 1rem;
 }
 
+/* Table rows are low, so their icon buttons are 2rem (below): at the usual 2.25rem they would keep the rows tall. */
 ul.card-list.is-table > li.card-item {
-  padding-block: 0.625rem;
+  min-height: 2.5rem;
+  padding-block: 0.25rem;
+}
+
+ul.card-list.is-table > li.list-head {
+  padding-block: 0.375rem;
 }
 
 ul.card-list > li.list-head {
@@ -539,6 +545,17 @@ ul.card-list > li.list-head > .is-end {
 .cell-actions > .icon-slot {
   width: 2.25rem;
   flex: none;
+}
+
+/* The low rows of the tables and the budgets have smaller icon buttons. A phone shows no tables, and its budgets keep 44px buttons
+   (money.css). */
+:is(.is-table, .sum-list, .cat-list) .cell-actions > :is(.icon-btn, .icon-slot) {
+  width: 2rem;
+  min-width: 2rem;
+}
+
+:is(.is-table, .sum-list, .cat-list) .cell-actions > .icon-btn {
+  height: 2rem;
 }
 
 /* Small grey words after a name: shared, a note, the documents. */
