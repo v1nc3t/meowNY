@@ -85,7 +85,7 @@ const SECTIONS = [
           '**Budgets** per month and category. A budget carries into later months. Change a past month and choose: only that month, that month and later, or every month. Category budgets cannot add up to more than the monthly budget.',
           '**Recurring items:** pay, skip, pause or end them. One with no fixed amount asks for it when paid. The **due payments** tab lists each payment past its day; pay or skip any one of them.',
           '**Statistics:** budget against spending, trends, a year view.',
-          'Seven languages, light and dark themes, four text sizes.',
+          'Seven languages, light and dark themes, a text size from 80 to 150%.',
         ],
       },
     ],

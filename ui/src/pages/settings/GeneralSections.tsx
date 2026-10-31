@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react'
+import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { errorText, vault, type LockPrefs } from '../../vault/api'
 import { currencyLabel } from '../../api/currencies'
 import { formatExample, localeOptions, zoneOptions } from '../../api/locales'
@@ -11,7 +11,7 @@ import { scheduleOnPhone } from '../../api/debtReminders'
 import { cleanCategoryName } from '../../api/categories'
 import { saveSenderName, senderName } from '../../lib/senderName'
 import { parseTheme, saveTheme, savedTheme } from '../../lib/theme'
-import { parseTextSize, saveTextSize, savedTextSize } from '../../lib/textSize'
+import { parseTextSize, saveTextSize, savedTextSize, TEXT_SIZE } from '../../lib/textSize'
 import { parseTime, REMINDER_PERIODS, reminderEvery, reminderTime, remindersChanged, saveReminderEvery, saveReminderTime } from '../../lib/reminders'
 import type { Say } from '../../hooks/toast'
 import { Actions, Field, Row, Rows, SwitchRow } from './layout'
@@ -83,6 +83,17 @@ export function AppearanceSection() {
   const { t } = useI18n()
   const [theme, setTheme] = useState(savedTheme)
   const [textSize, setTextSize] = useState(savedTextSize)
+  const rangeRef = useRef<HTMLInputElement>(null)
+
+  // The size applies when the slider is let go (the native change event): applied while dragging, the page and the slider would resize under the pointer.
+  useEffect(() => {
+    const range = rangeRef.current
+    if (!range) return
+    const apply = () => saveTextSize(parseTextSize(range.value))
+    range.addEventListener('change', apply)
+    return () => range.removeEventListener('change', apply)
+  }, [])
+
   return (
     <Rows>
       <Field>
@@ -101,23 +112,20 @@ export function AppearanceSection() {
           }}
         />
       </Field>
-      <Field>
-        <Dropdown
-          label={t('settings.textSize')}
+      <Row label={t('settings.textSize')} hint={`${textSize}%`}>
+        <input
+          ref={rangeRef}
+          type="range"
+          className="settings-range"
+          aria-label={t('settings.textSize')}
+          aria-valuetext={`${textSize}%`}
+          min={TEXT_SIZE.min}
+          max={TEXT_SIZE.max}
+          step={TEXT_SIZE.step}
           value={textSize}
-          options={[
-            { value: 'small', label: t('settings.textSizeSmall') },
-            { value: 'default', label: t('settings.textSizeDefault') },
-            { value: 'large', label: t('settings.textSizeLarge') },
-            { value: 'larger', label: t('settings.textSizeLarger') },
-          ]}
-          onChange={(value) => {
-            const next = parseTextSize(value)
-            saveTextSize(next)
-            setTextSize(next)
-          }}
+          onChange={(event) => setTextSize(Number(event.target.value))}
         />
-      </Field>
+      </Row>
     </Rows>
   )
 }

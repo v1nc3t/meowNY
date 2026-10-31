@@ -496,6 +496,37 @@
   cursor: not-allowed;
 }
 
+/* The text size slider: a flat track and a square knob in the main colour, like the switch. The app runs in WebKit and Chromium web views. */
+.settings-rows input.settings-range {
+  appearance: none;
+  padding: 0;
+  border: 0;
+  box-shadow: none;
+  background: transparent;
+  cursor: pointer;
+}
+
+/* A field's focus is its border, and the slider has none, so it takes the usual outline back. */
+.settings-rows input.settings-range:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
+.settings-range::-webkit-slider-runnable-track {
+  height: 4px;
+  background: var(--input);
+}
+
+.settings-range::-webkit-slider-thumb {
+  appearance: none;
+  width: 1rem;
+  height: 1rem;
+  margin-top: calc(2px - 0.5rem);
+  background: var(--primary);
+  border: 0;
+  border-radius: 0;
+}
+
 .settings-actions {
   display: flex;
   flex-wrap: wrap;
