@@ -172,10 +172,13 @@ function DebtsView({ settings, now }: { settings: MoneySettings; now: Today }) {
   const statusText = (tone: 'owed' | 'owe' | 'even') => t(tone === 'owed' ? 'debts.labelOwesYou' : tone === 'owe' ? 'debts.labelYouOwe' : 'debts.settledUp')
   const friendLink = (person: Person) => `/app/debts/${person.id}`
 
-  /** A click anywhere on a desktop row chooses the friend, as the name does. Not one on a link (that is the name), or one that ends a text selection. */
+  /** Where a friend's row leads: their history, or for the friend already chosen, back to the debts of all of them. */
+  const rowLink = (person: Person) => (person.id === personId ? '/app/debts' : friendLink(person))
+
+  /** A click anywhere on a desktop row chooses the friend (or lets go of them), as the name does. Not one on a link (that is the name), or one that ends a text selection. */
   function choose(event: MouseEvent<HTMLElement>, person: Person) {
     if ((event.target as Element).closest('a, button, input, label') || window.getSelection()?.isCollapsed === false) return
-    navigate(friendLink(person))
+    navigate(rowLink(person))
   }
 
   // A desktop row: name, who owes whom, the reminder, the amount, then the one thing to do (mark as paid, or bring back). Rename and take
@@ -188,7 +191,7 @@ function DebtsView({ settings, now }: { settings: MoneySettings; now: Today }) {
     return (
       <li key={person.id} className={chosen ? 'card-item is-selected' : 'card-item'} data-archived={person.archived || undefined} onClick={(event) => choose(event, person)}>
         <div className="cell-name">
-          <Link className="card-name" to={friendLink(person)} title={person.name} aria-current={chosen ? 'true' : undefined} data-row-focus>
+          <Link className="card-name" to={rowLink(person)} title={person.name} aria-current={chosen ? 'true' : undefined} data-row-focus>
             {person.name}
           </Link>
           {person.archived ? <span className="row-mark">{t('debts.removed')}</span> : null}
