@@ -312,8 +312,9 @@
 
 .seg-7 { --seg: var(--seg-7); } .seg-bg-7 { background: var(--seg-7); }
 
+/* The legend of the donut goes beside it only when it has 22rem: a name of 8rem, the share and the amount of 15 characters (small print). */
 .dash-legend {
-  flex: 1 1 17rem;
+  flex: 1 1 22rem;
   display: flex;
   flex-direction: column;
   min-width: 0;
@@ -434,9 +435,21 @@
 
 .dash-bar-text {
   display: flex;
+  flex-wrap: wrap;
   align-items: baseline;
-  gap: 1rem;
+  gap: 0.125rem 1rem;
   font-size: 0.8125rem;
+}
+
+/* What was spent of the budget is two amounts and some words: when the name would be left with less than 8rem it goes on a line of its
+   own, above the words, which wrap if they are wider than the card. */
+.dash-bar-text > .legend-name {
+  flex: 1 1 8rem;
+}
+
+.dash-bar-text > .legend-amount {
+  margin-left: auto;
+  white-space: normal;
 }
 
 .year-readout.is-blank {
@@ -511,6 +524,13 @@
   font-weight: 600;
   color: var(--muted-foreground);
   text-align: right;
+}
+
+/* The words over the columns wrap in the width of the amounts under them, so a long one ("diesen monat bezahlt") does not widen the
+   column and leave the name less room. */
+.dash .dash-rec-rows .dash-rec-head > span {
+  width: 0;
+  min-width: 100%;
 }
 
 .dash-rec-rows .legend-amount {

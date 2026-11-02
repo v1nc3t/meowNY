@@ -18,7 +18,8 @@
 }
 
 /* The debts page, like the budgets (money.css): the friends on the left, and on the right the debts of all friends or the history of the
-   one chosen, in halves of the same width; with no room for two, one under the other. The phone never has two. */
+   one chosen, in halves of the same width; with no room for two, one under the other. A half needs about 23rem, for a friend's name of
+   10rem beside the amount of its two-line row. The phone never has two. */
 .debts-view {
   container-type: inline-size;
   container-name: debts;
@@ -31,7 +32,7 @@
   gap: 1.5rem;
 }
 
-@container debts (max-width: 50rem) {
+@container debts (max-width: 46rem) {
   .debts-split {
     grid-template-columns: minmax(0, 1fr);
   }
@@ -147,19 +148,34 @@ html.is-phone .tx-actions.debts-actions > .ui-btn {
   gap: 0.5rem 0.75rem;
 }
 
-/* The friends: name, who owes whom (and the reminder), what is owed, then mark as paid (or bring back), edit and delete. The reminder wraps
-   rather than being cut. In its half of the page the list has the two-line rows, so the buttons keep the same room in every row (a friend
-   who is settled has no "mark as paid") and the amounts line up. */
+/* The friends: name, who owes whom (and the reminder), what is owed. A click anywhere on a row chooses the friend. Who owes whom is as
+   wide as the longest of the three ("alles beglichen", 15 characters of 0.875rem), the amount has 15 characters. The reminder wraps
+   rather than being cut: its column holds 19 characters of small print, and on a two-line row it is no wider than that, so it does not
+   take the room of the name. In its half of the page the list has the two-line rows: the name and the amount, then who owes whom and the
+   reminder under them. */
 .card-list.friends-table {
-  --cols: minmax(0, 1.6fr) minmax(0, 1fr) minmax(0, 1.9fr) 8rem 14.5rem;
+  --cols: minmax(0, 1fr) 13.5ch 17ch 15ch;
+}
+
+ul.card-list.friends-table > li.card-item {
+  cursor: pointer;
 }
 
 .friends-table .cell-sub-end {
   white-space: normal;
 }
 
-ul.card-list.friends-table .cell-actions {
-  min-width: 10.5rem;
+@container (max-width: 57em) {
+  ul.card-list.friends-table > li.card-item {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      'name amount'
+      'sub sub-end';
+  }
+
+  .friends-table .cell-sub-end {
+    max-width: 17ch;
+  }
 }
 
 ul.card-list > li.list-head > .span-2 {
@@ -182,10 +198,18 @@ ul.card-list > li.list-head > .span-2 {
   }
 }
 
-/* One friend's history: what it was, the day, how much it changed, the balance after it, then show code or edit and delete. It and the
-   history of all debts are `.has-action` for their half of the page: the two-line rows from 56em, as the friends have. */
+/* One friend's history: what it was, the day, how much it changed (with a sign, 16 characters), the balance after it (small print, with
+   a sign), then show code (a bill) or edit and delete (an entry): two buttons of 2rem at most. It and the history of all debts are
+   `.has-action` for their half of the page: the two-line rows below 57em, as the friends have. What it was starts with the kind in words,
+   and the day sits under it in a narrow half: both wrap rather than being cut. */
 .card-list.ledger-table {
-  --cols: minmax(0, 2.4fr) 7rem 8rem 8rem 5rem;
+  --cols: minmax(0, 1fr) 12ch 16ch 14.5ch 4.25rem;
+}
+
+.ledger-table .cell-name > .card-name,
+.ledger-table .cell-sub {
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .ledger-table .cell-sub-end {
@@ -195,12 +219,18 @@ ul.card-list > li.list-head > .span-2 {
 
 /* The same room for the buttons in every row, so the amounts line up when the head is gone (a narrow window). */
 .ledger-table .cell-actions {
-  min-width: 4.5rem;
+  min-width: 4.25rem;
 }
 
-/* The history of all debts: who, what kind of change, the day, the change, the balance after it. */
+/* The history of all debts: who, what kind of change, the day, the change (with a sign, 16 characters), the balance after it (small
+   print, with a sign). The kind of change is words that can be long ("wiederkehrende zahlung verspätet bezahlt"), so it wraps. */
 .card-list.history-table {
-  --cols: minmax(0, 1.3fr) minmax(0, 2.4fr) 8.5rem 8rem 8rem;
+  --cols: minmax(0, 1.3fr) minmax(0, 2.4fr) 12ch 16ch 14.5ch;
+}
+
+.history-table .cell-sub {
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .cell-bal {
@@ -212,9 +242,20 @@ ul.card-list > li.list-head > .span-2 {
   font-variant-numeric: tabular-nums;
 }
 
-@container (max-width: 56em) {
+@container (max-width: 57em) {
   ul.card-list.history-table .cell-bal {
     grid-area: actions;
+  }
+}
+
+/* In half a page the balance is under the day, in the column of the amount, so the friend's name keeps its room: three lines a row. */
+@container (max-width: 40em) {
+  ul.card-list.history-table > li.card-item {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      'name amount'
+      'sub sub-end'
+      'sub actions';
   }
 }
 
@@ -227,14 +268,17 @@ ul.card-list > li.list-head > .span-2 {
 .due-late {
   display: block;
   font-size: 0.8125rem;
+  white-space: normal;
 }
 
 .row-toggle .due-late {
   display: inline;
 }
 
+/* What is due: name, category, the day with how late it is under it (that wraps, on 14 characters), the amount (an income has a plus
+   sign: 16), then skip and mark as paid, which take 16.5rem together in German ("überspringen", and "als bezahlt markieren" on two lines). */
 .card-list.due-table {
-  --cols: minmax(0, 2fr) minmax(0, 1.2fr) 9rem 8rem 15rem;
+  --cols: minmax(0, 1.6fr) minmax(0, 1fr) 14ch 16ch 16.5rem;
 }
 
 /* A bill code that was read: who it is from, what, and when. */
@@ -439,9 +483,10 @@ ul.card-list > li.list-head > .span-2 {
   gap: 0.5rem;
 }
 
-/* The documents: name, day, size, then preview, details, save a copy and delete (four buttons of 2rem). */
+/* The documents: name, day (13 characters of small print), size ("1.023,9 KB"), then preview, details, save a copy and delete (four
+   buttons of 2rem). */
 .card-list.doc-table {
-  --cols: minmax(0, 3fr) 7rem 6rem 9.5rem;
+  --cols: minmax(0, 3fr) 12ch 6rem 9.5rem;
 }
 
 /* A note under a row (where the file is, when it is not here): across all the columns. */

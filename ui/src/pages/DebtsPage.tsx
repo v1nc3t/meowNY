@@ -1,4 +1,4 @@
-import { useEffect, useId, useState } from 'react'
+import { useEffect, useId, useState, type MouseEvent } from 'react'
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { debts, type EntryKind, type History, type Person, type Reminders } from '../api/debts'
 import { errorText } from '../api/invoke'
@@ -11,7 +11,7 @@ import EntryModal from '../components/EntryModal'
 import FriendLedger from '../components/FriendLedger'
 import FriendNameModal from '../components/FriendNameModal'
 import Icon from '../components/NavIcon'
-import { IconAction, TapRow } from '../components/RowParts'
+import { TapRow } from '../components/RowParts'
 import SettleModal from '../components/SettleModal'
 import Button from '../components/ui/Button'
 import { buttonClass } from '../components/ui/cn'
@@ -171,26 +171,23 @@ function DebtsView({ settings, now }: { settings: MoneySettings; now: Today }) {
   const statusText = (tone: 'owed' | 'owe' | 'even') => t(tone === 'owed' ? 'debts.labelOwesYou' : tone === 'owe' ? 'debts.labelYouOwe' : 'debts.settledUp')
   const friendLink = (person: Person) => `/app/debts/${person.id}`
 
-  /** The buttons that change a friend, as a row's icons: edit, and delete (or nothing, for one that is removed already). */
-  function icons(person: Person) {
-    return (
-      <>
-        <IconAction icon="pencil" label={t('common.edit')} data-row-focus onClick={() => setEditing(person)} />
-        {person.archived ? <span className="icon-slot" /> : <IconAction icon="trash" label={t('common.delete')} danger onClick={() => setDeleting(person)} />}
-      </>
-    )
+  /** A click anywhere on a desktop row chooses the friend, as the name does. Not one on a link (that is the name), or one that ends a text selection. */
+  function choose(event: MouseEvent<HTMLElement>, person: Person) {
+    if ((event.target as Element).closest('a, button, input, label') || window.getSelection()?.isCollapsed === false) return
+    navigate(friendLink(person))
   }
 
-  // A desktop row: name, who owes whom, the reminder, the amount, then the one thing to do (mark as paid, or bring back), edit and delete.
-  // The friend whose history is on the right is marked.
+  // A desktop row: name, who owes whom, the reminder and the amount. What can be done with a friend (mark as paid or bring back, rename,
+  // take off the list) is on the right, beside their history, so the list has the room for the names. The friend whose history is on the
+  // right is marked. The name is the link for the keyboard (j and k stop on it).
   function tableRow(person: Person) {
     const { tone, abs } = balanceView(person.balance)
     const reminded = dueIds.has(person.id) && tone !== 'even'
     const chosen = person.id === personId
     return (
-      <li key={person.id} className={chosen ? 'card-item is-selected' : 'card-item'} data-archived={person.archived || undefined}>
+      <li key={person.id} className={chosen ? 'card-item is-selected' : 'card-item'} data-archived={person.archived || undefined} onClick={(event) => choose(event, person)}>
         <div className="cell-name">
-          <Link className="card-name" to={friendLink(person)} title={person.name} aria-current={chosen ? 'true' : undefined}>
+          <Link className="card-name" to={friendLink(person)} title={person.name} aria-current={chosen ? 'true' : undefined} data-row-focus>
             {person.name}
           </Link>
           {person.archived ? <span className="row-mark">{t('debts.removed')}</span> : null}
@@ -198,18 +195,6 @@ function DebtsView({ settings, now }: { settings: MoneySettings; now: Today }) {
         <span className={`cell-sub debt-${tone}`}>{statusText(tone)}</span>
         <span className="cell-sub-end">{reminded ? t('debts.dueBadge', { date: formatDate(dueOn.get(person.id) ?? '', settings.locale) }) : ''}</span>
         <span className={`cell-amount debt-${tone}`}>{tone === 'even' ? '' : money(abs)}</span>
-        <div className="cell-actions">
-          {person.archived ? (
-            <Button variant="outline" size="sm" className="row-primary" onClick={() => void bringBack(person)}>
-              {t('debts.unarchive')}
-            </Button>
-          ) : tone !== 'even' ? (
-            <Button variant="outline" size="sm" className="row-primary" onClick={() => setSettling(person)}>
-              {t('debts.settle')}
-            </Button>
-          ) : null}
-          {icons(person)}
-        </div>
       </li>
     )
   }
@@ -405,7 +390,6 @@ function DebtsView({ settings, now }: { settings: MoneySettings; now: Today }) {
                         <span>{t('common.name')}</span>
                         <span className="span-2">{t('debts.colStatus')}</span>
                         <span className="is-end">{t('debts.balance')}</span>
-                        <span />
                       </li>
                     )}
                     {people.map(phone ? tapRow : tableRow)}

@@ -16,9 +16,11 @@
   flex: 0 0 auto;
 }
 
-/* The transactions as a table: name, amount, date, category, then the buttons (edit, delete, the chevron: three of 2rem). */
+/* The transactions as a table: name, amount, date, category, then the buttons (edit, delete, the chevron: three of 2rem). The columns
+   of amounts and dates are as wide as the longest the formats write, in characters of the monospace font: 16 for "-CHF 999,999.99" or a
+   longer way of writing it, and 13 for a date (small print, 0.875rem, so 12 of the row's). The name and the category share the rest. */
 .card-list.tx-list {
-  --cols: minmax(0, 2.2fr) 8rem 7rem minmax(0, 1.2fr) 6.5rem;
+  --cols: minmax(0, 2.2fr) 16ch 12ch minmax(0, 1.2fr) 6.5rem;
 }
 
 /* An open transaction: the split and the description side by side where there is room, one under the other where there is not. */
@@ -172,8 +174,8 @@ html.is-phone .split-table td {
   gap: 1.5rem;
 }
 
-/* No room for two sides: one under the other. */
-@container budget (max-width: 50rem) {
+/* No room for two sides: one under the other. A side needs about 28rem for a category name of 10rem beside its budget and buttons. */
+@container budget (max-width: 58rem) {
   .budget-split {
     grid-template-columns: minmax(0, 1fr);
   }
@@ -194,10 +196,16 @@ html.is-phone .split-table td {
 }
 
 /* The totals of a side (the budget, what was spent) and its categories (name, budget, edit and delete) share their columns, so the
-   amounts line up. A category row can be held and dragged: no text selection or touch menu when it is held. */
+   amounts line up: the amount has 15 characters of room (an amount with no sign, "CHF 999,999.99" and a little more), the buttons two
+   of 2rem. A category row can be held and dragged: no text selection or touch menu when it is held. */
 .card-list.sum-list,
 .card-list.cat-list {
-  --cols: minmax(0, 1fr) 7rem 4.75rem;
+  --cols: minmax(0, 1fr) 15ch 4.25rem;
+}
+
+/* The words of the total ("monthly budget") may take two lines in a narrow side, rather than being cut. */
+.sum-list .cell-name > .card-name {
+  white-space: normal;
 }
 
 ul.card-list.sum-list > li.card-item,
@@ -300,10 +308,12 @@ ul.card-list.sum-list > li.card-item.is-editing {
 }
 
 /* The history: the month, then what was spent and its budget, what was earned and its budget. The button with the month is stretched
-   over the row, so a click anywhere on it shows that month above. Narrower than 48em: no head, and three lines a row (the month, what
-   was spent, what was earned), the words of the head in front of the amounts. */
+   over the row, so a click anywhere on it shows that month above. Each column is at least as wide as the longest it holds (the month
+   with "septiembre de 2026", an amount of 15 characters, small print of 0.875rem for the budgets) and shares what is left. Narrower than
+   53em, which is what they add up to: no head, and three lines a row (the month, what was spent, what was earned), the words of the
+   head in front of the amounts. */
 .card-list.hist-list {
-  --cols: minmax(9rem, 1.4fr) repeat(4, minmax(0, 1fr));
+  --cols: minmax(18.5ch, 1.4fr) minmax(15ch, 1fr) minmax(13.5ch, 1fr) minmax(15ch, 1fr) minmax(13.5ch, 1fr);
   container-type: inline-size;
 }
 
@@ -334,7 +344,7 @@ ul.card-list.hist-list > li.card-item {
   font-variant-numeric: tabular-nums;
 }
 
-@container (max-width: 48em) {
+@container (max-width: 53em) {
   ul.card-list.hist-list > li.list-head {
     display: none;
   }
@@ -373,8 +383,8 @@ ul.card-list.hist-list > li.card-item {
 }
 
 /* Lists with one labelled button in each row (mark as paid, bring back): its words may wrap onto a second line rather than push the
-   columns about, whatever the language. A list that has them is `.has-action`, and is wide, so it gets its short two-line rows from 56em
-   instead of 40em. */
+   columns about, whatever the language. A list that has them is `.has-action`, and is wide, so it keeps its short two-line rows below 57em
+   instead of 40em: the recurring items need about that much for their six columns, and the other lists share the rule. */
 .row-primary {
   flex: 0 1 auto;
   min-width: 0;
@@ -396,7 +406,7 @@ ul.card-list.hist-list > li.card-item {
   color: var(--muted-foreground);
 }
 
-@container (max-width: 56em) {
+@container (max-width: 57em) {
   ul.card-list.has-action > li.list-head {
     display: none;
   }
@@ -436,16 +446,17 @@ ul.card-list.hist-list > li.card-item {
 }
 
 /* Recurring: name, amount, next due date, category, how often, then mark as paid, edit, delete and the chevron. Six columns are a lot for
-   a list, so the padding is a little narrower and the columns are as wide as their words, to leave room for wide gaps between them (at
-   1280px nothing is cut and the name keeps about 10rem); a name that is longer than its room wraps. The category and how often are two
+   a list, so the padding is a little narrower and the columns are as wide as their words (an amount of 16 characters, a date of 13,
+   and "how often" of 12 on a line: a longer one takes a second line, "toutes les 12 / semaines"); at 1280px, where the list is 58rem,
+   the name keeps about 7.5rem and the category 4rem. A name that is longer than its room wraps. The category and how often are two
    columns on a wide list and one line of small print (the wrapper is the cell) on a narrow one. */
 .card-list.rec-table {
-  --cols: minmax(0, 1fr) 6.5rem 5.5rem 7rem 7rem 15.5rem;
+  --cols: minmax(0, 1.8fr) 16ch 12ch minmax(0, 1fr) 11ch 14.5rem;
 }
 
 ul.card-list.rec-table > li.card-item,
 ul.card-list.rec-table > li.list-head {
-  column-gap: 1.5rem;
+  column-gap: 1.25rem;
   padding-inline: 1rem;
 }
 
@@ -459,33 +470,44 @@ ul.card-list.rec-table > li.list-head {
   overflow-wrap: anywhere;
 }
 
+/* "mark as paid" is on one line in 7.5rem, and takes two in the languages whose words are longer ("als bezahlt / markieren"). */
 .rec-table .row-primary {
+  max-width: 7.5rem;
   padding-inline: 0.5rem;
 }
 
 /* The same room for the buttons in every row (an item that is paused or ended has no "mark as paid"), so the amounts line up when the
    head is gone. */
 ul.card-list.rec-table .cell-actions {
-  min-width: 15.5rem;
+  min-width: 14.5rem;
 }
 
 .rec-table .rec-sub {
   display: contents;
 }
 
-@container (max-width: 56em) {
+.rec-table .rec-sub > .cell-sub:last-child {
+  white-space: normal;
+}
+
+/* On a narrow list "how often" keeps its line (a second one only when the cell is narrower than the words) and the category gives way. */
+@container (max-width: 57em) {
   ul.card-list.rec-table .rec-sub {
     display: flex;
     grid-area: sub;
     gap: 0.25rem 1rem;
     min-width: 0;
   }
+
+  ul.card-list.rec-table .rec-sub > .cell-sub:last-child {
+    flex: none;
+    max-width: 100%;
+  }
 }
 
-/* The payments paid late, under the due ones: name, the day it fell due, the day it was paid, the amount. The dates are as wide as the due
-   date of the list above. */
+/* The payments paid late, under the due ones: name, the day it fell due, the day it was paid, the amount (15 characters, with no sign). */
 .card-list.late-table {
-  --cols: minmax(0, 2fr) 9rem 9rem 8rem;
+  --cols: minmax(0, 1fr) 12ch 12ch 15ch;
 }
 
 /* The pane of due payments starts with a heading: no room above it, as the heading of the second list has. */

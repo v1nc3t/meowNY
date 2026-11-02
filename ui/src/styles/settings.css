@@ -597,10 +597,11 @@
   margin: 0;
 }
 
-/* The tokens: the name gets the room (a long one wraps), the times fit on a line when the section is as wide as it is at 1280px, and
+/* The tokens: the name gets the room (a long one wraps; about 11rem at 1280px, where the section is 42rem wide), the access and the times
+   are at least as wide as their longest word (the times wrap at their spaces, in small print: 11 characters, 8 for the access), and
    the last column is as wide as its button (the head has a hidden copy of the word, so both are the same in every language). */
 .card-list.token-table {
-  --cols: minmax(0, 1.3fr) minmax(0, 0.75fr) minmax(0, 1.45fr) minmax(0, 1.45fr) max-content;
+  --cols: minmax(0, 2.4fr) minmax(8ch, 0.75fr) minmax(11ch, 1fr) minmax(11ch, 1fr) max-content;
 }
 
 ul.card-list.token-table > li.card-item,
@@ -619,8 +620,10 @@ ul.card-list.token-table > li.list-head {
   visibility: hidden;
 }
 
+/* The paired phones, the same way. The last column is as wide as "ja, entfernen" (the widest of "yes, remove" in the languages), and the
+   button to cancel wraps under it. */
 .card-list.device-table {
-  --cols: minmax(0, 1.2fr) minmax(0, 1.4fr) minmax(0, 1.6fr) 7rem;
+  --cols: minmax(0, 2fr) minmax(11ch, 1fr) minmax(11ch, 1.2fr) 8.75rem;
 }
 
 .token-table .cell-sub,
@@ -658,6 +661,18 @@ ul.card-list.token-table > li.list-head {
 
   .token-table .cell-extra {
     grid-area: extra;
+  }
+
+  ul.card-list.device-table > li.card-item {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      'name actions'
+      'sub sub'
+      'sub-end sub-end';
+  }
+
+  ul.card-list.device-table .cell-sub-end {
+    text-align: left;
   }
 
   .token-table [data-label]::before,
