@@ -16,7 +16,6 @@ import { remindersChanged } from '../lib/reminders'
 import BillCodeModal from './BillCodeModal'
 import ClipPreview from './ClipPreview'
 import ConfirmModal from './ConfirmModal'
-import DebtsFiles from './DebtsFiles'
 import EntryModal from './EntryModal'
 import FriendNameModal from './FriendNameModal'
 import Icon from './NavIcon'
@@ -29,14 +28,15 @@ type Dialog =
   | { kind: 'entry'; entry: Entry }
   | { kind: 'settle' }
   | { kind: 'rename' }
+  | { kind: 'remove' }
   | { kind: 'delete'; entry: Entry }
   | { kind: 'code'; transactionId: string; amount: string }
   | null
 
 /**
- * One friend's history: the balance, the buttons that change the friend, the ledger with the buttons and documents of each line, and on
- * the desktop the statement as a file. It is the right half of the debts page, and the whole page of a friend on the phone. The page
- * says when to read again (`reload`) and is told when something changed (`onChanged`), so the list of friends beside it stays right.
+ * One friend's history: the name with the button that renames it, the balance, the buttons that change the friend, and the ledger with the
+ * buttons and documents of each line. It is the right half of the debts page, and the whole page of a friend on the phone. The page says
+ * when to read again (`reload`) and is told when something changed (`onChanged`), so the list of friends beside it stays right.
  */
 export default function FriendLedger({
   personId,
@@ -118,7 +118,7 @@ export default function FriendLedger({
     return (
       <div className="debts-half">
         <Link to="/app/debts" className={buttonClass('outline', 'sm')}>
-          {t('debts.back')}
+          {t('common.back')}
         </Link>
         <p className="notice">{errorText(new ApiError('not_found'))}</p>
       </div>
@@ -132,6 +132,11 @@ export default function FriendLedger({
     tone === 'even'
       ? t('debts.settledUp')
       : t(tone === 'owed' ? 'debts.owesYou' : 'debts.youOweThem', { name: person.name, amount: money(abs) })
+  // Taking a friend off the list asks first; bringing one back is easy to undo, so it does not.
+  function removeOrBringBack() {
+    if (person.archived) void run(() => debts.unarchive(person.id))
+    else setDialog({ kind: 'remove' })
+  }
   const lineLabel = (line: Line) => {
     const kind = t(`debts.kind.${line.kind}`)
     return line.what ? `${kind}: ${line.what}` : kind
@@ -237,27 +242,24 @@ export default function FriendLedger({
 
   return (
     <div className="debts-half">
-      <h2 className="debts-heading">{person.name}</h2>
+      <div className="debts-heading debts-name">
+        <h2>{person.name}</h2>
+        <Button variant="outline" size="sm" onClick={() => setDialog({ kind: 'rename' })}>
+          {t('common.rename')}
+        </Button>
+      </div>
       <div className="debts-summary">
         <p className={`debt-total debt-${tone}`}>{summaryText}</p>
         <div className="card-actions">
           <Link to="/app/debts" className={buttonClass('outline', 'sm')}>
-            {t('debts.back')}
+            {t('common.back')}
           </Link>
           {tone !== 'even' ? (
             <Button variant="outline" size="sm" onClick={() => setDialog({ kind: 'settle' })}>
               {t('debts.settle')}
             </Button>
           ) : null}
-          <Button variant="outline" size="sm" onClick={() => setDialog({ kind: 'rename' })}>
-            {t('common.rename')}
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={pending}
-            onClick={() => void run(() => (person.archived ? debts.unarchive(person.id) : debts.archive(person.id)))}
-          >
+          <Button variant="outline" size="sm" disabled={pending} onClick={removeOrBringBack}>
             {t(person.archived ? 'debts.unarchive' : 'debts.archive')}
           </Button>
         </div>
@@ -284,7 +286,6 @@ export default function FriendLedger({
           {lines.map(tableRow)}
         </ul>
       ) : null}
-      {phone ? null : <DebtsFiles personId={person.id} onSaved={() => say(t('export.saved'), 'success')} onFailed={(text) => say(text, 'error')} />}
       {dialog?.kind === 'entry' ? (
         <EntryModal
           entry={dialog.entry}
@@ -312,6 +313,14 @@ export default function FriendLedger({
         />
       ) : null}
       {dialog?.kind === 'rename' ? <FriendNameModal person={person} onClose={() => setDialog(null)} onSaved={() => done()} /> : null}
+      {dialog?.kind === 'remove' ? (
+        <ConfirmModal
+          title={t('rec.confirmTitle', { action: t('debts.archive'), name: person.name })}
+          pending={pending}
+          onConfirm={() => void run(() => debts.archive(person.id))}
+          onClose={() => setDialog(null)}
+        />
+      ) : null}
       {dialog?.kind === 'delete' ? (
         <ConfirmModal
           title={t('rec.confirmTitle', {

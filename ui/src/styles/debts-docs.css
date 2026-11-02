@@ -99,6 +99,19 @@ html.is-phone .tx-actions.debts-actions > .ui-btn {
   color: var(--muted-foreground);
 }
 
+/* A friend's name with the button that renames them beside it. A long name wraps rather than push the button out. */
+.debts-name {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+}
+
+.debts-name > h2 {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
 /* The balance with the friend chosen, and the buttons that change the friend, with no box around them. */
 .debts-summary {
   display: flex;
@@ -148,13 +161,32 @@ html.is-phone .tx-actions.debts-actions > .ui-btn {
   gap: 0.5rem 0.75rem;
 }
 
-/* The friends: name, who owes whom (and the reminder), what is owed. A click anywhere on a row chooses the friend. Who owes whom is as
-   wide as the longest of the three ("alles beglichen", 15 characters of 0.875rem), the amount has 15 characters. The reminder wraps
-   rather than being cut: its column holds 19 characters of small print, and on a two-line row it is no wider than that, so it does not
-   take the room of the name. In its half of the page the list has the two-line rows: the name and the amount, then who owes whom and the
-   reminder under them. */
+/* The statement of the friend chosen, under the history and at the window's bottom as the pager of the transactions is: the history
+   scrolls above it. Its list opens upwards, since there is no room under it. */
+.debts-foot {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.debts-foot > .debts-heading {
+  margin: 0;
+}
+
+.debts-foot .pick-list {
+  top: auto;
+  bottom: calc(100% + 0.25rem);
+}
+
+/* The friends: name, who owes whom (and the reminder), what is owed, then mark as paid (or bring back). A click anywhere else on a row
+   chooses the friend. Who owes whom is as wide as the longest of the three ("alles beglichen", 15 characters of 0.875rem), the amount has
+   15 characters. The button is on one line in every language: the longest word, "als bezahlt markieren", has 21 characters of 0.875rem
+   (a column in ch is the width of a character of 1rem), and the button has its padding. The reminder wraps rather than being cut: its
+   column holds 19 characters of small print. In its half of the page the list has the two-line rows: the name and the amount, then who
+   owes whom and the button under them, and the reminder under that. The button is in the column of the amount, so the name has what is
+   left beside the wider of the two. */
 .card-list.friends-table {
-  --cols: minmax(0, 1fr) 13.5ch 17ch 15ch;
+  --cols: minmax(0, 1fr) 13.5ch 17ch 15ch calc(18.4ch + 1.25rem);
 }
 
 ul.card-list.friends-table > li.card-item {
@@ -165,16 +197,23 @@ ul.card-list.friends-table > li.card-item {
   white-space: normal;
 }
 
+.friends-table .row-primary {
+  max-width: none;
+  padding-inline: 0.5rem;
+  white-space: nowrap;
+}
+
 @container (max-width: 57em) {
   ul.card-list.friends-table > li.card-item {
     grid-template-columns: minmax(0, 1fr) auto;
     grid-template-areas:
       'name amount'
-      'sub sub-end';
+      'sub actions'
+      'sub-end sub-end';
   }
 
-  .friends-table .cell-sub-end {
-    max-width: 17ch;
+  ul.card-list.friends-table > li.card-item > .cell-sub-end {
+    text-align: left;
   }
 }
 
@@ -276,9 +315,10 @@ ul.card-list > li.list-head > .span-2 {
 }
 
 /* What is due: name, category, the day with how late it is under it (that wraps, on 14 characters), the amount (an income has a plus
-   sign: 16), then skip and mark as paid, which take 16.5rem together in German ("überspringen", and "als bezahlt markieren" on two lines). */
+   sign: 16), then skip and mark as paid, each on one line: together 33 characters of 0.875rem in German ("überspringen", "als
+   bezahlt markieren"), and the padding of the two buttons. */
 .card-list.due-table {
-  --cols: minmax(0, 1.6fr) minmax(0, 1fr) 14ch 16ch 16.5rem;
+  --cols: minmax(0, 1.6fr) minmax(0, 1fr) 14ch 16ch calc(29ch + 3.5rem);
 }
 
 /* A bill code that was read: who it is from, what, and when. */
