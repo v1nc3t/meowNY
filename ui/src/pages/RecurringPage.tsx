@@ -9,6 +9,7 @@ import SplitEditor from '../components/SplitEditor'
 import Dropdown from '../components/Dropdown'
 import ConfirmModal from '../components/ConfirmModal'
 import DuePayments from '../components/DuePayments'
+import PaidLatePayments from '../components/PaidLatePayments'
 import Icon from '../components/NavIcon'
 import { Disclosure, IconAction, TapRow } from '../components/RowParts'
 import SectionTabs from '../components/SectionTabs'
@@ -626,8 +627,10 @@ function RecurringView({ settings, now }: { settings: MoneySettings; now: Today 
         ]}
       />
       {tab === 'due' && due ? (
-        <div className="tx-pane wide pane-stack" role="tabpanel">
+        <div className="tx-pane wide pane-stack rec-due" role="tabpanel">
+          <h2 className="debts-heading">{t('rec.tabDue')}</h2>
           <DuePayments due={due} currency={settings.currency} locale={settings.locale} onPay={payDue} onSkip={setSkipping} />
+          <PaidLatePayments currency={settings.currency} locale={settings.locale} reload={reload} />
         </div>
       ) : null}
       {tab === 'items' && items ? (

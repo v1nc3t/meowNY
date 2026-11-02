@@ -1,11 +1,11 @@
 /* Debts, friends and documents: the debts pages, attachments, previews, the paper and sheet views. */
 
 /* Debts (phase 10). Panes with several parts stack them with an even space between. */
-.tx-pane.pane-stack > * + * {
+:is(.tx-pane.pane-stack, .debts-half) > * + * {
   margin-top: 1rem;
 }
 
-.tx-pane.pane-stack > .debts-heading {
+:is(.tx-pane.pane-stack, .debts-half) > .debts-heading {
   margin: 1.5rem 0 0;
   font-family: var(--font);
   font-size: 1.0625rem;
@@ -13,8 +13,41 @@
   line-height: 1.4;
 }
 
-.tx-pane.pane-stack > .debts-heading + * {
+:is(.tx-pane.pane-stack, .debts-half) > .debts-heading + * {
   margin-top: 0.5rem;
+}
+
+/* The debts page, like the budgets (money.css): the friends on the left, and on the right the debts of all friends or the history of the
+   one chosen, in halves of the same width; with no room for two, one under the other. The phone never has two. */
+.debts-view {
+  container-type: inline-size;
+  container-name: debts;
+}
+
+.debts-split {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  align-items: start;
+  gap: 1.5rem;
+}
+
+@container debts (max-width: 50rem) {
+  .debts-split {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+html.is-phone .debts-split {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.debts-half {
+  min-width: 0;
+}
+
+/* The heading of a half is where the bar of the other half starts. */
+.debts-half > .debts-heading:first-child {
+  margin-top: 0;
 }
 
 .tx-actions.debts-actions {
@@ -65,7 +98,7 @@ html.is-phone .tx-actions.debts-actions > .ui-btn {
   color: var(--muted-foreground);
 }
 
-/* The balance with a friend at the top of the friend's page, and the buttons that change the friend, with no box around them. */
+/* The balance with the friend chosen, and the buttons that change the friend, with no box around them. */
 .debts-summary {
   display: flex;
   flex-direction: column;
@@ -115,13 +148,18 @@ html.is-phone .tx-actions.debts-actions > .ui-btn {
 }
 
 /* The friends: name, who owes whom (and the reminder), what is owed, then mark as paid (or bring back), edit and delete. The reminder wraps
-   rather than being cut. */
+   rather than being cut. In its half of the page the list has the two-line rows, so the buttons keep the same room in every row (a friend
+   who is settled has no "mark as paid") and the amounts line up. */
 .card-list.friends-table {
   --cols: minmax(0, 1.6fr) minmax(0, 1fr) minmax(0, 1.9fr) 8rem 14.5rem;
 }
 
 .friends-table .cell-sub-end {
   white-space: normal;
+}
+
+ul.card-list.friends-table .cell-actions {
+  min-width: 10.5rem;
 }
 
 ul.card-list > li.list-head > .span-2 {
@@ -144,7 +182,8 @@ ul.card-list > li.list-head > .span-2 {
   }
 }
 
-/* One friend's history: what it was, the day, how much it changed, the balance after it, then show code or edit and delete. */
+/* One friend's history: what it was, the day, how much it changed, the balance after it, then show code or edit and delete. It and the
+   history of all debts are `.has-action` for their half of the page: the two-line rows from 56em, as the friends have. */
 .card-list.ledger-table {
   --cols: minmax(0, 2.4fr) 7rem 8rem 8rem 5rem;
 }
@@ -173,7 +212,7 @@ ul.card-list > li.list-head > .span-2 {
   font-variant-numeric: tabular-nums;
 }
 
-@container (max-width: 40em) {
+@container (max-width: 56em) {
   ul.card-list.history-table .cell-bal {
     grid-area: actions;
   }

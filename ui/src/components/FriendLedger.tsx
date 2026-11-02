@@ -1,58 +1,65 @@
 import { useEffect, useId, useMemo, useState } from 'react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
-import { debts, type Entry, type EntryKind, type Line, type Statement } from '../api/debts'
+import { Link } from 'react-router-dom'
+import { debts, type Entry, type Line, type Person, type Statement } from '../api/debts'
 import { ApiError, errorText } from '../api/invoke'
-import { useToday, type Today } from '../api/today'
-import BillCodeModal from '../components/BillCodeModal'
-import ClipPreview from '../components/ClipPreview'
-import ConfirmModal from '../components/ConfirmModal'
-import DebtsFiles from '../components/DebtsFiles'
-import EntryModal from '../components/EntryModal'
-import FriendNameModal from '../components/FriendNameModal'
-import Icon from '../components/NavIcon'
-import { IconAction, TapRow } from '../components/RowParts'
-import SettleModal from '../components/SettleModal'
-import Button from '../components/ui/Button'
-import { buttonClass } from '../components/ui/cn'
+import type { Today } from '../api/today'
 import { useClipCounts } from '../hooks/useClipCounts'
 import { useFocusRequest, useJumpTo } from '../hooks/useFocusRequest'
-import { useMoneySettings, type MoneySettings } from '../hooks/useMoneySettings'
+import type { MoneySettings } from '../hooks/useMoneySettings'
 import { useToast } from '../hooks/toast'
 import { useProfile } from '../hooks/profile'
 import { useT } from '../i18n/context'
-import { useShortcut } from '../keys/registry'
-import { useRowNavigation } from '../keys/useRowNavigation'
 import { balanceView, entryOfLine } from '../lib/balance'
 import { byDay, dayHeading } from '../lib/dayHeading'
 import { formatDate, formatMoney } from '../lib/money'
 import { remindersChanged } from '../lib/reminders'
-
-export default function FriendPage() {
-  const { settings, error } = useMoneySettings()
-  const now = useToday()
-  if (error) return <p className="notice">{error}</p>
-  if (!settings || !now) return null
-  return <FriendView settings={settings} now={now} />
-}
+import BillCodeModal from './BillCodeModal'
+import ClipPreview from './ClipPreview'
+import ConfirmModal from './ConfirmModal'
+import DebtsFiles from './DebtsFiles'
+import EntryModal from './EntryModal'
+import FriendNameModal from './FriendNameModal'
+import Icon from './NavIcon'
+import { IconAction, TapRow } from './RowParts'
+import SettleModal from './SettleModal'
+import Button from './ui/Button'
+import { buttonClass } from './ui/cn'
 
 type Dialog =
-  | { kind: 'entry'; entry: Entry | null; as?: EntryKind }
+  | { kind: 'entry'; entry: Entry }
   | { kind: 'settle' }
   | { kind: 'rename' }
   | { kind: 'delete'; entry: Entry }
   | { kind: 'code'; transactionId: string; amount: string }
   | null
 
-function FriendView({ settings, now }: { settings: MoneySettings; now: Today }) {
+/**
+ * One friend's history: the balance, the buttons that change the friend, the ledger with the buttons and documents of each line, and on
+ * the desktop the statement as a file. It is the right half of the debts page, and the whole page of a friend on the phone. The page
+ * says when to read again (`reload`) and is told when something changed (`onChanged`), so the list of friends beside it stays right.
+ */
+export default function FriendLedger({
+  personId,
+  settings,
+  now,
+  reload,
+  onChanged,
+  onPerson,
+}: {
+  personId: string
+  settings: MoneySettings
+  now: Today
+  reload: number
+  onChanged: () => void
+  /** Told who the friend is once the statement is read (none while it is not), for the page's own buttons. */
+  onPerson: (person: Person | null) => void
+}) {
   const t = useT()
   const phone = useProfile() === 'phone'
-  const { personId = '' } = useParams()
-  const navigate = useNavigate()
   const panelId = useId()
   const [openKey, setOpenKey] = useState<string | null>(null)
   const [statement, setStatement] = useState<Statement | null>(null)
   const [missing, setMissing] = useState(false)
-  const [reload, setReload] = useState(0)
   const [dialog, setDialog] = useState<Dialog>(null)
   const [pending, setPending] = useState(false)
   const say = useToast()
@@ -77,6 +84,8 @@ function FriendView({ settings, now }: { settings: MoneySettings; now: Today }) 
     }
   }, [personId, reload])
 
+  useEffect(() => onPerson(statement?.person ?? null), [statement, onPerson])
+
   // Newest first: the balance after each line still reads the same.
   const lines = useMemo(() => [...(statement?.lines ?? [])].reverse(), [statement])
   const entryIds = useMemo(() => lines.flatMap((line) => (line.entryId ? [line.entryId] : [])), [lines])
@@ -85,13 +94,9 @@ function FriendView({ settings, now }: { settings: MoneySettings; now: Today }) 
   const { request: focus, done: focusDone } = useFocusRequest('ledger_entry')
   useJumpTo(focus, focusDone, lines)
 
-  // Keyboard: n adds money lent, j and k move between rows.
-  useShortcut('new', () => setDialog({ kind: 'entry', entry: null, as: 'LENT' }))
-  useRowNavigation()
-
   function done() {
     setDialog(null)
-    setReload((value) => value + 1)
+    onChanged()
     // a balance or a reminder may have changed: the phone schedules again
     remindersChanged()
   }
@@ -111,12 +116,12 @@ function FriendView({ settings, now }: { settings: MoneySettings; now: Today }) 
 
   if (missing) {
     return (
-      <section className="tx-page">
+      <div className="debts-half">
         <Link to="/app/debts" className={buttonClass('outline', 'sm')}>
           {t('debts.back')}
         </Link>
         <p className="notice">{errorText(new ApiError('not_found'))}</p>
-      </section>
+      </div>
     )
   }
   if (!statement) return loadError ? <p className="notice">{loadError}</p> : null
@@ -231,28 +236,58 @@ function FriendView({ settings, now }: { settings: MoneySettings; now: Today }) 
   }
 
   return (
-    <section className="tx-page">
-      <div className="tx-title">
-        <h1>{person.name}</h1>
-        <div className="tx-actions debts-actions">
-          <Button onClick={() => setDialog({ kind: 'entry', entry: null, as: 'LENT' })}>{t('debts.lent')}</Button>
-          <Button variant="outline" onClick={() => setDialog({ kind: 'entry', entry: null, as: 'BORROWED' })}>
-            {t('debts.borrowed')}
-          </Button>
-          <Button variant="outline" onClick={() => navigate('/app/transactions', { state: { split: true, friendId: person.id, friendName: person.name } })}>
-            {t('split.add')}
-          </Button>
+    <div className="debts-half">
+      <h2 className="debts-heading">{person.name}</h2>
+      <div className="debts-summary">
+        <p className={`debt-total debt-${tone}`}>{summaryText}</p>
+        <div className="card-actions">
+          <Link to="/app/debts" className={buttonClass('outline', 'sm')}>
+            {t('debts.back')}
+          </Link>
           {tone !== 'even' ? (
-            <Button variant="outline" onClick={() => setDialog({ kind: 'settle' })}>
+            <Button variant="outline" size="sm" onClick={() => setDialog({ kind: 'settle' })}>
               {t('debts.settle')}
             </Button>
           ) : null}
+          <Button variant="outline" size="sm" onClick={() => setDialog({ kind: 'rename' })}>
+            {t('common.rename')}
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={pending}
+            onClick={() => void run(() => (person.archived ? debts.unarchive(person.id) : debts.archive(person.id)))}
+          >
+            {t(person.archived ? 'debts.unarchive' : 'debts.archive')}
+          </Button>
         </div>
       </div>
+      <h2 className="debts-heading">{t('debts.ledger')}</h2>
+      {lines.length === 0 ? <p className="hint">{t('debts.noLines')}</p> : null}
+      {lines.length > 0 && phone
+        ? byDay(lines, (line) => line.date).map((day) => (
+            <div key={day.date} className="list-day">
+              <h2>{dayHeading(day.date, settings.locale, now.date.slice(0, 4))}</h2>
+              <ul className="card-list">{day.rows.map((line) => tapRow(line, lines.indexOf(line)))}</ul>
+            </div>
+          ))
+        : null}
+      {lines.length > 0 && !phone ? (
+        <ul className="card-list is-table has-action ledger-table">
+          <li className="list-head" aria-hidden="true">
+            <span>{t('debts.what')}</span>
+            <span>{t('sync.field.date')}</span>
+            <span className="is-end">{t('debts.change')}</span>
+            <span className="is-end">{t('debts.balance')}</span>
+            <span />
+          </li>
+          {lines.map(tableRow)}
+        </ul>
+      ) : null}
+      {phone ? null : <DebtsFiles personId={person.id} onSaved={() => say(t('export.saved'), 'success')} onFailed={(text) => say(text, 'error')} />}
       {dialog?.kind === 'entry' ? (
         <EntryModal
           entry={dialog.entry}
-          {...(dialog.as ? { kind: dialog.as } : {})}
           personId={person.id}
           today={now.date}
           onClose={() => setDialog(null)}
@@ -265,10 +300,17 @@ function FriendView({ settings, now }: { settings: MoneySettings; now: Today }) 
       {dialog?.kind === 'code' ? (
         <BillCodeModal target={{ kind: 'transaction', id: dialog.transactionId }} person={{ id: person.id, name: person.name }} part={dialog.amount} onClose={() => setDialog(null)} />
       ) : null}
-      {dialog?.kind === 'settle' ? <SettleModal person={person} today={now.date} onClose={() => setDialog(null)} onDone={() => {
+      {dialog?.kind === 'settle' ? (
+        <SettleModal
+          person={person}
+          today={now.date}
+          onClose={() => setDialog(null)}
+          onDone={() => {
             done()
             say(t('debts.settled'), 'success')
-          }} /> : null}
+          }}
+        />
+      ) : null}
       {dialog?.kind === 'rename' ? <FriendNameModal person={person} onClose={() => setDialog(null)} onSaved={() => done()} /> : null}
       {dialog?.kind === 'delete' ? (
         <ConfirmModal
@@ -281,50 +323,6 @@ function FriendView({ settings, now }: { settings: MoneySettings; now: Today }) 
           onClose={() => setDialog(null)}
         />
       ) : null}
-      <div className="tx-pane wide pane-stack">
-        <div className="debts-summary">
-          <p className={`debt-total debt-${tone}`}>{summaryText}</p>
-          <div className="card-actions">
-            <Link to="/app/debts" className={buttonClass('outline', 'sm')}>
-              {t('debts.back')}
-            </Link>
-            <Button variant="outline" size="sm" onClick={() => setDialog({ kind: 'rename' })}>
-              {t('common.rename')}
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={pending}
-              onClick={() => void run(() => (person.archived ? debts.unarchive(person.id) : debts.archive(person.id)))}
-            >
-              {t(person.archived ? 'debts.unarchive' : 'debts.archive')}
-            </Button>
-          </div>
-        </div>
-        <h2 className="debts-heading">{t('debts.ledger')}</h2>
-        {lines.length === 0 ? <p className="hint">{t('debts.noLines')}</p> : null}
-        {lines.length > 0 && phone
-          ? byDay(lines, (line) => line.date).map((day) => (
-              <div key={day.date} className="list-day">
-                <h2>{dayHeading(day.date, settings.locale, now.date.slice(0, 4))}</h2>
-                <ul className="card-list">{day.rows.map((line) => tapRow(line, lines.indexOf(line)))}</ul>
-              </div>
-            ))
-          : null}
-        {lines.length > 0 && !phone ? (
-          <ul className="card-list is-table ledger-table">
-            <li className="list-head" aria-hidden="true">
-              <span>{t('debts.what')}</span>
-              <span>{t('sync.field.date')}</span>
-              <span className="is-end">{t('debts.change')}</span>
-              <span className="is-end">{t('debts.balance')}</span>
-              <span />
-            </li>
-            {lines.map(tableRow)}
-          </ul>
-        ) : null}
-        {phone ? null : <DebtsFiles personId={person.id} onSaved={() => say(t('export.saved'), 'success')} onFailed={(text) => say(text, 'error')} />}
-      </div>
-    </section>
+    </div>
   )
 }

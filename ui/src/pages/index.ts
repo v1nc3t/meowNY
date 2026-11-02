@@ -10,7 +10,6 @@ export const pageLoaders = {
   recurring: () => import('./RecurringPage'),
   documents: () => import('./DocumentsPage'),
   debts: () => import('./DebtsPage'),
-  friend: () => import('./FriendPage'),
   export: () => import('./ExportPage'),
   settings: () => import('./SettingsPage'),
   sync: () => import('./SyncPage'),

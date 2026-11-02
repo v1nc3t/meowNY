@@ -1,5 +1,5 @@
 import { useEffect, useId, useState } from 'react'
-import { Link, useLocation, useNavigate } from 'react-router-dom'
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { debts, type EntryKind, type History, type Person, type Reminders } from '../api/debts'
 import { errorText } from '../api/invoke'
 import { scanQr, stopScan } from '../api/scanner'
@@ -8,10 +8,10 @@ import BillAcceptModal from '../components/BillAcceptModal'
 import ConfirmModal from '../components/ConfirmModal'
 import DebtsHistory from '../components/DebtsHistory'
 import EntryModal from '../components/EntryModal'
+import FriendLedger from '../components/FriendLedger'
 import FriendNameModal from '../components/FriendNameModal'
 import Icon from '../components/NavIcon'
 import { IconAction, TapRow } from '../components/RowParts'
-import SectionTabs from '../components/SectionTabs'
 import SettleModal from '../components/SettleModal'
 import Button from '../components/ui/Button'
 import { buttonClass } from '../components/ui/cn'
@@ -36,18 +36,17 @@ export default function DebtsPage() {
   return <DebtsView settings={settings} now={now} />
 }
 
-type Tab = 'friends' | 'history'
-
 function DebtsView({ settings, now }: { settings: MoneySettings; now: Today }) {
   const t = useT()
   const phone = useProfile() === 'phone'
   const navigate = useNavigate()
   const location = useLocation()
+  // the friend chosen in the address, whose history is on the right
+  const { personId } = useParams()
   const panelId = useId()
   const [openId, setOpenId] = useState<string | null>(null)
   const [people, setPeople] = useState<Person[] | null>(null)
   const [reminders, setReminders] = useState<Reminders | null>(null)
-  const [tab, setTab] = useState<Tab>('friends')
   const [history, setHistory] = useState<History | null>(null)
   const [historyOffset, setHistoryOffset] = useState(0)
   // a code that was scanned or is being pasted, and the camera while it looks
@@ -55,6 +54,9 @@ function DebtsView({ settings, now }: { settings: MoneySettings; now: Today }) {
   const [scanning, setScanning] = useState(false)
   const [showRemoved, setShowRemoved] = useState(() => storedChoice('debts.removed', [false, true], false))
   const [reload, setReload] = useState(0)
+  const refresh = () => setReload((value) => value + 1)
+  // the chosen friend as the right side has read them, for the buttons above
+  const [selected, setSelected] = useState<Person | null>(null)
   const say = useToast()
   const [addingFriend, setAddingFriend] = useState(false)
   const [entryKind, setEntryKind] = useState<EntryKind | null>(null)
@@ -82,11 +84,11 @@ function DebtsView({ settings, now }: { settings: MoneySettings; now: Today }) {
     }
   }, [showRemoved, reload, say])
 
-  // the history is read a page at a time, only while it is shown
+  // the debts of all friends are read a page at a time, only while no friend is chosen
   useEffect(() => {
-    if (tab !== 'history') return
+    if (personId) return
     let cancelled = false
-    void debts.history({ offset: historyOffset }).then(
+    void debts.history({ only: 'friends', offset: historyOffset }).then(
       (loaded) => {
         if (!cancelled) setHistory(loaded)
       },
@@ -97,7 +99,7 @@ function DebtsView({ settings, now }: { settings: MoneySettings; now: Today }) {
     return () => {
       cancelled = true
     }
-  }, [tab, historyOffset, reload, say])
+  }, [personId, historyOffset, reload, say])
 
   // A friend is taken off the list, never erased: the balance and the history stay, and "show removed friends" brings them back.
   async function onDelete(person: Person) {
@@ -112,7 +114,7 @@ function DebtsView({ settings, now }: { settings: MoneySettings; now: Today }) {
       setDeleting(null)
     }
     say(t('debts.deleted', { name: person.name }), 'success')
-    setReload((value) => value + 1)
+    refresh()
     remindersChanged()
   }
 
@@ -123,7 +125,7 @@ function DebtsView({ settings, now }: { settings: MoneySettings; now: Today }) {
       say(errorText(failure), 'error')
       return
     }
-    setReload((value) => value + 1)
+    refresh()
     remindersChanged()
   }
 
@@ -158,7 +160,10 @@ function DebtsView({ settings, now }: { settings: MoneySettings; now: Today }) {
   const dueIds = new Set(reminders?.due.map((friend) => friend.personId))
   const dueOn = new Map(reminders?.due.map((friend) => [friend.personId, friend.dueOn]))
 
-  // Keyboard: n adds money lent, j and k move between rows.
+  // The chosen friend, once the right side has read them (it is the one of the address; the one read before may be another).
+  const friend = selected?.id === personId ? selected : null
+
+  // Keyboard: n adds money lent (to the chosen friend), j and k move between rows.
   useShortcut('new', () => setEntryKind('LENT'))
   useRowNavigation()
 
@@ -177,13 +182,15 @@ function DebtsView({ settings, now }: { settings: MoneySettings; now: Today }) {
   }
 
   // A desktop row: name, who owes whom, the reminder, the amount, then the one thing to do (mark as paid, or bring back), edit and delete.
+  // The friend whose history is on the right is marked.
   function tableRow(person: Person) {
     const { tone, abs } = balanceView(person.balance)
     const reminded = dueIds.has(person.id) && tone !== 'even'
+    const chosen = person.id === personId
     return (
-      <li key={person.id} className="card-item" data-archived={person.archived || undefined}>
+      <li key={person.id} className={chosen ? 'card-item is-selected' : 'card-item'} data-archived={person.archived || undefined}>
         <div className="cell-name">
-          <Link className="card-name" to={friendLink(person)} title={person.name}>
+          <Link className="card-name" to={friendLink(person)} title={person.name} aria-current={chosen ? 'true' : undefined}>
             {person.name}
           </Link>
           {person.archived ? <span className="row-mark">{t('debts.removed')}</span> : null}
@@ -278,7 +285,10 @@ function DebtsView({ settings, now }: { settings: MoneySettings; now: Today }) {
               {t('code.scanShort')}
             </Button>
           ) : (
-            <Button variant="outline" onClick={() => navigate('/app/transactions', { state: { split: true } })}>
+            <Button
+              variant="outline"
+              onClick={() => navigate('/app/transactions', { state: { split: true, ...(friend ? { friendId: friend.id, friendName: friend.name } : {}) } })}
+            >
               {t('split.add')}
             </Button>
           )}
@@ -304,7 +314,7 @@ function DebtsView({ settings, now }: { settings: MoneySettings; now: Today }) {
           onAccepted={() => {
             setTaking(null)
             say(t('code.accepted'), 'success')
-            setReload((value) => value + 1)
+            refresh()
             remindersChanged()
           }}
         />
@@ -314,7 +324,7 @@ function DebtsView({ settings, now }: { settings: MoneySettings; now: Today }) {
           onClose={() => setAddingFriend(false)}
           onSaved={(person) => {
             setAddingFriend(false)
-            setReload((value) => value + 1)
+            refresh()
             navigate(`/app/debts/${person.id}`)
           }}
         />
@@ -323,12 +333,13 @@ function DebtsView({ settings, now }: { settings: MoneySettings; now: Today }) {
         <EntryModal
           entry={null}
           kind={entryKind}
+          {...(friend ? { personId: friend.id } : {})}
           today={now.date}
           onClose={() => setEntryKind(null)}
           onSaved={(notAttached) => {
             setEntryKind(null)
             if (notAttached.length > 0) say(t('docs.attachFailed', { names: notAttached.join(', ') }), 'warning')
-            setReload((value) => value + 1)
+            refresh()
             remindersChanged()
           }}
         />
@@ -341,7 +352,7 @@ function DebtsView({ settings, now }: { settings: MoneySettings; now: Today }) {
           onDone={() => {
             setSettling(null)
             say(t('debts.settled'), 'success')
-            setReload((value) => value + 1)
+            refresh()
             remindersChanged()
           }}
         />
@@ -352,7 +363,7 @@ function DebtsView({ settings, now }: { settings: MoneySettings; now: Today }) {
           onClose={() => setEditing(null)}
           onSaved={() => {
             setEditing(null)
-            setReload((value) => value + 1)
+            refresh()
           }}
         />
       ) : null}
@@ -364,52 +375,54 @@ function DebtsView({ settings, now }: { settings: MoneySettings; now: Today }) {
           onClose={() => setDeleting(null)}
         />
       ) : null}
-      <SectionTabs
-        label={t('debts.title')}
-        value={tab}
-        onChange={setTab}
-        tabs={[
-          { id: 'friends', label: t('debts.tabFriends') },
-          { id: 'history', label: t('debts.historyTab') },
-        ]}
-      />
-      {tab === 'history' && history ? (
-        <div className="tx-pane wide pane-stack" role="tabpanel">
-          <DebtsHistory history={history} currency={settings.currency} locale={settings.locale} today={now.date} onPage={setHistoryOffset} />
-        </div>
-      ) : null}
-      {tab === 'friends' && people ? (
-        <div className="tx-pane wide pane-stack" role="tabpanel">
-          <div className="debts-bar">
-            <Button variant="outline" onClick={() => setAddingFriend(true)}>
-              {t('debts.addFriend')}
-            </Button>
-            <label>
-              <input
-                type="checkbox"
-                checked={showRemoved}
-                onChange={(event) => {
-                  saveChoice('debts.removed', event.target.checked)
-                  setShowRemoved(event.target.checked)
-                }}
-              />
-              {t('debts.showRemoved')}
-            </label>
+      {people ? (
+        <div className="tx-pane wide debts-view">
+          <div className="debts-split">
+            {/* The phone shows a friend's history on its own, with a way back. */}
+            {phone && personId ? null : (
+              <div className="debts-half">
+                <div className="debts-bar">
+                  <Button variant="outline" onClick={() => setAddingFriend(true)}>
+                    {t('debts.addFriend')}
+                  </Button>
+                  <label>
+                    <input
+                      type="checkbox"
+                      checked={showRemoved}
+                      onChange={(event) => {
+                        saveChoice('debts.removed', event.target.checked)
+                        setShowRemoved(event.target.checked)
+                      }}
+                    />
+                    {t('debts.showRemoved')}
+                  </label>
+                </div>
+                {people.length === 0 ? <EmptyState text={t('debts.empty')} action={{ label: t('debts.addFriend'), onClick: () => setAddingFriend(true) }} /> : null}
+                {people.length > 0 ? (
+                  <ul className={phone ? 'card-list' : 'card-list is-table has-action friends-table'}>
+                    {phone ? null : (
+                      <li className="list-head" aria-hidden="true">
+                        <span>{t('common.name')}</span>
+                        <span className="span-2">{t('debts.colStatus')}</span>
+                        <span className="is-end">{t('debts.balance')}</span>
+                        <span />
+                      </li>
+                    )}
+                    {people.map(phone ? tapRow : tableRow)}
+                  </ul>
+                ) : null}
+              </div>
+            )}
+            {/* One friend, or the debts of all of them. The friend is a new one each time (key), so nothing of the last is shown while it is read. */}
+            {personId ? (
+              <FriendLedger key={personId} personId={personId} settings={settings} now={now} reload={reload} onChanged={refresh} onPerson={setSelected} />
+            ) : (
+              <div className="debts-half">
+                <h2 className="debts-heading">{t('debts.allHistory')}</h2>
+                {history ? <DebtsHistory history={history} currency={settings.currency} locale={settings.locale} today={now.date} onPage={setHistoryOffset} /> : null}
+              </div>
+            )}
           </div>
-          {people.length === 0 ? <EmptyState text={t('debts.empty')} action={{ label: t('debts.addFriend'), onClick: () => setAddingFriend(true) }} /> : null}
-          {people.length > 0 ? (
-            <ul className={phone ? 'card-list' : 'card-list is-table has-action friends-table'}>
-              {phone ? null : (
-                <li className="list-head" aria-hidden="true">
-                  <span>{t('common.name')}</span>
-                  <span className="span-2">{t('debts.colStatus')}</span>
-                  <span className="is-end">{t('debts.balance')}</span>
-                  <span />
-                </li>
-              )}
-              {people.map(phone ? tapRow : tableRow)}
-            </ul>
-          ) : null}
         </div>
       ) : null}
     </section>

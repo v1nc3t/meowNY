@@ -482,6 +482,17 @@ ul.card-list.rec-table .cell-actions {
   }
 }
 
+/* The payments paid late, under the due ones: name, the day it fell due, the day it was paid, the amount. The dates are as wide as the due
+   date of the list above. */
+.card-list.late-table {
+  --cols: minmax(0, 2fr) 9rem 9rem 8rem;
+}
+
+/* The pane of due payments starts with a heading: no room above it, as the heading of the second list has. */
+.tx-pane.pane-stack.rec-due > .debts-heading:first-child {
+  margin-top: 0;
+}
+
 /* An item that is paused or ended is quieter than one that is running. */
 .card-item[data-status='paused'] .card-name,
 .card-item[data-status='ended'] .card-name {

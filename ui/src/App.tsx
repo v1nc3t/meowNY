@@ -12,7 +12,6 @@ const CategoriesPage = lazy(pageLoaders.categories)
 const RecurringPage = lazy(pageLoaders.recurring)
 const DocumentsPage = lazy(pageLoaders.documents)
 const DebtsPage = lazy(pageLoaders.debts)
-const FriendPage = lazy(pageLoaders.friend)
 const ExportPage = lazy(pageLoaders.export)
 const SettingsPage = lazy(pageLoaders.settings)
 const SyncPage = lazy(pageLoaders.sync)
@@ -48,8 +47,8 @@ const router = createBrowserRouter([
       { path: 'categories', element: <CategoriesPage /> },
       { path: 'recurring', element: <RecurringPage /> },
       { path: 'documents', element: <DocumentsPage /> },
-      { path: 'debts', element: <DebtsPage /> },
-      { path: 'debts/:personId', element: <FriendPage /> },
+      // a friend in the address is the one chosen on the page
+      { path: 'debts/:personId?', element: <DebtsPage /> },
       { path: 'export', element: <NotOnPhone><ExportPage /></NotOnPhone> },
       { path: 'settings', element: <SettingsPage /> },
       { path: 'sync', element: <SyncPage /> },

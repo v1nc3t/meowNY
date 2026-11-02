@@ -9,8 +9,7 @@ import { TapRow } from './RowParts'
 import Button from './ui/Button'
 
 /**
- * The history of debts, newest first, a page at a time: what changed with each friend, and the recurring payments that were paid or are
- * due. A friend's line leads to the friend's statement, a recurring payment's to the recurring screen.
+ * The debts of all friends, newest first, a page at a time: what changed with each friend. A friend's name leads to the friend's history.
  */
 export default function DebtsHistory({
   history,
@@ -34,31 +33,19 @@ export default function DebtsHistory({
 
   const effectText = (effect: string) => `${effect.startsWith('-') ? '-' : '+'}${money(effect.replace('-', ''))}`
   const kindText = (line: HistoryLine) => t(`debts.kind.${line.kind}`)
-  const keyOf = (line: HistoryLine, at: number) => `${line.date}-${line.kind}-${line.entryId ?? line.transactionId ?? line.recurringId ?? ''}-${offset + at}`
+  const keyOf = (line: HistoryLine, at: number) => `${line.date}-${line.kind}-${line.entryId ?? line.transactionId ?? ''}-${offset + at}`
 
-  /** Who or what it was about: a friend or a recurring payment, each leading to its page. */
-  const subject = (line: HistoryLine) =>
-    line.recurringId !== null ? (
-      <Link to="/app/recurring" state={{ focus: { kind: 'recurring', id: line.recurringId, date: line.date } }}>
-        {line.what}
-      </Link>
-    ) : line.personId ? (
-      <Link to={`/app/debts/${line.personId}`}>{line.friend}</Link>
-    ) : (
-      line.friend
-    )
+  /** The friend, leading to their page. */
+  const subject = (line: HistoryLine) => (line.personId ? <Link to={`/app/debts/${line.personId}`}>{line.friend}</Link> : line.friend)
 
-  /** The change: what a friend owes you more is green and what you owe is red; a payment you made (late) is money paid, so it has no colour. */
+  /** The change: what a friend owes you more is green and what you owe is red. */
   function amount(line: HistoryLine) {
-    const tone = line.effect !== null ? (line.effect.startsWith('-') ? 'debt-owe' : 'debt-owed') : line.kind === 'PAYMENT_DUE' ? 'debt-owe' : ''
-    const text =
-      line.effect !== null ? effectText(line.effect) : line.kind === 'PAYMENT_DUE' && Number(line.amount) === 0 ? t('rec.varies') : money(line.amount)
-    return <span className={`cell-amount ${tone}`}>{text}</span>
+    const effect = line.effect ?? line.amount
+    return <span className={`cell-amount ${effect.startsWith('-') ? 'debt-owe' : 'debt-owed'}`}>{effectText(effect)}</span>
   }
 
-  /** What kind of change it was, and for a friend's line what it was for. */
-  const what = (line: HistoryLine) => (line.recurringId === null && line.what ? `${kindText(line)}: ${line.what}` : kindText(line))
-  const dueText = (line: HistoryLine) => (line.dueDate && line.dueDate !== line.date ? t('debts.dueOn', { date: formatDate(line.dueDate, locale) }) : '')
+  /** What kind of change it was, and what it was for. */
+  const what = (line: HistoryLine) => (line.what ? `${kindText(line)}: ${line.what}` : kindText(line))
 
   // A desktop row: who, what kind of change, the day, the change and the balance after it.
   function tableRow(line: HistoryLine, at: number) {
@@ -70,10 +57,7 @@ export default function DebtsHistory({
         <span className="cell-sub" title={what(line)}>
           {what(line)}
         </span>
-        <span className="cell-sub-end">
-          {formatDate(line.date, locale)}
-          {dueText(line) ? <span className="cell-fine">{dueText(line)}</span> : null}
-        </span>
+        <span className="cell-sub-end">{formatDate(line.date, locale)}</span>
         {amount(line)}
         <span className="cell-bal">{line.balance !== null ? money(line.balance) : ''}</span>
       </li>
@@ -92,7 +76,6 @@ export default function DebtsHistory({
         sub={
           <>
             <span className="is-line">{what(line)}</span>
-            {dueText(line) ? <span>{dueText(line)}</span> : null}
             {line.balance !== null ? <span>{`${t('debts.balance')} ${money(line.balance)}`}</span> : null}
           </>
         }
@@ -112,7 +95,7 @@ export default function DebtsHistory({
           ))
         : null}
       {lines.length > 0 && !phone ? (
-        <ul className="card-list is-table history-table">
+        <ul className="card-list is-table has-action history-table">
           <li className="list-head" aria-hidden="true">
             <span>{t('common.name')}</span>
             <span>{t('debts.kind')}</span>
