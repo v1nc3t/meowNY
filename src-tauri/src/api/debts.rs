@@ -34,6 +34,7 @@ const MODES: &[&str] = &["EQUAL", "PERCENT", "SHARES", "EXACT"];
 const KINDS: &[&str] = &["LENT", "BORROWED", "REPAID_TO_ME", "REPAID_BY_ME"];
 const FORMATS: &[&str] = &["TEXT", "CSV", "PDF"];
 const WHAT: &[&str] = &["SUMMARY", "STATEMENT", "LEDGER"];
+const ONLY: &[&str] = &["friends", "paidLate"];
 
 const FRIEND: Param = Param::new("id", Kind::Id, "The friend.");
 
@@ -141,6 +142,7 @@ pub const DEBTS_HISTORY: Route = Route {
         Param::new("from", Kind::Date, "Only lines on or after this date."),
         Param::new("to", Kind::Date, "Only lines on or before this date."),
         Param::new("personId", Kind::Id, "Only the lines of this friend (and none of the recurring payments)."),
+        Param::new("only", Kind::String, "friends (only the lines of friends) or paidLate (only the recurring payments that were paid late, not those overdue now; not with personId). Leave out for all of them.").one_of(ONLY),
         Param::new("limit", Kind::Integer, "How many to return, 1 to 200. Default 50."),
         Param::new("offset", Kind::Integer, "How many to skip, for the next page. Default 0."),
     ],

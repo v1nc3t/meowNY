@@ -251,7 +251,8 @@ export const History = z.object({
 })
 export type History = z.infer<typeof History>
 
-export type HistoryFilter = { from?: string; to?: string; personId?: string; limit?: number; offset?: number }
+/** `only` keeps one kind of line: the friends' lines, or the recurring payments that were paid late (not with `personId`). */
+export type HistoryFilter = { from?: string; to?: string; personId?: string; only?: 'friends' | 'paidLate'; limit?: number; offset?: number }
 
 /** A file for the preview before it is saved: its bytes as base64url text, and how many. */
 export const DebtsFilePreview = z.object({ data: z.string(), bytes: z.number().int().nonnegative() })

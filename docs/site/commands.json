@@ -2415,6 +2415,19 @@
           "values": []
         },
         {
+          "flag": "--only",
+          "nullable": false,
+          "param": "only",
+          "required": false,
+          "summary": "friends (only the lines of friends) or paidLate (only the recurring payments that were paid late, not those overdue now; not with personId). Leave out for all of them.",
+          "type": "string",
+          "value": "friends|paidLate",
+          "values": [
+            "friends",
+            "paidLate"
+          ]
+        },
+        {
           "flag": "--limit",
           "nullable": false,
           "param": "limit",
@@ -2439,7 +2452,7 @@
       "route": "debts.history",
       "scope": "read",
       "summary": "The history of debts, newest first, a page at a time: the lines of every friend (lent, borrowed, paid back, their parts of shared bills, with the balance after each) and the recurring payments that were paid late or are overdue. A payment made on its day or before it is not in it.",
-      "usage": "meowny debts history [--from <date>] [--to <date>] [--person-id <id>] [--limit <number>] [--offset <number>]"
+      "usage": "meowny debts history [--from <date>] [--to <date>] [--person-id <id>] [--only <friends|paidLate>] [--limit <number>] [--offset <number>]"
     },
     {
       "command": "debts reminders",

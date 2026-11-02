@@ -1071,7 +1071,7 @@ pub fn debts_due_payments(vault: Shared) -> Result<crate::debts::dues::Due, AppE
 }
 
 /// The history of debts, newest first: the lines of every friend (or of one), the recurring payments that were paid and those that are
-/// due, in a range of dates if asked, a page at a time.
+/// due, in a range of dates if asked, or only the lines of friends or only the payments paid late, a page at a time.
 #[tauri::command]
 pub fn debts_history(vault: Shared, filter: crate::debts::history::Filter) -> Result<crate::debts::history::History, AppError> {
     let today = today_text(&vault)?;

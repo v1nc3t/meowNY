@@ -5,6 +5,8 @@
 //!   it was paid, with the day it fell due); one paid on its day or before it was never a debt, so it is not here;
 //! * the recurring payments that are **overdue** now (`dues`), on the day each fell due.
 //!
+//! A screen that wants only one kind of line asks with `Only`: the lines of friends, or the payments that were paid late.
+//!
 //! Nothing here is stored: the lines are read from the statements of the friends, from the transactions and from the recurring items, so
 //! the history cannot disagree with them.
 
@@ -58,6 +60,16 @@ pub struct HistoryLine {
     pub category_id: Option<i64>,
 }
 
+/// One kind of line, for a screen that shows only that.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum Only {
+    /// The lines of every friend, and nothing else.
+    Friends,
+    /// The recurring payments that were paid late, and nothing else: the overdue ones are not here, they have their own list.
+    PaidLate,
+}
+
 #[derive(Debug, Clone, Default, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct Filter {
@@ -69,6 +81,9 @@ pub struct Filter {
     /// Only the lines of this friend (and none of the recurring payments).
     #[serde(default)]
     pub person_id: Option<String>,
+    /// Only this kind of line. Not `paidLate` with `person_id`: a friend has no recurring payments.
+    #[serde(default)]
+    pub only: Option<Only>,
     #[serde(default)]
     pub limit: Option<u32>,
     #[serde(default)]
@@ -91,6 +106,7 @@ pub struct Scope<'a> {
     pub from: Option<&'a str>,
     pub to: Option<&'a str>,
     pub person: Option<i64>,
+    pub only: Option<Only>,
 }
 
 /// Every line in the dates, oldest first (the order lines come in a file; the screen turns it round). Lines of friends come from
@@ -102,7 +118,9 @@ pub fn lines(conn: &Connection, today: &str, scope: &Scope) -> Result<Vec<Histor
         let at = out.len();
         out.push((line.date.clone(), source, at, line));
     };
-    for person in people::list(conn, true)?.into_iter().filter(|p| scope.person.is_none_or(|id| id == p.id)) {
+    // the friends are left out when only the payments paid late are wanted
+    let friends = if scope.only == Some(Only::PaidLate) { Vec::new() } else { people::list(conn, true)? };
+    for person in friends.into_iter().filter(|p| scope.person.is_none_or(|id| id == p.id)) {
         for line in ledger::statement_in(conn, person.id)?.lines.into_iter().filter(|l| inside(&l.date)) {
             push(
                 0,
@@ -127,7 +145,7 @@ pub fn lines(conn: &Connection, today: &str, scope: &Scope) -> Result<Vec<Histor
             );
         }
     }
-    if scope.person.is_none() {
+    if scope.person.is_none() && scope.only != Some(Only::Friends) {
         let mut statement = conn.prepare(
             "SELECT payment_date, name, amount_minor, recurring_due_date, id, recurring_transaction_id, category_id
              FROM transactions WHERE recurring_transaction_id IS NOT NULL",
@@ -161,7 +179,9 @@ pub fn lines(conn: &Connection, today: &str, scope: &Scope) -> Result<Vec<Histor
                 },
             );
         }
-        for due in dues::due_payments(conn, today)?.into_iter().filter(|d| inside(&d.due_date)) {
+        // the payments that are overdue have their own list, so they are not in the one of those paid late
+        let overdue = if scope.only == Some(Only::PaidLate) { Vec::new() } else { dues::due_payments(conn, today)? };
+        for due in overdue.into_iter().filter(|d| inside(&d.due_date)) {
             push(
                 2,
                 HistoryLine {
@@ -198,12 +218,15 @@ pub fn history(conn: &Connection, today: &str, filter: &Filter) -> Result<Histor
         return Err(AppError::InvalidInput);
     }
     let person = filter.person_id.as_deref().map(parse_id).transpose()?;
+    if person.is_some() && filter.only == Some(Only::PaidLate) {
+        return Err(AppError::InvalidInput);
+    }
     let limit = filter.limit.unwrap_or(DEFAULT_LIMIT);
     if limit == 0 || limit > MAX_LIMIT {
         return Err(AppError::InvalidInput);
     }
     let tx = conn.unchecked_transaction()?;
-    let mut all = lines(&tx, today, &Scope { from: from.as_deref(), to: to.as_deref(), person })?;
+    let mut all = lines(&tx, today, &Scope { from: from.as_deref(), to: to.as_deref(), person, only: filter.only })?;
     all.reverse();
     let total = all.len() as u32;
     let offset = filter.offset.unwrap_or(0);

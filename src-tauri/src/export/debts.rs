@@ -140,7 +140,7 @@ pub(crate) fn people(conn: &Connection, sel: &Parsed, lines: &[LineRow], entries
 pub(crate) fn history_lines(conn: &Connection, sel: &Parsed, today: &str, entries: bool) -> Result<Vec<crate::debts::history::HistoryLine>, AppError> {
     use crate::debts::history::{self, PAYMENT_DUE, PAYMENT_PAID};
     let held: std::collections::HashSet<i64> = super::transactions(conn, sel)?.iter().map(|t| t.id).collect();
-    let scope = history::Scope { from: sel.from.as_deref(), to: sel.to.as_deref(), person: None };
+    let scope = history::Scope { from: sel.from.as_deref(), to: sel.to.as_deref(), person: None, only: None };
     let keep_balance = !sel.narrows_transactions();
     let mut out = Vec::new();
     for mut line in history::lines(conn, today, &scope)? {

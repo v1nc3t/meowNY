@@ -152,7 +152,13 @@ fn the_history_the_overdue_payments_and_the_reminders_are_read_within_their_limi
     assert!(page["total"].as_u64().unwrap() > 25);
     let only_anna = ok(&vault, "debts.history", json!({ "personId": anna }));
     assert_eq!((only_anna["total"].as_u64(), only_anna["lines"][0]["friend"].as_str()), (Some(1), Some("Anna")), "a friend's lines have no recurring payments");
-    for body in [json!({ "limit": 0 }), json!({ "limit": 201 }), json!({ "offset": -1 }), json!({ "from": "2026-02-01", "to": "2026-01-01" }), json!({ "personId": "abc" })] {
+    // `only` keeps one kind of line: the friends' (no recurring payment is overdue in it), or those paid late (the seed has some, and no friend)
+    let friends = ok(&vault, "debts.history", json!({ "only": "friends" }));
+    assert!(friends["lines"].as_array().unwrap().iter().all(|l| l["friend"].is_string()), "{friends}");
+    assert!(friends["total"].as_u64().unwrap() >= 1 && friends["total"].as_u64() < page["total"].as_u64(), "the overdue payments are left out");
+    let late = ok(&vault, "debts.history", json!({ "only": "paidLate" }));
+    assert!(late["total"].as_u64().unwrap() >= 1 && late["lines"].as_array().unwrap().iter().all(|l| l["kind"] == "PAYMENT_PAID"), "{late}");
+    for body in [json!({ "limit": 0 }), json!({ "limit": 201 }), json!({ "offset": -1 }), json!({ "from": "2026-02-01", "to": "2026-01-01" }), json!({ "personId": "abc" }), json!({ "only": "all" }), json!({ "only": "paidLate", "personId": anna })] {
         assert_eq!(refused(&vault, "debts.history", body.clone()).0, 400, "{body}");
     }
 

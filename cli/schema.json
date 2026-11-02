@@ -1478,6 +1478,16 @@
           "type": "id"
         },
         {
+          "name": "only",
+          "required": false,
+          "summary": "friends (only the lines of friends) or paidLate (only the recurring payments that were paid late, not those overdue now; not with personId). Leave out for all of them.",
+          "type": "string",
+          "values": [
+            "friends",
+            "paidLate"
+          ]
+        },
+        {
           "name": "limit",
           "required": false,
           "summary": "How many to return, 1 to 200. Default 50.",
