@@ -229,6 +229,12 @@ html.is-phone .list-foot > .per-page {
   width: 100%;
 }
 
+/* The documents' type: as wide as its longest choice in any language ("outros ficheiros", 16 letters of the monospace font) plus the
+   padding and the arrow, so it does not change width with the choice. */
+.toolbar.tx-bar .pick.kind .pick-button {
+  min-width: calc(16ch + 3rem);
+}
+
 .toolbar.tx-bar .pick.limit {
   flex-shrink: 0;
   min-width: max-content;

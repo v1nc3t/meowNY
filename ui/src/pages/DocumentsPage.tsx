@@ -324,7 +324,7 @@ function DocumentsView({ settings }: { settings: MoneySettings }) {
         </label>
         <Pick
           label={t('common.type')}
-          className="scope"
+          className="kind"
           text={t(KIND_CHOICES.find((choice) => choice.value === kind)?.label ?? 'common.all')}
           open={kindMenu}
           onToggle={() => setKindMenu((open) => !open)}
