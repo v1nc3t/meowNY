@@ -138,7 +138,7 @@
    that starts a wrapped line). The gap is the width of the | and twice the room on each side of it as it was before (the phone's is
    a little less: see phone.css). */
 .app-footer {
-  --sep-gap: 2rem;
+  --sep-gap: 3rem;
   margin: 0;
   font-size: 0.8125rem;
   color: var(--muted-foreground);

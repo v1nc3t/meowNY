@@ -580,13 +580,13 @@
 }
 
 /* The foot of the settings (components/AppFooter.tsx), across the whole page. The page lines its children up at the start, so the
-   footer stretches itself; its own background repaints the whole strip (WebKitGTK left stale lines there). The room under the text
-   keeps it clear of the window's edge. */
+   footer stretches itself; its own background repaints the whole strip (WebKitGTK left stale lines there). A little room under the
+   text keeps it clear of the window's edge; the strip stays low. */
 .settings-page .app-footer {
   align-self: stretch;
   /* As wide as the rows above, which keep a gutter on the right for the scroll bar. */
   width: calc(100% - var(--room));
-  padding: 0.75rem 0 1.25rem;
+  padding: 0.5rem 0;
   border-top: 1px solid var(--border);
   background: var(--background);
 }
