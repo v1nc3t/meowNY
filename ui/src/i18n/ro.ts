@@ -33,6 +33,7 @@ export const ro: Messages = {
   'common.day': 'zi',
   'common.month': 'lună',
   'common.year': 'an',
+  'common.invalidDate': 'dată nevalidă',
 
   'nav.dashboard': 'panou',
   'nav.transactions': 'tranzacții',

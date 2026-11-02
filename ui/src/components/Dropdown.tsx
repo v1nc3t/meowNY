@@ -9,6 +9,8 @@ export type DropdownOption = { value: string; label: string; group?: string }
 // A styled select for forms. The list is portaled into the surrounding dialog, so a modal panel never clips it.
 // name: add a hidden input so a form submit carries the value.
 // action: a first row that runs something (for example opening another modal) instead of choosing a value.
+// parse: the closed control is a text field with the same list behind an arrow. It maps typed text to an option's value, or null
+// when the text is no option; Enter or leaving the field commits it, and a wrong text stays, marked invalid.
 export default function Dropdown({
   label,
   name,
@@ -18,6 +20,7 @@ export default function Dropdown({
   placeholder,
   action,
   compact = false,
+  parse,
 }: {
   label: string
   name?: string
@@ -28,24 +31,53 @@ export default function Dropdown({
   action?: { label: string; onSelect: () => void }
   /** No visible label above the button; the label is kept for screen readers. */
   compact?: boolean
+  parse?: (text: string) => string | null
 }) {
   const t = useT()
   const [host, setHost] = useState<HTMLElement | null>(null)
   const rootRef = useRef<HTMLDivElement>(null)
   const buttonRef = useRef<HTMLButtonElement>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
   const listRef = useRef<HTMLUListElement>(null)
   const typed = useRef({ text: '', timer: 0 })
   const selected = options.find((option) => option.value === value)
   const open = host !== null
+  const shown = selected ? selected.label : ''
+  const [text, setText] = useState(shown)
+  const [seen, setSeen] = useState(shown)
+  const [invalid, setInvalid] = useState(false)
+  const message = t('common.invalidDate')
+  // The text follows the value when it changes from outside (a shorter month pulls the day in).
+  if (seen !== shown) {
+    setSeen(shown)
+    setText(shown)
+    setInvalid(false)
+  }
+
+  // A form with a wrong text cannot be submitted.
+  useEffect(() => {
+    inputRef.current?.setCustomValidity(invalid ? message : '')
+  }, [invalid, message])
+
+  // The list opens under, and gives focus back to, the text field when there is one.
+  const anchor = () => inputRef.current ?? buttonRef.current
 
   function close() {
     setHost(null)
-    buttonRef.current?.focus()
+    anchor()?.focus()
   }
 
   function openList() {
-    const button = buttonRef.current
-    if (button) setHost(button.closest('dialog') ?? document.body)
+    const control = anchor()
+    if (control) setHost(control.closest('dialog') ?? document.body)
+  }
+
+  function commit() {
+    const next = parse?.(text) ?? null
+    setInvalid(next === null)
+    if (next === null) return
+    if (next !== value) onChange(next)
+    setText(options.find((option) => option.value === next)?.label ?? next)
   }
 
   useEffect(() => {
@@ -60,7 +92,7 @@ export default function Dropdown({
       event.preventDefault()
       event.stopPropagation()
       setHost(null)
-      buttonRef.current?.focus()
+      anchor()?.focus()
     }
     function onScroll(event: Event) {
       if (event.target instanceof Node && listRef.current?.contains(event.target)) return
@@ -78,9 +110,9 @@ export default function Dropdown({
 
   useLayoutEffect(() => {
     const list = listRef.current
-    const button = buttonRef.current
-    if (!host || !list || !button) return
-    place(list, button)
+    const control = anchor()
+    if (!host || !list || !control) return
+    place(list, control)
     const first = list.querySelector<HTMLButtonElement>('[aria-selected="true"]') ?? list.querySelector('button')
     first?.focus()
   }, [host])
@@ -88,22 +120,77 @@ export default function Dropdown({
   return (
     <div className="pick field" ref={rootRef}>
       {compact ? null : <span>{label}</span>}
-      <button
-        ref={buttonRef}
-        aria-label={compact ? label : undefined}
-        type="button"
-        className={selected ? 'pick-button' : 'pick-button empty'}
-        aria-haspopup="listbox"
-        aria-expanded={open}
-        onClick={() => (open ? close() : openList())}
-        onKeyDown={(event) => {
-          if (open || (event.key !== 'ArrowDown' && event.key !== 'ArrowUp')) return
-          event.preventDefault()
-          openList()
-        }}
-      >
-        {selected ? selected.label : (placeholder ?? t('common.choose'))}
-      </button>
+      {parse ? (
+        <>
+          <input
+            ref={inputRef}
+            className="pick-input"
+            role="combobox"
+            aria-label={label}
+            aria-haspopup="listbox"
+            aria-expanded={open}
+            aria-invalid={invalid || undefined}
+            title={invalid ? message : undefined}
+            value={text}
+            placeholder={placeholder ?? t('common.choose')}
+            // As wide as the longest choice; digits get the number keyboard.
+            size={Math.max(1, ...options.map((option) => option.label.length))}
+            inputMode={options.every((option) => /^\d+$/.test(option.label)) ? 'numeric' : undefined}
+            autoComplete="off"
+            spellCheck={false}
+            onChange={(event) => setText(event.target.value)}
+            onFocus={(event) => {
+              setHost(null)
+              event.target.select()
+            }}
+            onBlur={() => {
+              if (text !== shown) commit()
+            }}
+            onKeyDown={(event) => {
+              // While the text is as it was, Enter and Escape pass on: Enter submits the form, Escape closes the dialog.
+              if (event.key === 'Enter' && text !== shown) {
+                event.preventDefault()
+                commit()
+              } else if (event.key === 'Escape' && text !== shown) {
+                event.preventDefault()
+                event.stopPropagation()
+                setText(shown)
+                setInvalid(false)
+              } else if (!open && (event.key === 'ArrowDown' || event.key === 'ArrowUp')) {
+                event.preventDefault()
+                openList()
+              }
+            }}
+          />
+          <button
+            ref={buttonRef}
+            type="button"
+            tabIndex={-1}
+            className="pick-toggle"
+            aria-label={label}
+            aria-haspopup="listbox"
+            aria-expanded={open}
+            onClick={() => (open ? close() : openList())}
+          />
+        </>
+      ) : (
+        <button
+          ref={buttonRef}
+          aria-label={compact ? label : undefined}
+          type="button"
+          className={selected ? 'pick-button' : 'pick-button empty'}
+          aria-haspopup="listbox"
+          aria-expanded={open}
+          onClick={() => (open ? close() : openList())}
+          onKeyDown={(event) => {
+            if (open || (event.key !== 'ArrowDown' && event.key !== 'ArrowUp')) return
+            event.preventDefault()
+            openList()
+          }}
+        >
+          {selected ? selected.label : (placeholder ?? t('common.choose'))}
+        </button>
+      )}
       {name ? <input type="hidden" name={name} value={value} /> : null}
       {host
         ? createPortal(
@@ -160,6 +247,8 @@ export default function Dropdown({
                       role="option"
                       aria-selected={option.value === value}
                       onClick={() => {
+                        setText(option.label)
+                        setInvalid(false)
                         onChange(option.value)
                         close()
                       }}

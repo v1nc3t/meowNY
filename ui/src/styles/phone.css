@@ -37,7 +37,7 @@ html.is-phone {
 }
 
 /* A touch screen has no hover, so a press shows what hover shows on a desktop: the quiet fill. Rows and buttons have their own press (primitives.css). */
-html.is-phone :is(.phone-tab, .phone-action, .quick-menu button, .pick-button, .ui-tabs > button:not([aria-selected='true'])):active:not(:disabled) {
+html.is-phone :is(.phone-tab, .phone-action, .quick-menu button, .pick-button, .pick-toggle, .ui-tabs > button:not([aria-selected='true'])):active:not(:disabled) {
   color: var(--accent-foreground);
   background: var(--accent);
 }

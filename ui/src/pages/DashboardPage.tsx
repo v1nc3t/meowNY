@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { debts, type Summary } from '../api/debts'
 import { errorText } from '../api/invoke'
-import { monthNames, shiftMonth, withYear, yearChoices } from '../api/months'
+import { monthNames, parseYear, shiftMonth, withYear, yearChoices } from '../api/months'
 import Dropdown from '../components/Dropdown'
 import Button from '../components/ui/Button'
 import { Card, CardAction, CardContent, CardHeader, CardTitle } from '../components/ui/Card'
@@ -309,6 +309,7 @@ function YearNav({ month, thisMonth, onChange }: { month: string; thisMonth: str
         label={t('common.year')}
         value={String(year)}
         options={yearChoices(month, Number(thisMonth.slice(0, 4))).map((y) => ({ value: String(y), label: String(y) }))}
+        parse={(text) => parseYear(text)?.toString() ?? null}
         onChange={(value) => onChange(withYear(month, Number(value)))}
       />
       <Button variant="ghost" size="icon" aria-label={t('dashboard.nextYear')} onClick={() => onChange(withYear(month, year + 1))}>

@@ -33,6 +33,7 @@ export const pt: Messages = {
   'common.day': 'dia',
   'common.month': 'mês',
   'common.year': 'ano',
+  'common.invalidDate': 'data inválida',
 
   'nav.dashboard': 'painel',
   'nav.transactions': 'transações',

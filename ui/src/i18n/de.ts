@@ -33,6 +33,7 @@ export const de: Messages = {
   'common.day': 'tag',
   'common.month': 'monat',
   'common.year': 'jahr',
+  'common.invalidDate': 'kein gültiges datum',
 
   'nav.dashboard': 'übersicht',
   'nav.transactions': 'buchungen',

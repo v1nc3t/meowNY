@@ -1,9 +1,20 @@
-import { changePart, daysInMonth, joinParts, monthNames, parseParts, yearChoices, type DateKind } from '../api/months'
+import {
+  changePart,
+  daysInMonth,
+  joinParts,
+  monthNames,
+  parseDay,
+  parseMonth,
+  parseParts,
+  parseYear,
+  yearChoices,
+  type DateKind,
+} from '../api/months'
 import Dropdown from './Dropdown'
 import { useI18n } from '../i18n/context'
 
 /**
- * A date as dropdowns: day, month and year for a date, month and year for a month, year alone for a year.
+ * A date as dropdowns you can type into: day, month and year for a date, month and year for a month, year alone for a year.
  * `today` ("YYYY-MM-DD") is what an empty or invalid value shows, and centres the list of years.
  * With `name`, a hidden input carries the value so a form submit includes it.
  */
@@ -38,6 +49,7 @@ export default function DatePicker({
             value: String(index + 1),
             label: String(index + 1).padStart(2, '0'),
           }))}
+          parse={(text) => parseDay(text, parts.year, parts.month)?.toString() ?? null}
           onChange={(next) => update('day', next)}
         />
       ) : null}
@@ -47,6 +59,7 @@ export default function DatePicker({
           label={`${label} ${t('common.month')}`}
           value={String(parts.month)}
           options={monthNames(language).map((month, index) => ({ value: String(index + 1), label: month }))}
+          parse={(text) => parseMonth(text, language)?.toString() ?? null}
           onChange={(next) => update('month', next)}
         />
       ) : null}
@@ -58,6 +71,7 @@ export default function DatePicker({
           value: String(year),
           label: String(year),
         }))}
+        parse={(text) => parseYear(text)?.toString() ?? null}
         onChange={(next) => update('year', next)}
       />
       {name ? <input type="hidden" name={name} value={joinParts(kind, parts)} /> : null}

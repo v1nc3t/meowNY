@@ -37,6 +37,7 @@ export const en = {
   'common.day': 'day',
   'common.month': 'month',
   'common.year': 'year',
+  'common.invalidDate': 'not a valid date',
 
   // Sidebar
   'nav.dashboard': 'dashboard',

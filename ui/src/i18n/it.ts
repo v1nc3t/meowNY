@@ -33,6 +33,7 @@ export const it: Messages = {
   'common.day': 'giorno',
   'common.month': 'mese',
   'common.year': 'anno',
+  'common.invalidDate': 'data non valida',
 
   'nav.dashboard': 'pannello',
   'nav.transactions': 'transazioni',
