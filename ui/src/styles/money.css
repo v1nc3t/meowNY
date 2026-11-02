@@ -517,13 +517,19 @@ ul.card-list.rec-table .cell-actions {
   color: var(--muted-foreground);
 }
 
-/* The phone: the period fills the filter box. A month or a year sits beside the choice of period; from and to take a line each. */
+/* The phone: the period fills the filter box. A month or a year, with its arrows, sits beside the choice of period when there is room and under it
+   when there is not; from and to take a line each. */
 html.is-phone .tx-range {
   width: 100%;
 }
 
-html.is-phone .tx-range > .date-picker {
-  flex: 1 1 10rem;
+html.is-phone .tx-range > .month-nav {
+  flex: 1 1 18rem;
+  min-width: 0;
+}
+
+html.is-phone .tx-range .month-nav > .date-picker {
+  flex: 1 1 0;
   min-width: 0;
 }
 

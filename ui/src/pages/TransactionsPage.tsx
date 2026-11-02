@@ -17,6 +17,7 @@ import SplitEditor from '../components/SplitEditor'
 import { categories as categoriesApi, type Category } from '../api/categories'
 import { debts } from '../api/debts'
 import { errorText } from '../api/invoke'
+import { shiftMonth } from '../api/months'
 import { useToday, type Today } from '../api/today'
 import { transactions as transactionsApi, type Transaction, type TransactionPage } from '../api/transactions'
 import { categoryOptions } from '../lib/categoriesView'
@@ -192,6 +193,16 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
     setOffset(0)
   }
 
+  // One step back or forward in the month or the year shown; the arrows and the [ and ] keys use it, never in a range of dates.
+  function stepPeriod(delta: number) {
+    setFilters((current) => {
+      if (current.mode === 'date') return current
+      const from = current.mode === 'month' ? shiftMonth(current.from, delta) : String(Number(current.from) + delta)
+      return { ...current, from, to: from }
+    })
+    setOffset(0)
+  }
+
   /** A new transaction; `split` opens it with the bill dialog on, `friend` with that friend already on the bill. */
   function openAdd(options: { split?: boolean; friend?: { id: string; name: string } } = {}) {
     setMenu(null)
@@ -230,9 +241,11 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
     setEditing(null)
   }
 
-  // Keyboard: n adds, / searches, t jumps to this month, j and k move between rows.
+  // Keyboard: n adds, / searches, [ and ] step the month or the year, t jumps to this month, j and k move between rows.
   useShortcut('new', () => openAdd())
   useShortcut('search', () => searchRef.current?.focus())
+  useShortcut('prev', () => stepPeriod(-1), filters.mode !== 'date')
+  useShortcut('next', () => stepPeriod(1), filters.mode !== 'date')
   useShortcut('today', goCurrentMonth)
   useRowNavigation()
 
@@ -379,7 +392,27 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
           </div>
         </>
       ) : (
-        <DatePicker kind={filters.mode} value={filters.from} label={t('tx.period')} today={now.date} onChange={(value) => patchFilters({ from: value, to: value })} />
+        <div className="month-nav">
+          <Button
+            variant="ghost"
+            size="icon"
+            aria-label={t(filters.mode === 'month' ? 'budgets.prevMonth' : 'dashboard.prevYear')}
+            {...tip('prev')}
+            onClick={() => stepPeriod(-1)}
+          >
+            &lsaquo;
+          </Button>
+          <DatePicker kind={filters.mode} value={filters.from} label={t('tx.period')} today={now.date} onChange={(value) => patchFilters({ from: value, to: value })} />
+          <Button
+            variant="ghost"
+            size="icon"
+            aria-label={t(filters.mode === 'month' ? 'budgets.nextMonth' : 'dashboard.nextYear')}
+            {...tip('next')}
+            onClick={() => stepPeriod(1)}
+          >
+            &rsaquo;
+          </Button>
+        </div>
       )}
       {atCurrentMonth ? null : (
         <Button variant="outline" onClick={goCurrentMonth} {...tip('today', t('tx.currentMonth'))}>
