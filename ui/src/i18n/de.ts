@@ -690,6 +690,8 @@ export const de: Messages = {
   'debts.settleAmount': 'gezahlter betrag',
   'debts.settleOver': 'das sind {over} mehr, als {name} dir schuldet. der rest zählt als schuld von dir an {name}.',
   'debts.settleOverYou': 'das sind {over} mehr, als du {name} schuldest. der rest zählt als schuld von {name} an dich.',
+  'debts.settleKeep': 'nicht zurückzahlen: {over}',
+  'debts.settleKeepThem': '{name} muss {over} nicht zurückzahlen',
   'debts.settled': 'als bezahlt markiert.',
   'debts.kind.LENT': 'verliehen',
   'debts.kind.BORROWED': 'geliehen',

@@ -687,6 +687,8 @@ export const ro: Messages = {
   'debts.settleAmount': 'suma plătită',
   'debts.settleOver': 'sunt cu {over} mai mult decât îți datorează {name}. restul va conta ca o datorie a ta față de {name}.',
   'debts.settleOverYou': 'sunt cu {over} mai mult decât îi datorezi lui {name}. restul va conta ca o datorie a lui {name} față de tine.',
+  'debts.settleKeep': 'nu trebuie să dai înapoi {over}',
+  'debts.settleKeepThem': '{name} nu trebuie să dea înapoi {over}',
   'debts.settled': 'marcat ca plătit.',
   'debts.kind.LENT': 'împrumutat',
   'debts.kind.BORROWED': 'luat cu împrumut',

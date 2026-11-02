@@ -10,7 +10,7 @@ import Modal, { modalFormId } from './Modal'
 
 /**
  * "Mark as paid": a payment between the person and a friend. The amount starts as the whole balance. A larger one is accepted, and
- * the dialog says first that the balance will turn around.
+ * the dialog says first that the balance will turn around. A checkbox can drop that difference: then the whole balance is recorded.
  */
 export default function SettleModal({
   person,
@@ -31,6 +31,7 @@ export default function SettleModal({
   const [date, setDate] = useState(today)
   const say = useToast()
   const [pending, setPending] = useState(false)
+  const [keep, setKeep] = useState(false)
   const money = (value: string) => (settings ? formatMoney(value, settings.currency, settings.locale) : value)
 
   // More than the debt: said before it is confirmed. Only a comparison of two amounts, the rest is worked out by the app.
@@ -38,6 +39,8 @@ export default function SettleModal({
   const typedMinor = typed ? toMinor(typed) : null
   const wholeMinor = toMinor(whole)
   const over = typedMinor !== null && wholeMinor !== null && typedMinor > wholeMinor ? fromMinor(typedMinor - wholeMinor) : null
+  // A ticked box only counts while the difference is shown: once the amount is back to the balance, it is ignored.
+  const keeping = over !== null && keep
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -49,7 +52,7 @@ export default function SettleModal({
     }
     setPending(true)
     try {
-      await debts.settle(person.id, { amount: typed, date, ...(note ? { note } : {}) })
+      await debts.settle(person.id, { amount: keeping ? whole : typed, date, ...(note ? { note } : {}) })
     } catch (failure) {
       say(errorText(failure), 'error')
       return
@@ -67,7 +70,13 @@ export default function SettleModal({
           {t('debts.settleAmount')}
           <input name="amount" required inputMode="decimal" autoComplete="off" value={amount} onChange={(event) => setAmount(event.target.value)} />
         </label>
-        {over ? <p className="warning">{t(owedToYou ? 'debts.settleOver' : 'debts.settleOverYou', { over: money(over), name: person.name })}</p> : null}
+        {over ? (
+          <label>
+            <input type="checkbox" checked={keep} onChange={(event) => setKeep(event.target.checked)} />
+            {t(owedToYou ? 'debts.settleKeep' : 'debts.settleKeepThem', { over: money(over), name: person.name })}
+          </label>
+        ) : null}
+        {over && !keeping ? <p className="warning">{t(owedToYou ? 'debts.settleOver' : 'debts.settleOverYou', { over: money(over), name: person.name })}</p> : null}
         <div className="tx-date-group">
           <span>{t('report.date')}</span>
           <DatePicker kind="date" value={date} label={t('report.date')} today={today} onChange={setDate} />

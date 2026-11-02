@@ -702,6 +702,8 @@ export const en = {
   'debts.settleAmount': 'amount paid',
   'debts.settleOver': 'this is {over} more than {name} owes you. the rest will count as you owing {name}.',
   'debts.settleOverYou': 'this is {over} more than you owe {name}. the rest will count as {name} owing you.',
+  'debts.settleKeep': 'no need to pay back the {over}',
+  'debts.settleKeepThem': '{name} does not need to pay back the {over}',
   'debts.settled': 'marked as paid.',
   'debts.kind.LENT': 'lent',
   'debts.kind.BORROWED': 'borrowed',

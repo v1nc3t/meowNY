@@ -689,6 +689,8 @@ export const fr: Messages = {
   'debts.settleAmount': 'montant payé',
   'debts.settleOver': "c'est {over} de plus que ce que {name} te doit. le reste comptera comme ta dette envers {name}.",
   'debts.settleOverYou': "c'est {over} de plus que ce que tu dois à {name}. le reste comptera comme la dette de {name} envers toi.",
+  'debts.settleKeep': 'pas besoin de rendre {over}',
+  'debts.settleKeepThem': "{name} n'a pas besoin de rendre {over}",
   'debts.settled': 'marqué comme payé.',
   'debts.kind.LENT': 'prêté',
   'debts.kind.BORROWED': 'emprunté',
