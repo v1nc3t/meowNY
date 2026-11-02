@@ -43,8 +43,27 @@ html.is-phone :is(.phone-tab, .phone-action, .quick-menu button, .pick-button, .
 }
 
 /* A link or a title with no box of its own dims for as long as it is pressed. */
-html.is-phone :is(.app-logo, .settings-back, .app-main a:not([class])):active {
+html.is-phone :is(.app-logo, .settings-back, .app-main a:not([class]), .app-footer a):active {
   opacity: 0.6;
+}
+
+/* The footer is two lines (the page, then the links), each item at least 44px tall to tap. */
+html.is-phone .app-footer nav {
+  flex-direction: column;
+  align-items: center;
+}
+
+html.is-phone .app-footer li {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  min-height: 44px;
+}
+
+html.is-phone .app-footer a {
+  display: flex;
+  align-items: center;
+  align-self: stretch;
 }
 
 .app-shell.is-phone.is-locked {

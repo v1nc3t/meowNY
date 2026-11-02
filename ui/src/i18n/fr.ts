@@ -768,7 +768,6 @@ export const fr: Messages = {
   'settings.reminderDesktop': "sur l'ordinateur, seulement si meowNY est ouvert et déverrouillé.",
   'settings.reminderPhone': 'sur le téléphone, même app fermée.',
   'settings.linksLabel': 'en savoir plus sur meowNY',
-  'settings.linkSource': 'code source',
   'settings.linkDiscussions': 'questions et bugs',
   'settings.linkSponsor': 'soutenir',
   'settings.linkUpdate': 'rechercher des mises à jour',

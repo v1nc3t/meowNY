@@ -132,6 +132,72 @@
   margin-top: auto;
 }
 
+/* The foot of the settings and of the lock screens (components/AppFooter.tsx): the copyright, licence and version, then the links,
+   as one centred line of plain text with a | between the items. A link has no box and no underline; under the pointer a line goes
+   through it. The | is drawn in the gap in front of an item, so it takes no room (the component hides the one in front of an item
+   that starts a wrapped line). */
+.app-footer {
+  --sep-gap: 1.25rem;
+  margin: 0;
+  font-size: 0.8125rem;
+  color: var(--muted-foreground);
+  text-align: center;
+}
+
+.app-footer nav {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 0 var(--sep-gap);
+}
+
+.app-footer ul {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 0.125rem var(--sep-gap);
+  width: auto;
+  max-width: 100%;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* The plain list look (a rule and room above each item) is for lists of rows, not for this. */
+.app-footer li {
+  position: relative;
+  display: block;
+  padding: 0;
+  border: 0;
+}
+
+.app-footer li:not(:first-child)::before,
+.app-footer ul + ul > li:first-child::before {
+  content: '|';
+  position: absolute;
+  top: 50%;
+  left: calc(var(--sep-gap) / -2);
+  transform: translate(-50%, -50%);
+  opacity: 0.5;
+}
+
+.app-footer li[data-first]::before {
+  visibility: hidden;
+}
+
+.app-footer a {
+  color: inherit;
+  text-decoration: none;
+}
+
+@media (hover: hover) {
+  .app-footer a:hover {
+    text-decoration: line-through;
+  }
+}
+
 .app-main {
   min-width: 0;
   display: flex;

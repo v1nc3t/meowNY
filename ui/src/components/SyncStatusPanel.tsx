@@ -1,6 +1,7 @@
-import { checkCodeText, cleanDigits, clockGapText, countdownText, filesLines, nothingChanged, reasonKey, summaryLines, type Choice, type Status } from '../api/sync'
+import { checkCodeText, cleanDigits, clockGapText, countdownText, filesLines, nothingChanged, reasonKey, reasonNeedsUpdate, summaryLines, type Choice, type Status } from '../api/sync'
 import { useState, type FormEvent } from 'react'
 import { useT } from '../i18n/context'
+import { UpdateLink } from './AppFooter'
 import QrCode from './QrCode'
 import Button from './ui/Button'
 import { Logo } from './ui/Pixel'
@@ -189,6 +190,12 @@ export default function SyncStatusPanel({
     <div className="panel sync-panel">
       <p className="warning" role="alert">
         {t(reasonKey(status.reason))}
+        {reasonNeedsUpdate(status.reason) ? (
+          <>
+            {' '}
+            <UpdateLink />
+          </>
+        ) : null}
       </p>
       <div className="actions">
         <Button onClick={onDone}>{t('common.done')}</Button>

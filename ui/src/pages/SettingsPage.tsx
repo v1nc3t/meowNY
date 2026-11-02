@@ -2,27 +2,17 @@ import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { errorText, inDesktopApp, vault, type LockPrefs } from '../vault/api'
 import { useI18n } from '../i18n/context'
+import AppFooter from '../components/AppFooter'
 import ChangeCurrencyModal from '../components/ChangeCurrencyModal'
 import CommandApiBlock from '../components/CommandApiBlock'
 import PhoneSyncBlock from '../components/PhoneSyncBlock'
-import { buttonClass, cn } from '../components/ui/cn'
+import { cn } from '../components/ui/cn'
 import type { Settings } from '../vault/rules'
 import { useToast } from '../hooks/toast'
 import { useProfile } from '../hooks/profile'
 import { syncApi } from '../api/sync'
 import { AppearanceSection, AppLockSection, FriendNameSection, NotificationsSection, RegionSection } from './settings/GeneralSections'
 import { BackupSection, DataSection, RecoverySection } from './settings/DataSections'
-
-// The copyright line at the foot of the settings, on the computer and the phone.
-const YEAR = new Date().getFullYear()
-
-// The buttons at the foot of the settings, in the order they are shown. The person opens them in the browser; the app makes no request.
-const LINKS = [
-  { label: 'settings.linkUpdate', href: 'https://github.com/v1nc3t/meowNY/releases/latest' },
-  { label: 'settings.linkDiscussions', href: 'https://github.com/v1nc3t/meowNY/discussions' },
-  { label: 'settings.linkSource', href: 'https://github.com/v1nc3t/meowNY' },
-  { label: 'settings.linkSponsor', href: 'https://ko-fi.com/v1nc3t' },
-] as const
 
 /** The sections of the page, in the order they are listed. The id is what `?section=` holds, so a link can open one. */
 const SECTIONS = [
@@ -112,20 +102,6 @@ export default function SettingsPage() {
     }
   }
 
-  // On the computer the foot stays at the bottom of the window; on a phone it ends the scrolling page, above the bottom tabs.
-  const footer = (
-    <footer className="settings-footer">
-      <nav className="settings-links" aria-label={t('settings.linksLabel')}>
-        {LINKS.map((link) => (
-          <a key={link.href} className={buttonClass('outline', 'sm')} href={link.href} target="_blank" rel="noreferrer">
-            {t(link.label)}
-          </a>
-        ))}
-      </nav>
-      <p>© {YEAR} meowny · AGPL-3.0</p>
-    </footer>
-  )
-
   return (
     <section className={cn('tx-page', 'settings-page', phone && 'on-phone')}>
       <div className="tx-title">
@@ -192,10 +168,11 @@ export default function SettingsPage() {
           </div>
         ) : null}
 
-        {phone ? footer : null}
+        {/* On the computer the foot stays at the bottom of the window; on a phone it ends the scrolling page, above the bottom tabs. */}
+        {phone ? <AppFooter /> : null}
       </div>
 
-      {phone ? null : footer}
+      {phone ? null : <AppFooter />}
     </section>
   )
 }

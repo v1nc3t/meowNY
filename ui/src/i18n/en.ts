@@ -781,7 +781,6 @@ export const en = {
   'settings.reminderDesktop': 'on the computer, only while meowNY is open and unlocked.',
   'settings.reminderPhone': 'on the phone, also when the app is closed.',
   'settings.linksLabel': 'more about meowNY',
-  'settings.linkSource': 'source code',
   'settings.linkDiscussions': 'questions & bugs',
   'settings.linkSponsor': 'sponsor',
   'settings.linkUpdate': 'check for updates',

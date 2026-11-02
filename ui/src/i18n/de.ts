@@ -769,7 +769,6 @@ export const de: Messages = {
   'settings.reminderDesktop': 'am computer nur, solange meowNY offen und entsperrt ist.',
   'settings.reminderPhone': 'auf dem handy, auch bei geschlossener app.',
   'settings.linksLabel': 'mehr zu meowNY',
-  'settings.linkSource': 'quellcode',
   'settings.linkDiscussions': 'fragen & fehler',
   'settings.linkSponsor': 'unterstützen',
   'settings.linkUpdate': 'nach Updates suchen',

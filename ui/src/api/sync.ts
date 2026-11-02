@@ -227,6 +227,11 @@ export function reasonKey(reason: string): MessageKey {
   return Object.hasOwn(REASON_KEYS, reason) ? REASON_KEYS[reason as keyof typeof REASON_KEYS] : REASON_KEYS.internal
 }
 
+/** The reasons that an update of the app can fix: the apps differ in version, or the other one's clock ran ahead because of one. */
+export function reasonNeedsUpdate(reason: string): boolean {
+  return ['peer_version', 'other_device_older', 'this_device_older', 'clock'].includes(reason)
+}
+
 /** The lines of a summary: which text and how many. Counts of zero are left out; `updated` already contains `replaced`. */
 export function summaryLines(summary: SummaryView): { key: MessageKey; count: number }[] {
   const lines: { key: MessageKey; count: number }[] = [

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { test } from 'node:test'
-import { allChosen, choicesInOrder, cleanDigits, clockGapText, FIELDS, locksAfterBackground, PHONE_PASSPHRASE_GOOD, phoneClockGap, REASON_KEYS, shouldWarn, Status, TABLES, wantsLongerPassphrase } from './sync.ts'
+import { allChosen, choicesInOrder, cleanDigits, clockGapText, FIELDS, locksAfterBackground, PHONE_PASSPHRASE_GOOD, phoneClockGap, REASON_KEYS, reasonNeedsUpdate, shouldWarn, Status, TABLES, wantsLongerPassphrase } from './sync.ts'
 import { Today } from './today.ts'
 
 // What the Rust side sends, as its own tests show it (sync/service.rs, sync/peers.rs, vault.rs).
@@ -64,6 +64,15 @@ test('the reasons the screens translate are exactly the ones the app can give', 
   for (const match of source.matchAll(/\.fail\(run, purpose, "([a-z_]+)"\)/g)) given.add(match[1])
   assert.ok(given.size >= 20, `only ${given.size} reasons were found`)
   assert.deepEqual([...given].sort(), Object.keys(REASON_KEYS).sort())
+})
+
+test('the reasons an update can fix are the ones that link to the update', () => {
+  for (const reason of ['peer_version', 'other_device_older', 'this_device_older', 'clock']) {
+    assert.ok(Object.hasOwn(REASON_KEYS, reason), `${reason} is a reason the app gives`)
+    assert.equal(reasonNeedsUpdate(reason), true, reason)
+  }
+  assert.equal(reasonNeedsUpdate('unreachable'), false)
+  assert.equal(reasonNeedsUpdate('something_new'), false)
 })
 
 test('the lock screen warns from the third wrong passphrase on, while a try is left', () => {

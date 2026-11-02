@@ -9,6 +9,7 @@ import Decrypting from './Decrypting'
 import { atLeast, closeKeyboard, useRefocus } from './unlockFlow'
 import PasswordField from './PasswordField'
 import { defaultSettings, phonePassphraseProblem } from './rules'
+import AppFooter from '../components/AppFooter'
 import Button from '../components/ui/Button'
 import { Illustration, Logo, type PictureName } from '../components/ui/Pixel'
 import type { MessageKey } from '../i18n/en'
@@ -152,6 +153,7 @@ export function ErasedScreen({ onContinue }: { onContinue: () => void }) {
         <p className="hint">{t('phone.erasedNext')}</p>
         <Button onClick={onContinue}>{t('common.continue')}</Button>
       </div>
+      <AppFooter />
     </main>
   )
 }
@@ -198,6 +200,7 @@ export function ForgotPhone({ onBack }: { onBack: () => void }) {
           {message}
         </p>
       </form>
+      <AppFooter />
     </main>
   )
 }

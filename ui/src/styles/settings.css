@@ -83,6 +83,19 @@
   overflow-wrap: anywhere;
 }
 
+/* The foot of a lock screen (components/AppFooter.tsx) is at the bottom of the screen, under the card and never over it. */
+.gate:has(> .app-footer) {
+  grid-template-rows: auto 1fr;
+}
+
+.gate > .app-footer {
+  grid-row: 2;
+  align-self: end;
+  max-width: 100%;
+  /* Room under the card for when the screen is short and the foot follows it. */
+  margin-top: 1.5rem;
+}
+
 /* A form that is hidden while the loading screen shows keeps what was typed, so display must not override `hidden`. */
 .gate > [hidden] {
   display: none;
@@ -566,34 +579,16 @@
   margin-top: 0;
 }
 
-/* The foot of the settings, across the whole page: the four buttons on the left, the copyright and the licence on the right (under
-   them when there is no room). The page lines its children up at the start, so the footer stretches itself; its own background
-   repaints the whole strip (WebKitGTK left stale lines there). The room under the text keeps it clear of the window's edge. */
-.settings-footer {
+/* The foot of the settings (components/AppFooter.tsx), across the whole page. The page lines its children up at the start, so the
+   footer stretches itself; its own background repaints the whole strip (WebKitGTK left stale lines there). The room under the text
+   keeps it clear of the window's edge. */
+.settings-page .app-footer {
   align-self: stretch;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.75rem 1.5rem;
   /* As wide as the rows above, which keep a gutter on the right for the scroll bar. */
   width: calc(100% - var(--room));
   padding: 0.75rem 0 1.25rem;
   border-top: 1px solid var(--border);
   background: var(--background);
-  font-size: 0.875rem;
-  color: var(--muted-foreground);
-}
-
-.settings-footer p {
-  margin: 0;
-}
-
-.settings-links {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.5rem;
 }
 
 /* Access tokens and paired phones: tables in the section. A time is a few words, so the cells wrap rather than being cut, and
@@ -742,20 +737,10 @@ ul.card-list.token-table > li.list-head {
   padding-right: var(--edge);
 }
 
-.settings-page.on-phone .settings-footer {
-  flex-direction: column;
-  align-items: stretch;
-  gap: 1rem;
+.settings-page.on-phone .app-footer {
   width: 100%;
   margin-top: auto;
   padding-bottom: 0;
-  text-align: center;
-}
-
-/* The four buttons wrap, each as wide as its words and then some, and at least 44px tall. */
-.settings-page.on-phone .settings-links a {
-  flex: 1 1 auto;
-  min-height: 2.75rem;
 }
 
 .settings-list {

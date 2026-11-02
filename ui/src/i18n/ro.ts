@@ -766,7 +766,6 @@ export const ro: Messages = {
   'settings.reminderDesktop': 'pe computer, doar cu meowNY deschis și deblocat.',
   'settings.reminderPhone': 'pe telefon, chiar și cu aplicația închisă.',
   'settings.linksLabel': 'mai multe despre meowNY',
-  'settings.linkSource': 'cod sursă',
   'settings.linkDiscussions': 'întrebări și bug-uri',
   'settings.linkSponsor': 'susține',
   'settings.linkUpdate': 'caută actualizări',

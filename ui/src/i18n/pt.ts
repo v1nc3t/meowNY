@@ -768,7 +768,6 @@ export const pt: Messages = {
   'settings.reminderDesktop': 'no computador, só com o meowNY aberto e desbloqueado.',
   'settings.reminderPhone': 'no telemóvel, mesmo com a app fechada.',
   'settings.linksLabel': 'mais sobre o meowNY',
-  'settings.linkSource': 'código-fonte',
   'settings.linkDiscussions': 'perguntas e erros',
   'settings.linkSponsor': 'apoiar',
   'settings.linkUpdate': 'procurar atualizações',
