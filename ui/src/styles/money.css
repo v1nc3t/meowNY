@@ -383,9 +383,9 @@ ul.card-list.hist-list > li.card-item {
 }
 
 /* Lists with one labelled button in each row (mark as paid, resume, remove): the words stay on one line, so the column of the buttons is as
-   wide as the longest label in any language ("als bezahlt markieren", 21 characters). A list that has them is `.has-action`, and is
-   wide, so it keeps its short two-line rows below 62em instead of 40em: the recurring items and the due payments need that much for
-   their columns, and the other lists share the rule. */
+   wide as the longest label in any language ("als bezahlt markieren", 21 characters). The recurring items and the due payments are
+   `.has-action`: wide lists that keep their short two-line rows below 62em instead of 40em, which is what their columns need. (The
+   friends, who have a button too, have rules of their own in debts-docs.css.) */
 .row-primary {
   flex: none;
   height: auto;

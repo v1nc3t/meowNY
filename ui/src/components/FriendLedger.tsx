@@ -275,7 +275,7 @@ export default function FriendLedger({
           ))
         : null}
       {lines.length > 0 && !phone ? (
-        <ul className="card-list is-table has-action ledger-table">
+        <ul className="card-list is-table ledger-table">
           <li className="list-head" aria-hidden="true">
             <span>{t('debts.what')}</span>
             <span>{t('sync.field.date')}</span>

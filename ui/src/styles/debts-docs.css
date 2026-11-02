@@ -162,11 +162,26 @@ html.is-phone .tx-actions.debts-actions > .ui-btn {
 }
 
 /* The statement of the friend chosen, under the history and at the window's bottom as the pager of the transactions is: the history
-   scrolls above it. Its list opens upwards, since there is no room under it. */
+   scrolls above it. Its list opens upwards, since there is no room under it. It is outside the pane that holds the two halves, so the
+   page is a container for it to see when they are side by side: that is when the pane (the page less the room of the scroll bar,
+   0.875rem) is wider than 46rem, as in the rule of `.debts-split` above. Then the foot is under the right half, as wide as it, with the
+   same gap (1.5rem) to the left half; otherwise it has the whole width. */
+.debts-page {
+  container-type: inline-size;
+  container-name: debts-page;
+}
+
 .debts-foot {
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
+}
+
+@container debts-page (not (max-width: 46.875rem)) {
+  .app-main main > section > .debts-foot {
+    width: calc((100% - var(--room) - 1.5rem) / 2);
+    margin-left: calc((100% - var(--room) - 1.5rem) / 2 + 1.5rem);
+  }
 }
 
 .debts-foot > .debts-heading {
@@ -182,11 +197,12 @@ html.is-phone .tx-actions.debts-actions > .ui-btn {
    chooses the friend. Who owes whom is as wide as the longest of the three ("alles beglichen", 15 characters of 0.875rem), the amount has
    15 characters. The button is on one line in every language: the longest word, "als bezahlt markieren", has 21 characters of 0.875rem
    (a column in ch is the width of a character of 1rem), and the button has its padding. The reminder wraps rather than being cut: its
-   column holds 19 characters of small print. In its half of the page the list has the two-line rows: the name and the amount, then who
-   owes whom and the button under them, and the reminder under that. The button is in the column of the amount, so the name has what is
-   left beside the wider of the two. */
+   column holds 16 characters of small print, which is two lines for a reminder with a date of 10 characters in every language.
+   With these and the gaps the columns take 44.4rem, which leaves the name 10rem from 55em. Below that the list has two-line rows: the name and the amount, then who owes whom and the button under them, and the reminder under
+   that. The button is in the column of the amount, so the name has what is left beside the wider of the two, and the values on the right
+   end in one line down the list. */
 .card-list.friends-table {
-  --cols: minmax(0, 1fr) 13.5ch 17ch 15ch calc(18.4ch + 1.25rem);
+  --cols: minmax(0, 1fr) 13.5ch 14ch 15ch calc(18.4ch + 1.25rem);
 }
 
 ul.card-list.friends-table > li.card-item {
@@ -203,17 +219,43 @@ ul.card-list.friends-table > li.card-item {
   white-space: nowrap;
 }
 
-@container (max-width: 57em) {
+@container (max-width: 55em) {
+  ul.card-list.friends-table > li.list-head {
+    display: none;
+  }
+
+  ul.card-list.friends-table > li.list-head + li {
+    border-top: 0;
+  }
+
   ul.card-list.friends-table > li.card-item {
     grid-template-columns: minmax(0, 1fr) auto;
     grid-template-areas:
       'name amount'
       'sub actions'
       'sub-end sub-end';
+    row-gap: 0;
   }
 
-  ul.card-list.friends-table > li.card-item > .cell-sub-end {
+  ul.card-list.friends-table .cell-name {
+    grid-area: name;
+  }
+
+  ul.card-list.friends-table .cell-amount {
+    grid-area: amount;
+  }
+
+  ul.card-list.friends-table .cell-sub {
+    grid-area: sub;
+  }
+
+  ul.card-list.friends-table .cell-sub-end {
+    grid-area: sub-end;
     text-align: left;
+  }
+
+  ul.card-list.friends-table .cell-actions {
+    grid-area: actions;
   }
 }
 
@@ -238,11 +280,12 @@ ul.card-list > li.list-head > .span-2 {
 }
 
 /* One friend's history: what it was, the day, how much it changed (with a sign, 16 characters), the balance after it (small print, with
-   a sign), then show code (a bill) or edit and delete (an entry): two buttons of 2rem at most. It and the history of all debts are
-   `.has-action` for their half of the page: the two-line rows below 57em, as the friends have. What it was starts with the kind in words,
-   and the day sits under it in a narrow half: both wrap rather than being cut. */
+   a sign), then show code (a bill) or edit and delete (an entry): two buttons of 2rem at most. With the gaps they take 29.8rem and
+   the padding, which leaves what it was 10rem from 47em; below that the rows have two lines (what it was and the change, then the day
+   and the balance, the buttons beside both). What it was starts with the kind in words, and the day sits under it in a narrow half:
+   both wrap rather than being cut. */
 .card-list.ledger-table {
-  --cols: minmax(0, 1fr) 12ch 16ch 14.5ch 4.25rem;
+  --cols: minmax(10rem, 1fr) 12ch 16ch 14.5ch 4.25rem;
 }
 
 .ledger-table .cell-name > .card-name,
@@ -261,10 +304,51 @@ ul.card-list > li.list-head > .span-2 {
   min-width: 4.25rem;
 }
 
+@container (max-width: 47em) {
+  ul.card-list.ledger-table > li.list-head {
+    display: none;
+  }
+
+  ul.card-list.ledger-table > li.list-head + li {
+    border-top: 0;
+  }
+
+  ul.card-list.ledger-table > li.card-item {
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    grid-template-areas:
+      'name amount actions'
+      'sub sub-end actions';
+    row-gap: 0;
+  }
+
+  ul.card-list.ledger-table .cell-name {
+    grid-area: name;
+  }
+
+  ul.card-list.ledger-table .cell-amount {
+    grid-area: amount;
+  }
+
+  ul.card-list.ledger-table .cell-sub {
+    grid-area: sub;
+  }
+
+  ul.card-list.ledger-table .cell-sub-end {
+    grid-area: sub-end;
+  }
+
+  ul.card-list.ledger-table .cell-actions {
+    grid-area: actions;
+  }
+}
+
 /* The history of all debts: who, what kind of change, the day, the change (with a sign, 16 characters), the balance after it (small
-   print, with a sign). The kind of change is words that can be long ("wiederkehrende zahlung verspätet bezahlt"), so it wraps. */
+   print, with a sign). The kind of change is words that can be long ("wiederkehrende zahlung verspätet bezahlt"), so it wraps. With the
+   gaps the day, the change and the balance take 32rem, which leaves 10rem each to the friend and to the kind of change from 53em.
+   Below that the rows have two lines (the friend and the change, then the kind and the day, the balance beside both), and under 40em
+   three (the balance under the day). */
 .card-list.history-table {
-  --cols: minmax(0, 1.3fr) minmax(0, 2.4fr) 12ch 16ch 14.5ch;
+  --cols: minmax(10rem, 1fr) minmax(10rem, 1.4fr) 12ch 16ch 14.5ch;
 }
 
 .history-table .cell-sub {
@@ -273,7 +357,7 @@ ul.card-list > li.list-head > .span-2 {
 }
 
 .cell-bal {
-  min-width: 5.5rem;
+  min-width: 16.5ch;
   font-size: 0.875rem;
   text-align: right;
   white-space: nowrap;
@@ -281,7 +365,40 @@ ul.card-list > li.list-head > .span-2 {
   font-variant-numeric: tabular-nums;
 }
 
-@container (max-width: 57em) {
+@container (max-width: 53em) {
+  ul.card-list.history-table > li.list-head {
+    display: none;
+  }
+
+  ul.card-list.history-table > li.list-head + li {
+    border-top: 0;
+  }
+
+  ul.card-list.history-table > li.card-item {
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    grid-template-areas:
+      'name amount actions'
+      'sub sub-end actions';
+    row-gap: 0;
+  }
+
+  ul.card-list.history-table .cell-name {
+    grid-area: name;
+  }
+
+  ul.card-list.history-table .cell-amount {
+    grid-area: amount;
+  }
+
+  ul.card-list.history-table .cell-sub {
+    grid-area: sub;
+  }
+
+  ul.card-list.history-table .cell-sub-end {
+    grid-area: sub-end;
+    text-align: right;
+  }
+
   ul.card-list.history-table .cell-bal {
     grid-area: actions;
   }

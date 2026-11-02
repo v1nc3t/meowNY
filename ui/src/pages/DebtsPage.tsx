@@ -266,7 +266,7 @@ function DebtsView({ settings, now }: { settings: MoneySettings; now: Today }) {
   }
 
   return (
-    <section className="tx-page">
+    <section className="tx-page debts-page">
       <div className="tx-title">
         <h1>{t('debts.title')}</h1>
         <div className="tx-actions debts-actions">
@@ -397,7 +397,7 @@ function DebtsView({ settings, now }: { settings: MoneySettings; now: Today }) {
                   </div>
                   {people.length === 0 ? <EmptyState text={t('debts.empty')} action={{ label: t('debts.addFriend'), onClick: () => setAddingFriend(true) }} /> : null}
                   {people.length > 0 ? (
-                    <ul className={phone ? 'card-list' : 'card-list is-table has-action friends-table'}>
+                    <ul className={phone ? 'card-list' : 'card-list is-table friends-table'}>
                       {phone ? null : (
                         <li className="list-head" aria-hidden="true">
                           <span>{t('common.name')}</span>

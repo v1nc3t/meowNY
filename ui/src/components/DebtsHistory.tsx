@@ -95,7 +95,7 @@ export default function DebtsHistory({
           ))
         : null}
       {lines.length > 0 && !phone ? (
-        <ul className="card-list is-table has-action history-table">
+        <ul className="card-list is-table history-table">
           <li className="list-head" aria-hidden="true">
             <span>{t('common.name')}</span>
             <span>{t('debts.kind')}</span>
