@@ -382,19 +382,18 @@ ul.card-list.hist-list > li.card-item {
   }
 }
 
-/* Lists with one labelled button in each row (mark as paid, bring back): its words may wrap onto a second line rather than push the
-   columns about, whatever the language. A list that has them is `.has-action`, and is wide, so it keeps its short two-line rows below 57em
-   instead of 40em: the recurring items need about that much for their six columns, and the other lists share the rule. */
+/* Lists with one labelled button in each row (mark as paid, resume, remove): the words stay on one line, so the column of the buttons is as
+   wide as the longest label in any language ("als bezahlt markieren", 21 characters). A list that has them is `.has-action`, and is
+   wide, so it keeps its short two-line rows below 62em instead of 40em: the recurring items and the due payments need that much for
+   their columns, and the other lists share the rule. */
 .row-primary {
-  flex: 0 1 auto;
-  min-width: 0;
-  max-width: 8.5rem;
+  flex: none;
   height: auto;
   min-height: 2rem;
   padding: 0.25rem 0.75rem;
   line-height: 1.25;
   text-align: center;
-  white-space: normal;
+  white-space: nowrap;
 }
 
 .cell-actions > .row-primary:not(:last-child) {
@@ -406,7 +405,7 @@ ul.card-list.hist-list > li.card-item {
   color: var(--muted-foreground);
 }
 
-@container (max-width: 57em) {
+@container (max-width: 62em) {
   ul.card-list.has-action > li.list-head {
     display: none;
   }
@@ -447,11 +446,13 @@ ul.card-list.hist-list > li.card-item {
 
 /* Recurring: name, amount, next due date, category, how often, then mark as paid, edit, delete and the chevron. Six columns are a lot for
    a list, so the padding is a little narrower and the columns are as wide as their words (an amount of 16 characters, a date of 13,
-   and "how often" of 12 on a line: a longer one takes a second line, "toutes les 12 / semaines"); at 1280px, where the list is 58rem,
-   the name keeps about 7.5rem and the category 4rem. A name that is longer than its room wraps. The category and how often are two
-   columns on a wide list and one line of small print (the wrapper is the cell) on a narrow one. */
+   and "how often" of 11 on a line: a longer one takes a second line, "toutes les 12 / semaines"). The buttons are 19rem: "als bezahlt
+   markieren" (21 characters of 0.875rem), the padding, the edit, delete and chevron buttons. All that leaves a name of 7rem and a
+   category of 4rem at 62em, where the wide layout starts (a window of about 1360px, or 1150px with the sidebar closed); the name is
+   longer than that when there is more room, and one that is longer than its room wraps. The category and how often are two columns on a
+   wide list and one line of small print (the wrapper is the cell) on a narrow one. */
 .card-list.rec-table {
-  --cols: minmax(0, 1.8fr) 16ch 12ch minmax(0, 1fr) 11ch 14.5rem;
+  --cols: minmax(0, 1.8fr) 16ch 12ch minmax(0, 1fr) 11ch calc(18.5ch + 8rem);
 }
 
 ul.card-list.rec-table > li.card-item,
@@ -470,16 +471,14 @@ ul.card-list.rec-table > li.list-head {
   overflow-wrap: anywhere;
 }
 
-/* "mark as paid" is on one line in 7.5rem, and takes two in the languages whose words are longer ("als bezahlt / markieren"). */
 .rec-table .row-primary {
-  max-width: 7.5rem;
   padding-inline: 0.5rem;
 }
 
 /* The same room for the buttons in every row (an item that is paused or ended has no "mark as paid"), so the amounts line up when the
    head is gone. */
 ul.card-list.rec-table .cell-actions {
-  min-width: 14.5rem;
+  min-width: calc(18.5ch + 8rem);
 }
 
 .rec-table .rec-sub {
@@ -491,7 +490,7 @@ ul.card-list.rec-table .cell-actions {
 }
 
 /* On a narrow list "how often" keeps its line (a second one only when the cell is narrower than the words) and the category gives way. */
-@container (max-width: 57em) {
+@container (max-width: 62em) {
   ul.card-list.rec-table .rec-sub {
     display: flex;
     grid-area: sub;

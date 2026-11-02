@@ -476,11 +476,17 @@ ul.card-list.is-table > li.list-head {
 ul.card-list > li.list-head {
   min-height: 0;
   padding-block: 0.625rem;
-  font-size: 0.8125rem;
   font-weight: 500;
   line-height: 1.4;
   color: var(--muted-foreground);
   border-bottom: var(--border-width) solid var(--border);
+}
+
+/* The head is at the font size of the rows, because their columns in `ch` (the --cols of the lists) are the width of a character of that
+   size, and a smaller head would have narrower columns than the rows under it. Only its words are smaller. (:where, so the rule of a
+   single cell, such as the hidden word of the tokens' head, has the last word.) */
+:where(ul.card-list > li.list-head) > * {
+  font-size: 0.8125rem;
 }
 
 ul.card-list > li.list-head > .is-end {

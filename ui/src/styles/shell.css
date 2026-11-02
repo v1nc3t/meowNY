@@ -135,9 +135,10 @@
 /* The foot of the settings and of the lock screens (components/AppFooter.tsx): the copyright, licence and version, then the links,
    as one centred line of plain text with a | between the items. A link has no box and no underline; under the pointer a line goes
    through it. The | is drawn in the gap in front of an item, so it takes no room (the component hides the one in front of an item
-   that starts a wrapped line). */
+   that starts a wrapped line). The gap is the width of the | and twice the room on each side of it as it was before (the phone's is
+   a little less: see phone.css). */
 .app-footer {
-  --sep-gap: 1.25rem;
+  --sep-gap: 2rem;
   margin: 0;
   font-size: 0.8125rem;
   color: var(--muted-foreground);
