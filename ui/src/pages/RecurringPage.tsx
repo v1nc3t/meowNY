@@ -50,6 +50,9 @@ function statusOf(item: Recurring, today: string): Status {
   return item.endDate !== null && (item.endDate < today || item.nextDueDate > item.endDate) ? 'ended' : 'paused'
 }
 
+/** Where a status sits in the list: the running items, then the paused, then the ended. */
+const STATUS_RANK: Record<Status, number> = { overdue: 0, today: 0, upcoming: 0, paused: 1, ended: 2 }
+
 type ConfirmKind = 'skip' | 'pause' | 'end' | 'delete'
 
 /** What each confirmed action does, and the word that names it. */
@@ -109,14 +112,18 @@ function RecurringView({ settings, now }: { settings: MoneySettings; now: Today 
   const categoryNames = useMemo(() => new Map(categories.map((category) => [category.id, category.name])), [categories])
   const incomeCategories = useMemo(() => new Set(categories.filter((category) => category.type === 'INCOME').map((category) => category.id)), [categories])
 
-  // In the category list's order, the items of a category together; items of a deleted category go last. Each comes with its category's name.
+  const today = now.date
+  // Active items first, then paused, then ended. Within each, in the category list's order, the items of a category together; items of a
+  // deleted category go last. Each comes with its category's name.
   const rows = useMemo(() => {
     const byCategory = new Map<string, Recurring[]>()
     for (const item of items ?? []) byCategory.set(item.categoryId, [...(byCategory.get(item.categoryId) ?? []), item])
     const known = categories.filter((c) => byCategory.has(c.id)).map((c) => ({ name: c.name, items: byCategory.get(c.id) ?? [] }))
     const unknown = [...byCategory].filter(([id]) => !categoryNames.has(id)).map(([, list]) => ({ name: t('tx.deletedCategory'), items: list }))
-    return [...known, ...unknown].flatMap((group) => group.items.map((item) => ({ item, category: group.name })))
-  }, [items, categories, categoryNames, t])
+    const grouped = [...known, ...unknown].flatMap((group) => group.items.map((item) => ({ item, category: group.name })))
+    // the sort is stable, so the categories keep their order inside each status
+    return grouped.sort((a, b) => STATUS_RANK[statusOf(a.item, today)] - STATUS_RANK[statusOf(b.item, today)])
+  }, [items, categories, categoryNames, today, t])
 
   useEffect(() => {
     let cancelled = false
@@ -312,9 +319,10 @@ function RecurringView({ settings, now }: { settings: MoneySettings; now: Today 
     return item.amount !== null && part?.personId && part.person && part.weight > 0 ? { item, personId: part.personId, name: part.person } : null
   }
 
+  // One word for an interval of 1 ("monthly"), since the column head already says "repeats"; a longer one keeps "every 2 weeks".
   const everyText = (item: Recurring) =>
     item.intervalCount === 1
-      ? t(`rec.every1.${item.intervalUnit}`)
+      ? t(`rec.often.${item.intervalUnit}`)
       : t(`rec.everyN.${item.intervalUnit}`, { count: item.intervalCount })
 
   /** The date the badge shows, and the word beside it when the item is not simply upcoming. */
