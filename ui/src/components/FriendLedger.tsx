@@ -34,7 +34,7 @@ type Dialog =
   | null
 
 /**
- * One friend's history: back, the name and the balance on one line, the buttons that change the friend, and the ledger with the
+ * One friend's history: back, the name, the balance and the buttons that change the friend on one line, then the ledger with the
  * buttons and documents of each line. It is the right half of the debts page, and the whole page of a friend on the phone. The page says
  * when to read again (`reload`) and is told when something changed (`onChanged`), so the list of friends beside it stays right.
  */
@@ -128,10 +128,8 @@ export default function FriendLedger({
 
   const { person } = statement
   const { tone, abs } = balanceView(person.balance)
-  const summaryText =
-    tone === 'even'
-      ? t('debts.settledUp')
-      : t(tone === 'owed' ? 'debts.owesYou' : 'debts.youOweThem', { name: person.name, amount: money(abs) })
+  // Beside the name, so the short words of the list of friends: "you owe €0.35", "owes you €0.35".
+  const summaryText = tone === 'even' ? t('debts.settledUp') : `${t(tone === 'owed' ? 'debts.labelOwesYou' : 'debts.labelYouOwe')} ${money(abs)}`
   // Taking a friend off the list asks first; bringing one back is easy to undo, so it does not.
   function removeOrBringBack() {
     if (person.archived) void run(() => debts.unarchive(person.id))
@@ -243,15 +241,11 @@ export default function FriendLedger({
   return (
     <div className="debts-half">
       <div className="debts-heading debts-name">
-        <div className="debts-who">
-          <Link to="/app/debts" className={buttonClass('outline', 'sm')}>
-            {t('common.back')}
-          </Link>
-          <h2>{person.name}</h2>
-        </div>
+        <Link to="/app/debts" className={buttonClass('outline', 'sm')}>
+          {t('common.back')}
+        </Link>
+        <h2>{person.name}:</h2>
         <p className={`debt-total debt-${tone}`}>{summaryText}</p>
-      </div>
-      <div className="card-actions">
         <Button variant="outline" size="sm" onClick={() => setDialog({ kind: 'rename' })}>
           {t('common.rename')}
         </Button>

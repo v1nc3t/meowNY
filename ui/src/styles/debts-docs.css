@@ -99,23 +99,16 @@ html.is-phone .tx-actions.debts-actions > .ui-btn {
   color: var(--muted-foreground);
 }
 
-/* The top of a friend's page on one line: back, the name, then the balance. The balance goes under them only when it has no room beside
-   them. Back and the name stay together, and a long name wraps rather than push the balance out. */
+/* The top of a friend's page on one line: back, "name:", the balance, then rename, mark as paid and remove. Where there is no room the
+   rest wraps onto the next line; a long name wraps rather than push it all out. */
 .debts-name {
   display: flex;
   flex-wrap: wrap;
-  align-items: baseline;
-  gap: 0.25rem 0.75rem;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
 }
 
-.debts-who {
-  display: flex;
-  align-items: baseline;
-  gap: 0.75rem;
-  min-width: 0;
-}
-
-.debts-who > h2 {
+.debts-name > h2 {
   min-width: 0;
   margin: 0;
   overflow-wrap: anywhere;
