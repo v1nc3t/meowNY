@@ -9,7 +9,7 @@ import BudgetSpanModal from '../components/BudgetSpanModal'
 import EditCategoryModal from '../components/EditCategoryModal'
 import MonthNav from '../components/MonthNav'
 import Icon from '../components/NavIcon'
-import { IconAction } from '../components/RowParts'
+import { IconAction, Row } from '../components/RowParts'
 import SectionTabs from '../components/SectionTabs'
 import Button from '../components/ui/Button'
 import { CardTitle } from '../components/ui/Card'
@@ -622,36 +622,29 @@ function CategoryRow({
     </span>
   )
   // Deleted from a later month on: it still counts here, and there is nothing to change about it.
-  if (category.deleted) {
-    return (
-      <li className="card-item is-quiet" data-reorder-id={category.id}>
-        <div className="cell-name">
-          <span className="row-grip" />
-          <span className="card-name" title={category.name}>
-            {category.name}
-          </span>
-          <span className="row-mark">{t('budgets.deletedLater')}</span>
-        </div>
-        {spentCell}
-        {amount}
-        <div className="cell-actions" />
-      </li>
-    )
-  }
+  const gone = category.deleted
   return (
-    <li className="card-item" data-reorder-id={category.id}>
+    <Row
+      className={gone ? 'is-quiet' : undefined}
+      data-reorder-id={category.id}
+      actions={
+        gone ? null : (
+          <>
+            <IconAction icon="pencil" label={t('common.edit')} data-row-focus aria-describedby={hintId} onClick={() => onEdit(category)} />
+            <IconAction icon="trash" label={t('common.delete')} danger onClick={() => onDelete(category)} />
+          </>
+        )
+      }
+    >
       <div className="cell-name">
-        <Icon name="grip" className="row-grip" />
+        {gone ? <span className="row-grip" /> : <Icon name="grip" className="row-grip" />}
         <span className="card-name" title={category.name}>
           {category.name}
         </span>
+        {gone ? <span className="row-mark">{t('budgets.deletedLater')}</span> : null}
       </div>
       {spentCell}
       {amount}
-      <div className="cell-actions">
-        <IconAction icon="pencil" label={t('common.edit')} data-row-focus aria-describedby={hintId} onClick={() => onEdit(category)} />
-        <IconAction icon="trash" label={t('common.delete')} danger onClick={() => onDelete(category)} />
-      </div>
-    </li>
+    </Row>
   )
 }

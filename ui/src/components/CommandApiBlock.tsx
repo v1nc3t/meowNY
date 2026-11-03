@@ -15,6 +15,7 @@ import { errorText } from '../api/invoke'
 import { useT } from '../i18n/context'
 import { useToast } from '../hooks/toast'
 import Dropdown from './Dropdown'
+import { Row, Table } from './RowParts'
 import Badge from './ui/Badge'
 import Button from './ui/Button'
 import { Actions, Field, Rows, SwitchRow } from '../pages/settings/layout'
@@ -109,16 +110,20 @@ export default function CommandApiBlock({ locale, timezone }: { locale: string; 
       <h3 className="settings-subtitle">{t('cli.tokens')}</h3>
       {tokens && tokens.length === 0 && <p className="hint">{t('cli.noTokens')}</p>}
       {tokens && tokens.length > 0 && (
-        <ul className="card-list is-table token-table">
-          <li className="list-head" aria-hidden="true">
-            <span>{t('common.name')}</span>
-            <span>{t('cli.tokenScope')}</span>
-            <span>{t('cli.colExpires')}</span>
-            <span>{t('cli.colLastUsed')}</span>
-            <span className="head-spacer">{t('cli.revoke')}</span>
-          </li>
+        <Table
+          className="token-table"
+          heads={[t('common.name'), t('cli.tokenScope'), t('cli.colExpires'), t('cli.colLastUsed'), { label: t('cli.revoke'), className: 'head-spacer' }]}
+        >
           {tokens.map((token) => (
-            <li className={`card-item${token.expired ? ' is-expired' : ''}`} key={token.id}>
+            <Row
+              key={token.id}
+              className={token.expired ? 'is-expired' : undefined}
+              actions={
+                <Button variant="outline" size="sm" className="row-primary" onClick={() => void onRevoke(token.id)}>
+                  {t('cli.revoke')}
+                </Button>
+              }
+            >
               <div className="cell-name">
                 <span className="card-name" title={token.name}>
                   {token.name}
@@ -139,14 +144,9 @@ export default function CommandApiBlock({ locale, timezone }: { locale: string; 
               ) : (
                 <span className="cell-extra">{t('cli.neverUsed')}</span>
               )}
-              <div className="cell-actions">
-                <Button variant="outline" size="sm" className="row-primary" onClick={() => void onRevoke(token.id)}>
-                  {t('cli.revoke')}
-                </Button>
-              </div>
-            </li>
+            </Row>
           ))}
-        </ul>
+        </Table>
       )}
 
       {created ? (

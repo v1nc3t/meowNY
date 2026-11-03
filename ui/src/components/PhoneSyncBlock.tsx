@@ -6,6 +6,7 @@ import { useDeviceName } from '../hooks/useDeviceName'
 import { useToast } from '../hooks/toast'
 import { useSyncStatus } from '../hooks/useSyncStatus'
 import Dropdown from './Dropdown'
+import { Row, Table } from './RowParts'
 import Button from './ui/Button'
 import { useT } from '../i18n/context'
 import SyncStatusPanel from './SyncStatusPanel'
@@ -69,29 +70,12 @@ export default function PhoneSyncBlock({ locale, timezone }: { locale: string; t
       <h3 className="settings-subtitle">{t('sync.devices')}</h3>
       {devices && devices.length === 0 && <p className="hint">{t('sync.noDevices')}</p>}
       {devices && devices.length > 0 && (
-        <ul className="card-list is-table device-table">
-          <li className="list-head" aria-hidden="true">
-            <span>{t('common.name')}</span>
-            <span>{t('sync.colPaired')}</span>
-            <span>{t('sync.colSynced')}</span>
-            <span />
-          </li>
+        <Table className="device-table" heads={[t('common.name'), t('sync.colPaired'), t('sync.colSynced'), '']}>
           {devices.map((device) => (
-            <li className="card-item" key={device.deviceId}>
-              <div className="cell-name">
-                <span className="card-name" title={device.name}>
-                  {device.name}
-                </span>
-              </div>
-              <span className="cell-sub" data-label={t('sync.colPaired')}>
-                {whenText(device.pairedAt, locale, timezone)}
-              </span>
-              <span className="cell-sub-end" {...(device.lastSyncAt ? { 'data-label': t('sync.colSynced') } : {})}>
-                {device.lastSyncAt ? whenText(device.lastSyncAt, locale, timezone) : t('sync.neverSynced')}
-                {device.changesWaiting !== null ? <span className="cell-fine">{t('sync.changesWaiting', { count: device.changesWaiting })}</span> : null}
-              </span>
-              <div className="cell-actions">
-                {removing === device.deviceId ? (
+            <Row
+              key={device.deviceId}
+              actions={
+                removing === device.deviceId ? (
                   <>
                     <Button variant="destructive" size="sm" onClick={() => void onRemove(device.deviceId)}>
                       {t('sync.removeYes')}
@@ -104,11 +88,24 @@ export default function PhoneSyncBlock({ locale, timezone }: { locale: string; t
                   <Button variant="outline" size="sm" className="row-primary" disabled={!idle} onClick={() => setRemoving(device.deviceId)}>
                     {t('sync.remove')}
                   </Button>
-                )}
+                )
+              }
+            >
+              <div className="cell-name">
+                <span className="card-name" title={device.name}>
+                  {device.name}
+                </span>
               </div>
-            </li>
+              <span className="cell-sub" data-label={t('sync.colPaired')}>
+                {whenText(device.pairedAt, locale, timezone)}
+              </span>
+              <span className="cell-sub-end" {...(device.lastSyncAt ? { 'data-label': t('sync.colSynced') } : {})}>
+                {device.lastSyncAt ? whenText(device.lastSyncAt, locale, timezone) : t('sync.neverSynced')}
+                {device.changesWaiting !== null ? <span className="cell-fine">{t('sync.changesWaiting', { count: device.changesWaiting })}</span> : null}
+              </span>
+            </Row>
           ))}
-        </ul>
+        </Table>
       )}
       {removing && <p className="hint">{t('sync.removeAsk')}</p>}
       {devices
