@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useId, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import AddCategoryModal from '../components/AddCategoryModal'
 import AttachArea from '../components/AttachArea'
@@ -11,7 +11,7 @@ import ConfirmModal from '../components/ConfirmModal'
 import DuePayments from '../components/DuePayments'
 import PaidLatePayments from '../components/PaidLatePayments'
 import Icon from '../components/NavIcon'
-import { Disclosure, IconAction, TapRow } from '../components/RowParts'
+import { IconAction, Row, Table, TapRow } from '../components/RowParts'
 import SectionTabs from '../components/SectionTabs'
 import Modal, { modalFormId } from '../components/Modal'
 import Badge from '../components/ui/Badge'
@@ -25,11 +25,11 @@ import { useToday, type Today } from '../api/today'
 import { categoryOptions } from '../lib/categoriesView'
 import { amountString, formatDate, formatMoney } from '../lib/money'
 import { draftOfTemplate, NOT_SPLIT, reducedWeights, toInput, type SplitState } from '../lib/split'
-import { toggleRow } from '../lib/toggleRow'
 import { useAttachments, type Attachments } from '../hooks/useAttachments'
 import { useClipCounts } from '../hooks/useClipCounts'
 import { useFocusRequest, useJumpTo } from '../hooks/useFocusRequest'
 import { useMoneySettings, type MoneySettings } from '../hooks/useMoneySettings'
+import { useOpenRow } from '../hooks/useOpenRow'
 import { useProfile } from '../hooks/profile'
 import { useToast } from '../hooks/toast'
 import { useT } from '../i18n/context'
@@ -78,14 +78,13 @@ export default function RecurringPage() {
 function RecurringView({ settings, now }: { settings: MoneySettings; now: Today }) {
   const t = useT()
   const phone = useProfile() === 'phone'
-  const panelId = useId()
   const [categories, setCategories] = useState<Category[]>([])
   const [items, setItems] = useState<Recurring[] | null>(null)
   // every friend, removed ones too: a template may still name one
   const [friends, setFriends] = useState<Person[]>([])
   const [split, setSplit] = useState<SplitState>(NOT_SPLIT)
   // the item whose details are open in the list
-  const [openId, setOpenId] = useState<string | null>(null)
+  const openRows = useOpenRow()
   const [reload, setReload] = useState(0)
   const [adding, setAdding] = useState(false)
   const [editing, setEditing] = useState<Recurring | null>(null)
@@ -420,12 +419,55 @@ function RecurringView({ settings, now }: { settings: MoneySettings; now: Today 
   function tableRow({ item, category }: { item: Recurring; category: string }) {
     const status = statusOf(item, now.date)
     const badge = badgeOf(item, status)
-    const open = openId === item.id
     const more = status !== 'ended' || Boolean(item.split) || Boolean(item.description?.trim())
-    const label = `${panelId}-${item.id}`
     const late = status === 'overdue' || status === 'today'
     return (
-      <li key={item.id} className={open ? 'card-item is-open' : 'card-item'} data-status={status} data-item={`recurring:${item.id}`}>
+      <Row
+        key={item.id}
+        rows={openRows}
+        id={item.id}
+        item={`recurring:${item.id}`}
+        data-status={status}
+        actions={
+          <>
+            {item.isActive ? (
+              <Button variant="outline" size="sm" className="row-primary" data-row-focus onClick={() => openPay(item)}>
+                {t('rec.pay')}
+              </Button>
+            ) : status === 'paused' ? (
+              <Button variant="outline" size="sm" className="row-primary" data-row-focus onClick={() => resume(item)}>
+                {t('rec.resume')}
+              </Button>
+            ) : null}
+            <IconAction icon="pencil" label={t('common.edit')} data-row-focus={item.isActive || status === 'paused' ? undefined : true} onClick={() => openEdit(item)} />
+            <IconAction icon="trash" label={t('common.delete')} danger onClick={() => setConfirming({ kind: 'delete', item })} />
+          </>
+        }
+        panel={
+          more ? (
+            <>
+              {details(item)}
+              <div className="row-panel-actions">
+                {item.isActive ? (
+                  <>
+                    <Button variant="outline" size="sm" onClick={() => setConfirming({ kind: 'skip', item })}>
+                      {t('rec.skip')}
+                    </Button>
+                    <Button variant="outline" size="sm" onClick={() => setConfirming({ kind: 'pause', item })}>
+                      {t('rec.pause')}
+                    </Button>
+                  </>
+                ) : null}
+                {status !== 'ended' ? (
+                  <Button variant="outline" size="sm" onClick={() => setConfirming({ kind: 'end', item })}>
+                    {t('rec.end')}
+                  </Button>
+                ) : null}
+              </div>
+            </>
+          ) : null
+        }
+      >
         <div className="cell-name">
           <span className="card-name" title={item.name}>
             {item.name}
@@ -454,43 +496,7 @@ function RecurringView({ settings, now }: { settings: MoneySettings; now: Today 
             ) : null}
           </span>
         </div>
-        <div className="cell-actions">
-          {item.isActive ? (
-            <Button variant="outline" size="sm" className="row-primary" data-row-focus onClick={() => openPay(item)}>
-              {t('rec.pay')}
-            </Button>
-          ) : status === 'paused' ? (
-            <Button variant="outline" size="sm" className="row-primary" data-row-focus onClick={() => resume(item)}>
-              {t('rec.resume')}
-            </Button>
-          ) : null}
-          <IconAction icon="pencil" label={t('common.edit')} data-row-focus={item.isActive || status === 'paused' ? undefined : true} onClick={() => openEdit(item)} />
-          <IconAction icon="trash" label={t('common.delete')} danger onClick={() => setConfirming({ kind: 'delete', item })} />
-          <Disclosure more={more} open={open} controls={label} onClick={() => setOpenId(open ? null : item.id)} />
-        </div>
-        {open ? (
-          <div className="row-panel tx-detail" id={label}>
-            {details(item)}
-            <div className="row-panel-actions">
-              {item.isActive ? (
-                <>
-                  <Button variant="outline" size="sm" onClick={() => setConfirming({ kind: 'skip', item })}>
-                    {t('rec.skip')}
-                  </Button>
-                  <Button variant="outline" size="sm" onClick={() => setConfirming({ kind: 'pause', item })}>
-                    {t('rec.pause')}
-                  </Button>
-                </>
-              ) : null}
-              {status !== 'ended' ? (
-                <Button variant="outline" size="sm" onClick={() => setConfirming({ kind: 'end', item })}>
-                  {t('rec.end')}
-                </Button>
-              ) : null}
-            </div>
-          </div>
-        ) : null}
-      </li>
+      </Row>
     )
   }
 
@@ -499,15 +505,14 @@ function RecurringView({ settings, now }: { settings: MoneySettings; now: Today 
   function tapRow({ item, category }: { item: Recurring; category: string }) {
     const status = statusOf(item, now.date)
     const badge = badgeOf(item, status)
-    const label = `${panelId}-${item.id}`
     return (
       <TapRow
         key={item.id}
-        id={label}
+        id={openRows.panelId(item.id)}
         item={`recurring:${item.id}`}
         data-status={status}
-        open={openId === item.id}
-        onToggle={() => setOpenId(openId === item.id ? null : item.id)}
+        open={openRows.isOpen(item.id)}
+        onToggle={() => openRows.toggle(item.id)}
         name={item.name}
         amount={amount(item)}
         sub={
@@ -652,21 +657,15 @@ function RecurringView({ settings, now }: { settings: MoneySettings; now: Today 
       {tab === 'items' && items ? (
         <div className="tx-pane wide">
           {items.length === 0 ? <EmptyState text={t('rec.empty')} action={{ label: t('rec.add'), onClick: openAdd }} /> : null}
-          {items.length > 0 && phone ? <ul className="card-list">{rows.map((row) => tapRow(row))}</ul> : null}
+          {items.length > 0 && phone ? <ul className="card-list">{rows.map(tapRow)}</ul> : null}
           {items.length > 0 && !phone ? (
-            <ul className="card-list is-table rec-table" onClick={toggleRow}>
-              <li className="list-head" aria-hidden="true">
-                <span>{t('common.name')}</span>
-                <span className="is-end">{t('tx.amount')}</span>
-                <span>{t('sync.field.nextDue')}</span>
-                <span>{t('common.category')}</span>
-                <span>{t('sync.field.every')}</span>
-                <span>{t('debts.colStatus')}</span>
-                <span />
-                <span />
-              </li>
-              {rows.map((row) => tableRow(row))}
-            </ul>
+            <Table
+              className="rec-table"
+              heads={[t('common.name'), { label: t('tx.amount'), className: 'is-end' }, t('sync.field.nextDue'), t('common.category'), t('sync.field.every'), t('debts.colStatus'), '', '']}
+              opens
+            >
+              {rows.map(tableRow)}
+            </Table>
           ) : null}
         </div>
       ) : null}

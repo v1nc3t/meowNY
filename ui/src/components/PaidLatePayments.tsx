@@ -1,4 +1,4 @@
-import { useEffect, useId, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { debts, type History, type HistoryLine } from '../api/debts'
 import { errorText } from '../api/invoke'
@@ -7,7 +7,7 @@ import { useToast } from '../hooks/toast'
 import { useT } from '../i18n/context'
 import { formatDate, formatMoney } from '../lib/money'
 import Pager from './Pager'
-import { TapRow } from './RowParts'
+import { Table, TapRow } from './RowParts'
 
 /**
  * The recurring payments that were paid after their day, newest first, a page at a time: the day each fell due and the day it was paid.
@@ -17,7 +17,6 @@ import { TapRow } from './RowParts'
 export default function PaidLatePayments({ currency, locale, reload }: { currency: string; locale: string; reload: number }) {
   const t = useT()
   const phone = useProfile() === 'phone'
-  const panelId = useId()
   const say = useToast()
   const [history, setHistory] = useState<History | null>(null)
   const [offset, setOffset] = useState(0)
@@ -53,44 +52,48 @@ export default function PaidLatePayments({ currency, locale, reload }: { currenc
       </Link>
     )
 
+  // a paid line has nothing to open: the phone's row is plain, so its `id` is never shown
+  function tapRow(line: HistoryLine) {
+    return (
+      <TapRow
+        key={keyOf(line)}
+        id={keyOf(line)}
+        name={line.what}
+        amount={<span className="cell-amount">{money(line.amount)}</span>}
+        sub={
+          <>
+            {line.dueDate ? <span>{t('debts.dueOn', { date: formatDate(line.dueDate, locale) })}</span> : null}
+            <span>{`${t('rec.paidOn')} ${formatDate(line.date, locale)}`}</span>
+          </>
+        }
+      />
+    )
+  }
+
+  // not a `Row`: it would add an empty `cell-actions` to a row that has no buttons, and a cell too many to the table's columns
+  function tableRow(line: HistoryLine) {
+    return (
+      <li key={keyOf(line)} className="card-item">
+        <div className="cell-name">{name(line)}</div>
+        <span className="cell-sub">{line.dueDate ? formatDate(line.dueDate, locale) : ''}</span>
+        <span className="cell-sub-end">{formatDate(line.date, locale)}</span>
+        <span className="cell-amount">{money(line.amount)}</span>
+      </li>
+    )
+  }
+
   return (
     <>
       <h2 className="debts-heading">{t('rec.paidLateTitle')}</h2>
       {lines.length === 0 ? <p className="hint">{t('debts.noLines')}</p> : null}
       {lines.length > 0 ? (
-        <ul className={phone ? 'card-list' : 'card-list is-table late-table'}>
-          {phone ? null : (
-            <li className="list-head" aria-hidden="true">
-              <span>{t('common.name')}</span>
-              <span>{t('debts.colDue')}</span>
-              <span>{t('rec.paidOn')}</span>
-              <span className="is-end">{t('tx.amount')}</span>
-            </li>
-          )}
-          {lines.map((line) =>
-            phone ? (
-              <TapRow
-                key={keyOf(line)}
-                id={`${panelId}-${keyOf(line)}`}
-                name={line.what}
-                amount={<span className="cell-amount">{money(line.amount)}</span>}
-                sub={
-                  <>
-                    {line.dueDate ? <span>{t('debts.dueOn', { date: formatDate(line.dueDate, locale) })}</span> : null}
-                    <span>{`${t('rec.paidOn')} ${formatDate(line.date, locale)}`}</span>
-                  </>
-                }
-              />
-            ) : (
-              <li key={keyOf(line)} className="card-item">
-                <div className="cell-name">{name(line)}</div>
-                <span className="cell-sub">{line.dueDate ? formatDate(line.dueDate, locale) : ''}</span>
-                <span className="cell-sub-end">{formatDate(line.date, locale)}</span>
-                <span className="cell-amount">{money(line.amount)}</span>
-              </li>
-            ),
-          )}
-        </ul>
+        phone ? (
+          <ul className="card-list">{lines.map(tapRow)}</ul>
+        ) : (
+          <Table className="late-table" heads={[t('common.name'), t('debts.colDue'), t('rec.paidOn'), { label: t('tx.amount'), className: 'is-end' }]}>
+            {lines.map(tableRow)}
+          </Table>
+        )
       ) : null}
       <Pager page={Math.floor(at / limit) + 1} count={Math.ceil(total / limit)} onPage={(number) => setOffset((number - 1) * limit)} />
     </>

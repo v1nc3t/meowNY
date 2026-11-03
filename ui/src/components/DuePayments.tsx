@@ -1,10 +1,10 @@
-import { useId, useState } from 'react'
 import { Link } from 'react-router-dom'
 import type { Due, DuePayment } from '../api/debts'
 import { useProfile } from '../hooks/profile'
+import { useOpenRow } from '../hooks/useOpenRow'
 import { useT } from '../i18n/context'
 import { formatDate, formatMoney } from '../lib/money'
-import { TapRow } from './RowParts'
+import { Row, Table, TapRow } from './RowParts'
 import Button from './ui/Button'
 import { buttonClass } from './ui/cn'
 
@@ -28,8 +28,7 @@ export default function DuePayments({
 }) {
   const t = useT()
   const phone = useProfile() === 'phone'
-  const panelId = useId()
-  const [openKey, setOpenKey] = useState<string | null>(null)
+  const rows = useOpenRow()
   const money = (amount: string) => formatMoney(amount, currency, locale)
   const keyOf = (payment: DuePayment) => `${payment.recurringId}-${payment.dueDate}`
   const focus = (payment: DuePayment) => ({ focus: { kind: 'recurring', id: payment.recurringId, date: payment.dueDate } })
@@ -37,6 +36,72 @@ export default function DuePayments({
   const amount = (payment: DuePayment) => {
     if (payment.amount === null) return <span className="cell-amount is-varies">{t('rec.varies')}</span>
     return payment.income ? <span className="cell-amount is-income">{`+${money(payment.amount)}`}</span> : <span className="cell-amount debt-owe">{money(payment.amount)}</span>
+  }
+
+  const late = (payment: DuePayment) => t('debts.daysLate', { count: payment.daysOverdue })
+
+  function tapRow(payment: DuePayment) {
+    const key = keyOf(payment)
+    return (
+      <TapRow
+        key={key}
+        id={rows.panelId(key)}
+        open={rows.isOpen(key)}
+        onToggle={() => rows.toggle(key)}
+        name={payment.name}
+        amount={amount(payment)}
+        sub={
+          <>
+            <span>{payment.category}</span>
+            <span>{t('debts.dueOn', { date: formatDate(payment.dueDate, locale) })}</span>
+            <span className="due-late">{late(payment)}</span>
+          </>
+        }
+      >
+        <div className="row-panel-actions">
+          <Button variant="outline" onClick={() => onPay(payment)}>
+            {t('rec.pay')}
+          </Button>
+          <Button variant="outline" onClick={() => onSkip(payment)}>
+            {t('rec.skip')}
+          </Button>
+          <Link to={{ search: '' }} state={focus(payment)} className={buttonClass('outline')}>
+            {t('common.details')}
+          </Link>
+        </div>
+      </TapRow>
+    )
+  }
+
+  function tableRow(payment: DuePayment) {
+    return (
+      <Row
+        key={keyOf(payment)}
+        actions={
+          <>
+            <Button variant="ghost" size="sm" onClick={() => onSkip(payment)}>
+              {t('rec.skip')}
+            </Button>
+            <Button variant="outline" size="sm" className="row-primary" data-row-focus onClick={() => onPay(payment)}>
+              {t('rec.pay')}
+            </Button>
+          </>
+        }
+      >
+        <div className="cell-name">
+          <Link className="card-name" to={{ search: '' }} state={focus(payment)} title={payment.name}>
+            {payment.name}
+          </Link>
+          {payment.income ? <span className="row-mark">{t('common.income')}</span> : null}
+        </div>
+        <span className="cell-sub">{payment.category}</span>
+        <span className="cell-sub-end due-date">
+          {formatDate(payment.dueDate, locale)}
+          <span className="due-late">{late(payment)}</span>
+        </span>
+        {amount(payment)}
+      </Row>
+    )
   }
 
   return (
@@ -60,76 +125,13 @@ export default function DuePayments({
       </div>
       {due.payments.length === 0 ? <p className="hint">{t('debts.dueEmpty')}</p> : null}
       {due.payments.length > 0 ? (
-        <ul className={phone ? 'card-list' : 'card-list is-table has-action due-table'}>
-          {phone ? null : (
-            <li className="list-head" aria-hidden="true">
-              <span>{t('common.name')}</span>
-              <span>{t('common.category')}</span>
-              <span>{t('debts.colDue')}</span>
-              <span className="is-end">{t('tx.amount')}</span>
-              <span />
-            </li>
-          )}
-          {due.payments.map((payment) => {
-            const key = keyOf(payment)
-            const late = t('debts.daysLate', { count: payment.daysOverdue })
-            if (phone) {
-              return (
-                <TapRow
-                  key={key}
-                  id={`${panelId}-${key}`}
-                  open={openKey === key}
-                  onToggle={() => setOpenKey(openKey === key ? null : key)}
-                  name={payment.name}
-                  amount={amount(payment)}
-                  sub={
-                    <>
-                      <span>{payment.category}</span>
-                      <span>{t('debts.dueOn', { date: formatDate(payment.dueDate, locale) })}</span>
-                      <span className="due-late">{late}</span>
-                    </>
-                  }
-                >
-                  <div className="row-panel-actions">
-                    <Button variant="outline" onClick={() => onPay(payment)}>
-                      {t('rec.pay')}
-                    </Button>
-                    <Button variant="outline" onClick={() => onSkip(payment)}>
-                      {t('rec.skip')}
-                    </Button>
-                    <Link to={{ search: '' }} state={focus(payment)} className={buttonClass('outline')}>
-                      {t('common.details')}
-                    </Link>
-                  </div>
-                </TapRow>
-              )
-            }
-            return (
-              <li key={key} className="card-item">
-                <div className="cell-name">
-                  <Link className="card-name" to={{ search: '' }} state={focus(payment)} title={payment.name}>
-                    {payment.name}
-                  </Link>
-                  {payment.income ? <span className="row-mark">{t('common.income')}</span> : null}
-                </div>
-                <span className="cell-sub">{payment.category}</span>
-                <span className="cell-sub-end due-date">
-                  {formatDate(payment.dueDate, locale)}
-                  <span className="due-late">{late}</span>
-                </span>
-                {amount(payment)}
-                <div className="cell-actions">
-                  <Button variant="ghost" size="sm" onClick={() => onSkip(payment)}>
-                    {t('rec.skip')}
-                  </Button>
-                  <Button variant="outline" size="sm" className="row-primary" data-row-focus onClick={() => onPay(payment)}>
-                    {t('rec.pay')}
-                  </Button>
-                </div>
-              </li>
-            )
-          })}
-        </ul>
+        phone ? (
+          <ul className="card-list">{due.payments.map(tapRow)}</ul>
+        ) : (
+          <Table className="has-action due-table" heads={[t('common.name'), t('common.category'), t('debts.colDue'), { label: t('tx.amount'), className: 'is-end' }, '']}>
+            {due.payments.map(tableRow)}
+          </Table>
+        )
       ) : null}
     </>
   )
