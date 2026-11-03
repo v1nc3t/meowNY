@@ -1,6 +1,7 @@
 import { Fragment, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { place } from '../lib/placeList'
+import { focusChosen, useListKeys } from '../hooks/useListKeys'
 import { useT } from '../i18n/context'
 
 /** `group` puts the option under a heading: a heading is drawn where the group changes from the option before. */
@@ -39,7 +40,6 @@ export default function Dropdown({
   const buttonRef = useRef<HTMLButtonElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const listRef = useRef<HTMLUListElement>(null)
-  const typed = useRef({ text: '', timer: 0 })
   const selected = options.find((option) => option.value === value)
   const open = host !== null
   const shown = selected ? selected.label : ''
@@ -66,6 +66,8 @@ export default function Dropdown({
     setHost(null)
     anchor()?.focus()
   }
+
+  const onListKey = useListKeys(close)
 
   function openList() {
     const control = anchor()
@@ -113,8 +115,7 @@ export default function Dropdown({
     const control = anchor()
     if (!host || !list || !control) return
     place(list, control)
-    const first = list.querySelector<HTMLButtonElement>('[aria-selected="true"]') ?? list.querySelector('button')
-    first?.focus()
+    focusChosen(list)
   }, [host])
 
   return (
@@ -199,28 +200,10 @@ export default function Dropdown({
               role="listbox"
               aria-label={label}
               ref={listRef}
-              onKeyDown={(event) => {
-                const items = Array.from(event.currentTarget.querySelectorAll<HTMLButtonElement>('button'))
-                const at = items.indexOf(document.activeElement as HTMLButtonElement)
-                if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
-                  event.preventDefault()
-                  items[at + (event.key === 'ArrowDown' ? 1 : -1)]?.focus()
-                  return
-                }
-                // Type to jump: letters typed quickly build a prefix, and the first matching option gets focus.
-                if (event.key.length !== 1 || event.ctrlKey || event.metaKey || event.altKey) return
-                event.preventDefault()
-                window.clearTimeout(typed.current.timer)
-                typed.current.text += event.key.toLowerCase()
-                typed.current.timer = window.setTimeout(() => (typed.current.text = ''), 700)
-                const prefix = typed.current.text
-                const from = prefix.length > 1 ? at : at + 1
-                const ordered = [...items.slice(Math.max(from, 0)), ...items.slice(0, Math.max(from, 0))]
-                ordered.find((item) => item.textContent?.trim().toLowerCase().startsWith(prefix))?.focus()
-              }}
+              onKeyDown={onListKey}
             >
               {action ? (
-                <li>
+                <li role="presentation">
                   <button
                     type="button"
                     role="option"
@@ -241,7 +224,7 @@ export default function Dropdown({
                       {option.group}
                     </li>
                   ) : null}
-                  <li>
+                  <li role="presentation">
                     <button
                       type="button"
                       role="option"

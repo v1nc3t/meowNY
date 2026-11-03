@@ -128,6 +128,9 @@ export default function PersonCombo({
             event.preventDefault()
             event.stopPropagation()
             setHost(null)
+          } else if (event.key === 'Tab') {
+            // leaving the field closes its list, as the other dropdowns do
+            setHost(null)
           }
         }}
       />
