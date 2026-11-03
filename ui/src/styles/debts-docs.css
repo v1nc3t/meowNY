@@ -99,8 +99,7 @@ html.is-phone .tx-actions.debts-actions > .ui-btn {
   color: var(--muted-foreground);
 }
 
-/* The top of a friend's page on one line: back, "name:", the balance, then rename, mark as paid and remove. Where there is no room the
-   rest wraps onto the next line; a long name wraps rather than push it all out. */
+/* The top of a friend's page on one line: back on the left; rename, mark as paid and remove on the right. */
 .debts-name {
   display: flex;
   flex-wrap: wrap;
@@ -108,18 +107,14 @@ html.is-phone .tx-actions.debts-actions > .ui-btn {
   gap: 0.5rem 0.75rem;
 }
 
-.debts-name > h2 {
-  min-width: 0;
-  margin: 0;
-  overflow-wrap: anywhere;
+/* The space after back pushes the other buttons to the right. */
+.debts-name > :first-child {
+  margin-right: auto;
 }
 
-/* The space after the balance pushes rename, mark as paid and remove to the right. */
-.debts-name .debt-total {
-  margin: 0 auto 0 0;
-  font-size: 1rem;
-  font-weight: 600;
-  line-height: 1.4;
+/* The friend's name and balance, the title over their ledger; a long name wraps. */
+.debts-balance {
+  overflow-wrap: anywhere;
   font-variant-numeric: tabular-nums;
 }
 

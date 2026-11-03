@@ -34,7 +34,7 @@ type Dialog =
   | null
 
 /**
- * One friend's history: back, the name, the balance and the buttons that change the friend on one line, then the ledger with the
+ * One friend's history: back and the buttons that change the friend on one line, then the name and the balance over the ledger with the
  * buttons and documents of each line. It is the right half of the debts page, and the whole page of a friend on the phone. The page says
  * when to read again (`reload`) and is told when something changed (`onChanged`), so the list of friends beside it stays right.
  */
@@ -244,8 +244,6 @@ export default function FriendLedger({
         <Link to="/app/debts" className={buttonClass('outline', 'sm')}>
           {t('common.back')}
         </Link>
-        <h2>{person.name}:</h2>
-        <p className={`debt-total debt-${tone}`}>{summaryText}</p>
         <Button variant="outline" size="sm" onClick={() => setDialog({ kind: 'rename' })}>
           {t('common.rename')}
         </Button>
@@ -258,7 +256,10 @@ export default function FriendLedger({
           {t(person.archived ? 'debts.unarchive' : 'debts.archive')}
         </Button>
       </div>
-      <h2 className="debts-heading">{t('debts.ledger')}</h2>
+      {/* The title of the ledger is who it is with and where it stands. */}
+      <h2 className="debts-heading debts-balance">
+        {person.name}: <span className={`debt-${tone}`}>{summaryText}</span>
+      </h2>
       {lines.length === 0 ? <p className="hint">{t('debts.noLines')}</p> : null}
       {lines.length > 0 && phone
         ? byDay(lines, (line) => line.date).map((day) => (
