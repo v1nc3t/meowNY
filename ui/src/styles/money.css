@@ -237,10 +237,13 @@ ul.card-list.sum-list > li.card-item:not(.is-editing) .cell-amount {
   --grip-room: calc(12px + 0.5rem);
 }
 
+/* The grip sits out in the row's padding, away from the name; the room it gives on the left it takes on the right, so the names stay put. */
 .cat-list .row-grip {
   width: 12px;
   height: 12px;
   flex: none;
+  margin-left: -0.625rem;
+  margin-right: 0.625rem;
   color: var(--muted-foreground);
 }
 
