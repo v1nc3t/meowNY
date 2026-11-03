@@ -25,6 +25,7 @@ import { useToday, type Today } from '../api/today'
 import { categoryOptions } from '../lib/categoriesView'
 import { amountString, formatDate, formatMoney } from '../lib/money'
 import { draftOfTemplate, NOT_SPLIT, reducedWeights, toInput, type SplitState } from '../lib/split'
+import { tabPanelProps } from '../lib/tabs'
 import { useAttachments, type Attachments } from '../hooks/useAttachments'
 import { useClipCounts } from '../hooks/useClipCounts'
 import { useFocusRequest, useJumpTo } from '../hooks/useFocusRequest'
@@ -648,14 +649,14 @@ function RecurringView({ settings, now }: { settings: MoneySettings; now: Today 
         ]}
       />
       {tab === 'due' && due ? (
-        <div className="tx-pane wide pane-stack rec-due" role="tabpanel">
+        <div className="tx-pane wide pane-stack rec-due" {...tabPanelProps(tab)}>
           <h2 className="debts-heading">{t('rec.tabDue')}</h2>
           <DuePayments due={due} currency={settings.currency} locale={settings.locale} onPay={payDue} onSkip={setSkipping} />
           <PaidLatePayments currency={settings.currency} locale={settings.locale} reload={reload} />
         </div>
       ) : null}
       {tab === 'items' && items ? (
-        <div className="tx-pane wide">
+        <div className="tx-pane wide" {...tabPanelProps(tab)}>
           {items.length === 0 ? <EmptyState text={t('rec.empty')} action={{ label: t('rec.add'), onClick: openAdd }} /> : null}
           {items.length > 0 && phone ? <ul className="card-list">{rows.map(tapRow)}</ul> : null}
           {items.length > 0 && !phone ? (

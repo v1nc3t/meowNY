@@ -19,8 +19,8 @@
   --pixel-lg: 33px;
   --pixel-xl: 44px;
   /* Room that a scrolling area keeps around its content, so a scroll bar never covers the edge of a button
-     and a focus ring at the edge is not cut off. */
-  --edge: 0.25rem;
+     and a focus ring at the edge is not cut off: the ring is 2px wide and 2px away (base.css), in pixels, like this. */
+  --edge: 4px;
   --room: 0.875rem;
 
   /* Calm and square, with pixel touches: square corners everywhere, and shadows with no blur and no spread. Only the solid green button
@@ -70,7 +70,7 @@
   --border: #cfcfcf;
   --input: #8f8f8f;
   --ring: #166534;
-  --ring-soft: #16653440;
+  --ring-soft: #16653426;
   /* The hard shadow under a button or a raised box: dark on the light theme, a light tint on the dark one, so it always shows. */
   --press-shadow: rgb(0 0 0 / 0.25);
   --sidebar: #f5f5f5;
@@ -136,7 +136,7 @@
   --border: #3a3a3a;
   --input: #5c5c5c;
   --ring: #2e9e5e;
-  --ring-soft: #2e9e5e59;
+  --ring-soft: #2e9e5e40;
   --press-shadow: rgb(255 255 255 / 0.2);
   --sidebar: #111111;
   --success: #4ade80;
@@ -181,7 +181,7 @@
     --border: #3a3a3a;
     --input: #5c5c5c;
     --ring: #2e9e5e;
-    --ring-soft: #2e9e5e59;
+    --ring-soft: #2e9e5e40;
     --press-shadow: rgb(255 255 255 / 0.2);
     --sidebar: #111111;
     --success: #4ade80;

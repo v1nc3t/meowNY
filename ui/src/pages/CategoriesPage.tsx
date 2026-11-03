@@ -22,6 +22,7 @@ import { useSwipeHandler } from '../hooks/swipe'
 import { applyOrder } from '../lib/reorder'
 import { step } from '../lib/swipe'
 import { useSticky } from '../lib/sticky'
+import { tabPanelProps } from '../lib/tabs'
 import { useReorder } from '../hooks/useReorder'
 import { useToast } from '../hooks/toast'
 import { useI18n, useT } from '../i18n/context'
@@ -363,7 +364,7 @@ function CategoriesView({ settings, thisMonth }: { settings: MoneySettings; this
             onChange={setTab}
             tabs={tabs.map((name) => ({ id: name, label: t(name === 'EXPENSE' ? 'budgets.expenses' : name === 'INCOME' ? 'budgets.income' : 'budgets.history') }))}
           />
-          <div className="tx-pane wide budget-view" role="tabpanel" ref={paneRef}>
+          <div className="tx-pane wide budget-view" {...tabPanelProps(tab)} ref={paneRef}>
             {tab === 'EXPENSE' ? halves[0] : null}
             {tab === 'INCOME' ? halves[1] : null}
             {tab === 'HISTORY' ? historyList : null}

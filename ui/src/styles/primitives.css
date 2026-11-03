@@ -401,6 +401,16 @@ ul.card-list > li.card-item.is-selected {
   box-shadow: inset 2px 0 0 var(--primary);
 }
 
+/* The row that the keyboard is on (not one that was clicked) is tinted in the ring colour, round the button that has the ring. Focus in
+   the panel of an open row does not tint it. A row of the phone is one button, which shows its ring inside the row. */
+ul.card-list > li.card-item:has(:focus-visible):not(:has(> .row-panel :focus-visible)) {
+  background: var(--ring-soft);
+}
+
+ul.card-list > li.card-item.tap-row > .row-toggle:focus-visible {
+  outline-offset: -2px;
+}
+
 /* The transactions and the recurring items open on a click anywhere on the row (toggleRow in lib/toggleRow.ts): the pointer and the shade
    are for the rows that have a chevron, and the open panel is plain again. */
 ul.card-list.is-table > li.card-item:has(> .cell-actions [aria-expanded]) {
@@ -507,6 +517,11 @@ ul.card-list > li.list-head > .is-end {
   text-overflow: ellipsis;
   white-space: nowrap;
   overflow-wrap: normal;
+}
+
+/* The name cuts its end short, and with it the ring of a link in it: the ring goes inside. */
+.card-name a:focus-visible {
+  outline-offset: -2px;
 }
 
 .cell-sub,

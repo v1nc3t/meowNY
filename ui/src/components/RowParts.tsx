@@ -1,5 +1,5 @@
 import type { ComponentProps, ReactNode } from 'react'
-import type { OpenRows } from '../hooks/useOpenRow'
+import { closeOnEscape, type OpenRows } from '../hooks/useOpenRow'
 import { useT } from '../i18n/context'
 import { byDay, dayHeading } from '../lib/dayHeading'
 import { toggleRow } from '../lib/toggleRow'
@@ -72,7 +72,12 @@ export function Row({
   const opens = rows && id !== undefined ? { rows, id, panelId: rows.panelId(id) } : null
   const open = more && opens !== null && opens.rows.isOpen(opens.id)
   return (
-    <li className={cn('card-item', className, open && 'is-open')} data-item={item} {...rest}>
+    <li
+      className={cn('card-item', className, open && 'is-open')}
+      data-item={item}
+      onKeyDown={opens ? (event) => closeOnEscape(event, open, () => opens.rows.toggle(opens.id)) : undefined}
+      {...rest}
+    >
       {children}
       <div className="cell-actions">
         {actions}
@@ -198,7 +203,12 @@ export function TapRow({
     </>
   )
   return (
-    <li className={open ? 'card-item tap-row is-open' : 'card-item tap-row'} data-item={item} {...rest}>
+    <li
+      className={open ? 'card-item tap-row is-open' : 'card-item tap-row'}
+      data-item={item}
+      onKeyDown={onToggle ? (event) => closeOnEscape(event, open, onToggle) : undefined}
+      {...rest}
+    >
       {children ? (
         <button type="button" className="row-toggle" aria-expanded={open} aria-controls={open ? id : undefined} onClick={onToggle}>
           {inside}

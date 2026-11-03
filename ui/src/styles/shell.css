@@ -375,8 +375,8 @@ body:has(.app-shell.is-locked) {
    button or a card, and a focus ring at the edge of the content is not cut off by the area. The page grows by the same
    amount into the margin, so nothing moves. */
 .app-shell.is-locked .tx-page {
-  margin-inline: calc(var(--edge) * -1);
-  padding-inline: var(--edge);
+  margin: calc(var(--edge) * -1) calc(var(--edge) * -1) 0;
+  padding: var(--edge) var(--edge) 0;
 }
 
 .app-main main > section > .tx-pane.wide {

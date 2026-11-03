@@ -356,6 +356,11 @@
   color: var(--foreground);
 }
 
+/* The name cuts its end short, and with it the ring of a link in it: the ring goes inside. */
+.legend-name a:focus-visible {
+  outline-offset: -2px;
+}
+
 .legend-pct {
   color: var(--muted-foreground);
   font-variant-numeric: tabular-nums;

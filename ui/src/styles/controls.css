@@ -190,13 +190,8 @@
   background: transparent;
 }
 
-.pick-input[aria-invalid='true'],
-.pick-input[aria-invalid='true']:focus {
+.pick-input[aria-invalid='true'] {
   border-color: var(--destructive);
-}
-
-.pick-input[aria-invalid='true']:focus {
-  box-shadow: 0 0 0 1px var(--destructive);
 }
 
 /* Linking a payment to a transaction (the dialog of "mark as paid"): the button that opens the search, the line for the one chosen, and

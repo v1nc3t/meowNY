@@ -519,12 +519,6 @@
   cursor: pointer;
 }
 
-/* A field's focus is its border, and the slider has none, so it takes the usual outline back. */
-.settings-rows input.settings-range:focus-visible {
-  outline: 2px solid var(--ring);
-  outline-offset: 2px;
-}
-
 .settings-range::-webkit-slider-runnable-track {
   height: 4px;
   background: var(--input);

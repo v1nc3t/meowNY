@@ -266,19 +266,23 @@ p:empty {
   color: var(--muted-foreground);
 }
 
+/* The one focus ring, for buttons, links, fields and the rest: 2px in the ring colour with a 2px gap, so it also shows round a green
+   button. A field shows it when it is clicked as well. */
 :focus-visible {
   outline: 2px solid var(--ring);
   outline-offset: 2px;
 }
 
-/* Fields show focus with a border in the ring colour, one pixel thicker (a spread with no offset), instead of an outline. */
-input:focus:not([type='checkbox'], [type='radio']),
-textarea:focus,
-select:focus,
-.pick-button:focus {
-  outline: none;
-  border-color: var(--ring);
-  box-shadow: 0 0 0 1px var(--ring);
+/* Where the keyboard scrolls a control into view it stops short of the edge, so the ring is not cut off. */
+.tx-pane,
+.modal-panel,
+.export-groups {
+  scroll-padding: var(--edge);
+}
+
+/* A box that is a stop but no control (a tab panel, the export preview) scrolls, and its parent cuts what is outside it: the ring goes inside. */
+[tabindex='0']:not(a, button, input, select, textarea, summary):focus-visible {
+  outline-offset: -2px;
 }
 
 :where(form) {
