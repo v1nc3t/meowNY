@@ -612,6 +612,8 @@ export const ro: Messages = {
   'docs.keepOnPhone': 'păstrează pe telefon',
   'docs.date': 'data documentului',
   'docs.size': 'dimensiune',
+  'docs.colPhone': 'telefon',
+  'docs.colLinks': 'legături',
   'docs.links': 'legat de',
   'docs.noLinks': 'încă nu este atașat la nimic.',
   'docs.kindTransaction': 'tranzacție',

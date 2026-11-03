@@ -615,6 +615,8 @@ export const de: Messages = {
   'docs.keepOnPhone': 'auf dem handy behalten',
   'docs.date': 'datum des dokuments',
   'docs.size': 'größe',
+  'docs.colPhone': 'handy',
+  'docs.colLinks': 'verknüpft',
   'docs.links': 'verknüpft mit',
   'docs.noLinks': 'noch an nichts angehängt.',
   'docs.kindTransaction': 'buchung',

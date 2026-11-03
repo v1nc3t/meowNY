@@ -614,6 +614,8 @@ export const es: Messages = {
   'docs.keepOnPhone': 'mantener en el móvil',
   'docs.date': 'fecha del documento',
   'docs.size': 'tamaño',
+  'docs.colPhone': 'móvil',
+  'docs.colLinks': 'vínculos',
   'docs.links': 'vinculado a',
   'docs.noLinks': 'todavía no está adjunto a nada.',
   'docs.kindTransaction': 'transacción',

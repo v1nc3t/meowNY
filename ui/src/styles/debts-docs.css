@@ -674,10 +674,89 @@ ul.card-list > li.list-head > .span-2 {
   gap: 0.5rem;
 }
 
-/* The documents: name, day (13 characters of small print), size ("1.023,9 KB"), then preview, details, save a copy and delete (four
-   buttons of 2rem). */
+/* The documents: name, day (13 characters of small print), size ("1.023,9 KB"), the box to keep the document on the phone, how many things
+   it is attached to, then preview, details, save a copy and delete (four buttons of 2rem and three gaps of 0.125rem, 8.5rem). The two
+   new heads are small print too: 9 characters of 0.8125rem are 7.3 characters of the row, so 7.5ch holds "téléphone" and "telemóvel", and
+   a paper clip with a number of three digits; a longer head ("verknüpft mit") takes a second line. With these the columns take 30.7rem,
+   the gaps 5rem and the padding 2.5rem, which leaves the name 10rem from 48.2em (a window of about 1080px; the app opens at 1100px).
+   Narrower, a row is two lines (see below). */
 .card-list.doc-table {
-  --cols: minmax(0, 3fr) 12ch 6rem 9.5rem;
+  --cols: minmax(10rem, 1fr) 12ch 6rem 7.5ch 7.5ch 8.5rem;
+}
+
+/* The box is at the left of its column, under the word of the head, and so is the paper clip (its padding goes to the left). The word
+   beside the box is the head's, so it shows only where there is no head. */
+.doc-table .cell-keep {
+  width: auto;
+  justify-self: start;
+}
+
+.doc-table .cell-keep > span {
+  display: none;
+  font-size: 0.875rem;
+  white-space: nowrap;
+  color: var(--muted-foreground);
+}
+
+.doc-table .clip {
+  margin-left: -0.375rem;
+}
+
+/* Under 48.2em a row is two lines: the name, how many things it is attached to and the buttons, then the day, the size and the box with
+   its word. The buttons are beside both lines, and the paper clip and the box share a column, so they line up. */
+@container (max-width: 48.2em) {
+  ul.card-list.doc-table > li.list-head {
+    display: none;
+  }
+
+  ul.card-list.doc-table > li.list-head + li {
+    border-top: 0;
+  }
+
+  ul.card-list.doc-table > li.card-item {
+    grid-template-columns: minmax(0, 1fr) auto auto auto;
+    grid-template-areas:
+      'name name links actions'
+      'sub sub-end keep actions';
+    row-gap: 0;
+  }
+
+  ul.card-list.doc-table .cell-name {
+    grid-area: name;
+  }
+
+  ul.card-list.doc-table .cell-sub {
+    grid-area: sub;
+  }
+
+  ul.card-list.doc-table .cell-sub-end {
+    grid-area: sub-end;
+    text-align: right;
+  }
+
+  ul.card-list.doc-table .cell-keep {
+    grid-area: keep;
+  }
+
+  ul.card-list.doc-table .cell-keep > span {
+    display: inline;
+  }
+
+  ul.card-list.doc-table .cell-links {
+    grid-area: links;
+  }
+
+  ul.card-list.doc-table .cell-actions {
+    grid-area: actions;
+  }
+}
+
+/* In under 33em the day would be cut (13 characters, "2026. 12. 28.", in a column that the word of the box leaves too narrow), so the box
+   has no word. */
+@container (max-width: 33em) {
+  ul.card-list.doc-table .cell-keep > span {
+    display: none;
+  }
 }
 
 /* A note under a row (where the file is, when it is not here): across all the columns. */

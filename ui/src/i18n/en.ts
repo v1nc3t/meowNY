@@ -627,6 +627,8 @@ export const en = {
   'docs.keepOnPhone': 'keep on phone',
   'docs.date': 'date of the document',
   'docs.size': 'size',
+  'docs.colPhone': 'phone',
+  'docs.colLinks': 'links',
   'docs.links': 'linked to',
   'docs.noLinks': 'not attached to anything yet.',
   'docs.kindTransaction': 'transaction',

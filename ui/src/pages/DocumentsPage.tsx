@@ -54,6 +54,8 @@ function DocumentsView({ settings }: { settings: MoneySettings }) {
   const [linking, setLinking] = useState<Doc | null>(null)
   const [deleting, setDeleting] = useState<Doc | null>(null)
   const [busy, setBusy] = useState(false)
+  // The documents whose "keep on phone" is being saved, with the value asked for: the box shows it and is off until the app answers.
+  const [keeping, setKeeping] = useState<Record<string, boolean>>({})
   // Held over the window by a drag. On the computer the window takes the drop itself (the web view cannot be relied on to hand a page the
   // files), and the page is told.
   const [dragging, setDragging] = useState(false)
@@ -187,6 +189,31 @@ function DocumentsView({ settings }: { settings: MoneySettings }) {
     }
   }
 
+  // "Keep on phone" saves as soon as the box is ticked (the same call as the switch in the details). The row becomes the document the app
+  // gives back; if the app says no, the box goes back to what it was.
+  async function onKeep(doc: Doc, keep: boolean) {
+    setKeeping((now) => ({ ...now, [doc.id]: keep }))
+    try {
+      const saved = await documents.update(doc.id, { keepOnPhone: keep })
+      setPage((now) => now && { ...now, documents: now.documents.map((row) => (row.id === saved.id ? saved : row)) })
+    } catch (failure) {
+      say(errorText(failure), 'error')
+    } finally {
+      setKeeping((now) => {
+        const rest = { ...now }
+        delete rest[doc.id]
+        return rest
+      })
+    }
+  }
+
+  /** What the "keep on phone" box of a document needs: it shows the value being saved, if there is one. */
+  const keepProps = (doc: Doc) => ({
+    checked: keeping[doc.id] ?? doc.keepOnPhone,
+    disabled: doc.id in keeping,
+    onChange: (event: ChangeEvent<HTMLInputElement>) => void onKeep(doc, event.target.checked),
+  })
+
   // Keyboard: n adds a file, / searches, j and k move between rows.
   useShortcut('new', () => fileInput.current?.click())
   useShortcut('search', () => searchRef.current?.focus())
@@ -201,7 +228,8 @@ function DocumentsView({ settings }: { settings: MoneySettings }) {
   /** Where the file is, in words, when that is not simply here. */
   const stateOf = (doc: Doc) => fileStateText(fileState(doc, phone))
 
-  // A desktop row: the name, the day, the size, then preview, details, save a copy and delete.
+  // A desktop row: the name, the day, the size, keep on phone, how many things the document is attached to, then preview, details, save a
+  // copy and delete.
   function tableRow(doc: Doc) {
     const state = stateOf(doc)
     return (
@@ -211,11 +239,15 @@ function DocumentsView({ settings }: { settings: MoneySettings }) {
           <span className="card-name" title={doc.name}>
             {doc.name}
           </span>
-          {doc.keepOnPhone ? <span className="row-mark">{t('docs.keepOnPhone')}</span> : null}
-          {doc.linkCount > 0 ? <ClipMark inline count={doc.linkCount} onClick={() => setLinking(doc)} /> : null}
         </div>
         <span className="cell-sub">{formatDate(doc.documentDate, locale)}</span>
         <span className="cell-sub-end">{formatSize(doc.sizeBytes, locale)}</span>
+        {/* The head names this column; the word beside the box shows only in a narrow list, which has no head. */}
+        <label className="cell-keep" title={t('docs.keepOnPhone')}>
+          <input type="checkbox" aria-label={`${doc.name} ${t('docs.keepOnPhone')}`} {...keepProps(doc)} />
+          <span aria-hidden="true">{t('docs.colPhone')}</span>
+        </label>
+        <div className="cell-links">{doc.linkCount > 0 ? <ClipMark count={doc.linkCount} onClick={() => setLinking(doc)} /> : null}</div>
         <div className="cell-actions">
           <IconAction icon="eye" label={t('docs.previewButton')} disabled={!canPreview(doc)} onClick={() => setPreviewing(doc)} />
           <IconAction icon="pencil" label={t('docs.details')} data-row-focus onClick={() => setViewing(doc.id)} />
@@ -228,7 +260,8 @@ function DocumentsView({ settings }: { settings: MoneySettings }) {
   }
 
   // A phone row: the name and the size, the day and where the file is under them. It opens to a labelled button for each thing to do
-  // (a file that stays on the computer gets a note and a button to keep it, instead of the preview; the note then replaces the small line).
+  // (a file that stays on the computer gets a note and a button to keep it, instead of the preview; the note then replaces the small line;
+  // any other gets the box to keep it on the phone).
   function tapRow(doc: Doc) {
     const state = stateOf(doc)
     const offer = canKeepToPreview(doc, phone)
@@ -254,6 +287,12 @@ function DocumentsView({ settings }: { settings: MoneySettings }) {
             <ClipMark count={doc.linkCount} onClick={() => setLinking(doc)} />
           </section>
         ) : null}
+        {offer ? null : (
+          <label>
+            <input type="checkbox" {...keepProps(doc)} />
+            {t('docs.keepOnPhone')}
+          </label>
+        )}
         <div className="row-panel-actions">
           {offer ? (
             <KeepToPreview doc={doc} onKept={refresh} />
@@ -368,6 +407,9 @@ function DocumentsView({ settings }: { settings: MoneySettings }) {
                   <span>{t('common.name')}</span>
                   <span>{t('sync.field.date')}</span>
                   <span>{t('docs.size')}</span>
+                  <span>{t('docs.colPhone')}</span>
+                  {/* A short head, so it fits the column on one line in every language. */}
+                  <span>{t('docs.colLinks')}</span>
                   <span />
                 </li>
                 {page.documents.map(tableRow)}
