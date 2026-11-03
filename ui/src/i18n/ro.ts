@@ -296,6 +296,7 @@ export const ro: Messages = {
   'rec.dueToday': 'scadent azi',
   'rec.paused': 'în pauză',
   'rec.ended': 'încheiat',
+  'rec.ongoing': 'în curs',
   'rec.pay': 'marchează ca plătit',
   'rec.payTitle': 'marchează ca plătit',
   'rec.paidAmount': 'suma plătită',

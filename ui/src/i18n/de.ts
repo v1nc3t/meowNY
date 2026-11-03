@@ -299,6 +299,7 @@ export const de: Messages = {
   'rec.dueToday': 'heute fällig',
   'rec.paused': 'pausiert',
   'rec.ended': 'beendet',
+  'rec.ongoing': 'laufend',
   'rec.pay': 'als bezahlt markieren',
   'rec.payTitle': 'als bezahlt markieren',
   'rec.paidAmount': 'bezahlter betrag',

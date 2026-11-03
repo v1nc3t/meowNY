@@ -311,6 +311,7 @@ export const en = {
   'rec.dueToday': 'due today',
   'rec.paused': 'paused',
   'rec.ended': 'ended',
+  'rec.ongoing': 'ongoing',
   'rec.pay': 'mark as paid',
   'rec.payTitle': 'mark as paid',
   'rec.paidAmount': 'amount paid',

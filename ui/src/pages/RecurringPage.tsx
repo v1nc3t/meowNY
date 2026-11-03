@@ -344,13 +344,16 @@ function RecurringView({ settings, now }: { settings: MoneySettings; now: Today 
     return <span className={income ? 'cell-amount is-income' : 'cell-amount'}>{income ? `+${text}` : text}</span>
   }
 
-  /** The small marks after a name: shared with friends, a note, the documents (a button on the desktop, only its number on the phone). */
+  /**
+   * The small marks after a name: the documents (a button on the desktop, only its number on the phone) and, on the phone, shared with
+   * friends and a note. (The desktop's rows have a column for shared, and the note is in the panel.)
+   */
   function marks(item: Recurring) {
     const count = clips[item.id] ?? 0
     return (
       <>
-        {item.split ? <span className="row-mark">{t('tx.shared')}</span> : null}
-        {item.description?.trim() ? (
+        {phone && item.split ? <span className="row-mark">{t('tx.shared')}</span> : null}
+        {phone && item.description?.trim() ? (
           <span className="row-mark-icon" title={t('common.description')}>
             <Icon name="note" className="mark-icon" />
             <span className="sr-only">{t('common.description')}</span>
@@ -411,31 +414,44 @@ function RecurringView({ settings, now }: { settings: MoneySettings; now: Today 
 
   const resume = (item: Recurring) => void run(() => recurringApi.setActive(item.id, true))
 
-  // A desktop row: name, amount, next due date, category, how often, then the one thing to do (mark as paid), edit, delete and the
-  // chevron. Skip, pause and end are in the panel the chevron opens.
+  // A desktop row: name, amount, next due date (with "overdue" or "due today" under it), category, how often, ongoing, paused or ended, an
+  // icon if it is shared, then the one thing to do (mark as paid), edit, delete and the chevron. Skip, pause and end are in the panel
+  // the chevron opens.
   function tableRow({ item, category }: { item: Recurring; category: string }) {
     const status = statusOf(item, now.date)
     const badge = badgeOf(item, status)
     const open = openId === item.id
     const more = status !== 'ended' || Boolean(item.split) || Boolean(item.description?.trim())
     const label = `${panelId}-${item.id}`
+    const late = status === 'overdue' || status === 'today'
     return (
       <li key={item.id} className={open ? 'card-item is-open' : 'card-item'} data-status={status} data-item={`recurring:${item.id}`}>
         <div className="cell-name">
           <span className="card-name" title={item.name}>
             {item.name}
           </span>
-          {status !== 'upcoming' ? <Badge variant={STATE_BADGE[status]}>{badge.state}</Badge> : null}
           {marks(item)}
         </div>
         {amount(item)}
-        <span className="cell-sub-end">{badge.date}</span>
+        <span className={status === 'overdue' ? 'cell-sub-end is-overdue' : 'cell-sub-end'}>
+          {badge.date}
+          {late ? <span className="cell-fine">{badge.state}</span> : null}
+        </span>
         <div className="rec-sub">
           <span className="cell-sub" title={category}>
             {category}
           </span>
-          <span className="cell-sub" title={everyText(item)}>
+          <span className="cell-sub rec-often" title={everyText(item)}>
             {everyText(item)}
+          </span>
+          <span className="cell-sub rec-state">{t(status === 'paused' ? 'rec.paused' : status === 'ended' ? 'rec.ended' : 'rec.ongoing')}</span>
+          <span className="cell-mark">
+            {item.split ? (
+              <span className="row-mark-icon" title={t('tx.shared')}>
+                <Icon name="qr" className="mark-icon" />
+                <span className="sr-only">{t('tx.shared')}</span>
+              </span>
+            ) : null}
           </span>
         </div>
         <div className="cell-actions">
@@ -638,13 +654,15 @@ function RecurringView({ settings, now }: { settings: MoneySettings; now: Today 
           {items.length === 0 ? <EmptyState text={t('rec.empty')} action={{ label: t('rec.add'), onClick: openAdd }} /> : null}
           {items.length > 0 && phone ? <ul className="card-list">{rows.map((row) => tapRow(row))}</ul> : null}
           {items.length > 0 && !phone ? (
-            <ul className="card-list is-table has-action rec-table" onClick={toggleRow}>
+            <ul className="card-list is-table rec-table" onClick={toggleRow}>
               <li className="list-head" aria-hidden="true">
                 <span>{t('common.name')}</span>
                 <span className="is-end">{t('tx.amount')}</span>
                 <span>{t('sync.field.nextDue')}</span>
                 <span>{t('common.category')}</span>
                 <span>{t('sync.field.every')}</span>
+                <span>{t('debts.colStatus')}</span>
+                <span />
                 <span />
               </li>
               {rows.map((row) => tableRow(row))}

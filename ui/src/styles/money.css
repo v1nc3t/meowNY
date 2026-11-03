@@ -404,9 +404,9 @@ ul.card-list.hist-list > li.card-item {
 }
 
 /* Lists with one labelled button in each row (mark as paid, resume, remove): the words stay on one line, so the column of the buttons is as
-   wide as the longest label in any language ("als bezahlt markieren", 21 characters). The recurring items and the due payments are
-   `.has-action`: wide lists that keep their short two-line rows below 62em instead of 40em, which is what their columns need. (The
-   friends, who have a button too, have rules of their own in debts-docs.css.) */
+   wide as the longest label in any language ("als bezahlt markieren", 21 characters). The due payments are `.has-action`: a wide list
+   that keeps its short two-line rows below 62em instead of 40em, which is what its columns need. (The recurring items and the friends,
+   who have a button too, have rules of their own.) */
 .row-primary {
   flex: none;
   height: auto;
@@ -465,15 +465,16 @@ ul.card-list.hist-list > li.card-item {
   }
 }
 
-/* Recurring: name, amount, next due date, category, how often, then mark as paid, edit, delete and the chevron. Six columns are a lot for
-   a list, so the padding is a little narrower and the columns are as wide as their words (an amount of 16 characters, a date of 13,
-   and "how often" of 11 on a line: a longer one takes a second line, "toutes les 12 / semaines"). The buttons are 19rem: "als bezahlt
-   markieren" (21 characters of 0.875rem), the padding, the edit, delete and chevron buttons. All that leaves a name of 7rem and a
-   category of 4rem at 62em, where the wide layout starts (a window of about 1360px, or 1150px with the sidebar closed); the name is
-   longer than that when there is more room, and one that is longer than its room wraps. The category and how often are two columns on a
-   wide list and one line of small print (the wrapper is the cell) on a narrow one. */
+/* Recurring: name, amount, next due date, category, how often, ongoing / paused / ended, an icon if it is shared, then mark as paid, edit,
+   delete and the chevron. Eight columns are a lot for a list, so the padding is a little narrower and the columns are as wide as their
+   words: an amount of 16 characters, a date of 13, "how often" of 11 on a line (a longer one takes a second line, "toutes les 12 /
+   semaines"), the state of 10 ("terminado", in 9.5ch of small print) and the icon. The buttons are 19rem: "als bezahlt markieren"
+   (21 characters of 0.875rem), the padding, the edit, delete and chevron buttons. All that leaves a name of 7rem and a category of 4rem
+   at 72em, where the wide layout starts (a window of about 1540px, or 1380px with the sidebar closed); the name is longer than that
+   when there is more room, and one that is longer than its room wraps. Narrower, a row is two lines (below), and the category, how
+   often, the state and the icon are one line of small print (the wrapper is the cell) under the name. */
 .card-list.rec-table {
-  --cols: minmax(0, 1.8fr) 16ch 12ch minmax(0, 1fr) 11ch calc(18.5ch + 8rem);
+  --cols: minmax(0, 1.8fr) 16ch 12ch minmax(0, 1fr) 11ch 9.5ch 1.5rem calc(18.5ch + 8rem);
 }
 
 ul.card-list.rec-table > li.card-item,
@@ -506,22 +507,83 @@ ul.card-list.rec-table .cell-actions {
   display: contents;
 }
 
-.rec-table .rec-sub > .cell-sub:last-child {
+/* "How often" may take two lines in its column, and what is under the date ("overdue", "due today") too. */
+.rec-table .rec-often,
+.rec-table .cell-fine {
   white-space: normal;
 }
 
-/* On a narrow list "how often" keeps its line (a second one only when the cell is narrower than the words) and the category gives way. */
-@container (max-width: 62em) {
+/* Overdue is red, the date and the word under it. */
+.rec-table .cell-sub-end.is-overdue,
+.rec-table .cell-sub-end.is-overdue .cell-fine {
+  color: var(--destructive);
+}
+
+/* The icon of a shared item is in the middle of its column. */
+.rec-table .cell-mark {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Under 72em a row is two lines: the name, the amount and the buttons, then the date and one line of small print on the left: the
+   category, how often, the state and the icon. The category gives way (it is the person's own word), the others keep their line, a second
+   one only when the cell is narrower than the words; and when they do not all fit they go on to another line. */
+@container (max-width: 72em) {
+  ul.card-list.rec-table > li.list-head {
+    display: none;
+  }
+
+  ul.card-list.rec-table > li.list-head + li {
+    border-top: 0;
+  }
+
+  ul.card-list.rec-table > li.card-item {
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    grid-template-areas:
+      'name amount actions'
+      'sub sub-end actions';
+    row-gap: 0;
+  }
+
+  ul.card-list.rec-table .cell-name {
+    grid-area: name;
+  }
+
+  ul.card-list.rec-table .cell-amount {
+    grid-area: amount;
+  }
+
+  ul.card-list.rec-table .cell-sub-end {
+    grid-area: sub-end;
+    text-align: right;
+  }
+
+  ul.card-list.rec-table .cell-actions {
+    grid-area: actions;
+  }
+
   ul.card-list.rec-table .rec-sub {
     display: flex;
+    flex-wrap: wrap;
+    align-items: center;
     grid-area: sub;
-    gap: 0.25rem 1rem;
+    gap: 0.125rem 1rem;
     min-width: 0;
   }
 
-  ul.card-list.rec-table .rec-sub > .cell-sub:last-child {
+  ul.card-list.rec-table .rec-sub > .cell-sub:first-child {
+    flex: 1 1 0;
+    min-width: 4rem;
+  }
+
+  ul.card-list.rec-table .rec-sub > :not(:first-child) {
     flex: none;
     max-width: 100%;
+  }
+
+  ul.card-list.rec-table .rec-sub > .cell-mark:empty {
+    display: none;
   }
 }
 

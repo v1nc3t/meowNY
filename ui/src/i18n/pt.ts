@@ -298,6 +298,7 @@ export const pt: Messages = {
   'rec.dueToday': 'vence hoje',
   'rec.paused': 'em pausa',
   'rec.ended': 'terminado',
+  'rec.ongoing': 'em curso',
   'rec.pay': 'marcar como pago',
   'rec.payTitle': 'marcar como pago',
   'rec.paidAmount': 'valor pago',
