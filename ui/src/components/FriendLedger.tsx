@@ -1,4 +1,4 @@
-import { useEffect, useId, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { debts, type Entry, type Line, type Person, type Statement } from '../api/debts'
 import { ApiError, errorText } from '../api/invoke'
@@ -6,20 +6,19 @@ import type { Today } from '../api/today'
 import { useClipCounts } from '../hooks/useClipCounts'
 import { useFocusRequest, useGoToTransaction, useJumpTo } from '../hooks/useFocusRequest'
 import type { MoneySettings } from '../hooks/useMoneySettings'
+import { useOpenRow } from '../hooks/useOpenRow'
 import { useToast } from '../hooks/toast'
 import { useProfile } from '../hooks/profile'
 import { useT } from '../i18n/context'
 import { balanceView, entryOfLine, noteOf } from '../lib/balance'
-import { byDay, dayHeading } from '../lib/dayHeading'
 import { formatDate, formatMoney } from '../lib/money'
 import { remindersChanged } from '../lib/reminders'
-import { toggleRow } from '../lib/toggleRow'
 import BillCodeModal from './BillCodeModal'
 import ClipPreview from './ClipPreview'
 import ConfirmModal from './ConfirmModal'
 import EntryModal from './EntryModal'
 import Icon from './NavIcon'
-import { Disclosure, IconAction, NoteSection, TapRow } from './RowParts'
+import { DayGroups, IconAction, NoteSection, Row, Table, TapRow } from './RowParts'
 import SettleModal from './SettleModal'
 import Button from './ui/Button'
 import { buttonClass } from './ui/cn'
@@ -55,8 +54,7 @@ export default function FriendLedger({
 }) {
   const t = useT()
   const phone = useProfile() === 'phone'
-  const panelId = useId()
-  const [openKey, setOpenKey] = useState<string | null>(null)
+  const rows = useOpenRow()
   const goToTransaction = useGoToTransaction()
   const [statement, setStatement] = useState<Statement | null>(null)
   const [missing, setMissing] = useState(false)
@@ -141,7 +139,6 @@ export default function FriendLedger({
   /** What a line changed: what the friend owes you more (green) or less (red). */
   const change = (line: Line) => <span className={`cell-amount debt-${line.effect.startsWith('-') ? 'owe' : 'owed'}`}>{effectText(line)}</span>
   const showCode = (line: Line) => setDialog({ kind: 'code', transactionId: line.transactionId ?? '', amount: line.amount })
-  const toggle = (key: string) => setOpenKey(openKey === key ? null : key)
 
   // A desktop row: what it was, when, how much it changed, the balance after it, then its buttons (go to the transaction; show code for a
   // bill; edit and delete for an entry of the person's own) and the chevron of a note, which opens under the row.
@@ -150,9 +147,32 @@ export default function FriendLedger({
     const count = line.entryId ? (clips[line.entryId] ?? 0) : 0
     const note = noteOf(line)
     const key = lineKey(line, at)
-    const open = openKey === key
     return (
-      <li key={key} className={open ? 'card-item is-open' : 'card-item'} data-item={lineItem(line)}>
+      <Row
+        key={key}
+        rows={rows}
+        id={key}
+        item={lineItem(line)}
+        actions={
+          <>
+            {line.transactionId ? <IconAction icon="transactions" label={t('debts.goToTransaction')} onClick={() => goToTransaction(line)} /> : null}
+            {line.kind === 'BILL' && line.transactionId ? (
+              <>
+                <IconAction icon="qr" label={t('code.show')} data-row-focus onClick={() => showCode(line)} />
+                {/* where an entry has delete, so that the buttons of bills and entries line up */}
+                <span className="icon-slot" />
+              </>
+            ) : null}
+            {entry ? (
+              <>
+                <IconAction icon="pencil" label={t('common.edit')} data-row-focus onClick={() => setDialog({ kind: 'entry', entry })} />
+                <IconAction icon="trash" label={t('common.delete')} danger onClick={() => setDialog({ kind: 'delete', entry })} />
+              </>
+            ) : null}
+          </>
+        }
+        panel={note ? <NoteSection note={note} /> : null}
+      >
         <div className="cell-name">
           <span className="card-name" title={lineLabel(line)}>
             {lineLabel(line)}
@@ -162,47 +182,25 @@ export default function FriendLedger({
         <span className="cell-sub">{formatDate(line.date, settings.locale)}</span>
         {change(line)}
         <span className="cell-sub-end">{money(line.balance)}</span>
-        <div className="cell-actions">
-          {line.transactionId ? <IconAction icon="transactions" label={t('debts.goToTransaction')} onClick={() => goToTransaction(line)} /> : null}
-          {line.kind === 'BILL' && line.transactionId ? (
-            <>
-              <IconAction icon="qr" label={t('code.show')} data-row-focus onClick={() => showCode(line)} />
-              {/* where an entry has delete, so that the buttons of bills and entries line up */}
-              <span className="icon-slot" />
-            </>
-          ) : null}
-          {entry ? (
-            <>
-              <IconAction icon="pencil" label={t('common.edit')} data-row-focus onClick={() => setDialog({ kind: 'entry', entry })} />
-              <IconAction icon="trash" label={t('common.delete')} danger onClick={() => setDialog({ kind: 'delete', entry })} />
-            </>
-          ) : null}
-          <Disclosure more={note !== ''} open={open} controls={`${panelId}-${key}`} onClick={() => toggle(key)} />
-        </div>
-        {open && note ? (
-          <div className="row-panel tx-detail" id={`${panelId}-${key}`}>
-            <NoteSection note={note} />
-          </div>
-        ) : null}
-      </li>
+      </Row>
     )
   }
 
   // A phone row: what it was and how much it changed, the balance under them. It opens to its note, its documents and a labelled button
   // for each thing that can be done; a line with none of them is plain.
-  function tapRow(line: Line, at: number) {
+  function tapRow(line: Line) {
     const entry = entryOfLine(line, person.id)
     const count = line.entryId ? (clips[line.entryId] ?? 0) : 0
     const note = noteOf(line)
     const bill = line.kind === 'BILL' && line.transactionId
-    const key = lineKey(line, at)
+    const key = lineKey(line, lines.indexOf(line))
     return (
       <TapRow
         key={key}
-        id={`${panelId}-${key}`}
+        id={rows.panelId(key)}
         item={lineItem(line)}
-        open={openKey === key}
-        onToggle={() => toggle(key)}
+        open={rows.isOpen(key)}
+        onToggle={() => rows.toggle(key)}
         name={lineLabel(line)}
         amount={change(line)}
         sub={
@@ -276,25 +274,19 @@ export default function FriendLedger({
         {person.name}: <span className={`debt-${tone}`}>{summaryText}</span>
       </h2>
       {lines.length === 0 ? <p className="hint">{t('debts.noLines')}</p> : null}
-      {lines.length > 0 && phone
-        ? byDay(lines, (line) => line.date).map((day) => (
-            <div key={day.date} className="list-day">
-              <h2>{dayHeading(day.date, settings.locale, now.date.slice(0, 4))}</h2>
-              <ul className="card-list">{day.rows.map((line) => tapRow(line, lines.indexOf(line)))}</ul>
-            </div>
-          ))
-        : null}
+      {lines.length > 0 && phone ? (
+        <DayGroups rows={lines} dateOf={(line) => line.date} locale={settings.locale} today={now.date}>
+          {tapRow}
+        </DayGroups>
+      ) : null}
       {lines.length > 0 && !phone ? (
-        <ul className="card-list is-table ledger-table" onClick={toggleRow}>
-          <li className="list-head" aria-hidden="true">
-            <span>{t('debts.what')}</span>
-            <span>{t('sync.field.date')}</span>
-            <span className="is-end">{t('debts.change')}</span>
-            <span className="is-end">{t('debts.balance')}</span>
-            <span />
-          </li>
+        <Table
+          className="ledger-table"
+          heads={[t('debts.what'), t('sync.field.date'), { label: t('debts.change'), className: 'is-end' }, { label: t('debts.balance'), className: 'is-end' }, '']}
+          opens
+        >
           {lines.map(tableRow)}
-        </ul>
+        </Table>
       ) : null}
       {dialog?.kind === 'entry' ? (
         <EntryModal

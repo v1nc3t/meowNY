@@ -1,4 +1,4 @@
-import { useEffect, useId, useState, type MouseEvent } from 'react'
+import { useEffect, useState, type MouseEvent } from 'react'
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { debts, type EntryKind, type History, type Person, type Reminders } from '../api/debts'
 import { errorText } from '../api/invoke'
@@ -12,12 +12,13 @@ import EntryModal from '../components/EntryModal'
 import FriendLedger from '../components/FriendLedger'
 import FriendNameModal from '../components/FriendNameModal'
 import Icon from '../components/NavIcon'
-import { IconAction, TapRow } from '../components/RowParts'
+import { IconAction, Row, Table, TapRow } from '../components/RowParts'
 import SettleModal from '../components/SettleModal'
 import Button from '../components/ui/Button'
 import { buttonClass } from '../components/ui/cn'
 import { EmptyState } from '../components/ui/Pixel'
 import { useMoneySettings, type MoneySettings } from '../hooks/useMoneySettings'
+import { useOpenRow } from '../hooks/useOpenRow'
 import { useToast } from '../hooks/toast'
 import { useProfile } from '../hooks/profile'
 import { useT } from '../i18n/context'
@@ -44,8 +45,7 @@ function DebtsView({ settings, now }: { settings: MoneySettings; now: Today }) {
   const location = useLocation()
   // the friend chosen in the address, whose history is on the right
   const { personId } = useParams()
-  const panelId = useId()
-  const [openId, setOpenId] = useState<string | null>(null)
+  const rows = useOpenRow()
   const [people, setPeople] = useState<Person[] | null>(null)
   const [reminders, setReminders] = useState<Reminders | null>(null)
   const [history, setHistory] = useState<History | null>(null)
@@ -189,7 +189,27 @@ function DebtsView({ settings, now }: { settings: MoneySettings; now: Today }) {
     const reminded = dueIds.has(person.id) && tone !== 'even'
     const chosen = person.id === personId
     return (
-      <li key={person.id} className={chosen ? 'card-item is-selected' : 'card-item'} data-archived={person.archived || undefined} onClick={(event) => choose(event, person)}>
+      <Row
+        key={person.id}
+        className={chosen ? 'is-selected' : undefined}
+        data-archived={person.archived || undefined}
+        onClick={(event) => choose(event, person)}
+        actions={
+          <>
+            {person.archived ? (
+              <Button variant="outline" size="sm" className="row-primary" onClick={() => void bringBack(person)}>
+                {t('debts.unarchive')}
+              </Button>
+            ) : tone !== 'even' ? (
+              <Button variant="outline" size="sm" className="row-primary" onClick={() => setSettling(person)}>
+                {t('debts.settle')}
+              </Button>
+            ) : null}
+            <IconAction icon="pencil" label={t('common.rename')} onClick={() => setEditing(person)} />
+            {person.archived ? <span className="icon-slot" /> : <IconAction icon="trash" label={t('debts.archive')} danger onClick={() => setDeleting(person)} />}
+          </>
+        }
+      >
         <div className="cell-name">
           <Link className="card-name" to={rowLink(person)} title={person.name} aria-current={chosen ? 'true' : undefined} data-row-focus>
             {person.name}
@@ -199,20 +219,7 @@ function DebtsView({ settings, now }: { settings: MoneySettings; now: Today }) {
         <span className={`cell-sub debt-${tone}`}>{statusText(tone)}</span>
         <span className="cell-sub-end">{reminded ? t('debts.dueBadge', { date: formatDate(dueOn.get(person.id) ?? '', settings.locale) }) : ''}</span>
         <span className={`cell-amount debt-${tone}`}>{tone === 'even' ? '' : money(abs)}</span>
-        <div className="cell-actions">
-          {person.archived ? (
-            <Button variant="outline" size="sm" className="row-primary" onClick={() => void bringBack(person)}>
-              {t('debts.unarchive')}
-            </Button>
-          ) : tone !== 'even' ? (
-            <Button variant="outline" size="sm" className="row-primary" onClick={() => setSettling(person)}>
-              {t('debts.settle')}
-            </Button>
-          ) : null}
-          <IconAction icon="pencil" label={t('common.rename')} onClick={() => setEditing(person)} />
-          {person.archived ? <span className="icon-slot" /> : <IconAction icon="trash" label={t('debts.archive')} danger onClick={() => setDeleting(person)} />}
-        </div>
-      </li>
+      </Row>
     )
   }
 
@@ -220,14 +227,13 @@ function DebtsView({ settings, now }: { settings: MoneySettings; now: Today }) {
   function tapRow(person: Person) {
     const { tone, abs } = balanceView(person.balance)
     const reminded = dueIds.has(person.id) && tone !== 'even'
-    const id = `${panelId}-${person.id}`
     return (
       <TapRow
         key={person.id}
-        id={id}
+        id={rows.panelId(person.id)}
         data-archived={person.archived || undefined}
-        open={openId === person.id}
-        onToggle={() => setOpenId(openId === person.id ? null : person.id)}
+        open={rows.isOpen(person.id)}
+        onToggle={() => rows.toggle(person.id)}
         name={
           <>
             {person.name}
@@ -401,18 +407,11 @@ function DebtsView({ settings, now }: { settings: MoneySettings; now: Today }) {
                     </label>
                   </div>
                   {people.length === 0 ? <EmptyState text={t('debts.empty')} action={{ label: t('debts.addFriend'), onClick: () => setAddingFriend(true) }} /> : null}
-                  {people.length > 0 ? (
-                    <ul className={phone ? 'card-list' : 'card-list is-table friends-table'}>
-                      {phone ? null : (
-                        <li className="list-head" aria-hidden="true">
-                          <span>{t('common.name')}</span>
-                          <span className="span-2">{t('debts.colStatus')}</span>
-                          <span className="is-end">{t('debts.balance')}</span>
-                          <span />
-                        </li>
-                      )}
-                      {people.map(phone ? tapRow : tableRow)}
-                    </ul>
+                  {people.length > 0 && phone ? <ul className="card-list">{people.map(tapRow)}</ul> : null}
+                  {people.length > 0 && !phone ? (
+                    <Table className="friends-table" heads={[t('common.name'), { label: t('debts.colStatus'), className: 'span-2' }, { label: t('debts.balance'), className: 'is-end' }, '']}>
+                      {people.map(tableRow)}
+                    </Table>
                   ) : null}
                 </div>
               )}
