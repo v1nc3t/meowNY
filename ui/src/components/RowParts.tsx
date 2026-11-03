@@ -1,7 +1,120 @@
 import type { ComponentProps, ReactNode } from 'react'
+import type { OpenRows } from '../hooks/useOpenRow'
 import { useT } from '../i18n/context'
+import { byDay, dayHeading } from '../lib/dayHeading'
+import { toggleRow } from '../lib/toggleRow'
 import Icon from './NavIcon'
 import Button from './ui/Button'
+import { cn } from './ui/cn'
+
+/**
+ * The box of a table on the desktop and its head: one small grey label for each column, `{ label, className }` for one with a class of its
+ * own (`is-end` for the amounts at the right), an empty string for the columns of buttons. The rows are the children. With `opens` a click anywhere on a row presses its
+ * chevron (see `toggleRow`).
+ */
+export function Table({
+  className,
+  heads,
+  opens = false,
+  children,
+}: {
+  /** What names this list in the styles (`tx-list`): the columns are its `--cols`. */
+  className: string
+  heads: (string | { label: string; className: string })[]
+  opens?: boolean
+  children: ReactNode
+}) {
+  return (
+    <ul className={`card-list is-table ${className}`} onClick={opens ? toggleRow : undefined}>
+      <li className="list-head" aria-hidden="true">
+        {heads.map((head, column) =>
+          typeof head === 'string' ? (
+            <span key={column}>{head}</span>
+          ) : (
+            <span key={column} className={head.className}>
+              {head.label}
+            </span>
+          ),
+        )}
+      </li>
+      {children}
+    </ul>
+  )
+}
+
+/**
+ * A row of a `Table`: the cells (`children`), the icon buttons (`actions`), then the chevron that opens `panel` under the row. A row with
+ * `panel={null}` has nothing to open: an empty slot where the chevron would be keeps its buttons in line with the others. A list whose rows
+ * never open leaves out `rows` and `id`, and has no chevron or slot at all.
+ */
+export function Row({
+  rows,
+  id,
+  item,
+  actions,
+  panel = null,
+  note,
+  className,
+  children,
+  ...rest
+}: {
+  /** The list's `useOpenRow()`, and this row's name in it. */
+  rows?: OpenRows
+  id?: string
+  /** The `data-item` that jump-to finds the row by. */
+  item?: string
+  actions: ReactNode
+  panel?: ReactNode
+  /** A line across the row, under its cells and buttons. */
+  note?: ReactNode
+} & Omit<ComponentProps<'li'>, 'id'>) {
+  const more = Boolean(panel)
+  const opens = rows && id !== undefined ? { rows, id, panelId: rows.panelId(id) } : null
+  const open = more && opens !== null && opens.rows.isOpen(opens.id)
+  return (
+    <li className={cn('card-item', className, open && 'is-open')} data-item={item} {...rest}>
+      {children}
+      <div className="cell-actions">
+        {actions}
+        {opens ? <Disclosure more={more} open={open} controls={opens.panelId} onClick={() => opens.rows.toggle(opens.id)} /> : null}
+      </div>
+      {note ? <p className="cell-note">{note}</p> : null}
+      {open ? (
+        <div className="row-panel tx-detail" id={opens?.panelId}>
+          {panel}
+        </div>
+      ) : null}
+    </li>
+  )
+}
+
+/**
+ * The phone's list by day: a small heading over the rows of each day. `children` draws one row (a `TapRow`); `today` is a date, for the
+ * heading to leave out the year of this one.
+ */
+export function DayGroups<T>({
+  rows,
+  dateOf,
+  locale,
+  today,
+  className,
+  children,
+}: {
+  rows: readonly T[]
+  dateOf: (row: T) => string
+  locale: string
+  today: string
+  /** Added to the `card-list` of each day. */
+  className?: string
+  children: (row: T) => ReactNode
+}) {
+  return byDay(rows, dateOf).map((day) => (
+    <div key={day.date} className="list-day">
+      <h2>{dayHeading(day.date, locale, today.slice(0, 4))}</h2>
+      <ul className={cn('card-list', className)}>{day.rows.map((row) => children(row))}</ul>
+    </div>
+  ))
+}
 
 /** An icon-only button at the end of a table row (edit, delete, preview...): grey until the pointer is on it. Its name is the label and the title. */
 export function IconAction({

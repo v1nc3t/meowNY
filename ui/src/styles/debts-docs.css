@@ -675,13 +675,14 @@ ul.card-list > li.list-head > .span-2 {
 }
 
 /* The documents: name, day (13 characters of small print), size ("1.023,9 KB"), the box to keep the document on the phone, how many things
-   it is attached to, then preview, details, save a copy and delete (four buttons of 2rem and three gaps of 0.125rem, 8.5rem). The two
-   new heads are small print too: 9 characters of 0.8125rem are 7.3 characters of the row, so 7.5ch holds "téléphone" and "telemóvel", and
-   a paper clip with a number of three digits; a longer head ("verknüpft mit") takes a second line. With these the columns take 30.7rem,
-   the gaps 5rem and the padding 2.5rem, which leaves the name 10rem from 48.2em (a window of about 1080px; the app opens at 1100px).
-   Narrower, a row is two lines (see below). */
+   it is attached to, then preview, edit, save a copy and delete and the chevron that opens the details (five buttons of 2rem and four
+   gaps of 0.125rem, 10.5rem). The two new heads are small print too: 9 characters of 0.8125rem are 7.3 characters of the row, so 7.5ch
+   holds "téléphone" and "telemóvel", and a paper clip with a number of three digits; a longer head ("verknüpft mit") takes a second line.
+   With these the columns take 32.7rem, the gaps 5rem and the padding 2.5rem, which leaves the name 8rem from 48.2em (a window of about
+   1080px; the app opens at 1100px). The name is cut with an ellipsis, and the whole name is its title. Narrower, a row is two lines (see
+   below). */
 .card-list.doc-table {
-  --cols: minmax(10rem, 1fr) 12ch 6rem 7.5ch 7.5ch 8.5rem;
+  --cols: minmax(8rem, 1fr) 12ch 6rem 7.5ch 7.5ch 10.5rem;
 }
 
 /* The box is at the left of its column, under the word of the head, and so is the paper clip (its padding goes to the left). The word

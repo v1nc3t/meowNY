@@ -604,7 +604,6 @@ export const es: Messages = {
   'docs.adding': 'añadiendo {name}…',
   'docs.added': '{name} añadido.',
   'docs.alreadyThere': '{name} ya está en la biblioteca.',
-  'docs.details': 'detalles',
   'docs.detailsTitle': 'detalles del documento',
   'docs.open': 'abrir',
   'docs.openTitle': '¿abrir este archivo?',

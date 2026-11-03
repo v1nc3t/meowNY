@@ -602,7 +602,6 @@ export const ro: Messages = {
   'docs.adding': 'se adaugă {name}…',
   'docs.added': '{name} a fost adăugat.',
   'docs.alreadyThere': '{name} este deja în bibliotecă.',
-  'docs.details': 'detalii',
   'docs.detailsTitle': 'detaliile documentului',
   'docs.open': 'deschide',
   'docs.openTitle': 'deschizi acest fișier?',

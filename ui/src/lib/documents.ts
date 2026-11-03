@@ -2,6 +2,7 @@ import type { MessageKey } from '../i18n/en'
 import { isImage, isOpenable, type Doc, type DropOutcome, type DroppedResult, type LinkView, type Report, type TargetKind } from '../api/documents'
 import { messageFor, toErrorCode } from '../api/invoke'
 import type { t as Translate } from '../i18n/translate'
+import { isIos } from './platform'
 import type { PreviewKind } from './preview/load'
 
 /** The biggest image the app draws itself, in bytes; a bigger one goes to the system's viewer. The Rust side holds the same limit. */
@@ -37,9 +38,9 @@ export function fileStateText(state: FileState): MessageKey | null {
   }
 }
 
-/** Whether the system's viewer can be asked to open it: it has a file here, and it is a kind the app opens. */
+/** Whether the system's viewer can be asked to open it: it has a file here, and it is a kind the app opens. iOS cannot hand a file to another app through the opener plugin (URLs only); the preview still shows it. */
 export function canOpen(doc: Pick<Doc, 'hasFile' | 'mediaType'>): boolean {
-  return doc.hasFile && isOpenable(doc.mediaType)
+  return doc.hasFile && isOpenable(doc.mediaType) && !isIos
 }
 
 /** Whether the app should try to draw it: an image, here, and not too heavy. The Rust side checks the pixels. */

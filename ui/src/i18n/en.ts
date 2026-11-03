@@ -617,7 +617,6 @@ export const en = {
   'docs.adding': 'adding {name}…',
   'docs.added': 'added {name}.',
   'docs.alreadyThere': '{name} is in the library already.',
-  'docs.details': 'details',
   'docs.detailsTitle': 'document details',
   'docs.open': 'open',
   'docs.openTitle': 'open this file?',

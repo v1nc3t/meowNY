@@ -10,6 +10,7 @@ import Modal, { modalFormId } from '../components/Modal'
 import Icon from '../components/NavIcon'
 import Pager from '../components/Pager'
 import Pick, { PickOption } from '../components/Pick'
+import { DayGroups, IconAction, Row, Table, TapRow } from '../components/RowParts'
 import Button from '../components/ui/Button'
 import { EmptyState } from '../components/ui/Pixel'
 import DatePicker from '../components/DatePicker'
@@ -21,16 +22,15 @@ import { shiftMonth } from '../api/months'
 import { useToday, type Today } from '../api/today'
 import { transactions as transactionsApi, type Transaction, type TransactionPage } from '../api/transactions'
 import { categoryOptions } from '../lib/categoriesView'
-import { byDay, dayHeading } from '../lib/dayHeading'
 import { amountString, formatDate, formatMoney } from '../lib/money'
 import { apiBound, presentRange, shiftBound, type RangeMode } from '../lib/range'
 import { recall, saveChoice, storedChoice, storedId, useRemember } from '../lib/sticky'
 import { draftOfBill, equalDraft, NOT_SPLIT, toInput, type SplitState } from '../lib/split'
-import { toggleRow } from '../lib/toggleRow'
 import { useAttachments, type Attachments } from '../hooks/useAttachments'
 import { useClipCounts } from '../hooks/useClipCounts'
 import { useFocusRequest, useJumpTo } from '../hooks/useFocusRequest'
 import { useMoneySettings, type MoneySettings } from '../hooks/useMoneySettings'
+import { useOpenRow } from '../hooks/useOpenRow'
 import { useProfile } from '../hooks/profile'
 import { useToast } from '../hooks/toast'
 import { useT } from '../i18n/context'
@@ -79,7 +79,6 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
   const [reload, setReload] = useState(0)
   const [page, setPage] = useState<TransactionList | null>(null)
   const [menu, setMenu] = useState<MenuName | null>(null)
-  const [openId, setOpenId] = useState<string | null>(null)
   const [clientUuid, setClientUuid] = useState(() => crypto.randomUUID())
   // the transaction a first try made when its bill then failed: the next try changes that one (the same client id would give back the old
   // row, with the old amount, and the bill would be shared on that)
@@ -115,7 +114,7 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
   // the phone keeps the period and the category behind a "filters" button
   const [filtersOpen, setFiltersOpen] = useState(false)
   const filtersId = useId()
-  const panelId = useId()
+  const rows = useOpenRow()
 
   useEffect(() => {
     let cancelled = false
@@ -344,11 +343,7 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
   const atCurrentPeriod = filters.from === currentPeriod && filters.to === currentPeriod
   // how many filters are not as they start (this month, every category): the phone's filters button counts them
   const activeFilters = (atCurrentMonth ? 0 : 1) + (filters.categoryId ? 1 : 0)
-  const toggle = (id: string) => setOpenId((current) => (current === id ? null : id))
   const categoryName = (transaction: Transaction) => categoryNames.get(transaction.categoryId) ?? (categoriesReady ? t('tx.deletedCategory') : '')
-
-  // The phone's list is by day, under a heading for each day.
-  const days = useMemo(() => byDay(page?.transactions ?? [], (transaction) => transaction.paymentDate), [page])
 
   // The period: a year, a month of a year, or exact dates (from one day to another, the end never before the start).
   const rangeControls = (
@@ -564,11 +559,22 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
 
   // A desktop row: name, amount, date, category, an icon if it is shared, then edit, delete and (when there is more to show) the chevron.
   function tableRow(transaction: Transaction) {
-    const open = openId === transaction.id
     const count = clips[transaction.id] ?? 0
     const more = transaction.split.length > 0 || Boolean(transaction.description?.trim()) || count > 0
     return (
-      <li key={transaction.id} className={open ? 'card-item is-open' : 'card-item'} data-item={`transaction:${transaction.id}`}>
+      <Row
+        key={transaction.id}
+        rows={rows}
+        id={transaction.id}
+        item={`transaction:${transaction.id}`}
+        actions={
+          <>
+            <IconAction icon="pencil" label={t('common.edit')} data-row-focus onClick={() => openEdit(transaction)} />
+            <IconAction icon="trash" label={t('common.delete')} danger onClick={() => setDeleting(transaction)} />
+          </>
+        }
+        panel={more ? details(transaction, count) : null}
+      >
         <div className="cell-name">
           <span className="card-name" title={transaction.name}>
             {transaction.name}
@@ -585,58 +591,25 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
             </span>
           ) : null}
         </span>
-        <div className="cell-actions">
-          <Button variant="ghost" size="icon" className="icon-btn" aria-label={t('common.edit')} title={t('common.edit')} data-row-focus onClick={() => openEdit(transaction)}>
-            <Icon name="pencil" className="btn-icon" />
-          </Button>
-          <Button variant="ghost" size="icon" className="icon-btn is-danger" aria-label={t('common.delete')} title={t('common.delete')} onClick={() => setDeleting(transaction)}>
-            <Icon name="trash" className="btn-icon" />
-          </Button>
-          {more ? (
-            <Button
-              variant="ghost"
-              size="icon"
-              className="icon-btn"
-              aria-expanded={open}
-              aria-controls={open ? `${panelId}-${transaction.id}` : undefined}
-              aria-label={t('common.details')}
-              title={t('common.details')}
-              onClick={() => toggle(transaction.id)}
-            >
-              <Icon name="chevron-down" className="btn-icon chevron" />
-            </Button>
-          ) : (
-            <span className="icon-slot" />
-          )}
-        </div>
-        {open ? (
-          <div className="row-panel tx-detail" id={`${panelId}-${transaction.id}`}>
-            {details(transaction, count)}
-          </div>
-        ) : null}
-      </li>
+      </Row>
     )
   }
 
   // A phone row: one button with the name and amount, the category and marks under them. It opens to the details and to labelled
   // buttons for everything that can be done with the transaction.
   function tapRow(transaction: Transaction) {
-    const open = openId === transaction.id
     const count = clips[transaction.id] ?? 0
     return (
-      <li key={transaction.id} className={open ? 'card-item tap-row is-open' : 'card-item tap-row'} data-item={`transaction:${transaction.id}`}>
-        <button
-          type="button"
-          className="row-toggle"
-          aria-expanded={open}
-          aria-controls={open ? `${panelId}-${transaction.id}` : undefined}
-          onClick={() => toggle(transaction.id)}
-        >
-          <span className="cell-name">
-            <span className="card-name">{transaction.name}</span>
-          </span>
-          {amount(transaction)}
-          <span className="cell-sub">
+      <TapRow
+        key={transaction.id}
+        id={rows.panelId(transaction.id)}
+        item={`transaction:${transaction.id}`}
+        open={rows.isOpen(transaction.id)}
+        onToggle={() => rows.toggle(transaction.id)}
+        name={transaction.name}
+        amount={amount(transaction)}
+        sub={
+          <>
             <span>{categoryName(transaction)}</span>
             {marks(transaction)}
             {count ? (
@@ -646,25 +619,21 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
                 <span className="sr-only">{t('docs.clip', { count })}</span>
               </span>
             ) : null}
-          </span>
-          <Icon name="chevron-down" className="chevron" />
-        </button>
-        {open ? (
-          <div className="row-panel tx-detail" id={`${panelId}-${transaction.id}`}>
-            {details(transaction, count)}
-            <div className="row-panel-actions">
-              <Button variant="outline" onClick={() => openEdit(transaction)}>
-                <Icon name="pencil" className="btn-icon" />
-                {t('common.edit')}
-              </Button>
-              <Button variant="outline" className="row-danger" onClick={() => setDeleting(transaction)}>
-                <Icon name="trash" className="btn-icon" />
-                {t('common.delete')}
-              </Button>
-            </div>
-          </div>
-        ) : null}
-      </li>
+          </>
+        }
+      >
+        {details(transaction, count)}
+        <div className="row-panel-actions">
+          <Button variant="outline" onClick={() => openEdit(transaction)}>
+            <Icon name="pencil" className="btn-icon" />
+            {t('common.edit')}
+          </Button>
+          <Button variant="outline" className="row-danger" onClick={() => setDeleting(transaction)}>
+            <Icon name="trash" className="btn-icon" />
+            {t('common.delete')}
+          </Button>
+        </div>
+      </TapRow>
     )
   }
 
@@ -756,24 +725,13 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
             {page.transactions.length === 0 ? (
               <EmptyState text={t('tx.empty')} />
             ) : phone ? (
-              days.map((day) => (
-                <div key={day.date} className="list-day">
-                  <h2>{dayHeading(day.date, settings.locale, now.date.slice(0, 4))}</h2>
-                  <ul className="card-list tx-list">{day.rows.map(tapRow)}</ul>
-                </div>
-              ))
+              <DayGroups rows={page.transactions} dateOf={(transaction) => transaction.paymentDate} locale={settings.locale} today={now.date} className="tx-list">
+                {tapRow}
+              </DayGroups>
             ) : (
-              <ul className="card-list is-table tx-list" onClick={toggleRow}>
-                <li className="list-head" aria-hidden="true">
-                  <span>{t('common.name')}</span>
-                  <span className="is-end">{t('tx.amount')}</span>
-                  <span>{t('sync.field.date')}</span>
-                  <span>{t('common.category')}</span>
-                  <span />
-                  <span />
-                </li>
+              <Table className="tx-list" heads={[t('common.name'), { label: t('tx.amount'), className: 'is-end' }, t('sync.field.date'), t('common.category'), '', '']} opens>
                 {page.transactions.map(tableRow)}
-              </ul>
+              </Table>
             )}
             {phone ? foot : null}
           </div>

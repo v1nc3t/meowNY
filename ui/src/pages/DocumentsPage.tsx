@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useId, useRef, useState, type ChangeEvent } from 'react'
+import { useCallback, useEffect, useRef, useState, type ChangeEvent } from 'react'
 import ClipMark from '../components/ClipMark'
 import ConfirmModal from '../components/ConfirmModal'
+import DocumentDetails from '../components/DocumentDetails'
 import DocumentLinksModal from '../components/DocumentLinksModal'
 import DocumentModal from '../components/DocumentModal'
 import KeepToPreview from '../components/KeepToPreview'
@@ -8,12 +9,13 @@ import Pager from '../components/Pager'
 import PreviewModal from '../components/PreviewModal'
 import Icon from '../components/NavIcon'
 import Pick, { PickOption } from '../components/Pick'
-import { IconAction, TapRow } from '../components/RowParts'
+import { IconAction, Row, Table, TapRow } from '../components/RowParts'
 import Button from '../components/ui/Button'
 import { EmptyState } from '../components/ui/Pixel'
 import { documents, type Doc, type DocPage, type LibrarySize, type Report } from '../api/documents'
 import { errorText } from '../api/invoke'
 import { useMoneySettings, type MoneySettings } from '../hooks/useMoneySettings'
+import { useOpenRow } from '../hooks/useOpenRow'
 import { useProfile } from '../hooks/profile'
 import { useDebounced } from '../hooks/useDebounced'
 import { dismissToast, toast, useToast } from '../hooks/toast'
@@ -39,8 +41,7 @@ function DocumentsView({ settings }: { settings: MoneySettings }) {
   const t = useT()
   const phone = useProfile() === 'phone'
   const locale = settings.locale
-  const panelId = useId()
-  const [openId, setOpenId] = useState<string | null>(null)
+  const rows = useOpenRow()
   const [q, setQ] = useState('')
   const [kind, setKind] = useState<KindChoice>(() => storedChoice('docs.kind', KIND_CHOICES.map((choice) => choice.value), ''))
   const [kindMenu, setKindMenu] = useState(false)
@@ -228,12 +229,26 @@ function DocumentsView({ settings }: { settings: MoneySettings }) {
   /** Where the file is, in words, when that is not simply here. */
   const stateOf = (doc: Doc) => fileStateText(fileState(doc, phone))
 
-  // A desktop row: the name, the day, the size, keep on phone, how many things the document is attached to, then preview, details, save a
-  // copy and delete.
+  // A desktop row: the name, the day, the size, keep on phone, how many things the document is attached to, then preview, edit, save a
+  // copy and delete. It opens to the details.
   function tableRow(doc: Doc) {
     const state = stateOf(doc)
     return (
-      <li key={doc.id} className="card-item">
+      <Row
+        key={doc.id}
+        rows={rows}
+        id={doc.id}
+        actions={
+          <>
+            <IconAction icon="eye" label={t('docs.previewButton')} disabled={!canPreview(doc)} onClick={() => setPreviewing(doc)} />
+            <IconAction icon="pencil" label={t('common.edit')} data-row-focus onClick={() => setViewing(doc.id)} />
+            {doc.hasFile && !phone ? <IconAction icon="download" label={t('docs.saveCopy')} onClick={() => void onSaveCopy(doc)} /> : <span className="icon-slot" />}
+            <IconAction icon="trash" label={t('common.delete')} danger onClick={() => setDeleting(doc)} />
+          </>
+        }
+        note={state ? t(state) : null}
+        panel={<DocumentDetails doc={doc} locale={locale} />}
+      >
         <div className="cell-name">
           <Icon name="documents" className="doc-icon" />
           <span className="card-name" title={doc.name}>
@@ -248,14 +263,7 @@ function DocumentsView({ settings }: { settings: MoneySettings }) {
           <span aria-hidden="true">{t('docs.colPhone')}</span>
         </label>
         <div className="cell-links">{doc.linkCount > 0 ? <ClipMark count={doc.linkCount} onClick={() => setLinking(doc)} /> : null}</div>
-        <div className="cell-actions">
-          <IconAction icon="eye" label={t('docs.previewButton')} disabled={!canPreview(doc)} onClick={() => setPreviewing(doc)} />
-          <IconAction icon="pencil" label={t('docs.details')} data-row-focus onClick={() => setViewing(doc.id)} />
-          {doc.hasFile && !phone ? <IconAction icon="download" label={t('docs.saveCopy')} onClick={() => void onSaveCopy(doc)} /> : <span className="icon-slot" />}
-          <IconAction icon="trash" label={t('common.delete')} danger onClick={() => setDeleting(doc)} />
-        </div>
-        {state ? <p className="cell-note">{t(state)}</p> : null}
-      </li>
+      </Row>
     )
   }
 
@@ -268,16 +276,16 @@ function DocumentsView({ settings }: { settings: MoneySettings }) {
     return (
       <TapRow
         key={doc.id}
-        id={`${panelId}-${doc.id}`}
-        open={openId === doc.id}
-        onToggle={() => setOpenId(openId === doc.id ? null : doc.id)}
+        id={rows.panelId(doc.id)}
+        open={rows.isOpen(doc.id)}
+        onToggle={() => rows.toggle(doc.id)}
         name={doc.name}
         amount={<span className="cell-size">{formatSize(doc.sizeBytes, locale)}</span>}
         sub={
           <>
             <span>{formatDate(doc.documentDate, locale)}</span>
             {doc.keepOnPhone ? <span className="row-mark">{t('docs.keepOnPhone')}</span> : null}
-            {state && !(offer && openId === doc.id) ? <span className="is-line">{t(state)}</span> : null}
+            {state && !(offer && rows.isOpen(doc.id)) ? <span className="is-line">{t(state)}</span> : null}
           </>
         }
       >
@@ -304,7 +312,7 @@ function DocumentsView({ settings }: { settings: MoneySettings }) {
           )}
           <Button variant="outline" onClick={() => setViewing(doc.id)}>
             <Icon name="pencil" className="btn-icon" />
-            {t('docs.details')}
+            {t('common.edit')}
           </Button>
           <Button variant="outline" className="row-danger" onClick={() => setDeleting(doc)}>
             <Icon name="trash" className="btn-icon" />
@@ -402,18 +410,14 @@ function DocumentsView({ settings }: { settings: MoneySettings }) {
             ) : phone ? (
               <ul className="card-list">{page.documents.map(tapRow)}</ul>
             ) : (
-              <ul className="card-list is-table doc-table">
-                <li className="list-head" aria-hidden="true">
-                  <span>{t('common.name')}</span>
-                  <span>{t('sync.field.date')}</span>
-                  <span>{t('docs.size')}</span>
-                  <span>{t('docs.colPhone')}</span>
-                  {/* A short head, so it fits the column on one line in every language. */}
-                  <span>{t('docs.colLinks')}</span>
-                  <span />
-                </li>
+              <Table
+                className="doc-table"
+                // A short head for the links, so it fits the column on one line in every language.
+                heads={[t('common.name'), t('sync.field.date'), t('docs.size'), t('docs.colPhone'), t('docs.colLinks'), '']}
+                opens
+              >
                 {page.documents.map(tableRow)}
-              </ul>
+              </Table>
             )}
             {phone ? pager : null}
           </div>

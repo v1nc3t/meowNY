@@ -605,7 +605,6 @@ export const de: Messages = {
   'docs.adding': '{name} wird hinzugefügt…',
   'docs.added': '{name} hinzugefügt.',
   'docs.alreadyThere': '{name} ist schon in der bibliothek.',
-  'docs.details': 'einzelheiten',
   'docs.detailsTitle': 'dokument-einzelheiten',
   'docs.open': 'öffnen',
   'docs.openTitle': 'diese datei öffnen?',
