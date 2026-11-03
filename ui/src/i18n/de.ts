@@ -336,6 +336,7 @@ export const de: Messages = {
   'dashboard.paid': 'diesen monat bezahlt',
   'dashboard.prevYear': 'vorheriges jahr',
   'dashboard.nextYear': 'nächstes jahr',
+  'dashboard.yearChart': 'jahresdiagramm',
   'dashboard.noRecurring': 'keine wiederkehrenden buchungen.',
   'dashboard.recOverdue': 'wiederkehrend: überfällig',
   'dashboard.recOverdueEmpty': 'nichts ist überfällig.',

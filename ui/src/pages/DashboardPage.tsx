@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type KeyboardEvent } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { debts, type Summary } from '../api/debts'
 import { errorText } from '../api/invoke'
@@ -361,7 +361,8 @@ const PAD = { left: 40, right: 8, top: 10, bottom: 22 }
 
 /**
  * The year so far: income and expenses as lines, savings as bars underneath. Both are drawn at
- * the width they get. Hovering a month shows its numbers; clicking it opens that month.
+ * the width they get. Hovering a month shows its numbers; clicking it opens that month. The keyboard has the chart as one stop: Left and
+ * Right (Home, End) move through the months, Enter opens the one it is on.
  */
 function YearCharts({ year, month, onPick, settings }: { year: YearPoint[]; month: string; onPick: (month: string) => void; settings: MoneySettings }) {
   const t = useT()
@@ -398,6 +399,14 @@ function YearCharts({ year, month, onPick, settings }: { year: YearPoint[]; mont
   const by = (v: number) => 16 + ((hi - v) / span) * (barH - 22)
   const barW = Math.max(2, Math.min(28, slot * 0.55))
 
+  function onKeyDown(event: KeyboardEvent) {
+    const to = { ArrowLeft: shown - 1, ArrowRight: shown + 1, Home: 0, End: year.length - 1 }[event.key]
+    if (to !== undefined) setHover(Math.max(0, Math.min(year.length - 1, to)))
+    else if (event.key === 'Enter' && shown >= 0) onPick(year[shown].month)
+    else return
+    event.preventDefault()
+  }
+
   const hits = (h: number) =>
     year.map((p, i) => (
       <rect
@@ -414,8 +423,24 @@ function YearCharts({ year, month, onPick, settings }: { year: YearPoint[]; mont
 
   const p = shown >= 0 ? year[shown] : undefined
   const blank = !year.some((point) => Number(point.income) > 0 || Number(point.expense) > 0)
+  // A slider reads out its value as text, so a screen reader says the month and its numbers when an arrow moves it.
+  const slider = blank
+    ? {}
+    : {
+        role: 'slider',
+        tabIndex: 0,
+        'aria-label': t('dashboard.yearChart'),
+        'aria-valuemin': 1,
+        'aria-valuemax': year.length,
+        'aria-valuenow': shown + 1,
+        'aria-valuetext': p
+          ? `${names[shown]}, ${t('common.income')} ${money(p.income)}, ${t('common.expense')} ${money(p.expense)}, ${t('dashboard.savings')} ${money(p.savings)}`
+          : undefined,
+        onKeyDown,
+        onBlur: () => setHover(null),
+      }
   return (
-    <div className="dash-year" ref={ref}>
+    <div className="dash-year" ref={ref} {...slider}>
       {blank ? <p className="dash-empty">{t('dashboard.emptyYear')}</p> : null}
       <div className={blank ? 'year-readout is-blank' : 'year-readout'}>
         <span className="year-month">{p ? names[shown] : ''}</span>

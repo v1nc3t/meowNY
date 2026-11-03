@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react'
+import { useReturnFocus } from '../hooks/useReturnFocus'
 import { useT } from '../i18n/context'
 import { keysFor, shortcutName } from './tip'
 import { SHORTCUTS, type ShortcutGroup, type ShortcutId } from './shortcuts'
@@ -15,6 +16,9 @@ const GROUPS: { group: ShortcutGroup; title: 'keys.groupGo' | 'keys.groupActions
 export default function ShortcutHelp({ onClose }: { onClose: () => void }) {
   const t = useT()
   const ref = useRef<HTMLDialogElement>(null)
+
+  // before the effect below: the dialog takes the focus there
+  useReturnFocus()
 
   useEffect(() => {
     ref.current?.showModal()

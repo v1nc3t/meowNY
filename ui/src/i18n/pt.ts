@@ -335,6 +335,7 @@ export const pt: Messages = {
   'dashboard.paid': 'pago este mês',
   'dashboard.prevYear': 'ano anterior',
   'dashboard.nextYear': 'ano seguinte',
+  'dashboard.yearChart': 'gráfico do ano',
   'dashboard.noRecurring': 'sem transações recorrentes.',
   'dashboard.recOverdue': 'recorrentes: vencidos',
   'dashboard.recOverdueEmpty': 'nada está vencido.',

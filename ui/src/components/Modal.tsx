@@ -1,5 +1,6 @@
 import { useEffect, useId, useRef, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
+import { useReturnFocus } from '../hooks/useReturnFocus'
 import { useT } from '../i18n/context'
 import Button from './ui/Button'
 
@@ -37,6 +38,9 @@ export default function Modal({
   const t = useT()
   const ref = useRef<HTMLDialogElement>(null)
   const titleId = useId()
+
+  // before the effect below: the dialog takes the focus there
+  useReturnFocus()
 
   useEffect(() => {
     const dialog = ref.current

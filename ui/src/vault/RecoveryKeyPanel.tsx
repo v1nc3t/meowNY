@@ -58,7 +58,7 @@ export default function RecoveryKeyPanel({
         {code}
       </p>
       <div className="actions">
-        <Button variant="outline" onClick={() => void copy()}>
+        <Button variant="outline" autoFocus onClick={() => void copy()}>
           {copied ? t('common.copied') : t('common.copy')}
         </Button>
         <Button variant="outline" onClick={() => void download()}>

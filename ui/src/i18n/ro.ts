@@ -333,6 +333,7 @@ export const ro: Messages = {
   'dashboard.paid': 'plătit luna aceasta',
   'dashboard.prevYear': 'anul anterior',
   'dashboard.nextYear': 'anul următor',
+  'dashboard.yearChart': 'graficul anului',
   'dashboard.noRecurring': 'nicio tranzacție recurentă.',
   'dashboard.recOverdue': 'recurente: scadente',
   'dashboard.recOverdueEmpty': 'nimic nu este scadent.',

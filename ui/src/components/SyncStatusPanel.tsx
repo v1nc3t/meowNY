@@ -43,6 +43,8 @@ export default function SyncStatusPanel({
 
   if (status.state === 'idle') return null
 
+  // Each state has one button to end it (stop, done), and it takes the focus: the buttons that were there before are gone.
+
   if (status.state === 'waiting') {
     return (
       <div className="panel sync-panel">
@@ -52,7 +54,7 @@ export default function SyncStatusPanel({
           {t('sync.timeLeft', { time: countdownText(status.expiresInSecs) })}
         </p>
         <div className="actions">
-          <Button variant="outline" onClick={onCancel}>
+          <Button variant="outline" autoFocus onClick={onCancel}>
             {t('sync.stop')}
           </Button>
         </div>
@@ -66,7 +68,7 @@ export default function SyncStatusPanel({
       <div className="panel sync-panel">
         <p role="status">{t(key)}</p>
         <div className="actions">
-          <Button variant="outline" onClick={onCancel}>
+          <Button variant="outline" autoFocus onClick={onCancel}>
             {t('sync.stop')}
           </Button>
         </div>
@@ -83,7 +85,7 @@ export default function SyncStatusPanel({
         </p>
         <p className="hint">{t('sync.digitsShow')}</p>
         <div className="actions">
-          <Button variant="outline" onClick={onCancel}>
+          <Button variant="outline" autoFocus onClick={onCancel}>
             {t('sync.stop')}
           </Button>
         </div>
@@ -139,7 +141,7 @@ export default function SyncStatusPanel({
       <div className="panel sync-panel">
         <p role="status">{t('sync.waitingReview')}</p>
         <div className="actions">
-          <Button variant="outline" onClick={onCancel}>
+          <Button variant="outline" autoFocus onClick={onCancel}>
             {t('sync.stop')}
           </Button>
         </div>
@@ -180,7 +182,7 @@ export default function SyncStatusPanel({
           </p>
         ) : null}
         <div className="actions">
-          <Button onClick={onDone}>{t('common.done')}</Button>
+          <Button autoFocus onClick={onDone}>{t('common.done')}</Button>
         </div>
       </div>
     )
@@ -198,7 +200,7 @@ export default function SyncStatusPanel({
         ) : null}
       </p>
       <div className="actions">
-        <Button onClick={onDone}>{t('common.done')}</Button>
+        <Button autoFocus onClick={onDone}>{t('common.done')}</Button>
       </div>
     </div>
   )

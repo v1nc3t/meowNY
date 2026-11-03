@@ -348,6 +348,7 @@ export const en = {
   'dashboard.paid': 'paid this month',
   'dashboard.prevYear': 'previous year',
   'dashboard.nextYear': 'next year',
+  'dashboard.yearChart': 'year chart',
   'dashboard.noRecurring': 'no recurring items.',
   'dashboard.recOverdue': 'recurring: overdue',
   'dashboard.recOverdueEmpty': 'nothing is overdue.',

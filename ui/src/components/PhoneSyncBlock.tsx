@@ -80,7 +80,8 @@ export default function PhoneSyncBlock({ locale, timezone }: { locale: string; t
                     <Button variant="destructive" size="sm" onClick={() => void onRemove(device.deviceId)}>
                       {t('sync.removeYes')}
                     </Button>
-                    <Button variant="outline" size="sm" onClick={() => setRemoving(null)}>
+                    {/* The cancel button takes the focus, so that Enter again does not remove the phone. */}
+                    <Button variant="outline" size="sm" autoFocus onClick={() => setRemoving(null)}>
                       {t('common.cancel')}
                     </Button>
                   </>
