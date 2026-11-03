@@ -733,7 +733,7 @@ export const ro: Messages = {
   'sync.field.kind': 'tip',
   'sync.field.note': 'notă',
   'sync.field.split': 'împărțit cu',
-  'code.show': 'arată codul',
+  'code.show': 'cod',
   'code.title': 'codul cheltuielii pentru {name}',
   'code.part': 'partea lui {name}: {amount} din {total}',
   'code.senderAsk': 'ce nume să vadă prietenul tău?',

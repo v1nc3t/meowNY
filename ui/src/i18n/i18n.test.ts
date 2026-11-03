@@ -35,6 +35,7 @@ const SAME_AS_ENGLISH = new Set([
   'fr nav.documents', 'fr docs.title', 'fr docs.kindImage', 'fr docs.kindTransaction',
   'fr sync.table.documents', 'fr sync.field.document', 'ro sync.table.documents', 'ro sync.field.document',
   'fr debts.note', 'fr sync.field.note', 'de debts.colStatus', 'ro debts.net', 'de common.details', 'de common.optional', 'fr docs.typeImage',
+  'de code.show', 'fr code.show',
 ])
 
 test('no translation is empty or an untranslated copy of the English text', () => {

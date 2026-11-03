@@ -735,7 +735,7 @@ export const pt: Messages = {
   'sync.field.kind': 'tipo',
   'sync.field.note': 'nota',
   'sync.field.split': 'partilhado com',
-  'code.show': 'mostrar código',
+  'code.show': 'código',
   'code.title': 'código da despesa para {name}',
   'code.part': 'parte de {name}: {amount} de {total}',
   'code.senderAsk': 'que nome deve o teu amigo ver?',

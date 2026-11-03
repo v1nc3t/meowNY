@@ -748,7 +748,7 @@ export const en = {
   'sync.field.kind': 'kind',
   'sync.field.note': 'note',
   'sync.field.split': 'shared with',
-  'code.show': 'show code',
+  'code.show': 'code',
   'code.title': 'bill code for {name}',
   'code.part': "{name}'s part: {amount} of {total}",
   'code.senderAsk': 'what name should your friend see?',
