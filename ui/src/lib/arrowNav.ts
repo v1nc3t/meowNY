@@ -48,10 +48,22 @@ const CANDIDATES = `:is(${CONTROLS}):not(:disabled, [tabindex="-1"])`
 const LISTS = '.pick-list, [role=listbox], [role=menu]'
 // The inputs that are pressed, not typed into or stepped through. The arrows do nothing in these, so they can move focus.
 const PRESSED = new Set(['checkbox', 'button', 'submit', 'reset', 'file', 'image'])
+// The inputs typed into on one line: up and down mean nothing there, so they leave the field.
+const LINES = new Set(['text', 'search', 'email', 'url', 'tel', 'password'])
 
-function keepsArrows(element: HTMLElement): boolean {
+/** Whether a one-line field keeps a left or right arrow: it does while the caret can still move that way, or text is selected. */
+export function lineKeeps(way: Way, start: number | null, end: number | null, length: number): boolean {
+  if (way === 'up' || way === 'down') return false
+  if (start === null || start !== end) return true
+  return way === 'left' ? start > 0 : start < length
+}
+
+function keepsArrows(element: HTMLElement, way: Way): boolean {
   if (element.isContentEditable || element.closest(LISTS) || element.matches('[role=combobox]')) return true
-  if (element instanceof HTMLInputElement) return !PRESSED.has(element.type)
+  if (element instanceof HTMLInputElement) {
+    if (PRESSED.has(element.type)) return false
+    return LINES.has(element.type) ? lineKeeps(way, element.selectionStart, element.selectionEnd, element.value.length) : true
+  }
   if (element instanceof HTMLTextAreaElement || element instanceof HTMLSelectElement) return true
   // A box that is a tab stop but no control (a scrolling preview, a tab panel) scrolls with the arrows.
   return element.getAttribute('tabindex') === '0' && !element.matches(CONTROLS)
@@ -65,7 +77,7 @@ function onKeyDown(event: KeyboardEvent) {
   const way = WAYS[event.key]
   const from = event.target
   if (!way || event.defaultPrevented || event.isComposing || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return
-  if (!(from instanceof HTMLElement) || from === document.body || keepsArrows(from)) return
+  if (!(from instanceof HTMLElement) || from === document.body || keepsArrows(from, way)) return
   // In a dialog the arrows stay in the dialog. Up and down stay in the sidebar or the page; left and right go from one to the other.
   const sideways = way === 'left' || way === 'right'
   const scope = from.closest('dialog') ?? (sideways ? document : from.closest('main, .app-sidebar') ?? document)

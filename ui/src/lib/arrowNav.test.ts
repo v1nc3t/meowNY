@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { pickBox, type Box } from './arrowNav.ts'
+import { lineKeeps, pickBox, type Box } from './arrowNav.ts'
 
 const box = (left: number, top: number, width = 40, height = 20): Box => ({ left, top, right: left + width, bottom: top + height })
 
@@ -44,4 +44,15 @@ test('right and left stay in the row', () => {
 test('right: a taller box beside counts as the same row when the middles meet', () => {
   assert.equal(pickBox(box(0, 0, 40, 20), [box(60, -30, 40, 80)], 'right'), 0)
   assert.equal(pickBox(box(0, 0, 40, 80), [box(60, 60, 40, 20)], 'right'), 0)
+})
+
+test('a one-line field gives up and down away, and left or right only at that end with nothing selected', () => {
+  assert.equal(lineKeeps('down', 2, 2, 5), false)
+  assert.equal(lineKeeps('up', 0, 0, 0), false)
+  assert.equal(lineKeeps('left', 2, 2, 5), true)
+  assert.equal(lineKeeps('left', 0, 0, 5), false)
+  assert.equal(lineKeeps('right', 5, 5, 5), false)
+  assert.equal(lineKeeps('right', 4, 4, 5), true)
+  assert.equal(lineKeeps('right', 0, 5, 5), true)
+  assert.equal(lineKeeps('left', null, null, 5), true)
 })
