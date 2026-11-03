@@ -659,7 +659,7 @@ export const ro: Messages = {
   'debts.settledUp': 'totul achitat',
   'debts.settle': 'marchează ca plătit',
   'debts.removed': 'eliminat',
-  'debts.archive': 'elimină din listă',
+  'debts.archive': 'elimină',
   'debts.unarchive': 'readu',
   'debts.deleted': '{name} eliminat; istoricul rămâne.',
   'debts.statement': 'extras',

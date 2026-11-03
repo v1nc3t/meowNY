@@ -661,7 +661,7 @@ export const fr: Messages = {
   'debts.settledUp': 'tout est réglé',
   'debts.settle': 'marquer comme payé',
   'debts.removed': 'retiré',
-  'debts.archive': 'retirer de la liste',
+  'debts.archive': 'retirer',
   'debts.unarchive': 'remettre',
   'debts.deleted': '{name} retiré ; son historique est conservé.',
   'debts.statement': 'relevé',

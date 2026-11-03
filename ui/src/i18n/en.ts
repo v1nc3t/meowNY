@@ -674,7 +674,7 @@ export const en = {
   'debts.settledUp': 'all settled',
   'debts.settle': 'mark as paid',
   'debts.removed': 'removed',
-  'debts.archive': 'remove from the list',
+  'debts.archive': 'remove',
   'debts.unarchive': 'bring back',
   'debts.deleted': '{name} removed; their history is kept.',
   'debts.statement': 'statement',

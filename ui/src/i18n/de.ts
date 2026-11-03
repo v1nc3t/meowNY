@@ -662,7 +662,7 @@ export const de: Messages = {
   'debts.settledUp': 'alles beglichen',
   'debts.settle': 'als bezahlt markieren',
   'debts.removed': 'entfernt',
-  'debts.archive': 'aus der liste entfernen',
+  'debts.archive': 'entfernen',
   'debts.unarchive': 'zurückholen',
   'debts.deleted': '{name} entfernt; der verlauf bleibt erhalten.',
   'debts.statement': 'kontoauszug',

@@ -34,7 +34,7 @@ type Dialog =
   | null
 
 /**
- * One friend's history: the name with the button that renames it, the balance, the buttons that change the friend, and the ledger with the
+ * One friend's history: back, the name and the balance on one line, the buttons that change the friend, and the ledger with the
  * buttons and documents of each line. It is the right half of the debts page, and the whole page of a friend on the phone. The page says
  * when to read again (`reload`) and is told when something changed (`onChanged`), so the list of friends beside it stays right.
  */
@@ -243,26 +243,26 @@ export default function FriendLedger({
   return (
     <div className="debts-half">
       <div className="debts-heading debts-name">
-        <h2>{person.name}</h2>
-        <Button variant="outline" size="sm" onClick={() => setDialog({ kind: 'rename' })}>
-          {t('common.rename')}
-        </Button>
-      </div>
-      <div className="debts-summary">
-        <p className={`debt-total debt-${tone}`}>{summaryText}</p>
-        <div className="card-actions">
+        <div className="debts-who">
           <Link to="/app/debts" className={buttonClass('outline', 'sm')}>
             {t('common.back')}
           </Link>
-          {tone !== 'even' ? (
-            <Button variant="outline" size="sm" onClick={() => setDialog({ kind: 'settle' })}>
-              {t('debts.settle')}
-            </Button>
-          ) : null}
-          <Button variant="outline" size="sm" disabled={pending} onClick={removeOrBringBack}>
-            {t(person.archived ? 'debts.unarchive' : 'debts.archive')}
-          </Button>
+          <h2>{person.name}</h2>
         </div>
+        <p className={`debt-total debt-${tone}`}>{summaryText}</p>
+      </div>
+      <div className="card-actions">
+        <Button variant="outline" size="sm" onClick={() => setDialog({ kind: 'rename' })}>
+          {t('common.rename')}
+        </Button>
+        {tone !== 'even' ? (
+          <Button variant="outline" size="sm" onClick={() => setDialog({ kind: 'settle' })}>
+            {t('debts.settle')}
+          </Button>
+        ) : null}
+        <Button variant="outline" size="sm" disabled={pending} onClick={removeOrBringBack}>
+          {t(person.archived ? 'debts.unarchive' : 'debts.archive')}
+        </Button>
       </div>
       <h2 className="debts-heading">{t('debts.ledger')}</h2>
       {lines.length === 0 ? <p className="hint">{t('debts.noLines')}</p> : null}

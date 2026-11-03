@@ -99,31 +99,33 @@ html.is-phone .tx-actions.debts-actions > .ui-btn {
   color: var(--muted-foreground);
 }
 
-/* A friend's name with the button that renames them beside it. A long name wraps rather than push the button out. */
+/* The top of a friend's page on one line: back, the name, then the balance. The balance goes under them only when it has no room beside
+   them. Back and the name stay together, and a long name wraps rather than push the balance out. */
 .debts-name {
   display: flex;
-  align-items: center;
-  gap: 0.5rem 0.75rem;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.25rem 0.75rem;
 }
 
-.debts-name > h2 {
+.debts-who {
+  display: flex;
+  align-items: baseline;
+  gap: 0.75rem;
+  min-width: 0;
+}
+
+.debts-who > h2 {
   min-width: 0;
   margin: 0;
   overflow-wrap: anywhere;
 }
 
-/* The balance with the friend chosen, and the buttons that change the friend, with no box around them. */
-.debts-summary {
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-}
-
-.debts-summary .debt-total {
+.debts-name .debt-total {
   margin: 0;
-  font-size: 1.25rem;
-  font-weight: 700;
-  line-height: 1.3;
+  font-size: 1rem;
+  font-weight: 600;
+  line-height: 1.4;
   font-variant-numeric: tabular-nums;
 }
 
