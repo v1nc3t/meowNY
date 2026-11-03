@@ -99,7 +99,7 @@ html.is-phone .tx-actions.debts-actions > .ui-btn {
   color: var(--muted-foreground);
 }
 
-/* The top of a friend's page on one line: back on the left; rename, mark as paid and remove on the right. */
+/* The top of a friend's page on one line: back on the left, mark as paid on the right. */
 .debts-name {
   display: flex;
   flex-wrap: wrap;
@@ -107,7 +107,7 @@ html.is-phone .tx-actions.debts-actions > .ui-btn {
   gap: 0.5rem 0.75rem;
 }
 
-/* The space after back pushes the other buttons to the right. */
+/* The space after back pushes the other button to the right. */
 .debts-name > :first-child {
   margin-right: auto;
 }
@@ -184,16 +184,17 @@ html.is-phone .tx-actions.debts-actions > .ui-btn {
   bottom: calc(100% + 0.25rem);
 }
 
-/* The friends: name, who owes whom (and the reminder), what is owed, then mark as paid (or bring back). A click anywhere else on a row
-   chooses the friend. Who owes whom is as wide as the longest of the three ("alles beglichen", 15 characters of 0.875rem), the amount has
-   15 characters. The button is on one line in every language: the longest word, "als bezahlt markieren", has 21 characters of 0.875rem
-   (a column in ch is the width of a character of 1rem), and the button has its padding. The reminder wraps rather than being cut: its
-   column holds 16 characters of small print, which is two lines for a reminder with a date of 10 characters in every language.
-   With these and the gaps the columns take 44.4rem, which leaves the name 10rem from 55em. Below that the list has two-line rows: the name and the amount, then who owes whom and the button under them, and the reminder under
-   that. The button is in the column of the amount, so the name has what is left beside the wider of the two, and the values on the right
-   end in one line down the list. */
+/* The friends: name, who owes whom (and the reminder), what is owed, then mark as paid (or bring back), rename and remove (a friend who
+   is removed already has an empty place for it, so the icons line up). A click anywhere else on a row chooses the friend. Who owes whom
+   is as wide as the longest of the three ("alles beglichen", 15 characters of 0.875rem), the amount has 15 characters. The button is on
+   one line in every language: the longest word, "als bezahlt markieren", has 21 characters of 0.875rem (a column in ch is the width of
+   a character of 1rem), and the button has its padding, 0.5rem of room and two icon buttons of 2rem. The reminder wraps rather than
+   being cut: its column holds 16 characters of small print, which is two lines for a reminder with a date of 10 characters in every
+   language. With these and the gaps the columns take 49.1rem, which leaves the name 10rem from 60em. Below that a row is lines of
+   its own: the name and the amount; who owes whom, with the buttons on the right of it when they fit and on a line of their own, at the
+   right, when they do not; the reminder. So the name has the width of the row less the amount, whatever the buttons are called. */
 .card-list.friends-table {
-  --cols: minmax(0, 1fr) 13.5ch 14ch 15ch calc(18.4ch + 1.25rem);
+  --cols: minmax(0, 1fr) 13.5ch 14ch 15ch calc(18.4ch + 5.9rem);
 }
 
 ul.card-list.friends-table > li.card-item {
@@ -210,7 +211,7 @@ ul.card-list.friends-table > li.card-item {
   white-space: nowrap;
 }
 
-@container (max-width: 55em) {
+@container (max-width: 60em) {
   ul.card-list.friends-table > li.list-head {
     display: none;
   }
@@ -220,33 +221,50 @@ ul.card-list.friends-table > li.card-item {
   }
 
   ul.card-list.friends-table > li.card-item {
-    grid-template-columns: minmax(0, 1fr) auto;
-    grid-template-areas:
-      'name amount'
-      'sub actions'
-      'sub-end sub-end';
-    row-gap: 0;
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.125rem 1rem;
+  }
+
+  /* The line break after the name and the amount. */
+  ul.card-list.friends-table > li.card-item::after {
+    content: '';
+    order: 2;
+    flex: 0 0 100%;
+    height: 0;
   }
 
   ul.card-list.friends-table .cell-name {
-    grid-area: name;
+    order: 0;
+    flex: 1 1 0;
   }
 
   ul.card-list.friends-table .cell-amount {
-    grid-area: amount;
+    order: 1;
+    flex: none;
   }
 
   ul.card-list.friends-table .cell-sub {
-    grid-area: sub;
-  }
-
-  ul.card-list.friends-table .cell-sub-end {
-    grid-area: sub-end;
-    text-align: left;
+    order: 3;
+    flex: 0 1 auto;
   }
 
   ul.card-list.friends-table .cell-actions {
-    grid-area: actions;
+    order: 4;
+    flex: none;
+    margin-left: auto;
+  }
+
+  ul.card-list.friends-table .cell-sub-end {
+    order: 5;
+    flex: 0 0 100%;
+    text-align: left;
+  }
+
+  ul.card-list.friends-table :is(.cell-amount, .cell-sub-end):empty {
+    display: none;
   }
 }
 

@@ -12,7 +12,7 @@ import EntryModal from '../components/EntryModal'
 import FriendLedger from '../components/FriendLedger'
 import FriendNameModal from '../components/FriendNameModal'
 import Icon from '../components/NavIcon'
-import { TapRow } from '../components/RowParts'
+import { IconAction, TapRow } from '../components/RowParts'
 import SettleModal from '../components/SettleModal'
 import Button from '../components/ui/Button'
 import { buttonClass } from '../components/ui/cn'
@@ -181,9 +181,9 @@ function DebtsView({ settings, now }: { settings: MoneySettings; now: Today }) {
     navigate(rowLink(person))
   }
 
-  // A desktop row: name, who owes whom, the reminder, the amount, then the one thing to do (mark as paid, or bring back). Rename and take
-  // off the list are on the right, beside the friend's history, so the list has the room for the names. The friend whose history is on
-  // the right is marked. The name is the link for the keyboard (j and k stop on it).
+  // A desktop row: name, who owes whom, the reminder, the amount, then what can be done: mark as paid (or bring back), rename, and take off
+  // the list (not for one that is removed already, whose place stays empty so the icons line up). The friend whose history is on the
+  // right is marked. The name is the link for the keyboard (j and k stop on it).
   function tableRow(person: Person) {
     const { tone, abs } = balanceView(person.balance)
     const reminded = dueIds.has(person.id) && tone !== 'even'
@@ -209,6 +209,8 @@ function DebtsView({ settings, now }: { settings: MoneySettings; now: Today }) {
               {t('debts.settle')}
             </Button>
           ) : null}
+          <IconAction icon="pencil" label={t('common.rename')} onClick={() => setEditing(person)} />
+          {person.archived ? <span className="icon-slot" /> : <IconAction icon="trash" label={t('debts.archive')} danger onClick={() => setDeleting(person)} />}
         </div>
       </li>
     )
@@ -255,12 +257,12 @@ function DebtsView({ settings, now }: { settings: MoneySettings; now: Today }) {
           </Link>
           <Button variant="outline" onClick={() => setEditing(person)}>
             <Icon name="pencil" className="btn-icon" />
-            {t('common.edit')}
+            {t('common.rename')}
           </Button>
           {person.archived ? null : (
             <Button variant="outline" className="row-danger" onClick={() => setDeleting(person)}>
               <Icon name="trash" className="btn-icon" />
-              {t('common.delete')}
+              {t('debts.archive')}
             </Button>
           )}
         </div>
@@ -369,7 +371,7 @@ function DebtsView({ settings, now }: { settings: MoneySettings; now: Today }) {
       ) : null}
       {deleting ? (
         <ConfirmModal
-          title={t('rec.confirmTitle', { action: t('common.delete'), name: deleting.name })}
+          title={t('rec.confirmTitle', { action: t('debts.archive'), name: deleting.name })}
           pending={pending}
           onConfirm={() => void onDelete(deleting)}
           onClose={() => setDeleting(null)}
