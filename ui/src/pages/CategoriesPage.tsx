@@ -8,6 +8,7 @@ import AddCategoryModal from '../components/AddCategoryModal'
 import BudgetSpanModal from '../components/BudgetSpanModal'
 import EditCategoryModal from '../components/EditCategoryModal'
 import MonthNav from '../components/MonthNav'
+import Icon from '../components/NavIcon'
 import { IconAction } from '../components/RowParts'
 import SectionTabs from '../components/SectionTabs'
 import Button from '../components/ui/Button'
@@ -225,6 +226,7 @@ function CategoriesView({ settings, thisMonth }: { settings: MoneySettings; this
       month={month}
       overview={overview?.find((row) => row.type === 'EXPENSE') ?? null}
       amounts={amountsFor(overview, 'EXPENSE')}
+      spent={spentFor(overview, 'EXPENSE')}
       categories={expenseCategories}
       money={money}
       onGlobal={onGlobal}
@@ -241,6 +243,7 @@ function CategoriesView({ settings, thisMonth }: { settings: MoneySettings; this
       month={month}
       overview={overview?.find((row) => row.type === 'INCOME') ?? null}
       amounts={amountsFor(overview, 'INCOME')}
+      spent={spentFor(overview, 'INCOME')}
       categories={incomeCategories}
       money={money}
       onGlobal={onGlobal}
@@ -397,6 +400,11 @@ function amountsFor(overview: Overview[] | null, type: Side): Map<string, string
   return new Map((row?.categories ?? []).map((line) => [line.categoryId, line.amountLimit]))
 }
 
+function spentFor(overview: Overview[] | null, type: Side): Map<string, string> {
+  const row = overview?.find((item) => item.type === type)
+  return new Map((row?.spent ?? []).map((line) => [line.categoryId, line.amount]))
+}
+
 function BudgetHalf({
   title,
   hideTitle = false,
@@ -404,6 +412,7 @@ function BudgetHalf({
   month,
   overview,
   amounts,
+  spent,
   categories,
   money,
   onGlobal,
@@ -419,6 +428,8 @@ function BudgetHalf({
   month: string
   overview: Overview | null
   amounts: Map<string, string>
+  /** What each category has added up to this month (spent on the expense side, earned on the income side). */
+  spent: Map<string, string>
   categories: CategoryInMonth[] | null
   money: (amount: string) => string
   onGlobal: (type: Side, raw: string) => Promise<string | null>
@@ -454,6 +465,7 @@ function BudgetHalf({
         <ul className="card-list cat-list" key={month} ref={listRef}>
           <li className="list-head" aria-hidden="true">
             <span>{t('common.category')}</span>
+            <span className="is-end">{t(type === 'EXPENSE' ? 'budgets.colSpent' : 'budgets.colEarned')}</span>
             <span className="is-end">{t('budgets.budget')}</span>
             <span />
           </li>
@@ -461,7 +473,9 @@ function BudgetHalf({
             <CategoryRow
               key={category.id}
               category={category}
+              type={type}
               value={amounts.get(category.id) ?? ''}
+              spent={spent.get(category.id) ?? '0.00'}
               money={money}
               onEdit={onEdit}
               onDelete={onDelete}
@@ -571,17 +585,24 @@ function BudgetRow({
   )
 }
 
-/** A category with its budget in the month, and what can be done with it: edit (name and budget, in a dialog) and delete. */
+/**
+ * A category with what it adds up to in the month and its budget, and what can be done with it: edit (name and budget, in a dialog) and
+ * delete. The grip at its start tells that the row can be moved.
+ */
 function CategoryRow({
   category,
+  type,
   value,
+  spent,
   money,
   onEdit,
   onDelete,
   hintId,
 }: {
   category: CategoryInMonth
+  type: Side
   value: string
+  spent: string
   money: (amount: string) => string
   onEdit: (category: Category) => void
   onDelete: (category: Category) => void
@@ -592,16 +613,26 @@ function CategoryRow({
   const amount = (
     <span className={value === '' || Number(value) === 0 ? 'cell-amount is-varies' : 'cell-amount'}>{value === '' ? '-' : money(value)}</span>
   )
+  // Nothing yet reads as a dash, like the budget; otherwise it is coloured against the budget as the total of the side is.
+  const budget = value === '' ? null : value
+  const tone = Number(spent) === 0 ? 'cell-amount is-varies' : type === 'EXPENSE' ? spentClass(spent, budget) : earnedClass(spent, budget)
+  const spentCell = (
+    <span className={`${tone} cell-spent`}>
+      <span className="sr-only spent-label">{t(type === 'EXPENSE' ? 'budgets.colSpent' : 'budgets.colEarned')}</span> {money(spent)}
+    </span>
+  )
   // Deleted from a later month on: it still counts here, and there is nothing to change about it.
   if (category.deleted) {
     return (
       <li className="card-item is-quiet" data-reorder-id={category.id}>
         <div className="cell-name">
+          <span className="row-grip" />
           <span className="card-name" title={category.name}>
             {category.name}
           </span>
           <span className="row-mark">{t('budgets.deletedLater')}</span>
         </div>
+        {spentCell}
         {amount}
         <div className="cell-actions" />
       </li>
@@ -610,10 +641,12 @@ function CategoryRow({
   return (
     <li className="card-item" data-reorder-id={category.id}>
       <div className="cell-name">
+        <Icon name="grip" className="row-grip" />
         <span className="card-name" title={category.name}>
           {category.name}
         </span>
       </div>
+      {spentCell}
       {amount}
       <div className="cell-actions">
         <IconAction icon="pencil" label={t('common.edit')} data-row-focus aria-describedby={hintId} onClick={() => onEdit(category)} />

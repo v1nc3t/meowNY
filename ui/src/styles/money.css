@@ -195,8 +195,9 @@ html.is-phone .split-table td {
   gap: 1.5rem;
 }
 
-/* No room for two sides: one under the other. A side needs about 28rem for a category name of 10rem beside its budget and buttons. */
-@container budget (max-width: 58rem) {
+/* No room for two sides: one under the other. A side needs about 37.5rem for a category name of 8rem (after its grip) beside what it
+   adds up to, its budget and the buttons; two of them, the gap between and the room at the edge of the pane make 77rem. */
+@container budget (max-width: 77rem) {
   .budget-split {
     grid-template-columns: minmax(0, 1fr);
   }
@@ -216,12 +217,39 @@ html.is-phone .split-table td {
   margin: 0;
 }
 
-/* The totals of a side (the budget, what was spent) and its categories (name, budget, edit and delete) share their columns, so the
-   amounts line up: the amount has 15 characters of room (an amount with no sign, "CHF 999,999.99" and a little more), the buttons two
-   of 2rem. A category row can be held and dragged: no text selection or touch menu when it is held. */
+/* The totals of a side (the budget, what was spent) and its categories (name, what they add up to, budget, edit and delete) share their
+   columns, so the amounts line up: an amount has 15 characters of room (an amount with no sign, "CHF 999,999.99" and a little more),
+   the buttons two of 2rem. A category row can be held and dragged: no text selection or touch menu when it is held. */
 .card-list.sum-list,
 .card-list.cat-list {
-  --cols: minmax(0, 1fr) 15ch 4.25rem;
+  --cols: minmax(0, 1fr) 15ch 15ch 4.25rem;
+}
+
+/* A total has no column of what it adds up to: its amount is in the column of the budgets, the second from the end (on the phone too). */
+ul.card-list.sum-list > li.card-item:not(.is-editing) .cell-amount {
+  grid-column: -3 / -2;
+}
+
+/* The grip at the start of a category says that the row can be held and dragged. It is only a picture (the hint is read out to screen
+   readers), grey like the buttons. The empty one of a row that cannot be moved keeps its room, and the head's name starts where the
+   names do. */
+.cat-list {
+  --grip-room: calc(12px + 0.5rem);
+}
+
+.cat-list .row-grip {
+  width: 12px;
+  height: 12px;
+  flex: none;
+  color: var(--muted-foreground);
+}
+
+.cat-list svg.row-grip {
+  cursor: grab;
+}
+
+ul.card-list.cat-list > li.list-head > :first-child {
+  padding-left: var(--grip-room);
 }
 
 /* The words of the total ("monthly budget") may take two lines in a narrow side, rather than being cut. */
@@ -264,6 +292,10 @@ ul.card-list > li.card-item.is-lifted {
   touch-action: none;
 }
 
+ul.card-list > li.card-item.is-lifted svg.row-grip {
+  cursor: grabbing;
+}
+
 /* A category that is deleted from a later month on is quiet. */
 .card-item.is-quiet .card-name,
 .card-item.is-quiet .cell-amount {
@@ -294,6 +326,42 @@ html.is-phone .cat-list .ui-btn-icon {
 
 html.is-phone ul.card-list.cat-list > li.list-head {
   display: none;
+}
+
+/* What a category adds up to is a line under its name, with its word in front, since there is no head. It runs under the budget too,
+   where a long amount needs the room, and starts where the name does; the buttons are beside both lines. */
+html.is-phone ul.card-list.cat-list > li.card-item {
+  align-content: center;
+}
+
+html.is-phone ul.card-list.cat-list > li.card-item > .cell-spent {
+  grid-column: 1 / 3;
+  grid-row: 2;
+  padding-left: var(--grip-room);
+  font-size: 0.875rem;
+  text-align: left;
+  white-space: normal;
+}
+
+html.is-phone ul.card-list.cat-list > li.card-item > .cell-amount:not(.cell-spent) {
+  grid-column: 2;
+  grid-row: 1;
+}
+
+html.is-phone ul.card-list.cat-list > li.card-item > .cell-actions {
+  grid-column: 3;
+  grid-row: 1 / span 2;
+}
+
+html.is-phone .cat-list .spent-label.sr-only {
+  position: static;
+  width: auto;
+  height: auto;
+  margin: 0;
+  overflow: visible;
+  clip-path: none;
+  font-weight: 400;
+  color: var(--muted-foreground);
 }
 
 html.is-phone .sum-list .cell-name > .card-name,
