@@ -37,6 +37,17 @@ export function Disclosure({ more = true, open, controls, onClick }: { more?: bo
   )
 }
 
+/** The note of a line of the debts, in the panel of its row: a "description", as in the transactions. */
+export function NoteSection({ note }: { note: string }) {
+  const t = useT()
+  return (
+    <section className="detail-section">
+      <p className="detail-title">{t('common.description')}</p>
+      <p className="detail-text">{note}</p>
+    </section>
+  )
+}
+
 /**
  * A row of a list on the phone: the name and the amount on the first line, what else under them, a chevron on the right. Tapping it
  * opens `children` under it (the details and a labelled button for everything that can be done). A row with no `children` has nothing

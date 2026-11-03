@@ -1,15 +1,21 @@
-import { useId } from 'react'
+import { useId, useState } from 'react'
 import { Link } from 'react-router-dom'
 import type { History, HistoryLine } from '../api/debts'
+import { useGoToTransaction } from '../hooks/useFocusRequest'
 import { useProfile } from '../hooks/profile'
 import { useT } from '../i18n/context'
+import { noteOf } from '../lib/balance'
 import { byDay, dayHeading } from '../lib/dayHeading'
 import { formatDate, formatMoney } from '../lib/money'
-import { TapRow } from './RowParts'
+import { toggleRow } from '../lib/toggleRow'
+import Icon from './NavIcon'
+import { Disclosure, IconAction, NoteSection, TapRow } from './RowParts'
 import Button from './ui/Button'
+import { buttonClass } from './ui/cn'
 
 /**
  * The debts of all friends, newest first, a page at a time: what changed with each friend. A friend's name leads to the friend's history.
+ * A line with a note opens to it, and one with a transaction (a bill, or a payment that was for one) has a way to go to it.
  */
 export default function DebtsHistory({
   history,
@@ -28,6 +34,8 @@ export default function DebtsHistory({
   const t = useT()
   const phone = useProfile() === 'phone'
   const panelId = useId()
+  const [openKey, setOpenKey] = useState<string | null>(null)
+  const goToTransaction = useGoToTransaction()
   const money = (amount: string) => formatMoney(amount, currency, locale)
   const { lines, total, limit, offset } = history
 
@@ -44,13 +52,18 @@ export default function DebtsHistory({
     return <span className={`cell-amount ${effect.startsWith('-') ? 'debt-owe' : 'debt-owed'}`}>{effectText(effect)}</span>
   }
 
-  /** What kind of change it was, and what it was for. */
-  const what = (line: HistoryLine) => (line.what ? `${kindText(line)}: ${line.what}` : kindText(line))
+  /** What kind of change it was, and what it was for if that is a name (of a bill); a note is not here, it is in the panel of the row. */
+  const what = (line: HistoryLine) => (line.what && !noteOf(line) ? `${kindText(line)}: ${line.what}` : kindText(line))
+  const toggle = (key: string) => setOpenKey(openKey === key ? null : key)
 
-  // A desktop row: who, what kind of change, the day, the change and the balance after it.
+  // A desktop row: who, what kind of change, the day, the change and the balance after it, then the button that goes to its transaction
+  // and the chevron of a note, which opens under the row.
   function tableRow(line: HistoryLine, at: number) {
+    const note = noteOf(line)
+    const key = keyOf(line, at)
+    const open = openKey === key
     return (
-      <li key={keyOf(line, at)} className="card-item">
+      <li key={key} className={open ? 'card-item is-open' : 'card-item'}>
         <div className="cell-name">
           <span className="card-name">{subject(line)}</span>
         </div>
@@ -60,18 +73,33 @@ export default function DebtsHistory({
         <span className="cell-sub-end">{formatDate(line.date, locale)}</span>
         {amount(line)}
         <span className="cell-bal">{line.balance !== null ? money(line.balance) : ''}</span>
+        <div className="cell-actions">
+          {line.transactionId ? <IconAction icon="transactions" label={t('debts.goToTransaction')} data-row-focus onClick={() => goToTransaction(line)} /> : null}
+          <Disclosure more={note !== ''} open={open} controls={`${panelId}-${key}`} onClick={() => toggle(key)} />
+        </div>
+        {open && note ? (
+          <div className="row-panel tx-detail" id={`${panelId}-${key}`}>
+            <NoteSection note={note} />
+          </div>
+        ) : null}
       </li>
     )
   }
 
-  // A phone row: who and the change, what it was and its balance under them. There is nothing to open.
+  // A phone row: who and the change, what it was and its balance under them. It opens to its note and to a button for its transaction; a
+  // line with neither is plain. The friend's name is a link only in a plain row, since a link cannot be inside the button of a row that
+  // opens: there the friend is a button of the panel.
   function tapRow(line: HistoryLine, at: number) {
     const key = keyOf(line, at)
+    const note = noteOf(line)
+    const opens = Boolean(note || line.transactionId)
     return (
       <TapRow
         key={key}
         id={`${panelId}-${key}`}
-        name={subject(line)}
+        open={openKey === key}
+        onToggle={() => toggle(key)}
+        name={opens ? line.friend : subject(line)}
         amount={amount(line)}
         sub={
           <>
@@ -79,7 +107,26 @@ export default function DebtsHistory({
             {line.balance !== null ? <span>{`${t('debts.balance')} ${money(line.balance)}`}</span> : null}
           </>
         }
-      />
+      >
+        {opens ? (
+          <>
+            {note ? <NoteSection note={note} /> : null}
+            <div className="row-panel-actions">
+              {line.transactionId ? (
+                <Button variant="outline" onClick={() => goToTransaction(line)}>
+                  <Icon name="transactions" className="btn-icon" />
+                  {t('debts.goToTransaction')}
+                </Button>
+              ) : null}
+              {line.personId ? (
+                <Link to={`/app/debts/${line.personId}`} className={buttonClass('outline')}>
+                  {line.friend}
+                </Link>
+              ) : null}
+            </div>
+          </>
+        ) : null}
+      </TapRow>
     )
   }
 
@@ -95,13 +142,14 @@ export default function DebtsHistory({
           ))
         : null}
       {lines.length > 0 && !phone ? (
-        <ul className="card-list is-table history-table">
+        <ul className="card-list is-table history-table" onClick={toggleRow}>
           <li className="list-head" aria-hidden="true">
             <span>{t('common.name')}</span>
             <span>{t('debts.kind')}</span>
             <span>{t('sync.field.date')}</span>
             <span className="is-end">{t('debts.change')}</span>
             <span className="is-end">{t('debts.balance')}</span>
+            <span />
           </li>
           {lines.map(tableRow)}
         </ul>

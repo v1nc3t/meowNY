@@ -4,21 +4,22 @@ import { debts, type Entry, type Line, type Person, type Statement } from '../ap
 import { ApiError, errorText } from '../api/invoke'
 import type { Today } from '../api/today'
 import { useClipCounts } from '../hooks/useClipCounts'
-import { useFocusRequest, useJumpTo } from '../hooks/useFocusRequest'
+import { useFocusRequest, useGoToTransaction, useJumpTo } from '../hooks/useFocusRequest'
 import type { MoneySettings } from '../hooks/useMoneySettings'
 import { useToast } from '../hooks/toast'
 import { useProfile } from '../hooks/profile'
 import { useT } from '../i18n/context'
-import { balanceView, entryOfLine } from '../lib/balance'
+import { balanceView, entryOfLine, noteOf } from '../lib/balance'
 import { byDay, dayHeading } from '../lib/dayHeading'
 import { formatDate, formatMoney } from '../lib/money'
 import { remindersChanged } from '../lib/reminders'
+import { toggleRow } from '../lib/toggleRow'
 import BillCodeModal from './BillCodeModal'
 import ClipPreview from './ClipPreview'
 import ConfirmModal from './ConfirmModal'
 import EntryModal from './EntryModal'
 import Icon from './NavIcon'
-import { IconAction, TapRow } from './RowParts'
+import { Disclosure, IconAction, NoteSection, TapRow } from './RowParts'
 import SettleModal from './SettleModal'
 import Button from './ui/Button'
 import { buttonClass } from './ui/cn'
@@ -56,6 +57,7 @@ export default function FriendLedger({
   const phone = useProfile() === 'phone'
   const panelId = useId()
   const [openKey, setOpenKey] = useState<string | null>(null)
+  const goToTransaction = useGoToTransaction()
   const [statement, setStatement] = useState<Statement | null>(null)
   const [missing, setMissing] = useState(false)
   const [dialog, setDialog] = useState<Dialog>(null)
@@ -128,9 +130,10 @@ export default function FriendLedger({
   const { tone, abs } = balanceView(person.balance)
   // Beside the name, so the short words of the list of friends: "you owe €0.35", "owes you €0.35".
   const summaryText = tone === 'even' ? t('debts.settledUp') : `${t(tone === 'owed' ? 'debts.labelOwesYou' : 'debts.labelYouOwe')} ${money(abs)}`
+  // A bill's name is in its label; an entry's note is not, it is in the panel of its row.
   const lineLabel = (line: Line) => {
     const kind = t(`debts.kind.${line.kind}`)
-    return line.what ? `${kind}: ${line.what}` : kind
+    return line.what && !noteOf(line) ? `${kind}: ${line.what}` : kind
   }
   const effectText = (line: Line) => `${line.effect.startsWith('-') ? '-' : '+'}${money(line.effect.replace('-', ''))}`
   const lineKey = (line: Line, at: number) => `${line.entryId ?? 'bill'}-${line.transactionId ?? ''}-${at}`
@@ -138,14 +141,18 @@ export default function FriendLedger({
   /** What a line changed: what the friend owes you more (green) or less (red). */
   const change = (line: Line) => <span className={`cell-amount debt-${line.effect.startsWith('-') ? 'owe' : 'owed'}`}>{effectText(line)}</span>
   const showCode = (line: Line) => setDialog({ kind: 'code', transactionId: line.transactionId ?? '', amount: line.amount })
+  const toggle = (key: string) => setOpenKey(openKey === key ? null : key)
 
-  // A desktop row: what it was, when, how much it changed, the balance after it, then its buttons (show code for a bill; edit and delete
-  // for an entry of the person's own).
+  // A desktop row: what it was, when, how much it changed, the balance after it, then its buttons (go to the transaction; show code for a
+  // bill; edit and delete for an entry of the person's own) and the chevron of a note, which opens under the row.
   function tableRow(line: Line, at: number) {
     const entry = entryOfLine(line, person.id)
     const count = line.entryId ? (clips[line.entryId] ?? 0) : 0
+    const note = noteOf(line)
+    const key = lineKey(line, at)
+    const open = openKey === key
     return (
-      <li key={lineKey(line, at)} className="card-item" data-item={lineItem(line)}>
+      <li key={key} className={open ? 'card-item is-open' : 'card-item'} data-item={lineItem(line)}>
         <div className="cell-name">
           <span className="card-name" title={lineLabel(line)}>
             {lineLabel(line)}
@@ -156,23 +163,37 @@ export default function FriendLedger({
         {change(line)}
         <span className="cell-sub-end">{money(line.balance)}</span>
         <div className="cell-actions">
-          {line.kind === 'BILL' && line.transactionId ? <IconAction icon="qr" label={t('code.show')} data-row-focus onClick={() => showCode(line)} /> : null}
+          {line.transactionId ? <IconAction icon="transactions" label={t('debts.goToTransaction')} onClick={() => goToTransaction(line)} /> : null}
+          {line.kind === 'BILL' && line.transactionId ? (
+            <>
+              <IconAction icon="qr" label={t('code.show')} data-row-focus onClick={() => showCode(line)} />
+              {/* where an entry has delete, so that the buttons of bills and entries line up */}
+              <span className="icon-slot" />
+            </>
+          ) : null}
           {entry ? (
             <>
               <IconAction icon="pencil" label={t('common.edit')} data-row-focus onClick={() => setDialog({ kind: 'entry', entry })} />
               <IconAction icon="trash" label={t('common.delete')} danger onClick={() => setDialog({ kind: 'delete', entry })} />
             </>
           ) : null}
+          <Disclosure more={note !== ''} open={open} controls={`${panelId}-${key}`} onClick={() => toggle(key)} />
         </div>
+        {open && note ? (
+          <div className="row-panel tx-detail" id={`${panelId}-${key}`}>
+            <NoteSection note={note} />
+          </div>
+        ) : null}
       </li>
     )
   }
 
-  // A phone row: what it was and how much it changed, the balance under them. It opens to its documents and a labelled button for
-  // each thing that can be done; a line with neither is plain.
+  // A phone row: what it was and how much it changed, the balance under them. It opens to its note, its documents and a labelled button
+  // for each thing that can be done; a line with none of them is plain.
   function tapRow(line: Line, at: number) {
     const entry = entryOfLine(line, person.id)
     const count = line.entryId ? (clips[line.entryId] ?? 0) : 0
+    const note = noteOf(line)
     const bill = line.kind === 'BILL' && line.transactionId
     const key = lineKey(line, at)
     return (
@@ -181,7 +202,7 @@ export default function FriendLedger({
         id={`${panelId}-${key}`}
         item={lineItem(line)}
         open={openKey === key}
-        onToggle={() => setOpenKey(openKey === key ? null : key)}
+        onToggle={() => toggle(key)}
         name={lineLabel(line)}
         amount={change(line)}
         sub={
@@ -197,8 +218,9 @@ export default function FriendLedger({
           </>
         }
       >
-        {bill || entry || count ? (
+        {line.transactionId || entry || count || note ? (
           <>
+            {note ? <NoteSection note={note} /> : null}
             {count && line.entryId ? (
               <section className="detail-section">
                 <p className="detail-title">{t('docs.title')}</p>
@@ -206,6 +228,12 @@ export default function FriendLedger({
               </section>
             ) : null}
             <div className="row-panel-actions">
+              {line.transactionId ? (
+                <Button variant="outline" onClick={() => goToTransaction(line)}>
+                  <Icon name="transactions" className="btn-icon" />
+                  {t('debts.goToTransaction')}
+                </Button>
+              ) : null}
               {bill ? (
                 <Button variant="outline" onClick={() => showCode(line)}>
                   <Icon name="qr" className="btn-icon" />
@@ -257,7 +285,7 @@ export default function FriendLedger({
           ))
         : null}
       {lines.length > 0 && !phone ? (
-        <ul className="card-list is-table ledger-table">
+        <ul className="card-list is-table ledger-table" onClick={toggleRow}>
           <li className="list-head" aria-hidden="true">
             <span>{t('debts.what')}</span>
             <span>{t('sync.field.date')}</span>

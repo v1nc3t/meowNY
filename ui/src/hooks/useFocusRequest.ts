@@ -1,7 +1,7 @@
 import { useCallback, useEffect } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import type { TargetKind } from '../api/documents'
-import type { FocusRequest } from '../lib/documents'
+import { whereIs, type FocusRequest } from '../lib/documents'
 
 /**
  * The item a document sent the person here for, if it is of this kind. It comes in the state of the location (like the request of the
@@ -14,6 +14,21 @@ export function useFocusRequest(kind: TargetKind): { request: FocusRequest | nul
   const request = focus && focus.kind === kind ? focus : null
   const done = useCallback(() => navigate(location.pathname, { replace: true, state: null }), [navigate, location.pathname])
   return { request, done }
+}
+
+/**
+ * Takes the person to the transactions page, on the transaction of a line (of a bill, or of a payment that was for one). The page shows the
+ * month of the transaction's own day, which for a payment is not the day of the line.
+ */
+export function useGoToTransaction(): (line: { transactionId: string | null; transactionDate: string | null; date: string }) => void {
+  const navigate = useNavigate()
+  return useCallback(
+    (line) => {
+      const there = line.transactionId ? whereIs({ kind: 'transaction', id: line.transactionId, date: line.transactionDate ?? line.date }) : null
+      if (there) navigate(there.path, { state: { focus: there.focus } })
+    },
+    [navigate],
+  )
 }
 
 /**

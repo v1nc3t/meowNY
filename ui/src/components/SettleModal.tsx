@@ -1,16 +1,19 @@
 import { useState, type FormEvent } from 'react'
 import { debts, type Person } from '../api/debts'
 import { errorText } from '../api/invoke'
+import type { Transaction } from '../api/transactions'
 import { useMoneySettings } from '../hooks/useMoneySettings'
 import { useToast } from '../hooks/toast'
 import { useT } from '../i18n/context'
 import { amountString, formatMoney, fromMinor, toMinor } from '../lib/money'
 import DatePicker from './DatePicker'
 import Modal, { modalFormId } from './Modal'
+import TransactionLink from './TransactionLink'
 
 /**
  * "Mark as paid": a payment between the person and a friend. The amount starts as the whole balance. A larger one is accepted, and
  * the dialog says first that the balance will turn around. A checkbox can drop that difference: then the whole balance is recorded.
+ * A transaction can be linked as what the payment was for, for example a bill paid for them; it is only a reference.
  */
 export default function SettleModal({
   person,
@@ -32,6 +35,7 @@ export default function SettleModal({
   const say = useToast()
   const [pending, setPending] = useState(false)
   const [keep, setKeep] = useState(false)
+  const [linked, setLinked] = useState<Transaction | null>(null)
   const money = (value: string) => (settings ? formatMoney(value, settings.currency, settings.locale) : value)
 
   // More than the debt: said before it is confirmed. Only a comparison of two amounts, the rest is worked out by the app.
@@ -52,7 +56,7 @@ export default function SettleModal({
     }
     setPending(true)
     try {
-      await debts.settle(person.id, { amount: keeping ? whole : typed, date, ...(note ? { note } : {}) })
+      await debts.settle(person.id, { amount: keeping ? whole : typed, date, ...(note ? { note } : {}), ...(linked ? { transactionId: linked.id } : {}) })
     } catch (failure) {
       say(errorText(failure), 'error')
       return
@@ -85,6 +89,7 @@ export default function SettleModal({
           {t('debts.note')}
           <input name="note" maxLength={200} autoComplete="off" />
         </label>
+        <TransactionLink value={linked} onChange={setLinked} />
       </form>
     </Modal>
   )

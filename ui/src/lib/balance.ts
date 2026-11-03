@@ -20,3 +20,11 @@ export function entryOfLine(line: Line, personId: string): Entry | null {
     transactionId: line.transactionId,
   }
 }
+
+/** The kinds of line whose `what` is a name (of a bill or of a recurring payment). In an entry of the ledger it is the person's own note. */
+const NAMED = new Set(['BILL', 'PAYMENT_PAID', 'PAYMENT_DUE'])
+
+/** The note of a line, which a row shows in its panel; empty for a line with none, and for one whose `what` is a name (that is in its label). */
+export function noteOf(line: { kind: string; what: string }): string {
+  return NAMED.has(line.kind) ? '' : line.what
+}

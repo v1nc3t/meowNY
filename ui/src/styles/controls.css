@@ -199,6 +199,52 @@
   box-shadow: 0 0 0 1px var(--destructive);
 }
 
+/* Linking a payment to a transaction (the dialog of "mark as paid"): the button that opens the search, the line for the one chosen, and
+   the rows of the list, each a name with its date and amount. A long name is cut short so the amount always shows. */
+.tx-link-open {
+  align-self: flex-start;
+}
+
+.tx-link-line {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: 2.25rem;
+  padding: 0.25rem 0.25rem 0.25rem 0.75rem;
+  border: var(--border-width) solid var(--input);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-xs);
+}
+
+.tx-link-name,
+.tx-pick-name {
+  flex: 1 1 0;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tx-link-meta,
+.tx-pick-meta {
+  flex: none;
+  font-variant-numeric: tabular-nums;
+  opacity: 0.7;
+}
+
+.pick-list.tx-pick button {
+  display: flex;
+  gap: 0.75rem;
+  width: 100%;
+  padding-right: 0.5rem;
+}
+
+.pick-list > li.tx-pick-none {
+  padding: 0.5rem;
+  font-size: 0.8125rem;
+  color: var(--muted-foreground);
+}
+
 html:has(dialog[open]),
 body:has(dialog[open]) {
   overflow: hidden;

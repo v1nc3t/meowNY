@@ -75,6 +75,8 @@ export const Line = z.object({
   balance: signed,
   entryId: id.nullable(),
   transactionId: id.nullable(),
+  /** The payment date of that transaction, which for an entry is not the day of the line. Set whenever `transactionId` is. */
+  transactionDate: date.nullable(),
 })
 export type Line = z.infer<typeof Line>
 
@@ -238,6 +240,8 @@ export const HistoryLine = z.object({
   dueDate: date.nullable(),
   entryId: id.nullable(),
   transactionId: id.nullable(),
+  /** The payment date of that transaction, which for an entry is not the day of the line. Set whenever `transactionId` is. */
+  transactionDate: date.nullable(),
   recurringId: id.nullable(),
 })
 export type HistoryLine = z.infer<typeof HistoryLine>
@@ -275,9 +279,18 @@ export const debts = {
   addEntry: (input: NewEntry, expense?: ExpenseInput) => call('add_ledger_entry', Entry, { input, expense: expense ?? null }),
   updateEntry: (id: string, patch: EntryPatch) => call('update_ledger_entry', Entry, { id, patch }),
   removeEntry: (id: string) => call('delete_ledger_entry', z.null(), { id }).then(() => undefined),
-  /** "Mark as paid". No amount means the whole balance; one above the debt is accepted and the answer says how much was over. */
-  settle: (id: string, options: { amount?: string; date?: string; note?: string } = {}) =>
-    call('settle_person', Settled, { id, amount: options.amount ?? null, date: options.date ?? null, note: options.note ?? null }),
+  /**
+   * "Mark as paid". No amount means the whole balance; one above the debt is accepted and the answer says how much was over.
+   * `transactionId` is the transaction the payment was for: only a reference, no amount changes.
+   */
+  settle: (id: string, options: { amount?: string; date?: string; note?: string; transactionId?: string } = {}) =>
+    call('settle_person', Settled, {
+      id,
+      amount: options.amount ?? null,
+      date: options.date ?? null,
+      note: options.note ?? null,
+      transactionId: options.transactionId ?? null,
+    }),
   preview: (amount: string, input: SplitInput) => call('split_preview', SplitPreview, { amount, input }),
   split: (transactionId: string, input: SplitInput) => call('set_transaction_split', Transaction, { id: transactionId, input }),
   unsplit: (transactionId: string) => call('clear_transaction_split', Transaction, { id: transactionId }),

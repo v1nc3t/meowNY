@@ -289,12 +289,15 @@ ul.card-list > li.list-head > .span-2 {
 }
 
 /* One friend's history: what it was, the day, how much it changed (with a sign, 16 characters), the balance after it (small print, with
-   a sign), then show code (a bill) or edit and delete (an entry): two buttons of 2rem at most. With the gaps they take 29.8rem and
-   the padding, which leaves what it was 10rem from 47em; below that the rows have two lines (what it was and the change, then the day
-   and the balance, the buttons beside both). What it was starts with the kind in words, and the day sits under it in a narrow half:
-   both wrap rather than being cut. */
+   a sign), then the buttons: go to the transaction, show code (a bill) or edit and delete (an entry; a bill has an empty place where
+   an entry has delete), and the chevron of a note. That is four of 2rem and three gaps of 0.125rem, 8.5rem. The columns take 34rem
+   (the characters, 42.5 of them, 25.5rem, and the buttons), the gaps 4rem and the padding 2.5rem, which leaves what it was 10rem from
+   51em; below that the rows have two lines (what it was and the change, then the day and the balance, the buttons beside both), and
+   from 33em down three, the buttons on a line of their own at the right: beside the two lines they would leave what it was less than
+   10rem. What it was starts with the kind in words (and a bill's name), and the day sits under it in a narrow half: both wrap rather
+   than being cut. */
 .card-list.ledger-table {
-  --cols: minmax(10rem, 1fr) 12ch 16ch 14.5ch 4.25rem;
+  --cols: minmax(10rem, 1fr) 12ch 16ch 14.5ch 8.5rem;
 }
 
 .ledger-table .cell-name > .card-name,
@@ -310,10 +313,10 @@ ul.card-list > li.list-head > .span-2 {
 
 /* The same room for the buttons in every row, so the amounts line up when the head is gone (a narrow window). */
 .ledger-table .cell-actions {
-  min-width: 4.25rem;
+  min-width: 8.5rem;
 }
 
-@container (max-width: 47em) {
+@container (max-width: 51em) {
   ul.card-list.ledger-table > li.list-head {
     display: none;
   }
@@ -351,18 +354,34 @@ ul.card-list > li.list-head > .span-2 {
   }
 }
 
+@container (max-width: 33em) {
+  ul.card-list.ledger-table > li.card-item {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      'name amount'
+      'sub sub-end'
+      'actions actions';
+  }
+}
+
 /* The history of all debts: who, what kind of change, the day, the change (with a sign, 16 characters), the balance after it (small
-   print, with a sign). The kind of change is words that can be long ("wiederkehrende zahlung verspätet bezahlt"), so it wraps. With the
-   gaps the day, the change and the balance take 32rem, which leaves 10rem each to the friend and to the kind of change from 53em.
-   Below that the rows have two lines (the friend and the change, then the kind and the day, the balance beside both), and under 40em
-   three (the balance under the day). */
+   print, with a sign), then go to the transaction and the chevron of a note: two buttons of 2rem, 4.25rem. The kind of change is words
+   that can be long ("wiederkehrende zahlung verspätet bezahlt"), so it wraps. With the gaps and the padding the day, the change, the
+   balance and the buttons take 37.25rem, which leaves 10rem each to the friend and to the kind of change from 58em. Below that the rows
+   have two lines (the friend and the change, then the kind and the day, the balance and the buttons beside both), and under 40em four
+   (the balance under the day, the buttons under the balance). */
 .card-list.history-table {
-  --cols: minmax(10rem, 1fr) minmax(10rem, 1.4fr) 12ch 16ch 14.5ch;
+  --cols: minmax(10rem, 1fr) minmax(10rem, 1.4fr) 12ch 16ch 14.5ch 4.25rem;
 }
 
 .history-table .cell-sub {
   white-space: normal;
   overflow-wrap: anywhere;
+}
+
+/* The same room for the buttons in every row, so the amounts line up when the head is gone (a narrow window). */
+.history-table .cell-actions {
+  min-width: 4.25rem;
 }
 
 .cell-bal {
@@ -374,7 +393,7 @@ ul.card-list > li.list-head > .span-2 {
   font-variant-numeric: tabular-nums;
 }
 
-@container (max-width: 53em) {
+@container (max-width: 58em) {
   ul.card-list.history-table > li.list-head {
     display: none;
   }
@@ -384,10 +403,10 @@ ul.card-list > li.list-head > .span-2 {
   }
 
   ul.card-list.history-table > li.card-item {
-    grid-template-columns: minmax(0, 1fr) auto auto;
+    grid-template-columns: minmax(0, 1fr) auto auto auto;
     grid-template-areas:
-      'name amount actions'
-      'sub sub-end actions';
+      'name amount bal actions'
+      'sub sub-end bal actions';
     row-gap: 0;
   }
 
@@ -409,18 +428,24 @@ ul.card-list > li.list-head > .span-2 {
   }
 
   ul.card-list.history-table .cell-bal {
+    grid-area: bal;
+  }
+
+  ul.card-list.history-table .cell-actions {
     grid-area: actions;
   }
 }
 
-/* In half a page the balance is under the day, in the column of the amount, so the friend's name keeps its room: three lines a row. */
+/* In half a page the balance is under the day, in the column of the amount, and the buttons under it, so the friend's name keeps its
+   room. */
 @container (max-width: 40em) {
   ul.card-list.history-table > li.card-item {
     grid-template-columns: minmax(0, 1fr) auto;
     grid-template-areas:
       'name amount'
       'sub sub-end'
-      'sub actions';
+      'sub bal'
+      'actions actions';
   }
 }
 
