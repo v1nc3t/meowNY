@@ -156,7 +156,8 @@
       "json": {
         "exit": 0,
         "stderr": "",
-        "stdout": "[{\"actual\":\"3690.00\",\"allocated\":\"3200.00\",\"budgeted\":\"3600.00\",\"categories\":[{\"amountLimit\":\"3200.00\",\"categoryId\":\"1\"}],\"overAllocated\":false,\"remaining\":\"-90.00\",\"type\":\"INCOME\",\"unallocated\":\"400.00\",\"used\":\"3690.00\"},{\"actual\":\"1961.64\",\"allocated\":\"2015.00\",\"budgeted\":\"2450.00\",\"categories\":[{\"amountLimit\":\"950.00\",\"categoryId\":\"4\"},{\"amountLimit\":\"500.00\",\"categoryId\":\"5\"},{\"amountLimit\":\"70.00\",\"categoryId\":\"6\"},{\"amountLimit\":\"200.00\",\"categoryId\":\"7\"},{\"amountLimit\":\"45.00\",\"categoryId\":\"9\"},{\"amountLimit\":\"250.00\",\"categoryId\":\"10\"}],\"overAllocated\":false,\"remaining\":\"488.36\",\"type\":\"EXPENSE\",\"unallocated\":\"435.00\",\"used\":\"1961.64\"}]\n"
+        "stdout": "[{\"actual\":\"3690.00\",\"allocated\":\"3200.00\",\"budgeted\":\"3600.00\",\"categories\":[{\"amountLimit\":\"3200.00\",\"categoryId\":\"1\"}],\"overAllocated\":false,\"remaining\":\"-90.00\",\"spent\":[{\"amount\":\"3240.00\",\"categoryId\":\"1\"},{\"amount\":\"450.00\",\"categoryId\":\"2\"}],\"type\":\"INCOME\",\"unallocated\":\"400.00\",\"used\":\"3690.00\"},{\"actual\":\"1961.64\",\"allocated\":\"2015.00\",\"budgeted\":\"2450.00\",\"categories\":[{\"amountLimit\":\"950.00\",\"categoryId\":\"4\"},{\"amountLimit\":\"500.00\",\"categoryId\":\"5\"},{\"amountLimit\":\"70.00\",\"categoryId\":\"6\"},{\"amountLimit\":\"200.00\",\"categoryId\":\"7\"},{\"amountLimit\":\"45.00\",\"categoryId\":\"9\"},{\"amountLimit\":\"250.00\",\"categoryId\":\"10\"}],\"overAllocated\":false,\"remaining\":\"488.36\",\"spent\":[{\"amount\":\"9…",
+        "truncated": true
       }
     },
     "budgets remove": {
