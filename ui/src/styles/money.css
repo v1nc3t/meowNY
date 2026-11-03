@@ -16,11 +16,32 @@
   flex: 0 0 auto;
 }
 
-/* The transactions as a table: name, amount, date, category, then the buttons (edit, delete, the chevron: three of 2rem). The columns
-   of amounts and dates are as wide as the longest the formats write, in characters of the monospace font: 16 for "-CHF 999,999.99" or a
-   longer way of writing it, and 13 for a date (small print, 0.875rem, so 12 of the row's). The name and the category share the rest. */
+/* The transactions as a table: name, amount, date, category, the icon of a shared one, then the buttons (edit, delete, the chevron: three
+   of 2rem). The columns of amounts and dates are as wide as the longest the formats write, in characters of the monospace font: 16 for
+   "-CHF 999,999.99" or a longer way of writing it, and 13 for a date (small print, 0.875rem, so 12 of the row's). The icon is 12px, so
+   2 characters hold it with room to spare. The name and the category share the rest. */
 .card-list.tx-list {
-  --cols: minmax(0, 2.2fr) 16ch 12ch minmax(0, 1.2fr) 6.5rem;
+  --cols: minmax(0, 2.2fr) 16ch 12ch minmax(0, 1.2fr) 2ch 6.5rem;
+}
+
+.tx-list .cell-mark {
+  display: flex;
+  align-items: center;
+}
+
+/* Narrower than 40em, the icon of a shared one is on the second line, between the category and the date. The name takes the room over
+   it, so the first line is as wide as it was. */
+@container (max-width: 40em) {
+  ul.card-list.tx-list > li.card-item {
+    grid-template-columns: minmax(0, 1fr) auto auto auto;
+    grid-template-areas:
+      'name name amount actions'
+      'sub mark sub-end actions';
+  }
+
+  ul.card-list.tx-list .cell-mark {
+    grid-area: mark;
+  }
 }
 
 /* An open transaction: the split and the description side by side where there is room, one under the other where there is not. */

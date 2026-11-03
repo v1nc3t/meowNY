@@ -187,9 +187,12 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
 
   const searchRef = useRef<HTMLInputElement>(null)
 
-  function goCurrentMonth() {
-    saveChoice('tx.period', 'month')
-    setFilters((current) => ({ ...current, mode: 'month', from: now.month, to: now.month }))
+  // The current year when a year is shown, the current month otherwise; a range of dates is taken to the current month.
+  function goCurrent() {
+    const mode = filters.mode === 'year' ? 'year' : 'month'
+    const from = mode === 'year' ? now.date.slice(0, 4) : now.month
+    saveChoice('tx.period', mode)
+    setFilters((current) => ({ ...current, mode, from, to: from }))
     setOffset(0)
   }
 
@@ -241,12 +244,12 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
     setEditing(null)
   }
 
-  // Keyboard: n adds, / searches, [ and ] step the month or the year, t jumps to this month, j and k move between rows.
+  // Keyboard: n adds, / searches, [ and ] step the month or the year, t jumps to this month or year, j and k move between rows.
   useShortcut('new', () => openAdd())
   useShortcut('search', () => searchRef.current?.focus())
   useShortcut('prev', () => stepPeriod(-1), filters.mode !== 'date')
   useShortcut('next', () => stepPeriod(1), filters.mode !== 'date')
-  useShortcut('today', goCurrentMonth)
+  useShortcut('today', goCurrent)
   useRowNavigation()
 
   // One handler for both modes: the add modal creates, the same modal prefilled edits.
@@ -336,6 +339,9 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
   const currentPage = page && page.limit > 0 ? Math.floor(page.offset / page.limit) + 1 : 1
 
   const atCurrentMonth = filters.mode === 'month' && filters.from === now.month && filters.to === now.month
+  // the button for the current period is off when the year or the month shown is that one (and there is none for a range of dates)
+  const currentPeriod = filters.mode === 'year' ? now.date.slice(0, 4) : now.month
+  const atCurrentPeriod = filters.from === currentPeriod && filters.to === currentPeriod
   // how many filters are not as they start (this month, every category): the phone's filters button counts them
   const activeFilters = (atCurrentMonth ? 0 : 1) + (filters.categoryId ? 1 : 0)
   const toggle = (id: string) => setOpenId((current) => (current === id ? null : id))
@@ -414,9 +420,9 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
           </Button>
         </div>
       )}
-      {atCurrentMonth ? null : (
-        <Button variant="outline" onClick={goCurrentMonth} {...tip('today', t('tx.currentMonth'))}>
-          {t('tx.currentMonth')}
+      {filters.mode === 'date' ? null : (
+        <Button variant="outline" disabled={atCurrentPeriod} onClick={goCurrent} {...tip('today')}>
+          {t('common.current')}
         </Button>
       )}
     </div>
@@ -541,12 +547,12 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
     )
   }
 
-  /** The small marks after a name: shared with friends and, for the phone's rows, a note. */
-  function marks(transaction: Transaction, withNote: boolean) {
+  /** The small marks of a phone row, after its category: shared with friends and a note. (The desktop's rows have a column for shared.) */
+  function marks(transaction: Transaction) {
     return (
       <>
         {transaction.split.length > 0 ? <span className="row-mark">{t('tx.shared')}</span> : null}
-        {withNote && transaction.description?.trim() ? (
+        {transaction.description?.trim() ? (
           <span className="row-mark-icon" title={t('common.description')}>
             <Icon name="note" className="mark-icon" />
             <span className="sr-only">{t('common.description')}</span>
@@ -556,7 +562,7 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
     )
   }
 
-  // A desktop row: name, amount, date, category, then edit, delete and (when there is more to show) the chevron.
+  // A desktop row: name, amount, date, category, an icon if it is shared, then edit, delete and (when there is more to show) the chevron.
   function tableRow(transaction: Transaction) {
     const open = openId === transaction.id
     const count = clips[transaction.id] ?? 0
@@ -567,11 +573,18 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
           <span className="card-name" title={transaction.name}>
             {transaction.name}
           </span>
-          {marks(transaction, false)}
         </div>
         {amount(transaction)}
         <span className="cell-sub-end">{formatDate(transaction.paymentDate, settings.locale)}</span>
         <span className="cell-sub">{categoryName(transaction)}</span>
+        <span className="cell-mark">
+          {transaction.split.length > 0 ? (
+            <span className="row-mark-icon" title={t('tx.shared')}>
+              <Icon name="qr" className="mark-icon" />
+              <span className="sr-only">{t('tx.shared')}</span>
+            </span>
+          ) : null}
+        </span>
         <div className="cell-actions">
           <Button variant="ghost" size="icon" className="icon-btn" aria-label={t('common.edit')} title={t('common.edit')} data-row-focus onClick={() => openEdit(transaction)}>
             <Icon name="pencil" className="btn-icon" />
@@ -625,7 +638,7 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
           {amount(transaction)}
           <span className="cell-sub">
             <span>{categoryName(transaction)}</span>
-            {marks(transaction, true)}
+            {marks(transaction)}
             {count ? (
               <span className="row-mark-icon">
                 <Icon name="clip" className="mark-icon" />
@@ -756,6 +769,7 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
                   <span className="is-end">{t('tx.amount')}</span>
                   <span>{t('sync.field.date')}</span>
                   <span>{t('common.category')}</span>
+                  <span />
                   <span />
                 </li>
                 {page.transactions.map(tableRow)}
