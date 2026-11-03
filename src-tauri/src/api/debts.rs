@@ -255,19 +255,22 @@ pub const PEOPLE_SETTLE: Route = Route {
         Param::new("amount", Kind::Money, "How much was paid, more than zero. The whole balance if left out."),
         Param::new("date", Kind::Date, "The day it was paid. Today if left out."),
         Param::new("note", Kind::String, "A note, up to 200 characters."),
+        Param::new("transactionId", Kind::Id, "A transaction the payment was for, such as a bill you paid for them. Only a reference: no amount changes."),
     ],
     confirm: None,
     run: |ctx, mut args| {
         let id = take_id(&mut args, "id")?;
         #[derive(Deserialize)]
+        #[serde(rename_all = "camelCase")]
         struct Args {
             amount: Option<String>,
             date: Option<String>,
             note: Option<String>,
+            transaction_id: Option<String>,
         }
         let a: Args = parse(args)?;
         let today = today(ctx)?;
-        reply(ctx.vault.with_conn(|c| ledger::settle(c, id, a.amount.as_deref(), a.date.as_deref(), a.note.as_deref(), &today))?)
+        reply(ctx.vault.with_conn(|c| ledger::settle(c, id, a.amount.as_deref(), a.date.as_deref(), a.note.as_deref(), a.transaction_id.as_deref(), &today))?)
     },
 };
 

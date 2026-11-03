@@ -289,8 +289,17 @@ pub struct Settled {
 
 /// Marks a payment between you and a friend. It is a repayment in the direction that reduces the debt: they paid you back when they owe you,
 /// you paid them back when you owe them. With no `amount` it is the whole balance. An amount larger than the debt is accepted. When the
-/// balance reaches 0 the friend's reminder is cleared.
-pub fn settle(conn: &Connection, person_id: i64, amount: Option<&str>, date: Option<&str>, note: Option<&str>, today: &str) -> Result<Settled, AppError> {
+/// balance reaches 0 the friend's reminder is cleared. `transaction_id` is the transaction the payment was for, if any: only a reference,
+/// it changes no amount.
+pub fn settle(
+    conn: &Connection,
+    person_id: i64,
+    amount: Option<&str>,
+    date: Option<&str>,
+    note: Option<&str>,
+    transaction_id: Option<&str>,
+    today: &str,
+) -> Result<Settled, AppError> {
     let tx = conn.unchecked_transaction()?;
     let before = balance_minor(&tx, person_id)?;
     if before == 0 {
@@ -309,7 +318,7 @@ pub fn settle(conn: &Connection, person_id: i64, amount: Option<&str>, date: Opt
             amount: format_amount(minor),
             date: date.unwrap_or(today).to_string(),
             note: note.map(str::to_string),
-            transaction_id: None,
+            transaction_id: transaction_id.map(str::to_string),
         },
     )?;
     let after = balance_minor(&tx, person_id)?;
@@ -347,6 +356,8 @@ pub struct Line {
     pub balance_minor: i64,
     pub entry_id: Option<String>,
     pub transaction_id: Option<String>,
+    /// The payment date of that transaction, so a screen can open the right month. Set whenever `transaction_id` is.
+    pub transaction_date: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -365,7 +376,7 @@ pub fn statement(conn: &Connection, person_id: i64) -> Result<Statement, AppErro
 /// Without a transaction of its own, for the callers that have one.
 pub(crate) fn statement_in(tx: &Connection, person_id: i64) -> Result<Statement, AppError> {
     let person = people::get(tx, person_id)?;
-    // (date, source, id, kind, what, signed minor, entry id, transaction id): bills before entries on the same day
+    // (date, source, id, kind, what, signed minor, entry id, transaction id and its date): bills before entries on the same day
     struct Raw {
         date: String,
         source: u8,
@@ -374,7 +385,7 @@ pub(crate) fn statement_in(tx: &Connection, person_id: i64) -> Result<Statement,
         what: String,
         signed: i64,
         entry: Option<i64>,
-        transaction: Option<i64>,
+        transaction: Option<(i64, String)>,
     }
     let mut raw: Vec<Raw> = Vec::new();
     let mut statement = tx.prepare(
@@ -383,14 +394,19 @@ pub(crate) fn statement_in(tx: &Connection, person_id: i64) -> Result<Statement,
     )?;
     for row in statement.query_map([person_id], |r| Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)?, r.get::<_, String>(2)?, r.get::<_, i64>(3)?, r.get::<_, i64>(4)?)))? {
         let (date, id, what, amount, transaction) = row?;
-        raw.push(Raw { date, source: 0, id, kind: "BILL".into(), what, signed: amount, entry: None, transaction: Some(transaction) });
+        raw.push(Raw { date: date.clone(), source: 0, id, kind: "BILL".into(), what, signed: amount, entry: None, transaction: Some((transaction, date)) });
     }
-    let mut statement = tx.prepare("SELECT entry_date, id, kind, note, amount_minor, transaction_id FROM ledger_entries WHERE person_id = ?1")?;
+    let mut statement = tx.prepare(
+        "SELECT e.entry_date, e.id, e.kind, e.note, e.amount_minor, e.transaction_id, t.payment_date
+         FROM ledger_entries e LEFT JOIN transactions t ON t.id = e.transaction_id WHERE e.person_id = ?1",
+    )?;
     for row in statement.query_map([person_id], |r| {
-        Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)?, r.get::<_, String>(2)?, r.get::<_, Option<String>>(3)?, r.get::<_, i64>(4)?, r.get::<_, Option<i64>>(5)?))
+        Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)?, r.get::<_, String>(2)?, r.get::<_, Option<String>>(3)?, r.get::<_, i64>(4)?, r.get::<_, Option<i64>>(5)?, r.get::<_, Option<String>>(6)?))
     })? {
-        let (date, id, kind, note, amount, transaction) = row?;
+        let (date, id, kind, note, amount, transaction, transaction_date) = row?;
         let sign = Kind::from_sql(&kind)?.sign();
+        // the link is dropped with its transaction, so a link always has a date
+        let transaction = transaction.zip(transaction_date);
         raw.push(Raw { date, source: 1, id, kind, what: note.unwrap_or_default(), signed: sign * amount, entry: Some(id), transaction });
     }
     raw.sort_by(|a, b| (&a.date, a.source, a.id).cmp(&(&b.date, b.source, b.id)));
@@ -409,7 +425,8 @@ pub(crate) fn statement_in(tx: &Connection, person_id: i64) -> Result<Statement,
                 effect_minor: r.signed,
                 balance_minor: running,
                 entry_id: r.entry.map(|id| id.to_string()),
-                transaction_id: r.transaction.map(|id| id.to_string()),
+                transaction_id: r.transaction.as_ref().map(|(id, _)| id.to_string()),
+                transaction_date: r.transaction.map(|(_, date)| date),
             }
         })
         .collect();

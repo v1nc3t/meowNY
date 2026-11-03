@@ -485,12 +485,12 @@
       "human": {
         "exit": 0,
         "stderr": "",
-        "stdout": "person: {\"archived\":false,\"balance\":\"42.00\",\"id\":\"5\",\"name\":\"Anna\",\"remindEveryDays\":null,\"remindOn\":null}\n\nlines\namount  balance  date        effect  entryId  kind  transactionId  what\n 30.00    30.00  2026-10-12   30.00        -  BILL            425  Dinner\n 12.00    42.00  2026-10-13   12.00       11  LENT              -  taxi\n"
+        "stdout": "person: {\"archived\":false,\"balance\":\"42.00\",\"id\":\"5\",\"name\":\"Anna\",\"remindEveryDays\":null,\"remindOn\":null}\n\nlines\namount  balance  date        effect  entryId  kind  transactionDate  transactionId  what\n 30.00    30.00  2026-10-12   30.00        -  BILL  2026-10-12                 425  Dinner\n 12.00    42.00  2026-10-13   12.00       11  LENT  -                            -  taxi\n"
       },
       "json": {
         "exit": 0,
         "stderr": "",
-        "stdout": "{\"lines\":[{\"amount\":\"30.00\",\"balance\":\"30.00\",\"date\":\"2026-10-12\",\"effect\":\"30.00\",\"entryId\":null,\"kind\":\"BILL\",\"transactionId\":\"425\",\"what\":\"Dinner\"},{\"amount\":\"12.00\",\"balance\":\"42.00\",\"date\":\"2026-10-13\",\"effect\":\"12.00\",\"entryId\":\"11\",\"kind\":\"LENT\",\"transactionId\":null,\"what\":\"taxi\"}],\"person\":{\"archived\":false,\"balance\":\"42.00\",\"id\":\"5\",\"name\":\"Anna\",\"remindEveryDays\":null,\"remindOn\":null}}\n"
+        "stdout": "{\"lines\":[{\"amount\":\"30.00\",\"balance\":\"30.00\",\"date\":\"2026-10-12\",\"effect\":\"30.00\",\"entryId\":null,\"kind\":\"BILL\",\"transactionDate\":\"2026-10-12\",\"transactionId\":\"425\",\"what\":\"Dinner\"},{\"amount\":\"12.00\",\"balance\":\"42.00\",\"date\":\"2026-10-13\",\"effect\":\"12.00\",\"entryId\":\"11\",\"kind\":\"LENT\",\"transactionDate\":null,\"transactionId\":null,\"what\":\"taxi\"}],\"person\":{\"archived\":false,\"balance\":\"42.00\",\"id\":\"5\",\"name\":\"Anna\",\"remindEveryDays\":null,\"remindOn\":null}}\n"
       }
     },
     "people unarchive": {

@@ -1100,12 +1100,19 @@ pub fn delete_ledger_entry(vault: Shared, id: String) -> Result<(), AppError> {
 }
 
 /// "Mark as paid": a payment between the person and a friend. No amount means the whole balance; one larger than the debt is accepted and
-/// turns the balance around (the answer says how much was over).
+/// turns the balance around (the answer says how much was over). `transaction_id` links the payment to the transaction it was for.
 #[tauri::command]
-pub fn settle_person(vault: Shared, id: String, amount: Option<String>, date: Option<String>, note: Option<String>) -> Result<Settled, AppError> {
+pub fn settle_person(
+    vault: Shared,
+    id: String,
+    amount: Option<String>,
+    date: Option<String>,
+    note: Option<String>,
+    transaction_id: Option<String>,
+) -> Result<Settled, AppError> {
     let id = categories::parse_id(&id)?;
     let today = today_text(&vault)?;
-    vault.with_conn(|c| ledger::settle(c, id, amount.as_deref(), date.as_deref(), note.as_deref(), &today))
+    vault.with_conn(|c| ledger::settle(c, id, amount.as_deref(), date.as_deref(), note.as_deref(), transaction_id.as_deref(), &today))
 }
 
 /// What a split would give each person for a bill of `amount`, for the dialog, on every change. Writes nothing. The rule is here and

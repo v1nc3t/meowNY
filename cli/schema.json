@@ -1663,6 +1663,12 @@
           "required": false,
           "summary": "A note, up to 200 characters.",
           "type": "string"
+        },
+        {
+          "name": "transactionId",
+          "required": false,
+          "summary": "A transaction the payment was for, such as a bill you paid for them. Only a reference: no amount changes.",
+          "type": "id"
         }
       ],
       "scope": "write",

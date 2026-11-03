@@ -64,11 +64,14 @@ fn the_history_has_the_lines_of_the_friends_the_payments_that_were_paid_late_and
     let paid = every.iter().find(|l| l.kind == PAYMENT_PAID).unwrap();
     assert_eq!((paid.what.as_str(), paid.amount.as_str(), paid.due_date.as_deref(), paid.friend.as_deref()), ("Rent", "100.00", Some("2026-01-01"), None));
     assert!(paid.transaction_id.is_some() && paid.recurring_id.is_some() && paid.balance.is_none() && paid.effect.is_none());
+    assert_eq!(paid.transaction_date.as_deref(), Some("2026-01-04"), "the payment date of the transaction");
     let due = every.iter().find(|l| l.kind == PAYMENT_DUE && l.date == "2026-03-01").unwrap();
     assert_eq!((due.amount.as_str(), due.due_date.as_deref(), due.transaction_id.as_deref()), ("100.00", Some("2026-03-01"), None));
+    assert_eq!(due.transaction_date, None, "a payment that is due has no transaction yet");
     // a friend's line says what it did and what the friend owed after it: the debts screens' own numbers
     let dinner_line = every.iter().find(|l| l.kind == "BILL").unwrap();
     assert_eq!((dinner_line.friend.as_deref(), dinner_line.effect.as_deref(), dinner_line.balance.as_deref()), (Some("Anna"), Some("45.00"), Some("70.00")));
+    assert_eq!((dinner_line.transaction_id.clone(), dinner_line.transaction_date.as_deref()), (Some(dinner.to_string()), Some("2026-01-20")));
 }
 
 #[test]

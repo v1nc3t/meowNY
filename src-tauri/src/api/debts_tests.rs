@@ -74,6 +74,24 @@ fn a_loan_is_never_income_or_expense_and_a_borrowing_can_add_your_share_to_the_e
     assert_eq!(ok(&vault, "export.preview", json!({}))["transactions"].as_u64().unwrap(), before["transactions"].as_u64().unwrap() + 1, "nothing was made by the refused ones");
 }
 
+#[test]
+fn a_payment_can_name_the_transaction_it_was_for_and_an_unknown_one_is_refused() {
+    let (_dir, vault) = seeded();
+    let taxi = first_expense_id(&vault);
+    let anna = id(&ok(&vault, "people.create", json!({ "name": "Anna" })));
+    ok(&vault, "ledger.add", json!({ "personId": anna, "kind": "LENT", "amount": "25.00", "date": "2026-10-01" }));
+    let before = vault.with_conn(|c| crate::backup::dump(c)).unwrap();
+    for bad in ["99999999", "abc"] {
+        assert_eq!(refused(&vault, "people.settle", json!({ "id": anna, "transactionId": bad })), (400, "invalid_input".into()), "{bad}");
+    }
+    assert_eq!(vault.with_conn(|c| crate::backup::dump(c)).unwrap(), before, "a refused payment writes nothing");
+    let paid = ok(&vault, "people.settle", json!({ "id": anna, "amount": "10.00", "transactionId": taxi }));
+    assert_eq!(paid["entry"]["transactionId"], taxi.as_str());
+    let story = ok(&vault, "people.show", json!({ "id": anna }));
+    assert_eq!(story["lines"][1]["transactionId"], taxi.as_str(), "and the statement shows it");
+    assert_eq!(story["lines"][1]["transactionDate"], "2026-10-14", "with the day of the transaction, for the screen that opens its month");
+}
+
 // ---- the file ---------------------------------------------------------------------------------
 
 #[test]

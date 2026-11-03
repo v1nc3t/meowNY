@@ -48,6 +48,8 @@ pub struct HistoryLine {
     pub due_date: Option<String>,
     pub entry_id: Option<String>,
     pub transaction_id: Option<String>,
+    /// The payment date of that transaction, so a screen can open the right month. Set whenever `transaction_id` is.
+    pub transaction_date: Option<String>,
     pub recurring_id: Option<String>,
     /// The same in minor units, and the category of a recurring payment, for the code around (they do not leave the app).
     #[serde(skip)]
@@ -139,6 +141,7 @@ pub fn lines(conn: &Connection, today: &str, scope: &Scope) -> Result<Vec<Histor
                     due_date: None,
                     entry_id: line.entry_id,
                     transaction_id: line.transaction_id,
+                    transaction_date: line.transaction_date,
                     recurring_id: None,
                     category_id: None,
                 },
@@ -160,6 +163,7 @@ pub fn lines(conn: &Connection, today: &str, scope: &Scope) -> Result<Vec<Histor
             push(
                 1,
                 HistoryLine {
+                    transaction_date: Some(date.clone()),
                     date,
                     kind: PAYMENT_PAID.to_string(),
                     friend: None,
@@ -200,6 +204,7 @@ pub fn lines(conn: &Connection, today: &str, scope: &Scope) -> Result<Vec<Histor
                     due_date: Some(due.due_date),
                     entry_id: None,
                     transaction_id: None,
+                    transaction_date: None,
                     recurring_id: Some(due.recurring_id.to_string()),
                     category_id: Some(due.category_id),
                 },

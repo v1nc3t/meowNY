@@ -2725,13 +2725,23 @@
           "type": "string",
           "value": "text",
           "values": []
+        },
+        {
+          "flag": "--transaction-id",
+          "nullable": false,
+          "param": "transactionId",
+          "required": false,
+          "summary": "A transaction the payment was for, such as a bill you paid for them. Only a reference: no amount changes.",
+          "type": "id",
+          "value": "id",
+          "values": []
         }
       ],
       "positional": "id",
       "route": "people.settle",
       "scope": "write",
       "summary": "Marks a payment between you and a friend: they paid you back if they owe you, you paid them back if you owe them. With no amount it is the whole balance. An amount larger than the debt is accepted: the balance turns around and the answer says how much was over.",
-      "usage": "meowny people settle <id> [--amount <amount>] [--date <date>] [--note <text>]"
+      "usage": "meowny people settle <id> [--amount <amount>] [--date <date>] [--note <text>] [--transaction-id <id>]"
     },
     {
       "command": "ledger add",
