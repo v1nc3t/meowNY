@@ -571,7 +571,7 @@ function RecurringView({ settings, now }: { settings: MoneySettings; now: Today 
 
   return (
     <section className="tx-page">
-      <div className="tx-title">
+      <div className="tx-title one-line">
         <h1>{t('rec.title')}</h1>
         <div className="tx-actions">
           <Button onClick={() => openAdd()} {...tip('new', t('rec.add'))}>

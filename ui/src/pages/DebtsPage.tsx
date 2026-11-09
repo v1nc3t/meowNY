@@ -291,7 +291,7 @@ function DebtsView({ settings, now }: { settings: MoneySettings; now: Today }) {
 
   return (
     <section className="tx-page debts-page">
-      <div className="tx-title">
+      <div className="tx-title one-line">
         <h1>{t('debts.title')}</h1>
         <div className="tx-actions debts-actions">
           <Button onClick={() => setEntryKind('LENT')} {...tip('new', t('debts.lent'))}>

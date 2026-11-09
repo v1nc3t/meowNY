@@ -300,7 +300,7 @@ function CategoriesView({ settings, thisMonth }: { settings: MoneySettings; this
 
   return (
     <section className="tx-page budget-page">
-      <div className="tx-title budget-title">
+      <div className="tx-title budget-title one-line">
         <h1>{t('categories.title')}</h1>
         <div className="tx-actions">
           <Button onClick={() => setAdding(true)} {...tip('new', t('categories.add'))}>

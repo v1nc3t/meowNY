@@ -180,7 +180,9 @@ html.is-phone .split-table td {
   container-name: budget;
 }
 
-.budget-title .tx-actions {
+/* The picker is wider than a phone: "current" goes under it rather than past the edge. */
+.budget-title .tx-actions,
+.budget-title .month-nav {
   flex-wrap: wrap;
 }
 
