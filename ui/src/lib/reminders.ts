@@ -6,6 +6,7 @@ const TIME_KEY = 'debt-reminder-time'
 const EVERY_KEY = 'debt-reminder-every'
 const NOTIFIED_KEY = 'debt-reminded'
 const SCHEDULED_KEY = 'debt-scheduled'
+const DISMISSED_KEY = 'debt-dismissed'
 
 /** The periods a device can choose, in days: 0 is no reminders. Each friend with a debt is reminded this many days after the debt last changed, and again after as many. */
 export const REMINDER_PERIODS = [0, 7, 14, 30] as const
@@ -52,10 +53,10 @@ export function saveReminderEvery(days: number): void {
   if ((REMINDER_PERIODS as readonly number[]).includes(days)) write(EVERY_KEY, String(days))
 }
 
-/** Which day of each friend's reminder this device has already shown: friend id to day. */
-export function notifiedDays(): Record<string, string> {
+/** A map of friend id to day kept under `key`; anything else stored there is ignored. */
+function readDays(key: string): Record<string, string> {
   try {
-    const parsed: unknown = JSON.parse(read(NOTIFIED_KEY) ?? '{}')
+    const parsed: unknown = JSON.parse(read(key) ?? '{}')
     if (typeof parsed !== 'object' || parsed === null) return {}
     return Object.fromEntries(Object.entries(parsed).filter((entry): entry is [string, string] => typeof entry[1] === 'string'))
   } catch {
@@ -63,8 +64,33 @@ export function notifiedDays(): Record<string, string> {
   }
 }
 
+/** Which day of each friend's reminder this device has already shown: friend id to day. */
+export function notifiedDays(): Record<string, string> {
+  return readDays(NOTIFIED_KEY)
+}
+
 export function saveNotifiedDays(days: Record<string, string>): void {
   write(NOTIFIED_KEY, JSON.stringify(days))
+}
+
+/** Which day of each friend's reminder the person has cleared from the list on this device: friend id to day. */
+export function dismissedDays(): Record<string, string> {
+  return readDays(DISMISSED_KEY)
+}
+
+export function saveDismissedDays(days: Record<string, string>): void {
+  write(DISMISSED_KEY, JSON.stringify(days))
+}
+
+/** The reminders that are still to be seen: one that was cleared stays away for its day, and the friend's next reminder (a new day) comes back. */
+export function notDismissed(due: Reminders['due'], dismissed: Record<string, string>): Reminders['due'] {
+  return due.filter((friend) => dismissed[friend.personId] !== friend.dueOn)
+}
+
+/** The cleared days to keep once `cleared` are added: only those of the reminders in `due`, so a friend who is no longer due is forgotten and the map does not grow. */
+export function dismissedAfter(due: Reminders['due'], dismissed: Record<string, string>, cleared: Reminders['due']): Record<string, string> {
+  const days = { ...dismissed, ...Object.fromEntries(cleared.map((friend) => [friend.personId, friend.dueOn])) }
+  return Object.fromEntries(due.filter((friend) => days[friend.personId] === friend.dueOn).map((friend) => [friend.personId, friend.dueOn]))
 }
 
 const pad = (n: number) => String(n).padStart(2, '0')

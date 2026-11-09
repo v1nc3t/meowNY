@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { en } from '../i18n/en.ts'
 import { LANGUAGES } from '../i18n/languages.ts'
-import { clockNow, localDay, notificationId, parseTime, pluginDate, ringNow, schedulePlan } from './reminders.ts'
+import { clockNow, dismissedAfter, localDay, notDismissed, notificationId, parseTime, pluginDate, ringNow, schedulePlan } from './reminders.ts'
 
 test('the plugin gets the real instant, except on iOS, which gets the local clock time (it reads the date as local)', () => {
   const at = new Date(2026, 9, 24, 9, 5)
@@ -85,4 +85,16 @@ test('the notification never holds a name or an amount, in any language, only a 
       assert.ok(!/\d/.test(text), `${language.code} ${key} has a digit`)
     }
   }
+})
+
+test("a cleared reminder stays away for its day, comes back with the friend's next one, and the cleared days are pruned", () => {
+  const due = reminders('2026-10-20', [['1', 'Anna', '2026-10-20'], ['2', 'Bob', '2026-10-18']]).due
+  assert.deepEqual(notDismissed(due, {}).map((f) => f.personId), ['1', '2'])
+  const cleared = dismissedAfter(due, {}, [due[0]])
+  assert.deepEqual(cleared, { '1': '2026-10-20' })
+  assert.deepEqual(notDismissed(due, cleared).map((f) => f.personId), ['2'], 'hidden while it is the same day')
+  const next = reminders('2026-10-27', [['1', 'Anna', '2026-10-27'], ['2', 'Bob', '2026-10-18']]).due
+  assert.deepEqual(notDismissed(next, cleared).map((f) => f.personId), ['1', '2'], "Anna's next reminder shows again")
+  assert.deepEqual(dismissedAfter(due, cleared, due), { '1': '2026-10-20', '2': '2026-10-18' }, 'clear all')
+  assert.deepEqual(dismissedAfter([due[1]], { '1': '2026-10-20', '9': '2026-09-01' }, []), {}, 'friends who are no longer due are forgotten')
 })

@@ -766,6 +766,8 @@ export const ro: Messages = {
   'debts.notifications': 'notificări',
   'debts.notificationSettings': 'setări',
   'debts.noReminders': 'niciun memento de datorii',
+  'debts.dismissReminder': 'ignoră: {name}',
+  'debts.dismissAll': 'ignoră tot',
   'debts.remindDenied': 'notificările nu sunt permise pentru meowNY, deci memento-urile nu pot suna.',
   'notify.debtTitle': 'meowNY: un memento de datorie',
   'notify.debtBody': 'prieteni de verificat: {count}',

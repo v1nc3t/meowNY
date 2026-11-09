@@ -28,7 +28,7 @@ import { tip } from '../keys/tip'
 import { useRowNavigation } from '../keys/useRowNavigation'
 import { balanceView } from '../lib/balance'
 import { formatDate, formatMoney } from '../lib/money'
-import { reminderEvery, remindersChanged } from '../lib/reminders'
+import { dismissedAfter, dismissedDays, notDismissed, reminderEvery, remindersChanged, saveDismissedDays } from '../lib/reminders'
 import { saveChoice, storedChoice } from '../lib/sticky'
 
 export default function DebtsPage() {
@@ -49,6 +49,8 @@ function DebtsView({ settings, now }: { settings: MoneySettings; now: Today }) {
   const rows = useOpenRow()
   const [people, setPeople] = useState<Person[] | null>(null)
   const [reminders, setReminders] = useState<Reminders | null>(null)
+  // the reminders cleared on this device, friend to day
+  const [dismissed, setDismissed] = useState(dismissedDays)
   const [history, setHistory] = useState<History | null>(null)
   const [historyOffset, setHistoryOffset] = useState(0)
   // a code that was scanned or is being pasted, and the camera while it looks
@@ -160,8 +162,17 @@ function DebtsView({ settings, now }: { settings: MoneySettings; now: Today }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.state])
 
-  const dueIds = new Set(reminders?.due.map((friend) => friend.personId))
-  const dueOn = new Map(reminders?.due.map((friend) => [friend.personId, friend.dueOn]))
+  // The reminders that have come and were not cleared: what the badges, the count and the list of notifications show.
+  const due = notDismissed(reminders?.due ?? [], dismissed)
+  const dueIds = new Set(due.map((friend) => friend.personId))
+  const dueOn = new Map(due.map((friend) => [friend.personId, friend.dueOn]))
+
+  /** Clears reminders from the list on this device only: nothing rings differently, and the friend's next reminder comes back. */
+  function dismiss(cleared: Reminders['due']) {
+    const days = dismissedAfter(reminders?.due ?? [], dismissed, cleared)
+    saveDismissedDays(days)
+    setDismissed(days)
+  }
 
   // The chosen friend, once the right side has read them (it is the one of the address; the one read before may be another).
   const friend = selected?.id === personId ? selected : null
@@ -328,8 +339,9 @@ function DebtsView({ settings, now }: { settings: MoneySettings; now: Today }) {
       ) : null}
       {notifying ? (
         <DebtNotificationsModal
-          due={reminders?.due ?? []}
+          due={due}
           locale={settings.locale}
+          onDismiss={dismiss}
           onClose={() => {
             setNotifying(false)
             // the period may have changed in the settings tab
@@ -406,7 +418,7 @@ function DebtsView({ settings, now }: { settings: MoneySettings; now: Today }) {
                     </Button>
                     <Button variant="outline" onClick={() => setNotifying(true)}>
                       <Icon name="bell" className="btn-icon" />
-                      {reminders && reminders.due.length > 0 ? `${t('debts.notifications')} (${reminders.due.length})` : t('debts.notifications')}
+                      {due.length > 0 ? `${t('debts.notifications')} (${due.length})` : t('debts.notifications')}
                     </Button>
                     <label>
                       <input

@@ -768,6 +768,8 @@ export const es: Messages = {
   'debts.notifications': 'notificaciones',
   'debts.notificationSettings': 'ajustes',
   'debts.noReminders': 'ningún recordatorio de deudas',
+  'debts.dismissReminder': 'descartar: {name}',
+  'debts.dismissAll': 'descartar todo',
   'debts.remindDenied': 'las notificaciones no están permitidas para meowNY, así que los recordatorios no pueden sonar.',
   'notify.debtTitle': 'meowNY: un recordatorio de deuda',
   'notify.debtBody': 'amigos a los que mirar: {count}',

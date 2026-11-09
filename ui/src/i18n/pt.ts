@@ -768,6 +768,8 @@ export const pt: Messages = {
   'debts.notifications': 'notificações',
   'debts.notificationSettings': 'definições',
   'debts.noReminders': 'nenhum lembrete de dívidas',
+  'debts.dismissReminder': 'dispensar: {name}',
+  'debts.dismissAll': 'dispensar tudo',
   'debts.remindDenied': 'as notificações não estão permitidas para o meowNY, por isso os lembretes não podem tocar.',
   'notify.debtTitle': 'meowNY: um lembrete de dívida',
   'notify.debtBody': 'amigos a ver: {count}',

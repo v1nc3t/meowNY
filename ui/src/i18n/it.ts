@@ -768,6 +768,8 @@ export const it: Messages = {
   'debts.notifications': 'notifiche',
   'debts.notificationSettings': 'impostazioni',
   'debts.noReminders': 'nessun promemoria dei debiti',
+  'debts.dismissReminder': 'ignora: {name}',
+  'debts.dismissAll': 'ignora tutto',
   'debts.remindDenied': 'le notifiche non sono consentite per meowNY, quindi i promemoria non possono suonare.',
   'notify.debtTitle': 'meowNY: un promemoria di debito',
   'notify.debtBody': 'amici da controllare: {count}',

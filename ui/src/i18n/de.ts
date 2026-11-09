@@ -769,6 +769,8 @@ export const de: Messages = {
   'debts.notifications': 'benachrichtigungen',
   'debts.notificationSettings': 'einstellungen',
   'debts.noReminders': 'keine schulden-erinnerungen',
+  'debts.dismissReminder': 'ausblenden: {name}',
+  'debts.dismissAll': 'alle ausblenden',
   'debts.remindDenied': 'benachrichtigungen sind für meowNY nicht erlaubt, erinnerungen können also nicht klingeln.',
   'notify.debtTitle': 'meowNY: eine schulden-erinnerung',
   'notify.debtBody': 'freunde, die du ansehen solltest: {count}',

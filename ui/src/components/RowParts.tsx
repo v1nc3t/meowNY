@@ -178,6 +178,7 @@ export function TapRow({
   onToggle,
   name,
   amount,
+  action,
   sub,
   children,
   ...rest
@@ -190,6 +191,8 @@ export function TapRow({
   onToggle?: () => void
   name: ReactNode
   amount?: ReactNode
+  /** A button at the end of the first line, where the amount would be: only for a row with nothing to open (no `children`), as a button cannot sit in the one that opens. */
+  action?: ReactNode
   sub?: ReactNode
   children?: ReactNode
 } & Omit<ComponentProps<'li'>, 'children' | 'id' | 'onToggle'>) {
@@ -215,7 +218,10 @@ export function TapRow({
           <Icon name="chevron-down" className="chevron" />
         </button>
       ) : (
-        <div className="row-toggle is-plain">{inside}</div>
+        <div className="row-toggle is-plain">
+          {inside}
+          {action}
+        </div>
       )}
       {open && children ? (
         <div className="row-panel tx-detail" id={id}>

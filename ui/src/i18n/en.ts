@@ -781,6 +781,8 @@ export const en = {
   'debts.notifications': 'notifications',
   'debts.notificationSettings': 'settings',
   'debts.noReminders': 'no debt reminders',
+  'debts.dismissReminder': 'dismiss: {name}',
+  'debts.dismissAll': 'clear all',
   'debts.remindDenied': 'notifications are not allowed for meowNY, so reminders cannot ring.',
   'notify.debtTitle': 'meowNY: a debt reminder',
   'notify.debtBody': 'friends to look at: {count}',
