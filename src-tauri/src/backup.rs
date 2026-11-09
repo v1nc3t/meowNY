@@ -804,7 +804,7 @@ mod tests {
         )
         .unwrap();
         conn.execute("INSERT INTO document_links (document_id, recurring_transaction_id) VALUES (1, ?1)", [plan.id]).unwrap();
-        // friends, a shared bill with a friend and a guest, a split template that makes a split payment, the ledger, and a document on an entry
+        // friends, a shared bill with a friend and a guest, a split template (paid by a friend) that makes a split payment, the ledger, and a document on an entry
         use crate::debts::{ledger, people, splits};
         let anna = people::create(&conn, "Anna “A” 日本語").unwrap();
         let bob = people::create(&conn, "Bob").unwrap();
@@ -825,7 +825,7 @@ mod tests {
             guest: guest.map(str::to_string),
             value: None,
         };
-        splits::set_split(&conn, dinner.id, &splits::SplitInput { mode: splits::Mode::Equal, mine: None, parts: vec![part(Some(&anna), None), part(None, Some("Carl"))] })
+        splits::set_split(&conn, dinner.id, &splits::SplitInput { mode: splits::Mode::Equal, mine: None, parts: vec![part(Some(&anna), None), part(None, Some("Carl"))], paid_by: None })
             .unwrap();
         splits::set_template(
             &conn,
@@ -834,6 +834,8 @@ mod tests {
                 mode: splits::Mode::Shares,
                 mine: Some("2".into()),
                 parts: vec![splits::Part { person_id: Some(bob.id.to_string()), guest: None, value: Some("1".into()) }],
+                // Bob pays the rent: the payment below is a bill a friend paid
+                paid_by: Some(bob.id.to_string()),
             },
         )
         .unwrap();

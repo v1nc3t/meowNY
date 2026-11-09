@@ -212,6 +212,23 @@ fn changing_what_a_row_holds_gives_it_a_new_stamp() {
 }
 
 #[test]
+fn changing_who_paid_a_bill_or_pays_a_template_is_a_change_of_the_row() {
+    let conn = db();
+    let c = category(&conn, "Food");
+    let (t, r) = (transaction(&conn, c, "Coffee"), recurring(&conn, c, "Rent"));
+    conn.execute("INSERT INTO people (name) VALUES ('Anna')", []).unwrap();
+    for (table, id, column) in [("transactions", t, "paid_by"), ("recurring_transactions", r, "split_paid_by")] {
+        let before = stamp_of(&conn, table, id);
+        let updated: String = conn.query_row(&format!("SELECT updated_at FROM {table} WHERE id = ?1"), [id], |row| row.get(0)).unwrap();
+        std::thread::sleep(std::time::Duration::from_millis(5));
+        conn.execute(&format!("UPDATE {table} SET {column} = 1 WHERE id = ?1"), [id]).unwrap();
+        assert!(stamp_of(&conn, table, id) > before, "{column}: a new stamp");
+        let after: String = conn.query_row(&format!("SELECT updated_at FROM {table} WHERE id = ?1"), [id], |row| row.get(0)).unwrap();
+        assert!(after > updated, "{column}: a new updated_at");
+    }
+}
+
+#[test]
 fn what_is_not_content_does_not_make_a_stamp() {
     let conn = db();
     let c = category(&conn, "Food");

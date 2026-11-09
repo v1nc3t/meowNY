@@ -1,5 +1,5 @@
 use super::fixtures::*;
-use super::splits::{check, clear_template, preview, set_split, set_template, Mode};
+use super::splits::{check, clear_split, clear_template, preview, set_split, set_template, Mode, SplitInput};
 use super::{ledger, people};
 use crate::recurring::{self, NewRecurring, Unit};
 use crate::transactions::{self, TransactionPatch};
@@ -125,6 +125,46 @@ fn changing_the_split_touches_only_the_parts_that_differ() {
     set_split(&w.conn, dinner, &equal(vec![who(bob), guest("Carl")])).unwrap();
     assert_eq!(parts(&w.conn, dinner), [("Bob".to_string(), 3000), ("Carl".to_string(), 3000)]);
     assert_eq!(ledger::balance_minor(&w.conn, anna).unwrap(), 0, "Anna is off the bill");
+}
+
+#[test]
+fn a_bill_a_friend_paid_needs_the_payer_on_it_and_a_part_of_yours() {
+    let w = world();
+    let (anna, bob) = (friend(&w.conn, "Anna"), friend(&w.conn, "Bob"));
+    let dinner = bill(&w.conn, w.food, "Dinner", "90.00", "2026-01-01");
+    let paid_by = |payer: &str, split: SplitInput| SplitInput { paid_by: Some(payer.to_string()), ..split };
+    assert_eq!(set_split(&w.conn, dinner, &paid_by(&bob.to_string(), equal(vec![who(anna)]))), Err(INVALID), "the payer is not on the bill");
+    assert_eq!(set_split(&w.conn, dinner, &paid_by("x", equal(vec![who(anna)]))), Err(INVALID), "not an id");
+    assert_eq!(set_split(&w.conn, dinner, &paid_by(&anna.to_string(), input(Mode::Shares, Some("0"), vec![with(who(anna), "1")]))), Err(INVALID), "nothing of the bill is yours");
+    assert_eq!(one(&w.conn, "SELECT count(*) FROM transaction_split_lines") + one(&w.conn, "SELECT count(*) FROM transactions WHERE paid_by IS NOT NULL"), 0, "nothing was written");
+    // the payer's own part may be 0: they have no line, and what Bob owes is owed to them
+    set_split(&w.conn, dinner, &paid_by(&anna.to_string(), input(Mode::Shares, Some("1"), vec![with(who(anna), "0"), with(who(bob), "1")]))).unwrap();
+    assert_eq!(parts(&w.conn, dinner), [("Bob".to_string(), 4500)]);
+    assert_eq!((cost(&w.conn, dinner), ledger::balance_minor(&w.conn, anna).unwrap(), ledger::balance_minor(&w.conn, bob).unwrap()), (4500, -4500, 0));
+    assert_eq!(transactions::get(&w.conn, dinner).unwrap().paid_by.map(|p| (p.person_id, p.name)), Some((anna.to_string(), "Anna".to_string())));
+    // the same split again changes nothing, also once the payer is archived (with no line, they are on the bill as its payer), and taking
+    // the split off makes the bill yours again
+    people::archive(&w.conn, anna).unwrap();
+    let stamp = text(&w.conn, "SELECT stamp FROM transactions");
+    set_split(&w.conn, dinner, &paid_by(&anna.to_string(), input(Mode::Shares, Some("1"), vec![with(who(anna), "0"), with(who(bob), "1")]))).unwrap();
+    assert_eq!(text(&w.conn, "SELECT stamp FROM transactions"), stamp, "no new stamp for no change");
+    clear_split(&w.conn, dinner).unwrap();
+    assert!(transactions::get(&w.conn, dinner).unwrap().paid_by.is_none());
+    assert_eq!(ledger::balance_minor(&w.conn, anna).unwrap(), 0);
+}
+
+#[test]
+fn a_bill_with_a_payer_stays_an_expense() {
+    let w = world();
+    let anna = friend(&w.conn, "Anna");
+    let dinner = bill(&w.conn, w.food, "Dinner", "90.00", "2026-01-01");
+    set_split(&w.conn, dinner, &SplitInput { paid_by: Some(anna.to_string()), ..equal(vec![who(anna)]) }).unwrap();
+    // with no parts left (a tiny amount can drop them) the payer is still there, so the bill is still shared
+    w.conn.execute("DELETE FROM transaction_split_lines", []).unwrap();
+    let to_income = TransactionPatch { category_id: Some(w.salary.to_string()), ..Default::default() };
+    assert_eq!(transactions::update(&w.conn, dinner, &to_income), Err(INVALID));
+    // straight into the table, as no code of the app does
+    assert!(w.conn.execute("UPDATE transactions SET category_id = ?1 WHERE id = ?2", [w.salary, dinner]).is_err());
 }
 
 // ---- editing a shared bill -------------------------------------------------------------------
@@ -350,6 +390,30 @@ fn an_income_item_has_no_template_and_a_split_item_cannot_become_income() {
 }
 
 #[test]
+fn a_template_a_friend_pays_gives_the_payer_to_each_payment_and_needs_a_weight_of_yours() {
+    let w = world();
+    let (anna, bob) = (friend(&w.conn, "Anna"), friend(&w.conn, "Bob"));
+    let item = rent_item(&w.conn, w.rent, Some("900.00"));
+    let paid_by = |payer: i64, split: SplitInput| SplitInput { paid_by: Some(payer.to_string()), ..split };
+    assert_eq!(set_template(&w.conn, item.id, &paid_by(bob, equal(vec![who(anna)]))), Err(INVALID), "the payer is not on it");
+    assert_eq!(set_template(&w.conn, item.id, &paid_by(anna, input(Mode::Shares, Some("0"), vec![with(who(anna), "1")]))), Err(INVALID), "none of a payment is yours");
+    assert!(recurring::get(&w.conn, item.id).unwrap().split.is_none());
+    set_template(&w.conn, item.id, &paid_by(anna, equal(vec![who(anna), who(bob)]))).unwrap();
+    assert_eq!(recurring::get(&w.conn, item.id).unwrap().split.unwrap().paid_by.map(|p| p.name), Some("Anna".to_string()));
+    let first = recurring::pay(&w.conn, item.id, None, Some("2026-01-01"), "2026-01-01", None, None).unwrap();
+    assert_eq!((one(&w.conn, &format!("SELECT paid_by FROM transactions WHERE id = {}", first.id)), first.my_share.as_str()), (anna, "300.00"));
+    assert_eq!((ledger::balance_minor(&w.conn, anna).unwrap(), ledger::balance_minor(&w.conn, bob).unwrap()), (-30_000, 0));
+    // a template with no payer, and the payments to come are yours again; the one made keeps its payer
+    set_template(&w.conn, item.id, &equal(vec![who(anna)])).unwrap();
+    let second = recurring::pay(&w.conn, item.id, None, Some("2026-02-01"), "2026-02-01", None, None).unwrap();
+    assert_eq!(one(&w.conn, &format!("SELECT paid_by IS NULL FROM transactions WHERE id = {}", second.id)), 1);
+    assert_eq!(one(&w.conn, &format!("SELECT paid_by FROM transactions WHERE id = {}", first.id)), anna);
+    set_template(&w.conn, item.id, &paid_by(anna, equal(vec![who(anna)]))).unwrap();
+    clear_template(&w.conn, item.id).unwrap();
+    assert_eq!(one(&w.conn, "SELECT count(*) FROM recurring_transactions WHERE split_paid_by IS NOT NULL"), 0, "taking the split off clears the payer");
+}
+
+#[test]
 fn a_template_needs_somebody_to_share_with() {
     let w = world();
     let anna = friend(&w.conn, "Anna");
@@ -403,6 +467,19 @@ fn the_check_finds_a_state_the_steps_would_have_refused() {
     assert!(!check(&w.conn).unwrap(), "a template whose weights are all zero");
     add("UPDATE recurring_transactions SET split_my_weight = NULL", &[]);
     assert!(check(&w.conn).unwrap());
+    // a payer on an income, the payer of a template that has no weight of yours, and a payer who was merged into another friend
+    add("UPDATE transactions SET paid_by = ?1 WHERE id = ?2", &[&anna, &pay]);
+    assert!(!check(&w.conn).unwrap());
+    add("UPDATE transactions SET paid_by = NULL", &[]);
+    add("UPDATE recurring_transactions SET split_paid_by = ?1", &[&anna]);
+    assert!(!check(&w.conn).unwrap());
+    add("UPDATE recurring_transactions SET split_paid_by = NULL", &[]);
+    add("UPDATE transactions SET paid_by = ?1 WHERE id = ?2", &[&anna, &dinner]);
+    assert!(check(&w.conn).unwrap(), "a bill that is an expense can have a payer");
+    add("UPDATE people SET merged_into = ?1", &[&"ab".repeat(16)]);
+    assert!(!check(&w.conn).unwrap());
+    add("UPDATE people SET merged_into = NULL", &[]);
+    add("UPDATE transactions SET paid_by = NULL", &[]);
     // thirty-one parts
     for i in 0..31 {
         add("INSERT INTO transaction_split_lines (transaction_id, guest_name, amount_minor) VALUES (?1, ?2, 1)", &[&dinner, &format!("G{i}")]);

@@ -82,7 +82,7 @@ There is no Diffie-Hellman step, so that last case is the honest limit. Secrets 
 
 JSON messages with a `t` field, one per frame, long lists split. Money in minor units.
 
-1. `hello`: id, name, versions (schema must match; protocol 7: descriptions and notes may hold line breaks), wall clock (a gap
+1. `hello`: id, name, versions (schema must match; protocol 8: a split bill's payer), wall clock (a gap
    above a minute is told to the person, never stops the sync; section 10), currency generation, `since`, and the direction the
    desktop chose (both ways, to the computer, to the phone). Right after it the phone takes the computer's clock as the reference
    (section 10).
@@ -98,13 +98,14 @@ States are compared, not change logs, so a broken or half sync is repaired by th
 
 ## 9. Database changes
 
-Migrations `0008`, `0009`, `0012`, `0013`, `0014`, `0015`, `0016`: a random `sync_id` and a `stamp` on every shared row (`categories`,
+Migrations `0008`, `0009`, `0012`, `0013`, `0014`, `0015`, `0016`, `0017`: a random `sync_id` and a `stamp` on every shared row (`categories`,
 `budgets`, `recurring_transactions`, `transactions`, `people`, `ledger_entries`, `documents`, `document_links`, the
 shared part of `settings`); `sync_deleted` markers made by delete triggers; `categories.merged_into`; `categories.position` (the order the person chose, per type; a move gives the row a new stamp,
 so it travels in the category row, and ties are settled by id); `recurring_transactions.skipped_dates` (a JSON array of the later
 occurrences skipped one by one, sorted, at most 100; part of protocol 5, checked when a row arrives); `sync_clock`;
-`sync_peers`; `currency_changes`. Stamps come from triggers, which stand aside while `sync_clock.applying` is on (`0016` adds
-`sync_clock.offset_ms` to the clock they read, section 10). A
+`sync_peers`; `currency_changes`; `transactions.paid_by` and `recurring_transactions.split_paid_by` (the friend who paid a split
+bill, sent as that person's `sync_id`; part of protocol 8). Stamps come from triggers, which stand aside while
+`sync_clock.applying` is on (`0016` adds `sync_clock.offset_ms` to the clock they read, section 10). A
 bill's parts and a recurring item's template travel inside their parent's row. Never synced: `audit_log`,
 `backup_schedule`, `api_tokens`, `sync_peers`, `sync_clock`, the language, lock settings.
 

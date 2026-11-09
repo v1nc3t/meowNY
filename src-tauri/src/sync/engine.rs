@@ -405,9 +405,10 @@ fn load_rows(conn: &Connection, table: Table, wanted: &HashSet<&String>) -> Resu
             let mut parts = parts_by_bill(conn)?;
             let mut stmt = conn.prepare(
                 "SELECT t.sync_id, t.stamp, c.sync_id, r.sync_id, t.recurring_due_date, t.client_uuid, t.name, t.amount_minor,
-                        t.planned_amount_minor, t.payment_date, t.description, t.created_at, t.updated_at
+                        t.planned_amount_minor, t.payment_date, t.description, t.created_at, t.updated_at, p.sync_id
                  FROM transactions t JOIN categories c ON c.id = t.category_id
-                 LEFT JOIN recurring_transactions r ON r.id = t.recurring_transaction_id ORDER BY t.sync_id",
+                 LEFT JOIN recurring_transactions r ON r.id = t.recurring_transaction_id
+                 LEFT JOIN people p ON p.id = t.paid_by ORDER BY t.sync_id",
             )?;
             for r in stmt.query_map([], |r| {
                 Ok(TransactionRow {
@@ -422,6 +423,7 @@ fn load_rows(conn: &Connection, table: Table, wanted: &HashSet<&String>) -> Resu
                     planned_amount_minor: r.get(8)?,
                     payment_date: r.get(9)?,
                     description: r.get(10)?,
+                    paid_by: r.get(13)?,
                     split: Vec::new(),
                     created_at: r.get(11)?,
                     updated_at: r.get(12)?,
@@ -506,10 +508,12 @@ fn parts_by_bill(conn: &Connection) -> Result<HashMap<String, Vec<SplitPartRow>>
 /// The template of every split recurring item by the `sync_id` of the item.
 fn templates_by_item(conn: &Connection) -> Result<HashMap<String, TemplateRow>, SyncError> {
     let mut out: HashMap<String, TemplateRow> = HashMap::new();
-    let mut stmt = conn.prepare("SELECT sync_id, split_my_weight FROM recurring_transactions WHERE split_my_weight IS NOT NULL")?;
-    for row in stmt.query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)?)))? {
-        let (item, mine) = row?;
-        out.insert(item, TemplateRow { mine, parts: Vec::new() });
+    let mut stmt = conn.prepare(
+        "SELECT x.sync_id, x.split_my_weight, p.sync_id FROM recurring_transactions x LEFT JOIN people p ON p.id = x.split_paid_by WHERE x.split_my_weight IS NOT NULL",
+    )?;
+    for row in stmt.query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)?, r.get::<_, Option<String>>(2)?)))? {
+        let (item, mine, paid_by) = row?;
+        out.insert(item, TemplateRow { mine, paid_by, parts: Vec::new() });
     }
     let mut stmt = conn.prepare(
         "SELECT x.sync_id, p.sync_id, l.guest_name, l.weight
@@ -861,6 +865,14 @@ impl<'a> Applier<'a> {
         Ok((out, any_moved))
     }
 
+    /// The local id of the friend who paid a bill or pays a template, following a merge as `person` does (`true` when it did).
+    fn local_payer(&self, sync_id: Option<&str>) -> Result<(Option<i64>, bool), SyncError> {
+        match sync_id {
+            Some(sync_id) => self.person(sync_id).map(|(id, moved)| (Some(id), moved)),
+            None => Ok((None, false)),
+        }
+    }
+
     fn settings(&mut self, rows: &[Row]) -> Result<(), SyncError> {
         for row in rows {
             let Row::Settings(r) = row else { return Err(SyncError::Invalid("row")) };
@@ -1137,8 +1149,9 @@ impl<'a> Applier<'a> {
         Ok(())
     }
 
-    /// Moves everything that belonged to a friend who was merged away to the one they were merged into: their ledger entries, and their
-    /// parts of bills and of templates (a bill that held both gets one part with the amounts added). What moves takes the moved stamp.
+    /// Moves everything that belonged to a friend who was merged away to the one they were merged into: their ledger entries, their
+    /// parts of bills and of templates (a bill that held both gets one part with the amounts added), and the bills and templates they paid.
+    /// What moves takes the moved stamp.
     fn repoint_person(&mut self, loser: i64, winner: i64) -> Result<(), SyncError> {
         let entries: Vec<(i64, String)> = self.tx.prepare_cached("SELECT id, stamp FROM ledger_entries WHERE person_id = ?1")?
             .query_map([loser], |r| Ok((r.get(0)?, r.get(1)?)))?
@@ -1176,6 +1189,19 @@ impl<'a> Applier<'a> {
                 let new = moved(&parse(&stamp)?);
                 self.run(&format!("UPDATE {} SET stamp = ?2 WHERE id = ?1", parent_table.name()), params![bill, new.format()])?;
                 self.set_updated_at(parent_table, bill, &iso(new.ms))?;
+            }
+        }
+        // `moved` is the same stamp when it is made twice, so a bill that had both a part and the loser as its payer is moved once
+        for (table, column) in [(Table::Transactions, "paid_by"), (Table::RecurringTransactions, "split_paid_by")] {
+            let paid: Vec<(i64, String)> = self
+                .tx
+                .prepare_cached(&format!("SELECT id, stamp FROM {} WHERE {column} = ?1", table.name()))?
+                .query_map([loser], |r| Ok((r.get(0)?, r.get(1)?)))?
+                .collect::<Result<_, _>>()?;
+            for (id, stamp) in paid {
+                let new = moved(&parse(&stamp)?);
+                self.run(&format!("UPDATE {} SET {column} = ?2, stamp = ?3 WHERE id = ?1", table.name()), params![id, winner, new.format()])?;
+                self.set_updated_at(table, id, &iso(new.ms))?;
             }
         }
         Ok(())
@@ -1297,12 +1323,13 @@ impl<'a> Applier<'a> {
             if moved_category {
                 stamp = moved(&parse(&stamp)?).format();
             }
-            let (template, moved_person) = match &r.split {
+            let (template, paid_by, moved_person) = match &r.split {
                 Some(t) => {
-                    let (lines, moved_person) = self.local_parts(t.parts.iter().map(|p| (&p.person, &p.guest, p.weight)))?;
-                    (Some((t.mine, lines)), moved_person)
+                    let (lines, moved_parts) = self.local_parts(t.parts.iter().map(|p| (&p.person, &p.guest, p.weight)))?;
+                    let (paid_by, moved_payer) = self.local_payer(t.paid_by.as_deref())?;
+                    (Some((t.mine, lines)), paid_by, moved_parts || moved_payer)
                 }
-                None => (None, false),
+                None => (None, None, false),
             };
             if moved_person {
                 stamp = moved(&parse(&stamp)?).format();
@@ -1332,8 +1359,9 @@ impl<'a> Applier<'a> {
                     self.note_overwrite(local);
                     self.run(
                         "UPDATE recurring_transactions SET stamp = ?2, category_id = ?3, name = ?4, description = ?5, amount_minor = ?6, start_date = ?7,
-                         interval_unit = ?8, interval_count = ?9, next_due_date = ?10, end_date = ?11, is_active = ?12, created_at = ?13, skipped_dates = ?14 WHERE id = ?1",
-                        params![id, stamp, category, r.name, r.description, r.amount_minor, r.start_date, r.interval_unit, r.interval_count, r.next_due_date, r.end_date, r.is_active, r.created_at, r.skipped_dates],
+                         interval_unit = ?8, interval_count = ?9, next_due_date = ?10, end_date = ?11, is_active = ?12, created_at = ?13, skipped_dates = ?14,
+                         split_paid_by = ?15 WHERE id = ?1",
+                        params![id, stamp, category, r.name, r.description, r.amount_minor, r.start_date, r.interval_unit, r.interval_count, r.next_due_date, r.end_date, r.is_active, r.created_at, r.skipped_dates, paid_by],
                     )?;
                     self.set_updated_at(Table::RecurringTransactions, *id, &when)?;
                     self.summary.updated += 1;
@@ -1342,9 +1370,9 @@ impl<'a> Applier<'a> {
                 None => {
                     self.run(
                         "INSERT INTO recurring_transactions (sync_id, stamp, category_id, name, description, amount_minor, start_date, interval_unit,
-                         interval_count, next_due_date, end_date, is_active, created_at, updated_at, skipped_dates)
-                         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)",
-                        params![r.sync_id, stamp, category, r.name, r.description, r.amount_minor, r.start_date, r.interval_unit, r.interval_count, r.next_due_date, r.end_date, r.is_active, r.created_at, when, r.skipped_dates],
+                         interval_count, next_due_date, end_date, is_active, created_at, updated_at, skipped_dates, split_paid_by)
+                         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)",
+                        params![r.sync_id, stamp, category, r.name, r.description, r.amount_minor, r.start_date, r.interval_unit, r.interval_count, r.next_due_date, r.end_date, r.is_active, r.created_at, when, r.skipped_dates, paid_by],
                     )?;
                     self.summary.added += 1;
                     self.tx.last_insert_rowid()
@@ -1469,8 +1497,9 @@ impl<'a> Applier<'a> {
             if moved_category {
                 stamp = moved(&parse(&stamp)?).format();
             }
-            let (parts, moved_person) = self.local_parts(r.split.iter().map(|p| (&p.person, &p.guest, p.amount_minor)))?;
-            if moved_person {
+            let (parts, moved_parts) = self.local_parts(r.split.iter().map(|p| (&p.person, &p.guest, p.amount_minor)))?;
+            let (paid_by, moved_payer) = self.local_payer(r.paid_by.as_deref())?;
+            if moved_parts || moved_payer {
                 stamp = moved(&parse(&stamp)?).format();
             }
             // updated_at follows the stamp only when the stamp was derived from a merge; any other stamp change keeps it
@@ -1547,7 +1576,7 @@ impl<'a> Applier<'a> {
                 self.put_marker(Table::Transactions, rival_sync_id, &marker)?;
                 self.summary.dropped += 1;
             }
-            if !parts.is_empty() && self.is_income(category)? {
+            if (!parts.is_empty() || paid_by.is_some()) && self.is_income(category)? {
                 return Err(SyncError::Invalid("split"));
             }
             let bill = match &existing {
@@ -1555,8 +1584,8 @@ impl<'a> Applier<'a> {
                     self.note_overwrite(local);
                     self.run(
                         "UPDATE transactions SET stamp = ?2, category_id = ?3, recurring_transaction_id = ?4, recurring_due_date = ?5, client_uuid = ?6,
-                         name = ?7, amount_minor = ?8, planned_amount_minor = ?9, payment_date = ?10, description = ?11, created_at = ?12 WHERE id = ?1",
-                        params![id, stamp, category, recurring, r.recurring_due_date, r.client_uuid, r.name, r.amount_minor, r.planned_amount_minor, r.payment_date, r.description, r.created_at],
+                         name = ?7, amount_minor = ?8, planned_amount_minor = ?9, payment_date = ?10, description = ?11, created_at = ?12, paid_by = ?13 WHERE id = ?1",
+                        params![id, stamp, category, recurring, r.recurring_due_date, r.client_uuid, r.name, r.amount_minor, r.planned_amount_minor, r.payment_date, r.description, r.created_at, paid_by],
                     )?;
                     self.set_updated_at(Table::Transactions, *id, &when)?;
                     self.summary.updated += 1;
@@ -1565,9 +1594,9 @@ impl<'a> Applier<'a> {
                 None => {
                     self.run(
                         "INSERT INTO transactions (sync_id, stamp, category_id, recurring_transaction_id, recurring_due_date, client_uuid, name,
-                         amount_minor, planned_amount_minor, payment_date, description, created_at, updated_at)
-                         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
-                        params![r.sync_id, stamp, category, recurring, r.recurring_due_date, r.client_uuid, r.name, r.amount_minor, r.planned_amount_minor, r.payment_date, r.description, r.created_at, when],
+                         amount_minor, planned_amount_minor, payment_date, description, created_at, updated_at, paid_by)
+                         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)",
+                        params![r.sync_id, stamp, category, recurring, r.recurring_due_date, r.client_uuid, r.name, r.amount_minor, r.planned_amount_minor, r.payment_date, r.description, r.created_at, when, paid_by],
                     )?;
                     self.summary.added += 1;
                     self.tx.last_insert_rowid()
@@ -2277,9 +2306,9 @@ fn name_of(conn: &Connection, sql: &str, sync_id: &str) -> String {
     conn.query_row(sql, [sync_id], |r| r.get::<_, String>(0)).unwrap_or_default()
 }
 
-/// "Anna 30.00, Bob 30.00": the parts of a bill, by the names of the friends on this device.
-fn split_text(conn: &Connection, parts: &[SplitPartRow]) -> String {
-    parts
+/// "Anna 30.00, Bob 30.00, paid by Anna": the parts of a bill, by the names of the friends on this device, and who paid if it was not you.
+fn split_text(conn: &Connection, parts: &[SplitPartRow], paid_by: &Option<String>) -> String {
+    let mut text: Vec<String> = parts
         .iter()
         .map(|p| {
             let who = match (&p.person, &p.guest) {
@@ -2289,8 +2318,11 @@ fn split_text(conn: &Connection, parts: &[SplitPartRow]) -> String {
             };
             format!("{who} {}", crate::money::format_amount(p.amount_minor))
         })
-        .collect::<Vec<_>>()
-        .join(", ")
+        .collect();
+    if let Some(id) = paid_by {
+        text.push(format!("paid by {}", name_of(conn, "SELECT name FROM people WHERE sync_id = ?1", id)));
+    }
+    text.join(", ")
 }
 
 fn template_text(conn: &Connection, template: &Option<TemplateRow>) -> String {
@@ -2307,7 +2339,8 @@ fn template_text(conn: &Connection, template: &Option<TemplateRow>) -> String {
             format!("{who} {}", p.weight)
         })
         .collect();
-    format!("{} {}", t.mine, parts.join(" "))
+    let paid_by = t.paid_by.as_ref().map(|id| format!(" paid by {}", name_of(conn, "SELECT name FROM people WHERE sync_id = ?1", id))).unwrap_or_default();
+    format!("{} {}{paid_by}", t.mine, parts.join(" "))
 }
 
 fn money_text(minor: Option<i64>) -> String {
@@ -2326,7 +2359,7 @@ fn facts(conn: &Connection, row: &Row) -> Vec<(&'static str, String)> {
             ("date", r.payment_date.clone()),
             ("category", category_name(conn, &r.category)),
             ("description", some(&r.description)),
-            ("split", split_text(conn, &r.split)),
+            ("split", split_text(conn, &r.split, &r.paid_by)),
         ],
         Row::Person(r) => vec![
             ("name", r.name.clone()),

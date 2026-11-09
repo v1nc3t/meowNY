@@ -1849,6 +1849,12 @@
           "required": false,
           "summary": "The value of each friend, in the order of --people, then of each guest, separated by commas. Not for an equal split.",
           "type": "string"
+        },
+        {
+          "name": "paidBy",
+          "required": false,
+          "summary": "The friend who paid the bill, one of --people. Leave out when you paid. Then your part must be above zero: you owe the friend your part, and the others on the bill owe the friend too.",
+          "type": "id"
         }
       ],
       "scope": "write",
@@ -1911,6 +1917,12 @@
           "required": false,
           "summary": "The value of each friend, in the order of --people, then of each guest, separated by commas. Not for an equal split.",
           "type": "string"
+        },
+        {
+          "name": "paidBy",
+          "required": false,
+          "summary": "The friend who paid the bill, one of --people. Leave out when you paid. Then your part must be above zero: you owe the friend your part, and the others on the bill owe the friend too.",
+          "type": "id"
         }
       ],
       "scope": "write",

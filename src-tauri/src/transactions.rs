@@ -6,7 +6,7 @@ use rusqlite::{params, Connection, OptionalExtension};
 use serde::{Deserialize, Deserializer, Serialize};
 
 use crate::categories::{parse_id, serialize_id};
-use crate::debts::splits::{self, PartOut};
+use crate::debts::splits::{self, PartOut, Payer};
 use crate::money::{format_amount, parse_positive_amount};
 use crate::vault::AppError;
 
@@ -32,6 +32,8 @@ pub struct Transaction {
     pub my_share: String,
     /// The parts of the others, when the bill is shared.
     pub split: Vec<PartOut>,
+    /// The friend who paid the bill, when it was not you: then `my_share` is what you owe them and the parts are what the others owe them.
+    pub paid_by: Option<Payer>,
     pub payment_date: String,
     pub description: Option<String>,
 }
@@ -157,6 +159,7 @@ fn from_row(row: &rusqlite::Row) -> rusqlite::Result<Transaction> {
         amount: format_amount(row.get(4)?),
         my_share: format_amount(row.get(4)?),
         split: Vec::new(),
+        paid_by: None,
         payment_date: row.get(5)?,
         description: row.get(6)?,
     })
@@ -167,11 +170,13 @@ fn hydrate(conn: &Connection, transactions: &mut [Transaction]) -> Result<(), Ap
     let ids: Vec<i64> = transactions.iter().map(|t| t.id).collect();
     let costs = splits::costs_of(conn, &ids)?;
     let mut parts = splits::parts_of(conn, &ids)?;
+    let mut payers = splits::payers_of(conn, &ids)?;
     for t in transactions {
         if let Some(cost) = costs.get(&t.id) {
             t.my_share = format_amount(*cost);
         }
         t.split = parts.remove(&t.id).unwrap_or_default();
+        t.paid_by = payers.remove(&t.id);
     }
     Ok(())
 }
@@ -253,6 +258,7 @@ pub fn create(conn: &Connection, input: &NewTransaction) -> Result<Transaction, 
             amount: format_amount(minor),
             my_share: format_amount(minor),
             split: Vec::new(),
+            paid_by: None,
             payment_date: date,
             description,
         }),
@@ -301,7 +307,7 @@ pub fn update(conn: &Connection, id: i64, patch: &TransactionPatch) -> Result<Tr
     // A bill that is shared keeps its parts adding up to the bill: a new amount rescales every part, yours included, and a split bill
     // stays an expense. The parts are written before the amount when it shrinks and after it when it grows, so they never pass the bill.
     let old_minor = parse_positive_amount(&current.amount)?;
-    let shared = !current.split.is_empty();
+    let shared = !current.split.is_empty() || current.paid_by.is_some();
     if shared && category_id != current.category_id && !category_is_expense(conn, category_id)? {
         return Err(AppError::InvalidInput);
     }

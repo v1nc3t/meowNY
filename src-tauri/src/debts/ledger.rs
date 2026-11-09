@@ -2,8 +2,8 @@
 //!
 //! * A loan or a repayment is **never income or expense**: it lives only here and no sum of spending or earning reads it, so it cannot
 //!   inflate your income, hide a real cost or touch a budget.
-//! * The balance of a friend is the sum of their parts of split bills and of the signed entries: who owes whom, and how much. It is a
-//!   running total; a repayment is not matched to one bill.
+//! * The balance of a friend is the sum of their parts of the split bills you paid, minus your part of the bills they paid, and of the
+//!   signed entries: who owes whom, and how much. It is a running total; a repayment is not matched to one bill.
 //! * "Mark as paid" takes an amount that may be larger than the debt: the balance then turns around and you owe the rest.
 //! * "I borrowed" can add your share to your expenses at the same time, in one step: someone else paid, you owe them, and the month shows
 //!   your part. Paying them back later is another entry and never a second expense.
@@ -335,12 +335,13 @@ pub fn balance_minor(conn: &Connection, person_id: i64) -> Result<i64, AppError>
     conn.query_row("SELECT balance_minor FROM person_balances WHERE person_id = ?1", [person_id], |r| r.get(0)).optional()?.ok_or(AppError::NotFound)
 }
 
-/// One line of a friend's ledger: a part of a bill or an entry.
+/// One line of a friend's ledger: a part of a bill, or an entry.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Line {
     pub date: String,
-    /// `BILL` for their part of a split bill, otherwise the kind of the entry.
+    /// `BILL` for their part of a split bill you paid, or (what it did to the balance is then negative) your part of one they paid;
+    /// otherwise the kind of the entry.
     pub kind: String,
     /// The name of the bill, or the note of the entry; empty when there is none.
     pub what: String,
@@ -368,7 +369,8 @@ pub struct Statement {
     pub lines: Vec<Line>,
 }
 
-/// The story of a friend's balance: their parts of bills and the entries together, by date, with the balance after each line.
+/// The story of a friend's balance: their parts of bills you paid, your parts of the bills they paid, and the entries together, by date,
+/// with the balance after each line.
 pub fn statement(conn: &Connection, person_id: i64) -> Result<Statement, AppError> {
     let tx = conn.unchecked_transaction()?;
     statement_in(&tx, person_id)
@@ -389,13 +391,23 @@ pub(crate) fn statement_in(tx: &Connection, person_id: i64) -> Result<Statement,
         transaction: Option<(i64, String)>,
     }
     let mut raw: Vec<Raw> = Vec::new();
+    // their part of a bill you paid: they owe you. (On a bill another friend paid, a line is a debt to that friend, and on one this friend paid
+    // their own part owes nobody.)
     let mut statement = tx.prepare(
         "SELECT t.payment_date, l.id, t.name, l.amount_minor, t.id
-         FROM transaction_split_lines l JOIN transactions t ON t.id = l.transaction_id WHERE l.person_id = ?1",
+         FROM transaction_split_lines l JOIN transactions t ON t.id = l.transaction_id WHERE l.person_id = ?1 AND t.paid_by IS NULL",
     )?;
     for row in statement.query_map([person_id], |r| Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)?, r.get::<_, String>(2)?, r.get::<_, i64>(3)?, r.get::<_, i64>(4)?)))? {
         let (date, id, what, amount, transaction) = row?;
         raw.push(Raw { date: date.clone(), source: 0, id, kind: "BILL".into(), what, signed: amount, entry: None, transaction: Some((transaction, date)) });
+    }
+    // your part of a bill they paid: you owe them. (Its id is the bill's, which only orders it among the others of the day.)
+    let mut statement = tx.prepare(
+        "SELECT t.payment_date, t.id, t.name, k.cost_minor FROM transactions t JOIN transaction_costs k ON k.transaction_id = t.id WHERE t.paid_by = ?1",
+    )?;
+    for row in statement.query_map([person_id], |r| Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)?, r.get::<_, String>(2)?, r.get::<_, i64>(3)?)))? {
+        let (date, transaction, what, cost) = row?;
+        raw.push(Raw { date: date.clone(), source: 0, id: transaction, kind: "BILL".into(), what, signed: -cost, entry: None, transaction: Some((transaction, date)) });
     }
     let mut statement = tx.prepare(
         "SELECT e.entry_date, e.id, e.kind, e.note, e.amount_minor, e.transaction_id, t.payment_date

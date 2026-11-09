@@ -3028,13 +3028,23 @@
           "type": "string",
           "value": "text",
           "values": []
+        },
+        {
+          "flag": "--paid-by",
+          "nullable": false,
+          "param": "paidBy",
+          "required": false,
+          "summary": "The friend who paid the bill, one of --people. Leave out when you paid. Then your part must be above zero: you owe the friend your part, and the others on the bill owe the friend too.",
+          "type": "id",
+          "value": "id",
+          "values": []
         }
       ],
       "positional": "id",
       "route": "transactions.split",
       "scope": "write",
       "summary": "Shares a transaction with friends and guests. It keeps the amount that was paid; your part, the amount minus theirs, is what budgets and statistics count. The numbers must add up. Only an expense can be shared.",
-      "usage": "meowny transactions split <id> --mode <EQUAL|PERCENT|SHARES|EXACT> [--mine <text>] [--people <id,id,...>] [--guests <text>] [--values <text>]"
+      "usage": "meowny transactions split <id> --mode <EQUAL|PERCENT|SHARES|EXACT> [--mine <text>] [--people <id,id,...>] [--guests <text>] [--values <text>] [--paid-by <id>]"
     },
     {
       "command": "transactions unsplit",
@@ -3127,13 +3137,23 @@
           "type": "string",
           "value": "text",
           "values": []
+        },
+        {
+          "flag": "--paid-by",
+          "nullable": false,
+          "param": "paidBy",
+          "required": false,
+          "summary": "The friend who paid the bill, one of --people. Leave out when you paid. Then your part must be above zero: you owe the friend your part, and the others on the bill owe the friend too.",
+          "type": "id",
+          "value": "id",
+          "values": []
         }
       ],
       "positional": "id",
       "route": "recurring.split",
       "scope": "write",
       "summary": "Splits every payment of a recurring item the same way, from now on. Kept as proportions, so a payment that differs from the plan is shared in the same proportions. EXACT needs an item with an amount that the values add up to. Payments already made are not changed.",
-      "usage": "meowny recurring split <id> --mode <EQUAL|PERCENT|SHARES|EXACT> [--mine <text>] [--people <id,id,...>] [--guests <text>] [--values <text>]"
+      "usage": "meowny recurring split <id> --mode <EQUAL|PERCENT|SHARES|EXACT> [--mine <text>] [--people <id,id,...>] [--guests <text>] [--values <text>] [--paid-by <id>]"
     },
     {
       "command": "recurring unsplit",

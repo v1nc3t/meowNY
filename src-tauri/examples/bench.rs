@@ -72,7 +72,7 @@ fn main() {
         for (n, (id, expense)) in ids.iter().enumerate() {
             if n % 5 == 0 && *expense {
                 let parts = friends.iter().cycle().skip(n % 8).take(1 + n % 3).map(|f| splits::Part { person_id: Some(f.clone()), guest: None, value: None }).collect();
-                splits::set_split(a, *id, &splits::SplitInput { mode: splits::Mode::Equal, mine: None, parts }).unwrap();
+                splits::set_split(a, *id, &splits::SplitInput { mode: splits::Mode::Equal, mine: None, parts, paid_by: None }).unwrap();
             }
         }
     });

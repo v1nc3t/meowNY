@@ -3,7 +3,7 @@ use rusqlite::Connection;
 use super::fixtures::*;
 use super::ledger::{self, Expense, Kind, NewEntry};
 use super::people;
-use super::splits::set_split;
+use super::splits::{set_split, SplitInput};
 use crate::transactions;
 use crate::vault::AppError;
 
@@ -54,6 +54,27 @@ fn an_entry_can_be_added_for_an_archived_friend_because_a_repayment_can_come_lat
     people::archive(&w.conn, anna).unwrap();
     assert!(ledger::add(&w.conn, &new(anna, Kind::RepaidToMe, "5.00", "2026-02-01")).is_ok());
     assert_eq!(balance(&w.conn, anna), 0);
+}
+
+#[test]
+fn a_bill_a_friend_paid_is_a_debt_to_them_of_your_part_and_the_others_on_it_owe_you_nothing() {
+    let w = world();
+    let (anna, bob) = (friend(&w.conn, "Anna"), friend(&w.conn, "Bob"));
+    let dinner = bill(&w.conn, w.food, "Dinner", "90.00", "2026-01-01");
+    set_split(&w.conn, dinner, &SplitInput { paid_by: Some(anna.to_string()), ..equal(vec![who(anna), who(bob)]) }).unwrap();
+    let lunch = bill(&w.conn, w.food, "Lunch", "30.00", "2026-01-02");
+    set_split(&w.conn, lunch, &equal(vec![who(anna)])).unwrap();
+    // Anna paid the dinner: you owe her your 30.00, her own part owes nobody and Bob's goes to her, not to you. You paid the lunch: she owes 15.00.
+    assert_eq!(cost(&w.conn, dinner), 3000, "the cost of the bill is still your part");
+    assert_eq!((balance(&w.conn, anna), balance(&w.conn, bob)), (-3000 + 1500, 0));
+    let shown = ledger::statement(&w.conn, anna).unwrap();
+    let lines: Vec<(&str, &str, &str)> = shown.lines.iter().map(|l| (l.what.as_str(), l.effect.as_str(), l.balance.as_str())).collect();
+    assert_eq!(lines, [("Dinner", "-30.00", "-30.00"), ("Lunch", "15.00", "-15.00")]);
+    assert_eq!(shown.lines[0].transaction_id, Some(dinner.to_string()));
+    assert!(ledger::statement(&w.conn, bob).unwrap().lines.is_empty(), "nothing in Bob's ledger: his part of the dinner is a debt to Anna");
+    for person in [anna, bob] {
+        assert_eq!(ledger::statement(&w.conn, person).unwrap().lines.last().map_or(0, |l| l.balance_minor), balance(&w.conn, person), "the statement ends where the view says");
+    }
 }
 
 // ---- mark as paid ----------------------------------------------------------------------------

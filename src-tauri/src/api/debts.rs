@@ -13,6 +13,7 @@
 //!
 //! A split is typed with flags a command line can take: `mode`, your own value (`mine`), the friends (`people`, ids), the guests (`guests`,
 //! names separated by commas) and `values`, one for each friend and then each guest, in that order. An equal split needs no values.
+//! `paidBy`, the id of one of the friends, says that friend paid the bill (or pays each payment of a recurring item), not you.
 
 use serde::Deserialize;
 use serde_json::{json, Map, Value};
@@ -44,6 +45,7 @@ const MINE: Param = Param::new("mine", Kind::String, "Your own value, typed the 
 const PEOPLE: Param = Param::new("people", Kind::Ids, "The friends the bill is shared with, as ids.");
 const GUESTS: Param = Param::new("guests", Kind::String, "People who are not tracked, by name, separated by commas. Their part leaves your cost and makes no debt.");
 const VALUES: Param = Param::new("values", Kind::String, "The value of each friend, in the order of --people, then of each guest, separated by commas. Not for an equal split.");
+const PAID_BY: Param = Param::new("paidBy", Kind::Id, "The friend who paid the bill, one of --people. Leave out when you paid. Then your part must be above zero: you owe the friend your part, and the others on the bill owe the friend too.");
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -57,6 +59,8 @@ struct SplitArgs {
     guests: Option<String>,
     #[serde(default)]
     values: Option<String>,
+    #[serde(default)]
+    paid_by: Option<String>,
 }
 
 impl SplitArgs {
@@ -78,7 +82,7 @@ impl SplitArgs {
         for (part, value) in parts.iter_mut().zip(values) {
             part.value = value;
         }
-        Ok(SplitInput { mode: self.mode, mine: self.mine, parts })
+        Ok(SplitInput { mode: self.mode, mine: self.mine, parts, paid_by: self.paid_by })
     }
 }
 
@@ -359,7 +363,7 @@ pub const TRANSACTIONS_SPLIT: Route = Route {
     name: "transactions.split",
     scope: Scope::Write,
     summary: "Shares a transaction with friends and guests. It keeps the amount that was paid; your part, the amount minus theirs, is what budgets and statistics count. The numbers must add up. Only an expense can be shared.",
-    params: &[Param::new("id", Kind::Id, "The transaction.").required(), MODE.required(), MINE, PEOPLE, GUESTS, VALUES],
+    params: &[Param::new("id", Kind::Id, "The transaction.").required(), MODE.required(), MINE, PEOPLE, GUESTS, VALUES, PAID_BY],
     confirm: None,
     run: |ctx, mut args| {
         let id = take_id(&mut args, "id")?;
@@ -390,7 +394,7 @@ pub const RECURRING_SPLIT: Route = Route {
     name: "recurring.split",
     scope: Scope::Write,
     summary: "Splits every payment of a recurring item the same way, from now on. Kept as proportions, so a payment that differs from the plan is shared in the same proportions. EXACT needs an item with an amount that the values add up to. Payments already made are not changed.",
-    params: &[Param::new("id", Kind::Id, "The recurring item.").required(), MODE.required(), MINE, PEOPLE, GUESTS, VALUES],
+    params: &[Param::new("id", Kind::Id, "The recurring item.").required(), MODE.required(), MINE, PEOPLE, GUESTS, VALUES, PAID_BY],
     confirm: None,
     run: |ctx, mut args| {
         let id = take_id(&mut args, "id")?;

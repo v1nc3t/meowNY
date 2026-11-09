@@ -439,8 +439,9 @@ fn write(data: &Data, codes: &Codes) -> Result<Vec<u8>, XlsxError> {
             }
         }
 
-        // The parts of the bills that are shared: who has which part of which bill.
-        let s = sheet(&mut book, "Split bills", &[("Date", 12.0), ("Bill", 30.0), ("Who", 30.0), ("Guest", 8.0), (&amount, 14.0)])?;
+        // The parts of the bills that are shared: who has which part of which bill, and who paid it when it was not you (the part is then a
+        // debt to them).
+        let s = sheet(&mut book, "Split bills", &[("Date", 12.0), ("Bill", 30.0), ("Who", 30.0), ("Guest", 8.0), (&amount, 14.0), ("Paid by", 30.0)])?;
         for (i, l) in data.bill_lines.iter().enumerate() {
             let row = i as u32 + 1;
             date(s, row, 0, &l.date, &day)?;
@@ -448,6 +449,7 @@ fn write(data: &Data, codes: &Codes) -> Result<Vec<u8>, XlsxError> {
             text(s, row, 2, l.person.as_deref().or(l.guest.as_deref()).unwrap_or(""))?;
             s.write_boolean(row, 3, l.guest.is_some())?;
             money(s, row, 4, l.amount, &cash)?;
+            text(s, row, 5, l.paid_by.as_deref().unwrap_or(""))?;
         }
     }
 

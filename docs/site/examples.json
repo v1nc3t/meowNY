@@ -577,7 +577,7 @@
       "json": {
         "exit": 0,
         "stderr": "",
-        "stdout": "{\"amount\":\"20.00\",\"categoryId\":\"16\",\"clientUuid\":null,\"description\":null,\"id\":\"426\",\"myShare\":\"20.00\",\"name\":\"Vet plan plus\",\"paymentDate\":\"2026-10-14\",\"split\":[]}\n"
+        "stdout": "{\"amount\":\"20.00\",\"categoryId\":\"16\",\"clientUuid\":null,\"description\":null,\"id\":\"426\",\"myShare\":\"20.00\",\"name\":\"Vet plan plus\",\"paidBy\":null,\"paymentDate\":\"2026-10-14\",\"split\":[]}\n"
       }
     },
     "recurring resume": {
@@ -601,7 +601,7 @@
       "json": {
         "exit": 0,
         "stderr": "",
-        "stdout": "{\"amount\":\"20.00\",\"categoryId\":\"16\",\"description\":null,\"endDate\":null,\"id\":\"13\",\"intervalCount\":1,\"intervalUnit\":\"MONTH\",\"isActive\":true,\"name\":\"Vet plan plus\",\"nextDueDate\":\"2026-10-20\",\"split\":{\"mine\":2,\"parts\":[{\"guest\":null,\"person\":\"Anna\",\"personId\":\"5\",\"weight\":1}]},\"startDate\":\"2026-10-20\"}\n"
+        "stdout": "{\"amount\":\"20.00\",\"categoryId\":\"16\",\"description\":null,\"endDate\":null,\"id\":\"13\",\"intervalCount\":1,\"intervalUnit\":\"MONTH\",\"isActive\":true,\"name\":\"Vet plan plus\",\"nextDueDate\":\"2026-10-20\",\"split\":{\"mine\":2,\"paidBy\":null,\"parts\":[{\"guest\":null,\"person\":\"Anna\",\"personId\":\"5\",\"weight\":1}]},\"startDate\":\"2026-10-20\"}\n"
       }
     },
     "recurring unsplit": {
@@ -751,12 +751,12 @@
       "human": {
         "exit": 0,
         "stderr": "",
-        "stdout": "api: 1\napp: meowny\nschemaVersion: 16\nscope: read\nversion: 0.3.0\n"
+        "stdout": "api: 1\napp: meowny\nschemaVersion: 17\nscope: read\nversion: 0.3.0\n"
       },
       "json": {
         "exit": 0,
         "stderr": "",
-        "stdout": "{\"api\":1,\"app\":\"meowny\",\"schemaVersion\":16,\"scope\":\"read\",\"version\":\"0.3.0\"}\n"
+        "stdout": "{\"api\":1,\"app\":\"meowny\",\"schemaVersion\":17,\"scope\":\"read\",\"version\":\"0.3.0\"}\n"
       }
     },
     "today": {
@@ -777,7 +777,7 @@
       "json": {
         "exit": 0,
         "stderr": "",
-        "stdout": "{\"amount\":\"2.40\",\"categoryId\":\"16\",\"clientUuid\":\"9b2f5d44-6e1a-4c3b-8f2d-1a2b3c4d5e6f\",\"description\":null,\"id\":\"424\",\"myShare\":\"2.40\",\"name\":\"Bread\",\"paymentDate\":\"2026-10-14\",\"split\":[]}\n"
+        "stdout": "{\"amount\":\"2.40\",\"categoryId\":\"16\",\"clientUuid\":\"9b2f5d44-6e1a-4c3b-8f2d-1a2b3c4d5e6f\",\"description\":null,\"id\":\"424\",\"myShare\":\"2.40\",\"name\":\"Bread\",\"paidBy\":null,\"paymentDate\":\"2026-10-14\",\"split\":[]}\n"
       }
     },
     "transactions delete": {
@@ -793,12 +793,13 @@
       "human": {
         "exit": 0,
         "stderr": "showing 1-4 of 423; next page: --offset 4\n",
-        "stdout": "limit: 4\noffset: 0\ntotal: 423\n\ntransactions\n id  name             paymentDate  amount  categoryId  clientUuid  description  myShare\n403  Coffee           2026-10-13     3.20           7  -           Flat white      3.20\n402  Bus ticket       2026-10-13     2.80           6  -           -               2.80\n401  Corner shop      2026-10-13     4.50           5  -           -               4.50\n291  Board game cafe  2026-10-13    51.83           8  -           -              51.83\n"
+        "stdout": "limit: 4\noffset: 0\ntotal: 423\n\ntransactions\n id  name             paymentDate  amount  categoryId  clientUuid  description  myShare  paidBy\n403  Coffee           2026-10-13     3.20           7  -           Flat white      3.20  -\n402  Bus ticket       2026-10-13     2.80           6  -           -               2.80  -\n401  Corner shop      2026-10-13     4.50           5  -           -               4.50  -\n291  Board game cafe  2026-10-13    51.83           8  -           -              51.83  -\n"
       },
       "json": {
         "exit": 0,
         "stderr": "",
-        "stdout": "{\"limit\":4,\"offset\":0,\"total\":423,\"transactions\":[{\"amount\":\"3.20\",\"categoryId\":\"7\",\"clientUuid\":null,\"description\":\"Flat white\",\"id\":\"403\",\"myShare\":\"3.20\",\"name\":\"Coffee\",\"paymentDate\":\"2026-10-13\",\"split\":[]},{\"amount\":\"2.80\",\"categoryId\":\"6\",\"clientUuid\":null,\"description\":null,\"id\":\"402\",\"myShare\":\"2.80\",\"name\":\"Bus ticket\",\"paymentDate\":\"2026-10-13\",\"split\":[]},{\"amount\":\"4.50\",\"categoryId\":\"5\",\"clientUuid\":null,\"description\":null,\"id\":\"401\",\"myShare\":\"4.50\",\"name\":\"Corner shop\",\"paymentDate\":\"2026-10-13\",\"split\":[]},{\"amount\":\"51.83\",\"categoryId\":\"8\",\"clientUuid\":null,\"description\":null,\"id\":\"291\",\"myShare\":\"51.83\",\"name\":\"Board game cafe\",\"paymentDate\":\"2026-10-13\",\"split\":[]}]}\n"
+        "stdout": "{\"limit\":4,\"offset\":0,\"total\":423,\"transactions\":[{\"amount\":\"3.20\",\"categoryId\":\"7\",\"clientUuid\":null,\"description\":\"Flat white\",\"id\":\"403\",\"myShare\":\"3.20\",\"name\":\"Coffee\",\"paidBy\":null,\"paymentDate\":\"2026-10-13\",\"split\":[]},{\"amount\":\"2.80\",\"categoryId\":\"6\",\"clientUuid\":null,\"description\":null,\"id\":\"402\",\"myShare\":\"2.80\",\"name\":\"Bus ticket\",\"paidBy\":null,\"paymentDate\":\"2026-10-13\",\"split\":[]},{\"amount\":\"4.50\",\"categoryId\":\"5\",\"clientUuid\":null,\"description\":null,\"id\":\"401\",\"myShare\":\"4.50\",\"name\":\"Corner shop\",\"paidBy\":null,\"paymentDate\":\"2026-10-13\",\"split\":[]},{\"amount\":\"51.83\",\"categoryId\":\"8\",\"clientUuid\":null,\"description\":null,\"id\":\"291\",\"myShare\":\"51.83\",\"name\":\"Board game cafe\",\"pa…",
+        "truncated": true
       }
     },
     "transactions split": {
@@ -806,7 +807,7 @@
       "json": {
         "exit": 0,
         "stderr": "",
-        "stdout": "{\"amount\":\"90.00\",\"categoryId\":\"16\",\"clientUuid\":\"5c1d8e07-3b2a-4f6e-9a41-7d0c2b9e8f13\",\"description\":null,\"id\":\"425\",\"myShare\":\"30.00\",\"name\":\"Dinner\",\"paymentDate\":\"2026-10-12\",\"split\":[{\"amount\":\"30.00\",\"guest\":null,\"person\":\"Anna\",\"personId\":\"5\"},{\"amount\":\"30.00\",\"guest\":null,\"person\":\"Bob\",\"personId\":\"6\"}]}\n"
+        "stdout": "{\"amount\":\"90.00\",\"categoryId\":\"16\",\"clientUuid\":\"5c1d8e07-3b2a-4f6e-9a41-7d0c2b9e8f13\",\"description\":null,\"id\":\"425\",\"myShare\":\"30.00\",\"name\":\"Dinner\",\"paidBy\":null,\"paymentDate\":\"2026-10-12\",\"split\":[{\"amount\":\"30.00\",\"guest\":null,\"person\":\"Anna\",\"personId\":\"5\"},{\"amount\":\"30.00\",\"guest\":null,\"person\":\"Bob\",\"personId\":\"6\"}]}\n"
       }
     },
     "transactions unsplit": {
@@ -814,7 +815,7 @@
       "json": {
         "exit": 0,
         "stderr": "",
-        "stdout": "{\"amount\":\"90.00\",\"categoryId\":\"16\",\"clientUuid\":\"5c1d8e07-3b2a-4f6e-9a41-7d0c2b9e8f13\",\"description\":null,\"id\":\"425\",\"myShare\":\"90.00\",\"name\":\"Dinner\",\"paymentDate\":\"2026-10-12\",\"split\":[]}\n"
+        "stdout": "{\"amount\":\"90.00\",\"categoryId\":\"16\",\"clientUuid\":\"5c1d8e07-3b2a-4f6e-9a41-7d0c2b9e8f13\",\"description\":null,\"id\":\"425\",\"myShare\":\"90.00\",\"name\":\"Dinner\",\"paidBy\":null,\"paymentDate\":\"2026-10-12\",\"split\":[]}\n"
       }
     },
     "transactions update": {
@@ -822,7 +823,7 @@
       "json": {
         "exit": 0,
         "stderr": "",
-        "stdout": "{\"amount\":\"2.95\",\"categoryId\":\"16\",\"clientUuid\":\"9b2f5d44-6e1a-4c3b-8f2d-1a2b3c4d5e6f\",\"description\":\"Sourdough\",\"id\":\"424\",\"myShare\":\"2.95\",\"name\":\"Bread\",\"paymentDate\":\"2026-10-14\",\"split\":[]}\n"
+        "stdout": "{\"amount\":\"2.95\",\"categoryId\":\"16\",\"clientUuid\":\"9b2f5d44-6e1a-4c3b-8f2d-1a2b3c4d5e6f\",\"description\":\"Sourdough\",\"id\":\"424\",\"myShare\":\"2.95\",\"name\":\"Bread\",\"paidBy\":null,\"paymentDate\":\"2026-10-14\",\"split\":[]}\n"
       }
     }
   }

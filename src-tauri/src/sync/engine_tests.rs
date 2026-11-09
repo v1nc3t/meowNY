@@ -836,6 +836,7 @@ fn a_marker_for_a_row_this_device_never_had_is_remembered_so_the_row_cannot_come
                 planned_amount_minor: None,
                 payment_date: "2026-03-01".into(),
                 description: None,
+                paid_by: None,
                 split: Vec::new(),
                 created_at: "2026-03-01T10:00:00.000Z".into(),
                 updated_at: "2026-03-01T10:00:00.000Z".into(),
@@ -1145,14 +1146,17 @@ fn edit_debts(conn: &mut Connection, rng: &mut Rng) {
         out.retain(|p| seen.insert((p.person_id.clone(), p.guest.clone())));
         out
     };
+    // sometimes the first friend on the split paid it
+    let payer = |rng: &mut Rng, parts: &[Part]| parts.iter().find_map(|p| p.person_id.clone()).filter(|_| rng.below(3) == 0);
     let split = |rng: &mut Rng, mut parts: Vec<Part>| -> SplitInput {
+        let paid_by = payer(rng, &parts);
         if rng.below(2) == 0 {
-            SplitInput { mode: Mode::Equal, mine: None, parts }
+            SplitInput { mode: Mode::Equal, mine: None, parts, paid_by }
         } else {
             for p in &mut parts {
                 p.value = Some(rng.below(5).to_string());
             }
-            SplitInput { mode: Mode::Shares, mine: Some((1 + rng.below(4)).to_string()), parts }
+            SplitInput { mode: Mode::Shares, mine: Some((1 + rng.below(4)).to_string()), parts, paid_by }
         }
     };
     match rng.below(16) {
@@ -1220,7 +1224,8 @@ fn edit_debts(conn: &mut Connection, rng: &mut Rng) {
                 let _ = splits::clear_template(conn, id);
             } else {
                 let p = parts(rng);
-                let _ = splits::set_template(conn, id, &SplitInput { mode: Mode::Shares, mine: Some((1 + rng.below(3)).to_string()), parts: p.into_iter().map(|mut x| { x.value = Some((1 + rng.below(3)).to_string()); x }).collect() });
+                let paid_by = payer(rng, &p);
+                let _ = splits::set_template(conn, id, &SplitInput { mode: Mode::Shares, mine: Some((1 + rng.below(3)).to_string()), parts: p.into_iter().map(|mut x| { x.value = Some((1 + rng.below(3)).to_string()); x }).collect(), paid_by });
             }
         }
         14 if !items.is_empty() => {
@@ -1840,7 +1845,7 @@ fn what_a_device_changed_in_documents_counts_as_waiting_for_the_next_sync() {
 mod debts {
     use super::*;
     use crate::debts::fixtures::{equal, friend, guest, input, with, who};
-    use crate::debts::splits::{check, set_split, set_template, Mode};
+    use crate::debts::splits::{check, set_split, set_template, Mode, SplitInput};
 
     fn food(conn: &Connection) -> i64 {
         id_of(conn, "categories", "Food")
@@ -1897,6 +1902,48 @@ mod debts {
         set_split(&desktop, dinner, &equal(vec![who(bob)])).unwrap();
         sync_ok(&mut desktop, &mut phone);
         assert_eq!(parts_of(&phone, "Dinner"), [("Bob".to_string(), 4500)]);
+    }
+
+    #[test]
+    fn the_friend_who_paid_a_bill_or_pays_a_template_arrives_with_it_and_changes_with_it() {
+        let (mut desktop, mut phone) = paired();
+        let anna = friend(&desktop, "Anna");
+        let dinner = spend(&desktop, food(&desktop), "Dinner", "90.00");
+        set_split(&desktop, dinner, &SplitInput { paid_by: Some(anna.to_string()), ..equal(vec![who(anna), guest("Carl")]) }).unwrap();
+        let item = id_of(&desktop, "recurring_transactions", "Rent");
+        set_template(&desktop, item, &SplitInput { paid_by: Some(anna.to_string()), ..equal(vec![who(anna)]) }).unwrap();
+        sync_ok(&mut desktop, &mut phone);
+        assert_eq!(text(&phone, "SELECT p.name FROM transactions t JOIN people p ON p.id = t.paid_by WHERE t.name = 'Dinner'"), "Anna");
+        assert_eq!(text(&phone, "SELECT p.name FROM recurring_transactions r JOIN people p ON p.id = r.split_paid_by"), "Anna");
+        assert_eq!(balance(&phone, "Anna"), -3000, "you owe the friend who paid your part");
+        // the bill becomes yours on the desktop; the change of the payer alone is a change of the bill
+        pause();
+        set_split(&desktop, dinner, &equal(vec![who(anna)])).unwrap();
+        sync_ok(&mut desktop, &mut phone);
+        assert_eq!(count(&phone, "SELECT count(*) FROM transactions WHERE paid_by IS NOT NULL"), 0);
+        assert_eq!(balance(&phone, "Anna"), 4500);
+        pause();
+        set_split(&phone, id_of(&phone, "transactions", "Dinner"), &SplitInput { paid_by: Some(id_of(&phone, "people", "Anna").to_string()), ..equal(vec![who(id_of(&phone, "people", "Anna"))]) }).unwrap();
+        sync_ok(&mut desktop, &mut phone);
+        assert_eq!(count(&desktop, "SELECT count(*) FROM transactions WHERE paid_by IS NOT NULL"), 1, "a change that is only the payer");
+    }
+
+    #[test]
+    fn a_friend_who_paid_and_is_merged_into_the_same_friend_of_the_other_device_stays_the_payer() {
+        let (mut desktop, mut phone) = paired();
+        let (on_desktop, on_phone) = (friend(&desktop, "Anna"), friend(&phone, "anna"));
+        let dinner = spend(&desktop, food(&desktop), "Dinner", "90.00");
+        set_split(&desktop, dinner, &SplitInput { paid_by: Some(on_desktop.to_string()), ..equal(vec![who(on_desktop)]) }).unwrap();
+        let item = id_of(&phone, "recurring_transactions", "Rent");
+        set_template(&phone, item, &SplitInput { paid_by: Some(on_phone.to_string()), ..equal(vec![who(on_phone)]) }).unwrap();
+        sync_ok(&mut desktop, &mut phone);
+        for conn in [&desktop, &phone] {
+            assert_eq!(count(conn, "SELECT count(*) FROM people WHERE merged_into IS NOT NULL"), 1, "one Anna");
+            assert_eq!(count(conn, "SELECT count(*) FROM transactions t JOIN people p ON p.id = t.paid_by WHERE t.name = 'Dinner' AND p.merged_into IS NULL"), 1, "the bill moved to the one kept");
+            assert_eq!(count(conn, "SELECT count(*) FROM recurring_transactions r JOIN people p ON p.id = r.split_paid_by WHERE p.merged_into IS NULL"), 1, "and the template");
+            assert_eq!(balance(conn, "Anna"), -4500);
+            assert!(check(conn).unwrap());
+        }
     }
 
     #[test]
@@ -2088,7 +2135,7 @@ mod debts {
     fn a_code_taken_in_on_both_devices_ends_as_one_entry_and_two_expenses_stay_because_each_device_made_its_own() {
         use crate::debts::codes::{accept, encode, Accept, BillCode};
         let (mut desktop, mut phone) = paired();
-        let code = encode(&BillCode { id: "cd".repeat(16), from: "Vincent".into(), what: "Dinner".into(), date: "2026-03-04".into(), amount_minor: 2250, total_minor: 9000, currency: "EUR".into() });
+        let code = encode(&BillCode { id: "cd".repeat(16), from: "Vincent".into(), what: "Dinner".into(), date: "2026-03-04".into(), amount_minor: 2250, total_minor: 9000, currency: "EUR".into(), paid_by: None });
         let take = |conn: &Connection, expense: bool| {
             accept(
                 conn,
