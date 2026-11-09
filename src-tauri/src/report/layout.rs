@@ -127,9 +127,10 @@ impl Metrics {
         self.face(bold).width(text, size)
     }
 
-    /// Text the font can draw: control characters go, and a character the font lacks becomes `?`.
+    /// Text the font can draw: a line break becomes a space, other control characters go, and a character the font lacks becomes `?`.
     pub fn clean(&self, text: &str) -> String {
         text.chars()
+            .map(|c| if c == '\n' { ' ' } else { c })
             .filter(|c| !c.is_control())
             .map(|c| if self.regular.has(c) && self.bold.has(c) { c } else { '?' })
             .collect()

@@ -123,10 +123,11 @@ pub struct Expense {
 /// Empty means "no note".
 fn clean_note(text: Option<&str>) -> Result<Option<String>, AppError> {
     let Some(text) = text.map(str::trim).filter(|t| !t.is_empty()) else { return Ok(None) };
-    if text.chars().count() > NOTE_MAX_CHARS || text.chars().any(char::is_control) {
+    let text = transactions::clean_lines(text).ok_or(AppError::InvalidInput)?;
+    if text.chars().count() > NOTE_MAX_CHARS {
         return Err(AppError::InvalidInput);
     }
-    Ok(Some(text.to_string()))
+    Ok(Some(text))
 }
 
 const COLUMNS: &str = "id, person_id, kind, amount_minor, entry_date, note, transaction_id";

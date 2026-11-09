@@ -204,9 +204,10 @@ pub fn statement_text(conn: &Connection, person_id: i64, today: &str, labels: &L
     let currency = export::currency(&tx)?;
     let Statement { person, lines } = ledger::statement_in(&tx, person_id)?;
     let mut out = format!("{}: {}\n{today} ({currency})\n\n", labels.statement_title, person.name);
+    // A note may hold line breaks; the statement keeps one line for each entry.
     let what = |l: &ledger::Line| {
         let kind = labels.kind(&l.kind);
-        if l.what.is_empty() { kind.to_string() } else { format!("{kind}: {}", l.what) }
+        if l.what.is_empty() { kind.to_string() } else { format!("{kind}: {}", l.what.replace('\n', " ")) }
     };
     let what_width = lines.iter().map(|l| what(l).chars().count()).max().unwrap_or(0);
     let effect_width = lines.iter().map(|l| signed(&l.effect).len()).max().unwrap_or(0);

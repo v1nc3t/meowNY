@@ -633,7 +633,7 @@ function RecurringView({ settings, now }: { settings: MoneySettings; now: Today 
             <DateField name="paidOn" label={t('rec.paidOn')} defaultValue={paying.dueDate ?? paying.item.nextDueDate} today={now.date} />
             <label>
               {t('common.description')}
-              <input name="description" maxLength={255} placeholder={t('common.optional')} defaultValue={paying.item.description ?? ''} autoComplete="off" />
+              <textarea name="description" rows={3} maxLength={255} placeholder={t('common.optional')} defaultValue={paying.item.description ?? ''} autoComplete="off" />
             </label>
           </form>
           <AttachArea attachments={attachments} />
@@ -764,7 +764,7 @@ function RecurringModal({
           ) : null}
           <label>
             {t('common.description')}
-            <input name="description" maxLength={255} placeholder={t('common.optional')} defaultValue={item?.description ?? ''} autoComplete="off" />
+            <textarea name="description" rows={3} maxLength={255} placeholder={t('common.optional')} defaultValue={item?.description ?? ''} autoComplete="off" />
           </label>
         </form>
         <AttachArea attachments={attachments} />

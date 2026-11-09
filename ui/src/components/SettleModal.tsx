@@ -87,7 +87,7 @@ export default function SettleModal({
         </div>
         <label>
           {t('debts.note')}
-          <input name="note" maxLength={200} autoComplete="off" />
+          <textarea name="note" rows={3} maxLength={200} autoComplete="off" />
         </label>
         <TransactionLink value={linked} onChange={setLinked} />
       </form>

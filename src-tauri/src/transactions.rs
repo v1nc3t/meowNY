@@ -109,13 +109,20 @@ pub(crate) fn clean_name(name: &str) -> Result<String, AppError> {
     Ok(name.to_string())
 }
 
+/// A description or a note may hold line breaks and no other control character; `\r\n` and `\r` become `\n`. `None` when it holds another one.
+pub(crate) fn clean_lines(text: &str) -> Option<String> {
+    let text = text.replace("\r\n", "\n").replace('\r', "\n");
+    (!text.chars().any(|c| c.is_control() && c != '\n')).then_some(text)
+}
+
 /// Empty means "no description".
 pub(crate) fn clean_description(text: Option<&str>) -> Result<Option<String>, AppError> {
     let Some(text) = text.map(str::trim).filter(|t| !t.is_empty()) else { return Ok(None) };
-    if text.chars().count() > DESCRIPTION_MAX_CHARS || !no_controls(text) {
+    let text = clean_lines(text).ok_or(AppError::InvalidInput)?;
+    if text.chars().count() > DESCRIPTION_MAX_CHARS {
         return Err(AppError::InvalidInput);
     }
-    Ok(Some(text.to_string()))
+    Ok(Some(text))
 }
 
 pub fn clean_date(text: &str) -> Result<String, AppError> {
@@ -439,6 +446,8 @@ mod tests {
             new(food, "A", "1.00", "2026-6-5"),
             new(food, "A", "1.00", "15/06/2026"),
             NewTransaction { description: Some("x".repeat(256)), ..new(food, "A", "1.00", "2026-06-15") },
+            NewTransaction { description: Some("tab\there".into()), ..new(food, "A", "1.00", "2026-06-15") },
+            NewTransaction { description: Some("nul\u{0}here".into()), ..new(food, "A", "1.00", "2026-06-15") },
             NewTransaction { client_uuid: Some("not-a-uuid".into()), ..new(food, "A", "1.00", "2026-06-15") },
             NewTransaction { category_id: "abc".into(), ..new(food, "A", "1.00", "2026-06-15") },
         ];
@@ -447,6 +456,16 @@ mod tests {
         }
         let count: i64 = conn.query_row("SELECT count(*) FROM transactions", [], |r| r.get(0)).unwrap();
         assert_eq!(count, 0);
+    }
+
+    #[test]
+    fn a_description_may_hold_line_breaks_and_a_name_may_not() {
+        let (conn, food, _) = db();
+        let input = NewTransaction { description: Some(" one\r\ntwo\rthree\nfour ".into()), ..new(food, "A", "1.00", "2026-06-15") };
+        assert_eq!(create(&conn, &input).unwrap().description.as_deref(), Some("one\ntwo\nthree\nfour"));
+        assert_eq!(create(&conn, &new(food, "A\nB", "1.00", "2026-06-15")), Err(AppError::InvalidInput));
+        let long = NewTransaction { description: Some("x\r\n".repeat(128)), ..new(food, "A", "1.00", "2026-06-15") };
+        assert!(create(&conn, &long).is_ok(), "the length counts after the breaks are made one character");
     }
 
     #[test]

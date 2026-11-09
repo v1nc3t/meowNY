@@ -854,7 +854,7 @@ function TransactionModal({
           ) : null}
           <label>
             {t('common.description')}
-            <input name="description" maxLength={255} placeholder={t('common.optional')} defaultValue={transaction?.description ?? ''} autoComplete="off" />
+            <textarea name="description" rows={3} maxLength={255} placeholder={t('common.optional')} defaultValue={transaction?.description ?? ''} autoComplete="off" />
           </label>
           <label>
             <input type="checkbox" checked={showDocuments} disabled={hasDocuments} onChange={(event) => setDocsOn(event.target.checked)} />

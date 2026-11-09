@@ -82,9 +82,10 @@ There is no Diffie-Hellman step, so that last case is the honest limit. Secrets 
 
 JSON messages with a `t` field, one per frame, long lists split. Money in minor units.
 
-1. `hello`: id, name, versions (schema must match; protocol 6), wall clock (a gap above a minute is told to the person, never
-   stops the sync; section 10), currency generation, `since`, and the direction the desktop chose (both ways, to the computer,
-   to the phone). Right after it the phone takes the computer's clock as the reference (section 10).
+1. `hello`: id, name, versions (schema must match; protocol 7: descriptions and notes may hold line breaks), wall clock (a gap
+   above a minute is told to the person, never stops the sync; section 10), currency generation, `since`, and the direction the
+   desktop chose (both ways, to the computer, to the phone). Right after it the phone takes the computer's clock as the reference
+   (section 10).
 2. `currency`: changes the phone has not seen, applied before anything else (section 11).
 3. `hashes` per table, then `digest` (`sync_id`, stamp, deleted) for tables that differ.
 4. `rows`: each side sends what the other lacks or has older; deletions as markers. One-way syncs refuse the other side's rows.

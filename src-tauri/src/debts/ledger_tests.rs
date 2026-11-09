@@ -31,6 +31,8 @@ fn an_entry_is_checked_before_it_is_written() {
         NewEntry { person_id: "abc".into(), ..new(anna, Kind::Lent, "5.00", "2026-01-01") },
         NewEntry { note: Some("x".repeat(201)), ..new(anna, Kind::Lent, "5.00", "2026-01-01") },
         NewEntry { note: Some("bad\u{7}".into()), ..new(anna, Kind::Lent, "5.00", "2026-01-01") },
+        NewEntry { note: Some("bad\ttab".into()), ..new(anna, Kind::Lent, "5.00", "2026-01-01") },
+        NewEntry { note: Some("bad\u{0}nul".into()), ..new(anna, Kind::Lent, "5.00", "2026-01-01") },
         NewEntry { transaction_id: Some("999".into()), ..new(anna, Kind::Lent, "5.00", "2026-01-01") },
     ] {
         assert_eq!(ledger::add(&w.conn, &bad), Err(AppError::InvalidInput), "{bad:?}");
@@ -40,6 +42,8 @@ fn an_entry_is_checked_before_it_is_written() {
     assert_eq!((ok.note.as_deref(), ok.transaction_id, ok.amount.as_str()), (Some("taxi"), Some(dinner.to_string()), "5.00"));
     let empty_note = ledger::add(&w.conn, &NewEntry { note: Some("   ".into()), ..new(anna, Kind::Lent, "5.00", "2026-01-01") }).unwrap();
     assert_eq!(empty_note.note, None, "an empty note is none");
+    let lines = ledger::add(&w.conn, &NewEntry { note: Some("taxi\r\nhome\rlate".into()), ..new(anna, Kind::Lent, "5.00", "2026-01-01") }).unwrap();
+    assert_eq!(lines.note.as_deref(), Some("taxi\nhome\nlate"), "a note may hold line breaks, and every kind of break becomes \\n");
 }
 
 #[test]

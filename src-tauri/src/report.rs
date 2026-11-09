@@ -698,6 +698,11 @@ mod tests {
     }
 
     #[test]
+    fn a_line_break_in_a_description_is_a_space_in_the_pdf() {
+        assert_eq!(Metrics::new().unwrap().clean("taxi\nhome\u{7}"), "taxi home");
+    }
+
+    #[test]
     fn characters_the_font_lacks_become_question_marks_and_the_rest_survive() {
         let w = world();
         let rare = categories::create(&w.conn, "Școală Țară Ωμέγα Дом", CategoryType::Expense).unwrap().id;

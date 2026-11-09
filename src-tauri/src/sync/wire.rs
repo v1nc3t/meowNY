@@ -25,8 +25,9 @@ use crate::{categories, transactions, vault};
 /// bill inside its transaction's row, the split template inside a recurring item's row, and a third target for a document link (a
 /// ledger entry); protocol 5 adds the category order (`position`) and the skipped dates of a recurring item; protocol 6 makes the
 /// computer's clock the reference (the `clock` of a hello is the wall clock, a gap between the clocks no longer stops a sync, and the
-/// phone pulls its stamps back to the computer's time). A device that speaks an older protocol is told to update.
-pub const PROTOCOL: u32 = 6;
+/// phone pulls its stamps back to the computer's time); protocol 7 lets descriptions and notes hold line breaks. A device that speaks an
+/// older protocol is told to update.
+pub const PROTOCOL: u32 = 7;
 /// Digest entries in one message, and rows in one message. Messages are also cut by size (`SOFT_MESSAGE_BYTES`).
 pub const MAX_ENTRIES_PER_MESSAGE: usize = 400;
 pub const MAX_ROWS_PER_MESSAGE: usize = 200;
@@ -494,10 +495,10 @@ fn description_ok(text: &Option<String>) -> bool {
     }
 }
 
-/// A note of a ledger entry: 1 to 200 characters, already trimmed, with no control characters.
+/// A note of a ledger entry: 1 to 200 characters, already trimmed, with no control characters but `\n`.
 fn note_ok(text: &str) -> bool {
     let length = text.chars().count();
-    (1..=200).contains(&length) && text.trim() == text && !text.chars().any(char::is_control)
+    (1..=200).contains(&length) && text.trim() == text && transactions::clean_lines(text).is_some_and(|clean| clean == text)
 }
 
 /// Who a part belongs to: exactly one of a friend (a `sync_id`) and a guest (a plain name).
@@ -1078,7 +1079,7 @@ mod tests {
 
     #[test]
     fn there_is_a_table_for_every_kind_of_row_and_the_protocol_knows_it() {
-        assert_eq!(PROTOCOL, 6);
+        assert_eq!(PROTOCOL, 7);
         let names: Vec<&str> = Table::ALL.iter().map(|t| t.name()).collect();
         assert_eq!(
             names,
@@ -1131,7 +1132,8 @@ mod tests {
             (Table::Transactions, changed(transaction(), "paymentDate", json!("2026-02-30"))),
             (Table::Transactions, changed(transaction(), "description", json!("x".repeat(256)))),
             (Table::Transactions, changed(transaction(), "description", json!(""))),
-            (Table::Transactions, changed(transaction(), "description", json!("line\nbreak"))),
+            (Table::Transactions, changed(transaction(), "description", json!("tab\there"))),
+            (Table::Transactions, changed(transaction(), "description", json!("line\r\nbreak"))),
             (Table::Transactions, changed(transaction(), "clientUuid", json!("0B8F6C1E-5C52-4D6A-9D50-3F7A8A1B2C3D"))),
             (Table::Transactions, changed(transaction(), "clientUuid", json!("not-a-uuid"))),
             (Table::Transactions, changed(transaction(), "recurring", json!(ID_A))),
@@ -1209,7 +1211,8 @@ mod tests {
             (Table::LedgerEntries, changed(entry(), "note", json!(""))),
             (Table::LedgerEntries, changed(entry(), "note", json!(" padded"))),
             (Table::LedgerEntries, changed(entry(), "note", json!("x".repeat(201)))),
-            (Table::LedgerEntries, changed(entry(), "note", json!("line\nbreak"))),
+            (Table::LedgerEntries, changed(entry(), "note", json!("tab\there"))),
+            (Table::LedgerEntries, changed(entry(), "note", json!("line\r\nbreak"))),
             (Table::LedgerEntries, changed(entry(), "person", json!("1"))),
             (Table::LedgerEntries, changed(entry(), "transaction", json!("x"))),
             (Table::LedgerEntries, changed(entry(), "originId", json!("ab"))),
@@ -1252,6 +1255,13 @@ mod tests {
         let global = json!({"syncId": ID_B, "stamp": STAMP, "type": "INCOME", "scope": "GLOBAL", "category": null, "amountLimitMinor": null,
                             "effectiveFrom": "2026-03-01", "createdAt": TS, "updatedAt": TS});
         assert!(parse_row(Table::Budgets, &global).is_ok(), "a removed budget has no limit");
+    }
+
+    #[test]
+    fn descriptions_and_notes_may_hold_line_breaks() {
+        assert!(parse_row(Table::Transactions, &changed(transaction(), "description", json!("line\nbreak"))).is_ok());
+        assert!(parse_row(Table::RecurringTransactions, &changed(recurring(), "description", json!("line\nbreak"))).is_ok());
+        assert!(parse_row(Table::LedgerEntries, &changed(entry(), "note", json!("line\nbreak"))).is_ok());
     }
 
     #[test]
