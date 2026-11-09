@@ -47,15 +47,15 @@ html.is-phone :is(.app-logo, .settings-back, .app-main a:not([class]), .app-foot
   opacity: 0.6;
 }
 
-/* The footer is two lines (the page, then the links), each item at least 44px tall to tap. The gap round the | is as wide as a 360px
-   screen allows for the links in English ("check for updates | questions & bugs | sponsor" is 273px of text on 325px). */
+/* The footer is two lines (the page at the left, then the links at the right), each item at least 44px tall to tap. The gap round
+   the | is as wide as a 360px screen allows for the links in English ("check for updates | questions & bugs | sponsor" is 273px of
+   text on 325px). */
 html.is-phone .app-footer {
   --sep-gap: 1.7rem;
 }
 
 html.is-phone .app-footer nav {
   flex-direction: column;
-  align-items: center;
 }
 
 html.is-phone .app-footer li {

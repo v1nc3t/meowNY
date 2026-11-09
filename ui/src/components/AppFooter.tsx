@@ -18,8 +18,8 @@ export function UpdateLink() {
 }
 
 /**
- * The foot of the settings and of the lock screens: who made the app, its licence and version, then the links. Two groups, so a
- * phone can show them as two lines; a computer shows one line with a | between all of them.
+ * The foot of the settings and of the lock screens: who made the app, its licence and version at the left, the links at the right.
+ * Two groups: one line when there is room, else two (a phone always shows two), with a | between the items of a group.
  */
 export default function AppFooter() {
   const t = useT()
@@ -49,7 +49,8 @@ export default function AppFooter() {
     [
       { key: 'copyright', text: `meowny © ${YEAR} v1nc3t`, href: REPO },
       { key: 'licence', text: 'AGPL-3.0', href: `${REPO}/blob/main/LICENSE` },
-      { key: 'version', text: `v${__APP_VERSION__}` },
+      // the version says where it leads, as its text does not
+      { key: 'version', text: `v${__APP_VERSION__}`, href: UPDATE_URL, title: t('settings.linkUpdate') },
     ],
     [
       { key: 'update', text: t('settings.linkUpdate'), href: UPDATE_URL },
@@ -65,13 +66,9 @@ export default function AppFooter() {
           <ul key={group[0].key}>
             {group.map((item) => (
               <li key={item.key}>
-                {item.href ? (
-                  <a href={item.href} target="_blank" rel="noreferrer">
-                    {item.text}
-                  </a>
-                ) : (
-                  item.text
-                )}
+                <a href={item.href} title={item.title} target="_blank" rel="noreferrer">
+                  {item.text}
+                </a>
               </li>
             ))}
           </ul>

@@ -83,7 +83,7 @@
   overflow-wrap: anywhere;
 }
 
-/* The foot of a lock screen (components/AppFooter.tsx) is at the bottom of the screen, under the card and never over it. */
+/* The foot of a lock screen (components/AppFooter.tsx) is at the bottom of the screen, under the card and never over it, across its width. */
 .gate:has(> .app-footer) {
   grid-template-rows: auto 1fr;
 }
@@ -91,6 +91,8 @@
 .gate > .app-footer {
   grid-row: 2;
   align-self: end;
+  /* The grid centres its items: the foot spans the screen, so its left and right are the edges. */
+  justify-self: stretch;
   max-width: 100%;
   /* Room under the card for when the screen is short and the foot follows it. */
   margin-top: 1.5rem;
