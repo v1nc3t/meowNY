@@ -732,6 +732,8 @@ export const en = {
   'split.mode.SHARES': 'by shares',
   'split.mode.EXACT': 'by amounts',
   'split.you': 'you',
+  'split.paidBy': 'paid by',
+  'split.youOwe': 'you owe {name} {mine}',
   'split.remove': 'remove',
   'split.rest': 'give the rest to me',
   'split.left': 'left to assign: {left}',

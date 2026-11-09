@@ -17,7 +17,7 @@ import DatePicker from '../components/DatePicker'
 import SplitEditor from '../components/SplitEditor'
 import { categories as categoriesApi, type Category } from '../api/categories'
 import { debts } from '../api/debts'
-import { errorText } from '../api/invoke'
+import { ApiError, errorText } from '../api/invoke'
 import { shiftMonth } from '../api/months'
 import { useToday, type Today } from '../api/today'
 import { transactions as transactionsApi, type Transaction, type TransactionPage } from '../api/transactions'
@@ -38,6 +38,7 @@ import { useDebounced } from '../hooks/useDebounced'
 import { useShortcut } from '../keys/registry'
 import { tip } from '../keys/tip'
 import { useRowNavigation } from '../keys/useRowNavigation'
+import { remindersChanged } from '../lib/reminders'
 
 type TransactionList = TransactionPage
 type MenuName = 'range' | 'show' | 'category'
@@ -287,6 +288,16 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
         await transactionsApi.update(editing.id, body)
         if (input) await debts.split(editing.id, input)
         else if (hadSplit && !wantsSplit) await debts.unsplit(editing.id)
+      } else if (input && split.draft.paidBy) {
+        // a friend paid: only your part is your expense, and you owe it to them ("I borrowed", made with the expense in one step)
+        const { mine } = await debts.preview(amount, input)
+        // a retry after a failure further on changes the expense that is there, so the friend is not borrowed from twice
+        const expenseId = savedId ?? (await debts.addEntry({ personId: split.draft.paidBy, kind: 'BORROWED', amount: mine, date: paymentDate }, { name, categoryId })).transactionId
+        if (!expenseId) throw new ApiError('internal')
+        setSavedId(expenseId)
+        // the expense that comes with the entry has no description
+        if (body.description) await transactionsApi.update(expenseId, { ...body, amount: mine })
+        notAttached = await attachments.commit({ kind: 'transaction', id: expenseId })
       } else {
         // creating again with the same client id gives back the same transaction, so a failed split can be tried again
         const created = savedId ? await transactionsApi.update(savedId, body) : await transactionsApi.create({ ...body, clientUuid })
@@ -305,6 +316,8 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
       setClientUuid(crypto.randomUUID())
       setSavedId(null)
     }
+    // a shared bill changes what friends owe, and so the reminders
+    if (input) remindersChanged()
     closeModal()
     setReload((value) => value + 1)
   }
@@ -702,6 +715,7 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
           split={split}
           onSplit={setSplit}
           onSplitReady={onSplitReady}
+          payerLocked={savedId !== null}
           onSubmit={(event) => void onSave(event)}
           onClose={closeModal}
           onCategoryAdded={(category) => setCategories((current) => [...current, category])}
@@ -752,6 +766,7 @@ function TransactionModal({
   split,
   onSplit,
   onSplitReady,
+  payerLocked,
   onSubmit,
   onClose,
   onCategoryAdded,
@@ -764,6 +779,8 @@ function TransactionModal({
   split: SplitState
   onSplit: (split: SplitState) => void
   onSplitReady: (ready: boolean) => void
+  /** A save that failed halfway left a bill behind: who paid it can no longer change, so a retry finishes the same kind of bill. */
+  payerLocked: boolean
   onSubmit: (event: FormEvent<HTMLFormElement>) => void
   onClose: () => void
   onCategoryAdded: (category: Category) => void
@@ -831,6 +848,7 @@ function TransactionModal({
                 draft={split.draft}
                 onChange={(draft) => onSplit({ ...split, draft, touched: true })}
                 onReady={onSplitReady}
+                choosePayer={!transaction && !payerLocked}
               />
             )
           ) : null}

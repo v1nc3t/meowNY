@@ -25,6 +25,8 @@ export type SplitDraft = {
   /** Percent and exact give the person what the others leave. */
   mineIsRest: boolean
   rows: SplitRow[]
+  /** The friend who paid the bill (a person id): the person owes them their part. Empty or absent when the person paid. */
+  paidBy?: string
 }
 
 /** The bill dialog of a transaction or recurring item being made or changed: whether it is shared, how, whether the numbers add up, and whether the person touched them. */

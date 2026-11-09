@@ -717,6 +717,8 @@ export const ro: Messages = {
   'split.mode.SHARES': 'pe cote',
   'split.mode.EXACT': 'pe sume',
   'split.you': 'tu',
+  'split.paidBy': 'plătit de',
+  'split.youOwe': 'îi datorezi {mine} lui {name}',
   'split.remove': 'scoate',
   'split.rest': 'restul rămâne la mine',
   'split.left': 'de repartizat: {left}',
