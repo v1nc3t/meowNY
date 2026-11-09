@@ -17,7 +17,7 @@ import DatePicker from '../components/DatePicker'
 import SplitEditor from '../components/SplitEditor'
 import { categories as categoriesApi, type Category } from '../api/categories'
 import { debts } from '../api/debts'
-import { ApiError, errorText } from '../api/invoke'
+import { errorText } from '../api/invoke'
 import { shiftMonth } from '../api/months'
 import { useToday, type Today } from '../api/today'
 import { transactions as transactionsApi, type Transaction, type TransactionPage } from '../api/transactions'
@@ -41,6 +41,8 @@ import { useRowNavigation } from '../keys/useRowNavigation'
 import { remindersChanged } from '../lib/reminders'
 
 type TransactionList = TransactionPage
+/** A bill with parts of others, or a friend who paid it. */
+const isShared = (transaction: Transaction) => transaction.split.length > 0 || transaction.paidBy !== null
 type MenuName = 'range' | 'show' | 'category'
 const MODES = ['year', 'month', 'date'] as const
 const LIMITS = [10, 50, 100] as const
@@ -233,7 +235,7 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
     attachments.reset()
     setAdding(false)
     // a saved bill opens as exact amounts, as they are stored
-    setSplit(transaction.split.length > 0 ? { on: true, draft: draftOfBill(transaction.split), ready: true, touched: false } : NOT_SPLIT)
+    setSplit(isShared(transaction) ? { on: true, draft: draftOfBill(transaction.split, transaction.paidBy), ready: true, touched: false } : NOT_SPLIT)
     setEditing(transaction)
   }
 
@@ -272,7 +274,7 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
     }
     const body = { name, amount, paymentDate, categoryId, description: description.length > 0 ? description : null }
     // A shared bill is saved when its numbers add up; one that was shared and is left alone is scaled by the app to a new amount.
-    const hadSplit = (editing?.split.length ?? 0) > 0
+    const hadSplit = editing ? isShared(editing) : false
     const wantsSplit = split.on && categories.find((category) => category.id === categoryId)?.type !== 'INCOME'
     const sendSplit = wantsSplit && (split.touched || !hadSplit)
     const input = sendSplit ? toInput(split.draft) : null
@@ -288,16 +290,6 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
         await transactionsApi.update(editing.id, body)
         if (input) await debts.split(editing.id, input)
         else if (hadSplit && !wantsSplit) await debts.unsplit(editing.id)
-      } else if (input && split.draft.paidBy) {
-        // a friend paid: only your part is your expense, and you owe it to them ("I borrowed", made with the expense in one step)
-        const { mine } = await debts.preview(amount, input)
-        // a retry after a failure further on changes the expense that is there, so the friend is not borrowed from twice
-        const expenseId = savedId ?? (await debts.addEntry({ personId: split.draft.paidBy, kind: 'BORROWED', amount: mine, date: paymentDate }, { name, categoryId })).transactionId
-        if (!expenseId) throw new ApiError('internal')
-        setSavedId(expenseId)
-        // the expense that comes with the entry has no description
-        if (body.description) await transactionsApi.update(expenseId, { ...body, amount: mine })
-        notAttached = await attachments.commit({ kind: 'transaction', id: expenseId })
       } else {
         // creating again with the same client id gives back the same transaction, so a failed split can be tried again
         const created = savedId ? await transactionsApi.update(savedId, body) : await transactionsApi.create({ ...body, clientUuid })
@@ -500,15 +492,19 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
     return <span className={income ? 'cell-amount is-income' : 'cell-amount is-expense'}>{income ? `+${text}` : `-${text}`}</span>
   }
 
-  /** What a row opens to: the split, with a code for each friend on it, the description and the documents (`count` of them). */
+  /** What a row opens to: the split, with a code for each friend on it (not for the one who paid), the description and the documents (`count` of them). */
   function details(transaction: Transaction, count: number): ReactNode {
     return (
       <>
-        {transaction.split.length > 0 ? (
+        {isShared(transaction) ? (
           <section className="detail-section">
             <div className="split-head">
               <p className="detail-title">{t('split.section')}</p>
-              <p className="split-paid">{t('split.paid', { amount: formatMoney(transaction.amount, settings.currency, settings.locale) })}</p>
+              <p className="split-paid">
+                {transaction.paidBy
+                  ? t('split.paidByFriend', { name: transaction.paidBy.name, amount: formatMoney(transaction.amount, settings.currency, settings.locale) })
+                  : t('split.paid', { amount: formatMoney(transaction.amount, settings.currency, settings.locale) })}
+              </p>
             </div>
             <table className="split-table">
               <tbody>
@@ -522,7 +518,7 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
                     <th scope="row">{part.person ?? part.guest ?? ''}</th>
                     <td>{formatMoney(part.amount, settings.currency, settings.locale)}</td>
                     <td>
-                      {part.personId && part.person ? (
+                      {part.personId && part.person && part.personId !== transaction.paidBy?.personId ? (
                         <Button
                           variant="outline"
                           size="sm"
@@ -559,7 +555,7 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
   function marks(transaction: Transaction) {
     return (
       <>
-        {transaction.split.length > 0 ? <span className="row-mark">{t('tx.shared')}</span> : null}
+        {isShared(transaction) ? <span className="row-mark">{t('tx.shared')}</span> : null}
         {transaction.description?.trim() ? (
           <span className="row-mark-icon" title={t('common.description')}>
             <Icon name="note" className="mark-icon" />
@@ -573,7 +569,7 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
   // A desktop row: name, amount, date, category, an icon if it is shared, then edit, delete and (when there is more to show) the chevron.
   function tableRow(transaction: Transaction) {
     const count = clips[transaction.id] ?? 0
-    const more = transaction.split.length > 0 || Boolean(transaction.description?.trim()) || count > 0
+    const more = isShared(transaction) || Boolean(transaction.description?.trim()) || count > 0
     return (
       <Row
         key={transaction.id}
@@ -597,7 +593,7 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
         <span className="cell-sub-end">{formatDate(transaction.paymentDate, settings.locale)}</span>
         <span className="cell-sub">{categoryName(transaction)}</span>
         <span className="cell-mark">
-          {transaction.split.length > 0 ? (
+          {isShared(transaction) ? (
             <span className="row-mark-icon" title={t('tx.shared')}>
               <Icon name="qr" className="mark-icon" />
               <span className="sr-only">{t('tx.shared')}</span>
@@ -715,7 +711,6 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
           split={split}
           onSplit={setSplit}
           onSplitReady={onSplitReady}
-          payerLocked={savedId !== null}
           onSubmit={(event) => void onSave(event)}
           onClose={closeModal}
           onCategoryAdded={(category) => setCategories((current) => [...current, category])}
@@ -727,6 +722,7 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
           person={{ id: coding.personId, name: coding.name }}
           part={coding.part}
           total={coding.transaction.amount}
+          paidBy={coding.transaction.paidBy?.name}
           onClose={() => setCoding(null)}
         />
       ) : null}
@@ -766,7 +762,6 @@ function TransactionModal({
   split,
   onSplit,
   onSplitReady,
-  payerLocked,
   onSubmit,
   onClose,
   onCategoryAdded,
@@ -779,8 +774,6 @@ function TransactionModal({
   split: SplitState
   onSplit: (split: SplitState) => void
   onSplitReady: (ready: boolean) => void
-  /** A save that failed halfway left a bill behind: who paid it can no longer change, so a retry finishes the same kind of bill. */
-  payerLocked: boolean
   onSubmit: (event: FormEvent<HTMLFormElement>) => void
   onClose: () => void
   onCategoryAdded: (category: Category) => void
@@ -796,7 +789,7 @@ function TransactionModal({
   const showDocuments = docsOn || hasDocuments
   // only an expense can be shared
   const canSplit = categories.find((category) => category.id === categoryId)?.type !== 'INCOME'
-  const hadSplit = (transaction?.split.length ?? 0) > 0
+  const hadSplit = transaction ? isShared(transaction) : false
   const rescaled = hadSplit && !split.touched && amountString(amount, false) !== transaction?.amount
   const options: DropdownOption[] = categoryOptions(categories, { expense: t('common.expense'), income: t('common.income') })
   if (transaction && categories.every((category) => category.id !== transaction.categoryId)) {
@@ -848,7 +841,6 @@ function TransactionModal({
                 draft={split.draft}
                 onChange={(draft) => onSplit({ ...split, draft, touched: true })}
                 onReady={onSplitReady}
-                choosePayer={!transaction && !payerLocked}
               />
             )
           ) : null}

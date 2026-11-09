@@ -314,10 +314,12 @@ function RecurringView({ settings, now }: { settings: MoneySettings; now: Today 
     setReload((value) => value + 1)
   }
 
-  // The code of the next payment is for a friend with a part, and needs an amount to share (a bill that changes has none).
+  // The code of the next payment is for a friend with a part, and needs an amount to share (a bill that changes has none). The friend who
+  // pays it has no code: the others owe them, and the code is refused for them.
   const codeFor = (item: Recurring, at: number) => {
     const part = item.split?.parts[at]
-    return item.amount !== null && part?.personId && part.person && part.weight > 0 ? { item, personId: part.personId, name: part.person } : null
+    const isPayer = part?.personId === item.split?.paidBy?.personId
+    return item.amount !== null && part?.personId && part.person && part.weight > 0 && !isPayer ? { item, personId: part.personId, name: part.person } : null
   }
 
   // One word for an interval of 1 ("monthly"), since the column head already says "repeats"; a longer one keeps "every 2 weeks".
@@ -377,7 +379,10 @@ function RecurringView({ settings, now }: { settings: MoneySettings; now: Today 
       <>
         {item.split ? (
           <section className="detail-section">
-            <p className="detail-title">{t('split.section')}</p>
+            <div className="split-head">
+              <p className="detail-title">{t('split.section')}</p>
+              {item.split.paidBy ? <p className="split-paid">{t('split.paidByName', { name: item.split.paidBy.name })}</p> : null}
+            </div>
             <table className="split-table">
               <tbody>
                 {(() => {
@@ -617,6 +622,7 @@ function RecurringView({ settings, now }: { settings: MoneySettings; now: Today 
         <BillCodeModal
           target={{ kind: 'recurring', id: coding.item.id, date: coding.item.nextDueDate }}
           person={{ id: coding.personId, name: coding.name }}
+          paidBy={coding.item.split?.paidBy?.name}
           onClose={() => setCoding(null)}
         />
       ) : null}

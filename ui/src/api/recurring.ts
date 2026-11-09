@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { call } from './invoke'
-import { Transaction } from './transactions'
+import { Payer, Transaction } from './transactions'
 
 const id = z.string().regex(/^[1-9]\d*$/)
 const date = z.string().regex(/^\d{4}-\d{2}-\d{2}$/)
@@ -9,12 +9,13 @@ export const INTERVAL_UNITS = ['DAY', 'WEEK', 'MONTH', 'YEAR'] as const
 export const IntervalUnit = z.enum(INTERVAL_UNITS)
 export type IntervalUnit = z.infer<typeof IntervalUnit>
 
-/** How each payment of an item is shared, as weights: the person's own and one for each friend or guest. */
+/** How each payment of an item is shared, as weights: the person's own and one for each friend or guest, and the friend who pays it, if one does. */
 export const Template = z.object({
   mine: z.number().int().nonnegative(),
   parts: z.array(
     z.object({ personId: id.nullable(), person: z.string().nullable(), guest: z.string().nullable(), weight: z.number().int().nonnegative() }),
   ),
+  paidBy: Payer.nullable(),
 })
 export type Template = z.infer<typeof Template>
 

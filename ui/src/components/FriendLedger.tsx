@@ -138,6 +138,8 @@ export default function FriendLedger({
   const lineItem = (line: Line) => (line.entryId ? `ledger_entry:${line.entryId}` : undefined)
   /** What a line changed: what the friend owes you more (green) or less (red). */
   const change = (line: Line) => <span className={`cell-amount debt-${line.effect.startsWith('-') ? 'owe' : 'owed'}`}>{effectText(line)}</span>
+  // a bill the friend paid has a negative change (the person owes them), and the app makes no code for the one who paid
+  const hasCode = (line: Line) => line.kind === 'BILL' && line.transactionId !== null && !line.effect.startsWith('-')
   const showCode = (line: Line) => setDialog({ kind: 'code', transactionId: line.transactionId ?? '', amount: line.amount })
 
   // A desktop row: what it was, when, how much it changed, the balance after it, then its buttons (go to the transaction; show code for a
@@ -155,10 +157,12 @@ export default function FriendLedger({
         item={lineItem(line)}
         actions={
           <>
-            {line.transactionId ? <IconAction icon="transactions" label={t('debts.goToTransaction')} onClick={() => goToTransaction(line)} /> : null}
+            {line.transactionId ? (
+              <IconAction icon="transactions" label={t('debts.goToTransaction')} data-row-focus={line.kind === 'BILL' && !hasCode(line) ? true : undefined} onClick={() => goToTransaction(line)} />
+            ) : null}
             {line.kind === 'BILL' && line.transactionId ? (
               <>
-                <IconAction icon="qr" label={t('code.show')} data-row-focus onClick={() => showCode(line)} />
+                {hasCode(line) ? <IconAction icon="qr" label={t('code.show')} data-row-focus onClick={() => showCode(line)} /> : <span className="icon-slot" />}
                 {/* where an entry has delete, so that the buttons of bills and entries line up */}
                 <span className="icon-slot" />
               </>
@@ -192,7 +196,7 @@ export default function FriendLedger({
     const entry = entryOfLine(line, person.id)
     const count = line.entryId ? (clips[line.entryId] ?? 0) : 0
     const note = noteOf(line)
-    const bill = line.kind === 'BILL' && line.transactionId
+    const bill = hasCode(line)
     const key = lineKey(line, lines.indexOf(line))
     return (
       <TapRow

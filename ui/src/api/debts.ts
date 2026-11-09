@@ -91,8 +91,11 @@ export type SplitMode = z.infer<typeof SplitMode>
 
 /** One friend or guest on a bill, as typed. Exactly one of `personId` and `guest`. */
 export type PartInput = { personId?: string; guest?: string; value?: string }
-/** A split as it is typed: the mode, the person's own value and the others. With `mine` left out, percent and exact give the rest. */
-export type SplitInput = { mode: SplitMode; mine?: string; parts: PartInput[] }
+/**
+ * A split as it is typed: the mode, the person's own value and the others. With `mine` left out, percent and exact give the rest.
+ * `paidBy` is a friend on the bill who paid it (a person id); left out, the person paid. Only for saving, a preview ignores it.
+ */
+export type SplitInput = { mode: SplitMode; mine?: string; parts: PartInput[]; paidBy?: string }
 
 export { PartOut }
 
@@ -120,7 +123,9 @@ export const BillPreview = z.object({
   ownCurrency: z.string().regex(/^[A-Z]{3}$/),
   sameCurrency: z.boolean(),
   alreadyAdded: z.boolean(),
-  /** The friend whose name is the sender's, to choose first. */
+  /** The name of the friend who paid the bill, when it was not the sender: the person owes them the part. */
+  paidBy: z.string().nullable(),
+  /** The friend whose name is the payer's, or the sender's when nobody else paid, to choose first. */
   friendId: id.nullable(),
 })
 export type BillPreview = z.infer<typeof BillPreview>

@@ -17,20 +17,18 @@ import Button from './ui/Button'
  * whether the split can be saved: the numbers add up and somebody else has a part.
  *
  * `amount` is the bill. For a recurring item with no fixed amount it is null, and the parts are shown as percentages of the whole.
- * `choosePayer` lets a friend on the bill be the one who paid it, for a bill that is new.
+ * With a friend on the bill, one of them (or the person) can be the one who paid it.
  */
 export default function SplitEditor({
   amount,
   draft,
   onChange,
   onReady,
-  choosePayer = false,
 }: {
   amount: string | null
   draft: SplitDraft
   onChange: (draft: SplitDraft) => void
   onReady: (ready: boolean) => void
-  choosePayer?: boolean
 }) {
   const t = useT()
   const { settings } = useMoneySettings()
@@ -76,8 +74,9 @@ export default function SplitEditor({
   // What is shown only counts while it belongs to what is typed now.
   const current = shown && shown.key === key ? shown.preview : null
   const payer = draft.paidBy ? draft.rows.find((row) => row.personId === draft.paidBy) : undefined
-  // when a friend paid, the person has a part of their own to owe, and the friends' parts do not count
-  const ready = current !== null && current.complete && (payer ? current.mine !== '0.00' : current.parts.some((part) => part.amount !== '0.00'))
+  // someone else has a part, and when a friend paid the person has one too: it is what they owe
+  const noPartOfMine = payer !== undefined && current !== null && current.mine === '0.00'
+  const ready = current !== null && current.complete && current.parts.some((part) => part.amount !== '0.00') && !noPartOfMine
   useEffect(() => onReady(ready), [ready, onReady])
 
   const money = (value: string) =>
@@ -127,7 +126,7 @@ export default function SplitEditor({
         options={modes.map((mode) => ({ value: mode, label: t(`split.mode.${mode}`) }))}
         onChange={(mode) => onChange(withMode(draft, mode as SplitMode))}
       />
-      {choosePayer && draft.rows.some((row) => row.personId) ? (
+      {draft.rows.some((row) => row.personId) ? (
         <Dropdown
           label={t('split.paidBy')}
           value={draft.paidBy ?? ''}
@@ -197,6 +196,8 @@ export default function SplitEditor({
         <p className={left.startsWith('-') ? 'split-status over' : 'split-status'}>
           {left.startsWith('-') ? t('split.over', { left: leftText }) : t('split.left', { left: leftText })}
         </p>
+      ) : noPartOfMine ? (
+        <p className="hint">{t('split.needMine')}</p>
       ) : current && !proportions && bill ? (
         <p className="hint">
           {payer ? t('split.youOwe', { name: payer.name, mine: money(current.mine) }) : t('split.yourPartOf', { mine: money(current.mine), amount: money(bill) })}

@@ -1,5 +1,5 @@
 import type { PartInput, SplitInput, SplitMode } from '../api/debts'
-import type { PartOut } from '../api/transactions'
+import type { PartOut, Payer } from '../api/transactions'
 import type { Template } from '../api/recurring'
 import { amountString } from './money'
 
@@ -40,20 +40,25 @@ export function equalDraft(rows: Omit<SplitRow, 'key' | 'value'>[] = []): SplitD
   return { mode: 'EQUAL', mine: '', mineIsRest: true, rows: rows.map((row) => ({ ...row, key: rowKey(), value: '' })) }
 }
 
+/**
+ * A row for a friend who paid and has no part (a part of 0 is not kept), so that they can be seen on the bill and stay the payer.
+ * Nothing is added when they have a row.
+ */
+function withPayer(rows: SplitRow[], paidBy: Payer | null, value: string): SplitRow[] {
+  if (!paidBy || rows.some((row) => row.personId === paidBy.personId)) return rows
+  return [...rows, { key: rowKey(), personId: paidBy.personId, name: paidBy.name, value }]
+}
+
 /** A saved bill opens in the exact mode, with the amounts as they are stored; the person's own part is the rest. */
-export function draftOfBill(split: PartOut[]): SplitDraft {
-  return {
-    mode: 'EXACT',
-    mine: '',
-    mineIsRest: true,
-    rows: split.map((part) => ({
-      key: rowKey(),
-      ...(part.personId ? { personId: part.personId } : {}),
-      ...(part.guest ? { guest: part.guest } : {}),
-      name: part.person ?? part.guest ?? '',
-      value: part.amount,
-    })),
-  }
+export function draftOfBill(split: PartOut[], paidBy: Payer | null): SplitDraft {
+  const rows = split.map((part) => ({
+    key: rowKey(),
+    ...(part.personId ? { personId: part.personId } : {}),
+    ...(part.guest ? { guest: part.guest } : {}),
+    name: part.person ?? part.guest ?? '',
+    value: part.amount,
+  }))
+  return { mode: 'EXACT', mine: '', mineIsRest: true, rows: withPayer(rows, paidBy, '0.00'), ...(paidBy ? { paidBy: paidBy.personId } : {}) }
 }
 
 /** Hundredths as a number with two decimals: 1900 is "19.00". */
@@ -70,17 +75,20 @@ export function draftOfTemplate(template: Template): SplitDraft {
   const weights = [template.mine, ...template.parts.map((part) => part.weight)]
   const percent = weights.reduce((sum, weight) => sum + weight, 0) === 10_000
   const shown = percent ? weights.map(hundredths) : reducedWeights(weights).map(String)
+  const rows = template.parts.map((part, at) => ({
+    key: rowKey(),
+    ...(part.personId ? { personId: part.personId } : {}),
+    ...(part.guest ? { guest: part.guest } : {}),
+    name: part.person ?? part.guest ?? '',
+    value: shown[at + 1] ?? '',
+  }))
+  const { paidBy } = template
   return {
     mode: percent ? 'PERCENT' : 'SHARES',
     mine: shown[0] ?? '',
     mineIsRest: false,
-    rows: template.parts.map((part, at) => ({
-      key: rowKey(),
-      ...(part.personId ? { personId: part.personId } : {}),
-      ...(part.guest ? { guest: part.guest } : {}),
-      name: part.person ?? part.guest ?? '',
-      value: shown[at + 1] ?? '',
-    })),
+    rows: withPayer(rows, paidBy, percent ? '0.00' : '0'),
+    ...(paidBy ? { paidBy: paidBy.personId } : {}),
   }
 }
 
@@ -112,10 +120,11 @@ export function toInput(draft: SplitDraft): SplitInput | null {
     }
     parts.push(part)
   }
-  if (draft.mode === 'EQUAL') return { mode: 'EQUAL', parts }
-  if (draft.mineIsRest && draft.mode !== 'SHARES') return { mode: draft.mode, parts }
+  const paid = draft.paidBy ? { paidBy: draft.paidBy } : {}
+  if (draft.mode === 'EQUAL') return { mode: 'EQUAL', parts, ...paid }
+  if (draft.mineIsRest && draft.mode !== 'SHARES') return { mode: draft.mode, parts, ...paid }
   const mine = normalise(draft.mode, draft.mine)
-  return mine === null ? null : { mode: draft.mode, mine, parts }
+  return mine === null ? null : { mode: draft.mode, mine, parts, ...paid }
 }
 
 /** The people on a shared bill, to show next to its amount: "Anna 25.00, Bob 25.00". */
