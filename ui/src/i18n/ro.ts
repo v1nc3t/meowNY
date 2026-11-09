@@ -720,7 +720,6 @@ export const ro: Messages = {
   'split.paidBy': 'plătit de',
   'split.youOwe': 'îi datorezi {mine} lui {name}',
   'split.remove': 'scoate',
-  'split.rest': 'restul rămâne la mine',
   'split.left': 'de repartizat: {left}',
   'split.over': 'depășit cu {left}',
   'split.yourPartOf': 'partea ta: {mine} din {amount}',

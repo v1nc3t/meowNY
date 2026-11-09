@@ -49,11 +49,12 @@ stamp. `document_links` gained a ledger entry target. `0017` adds `transactions.
 Equal, percent (exactly 100.00), shares, or exact amounts (exactly the bill). One Rust function, `splits::allocate`,
 turns weights into amounts that add up: floor of each quota in 128-bit integers, the odd cents to the largest
 remainders, ties to the lower position (you are 0). The screen asks Rust for every preview; the interface has no copy
-of the rule. Only the friends' amounts are stored, so a saved bill opens as exact amounts. A new amount rescales every
-part. A recurring item keeps weights; each payment is allocated when paid, and editing the template never changes past
-payments. A bill is paid by you or by one friend (`paidBy`). The payer must be one of the people on the split, and your part
-must be above 0 (a bill a friend paid with nothing of yours is not your expense); the payer's own part may be 0. The cost
-stays your part. A template has the same payer, and each payment copies it. Taking the split off clears it.
+of the rule. In percent and exact, the one field left empty, yours or a friend's, gets the rest. Only the friends'
+amounts are stored, so a saved bill opens as exact amounts. A new amount rescales every part. A recurring item keeps
+weights; each payment is allocated when paid, and editing the template never changes past payments. A bill is paid by
+you or by one friend (`paidBy`). The payer must be one of the people on the split, and your part must be above 0 (a
+bill a friend paid with nothing of yours is not your expense); the payer's own part may be 0. The cost stays your
+part. A template has the same payer, and each payment copies it. Taking the split off clears it.
 
 ## 6. The ledger
 

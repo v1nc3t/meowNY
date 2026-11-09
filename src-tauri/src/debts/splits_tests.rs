@@ -284,6 +284,32 @@ fn the_preview_says_what_is_left_while_the_numbers_do_not_add_up() {
     assert_eq!(one(&w.conn, "SELECT count(*) FROM transaction_split_lines"), 0);
 }
 
+#[test]
+fn the_one_value_left_out_gets_the_rest_whoever_it_is() {
+    let w = world();
+    let (anna, bob) = (friend(&w.conn, "Anna"), friend(&w.conn, "Bob"));
+    let amounts = |p: &super::splits::Preview| (p.mine.clone(), p.parts.iter().map(|x| x.amount.clone()).collect::<Vec<_>>(), p.left.clone());
+    let split = |mode, mine, parts| preview(&w.conn, 10_000, &input(mode, mine, parts));
+    let percent = split(Mode::Percent, Some("20.00"), vec![with(who(anna), "30.00"), who(bob)]).unwrap();
+    assert!(percent.complete);
+    assert_eq!(amounts(&percent), ("20.00".into(), vec!["30.00".into(), "50.00".into()], "0.00".into()));
+    let exact = split(Mode::Exact, Some("10.00"), vec![who(anna), with(who(bob), "30.00")]).unwrap();
+    assert!(exact.complete);
+    assert_eq!(amounts(&exact), ("10.00".into(), vec!["60.00".into(), "30.00".into()], "0.00".into()));
+    // typing too much leaves the one left out with 0 and shows by how much it is over
+    let over = split(Mode::Exact, Some("90.00"), vec![with(who(anna), "30.00"), who(bob)]).unwrap();
+    assert!(!over.complete);
+    assert_eq!(amounts(&over), ("90.00".into(), vec!["30.00".into(), "0.00".into()], "-20.00".into()));
+    // two left out, or a share left out, is not a number yet
+    assert_eq!(split(Mode::Percent, None, vec![with(who(anna), "30.00"), who(bob)]), Err(INVALID));
+    assert_eq!(split(Mode::Exact, Some("10.00"), vec![who(anna), who(bob)]), Err(INVALID));
+    assert_eq!(split(Mode::Shares, Some("1"), vec![with(who(anna), "1"), who(bob)]), Err(INVALID));
+    // and a saved split takes the rest the same way
+    let dinner = bill(&w.conn, w.food, "Dinner", "100.00", "2026-01-01");
+    set_split(&w.conn, dinner, &input(Mode::Percent, Some("20.00"), vec![who(anna)])).unwrap();
+    assert_eq!((parts(&w.conn, dinner), cost(&w.conn, dinner)), (vec![("Anna".to_string(), 8000)], 2000));
+}
+
 // ---- a recurring item ------------------------------------------------------------------------
 
 fn rent_item(conn: &rusqlite::Connection, category: i64, amount: Option<&str>) -> recurring::Recurring {

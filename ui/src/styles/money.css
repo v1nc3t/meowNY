@@ -803,10 +803,6 @@ html.is-phone .tx-range > .ui-btn {
   color: var(--muted-foreground);
 }
 
-.split-rest {
-  align-self: flex-start;
-}
-
 /* How much of the bill is still to be given out (grey), or by how much the parts are over it (red). */
 .split-status {
   margin: 0;

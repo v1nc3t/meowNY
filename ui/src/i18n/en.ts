@@ -735,7 +735,6 @@ export const en = {
   'split.paidBy': 'paid by',
   'split.youOwe': 'you owe {name} {mine}',
   'split.remove': 'remove',
-  'split.rest': 'give the rest to me',
   'split.left': 'left to assign: {left}',
   'split.over': 'over by {left}',
   'split.yourPartOf': 'your part: {mine} of {amount}',

@@ -92,7 +92,7 @@ export type SplitMode = z.infer<typeof SplitMode>
 /** One friend or guest on a bill, as typed. Exactly one of `personId` and `guest`. */
 export type PartInput = { personId?: string; guest?: string; value?: string }
 /**
- * A split as it is typed: the mode, the person's own value and the others. With `mine` left out, percent and exact give the rest.
+ * A split as it is typed: the mode, the person's own value and the others. In percent and exact one value may be left out, `mine` or a part's, and it gets the rest.
  * `paidBy` is a friend on the bill who paid it (a person id); left out, the person paid. Only for saving, a preview ignores it.
  */
 export type SplitInput = { mode: SplitMode; mine?: string; parts: PartInput[]; paidBy?: string }

@@ -20,10 +20,8 @@ export type SplitRow = {
 
 export type SplitDraft = {
   mode: SplitMode
-  /** What was typed for the person themself. */
+  /** What was typed for the person themself. Empty, with every other field typed, it is the rest. */
   mine: string
-  /** Percent and exact give the person what the others leave. */
-  mineIsRest: boolean
   rows: SplitRow[]
   /** The friend who paid the bill (a person id): the person owes them their part. Empty or absent when the person paid. */
   paidBy?: string
@@ -37,7 +35,7 @@ export const rowKey = (): string => `row-${(serial += 1)}`
 
 /** A bill that starts as an equal split between the person and these. */
 export function equalDraft(rows: Omit<SplitRow, 'key' | 'value'>[] = []): SplitDraft {
-  return { mode: 'EQUAL', mine: '', mineIsRest: true, rows: rows.map((row) => ({ ...row, key: rowKey(), value: '' })) }
+  return { mode: 'EQUAL', mine: '', rows: rows.map((row) => ({ ...row, key: rowKey(), value: '' })) }
 }
 
 /**
@@ -49,7 +47,7 @@ function withPayer(rows: SplitRow[], paidBy: Payer | null, value: string): Split
   return [...rows, { key: rowKey(), personId: paidBy.personId, name: paidBy.name, value }]
 }
 
-/** A saved bill opens in the exact mode, with the amounts as they are stored; the person's own part is the rest. */
+/** A saved bill opens in the exact mode, with the amounts as they are stored; the person's own field stays empty, so their part is the rest. */
 export function draftOfBill(split: PartOut[], paidBy: Payer | null): SplitDraft {
   const rows = split.map((part) => ({
     key: rowKey(),
@@ -58,7 +56,7 @@ export function draftOfBill(split: PartOut[], paidBy: Payer | null): SplitDraft 
     name: part.person ?? part.guest ?? '',
     value: part.amount,
   }))
-  return { mode: 'EXACT', mine: '', mineIsRest: true, rows: withPayer(rows, paidBy, '0.00'), ...(paidBy ? { paidBy: paidBy.personId } : {}) }
+  return { mode: 'EXACT', mine: '', rows: withPayer(rows, paidBy, '0.00'), ...(paidBy ? { paidBy: paidBy.personId } : {}) }
 }
 
 /** Hundredths as a number with two decimals: 1900 is "19.00". */
@@ -86,17 +84,16 @@ export function draftOfTemplate(template: Template): SplitDraft {
   return {
     mode: percent ? 'PERCENT' : 'SHARES',
     mine: shown[0] ?? '',
-    mineIsRest: false,
     rows: withPayer(rows, paidBy, percent ? '0.00' : '0'),
     ...(paidBy ? { paidBy: paidBy.personId } : {}),
   }
 }
 
-/** The mode changes: shares start at 1 for everyone, percent and exact start empty, and the person has the rest. */
+/** The mode changes: shares start at 1 for everyone, percent and exact start empty, so nothing is assumed until all but one are typed. */
 export function withMode(draft: SplitDraft, mode: SplitMode): SplitDraft {
   if (mode === draft.mode) return draft
   const value = mode === 'SHARES' ? '1' : ''
-  return { ...draft, mode, mine: value, mineIsRest: mode !== 'SHARES', rows: draft.rows.map((row) => ({ ...row, value })) }
+  return { ...draft, mode, mine: value, rows: draft.rows.map((row) => ({ ...row, value })) }
 }
 
 /** The text of one number as Rust takes it: whole numbers for shares, two decimals for percent and exact. Null when it is not a number. */
@@ -107,13 +104,19 @@ export function normalise(mode: SplitMode, raw: string): string | null {
   return text === '' ? '0.00' : amountString(text, true)
 }
 
-/** The draft as Rust takes it, or null when a number is not yet a number (the dialog then shows nothing new). */
+/**
+ * The draft as Rust takes it, or null when a number is not yet a number (the dialog then shows nothing new). In percent and exact, when
+ * exactly one field is empty (the person's or a friend's) it is left out and Rust gives it the rest; with more empty, they count as 0.00.
+ */
 export function toInput(draft: SplitDraft): SplitInput | null {
   if (draft.rows.length === 0) return null
+  const empty = (text: string) => text.trim() === ''
+  const open = draft.mode === 'PERCENT' || draft.mode === 'EXACT'
+  const leftOut = open && [draft.mine, ...draft.rows.map((row) => row.value)].filter(empty).length === 1
   const parts: PartInput[] = []
   for (const row of draft.rows) {
     const part: PartInput = row.personId ? { personId: row.personId } : { guest: row.guest ?? row.name }
-    if (draft.mode !== 'EQUAL') {
+    if (draft.mode !== 'EQUAL' && !(leftOut && empty(row.value))) {
       const value = normalise(draft.mode, row.value)
       if (value === null) return null
       part.value = value
@@ -122,7 +125,7 @@ export function toInput(draft: SplitDraft): SplitInput | null {
   }
   const paid = draft.paidBy ? { paidBy: draft.paidBy } : {}
   if (draft.mode === 'EQUAL') return { mode: 'EQUAL', parts, ...paid }
-  if (draft.mineIsRest && draft.mode !== 'SHARES') return { mode: draft.mode, parts, ...paid }
+  if (leftOut && empty(draft.mine)) return { mode: draft.mode, parts, ...paid }
   const mine = normalise(draft.mode, draft.mine)
   return mine === null ? null : { mode: draft.mode, mine, parts, ...paid }
 }

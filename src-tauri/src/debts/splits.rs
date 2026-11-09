@@ -87,7 +87,8 @@ pub struct Part {
     pub value: Option<String>,
 }
 
-/// A split as it is typed: the mode, your own value and the others. With `mine` left out, percent and exact give you the rest.
+/// A split as it is typed: the mode, your own value and the others. In percent and exact one value may be left out, `mine` or a part's
+/// `value`, and that one gets the rest.
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct SplitInput {
@@ -209,25 +210,25 @@ fn weights(conn: &Connection, input: &SplitInput, whole: Option<i64>, keep: &Has
         }
         return Ok(Weights { mine: 1, others: who.into_iter().map(|w| (w, 1)).collect(), left: 0 });
     }
-    let mut others = Vec::with_capacity(who.len());
-    for (who, part) in who.into_iter().zip(&input.parts) {
-        let text = part.value.as_deref().ok_or(AppError::InvalidInput)?;
-        others.push((who, parse_weight(mode, text)?));
-    }
-    let typed: i64 = others.iter().map(|(_, w)| *w as i64).sum();
     let total = match mode {
         Mode::Percent => Some(PERCENT_WHOLE as i64),
         Mode::Exact => Some(whole.ok_or(AppError::InvalidInput)?),
         _ => None,
     };
-    let mine = match (&input.mine, total) {
-        (Some(text), _) => parse_weight(mode, text)?,
-        // "give the rest to me"
-        (None, Some(total)) => (total - typed).max(0) as u64,
-        (None, None) => return Err(AppError::InvalidInput),
-    };
+    // in percent and exact one value may be left out, yours or a friend's, and it gets the rest; in shares every value is typed
+    let left_out = usize::from(input.mine.is_none()) + input.parts.iter().filter(|p| p.value.is_none()).count();
+    if left_out > usize::from(total.is_some()) {
+        return Err(AppError::InvalidInput);
+    }
+    let value = |text: &Option<String>| text.as_deref().map(|text| parse_weight(mode, text)).transpose();
+    let typed_mine = value(&input.mine)?;
+    let typed_others = input.parts.iter().map(|part| value(&part.value)).collect::<Result<Vec<_>, _>>()?;
+    let typed: i64 = typed_mine.iter().chain(typed_others.iter().flatten()).map(|w| *w as i64).sum();
+    let rest = (total.unwrap_or(0) - typed).max(0) as u64;
+    let mine = typed_mine.unwrap_or(rest);
+    let others: Vec<(Who, u64)> = who.into_iter().zip(typed_others).map(|(who, weight)| (who, weight.unwrap_or(rest))).collect();
     let left = match total {
-        Some(total) => total - typed - mine as i64,
+        Some(total) => total - mine as i64 - others.iter().map(|(_, w)| *w as i64).sum::<i64>(),
         None => 0,
     };
     if mine == 0 && others.iter().all(|(_, w)| *w == 0) {

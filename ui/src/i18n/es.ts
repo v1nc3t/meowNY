@@ -722,7 +722,6 @@ export const es: Messages = {
   'split.paidBy': 'pagado por',
   'split.youOwe': 'debes {mine} a {name}',
   'split.remove': 'quitar',
-  'split.rest': 'el resto es mío',
   'split.left': 'por asignar: {left}',
   'split.over': 'te pasas por {left}',
   'split.yourPartOf': 'tu parte: {mine} de {amount}',

@@ -28,10 +28,26 @@ test('an empty field is nothing while typing, and a wrong one is not a number', 
 
 test('changing the mode starts the numbers again: shares at one, the others empty', () => {
   const draft = withMode(equalDraft([anna, bob]), 'SHARES')
-  assert.deepEqual([draft.mine, draft.mineIsRest, ...draft.rows.map((row) => row.value)], ['1', false, '1', '1'])
+  assert.deepEqual([draft.mine, ...draft.rows.map((row) => row.value)], ['1', '1', '1'])
   const back = withMode(draft, 'EXACT')
-  assert.deepEqual([back.mine, back.mineIsRest, ...back.rows.map((row) => row.value)], ['', true, '', ''])
+  assert.deepEqual([back.mine, ...back.rows.map((row) => row.value)], ['', '', ''])
   assert.equal(withMode(back, 'EXACT'), back, 'the same mode changes nothing')
+})
+
+test('in percent and exact the one empty field is left out and gets the rest, whoever it is; with more empty none is', () => {
+  const draft = (mode: 'PERCENT' | 'EXACT', mine: string, ...values: string[]) => ({
+    ...withMode(equalDraft([anna, bob]), mode),
+    mine,
+    rows: [anna, bob].map((who, at) => ({ ...who, key: `k${at}`, value: values[at]! })),
+  })
+  assert.deepEqual(toInput(draft('EXACT', '20', '30', '')), { mode: 'EXACT', mine: '20.00', parts: [{ personId: '2', value: '30.00' }, { guest: 'Bob' }] })
+  assert.deepEqual(toInput(draft('PERCENT', '', '30', '50')), { mode: 'PERCENT', parts: [{ personId: '2', value: '30.00' }, { guest: 'Bob', value: '50.00' }] })
+  assert.deepEqual(toInput(draft('EXACT', ' ', '30', '')), { mode: 'EXACT', mine: '0.00', parts: [{ personId: '2', value: '30.00' }, { guest: 'Bob', value: '0.00' }] })
+  assert.deepEqual(toInput(draft('PERCENT', '', '', '')), { mode: 'PERCENT', mine: '0.00', parts: [{ personId: '2', value: '0.00' }, { guest: 'Bob', value: '0.00' }] })
+  assert.deepEqual(toInput(draft('PERCENT', '20', '30', '50')), { mode: 'PERCENT', mine: '20.00', parts: [{ personId: '2', value: '30.00' }, { guest: 'Bob', value: '50.00' }] })
+  const shares = withMode(equalDraft([anna, bob]), 'SHARES')
+  shares.rows[1]!.value = ''
+  assert.equal(toInput(shares), null, 'a share is never left out')
 })
 
 test('a saved template opens as shares, in lowest terms, so what was typed as 19 and 1 does not come back as 1900 and 100', () => {

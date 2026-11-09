@@ -146,9 +146,8 @@ export default function SplitEditor({
               aria-label={t('split.you')}
               inputMode={draft.mode === 'SHARES' ? 'numeric' : 'decimal'}
               autoComplete="off"
-              value={draft.mineIsRest && draft.mode !== 'SHARES' ? '' : draft.mine}
-              placeholder={draft.mineIsRest && draft.mode !== 'SHARES' ? t('split.rest') : ''}
-              onChange={(event) => onChange({ ...draft, mine: event.target.value, mineIsRest: false })}
+              value={draft.mine}
+              onChange={(event) => onChange({ ...draft, mine: event.target.value })}
             />
           ) : null}
           <span className="split-amount">{current ? money(current.mine) : ''}</span>
@@ -177,11 +176,6 @@ export default function SplitEditor({
           )
         })}
       </ul>
-      {draft.mode !== 'EQUAL' && draft.mode !== 'SHARES' && !draft.mineIsRest ? (
-        <Button variant="outline" size="sm" className="split-rest" onClick={() => onChange({ ...draft, mine: '', mineIsRest: true })}>
-          {t('split.rest')}
-        </Button>
-      ) : null}
       <PersonCombo
         label={t('debts.addFriend')}
         placeholder={t('split.pickOrType')}
