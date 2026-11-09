@@ -6,6 +6,7 @@ import { scanQr, stopScan } from '../api/scanner'
 import { useToday, type Today } from '../api/today'
 import BillAcceptModal from '../components/BillAcceptModal'
 import ConfirmModal from '../components/ConfirmModal'
+import DebtNotificationsModal from '../components/DebtNotificationsModal'
 import DebtsFiles from '../components/DebtsFiles'
 import DebtsHistory from '../components/DebtsHistory'
 import EntryModal from '../components/EntryModal'
@@ -60,6 +61,7 @@ function DebtsView({ settings, now }: { settings: MoneySettings; now: Today }) {
   const [selected, setSelected] = useState<Person | null>(null)
   const say = useToast()
   const [addingFriend, setAddingFriend] = useState(false)
+  const [notifying, setNotifying] = useState(false)
   const [entryKind, setEntryKind] = useState<EntryKind | null>(null)
   const [settling, setSettling] = useState<Person | null>(null)
   // the friend whose name is being changed, and the one being taken off the list
@@ -305,9 +307,6 @@ function DebtsView({ settings, now }: { settings: MoneySettings; now: Today }) {
           </Button>
         </div>
       </div>
-      {reminders && reminders.due.length > 0 ? (
-        <p className="notice">{t('debts.due', { names: reminders.due.map((friend) => friend.name).join(', ') })}</p>
-      ) : null}
       {scanning ? (
         <div className="scan-overlay" role="dialog" aria-label={t('code.scan')}>
           <Button variant="outline" onClick={() => void stopScan()}>
@@ -324,6 +323,17 @@ function DebtsView({ settings, now }: { settings: MoneySettings; now: Today }) {
             say(t('code.accepted'), 'success')
             refresh()
             remindersChanged()
+          }}
+        />
+      ) : null}
+      {notifying ? (
+        <DebtNotificationsModal
+          due={reminders?.due ?? []}
+          locale={settings.locale}
+          onClose={() => {
+            setNotifying(false)
+            // the period may have changed in the settings tab
+            refresh()
           }}
         />
       ) : null}
@@ -393,6 +403,10 @@ function DebtsView({ settings, now }: { settings: MoneySettings; now: Today }) {
                   <div className="debts-bar">
                     <Button variant="outline" onClick={() => setAddingFriend(true)}>
                       {t('debts.addFriend')}
+                    </Button>
+                    <Button variant="outline" onClick={() => setNotifying(true)}>
+                      <Icon name="bell" className="btn-icon" />
+                      {reminders && reminders.due.length > 0 ? `${t('debts.notifications')} (${reminders.due.length})` : t('debts.notifications')}
                     </Button>
                     <label>
                       <input

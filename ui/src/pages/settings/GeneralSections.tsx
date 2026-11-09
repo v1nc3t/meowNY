@@ -181,51 +181,62 @@ export function AppLockSection({ prefs, phone, onSaved, say }: { prefs: LockPref
   )
 }
 
-export function NotificationsSection({ notifyDue, phone, onNotify, say }: { notifyDue: boolean; phone: boolean; onNotify: (on: boolean) => void; say: Say }) {
+/** The time of day and the period of the debt reminders, as two rows. Settings and the debts page's notifications share them. */
+export function DebtReminderFields({ phone, say }: { phone: boolean; say: Say }) {
   const { t } = useI18n()
   const [reminderAt, setReminderAt] = useState(reminderTime)
   const [debtEvery, setDebtEvery] = useState(() => String(reminderEvery()))
 
   return (
-    <div className="settings-stack">
-      <Rows>
-        <SwitchRow label={t('settings.notifyDue')} checked={notifyDue} onChange={(event) => onNotify(event.target.checked)} />
-        <Field>
-          <label>
-            {t('settings.reminderTime')}
-            <input
-              type="time"
-              value={reminderAt}
-              onChange={(event) => {
-                setReminderAt(event.target.value)
-                // the time of a reminder is this device's: kept here, and the phone hands the system the new time
-                if (parseTime(event.target.value)) {
-                  saveReminderTime(event.target.value)
-                  remindersChanged()
-                }
-              }}
-            />
-          </label>
-        </Field>
-        <Field>
-          <Dropdown
-            label={t('settings.debtEvery')}
-            value={debtEvery}
-            options={REMINDER_PERIODS.map((days) => ({ value: String(days), label: t(PERIOD_LABELS[days]) }))}
-            onChange={(value) => {
-              setDebtEvery(value)
-              // the period is this device's, like the time of day: kept here, and the phone hands the system the new days
-              saveReminderEvery(Number(value))
-              if (phone) {
-                void scheduleOnPhone().then((result) => {
-                  if (result === 'denied') say(t('debts.remindDenied'), 'warning')
-                })
-              } else {
+    <>
+      <Field>
+        <label>
+          {t('settings.reminderTime')}
+          <input
+            type="time"
+            value={reminderAt}
+            onChange={(event) => {
+              setReminderAt(event.target.value)
+              // the time of a reminder is this device's: kept here, and the phone hands the system the new time
+              if (parseTime(event.target.value)) {
+                saveReminderTime(event.target.value)
                 remindersChanged()
               }
             }}
           />
-        </Field>
+        </label>
+      </Field>
+      <Field>
+        <Dropdown
+          label={t('settings.debtEvery')}
+          value={debtEvery}
+          options={REMINDER_PERIODS.map((days) => ({ value: String(days), label: t(PERIOD_LABELS[days]) }))}
+          onChange={(value) => {
+            setDebtEvery(value)
+            // the period is this device's, like the time of day: kept here, and the phone hands the system the new days
+            saveReminderEvery(Number(value))
+            if (phone) {
+              void scheduleOnPhone().then((result) => {
+                if (result === 'denied') say(t('debts.remindDenied'), 'warning')
+              })
+            } else {
+              remindersChanged()
+            }
+          }}
+        />
+      </Field>
+    </>
+  )
+}
+
+export function NotificationsSection({ notifyDue, phone, onNotify, say }: { notifyDue: boolean; phone: boolean; onNotify: (on: boolean) => void; say: Say }) {
+  const { t } = useI18n()
+
+  return (
+    <div className="settings-stack">
+      <Rows>
+        <SwitchRow label={t('settings.notifyDue')} checked={notifyDue} onChange={(event) => onNotify(event.target.checked)} />
+        <DebtReminderFields phone={phone} say={say} />
       </Rows>
       <p className="hint">{t(phone ? 'settings.reminderPhone' : 'settings.reminderDesktop')}</p>
     </div>
