@@ -12,7 +12,7 @@ use zeroize::Zeroizing;
 
 use crate::categories::{parse_id, serialize_id};
 use crate::keys;
-use crate::transactions::clean_date;
+use crate::transactions::{clean_date, like_pattern};
 use crate::vault::AppError;
 
 use super::names::{clean_file_name, clean_title, drawable, open_name, sniff, MediaType};
@@ -434,18 +434,6 @@ pub fn links_of(conn: &Connection, document_id: i64) -> Result<Vec<LinkView>, Ap
         })
     })?;
     Ok(rows.collect::<Result<Vec<_>, _>>()?)
-}
-
-fn like_pattern(q: &str) -> String {
-    let mut pattern = String::from("%");
-    for c in q.chars() {
-        if matches!(c, '\\' | '%' | '_') {
-            pattern.push('\\');
-        }
-        pattern.push(c);
-    }
-    pattern.push('%');
-    pattern
 }
 
 /// Newest paper first, then newest id.

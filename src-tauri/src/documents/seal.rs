@@ -139,6 +139,7 @@ impl DocKeys {
         keys::hex_encode(&out)
     }
 
+    #[cfg(test)]
     pub fn file_name(&self, id: &DocId) -> String {
         format!("{}.mnd", self.stem(id))
     }
@@ -382,6 +383,7 @@ pub fn read_prefix<R: Read>(
 }
 
 /// Seals a whole file held in memory.
+#[cfg(test)]
 pub fn seal_all(keys: &DocKeys, id: &DocId, bytes: &[u8]) -> Result<Vec<u8>, DocError> {
     let mut sealer = Sealer::new(Vec::with_capacity(sealed_len(bytes.len() as u64) as usize), keys, id, bytes.len() as u64)?;
     sealer.write(bytes)?;
@@ -389,6 +391,7 @@ pub fn seal_all(keys: &DocKeys, id: &DocId, bytes: &[u8]) -> Result<Vec<u8>, Doc
 }
 
 /// Opens a whole sealed file held in memory.
+#[cfg(test)]
 pub fn open_all(keys: &DocKeys, id: &DocId, sealed: &[u8]) -> Result<Zeroizing<Vec<u8>>, DocError> {
     let mut opener = Opener::new(std::io::Cursor::new(sealed), sealed.len() as u64, keys, id)?;
     let mut out = Zeroizing::new(Vec::with_capacity(opener.plaintext_len() as usize));

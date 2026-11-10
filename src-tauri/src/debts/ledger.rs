@@ -9,10 +9,10 @@
 //!   your part. Paying them back later is another entry and never a second expense.
 
 use rusqlite::{params, Connection, OptionalExtension};
-use serde::{Deserialize, Deserializer, Serialize};
+use serde::{Deserialize, Serialize};
 
 use super::people::{self, Person};
-use crate::categories::{parse_id, serialize_id};
+use crate::categories::{parse_id, present_or_null, serialize_id};
 use crate::money::{format_amount, parse_positive_amount};
 use crate::transactions::{self, clean_date, NewTransaction};
 use crate::vault::AppError;
@@ -106,10 +106,6 @@ pub struct EntryPatch {
     pub note: Option<Option<String>>,
     #[serde(default, deserialize_with = "present_or_null")]
     pub transaction_id: Option<Option<String>>,
-}
-
-fn present_or_null<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Option<Option<String>>, D::Error> {
-    Ok(Some(Option::deserialize(deserializer)?))
 }
 
 /// The expense that "I borrowed" adds to your expenses along with the entry.

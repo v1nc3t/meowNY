@@ -17,6 +17,7 @@ use super::splits;
 use crate::categories::parse_id;
 use crate::currency;
 use crate::export;
+use crate::keys;
 use crate::money::{format_amount, parse_positive_amount, MAX_MINOR};
 use crate::sync::qr::{base64url_decode, base64url_encode};
 use crate::transactions::clean_date;
@@ -125,10 +126,6 @@ pub fn encode(code: &BillCode) -> String {
     format!("{PREFIX}{}", base64url_encode(&json))
 }
 
-fn hex(bytes: &[u8]) -> String {
-    bytes.iter().map(|b| format!("{b:02x}")).collect()
-}
-
 /// The code of one friend's part of one bill, in the name the person gives for the sender. The same text every time for the same bill and
 /// friend. The friend must be one of the parts of the bill (a guest has no code: they have no app to give it to). When another friend paid
 /// the bill the code holds their name, and the friend who paid gets no code: they have nothing to owe.
@@ -200,7 +197,7 @@ fn build(conn: &Connection, domain: &[u8], bill: &str, person_id: i64, from: &st
     hash.update(domain);
     hash.update(bill.as_bytes());
     hash.update(person_sync.as_bytes());
-    let id = hex(&hash.finalize()[..16]);
+    let id = keys::hex_encode(&hash.finalize()[..16]);
     // the name of a bill is a transaction's: at most 50 characters, and never something `parse` would refuse
     let what: String = name.chars().filter(|c| shown_as_itself(*c)).take(WHAT_MAX_CHARS).collect();
     let what = what.trim().to_string();

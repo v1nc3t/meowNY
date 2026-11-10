@@ -58,6 +58,7 @@ use zeroize::Zeroizing;
 
 use self::stream::{ChunkReader, ChunkWriter, CHUNK};
 use crate::documents::library::Files;
+use crate::documents::store::create_private;
 use crate::documents::{DocId, MAX_DOCUMENT_BYTES};
 use crate::keys::{self, SALT_LEN};
 use crate::migrate;
@@ -292,6 +293,7 @@ pub fn commit(target: &mut Connection, prepared: &Snapshot) -> Result<(), AppErr
 
 /// Replaces everything in `target` with the snapshot. An older snapshot is migrated forward first. (The rows only; the files of a
 /// backup are read from the stream by `Backup::restore_files` between the two steps.)
+#[cfg(test)]
 pub fn restore_snapshot(target: &mut Connection, snapshot: &Snapshot) -> Result<(), AppError> {
     commit(target, &prepare(snapshot)?)
 }
@@ -417,25 +419,13 @@ pub fn seal(snapshot: &Snapshot, passphrase: &str) -> Result<Vec<u8>, AppError> 
     Ok(write_stream(Vec::new(), snapshot, passphrase, None)?.0)
 }
 
-/// What a file for a backup is opened with: owner only.
-fn private_options() -> fs::OpenOptions {
-    let mut options = fs::OpenOptions::new();
-    options.write(true).create(true).truncate(true);
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::OpenOptionsExt;
-        options.mode(0o600);
-    }
-    options
-}
-
 /// Writes a backup to `path`, streamed, readable by the owner only. It goes through a temporary file, so a crash, a full disk or a
 /// vault that locks half way never leaves a half-written backup under the real name.
 pub fn create_file(path: &Path, snapshot: &Snapshot, passphrase: &str, files: Option<&mut dyn FileSource>) -> Result<Written, AppError> {
     let mut tmp = path.as_os_str().to_owned();
     tmp.push(".tmp");
     let tmp = PathBuf::from(tmp);
-    let file = private_options().open(&tmp).map_err(|_| AppError::Internal)?;
+    let file = create_private(&tmp).map_err(|_| AppError::Internal)?;
     let written = write_stream(std::io::BufWriter::new(file), snapshot, passphrase, files).and_then(|(out, written)| {
         let file = out.into_inner().map_err(|_| AppError::Internal)?;
         file.sync_all().map_err(|_| AppError::Internal)?;
@@ -691,7 +681,7 @@ pub fn write_file(path: &Path, bytes: &[u8]) -> Result<(), AppError> {
     tmp.push(".tmp");
     let tmp = PathBuf::from(tmp);
 
-    let written = private_options().open(&tmp).and_then(|mut f| f.write_all(bytes).and_then(|_| f.sync_all()));
+    let written = create_private(&tmp).and_then(|mut f| f.write_all(bytes).and_then(|_| f.sync_all()));
     if written.is_err() {
         let _ = fs::remove_file(&tmp);
         return Err(AppError::Internal);

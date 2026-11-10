@@ -1034,7 +1034,7 @@ impl<'a> Applier<'a> {
                     let star = after(&parse(&r.stamp)?);
                     let mut merged = r.clone();
                     merged.deleted_at = Some(iso(star.ms));
-                    merged.merged_into = Some(rival_sync_id.clone());
+                    merged.merged_into = Some(rival_sync_id);
                     merged.stamp = star.format();
                     merged.updated_at = iso(star.ms);
                     let id = self.write_category(existing.as_ref(), &merged)?;
@@ -1230,7 +1230,7 @@ impl<'a> Applier<'a> {
                     let star = after(&parse(&r.stamp)?);
                     let mut merged = r.clone();
                     merged.archived = 1;
-                    merged.merged_into = Some(rival_sync_id.clone());
+                    merged.merged_into = Some(rival_sync_id);
                     merged.stamp = star.format();
                     merged.updated_at = iso(star.ms);
                     let id = self.write_person(existing.as_ref(), &merged)?;

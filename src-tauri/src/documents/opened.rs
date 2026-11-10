@@ -12,6 +12,7 @@ use std::path::{Path, PathBuf};
 use crate::keys;
 
 use super::seal::DocError;
+use super::store::make_private_dir;
 
 /// The folder's name inside the data folder.
 pub const DIR_NAME: &str = "open";
@@ -23,10 +24,6 @@ pub struct Opened {
 impl Opened {
     pub fn new(data_dir: &Path) -> Opened {
         Opened { dir: data_dir.join(DIR_NAME) }
-    }
-
-    pub fn dir(&self) -> &Path {
-        &self.dir
     }
 
     /// Removes every copy. Says whether the folder is gone: on Windows a viewer that still holds a file open keeps it, and the
@@ -63,16 +60,4 @@ impl Opened {
         }
         Ok(path)
     }
-}
-
-fn make_private_dir(dir: &Path) -> Result<(), DocError> {
-    let mut builder = fs::DirBuilder::new();
-    builder.recursive(true);
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::DirBuilderExt;
-        builder.mode(0o700);
-    }
-    builder.create(dir)?;
-    Ok(())
 }

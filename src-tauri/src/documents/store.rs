@@ -53,20 +53,9 @@ impl Store {
         Store { dir: data_dir.join(DIR_NAME) }
     }
 
+    #[cfg(test)]
     pub fn dir(&self) -> &Path {
         &self.dir
-    }
-
-    fn ensure_dir(&self) -> Result<(), DocError> {
-        let mut builder = fs::DirBuilder::new();
-        builder.recursive(true);
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::DirBuilderExt;
-            builder.mode(0o700);
-        }
-        builder.create(&self.dir)?;
-        Ok(())
     }
 
     fn path(&self, keys: &DocKeys, id: &DocId, extension: &str) -> PathBuf {
@@ -102,7 +91,7 @@ impl Store {
         if bytes.len() as u64 > MAX_DOCUMENT_BYTES {
             return Err(DocError::TooLarge);
         }
-        self.ensure_dir()?;
+        make_private_dir(&self.dir)?;
         let temp = self.path(keys, id, "tmp");
         let result = (|| {
             let mut sealer = Sealer::new(create_private(&temp)?, keys, id, bytes.len() as u64)?;
@@ -174,7 +163,7 @@ impl Store {
         if size > MAX_DOCUMENT_BYTES {
             return Err(DocError::TooLarge);
         }
-        self.ensure_dir()?;
+        make_private_dir(&self.dir)?;
         let part = self.path(keys, id, "part");
         let dest = self.path(keys, id, "mnd");
 
@@ -304,6 +293,7 @@ impl Incoming {
     }
 
     /// How many bytes of the file are here, including those that wait for a whole chunk.
+    #[cfg(test)]
     pub fn received(&self) -> u64 {
         self.received
     }
@@ -341,7 +331,21 @@ fn split_name(name: &str) -> Option<(&str, &str)> {
     hex.then_some((stem, extension))
 }
 
-fn create_private(path: &Path) -> std::io::Result<File> {
+/// Makes the folder, and its parents, readable by its owner only.
+pub(super) fn make_private_dir(dir: &Path) -> Result<(), DocError> {
+    let mut builder = fs::DirBuilder::new();
+    builder.recursive(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::DirBuilderExt;
+        builder.mode(0o700);
+    }
+    builder.create(dir)?;
+    Ok(())
+}
+
+/// Creates a file, or empties the one there, readable by its owner only.
+pub(crate) fn create_private(path: &Path) -> std::io::Result<File> {
     let mut options = OpenOptions::new();
     options.write(true).create(true).truncate(true);
     #[cfg(unix)]

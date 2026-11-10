@@ -387,6 +387,7 @@ impl Session {
     }
 
     /// Ends the session; every later call fails.
+    #[cfg(test)]
     pub fn close(&mut self) {
         self.closed = true;
     }

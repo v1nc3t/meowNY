@@ -20,8 +20,7 @@ impl DbKey {
 
     /// SQLCipher raw-key syntax: skips the passphrase KDF, so the key must be random.
     fn pragma_value(&self) -> String {
-        let hex: String = self.0.iter().map(|b| format!("{b:02x}")).collect();
-        format!("\"x'{hex}'\"")
+        format!("\"x'{}'\"", crate::keys::hex_encode(&self.0))
     }
 }
 
@@ -92,6 +91,11 @@ pub fn open(path: &Path, key: &DbKey) -> Result<Connection, DbError> {
          PRAGMA cache_size = -16384;",
     )?;
     Ok(conn)
+}
+
+/// Whether a write failed because it would break a UNIQUE constraint.
+pub(crate) fn is_unique_violation(error: &rusqlite::Error) -> bool {
+    matches!(error, rusqlite::Error::SqliteFailure(e, _) if e.extended_code == rusqlite::ffi::SQLITE_CONSTRAINT_UNIQUE)
 }
 
 #[cfg(test)]
