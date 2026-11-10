@@ -1,6 +1,7 @@
 /* The phone shell: header, bottom tabs, add button and quick menu. */
 
 html.is-phone button,
+html.is-phone a.ui-btn,
 html.is-phone .pick-button {
   min-height: 44px;
 }
@@ -20,9 +21,37 @@ html.is-phone input[type='radio'] {
   min-width: 24px;
 }
 
+/* A slider has a 2px margin of its own, which would put its track 2px in from the edge of the fields above and below it. */
+html.is-phone input[type='range'] {
+  margin-inline: 0;
+}
+
 /* An icon button is as wide as it is tall, so it is also 44px wide. */
 html.is-phone .ui-btn-icon {
   min-width: 44px;
+}
+
+/* A page reaches 4px into the padding on both sides (shell.css), so that its scroll area has room for a focus ring. Its cap of 100%
+   stopped it growing on the right, and every box ended 8px further from the screen's edge on the right than on the left. */
+.app-shell.is-phone .app-main > main > section {
+  max-width: none;
+}
+
+/* The green button's hard shadow is 2px outside its box, past the edge that the other controls line up on. On a phone the button
+   leaves 2px of its box for the shadow, so the shadow ends where the other controls end (also for a button that is 100% wide). */
+html.is-phone .ui-btn-default {
+  max-width: calc(100% - 2px);
+  margin-right: 2px;
+  margin-bottom: 2px;
+}
+
+/* The two buttons of a dialog are as tall as each other (the green one with its shadow), so their edges line up. */
+html.is-phone .modal-actions {
+  align-items: stretch;
+}
+
+html.is-phone .modal-actions > .ui-btn {
+  height: auto;
 }
 
 /* The tabs' buttons are 44px tall, so the track around them grows to fit. */
@@ -47,28 +76,31 @@ html.is-phone :is(.app-logo, .settings-back, .app-main a:not([class]), .app-foot
   opacity: 0.6;
 }
 
-/* The footer is two lines (the page at the left, then the links at the right), each item at least 44px tall to tap. The gap round
-   the | is as wide as a 360px screen allows for the links in English ("check for updates | questions & bugs | sponsor" is 273px of
-   text on 325px). */
+/* The footer (components/AppFooter.tsx) is centred: the links on one row (a second only when the words are long) with what the app is
+   under them in smaller text. Every link is 44px tall to tap and the rows touch, so there is no gap between them. */
 html.is-phone .app-footer {
-  --sep-gap: 1.7rem;
-}
-
-html.is-phone .app-footer nav {
-  flex-direction: column;
-}
-
-html.is-phone .app-footer li {
-  display: flex;
-  flex-direction: row;
+  flex-direction: column-reverse;
   align-items: center;
-  min-height: 44px;
+  gap: 0;
+  padding: 0;
+}
+
+html.is-phone .app-footer > :is(p, nav) {
+  justify-content: center;
+  align-items: center;
+  gap: 0 1.25rem;
+  margin: 0;
+  text-align: center;
+}
+
+html.is-phone .app-footer > p {
+  font-size: 0.6875rem;
 }
 
 html.is-phone .app-footer a {
   display: flex;
   align-items: center;
-  align-self: stretch;
+  min-height: 44px;
 }
 
 .app-shell.is-phone.is-locked {
@@ -156,18 +188,20 @@ html.is-phone *::-webkit-scrollbar-thumb {
   gap: 0.125rem;
   min-width: 0;
   min-height: 3.5rem;
-  padding: 0.375rem 0.125rem;
+  padding: 0.25rem 0;
   color: var(--muted-foreground);
-  font-size: 0.75rem;
+  font-size: min(0.75rem, 2.5vw);
   text-decoration: none;
   transition: background-color var(--t-fast), color var(--t-fast);
 }
 
+/* The longest word of any language ("wiederkehrend", "transacciones": 13 letters) is 19.5vw wide at 2.5vw, so it fits the fifth of the
+   screen at any width or text size. A label of several words ("tableau de bord") takes two lines; none ends with "...". */
 .phone-tab > span {
   max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  line-height: 1.1;
+  text-align: center;
+  overflow-wrap: anywhere;
 }
 
 /* The page you are on: brighter, with a short line above it (a line, not a box). */
@@ -249,6 +283,42 @@ html.is-phone .fab {
 .app-main > main[data-direction='prev'] {
   --enter-x: -2rem;
   --enter-y: 0;
+}
+
+/* The title row of a page: a button that fits goes at the right on the title's line, centred on it (page-chrome.css); one that does not
+   goes on a row of its own under the title, at the left, the same 1rem below the title as every other part of the page is. */
+html.is-phone .app-main main > section > .tx-title.one-line {
+  row-gap: 1rem;
+}
+
+/* The period picker (components/MonthNav.tsx, the dashboard's year and the transactions' period): ‹ month year › and "current" on one
+   line at the left, every part 44px tall. On the 332px of a 360px screen the fields shrink (to the width of their text) before a
+   part of the line goes under, with less room between the parts and a "current" button as narrow as its word. */
+html.is-phone .month-nav {
+  flex-wrap: nowrap;
+  gap: 0.25rem;
+  max-width: 100%;
+}
+
+html.is-phone .month-nav .pick.field {
+  flex: 0 1 auto;
+  min-width: 0;
+}
+
+html.is-phone .month-nav > .ui-btn-outline {
+  padding-inline: 0.5rem;
+}
+
+/* The arrows have a thin edge like the fields, so the line starts at the page's edge and not at the arrow's glyph in the middle of its box. */
+html.is-phone .month-nav > .ui-btn-ghost {
+  --btn-edge: var(--input);
+}
+
+/* The dashboard's picker sits at the left of its card, under no title. */
+html.is-phone .dash-top .ui-card-action {
+  grid-column: 1 / -1;
+  justify-self: start;
+  max-width: 100%;
 }
 
 /* The transactions on a phone: no shortcuts to show, and a row needs no hover. The filters button sits at the bottom of the search

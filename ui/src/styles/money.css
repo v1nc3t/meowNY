@@ -734,6 +734,11 @@ html.is-phone .tx-range .date-picker .pick.field {
   min-width: 0;
 }
 
+/* The field is as wide as its box: without this it keeps the width of its text and its arrow lies outside it (controls.css, the toolbar). */
+html.is-phone .tx-range .date-picker .pick-input {
+  width: 100%;
+}
+
 html.is-phone .tx-range > .ui-btn {
   flex: 1 1 100%;
 }

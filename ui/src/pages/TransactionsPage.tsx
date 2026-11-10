@@ -650,9 +650,12 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
     <section className="tx-page">
       <div className="tx-title one-line">
         <h1>{t('tx.title')}</h1>
-        <Button onClick={() => openAdd()} {...tip('new', t('tx.add'))}>
-          {t('tx.add')}
-        </Button>
+        {/* The phone has the round add button for this. */}
+        {phone ? null : (
+          <Button onClick={() => openAdd()} {...tip('new', t('tx.add'))}>
+            {t('tx.add')}
+          </Button>
+        )}
       </div>
       <div className="toolbar wide tx-bar filter-bar">
         <label className="grow" {...tip('search')}>

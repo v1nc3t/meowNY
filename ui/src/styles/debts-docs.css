@@ -56,15 +56,17 @@ html.is-phone .debts-split {
   gap: 0.5rem;
 }
 
-/* On a phone the four buttons are two by two, all the same width; a long name breaks onto a second line inside its button. */
-html.is-phone .tx-actions.debts-actions {
+/* On a phone the four buttons are two by two, all the same width; a long name breaks onto a second line inside its button. The bar of
+   adding a friend has the same two columns (so the edges line up), and "show removed friends" takes a row under them. */
+html.is-phone :is(.tx-actions.debts-actions, .debts-bar) {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: stretch;
   gap: 0.5rem;
   width: 100%;
 }
 
-html.is-phone .tx-actions.debts-actions > .ui-btn {
+html.is-phone :is(.tx-actions.debts-actions, .debts-bar) > .ui-btn {
   width: 100%;
   min-width: 0;
   height: auto;
@@ -72,6 +74,15 @@ html.is-phone .tx-actions.debts-actions > .ui-btn {
   line-height: 1.25;
   white-space: normal;
   text-align: center;
+}
+
+html.is-phone .debts-bar > label {
+  grid-column: 1 / -1;
+}
+
+/* A friend's page: the title sits the page's usual 1rem under the row of back and mark as paid, not the 0.5rem of a heading and its text. */
+html.is-phone .debts-name + .debts-heading {
+  margin-top: 1rem;
 }
 
 /* Adding a friend, and showing the ones that were taken off the list. */
@@ -1143,17 +1154,13 @@ ul.card-list > li.list-head > .span-2 {
   overflow-wrap: anywhere;
 }
 
-/* A phone: the rows of attached documents wrap so the name keeps room, and a link made to look like a button is as tall as one. */
+/* A phone: the rows of attached documents wrap so the name keeps room. */
 html.is-phone .attach-list > li {
   flex-wrap: wrap;
 }
 
 html.is-phone .attach-list .attach-name {
   flex: 1 1 6rem;
-}
-
-html.is-phone a.ui-btn {
-  min-height: 2.75rem;
 }
 
 /* On the phone, a file that stays on the computer: a short note and one button to bring it (components/KeepToPreview.tsx). */

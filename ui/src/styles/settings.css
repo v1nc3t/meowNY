@@ -576,14 +576,11 @@
 }
 
 /* The foot of the settings (components/AppFooter.tsx), across the whole page. The page lines its children up at the start, so the
-   footer stretches itself; its own background repaints the whole strip (WebKitGTK left stale lines there). A little room under the
-   text keeps it clear of the window's edge; the strip stays low. */
+   footer stretches itself; its own background repaints the whole strip (WebKitGTK left stale lines there). */
 .settings-page .app-footer {
   align-self: stretch;
   /* As wide as the rows above, which keep a gutter on the right for the scroll bar. */
   width: calc(100% - var(--room));
-  padding: 0.5rem 0;
-  border-top: 1px solid var(--border);
   background: var(--background);
 }
 
@@ -751,7 +748,6 @@ ul.card-list.token-table > li.list-head {
 .settings-page.on-phone .app-footer {
   width: 100%;
   margin-top: auto;
-  padding-bottom: 0;
 }
 
 .settings-list {
@@ -917,6 +913,12 @@ html.is-phone .gate {
 
 html.is-phone .gate > .decrypting:not(.is-below) {
   min-height: calc(100dvh - 10dvh - 2rem - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
+}
+
+/* The card of a password screen is as wide as the boxes of the other pages: its frame and shadow take the 8px of its margins, so they
+   end on the page's 14px sides (at 390px; at 360px it is already as wide as the screen allows). */
+html.is-phone .gate > :is(form:not(.onboard-form), .panel:not(.onboard-welcome)) {
+  width: calc(100% - 8px);
 }
 
 /* The show button fills the 44px field. */
