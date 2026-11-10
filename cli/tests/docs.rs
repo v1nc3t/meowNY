@@ -212,13 +212,13 @@ fn tour(app: &App) -> (Map<String, Value>, Vec<Value>) {
     t.example("people show", read, &format!("meowny people show {anna}"), &["people", "show", &anna], true, true, None);
     t.example("debts summary", read, "meowny debts summary", &["debts", "summary"], true, true, None);
     t.example("debts due", read, "meowny debts due", &["debts", "due"], true, true, None);
-    t.example("debts history", read, "meowny debts history --limit 5", &["debts", "history", "--limit", "5"], true, true, None);
+    t.example("debts history", read, "meowny debts history --only friends --limit 5", &["debts", "history", "--only", "friends", "--limit", "5"], true, true, None);
     t.example("debts reminders", read, "meowny debts reminders --every-days 7", &["debts", "reminders", "--every-days", "7"], true, true, None);
     t.example(
         "people settle",
         write,
-        &format!("meowny people settle {anna} --amount 50.00 --date 2026-10-15"),
-        &["people", "settle", &anna, "--amount", "50.00", "--date", "2026-10-15"],
+        &format!("meowny people settle {anna} --amount 50.00 --date 2026-10-15 --transaction-id {dinner}"),
+        &["people", "settle", &anna, "--amount", "50.00", "--date", "2026-10-15", "--transaction-id", &dinner],
         false,
         true,
         None,
@@ -238,8 +238,8 @@ fn tour(app: &App) -> (Map<String, Value>, Vec<Value>) {
     t.example(
         "recurring split",
         write,
-        &format!("meowny recurring split {plan} --mode shares --mine 2 --people {anna} --values 1"),
-        &["recurring", "split", &plan, "--mode", "shares", "--mine", "2", "--people", &anna, "--values", "1"],
+        &format!("meowny recurring split {plan} --mode shares --mine 2 --people {anna} --values 1 --paid-by {anna}"),
+        &["recurring", "split", &plan, "--mode", "shares", "--mine", "2", "--people", &anna, "--values", "1", "--paid-by", &anna],
         false,
         true,
         None,
