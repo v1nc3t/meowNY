@@ -8,7 +8,6 @@ import { focusChosen, useListKeys } from '../hooks/useListKeys'
  */
 export default function Pick({
   label,
-  inline = false,
   className,
   text,
   title,
@@ -18,8 +17,6 @@ export default function Pick({
   children,
 }: {
   label: string
-  /** Beside other buttons: the label is for screen readers only. */
-  inline?: boolean
   className?: string
   text: string
   /** For a choice that may be cut short in a narrow field: the whole of it, as a tooltip. */
@@ -64,7 +61,7 @@ export default function Pick({
 
   return (
     <div className={className ? `pick ${className}` : 'pick'} ref={ref}>
-      <span className={inline ? 'sr-only' : undefined}>{label}</span>
+      <span>{label}</span>
       <button
         ref={buttonRef}
         type="button"

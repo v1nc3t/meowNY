@@ -130,11 +130,6 @@ export function toInput(draft: SplitDraft): SplitInput | null {
   return mine === null ? null : { mode: draft.mode, mine, parts, ...paid }
 }
 
-/** The people on a shared bill, to show next to its amount: "Anna 25.00, Bob 25.00". */
-export function partsText(split: PartOut[], format: (amount: string) => string = (amount) => amount): string {
-  return split.map((part) => `${part.person ?? part.guest ?? ''} ${format(part.amount)}`).join(', ')
-}
-
 /** The weights of a template in lowest terms, so 5000 and 5000 read as 1 and 1: only for showing, the weights stay as they are kept. */
 export function reducedWeights(weights: number[]): number[] {
   const gcd = (a: number, b: number): number => (b === 0 ? a : gcd(b, a % b))

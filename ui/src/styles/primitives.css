@@ -32,8 +32,7 @@
     opacity var(--t-fast);
 }
 
-.ui-btn:disabled,
-.ui-btn[aria-disabled='true'] {
+.ui-btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
   box-shadow: none;
@@ -44,12 +43,6 @@
   --btn-edge: var(--primary);
   color: var(--primary-foreground);
   box-shadow: var(--shadow-press);
-}
-
-.ui-btn-secondary {
-  --btn-fill: var(--secondary);
-  --btn-edge: var(--secondary);
-  color: var(--secondary-foreground);
 }
 
 .ui-btn-outline {
@@ -87,7 +80,6 @@
     transform: translate(2px, 2px);
   }
 
-  .ui-btn-secondary:active:not(:disabled),
   .ui-btn-outline:active:not(:disabled),
   .ui-btn-destructive:active:not(:disabled),
   .ui-btn-ghost:active:not(:disabled),
@@ -99,7 +91,6 @@
 
 @media (hover: hover) {
   .ui-btn-default:hover:not(:disabled),
-  .ui-btn-secondary:hover:not(:disabled),
   .ui-btn-destructive:hover:not(:disabled) {
     opacity: 0.9;
   }
@@ -202,7 +193,7 @@
   box-shadow: var(--shadow-sm);
 }
 
-/* The title and description on the left, an optional action in the top right corner. */
+/* The title on the left, an optional action in the top right corner. */
 .ui-card-header {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
@@ -235,13 +226,6 @@
   }
 }
 
-.ui-card-description {
-  grid-column: 1;
-  margin-top: 0.25rem;
-  font-size: 0.8125rem;
-  color: var(--muted-foreground);
-}
-
 .ui-card-action {
   grid-column: 2;
   grid-row: 1 / span 2;
@@ -254,12 +238,6 @@
 
 .ui-card-content {
   min-width: 0;
-}
-
-.ui-card-footer {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
 }
 
 /* Badges. The coloured ones are outlined in their colour, so a row of them stays calm. */
@@ -275,11 +253,6 @@
   font-weight: 600;
   line-height: 1.4;
   white-space: nowrap;
-}
-
-.ui-badge-default {
-  color: var(--primary-foreground);
-  background: var(--primary);
 }
 
 .ui-badge-secondary {
@@ -427,13 +400,6 @@ ul.card-list.is-table > li.card-item > .row-panel {
   }
 }
 
-.card-body {
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-  min-width: 0;
-}
-
 .card-name {
   margin: 0;
   font-size: 1rem;
@@ -441,17 +407,6 @@ ul.card-list.is-table > li.card-item > .row-panel {
   line-height: 1.5;
   color: var(--foreground);
   overflow-wrap: anywhere;
-}
-
-.card-meta {
-  margin: 0;
-  font-size: 0.875rem;
-  color: var(--muted-foreground);
-}
-
-.card-amount {
-  color: var(--foreground);
-  font-variant-numeric: tabular-nums;
 }
 
 /* Edit and delete are plain (ghost) buttons side by side. */

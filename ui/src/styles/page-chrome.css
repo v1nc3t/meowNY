@@ -176,8 +176,6 @@ html.is-phone .list-foot > .per-page {
 .toolbar.tx-bar {
   position: relative;
   z-index: 2;
-  flex-wrap: wrap;
-  align-items: flex-end;
 }
 
 .toolbar .grow {
@@ -191,61 +189,14 @@ html.is-phone .list-foot > .per-page {
   width: 100%;
 }
 
-.toolbar.tx-bar .fit {
-  flex: 0 0 auto;
-  width: max-content;
-  min-width: max-content;
-  max-width: 100%;
-}
-
-.toolbar.tx-bar .fit input,
-.toolbar.tx-bar .fit select {
-  width: max-content;
-  max-width: none;
-  white-space: nowrap;
-  overflow-wrap: normal;
-}
-
-.toolbar.tx-bar .fit select {
-  width: calc(8ch + 2.75rem);
-  min-width: calc(8ch + 2.75rem);
-}
-
 .toolbar.tx-bar .pick {
   max-width: 100%;
-}
-
-.toolbar.tx-bar .pick.type {
-  min-width: 8.5rem;
-}
-
-.toolbar.tx-bar .pick.type .pick-button {
-  width: 100%;
-}
-
-.pick.type .pick-list {
-  right: 0;
-  left: auto;
-  width: 100%;
 }
 
 /* The documents' type: as wide as its longest choice in any language ("outros ficheiros", 16 letters of the monospace font) plus the
    padding and the arrow, so it does not change width with the choice. */
 .toolbar.tx-bar .pick.kind .pick-button {
   min-width: calc(16ch + 3rem);
-}
-
-.toolbar.tx-bar .pick.limit {
-  flex-shrink: 0;
-  min-width: max-content;
-  max-width: none;
-}
-
-.toolbar.tx-bar .pick.limit .pick-button {
-  min-width: calc(3ch + 1.625rem);
-  max-width: none;
-  overflow-wrap: normal;
-  white-space: nowrap;
 }
 
 .pick.limit .pick-list {

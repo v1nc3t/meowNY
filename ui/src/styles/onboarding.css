@@ -291,12 +291,7 @@ html.is-phone .first-step {
   padding: 0.75rem 0.875rem;
 }
 
-/* An empty list: a little more room around the dozing cat, and the button for the first thing to do under the hint. */
-.empty-state {
-  gap: 1rem;
-  padding-block: 1.5rem;
-}
-
+/* An empty list: the button for the first thing to do goes under the hint. */
 .empty-state > .ui-btn {
   margin-top: 0.25rem;
 }

@@ -129,7 +129,7 @@ export function useAttachments(target: Target | null) {
     [pending],
   )
 
-  return { exists: target !== null, linked, pending, working, addFiles, attachExisting, detach, removePending, commit, reset, reload }
+  return { linked, pending, working, addFiles, attachExisting, detach, removePending, commit, reset, reload }
 }
 
 export type Attachments = ReturnType<typeof useAttachments>

@@ -5,7 +5,7 @@ export function cn(...parts: (string | false | null | undefined)[]): string {
   return parts.filter(Boolean).join(' ')
 }
 
-export type ButtonVariant = 'default' | 'secondary' | 'outline' | 'ghost' | 'destructive' | 'link'
+export type ButtonVariant = 'default' | 'outline' | 'ghost' | 'destructive' | 'link'
 export type ButtonSize = 'default' | 'sm' | 'lg' | 'icon'
 
 /** The classes of a button, for something that is not a <button> but should look like one (a link). */

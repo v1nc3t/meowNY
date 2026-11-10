@@ -11,11 +11,6 @@
   max-width: 100%;
 }
 
-.tx-range > label {
-  width: auto;
-  flex: 0 0 auto;
-}
-
 /* The transactions as a table: name, amount, date, category, the icon of a shared one, then the buttons (edit, delete, the chevron: three
    of 2rem). The columns of amounts and dates are as wide as the longest the formats write, in characters of the monospace font: 16 for
    "-CHF 999,999.99" or a longer way of writing it, and 13 for a date (small print, 0.875rem, so 12 of the row's). The icon is 12px, so
