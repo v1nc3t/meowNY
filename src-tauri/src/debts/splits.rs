@@ -1,13 +1,16 @@
 //! Sharing a bill (`docs/debts-design.md`, sections 3 to 5).
 //!
-//! A transaction you paid can be shared with friends and guests. The transaction keeps the amount that was paid; the parts of the others
+//! A transaction can be shared with friends and guests. The transaction keeps the amount that was paid; the parts of the others
 //! are rows in `transaction_split_lines`; **your own part is never stored**, it is the amount minus the parts of the others
 //! (`transaction_costs`). So the parts can never disagree with the total, whatever rounding, sync or conversion does.
+//!
+//! You paid, unless `paid_by` names a friend: then your part is what you owe them, and the parts of the others are what those owe them.
 //!
 //! `allocate` is the one place that turns weights into amounts, and the dialog asks for its preview (`preview`) on every change, so what it
 //! shows is what is stored and there is no copy of the rule in the interface.
 //!
-//! A recurring item carries a template: your weight and one weight for each friend or guest, copied into every payment when it is paid.
+//! A recurring item carries a template: your weight, one weight for each friend or guest, and the friend who pays if one does, copied into
+//! every payment when it is paid.
 
 use std::collections::{HashMap, HashSet};
 
@@ -84,7 +87,8 @@ pub struct Part {
     pub value: Option<String>,
 }
 
-/// A split as it is typed: the mode, your own value and the others. With `mine` left out, percent and exact give you the rest.
+/// A split as it is typed: the mode, your own value and the others. In percent and exact one value may be left out, `mine` or a part's
+/// `value`, and that one gets the rest.
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct SplitInput {
@@ -92,6 +96,17 @@ pub struct SplitInput {
     #[serde(default)]
     pub mine: Option<String>,
     pub parts: Vec<Part>,
+    /// The friend (a person id, one of `parts`) who paid the bill, when it was not you. Your own part must then be above 0.
+    #[serde(default)]
+    pub paid_by: Option<String>,
+}
+
+/// The friend who paid a bill (or pays each payment of a template) instead of you.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Payer {
+    pub person_id: String,
+    pub name: String,
 }
 
 /// One person's part, as it leaves the app.
@@ -195,25 +210,25 @@ fn weights(conn: &Connection, input: &SplitInput, whole: Option<i64>, keep: &Has
         }
         return Ok(Weights { mine: 1, others: who.into_iter().map(|w| (w, 1)).collect(), left: 0 });
     }
-    let mut others = Vec::with_capacity(who.len());
-    for (who, part) in who.into_iter().zip(&input.parts) {
-        let text = part.value.as_deref().ok_or(AppError::InvalidInput)?;
-        others.push((who, parse_weight(mode, text)?));
-    }
-    let typed: i64 = others.iter().map(|(_, w)| *w as i64).sum();
     let total = match mode {
         Mode::Percent => Some(PERCENT_WHOLE as i64),
         Mode::Exact => Some(whole.ok_or(AppError::InvalidInput)?),
         _ => None,
     };
-    let mine = match (&input.mine, total) {
-        (Some(text), _) => parse_weight(mode, text)?,
-        // "give the rest to me"
-        (None, Some(total)) => (total - typed).max(0) as u64,
-        (None, None) => return Err(AppError::InvalidInput),
-    };
+    // in percent and exact one value may be left out, yours or a friend's, and it gets the rest; in shares every value is typed
+    let left_out = usize::from(input.mine.is_none()) + input.parts.iter().filter(|p| p.value.is_none()).count();
+    if left_out > usize::from(total.is_some()) {
+        return Err(AppError::InvalidInput);
+    }
+    let value = |text: &Option<String>| text.as_deref().map(|text| parse_weight(mode, text)).transpose();
+    let typed_mine = value(&input.mine)?;
+    let typed_others = input.parts.iter().map(|part| value(&part.value)).collect::<Result<Vec<_>, _>>()?;
+    let typed: i64 = typed_mine.iter().chain(typed_others.iter().flatten()).map(|w| *w as i64).sum();
+    let rest = (total.unwrap_or(0) - typed).max(0) as u64;
+    let mine = typed_mine.unwrap_or(rest);
+    let others: Vec<(Who, u64)> = who.into_iter().zip(typed_others).map(|(who, weight)| (who, weight.unwrap_or(rest))).collect();
     let left = match total {
-        Some(total) => total - typed - mine as i64,
+        Some(total) => total - mine as i64 - others.iter().map(|(_, w)| *w as i64).sum::<i64>(),
         None => 0,
     };
     if mine == 0 && others.iter().all(|(_, w)| *w == 0) {
@@ -224,6 +239,16 @@ fn weights(conn: &Connection, input: &SplitInput, whole: Option<i64>, keep: &Has
 
 fn all_weights(w: &Weights) -> Vec<u64> {
     std::iter::once(w.mine).chain(w.others.iter().map(|(_, weight)| *weight)).collect()
+}
+
+/// The friend who paid, from the input: one of the people on the split.
+fn payer(input: &SplitInput, w: &Weights) -> Result<Option<i64>, AppError> {
+    let Some(text) = &input.paid_by else { return Ok(None) };
+    let id = parse_id(text)?;
+    if !w.others.iter().any(|(who, _)| *who == Who::Person(id)) {
+        return Err(AppError::InvalidInput);
+    }
+    Ok(Some(id))
 }
 
 fn name_of(conn: &Connection, id: i64) -> Result<String, AppError> {
@@ -292,8 +317,12 @@ pub fn line_count(conn: &Connection, transaction_id: i64) -> Result<u32, AppErro
     Ok(conn.query_row("SELECT count(*) FROM transaction_split_lines WHERE transaction_id = ?1", [transaction_id], |r| r.get(0))?)
 }
 
+/// The friends on a bill: those with a part, and the friend who paid it (whose own part may be 0). They stay on it once archived.
 fn people_on(conn: &Connection, transaction_id: i64) -> Result<HashSet<i64>, AppError> {
-    Ok(lines_of(conn, transaction_id)?.into_iter().filter_map(|(_, who, _)| if let Who::Person(id) = who { Some(id) } else { None }).collect())
+    let mut people: HashSet<i64> = lines_of(conn, transaction_id)?.into_iter().filter_map(|(_, who, _)| if let Who::Person(id) = who { Some(id) } else { None }).collect();
+    let current_payer: Option<i64> = conn.query_row("SELECT paid_by FROM transactions WHERE id = ?1", [transaction_id], |r| r.get(0)).optional()?.flatten();
+    people.extend(current_payer);
+    Ok(people)
 }
 
 /// Makes the parts of a bill be exactly `new`. Only the lines that differ are touched, so the history shows what really changed. Parts
@@ -335,7 +364,8 @@ fn write_lines(conn: &Connection, transaction_id: i64, new: &[(Who, i64)]) -> Re
     Ok(())
 }
 
-/// Splits a transaction (or changes how it is split). The numbers must add up, and at least one other person must keep a part above 0.
+/// Splits a transaction (or changes how it is split). The numbers must add up, and at least one other person must keep a part above 0. With
+/// `paid_by` (a friend on the split) the friend paid: then your part must be above 0 too, or the bill is not your expense.
 pub fn set_split(conn: &Connection, transaction_id: i64, input: &SplitInput) -> Result<(), AppError> {
     let tx = conn.unchecked_transaction()?;
     let bill = bill(&tx, transaction_id)?;
@@ -346,21 +376,28 @@ pub fn set_split(conn: &Connection, transaction_id: i64, input: &SplitInput) -> 
     if w.left != 0 {
         return Err(AppError::InvalidInput);
     }
+    let paid_by = payer(input, &w)?;
     let amounts = allocate(bill.amount, &all_weights(&w))?;
+    if paid_by.is_some() && amounts[0] == 0 {
+        return Err(AppError::InvalidInput);
+    }
     let lines: Vec<(Who, i64)> = w.others.into_iter().zip(&amounts[1..]).filter(|(_, amount)| **amount > 0).map(|((who, _), amount)| (who, *amount)).collect();
     if lines.is_empty() {
         return Err(AppError::InvalidInput);
     }
     write_lines(&tx, transaction_id, &lines)?;
+    // only when it differs, so a change of nothing gives the bill no new stamp
+    tx.execute("UPDATE transactions SET paid_by = ?1 WHERE id = ?2 AND paid_by IS NOT ?1", params![paid_by, transaction_id])?;
     tx.commit()?;
     Ok(())
 }
 
-/// Takes the split off a transaction: it costs its whole amount again.
+/// Takes the split off a transaction: it costs its whole amount again, and you paid it.
 pub fn clear_split(conn: &Connection, transaction_id: i64) -> Result<(), AppError> {
     let tx = conn.unchecked_transaction()?;
     bill(&tx, transaction_id)?;
     tx.execute("DELETE FROM transaction_split_lines WHERE transaction_id = ?1", [transaction_id])?;
+    tx.execute("UPDATE transactions SET paid_by = NULL WHERE id = ?1 AND paid_by IS NOT NULL", [transaction_id])?;
     tx.commit()?;
     Ok(())
 }
@@ -472,6 +509,17 @@ pub fn parts_of(conn: &Connection, ids: &[i64]) -> Result<HashMap<i64, Vec<PartO
     Ok(out)
 }
 
+/// The friend who paid each of the given transactions. A transaction you paid has no entry.
+pub fn payers_of(conn: &Connection, ids: &[i64]) -> Result<HashMap<i64, Payer>, AppError> {
+    if ids.is_empty() {
+        return Ok(HashMap::new());
+    }
+    let list = ids.iter().map(i64::to_string).collect::<Vec<_>>().join(",");
+    let mut statement = conn.prepare(&format!("SELECT t.id, p.id, p.name FROM transactions t JOIN people p ON p.id = t.paid_by WHERE t.id IN ({list})"))?;
+    let rows = statement.query_map([], |r| Ok((r.get::<_, i64>(0)?, Payer { person_id: r.get::<_, i64>(1)?.to_string(), name: r.get(2)? })))?;
+    Ok(rows.collect::<Result<_, _>>()?)
+}
+
 // ---------------------------------------------------------------------------------------------------------------
 // the template of a recurring item
 
@@ -481,6 +529,8 @@ pub fn parts_of(conn: &Connection, ids: &[i64]) -> Result<HashMap<i64, Vec<PartO
 pub struct Template {
     /// Your weight.
     pub mine: u64,
+    /// The friend who pays each payment instead of you, if one does.
+    pub paid_by: Option<Payer>,
     pub parts: Vec<TemplatePart>,
 }
 
@@ -528,10 +578,15 @@ pub fn templates_of(conn: &Connection, ids: &[i64]) -> Result<HashMap<i64, Templ
     }
     let list = ids.iter().map(i64::to_string).collect::<Vec<_>>().join(",");
     let mut out: HashMap<i64, Template> = HashMap::new();
-    let mut statement = conn.prepare(&format!("SELECT id, split_my_weight FROM recurring_transactions WHERE split_my_weight IS NOT NULL AND id IN ({list})"))?;
-    for row in statement.query_map([], |r| Ok((r.get::<_, i64>(0)?, r.get::<_, i64>(1)?)))? {
-        let (id, mine) = row?;
-        out.insert(id, Template { mine: mine as u64, parts: Vec::new() });
+    let mut statement = conn.prepare(&format!(
+        "SELECT r.id, r.split_my_weight, p.id, p.name FROM recurring_transactions r LEFT JOIN people p ON p.id = r.split_paid_by
+         WHERE r.split_my_weight IS NOT NULL AND r.id IN ({list})"
+    ))?;
+    let rows = statement.query_map([], |r| Ok((r.get::<_, i64>(0)?, r.get::<_, i64>(1)?, r.get::<_, Option<i64>>(2)?, r.get::<_, Option<String>>(3)?)))?;
+    for row in rows {
+        let (id, mine, payer, name) = row?;
+        let paid_by = payer.zip(name).map(|(id, name)| Payer { person_id: id.to_string(), name });
+        out.insert(id, Template { mine: mine as u64, paid_by, parts: Vec::new() });
     }
     let mut statement = conn.prepare(&format!(
         "SELECT l.recurring_transaction_id, l.person_id, p.name, l.guest_name, l.weight
@@ -561,7 +616,7 @@ pub fn my_part(amount: i64, weights: &[u64]) -> Result<i64, AppError> {
 /// Sets the split of a recurring item. The weights are kept, not amounts: a payment can differ from the plan, and an item can have no fixed
 /// amount. Equal gives everyone 1, shares are the numbers typed, percent is in hundredths (10,000 in all), and exact amounts are kept as
 /// weights too, so a payment of the planned amount gives exactly what was typed (exact needs an item with an amount, and the amounts must
-/// add up to it). The payments already made are not touched.
+/// add up to it). The payments already made are not touched. With `paid_by` a friend pays each payment: then your weight must be above 0.
 pub fn set_template(conn: &Connection, recurring_id: i64, input: &SplitInput) -> Result<(), AppError> {
     let tx = conn.unchecked_transaction()?;
     let (amount, income): (Option<i64>, bool) = tx
@@ -575,16 +630,23 @@ pub fn set_template(conn: &Connection, recurring_id: i64, input: &SplitInput) ->
     if income {
         return Err(AppError::InvalidInput);
     }
-    let keep: HashSet<i64> = template_lines(&tx, recurring_id)?.into_iter().filter_map(|(who, _)| if let Who::Person(id) = who { Some(id) } else { None }).collect();
+    let mut keep: HashSet<i64> = template_lines(&tx, recurring_id)?.into_iter().filter_map(|(who, _)| if let Who::Person(id) = who { Some(id) } else { None }).collect();
+    // the friend who pays stays on it once archived, also with a weight of 0
+    let current_payer: Option<i64> = tx.query_row("SELECT split_paid_by FROM recurring_transactions WHERE id = ?1", [recurring_id], |r| r.get(0))?;
+    keep.extend(current_payer);
     let w = weights(&tx, input, amount, &keep)?;
     if w.left != 0 {
+        return Err(AppError::InvalidInput);
+    }
+    let paid_by = payer(input, &w)?;
+    if paid_by.is_some() && w.mine == 0 {
         return Err(AppError::InvalidInput);
     }
     let others: Vec<(Who, u64)> = w.others.into_iter().filter(|(_, weight)| *weight > 0).collect();
     if others.is_empty() {
         return Err(AppError::InvalidInput);
     }
-    tx.execute("UPDATE recurring_transactions SET split_my_weight = ?1 WHERE id = ?2", params![w.mine as i64, recurring_id])?;
+    tx.execute("UPDATE recurring_transactions SET split_my_weight = ?1, split_paid_by = ?2 WHERE id = ?3", params![w.mine as i64, paid_by, recurring_id])?;
     tx.execute("DELETE FROM recurring_split_lines WHERE recurring_transaction_id = ?1", [recurring_id])?;
     for (who, weight) in others {
         let (person, guest) = match &who {
@@ -606,21 +668,26 @@ pub fn clear_template(conn: &Connection, recurring_id: i64) -> Result<(), AppErr
     let found: Option<i64> = tx.query_row("SELECT id FROM recurring_transactions WHERE id = ?1", [recurring_id], |r| r.get(0)).optional()?;
     found.ok_or(AppError::NotFound)?;
     tx.execute("DELETE FROM recurring_split_lines WHERE recurring_transaction_id = ?1", [recurring_id])?;
-    tx.execute("UPDATE recurring_transactions SET split_my_weight = NULL WHERE id = ?1", [recurring_id])?;
+    tx.execute("UPDATE recurring_transactions SET split_my_weight = NULL, split_paid_by = NULL WHERE id = ?1", [recurring_id])?;
     tx.commit()?;
     Ok(())
 }
 
-/// Splits a payment that has just been made from a recurring item, as the item's template says. Nothing happens for an item with no template.
-/// The caller runs this in the database transaction that made the payment.
+/// Splits a payment that has just been made from a recurring item, as the item's template says, the payer's name included. Nothing happens
+/// for an item with no template. The caller runs this in the database transaction that made the payment.
 pub(crate) fn apply_template(conn: &Connection, transaction_id: i64, recurring_id: i64, amount: i64) -> Result<(), AppError> {
-    let mine: Option<i64> = conn.query_row("SELECT split_my_weight FROM recurring_transactions WHERE id = ?1", [recurring_id], |r| r.get(0))?;
+    let (mine, paid_by): (Option<i64>, Option<i64>) =
+        conn.query_row("SELECT split_my_weight, split_paid_by FROM recurring_transactions WHERE id = ?1", [recurring_id], |r| Ok((r.get(0)?, r.get(1)?)))?;
     let Some(mine) = mine else { return Ok(()) };
     let others = template_lines(conn, recurring_id)?;
     let weights: Vec<u64> = std::iter::once(mine as u64).chain(others.iter().map(|(_, weight)| *weight)).collect();
     let amounts = allocate(amount, &weights)?;
     let lines: Vec<(Who, i64)> = others.into_iter().zip(&amounts[1..]).filter(|(_, amount)| **amount > 0).map(|((who, _), amount)| (who, *amount)).collect();
-    write_lines(conn, transaction_id, &lines)
+    write_lines(conn, transaction_id, &lines)?;
+    if paid_by.is_some() {
+        conn.execute("UPDATE transactions SET paid_by = ?1 WHERE id = ?2", params![paid_by, transaction_id])?;
+    }
+    Ok(())
 }
 
 // ---------------------------------------------------------------------------------------------------------------
@@ -629,7 +696,8 @@ pub(crate) fn apply_template(conn: &Connection, transaction_id: i64, recurring_i
 /// Whether the parts and templates in the database follow the rules, looked at as a whole. The database checks each step of a change, but
 /// stands aside while a sync, a restore or a currency conversion writes the pieces in some order; those call this when they are done, and
 /// refuse the result if it is `false`. The rules: the parts of a bill add up to no more than the bill, at most 30 of them, and only an
-/// expense is split; a template belongs to an expense, has at most 30 parts and at least one weight above 0.
+/// expense is split or has a payer; a template belongs to an expense, has at most 30 parts and at least one weight above 0, and has a payer
+/// only when it has a weight for you; nobody pays a bill, or a template, who was merged into another friend.
 pub fn check(conn: &Connection) -> Result<bool, AppError> {
     let bad = |sql: &str| -> Result<bool, AppError> { Ok(conn.query_row(sql, [], |r| r.get::<_, i64>(0))? > 0) };
     let violations = [
@@ -641,6 +709,10 @@ pub fn check(conn: &Connection) -> Result<bool, AppError> {
         "SELECT count(*) FROM recurring_transactions r JOIN categories c ON c.id = r.category_id WHERE r.split_my_weight IS NOT NULL AND c.type = 'INCOME'",
         "SELECT count(*) FROM recurring_transactions r WHERE r.split_my_weight IS NOT NULL
            AND r.split_my_weight + COALESCE((SELECT SUM(weight) FROM recurring_split_lines l WHERE l.recurring_transaction_id = r.id), 0) = 0",
+        "SELECT count(*) FROM transactions t JOIN categories c ON c.id = t.category_id WHERE t.paid_by IS NOT NULL AND c.type = 'INCOME'",
+        "SELECT count(*) FROM recurring_transactions WHERE split_paid_by IS NOT NULL AND split_my_weight IS NULL",
+        "SELECT count(*) FROM transactions t JOIN people p ON p.id = t.paid_by WHERE p.merged_into IS NOT NULL",
+        "SELECT count(*) FROM recurring_transactions r JOIN people p ON p.id = r.split_paid_by WHERE p.merged_into IS NOT NULL",
     ];
     for sql in violations {
         if bad(sql)? {

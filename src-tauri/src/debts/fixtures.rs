@@ -60,11 +60,11 @@ pub(crate) fn with(mut part: Part, value: &str) -> Part {
 }
 
 pub(crate) fn equal(parts: Vec<Part>) -> SplitInput {
-    SplitInput { mode: Mode::Equal, mine: None, parts }
+    SplitInput { mode: Mode::Equal, mine: None, parts, paid_by: None }
 }
 
 pub(crate) fn input(mode: Mode, mine: Option<&str>, parts: Vec<Part>) -> SplitInput {
-    SplitInput { mode, mine: mine.map(str::to_string), parts }
+    SplitInput { mode, mine: mine.map(str::to_string), parts, paid_by: None }
 }
 
 pub(crate) fn one(conn: &Connection, sql: &str) -> i64 {

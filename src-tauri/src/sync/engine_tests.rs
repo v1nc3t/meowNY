@@ -8,7 +8,7 @@ use std::time::Duration;
 use rusqlite::{params, Connection};
 
 use super::engine::{self, snapshot, Incoming, RowsCollector, SyncError, Warning};
-use super::run::{sync, Outcome};
+use super::run::{sync, sync_with_clocks, Outcome};
 use super::stamp::{self, Stamp};
 use super::wire::{self, Marker, Message, Row, Table};
 use crate::budgets::{self, Scope, SetBudget};
@@ -490,8 +490,8 @@ fn devices_with_the_same_generation_but_another_currency_do_not_sync() {
 #[test]
 fn hellos_are_checked_for_version_clock_and_identity() {
     let (a, b) = (device("EUR"), device("EUR"));
-    let mine = engine::hello(&a, "desktop", "0.1.0").unwrap();
-    let theirs = engine::hello(&b, "phone", "0.1.0").unwrap();
+    let mine = engine::hello(&a, "desktop", "0.1.0", now()).unwrap();
+    let theirs = engine::hello(&b, "phone", "0.1.0", now()).unwrap();
     assert_eq!(engine::check_hello(&mine, &theirs, now()).unwrap(), vec![]);
 
     let changed = |f: &dyn Fn(&mut wire::Hello)| {
@@ -509,8 +509,193 @@ fn hellos_are_checked_for_version_clock_and_identity() {
     let warned = engine::check_hello(&mine, &at(now() + 90_000), now()).unwrap();
     assert!(matches!(warned.as_slice(), [Warning::ClockOff(s)] if (89..=91).contains(s)), "{warned:?}");
     assert!(engine::check_hello(&mine, &at(now() + 30_000), now()).unwrap().is_empty(), "half a minute is nothing to mention");
-    assert!(matches!(engine::check_hello(&mine, &at(now() + 2 * 86_400_000), now()), Err(SyncError::ClockFarOff)));
-    assert!(matches!(engine::check_hello(&mine, &at(now().saturating_sub(2 * 86_400_000)), now()), Err(SyncError::ClockFarOff)));
+    // however far apart the clocks are, the sync goes on; the gap is only told
+    for days in [2, 3, 400] {
+        let ahead = engine::check_hello(&mine, &at(now() + days * 86_400_000), now()).unwrap();
+        assert!(matches!(ahead.as_slice(), [Warning::ClockOff(s)] if s.abs_diff(days * 86_400) <= 1), "{days} days ahead: {ahead:?}");
+        let behind = engine::check_hello(&mine, &at(now().saturating_sub(days * 86_400_000)), now()).unwrap();
+        assert!(matches!(behind.as_slice(), [Warning::ClockOff(s)] if s.abs_diff(days * 86_400) <= 1), "{days} days behind: {behind:?}");
+    }
+}
+
+// --- the computer's clock wins ----------------------------------------------------------------------------------
+
+const DAY: u64 = 86_400_000;
+
+/// Runs `f` as a device whose wall clock is `skew_ms` away from the real one would. SQLite's triggers read the real clock, so the skew
+/// is put into the offset (which they add) for as long as `f` runs.
+fn skewed<R>(conn: &Connection, skew_ms: i64, f: impl FnOnce() -> R) -> R {
+    let stored = stamp::offset_ms(conn).unwrap();
+    conn.execute("UPDATE sync_clock SET offset_ms = ?1", [stored + skew_ms]).unwrap();
+    let out = f();
+    conn.execute("UPDATE sync_clock SET offset_ms = ?1", [stored]).unwrap();
+    out
+}
+
+fn stamp_of_row(conn: &Connection, table: &str, id: i64) -> Stamp {
+    Stamp::parse(&text(conn, &format!("SELECT stamp FROM {table} WHERE id = {id}"))).unwrap()
+}
+
+fn warned_days(outcome: &Outcome, days: u64) -> bool {
+    matches!(outcome.warnings.as_slice(), [Warning::ClockOff(s)] if s.abs_diff(days * 86_400) <= 1)
+}
+
+#[test]
+fn a_phone_three_days_ahead_syncs_with_a_warning_and_its_stamps_are_pulled_back() {
+    let (mut desktop, mut phone) = paired();
+    let p = id_of(&phone, "transactions", "Coffee");
+    skewed(&phone, 3 * DAY as i64, || phone.execute("UPDATE transactions SET name = 'Phone ahead' WHERE id = ?1", [p]).unwrap());
+    let ahead = stamp_of_row(&phone, "transactions", p);
+    assert!(ahead.ms > now() + 2 * DAY, "the edit carries the phone's wrong time");
+
+    pause();
+    let h = now();
+    let outcome = sync_with_clocks(&mut desktop, &mut phone, TODAY, h, h + 3 * DAY, None).unwrap();
+    assert!(warned_days(&outcome, 3), "{:?}", outcome.warnings);
+    assert!(!outcome.differences);
+    assert_same(&desktop, &phone, "after one sync");
+
+    // nothing of the phone's is ahead of the computer any more; the edit kept its counter and device part
+    assert!(stamp::max_stamp(&phone).unwrap().unwrap().ms <= h);
+    let pulled = stamp_of_row(&phone, "transactions", p);
+    assert_eq!((pulled.ms, pulled.counter, &pulled.device), (h, ahead.counter, &ahead.device));
+    assert_eq!(count(&phone, "SELECT last_ms FROM sync_clock") as u64, h, "the clock went back with them");
+    assert_eq!(stamp::offset_ms(&phone).unwrap(), -3 * DAY as i64);
+    assert_eq!(count(&phone, "SELECT applying FROM sync_clock"), 0);
+    assert_eq!(count(&desktop, "SELECT count(*) FROM transactions WHERE name = 'Phone ahead'"), 1, "the edit reached the computer");
+    assert_eq!(stamp::offset_ms(&desktop).unwrap(), 0);
+
+    // a later edit on the computer is newer than the phone's earlier one, as it should be
+    pause();
+    let d = id_of(&desktop, "transactions", "Phone ahead");
+    desktop.execute("UPDATE transactions SET name = 'Desktop later' WHERE id = ?1", [d]).unwrap();
+    let h2 = now();
+    let outcome = sync_with_clocks(&mut desktop, &mut phone, TODAY, h2, h2 + 3 * DAY, None).unwrap();
+    assert!(!outcome.differences);
+    assert_same(&desktop, &phone, "after the second sync");
+    assert_eq!(count(&phone, "SELECT count(*) FROM transactions WHERE name = 'Desktop later'"), 1);
+    assert_eq!(count(&phone, "SELECT count(*) FROM transactions WHERE name = 'Phone ahead'"), 0);
+    assert_eq!(stamp::offset_ms(&phone).unwrap(), -3 * DAY as i64, "measured again at every sync");
+}
+
+#[test]
+fn a_phone_three_days_behind_syncs_and_a_later_edit_on_it_beats_an_older_one_on_the_computer() {
+    let (mut desktop, mut phone) = paired();
+    let d = id_of(&desktop, "transactions", "Tea");
+    desktop.execute("UPDATE transactions SET name = 'Desktop older' WHERE id = ?1", [d]).unwrap();
+    pause();
+    let h = now();
+    // the computer's change is dated 3 days after the phone's own clock: it still comes in, because the phone goes by the computer's time
+    let outcome = sync_with_clocks(&mut desktop, &mut phone, TODAY, h, h - 3 * DAY, None).unwrap();
+    assert!(warned_days(&outcome, 3), "{:?}", outcome.warnings);
+    assert!(!outcome.differences);
+    assert_same(&desktop, &phone, "after one sync");
+    assert_eq!(stamp::offset_ms(&phone).unwrap(), 3 * DAY as i64);
+    assert_eq!(stamp::offset_ms(&desktop).unwrap(), 0);
+
+    // an edit on the phone after the sync, with its clock still 3 days behind
+    pause();
+    let p = id_of(&phone, "transactions", "Desktop older");
+    skewed(&phone, -(3 * DAY as i64), || phone.execute("UPDATE transactions SET name = 'Phone newer' WHERE id = ?1", [p]).unwrap());
+    assert!(stamp_of_row(&phone, "transactions", p).ms >= h, "it is stamped with the computer's time, not the phone's");
+
+    let h2 = now();
+    let outcome = sync_with_clocks(&mut desktop, &mut phone, TODAY, h2, h2 - 3 * DAY, None).unwrap();
+    assert!(!outcome.differences);
+    assert_same(&desktop, &phone, "after the second sync");
+    assert_eq!(count(&desktop, "SELECT count(*) FROM transactions WHERE name = 'Phone newer'"), 1);
+    assert_eq!(count(&desktop, "SELECT count(*) FROM transactions WHERE name = 'Desktop older'"), 0);
+}
+
+#[test]
+fn the_computer_never_applies_an_offset_to_its_own_clock() {
+    let (mut desktop, mut phone) = paired();
+    for skew in [3 * DAY as i64, -(3 * DAY as i64), 5_000] {
+        let h = now();
+        sync_with_clocks(&mut desktop, &mut phone, TODAY, h, h.saturating_add_signed(skew), None).unwrap();
+        assert_eq!(stamp::offset_ms(&desktop).unwrap(), 0, "skew {skew}");
+        assert_eq!(stamp::offset_ms(&phone).unwrap(), -skew, "the phone's offset is the computer's clock minus its own, also when small");
+        assert!(stamp::clock_ms(&desktop).unwrap().abs_diff(now()) < 1000);
+    }
+    assert!(stamp::tick(&desktop).unwrap().ms.abs_diff(now()) < 1000);
+}
+
+#[test]
+fn a_gap_between_the_clocks_never_stops_a_sync() {
+    for skew in [DAY as i64 + 1, 30 * DAY as i64, 400 * DAY as i64, -(DAY as i64) - 1, -(400 * DAY as i64)] {
+        let (mut desktop, mut phone) = paired();
+        let food = id_of(&phone, "categories", "Food");
+        skewed(&phone, skew, || spend(&phone, food, "From the phone", "1.00"));
+        let h = now();
+        let outcome = sync_with_clocks(&mut desktop, &mut phone, TODAY, h, h.saturating_add_signed(skew), None).unwrap_or_else(|e| panic!("skew {skew}: {e}"));
+        assert!(!outcome.differences, "skew {skew}");
+        assert_same(&desktop, &phone, "after one sync");
+        assert_eq!(count(&desktop, "SELECT count(*) FROM transactions WHERE name = 'From the phone'"), 1);
+        assert!(stamp::max_stamp(&desktop).unwrap().unwrap().ms <= h, "skew {skew}: nothing on the computer is dated after the computer's own time");
+    }
+}
+
+#[test]
+fn following_the_computer_pulls_back_every_stamp_that_is_ahead_and_nothing_else() {
+    let (mut desktop, mut phone) = paired();
+    currency::change(&mut desktop, "GBP", Some("0.8"), TODAY).unwrap();
+    sync_ok(&mut desktop, &mut phone);
+    let before = engine::digest(&phone).unwrap();
+    assert!(before.0.values().flatten().all(|(_, (s, _))| Stamp::parse(s).unwrap().ms <= now()));
+
+    // the phone's clock is 3 days ahead: it changes a transaction, a category, the shared settings, adds a payment and deletes another
+    let (coffee, tea) = (id_of(&phone, "transactions", "Coffee"), id_of(&phone, "transactions", "Tea"));
+    let food = id_of(&phone, "categories", "Food");
+    skewed(&phone, 3 * DAY as i64, || {
+        phone.execute("UPDATE transactions SET name = 'Coffee, ahead' WHERE id = ?1", [coffee]).unwrap();
+        phone.execute("UPDATE categories SET name = 'Food, ahead' WHERE id = ?1", [food]).unwrap();
+        phone.execute("UPDATE settings SET timezone = 'Europe/Paris'", []).unwrap();
+        spend(&phone, food, "New, ahead", "1.00");
+        transactions::delete(&phone, tea).unwrap();
+    });
+    // the record of currency changes carries a stamp too
+    phone.execute("UPDATE currency_changes SET stamp = ?1", [Stamp::new(now() + 3 * DAY, 9, "abcdef01").format()]).unwrap();
+    let ahead = engine::digest(&phone).unwrap();
+    let h = now();
+    assert!(ahead.0.values().flatten().filter(|(_, (s, _))| Stamp::parse(s).unwrap().ms > h).count() >= 5, "the edits above are ahead");
+
+    let hello = engine::hello(&desktop, "desktop", "0.1.0", h).unwrap();
+    engine::follow_desktop_clock(&mut phone, &hello, h + 3 * DAY).unwrap();
+    let after = engine::digest(&phone).unwrap();
+    for (table, entries) in &ahead.0 {
+        for (id, (old, deleted)) in entries {
+            let old = Stamp::parse(old).unwrap();
+            let expected = if old.ms > h { Stamp::new(h, old.counter, &old.device) } else { old.clone() };
+            assert_eq!(after.0[table][id], (expected.format(), *deleted), "{table:?} {id}");
+        }
+    }
+    for table in stamp::STAMPED_TABLES.iter().copied().chain(["sync_deleted", "currency_changes"]) {
+        assert_eq!(count(&phone, &format!("SELECT count(*) FROM {table} WHERE substr(stamp, 1, 13) > '{h:013}'")), 0, "{table}");
+    }
+    assert_eq!(text(&phone, "SELECT stamp FROM currency_changes"), Stamp::new(h, 9, "abcdef01").format(), "the record of currency changes too");
+    assert_eq!(count(&phone, "SELECT last_ms FROM sync_clock") as u64, h);
+    assert_eq!(stamp::offset_ms(&phone).unwrap(), -3 * DAY as i64);
+    assert_eq!(count(&phone, "SELECT applying FROM sync_clock"), 0);
+
+    // the clock is not behind what was kept, so the next edit is newer than everything held (the phone's clock is still 3 days ahead)
+    let newest = stamp::max_stamp(&phone).unwrap().unwrap();
+    skewed(&phone, 3 * DAY as i64, || phone.execute("UPDATE transactions SET name = 'After' WHERE id = ?1", [coffee]).unwrap());
+    assert!(stamp_of_row(&phone, "transactions", coffee) > newest);
+}
+
+#[test]
+fn a_peer_that_did_not_pull_its_stamps_back_is_still_refused() {
+    let (mut desktop, phone) = paired();
+    let p = id_of(&phone, "transactions", "Coffee");
+    skewed(&phone, 3 * DAY as i64, || phone.execute("UPDATE transactions SET name = 'Phone ahead' WHERE id = ?1", [p]).unwrap());
+    let incoming = rows_to(&phone, &desktop);
+    let before = snapshot(&desktop).unwrap();
+    assert!(matches!(engine::apply(&mut desktop, &incoming, now(), None), Err(SyncError::ClockFarOff)));
+    assert_eq!(snapshot(&desktop).unwrap(), before);
+    // the currency changes are checked the same way
+    let change = wire::CurrencyChange { generation: 1, from: "EUR".into(), to: "USD".into(), rate: Some("1.1".into()), stamp: Stamp::new(now() + 3 * DAY, 0, "abcdef01").format() };
+    let mut other = new_phone(&desktop);
+    assert!(matches!(engine::apply_currency(&mut other, &[change], TODAY, now()), Err(SyncError::ClockFarOff)));
 }
 
 // --- what arrives is not trusted --------------------------------------------------------------------------------
@@ -651,6 +836,7 @@ fn a_marker_for_a_row_this_device_never_had_is_remembered_so_the_row_cannot_come
                 planned_amount_minor: None,
                 payment_date: "2026-03-01".into(),
                 description: None,
+                paid_by: None,
                 split: Vec::new(),
                 created_at: "2026-03-01T10:00:00.000Z".into(),
                 updated_at: "2026-03-01T10:00:00.000Z".into(),
@@ -960,14 +1146,17 @@ fn edit_debts(conn: &mut Connection, rng: &mut Rng) {
         out.retain(|p| seen.insert((p.person_id.clone(), p.guest.clone())));
         out
     };
+    // sometimes the first friend on the split paid it
+    let payer = |rng: &mut Rng, parts: &[Part]| parts.iter().find_map(|p| p.person_id.clone()).filter(|_| rng.below(3) == 0);
     let split = |rng: &mut Rng, mut parts: Vec<Part>| -> SplitInput {
+        let paid_by = payer(rng, &parts);
         if rng.below(2) == 0 {
-            SplitInput { mode: Mode::Equal, mine: None, parts }
+            SplitInput { mode: Mode::Equal, mine: None, parts, paid_by }
         } else {
             for p in &mut parts {
                 p.value = Some(rng.below(5).to_string());
             }
-            SplitInput { mode: Mode::Shares, mine: Some((1 + rng.below(4)).to_string()), parts }
+            SplitInput { mode: Mode::Shares, mine: Some((1 + rng.below(4)).to_string()), parts, paid_by }
         }
     };
     match rng.below(16) {
@@ -1035,7 +1224,8 @@ fn edit_debts(conn: &mut Connection, rng: &mut Rng) {
                 let _ = splits::clear_template(conn, id);
             } else {
                 let p = parts(rng);
-                let _ = splits::set_template(conn, id, &SplitInput { mode: Mode::Shares, mine: Some((1 + rng.below(3)).to_string()), parts: p.into_iter().map(|mut x| { x.value = Some((1 + rng.below(3)).to_string()); x }).collect() });
+                let paid_by = payer(rng, &p);
+                let _ = splits::set_template(conn, id, &SplitInput { mode: Mode::Shares, mine: Some((1 + rng.below(3)).to_string()), parts: p.into_iter().map(|mut x| { x.value = Some((1 + rng.below(3)).to_string()); x }).collect(), paid_by });
             }
         }
         14 if !items.is_empty() => {
@@ -1655,7 +1845,7 @@ fn what_a_device_changed_in_documents_counts_as_waiting_for_the_next_sync() {
 mod debts {
     use super::*;
     use crate::debts::fixtures::{equal, friend, guest, input, with, who};
-    use crate::debts::splits::{check, set_split, set_template, Mode};
+    use crate::debts::splits::{check, set_split, set_template, Mode, SplitInput};
 
     fn food(conn: &Connection) -> i64 {
         id_of(conn, "categories", "Food")
@@ -1712,6 +1902,48 @@ mod debts {
         set_split(&desktop, dinner, &equal(vec![who(bob)])).unwrap();
         sync_ok(&mut desktop, &mut phone);
         assert_eq!(parts_of(&phone, "Dinner"), [("Bob".to_string(), 4500)]);
+    }
+
+    #[test]
+    fn the_friend_who_paid_a_bill_or_pays_a_template_arrives_with_it_and_changes_with_it() {
+        let (mut desktop, mut phone) = paired();
+        let anna = friend(&desktop, "Anna");
+        let dinner = spend(&desktop, food(&desktop), "Dinner", "90.00");
+        set_split(&desktop, dinner, &SplitInput { paid_by: Some(anna.to_string()), ..equal(vec![who(anna), guest("Carl")]) }).unwrap();
+        let item = id_of(&desktop, "recurring_transactions", "Rent");
+        set_template(&desktop, item, &SplitInput { paid_by: Some(anna.to_string()), ..equal(vec![who(anna)]) }).unwrap();
+        sync_ok(&mut desktop, &mut phone);
+        assert_eq!(text(&phone, "SELECT p.name FROM transactions t JOIN people p ON p.id = t.paid_by WHERE t.name = 'Dinner'"), "Anna");
+        assert_eq!(text(&phone, "SELECT p.name FROM recurring_transactions r JOIN people p ON p.id = r.split_paid_by"), "Anna");
+        assert_eq!(balance(&phone, "Anna"), -3000, "you owe the friend who paid your part");
+        // the bill becomes yours on the desktop; the change of the payer alone is a change of the bill
+        pause();
+        set_split(&desktop, dinner, &equal(vec![who(anna)])).unwrap();
+        sync_ok(&mut desktop, &mut phone);
+        assert_eq!(count(&phone, "SELECT count(*) FROM transactions WHERE paid_by IS NOT NULL"), 0);
+        assert_eq!(balance(&phone, "Anna"), 4500);
+        pause();
+        set_split(&phone, id_of(&phone, "transactions", "Dinner"), &SplitInput { paid_by: Some(id_of(&phone, "people", "Anna").to_string()), ..equal(vec![who(id_of(&phone, "people", "Anna"))]) }).unwrap();
+        sync_ok(&mut desktop, &mut phone);
+        assert_eq!(count(&desktop, "SELECT count(*) FROM transactions WHERE paid_by IS NOT NULL"), 1, "a change that is only the payer");
+    }
+
+    #[test]
+    fn a_friend_who_paid_and_is_merged_into_the_same_friend_of_the_other_device_stays_the_payer() {
+        let (mut desktop, mut phone) = paired();
+        let (on_desktop, on_phone) = (friend(&desktop, "Anna"), friend(&phone, "anna"));
+        let dinner = spend(&desktop, food(&desktop), "Dinner", "90.00");
+        set_split(&desktop, dinner, &SplitInput { paid_by: Some(on_desktop.to_string()), ..equal(vec![who(on_desktop)]) }).unwrap();
+        let item = id_of(&phone, "recurring_transactions", "Rent");
+        set_template(&phone, item, &SplitInput { paid_by: Some(on_phone.to_string()), ..equal(vec![who(on_phone)]) }).unwrap();
+        sync_ok(&mut desktop, &mut phone);
+        for conn in [&desktop, &phone] {
+            assert_eq!(count(conn, "SELECT count(*) FROM people WHERE merged_into IS NOT NULL"), 1, "one Anna");
+            assert_eq!(count(conn, "SELECT count(*) FROM transactions t JOIN people p ON p.id = t.paid_by WHERE t.name = 'Dinner' AND p.merged_into IS NULL"), 1, "the bill moved to the one kept");
+            assert_eq!(count(conn, "SELECT count(*) FROM recurring_transactions r JOIN people p ON p.id = r.split_paid_by WHERE p.merged_into IS NULL"), 1, "and the template");
+            assert_eq!(balance(conn, "Anna"), -4500);
+            assert!(check(conn).unwrap());
+        }
     }
 
     #[test]
@@ -1903,7 +2135,7 @@ mod debts {
     fn a_code_taken_in_on_both_devices_ends_as_one_entry_and_two_expenses_stay_because_each_device_made_its_own() {
         use crate::debts::codes::{accept, encode, Accept, BillCode};
         let (mut desktop, mut phone) = paired();
-        let code = encode(&BillCode { id: "cd".repeat(16), from: "Vincent".into(), what: "Dinner".into(), date: "2026-03-04".into(), amount_minor: 2250, total_minor: 9000, currency: "EUR".into() });
+        let code = encode(&BillCode { id: "cd".repeat(16), from: "Vincent".into(), what: "Dinner".into(), date: "2026-03-04".into(), amount_minor: 2250, total_minor: 9000, currency: "EUR".into(), paid_by: None });
         let take = |conn: &Connection, expense: bool| {
             accept(
                 conn,

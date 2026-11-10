@@ -29,12 +29,13 @@ const SAME_AS_ENGLISH = new Set([
   'fr lock.15m', 'fr tx.title',
   'fr report.date', 'fr report.page',
   'de nav.export', 'de export.title', 'fr export.format', 'ro export.format',
-  'es keys.groupGeneral', 'ro keys.groupGeneral', 'fr keys.groupActions', 'fr settings.notifications',
+  'es keys.groupGeneral', 'ro keys.groupGeneral', 'fr keys.groupActions', 'fr settings.notifications', 'fr debts.notifications',
   'de nav.sync', 'de phone.passphrase', 'de rec.confirmTitle', 'es rec.confirmTitle', 'fr rec.confirmTitle', 'it rec.confirmTitle', 'pt rec.confirmTitle', 'ro rec.confirmTitle', 'es common.no', 'it common.no',
   'de sync.table.budgets', 'de sync.field.name', 'de sync.field.locale', 'fr sync.table.transactions', 'fr sync.table.budgets', 'fr sync.field.date', 'fr sync.field.description', 'fr sync.field.type', 'fr sync.field.locale', 'it sync.table.budgets', 'ro sync.field.locale',
   'fr nav.documents', 'fr docs.title', 'fr docs.kindImage', 'fr docs.kindTransaction',
   'fr sync.table.documents', 'fr sync.field.document', 'ro sync.table.documents', 'ro sync.field.document',
-  'fr debts.note', 'fr sync.field.note', 'ro debts.net', 'de common.details', 'de common.optional', 'fr docs.typeImage',
+  'fr debts.note', 'fr sync.field.note', 'de debts.colStatus', 'ro debts.net', 'de common.details', 'de common.optional', 'fr docs.typeImage',
+  'de code.show', 'fr code.show',
 ])
 
 test('no translation is empty or an untranslated copy of the English text', () => {

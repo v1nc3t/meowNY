@@ -10,6 +10,7 @@ import { passphraseProblem } from './rules'
 import { useNotice } from '../hooks/useNotice'
 import { useProfile } from '../hooks/profile'
 import { useT } from '../i18n/context'
+import AppFooter, { UpdateLink } from '../components/AppFooter'
 import Button from '../components/ui/Button'
 import { Logo } from '../components/ui/Pixel'
 
@@ -140,9 +141,16 @@ export default function LockScreen({ onUnlocked }: { onUnlocked: () => void }) {
           </Button>
           <p className="notice" role="alert">
             {message}
+            {message === messageFor('database_too_new') ? (
+              <>
+                {' '}
+                <UpdateLink />
+              </>
+            ) : null}
           </p>
         </form>
         {busy && <Decrypting below done={workDone} />}
+        {busy ? null : <AppFooter />}
       </main>
     )
   }
@@ -183,9 +191,17 @@ export default function LockScreen({ onUnlocked }: { onUnlocked: () => void }) {
         {keyMissing ? <p className="notice">{messageFor('key_unavailable')}</p> : null}
         <p className="notice" role="alert">
           {message}
+          {message === messageFor('database_too_new') ? (
+            <>
+              {' '}
+              <UpdateLink />
+            </>
+          ) : null}
         </p>
       </form>
       {busy && <Decrypting below done={workDone} />}
+      {/* The loading line takes the foot of the screen while the data opens. */}
+      {busy ? null : <AppFooter />}
     </main>
   )
 }

@@ -2,27 +2,17 @@ import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { errorText, inDesktopApp, vault, type LockPrefs } from '../vault/api'
 import { useI18n } from '../i18n/context'
+import AppFooter from '../components/AppFooter'
 import ChangeCurrencyModal from '../components/ChangeCurrencyModal'
 import CommandApiBlock from '../components/CommandApiBlock'
 import PhoneSyncBlock from '../components/PhoneSyncBlock'
-import { buttonClass, cn } from '../components/ui/cn'
+import { cn } from '../components/ui/cn'
 import type { Settings } from '../vault/rules'
 import { useToast } from '../hooks/toast'
 import { useProfile } from '../hooks/profile'
 import { syncApi } from '../api/sync'
 import { AppearanceSection, AppLockSection, FriendNameSection, NotificationsSection, RegionSection } from './settings/GeneralSections'
 import { BackupSection, DataSection, RecoverySection } from './settings/DataSections'
-
-// The copyright line at the foot of the settings, on the computer and the phone.
-const YEAR = new Date().getFullYear()
-
-// The links at the foot of the settings. The person opens them in the browser; the app makes no request.
-const LINKS = {
-  source: 'https://github.com/v1nc3t/meowNY',
-  discussions: 'https://github.com/v1nc3t/meowNY/discussions',
-  sponsor: 'https://ko-fi.com/v1nc3t',
-  releases: 'https://github.com/v1nc3t/meowNY/releases/latest',
-}
 
 /** The sections of the page, in the order they are listed. The id is what `?section=` holds, so a link can open one. */
 const SECTIONS = [
@@ -134,7 +124,7 @@ export default function SettingsPage() {
         />
       ) : null}
 
-      <div ref={paneRef} className={cn('tx-pane', 'wide', 'settings-layout', phone && 'is-list')}>
+      <div ref={paneRef} className="tx-pane wide settings-layout">
         {phone ? (
           current ? null : (
             <nav className="settings-list" aria-label={t('settings.title')}>
@@ -177,27 +167,12 @@ export default function SettingsPage() {
             {body(current.id)}
           </div>
         ) : null}
+
+        {/* On the computer the foot stays at the bottom of the window; on a phone it ends the scrolling page, above the bottom tabs. */}
+        {phone ? <AppFooter /> : null}
       </div>
 
-      <footer className="settings-footer">
-        <nav className="settings-links" aria-label={t('settings.linksLabel')}>
-          <a href={LINKS.source} target="_blank" rel="noreferrer">
-            {t('settings.linkSource')}
-          </a>
-          <a href={LINKS.discussions} target="_blank" rel="noreferrer">
-            {t('settings.linkDiscussions')}
-          </a>
-        </nav>
-        <div className="settings-footer-actions">
-          <a className={buttonClass('outline', 'sm')} href={LINKS.releases} target="_blank" rel="noreferrer">
-            {t('settings.linkUpdate')}
-          </a>
-          <a className={buttonClass('outline', 'sm')} href={LINKS.sponsor} target="_blank" rel="noreferrer">
-            {t('settings.linkSponsor')}
-          </a>
-        </div>
-        <p>© {YEAR} meowny · AGPL-3.0</p>
-      </footer>
+      {phone ? null : <AppFooter />}
     </section>
   )
 }

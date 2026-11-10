@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { apiBound, lastDay, shiftBound } from './range.ts'
+import { apiBound, lastDay, presentRange, shiftBound } from './range.ts'
 
 test('a value that is not a whole one of its kind is no bound', () => {
   for (const [mode, value] of [['date', '2026-03'], ['date', ''], ['month', '2026-13'], ['month', '2026-3'], ['month', '2026-03-01'], ['year', '26'], ['year', '2026-03']] as const) {
@@ -32,4 +32,11 @@ test('changing how a range is chosen keeps what it covers as far as it can', () 
   assert.equal(shiftBound('', 'date', 'month', 'from'), '')
   assert.equal(shiftBound('2026-03', 'month', 'month', 'from'), '2026-03')
   assert.equal(shiftBound('garbage', 'month', 'date', 'from'), '')
+})
+
+test('a list opens on the present in the kind of period that was remembered', () => {
+  const today = { month: '2026-02' }
+  assert.deepEqual(presentRange('year', today), { mode: 'year', from: '2026', to: '2026' })
+  assert.deepEqual(presentRange('month', today), { mode: 'month', from: '2026-02', to: '2026-02' })
+  assert.deepEqual(presentRange('date', today), { mode: 'date', from: '2026-02-01', to: '2026-02-28' })
 })

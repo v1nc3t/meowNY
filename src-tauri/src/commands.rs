@@ -35,6 +35,13 @@ use crate::vault::{AppError, Attempts, LockPrefs, Policy, Settings, Vault, Vault
 type Shared<'a> = State<'a, Arc<Vault>>;
 type Syncing<'a> = State<'a, Arc<SyncService<Vault>>>;
 
+/// The time the app goes by for every date it works out itself (today, the current month, what is due): the wall clock, moved on a phone
+/// by its distance from the computer's clock, which is the reference (`docs/sync-design.md`, section 10). The computer's is the wall clock.
+/// Not for durations, timeouts or expiry times: those stay on the system's clock.
+fn clock_now(vault: &Vault) -> Result<chrono::DateTime<chrono::Utc>, AppError> {
+    vault.with_conn(|c| crate::sync::stamp::clock_now(c))
+}
+
 /// Asking the person for a file or a folder. Only the desktop does it: the phone has no backup, export or recovery key file
 /// to save or load, so its build has neither these dialogs nor the dialog plugin (see `Cargo.toml`), and asking is refused.
 #[cfg(desktop)]
@@ -332,8 +339,14 @@ pub fn reorder_categories(vault: Shared, ids: Vec<String>) -> Result<(), AppErro
 pub fn delete_category(vault: Shared, id: String, month: Option<String>, span: Option<budgets::Span>) -> Result<(), AppError> {
     let id = categories::parse_id(&id)?;
     match (month, span) {
-        (Some(month), Some(span)) => vault.with_conn(|c| categories::delete_span(c, id, &month, span, chrono::Utc::now())),
-        _ => vault.with_conn(|c| categories::delete(c, id, chrono::Utc::now())),
+        (Some(month), Some(span)) => {
+            let now = clock_now(&vault)?;
+            vault.with_conn(|c| categories::delete_span(c, id, &month, span, now))
+        }
+        _ => {
+            let now = clock_now(&vault)?;
+            vault.with_conn(|c| categories::delete(c, id, now))
+        }
     }
 }
 
@@ -361,7 +374,8 @@ pub fn delete_transaction(vault: Shared, id: String) -> Result<(), AppError> {
 
 #[tauri::command]
 pub fn set_budget(vault: Shared, input: SetBudget, span: Option<budgets::Span>) -> Result<Budget, AppError> {
-    vault.with_conn(|c| budgets::set_span(c, &input, chrono::Utc::now(), span.unwrap_or_default()))
+    let now = clock_now(&vault)?;
+    vault.with_conn(|c| budgets::set_span(c, &input, now, span.unwrap_or_default()))
 }
 
 #[derive(serde::Deserialize)]
@@ -380,13 +394,14 @@ pub fn change_currency(vault: Shared, input: ChangeCurrency) -> Result<Conversio
         return Err(AppError::InvalidInput);
     }
     let timezone = vault.settings()?.timezone;
-    let today = clock::today(chrono::Utc::now(), &timezone)?.to_string();
+    let today = clock::today(clock_now(&vault)?, &timezone)?.to_string();
     vault.with_conn(|c| currency::change(c, &input.currency, input.rate.as_deref(), &today))
 }
 
 #[tauri::command]
 pub fn budget_history(vault: Shared) -> Result<Vec<budgets::MonthHistory>, AppError> {
-    vault.with_conn(|c| budgets::history(c, chrono::Utc::now()))
+    let now = clock_now(&vault)?;
+    vault.with_conn(|c| budgets::history(c, now))
 }
 
 #[tauri::command]
@@ -394,24 +409,28 @@ pub fn budget_overview(vault: Shared, month: String) -> Result<Vec<Overview>, Ap
     vault.with_conn(|c| budgets::overview(c, &month))
 }
 
-/// Today and this month in the user's timezone setting, so the UI never guesses from the browser clock.
+/// Today and this month in the user's timezone setting, so the UI never guesses from the browser clock. `offset_ms` is how far the
+/// device's clock is from the computer's (0 on the computer): the UI adds it to its own clock for the times of reminders.
 #[tauri::command]
 pub fn today(vault: Shared) -> Result<Today, AppError> {
     let timezone = vault.settings()?.timezone;
-    let date = clock::today(chrono::Utc::now(), &timezone)?;
-    Ok(Today { date: date.to_string(), month: date.format("%Y-%m").to_string() })
+    let date = clock::today(clock_now(&vault)?, &timezone)?;
+    let offset_ms = vault.with_conn(|c| crate::sync::stamp::offset_ms(c))?;
+    Ok(Today { date: date.to_string(), month: date.format("%Y-%m").to_string(), offset_ms })
 }
 
 #[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Today {
     pub date: String,
     pub month: String,
+    pub offset_ms: i64,
 }
 
 /// Today in the user's timezone setting; due dates and "overdue" use it, never the system date.
 fn today_text(vault: &Vault) -> Result<String, AppError> {
     let timezone = vault.settings()?.timezone;
-    Ok(clock::today(chrono::Utc::now(), &timezone)?.to_string())
+    Ok(clock::today(clock_now(vault)?, &timezone)?.to_string())
 }
 
 #[tauri::command]
@@ -1052,7 +1071,7 @@ pub fn debts_due_payments(vault: Shared) -> Result<crate::debts::dues::Due, AppE
 }
 
 /// The history of debts, newest first: the lines of every friend (or of one), the recurring payments that were paid and those that are
-/// due, in a range of dates if asked, a page at a time.
+/// due, in a range of dates if asked, or only the lines of friends or only the payments paid late, a page at a time.
 #[tauri::command]
 pub fn debts_history(vault: Shared, filter: crate::debts::history::Filter) -> Result<crate::debts::history::History, AppError> {
     let today = today_text(&vault)?;
@@ -1081,12 +1100,19 @@ pub fn delete_ledger_entry(vault: Shared, id: String) -> Result<(), AppError> {
 }
 
 /// "Mark as paid": a payment between the person and a friend. No amount means the whole balance; one larger than the debt is accepted and
-/// turns the balance around (the answer says how much was over).
+/// turns the balance around (the answer says how much was over). `transaction_id` links the payment to the transaction it was for.
 #[tauri::command]
-pub fn settle_person(vault: Shared, id: String, amount: Option<String>, date: Option<String>, note: Option<String>) -> Result<Settled, AppError> {
+pub fn settle_person(
+    vault: Shared,
+    id: String,
+    amount: Option<String>,
+    date: Option<String>,
+    note: Option<String>,
+    transaction_id: Option<String>,
+) -> Result<Settled, AppError> {
     let id = categories::parse_id(&id)?;
     let today = today_text(&vault)?;
-    vault.with_conn(|c| ledger::settle(c, id, amount.as_deref(), date.as_deref(), note.as_deref(), &today))
+    vault.with_conn(|c| ledger::settle(c, id, amount.as_deref(), date.as_deref(), note.as_deref(), transaction_id.as_deref(), &today))
 }
 
 /// What a split would give each person for a bill of `amount`, for the dialog, on every change. Writes nothing. The rule is here and

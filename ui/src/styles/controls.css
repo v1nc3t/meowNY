@@ -35,38 +35,43 @@
   font-size: 0.8125rem;
   color: var(--foreground);
   background: transparent;
-  border: 1px solid var(--input);
+  border: var(--border-width) solid var(--input);
   border-radius: var(--radius-md);
   box-shadow: var(--shadow-xs);
   white-space: nowrap;
   overflow: visible;
 }
 
-/* A thin chevron on the right; it flips while the list is open. */
-.pick-button::after {
+/* A pixel arrow on the right, three rows of 2px blocks (6, 4 and 2 wide... a stepped triangle); it turns over while the list is
+   open, in two steps, like a sprite. */
+.pick-button::after,
+.pick-toggle::after {
   content: '';
   position: absolute;
   top: 50%;
-  right: 0.875rem;
-  width: 0.3125rem;
-  height: 0.3125rem;
-  border-right: 1px solid currentColor;
-  border-bottom: 1px solid currentColor;
-  opacity: 0.5;
-  transform: translateY(-70%) rotate(45deg);
-  transition: transform 0.12s ease;
+  right: 0.75rem;
+  width: 10px;
+  height: 6px;
+  margin-top: -3px;
+  background:
+    linear-gradient(currentColor 0 0) 0 0 / 10px 2px no-repeat,
+    linear-gradient(currentColor 0 0) 2px 2px / 6px 2px no-repeat,
+    linear-gradient(currentColor 0 0) 4px 4px / 2px 2px no-repeat;
+  opacity: 0.6;
+  transition: transform var(--t-fast) steps(2, end);
 }
 
-.pick-button[aria-expanded='true']::after {
-  transform: translateY(-30%) rotate(-135deg);
+.pick-button[aria-expanded='true']::after,
+.pick-toggle[aria-expanded='true']::after {
+  transform: rotate(180deg);
 }
 
 .pick-button[aria-expanded='true'] {
   border-color: var(--ring);
-  box-shadow: 0 0 0 3px var(--ring-soft);
+  box-shadow: 0 0 0 1px var(--ring);
 }
 
-/* The list opens in a popover: a small raised card with a row for each choice. */
+/* The list opens in a popover: a small flat card with a row for each choice. */
 .pick-list {
   position: absolute;
   z-index: 30;
@@ -80,9 +85,9 @@
   overflow: auto;
   background: var(--popover);
   color: var(--popover-foreground);
-  border: 1px solid var(--border);
+  border: var(--border-width) solid var(--input);
   border-radius: var(--radius-md);
-  box-shadow: var(--shadow-md);
+  animation: panel-in var(--t-fast) var(--ease-step);
 }
 
 .pick-list > li {
@@ -124,6 +129,7 @@
 }
 
 .pick-list button:hover:not(:disabled),
+.pick-list button:active:not(:disabled),
 .pick-list button:focus {
   color: var(--accent-foreground);
   background: var(--accent);
@@ -165,28 +171,103 @@
   color: var(--muted-foreground);
 }
 
+/* A dropdown that can be typed into: a text field, with the arrow as a button over its right end. A wrong text turns the border red,
+   also while the field has focus. */
+.pick-input {
+  padding-right: 2.25rem;
+}
+
+.pick-toggle {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 2.25rem;
+  height: 2.25rem;
+  min-width: 0;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+.pick-input[aria-invalid='true'] {
+  border-color: var(--destructive);
+}
+
+/* Linking a payment to a transaction (the dialog of "mark as paid"): the button that opens the search, the line for the one chosen, and
+   the rows of the list, each a name with its date and amount. A long name is cut short so the amount always shows. */
+.tx-link-open {
+  align-self: flex-start;
+}
+
+.tx-link-line {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: 2.25rem;
+  padding: 0.25rem 0.25rem 0.25rem 0.75rem;
+  border: var(--border-width) solid var(--input);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-xs);
+}
+
+.tx-link-name,
+.tx-pick-name {
+  flex: 1 1 0;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tx-link-meta,
+.tx-pick-meta {
+  flex: none;
+  font-variant-numeric: tabular-nums;
+  opacity: 0.7;
+}
+
+.pick-list.tx-pick button {
+  display: flex;
+  gap: 0.75rem;
+  width: 100%;
+  padding-right: 0.5rem;
+}
+
+.pick-list > li.tx-pick-none {
+  padding: 0.5rem;
+  font-size: 0.8125rem;
+  color: var(--muted-foreground);
+}
+
 html:has(dialog[open]),
 body:has(dialog[open]) {
   overflow: hidden;
 }
 
-/* A dialog: a raised card in the middle of the screen over a dimmed page. */
+/* A dialog: a window in the middle of the screen over a dimmed page, with a thin line and one hard shadow, the only box that has one.
+   It opens with a short fade and grows into place; the page behind dims in. */
 .modal {
   width: min(32rem, calc(100vw - 2rem));
   max-height: calc(100svh - 2rem);
   margin: auto;
   padding: 0;
-  border: 1px solid var(--border);
+  border: var(--border-width) solid var(--border);
   border-radius: var(--radius-lg);
   background-color: var(--background);
   background-image: none;
+  box-shadow: var(--shadow-lg);
   color: var(--foreground);
   overflow: visible;
-  box-shadow: var(--shadow-lg);
+}
+
+.modal[open] {
+  animation: dialog-in var(--t-med) var(--ease-step);
 }
 
 .modal::backdrop {
   background: var(--overlay);
+  animation: fade-in var(--t-med) var(--ease-snap);
 }
 
 .modal-panel {
@@ -220,8 +301,7 @@ body:has(dialog[open]) {
 .modal-head h2 {
   margin: 0;
   font-size: 1.125rem;
-  font-weight: 600;
-  letter-spacing: -0.015em;
+  line-height: 1.3;
 }
 
 .modal form,
@@ -244,13 +324,9 @@ body:has(dialog[open]) {
   width: auto;
 }
 
-.month-nav .pick-button {
-  text-transform: lowercase;
-}
-
-/* The arrows are glyphs, not icons: a little larger so they read. */
+/* The arrows are glyphs of the text font, a little bigger so they read. */
 .month-nav > .ui-btn-icon {
-  font-size: 1.125rem;
+  font-size: 1.25rem;
   line-height: 1;
 }
 
@@ -278,8 +354,8 @@ body:has(dialog[open]) {
 
 .shortcut-group h3 {
   margin: 0 0 0.5rem;
-  font-size: 0.75rem;
-  letter-spacing: 0.04em;
+  font-size: 0.8125rem;
+  font-weight: 500;
   color: var(--muted-foreground);
 }
 
@@ -312,7 +388,7 @@ body:has(dialog[open]) {
 
 .span-hint {
   margin: 0.75rem 0 0;
-  font-size: 0.8125rem;
+  font-size: 0.875rem;
   color: var(--muted-foreground);
 }
 

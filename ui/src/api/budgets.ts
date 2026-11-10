@@ -26,6 +26,8 @@ export const Overview = z.object({
   remaining: Amount.nullable(),
   overAllocated: z.boolean(),
   categories: z.array(z.object({ categoryId: Id, amountLimit: Amount })),
+  /** What each category with transactions this month adds up to (your part of a shared one), with or without a budget. */
+  spent: z.array(z.object({ categoryId: Id, amount: Amount })),
 })
 export type Overview = z.infer<typeof Overview>
 

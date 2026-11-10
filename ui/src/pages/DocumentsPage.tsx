@@ -1,24 +1,29 @@
 import { useCallback, useEffect, useRef, useState, type ChangeEvent } from 'react'
 import ClipMark from '../components/ClipMark'
 import ConfirmModal from '../components/ConfirmModal'
+import DocumentDetails from '../components/DocumentDetails'
 import DocumentLinksModal from '../components/DocumentLinksModal'
 import DocumentModal from '../components/DocumentModal'
+import KeepToPreview from '../components/KeepToPreview'
+import Pager from '../components/Pager'
 import PreviewModal from '../components/PreviewModal'
 import Icon from '../components/NavIcon'
 import Pick, { PickOption } from '../components/Pick'
-import Badge from '../components/ui/Badge'
+import { IconAction, Row, Table, TapRow } from '../components/RowParts'
 import Button from '../components/ui/Button'
 import { EmptyState } from '../components/ui/Pixel'
 import { documents, type Doc, type DocPage, type LibrarySize, type Report } from '../api/documents'
 import { errorText } from '../api/invoke'
 import { useMoneySettings, type MoneySettings } from '../hooks/useMoneySettings'
+import { useOpenRow } from '../hooks/useOpenRow'
 import { useProfile } from '../hooks/profile'
 import { useDebounced } from '../hooks/useDebounced'
 import { dismissToast, toast, useToast } from '../hooks/toast'
 import { useT } from '../i18n/context'
 import { formatSize } from '../lib/bytes'
-import { canPreview, dropNotice, fileState, fileStateText, KIND_CHOICES, reportLines, type KindChoice } from '../lib/documents'
+import { canKeepToPreview, canPreview, dropNotice, fileState, fileStateText, KIND_CHOICES, reportLines, type KindChoice } from '../lib/documents'
 import { formatDate } from '../lib/money'
+import { saveChoice, storedChoice } from '../lib/sticky'
 import { useShortcut } from '../keys/registry'
 import { tip } from '../keys/tip'
 import { useRowNavigation } from '../keys/useRowNavigation'
@@ -36,8 +41,9 @@ function DocumentsView({ settings }: { settings: MoneySettings }) {
   const t = useT()
   const phone = useProfile() === 'phone'
   const locale = settings.locale
+  const rows = useOpenRow()
   const [q, setQ] = useState('')
-  const [kind, setKind] = useState<KindChoice>('')
+  const [kind, setKind] = useState<KindChoice>(() => storedChoice('docs.kind', KIND_CHOICES.map((choice) => choice.value), ''))
   const [kindMenu, setKindMenu] = useState(false)
   const [offset, setOffset] = useState(0)
   const [reload, setReload] = useState(0)
@@ -49,6 +55,8 @@ function DocumentsView({ settings }: { settings: MoneySettings }) {
   const [linking, setLinking] = useState<Doc | null>(null)
   const [deleting, setDeleting] = useState<Doc | null>(null)
   const [busy, setBusy] = useState(false)
+  // The documents whose "keep on phone" is being saved, with the value asked for: the box shows it and is off until the app answers.
+  const [keeping, setKeeping] = useState<Record<string, boolean>>({})
   // Held over the window by a drag. On the computer the window takes the drop itself (the web view cannot be relied on to hand a page the
   // files), and the page is told.
   const [dragging, setDragging] = useState(false)
@@ -182,6 +190,31 @@ function DocumentsView({ settings }: { settings: MoneySettings }) {
     }
   }
 
+  // "Keep on phone" saves as soon as the box is ticked (the same call as the switch in the details). The row becomes the document the app
+  // gives back; if the app says no, the box goes back to what it was.
+  async function onKeep(doc: Doc, keep: boolean) {
+    setKeeping((now) => ({ ...now, [doc.id]: keep }))
+    try {
+      const saved = await documents.update(doc.id, { keepOnPhone: keep })
+      setPage((now) => now && { ...now, documents: now.documents.map((row) => (row.id === saved.id ? saved : row)) })
+    } catch (failure) {
+      say(errorText(failure), 'error')
+    } finally {
+      setKeeping((now) => {
+        const rest = { ...now }
+        delete rest[doc.id]
+        return rest
+      })
+    }
+  }
+
+  /** What the "keep on phone" box of a document needs: it shows the value being saved, if there is one. */
+  const keepProps = (doc: Doc) => ({
+    checked: keeping[doc.id] ?? doc.keepOnPhone,
+    disabled: doc.id in keeping,
+    onChange: (event: ChangeEvent<HTMLInputElement>) => void onKeep(doc, event.target.checked),
+  })
+
   // Keyboard: n adds a file, / searches, j and k move between rows.
   useShortcut('new', () => fileInput.current?.click())
   useShortcut('search', () => searchRef.current?.focus())
@@ -189,7 +222,106 @@ function DocumentsView({ settings }: { settings: MoneySettings }) {
 
   const pageCount = page && page.limit > 0 ? Math.max(1, Math.ceil(page.total / page.limit)) : 0
   const currentPage = page && page.limit > 0 ? Math.floor(page.offset / page.limit) + 1 : 1
+  // on a phone the pages are the end of the scrolling list (the round add button covers the corner under it)
+  const pager = <Pager page={currentPage} count={pageCount} onPage={(number) => setOffset((number - 1) * LIMIT)} />
   const lines = report ? reportLines(report, phone) : []
+
+  /** Where the file is, in words, when that is not simply here. */
+  const stateOf = (doc: Doc) => fileStateText(fileState(doc, phone))
+
+  // A desktop row: the name, the day, the size, keep on phone, how many things the document is attached to, then preview, edit, save a
+  // copy and delete. It opens to the details.
+  function tableRow(doc: Doc) {
+    const state = stateOf(doc)
+    return (
+      <Row
+        key={doc.id}
+        rows={rows}
+        id={doc.id}
+        actions={
+          <>
+            <IconAction icon="eye" label={t('docs.previewButton')} disabled={!canPreview(doc)} onClick={() => setPreviewing(doc)} />
+            <IconAction icon="pencil" label={t('common.edit')} data-row-focus onClick={() => setViewing(doc.id)} />
+            {doc.hasFile && !phone ? <IconAction icon="download" label={t('docs.saveCopy')} onClick={() => void onSaveCopy(doc)} /> : <span className="icon-slot" />}
+            <IconAction icon="trash" label={t('common.delete')} danger onClick={() => setDeleting(doc)} />
+          </>
+        }
+        note={state ? t(state) : null}
+        panel={<DocumentDetails doc={doc} locale={locale} />}
+      >
+        <div className="cell-name">
+          <Icon name="documents" className="doc-icon" />
+          <span className="card-name" title={doc.name}>
+            {doc.name}
+          </span>
+        </div>
+        <span className="cell-sub">{formatDate(doc.documentDate, locale)}</span>
+        <span className="cell-sub-end">{formatSize(doc.sizeBytes, locale)}</span>
+        {/* The head names this column; the word beside the box shows only in a narrow list, which has no head. */}
+        <label className="cell-keep" title={t('docs.keepOnPhone')}>
+          <input type="checkbox" aria-label={`${doc.name} ${t('docs.keepOnPhone')}`} {...keepProps(doc)} />
+          <span aria-hidden="true">{t('docs.colPhone')}</span>
+        </label>
+        <div className="cell-links">{doc.linkCount > 0 ? <ClipMark count={doc.linkCount} onClick={() => setLinking(doc)} /> : null}</div>
+      </Row>
+    )
+  }
+
+  // A phone row: the name and the size, the day and where the file is under them. It opens to a labelled button for each thing to do
+  // (a file that stays on the computer gets a note and a button to keep it, instead of the preview; the note then replaces the small line;
+  // any other gets the box to keep it on the phone).
+  function tapRow(doc: Doc) {
+    const state = stateOf(doc)
+    const offer = canKeepToPreview(doc, phone)
+    return (
+      <TapRow
+        key={doc.id}
+        id={rows.panelId(doc.id)}
+        open={rows.isOpen(doc.id)}
+        onToggle={() => rows.toggle(doc.id)}
+        name={doc.name}
+        amount={<span className="cell-size">{formatSize(doc.sizeBytes, locale)}</span>}
+        sub={
+          <>
+            <span>{formatDate(doc.documentDate, locale)}</span>
+            {doc.keepOnPhone ? <span className="row-mark">{t('docs.keepOnPhone')}</span> : null}
+            {state && !(offer && rows.isOpen(doc.id)) ? <span className="is-line">{t(state)}</span> : null}
+          </>
+        }
+      >
+        {doc.linkCount > 0 ? (
+          <section className="detail-section">
+            <p className="detail-title">{t('docs.links')}</p>
+            <ClipMark count={doc.linkCount} onClick={() => setLinking(doc)} />
+          </section>
+        ) : null}
+        {offer ? null : (
+          <label>
+            <input type="checkbox" {...keepProps(doc)} />
+            {t('docs.keepOnPhone')}
+          </label>
+        )}
+        <div className="row-panel-actions">
+          {offer ? (
+            <KeepToPreview doc={doc} onKept={refresh} />
+          ) : (
+            <Button variant="outline" disabled={!canPreview(doc)} onClick={() => setPreviewing(doc)}>
+              <Icon name="eye" className="btn-icon" />
+              {t('docs.previewButton')}
+            </Button>
+          )}
+          <Button variant="outline" onClick={() => setViewing(doc.id)}>
+            <Icon name="pencil" className="btn-icon" />
+            {t('common.edit')}
+          </Button>
+          <Button variant="outline" className="row-danger" onClick={() => setDeleting(doc)}>
+            <Icon name="trash" className="btn-icon" />
+            {t('common.delete')}
+          </Button>
+        </div>
+      </TapRow>
+    )
+  }
 
   return (
     <section className={dragging ? 'tx-page doc-page is-dragging' : 'tx-page doc-page'}>
@@ -239,7 +371,7 @@ function DocumentsView({ settings }: { settings: MoneySettings }) {
         </label>
         <Pick
           label={t('common.type')}
-          className="scope"
+          className="kind"
           text={t(KIND_CHOICES.find((choice) => choice.value === kind)?.label ?? 'common.all')}
           open={kindMenu}
           onToggle={() => setKindMenu((open) => !open)}
@@ -250,6 +382,7 @@ function DocumentsView({ settings }: { settings: MoneySettings }) {
               key={choice.value}
               selected={kind === choice.value}
               onClick={() => {
+                saveChoice('docs.kind', choice.value)
                 setKind(choice.value)
                 setKindMenu(false)
                 setOffset(0)
@@ -269,64 +402,26 @@ function DocumentsView({ settings }: { settings: MoneySettings }) {
       {page ? (
         <>
           <div className="tx-pane wide">
-            {page.documents.length === 0 ? <EmptyState text={search || kind ? t('docs.noMatch') : t('docs.empty')} /> : null}
-            <ul className="card-list">
-              {page.documents.map((doc) => {
-                const state = fileStateText(fileState(doc, phone))
-                return (
-                  <li key={doc.id} className="card-item">
-                    <div className="card-body">
-                      <div className="doc-title">
-                        <Icon name="documents" className="doc-icon" />
-                        <p className="card-name">{doc.name}</p>
-                      </div>
-                      <p className="card-meta">
-                        {formatDate(doc.documentDate, locale)} · {formatSize(doc.sizeBytes, locale)}
-                        {doc.linkCount > 0 ? (
-                          <>
-                            {' · '}
-                            <ClipMark inline count={doc.linkCount} onClick={() => setLinking(doc)} />
-                          </>
-                        ) : null}
-                        {state ? ` · ${t(state)}` : ''}
-                      </p>
-                      {doc.keepOnPhone ? (
-                        <p className="card-meta doc-marks">
-                          <Badge variant="outline">{t('docs.keepOnPhone')}</Badge>
-                        </p>
-                      ) : null}
-                    </div>
-                    <div className="card-actions">
-                      <Button variant="ghost" size="sm" disabled={!canPreview(doc)} onClick={() => setPreviewing(doc)}>
-                        {t('docs.previewButton')}
-                      </Button>
-                      <Button variant="ghost" size="sm" data-row-focus onClick={() => setViewing(doc.id)}>
-                        {t('docs.details')}
-                      </Button>
-                      {doc.hasFile && !phone ? (
-                        <Button variant="ghost" size="sm" aria-label={t('docs.saveCopy')} onClick={() => void onSaveCopy(doc)}>
-                          {t('common.save')}
-                        </Button>
-                      ) : null}
-                      <Button variant="ghost" size="sm" className="row-danger" onClick={() => setDeleting(doc)}>
-                        {t('common.delete')}
-                      </Button>
-                    </div>
-                  </li>
-                )
-              })}
-            </ul>
+            {page.documents.length === 0 ? (
+              <EmptyState
+                text={search || kind ? t('docs.noMatch') : t('docs.empty')}
+                action={search || kind ? undefined : { label: t('docs.add'), onClick: () => fileInput.current?.click() }}
+              />
+            ) : phone ? (
+              <ul className="card-list">{page.documents.map(tapRow)}</ul>
+            ) : (
+              <Table
+                className="doc-table"
+                // A short head for the links, so it fits the column on one line in every language.
+                heads={[t('common.name'), t('sync.field.date'), t('docs.size'), t('docs.colPhone'), t('docs.colLinks'), '']}
+                opens
+              >
+                {page.documents.map(tableRow)}
+              </Table>
+            )}
+            {phone ? pager : null}
           </div>
-          <div className="page-numbers">
-            {Array.from({ length: pageCount }, (_, index) => {
-              const number = index + 1
-              return (
-                <button key={number} type="button" aria-current={number === currentPage ? 'page' : undefined} onClick={() => setOffset((number - 1) * page.limit)}>
-                  {number}
-                </button>
-              )
-            })}
-          </div>
+          {phone ? null : pager}
         </>
       ) : null}
     </section>

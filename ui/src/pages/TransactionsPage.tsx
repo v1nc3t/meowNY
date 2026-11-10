@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
+import { useCallback, useEffect, useId, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import AddCategoryModal from '../components/AddCategoryModal'
 import AttachArea from '../components/AttachArea'
@@ -7,7 +7,10 @@ import ClipPreview from '../components/ClipPreview'
 import ConfirmModal from '../components/ConfirmModal'
 import Dropdown, { type DropdownOption } from '../components/Dropdown'
 import Modal, { modalFormId } from '../components/Modal'
+import Icon from '../components/NavIcon'
+import Pager from '../components/Pager'
 import Pick, { PickOption } from '../components/Pick'
+import { DayGroups, IconAction, Row, Table, TapRow } from '../components/RowParts'
 import Button from '../components/ui/Button'
 import { EmptyState } from '../components/ui/Pixel'
 import DatePicker from '../components/DatePicker'
@@ -15,17 +18,19 @@ import SplitEditor from '../components/SplitEditor'
 import { categories as categoriesApi, type Category } from '../api/categories'
 import { debts } from '../api/debts'
 import { errorText } from '../api/invoke'
+import { shiftMonth } from '../api/months'
 import { useToday, type Today } from '../api/today'
 import { transactions as transactionsApi, type Transaction, type TransactionPage } from '../api/transactions'
 import { categoryOptions } from '../lib/categoriesView'
 import { amountString, formatDate, formatMoney } from '../lib/money'
-import { apiBound, shiftBound, type RangeMode } from '../lib/range'
-import { recall, useRemember } from '../lib/sticky'
+import { apiBound, presentRange, shiftBound, type RangeMode } from '../lib/range'
+import { recall, saveChoice, storedChoice, storedId, useRemember } from '../lib/sticky'
 import { draftOfBill, equalDraft, NOT_SPLIT, toInput, type SplitState } from '../lib/split'
 import { useAttachments, type Attachments } from '../hooks/useAttachments'
 import { useClipCounts } from '../hooks/useClipCounts'
 import { useFocusRequest, useJumpTo } from '../hooks/useFocusRequest'
 import { useMoneySettings, type MoneySettings } from '../hooks/useMoneySettings'
+import { useOpenRow } from '../hooks/useOpenRow'
 import { useProfile } from '../hooks/profile'
 import { useToast } from '../hooks/toast'
 import { useT } from '../i18n/context'
@@ -33,9 +38,14 @@ import { useDebounced } from '../hooks/useDebounced'
 import { useShortcut } from '../keys/registry'
 import { tip } from '../keys/tip'
 import { useRowNavigation } from '../keys/useRowNavigation'
+import { remindersChanged } from '../lib/reminders'
 
 type TransactionList = TransactionPage
+/** A bill with parts of others, or a friend who paid it. */
+const isShared = (transaction: Transaction) => transaction.split.length > 0 || transaction.paidBy !== null
 type MenuName = 'range' | 'show' | 'category'
+const MODES = ['year', 'month', 'date'] as const
+const LIMITS = [10, 50, 100] as const
 type Filters = {
   mode: RangeMode
   from: string
@@ -57,18 +67,21 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
   const phone = useProfile() === 'phone'
   const [categories, setCategories] = useState<Category[]>([])
   const [categoriesReady, setCategoriesReady] = useState(false)
-  const [filters, setFilters] = useState<Filters>(() => {
-    const month = now.month
-    return { mode: 'month', from: month, to: month, categoryId: '', q: '', ...recall<Partial<Filters>>('transactions.range', () => ({})) }
-  })
+  // The kind of period, the category and the rows per page are remembered after a restart; the dates only while the app stays open (after a
+  // restart the page opens on the present, in the kind of period that was chosen).
+  const [filters, setFilters] = useState<Filters>(() => ({
+    ...presentRange(storedChoice('tx.period', MODES, 'month'), now),
+    categoryId: storedId('tx.category'),
+    q: '',
+    ...recall<Partial<Filters>>('transactions.range', () => ({})),
+  }))
   const range = useMemo(() => ({ mode: filters.mode, from: filters.from, to: filters.to }), [filters.mode, filters.from, filters.to])
   useRemember('transactions.range', range)
-  const [limit, setLimit] = useState(50)
+  const [limit, setLimit] = useState(() => storedChoice('tx.limit', LIMITS, 50))
   const [offset, setOffset] = useState(0)
   const [reload, setReload] = useState(0)
   const [page, setPage] = useState<TransactionList | null>(null)
   const [menu, setMenu] = useState<MenuName | null>(null)
-  const [openId, setOpenId] = useState<string | null>(null)
   const [clientUuid, setClientUuid] = useState(() => crypto.randomUUID())
   // the transaction a first try made when its bill then failed: the next try changes that one (the same client id would give back the old
   // row, with the old amount, and the bill would be shared on that)
@@ -93,6 +106,18 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
   // The list waits for a short pause in typing instead of asking the database on every key.
   const searchText = useDebounced(filters.q, 200)
   const categoryNames = useMemo(() => new Map(categories.map((category) => [category.id, category.name])), [categories])
+  const incomeCategories = useMemo(() => new Set(categories.filter((category) => category.type === 'INCOME').map((category) => category.id)), [categories])
+  // a remembered category that has been deleted since is no longer a filter, and the list is not asked for it before that is known
+  const categoryKnown = filters.categoryId === '' || categoryNames.has(filters.categoryId)
+  useEffect(() => {
+    if (!categoriesReady || categoryKnown) return
+    saveChoice('tx.category', '')
+    setFilters((current) => ({ ...current, categoryId: '' }))
+  }, [categoriesReady, categoryKnown])
+  // the phone keeps the period and the category behind a "filters" button
+  const [filtersOpen, setFiltersOpen] = useState(false)
+  const filtersId = useId()
+  const rows = useOpenRow()
 
   useEffect(() => {
     let cancelled = false
@@ -110,6 +135,7 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
   }, [reload])
 
   useEffect(() => {
+    if (!categoryKnown) return
     let cancelled = false
     const from = apiBound(filters.mode, filters.from, 'from')
     const to = apiBound(filters.mode, filters.to, 'to')
@@ -134,7 +160,7 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
     return () => {
       cancelled = true
     }
-  }, [filters.mode, filters.from, filters.to, filters.categoryId, searchText, limit, offset, reload, say])
+  }, [filters.mode, filters.from, filters.to, filters.categoryId, categoryKnown, searchText, limit, offset, reload, say])
 
   useEffect(() => {
     if (!focus) return
@@ -149,20 +175,36 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
     setOffset(0)
   }
 
+  // A year or a month is one value for both ends; a range keeps the first and the last day of what was shown. The current year, shown
+  // by month, is this month.
   function onMode(mode: RangeMode) {
-    setFilters((current) => ({
-      ...current,
-      mode,
-      from: shiftBound(current.from, current.mode, mode, 'from'),
-      to: shiftBound(current.to, current.mode, mode, 'to'),
-    }))
+    saveChoice('tx.period', mode)
+    setFilters((current) => {
+      const from =
+        mode === 'month' && current.mode === 'year' && current.from === now.date.slice(0, 4) ? now.month : shiftBound(current.from, current.mode, mode, 'from')
+      return { ...current, mode, from, to: mode === 'date' ? shiftBound(current.to, current.mode, mode, 'to') : from }
+    })
     setOffset(0)
   }
 
   const searchRef = useRef<HTMLInputElement>(null)
 
-  function goCurrentMonth() {
-    setFilters((current) => ({ ...current, mode: 'month', from: now.month, to: now.month }))
+  // The current year when a year is shown, the current month otherwise; a range of dates is taken to the current month.
+  function goCurrent() {
+    const mode = filters.mode === 'year' ? 'year' : 'month'
+    const from = mode === 'year' ? now.date.slice(0, 4) : now.month
+    saveChoice('tx.period', mode)
+    setFilters((current) => ({ ...current, mode, from, to: from }))
+    setOffset(0)
+  }
+
+  // One step back or forward in the month or the year shown; the arrows and the [ and ] keys use it, never in a range of dates.
+  function stepPeriod(delta: number) {
+    setFilters((current) => {
+      if (current.mode === 'date') return current
+      const from = current.mode === 'month' ? shiftMonth(current.from, delta) : String(Number(current.from) + delta)
+      return { ...current, from, to: from }
+    })
     setOffset(0)
   }
 
@@ -193,7 +235,7 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
     attachments.reset()
     setAdding(false)
     // a saved bill opens as exact amounts, as they are stored
-    setSplit(transaction.split.length > 0 ? { on: true, draft: draftOfBill(transaction.split), ready: true, touched: false } : NOT_SPLIT)
+    setSplit(isShared(transaction) ? { on: true, draft: draftOfBill(transaction.split, transaction.paidBy), ready: true, touched: false } : NOT_SPLIT)
     setEditing(transaction)
   }
 
@@ -204,10 +246,12 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
     setEditing(null)
   }
 
-  // Keyboard: n adds, / searches, t jumps to this month, j and k move between rows.
+  // Keyboard: n adds, / searches, [ and ] step the month or the year, t jumps to this month or year, j and k move between rows.
   useShortcut('new', () => openAdd())
   useShortcut('search', () => searchRef.current?.focus())
-  useShortcut('today', goCurrentMonth)
+  useShortcut('prev', () => stepPeriod(-1), filters.mode !== 'date')
+  useShortcut('next', () => stepPeriod(1), filters.mode !== 'date')
+  useShortcut('today', goCurrent)
   useRowNavigation()
 
   // One handler for both modes: the add modal creates, the same modal prefilled edits.
@@ -230,7 +274,7 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
     }
     const body = { name, amount, paymentDate, categoryId, description: description.length > 0 ? description : null }
     // A shared bill is saved when its numbers add up; one that was shared and is left alone is scaled by the app to a new amount.
-    const hadSplit = (editing?.split.length ?? 0) > 0
+    const hadSplit = editing ? isShared(editing) : false
     const wantsSplit = split.on && categories.find((category) => category.id === categoryId)?.type !== 'INCOME'
     const sendSplit = wantsSplit && (split.touched || !hadSplit)
     const input = sendSplit ? toInput(split.draft) : null
@@ -264,6 +308,8 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
       setClientUuid(crypto.randomUUID())
       setSavedId(null)
     }
+    // a shared bill changes what friends owe, and so the reminders
+    if (input) remindersChanged()
     closeModal()
     setReload((value) => value + 1)
   }
@@ -281,37 +327,41 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
   }
 
   function scopeLabel(): string {
-    if (filters.categoryId) return categoryNames.get(filters.categoryId) ?? t('tx.deletedCategory')
+    if (filters.categoryId) return categoryNames.get(filters.categoryId) ?? ''
     return t('tx.allCategories')
   }
 
-  const modeLabel = (mode: RangeMode) => (mode === 'date' ? t('common.day') : mode === 'month' ? t('common.month') : t('common.year'))
+  function pickCategory(categoryId: string) {
+    saveChoice('tx.category', categoryId)
+    patchFilters({ categoryId })
+    setMenu(null)
+  }
 
-  // shortcut: one button per page, upgrade if lists run past a few dozen pages
+  const modeLabel = (mode: RangeMode) => (mode === 'date' ? t('tx.range') : mode === 'month' ? t('common.month') : t('common.year'))
+
   const pageCount = page && page.limit > 0 ? Math.max(1, Math.ceil(page.total / page.limit)) : 0
   const currentPage = page && page.limit > 0 ? Math.floor(page.offset / page.limit) + 1 : 1
 
-  // The current-month button and the range: beside "add" on a phone, where room is short, and first in the filters elsewhere.
+  const atCurrentMonth = filters.mode === 'month' && filters.from === now.month && filters.to === now.month
+  // the button for the current period is off when the year or the month shown is that one (and there is none for a range of dates)
+  const currentPeriod = filters.mode === 'year' ? now.date.slice(0, 4) : now.month
+  const atCurrentPeriod = filters.from === currentPeriod && filters.to === currentPeriod
+  // how many filters are not as they start (this month, every category): the phone's filters button counts them
+  const activeFilters = (atCurrentMonth ? 0 : 1) + (filters.categoryId ? 1 : 0)
+  const categoryName = (transaction: Transaction) => categoryNames.get(transaction.categoryId) ?? (categoriesReady ? t('tx.deletedCategory') : '')
+
+  // The period: a year, a month of a year, or exact dates (from one day to another, the end never before the start).
   const rangeControls = (
-    <>
-      <Button
-        variant="outline"
-        disabled={filters.mode === 'month' && filters.from === now.month && filters.to === now.month}
-        onClick={goCurrentMonth}
-        {...tip('today', t('tx.currentMonth'))}
-      >
-        {t('tx.currentMonth')}
-      </Button>
+    <div className="tx-range">
       <Pick
-        label={t('tx.range')}
+        label={t('tx.period')}
         className="mode"
-        inline={phone}
         text={modeLabel(filters.mode)}
         open={menu === 'range'}
         onToggle={() => setMenu((current) => (current === 'range' ? null : 'range'))}
         onClose={() => setMenu(null)}
       >
-        {(['date', 'month', 'year'] as const).map((mode) => (
+        {MODES.map((mode) => (
           <PickOption
             key={mode}
             selected={filters.mode === mode}
@@ -324,21 +374,287 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
           </PickOption>
         ))}
       </Pick>
-    </>
+      {filters.mode === 'date' ? (
+        <>
+          <div className="tx-date-group">
+            <span>{t('tx.from')}</span>
+            <DatePicker
+              kind="date"
+              value={filters.from}
+              label={t('tx.from')}
+              today={now.date}
+              onChange={(from) => patchFilters(from > filters.to ? { from, to: from } : { from })}
+            />
+          </div>
+          <div className="tx-date-group">
+            <span>{t('tx.to')}</span>
+            <DatePicker
+              kind="date"
+              value={filters.to}
+              label={t('tx.to')}
+              today={now.date}
+              onChange={(to) => patchFilters(to < filters.from ? { from: to, to } : { to })}
+            />
+          </div>
+        </>
+      ) : (
+        <div className="month-nav">
+          <Button
+            variant="ghost"
+            size="icon"
+            aria-label={t(filters.mode === 'month' ? 'budgets.prevMonth' : 'dashboard.prevYear')}
+            {...tip('prev')}
+            onClick={() => stepPeriod(-1)}
+          >
+            &lsaquo;
+          </Button>
+          <DatePicker kind={filters.mode} value={filters.from} label={t('tx.period')} today={now.date} onChange={(value) => patchFilters({ from: value, to: value })} />
+          <Button
+            variant="ghost"
+            size="icon"
+            aria-label={t(filters.mode === 'month' ? 'budgets.nextMonth' : 'dashboard.nextYear')}
+            {...tip('next')}
+            onClick={() => stepPeriod(1)}
+          >
+            &rsaquo;
+          </Button>
+        </div>
+      )}
+      {filters.mode === 'date' ? null : (
+        <Button variant="outline" disabled={atCurrentPeriod} onClick={goCurrent} {...tip('today')}>
+          {t('common.current')}
+        </Button>
+      )}
+    </div>
   )
+
+  const categoryPick = (
+    <Pick
+      label={t('common.category')}
+      className="scope"
+      text={scopeLabel()}
+      title={scopeLabel()}
+      open={menu === 'category'}
+      onToggle={() => setMenu((current) => (current === 'category' ? null : 'category'))}
+      onClose={() => setMenu(null)}
+    >
+      <PickOption selected={!filters.categoryId} onClick={() => pickCategory('')}>
+        {t('tx.allCategories')}
+      </PickOption>
+      {categories.map((category) => (
+        <PickOption
+          key={`category-${category.id}`}
+          selected={filters.categoryId === category.id}
+          onClick={() => pickCategory(category.id)}
+        >
+          {category.name}
+        </PickOption>
+      ))}
+    </Pick>
+  )
+
+  // Under the list: the pages, and how many rows a page has.
+  const foot =
+    page && page.total > 0 ? (
+      <div className="list-foot wide">
+        <Pager page={currentPage} count={pageCount} onPage={(number) => setOffset((number - 1) * page.limit)} />
+        <Pick
+          label={t('tx.perPage')}
+          className="limit per-page"
+          text={String(limit)}
+          open={menu === 'show'}
+          onToggle={() => setMenu((current) => (current === 'show' ? null : 'show'))}
+          onClose={() => setMenu(null)}
+        >
+          {LIMITS.map((value) => (
+            <PickOption
+              key={value}
+              selected={limit === value}
+              onClick={() => {
+                saveChoice('tx.limit', value)
+                setLimit(value)
+                setOffset(0)
+                setMenu(null)
+              }}
+            >
+              {String(value)}
+            </PickOption>
+          ))}
+        </Pick>
+      </div>
+    ) : null
+
+  /** What the person's share was: income in green with a plus, spending in red with a minus, and nothing at all plain. */
+  function amount(transaction: Transaction) {
+    const text = formatMoney(transaction.myShare, settings.currency, settings.locale)
+    if (Number(transaction.myShare) === 0) return <span className="cell-amount">{text}</span>
+    const income = incomeCategories.has(transaction.categoryId)
+    return <span className={income ? 'cell-amount is-income' : 'cell-amount is-expense'}>{income ? `+${text}` : `-${text}`}</span>
+  }
+
+  /** What a row opens to: the split, with a code for each friend on it (not for the one who paid), the description and the documents (`count` of them). */
+  function details(transaction: Transaction, count: number): ReactNode {
+    return (
+      <>
+        {isShared(transaction) ? (
+          <section className="detail-section">
+            <div className="split-head">
+              <p className="detail-title">{t('split.section')}</p>
+              <p className="split-paid">
+                {transaction.paidBy
+                  ? t('split.paidByFriend', { name: transaction.paidBy.name, amount: formatMoney(transaction.amount, settings.currency, settings.locale) })
+                  : t('split.paid', { amount: formatMoney(transaction.amount, settings.currency, settings.locale) })}
+              </p>
+            </div>
+            <table className="split-table">
+              <tbody>
+                <tr className="is-you">
+                  <th scope="row">{t('split.you')}</th>
+                  <td>{formatMoney(transaction.myShare, settings.currency, settings.locale)}</td>
+                  <td />
+                </tr>
+                {transaction.split.map((part) => (
+                  <tr key={`${part.personId ?? 'guest'}-${part.person ?? part.guest}`}>
+                    <th scope="row">{part.person ?? part.guest ?? ''}</th>
+                    <td>{formatMoney(part.amount, settings.currency, settings.locale)}</td>
+                    <td>
+                      {part.personId && part.person && part.personId !== transaction.paidBy?.personId ? (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setCoding({ transaction, personId: part.personId ?? '', name: part.person ?? '', part: part.amount })}
+                        >
+                          <Icon name="qr" className="btn-icon" />
+                          {t('code.show')}
+                        </Button>
+                      ) : null}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </section>
+        ) : null}
+        {transaction.description?.trim() ? (
+          <section className="detail-section">
+            <p className="detail-title">{t('common.description')}</p>
+            <p className="detail-text">{transaction.description}</p>
+          </section>
+        ) : null}
+        {count > 0 ? (
+          <section className="detail-section">
+            <p className="detail-title">{t('docs.title')}</p>
+            <ClipPreview target={{ kind: 'transaction', id: transaction.id }} name={transaction.name} count={count} />
+          </section>
+        ) : null}
+      </>
+    )
+  }
+
+  /** The small marks of a phone row, after its category: shared with friends and a note. (The desktop's rows have a column for shared.) */
+  function marks(transaction: Transaction) {
+    return (
+      <>
+        {isShared(transaction) ? <span className="row-mark">{t('tx.shared')}</span> : null}
+        {transaction.description?.trim() ? (
+          <span className="row-mark-icon" title={t('common.description')}>
+            <Icon name="note" className="mark-icon" />
+            <span className="sr-only">{t('common.description')}</span>
+          </span>
+        ) : null}
+      </>
+    )
+  }
+
+  // A desktop row: name, amount, date, category, an icon if it is shared, then edit, delete and (when there is more to show) the chevron.
+  function tableRow(transaction: Transaction) {
+    const count = clips[transaction.id] ?? 0
+    const more = isShared(transaction) || Boolean(transaction.description?.trim()) || count > 0
+    return (
+      <Row
+        key={transaction.id}
+        rows={rows}
+        id={transaction.id}
+        item={`transaction:${transaction.id}`}
+        actions={
+          <>
+            <IconAction icon="pencil" label={t('common.edit')} data-row-focus onClick={() => openEdit(transaction)} />
+            <IconAction icon="trash" label={t('common.delete')} danger onClick={() => setDeleting(transaction)} />
+          </>
+        }
+        panel={more ? details(transaction, count) : null}
+      >
+        <div className="cell-name">
+          <span className="card-name" title={transaction.name}>
+            {transaction.name}
+          </span>
+        </div>
+        {amount(transaction)}
+        <span className="cell-sub-end">{formatDate(transaction.paymentDate, settings.locale)}</span>
+        <span className="cell-sub">{categoryName(transaction)}</span>
+        <span className="cell-mark">
+          {isShared(transaction) ? (
+            <span className="row-mark-icon" title={t('tx.shared')}>
+              <Icon name="qr" className="mark-icon" />
+              <span className="sr-only">{t('tx.shared')}</span>
+            </span>
+          ) : null}
+        </span>
+      </Row>
+    )
+  }
+
+  // A phone row: one button with the name and amount, the category and marks under them. It opens to the details and to labelled
+  // buttons for everything that can be done with the transaction.
+  function tapRow(transaction: Transaction) {
+    const count = clips[transaction.id] ?? 0
+    return (
+      <TapRow
+        key={transaction.id}
+        id={rows.panelId(transaction.id)}
+        item={`transaction:${transaction.id}`}
+        open={rows.isOpen(transaction.id)}
+        onToggle={() => rows.toggle(transaction.id)}
+        name={transaction.name}
+        amount={amount(transaction)}
+        sub={
+          <>
+            <span>{categoryName(transaction)}</span>
+            {marks(transaction)}
+            {count ? (
+              <span className="row-mark-icon">
+                <Icon name="clip" className="mark-icon" />
+                <span aria-hidden="true">{count}</span>
+                <span className="sr-only">{t('docs.clip', { count })}</span>
+              </span>
+            ) : null}
+          </>
+        }
+      >
+        {details(transaction, count)}
+        <div className="row-panel-actions">
+          <Button variant="outline" onClick={() => openEdit(transaction)}>
+            <Icon name="pencil" className="btn-icon" />
+            {t('common.edit')}
+          </Button>
+          <Button variant="outline" className="row-danger" onClick={() => setDeleting(transaction)}>
+            <Icon name="trash" className="btn-icon" />
+            {t('common.delete')}
+          </Button>
+        </div>
+      </TapRow>
+    )
+  }
 
   return (
     <section className="tx-page">
-      <div className="tx-title">
+      <div className="tx-title one-line">
         <h1>{t('tx.title')}</h1>
-        <div className="tx-actions">
-          <Button onClick={() => openAdd()} {...tip('new', t('tx.add'))}>
-            {t('tx.add')}
-          </Button>
-          {phone ? rangeControls : null}
-        </div>
+        <Button onClick={() => openAdd()} {...tip('new', t('tx.add'))}>
+          {t('tx.add')}
+        </Button>
       </div>
-      <div className="toolbar wide tx-bar">
+      <div className="toolbar wide tx-bar filter-bar">
         <label className="grow" {...tip('search')}>
           {t('common.search')}
           <input
@@ -352,83 +668,37 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
             onChange={(event) => patchFilters({ q: event.target.value })}
           />
         </label>
-        <Pick
-          label={t('tx.show')}
-          className="limit"
-          text={String(limit)}
-          open={menu === 'show'}
-          onToggle={() => setMenu((current) => (current === 'show' ? null : 'show'))}
-          onClose={() => setMenu(null)}
-        >
-          {['10', '50', '100'].map((value) => (
-            <PickOption
-              key={value}
-              selected={String(limit) === value}
-              onClick={() => {
-                setLimit(Number(value))
-                setOffset(0)
-                setMenu(null)
-              }}
+        {phone ? (
+          <>
+            <Button
+              variant="outline"
+              className="filter-toggle"
+              aria-expanded={filtersOpen}
+              aria-controls={filtersOpen ? filtersId : undefined}
+              aria-label={activeFilters > 0 ? t('tx.filtersCount', { count: activeFilters }) : undefined}
+              onClick={() => setFiltersOpen((open) => !open)}
             >
-              {value}
-            </PickOption>
-          ))}
-        </Pick>
-        <Pick
-          label={t('common.category')}
-          className="scope"
-          text={scopeLabel()}
-          open={menu === 'category'}
-          onToggle={() => setMenu((current) => (current === 'category' ? null : 'category'))}
-          onClose={() => setMenu(null)}
-        >
-          <PickOption
-            selected={!filters.categoryId}
-            onClick={() => {
-              patchFilters({ categoryId: '' })
-              setMenu(null)
-            }}
-          >
-            {t('tx.allCategories')}
-          </PickOption>
-          {categories.map((category) => (
-            <PickOption
-              key={`category-${category.id}`}
-              selected={filters.categoryId === category.id}
-              onClick={() => {
-                patchFilters({ categoryId: category.id })
-                setMenu(null)
-              }}
-            >
-              {category.name}
-            </PickOption>
-          ))}
-        </Pick>
-        <div className="tx-range" data-mode={filters.mode}>
-          {phone ? null : rangeControls}
-          <div className="tx-date-group">
-            <span>{t('tx.from')}</span>
-            <DatePicker
-              key={`from-${filters.mode}`}
-              kind={filters.mode}
-              value={filters.from}
-              label={t('tx.from')}
-              today={now.date}
-              onChange={(from) => patchFilters({ from })}
-            />
-          </div>
-          <div className="tx-date-group">
-            <span>{t('tx.to')}</span>
-            <DatePicker
-              key={`to-${filters.mode}`}
-              kind={filters.mode}
-              value={filters.to}
-              label={t('tx.to')}
-              today={now.date}
-              onChange={(to) => patchFilters({ to })}
-            />
-          </div>
-        </div>
+              <Icon name="filter" className="btn-icon" />
+              {t('tx.filters')}
+              {activeFilters > 0 ? (
+                <span className="count-badge" aria-hidden="true">
+                  {activeFilters}
+                </span>
+              ) : null}
+            </Button>
+            {filtersOpen ? (
+              <div className="filter-panel" id={filtersId}>
+                {categoryPick}
+                {rangeControls}
+              </div>
+            ) : null}
+          </>
+        ) : (
+          <>
+            {categoryPick}
+            {rangeControls}
+          </>
+        )}
       </div>
       {adding || editing ? (
         <TransactionModal
@@ -452,6 +722,7 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
           person={{ id: coding.personId, name: coding.name }}
           part={coding.part}
           total={coding.transaction.amount}
+          paidBy={coding.transaction.paidBy?.name}
           onClose={() => setCoding(null)}
         />
       ) : null}
@@ -461,129 +732,20 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
       {page ? (
         <>
           <div className="tx-pane wide">
-            {page.transactions.length === 0 ? <EmptyState text={t('tx.empty')} /> : null}
-            <ul className="card-list">
-              {page.transactions.map((transaction) => (
-                <li key={transaction.id} className="card-item" data-item={`transaction:${transaction.id}`}>
-                  <div className="card-body">
-                    <p className="card-name">{transaction.name}</p>
-                    <p className="card-meta">
-                      <span className="card-amount">{formatMoney(transaction.myShare, settings.currency, settings.locale)}</span>
-                      {[
-                        categoryNames.get(transaction.categoryId) ?? (categoriesReady ? t('tx.deletedCategory') : ''),
-                        formatDate(transaction.paymentDate, settings.locale),
-                      ]
-                        .filter(Boolean)
-                        .map((part) => ` \u00b7 ${part}`)
-                        .join('')}
-                      {clips[transaction.id] ? (
-                        <>
-                          {' \u00b7 '}
-                          <ClipPreview inline target={{ kind: 'transaction', id: transaction.id }} name={transaction.name} count={clips[transaction.id] ?? 0} />
-                        </>
-                      ) : null}
-                    </p>
-                    {transaction.split.length > 0 || transaction.description?.trim() ? (
-                      <Button
-                        variant="link"
-                        className="tx-desc"
-                        aria-expanded={openId === transaction.id}
-                        onClick={() => setOpenId((current) => (current === transaction.id ? null : transaction.id))}
-                      >
-                        {t('common.details')}
-                      </Button>
-                    ) : null}
-                    {openId === transaction.id ? (
-                      <div className="card-detail">
-                        {transaction.split.length > 0 ? (
-                          <section className="detail-section">
-                            <div className="split-head">
-                              <p className="detail-title">{t('split.section')}</p>
-                              <p className="split-paid">{t('split.paid', { amount: formatMoney(transaction.amount, settings.currency, settings.locale) })}</p>
-                            </div>
-                            <table className="split-table">
-                              <tbody>
-                                <tr className="is-you">
-                                  <th scope="row">{t('split.you')}</th>
-                                  <td>{formatMoney(transaction.myShare, settings.currency, settings.locale)}</td>
-                                  <td />
-                                </tr>
-                                {transaction.split.map((part) => (
-                                  <tr key={`${part.personId ?? 'guest'}-${part.person ?? part.guest}`}>
-                                    <th scope="row">{part.person ?? part.guest ?? ''}</th>
-                                    <td>{formatMoney(part.amount, settings.currency, settings.locale)}</td>
-                                    <td>
-                                      {part.personId && part.person ? (
-                                        <Button
-                                          variant="ghost"
-                                          size="sm"
-                                          onClick={() => setCoding({ transaction, personId: part.personId ?? '', name: part.person ?? '', part: part.amount })}
-                                        >
-                                          {t('code.show')}
-                                        </Button>
-                                      ) : null}
-                                    </td>
-                                  </tr>
-                                ))}
-                              </tbody>
-                            </table>
-                          </section>
-                        ) : null}
-                        {transaction.description?.trim() ? (
-                          <section className="detail-section">
-                            <p className="detail-title">{t('common.description')}</p>
-                            <p>{transaction.description}</p>
-                          </section>
-                        ) : null}
-                      </div>
-                    ) : null}
-                  </div>
-                  <div className="card-actions">
-                    <Button variant="ghost" size="sm" data-row-focus onClick={() => openEdit(transaction)}>
-                      {t('common.edit')}
-                    </Button>
-                    {(() => {
-                      // a bill shared with friends has a code for each of them: one friend opens it, several open the details to choose
-                      const friends = transaction.split.filter((part) => part.personId && part.person)
-                      const [only] = friends
-                      if (friends.length === 0) return null
-                      return (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() =>
-                            friends.length === 1 && only
-                              ? setCoding({ transaction, personId: only.personId ?? '', name: only.person ?? '', part: only.amount })
-                              : setOpenId(transaction.id)
-                          }
-                        >
-                          {t('code.show')}
-                        </Button>
-                      )
-                    })()}
-                    <Button variant="ghost" size="sm" className="row-danger" onClick={() => setDeleting(transaction)}>
-                      {t('common.delete')}
-                    </Button>
-                  </div>
-                </li>
-              ))}
-            </ul>
+            {page.transactions.length === 0 ? (
+              <EmptyState text={t('tx.empty')} />
+            ) : phone ? (
+              <DayGroups rows={page.transactions} dateOf={(transaction) => transaction.paymentDate} locale={settings.locale} today={now.date} className="tx-list">
+                {tapRow}
+              </DayGroups>
+            ) : (
+              <Table className="tx-list" heads={[t('common.name'), { label: t('tx.amount'), className: 'is-end' }, t('sync.field.date'), t('common.category'), '', '']} opens>
+                {page.transactions.map(tableRow)}
+              </Table>
+            )}
+            {phone ? foot : null}
           </div>
-          <div className="page-numbers">
-            {Array.from({ length: pageCount }, (_, index) => {
-              const number = index + 1
-              return (
-                <button
-                  key={number}
-                  type="button"
-                  aria-current={number === currentPage ? 'page' : undefined}
-                  onClick={() => setOffset((number - 1) * (page?.limit ?? limit))}
-                >
-                  {number}
-                </button>
-              )
-            })}
-          </div>
+          {phone ? null : foot}
         </>
       ) : null}
     </section>
@@ -627,7 +789,7 @@ function TransactionModal({
   const showDocuments = docsOn || hasDocuments
   // only an expense can be shared
   const canSplit = categories.find((category) => category.id === categoryId)?.type !== 'INCOME'
-  const hadSplit = (transaction?.split.length ?? 0) > 0
+  const hadSplit = transaction ? isShared(transaction) : false
   const rescaled = hadSplit && !split.touched && amountString(amount, false) !== transaction?.amount
   const options: DropdownOption[] = categoryOptions(categories, { expense: t('common.expense'), income: t('common.income') })
   if (transaction && categories.every((category) => category.id !== transaction.categoryId)) {
@@ -684,7 +846,7 @@ function TransactionModal({
           ) : null}
           <label>
             {t('common.description')}
-            <input name="description" maxLength={255} placeholder={t('common.optional')} defaultValue={transaction?.description ?? ''} autoComplete="off" />
+            <textarea name="description" rows={3} maxLength={255} placeholder={t('common.optional')} defaultValue={transaction?.description ?? ''} autoComplete="off" />
           </label>
           <label>
             <input type="checkbox" checked={showDocuments} disabled={hasDocuments} onChange={(event) => setDocsOn(event.target.checked)} />

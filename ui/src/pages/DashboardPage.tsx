@@ -1,21 +1,24 @@
-import { useEffect, useRef, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { useEffect, useRef, useState, type KeyboardEvent } from 'react'
+import { Link, useNavigate } from 'react-router-dom'
 import { debts, type Summary } from '../api/debts'
 import { errorText } from '../api/invoke'
-import { monthNames, shiftMonth, withYear, yearChoices } from '../api/months'
+import { monthNames, parseYear, shiftMonth, withYear, yearChoices } from '../api/months'
 import Dropdown from '../components/Dropdown'
-import Badge from '../components/ui/Badge'
 import Button from '../components/ui/Button'
 import { Card, CardAction, CardContent, CardHeader, CardTitle } from '../components/ui/Card'
+import { EmptyState, Illustration, type PictureName } from '../components/ui/Pixel'
 import RecurringDashboard, { SOON_DAYS } from '../components/RecurringDashboard'
 import { recurring, type Dues, type Recurring } from '../api/recurring'
 import { stats, type BudgetVsActual, type Commitments, type PlannedVsPaid, type TopCategory, type YearPoint } from '../api/stats'
 import { useToday, type Today } from '../api/today'
+import { transactions } from '../api/transactions'
 import { formatMoney, formatPercent, toMinor } from '../lib/money'
 import { useSticky } from '../lib/sticky'
 import { useMoneySettings, type MoneySettings } from '../hooks/useMoneySettings'
 import { useToast } from '../hooks/toast'
+import { useProfile } from '../hooks/profile'
 import { useI18n, useT } from '../i18n/context'
+import type { MessageKey } from '../i18n/en'
 import { useShortcut } from '../keys/registry'
 import { changePercent, niceCeil, savingsRateText, slicePath, usedPercent } from './dashboardMath'
 
@@ -45,7 +48,23 @@ function DashboardView({ settings, now }: { settings: MoneySettings; now: Today 
   const [owed, setOwed] = useState<Summary | null>(null)
   // the recurring items that are overdue or due soon, and all of them (for those that are split): they do not follow the month either
   const [recurringNow, setRecurringNow] = useState<{ dues: Dues; items: Recurring[] } | null>(null)
+  // Whether nothing at all has been recorded yet (no transaction in any month): then the first steps show. Unknown at first.
+  const [fresh, setFresh] = useState<boolean | null>(null)
   const say = useToast()
+  const navigate = useNavigate()
+
+  useEffect(() => {
+    let cancelled = false
+    void transactions.list({ limit: 1 }).then(
+      (page) => {
+        if (!cancelled) setFresh(page.total === 0)
+      },
+      () => undefined,
+    )
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   useEffect(() => {
     let cancelled = false
@@ -113,6 +132,7 @@ function DashboardView({ settings, now }: { settings: MoneySettings; now: Today 
       </div>
       {data && point ? (
         <div className="tx-pane wide dash">
+          {fresh ? <FirstSteps /> : null}
           <Card className="dash-top">
             <CardHeader>
               <CardAction>
@@ -140,7 +160,12 @@ function DashboardView({ settings, now }: { settings: MoneySettings; now: Today 
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <Spending top={data.top} total={expenseTotal} settings={settings} />
+                  <Spending
+                    top={data.top}
+                    total={expenseTotal}
+                    settings={settings}
+                    onAdd={fresh === false ? () => navigate('/app/transactions', { state: { add: true } }) : undefined}
+                  />
                 </CardContent>
               </Card>
               <Card>
@@ -202,6 +227,45 @@ function DashboardView({ settings, now }: { settings: MoneySettings; now: Today 
   )
 }
 
+type FirstStep = { picture: PictureName; title: MessageKey; text: MessageKey; to: string; state?: object; desktopOnly?: boolean }
+
+/**
+ * The ways to start, each a picture and a link to the page that does it. The transaction form (and on a phone the friend form) opens
+ * at once.
+ */
+const FIRST_STEPS: FirstStep[] = [
+  { picture: 'spend', title: 'dashboard.firstAdd', text: 'dashboard.firstAddText', to: '/app/transactions', state: { add: true } },
+  { picture: 'budget', title: 'dashboard.firstBudget', text: 'dashboard.firstBudgetText', to: '/app/categories' },
+  { picture: 'share', title: 'dashboard.firstFriend', text: 'dashboard.firstFriendText', to: '/app/debts', state: { addFriend: true } },
+  { picture: 'sync', title: 'dashboard.firstPhone', text: 'dashboard.firstPhoneText', to: '/app/settings?section=phone',
+    desktopOnly: true },
+]
+
+/** For someone who has recorded nothing yet: what to do first. It goes once there is a transaction. */
+function FirstSteps() {
+  const t = useT()
+  const phone = useProfile() === 'phone'
+  return (
+    <section className="first-steps" aria-labelledby="first-steps-title">
+      <h2 id="first-steps-title">{t('dashboard.firstTitle')}</h2>
+      <p className="hint">{t('dashboard.firstText')}</p>
+      <ul className="first-steps-list">
+        {FIRST_STEPS.filter((step) => !(phone && step.desktopOnly)).map((step) => (
+          <li key={step.picture}>
+            <Link className="first-step" to={step.to} state={step.state}>
+              <Illustration name={step.picture} scale={3} />
+              <span className="first-step-text">
+                <b>{t(step.title)}</b>
+                <span>{t(step.text)}</span>
+              </span>
+            </Link>
+          </li>
+        ))}
+      </ul>
+    </section>
+  )
+}
+
 /** A headline number with its change from the month before, in green when the change is good and red when it is bad. */
 function Stat({
   label,
@@ -217,15 +281,15 @@ function Stat({
   settings: MoneySettings
 }) {
   const change = changePercent(value, before)
-  const tone = change === null || Math.abs(change) < 0.05 ? 'secondary' : (change > 0) === (good === 'up') ? 'success' : 'destructive'
+  const tone = change === null || Math.abs(change) < 0.05 ? '' : (change > 0) === (good === 'up') ? ' is-good' : ' is-bad'
   return (
     <div className="dash-stat">
       <span className="dash-stat-label">{label}</span>
       <span className="dash-stat-value">{formatMoney(value, settings.currency, settings.locale)}</span>
       {change === null ? null : (
-        <Badge variant={tone}>
+        <span className={`dash-delta${tone}`}>
           {change > 0 ? '▲' : change < 0 ? '▼' : ''} {formatPercent(Math.abs(Math.round(change * 10) / 10), settings.locale)}
-        </Badge>
+        </span>
       )}
     </div>
   )
@@ -237,7 +301,7 @@ function YearNav({ month, thisMonth, onChange }: { month: string; thisMonth: str
   const year = Number(month.slice(0, 4))
   return (
     <div className="month-nav dash-year-nav">
-      <Button variant="outline" size="icon" aria-label={t('dashboard.prevYear')} onClick={() => onChange(withYear(month, year - 1))}>
+      <Button variant="ghost" size="icon" aria-label={t('dashboard.prevYear')} onClick={() => onChange(withYear(month, year - 1))}>
         &lsaquo;
       </Button>
       <Dropdown
@@ -245,9 +309,10 @@ function YearNav({ month, thisMonth, onChange }: { month: string; thisMonth: str
         label={t('common.year')}
         value={String(year)}
         options={yearChoices(month, Number(thisMonth.slice(0, 4))).map((y) => ({ value: String(y), label: String(y) }))}
+        parse={(text) => parseYear(text)?.toString() ?? null}
         onChange={(value) => onChange(withYear(month, Number(value)))}
       />
-      <Button variant="outline" size="icon" aria-label={t('dashboard.nextYear')} onClick={() => onChange(withYear(month, year + 1))}>
+      <Button variant="ghost" size="icon" aria-label={t('dashboard.nextYear')} onClick={() => onChange(withYear(month, year + 1))}>
         &rsaquo;
       </Button>
       <Button variant="outline" disabled={month.slice(0, 4) === thisMonth.slice(0, 4)} onClick={() => onChange(thisMonth)}>
@@ -296,7 +361,8 @@ const PAD = { left: 40, right: 8, top: 10, bottom: 22 }
 
 /**
  * The year so far: income and expenses as lines, savings as bars underneath. Both are drawn at
- * the width they get. Hovering a month shows its numbers; clicking it opens that month.
+ * the width they get. Hovering a month shows its numbers; clicking it opens that month. The keyboard has the chart as one stop: Left and
+ * Right (Home, End) move through the months, Enter opens the one it is on.
  */
 function YearCharts({ year, month, onPick, settings }: { year: YearPoint[]; month: string; onPick: (month: string) => void; settings: MoneySettings }) {
   const t = useT()
@@ -333,6 +399,14 @@ function YearCharts({ year, month, onPick, settings }: { year: YearPoint[]; mont
   const by = (v: number) => 16 + ((hi - v) / span) * (barH - 22)
   const barW = Math.max(2, Math.min(28, slot * 0.55))
 
+  function onKeyDown(event: KeyboardEvent) {
+    const to = { ArrowLeft: shown - 1, ArrowRight: shown + 1, Home: 0, End: year.length - 1 }[event.key]
+    if (to !== undefined) setHover(Math.max(0, Math.min(year.length - 1, to)))
+    else if (event.key === 'Enter' && shown >= 0) onPick(year[shown].month)
+    else return
+    event.preventDefault()
+  }
+
   const hits = (h: number) =>
     year.map((p, i) => (
       <rect
@@ -349,8 +423,24 @@ function YearCharts({ year, month, onPick, settings }: { year: YearPoint[]; mont
 
   const p = shown >= 0 ? year[shown] : undefined
   const blank = !year.some((point) => Number(point.income) > 0 || Number(point.expense) > 0)
+  // A slider reads out its value as text, so a screen reader says the month and its numbers when an arrow moves it.
+  const slider = blank
+    ? {}
+    : {
+        role: 'slider',
+        tabIndex: 0,
+        'aria-label': t('dashboard.yearChart'),
+        'aria-valuemin': 1,
+        'aria-valuemax': year.length,
+        'aria-valuenow': shown + 1,
+        'aria-valuetext': p
+          ? `${names[shown]}, ${t('common.income')} ${money(p.income)}, ${t('common.expense')} ${money(p.expense)}, ${t('dashboard.savings')} ${money(p.savings)}`
+          : undefined,
+        onKeyDown,
+        onBlur: () => setHover(null),
+      }
   return (
-    <div className="dash-year" ref={ref}>
+    <div className="dash-year" ref={ref} {...slider}>
       {blank ? <p className="dash-empty">{t('dashboard.emptyYear')}</p> : null}
       <div className={blank ? 'year-readout is-blank' : 'year-readout'}>
         <span className="year-month">{p ? names[shown] : ''}</span>
@@ -423,12 +513,18 @@ function YearCharts({ year, month, onPick, settings }: { year: YearPoint[]; mont
 // How far a slice runs under the next one (a fraction of the way round), so that no thin gap shows between two slices.
 const DONUT_OVERLAP = 0.0015
 
-/** Expenses by category as a donut and a list. Hovering a list row or a slice highlights both. */
-function Spending({ top, total, settings }: { top: TopCategory[]; total: string; settings: MoneySettings }) {
+/**
+ * Expenses by category as a donut and a list. Hovering a list row or a slice highlights both. A month with nothing in it offers to
+ * add a transaction (`onAdd`), unless the first steps already do.
+ */
+function Spending({ top, total, settings, onAdd }: { top: TopCategory[]; total: string; settings: MoneySettings; onAdd?: () => void }) {
   const t = useT()
   const [hover, setHover] = useState<number | null>(null)
   const sum = Number(total)
-  if (!(sum > 0)) return <p className="dash-empty">{t('dashboard.empty')}</p>
+  if (!(sum > 0)) {
+    if (onAdd) return <EmptyState text={t('dashboard.empty')} action={{ label: t('tx.add'), onClick: onAdd }} />
+    return <p className="dash-empty">{t('dashboard.empty')}</p>
+  }
   const money = (amount: string) => formatMoney(amount, settings.currency, settings.locale)
   const items = top.map((c, i) => ({ key: i, name: c.name, amount: c.actual, value: Number(c.actual) }))
   const rest = sum - items.reduce((left, item) => left + item.value, 0)
@@ -522,7 +618,7 @@ function BudgetBars({ bva, settings }: { bva: BudgetVsActual; settings: MoneySet
                     <span className="legend-name">{r.name}</span>
                     <span className="legend-amount">
                       {actual}
-                      <span className="muted"> {r.budgeted === null ? `· ${t('dashboard.noBudget')}` : t('dashboard.ofBudget', { amount: money(r.budgeted) })}</span>
+                      <span className="muted">{r.budgeted === null ? `, ${t('dashboard.noBudget')}` : ` ${t('dashboard.ofBudget', { amount: money(r.budgeted) })}`}</span>
                     </span>
                   </span>
                   {r.budgeted === null ? null : (

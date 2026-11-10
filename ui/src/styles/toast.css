@@ -150,22 +150,20 @@ html.is-phone .toast-close {
   margin: -0.875rem -1rem -0.875rem 0;
 }
 
-/* No slide; the fades are quick. The bar still runs: it tells how long the message stays. */
+/* Less motion: no slide, and the message does not fade in. What ends a toast still runs, though: the bar is its clock, and the quick fade
+   out is what removes it. base.css switches every animation off here with !important, so these two are !important as well (and
+   more specific), or a toast would never leave on its own. */
 @media (prefers-reduced-motion: reduce) {
-  .toast {
-    animation: toast-fade-in 80ms linear;
-  }
-
   .toast.is-leaving {
-    animation: toast-out 80ms linear forwards;
+    animation: toast-out 80ms linear forwards !important;
   }
-}
 
-@keyframes toast-fade-in {
-  from {
-    opacity: 0;
+  .toast-bar-fill {
+    animation: toast-bar var(--toast-seconds, 6s) linear forwards !important;
   }
-  to {
-    opacity: 1;
+
+  .toast:hover .toast-bar-fill,
+  .toast:focus-within .toast-bar-fill {
+    animation-play-state: paused !important;
   }
 }

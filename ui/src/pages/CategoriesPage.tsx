@@ -8,9 +8,12 @@ import AddCategoryModal from '../components/AddCategoryModal'
 import BudgetSpanModal from '../components/BudgetSpanModal'
 import EditCategoryModal from '../components/EditCategoryModal'
 import MonthNav from '../components/MonthNav'
+import Icon from '../components/NavIcon'
+import { IconAction, Row } from '../components/RowParts'
 import SectionTabs from '../components/SectionTabs'
 import Button from '../components/ui/Button'
 import { CardTitle } from '../components/ui/Card'
+import { EmptyState } from '../components/ui/Pixel'
 import { useToday } from '../api/today'
 import { amountString, formatMoney } from '../lib/money'
 import { useMoneySettings, type MoneySettings } from '../hooks/useMoneySettings'
@@ -19,6 +22,7 @@ import { useSwipeHandler } from '../hooks/swipe'
 import { applyOrder } from '../lib/reorder'
 import { step } from '../lib/swipe'
 import { useSticky } from '../lib/sticky'
+import { tabPanelProps } from '../lib/tabs'
 import { useReorder } from '../hooks/useReorder'
 import { useToast } from '../hooks/toast'
 import { useI18n, useT } from '../i18n/context'
@@ -44,7 +48,7 @@ function CategoriesView({ settings, thisMonth }: { settings: MoneySettings; this
   const [month, setMonth] = useSticky('categories.month', () => thisMonth)
   const [overview, setOverview] = useState<Overview[] | null>(null)
   const [history, setHistory] = useState<MonthHistory[] | null>(null)
-  const pageRef = useRef<HTMLElement>(null)
+  const paneRef = useRef<HTMLDivElement>(null)
   const [categories, setCategories] = useState<CategoryInMonth[] | null>(null)
   const [reload, setReload] = useState(0)
   const say = useToast()
@@ -223,12 +227,14 @@ function CategoriesView({ settings, thisMonth }: { settings: MoneySettings; this
       month={month}
       overview={overview?.find((row) => row.type === 'EXPENSE') ?? null}
       amounts={amountsFor(overview, 'EXPENSE')}
+      spent={spentFor(overview, 'EXPENSE')}
       categories={expenseCategories}
       money={money}
       onGlobal={onGlobal}
       onEdit={setEditing}
       onDelete={setDeleting}
       onReorder={onReorder}
+      onAdd={() => setAdding(true)}
     />,
     <BudgetHalf
       key="INCOME"
@@ -238,61 +244,63 @@ function CategoriesView({ settings, thisMonth }: { settings: MoneySettings; this
       month={month}
       overview={overview?.find((row) => row.type === 'INCOME') ?? null}
       amounts={amountsFor(overview, 'INCOME')}
+      spent={spentFor(overview, 'INCOME')}
       categories={incomeCategories}
       money={money}
       onGlobal={onGlobal}
       onEdit={setEditing}
       onDelete={setDeleting}
       onReorder={onReorder}
+      onAdd={() => setAdding(true)}
     />,
   ]
-  const historyTable = history ? (
-    <table className="ui-table">
-      <thead>
-        <tr>
-          <th scope="col">{t('budgets.colMonth')}</th>
-          <th scope="col">{t('budgets.colExpenseBudget')}</th>
-          <th scope="col">{t('budgets.colSpent')}</th>
-          <th scope="col">{t('budgets.colIncomeBudget')}</th>
-          <th scope="col">{t('budgets.colEarned')}</th>
-        </tr>
-      </thead>
-      <tbody>
-        {history.map((row) => {
-          // red when more was spent than was budgeted, green when more was earned than was budgeted
-          const overspent = row.expenseBudget !== null && Number(row.expenseActual) > Number(row.expenseBudget)
-          const overearned = row.incomeBudget !== null && Number(row.incomeActual) > Number(row.incomeBudget)
-          return (
-            <tr key={row.month} className={row.month === month ? 'selected' : undefined}>
-              <td>
-                <Button
-                  variant="link"
-                  onClick={() => {
-                    setMonth(row.month)
-                    pageRef.current?.scrollTo({ top: 0 })
-                  }}
-                >
-                  {monthLabel(row.month, language)}
-                </Button>
-              </td>
-              <td>{row.expenseBudget === null ? '-' : money(row.expenseBudget)}</td>
-              <td>
-                <span className={overspent ? 'over' : undefined}>{money(row.expenseActual)}</span>
-              </td>
-              <td>{row.incomeBudget === null ? '-' : money(row.incomeBudget)}</td>
-              <td>
-                <span className={overearned ? 'earned-over' : undefined}>{money(row.incomeActual)}</span>
-              </td>
-            </tr>
-          )
-        })}
-      </tbody>
-    </table>
+  // The months, each a row you click to see that month above; spent is green within its budget and red above it, earned green above its budget.
+  const historyList = history ? (
+    <ul className="card-list hist-list">
+      <li className="list-head" aria-hidden="true">
+        <span>{t('budgets.colMonth')}</span>
+        <span className="is-end">{t('budgets.colSpent')}</span>
+        <span className="is-end">{t('budgets.colExpenseBudget')}</span>
+        <span className="is-end">{t('budgets.colEarned')}</span>
+        <span className="is-end">{t('budgets.colIncomeBudget')}</span>
+      </li>
+      {history.map((row) => {
+        return (
+          <li key={row.month} className={row.month === month ? 'card-item is-selected' : 'card-item'}>
+            <span className="cell-name">
+              <Button
+                variant="link"
+                className="card-name"
+                aria-current={row.month === month ? 'date' : undefined}
+                onClick={() => {
+                  setMonth(row.month)
+                  paneRef.current?.scrollTo({ top: 0 })
+                }}
+              >
+                {monthLabel(row.month, language)}
+              </Button>
+            </span>
+            <span className="sr-only hist-label">{t('budgets.colSpent')}</span>
+            <span className={spentClass(row.expenseActual, row.expenseBudget)}>{money(row.expenseActual)}</span>
+            <span className="cell-sub-end hist-budget">
+              <span className="sr-only">{t('budgets.colExpenseBudget')}</span>
+              {row.expenseBudget === null ? '-' : money(row.expenseBudget)}
+            </span>
+            <span className="sr-only hist-label">{t('budgets.colEarned')}</span>
+            <span className={earnedClass(row.incomeActual, row.incomeBudget)}>{money(row.incomeActual)}</span>
+            <span className="cell-sub-end hist-budget">
+              <span className="sr-only">{t('budgets.colIncomeBudget')}</span>
+              {row.incomeBudget === null ? '-' : money(row.incomeBudget)}
+            </span>
+          </li>
+        )
+      })}
+    </ul>
   ) : null
 
   return (
-    <section className="tx-page budget-page" ref={pageRef}>
-      <div className="tx-title budget-title">
+    <section className="tx-page budget-page">
+      <div className="tx-title budget-title one-line">
         <h1>{t('categories.title')}</h1>
         <div className="tx-actions">
           <Button onClick={() => setAdding(true)} {...tip('new', t('categories.add'))}>
@@ -356,34 +364,46 @@ function CategoriesView({ settings, thisMonth }: { settings: MoneySettings; this
             onChange={setTab}
             tabs={tabs.map((name) => ({ id: name, label: t(name === 'EXPENSE' ? 'budgets.expenses' : name === 'INCOME' ? 'budgets.income' : 'budgets.history') }))}
           />
-          <div className="tx-pane wide budget-view" role="tabpanel">
+          <div className="tx-pane wide budget-view" {...tabPanelProps(tab)} ref={paneRef}>
             {tab === 'EXPENSE' ? halves[0] : null}
             {tab === 'INCOME' ? halves[1] : null}
-            {tab === 'HISTORY' ? (
-              <div className="ui-card budget-history">
-                <div className="ui-table-wrap budget-history-scroll">{historyTable}</div>
-              </div>
-            ) : null}
+            {tab === 'HISTORY' ? historyList : null}
           </div>
         </>
       ) : (
-        <>
-          <div className="budget-split wide">{halves}</div>
+        <div className="tx-pane wide budget-view" ref={paneRef}>
+          <div className="budget-split">{halves}</div>
           {history && history.length > 0 ? (
-            <section className="ui-card budget-history">
+            <section className="budget-history">
               <CardTitle>{t('budgets.history')}</CardTitle>
-              <div className="ui-table-wrap budget-history-scroll">{historyTable}</div>
+              {historyList}
             </section>
           ) : null}
-        </>
+        </div>
       )}
     </section>
   )
 }
 
+/** Spending against its budget: green at or under it, red above it, plain when there is no budget. */
+function spentClass(spent: string, budget: string | null): string {
+  if (budget === null) return 'cell-amount'
+  return Number(spent) > Number(budget) ? 'cell-amount is-over' : 'cell-amount is-income'
+}
+
+/** Earning against its budget: green above it, plain otherwise. */
+function earnedClass(earned: string, budget: string | null): string {
+  return budget !== null && Number(earned) > Number(budget) ? 'cell-amount is-income' : 'cell-amount'
+}
+
 function amountsFor(overview: Overview[] | null, type: Side): Map<string, string> {
   const row = overview?.find((item) => item.type === type)
   return new Map((row?.categories ?? []).map((line) => [line.categoryId, line.amountLimit]))
+}
+
+function spentFor(overview: Overview[] | null, type: Side): Map<string, string> {
+  const row = overview?.find((item) => item.type === type)
+  return new Map((row?.spent ?? []).map((line) => [line.categoryId, line.amount]))
 }
 
 function BudgetHalf({
@@ -393,12 +413,14 @@ function BudgetHalf({
   month,
   overview,
   amounts,
+  spent,
   categories,
   money,
   onGlobal,
   onEdit,
   onDelete,
   onReorder,
+  onAdd,
 }: {
   title: string
   /** The title is already shown by a section around this one. */
@@ -407,20 +429,23 @@ function BudgetHalf({
   month: string
   overview: Overview | null
   amounts: Map<string, string>
+  /** What each category has added up to this month (spent on the expense side, earned on the income side). */
+  spent: Map<string, string>
   categories: CategoryInMonth[] | null
   money: (amount: string) => string
   onGlobal: (type: Side, raw: string) => Promise<string | null>
   onEdit: (category: Category) => void
   onDelete: (category: Category) => void
   onReorder: (ids: string[]) => void
+  onAdd: () => void
 }) {
   const t = useT()
   const { listRef, hintId, live } = useReorder(categories, onReorder)
   const budgeted = overview?.budgeted ?? ''
   return (
-    <section className="ui-card budget-half">
+    <section className="budget-half">
       {hideTitle ? null : <CardTitle>{title}</CardTitle>}
-      <div className="budget-table">
+      <ul className="card-list sum-list">
         <BudgetRow
           key={`${type}:${month}:${budgeted}`}
           label={t('budgets.budget')}
@@ -429,32 +454,41 @@ function BudgetHalf({
           onSave={(raw) => onGlobal(type, raw)}
         />
         {overview ? (
-          <div className="budget-row quiet">
-            <span className="budget-label">{t(type === 'EXPENSE' ? 'budgets.colSpent' : 'budgets.colEarned')}</span>
-            <span className="budget-amount">{money(overview.used)}</span>
-            <span className="budget-actions" />
-          </div>
+          <li className="card-item">
+            <span className="cell-name">
+              <span className="cell-sub">{t(type === 'EXPENSE' ? 'budgets.colSpent' : 'budgets.colEarned')}</span>
+            </span>
+            <span className={type === 'EXPENSE' ? spentClass(overview.used, overview.budgeted) : earnedClass(overview.used, overview.budgeted)}>{money(overview.used)}</span>
+          </li>
         ) : null}
-      </div>
-      {/* The category list scrolls on its own, so the summary above and the history below stay in view. */}
-      <div className="budget-pane">
-        {categories && categories.length > 0 ? (
-          <div className="budget-table" key={month} ref={listRef}>
-            {categories.map((category) => (
-              <CategoryRow
-                key={category.id}
-                category={category}
-                value={amounts.get(category.id) ?? ''}
-                money={money}
-                onEdit={onEdit}
-                onDelete={onDelete}
-                hintId={hintId}
-              />
-            ))}
-          </div>
-        ) : null}
-        {categories && categories.length === 0 ? <p>{t('common.noCategories')}</p> : null}
-      </div>
+      </ul>
+      {categories && categories.length > 0 ? (
+        <ul className="card-list cat-list" key={month} ref={listRef}>
+          <li className="list-head" aria-hidden="true">
+            <span>{t('common.category')}</span>
+            <span className="is-end">{t(type === 'EXPENSE' ? 'budgets.colSpent' : 'budgets.colEarned')}</span>
+            <span className="is-end">{t('budgets.budget')}</span>
+            <span />
+          </li>
+          {categories.map((category) => (
+            <CategoryRow
+              key={category.id}
+              category={category}
+              type={type}
+              value={amounts.get(category.id) ?? ''}
+              spent={spent.get(category.id) ?? '0.00'}
+              money={money}
+              onEdit={onEdit}
+              onDelete={onDelete}
+              hintId={hintId}
+            />
+          ))}
+        </ul>
+      ) : null}
+      {/* the button is on the expenses side only: when both sides are empty, two of them would say the same */}
+      {categories && categories.length === 0 ? (
+        <EmptyState text={t('common.noCategories')} action={type === 'EXPENSE' ? { label: t('categories.add'), onClick: onAdd } : undefined} />
+      ) : null}
       <span id={hintId} className="sr-only">
         {t('categories.reorderHint')}
       </span>
@@ -465,7 +499,7 @@ function BudgetHalf({
   )
 }
 
-/** One amount that is plain text until "edit" is clicked. Saving an empty field removes the budget. */
+/** One row of the budget of a side: its amount is plain text until "edit" is clicked. Saving an empty field removes the budget. */
 function BudgetRow({
   label,
   value,
@@ -483,10 +517,6 @@ function BudgetRow({
   const inputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
-    if (!editing) setDraft(value)
-  }, [value, editing])
-
-  useEffect(() => {
     if (editing) inputRef.current?.focus()
   }, [editing])
 
@@ -501,71 +531,79 @@ function BudgetRow({
   }
 
   return (
-    <form className={editing ? 'budget-row editing' : 'budget-row'} onSubmit={onSubmit}>
-      <span className="budget-label">{label}</span>
-      {editing ? (
-        <input
-          ref={inputRef}
-          aria-label={t('budgets.amountOf', { label })}
-          inputMode="decimal"
-          autoComplete="off"
-          placeholder="0.00"
-          value={draft}
-          onChange={(event) => setDraft(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.key === 'Escape') setEditing(false)
-          }}
-        />
-      ) : (
-        <span className={value === '' || Number(value) === 0 ? 'budget-amount unset' : 'budget-amount'}>
-          {value === '' ? '-' : money(value)}
+    <li className={editing ? 'card-item is-editing' : 'card-item'}>
+      <form className="budget-form" onSubmit={onSubmit}>
+        <span className="cell-name">
+          <span className="card-name">{label}</span>
         </span>
-      )}
-      <span className="budget-actions">
-        {/* Distinct keys: reusing one button node and flipping its type to submit mid-click submits the form at once. */}
         {editing ? (
-          <>
-            <Button key="save" type="submit" size="sm">
-              {t('common.save')}
-            </Button>
-            {value !== '' ? (
-              <Button key="clear" variant="ghost" size="sm" onClick={() => void save('')}>
-                {t('common.clear')}
-              </Button>
-            ) : null}
-            <Button key="cancel" variant="ghost" size="sm" onClick={() => setEditing(false)}>
-              {t('common.cancel')}
-            </Button>
-          </>
-        ) : (
-          <Button
-            key="edit"
-            variant="ghost"
-            size="sm"
-            onClick={(event) => {
-              event.preventDefault()
-              setEditing(true)
+          <input
+            ref={inputRef}
+            aria-label={t('budgets.amountOf', { label })}
+            inputMode="decimal"
+            autoComplete="off"
+            placeholder="0.00"
+            value={draft}
+            onChange={(event) => setDraft(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === 'Escape') setEditing(false)
             }}
-          >
-            {t('common.edit')}
-          </Button>
+          />
+        ) : (
+          <span className={value === '' || Number(value) === 0 ? 'cell-amount is-varies' : 'cell-amount'}>{value === '' ? '-' : money(value)}</span>
         )}
-      </span>
-    </form>
+        <span className="cell-actions">
+          {/* Distinct keys: reusing one button node and flipping its type to submit mid-click submits the form at once. */}
+          {editing ? (
+            <>
+              <Button key="save" type="submit" size="sm">
+                {t('common.save')}
+              </Button>
+              {value !== '' ? (
+                <Button key="clear" variant="ghost" size="sm" onClick={() => void save('')}>
+                  {t('common.clear')}
+                </Button>
+              ) : null}
+              <Button key="cancel" variant="ghost" size="sm" onClick={() => setEditing(false)}>
+                {t('common.cancel')}
+              </Button>
+            </>
+          ) : (
+            <IconAction
+              key="edit"
+              icon="pencil"
+              label={t('common.edit')}
+              onClick={(event) => {
+                event.preventDefault()
+                setDraft(value)
+                setEditing(true)
+              }}
+            />
+          )}
+        </span>
+      </form>
+    </li>
   )
 }
 
-/** A category with its budget in the month, and what can be done with it: edit (name and budget, in a dialog) and delete. */
+/**
+ * A category with what it adds up to in the month and its budget, and what can be done with it: edit (name and budget, in a dialog) and
+ * delete. The grip at its start tells that the row can be moved.
+ */
 function CategoryRow({
   category,
+  type,
   value,
+  spent,
   money,
   onEdit,
   onDelete,
   hintId,
 }: {
   category: CategoryInMonth
+  type: Side
   value: string
+  spent: string
   money: (amount: string) => string
   onEdit: (category: Category) => void
   onDelete: (category: Category) => void
@@ -573,28 +611,41 @@ function CategoryRow({
   hintId: string
 }) {
   const t = useT()
+  const amount = (
+    <span className={value === '' || Number(value) === 0 ? 'cell-amount is-varies' : 'cell-amount'}>{value === '' ? '-' : money(value)}</span>
+  )
+  // Nothing yet reads as a dash, like the budget; otherwise it is coloured against the budget as the total of the side is.
+  const budget = value === '' ? null : value
+  const tone = Number(spent) === 0 ? 'cell-amount is-varies' : type === 'EXPENSE' ? spentClass(spent, budget) : earnedClass(spent, budget)
+  const spentCell = (
+    <span className={`${tone} cell-spent`}>
+      <span className="sr-only spent-label">{t(type === 'EXPENSE' ? 'budgets.colSpent' : 'budgets.colEarned')}</span> {money(spent)}
+    </span>
+  )
   // Deleted from a later month on: it still counts here, and there is nothing to change about it.
-  if (category.deleted) {
-    return (
-      <div className="budget-row quiet" data-reorder-id={category.id}>
-        <span className="budget-label">{category.name}</span>
-        <span className={value === '' || Number(value) === 0 ? 'budget-amount unset' : 'budget-amount'}>{value === '' ? '-' : money(value)}</span>
-        <span className="budget-note">{t('budgets.deletedLater')}</span>
-      </div>
-    )
-  }
+  const gone = category.deleted
   return (
-    <div className="budget-row" data-reorder-id={category.id}>
-      <span className="budget-label">{category.name}</span>
-      <span className={value === '' || Number(value) === 0 ? 'budget-amount unset' : 'budget-amount'}>{value === '' ? '-' : money(value)}</span>
-      <span className="budget-actions">
-        <Button variant="ghost" size="sm" data-row-focus aria-describedby={hintId} onClick={() => onEdit(category)}>
-          {t('common.edit')}
-        </Button>
-        <Button variant="ghost" size="sm" className="row-danger" onClick={() => onDelete(category)}>
-          {t('common.delete')}
-        </Button>
-      </span>
-    </div>
+    <Row
+      className={gone ? 'is-quiet' : undefined}
+      data-reorder-id={category.id}
+      actions={
+        gone ? null : (
+          <>
+            <IconAction icon="pencil" label={t('common.edit')} data-row-focus aria-describedby={hintId} onClick={() => onEdit(category)} />
+            <IconAction icon="trash" label={t('common.delete')} danger onClick={() => onDelete(category)} />
+          </>
+        )
+      }
+    >
+      <div className="cell-name">
+        {gone ? <span className="row-grip" /> : <Icon name="grip" className="row-grip" />}
+        <span className="card-name" title={category.name}>
+          {category.name}
+        </span>
+        {gone ? <span className="row-mark">{t('budgets.deletedLater')}</span> : null}
+      </div>
+      {spentCell}
+      {amount}
+    </Row>
   )
 }

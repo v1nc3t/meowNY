@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from 'react'
 /** A start that is quicker than this shows no loading screen at all, so a fast start never flashes. */
 export const SHOW_AFTER_MS = 150
 /** Once the loading screen is up it stays at least this long, so it is never just a flicker and can be read. */
-export const MIN_SHOW_MS = 5000
+export const MIN_SHOW_MS = 3500
 
 /** The decrypting line stops short of its end until the data is open: it never shows more done than there is. */
 export const FILL_UNTIL_DONE = 0.95
@@ -66,13 +66,14 @@ export function useDecryptingGate(active: boolean): { show: boolean; blank: bool
 
 /**
  * A form that is hidden (not removed) while the loading screen shows keeps what was typed. When it comes back after a failure,
- * the cursor goes back into its first field, where it was before the submit.
+ * the cursor goes back into its first field on show (a form in steps hides the others), where it was before the submit.
  */
 export function useRefocus(busy: boolean) {
   const form = useRef<HTMLFormElement>(null)
   const wasBusy = useRef(false)
   useEffect(() => {
-    if (wasBusy.current && !busy) form.current?.querySelector('input')?.focus()
+    const fields = form.current?.querySelectorAll('input') ?? []
+    if (wasBusy.current && !busy) Array.from(fields).find((input) => input.getClientRects().length > 0)?.focus()
     wasBusy.current = busy
   }, [busy])
   return form

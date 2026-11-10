@@ -4,6 +4,9 @@
 //! fixed width, so comparing two stamps as text gives the same answer as comparing (milliseconds, counter, device), and a
 //! larger stamp is a newer change. The triggers of migration 0008 make the stamps of local changes from the clock row
 //! `sync_clock`; this module reads and moves that clock for the code around it (a sync, a restore, the start of the app).
+//!
+//! The computer's clock is the reference. A phone keeps how far it is from the computer's clock (`offset_ms`, measured at every sync)
+//! and goes by the wall clock plus that offset for everything that is a date or a stamp; the computer's offset is always 0.
 
 use rusqlite::{params, Connection};
 
@@ -56,12 +59,35 @@ impl Stamp {
     }
 }
 
-/// The wall clock in milliseconds since 1970.
+/// The wall clock of this device in milliseconds since 1970, as the system says. Not what the app goes by for dates and stamps
+/// (`clock_ms`); durations, timeouts and the hello that tells the other device the time use this.
 pub fn now_ms() -> u64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_millis() as u64)
         .unwrap_or(0)
+}
+
+/// A wall clock moved by the offset: the one place in the Rust code where the offset is added. (The stamp triggers add the same column
+/// in SQL, migration 0016.)
+pub fn shifted(wall_ms: u64, offset_ms: i64) -> u64 {
+    wall_ms.saturating_add_signed(offset_ms)
+}
+
+/// How far this device's clock is from the computer's, in milliseconds: the computer's clock minus this one's, as of the last sync.
+/// 0 on the computer, always, and on a phone that has not synced yet.
+pub fn offset_ms(conn: &Connection) -> Result<i64, AppError> {
+    Ok(conn.query_row("SELECT offset_ms FROM sync_clock WHERE id = 1", [], |r| r.get(0))?)
+}
+
+/// The time the app goes by for every date and every stamp: the wall clock moved by the offset.
+pub fn clock_ms(conn: &Connection) -> Result<u64, AppError> {
+    Ok(shifted(now_ms(), offset_ms(conn)?))
+}
+
+/// `clock_ms` as a date and time, for "today", the current month, the dates of reminders and the time of the last sync.
+pub fn clock_now(conn: &Connection) -> Result<chrono::DateTime<chrono::Utc>, AppError> {
+    chrono::DateTime::from_timestamp_millis(clock_ms(conn)? as i64).ok_or(AppError::Internal)
 }
 
 /// This device's id: 32 hex characters, made when the database was first migrated.
@@ -76,10 +102,10 @@ pub fn set_applying(conn: &Connection, on: bool) -> Result<(), AppError> {
     Ok(())
 }
 
-/// Makes a new stamp from the clock the way the triggers do: the wall clock if it is ahead, otherwise one step on from the
-/// last stamp. The clock never goes backwards.
+/// Makes a new stamp from the clock the way the triggers do: the clock (wall clock and offset) if it is ahead, otherwise one step on
+/// from the last stamp. The clock never goes backwards, except for the pull-back of a sync (`engine::follow_desktop_clock`).
 pub fn tick(conn: &Connection) -> Result<Stamp, AppError> {
-    let now = now_ms() as i64;
+    let now = clock_ms(conn)? as i64;
     conn.execute(
         "UPDATE sync_clock SET
            last_counter = CASE WHEN ?1 > last_ms THEN 0 WHEN last_counter >= 65535 THEN 0 ELSE last_counter + 1 END,

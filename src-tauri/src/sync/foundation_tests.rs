@@ -149,6 +149,29 @@ fn the_clock_never_goes_backwards_even_when_the_wall_clock_does() {
 }
 
 #[test]
+fn the_time_the_app_goes_by_is_the_wall_clock_plus_the_offset_in_rust_and_in_the_triggers() {
+    const DAY: i64 = 86_400_000;
+    let close = |ms: u64, expected: i64| (ms as i64 - expected).abs() < 2_000;
+    for offset in [0, 3 * DAY, -3 * DAY, 90_000] {
+        let conn = db();
+        // (the clock never goes backwards, so a negative offset only shows when nothing was stamped later than that yet)
+        conn.execute("UPDATE sync_clock SET offset_ms = ?1, last_ms = 0", [offset]).unwrap();
+        assert_eq!(stamp::offset_ms(&conn).unwrap(), offset);
+        let wall = stamp::now_ms() as i64;
+        assert!(close(stamp::clock_ms(&conn).unwrap(), wall + offset), "clock_ms with {offset}");
+        assert!(close(stamp::clock_now(&conn).unwrap().timestamp_millis() as u64, wall + offset), "clock_now with {offset}");
+        let c = category(&conn, "Food");
+        let from_trigger = Stamp::parse(&stamp_of(&conn, "transactions", transaction(&conn, c, "a"))).unwrap();
+        assert!(close(from_trigger.ms, wall + offset), "a stamp from a trigger with {offset}: {}", from_trigger.ms);
+        assert!(close(stamp::tick(&conn).unwrap().ms, wall + offset), "a stamp from tick with {offset}");
+    }
+    assert_eq!(stamp::shifted(5, -10), 0, "never below zero");
+    assert_eq!(stamp::shifted(5, 10), 15);
+    let fresh = db();
+    assert_eq!(stamp::offset_ms(&fresh).unwrap(), 0, "a device that has not synced goes by its own clock");
+}
+
+#[test]
 fn the_clock_in_rust_and_the_triggers_make_one_ordered_sequence() {
     let conn = db();
     let c = category(&conn, "Food");
@@ -186,6 +209,23 @@ fn changing_what_a_row_holds_gives_it_a_new_stamp() {
     let before = stamp_of(&conn, "categories", c);
     conn.execute("UPDATE categories SET deleted_at = '2026-02-01T00:00:00.000Z' WHERE id = ?1", [c]).unwrap();
     assert!(stamp_of(&conn, "categories", c) > before, "a soft delete is a change");
+}
+
+#[test]
+fn changing_who_paid_a_bill_or_pays_a_template_is_a_change_of_the_row() {
+    let conn = db();
+    let c = category(&conn, "Food");
+    let (t, r) = (transaction(&conn, c, "Coffee"), recurring(&conn, c, "Rent"));
+    conn.execute("INSERT INTO people (name) VALUES ('Anna')", []).unwrap();
+    for (table, id, column) in [("transactions", t, "paid_by"), ("recurring_transactions", r, "split_paid_by")] {
+        let before = stamp_of(&conn, table, id);
+        let updated: String = conn.query_row(&format!("SELECT updated_at FROM {table} WHERE id = ?1"), [id], |row| row.get(0)).unwrap();
+        std::thread::sleep(std::time::Duration::from_millis(5));
+        conn.execute(&format!("UPDATE {table} SET {column} = 1 WHERE id = ?1"), [id]).unwrap();
+        assert!(stamp_of(&conn, table, id) > before, "{column}: a new stamp");
+        let after: String = conn.query_row(&format!("SELECT updated_at FROM {table} WHERE id = ?1"), [id], |row| row.get(0)).unwrap();
+        assert!(after > updated, "{column}: a new updated_at");
+    }
 }
 
 #[test]

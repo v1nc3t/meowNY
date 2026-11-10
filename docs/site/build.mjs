@@ -7,7 +7,8 @@
 //
 // No dependencies. The facts come from docs/site/commands.json and docs/site/examples.json (written by the program's tests,
 // `cd cli && UPDATE_DOCS=1 cargo test --offline --test docs`) and from cli/schema.json (the app's routes). The colours,
-// font and corners are the app's own: ui/src/styles/tokens.css goes in front of docs/site/site.css.
+// font and corners are the app's own: ui/src/styles/tokens.css goes in front of docs/site/site.css, without its @font-face (the site
+// loads no files, so the pixel font falls back to the app's monospace).
 
 import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
@@ -92,7 +93,8 @@ export function build(data = inputs(), shots = images()) {
     ...['index.html', 'guide.html', 'develop.html'].flatMap((file) => lintPage(pages[file]).map((p) => `${file}: ${p}`)),
     ...lintLinks(pages),
   ]
-  const css = readFileSync(join(here, '../../ui/src/styles/tokens.css'), 'utf8') + '\n' + readFileSync(join(here, 'site.css'), 'utf8')
+  const tokens = readFileSync(join(here, '../../ui/src/styles/tokens.css'), 'utf8').replace(/@font-face\s*\{[^}]*\}/g, '')
+  const css = tokens + '\n' + readFileSync(join(here, 'site.css'), 'utf8')
   return { page, html, pages, shots, markdown: toMarkdown(page), css, problems }
 }
 

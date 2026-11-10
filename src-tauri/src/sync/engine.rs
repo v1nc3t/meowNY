@@ -22,9 +22,11 @@ use super::wire::{
 use crate::debts::splits::{self, Who};
 use crate::recurring;
 
-/// A stamp from the other device this far ahead of this device's clock is refused: it would win every later fight.
+/// A stamp from the other device this far ahead of this device's clock is refused: it would win every later fight. A phone pulls
+/// its stamps back to the computer's clock before it sends any (`follow_desktop_clock`), so an honest device never trips this; it is
+/// the net under a broken or hostile one.
 pub const MAX_CLOCK_LEAD_MS: u64 = 24 * 60 * 60 * 1000;
-/// The sync is refused when the clocks differ by more than this; a smaller gap above `CLOCK_WARNING_MS` is only a warning.
+/// Clocks that differ by more than this are told to the person after the sync. Any gap is allowed: the computer's clock wins.
 pub const CLOCK_WARNING_MS: u64 = 60 * 1000;
 
 #[derive(Debug)]
@@ -32,6 +34,7 @@ pub enum SyncError {
     /// The other device has another schema version; `newer_here` says which one has to be updated.
     SchemaMismatch { newer_here: bool },
     ProtocolMismatch,
+    /// The other device sent a stamp far ahead of this device's clock (see `MAX_CLOCK_LEAD_MS`). A gap between the clocks is not this.
     ClockFarOff,
     /// The currencies or their generations do not fit together.
     Currency,
@@ -52,7 +55,7 @@ impl std::fmt::Display for SyncError {
             SyncError::SchemaMismatch { newer_here: true } => f.write_str("the other device must be updated"),
             SyncError::SchemaMismatch { newer_here: false } => f.write_str("this app must be updated"),
             SyncError::ProtocolMismatch => f.write_str("the other device speaks another version of the sync"),
-            SyncError::ClockFarOff => f.write_str("the clocks of the two devices are too far apart"),
+            SyncError::ClockFarOff => f.write_str("the other device sent changes dated far in the future"),
             SyncError::Currency => f.write_str("the currencies of the two devices do not fit together"),
             SyncError::Invalid(what) => write!(f, "invalid {what} from the other device"),
             SyncError::Locked => f.write_str("the app is locked"),
@@ -402,9 +405,10 @@ fn load_rows(conn: &Connection, table: Table, wanted: &HashSet<&String>) -> Resu
             let mut parts = parts_by_bill(conn)?;
             let mut stmt = conn.prepare(
                 "SELECT t.sync_id, t.stamp, c.sync_id, r.sync_id, t.recurring_due_date, t.client_uuid, t.name, t.amount_minor,
-                        t.planned_amount_minor, t.payment_date, t.description, t.created_at, t.updated_at
+                        t.planned_amount_minor, t.payment_date, t.description, t.created_at, t.updated_at, p.sync_id
                  FROM transactions t JOIN categories c ON c.id = t.category_id
-                 LEFT JOIN recurring_transactions r ON r.id = t.recurring_transaction_id ORDER BY t.sync_id",
+                 LEFT JOIN recurring_transactions r ON r.id = t.recurring_transaction_id
+                 LEFT JOIN people p ON p.id = t.paid_by ORDER BY t.sync_id",
             )?;
             for r in stmt.query_map([], |r| {
                 Ok(TransactionRow {
@@ -419,6 +423,7 @@ fn load_rows(conn: &Connection, table: Table, wanted: &HashSet<&String>) -> Resu
                     planned_amount_minor: r.get(8)?,
                     payment_date: r.get(9)?,
                     description: r.get(10)?,
+                    paid_by: r.get(13)?,
                     split: Vec::new(),
                     created_at: r.get(11)?,
                     updated_at: r.get(12)?,
@@ -503,10 +508,12 @@ fn parts_by_bill(conn: &Connection) -> Result<HashMap<String, Vec<SplitPartRow>>
 /// The template of every split recurring item by the `sync_id` of the item.
 fn templates_by_item(conn: &Connection) -> Result<HashMap<String, TemplateRow>, SyncError> {
     let mut out: HashMap<String, TemplateRow> = HashMap::new();
-    let mut stmt = conn.prepare("SELECT sync_id, split_my_weight FROM recurring_transactions WHERE split_my_weight IS NOT NULL")?;
-    for row in stmt.query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)?)))? {
-        let (item, mine) = row?;
-        out.insert(item, TemplateRow { mine, parts: Vec::new() });
+    let mut stmt = conn.prepare(
+        "SELECT x.sync_id, x.split_my_weight, p.sync_id FROM recurring_transactions x LEFT JOIN people p ON p.id = x.split_paid_by WHERE x.split_my_weight IS NOT NULL",
+    )?;
+    for row in stmt.query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)?, r.get::<_, Option<String>>(2)?)))? {
+        let (item, mine, paid_by) = row?;
+        out.insert(item, TemplateRow { mine, paid_by, parts: Vec::new() });
     }
     let mut stmt = conn.prepare(
         "SELECT x.sync_id, p.sync_id, l.guest_name, l.weight
@@ -858,6 +865,14 @@ impl<'a> Applier<'a> {
         Ok((out, any_moved))
     }
 
+    /// The local id of the friend who paid a bill or pays a template, following a merge as `person` does (`true` when it did).
+    fn local_payer(&self, sync_id: Option<&str>) -> Result<(Option<i64>, bool), SyncError> {
+        match sync_id {
+            Some(sync_id) => self.person(sync_id).map(|(id, moved)| (Some(id), moved)),
+            None => Ok((None, false)),
+        }
+    }
+
     fn settings(&mut self, rows: &[Row]) -> Result<(), SyncError> {
         for row in rows {
             let Row::Settings(r) = row else { return Err(SyncError::Invalid("row")) };
@@ -1134,8 +1149,9 @@ impl<'a> Applier<'a> {
         Ok(())
     }
 
-    /// Moves everything that belonged to a friend who was merged away to the one they were merged into: their ledger entries, and their
-    /// parts of bills and of templates (a bill that held both gets one part with the amounts added). What moves takes the moved stamp.
+    /// Moves everything that belonged to a friend who was merged away to the one they were merged into: their ledger entries, their
+    /// parts of bills and of templates (a bill that held both gets one part with the amounts added), and the bills and templates they paid.
+    /// What moves takes the moved stamp.
     fn repoint_person(&mut self, loser: i64, winner: i64) -> Result<(), SyncError> {
         let entries: Vec<(i64, String)> = self.tx.prepare_cached("SELECT id, stamp FROM ledger_entries WHERE person_id = ?1")?
             .query_map([loser], |r| Ok((r.get(0)?, r.get(1)?)))?
@@ -1173,6 +1189,19 @@ impl<'a> Applier<'a> {
                 let new = moved(&parse(&stamp)?);
                 self.run(&format!("UPDATE {} SET stamp = ?2 WHERE id = ?1", parent_table.name()), params![bill, new.format()])?;
                 self.set_updated_at(parent_table, bill, &iso(new.ms))?;
+            }
+        }
+        // `moved` is the same stamp when it is made twice, so a bill that had both a part and the loser as its payer is moved once
+        for (table, column) in [(Table::Transactions, "paid_by"), (Table::RecurringTransactions, "split_paid_by")] {
+            let paid: Vec<(i64, String)> = self
+                .tx
+                .prepare_cached(&format!("SELECT id, stamp FROM {} WHERE {column} = ?1", table.name()))?
+                .query_map([loser], |r| Ok((r.get(0)?, r.get(1)?)))?
+                .collect::<Result<_, _>>()?;
+            for (id, stamp) in paid {
+                let new = moved(&parse(&stamp)?);
+                self.run(&format!("UPDATE {} SET {column} = ?2, stamp = ?3 WHERE id = ?1", table.name()), params![id, winner, new.format()])?;
+                self.set_updated_at(table, id, &iso(new.ms))?;
             }
         }
         Ok(())
@@ -1294,12 +1323,13 @@ impl<'a> Applier<'a> {
             if moved_category {
                 stamp = moved(&parse(&stamp)?).format();
             }
-            let (template, moved_person) = match &r.split {
+            let (template, paid_by, moved_person) = match &r.split {
                 Some(t) => {
-                    let (lines, moved_person) = self.local_parts(t.parts.iter().map(|p| (&p.person, &p.guest, p.weight)))?;
-                    (Some((t.mine, lines)), moved_person)
+                    let (lines, moved_parts) = self.local_parts(t.parts.iter().map(|p| (&p.person, &p.guest, p.weight)))?;
+                    let (paid_by, moved_payer) = self.local_payer(t.paid_by.as_deref())?;
+                    (Some((t.mine, lines)), paid_by, moved_parts || moved_payer)
                 }
-                None => (None, false),
+                None => (None, None, false),
             };
             if moved_person {
                 stamp = moved(&parse(&stamp)?).format();
@@ -1329,8 +1359,9 @@ impl<'a> Applier<'a> {
                     self.note_overwrite(local);
                     self.run(
                         "UPDATE recurring_transactions SET stamp = ?2, category_id = ?3, name = ?4, description = ?5, amount_minor = ?6, start_date = ?7,
-                         interval_unit = ?8, interval_count = ?9, next_due_date = ?10, end_date = ?11, is_active = ?12, created_at = ?13, skipped_dates = ?14 WHERE id = ?1",
-                        params![id, stamp, category, r.name, r.description, r.amount_minor, r.start_date, r.interval_unit, r.interval_count, r.next_due_date, r.end_date, r.is_active, r.created_at, r.skipped_dates],
+                         interval_unit = ?8, interval_count = ?9, next_due_date = ?10, end_date = ?11, is_active = ?12, created_at = ?13, skipped_dates = ?14,
+                         split_paid_by = ?15 WHERE id = ?1",
+                        params![id, stamp, category, r.name, r.description, r.amount_minor, r.start_date, r.interval_unit, r.interval_count, r.next_due_date, r.end_date, r.is_active, r.created_at, r.skipped_dates, paid_by],
                     )?;
                     self.set_updated_at(Table::RecurringTransactions, *id, &when)?;
                     self.summary.updated += 1;
@@ -1339,9 +1370,9 @@ impl<'a> Applier<'a> {
                 None => {
                     self.run(
                         "INSERT INTO recurring_transactions (sync_id, stamp, category_id, name, description, amount_minor, start_date, interval_unit,
-                         interval_count, next_due_date, end_date, is_active, created_at, updated_at, skipped_dates)
-                         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)",
-                        params![r.sync_id, stamp, category, r.name, r.description, r.amount_minor, r.start_date, r.interval_unit, r.interval_count, r.next_due_date, r.end_date, r.is_active, r.created_at, when, r.skipped_dates],
+                         interval_count, next_due_date, end_date, is_active, created_at, updated_at, skipped_dates, split_paid_by)
+                         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)",
+                        params![r.sync_id, stamp, category, r.name, r.description, r.amount_minor, r.start_date, r.interval_unit, r.interval_count, r.next_due_date, r.end_date, r.is_active, r.created_at, when, r.skipped_dates, paid_by],
                     )?;
                     self.summary.added += 1;
                     self.tx.last_insert_rowid()
@@ -1466,8 +1497,9 @@ impl<'a> Applier<'a> {
             if moved_category {
                 stamp = moved(&parse(&stamp)?).format();
             }
-            let (parts, moved_person) = self.local_parts(r.split.iter().map(|p| (&p.person, &p.guest, p.amount_minor)))?;
-            if moved_person {
+            let (parts, moved_parts) = self.local_parts(r.split.iter().map(|p| (&p.person, &p.guest, p.amount_minor)))?;
+            let (paid_by, moved_payer) = self.local_payer(r.paid_by.as_deref())?;
+            if moved_parts || moved_payer {
                 stamp = moved(&parse(&stamp)?).format();
             }
             // updated_at follows the stamp only when the stamp was derived from a merge; any other stamp change keeps it
@@ -1544,7 +1576,7 @@ impl<'a> Applier<'a> {
                 self.put_marker(Table::Transactions, rival_sync_id, &marker)?;
                 self.summary.dropped += 1;
             }
-            if !parts.is_empty() && self.is_income(category)? {
+            if (!parts.is_empty() || paid_by.is_some()) && self.is_income(category)? {
                 return Err(SyncError::Invalid("split"));
             }
             let bill = match &existing {
@@ -1552,8 +1584,8 @@ impl<'a> Applier<'a> {
                     self.note_overwrite(local);
                     self.run(
                         "UPDATE transactions SET stamp = ?2, category_id = ?3, recurring_transaction_id = ?4, recurring_due_date = ?5, client_uuid = ?6,
-                         name = ?7, amount_minor = ?8, planned_amount_minor = ?9, payment_date = ?10, description = ?11, created_at = ?12 WHERE id = ?1",
-                        params![id, stamp, category, recurring, r.recurring_due_date, r.client_uuid, r.name, r.amount_minor, r.planned_amount_minor, r.payment_date, r.description, r.created_at],
+                         name = ?7, amount_minor = ?8, planned_amount_minor = ?9, payment_date = ?10, description = ?11, created_at = ?12, paid_by = ?13 WHERE id = ?1",
+                        params![id, stamp, category, recurring, r.recurring_due_date, r.client_uuid, r.name, r.amount_minor, r.planned_amount_minor, r.payment_date, r.description, r.created_at, paid_by],
                     )?;
                     self.set_updated_at(Table::Transactions, *id, &when)?;
                     self.summary.updated += 1;
@@ -1562,9 +1594,9 @@ impl<'a> Applier<'a> {
                 None => {
                     self.run(
                         "INSERT INTO transactions (sync_id, stamp, category_id, recurring_transaction_id, recurring_due_date, client_uuid, name,
-                         amount_minor, planned_amount_minor, payment_date, description, created_at, updated_at)
-                         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
-                        params![r.sync_id, stamp, category, recurring, r.recurring_due_date, r.client_uuid, r.name, r.amount_minor, r.planned_amount_minor, r.payment_date, r.description, r.created_at, when],
+                         amount_minor, planned_amount_minor, payment_date, description, created_at, updated_at, paid_by)
+                         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)",
+                        params![r.sync_id, stamp, category, recurring, r.recurring_due_date, r.client_uuid, r.name, r.amount_minor, r.planned_amount_minor, r.payment_date, r.description, r.created_at, when, paid_by],
                     )?;
                     self.summary.added += 1;
                     self.tx.last_insert_rowid()
@@ -1949,8 +1981,9 @@ impl<'a> Applier<'a> {
     }
 }
 
-/// Applies what arrived, in one database transaction: either all of it or none. `now_ms` is this device's wall clock, and
-/// `since_ms` the time of the last sync with this device (none if there was none), which tells a change made here since then
+/// Applies what arrived, in one database transaction: either all of it or none. `now_ms` is the time this device goes by
+/// (`stamp::clock_ms`): a stamp more than a day ahead of it is refused, as the net under a peer that did not pull its stamps back.
+/// `since_ms` is the time of the last sync with this device (none if there was none), which tells a change made here since then
 /// from an older one.
 pub fn apply(conn: &mut Connection, incoming: &Incoming, now_ms: u64, since_ms: Option<u64>) -> Result<Summary, SyncError> {
     let newest_allowed = now_ms.saturating_add(MAX_CLOCK_LEAD_MS);
@@ -2044,9 +2077,9 @@ pub fn adopt_currency(conn: &mut Connection, currency: &str, generation: i64, ch
 // ---------------------------------------------------------------------------------------------------------------
 // hello, clocks and currency
 
-pub fn hello(conn: &Connection, name: &str, app_version: &str) -> Result<wire::Hello, SyncError> {
+/// `wall_ms` is this device's wall clock as the system says it, with no offset: it is what the other device measures its own against.
+pub fn hello(conn: &Connection, name: &str, app_version: &str, wall_ms: u64) -> Result<wire::Hello, SyncError> {
     let device_id = stamp::device_id(conn).map_err(|_| SyncError::Internal)?;
-    let (ms, counter): (i64, i64) = conn.query_row("SELECT last_ms, last_counter FROM sync_clock WHERE id = 1", [], |r| Ok((r.get(0)?, r.get(1)?)))?;
     let (currency, generation): (String, i64) =
         conn.query_row("SELECT currency, currency_generation FROM settings WHERE id = 1", [], |r| Ok((r.get(0)?, r.get(1)?)))?;
     Ok(wire::Hello {
@@ -2055,7 +2088,7 @@ pub fn hello(conn: &Connection, name: &str, app_version: &str) -> Result<wire::H
         app_version: app_version.to_string(),
         schema: crate::migrate::latest_version(),
         protocol: wire::PROTOCOL,
-        clock: Stamp::new(ms as u64, counter as u16, &device_id[..stamp::DEVICE_CHARS]).format(),
+        clock: Stamp::new(wall_ms, 0, &device_id[..stamp::DEVICE_CHARS]).format(),
         currency,
         generation,
         since: None,
@@ -2070,7 +2103,8 @@ pub enum Warning {
     ClockOff(u64),
 }
 
-/// What the other device's hello means for this sync: stop, or go on (maybe with a warning).
+/// What the other device's hello means for this sync: stop, or go on (maybe with a warning). `now_ms` is this device's wall clock
+/// (no offset), the same kind of time as the clock in the hello. However far apart the clocks are, the sync goes on.
 pub fn check_hello(mine: &wire::Hello, theirs: &wire::Hello, now_ms: u64) -> Result<Vec<Warning>, SyncError> {
     if theirs.protocol != mine.protocol {
         return Err(SyncError::ProtocolMismatch);
@@ -2083,9 +2117,6 @@ pub fn check_hello(mine: &wire::Hello, theirs: &wire::Hello, now_ms: u64) -> Res
     }
     let their_time = Stamp::parse(&theirs.clock).ok_or(SyncError::Invalid("clock"))?.ms;
     let gap = their_time.abs_diff(now_ms);
-    if gap > MAX_CLOCK_LEAD_MS {
-        return Err(SyncError::ClockFarOff);
-    }
     // the generation of the currency: equal generations must mean the same currency
     if theirs.generation == mine.generation && theirs.currency != mine.currency {
         return Err(SyncError::Currency);
@@ -2095,6 +2126,37 @@ pub fn check_hello(mine: &wire::Hello, theirs: &wire::Hello, now_ms: u64) -> Res
         warnings.push(Warning::ClockOff(gap / 1000));
     }
     Ok(warnings)
+}
+
+/// Phone, at every sync, as soon as the computer's hello is in and before any list is compared (`docs/sync-design.md`, section 10): the
+/// computer's clock is the reference, so this device takes its distance from it and gives up every stamp that is ahead of it.
+///
+/// * `offset_ms` becomes the computer's clock minus this device's wall clock (`wall_ms`), also when it is small. Everything that is a date
+///   or a stamp here goes by the wall clock plus this (`stamp::clock_ms`).
+/// * Every stamp of this device's data (rows, deletion markers, the record of currency changes) later than the computer's time `H` is
+///   made `H`, keeping its counter and device part, and the clock is set to `H`. This is the one deliberate exception to "the clock never
+///   goes backwards": a phone that was set days ahead would otherwise make every row it ever touched win over the computer's edits.
+///
+/// All in one transaction, with the triggers standing aside as in `apply`; either all of it happens or none.
+pub fn follow_desktop_clock(conn: &mut Connection, desktop: &wire::Hello, wall_ms: u64) -> Result<(), SyncError> {
+    let h = Stamp::parse(&desktop.clock).ok_or(SyncError::Invalid("clock"))?.ms;
+    // a stamp has 13 digits, so `h` fits an `i64` with room to spare
+    let offset = h as i64 - wall_ms as i64;
+    let tx = conn.transaction()?;
+    stamp::set_applying(&tx, true)?;
+    // a stamp later than H is one that sorts after "H-ffff-ffffffff"; the new one keeps what follows the milliseconds
+    let latest_kept = format!("{h:013}-ffff-ffffffff");
+    let head = format!("{h:013}");
+    for table in stamp::STAMPED_TABLES.iter().copied().chain(["sync_deleted", "currency_changes"]) {
+        // The names are fixed above, never typed by anyone.
+        tx.execute(&format!("UPDATE {table} SET stamp = ?2 || substr(stamp, 14) WHERE stamp > ?1"), params![latest_kept, head])?;
+    }
+    tx.execute("UPDATE sync_clock SET offset_ms = ?1, last_ms = ?2, last_counter = 0 WHERE id = 1", params![offset, h as i64])?;
+    stamp::set_applying(&tx, false)?;
+    // the clock must still not be behind a stamp that stays (one at H with a counter above 0)
+    stamp::catch_up(&tx).map_err(|_| SyncError::Internal)?;
+    tx.commit()?;
+    Ok(())
 }
 
 /// The currency changes the other device has not seen yet, in order.
@@ -2244,9 +2306,9 @@ fn name_of(conn: &Connection, sql: &str, sync_id: &str) -> String {
     conn.query_row(sql, [sync_id], |r| r.get::<_, String>(0)).unwrap_or_default()
 }
 
-/// "Anna 30.00, Bob 30.00": the parts of a bill, by the names of the friends on this device.
-fn split_text(conn: &Connection, parts: &[SplitPartRow]) -> String {
-    parts
+/// "Anna 30.00, Bob 30.00, paid by Anna": the parts of a bill, by the names of the friends on this device, and who paid if it was not you.
+fn split_text(conn: &Connection, parts: &[SplitPartRow], paid_by: &Option<String>) -> String {
+    let mut text: Vec<String> = parts
         .iter()
         .map(|p| {
             let who = match (&p.person, &p.guest) {
@@ -2256,8 +2318,11 @@ fn split_text(conn: &Connection, parts: &[SplitPartRow]) -> String {
             };
             format!("{who} {}", crate::money::format_amount(p.amount_minor))
         })
-        .collect::<Vec<_>>()
-        .join(", ")
+        .collect();
+    if let Some(id) = paid_by {
+        text.push(format!("paid by {}", name_of(conn, "SELECT name FROM people WHERE sync_id = ?1", id)));
+    }
+    text.join(", ")
 }
 
 fn template_text(conn: &Connection, template: &Option<TemplateRow>) -> String {
@@ -2274,7 +2339,8 @@ fn template_text(conn: &Connection, template: &Option<TemplateRow>) -> String {
             format!("{who} {}", p.weight)
         })
         .collect();
-    format!("{} {}", t.mine, parts.join(" "))
+    let paid_by = t.paid_by.as_ref().map(|id| format!(" paid by {}", name_of(conn, "SELECT name FROM people WHERE sync_id = ?1", id))).unwrap_or_default();
+    format!("{} {}{paid_by}", t.mine, parts.join(" "))
 }
 
 fn money_text(minor: Option<i64>) -> String {
@@ -2293,7 +2359,7 @@ fn facts(conn: &Connection, row: &Row) -> Vec<(&'static str, String)> {
             ("date", r.payment_date.clone()),
             ("category", category_name(conn, &r.category)),
             ("description", some(&r.description)),
-            ("split", split_text(conn, &r.split)),
+            ("split", split_text(conn, &r.split, &r.paid_by)),
         ],
         Row::Person(r) => vec![
             ("name", r.name.clone()),

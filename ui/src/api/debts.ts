@@ -75,6 +75,8 @@ export const Line = z.object({
   balance: signed,
   entryId: id.nullable(),
   transactionId: id.nullable(),
+  /** The payment date of that transaction, which for an entry is not the day of the line. Set whenever `transactionId` is. */
+  transactionDate: date.nullable(),
 })
 export type Line = z.infer<typeof Line>
 
@@ -89,8 +91,11 @@ export type SplitMode = z.infer<typeof SplitMode>
 
 /** One friend or guest on a bill, as typed. Exactly one of `personId` and `guest`. */
 export type PartInput = { personId?: string; guest?: string; value?: string }
-/** A split as it is typed: the mode, the person's own value and the others. With `mine` left out, percent and exact give the rest. */
-export type SplitInput = { mode: SplitMode; mine?: string; parts: PartInput[] }
+/**
+ * A split as it is typed: the mode, the person's own value and the others. In percent and exact one value may be left out, `mine` or a part's, and it gets the rest.
+ * `paidBy` is a friend on the bill who paid it (a person id); left out, the person paid. Only for saving, a preview ignores it.
+ */
+export type SplitInput = { mode: SplitMode; mine?: string; parts: PartInput[]; paidBy?: string }
 
 export { PartOut }
 
@@ -118,7 +123,9 @@ export const BillPreview = z.object({
   ownCurrency: z.string().regex(/^[A-Z]{3}$/),
   sameCurrency: z.boolean(),
   alreadyAdded: z.boolean(),
-  /** The friend whose name is the sender's, to choose first. */
+  /** The name of the friend who paid the bill, when it was not the sender: the person owes them the part. */
+  paidBy: z.string().nullable(),
+  /** The friend whose name is the payer's, or the sender's when nobody else paid, to choose first. */
   friendId: id.nullable(),
 })
 export type BillPreview = z.infer<typeof BillPreview>
@@ -238,6 +245,8 @@ export const HistoryLine = z.object({
   dueDate: date.nullable(),
   entryId: id.nullable(),
   transactionId: id.nullable(),
+  /** The payment date of that transaction, which for an entry is not the day of the line. Set whenever `transactionId` is. */
+  transactionDate: date.nullable(),
   recurringId: id.nullable(),
 })
 export type HistoryLine = z.infer<typeof HistoryLine>
@@ -251,7 +260,8 @@ export const History = z.object({
 })
 export type History = z.infer<typeof History>
 
-export type HistoryFilter = { from?: string; to?: string; personId?: string; limit?: number; offset?: number }
+/** `only` keeps one kind of line: the friends' lines, or the recurring payments that were paid late (not with `personId`). */
+export type HistoryFilter = { from?: string; to?: string; personId?: string; only?: 'friends' | 'paidLate'; limit?: number; offset?: number }
 
 /** A file for the preview before it is saved: its bytes as base64url text, and how many. */
 export const DebtsFilePreview = z.object({ data: z.string(), bytes: z.number().int().nonnegative() })
@@ -274,9 +284,18 @@ export const debts = {
   addEntry: (input: NewEntry, expense?: ExpenseInput) => call('add_ledger_entry', Entry, { input, expense: expense ?? null }),
   updateEntry: (id: string, patch: EntryPatch) => call('update_ledger_entry', Entry, { id, patch }),
   removeEntry: (id: string) => call('delete_ledger_entry', z.null(), { id }).then(() => undefined),
-  /** "Mark as paid". No amount means the whole balance; one above the debt is accepted and the answer says how much was over. */
-  settle: (id: string, options: { amount?: string; date?: string; note?: string } = {}) =>
-    call('settle_person', Settled, { id, amount: options.amount ?? null, date: options.date ?? null, note: options.note ?? null }),
+  /**
+   * "Mark as paid". No amount means the whole balance; one above the debt is accepted and the answer says how much was over.
+   * `transactionId` is the transaction the payment was for: only a reference, no amount changes.
+   */
+  settle: (id: string, options: { amount?: string; date?: string; note?: string; transactionId?: string } = {}) =>
+    call('settle_person', Settled, {
+      id,
+      amount: options.amount ?? null,
+      date: options.date ?? null,
+      note: options.note ?? null,
+      transactionId: options.transactionId ?? null,
+    }),
   preview: (amount: string, input: SplitInput) => call('split_preview', SplitPreview, { amount, input }),
   split: (transactionId: string, input: SplitInput) => call('set_transaction_split', Transaction, { id: transactionId, input }),
   unsplit: (transactionId: string) => call('clear_transaction_split', Transaction, { id: transactionId }),

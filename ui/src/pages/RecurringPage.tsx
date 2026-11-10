@@ -1,4 +1,4 @@
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import AddCategoryModal from '../components/AddCategoryModal'
 import AttachArea from '../components/AttachArea'
@@ -9,6 +9,9 @@ import SplitEditor from '../components/SplitEditor'
 import Dropdown from '../components/Dropdown'
 import ConfirmModal from '../components/ConfirmModal'
 import DuePayments from '../components/DuePayments'
+import PaidLatePayments from '../components/PaidLatePayments'
+import Icon from '../components/NavIcon'
+import { IconAction, Row, Table, TapRow } from '../components/RowParts'
 import SectionTabs from '../components/SectionTabs'
 import Modal, { modalFormId } from '../components/Modal'
 import Badge from '../components/ui/Badge'
@@ -22,10 +25,13 @@ import { useToday, type Today } from '../api/today'
 import { categoryOptions } from '../lib/categoriesView'
 import { amountString, formatDate, formatMoney } from '../lib/money'
 import { draftOfTemplate, NOT_SPLIT, reducedWeights, toInput, type SplitState } from '../lib/split'
+import { tabPanelProps } from '../lib/tabs'
 import { useAttachments, type Attachments } from '../hooks/useAttachments'
 import { useClipCounts } from '../hooks/useClipCounts'
 import { useFocusRequest, useJumpTo } from '../hooks/useFocusRequest'
 import { useMoneySettings, type MoneySettings } from '../hooks/useMoneySettings'
+import { useOpenRow } from '../hooks/useOpenRow'
+import { useProfile } from '../hooks/profile'
 import { useToast } from '../hooks/toast'
 import { useT } from '../i18n/context'
 import { useShortcut } from '../keys/registry'
@@ -45,6 +51,9 @@ function statusOf(item: Recurring, today: string): Status {
   }
   return item.endDate !== null && (item.endDate < today || item.nextDueDate > item.endDate) ? 'ended' : 'paused'
 }
+
+/** Where a status sits in the list: the running items, then the paused, then the ended. */
+const STATUS_RANK: Record<Status, number> = { overdue: 0, today: 0, upcoming: 0, paused: 1, ended: 2 }
 
 type ConfirmKind = 'skip' | 'pause' | 'end' | 'delete'
 
@@ -69,13 +78,14 @@ export default function RecurringPage() {
 
 function RecurringView({ settings, now }: { settings: MoneySettings; now: Today }) {
   const t = useT()
+  const phone = useProfile() === 'phone'
   const [categories, setCategories] = useState<Category[]>([])
   const [items, setItems] = useState<Recurring[] | null>(null)
   // every friend, removed ones too: a template may still name one
   const [friends, setFriends] = useState<Person[]>([])
   const [split, setSplit] = useState<SplitState>(NOT_SPLIT)
   // the item whose details are open in the list
-  const [openId, setOpenId] = useState<string | null>(null)
+  const openRows = useOpenRow()
   const [reload, setReload] = useState(0)
   const [adding, setAdding] = useState(false)
   const [editing, setEditing] = useState<Recurring | null>(null)
@@ -101,15 +111,20 @@ function RecurringView({ settings, now }: { settings: MoneySettings; now: Today 
   const onSplitReady = useCallback((ready: boolean) => setSplit((current) => (current.ready === ready ? current : { ...current, ready })), [])
   const removedFriends = useMemo(() => new Set(friends.filter((friend) => friend.archived).map((friend) => friend.id)), [friends])
   const categoryNames = useMemo(() => new Map(categories.map((category) => [category.id, category.name])), [categories])
+  const incomeCategories = useMemo(() => new Set(categories.filter((category) => category.type === 'INCOME').map((category) => category.id)), [categories])
 
-  // One group per category, in the category list's order; items of a deleted category go last.
-  const groups = useMemo(() => {
+  const today = now.date
+  // Active items first, then paused, then ended. Within each, in the category list's order, the items of a category together; items of a
+  // deleted category go last. Each comes with its category's name.
+  const rows = useMemo(() => {
     const byCategory = new Map<string, Recurring[]>()
     for (const item of items ?? []) byCategory.set(item.categoryId, [...(byCategory.get(item.categoryId) ?? []), item])
-    const known = categories.filter((c) => byCategory.has(c.id)).map((c) => ({ id: c.id, name: c.name, items: byCategory.get(c.id) ?? [] }))
-    const unknown = [...byCategory].filter(([id]) => !categoryNames.has(id))
-    return [...known, ...unknown.map(([id, list]) => ({ id, name: t('tx.deletedCategory'), items: list }))]
-  }, [items, categories, categoryNames, t])
+    const known = categories.filter((c) => byCategory.has(c.id)).map((c) => ({ name: c.name, items: byCategory.get(c.id) ?? [] }))
+    const unknown = [...byCategory].filter(([id]) => !categoryNames.has(id)).map(([, list]) => ({ name: t('tx.deletedCategory'), items: list }))
+    const grouped = [...known, ...unknown].flatMap((group) => group.items.map((item) => ({ item, category: group.name })))
+    // the sort is stable, so the categories keep their order inside each status
+    return grouped.sort((a, b) => STATUS_RANK[statusOf(a.item, today)] - STATUS_RANK[statusOf(b.item, today)])
+  }, [items, categories, categoryNames, today, t])
 
   useEffect(() => {
     let cancelled = false
@@ -294,19 +309,23 @@ function RecurringView({ settings, now }: { settings: MoneySettings; now: Today 
       setPending(false)
     }
     if (notAttached.length > 0) say(t('docs.attachFailed', { names: notAttached.join(', ') }), 'warning')
+    else say(t('rec.paid'), 'success')
     closeModals()
     setReload((value) => value + 1)
   }
 
-  // The code of the next payment is for a friend with a part, and needs an amount to share (a bill that changes has none).
+  // The code of the next payment is for a friend with a part, and needs an amount to share (a bill that changes has none). The friend who
+  // pays it has no code: the others owe them, and the code is refused for them.
   const codeFor = (item: Recurring, at: number) => {
     const part = item.split?.parts[at]
-    return item.amount !== null && part?.personId && part.person && part.weight > 0 ? { item, personId: part.personId, name: part.person } : null
+    const isPayer = part?.personId === item.split?.paidBy?.personId
+    return item.amount !== null && part?.personId && part.person && part.weight > 0 && !isPayer ? { item, personId: part.personId, name: part.person } : null
   }
 
+  // One word for an interval of 1 ("monthly"), since the column head already says "repeats"; a longer one keeps "every 2 weeks".
   const everyText = (item: Recurring) =>
     item.intervalCount === 1
-      ? t(`rec.every1.${item.intervalUnit}`)
+      ? t(`rec.often.${item.intervalUnit}`)
       : t(`rec.everyN.${item.intervalUnit}`, { count: item.intervalCount })
 
   /** The date the badge shows, and the word beside it when the item is not simply upcoming. */
@@ -319,9 +338,245 @@ function RecurringView({ settings, now }: { settings: MoneySettings; now: Today 
     return { date, state: '' }
   }
 
+  /** The amount of an item: income in green with a plus, a bill with no fixed amount in grey. */
+  function amount(item: Recurring) {
+    if (item.amount === null) return <span className="cell-amount is-varies">{t('rec.varies')}</span>
+    const income = incomeCategories.has(item.categoryId)
+    const text = formatMoney(item.amount, settings.currency, settings.locale)
+    return <span className={income ? 'cell-amount is-income' : 'cell-amount'}>{income ? `+${text}` : text}</span>
+  }
+
+  /**
+   * The small marks after a name: the documents (a button on the desktop, only its number on the phone) and, on the phone, shared with
+   * friends and a note. (The desktop's rows have a column for shared, and the note is in the panel.)
+   */
+  function marks(item: Recurring) {
+    const count = clips[item.id] ?? 0
+    return (
+      <>
+        {phone && item.split ? <span className="row-mark">{t('tx.shared')}</span> : null}
+        {phone && item.description?.trim() ? (
+          <span className="row-mark-icon" title={t('common.description')}>
+            <Icon name="note" className="mark-icon" />
+            <span className="sr-only">{t('common.description')}</span>
+          </span>
+        ) : null}
+        {count && !phone ? <ClipPreview inline target={{ kind: 'recurring', id: item.id }} name={item.name} count={count} /> : null}
+        {count && phone ? (
+          <span className="row-mark-icon">
+            <Icon name="clip" className="mark-icon" />
+            <span aria-hidden="true">{count}</span>
+            <span className="sr-only">{t('docs.clip', { count })}</span>
+          </span>
+        ) : null}
+      </>
+    )
+  }
+
+  /** What a row opens to: who shares it (with a code for each friend) and the description. */
+  function details(item: Recurring): ReactNode {
+    return (
+      <>
+        {item.split ? (
+          <section className="detail-section">
+            <div className="split-head">
+              <p className="detail-title">{t('split.section')}</p>
+              {item.split.paidBy ? <p className="split-paid">{t('split.paidByName', { name: item.split.paidBy.name })}</p> : null}
+            </div>
+            <table className="split-table">
+              <tbody>
+                {(() => {
+                  const shares = reducedWeights([item.split.mine, ...item.split.parts.map((part) => part.weight)])
+                  return [t('split.you'), ...item.split.parts.map((part) => part.person ?? part.guest ?? '')].map((name, at) => (
+                    <tr key={`${name}-${at}`} className={at === 0 ? 'is-you' : undefined}>
+                      <th scope="row">{name}</th>
+                      <td>{shares[at] ?? 0}</td>
+                      <td>
+                        {codeFor(item, at - 1) ? (
+                          <Button variant="outline" size="sm" onClick={() => setCoding(codeFor(item, at - 1))}>
+                            <Icon name="qr" className="btn-icon" />
+                            {t('code.show')}
+                          </Button>
+                        ) : null}
+                      </td>
+                    </tr>
+                  ))
+                })()}
+              </tbody>
+            </table>
+            {item.split.parts.some((part) => part.personId && removedFriends.has(part.personId)) ? <p className="hint">{t('split.archivedFriend')}</p> : null}
+          </section>
+        ) : null}
+        {item.description?.trim() ? (
+          <section className="detail-section">
+            <p className="detail-title">{t('common.description')}</p>
+            <p className="detail-text">{item.description}</p>
+          </section>
+        ) : null}
+      </>
+    )
+  }
+
+  const resume = (item: Recurring) => void run(() => recurringApi.setActive(item.id, true))
+
+  // A desktop row: name, amount, next due date (with "overdue" or "due today" under it), category, how often, ongoing, paused or ended, an
+  // icon if it is shared, then the one thing to do (mark as paid), edit, delete and the chevron. Skip, pause and end are in the panel
+  // the chevron opens.
+  function tableRow({ item, category }: { item: Recurring; category: string }) {
+    const status = statusOf(item, now.date)
+    const badge = badgeOf(item, status)
+    const more = status !== 'ended' || Boolean(item.split) || Boolean(item.description?.trim())
+    const late = status === 'overdue' || status === 'today'
+    return (
+      <Row
+        key={item.id}
+        rows={openRows}
+        id={item.id}
+        item={`recurring:${item.id}`}
+        data-status={status}
+        actions={
+          <>
+            {item.isActive ? (
+              <Button variant="outline" size="sm" className="row-primary" data-row-focus onClick={() => openPay(item)}>
+                {t('rec.pay')}
+              </Button>
+            ) : status === 'paused' ? (
+              <Button variant="outline" size="sm" className="row-primary" data-row-focus onClick={() => resume(item)}>
+                {t('rec.resume')}
+              </Button>
+            ) : null}
+            <IconAction icon="pencil" label={t('common.edit')} data-row-focus={item.isActive || status === 'paused' ? undefined : true} onClick={() => openEdit(item)} />
+            <IconAction icon="trash" label={t('common.delete')} danger onClick={() => setConfirming({ kind: 'delete', item })} />
+          </>
+        }
+        panel={
+          more ? (
+            <>
+              {details(item)}
+              <div className="row-panel-actions">
+                {item.isActive ? (
+                  <>
+                    <Button variant="outline" size="sm" onClick={() => setConfirming({ kind: 'skip', item })}>
+                      {t('rec.skip')}
+                    </Button>
+                    <Button variant="outline" size="sm" onClick={() => setConfirming({ kind: 'pause', item })}>
+                      {t('rec.pause')}
+                    </Button>
+                  </>
+                ) : null}
+                {status !== 'ended' ? (
+                  <Button variant="outline" size="sm" onClick={() => setConfirming({ kind: 'end', item })}>
+                    {t('rec.end')}
+                  </Button>
+                ) : null}
+              </div>
+            </>
+          ) : null
+        }
+      >
+        <div className="cell-name">
+          <span className="card-name" title={item.name}>
+            {item.name}
+          </span>
+          {marks(item)}
+        </div>
+        {amount(item)}
+        <span className={status === 'overdue' ? 'cell-sub-end is-overdue' : 'cell-sub-end'}>
+          {badge.date}
+          {late ? <span className="cell-fine">{badge.state}</span> : null}
+        </span>
+        <div className="rec-sub">
+          <span className="cell-sub" title={category}>
+            {category}
+          </span>
+          <span className="cell-sub rec-often" title={everyText(item)}>
+            {everyText(item)}
+          </span>
+          <span className="cell-sub rec-state">{t(status === 'paused' ? 'rec.paused' : status === 'ended' ? 'rec.ended' : 'rec.ongoing')}</span>
+          <span className="cell-mark">
+            {item.split ? (
+              <span className="row-mark-icon" title={t('tx.shared')}>
+                <Icon name="qr" className="mark-icon" />
+                <span className="sr-only">{t('tx.shared')}</span>
+              </span>
+            ) : null}
+          </span>
+        </div>
+      </Row>
+    )
+  }
+
+  // A phone row: the name and amount, how often and the next due date under them. It opens to the details and a labelled button for
+  // everything that can be done with the item.
+  function tapRow({ item, category }: { item: Recurring; category: string }) {
+    const status = statusOf(item, now.date)
+    const badge = badgeOf(item, status)
+    return (
+      <TapRow
+        key={item.id}
+        id={openRows.panelId(item.id)}
+        item={`recurring:${item.id}`}
+        data-status={status}
+        open={openRows.isOpen(item.id)}
+        onToggle={() => openRows.toggle(item.id)}
+        name={item.name}
+        amount={amount(item)}
+        sub={
+          <>
+            <span>{`${category}, ${everyText(item)}, ${status === 'ended' ? badge.date : t('debts.dueOn', { date: badge.date })}`}</span>
+            {status !== 'upcoming' ? <Badge variant={STATE_BADGE[status]}>{badge.state}</Badge> : null}
+            {marks(item)}
+          </>
+        }
+      >
+        {details(item)}
+        {clips[item.id] ? (
+          <section className="detail-section">
+            <p className="detail-title">{t('docs.title')}</p>
+            <ClipPreview target={{ kind: 'recurring', id: item.id }} name={item.name} count={clips[item.id] ?? 0} />
+          </section>
+        ) : null}
+        <div className="row-panel-actions">
+          {item.isActive ? (
+            <Button variant="outline" onClick={() => openPay(item)}>
+              {t('rec.pay')}
+            </Button>
+          ) : status === 'paused' ? (
+            <Button variant="outline" onClick={() => resume(item)}>
+              {t('rec.resume')}
+            </Button>
+          ) : null}
+          <Button variant="outline" onClick={() => openEdit(item)}>
+            <Icon name="pencil" className="btn-icon" />
+            {t('common.edit')}
+          </Button>
+          {item.isActive ? (
+            <>
+              <Button variant="outline" onClick={() => setConfirming({ kind: 'skip', item })}>
+                {t('rec.skip')}
+              </Button>
+              <Button variant="outline" onClick={() => setConfirming({ kind: 'pause', item })}>
+                {t('rec.pause')}
+              </Button>
+            </>
+          ) : null}
+          {status !== 'ended' ? (
+            <Button variant="outline" onClick={() => setConfirming({ kind: 'end', item })}>
+              {t('rec.end')}
+            </Button>
+          ) : null}
+          <Button variant="outline" className="row-danger" onClick={() => setConfirming({ kind: 'delete', item })}>
+            <Icon name="trash" className="btn-icon" />
+            {t('common.delete')}
+          </Button>
+        </div>
+      </TapRow>
+    )
+  }
+
   return (
     <section className="tx-page">
-      <div className="tx-title">
+      <div className="tx-title one-line">
         <h1>{t('rec.title')}</h1>
         <div className="tx-actions">
           <Button onClick={() => openAdd()} {...tip('new', t('rec.add'))}>
@@ -367,6 +622,7 @@ function RecurringView({ settings, now }: { settings: MoneySettings; now: Today 
         <BillCodeModal
           target={{ kind: 'recurring', id: coding.item.id, date: coding.item.nextDueDate }}
           person={{ id: coding.personId, name: coding.name }}
+          paidBy={coding.item.split?.paidBy?.name}
           onClose={() => setCoding(null)}
         />
       ) : null}
@@ -383,7 +639,7 @@ function RecurringView({ settings, now }: { settings: MoneySettings; now: Today 
             <DateField name="paidOn" label={t('rec.paidOn')} defaultValue={paying.dueDate ?? paying.item.nextDueDate} today={now.date} />
             <label>
               {t('common.description')}
-              <input name="description" maxLength={255} placeholder={t('common.optional')} defaultValue={paying.item.description ?? ''} autoComplete="off" />
+              <textarea name="description" rows={3} maxLength={255} placeholder={t('common.optional')} defaultValue={paying.item.description ?? ''} autoComplete="off" />
             </label>
           </form>
           <AttachArea attachments={attachments} />
@@ -399,143 +655,25 @@ function RecurringView({ settings, now }: { settings: MoneySettings; now: Today 
         ]}
       />
       {tab === 'due' && due ? (
-        <div className="tx-pane wide pane-stack" role="tabpanel">
+        <div className="tx-pane wide pane-stack rec-due" {...tabPanelProps(tab)}>
+          <h2 className="debts-heading">{t('rec.tabDue')}</h2>
           <DuePayments due={due} currency={settings.currency} locale={settings.locale} onPay={payDue} onSkip={setSkipping} />
+          <PaidLatePayments currency={settings.currency} locale={settings.locale} reload={reload} />
         </div>
       ) : null}
       {tab === 'items' && items ? (
-        <div className="tx-pane wide">
-          {items.length === 0 ? <EmptyState text={t('rec.empty')} /> : null}
-          {groups.map((group) => (
-            <Fragment key={group.id}>
-              <h2 className="rec-group">
-                {group.name}
-                <span className="rec-count">{group.items.length}</span>
-              </h2>
-              <ul className="rec-list">
-                {group.items.map((item) => {
-                  const status = statusOf(item, now.date)
-                  const badge = badgeOf(item, status)
-                  return (
-                    <li key={item.id} className="rec-item" data-status={status} data-item={`recurring:${item.id}`}>
-                      <div className="rec-body">
-                        <p className="rec-name">{item.name}</p>
-                        <p className="rec-meta">
-                          <span className={item.amount === null ? 'rec-amount rec-varies' : 'rec-amount'}>
-                            {item.amount === null ? t('rec.varies') : formatMoney(item.amount, settings.currency, settings.locale)}
-                          </span>
-                          {' \u00b7 '}
-                          {everyText(item)}
-                          {clips[item.id] ? (
-                            <>
-                              {' \u00b7 '}
-                              <ClipPreview inline target={{ kind: 'recurring', id: item.id }} name={item.name} count={clips[item.id] ?? 0} />
-                            </>
-                          ) : null}
-                        </p>
-                        {item.split?.parts.some((part) => part.personId && removedFriends.has(part.personId)) ? (
-                          <p className="hint">{t('split.archivedFriend')}</p>
-                        ) : null}
-                        {item.split || item.description?.trim() ? (
-                          <Button
-                            variant="link"
-                            className="tx-desc"
-                            aria-expanded={openId === item.id}
-                            onClick={() => setOpenId((current) => (current === item.id ? null : item.id))}
-                          >
-                            {t('common.details')}
-                          </Button>
-                        ) : null}
-                        {openId === item.id ? (
-                          <div className="card-detail">
-                            {item.split ? (
-                              <section className="detail-section">
-                                <p className="detail-title">{t('split.section')}</p>
-                                <table className="split-table">
-                                  <tbody>
-                                    {(() => {
-                                      const shares = reducedWeights([item.split.mine, ...item.split.parts.map((part) => part.weight)])
-                                      return [t('split.you'), ...item.split.parts.map((part) => part.person ?? part.guest ?? '')].map((name, at) => (
-                                        <tr key={`${name}-${at}`} className={at === 0 ? 'is-you' : undefined}>
-                                          <th scope="row">{name}</th>
-                                          <td>{shares[at] ?? 0}</td>
-                                          <td>
-                                            {codeFor(item, at - 1) ? (
-                                              <Button variant="ghost" size="sm" onClick={() => setCoding(codeFor(item, at - 1))}>
-                                                {t('code.show')}
-                                              </Button>
-                                            ) : null}
-                                          </td>
-                                        </tr>
-                                      ))
-                                    })()}
-                                  </tbody>
-                                </table>
-                              </section>
-                            ) : null}
-                            {item.description?.trim() ? (
-                              <section className="detail-section">
-                                <p className="detail-title">{t('common.description')}</p>
-                                <p>{item.description}</p>
-                              </section>
-                            ) : null}
-                          </div>
-                        ) : null}
-                      </div>
-                      <div className="rec-due">
-                        <span className="rec-status">
-                          <span className="rec-date">{badge.date}</span>
-                          {status !== 'upcoming' ? <Badge variant={STATE_BADGE[status]}>{badge.state}</Badge> : null}
-                        </span>
-                        {item.isActive ? (
-                          <span className="rec-actions">
-                            <Button size="sm" data-row-focus onClick={() => openPay(item)}>
-                              {t('rec.pay')}
-                            </Button>
-                            <Button variant="ghost" size="sm" onClick={() => setConfirming({ kind: 'skip', item })}>
-                              {t('rec.skip')}
-                            </Button>
-                            <Button variant="ghost" size="sm" onClick={() => setConfirming({ kind: 'pause', item })}>
-                              {t('rec.pause')}
-                            </Button>
-                          </span>
-                        ) : status === 'paused' ? (
-                          <span className="rec-actions">
-                            <Button variant="outline" size="sm" data-row-focus onClick={() => void run(() => recurringApi.setActive(item.id, true))}>
-                              {t('rec.resume')}
-                            </Button>
-                          </span>
-                        ) : null}
-                      </div>
-                      <div className="rec-more">
-                        <Button variant="ghost" size="sm" onClick={() => openEdit(item)}>
-                          {t('common.edit')}
-                        </Button>
-                        {(() => {
-                          // an item split with friends has a code for each of them: one friend opens it, several open the details to choose
-                          const friends = (item.split?.parts ?? []).map((_, at) => codeFor(item, at)).filter((code) => code !== null)
-                          if (friends.length === 0) return null
-                          return (
-                            <Button variant="ghost" size="sm" onClick={() => (friends.length === 1 ? setCoding(friends[0] ?? null) : setOpenId(item.id))}>
-                              {t('code.show')}
-                            </Button>
-                          )
-                        })()}
-                        {status !== 'ended' ? (
-                          <Button variant="ghost" size="sm" className="row-danger" onClick={() => setConfirming({ kind: 'end', item })}>
-                            {t('rec.end')}
-                          </Button>
-                        ) : null}
-                        <Button variant="ghost" size="sm" className="row-danger" onClick={() => setConfirming({ kind: 'delete', item })}>
-                          {t('common.delete')}
-                        </Button>
-                      </div>
-                    </li>
-                  )
-                })}
-              </ul>
-            </Fragment>
-          ))}
+        <div className="tx-pane wide" {...tabPanelProps(tab)}>
+          {items.length === 0 ? <EmptyState text={t('rec.empty')} action={{ label: t('rec.add'), onClick: openAdd }} /> : null}
+          {items.length > 0 && phone ? <ul className="card-list">{rows.map(tapRow)}</ul> : null}
+          {items.length > 0 && !phone ? (
+            <Table
+              className="rec-table"
+              heads={[t('common.name'), { label: t('tx.amount'), className: 'is-end' }, t('sync.field.nextDue'), t('common.category'), t('sync.field.every'), t('debts.colStatus'), '', '']}
+              opens
+            >
+              {rows.map(tableRow)}
+            </Table>
+          ) : null}
         </div>
       ) : null}
     </section>
@@ -632,7 +770,7 @@ function RecurringModal({
           ) : null}
           <label>
             {t('common.description')}
-            <input name="description" maxLength={255} placeholder={t('common.optional')} defaultValue={item?.description ?? ''} autoComplete="off" />
+            <textarea name="description" rows={3} maxLength={255} placeholder={t('common.optional')} defaultValue={item?.description ?? ''} autoComplete="off" />
           </label>
         </form>
         <AttachArea attachments={attachments} />

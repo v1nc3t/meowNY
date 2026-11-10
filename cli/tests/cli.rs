@@ -404,8 +404,8 @@ fn control_characters_cannot_get_into_the_data_so_they_cannot_reach_a_terminal_f
     let app = app(false);
     let food = ok(&app, &app.write, &["categories", "create", "--name", "Food", "--type", "expense"])["id"].as_str().unwrap().to_string();
     let before = snapshot(&app);
-    // The app refuses them in names and notes, so a list can never print an escape sequence it was given.
-    for (name, note) in [("\u{1b}[31mred", "x"), ("plain", "a\u{1b}[2Jb"), ("bell\u{7}", "x"), ("plain", "two\nlines"), ("tab\there", "x")] {
+    // The app refuses them in names and notes (a note may hold line breaks), so a list can never print an escape sequence it was given.
+    for (name, note) in [("\u{1b}[31mred", "x"), ("plain", "a\u{1b}[2Jb"), ("bell\u{7}", "x"), ("tab\there", "x")] {
         let args = ["transactions", "create", "--name", name, "--amount", "1.00", "--payment-date", "2026-10-14", "--category-id", &food, "--description", note];
         assert_eq!(failed(&app, &app.write, &args), (2, "invalid_input".into()), "{name:?} {note:?}");
     }
@@ -416,6 +416,10 @@ fn control_characters_cannot_get_into_the_data_so_they_cannot_reach_a_terminal_f
     ok(&app, &app.write, &["transactions", "create", "--name", name, "--amount", "1.00", "--payment-date", "2026-10-14", "--category-id", &food]);
     assert_eq!(ok(&app, &app.read, &["transactions", "list"])["transactions"][0]["name"], name);
     assert!(run(&app, &app.read, &["transactions", "list"]).out.contains(name));
+    // A line break in a note is kept in the data and shown as a space in the table.
+    ok(&app, &app.write, &["transactions", "create", "--name", "Two", "--amount", "1.00", "--payment-date", "2026-10-15", "--category-id", &food, "--description", "two\nlines"]);
+    assert_eq!(ok(&app, &app.read, &["transactions", "list"])["transactions"][0]["description"], "two\nlines");
+    assert!(run(&app, &app.read, &["transactions", "list"]).out.contains("two lines"));
 }
 
 #[test]

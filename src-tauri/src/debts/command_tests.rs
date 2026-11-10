@@ -132,6 +132,11 @@ fn the_ledger_is_kept_and_a_payment_larger_than_the_debt_turns_the_balance_aroun
     assert_eq!(h.ok("list_transactions", json!({ "filter": { "q": "Pizza" } }))["total"], 1);
     assert_eq!(h.code("add_ledger_entry", json!({ "input": { "personId": anna, "kind": "LENT", "amount": "1.00", "date": "2026-10-11" }, "expense": { "name": "X", "categoryId": food } })), "invalid_input");
     assert_eq!(h.code("settle_person", json!({ "id": h.friend("Bob") })), "invalid_input", "nothing to settle");
+    // a payment can name the transaction it was for; one that is not there is refused
+    let taxi = h.ok("create_transaction", json!({ "input": { "name": "Taxi", "amount": "8.00", "paymentDate": "2026-10-12", "categoryId": food } }));
+    let for_taxi = h.ok("settle_person", json!({ "id": anna, "amount": "10.00", "transactionId": taxi["id"] }));
+    assert_eq!(for_taxi["entry"]["transactionId"], taxi["id"]);
+    assert_eq!(h.code("settle_person", json!({ "id": anna, "transactionId": "999" })), "invalid_input");
     h.ok("delete_ledger_entry", json!({ "id": loan["id"] }));
     assert_eq!(h.code("delete_ledger_entry", json!({ "id": loan["id"] })), "not_found");
 }

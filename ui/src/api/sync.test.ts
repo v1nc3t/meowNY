@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { test } from 'node:test'
-import { allChosen, choicesInOrder, cleanDigits, FIELDS, locksAfterBackground, PHONE_PASSPHRASE_GOOD, REASON_KEYS, shouldWarn, Status, TABLES, wantsLongerPassphrase } from './sync.ts'
+import { allChosen, choicesInOrder, cleanDigits, clockGapText, FIELDS, locksAfterBackground, PHONE_PASSPHRASE_GOOD, phoneClockGap, REASON_KEYS, reasonNeedsUpdate, shouldWarn, Status, TABLES, wantsLongerPassphrase } from './sync.ts'
+import { Today } from './today.ts'
 
 // What the Rust side sends, as its own tests show it (sync/service.rs, sync/peers.rs, vault.rs).
 const waiting = { state: 'waiting', purpose: 'sync', qr: 'MNY1:x', address: '192.168.1.2:5000', expiresInSecs: 120 }
@@ -65,6 +66,15 @@ test('the reasons the screens translate are exactly the ones the app can give', 
   assert.deepEqual([...given].sort(), Object.keys(REASON_KEYS).sort())
 })
 
+test('the reasons an update can fix are the ones that link to the update', () => {
+  for (const reason of ['peer_version', 'other_device_older', 'this_device_older', 'clock']) {
+    assert.ok(Object.hasOwn(REASON_KEYS, reason), `${reason} is a reason the app gives`)
+    assert.equal(reasonNeedsUpdate(reason), true, reason)
+  }
+  assert.equal(reasonNeedsUpdate('unreachable'), false)
+  assert.equal(reasonNeedsUpdate('something_new'), false)
+})
+
 test('the lock screen warns from the third wrong passphrase on, while a try is left', () => {
   const at = (failed: number) => ({ failed, allowed: 5, left: 5 - failed })
   assert.equal(shouldWarn(null), false)
@@ -84,6 +94,28 @@ test('the phone locks when it was away for the time chosen, and never when the c
   assert.equal(locksAfterBackground(60_000, 60), true)
   assert.equal(locksAfterBackground(10 * 60_000, 300), true)
   assert.equal(locksAfterBackground(10 * 3_600_000, 0), false)
+})
+
+test('a gap between clocks reads in the unit that fits it, up to days', () => {
+  assert.deepEqual([45, 119, 120, 600].map(clockGapText), ['45 s', '119 s', '2 min', '10 min'])
+  assert.deepEqual([119 * 60, 120 * 60, 5 * 3600, 47 * 3600].map(clockGapText), ['119 min', '2 h', '5 h', '47 h'])
+  assert.deepEqual([48 * 3600, 3 * 86_400, 400 * 86_400].map(clockGapText), ['2 d', '3 d', '400 d'])
+})
+
+test('the phone says its clock is off only when it is more than a minute from the computer, either way', () => {
+  assert.equal(phoneClockGap(0), null)
+  assert.equal(phoneClockGap(60_000), null, 'a minute is nothing to mention')
+  assert.equal(phoneClockGap(-60_000), null)
+  assert.equal(phoneClockGap(90_000), 90)
+  assert.equal(phoneClockGap(-90_000), 90, 'behind or ahead, the gap is the same')
+  assert.equal(phoneClockGap(3 * 86_400_000), 3 * 86_400)
+})
+
+test('the offset comes with today, as a whole number of milliseconds', () => {
+  assert.equal(Today.parse({ date: '2026-10-30', month: '2026-10', offsetMs: -259_200_000 }).offsetMs, -259_200_000)
+  for (const bad of [{ date: '2026-10-30', month: '2026-10' }, { date: '2026-10-30', month: '2026-10', offsetMs: 1.5 }, { date: '2026-10-30', month: '2026-10', offsetMs: '5' }]) {
+    assert.equal(Today.safeParse(bad).success, false, JSON.stringify(bad))
+  }
 })
 
 test('the digits are kept to six numbers, whatever was typed or pasted', () => {

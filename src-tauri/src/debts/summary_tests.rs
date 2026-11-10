@@ -2,7 +2,7 @@ use super::fixtures::*;
 use super::ledger::{self, Kind, NewEntry};
 use super::people;
 use super::splits::set_split;
-use super::summary::{summary, summary_csv};
+use super::summary::{statement_text, summary, summary_csv, Labels};
 
 fn entry(conn: &rusqlite::Connection, person: i64, kind: Kind, amount: &str, date: &str, note: Option<&str>) {
     ledger::add(conn, &NewEntry { person_id: person.to_string(), kind, amount: amount.into(), date: date.into(), note: note.map(str::to_string), transaction_id: None }).unwrap();
@@ -39,4 +39,13 @@ fn the_csv_summary_has_a_signed_balance_and_cannot_run_as_a_formula() {
     assert_eq!(rows[0], "\"'=HYPERLINK(\"\"evil\"\")\",-7.50,EUR", "{csv}");
     assert_eq!(rows[1], "\"Smith, \"\"Jo\"\"\",1.00,EUR");
     assert_eq!(rows.len(), 2);
+}
+
+#[test]
+fn a_note_with_a_line_break_stays_on_one_line_of_the_text_statement() {
+    let w = world();
+    let anna = friend(&w.conn, "Anna");
+    entry(&w.conn, anna, Kind::Lent, "5.00", "2026-01-01", Some("taxi\nhome"));
+    let text = statement_text(&w.conn, anna, "2026-02-01", &Labels::english()).unwrap();
+    assert!(text.contains("lent: taxi home"), "{text}");
 }

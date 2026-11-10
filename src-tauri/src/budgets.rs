@@ -80,6 +80,13 @@ pub struct CategoryLimit {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
+pub struct CategorySum {
+    pub category_id: String,
+    pub amount: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Overview {
     #[serde(rename = "type")]
     pub kind: CategoryType,
@@ -97,6 +104,8 @@ pub struct Overview {
     pub remaining: Option<String>,
     pub over_allocated: bool,
     pub categories: Vec<CategoryLimit>,
+    /// What the month's transactions add up to in each category that has any, with or without a budget; they add up to `used`.
+    pub spent: Vec<CategorySum>,
 }
 
 /// "2026-06" to the first day of that month.
@@ -356,6 +365,23 @@ fn actual_minor(conn: &Connection, kind: CategoryType, start: &str, end: &str) -
     )?)
 }
 
+/// What each category of this type has in the month, counted like `used` in `actual_minor`: your part of a shared transaction, and
+/// no category that was deleted before the month ends.
+fn spent_by_category(conn: &Connection, kind: CategoryType, start: &str, end: &str) -> Result<Vec<CategorySum>, AppError> {
+    let mut statement = conn.prepare(
+        "SELECT t.category_id, SUM(t.cost_minor)
+         FROM transaction_costs t JOIN categories c ON c.id = t.category_id
+         WHERE c.type = ?1 AND t.payment_date >= ?2 AND t.payment_date < ?3 AND (c.deleted_at IS NULL OR c.deleted_at >= ?3)
+         GROUP BY t.category_id ORDER BY t.category_id",
+    )?;
+    let rows = statement.query_map(params![kind_sql(kind), start, end], |r| Ok((r.get::<_, i64>(0)?, r.get::<_, i64>(1)?)))?;
+    rows.map(|row| {
+        let (id, minor) = row?;
+        Ok(CategorySum { category_id: id.to_string(), amount: format_amount(minor) })
+    })
+    .collect()
+}
+
 /// Income and expense side for one month. Categories removed from the budget are not listed.
 pub fn overview(conn: &Connection, month: &str) -> Result<Vec<Overview>, AppError> {
     let first = month_start(month)?;
@@ -387,6 +413,7 @@ pub fn overview(conn: &Connection, month: &str) -> Result<Vec<Overview>, AppErro
                         b.category_id.map(|id| CategoryLimit { category_id: id.to_string(), amount_limit: format_amount(b.limit_minor) })
                     })
                     .collect(),
+                spent: spent_by_category(conn, kind, &start, &end)?,
             })
         })
         .collect()
@@ -972,6 +999,59 @@ mod tests {
         categories::delete(&mut conn, rent, at(LATE)).unwrap();
         let o = side(&conn, "2026-10", CategoryType::Expense);
         assert_eq!((o.allocated.as_str(), o.used.as_str(), o.actual.as_str()), ("500.00", "300.00", "350.00"));
+    }
+
+    fn spent_in(o: &Overview, category: i64) -> Option<&str> {
+        o.spent.iter().find(|s| s.category_id == category.to_string()).map(|s| s.amount.as_str())
+    }
+
+    #[test]
+    fn spent_lists_every_category_with_transactions_in_the_month_with_or_without_a_budget() {
+        let (conn, food, rent, salary) = db();
+        put(&conn, &category(CategoryType::Expense, food, "2026-10", Some("500.00"))).unwrap();
+        spend(&conn, food, "300.00", "2026-10-05");
+        spend(&conn, food, "20.50", "2026-10-31");
+        spend(&conn, rent, "50.00", "2026-10-06");
+        spend(&conn, food, "99.00", "2026-09-30");
+        spend(&conn, food, "98.00", "2026-11-01");
+        spend(&conn, salary, "1200.00", "2026-10-25");
+
+        let october = side(&conn, "2026-10", CategoryType::Expense);
+        assert_eq!(spent_in(&october, food), Some("320.50"), "the month only, both ends of it");
+        assert_eq!(spent_in(&october, rent), Some("50.00"), "no budget, still listed");
+        assert_eq!(spent_in(&october, salary), None, "the other side has its own");
+        assert_eq!(october.spent.len(), 2);
+        assert_eq!(october.used, "370.50", "they add up to used");
+        let income = side(&conn, "2026-10", CategoryType::Income);
+        assert_eq!((spent_in(&income, salary), income.spent.len()), (Some("1200.00"), 1));
+
+        let september = side(&conn, "2026-09", CategoryType::Expense);
+        assert_eq!((spent_in(&september, food), spent_in(&september, rent)), (Some("99.00"), None));
+        assert!(side(&conn, "2026-08", CategoryType::Expense).spent.is_empty());
+    }
+
+    #[test]
+    fn spent_is_your_part_of_a_shared_transaction() {
+        let (conn, food, rent, _) = db();
+        spend(&conn, food, "100.00", "2026-10-05");
+        conn.execute("INSERT INTO transaction_split_lines (transaction_id, guest_name, amount_minor) VALUES (?1, 'Carl', 4000)", [conn.last_insert_rowid()])
+            .unwrap();
+        spend(&conn, rent, "80.00", "2026-10-06");
+        conn.execute("INSERT INTO transaction_split_lines (transaction_id, guest_name, amount_minor) VALUES (?1, 'Carl', 8000)", [conn.last_insert_rowid()])
+            .unwrap();
+        let o = side(&conn, "2026-10", CategoryType::Expense);
+        assert_eq!((spent_in(&o, food), spent_in(&o, rent)), (Some("60.00"), Some("0.00")), "paid for others: nothing is yours");
+        assert_eq!(o.used, "60.00");
+    }
+
+    #[test]
+    fn spent_leaves_out_a_category_deleted_before_the_month_ends_like_used() {
+        let (mut conn, food, rent, _) = db();
+        spend(&conn, food, "300.00", "2026-10-05");
+        spend(&conn, rent, "50.00", "2026-10-06");
+        categories::delete(&mut conn, rent, at(LATE)).unwrap();
+        let o = side(&conn, "2026-10", CategoryType::Expense);
+        assert_eq!((spent_in(&o, food), spent_in(&o, rent), o.used.as_str()), (Some("300.00"), None, "300.00"));
     }
 
     #[test]

@@ -1,32 +1,74 @@
-/* The phone shell: header, bottom tabs, add button, quick menu and slide animations. */
+/* The phone shell: header, bottom tabs, add button and quick menu. */
 
 html.is-phone button,
 html.is-phone .pick-button {
-  min-height: 2.75rem;
+  min-height: 44px;
 }
 
 /* min-height beats the heights that base.css and primitives.css give, so a tap target stays 44px or more. */
 html.is-phone input:not([type='checkbox'], [type='radio']),
 html.is-phone select,
 html.is-phone textarea {
-  min-height: 2.75rem;
+  min-height: 44px;
   font-size: max(16px, 1rem);
 }
 
 html.is-phone input[type='checkbox'],
 html.is-phone input[type='radio'] {
-  width: 1.5rem;
-  height: 1.5rem;
+  width: 24px;
+  height: 24px;
+  min-width: 24px;
 }
 
 /* An icon button is as wide as it is tall, so it is also 44px wide. */
 html.is-phone .ui-btn-icon {
-  min-width: 2.75rem;
+  min-width: 44px;
 }
 
 /* The tabs' buttons are 44px tall, so the track around them grows to fit. */
 html.is-phone .ui-tabs {
   height: auto;
+}
+
+/* The phone's own press replaces the grey box that Android draws on a tapped element (and iOS on a link). Every tappable thing below
+   and in primitives.css answers a press with a change of its own, so a tap is never silent. */
+html.is-phone {
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* A touch screen has no hover, so a press shows what hover shows on a desktop: the quiet fill. Rows and buttons have their own press (primitives.css). */
+html.is-phone :is(.phone-tab, .phone-action, .quick-menu button, .pick-button, .pick-toggle, .ui-tabs > button:not([aria-selected='true'])):active:not(:disabled) {
+  color: var(--accent-foreground);
+  background: var(--accent);
+}
+
+/* A link or a title with no box of its own dims for as long as it is pressed. */
+html.is-phone :is(.app-logo, .settings-back, .app-main a:not([class]), .app-footer a):active {
+  opacity: 0.6;
+}
+
+/* The footer is two lines (the page at the left, then the links at the right), each item at least 44px tall to tap. The gap round
+   the | is as wide as a 360px screen allows for the links in English ("check for updates | questions & bugs | sponsor" is 273px of
+   text on 325px). */
+html.is-phone .app-footer {
+  --sep-gap: 1.7rem;
+}
+
+html.is-phone .app-footer nav {
+  flex-direction: column;
+}
+
+html.is-phone .app-footer li {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  min-height: 44px;
+}
+
+html.is-phone .app-footer a {
+  display: flex;
+  align-items: center;
+  align-self: stretch;
 }
 
 .app-shell.is-phone.is-locked {
@@ -41,7 +83,7 @@ html.is-phone .ui-tabs {
   align-items: center;
   gap: 1rem;
   padding: calc(0.25rem + env(safe-area-inset-top, 0px)) 1rem 0.25rem;
-  border-bottom: 1px solid var(--border);
+  border-bottom: var(--border-width) solid var(--border);
   background: var(--background);
 }
 
@@ -56,11 +98,12 @@ html.is-phone .ui-tabs {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 2.75rem;
+  width: 44px;
   min-width: 0;
-  height: 2.75rem;
+  height: 44px;
   padding: 0;
   color: var(--muted-foreground);
+  transition: background-color var(--t-fast), color var(--t-fast);
 }
 
 .phone-action.active {
@@ -68,9 +111,10 @@ html.is-phone .ui-tabs {
   background: var(--accent);
 }
 
+/* The pixel icons at twice their grid (12px), so each of their pixels is a 2px block. */
 .tab-icon {
-  width: 1.375rem;
-  height: 1.375rem;
+  width: 24px;
+  height: 24px;
   flex: 0 0 auto;
 }
 
@@ -78,16 +122,29 @@ html.is-phone .ui-tabs {
   padding: 1rem 1rem 0.5rem;
 }
 
-/* The round button covers the corner of the page; the lists leave room below their last row. */
+/* The round button covers the corner of the page; the lists leave room below their last row. A phone's scroll bar is thin and floats
+   over the page, so a list needs no gutter for it: it is as wide as the fields above it. */
 .app-shell.is-phone .app-main > main > section > .tx-pane.wide {
+  width: calc(100% + 2 * var(--edge));
+  margin-right: calc(var(--edge) * -1);
+  padding-right: var(--edge);
   padding-bottom: 5rem;
+}
+
+html.is-phone *::-webkit-scrollbar {
+  width: 2px;
+  height: 2px;
+}
+
+html.is-phone *::-webkit-scrollbar-thumb {
+  border: 0;
 }
 
 .phone-tabs {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
   padding-bottom: env(safe-area-inset-bottom, 0px);
-  border-top: 1px solid var(--border);
+  border-top: var(--border-width) solid var(--border);
   background: var(--background);
 }
 
@@ -101,9 +158,9 @@ html.is-phone .ui-tabs {
   min-height: 3.5rem;
   padding: 0.375rem 0.125rem;
   color: var(--muted-foreground);
-  font-size: 0.6875rem;
-  letter-spacing: 0.02em;
+  font-size: 0.75rem;
   text-decoration: none;
+  transition: background-color var(--t-fast), color var(--t-fast);
 }
 
 .phone-tab > span {
@@ -119,7 +176,7 @@ html.is-phone .ui-tabs {
   box-shadow: inset 0 2px 0 var(--foreground);
 }
 
-/* The square add button: the main colour, raised over the page. */
+/* The square add button: a block of the main colour, like the green button, over the page on the same small hard shadow. */
 .fab {
   position: fixed;
   right: 1rem;
@@ -136,7 +193,17 @@ html.is-phone .ui-tabs {
   border-radius: var(--radius-lg);
   background: var(--primary);
   color: var(--primary-foreground);
-  box-shadow: var(--shadow-lg);
+  box-shadow: var(--shadow-press);
+}
+
+.fab:active:not(:disabled) {
+  box-shadow: none;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .fab:active:not(:disabled) {
+    transform: translate(2px, 2px);
+  }
 }
 
 html.is-phone .fab {
@@ -145,16 +212,14 @@ html.is-phone .fab {
 
 @media (hover: hover) {
   .fab:hover:not(:disabled) {
-    background: var(--primary);
     color: var(--primary-foreground);
     opacity: 0.9;
   }
 }
 
 .fab-icon {
-  width: 1.5rem;
-  height: 1.5rem;
-  stroke-width: 2;
+  width: 24px;
+  height: 24px;
 }
 
 /* The ways to add something: a short list in a bordered box. */
@@ -164,9 +229,8 @@ html.is-phone .fab {
   gap: 0.125rem;
   padding: 0.25rem;
   background: var(--popover);
-  border: 1px solid var(--border);
+  border: var(--border-width) solid var(--input);
   border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-md);
 }
 
 .quick-menu button {
@@ -176,27 +240,48 @@ html.is-phone .fab {
   text-align: left;
 }
 
-/* Swiping to another section slides it in from the side the finger came from. */
-@keyframes slide-from-right {
-  from {
-    opacity: 0;
-    transform: translateX(2rem);
-  }
+/* Swiping to another section brings the page in (base.css, page-in) from the side the finger came from, not from below. */
+.app-main > main[data-direction='next'] {
+  --enter-x: 2rem;
+  --enter-y: 0;
 }
 
-@keyframes slide-from-left {
-  from {
-    opacity: 0;
-    transform: translateX(-2rem);
-  }
+.app-main > main[data-direction='prev'] {
+  --enter-x: -2rem;
+  --enter-y: 0;
 }
 
-@media (prefers-reduced-motion: no-preference) {
-  .app-main > main[data-direction='next'] > section {
-    animation: slide-from-right 0.2s ease-out;
-  }
+/* The transactions on a phone: no shortcuts to show, and a row needs no hover. The filters button sits at the bottom of the search
+   line, as tall as the field. */
+html.is-phone .filter-bar {
+  gap: 0.75rem;
+}
 
-  .app-main > main[data-direction='prev'] > section {
-    animation: slide-from-left 0.2s ease-out;
-  }
+html.is-phone .filter-bar > .grow {
+  flex-basis: 8rem;
+}
+
+html.is-phone .filter-toggle {
+  height: 44px;
+}
+
+html.is-phone .list-foot {
+  margin-top: 1.25rem;
+}
+
+html.is-phone .page-numbers button {
+  min-width: 44px;
+}
+
+/* Under the transactions the numbers share the line with the rows picker: the buttons keep their 44px height but are narrower, so
+   that seven of them and the picker fit a 360px screen. */
+html.is-phone .list-foot .page-numbers button {
+  min-width: 28px;
+  padding-inline: 0.25rem;
+}
+
+/* A section of the settings opens in place of their list (and the list comes back) without the route changing, so the page's own
+   entrance does not play: the new part fades in the same quick steps. */
+html.is-phone .settings-layout > :is(.settings-list, .settings-section) {
+  animation: fade-in var(--t-med) steps(4, jump-start);
 }

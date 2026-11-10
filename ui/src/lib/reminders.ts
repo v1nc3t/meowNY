@@ -6,6 +6,7 @@ const TIME_KEY = 'debt-reminder-time'
 const EVERY_KEY = 'debt-reminder-every'
 const NOTIFIED_KEY = 'debt-reminded'
 const SCHEDULED_KEY = 'debt-scheduled'
+const DISMISSED_KEY = 'debt-dismissed'
 
 /** The periods a device can choose, in days: 0 is no reminders. Each friend with a debt is reminded this many days after the debt last changed, and again after as many. */
 export const REMINDER_PERIODS = [0, 7, 14, 30] as const
@@ -52,10 +53,10 @@ export function saveReminderEvery(days: number): void {
   if ((REMINDER_PERIODS as readonly number[]).includes(days)) write(EVERY_KEY, String(days))
 }
 
-/** Which day of each friend's reminder this device has already shown: friend id to day. */
-export function notifiedDays(): Record<string, string> {
+/** A map of friend id to day kept under `key`; anything else stored there is ignored. */
+function readDays(key: string): Record<string, string> {
   try {
-    const parsed: unknown = JSON.parse(read(NOTIFIED_KEY) ?? '{}')
+    const parsed: unknown = JSON.parse(read(key) ?? '{}')
     if (typeof parsed !== 'object' || parsed === null) return {}
     return Object.fromEntries(Object.entries(parsed).filter((entry): entry is [string, string] => typeof entry[1] === 'string'))
   } catch {
@@ -63,11 +64,44 @@ export function notifiedDays(): Record<string, string> {
   }
 }
 
+/** Which day of each friend's reminder this device has already shown: friend id to day. */
+export function notifiedDays(): Record<string, string> {
+  return readDays(NOTIFIED_KEY)
+}
+
 export function saveNotifiedDays(days: Record<string, string>): void {
   write(NOTIFIED_KEY, JSON.stringify(days))
 }
 
+/** Which day of each friend's reminder the person has cleared from the list on this device: friend id to day. */
+export function dismissedDays(): Record<string, string> {
+  return readDays(DISMISSED_KEY)
+}
+
+export function saveDismissedDays(days: Record<string, string>): void {
+  write(DISMISSED_KEY, JSON.stringify(days))
+}
+
+/** The reminders that are still to be seen: one that was cleared stays away for its day, and the friend's next reminder (a new day) comes back. */
+export function notDismissed(due: Reminders['due'], dismissed: Record<string, string>): Reminders['due'] {
+  return due.filter((friend) => dismissed[friend.personId] !== friend.dueOn)
+}
+
+/** The cleared days to keep once `cleared` are added: only those of the reminders in `due`, so a friend who is no longer due is forgotten and the map does not grow. */
+export function dismissedAfter(due: Reminders['due'], dismissed: Record<string, string>, cleared: Reminders['due']): Record<string, string> {
+  const days = { ...dismissed, ...Object.fromEntries(cleared.map((friend) => [friend.personId, friend.dueOn])) }
+  return Object.fromEntries(due.filter((friend) => days[friend.personId] === friend.dueOn).map((friend) => [friend.personId, friend.dueOn]))
+}
+
 const pad = (n: number) => String(n).padStart(2, '0')
+
+/**
+ * The time the app goes by for the dates and times of reminders: this device's clock moved by `offsetMs`, how far it is from the
+ * computer's (the computer's clock is the reference, and its offset is 0). The one place the UI adds the offset; never for a timer.
+ */
+export function clockNow(offsetMs: number, wall: number = Date.now()): Date {
+  return new Date(wall + offsetMs)
+}
 
 /** The day of a date on this device's clock, "YYYY-MM-DD". */
 export function localDay(now: Date): string {
@@ -77,7 +111,7 @@ export function localDay(now: Date): string {
 /**
  * The friends this device should ring about now: the day of their reminder has come, this device has not shown that day yet, and either
  * the day is past (it came while the app was closed) or the time of day has been reached. `today` is the day in the person's time zone,
- * as the app says it; the clock of the device gives the time.
+ * as the app says it; `now` (from `clockNow`) gives the time.
  */
 export function ringNow(reminders: Reminders, time: string, now: Date, notified: Record<string, string>): Reminders['due'] {
   const at = parseTime(time)
@@ -96,9 +130,10 @@ export function notificationId(day: string): number {
 
 /**
  * The notifications to schedule for the days that come: each at the chosen time of day on that day, and only those still ahead. One
- * notification for each day, however many friends it is for.
+ * notification for each day, however many friends it is for. `now` is the time the app goes by (`clockNow`); the system rings by this
+ * device's own clock, which is `offsetMs` away from it, so each notification is handed over that much earlier or later.
  */
-export function schedulePlan(reminders: Reminders, time: string, now: Date): Scheduled[] {
+export function schedulePlan(reminders: Reminders, time: string, now: Date, offsetMs = 0): Scheduled[] {
   const at = parseTime(time)
   if (!at) return []
   const plan: Scheduled[] = []
@@ -108,7 +143,7 @@ export function schedulePlan(reminders: Reminders, time: string, now: Date): Sch
     const when = new Date(year, month - 1, day, at.hours, at.minutes)
     // `Date` moves 40 October to November; a day that is not a day is left out
     if (when.getFullYear() !== year || when.getMonth() !== month - 1 || when.getDate() !== day) continue
-    if (when.getTime() > now.getTime() + 30_000) plan.push({ id: notificationId(date), at: when, count })
+    if (when.getTime() > now.getTime() + 30_000) plan.push({ id: notificationId(date), at: new Date(when.getTime() - offsetMs), count })
   }
   return plan
 }

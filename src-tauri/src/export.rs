@@ -777,7 +777,7 @@ pub fn json(conn: &Connection, selection: &Selection, now: DateTime<Utc>) -> Res
                 .remove(&t.id)
                 .unwrap_or_default()
                 .into_iter()
-                .map(|l| json!({ "personId": l.person_id.map(|id| id.to_string()), "person": l.person, "guest": l.guest, "amount": format_amount(l.amount) }))
+                .map(|l| json!({ "personId": l.person_id.map(|id| id.to_string()), "person": l.person, "guest": l.guest, "amount": format_amount(l.amount), "paidBy": l.paid_by }))
                 .collect();
             json!({
                 "id": t.id.to_string(),

@@ -2,8 +2,8 @@
 //!
 //! * A loan or a repayment is **never income or expense**: it lives only here and no sum of spending or earning reads it, so it cannot
 //!   inflate your income, hide a real cost or touch a budget.
-//! * The balance of a friend is the sum of their parts of split bills and of the signed entries: who owes whom, and how much. It is a
-//!   running total; a repayment is not matched to one bill.
+//! * The balance of a friend is the sum of their parts of the split bills you paid, minus your part of the bills they paid, and of the
+//!   signed entries: who owes whom, and how much. It is a running total; a repayment is not matched to one bill.
 //! * "Mark as paid" takes an amount that may be larger than the debt: the balance then turns around and you owe the rest.
 //! * "I borrowed" can add your share to your expenses at the same time, in one step: someone else paid, you owe them, and the month shows
 //!   your part. Paying them back later is another entry and never a second expense.
@@ -123,10 +123,11 @@ pub struct Expense {
 /// Empty means "no note".
 fn clean_note(text: Option<&str>) -> Result<Option<String>, AppError> {
     let Some(text) = text.map(str::trim).filter(|t| !t.is_empty()) else { return Ok(None) };
-    if text.chars().count() > NOTE_MAX_CHARS || text.chars().any(char::is_control) {
+    let text = transactions::clean_lines(text).ok_or(AppError::InvalidInput)?;
+    if text.chars().count() > NOTE_MAX_CHARS {
         return Err(AppError::InvalidInput);
     }
-    Ok(Some(text.to_string()))
+    Ok(Some(text))
 }
 
 const COLUMNS: &str = "id, person_id, kind, amount_minor, entry_date, note, transaction_id";
@@ -289,8 +290,17 @@ pub struct Settled {
 
 /// Marks a payment between you and a friend. It is a repayment in the direction that reduces the debt: they paid you back when they owe you,
 /// you paid them back when you owe them. With no `amount` it is the whole balance. An amount larger than the debt is accepted. When the
-/// balance reaches 0 the friend's reminder is cleared.
-pub fn settle(conn: &Connection, person_id: i64, amount: Option<&str>, date: Option<&str>, note: Option<&str>, today: &str) -> Result<Settled, AppError> {
+/// balance reaches 0 the friend's reminder is cleared. `transaction_id` is the transaction the payment was for, if any: only a reference,
+/// it changes no amount.
+pub fn settle(
+    conn: &Connection,
+    person_id: i64,
+    amount: Option<&str>,
+    date: Option<&str>,
+    note: Option<&str>,
+    transaction_id: Option<&str>,
+    today: &str,
+) -> Result<Settled, AppError> {
     let tx = conn.unchecked_transaction()?;
     let before = balance_minor(&tx, person_id)?;
     if before == 0 {
@@ -309,7 +319,7 @@ pub fn settle(conn: &Connection, person_id: i64, amount: Option<&str>, date: Opt
             amount: format_amount(minor),
             date: date.unwrap_or(today).to_string(),
             note: note.map(str::to_string),
-            transaction_id: None,
+            transaction_id: transaction_id.map(str::to_string),
         },
     )?;
     let after = balance_minor(&tx, person_id)?;
@@ -325,12 +335,13 @@ pub fn balance_minor(conn: &Connection, person_id: i64) -> Result<i64, AppError>
     conn.query_row("SELECT balance_minor FROM person_balances WHERE person_id = ?1", [person_id], |r| r.get(0)).optional()?.ok_or(AppError::NotFound)
 }
 
-/// One line of a friend's ledger: a part of a bill or an entry.
+/// One line of a friend's ledger: a part of a bill, or an entry.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Line {
     pub date: String,
-    /// `BILL` for their part of a split bill, otherwise the kind of the entry.
+    /// `BILL` for their part of a split bill you paid, or (what it did to the balance is then negative) your part of one they paid;
+    /// otherwise the kind of the entry.
     pub kind: String,
     /// The name of the bill, or the note of the entry; empty when there is none.
     pub what: String,
@@ -347,6 +358,8 @@ pub struct Line {
     pub balance_minor: i64,
     pub entry_id: Option<String>,
     pub transaction_id: Option<String>,
+    /// The payment date of that transaction, so a screen can open the right month. Set whenever `transaction_id` is.
+    pub transaction_date: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -356,7 +369,8 @@ pub struct Statement {
     pub lines: Vec<Line>,
 }
 
-/// The story of a friend's balance: their parts of bills and the entries together, by date, with the balance after each line.
+/// The story of a friend's balance: their parts of bills you paid, your parts of the bills they paid, and the entries together, by date,
+/// with the balance after each line.
 pub fn statement(conn: &Connection, person_id: i64) -> Result<Statement, AppError> {
     let tx = conn.unchecked_transaction()?;
     statement_in(&tx, person_id)
@@ -365,7 +379,7 @@ pub fn statement(conn: &Connection, person_id: i64) -> Result<Statement, AppErro
 /// Without a transaction of its own, for the callers that have one.
 pub(crate) fn statement_in(tx: &Connection, person_id: i64) -> Result<Statement, AppError> {
     let person = people::get(tx, person_id)?;
-    // (date, source, id, kind, what, signed minor, entry id, transaction id): bills before entries on the same day
+    // (date, source, id, kind, what, signed minor, entry id, transaction id and its date): bills before entries on the same day
     struct Raw {
         date: String,
         source: u8,
@@ -374,23 +388,38 @@ pub(crate) fn statement_in(tx: &Connection, person_id: i64) -> Result<Statement,
         what: String,
         signed: i64,
         entry: Option<i64>,
-        transaction: Option<i64>,
+        transaction: Option<(i64, String)>,
     }
     let mut raw: Vec<Raw> = Vec::new();
+    // their part of a bill you paid: they owe you. (On a bill another friend paid, a line is a debt to that friend, and on one this friend paid
+    // their own part owes nobody.)
     let mut statement = tx.prepare(
         "SELECT t.payment_date, l.id, t.name, l.amount_minor, t.id
-         FROM transaction_split_lines l JOIN transactions t ON t.id = l.transaction_id WHERE l.person_id = ?1",
+         FROM transaction_split_lines l JOIN transactions t ON t.id = l.transaction_id WHERE l.person_id = ?1 AND t.paid_by IS NULL",
     )?;
     for row in statement.query_map([person_id], |r| Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)?, r.get::<_, String>(2)?, r.get::<_, i64>(3)?, r.get::<_, i64>(4)?)))? {
         let (date, id, what, amount, transaction) = row?;
-        raw.push(Raw { date, source: 0, id, kind: "BILL".into(), what, signed: amount, entry: None, transaction: Some(transaction) });
+        raw.push(Raw { date: date.clone(), source: 0, id, kind: "BILL".into(), what, signed: amount, entry: None, transaction: Some((transaction, date)) });
     }
-    let mut statement = tx.prepare("SELECT entry_date, id, kind, note, amount_minor, transaction_id FROM ledger_entries WHERE person_id = ?1")?;
+    // your part of a bill they paid: you owe them. (Its id is the bill's, which only orders it among the others of the day.)
+    let mut statement = tx.prepare(
+        "SELECT t.payment_date, t.id, t.name, k.cost_minor FROM transactions t JOIN transaction_costs k ON k.transaction_id = t.id WHERE t.paid_by = ?1",
+    )?;
+    for row in statement.query_map([person_id], |r| Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)?, r.get::<_, String>(2)?, r.get::<_, i64>(3)?)))? {
+        let (date, transaction, what, cost) = row?;
+        raw.push(Raw { date: date.clone(), source: 0, id: transaction, kind: "BILL".into(), what, signed: -cost, entry: None, transaction: Some((transaction, date)) });
+    }
+    let mut statement = tx.prepare(
+        "SELECT e.entry_date, e.id, e.kind, e.note, e.amount_minor, e.transaction_id, t.payment_date
+         FROM ledger_entries e LEFT JOIN transactions t ON t.id = e.transaction_id WHERE e.person_id = ?1",
+    )?;
     for row in statement.query_map([person_id], |r| {
-        Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)?, r.get::<_, String>(2)?, r.get::<_, Option<String>>(3)?, r.get::<_, i64>(4)?, r.get::<_, Option<i64>>(5)?))
+        Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)?, r.get::<_, String>(2)?, r.get::<_, Option<String>>(3)?, r.get::<_, i64>(4)?, r.get::<_, Option<i64>>(5)?, r.get::<_, Option<String>>(6)?))
     })? {
-        let (date, id, kind, note, amount, transaction) = row?;
+        let (date, id, kind, note, amount, transaction, transaction_date) = row?;
         let sign = Kind::from_sql(&kind)?.sign();
+        // the link is dropped with its transaction, so a link always has a date
+        let transaction = transaction.zip(transaction_date);
         raw.push(Raw { date, source: 1, id, kind, what: note.unwrap_or_default(), signed: sign * amount, entry: Some(id), transaction });
     }
     raw.sort_by(|a, b| (&a.date, a.source, a.id).cmp(&(&b.date, b.source, b.id)));
@@ -409,7 +438,8 @@ pub(crate) fn statement_in(tx: &Connection, person_id: i64) -> Result<Statement,
                 effect_minor: r.signed,
                 balance_minor: running,
                 entry_id: r.entry.map(|id| id.to_string()),
-                transaction_id: r.transaction.map(|id| id.to_string()),
+                transaction_id: r.transaction.as_ref().map(|(id, _)| id.to_string()),
+                transaction_date: r.transaction.map(|(_, date)| date),
             }
         })
         .collect();

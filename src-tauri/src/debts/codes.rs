@@ -1,7 +1,8 @@
 //! The bill code (`docs/debts-design.md`, section 10): one friend's part of one bill as a line of text, which the app shows as a QR code
 //! and a friend with the app scans (phone) or pastes (desktop) and then accepts or denies.
 //!
-//! It is a notice and nothing more. It is not signed or encrypted, it names nobody but the sender, and it holds no other person's part.
+//! It is a notice and nothing more. It is not signed or encrypted, it names nobody but the sender (and the friend who paid the bill, when one
+//! did: the debt of the friend who reads it goes to the payer), and it holds no other person's part.
 //! Reading one writes nothing (`preview`); taking one in (`accept`) makes the friend, the expense and the `BORROWED` entry together, or
 //! nothing, and the same code is never taken in twice (its id is the `origin_id` of the entry). The one strict parser (`parse`) is the
 //! only way in, and it is run on text from outside, so it checks everything and allocates from nothing the text says.
@@ -42,6 +43,10 @@ struct Wire {
     amt: i64,
     total: i64,
     cur: String,
+    /// The name of the friend who paid the bill, when it was not the sender. Left out when there is none, so a code for a bill the sender
+    /// paid is the text it always was.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    by: Option<String>,
 }
 
 /// What a code says, checked.
@@ -59,6 +64,8 @@ pub struct BillCode {
     /// The whole bill.
     pub total_minor: i64,
     pub currency: String,
+    /// The name of the friend who paid the bill, when the sender did not: the friend's debt goes to them.
+    pub paid_by: Option<String>,
 }
 
 /// A character that is shown as itself. Control characters are refused as in every name, and so are the invisible ones that change how text
@@ -89,6 +96,7 @@ pub fn parse(text: &str) -> Result<BillCode, AppError> {
         || !id_ok
         || !plain(&wire.from, NAME_MAX_CHARS)
         || !plain(&wire.what, WHAT_MAX_CHARS)
+        || wire.by.as_deref().is_some_and(|by| !plain(by, NAME_MAX_CHARS))
         || clean_date(&wire.date).is_err()
         || !(1..=MAX_MINOR).contains(&wire.amt)
         || !(wire.amt..=MAX_MINOR).contains(&wire.total)
@@ -96,7 +104,7 @@ pub fn parse(text: &str) -> Result<BillCode, AppError> {
     {
         return Err(AppError::InvalidInput);
     }
-    Ok(BillCode { id: wire.id, from: wire.from, what: wire.what, date: wire.date, amount_minor: wire.amt, total_minor: wire.total, currency: wire.cur })
+    Ok(BillCode { id: wire.id, from: wire.from, what: wire.what, date: wire.date, amount_minor: wire.amt, total_minor: wire.total, currency: wire.cur, paid_by: wire.by })
 }
 
 /// The text of a code.
@@ -110,6 +118,7 @@ pub fn encode(code: &BillCode) -> String {
         amt: code.amount_minor,
         total: code.total_minor,
         cur: code.currency.clone(),
+        by: code.paid_by.clone(),
     };
     // a struct of numbers and strings always serializes
     let json = serde_json::to_vec(&wire).unwrap_or_default();
@@ -121,42 +130,55 @@ fn hex(bytes: &[u8]) -> String {
 }
 
 /// The code of one friend's part of one bill, in the name the person gives for the sender. The same text every time for the same bill and
-/// friend. The friend must be one of the parts of the bill (a guest has no code: they have no app to give it to).
+/// friend. The friend must be one of the parts of the bill (a guest has no code: they have no app to give it to). When another friend paid
+/// the bill the code holds their name, and the friend who paid gets no code: they have nothing to owe.
 pub fn make(conn: &Connection, transaction_id: i64, person_id: i64, from: &str) -> Result<String, AppError> {
     let from = from.trim();
     if !plain(from, NAME_MAX_CHARS) {
         return Err(AppError::InvalidInput);
     }
-    let (bill_sync, name, date, total): (String, String, String, i64) = conn
-        .query_row("SELECT sync_id, name, payment_date, amount_minor FROM transactions WHERE id = ?1", [transaction_id], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)))
+    let (bill_sync, name, date, total, paid_by): (String, String, String, i64, Option<i64>) = conn
+        .query_row("SELECT sync_id, name, payment_date, amount_minor, paid_by FROM transactions WHERE id = ?1", [transaction_id], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?)))
         .optional()?
         .ok_or(AppError::NotFound)?;
+    let by = payer_name(conn, paid_by, person_id)?;
     let part: i64 = conn
         .query_row("SELECT amount_minor FROM transaction_split_lines WHERE transaction_id = ?1 AND person_id = ?2", [transaction_id, person_id], |r| r.get(0))
         .optional()?
         .ok_or(AppError::NotFound)?;
-    build(conn, b"meowny-bill-1", &bill_sync, person_id, from, &name, date, part, total)
+    build(conn, b"meowny-bill-1", &bill_sync, person_id, from, &name, date, part, total, by)
+}
+
+/// The name of the friend who paid, for the code of `person_id`'s part: none when the sender paid. The payer's own code is refused.
+fn payer_name(conn: &Connection, paid_by: Option<i64>, person_id: i64) -> Result<Option<String>, AppError> {
+    match paid_by {
+        None => Ok(None),
+        Some(payer) if payer == person_id => Err(AppError::InvalidInput),
+        Some(payer) => Ok(Some(conn.query_row("SELECT name FROM people WHERE id = ?1", [payer], |r| r.get(0))?)),
+    }
 }
 
 /// The code of one friend's part of the **next payment** of a recurring item: the item's name, the day that payment falls due, and its
 /// fixed amount shared as the item's template says. For the friend of a template that has a part for them; an item with no fixed amount has
 /// no code. The same text every time for the same payment of the same item (the next payment has another), so a friend who takes it in
 /// twice is stopped. shortcut: the code of the payment once it is paid (the transaction's) is another code, so a friend who takes in both
-/// owes it twice; the dialog says which payment it is for, and a person who shows both has done it by hand.
+/// owes it twice; the dialog says which payment it is for, and a person who shows both has done it by hand. As for a bill, a friend who pays
+/// the item has no code and the others' codes name them.
 pub fn make_recurring(conn: &Connection, recurring_id: i64, person_id: i64, from: &str) -> Result<String, AppError> {
     let from = from.trim();
     if !plain(from, NAME_MAX_CHARS) {
         return Err(AppError::InvalidInput);
     }
-    let (sync, name, date, amount, mine): (String, String, String, Option<i64>, Option<i64>) = conn
+    let (sync, name, date, amount, mine, paid_by): (String, String, String, Option<i64>, Option<i64>, Option<i64>) = conn
         .query_row(
-            "SELECT sync_id, name, next_due_date, amount_minor, split_my_weight FROM recurring_transactions WHERE id = ?1",
+            "SELECT sync_id, name, next_due_date, amount_minor, split_my_weight, split_paid_by FROM recurring_transactions WHERE id = ?1",
             [recurring_id],
-            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?)),
+            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?, r.get(5)?)),
         )
         .optional()?
         .ok_or(AppError::NotFound)?;
     let mine = mine.ok_or(AppError::NotFound)?;
+    let by = payer_name(conn, paid_by, person_id)?;
     let total = amount.ok_or(AppError::InvalidInput)?;
     let others = splits::template_lines(conn, recurring_id)?;
     let at = others.iter().position(|(who, _)| *who == splits::Who::Person(person_id)).ok_or(AppError::NotFound)?;
@@ -166,13 +188,13 @@ pub fn make_recurring(conn: &Connection, recurring_id: i64, person_id: i64, from
         return Err(AppError::NotFound);
     }
     // the day is part of the identity: next month's payment is another code
-    build(conn, b"meowny-bill-r1", &format!("{sync}:{date}"), person_id, from, &name, date, part, total)
+    build(conn, b"meowny-bill-r1", &format!("{sync}:{date}"), person_id, from, &name, date, part, total, by)
 }
 
 /// What both kinds of code share: the id from the bill (or payment) and the friend, the name of the bill made safe to show, and the check
 /// that what is made is what `parse` takes.
 #[allow(clippy::too_many_arguments)]
-fn build(conn: &Connection, domain: &[u8], bill: &str, person_id: i64, from: &str, name: &str, date: String, part: i64, total: i64) -> Result<String, AppError> {
+fn build(conn: &Connection, domain: &[u8], bill: &str, person_id: i64, from: &str, name: &str, date: String, part: i64, total: i64, by: Option<String>) -> Result<String, AppError> {
     let person_sync: String = conn.query_row("SELECT sync_id FROM people WHERE id = ?1", [person_id], |r| r.get(0))?;
     let mut hash = Sha256::new();
     hash.update(domain);
@@ -186,7 +208,7 @@ fn build(conn: &Connection, domain: &[u8], bill: &str, person_id: i64, from: &st
         return Err(AppError::InvalidInput);
     }
     let currency = export::currency(conn)?;
-    let code = BillCode { id, from: from.to_string(), what, date, amount_minor: part, total_minor: total, currency };
+    let code = BillCode { id, from: from.to_string(), what, date, amount_minor: part, total_minor: total, currency, paid_by: by };
     // what is made is what `parse` takes
     parse(&encode(&code))?;
     Ok(encode(&code))
@@ -198,6 +220,8 @@ fn build(conn: &Connection, domain: &[u8], bill: &str, person_id: i64, from: &st
 pub struct Preview {
     pub id: String,
     pub from: String,
+    /// The name of the friend who paid the bill, when the sender did not.
+    pub paid_by: Option<String>,
     pub what: String,
     pub date: String,
     /// The friend's part, in the currency of the code.
@@ -209,7 +233,8 @@ pub struct Preview {
     pub same_currency: bool,
     /// An entry that came from this code is here already: it is not taken in twice.
     pub already_added: bool,
-    /// The friend, not removed from the list, whose name is the sender's (ignoring case), to choose first.
+    /// The friend, not removed from the list, whose name is the payer's when a friend paid and the sender's otherwise (ignoring case), to choose
+    /// first: the debt goes to whoever paid.
     pub friend_id: Option<String>,
 }
 
@@ -222,7 +247,11 @@ pub fn preview(conn: &Connection, text: &str) -> Result<Preview, AppError> {
     let code = parse(text)?;
     let own = export::currency(conn)?;
     let friend_id: Option<i64> = conn
-        .query_row("SELECT id FROM people WHERE name = ?1 COLLATE NOCASE AND archived = 0 AND merged_into IS NULL ORDER BY id LIMIT 1", [&code.from], |r| r.get(0))
+        .query_row(
+            "SELECT id FROM people WHERE name = ?1 COLLATE NOCASE AND archived = 0 AND merged_into IS NULL ORDER BY id LIMIT 1",
+            [code.paid_by.as_ref().unwrap_or(&code.from)],
+            |r| r.get(0),
+        )
         .optional()?;
     Ok(Preview {
         already_added: already_added(conn, &code.id)?,
@@ -233,6 +262,7 @@ pub fn preview(conn: &Connection, text: &str) -> Result<Preview, AppError> {
         total: format_amount(code.total_minor),
         id: code.id,
         from: code.from,
+        paid_by: code.paid_by,
         what: code.what,
         date: code.date,
         currency: code.currency,

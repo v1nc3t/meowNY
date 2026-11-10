@@ -1,5 +1,5 @@
 use super::fixtures::{bill, equal, friend, who, world};
-use super::history::{history, lines, Filter, Scope, PAYMENT_DUE, PAYMENT_PAID};
+use super::history::{history, lines, Filter, Only, Scope, PAYMENT_DUE, PAYMENT_PAID};
 use super::ledger::{self, Kind, NewEntry};
 use super::splits::set_split;
 use crate::recurring::{self, NewRecurring, Unit};
@@ -64,11 +64,14 @@ fn the_history_has_the_lines_of_the_friends_the_payments_that_were_paid_late_and
     let paid = every.iter().find(|l| l.kind == PAYMENT_PAID).unwrap();
     assert_eq!((paid.what.as_str(), paid.amount.as_str(), paid.due_date.as_deref(), paid.friend.as_deref()), ("Rent", "100.00", Some("2026-01-01"), None));
     assert!(paid.transaction_id.is_some() && paid.recurring_id.is_some() && paid.balance.is_none() && paid.effect.is_none());
+    assert_eq!(paid.transaction_date.as_deref(), Some("2026-01-04"), "the payment date of the transaction");
     let due = every.iter().find(|l| l.kind == PAYMENT_DUE && l.date == "2026-03-01").unwrap();
     assert_eq!((due.amount.as_str(), due.due_date.as_deref(), due.transaction_id.as_deref()), ("100.00", Some("2026-03-01"), None));
+    assert_eq!(due.transaction_date, None, "a payment that is due has no transaction yet");
     // a friend's line says what it did and what the friend owed after it: the debts screens' own numbers
     let dinner_line = every.iter().find(|l| l.kind == "BILL").unwrap();
     assert_eq!((dinner_line.friend.as_deref(), dinner_line.effect.as_deref(), dinner_line.balance.as_deref()), (Some("Anna"), Some("45.00"), Some("70.00")));
+    assert_eq!((dinner_line.transaction_id.clone(), dinner_line.transaction_date.as_deref()), (Some(dinner.to_string()), Some("2026-01-20")));
 }
 
 #[test]
@@ -94,11 +97,39 @@ fn a_range_of_dates_keeps_the_lines_inside_it_both_ends_included_and_the_balance
     entry(&w.conn, anna, Kind::Lent, "25.00", "2026-01-02");
     entry(&w.conn, anna, Kind::Lent, "5.00", "2026-02-02");
     entry(&w.conn, anna, Kind::RepaidToMe, "10.00", "2026-03-02");
-    let scope = Scope { from: Some("2026-02-02"), to: Some("2026-03-02"), person: None };
+    let scope = Scope { from: Some("2026-02-02"), to: Some("2026-03-02"), ..Default::default() };
     assert_eq!(all(&w.conn, &scope), pairs(&[("2026-02-02", "LENT"), ("2026-03-02", "REPAID_TO_ME")]));
     let balances: Vec<String> = lines(&w.conn, TODAY, &scope).unwrap().into_iter().filter_map(|l| l.balance).collect();
     assert_eq!(balances, ["30.00", "20.00"], "the 25.00 before the range is in them");
     assert!(all(&w.conn, &Scope { from: Some("2027-01-01"), ..Default::default() }).is_empty());
+}
+
+#[test]
+fn only_the_friends_or_only_the_payments_paid_late_can_be_asked_for() {
+    let w = world();
+    let (anna, bob) = (friend(&w.conn, "Anna"), friend(&w.conn, "Bob"));
+    entry(&w.conn, anna, Kind::Lent, "25.00", "2026-01-02");
+    entry(&w.conn, bob, Kind::Borrowed, "7.50", "2026-02-02");
+    let rent = item(&w.conn, "Rent", w.rent, "2026-01-01", "2026-04-15");
+    recurring::pay(&w.conn, rent, None, Some("2026-01-04"), TODAY, None, None).unwrap();
+    let only = |only| Scope { only: Some(only), ..Default::default() };
+    // the lines of every friend, and neither the payment paid late nor those overdue now (February and March)
+    assert_eq!(all(&w.conn, &only(Only::Friends)), pairs(&[("2026-01-02", "LENT"), ("2026-02-02", "BORROWED")]));
+    // the payment paid late, and no friend and no overdue payment
+    assert_eq!(all(&w.conn, &only(Only::PaidLate)), pairs(&[("2026-01-04", PAYMENT_PAID)]));
+    assert_eq!(all(&w.conn, &Scope::default()).len(), 5, "without it, all of them");
+    // it comes with the dates, and a friend can still be asked for alone
+    assert_eq!(all(&w.conn, &Scope { from: Some("2026-02-01"), only: Some(Only::Friends), ..Default::default() }), pairs(&[("2026-02-02", "BORROWED")]));
+    assert_eq!(all(&w.conn, &Scope { person: Some(anna), only: Some(Only::Friends), ..Default::default() }), pairs(&[("2026-01-02", "LENT")]));
+    // the page counts only what was asked for
+    let ask = |only| history(&w.conn, TODAY, &Filter { only: Some(only), limit: Some(1), ..Default::default() }).unwrap();
+    assert_eq!((ask(Only::Friends).total, ask(Only::Friends).lines.len()), (2, 1));
+    assert_eq!((ask(Only::PaidLate).total, ask(Only::PaidLate).lines.len()), (1, 1));
+    // the words of the screens and the API
+    let filter: Filter = serde_json::from_str(r#"{"only":"paidLate"}"#).unwrap();
+    assert_eq!(filter.only, Some(Only::PaidLate));
+    assert!(serde_json::from_str::<Filter>(r#"{"only":"friends"}"#).is_ok());
+    assert!(serde_json::from_str::<Filter>(r#"{"only":"all"}"#).is_err());
 }
 
 #[test]
@@ -111,4 +142,7 @@ fn what_cannot_be_asked_is_refused() {
     assert_eq!(ask(Filter { from: Some("2026-02-30".into()), ..Default::default() }), Some(AppError::InvalidInput));
     assert_eq!(ask(Filter { person_id: Some("0".into()), ..Default::default() }), Some(AppError::InvalidInput));
     assert_eq!(ask(Filter { person_id: Some("abc".into()), ..Default::default() }), Some(AppError::InvalidInput));
+    // a friend has no recurring payments: asking for those paid late of one is a mistake, not an empty answer
+    assert_eq!(ask(Filter { person_id: Some("1".into()), only: Some(Only::PaidLate), ..Default::default() }), Some(AppError::InvalidInput));
+    assert_eq!(ask(Filter { person_id: Some("1".into()), only: Some(Only::Friends), ..Default::default() }), None);
 }

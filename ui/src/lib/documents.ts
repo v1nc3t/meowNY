@@ -2,6 +2,7 @@ import type { MessageKey } from '../i18n/en'
 import { isImage, isOpenable, type Doc, type DropOutcome, type DroppedResult, type LinkView, type Report, type TargetKind } from '../api/documents'
 import { messageFor, toErrorCode } from '../api/invoke'
 import type { t as Translate } from '../i18n/translate'
+import { isIos } from './platform'
 import type { PreviewKind } from './preview/load'
 
 /** The biggest image the app draws itself, in bytes; a bigger one goes to the system's viewer. The Rust side holds the same limit. */
@@ -37,9 +38,9 @@ export function fileStateText(state: FileState): MessageKey | null {
   }
 }
 
-/** Whether the system's viewer can be asked to open it: it has a file here, and it is a kind the app opens. */
+/** Whether the system's viewer can be asked to open it: it has a file here, and it is a kind the app opens. iOS cannot hand a file to another app through the opener plugin (URLs only); the preview still shows it. */
 export function canOpen(doc: Pick<Doc, 'hasFile' | 'mediaType'>): boolean {
-  return doc.hasFile && isOpenable(doc.mediaType)
+  return doc.hasFile && isOpenable(doc.mediaType) && !isIos
 }
 
 /** Whether the app should try to draw it: an image, here, and not too heavy. The Rust side checks the pixels. */
@@ -80,6 +81,14 @@ export function canPreview(doc: Pick<Doc, 'hasFile' | 'name' | 'mediaType' | 'si
   const kind = previewKindOf(doc)
   if (!doc.hasFile || kind === null) return false
   return doc.sizeBytes <= (kind === 'image' ? MAX_DRAW_BYTES : MAX_PREVIEW_BYTES)
+}
+
+/**
+ * Whether a phone offers to keep the file so it can be previewed: the file stays on the computer, and it would show once it is here.
+ * A file that is too big, or of a kind the preview does not show, is not offered (keeping it would not help).
+ */
+export function canKeepToPreview(doc: Pick<Doc, 'hasFile' | 'keepOnPhone' | 'name' | 'mediaType' | 'sizeBytes'>, phone: boolean): boolean {
+  return fileState(doc, phone) === 'onComputer' && canPreview({ ...doc, hasFile: true })
 }
 
 /** The lines the page shows under its title about the files, each a text key and a number. Nothing for zero. */

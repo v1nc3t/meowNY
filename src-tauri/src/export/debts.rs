@@ -2,7 +2,8 @@
 //!
 //! With no limit (no dates, no categories) everything is in. With a limit the file reveals nothing about the rest:
 //!
-//! * the parts of the bills that are in the export, and only those;
+//! * the parts of the bills that are in the export, and only those, each with the friend who paid the bill when it was not you (the part is
+//!   then a debt to that friend, not to you);
 //! * the friends and guests that those parts name, by name, with no balance and no reminder (a balance would add up things the export left out);
 //! * the ledger entries only when the person asked for them (`include_debts`), limited by the dates if there are any. A category does not
 //!   limit them: a loan has none.
@@ -43,16 +44,19 @@ pub(crate) struct LineRow {
     pub(crate) person: Option<String>,
     pub(crate) guest: Option<String>,
     pub(crate) amount: i64,
+    /// The friend who paid the bill, when it was not you: then the part is a debt to them, not to you.
+    pub(crate) paid_by: Option<String>,
 }
 
 /// The parts of the bills the export contains, oldest bill first.
 pub(crate) fn lines(conn: &Connection, sel: &Parsed) -> Result<Vec<LineRow>, AppError> {
     let mut statement = conn.prepare(&format!(
-        "SELECT l.transaction_id, t.payment_date, t.name, l.person_id, p.name, l.guest_name, l.amount_minor
+        "SELECT l.transaction_id, t.payment_date, t.name, l.person_id, p.name, l.guest_name, l.amount_minor, b.name
          FROM transaction_split_lines l
          JOIN transactions t ON t.id = l.transaction_id
          JOIN transaction_costs k ON k.transaction_id = t.id
          LEFT JOIN people p ON p.id = l.person_id
+         LEFT JOIN people b ON b.id = t.paid_by
          WHERE {} ORDER BY t.payment_date, t.id, l.id",
         transaction_filter(sel)
     ))?;
@@ -65,6 +69,7 @@ pub(crate) fn lines(conn: &Connection, sel: &Parsed) -> Result<Vec<LineRow>, App
             person: r.get(4)?,
             guest: r.get(5)?,
             amount: r.get(6)?,
+            paid_by: r.get(7)?,
         })
     })?;
     Ok(rows.collect::<Result<_, _>>()?)
@@ -140,7 +145,7 @@ pub(crate) fn people(conn: &Connection, sel: &Parsed, lines: &[LineRow], entries
 pub(crate) fn history_lines(conn: &Connection, sel: &Parsed, today: &str, entries: bool) -> Result<Vec<crate::debts::history::HistoryLine>, AppError> {
     use crate::debts::history::{self, PAYMENT_DUE, PAYMENT_PAID};
     let held: std::collections::HashSet<i64> = super::transactions(conn, sel)?.iter().map(|t| t.id).collect();
-    let scope = history::Scope { from: sel.from.as_deref(), to: sel.to.as_deref(), person: None };
+    let scope = history::Scope { from: sel.from.as_deref(), to: sel.to.as_deref(), person: None, only: None };
     let keep_balance = !sel.narrows_transactions();
     let mut out = Vec::new();
     for mut line in history::lines(conn, today, &scope)? {

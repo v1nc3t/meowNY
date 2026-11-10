@@ -17,6 +17,7 @@ import Button from './ui/Button'
  * whether the split can be saved: the numbers add up and somebody else has a part.
  *
  * `amount` is the bill. For a recurring item with no fixed amount it is null, and the parts are shown as percentages of the whole.
+ * With a friend on the bill, one of them (or the person) can be the one who paid it.
  */
 export default function SplitEditor({
   amount,
@@ -72,7 +73,10 @@ export default function SplitEditor({
 
   // What is shown only counts while it belongs to what is typed now.
   const current = shown && shown.key === key ? shown.preview : null
-  const ready = current !== null && current.complete && current.parts.some((part) => part.amount !== '0.00')
+  const payer = draft.paidBy ? draft.rows.find((row) => row.personId === draft.paidBy) : undefined
+  // someone else has a part, and when a friend paid the person has one too: it is what they owe
+  const noPartOfMine = payer !== undefined && current !== null && current.mine === '0.00'
+  const ready = current !== null && current.complete && current.parts.some((part) => part.amount !== '0.00') && !noPartOfMine
   useEffect(() => onReady(ready), [ready, onReady])
 
   const money = (value: string) =>
@@ -83,6 +87,11 @@ export default function SplitEditor({
 
   function addRow(row: Omit<SplitRow, 'key' | 'value'>) {
     onChange({ ...draft, rows: [...draft.rows, { ...row, key: rowKey(), value: draft.mode === 'SHARES' ? '1' : '' }] })
+  }
+
+  function removeRow(row: SplitRow) {
+    // a friend who is taken off the bill has not paid it
+    onChange({ ...draft, rows: draft.rows.filter((other) => other.key !== row.key), ...(row === payer ? { paidBy: '' } : {}) })
   }
 
   function setValue(at: number, value: string) {
@@ -117,6 +126,17 @@ export default function SplitEditor({
         options={modes.map((mode) => ({ value: mode, label: t(`split.mode.${mode}`) }))}
         onChange={(mode) => onChange(withMode(draft, mode as SplitMode))}
       />
+      {draft.rows.some((row) => row.personId) ? (
+        <Dropdown
+          label={t('split.paidBy')}
+          value={draft.paidBy ?? ''}
+          options={[
+            { value: '', label: t('split.you') },
+            ...draft.rows.flatMap((row) => (row.personId ? [{ value: row.personId, label: row.name }] : [])),
+          ]}
+          onChange={(paidBy) => onChange({ ...draft, paidBy })}
+        />
+      ) : null}
       <ul className="split-rows">
         <li className="split-row">
           <span className="split-name">{t('split.you')}</span>
@@ -126,9 +146,8 @@ export default function SplitEditor({
               aria-label={t('split.you')}
               inputMode={draft.mode === 'SHARES' ? 'numeric' : 'decimal'}
               autoComplete="off"
-              value={draft.mineIsRest && draft.mode !== 'SHARES' ? '' : draft.mine}
-              placeholder={draft.mineIsRest && draft.mode !== 'SHARES' ? t('split.rest') : ''}
-              onChange={(event) => onChange({ ...draft, mine: event.target.value, mineIsRest: false })}
+              value={draft.mine}
+              onChange={(event) => onChange({ ...draft, mine: event.target.value })}
             />
           ) : null}
           <span className="split-amount">{current ? money(current.mine) : ''}</span>
@@ -150,18 +169,13 @@ export default function SplitEditor({
                 />
               ) : null}
               <span className="split-amount">{part ? money(part.amount) : ''}</span>
-              <Button variant="ghost" size="sm" className="split-remove" onClick={() => onChange({ ...draft, rows: draft.rows.filter((other) => other.key !== row.key) })}>
+              <Button variant="ghost" size="sm" className="split-remove" onClick={() => removeRow(row)}>
                 {t('split.remove')}
               </Button>
             </li>
           )
         })}
       </ul>
-      {draft.mode !== 'EQUAL' && draft.mode !== 'SHARES' && !draft.mineIsRest ? (
-        <Button variant="outline" size="sm" className="split-rest" onClick={() => onChange({ ...draft, mine: '', mineIsRest: true })}>
-          {t('split.rest')}
-        </Button>
-      ) : null}
       <PersonCombo
         label={t('debts.addFriend')}
         placeholder={t('split.pickOrType')}
@@ -176,8 +190,12 @@ export default function SplitEditor({
         <p className={left.startsWith('-') ? 'split-status over' : 'split-status'}>
           {left.startsWith('-') ? t('split.over', { left: leftText }) : t('split.left', { left: leftText })}
         </p>
+      ) : noPartOfMine ? (
+        <p className="hint">{t('split.needMine')}</p>
       ) : current && !proportions && bill ? (
-        <p className="hint">{t('split.yourPartOf', { mine: money(current.mine), amount: money(bill) })}</p>
+        <p className="hint">
+          {payer ? t('split.youOwe', { name: payer.name, mine: money(current.mine) }) : t('split.yourPartOf', { mine: money(current.mine), amount: money(bill) })}
+        </p>
       ) : null}
     </div>
   )

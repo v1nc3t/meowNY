@@ -19,34 +19,42 @@ friends, knowing whether a friend paid, several currencies per ledger, splitting
 | Split line: one friend's or guest's part of a bill | `transaction_split_lines`, child of a transaction |
 | Ledger entry: a loan, borrowing or repayment | `ledger_entries` |
 | Split template of a recurring item | `recurring_split_lines` and `recurring_transactions.split_my_weight` |
+| The friend who paid a bill or a template (none: you) | `transactions.paid_by`, `recurring_transactions.split_paid_by` |
 | What a transaction costs you; what a friend owes | Views `transaction_costs`, `person_balances` |
 | Bill code | Made on screen, stored nowhere |
 
-Your own part is never stored: it is the amount minus the lines, so parts can never disagree with the total.
+Your own part is never stored: it is the amount minus the lines, so parts can never disagree with the total. A friend's own part
+is a line like any other, also when they paid.
 
 ## 3. The numbers
 
-Integers in minor units. Cost = `amount_minor - sum(lines)`. Balance (positive: they owe you) = their lines + `LENT`
-+ `REPAID_BY_ME` - `BORROWED` - `REPAID_TO_ME`. A balance is a running total, not matched to bills, and never income,
-expense or part of a budget.
+Integers in minor units. Cost = `amount_minor - sum(lines)`, whoever paid. Balance (positive: they owe you) = their lines on
+bills you paid + `LENT` + `REPAID_BY_ME` - `BORROWED` - `REPAID_TO_ME` - the cost of each bill they paid (you owe them your
+part; the others on that bill owe the payer, not you, so their lines count for nothing here). A balance is a running total,
+not matched to bills, and never income, expense or part of a budget.
 
 ## 4. The rows
 
-Migration `0012_debts.sql` (`0013` for deleted expenses). Names 1 to 50 characters, unique among active people
+Migration `0012_debts.sql` (`0013` for deleted expenses, `0017` for the payer). Names 1 to 50 characters, unique among active people
 ignoring case; people are archived, never deleted. Entries: kind, amount, date, a note of at most 200 characters, an
 optional expense (`ON DELETE SET NULL`) and an `origin_id` from a bill code (unique). Lines: exactly one of person or
 guest, at most 30 per bill, one per person. Triggers refuse lines on income and parts above the bill (they stand aside
 while a sync, restore or conversion writes; `splits::check` checks the result). Changing a line gives its parent a new
-stamp. `document_links` gained a ledger entry target.
+stamp. `document_links` gained a ledger entry target. `0017` adds `transactions.paid_by` and
+`recurring_transactions.split_paid_by` (a person, `NULL` for you), puts them in the triggers that stamp a row and set
+`updated_at`, extends the refusal of income to a bill with a payer, and makes `person_balances` again.
 
 ## 5. Splitting a bill
 
 Equal, percent (exactly 100.00), shares, or exact amounts (exactly the bill). One Rust function, `splits::allocate`,
 turns weights into amounts that add up: floor of each quota in 128-bit integers, the odd cents to the largest
 remainders, ties to the lower position (you are 0). The screen asks Rust for every preview; the interface has no copy
-of the rule. Only the friends' amounts are stored, so a saved bill opens as exact amounts. A new amount rescales every
-part. A recurring item keeps weights; each payment is allocated when paid, and editing the template never changes past
-payments.
+of the rule. In percent and exact, the one field left empty, yours or a friend's, gets the rest. Only the friends'
+amounts are stored, so a saved bill opens as exact amounts. A new amount rescales every part. A recurring item keeps
+weights; each payment is allocated when paid, and editing the template never changes past payments. A bill is paid by
+you or by one friend (`paidBy`). The payer must be one of the people on the split, and your part must be above 0 (a
+bill a friend paid with nothing of yours is not your expense); the payer's own part may be 0. The cost stays your
+part. A template has the same payer, and each payment copies it. Taking the split off clears it.
 
 ## 6. The ledger
 
@@ -70,18 +78,21 @@ Both devices get the same numbers.
 
 ## 9. Sync
 
-Protocol 4. `people` and `ledger_entries` are ordinary synced tables. A bill's lines travel inside its transaction's
-row, and the winning row replaces all local lines; a template travels inside its item. Same-name active friends merge
-(lower `sync_id` kept, rows moved, two lines for one friend added). Two entries from one bill code (`origin_id`)
-become one. Every arriving row is checked, including that lines never exceed the bill; a failure ends the sync naming
-the table.
+Protocol 8 (4 brought these tables, 8 the payer). `people` and `ledger_entries` are ordinary synced tables. A bill's lines
+travel inside its transaction's row, and the winning row replaces all local lines; a template travels inside its item. The
+payer travels as the person's `sync_id` in the bill's row and in the template (`paidBy`), and a merged friend's bills and
+templates move to the one kept. Same-name active friends merge (lower `sync_id` kept, rows moved, two lines for one friend
+added). Two entries from one bill code (`origin_id`) become one. Every arriving row is checked, including that lines never
+exceed the bill; a failure ends the sync naming the table.
 
 ## 10. Bill codes (QR)
 
 `MNB1:` plus base64url of `{"v":1,"id","from","what","date","amt","total","cur"}`: one friend's part, the whole bill,
-your chosen name, and nothing about anyone else. `id` is the first 16 bytes of
-`SHA-256("meowny-bill-1" || transaction sync_id || person sync_id)`. At most 1 KiB, a notice, not signed or encrypted.
-One strict parser (`debts/codes.rs`) refuses anything not exactly that, including control and direction characters.
+your chosen name, and nothing about anyone else, except that when a friend paid the code also holds the payer's name (`by`,
+left out when you paid): the friend's debt goes to the payer, so the dialog offers that friend first, and the payer gets
+no code. `id` is the first 16 bytes of `SHA-256("meowny-bill-1" || transaction sync_id || person sync_id)`. At most 1 KiB,
+a notice, not signed or encrypted. One strict parser (`debts/codes.rs`) refuses anything not exactly that, including
+control and direction characters.
 A scan writes nothing; the dialog shows the details, the friend to use, "add to my expenses" and, for another
 currency, a typed rate (nothing is fetched). Accept (`bill_accept`) makes the friend, expense and entry in one
 transaction, or nothing. The sender learns nothing.
@@ -97,13 +108,15 @@ The desktop shows them while open and unlocked; the phone hands the system the n
 ## 12. Backup, restore, exports, "Delete all my data"
 
 All four tables are in backups; a restore checks them by the section 9 rules and refuses the file whole on a failure.
-JSON, CSV and Excel include people, the ledger and the parts (a limited export names only the friends on its bills).
+JSON, CSV and Excel include people, the ledger and the parts (a limited export names only the friends on its bills); a part
+names the friend who paid its bill when it was not you (JSON and Excel; the CSV of transactions has no parts).
 A summary or one friend's statement is saved as TXT, CSV or PDF for the person to send. Bill codes are never stored.
 
 ## 13. Command line and API
 
 Read: people, a person's ledger, balances, split preview. Write: people, ledger entries, settle, set or clear a
-transaction's or recurring item's split. Exporting debts needs the person's yes. Bill codes and notifications need the
+transaction's or recurring item's split (a split takes `paidBy`, a friend's id, and a transaction or template shows
+`paidBy` as `{personId, name}` or null). Exporting debts needs the person's yes. Bill codes and notifications need the
 person at the app and are not in the API.
 
 ## 14. The screens
@@ -129,5 +142,6 @@ about 50 ms with many shared bills (target 40). An outside review of the bill-co
 
 Allocation properties and fixed cases; the views against recomputation; the section 7 guard; constraints and
 triggers; templates and payments; currency changes on both devices; every sync case and random edits; bill codes
-(round trips, 40 refused forms, a 30,000-code fuzz run, accept and its refusals); reminders; backups. Checked by hand
-on a real phone with a second phone for the code (2026-10-23).
+(round trips, 40 refused forms, a 30,000-code fuzz run, accept and its refusals); reminders; backups; bills a friend
+paid (balances, statements, codes, sync merges). Checked by hand on a real phone with a second phone for the code
+(2026-10-23).

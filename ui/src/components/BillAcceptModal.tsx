@@ -23,7 +23,7 @@ function savedCategory(): string {
 /**
  * Taking in a bill code a friend showed or sent: the text is read first (nothing is written), then the person sees who it is from, what,
  * and their part, chooses the friend and whether to add the part to their expenses (and, for another currency, the rate), and accepts or
- * denies. Deny stores nothing.
+ * denies. Deny stores nothing. When a friend paid the bill, the part is owed to them and not to the sender, and the dialog says so.
  */
 export default function BillAcceptModal({
   initialText = '',
@@ -60,7 +60,7 @@ export default function BillAcceptModal({
       setFriends(people)
       setExpenseCategories(categories)
       setFriendChoice(shown.friendId ?? NEW)
-      setNewName(shown.from)
+      setNewName(shown.paidBy ?? shown.from)
       if (!categories.some((category) => category.id === categoryId)) setCategoryId(categories[0]?.id ?? '')
       setPreview(shown)
     } catch (failure) {
@@ -138,13 +138,19 @@ export default function BillAcceptModal({
             <dl className="code-details">
               <dt>{t('code.from')}</dt>
               <dd>{preview.from}</dd>
+              {preview.paidBy ? (
+                <>
+                  <dt>{t('split.paidBy')}</dt>
+                  <dd>{preview.paidBy}</dd>
+                </>
+              ) : null}
               <dt>{t('code.what')}</dt>
               <dd>{preview.what}</dd>
               <dt>{t('report.date')}</dt>
               <dd>{settings ? formatDate(preview.date, settings.locale) : preview.date}</dd>
             </dl>
             <p>{t('split.yourPartOf', { mine: money(preview.amount, preview.currency), amount: money(preview.total, preview.currency) })}</p>
-            <Dropdown label={t('debts.friend')} value={friendChoice} options={friendOptions} onChange={setFriendChoice} />
+            <Dropdown label={t(preview.paidBy ? 'debts.labelYouOwe' : 'debts.friend')} value={friendChoice} options={friendOptions} onChange={setFriendChoice} />
             {friendChoice === NEW ? (
               <label>
                 {t('common.name')}

@@ -180,9 +180,21 @@ export function countdownText(seconds: number): string {
   return `${Math.floor(whole / 60)}:${String(whole % 60).padStart(2, '0')}`
 }
 
-/** A gap between two clocks in words that need no translation: "45 s" or "3 min". */
+/** A gap between two clocks in words that need no translation: "45 s", "3 min", "5 h" or "3 d". */
 export function clockGapText(seconds: number): string {
-  return seconds < 120 ? `${seconds} s` : `${Math.round(seconds / 60)} min`
+  if (seconds < 120) return `${seconds} s`
+  const minutes = Math.round(seconds / 60)
+  if (minutes < 120) return `${minutes} min`
+  const hours = Math.round(minutes / 60)
+  return hours < 48 ? `${hours} h` : `${Math.round(hours / 24)} d`
+}
+
+/** From this gap on, the phone says its clock is off (the Rust side warns after a sync at the same gap). */
+export const CLOCK_WARNING_MS = 60_000
+
+/** The gap to show on the phone, in seconds, when its clock is more than a minute from the computer's; null when it is close enough. */
+export function phoneClockGap(offsetMs: number): number | null {
+  return Math.abs(offsetMs) > CLOCK_WARNING_MS ? Math.round(Math.abs(offsetMs) / 1000) : null
 }
 
 /** Every reason the Rust side can give, with the text for it. A reason this list does not know shows as `internal`. */
@@ -213,6 +225,11 @@ export const REASON_KEYS = {
 
 export function reasonKey(reason: string): MessageKey {
   return Object.hasOwn(REASON_KEYS, reason) ? REASON_KEYS[reason as keyof typeof REASON_KEYS] : REASON_KEYS.internal
+}
+
+/** The reasons that an update of the app can fix: the apps differ in version, or the other one's clock ran ahead because of one. */
+export function reasonNeedsUpdate(reason: string): boolean {
+  return ['peer_version', 'other_device_older', 'this_device_older', 'clock'].includes(reason)
 }
 
 /** The lines of a summary: which text and how many. Counts of zero are left out; `updated` already contains `replaced`. */

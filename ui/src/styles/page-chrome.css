@@ -1,27 +1,112 @@
 /* The top of a list page: title, actions, filter bar and page numbers, shared by several pages. */
 
+/* The pager (previous, page numbers, next) is a row of plain words with no box; the page you are on is bold, underlined and in the
+   main colour. A gap between the numbers is a plain "…". */
 .page-numbers {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 0.5rem;
-}
-
-/* Page numbers are small ghost buttons; the page you are on is outlined. */
-.page-numbers {
   gap: 0.25rem;
 }
 
 .page-numbers button {
-  min-width: 2rem;
+  min-width: 2.25rem;
+  min-height: 2.25rem;
   padding: 0 0.5rem;
+  font-size: 0.875rem;
+  color: var(--foreground);
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+}
+
+@media (hover: hover) {
+  .page-numbers button:hover:not(:disabled) {
+    color: var(--primary);
+  }
+}
+
+.page-numbers button:active:not(:disabled) {
+  color: var(--primary);
 }
 
 .page-numbers button[aria-current='page'] {
-  color: var(--foreground);
-  background: var(--background);
-  border-color: var(--input);
-  box-shadow: var(--shadow-xs);
+  font-weight: 700;
+  color: var(--primary);
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+
+.page-numbers > span {
+  min-width: 1.5rem;
+  text-align: center;
+  color: var(--muted-foreground);
+}
+
+/* The phone: one centred line of 44px tall buttons (the pager shows fewer numbers there). */
+html.is-phone .page-numbers {
+  flex-wrap: nowrap;
+  justify-content: center;
+  width: 100%;
+  gap: 0.125rem;
+}
+
+html.is-phone .page-numbers > span {
+  min-width: 1.25rem;
+}
+
+html.is-phone .tx-pane > .page-numbers {
+  margin-top: 1.25rem;
+}
+
+/* Under a list: the page numbers in the middle of the width, how many rows a page shows on the right, its label beside it. The rows
+   have their own column, so they stay on the right when there is only one page and no numbers. Its list opens upwards, at the bottom
+   of the window. */
+.list-foot {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 0.75rem 1.5rem;
+  width: 100%;
+  max-width: none;
+}
+
+.list-foot > .page-numbers {
+  grid-column: 2;
+}
+
+.list-foot > .per-page {
+  grid-column: 3;
+  justify-self: end;
+  flex-direction: row;
+  align-items: center;
+  gap: 0.75rem;
+  color: var(--muted-foreground);
+}
+
+/* The phone: the numbers and the rows on one line (the numbers take what the rows leave), and onto two lines when a large text size
+   leaves no room. */
+html.is-phone .list-foot {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem 0.5rem;
+}
+
+html.is-phone .list-foot > .page-numbers {
+  flex: 1 1 auto;
+  width: auto;
+}
+
+html.is-phone .list-foot > .per-page {
+  gap: 0.5rem;
+  margin-left: auto;
+}
+
+.list-foot > .per-page .pick-list {
+  top: auto;
+  bottom: calc(100% + 0.25rem);
+  right: 0;
+  left: auto;
 }
 
 .toolbar {
@@ -61,10 +146,8 @@
 
 .tx-title h1 {
   margin: 0;
-  font-size: 1.5rem;
-  font-weight: 600;
+  font-size: var(--pixel-md);
   line-height: 1.2;
-  letter-spacing: -0.025em;
 }
 
 .tx-title:has(> .tx-actions),
@@ -78,6 +161,16 @@
   display: flex;
   align-items: center;
   gap: 0.75rem;
+}
+
+/* A title with its one action on the same line: the title on the left, the action at the right edge (under it when there is no room). */
+.app-main main > section > .tx-title.one-line {
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem 1.5rem;
+  width: 100%;
 }
 
 .toolbar.tx-bar {
@@ -134,6 +227,12 @@
   right: 0;
   left: auto;
   width: 100%;
+}
+
+/* The documents' type: as wide as its longest choice in any language ("outros ficheiros", 16 letters of the monospace font) plus the
+   padding and the arrow, so it does not change width with the choice. */
+.toolbar.tx-bar .pick.kind .pick-button {
+  min-width: calc(16ch + 3rem);
 }
 
 .toolbar.tx-bar .pick.limit {
@@ -193,6 +292,75 @@
 .toolbar.tx-bar {
   flex-wrap: wrap-reverse;
   align-items: flex-start;
+}
+
+/* The filters of the transactions: the search and the category share what is left of the line, then the period; what does not fit goes
+   to the next line. Labels stay above their fields and line up at the top (a long category name makes its field two lines high). */
+.toolbar.tx-bar.filter-bar {
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 1rem;
+}
+
+.filter-bar > .grow {
+  flex: 1 1 10rem;
+}
+
+.filter-bar > .pick.scope {
+  flex: 0 1 13rem;
+  min-width: 10rem;
+}
+
+/* The field is kept narrow, so the search has the room. A long category name is cut short in the closed field (the whole name is its
+   tooltip) and wraps in the open list, which is as wide as the field. */
+.filter-bar .pick.scope .pick-button {
+  width: 100%;
+  min-width: 0;
+}
+
+.filter-bar .pick.scope .pick-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.filter-bar .pick.scope .pick-list {
+  width: 100%;
+}
+
+.filter-bar .pick.scope .pick-list button {
+  width: 100%;
+  min-width: 0;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+/* The phone: the search and the "filters" button on one line, level at the bottom; the button opens the category and the period under
+   them, in a box. */
+html.is-phone .toolbar.tx-bar.filter-bar {
+  align-items: flex-end;
+}
+
+/* In that box the field is as wide as the box and a phone has no tooltip: the whole name shows, on as many lines as it needs. */
+.filter-panel .pick.scope .pick-button {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.filter-toggle[aria-expanded='true'] {
+  --btn-fill: var(--accent);
+}
+
+.filter-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  flex: 1 1 100%;
+  min-width: 0;
+  padding: 1rem;
+  background: var(--card);
+  border: var(--border-width) solid var(--border);
+  animation: panel-in var(--t-med) var(--ease-step);
 }
 
 /* A phone: "current month" and the range sit beside "add transaction"; from and to are side by side, level with each other. */

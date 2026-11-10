@@ -84,7 +84,7 @@ export default function RecurringDashboard({ dues, items, today, currency, local
                   <li key={item.id} title={`${item.name}: ${names}`}>
                     <span className="legend-name">
                       {link(item)}
-                      <span className="muted">{` · ${names}`}</span>
+                      <span className="muted">{` ${names}`}</span>
                     </span>
                     <span className="legend-amount">{money(item)}</span>
                   </li>

@@ -165,7 +165,7 @@
       "positional": null,
       "route": "budgets.overview",
       "scope": "read",
-      "summary": "For a month, per side (income, expense): the budget, how much of it is given to categories, what is left, and the actual so far. used is what the categories that still count spent.",
+      "summary": "For a month, per side (income, expense): the budget, how much of it is given to categories, what is left, and the actual so far. used is what the categories that still count spent, and spent has it for each of those categories, with or without a budget.",
       "usage": "meowny budgets overview --month <month>"
     },
     {
@@ -2415,6 +2415,19 @@
           "values": []
         },
         {
+          "flag": "--only",
+          "nullable": false,
+          "param": "only",
+          "required": false,
+          "summary": "friends (only the lines of friends) or paidLate (only the recurring payments that were paid late, not those overdue now; not with personId). Leave out for all of them.",
+          "type": "string",
+          "value": "friends|paidLate",
+          "values": [
+            "friends",
+            "paidLate"
+          ]
+        },
+        {
           "flag": "--limit",
           "nullable": false,
           "param": "limit",
@@ -2439,7 +2452,7 @@
       "route": "debts.history",
       "scope": "read",
       "summary": "The history of debts, newest first, a page at a time: the lines of every friend (lent, borrowed, paid back, their parts of shared bills, with the balance after each) and the recurring payments that were paid late or are overdue. A payment made on its day or before it is not in it.",
-      "usage": "meowny debts history [--from <date>] [--to <date>] [--person-id <id>] [--limit <number>] [--offset <number>]"
+      "usage": "meowny debts history [--from <date>] [--to <date>] [--person-id <id>] [--only <friends|paidLate>] [--limit <number>] [--offset <number>]"
     },
     {
       "command": "debts reminders",
@@ -2712,13 +2725,23 @@
           "type": "string",
           "value": "text",
           "values": []
+        },
+        {
+          "flag": "--transaction-id",
+          "nullable": false,
+          "param": "transactionId",
+          "required": false,
+          "summary": "A transaction the payment was for, such as a bill you paid for them. Only a reference: no amount changes.",
+          "type": "id",
+          "value": "id",
+          "values": []
         }
       ],
       "positional": "id",
       "route": "people.settle",
       "scope": "write",
       "summary": "Marks a payment between you and a friend: they paid you back if they owe you, you paid them back if you owe them. With no amount it is the whole balance. An amount larger than the debt is accepted: the balance turns around and the answer says how much was over.",
-      "usage": "meowny people settle <id> [--amount <amount>] [--date <date>] [--note <text>]"
+      "usage": "meowny people settle <id> [--amount <amount>] [--date <date>] [--note <text>] [--transaction-id <id>]"
     },
     {
       "command": "ledger add",
@@ -3005,13 +3028,23 @@
           "type": "string",
           "value": "text",
           "values": []
+        },
+        {
+          "flag": "--paid-by",
+          "nullable": false,
+          "param": "paidBy",
+          "required": false,
+          "summary": "The friend who paid the bill, one of --people. Leave out when you paid. Then your part must be above zero: you owe the friend your part, and the others on the bill owe the friend too.",
+          "type": "id",
+          "value": "id",
+          "values": []
         }
       ],
       "positional": "id",
       "route": "transactions.split",
       "scope": "write",
       "summary": "Shares a transaction with friends and guests. It keeps the amount that was paid; your part, the amount minus theirs, is what budgets and statistics count. The numbers must add up. Only an expense can be shared.",
-      "usage": "meowny transactions split <id> --mode <EQUAL|PERCENT|SHARES|EXACT> [--mine <text>] [--people <id,id,...>] [--guests <text>] [--values <text>]"
+      "usage": "meowny transactions split <id> --mode <EQUAL|PERCENT|SHARES|EXACT> [--mine <text>] [--people <id,id,...>] [--guests <text>] [--values <text>] [--paid-by <id>]"
     },
     {
       "command": "transactions unsplit",
@@ -3104,13 +3137,23 @@
           "type": "string",
           "value": "text",
           "values": []
+        },
+        {
+          "flag": "--paid-by",
+          "nullable": false,
+          "param": "paidBy",
+          "required": false,
+          "summary": "The friend who paid the bill, one of --people. Leave out when you paid. Then your part must be above zero: you owe the friend your part, and the others on the bill owe the friend too.",
+          "type": "id",
+          "value": "id",
+          "values": []
         }
       ],
       "positional": "id",
       "route": "recurring.split",
       "scope": "write",
       "summary": "Splits every payment of a recurring item the same way, from now on. Kept as proportions, so a payment that differs from the plan is shared in the same proportions. EXACT needs an item with an amount that the values add up to. Payments already made are not changed.",
-      "usage": "meowny recurring split <id> --mode <EQUAL|PERCENT|SHARES|EXACT> [--mine <text>] [--people <id,id,...>] [--guests <text>] [--values <text>]"
+      "usage": "meowny recurring split <id> --mode <EQUAL|PERCENT|SHARES|EXACT> [--mine <text>] [--people <id,id,...>] [--guests <text>] [--values <text>] [--paid-by <id>]"
     },
     {
       "command": "recurring unsplit",

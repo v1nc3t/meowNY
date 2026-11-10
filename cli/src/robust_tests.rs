@@ -228,6 +228,10 @@ fn a_damaged_schema_is_an_error_not_a_panic() {
     for _ in 0..3000 {
         let mut bytes = original.as_bytes().to_vec();
         for _ in 0..1 + rng.below(3) {
+            // a cut and a drain can leave nothing to change
+            if bytes.is_empty() {
+                break;
+            }
             let at = rng.below(bytes.len());
             match rng.below(3) {
                 0 => bytes[at] = b" {}[]\":,0a"[rng.below(10)],

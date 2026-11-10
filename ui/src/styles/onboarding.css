@@ -1,0 +1,309 @@
+/* The first start (what the app does, then three steps), the first steps of an empty dashboard, and the room of an empty list. */
+
+/* The first screen is wider than the other password screens, so it starts a little higher. */
+.gate.onboard {
+  padding-top: clamp(1.5rem, 9vh, 5rem);
+}
+
+.gate > .onboard-welcome {
+  width: min(100%, 47rem);
+  gap: 1.25rem;
+}
+
+.gate > .onboard-form {
+  width: min(100%, 28rem);
+}
+
+/* The headline: what the app is, big, in the pixel font (33px: three pixels of the screen for each pixel of a letter). */
+.gate .onboard-headline {
+  margin: 0.25rem 0 0;
+  font-size: var(--pixel-lg, 33px);
+  line-height: 44px;
+  text-wrap: balance;
+}
+
+.onboard-lead {
+  margin: -0.5rem 0 0;
+  font-size: 0.9375rem;
+  line-height: 1.5;
+  color: var(--muted-foreground);
+}
+
+/* What the app does: four tiles, two by two (one under the other when the card is narrow). */
+.onboard-features {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 18rem), 1fr));
+  gap: 1.25rem 1.5rem;
+  width: auto;
+  margin: 0.25rem 0 0.5rem;
+}
+
+/* A tile is a picture beside a title and a line, with air around it: no box. */
+.onboard-features > .onboard-tile {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 1rem;
+  padding: 0;
+  border: 0;
+}
+
+.onboard-tile .pixel-art,
+.first-step .pixel-art {
+  flex: none;
+  color: var(--foreground);
+}
+
+.onboard-tile-text,
+.first-step-text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  min-width: 0;
+}
+
+.onboard-tile-text > b,
+.first-step-text > b {
+  font-size: 0.9375rem;
+  font-weight: 600;
+  line-height: 1.35;
+  color: var(--foreground);
+}
+
+.onboard-tile-text > span,
+.first-step-text > span {
+  font-size: 0.875rem;
+  line-height: 1.5;
+  color: var(--muted-foreground);
+}
+
+/* The two ways in, side by side; one under the other when they do not fit. */
+.onboard-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem 1rem;
+}
+
+.onboard-actions > .ui-btn {
+  flex: 1 1 12rem;
+}
+
+/* Where the person is: "step 1 of 3" and three thin blocks, filled up to this step. */
+.onboard-progress {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-top: 0.25rem;
+}
+
+.onboard-count {
+  font-size: 0.875rem;
+  line-height: 1.4;
+  color: var(--muted-foreground);
+}
+
+.onboard-blocks {
+  display: flex;
+  gap: 4px;
+}
+
+.onboard-blocks > span {
+  width: 2.75rem;
+  height: 8px;
+  background-color: var(--c-track);
+  transition: background-color var(--t-fast, 110ms) steps(2, end);
+}
+
+.onboard-blocks > .is-done {
+  background-color: var(--primary);
+}
+
+/* This step's block is cut into segments, like a bar that is filling up. */
+.onboard-blocks > .is-now {
+  background-image: repeating-linear-gradient(90deg, var(--primary) 0 6px, transparent 6px 8px);
+}
+
+/* A step: its title, its fields and its hints, with the gaps of the form. The steps that are not on show are hidden, not removed. */
+.onboard-step {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.onboard-step[hidden] {
+  display: none;
+}
+
+.gate .onboard-step > h1 {
+  margin: 0.25rem 0 0;
+}
+
+.onboard-step > .hint {
+  margin: -0.5rem 0 0;
+}
+
+.onboard-step > h1 + .hint {
+  margin: -0.25rem 0 0;
+}
+
+/* Back and next under the steps: back as small as its word, next takes the rest, and a long label may break onto two lines. */
+.onboard-nav {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 1rem;
+  margin-top: 0.25rem;
+}
+
+.onboard-nav > .ui-btn {
+  height: auto;
+  min-height: 2.25rem;
+  padding-block: 0.5rem;
+  white-space: normal;
+}
+
+/* A new step slides in a few pixels, in steps like a sprite: from the right going on, from the left going back. */
+@media (prefers-reduced-motion: no-preference) {
+  .onboard .is-forward:not([hidden]) {
+    animation: onboard-from-right var(--t-med, 180ms) steps(4, jump-start) both;
+  }
+
+  .onboard .is-back:not([hidden]) {
+    animation: onboard-from-left var(--t-med, 180ms) steps(4, jump-start) both;
+  }
+}
+
+@keyframes onboard-from-right {
+  from {
+    opacity: 0;
+    transform: translateX(16px);
+  }
+}
+
+@keyframes onboard-from-left {
+  from {
+    opacity: 0;
+    transform: translateX(-16px);
+  }
+}
+
+/* The phone: the headline at 22px, one tile under the other. */
+html.is-phone .gate.onboard {
+  padding-top: calc(5dvh + env(safe-area-inset-top, 0px));
+}
+
+html.is-phone .gate .onboard-headline {
+  font-size: var(--pixel-md, 22px);
+  line-height: 33px;
+}
+
+html.is-phone .onboard-lead {
+  margin-top: -0.375rem;
+  font-size: 0.875rem;
+}
+
+html.is-phone .onboard-features {
+  gap: 1rem;
+  margin: 0;
+}
+
+html.is-phone .onboard-features > .onboard-tile {
+  gap: 0.875rem;
+}
+
+/* The first steps on a dashboard with nothing in it yet: a few big links, each with its picture, under a title, with no box around them. */
+.first-steps {
+  container-type: inline-size;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin-bottom: 0.5rem;
+}
+
+.first-steps > h2 {
+  margin: 0;
+}
+
+.first-steps > .hint {
+  margin: -0.25rem 0 0.25rem;
+  font-size: 0.875rem;
+}
+
+.dash .first-steps-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem 1.25rem;
+  width: auto;
+}
+
+/* Two by two, or one under the other when the panel is narrow (a phone). */
+@container (max-width: 34rem) {
+  .dash .first-steps-list {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.dash .first-steps-list > li {
+  display: block;
+  padding: 0;
+}
+
+/* A step is a link with a thin line, so it reads as something to press; pressed, it shrinks a little, like a button. */
+.first-step {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 1rem;
+  height: 100%;
+  padding: 0.875rem 1rem;
+  color: inherit;
+  text-decoration: none;
+  border: var(--border-width) solid var(--border);
+  transition:
+    background-color var(--t-fast, 110ms),
+    transform var(--t-fast, 110ms) steps(1, end);
+}
+
+.first-step:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 4px;
+}
+
+@media (hover: hover) {
+  .first-step:hover {
+    background: var(--accent);
+  }
+
+  .first-step:hover .first-step-text > b {
+    text-decoration: underline;
+    text-underline-offset: 4px;
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .first-step:active {
+    transform: scale(0.97);
+  }
+}
+
+html.is-phone .first-step {
+  min-height: 2.75rem;
+  padding: 0.75rem 0.875rem;
+}
+
+/* An empty list: a little more room around the dozing cat, and the button for the first thing to do under the hint. */
+.empty-state {
+  gap: 1rem;
+  padding-block: 1.5rem;
+}
+
+.empty-state > .ui-btn {
+  margin-top: 0.25rem;
+}
+
+/* On the dashboard the empty state sits in the middle of its card, like the other empty lines there. */
+.dash .empty-state {
+  align-items: center;
+  text-align: center;
+  padding-block: 0.75rem;
+}

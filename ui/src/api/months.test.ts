@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { changePart, daysInMonth, monthLabel, parseParts, shiftMonth } from './months.ts'
+import { changePart, daysInMonth, monthLabel, monthNames, parseDay, parseMonth, parseParts, parseYear, shiftMonth } from './months.ts'
 
 test('stepping a month crosses year ends in both directions', () => {
   assert.equal(shiftMonth('2026-10', 1), '2026-11')
@@ -37,4 +37,43 @@ test('days in a month handle leap years', () => {
   assert.equal(daysInMonth(2024, 2), 29)
   assert.equal(daysInMonth(2026, 2), 28)
   assert.equal(daysInMonth(2026, 4), 30)
+})
+
+test('month names are three lower case letters in the language', () => {
+  assert.deepEqual(monthNames('en'), ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'])
+  assert.equal(monthNames('de')[2], 'mär')
+  assert.equal(monthNames('not a locale!!')[10], '11', 'an unusable locale falls back to numbers')
+})
+
+test('a typed day is digits within the days of the month', () => {
+  assert.equal(parseDay('5', 2026, 11), 5)
+  assert.equal(parseDay('05', 2026, 11), 5)
+  assert.equal(parseDay(' 30 ', 2026, 11), 30)
+  assert.equal(parseDay('31', 2026, 11), null, 'November has 30 days')
+  assert.equal(parseDay('31', 2026, 10), 31)
+  assert.equal(parseDay('29', 2026, 2), null)
+  assert.equal(parseDay('29', 2024, 2), 29)
+  for (const bad of ['', '0', '00', 'x', '1x', '-1', '1.5', '32']) assert.equal(parseDay(bad, 2026, 10), null, bad)
+})
+
+test('a typed month is a number or the start of a name, in any case', () => {
+  for (const text of ['11', '011', 'nov', 'Nov', 'NOV', 'november', 'November']) assert.equal(parseMonth(text, 'en'), 11, text)
+  assert.equal(parseMonth('1', 'en'), 1)
+  assert.equal(parseMonth('12', 'en'), 12)
+  for (const bad of ['', ' ', '0', '13', 'xyz', 'no', 'novx', 'ju', '1x']) assert.equal(parseMonth(bad, 'en'), null, bad)
+  assert.equal(parseMonth('jun', 'en'), 6)
+  assert.equal(parseMonth('juni', 'de'), 6, 'the language of the app')
+  assert.equal(parseMonth('mär', 'de'), 3)
+  assert.equal(parseMonth('märz', 'de'), 3)
+  assert.equal(parseMonth('novembre', 'fr'), 11)
+  assert.equal(parseMonth('dec', 'de'), 12, 'English names always work')
+  assert.equal(parseMonth('jui', 'fr'), null, 'juin and juillet both start with it')
+  assert.equal(parseMonth('nov', 'not a locale!!'), 11)
+})
+
+test('a typed year is four digits from 1900 to 2100', () => {
+  assert.equal(parseYear('2026'), 2026)
+  assert.equal(parseYear('1900'), 1900)
+  assert.equal(parseYear('2100'), 2100)
+  for (const bad of ['', '26', '202', '20266', '1899', '2101', 'abcd', '20 6']) assert.equal(parseYear(bad), null, bad)
 })

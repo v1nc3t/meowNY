@@ -39,7 +39,7 @@ fn friends_the_ledger_and_the_parts_of_bills_come_back_exactly() {
     assert!(splits::check(&target).unwrap());
     assert_eq!(splits::all_template_weights(&target).unwrap(), splits::all_template_weights(&source).unwrap());
     let anna: i64 = target.query_row("SELECT id FROM people WHERE name LIKE 'Anna%'", [], |r| r.get(0)).unwrap();
-    assert!(ledger::settle(&target, anna, None, None, None, "2026-03-01").is_ok(), "an entry made after a restore works");
+    assert!(ledger::settle(&target, anna, None, None, None, None, "2026-03-01").is_ok(), "an entry made after a restore works");
 }
 
 #[test]

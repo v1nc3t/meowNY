@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { Doc } from '../api/documents.ts'
 import { t } from '../i18n/translate.ts'
-import { canOpen, canPreview, canShowImage, dropNotice, dropNote, fileState, MAX_DRAW_BYTES, MAX_PREVIEW_BYTES, previewKindOf } from './documents.ts'
+import { canKeepToPreview, canOpen, canPreview, canShowImage, dropNotice, dropNote, fileState, MAX_DRAW_BYTES, MAX_PREVIEW_BYTES, previewKindOf } from './documents.ts'
 
 test('a missing file is a fault on the computer and normal on the phone', () => {
   assert.equal(fileState({ hasFile: true, keepOnPhone: false }, false), 'here')
@@ -72,4 +72,14 @@ test('the preview button is offered for a file that is here, of a kind that is s
   assert.equal(canPreview(image), true)
   assert.equal(canPreview({ ...image, sizeBytes: MAX_DRAW_BYTES + 1 }), false, 'an image keeps the lower limit')
   assert.equal(canPreview({ ...pdf, name: 'a.html', mediaType: 'text/html' }), false)
+})
+
+test('a phone offers to keep a file for the preview only when it stays on the computer and would show once here', () => {
+  const pdf = { hasFile: false, keepOnPhone: false, name: 'a.pdf', mediaType: 'application/pdf', sizeBytes: MAX_PREVIEW_BYTES } as const
+  assert.equal(canKeepToPreview(pdf, true), true)
+  assert.equal(canKeepToPreview(pdf, false), false, 'on the computer a file that is not there is a fault, not an offer')
+  assert.equal(canKeepToPreview({ ...pdf, keepOnPhone: true }, true), false, 'it is on its way already')
+  assert.equal(canKeepToPreview({ ...pdf, hasFile: true }, true), false, 'it is here: preview works')
+  assert.equal(canKeepToPreview({ ...pdf, sizeBytes: MAX_PREVIEW_BYTES + 1 }, true), false, 'too big')
+  assert.equal(canKeepToPreview({ ...pdf, name: 'a.html', mediaType: 'text/html' }, true), false, 'a kind the preview does not show')
 })

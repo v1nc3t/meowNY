@@ -3,7 +3,7 @@ use serde_json::{json, Value};
 use super::codes::{accept, encode, make, make_recurring, parse, preview, Accept, BillCode, MAX_CODE_BYTES, PREFIX};
 use super::fixtures::*;
 use super::ledger::{self};
-use super::splits::{set_split, set_template, Mode};
+use super::splits::{set_split, set_template, Mode, SplitInput};
 use super::people;
 use crate::money::MAX_MINOR;
 use crate::sync::qr::{base64url_decode, base64url_encode};
@@ -89,6 +89,44 @@ fn only_a_friend_on_the_bill_has_a_code_and_the_sender_name_follows_the_name_rul
     }
     assert!(make(&w.conn, bill, anna, "  Vincent  ").is_ok(), "the name is trimmed");
     assert_eq!(parse(&make(&w.conn, bill, anna, "  Vincent  ").unwrap()).unwrap().from, "Vincent");
+}
+
+#[test]
+fn a_bill_a_friend_paid_names_the_payer_in_the_code_and_the_payer_has_none() {
+    let w = world();
+    let (anna, bob, sender) = (friend(&w.conn, "Anna"), friend(&w.conn, "Bob"), friend(&w.conn, FROM));
+    let dinner = bill(&w.conn, w.food, "Dinner", "90.00", "2026-03-04");
+    set_split(&w.conn, dinner, &SplitInput { paid_by: Some(bob.to_string()), ..equal(vec![who(anna), who(bob)]) }).unwrap();
+    let text = code(&w.conn, anna, dinner);
+    let held = parse(&text).unwrap();
+    assert_eq!((held.paid_by.as_deref(), held.amount_minor), (Some("Bob"), 3000));
+    assert_eq!(encode(&held), text, "what is encoded is what is read");
+    assert!(String::from_utf8(base64url_decode(text.strip_prefix(PREFIX).unwrap()).unwrap()).unwrap().ends_with(r#","by":"Bob"}"#));
+    assert_eq!(make(&w.conn, dinner, bob, FROM), Err(AppError::InvalidInput), "the friend who paid owes nothing");
+    // the debt goes to whoever paid: the dialog offers the payer first, and the sender when nobody else paid
+    let shown = preview(&w.conn, &text).unwrap();
+    assert_eq!((shown.paid_by.as_deref(), shown.friend_id), (Some("Bob"), Some(bob.to_string())));
+    let lunch = bill(&w.conn, w.food, "Lunch", "30.00", "2026-03-05");
+    set_split(&w.conn, lunch, &equal(vec![who(anna)])).unwrap();
+    let mine = preview(&w.conn, &code(&w.conn, anna, lunch)).unwrap();
+    assert_eq!((mine.paid_by, mine.friend_id), (None, Some(sender.to_string())));
+    // the same for the next payment of a recurring item
+    let item = rent(&w, Some("900.00"));
+    set_template(&w.conn, item, &SplitInput { paid_by: Some(anna.to_string()), ..equal(vec![who(anna), who(bob)]) }).unwrap();
+    assert_eq!(make_recurring(&w.conn, item, anna, FROM), Err(AppError::InvalidInput));
+    assert_eq!(parse(&make_recurring(&w.conn, item, bob, FROM).unwrap()).unwrap().paid_by.as_deref(), Some("Anna"));
+}
+
+#[test]
+fn a_code_with_no_payer_is_the_text_it_always_was_and_a_payer_is_checked_like_a_name() {
+    let held = parse(&raw(&good())).unwrap();
+    assert_eq!(held.paid_by, None);
+    let before = r#"{"v":1,"id":"0123456789abcdef0123456789abcdef","from":"Vincent","what":"Dinner","date":"2026-03-04","amt":2500,"total":10000,"cur":"EUR"}"#;
+    assert_eq!(encode(&held), format!("{PREFIX}{}", base64url_encode(before.as_bytes())));
+    assert!(parse(&changed("by", json!("Bob"))).is_ok());
+    for by in ["", " Bob", "Bob ", "B\u{202e}b", "B\nb", &"x".repeat(51)] {
+        assert_eq!(parse(&changed("by", json!(by))), Err(AppError::InvalidInput), "{by:?}");
+    }
 }
 
 fn rent(w: &World, amount: Option<&str>) -> i64 {

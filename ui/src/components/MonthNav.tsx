@@ -1,4 +1,4 @@
-import { monthNames, shiftMonth, withMonth, withYear, yearChoices } from '../api/months'
+import { monthNames, parseMonth, parseYear, shiftMonth, withMonth, withYear, yearChoices } from '../api/months'
 import Dropdown from './Dropdown'
 import Button from './ui/Button'
 import { useI18n } from '../i18n/context'
@@ -17,7 +17,7 @@ export default function MonthNav({
   const { t, language } = useI18n()
   return (
     <div className="month-nav">
-      <Button variant="outline" size="icon" aria-label={t('budgets.prevMonth')} {...tip('prev')} onClick={() => onChange(shiftMonth(month, -1))}>
+      <Button variant="ghost" size="icon" aria-label={t('budgets.prevMonth')} {...tip('prev')} onClick={() => onChange(shiftMonth(month, -1))}>
         &lsaquo;
       </Button>
       <Dropdown
@@ -25,6 +25,7 @@ export default function MonthNav({
         label={t('common.month')}
         value={String(Number(month.slice(5, 7)))}
         options={monthNames(language).map((name, index) => ({ value: String(index + 1), label: name }))}
+        parse={(text) => parseMonth(text, language)?.toString() ?? null}
         onChange={(value) => onChange(withMonth(month, Number(value)))}
       />
       <Dropdown
@@ -35,9 +36,10 @@ export default function MonthNav({
           value: String(year),
           label: String(year),
         }))}
+        parse={(text) => parseYear(text)?.toString() ?? null}
         onChange={(value) => onChange(withYear(month, Number(value)))}
       />
-      <Button variant="outline" size="icon" aria-label={t('budgets.nextMonth')} {...tip('next')} onClick={() => onChange(shiftMonth(month, 1))}>
+      <Button variant="ghost" size="icon" aria-label={t('budgets.nextMonth')} {...tip('next')} onClick={() => onChange(shiftMonth(month, 1))}>
         &rsaquo;
       </Button>
       <Button variant="outline" disabled={month === thisMonth} {...tip('today')} onClick={() => onChange(thisMonth)}>

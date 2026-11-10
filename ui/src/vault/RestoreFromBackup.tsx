@@ -1,9 +1,11 @@
 import { useState, type FormEvent } from 'react'
 import { useI18n } from '../i18n/context'
 import { useNotice } from '../hooks/useNotice'
+import { messageFor } from '../api/invoke'
 import { errorText, vault } from './api'
 import PasswordField from './PasswordField'
 import { passphraseProblem } from './rules'
+import { UpdateLink } from '../components/AppFooter'
 import Button from '../components/ui/Button'
 import { Logo } from '../components/ui/Pixel'
 
@@ -48,6 +50,12 @@ export default function RestoreFromBackup({ onKey, onBack }: { onKey: (recoveryK
         </Button>
         <p className="notice" role="alert">
           {message}
+          {message === messageFor('database_too_new') ? (
+            <>
+              {' '}
+              <UpdateLink />
+            </>
+          ) : null}
         </p>
       </form>
     </main>

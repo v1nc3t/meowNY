@@ -4,11 +4,13 @@ import { documents, type Doc, type Target } from '../api/documents'
 import { errorText } from '../api/invoke'
 import { useMoneySettings } from '../hooks/useMoneySettings'
 import { useToast } from '../hooks/toast'
+import { useProfile } from '../hooks/profile'
 import { useT } from '../i18n/context'
 import { formatSize } from '../lib/bytes'
-import { canPreview } from '../lib/documents'
+import { canKeepToPreview, canPreview, fileState } from '../lib/documents'
 import ClipMark from './ClipMark'
 import DocumentModal from './DocumentModal'
+import KeepToPreview from './KeepToPreview'
 import Icon from './NavIcon'
 import Modal from './Modal'
 import PreviewModal from './PreviewModal'
@@ -61,9 +63,13 @@ export default function ClipPreview({ target, name, count, inline = false }: { t
   )
 }
 
-/** The documents of one item, each with a preview button (dimmed for a kind of file that is not shown) and its name, which opens its details. */
+/**
+ * The documents of one item, each with a preview button (dimmed for a kind of file that is not shown) and its name, which opens its details.
+ * On the phone a file that stays on the computer gets a note and a button to keep it there instead of the preview.
+ */
 function ItemDocuments({ name, docs, onChanged, onClose }: { name: string; docs: Doc[]; onChanged: () => void; onClose: () => void }) {
   const t = useT()
+  const phone = useProfile() === 'phone'
   const { settings } = useMoneySettings()
   const locale = settings?.locale ?? 'en'
   const [previewing, setPreviewing] = useState<Doc | null>(null)
@@ -82,9 +88,14 @@ function ItemDocuments({ name, docs, onChanged, onClose }: { name: string; docs:
                   {doc.name}
                 </Button>
                 <span className="attach-size">{formatSize(doc.sizeBytes, locale)}</span>
-                <Button variant="ghost" size="sm" disabled={!canPreview(doc)} onClick={() => setPreviewing(doc)}>
-                  {t('docs.previewButton')}
-                </Button>
+                {canKeepToPreview(doc, phone) ? (
+                  <KeepToPreview doc={doc} onKept={onChanged} />
+                ) : (
+                  <Button variant="ghost" size="sm" disabled={!canPreview(doc)} onClick={() => setPreviewing(doc)}>
+                    {t('docs.previewButton')}
+                  </Button>
+                )}
+                {fileState(doc, phone) === 'waiting' ? <p className="attach-note">{t('docs.fileWaiting')}</p> : null}
               </li>
             ))}
           </ul>

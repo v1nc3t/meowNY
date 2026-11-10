@@ -7,6 +7,7 @@
 use rusqlite::Connection;
 
 use super::engine::{self, Digest, DigestCollector, Incoming, RowsCollector, Summary, SyncError, Warning};
+use super::stamp;
 use super::wire::{Message, Table, WireError};
 
 #[derive(Debug, Default)]
@@ -67,15 +68,21 @@ fn rows_of(wire: &mut Wire, messages: Vec<Message>, tables: &[Table]) -> Result<
     collector.finish()
 }
 
-/// Syncs `a` with `b`. `today` is the date for the history entries of a currency change, `now_ms` the wall clock, and
-/// `since_ms` the time of their last sync.
+/// Syncs `a` with `b`; both read the same wall clock, `now_ms`. See `sync_with_clocks`.
 pub fn sync(a: &mut Connection, b: &mut Connection, today: &str, now_ms: u64, since_ms: Option<u64>) -> Result<Outcome, SyncError> {
+    sync_with_clocks(a, b, today, now_ms, now_ms, since_ms)
+}
+
+/// Syncs `a` (the computer) with `b` (the phone). `today` is the date for the history entries of a currency change, `a_wall_ms` and
+/// `b_wall_ms` the wall clocks of the two devices (they may differ by any amount), and `since_ms` the time of their last sync. As in
+/// the real conversation, the phone takes the computer's clock as the reference as soon as the hello is in (`flow::follow_computer`).
+pub fn sync_with_clocks(a: &mut Connection, b: &mut Connection, today: &str, a_wall_ms: u64, b_wall_ms: u64, since_ms: Option<u64>) -> Result<Outcome, SyncError> {
     let mut wire = Wire { messages: 0, bytes: 0, #[cfg(test)] transcript: Vec::new() };
     let mut outcome = Outcome::default();
 
     // hello
-    let hello_a = engine::hello(a, "first", "0.1.0")?;
-    let hello_b = engine::hello(b, "second", "0.1.0")?;
+    let hello_a = engine::hello(a, "first", "0.1.0", a_wall_ms)?;
+    let hello_b = engine::hello(b, "second", "0.1.0", b_wall_ms)?;
     let seen_by_b = match wire.carry(&Message::Hello(hello_a.clone()))? {
         Message::Hello(h) => h,
         _ => return Err(SyncError::Wire(WireError::Order)),
@@ -84,19 +91,23 @@ pub fn sync(a: &mut Connection, b: &mut Connection, today: &str, now_ms: u64, si
         Message::Hello(h) => h,
         _ => return Err(SyncError::Wire(WireError::Order)),
     };
-    outcome.warnings.extend(engine::check_hello(&hello_a, &seen_by_a, now_ms)?);
-    engine::check_hello(&hello_b, &seen_by_b, now_ms)?;
+    outcome.warnings.extend(engine::check_hello(&hello_a, &seen_by_a, a_wall_ms)?);
+    engine::check_hello(&hello_b, &seen_by_b, b_wall_ms)?;
+    // the phone follows the computer's clock; the time each goes by from here on is its wall clock moved by its offset
+    engine::follow_desktop_clock(b, &seen_by_b, b_wall_ms)?;
+    let now_a = stamp::shifted(a_wall_ms, stamp::offset_ms(a)?);
+    let now_b = stamp::shifted(b_wall_ms, stamp::offset_ms(b)?);
 
     // currency: the one that is behind takes over the other's changes before anything is compared
     if hello_a.generation != hello_b.generation {
-        let (ahead, behind, behind_generation) =
-            if hello_a.generation > hello_b.generation { (&*a, &mut *b, hello_b.generation) } else { (&*b, &mut *a, hello_a.generation) };
+        let (ahead, behind, behind_generation, now_behind) =
+            if hello_a.generation > hello_b.generation { (&*a, &mut *b, hello_b.generation, now_b) } else { (&*b, &mut *a, hello_a.generation, now_a) };
         let changes = engine::changes_after(ahead, behind_generation)?;
         let changes = match wire.carry(&Message::Currency(super::wire::CurrencyMessage { changes }))? {
             Message::Currency(c) => c.changes,
             _ => return Err(SyncError::Wire(WireError::Order)),
         };
-        engine::apply_currency(behind, &changes, today, now_ms)?;
+        engine::apply_currency(behind, &changes, today, now_behind)?;
     }
 
     // which tables differ
@@ -125,8 +136,8 @@ pub fn sync(a: &mut Connection, b: &mut Connection, today: &str, now_ms: u64, si
         let from_b = engine::outgoing(b, &digest_b, &their_digest_for_b, &tables)?;
         let incoming_for_a = rows_of(&mut wire, from_b, &tables)?;
         let incoming_for_b = rows_of(&mut wire, from_a, &tables)?;
-        outcome.first = engine::apply(a, &incoming_for_a, now_ms, since_ms)?;
-        outcome.second = engine::apply(b, &incoming_for_b, now_ms, since_ms)?;
+        outcome.first = engine::apply(a, &incoming_for_a, now_a, since_ms)?;
+        outcome.second = engine::apply(b, &incoming_for_b, now_b, since_ms)?;
     }
 
     // done

@@ -1,4 +1,6 @@
 import { useEffect, useId, useRef, type ReactNode } from 'react'
+import { createPortal } from 'react-dom'
+import { useReturnFocus } from '../hooks/useReturnFocus'
 import { useT } from '../i18n/context'
 import Button from './ui/Button'
 
@@ -37,6 +39,9 @@ export default function Modal({
   const ref = useRef<HTMLDialogElement>(null)
   const titleId = useId()
 
+  // before the effect below: the dialog takes the focus there
+  useReturnFocus()
+
   useEffect(() => {
     const dialog = ref.current
     if (!dialog) return
@@ -47,7 +52,9 @@ export default function Modal({
     ;(first ?? dialog.querySelector<HTMLElement>('.modal-panel'))?.focus()
   }, [])
 
-  return (
+  // In the body, not where it is used: a size container (the debts and budgets halves) holds a fixed box, and a web view may keep even
+  // a modal dialog inside it, at the top of the container instead of the middle of the screen.
+  return createPortal(
     <dialog
       ref={ref}
       className={wide ? 'modal modal-look' : 'modal'}
@@ -81,6 +88,7 @@ export default function Modal({
           )}
         </div>
       </div>
-    </dialog>
+    </dialog>,
+    document.body,
   )
 }

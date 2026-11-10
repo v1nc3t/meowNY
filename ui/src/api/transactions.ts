@@ -10,6 +10,10 @@ export const PartOut = z.object({
 })
 export type PartOut = z.infer<typeof PartOut>
 
+/** The friend who paid a shared bill, when it was not the person. */
+export const Payer = z.object({ personId: z.string().regex(/^[1-9]\d*$/), name: z.string() })
+export type Payer = z.infer<typeof Payer>
+
 export const Transaction = z.object({
   id: z.string().regex(/^[1-9]\d*$/),
   categoryId: z.string().regex(/^[1-9]\d*$/),
@@ -21,6 +25,8 @@ export const Transaction = z.object({
   myShare: z.string().regex(/^\d+\.\d{2}$/),
   /** The parts of the others, when the bill is shared; empty otherwise. */
   split: z.array(PartOut),
+  /** Who paid the bill when it was a friend on it (then the person owes them `myShare`); null when the person paid. */
+  paidBy: Payer.nullable(),
   paymentDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   description: z.string().nullable(),
 })

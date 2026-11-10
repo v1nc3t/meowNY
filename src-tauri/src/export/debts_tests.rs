@@ -6,7 +6,7 @@ use super::*;
 use crate::categories;
 use crate::debts::fixtures::*;
 use crate::debts::ledger::{self, Kind, NewEntry};
-use crate::debts::splits::set_split;
+use crate::debts::splits::{set_split, SplitInput};
 use crate::debts::people;
 
 struct Case {
@@ -40,6 +40,20 @@ fn json_of(conn: &Connection, selection: &Selection) -> Value {
 
 fn names(list: &Value) -> Vec<String> {
     list.as_array().unwrap().iter().map(|p| p["name"].as_str().unwrap().to_string()).collect()
+}
+
+#[test]
+fn the_parts_of_a_bill_a_friend_paid_name_the_payer_so_they_do_not_read_as_debts_to_you() {
+    let c = case();
+    let (anna, bob) = (one(&c.conn, "SELECT id FROM people WHERE name = 'Anna'"), one(&c.conn, "SELECT id FROM people WHERE name = 'Bob'"));
+    let taxi = bill(&c.conn, c.food, "Taxi", "30.00", "2026-03-08");
+    set_split(&c.conn, taxi, &SplitInput { paid_by: Some(bob.to_string()), ..equal(vec![who(anna), who(bob)]) }).unwrap();
+    let file = json_of(&c.conn, &Selection::default());
+    let payers = |bill: &str| -> Vec<Value> {
+        file["transactions"].as_array().unwrap().iter().find(|t| t["name"] == bill).unwrap()["split"].as_array().unwrap().iter().map(|l| l["paidBy"].clone()).collect()
+    };
+    assert_eq!(payers("Taxi"), [Value::from("Bob"), Value::from("Bob")]);
+    assert_eq!(payers("Dinner"), [Value::Null, Value::Null, Value::Null], "a bill you paid has no payer");
 }
 
 #[test]

@@ -20,6 +20,8 @@ const MIGRATIONS: &[&str] = &[
     include_str!("../migrations/0013_debts_sync.sql"),
     include_str!("../migrations/0014_category_order.sql"),
     include_str!("../migrations/0015_recurring_skips.sql"),
+    include_str!("../migrations/0016_clock_offset.sql"),
+    include_str!("../migrations/0017_split_payer.sql"),
 ];
 
 #[derive(Debug)]

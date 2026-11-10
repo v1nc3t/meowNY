@@ -27,17 +27,27 @@
   bottom: calc(2.5rem + env(safe-area-inset-bottom, 0px));
 }
 
+/* The card is the one pixel frame of the app, like a game's title screen: a 2px line in the text colour with its corner pixels left
+   out, on a hard shadow (box-shadows, no border), here for every password screen. */
 .gate > form,
 .gate > .panel {
+  display: flex;
+  flex-direction: column;
   width: min(100%, 24rem);
-  margin: 0;
+  margin: 2px 6px 6px 2px;
   padding: 1.5rem;
   gap: 1rem;
   color: var(--card-foreground);
   background: var(--card);
-  border: 1px solid var(--border);
+  border: 0;
   border-radius: var(--radius-xl);
-  box-shadow: var(--shadow-sm);
+  box-shadow:
+    0 -2px 0 var(--foreground),
+    0 2px 0 var(--foreground),
+    -2px 0 0 var(--foreground),
+    2px 0 0 var(--foreground),
+    6px 4px 0 var(--press-shadow),
+    4px 6px 0 var(--press-shadow);
 }
 
 .gate .brand-mark {
@@ -45,16 +55,18 @@
   align-items: center;
   gap: 0.5rem;
   margin: 0;
-  font-family: var(--font);
-  font-size: 0.875rem;
-  font-weight: 600;
-  letter-spacing: 0.04em;
+  font-family: var(--font-pixel);
+  font-size: var(--pixel-md);
+  font-weight: 400;
+  line-height: 1;
   color: var(--foreground);
 }
 
+/* The title of a screen, in the pixel font (base.css), with room under it for two lines. */
 .gate h1 {
   margin: 0;
-  font-size: 1.25rem;
+  font-size: var(--pixel-md);
+  line-height: 33px;
 }
 
 /* The buttons of a screen are as wide as the card. */
@@ -69,6 +81,21 @@
 
 .gate code {
   overflow-wrap: anywhere;
+}
+
+/* The foot of a lock screen (components/AppFooter.tsx) is at the bottom of the screen, under the card and never over it, across its width. */
+.gate:has(> .app-footer) {
+  grid-template-rows: auto 1fr;
+}
+
+.gate > .app-footer {
+  grid-row: 2;
+  align-self: end;
+  /* The grid centres its items: the foot spans the screen, so its left and right are the edges. */
+  justify-self: stretch;
+  max-width: 100%;
+  /* Room under the card for when the screen is short and the foot follows it. */
+  margin-top: 1.5rem;
 }
 
 /* A form that is hidden while the loading screen shows keeps what was typed, so display must not override `hidden`. */
@@ -201,10 +228,15 @@
   column-gap: 1rem;
 }
 
+/* The whole page is this one block, so it has no frame: the device list inside it is the box. */
 .settings-block {
   width: 100%;
   min-width: 0;
   margin: 0 0 1rem;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  box-shadow: none;
   break-inside: avoid;
 }
 
@@ -230,26 +262,23 @@
   width: 100%;
 }
 
-.settings-block ul.card-list > li.card-item {
-  grid-template-columns: minmax(0, 1fr) auto;
-}
-
 .settings-block .card-list {
   margin: 0;
 }
 
-/* Settings page. Wide: a list of sections on the left, the chosen section on the right. Narrow: the list is a row of tabs above
-   the section. Phone: the list is the page, and a section opens in place of it. */
+/* Settings page. Wide: a list of sections on the left, the chosen section on the right, across the whole width: the lines and rows
+   run to the right edge, while a control keeps a sensible width. Narrow: the list is a row of tabs above the section. Phone: the
+   list is the page, and a section opens in place of it. */
 .settings-page {
-  /* The columns of a row: its name, then its control (a control is at most this wide). */
-  --row-cols: minmax(0, 16rem) minmax(0, 1fr);
+  /* The columns of a row: its name (a third of the row, but 14 to 26rem), then its control (a control is at most this wide). */
+  --row-cols: minmax(0, clamp(14rem, 30%, 26rem)) minmax(0, 1fr);
   --control-max: 28rem;
 }
 
 .settings-layout {
   display: grid;
-  grid-template-columns: 13rem minmax(0, 1fr);
-  gap: 2rem;
+  grid-template-columns: 14rem minmax(0, 1fr);
+  gap: 2.5rem;
   align-items: start;
   /* The pane is as tall as the page: the rows keep their height instead of sharing the rest. */
   align-content: start;
@@ -266,9 +295,9 @@
 .settings-nav-item {
   display: flex;
   align-items: center;
-  min-height: 2.25rem;
-  padding: 0.375rem 0.75rem;
-  font-size: 0.8125rem;
+  min-height: 2.5rem;
+  padding: 0.375rem 0.875rem;
+  font-size: 0.9375rem;
   color: var(--muted-foreground);
   text-decoration: none;
   border-radius: var(--radius-md);
@@ -281,10 +310,11 @@
   }
 }
 
+/* The section you are on is marked like the page you are on in the sidebar: bold, with a green line on the left. */
 .settings-nav-item[aria-current='page'] {
   font-weight: 600;
-  color: var(--accent-foreground);
-  background: var(--accent);
+  color: var(--foreground);
+  box-shadow: inset 2px 0 0 var(--primary);
 }
 
 .settings-section {
@@ -292,8 +322,15 @@
   flex-direction: column;
   gap: 1rem;
   width: 100%;
-  max-width: 56rem;
   min-width: 0;
+  container-type: inline-size;
+}
+
+/* A section with no room for a name beside its control (a narrow window with the sidebar open): the name goes above the control. */
+@container (max-width: 36rem) {
+  .settings-row {
+    --row-cols: minmax(0, 1fr);
+  }
 }
 
 .settings-section-head h2 {
@@ -349,7 +386,7 @@
   gap: 0.5rem 2rem;
   width: 100%;
   min-height: 3.5rem;
-  padding: 0.75rem 0;
+  padding: 0.875rem 0;
   border-bottom: 1px solid var(--border);
 }
 
@@ -362,6 +399,7 @@
   align-items: center;
   gap: 0.5rem 2rem;
   width: 100%;
+  font-size: 0.9375rem;
 }
 
 .settings-row > label,
@@ -372,6 +410,7 @@
 
 .settings-row > details > summary {
   padding: 0.25rem 0;
+  font-size: 0.875rem;
 }
 
 .settings-row > details[open] > summary {
@@ -385,6 +424,7 @@
 .settings-row :is(input:not([type='checkbox'], [type='radio']), .pick-button, .field-input) {
   width: 100%;
   max-width: var(--control-max);
+  font-size: 0.875rem;
 }
 
 .settings-row-text {
@@ -395,13 +435,13 @@
 }
 
 .settings-row-label {
-  font-size: 0.8125rem;
+  font-size: 0.9375rem;
   line-height: 1.4;
   color: var(--foreground);
 }
 
 .settings-row-hint {
-  font-size: 0.75rem;
+  font-size: 0.875rem;
   line-height: 1.5;
   color: var(--muted-foreground);
   overflow-wrap: anywhere;
@@ -421,7 +461,7 @@
 }
 
 .settings-value {
-  font-size: 0.8125rem;
+  font-size: 0.9375rem;
   color: var(--foreground);
   overflow-wrap: anywhere;
 }
@@ -471,6 +511,31 @@
   cursor: not-allowed;
 }
 
+/* The text size slider: a flat track and a square knob in the main colour, like the switch. The app runs in WebKit and Chromium web views. */
+.settings-rows input.settings-range {
+  appearance: none;
+  padding: 0;
+  border: 0;
+  box-shadow: none;
+  background: transparent;
+  cursor: pointer;
+}
+
+.settings-range::-webkit-slider-runnable-track {
+  height: 4px;
+  background: var(--input);
+}
+
+.settings-range::-webkit-slider-thumb {
+  appearance: none;
+  width: 1rem;
+  height: 1rem;
+  margin-top: calc(2px - 0.5rem);
+  background: var(--primary);
+  border: 0;
+  border-radius: 0;
+}
+
 .settings-actions {
   display: flex;
   flex-wrap: wrap;
@@ -479,13 +544,16 @@
 
 .settings-section code {
   font-family: var(--font);
-  font-size: 0.8125rem;
+  font-size: 0.875rem;
   color: var(--foreground);
   overflow-wrap: anywhere;
 }
 
+/* Lines of text stay a readable length, however wide the window is. */
 .settings-section .hint {
+  max-width: 44rem;
   margin: 0;
+  font-size: 0.875rem;
 }
 
 /* What cannot be undone: a red outline round the form. */
@@ -507,105 +575,106 @@
   margin-top: 0;
 }
 
-/* The foot of the settings. Wide: across the whole page, the links on the left, the two buttons on the right, the copyright
-   under them. Narrow or phone: the links stack, the buttons share a row, then the copyright. The page lines its children up at
-   the start, so the footer stretches itself; its own background repaints the whole strip (WebKitGTK left stale lines there). */
-.settings-footer {
+/* The foot of the settings (components/AppFooter.tsx), across the whole page. The page lines its children up at the start, so the
+   footer stretches itself; its own background repaints the whole strip (WebKitGTK left stale lines there). A little room under the
+   text keeps it clear of the window's edge; the strip stays low. */
+.settings-page .app-footer {
   align-self: stretch;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.5rem 1.5rem;
-  width: 100%;
-  margin-top: 1rem;
-  padding-top: 0.75rem;
+  /* As wide as the rows above, which keep a gutter on the right for the scroll bar. */
+  width: calc(100% - var(--room));
+  padding: 0.5rem 0;
   border-top: 1px solid var(--border);
   background: var(--background);
-  font-size: 0.75rem;
-  color: var(--muted-foreground);
 }
 
-.settings-footer p {
-  flex-basis: 100%;
-  margin: 0;
-}
-
-.settings-links,
-.settings-footer-actions {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.25rem 1.5rem;
-}
-
-.settings-footer-actions {
-  gap: 0.5rem;
-}
-
-.settings-links a {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 2rem;
-  color: var(--muted-foreground);
-  font-size: 0.8125rem;
-  text-underline-offset: 4px;
-}
-
-@media (hover: hover) {
-  .settings-links a:hover {
-    color: var(--foreground);
-  }
-}
-
-@media (max-width: 48em) {
-  .settings-footer {
-    flex-direction: column;
-    align-items: stretch;
-    text-align: center;
-  }
-
-  .settings-links {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .settings-footer-actions {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
-
-.settings-page.on-phone .settings-footer {
-  flex-direction: column;
-  align-items: stretch;
-  text-align: center;
-}
-
-.settings-page.on-phone .settings-links {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-}
-
-.settings-page.on-phone .settings-footer-actions {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-
-/* A tap target stays 44px or more on the phone. */
-html.is-phone .settings-links a,
-html.is-phone .settings-footer-actions a {
-  min-height: 2.75rem;
-}
-
-/* Access tokens and paired phones: the rows of a card list, with the button at the right edge. */
+/* Access tokens and paired phones: tables in the section. A time is a few words, so the cells wrap rather than being cut, and
+   where the heads are gone (a narrow section) each time says what it is. */
 .settings-section .card-list {
   margin: 0;
 }
 
-.settings-section ul.card-list > li.card-item {
-  grid-template-columns: minmax(0, 1fr) auto;
+/* The tokens: the name gets the room (a long one wraps; about 11rem at 1280px, where the section is 42rem wide), the access and the times
+   are at least as wide as their longest word (the times wrap at their spaces, in small print: 11 characters, 8 for the access), and
+   the last column is as wide as its button (the head has a hidden copy of the word, so both are the same in every language). */
+.card-list.token-table {
+  --cols: minmax(0, 2.4fr) minmax(8ch, 0.75fr) minmax(11ch, 1fr) minmax(11ch, 1fr) max-content;
+}
+
+ul.card-list.token-table > li.card-item,
+ul.card-list.token-table > li.list-head {
+  column-gap: 0.75rem;
+}
+
+.token-table .cell-name > .card-name {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.token-table .head-spacer {
+  padding-inline: calc(0.75rem + 1px);
+  font-size: 0.875rem;
+  visibility: hidden;
+}
+
+/* The paired phones, the same way. The last column is as wide as "ja, entfernen" (the widest of "yes, remove" in the languages), and the
+   button to cancel wraps under it. */
+.card-list.device-table {
+  --cols: minmax(0, 2fr) minmax(11ch, 1fr) minmax(11ch, 1.2fr) 8.75rem;
+}
+
+.token-table .cell-sub,
+.token-table .cell-sub-end,
+.device-table .cell-sub,
+.device-table .cell-sub-end {
+  overflow: visible;
+  white-space: normal;
+}
+
+.cell-extra {
+  min-width: 0;
+  font-size: 0.875rem;
+  color: var(--muted-foreground);
+}
+
+.device-table .cell-actions {
+  flex-wrap: wrap;
+  gap: 0.25rem;
+}
+
+@container (max-width: 40em) {
+  ul.card-list.token-table > li.card-item {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      'name actions'
+      'sub sub'
+      'sub-end sub-end'
+      'extra extra';
+  }
+
+  ul.card-list.token-table .cell-sub-end {
+    text-align: left;
+  }
+
+  .token-table .cell-extra {
+    grid-area: extra;
+  }
+
+  ul.card-list.device-table > li.card-item {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      'name actions'
+      'sub sub'
+      'sub-end sub-end';
+  }
+
+  ul.card-list.device-table .cell-sub-end {
+    text-align: left;
+  }
+
+  .token-table [data-label]::before,
+  .device-table [data-label]::before {
+    content: attr(data-label) ' ';
+  }
 }
 
 .settings-section .ui-badge {
@@ -618,13 +687,9 @@ html.is-phone .settings-footer-actions a {
 }
 
 .card-item.is-expired .card-name,
-.card-item.is-expired .card-meta {
+.card-item.is-expired .cell-sub,
+.card-item.is-expired .cell-sub-end {
   color: var(--muted-foreground);
-}
-
-.inline-actions {
-  display: inline-flex;
-  gap: 0.25rem;
 }
 
 /* A narrow window: the sections are tabs in a row above the section, and a row stacks its name above its control. */
@@ -653,22 +718,40 @@ html.is-phone .settings-footer-actions a {
   .settings-nav-item {
     flex: 0 0 auto;
   }
+
+  /* In a row of tabs the mark is a line under the one you are on. */
+  .settings-nav-item[aria-current='page'] {
+    box-shadow: inset 0 -2px 0 var(--primary);
+  }
 }
 
-/* The phone: a grouped list of sections, then one section at a time with fields stacked and full width. */
+/* The phone: a grouped list of sections, then one section at a time with fields stacked and full width. The foot ends the page: at
+   the bottom when the page is short, after the last row when it is long (the pane leaves room under it for the add button). */
 .settings-page.on-phone {
   --row-cols: minmax(0, 1fr);
   --control-max: none;
 }
 
 .settings-page.on-phone .settings-layout {
-  grid-template-columns: minmax(0, 1fr);
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
   gap: 1rem;
+}
+
+.settings-page.on-phone .settings-layout > * {
+  flex-shrink: 0;
 }
 
 /* A phone has overlay scroll bars: no wide gutter on the right, so the list is as far from the edge on both sides. */
 .settings-page.on-phone > .tx-pane.wide {
   padding-right: var(--edge);
+}
+
+.settings-page.on-phone .app-footer {
+  width: 100%;
+  margin-top: auto;
+  padding-bottom: 0;
 }
 
 .settings-list {

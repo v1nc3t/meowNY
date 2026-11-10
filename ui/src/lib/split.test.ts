@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { draftOfTemplate, equalDraft, normalise, reducedWeights, toInput, withMode } from './split.ts'
+import { draftOfBill, draftOfTemplate, equalDraft, normalise, reducedWeights, toInput, withMode } from './split.ts'
 
 const anna = { personId: '2', name: 'Anna' }
 const bob = { guest: 'Bob', name: 'Bob' }
@@ -28,10 +28,26 @@ test('an empty field is nothing while typing, and a wrong one is not a number', 
 
 test('changing the mode starts the numbers again: shares at one, the others empty', () => {
   const draft = withMode(equalDraft([anna, bob]), 'SHARES')
-  assert.deepEqual([draft.mine, draft.mineIsRest, ...draft.rows.map((row) => row.value)], ['1', false, '1', '1'])
+  assert.deepEqual([draft.mine, ...draft.rows.map((row) => row.value)], ['1', '1', '1'])
   const back = withMode(draft, 'EXACT')
-  assert.deepEqual([back.mine, back.mineIsRest, ...back.rows.map((row) => row.value)], ['', true, '', ''])
+  assert.deepEqual([back.mine, ...back.rows.map((row) => row.value)], ['', '', ''])
   assert.equal(withMode(back, 'EXACT'), back, 'the same mode changes nothing')
+})
+
+test('in percent and exact the one empty field is left out and gets the rest, whoever it is; with more empty none is', () => {
+  const draft = (mode: 'PERCENT' | 'EXACT', mine: string, ...values: string[]) => ({
+    ...withMode(equalDraft([anna, bob]), mode),
+    mine,
+    rows: [anna, bob].map((who, at) => ({ ...who, key: `k${at}`, value: values[at]! })),
+  })
+  assert.deepEqual(toInput(draft('EXACT', '20', '30', '')), { mode: 'EXACT', mine: '20.00', parts: [{ personId: '2', value: '30.00' }, { guest: 'Bob' }] })
+  assert.deepEqual(toInput(draft('PERCENT', '', '30', '50')), { mode: 'PERCENT', parts: [{ personId: '2', value: '30.00' }, { guest: 'Bob', value: '50.00' }] })
+  assert.deepEqual(toInput(draft('EXACT', ' ', '30', '')), { mode: 'EXACT', mine: '0.00', parts: [{ personId: '2', value: '30.00' }, { guest: 'Bob', value: '0.00' }] })
+  assert.deepEqual(toInput(draft('PERCENT', '', '', '')), { mode: 'PERCENT', mine: '0.00', parts: [{ personId: '2', value: '0.00' }, { guest: 'Bob', value: '0.00' }] })
+  assert.deepEqual(toInput(draft('PERCENT', '20', '30', '50')), { mode: 'PERCENT', mine: '20.00', parts: [{ personId: '2', value: '30.00' }, { guest: 'Bob', value: '50.00' }] })
+  const shares = withMode(equalDraft([anna, bob]), 'SHARES')
+  shares.rows[1]!.value = ''
+  assert.equal(toInput(shares), null, 'a share is never left out')
 })
 
 test('a saved template opens as shares, in lowest terms, so what was typed as 19 and 1 does not come back as 1900 and 100', () => {
@@ -60,4 +76,25 @@ test('the weights of a template are shown in lowest terms and never changed othe
   assert.deepEqual(reducedWeights([0, 3]), [0, 1])
   assert.deepEqual(reducedWeights([]), [])
   assert.deepEqual(reducedWeights([0, 0]), [0, 0])
+})
+
+test('a friend who paid and has no part still has a row, with 0, so that they stay the payer', () => {
+  const part = { personId: '3', person: 'Bob', guest: null, amount: '10.00' }
+  const bill = draftOfBill([part], { personId: '2', name: 'Anna' })
+  assert.equal(bill.paidBy, '2')
+  assert.deepEqual(toInput(bill), { mode: 'EXACT', parts: [{ personId: '3', value: '10.00' }, { personId: '2', value: '0.00' }], paidBy: '2' })
+  assert.equal(draftOfBill([part], { personId: '3', name: 'Bob' }).rows.length, 1, 'a payer who has a part gets no second row')
+  assert.equal(draftOfBill([part], null).paidBy, undefined)
+  const kept = (percent: boolean) => {
+    const weights = percent ? [8000, 2000] : [2, 3]
+    return draftOfTemplate({ mine: weights[0]!, paidBy: { personId: '2', name: 'Anna' }, parts: [{ personId: '3', person: 'Bob', guest: null, weight: weights[1]! }] })
+  }
+  assert.deepEqual(toInput(kept(true)), { mode: 'PERCENT', mine: '80.00', parts: [{ personId: '3', value: '20.00' }, { personId: '2', value: '0.00' }], paidBy: '2' })
+  assert.deepEqual(toInput(kept(false)), { mode: 'SHARES', mine: '2', parts: [{ personId: '3', value: '3' }, { personId: '2', value: '0' }], paidBy: '2' })
+})
+
+test('the payer goes out only when there is one', () => {
+  assert.equal('paidBy' in toInput(equalDraft([anna]))!, false)
+  assert.equal('paidBy' in toInput({ ...equalDraft([anna]), paidBy: '' })!, false, 'an empty payer is you')
+  assert.equal(toInput({ ...equalDraft([anna]), paidBy: '2' })?.paidBy, '2')
 })

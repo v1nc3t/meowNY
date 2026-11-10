@@ -14,13 +14,15 @@ import Button from './ui/Button'
 /**
  * The code of one friend's part of one bill, or of the next payment of a recurring item: a QR code a friend scans and the same text to copy
  * and send. It holds the bill, the friend's part and the name the person gave at the first run (changed in the settings). The name is only
- * asked here when there is none (a vault restored from a backup). Nothing is stored or sent from here.
+ * asked here when there is none (a vault restored from a backup). Nothing is stored or sent from here. When a friend paid the bill, the
+ * dialog says so: the code makes the friend who takes it in owe the payer (never for the payer's own code, which the app refuses).
  */
 export default function BillCodeModal({
   target,
   person,
   part,
   total,
+  paidBy,
   onClose,
 }: {
   /** A transaction, or a recurring item (its next payment). */
@@ -29,6 +31,8 @@ export default function BillCodeModal({
   /** The friend's part and, when it is known, the whole bill, as amounts. A recurring item's are read from its code. */
   part?: string
   total?: string
+  /** The name of the friend who paid the bill, if one did. */
+  paidBy?: string
   onClose: () => void
 }) {
   const t = useT()
@@ -99,6 +103,7 @@ export default function BillCodeModal({
           <>
             {target.kind === 'recurring' && target.date && settings ? <p>{t('code.next', { date: formatDate(target.date, settings.locale) })}</p> : null}
             {held ? <p>{held.total ? t('code.part', { name: person.name, amount: money(held.part), total: money(held.total) }) : `${person.name}: ${money(held.part)}`}</p> : null}
+            {paidBy ? <p className="hint">{t('code.paidBy', { payer: paidBy, name: person.name })}</p> : null}
             {code ? <QrCode text={code} label={t('code.title', { name: person.name })} level="L" onTooLong={onTooLong} /> : null}
             {tooLong ? <p className="warning">{t('code.tooLong')}</p> : null}
             <div className="card-actions">

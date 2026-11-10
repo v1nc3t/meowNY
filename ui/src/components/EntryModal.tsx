@@ -138,7 +138,7 @@ export default function EntryModal({
           </div>
           <label>
             {t('debts.note')}
-            <input name="note" maxLength={200} defaultValue={entry?.note ?? ''} autoComplete="off" />
+            <textarea name="note" rows={3} maxLength={200} defaultValue={entry?.note ?? ''} autoComplete="off" />
           </label>
           {!entry && kind === 'BORROWED' ? (
             <>

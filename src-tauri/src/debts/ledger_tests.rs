@@ -3,7 +3,7 @@ use rusqlite::Connection;
 use super::fixtures::*;
 use super::ledger::{self, Expense, Kind, NewEntry};
 use super::people;
-use super::splits::set_split;
+use super::splits::{set_split, SplitInput};
 use crate::transactions;
 use crate::vault::AppError;
 
@@ -31,6 +31,8 @@ fn an_entry_is_checked_before_it_is_written() {
         NewEntry { person_id: "abc".into(), ..new(anna, Kind::Lent, "5.00", "2026-01-01") },
         NewEntry { note: Some("x".repeat(201)), ..new(anna, Kind::Lent, "5.00", "2026-01-01") },
         NewEntry { note: Some("bad\u{7}".into()), ..new(anna, Kind::Lent, "5.00", "2026-01-01") },
+        NewEntry { note: Some("bad\ttab".into()), ..new(anna, Kind::Lent, "5.00", "2026-01-01") },
+        NewEntry { note: Some("bad\u{0}nul".into()), ..new(anna, Kind::Lent, "5.00", "2026-01-01") },
         NewEntry { transaction_id: Some("999".into()), ..new(anna, Kind::Lent, "5.00", "2026-01-01") },
     ] {
         assert_eq!(ledger::add(&w.conn, &bad), Err(AppError::InvalidInput), "{bad:?}");
@@ -40,6 +42,8 @@ fn an_entry_is_checked_before_it_is_written() {
     assert_eq!((ok.note.as_deref(), ok.transaction_id, ok.amount.as_str()), (Some("taxi"), Some(dinner.to_string()), "5.00"));
     let empty_note = ledger::add(&w.conn, &NewEntry { note: Some("   ".into()), ..new(anna, Kind::Lent, "5.00", "2026-01-01") }).unwrap();
     assert_eq!(empty_note.note, None, "an empty note is none");
+    let lines = ledger::add(&w.conn, &NewEntry { note: Some("taxi\r\nhome\rlate".into()), ..new(anna, Kind::Lent, "5.00", "2026-01-01") }).unwrap();
+    assert_eq!(lines.note.as_deref(), Some("taxi\nhome\nlate"), "a note may hold line breaks, and every kind of break becomes \\n");
 }
 
 #[test]
@@ -52,6 +56,27 @@ fn an_entry_can_be_added_for_an_archived_friend_because_a_repayment_can_come_lat
     assert_eq!(balance(&w.conn, anna), 0);
 }
 
+#[test]
+fn a_bill_a_friend_paid_is_a_debt_to_them_of_your_part_and_the_others_on_it_owe_you_nothing() {
+    let w = world();
+    let (anna, bob) = (friend(&w.conn, "Anna"), friend(&w.conn, "Bob"));
+    let dinner = bill(&w.conn, w.food, "Dinner", "90.00", "2026-01-01");
+    set_split(&w.conn, dinner, &SplitInput { paid_by: Some(anna.to_string()), ..equal(vec![who(anna), who(bob)]) }).unwrap();
+    let lunch = bill(&w.conn, w.food, "Lunch", "30.00", "2026-01-02");
+    set_split(&w.conn, lunch, &equal(vec![who(anna)])).unwrap();
+    // Anna paid the dinner: you owe her your 30.00, her own part owes nobody and Bob's goes to her, not to you. You paid the lunch: she owes 15.00.
+    assert_eq!(cost(&w.conn, dinner), 3000, "the cost of the bill is still your part");
+    assert_eq!((balance(&w.conn, anna), balance(&w.conn, bob)), (-3000 + 1500, 0));
+    let shown = ledger::statement(&w.conn, anna).unwrap();
+    let lines: Vec<(&str, &str, &str)> = shown.lines.iter().map(|l| (l.what.as_str(), l.effect.as_str(), l.balance.as_str())).collect();
+    assert_eq!(lines, [("Dinner", "-30.00", "-30.00"), ("Lunch", "15.00", "-15.00")]);
+    assert_eq!(shown.lines[0].transaction_id, Some(dinner.to_string()));
+    assert!(ledger::statement(&w.conn, bob).unwrap().lines.is_empty(), "nothing in Bob's ledger: his part of the dinner is a debt to Anna");
+    for person in [anna, bob] {
+        assert_eq!(ledger::statement(&w.conn, person).unwrap().lines.last().map_or(0, |l| l.balance_minor), balance(&w.conn, person), "the statement ends where the view says");
+    }
+}
+
 // ---- mark as paid ----------------------------------------------------------------------------
 
 #[test]
@@ -60,9 +85,9 @@ fn marking_paid_with_no_amount_settles_the_whole_balance_in_the_right_direction(
     let (anna, bob) = (friend(&w.conn, "Anna"), friend(&w.conn, "Bob"));
     ledger::add(&w.conn, &new(anna, Kind::Lent, "25.00", "2026-01-01")).unwrap();
     ledger::add(&w.conn, &new(bob, Kind::Borrowed, "12.00", "2026-01-01")).unwrap();
-    let a = ledger::settle(&w.conn, anna, None, None, None, "2026-02-01").unwrap();
+    let a = ledger::settle(&w.conn, anna, None, None, None, None, "2026-02-01").unwrap();
     assert_eq!((a.entry.kind, a.entry.amount.as_str(), a.entry.date.as_str(), a.before.as_str(), a.after.as_str(), a.over.as_str()), (Kind::RepaidToMe, "25.00", "2026-02-01", "25.00", "0.00", "0.00"));
-    let b = ledger::settle(&w.conn, bob, None, Some("2026-01-15"), Some("cash"), "2026-02-01").unwrap();
+    let b = ledger::settle(&w.conn, bob, None, Some("2026-01-15"), Some("cash"), None, "2026-02-01").unwrap();
     assert_eq!((b.entry.kind, b.entry.amount.as_str(), b.entry.date.as_str(), b.entry.note.as_deref(), b.before.as_str(), b.after.as_str()), (Kind::RepaidByMe, "12.00", "2026-01-15", Some("cash"), "-12.00", "0.00"));
     assert_eq!((balance(&w.conn, anna), balance(&w.conn, bob)), (0, 0));
 }
@@ -72,10 +97,10 @@ fn an_amount_larger_than_the_debt_is_accepted_and_the_balance_turns_around() {
     let w = world();
     let anna = friend(&w.conn, "Anna");
     ledger::add(&w.conn, &new(anna, Kind::Lent, "25.00", "2026-01-01")).unwrap();
-    let paid = ledger::settle(&w.conn, anna, Some("40.00"), None, None, "2026-02-01").unwrap();
+    let paid = ledger::settle(&w.conn, anna, Some("40.00"), None, None, None, "2026-02-01").unwrap();
     assert_eq!((paid.before.as_str(), paid.after.as_str(), paid.over.as_str()), ("25.00", "-15.00", "15.00"), "you now owe Anna the rest");
     // and the next settlement goes the other way
-    let back = ledger::settle(&w.conn, anna, None, None, None, "2026-02-02").unwrap();
+    let back = ledger::settle(&w.conn, anna, None, None, None, None, "2026-02-02").unwrap();
     assert_eq!((back.entry.kind, back.entry.amount.as_str(), back.after.as_str()), (Kind::RepaidByMe, "15.00", "0.00"));
 }
 
@@ -83,14 +108,14 @@ fn an_amount_larger_than_the_debt_is_accepted_and_the_balance_turns_around() {
 fn nothing_to_settle_or_a_bad_amount_is_refused_and_writes_nothing() {
     let w = world();
     let anna = friend(&w.conn, "Anna");
-    assert_eq!(ledger::settle(&w.conn, anna, None, None, None, "2026-02-01"), Err(AppError::InvalidInput), "a balance of 0 has nothing to settle");
-    assert_eq!(ledger::settle(&w.conn, anna, Some("5.00"), None, None, "2026-02-01"), Err(AppError::InvalidInput), "and no direction");
+    assert_eq!(ledger::settle(&w.conn, anna, None, None, None, None, "2026-02-01"), Err(AppError::InvalidInput), "a balance of 0 has nothing to settle");
+    assert_eq!(ledger::settle(&w.conn, anna, Some("5.00"), None, None, None, "2026-02-01"), Err(AppError::InvalidInput), "and no direction");
     ledger::add(&w.conn, &new(anna, Kind::Lent, "25.00", "2026-01-01")).unwrap();
     for bad in [Some("0.00"), Some("-1.00"), Some("1"), Some("x")] {
-        assert_eq!(ledger::settle(&w.conn, anna, bad, None, None, "2026-02-01"), Err(AppError::InvalidInput), "{bad:?}");
+        assert_eq!(ledger::settle(&w.conn, anna, bad, None, None, None, "2026-02-01"), Err(AppError::InvalidInput), "{bad:?}");
     }
-    assert_eq!(ledger::settle(&w.conn, anna, None, Some("nope"), None, "2026-02-01"), Err(AppError::InvalidInput));
-    assert_eq!(ledger::settle(&w.conn, 99, None, None, None, "2026-02-01"), Err(AppError::NotFound));
+    assert_eq!(ledger::settle(&w.conn, anna, None, Some("nope"), None, None, "2026-02-01"), Err(AppError::InvalidInput));
+    assert_eq!(ledger::settle(&w.conn, 99, None, None, None, None, "2026-02-01"), Err(AppError::NotFound));
     assert_eq!(one(&w.conn, "SELECT count(*) FROM ledger_entries"), 1);
 }
 
@@ -100,9 +125,9 @@ fn settling_to_zero_clears_the_reminder_and_a_part_payment_does_not() {
     let anna = friend(&w.conn, "Anna");
     ledger::add(&w.conn, &new(anna, Kind::Lent, "25.00", "2026-01-01")).unwrap();
     people::set_reminder(&w.conn, anna, Some("2026-03-01"), Some(7)).unwrap();
-    ledger::settle(&w.conn, anna, Some("10.00"), None, None, "2026-02-01").unwrap();
+    ledger::settle(&w.conn, anna, Some("10.00"), None, None, None, "2026-02-01").unwrap();
     assert_eq!(people::get(&w.conn, anna).unwrap().remind_on.as_deref(), Some("2026-03-01"));
-    ledger::settle(&w.conn, anna, None, None, None, "2026-02-01").unwrap();
+    ledger::settle(&w.conn, anna, None, None, None, None, "2026-02-01").unwrap();
     let after = people::get(&w.conn, anna).unwrap();
     assert_eq!((after.remind_on, after.remind_every_days), (None, None));
 }
@@ -113,9 +138,46 @@ fn a_friend_can_be_settled_after_a_shared_bill_without_any_ledger_entry() {
     let anna = friend(&w.conn, "Anna");
     let dinner = bill(&w.conn, w.food, "Dinner", "90.00", "2026-01-01");
     set_split(&w.conn, dinner, &equal(vec![who(anna)])).unwrap();
-    let paid = ledger::settle(&w.conn, anna, None, None, None, "2026-02-01").unwrap();
+    let paid = ledger::settle(&w.conn, anna, None, None, None, None, "2026-02-01").unwrap();
     assert_eq!((paid.before.as_str(), paid.after.as_str()), ("45.00", "0.00"));
     assert_eq!(cost(&w.conn, dinner), 4500, "paying you back changes what the dinner cost you not at all");
+}
+
+#[test]
+fn a_payment_can_name_the_transaction_it_was_for_and_nothing_else_changes() {
+    let w = world();
+    let anna = friend(&w.conn, "Anna");
+    let taxi = bill(&w.conn, w.food, "Taxi", "20.00", "2026-01-01");
+    ledger::add(&w.conn, &new(anna, Kind::Lent, "20.00", "2026-01-01")).unwrap();
+    let paid = ledger::settle(&w.conn, anna, None, None, None, Some(&taxi.to_string()), "2026-02-01").unwrap();
+    assert_eq!((paid.entry.transaction_id, paid.after.as_str()), (Some(taxi.to_string()), "0.00"));
+    assert_eq!(cost(&w.conn, taxi), 2000, "the link is only a reference: the taxi still cost what it cost");
+    let lines = ledger::statement(&w.conn, anna).unwrap().lines;
+    let repaid = lines.iter().find(|l| l.kind == "REPAID_TO_ME").unwrap();
+    assert_eq!(repaid.transaction_id, Some(taxi.to_string()), "the statement line carries the link of the entry");
+    assert_eq!(repaid.transaction_date.as_deref(), Some("2026-01-01"), "with the date of the transaction, not the date of the payment");
+    // a bill that is shared can be named too
+    let dinner = bill(&w.conn, w.food, "Dinner", "90.00", "2026-01-05");
+    set_split(&w.conn, dinner, &equal(vec![who(anna)])).unwrap();
+    let again = ledger::settle(&w.conn, anna, None, None, None, Some(&dinner.to_string()), "2026-02-02").unwrap();
+    assert_eq!((again.entry.transaction_id, again.after.as_str()), (Some(dinner.to_string()), "0.00"));
+    assert_eq!(cost(&w.conn, dinner), 4500);
+    let lines = ledger::statement(&w.conn, anna).unwrap().lines;
+    let dates: Vec<_> = lines.iter().filter(|l| l.transaction_id.as_deref() == Some(&dinner.to_string())).map(|l| (l.kind.as_str(), l.date.as_str(), l.transaction_date.as_deref())).collect();
+    assert_eq!(dates, [("BILL", "2026-01-05", Some("2026-01-05")), ("REPAID_TO_ME", "2026-02-02", Some("2026-01-05"))]);
+    assert!(lines.iter().all(|l| l.transaction_id.is_some() == l.transaction_date.is_some()));
+}
+
+#[test]
+fn a_payment_for_a_transaction_that_is_not_there_is_refused_and_writes_nothing() {
+    let w = world();
+    let anna = friend(&w.conn, "Anna");
+    ledger::add(&w.conn, &new(anna, Kind::Lent, "25.00", "2026-01-01")).unwrap();
+    for bad in ["999", "abc", "0"] {
+        assert_eq!(ledger::settle(&w.conn, anna, None, None, None, Some(bad), "2026-02-01"), Err(AppError::InvalidInput), "{bad}");
+    }
+    assert_eq!(one(&w.conn, "SELECT count(*) FROM ledger_entries"), 1);
+    assert_eq!(balance(&w.conn, anna), 2500);
 }
 
 // ---- I borrowed, with an expense -------------------------------------------------------------
@@ -130,7 +192,7 @@ fn a_borrowing_can_add_your_share_to_your_expenses_in_one_step() {
     assert_eq!((spent.name.as_str(), spent.amount.as_str(), spent.payment_date.as_str(), spent.category_id), ("Dinner at Luigi's", "25.00", "2026-01-10", w.food));
     assert_eq!(balance(&w.conn, anna), -2500, "you owe her");
     // paying her back later is an entry, and never a second expense
-    ledger::settle(&w.conn, anna, None, None, None, "2026-02-01").unwrap();
+    ledger::settle(&w.conn, anna, None, None, None, None, "2026-02-01").unwrap();
     assert_eq!(one(&w.conn, "SELECT count(*) FROM transactions"), 1);
     assert_eq!(balance(&w.conn, anna), 0);
 }

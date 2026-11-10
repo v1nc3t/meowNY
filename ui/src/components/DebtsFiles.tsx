@@ -42,43 +42,46 @@ export default function DebtsFiles({ personId, onSaved, onFailed }: { personId: 
   }
 
   return (
-    <div className="debts-files">
-      <Pick
-        label={t('debts.fileType')}
-        className="mode"
-        text={FORMATS.find((f) => f.value === format)?.name ?? ''}
-        open={menu}
-        onToggle={() => setMenu((open) => !open)}
-        onClose={() => setMenu(false)}
-      >
-        {FORMATS.map((f) => (
-          <PickOption
-            key={f.value}
-            selected={format === f.value}
-            onClick={() => {
-              setFormat(f.value)
-              setMenu(false)
+    <>
+      <h2 className="debts-heading">{t('debts.statement')}</h2>
+      <div className="debts-files">
+        <Pick
+          label={t('debts.fileType')}
+          className="mode"
+          text={FORMATS.find((f) => f.value === format)?.name ?? ''}
+          open={menu}
+          onToggle={() => setMenu((open) => !open)}
+          onClose={() => setMenu(false)}
+        >
+          {FORMATS.map((f) => (
+            <PickOption
+              key={f.value}
+              selected={format === f.value}
+              onClick={() => {
+                setFormat(f.value)
+                setMenu(false)
+              }}
+            >
+              {f.name}
+            </PickOption>
+          ))}
+        </Pick>
+        <Button variant="outline" onClick={() => ask(format)}>
+          {t('debts.saveStatement')}
+        </Button>
+        {asking ? (
+          <DebtsFilePreview
+            request={asking.request}
+            title={asking.title}
+            onClose={() => setAsking(null)}
+            onSaved={() => {
+              setAsking(null)
+              onSaved()
             }}
-          >
-            {f.name}
-          </PickOption>
-        ))}
-      </Pick>
-      <Button variant="outline" onClick={() => ask(format)}>
-        {t('debts.saveStatement')}
-      </Button>
-      {asking ? (
-        <DebtsFilePreview
-          request={asking.request}
-          title={asking.title}
-          onClose={() => setAsking(null)}
-          onSaved={() => {
-            setAsking(null)
-            onSaved()
-          }}
-          onFailed={onFailed}
-        />
-      ) : null}
-    </div>
+            onFailed={onFailed}
+          />
+        ) : null}
+      </div>
+    </>
   )
 }

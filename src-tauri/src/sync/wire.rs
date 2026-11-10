@@ -23,8 +23,11 @@ use crate::{categories, transactions, vault};
 /// The version of this protocol, in `hello`.
 /// Protocol 3 adds the tables `documents` and `document_links`; protocol 4 adds `people` and `ledger_entries`, the parts of a shared
 /// bill inside its transaction's row, the split template inside a recurring item's row, and a third target for a document link (a
-/// ledger entry); protocol 5 adds the category order (`position`) and the skipped dates of a recurring item. A device that speaks an older protocol is told to update.
-pub const PROTOCOL: u32 = 5;
+/// ledger entry); protocol 5 adds the category order (`position`) and the skipped dates of a recurring item; protocol 6 makes the
+/// computer's clock the reference (the `clock` of a hello is the wall clock, a gap between the clocks no longer stops a sync, and the
+/// phone pulls its stamps back to the computer's time); protocol 7 lets descriptions and notes hold line breaks; protocol 8 lets a split bill
+/// and the template of a recurring item name the friend who paid (`paidBy`). A device that speaks an older protocol is told to update.
+pub const PROTOCOL: u32 = 8;
 /// Digest entries in one message, and rows in one message. Messages are also cut by size (`SOFT_MESSAGE_BYTES`).
 pub const MAX_ENTRIES_PER_MESSAGE: usize = 400;
 pub const MAX_ROWS_PER_MESSAGE: usize = 200;
@@ -243,7 +246,8 @@ pub struct Hello {
     pub app_version: String,
     pub schema: u32,
     pub protocol: u32,
-    /// The device's newest stamp, as its clock reads. Only its time is used.
+    /// The device's wall clock when it made the hello (as a stamp, so it has the same shape; only its time is used), with no offset.
+    /// The computer's is the reference time of the sync.
     pub clock: String,
     pub currency: String,
     pub generation: i64,
@@ -491,10 +495,10 @@ fn description_ok(text: &Option<String>) -> bool {
     }
 }
 
-/// A note of a ledger entry: 1 to 200 characters, already trimmed, with no control characters.
+/// A note of a ledger entry: 1 to 200 characters, already trimmed, with no control characters but `\n`.
 fn note_ok(text: &str) -> bool {
     let length = text.chars().count();
-    (1..=200).contains(&length) && text.trim() == text && !text.chars().any(char::is_control)
+    (1..=200).contains(&length) && text.trim() == text && transactions::clean_lines(text).is_some_and(|clean| clean == text)
 }
 
 /// Who a part belongs to: exactly one of a friend (a `sync_id`) and a guest (a plain name).
@@ -539,12 +543,13 @@ fn split_ok(parts: &[SplitPartRow], amount: i64) -> bool {
         && parts.iter().map(|p| p.amount_minor).sum::<i64>() <= amount
 }
 
-/// A template: the weight of the person who pays (0 or more), at most 30 friends and guests with a weight of at least 1, nobody twice,
-/// and some weight above 0 somewhere.
+/// A template: the weight of the person who pays (0 or more), the friend who pays instead of them if there is one, at most 30 friends and
+/// guests with a weight of at least 1, nobody twice, and some weight above 0 somewhere.
 fn template_ok(t: &TemplateRow) -> bool {
     let mut sorted = t.parts.clone();
     sort_template(&mut sorted);
-    t.parts.len() <= 30
+    option_sync_id(&t.paid_by)
+        && t.parts.len() <= 30
         && sorted == t.parts
         && money_ok(t.mine, 0)
         && t.parts.iter().all(|p| who_ok(&p.person, &p.guest) && money_ok(p.weight, 1))
@@ -628,6 +633,8 @@ pub struct RecurringRow {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct TemplateRow {
     pub mine: i64,
+    /// The `sync_id` of the friend who pays each payment instead of you, if one does.
+    pub paid_by: Option<String>,
     pub parts: Vec<TemplatePartRow>,
 }
 
@@ -717,6 +724,8 @@ pub struct TransactionRow {
     pub planned_amount_minor: Option<i64>,
     pub payment_date: String,
     pub description: Option<String>,
+    /// The `sync_id` of the friend who paid the bill, if it was not you.
+    pub paid_by: Option<String>,
     /// The parts of the friends and guests the bill is shared with, in the order `sort_split` makes. Your own part is not here: it is
     /// the amount minus these.
     pub split: Vec<SplitPartRow>,
@@ -905,6 +914,7 @@ pub fn parse_row(table: Table, value: &Value) -> Result<Row, WireError> {
                 && r.planned_amount_minor.is_none_or(|a| money_ok(a, 0))
                 && date_ok(&r.payment_date)
                 && description_ok(&r.description)
+                && option_sync_id(&r.paid_by)
                 && split_ok(&r.split, r.amount_minor)
                 && timestamp_ok(&r.created_at)
                 && timestamp_ok(&r.updated_at)
@@ -970,7 +980,7 @@ mod tests {
     fn transaction() -> Value {
         json!({"syncId": ID_B, "stamp": STAMP, "category": ID_A, "recurring": null, "recurringDueDate": null, "clientUuid": null,
                "name": "Coffee", "amountMinor": 350, "plannedAmountMinor": null, "paymentDate": "2026-03-01", "description": null,
-               "split": [], "createdAt": TS, "updatedAt": TS})
+               "paidBy": null, "split": [], "createdAt": TS, "updatedAt": TS})
     }
 
     fn recurring() -> Value {
@@ -1006,7 +1016,7 @@ mod tests {
     }
 
     fn templated() -> Value {
-        changed(recurring(), "split", json!({"mine": 2, "parts": [{"person": ID_A, "guest": null, "weight": 1}, {"person": null, "guest": "Carl", "weight": 1}]}))
+        changed(recurring(), "split", json!({"mine": 2, "paidBy": null, "parts": [{"person": ID_A, "guest": null, "weight": 1}, {"person": null, "guest": "Carl", "weight": 1}]}))
     }
 
     fn budget() -> Value {
@@ -1046,6 +1056,8 @@ mod tests {
             (Table::Budgets, budget()),
             (Table::Transactions, transaction()),
             (Table::Transactions, shared()),
+            (Table::Transactions, changed(shared(), "paidBy", json!(ID_A))),
+            (Table::RecurringTransactions, changed(templated(), "split", json!({"mine": 2, "paidBy": ID_A, "parts": [{"person": ID_A, "guest": null, "weight": 1}]}))),
             (Table::Documents, document()),
             (Table::DocumentLinks, link()),
             (Table::DocumentLinks, changed(changed(link(), "transaction", json!(null)), "recurring", json!(ID_B))),
@@ -1075,7 +1087,7 @@ mod tests {
 
     #[test]
     fn there_is_a_table_for_every_kind_of_row_and_the_protocol_knows_it() {
-        assert_eq!(PROTOCOL, 5);
+        assert_eq!(PROTOCOL, 8);
         let names: Vec<&str> = Table::ALL.iter().map(|t| t.name()).collect();
         assert_eq!(
             names,
@@ -1128,7 +1140,8 @@ mod tests {
             (Table::Transactions, changed(transaction(), "paymentDate", json!("2026-02-30"))),
             (Table::Transactions, changed(transaction(), "description", json!("x".repeat(256)))),
             (Table::Transactions, changed(transaction(), "description", json!(""))),
-            (Table::Transactions, changed(transaction(), "description", json!("line\nbreak"))),
+            (Table::Transactions, changed(transaction(), "description", json!("tab\there"))),
+            (Table::Transactions, changed(transaction(), "description", json!("line\r\nbreak"))),
             (Table::Transactions, changed(transaction(), "clientUuid", json!("0B8F6C1E-5C52-4D6A-9D50-3F7A8A1B2C3D"))),
             (Table::Transactions, changed(transaction(), "clientUuid", json!("not-a-uuid"))),
             (Table::Transactions, changed(transaction(), "recurring", json!(ID_A))),
@@ -1206,7 +1219,8 @@ mod tests {
             (Table::LedgerEntries, changed(entry(), "note", json!(""))),
             (Table::LedgerEntries, changed(entry(), "note", json!(" padded"))),
             (Table::LedgerEntries, changed(entry(), "note", json!("x".repeat(201)))),
-            (Table::LedgerEntries, changed(entry(), "note", json!("line\nbreak"))),
+            (Table::LedgerEntries, changed(entry(), "note", json!("tab\there"))),
+            (Table::LedgerEntries, changed(entry(), "note", json!("line\r\nbreak"))),
             (Table::LedgerEntries, changed(entry(), "person", json!("1"))),
             (Table::LedgerEntries, changed(entry(), "transaction", json!("x"))),
             (Table::LedgerEntries, changed(entry(), "originId", json!("ab"))),
@@ -1223,6 +1237,11 @@ mod tests {
             (Table::Transactions, changed(shared(), "split", json!([{"person": null, "guest": " Carl", "amountMinor": 100}]))),
             (Table::Transactions, changed(shared(), "split", json!([{"person": ID_A, "guest": null, "amountMinor": 100}, {"person": ID_A, "guest": null, "amountMinor": 100}]))),
             (Table::Transactions, changed(shared(), "split", json!([{"person": null, "guest": "Carl", "amountMinor": 100}, {"person": null, "guest": "carl", "amountMinor": 100}]))),
+            // the friend who paid
+            (Table::Transactions, changed(shared(), "paidBy", json!("x"))),
+            (Table::Transactions, changed(shared(), "paidBy", json!(ID_A.to_uppercase()))),
+            (Table::Transactions, changed(shared(), "paidBy", json!(1))),
+            (Table::RecurringTransactions, changed(templated(), "split", json!({"mine": 2, "paidBy": "x", "parts": [{"person": ID_A, "guest": null, "weight": 1}]}))),
             // not in the order the parts are sent in
             (Table::Transactions, changed(shared(), "split", json!([{"person": null, "guest": "Carl", "amountMinor": 3000}, {"person": ID_A, "guest": null, "amountMinor": 3000}]))),
             (Table::Transactions, changed(shared(), "split", json!({"person": ID_A}))),
@@ -1249,6 +1268,13 @@ mod tests {
         let global = json!({"syncId": ID_B, "stamp": STAMP, "type": "INCOME", "scope": "GLOBAL", "category": null, "amountLimitMinor": null,
                             "effectiveFrom": "2026-03-01", "createdAt": TS, "updatedAt": TS});
         assert!(parse_row(Table::Budgets, &global).is_ok(), "a removed budget has no limit");
+    }
+
+    #[test]
+    fn descriptions_and_notes_may_hold_line_breaks() {
+        assert!(parse_row(Table::Transactions, &changed(transaction(), "description", json!("line\nbreak"))).is_ok());
+        assert!(parse_row(Table::RecurringTransactions, &changed(recurring(), "description", json!("line\nbreak"))).is_ok());
+        assert!(parse_row(Table::LedgerEntries, &changed(entry(), "note", json!("line\nbreak"))).is_ok());
     }
 
     #[test]

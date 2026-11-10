@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react'
+import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { errorText, vault, type LockPrefs } from '../../vault/api'
 import { currencyLabel } from '../../api/currencies'
 import { formatExample, localeOptions, zoneOptions } from '../../api/locales'
@@ -11,6 +11,7 @@ import { scheduleOnPhone } from '../../api/debtReminders'
 import { cleanCategoryName } from '../../api/categories'
 import { saveSenderName, senderName } from '../../lib/senderName'
 import { parseTheme, saveTheme, savedTheme } from '../../lib/theme'
+import { parseTextSize, saveTextSize, savedTextSize, TEXT_SIZE } from '../../lib/textSize'
 import { parseTime, REMINDER_PERIODS, reminderEvery, reminderTime, remindersChanged, saveReminderEvery, saveReminderTime } from '../../lib/reminders'
 import type { Say } from '../../hooks/toast'
 import { Actions, Field, Row, Rows, SwitchRow } from './layout'
@@ -77,10 +78,22 @@ export function RegionSection({
   )
 }
 
-/** The theme is this device's and applies at once, on the phone as well. */
+/** The theme and text size are this device's and apply at once, on the phone as well. */
 export function AppearanceSection() {
   const { t } = useI18n()
   const [theme, setTheme] = useState(savedTheme)
+  const [textSize, setTextSize] = useState(savedTextSize)
+  const rangeRef = useRef<HTMLInputElement>(null)
+
+  // The size applies when the slider is let go (the native change event): applied while dragging, the page and the slider would resize under the pointer.
+  useEffect(() => {
+    const range = rangeRef.current
+    if (!range) return
+    const apply = () => saveTextSize(parseTextSize(range.value))
+    range.addEventListener('change', apply)
+    return () => range.removeEventListener('change', apply)
+  }, [])
+
   return (
     <Rows>
       <Field>
@@ -99,6 +112,20 @@ export function AppearanceSection() {
           }}
         />
       </Field>
+      <Row label={t('settings.textSize')} hint={`${textSize}%`}>
+        <input
+          ref={rangeRef}
+          type="range"
+          className="settings-range"
+          aria-label={t('settings.textSize')}
+          aria-valuetext={`${textSize}%`}
+          min={TEXT_SIZE.min}
+          max={TEXT_SIZE.max}
+          step={TEXT_SIZE.step}
+          value={textSize}
+          onChange={(event) => setTextSize(Number(event.target.value))}
+        />
+      </Row>
     </Rows>
   )
 }
@@ -154,51 +181,62 @@ export function AppLockSection({ prefs, phone, onSaved, say }: { prefs: LockPref
   )
 }
 
-export function NotificationsSection({ notifyDue, phone, onNotify, say }: { notifyDue: boolean; phone: boolean; onNotify: (on: boolean) => void; say: Say }) {
+/** The time of day and the period of the debt reminders, as two rows. Settings and the debts page's notifications share them. */
+export function DebtReminderFields({ phone, say }: { phone: boolean; say: Say }) {
   const { t } = useI18n()
   const [reminderAt, setReminderAt] = useState(reminderTime)
   const [debtEvery, setDebtEvery] = useState(() => String(reminderEvery()))
 
   return (
-    <div className="settings-stack">
-      <Rows>
-        <SwitchRow label={t('settings.notifyDue')} checked={notifyDue} onChange={(event) => onNotify(event.target.checked)} />
-        <Field>
-          <label>
-            {t('settings.reminderTime')}
-            <input
-              type="time"
-              value={reminderAt}
-              onChange={(event) => {
-                setReminderAt(event.target.value)
-                // the time of a reminder is this device's: kept here, and the phone hands the system the new time
-                if (parseTime(event.target.value)) {
-                  saveReminderTime(event.target.value)
-                  remindersChanged()
-                }
-              }}
-            />
-          </label>
-        </Field>
-        <Field>
-          <Dropdown
-            label={t('settings.debtEvery')}
-            value={debtEvery}
-            options={REMINDER_PERIODS.map((days) => ({ value: String(days), label: t(PERIOD_LABELS[days]) }))}
-            onChange={(value) => {
-              setDebtEvery(value)
-              // the period is this device's, like the time of day: kept here, and the phone hands the system the new days
-              saveReminderEvery(Number(value))
-              if (phone) {
-                void scheduleOnPhone().then((result) => {
-                  if (result === 'denied') say(t('debts.remindDenied'), 'warning')
-                })
-              } else {
+    <>
+      <Field>
+        <label>
+          {t('settings.reminderTime')}
+          <input
+            type="time"
+            value={reminderAt}
+            onChange={(event) => {
+              setReminderAt(event.target.value)
+              // the time of a reminder is this device's: kept here, and the phone hands the system the new time
+              if (parseTime(event.target.value)) {
+                saveReminderTime(event.target.value)
                 remindersChanged()
               }
             }}
           />
-        </Field>
+        </label>
+      </Field>
+      <Field>
+        <Dropdown
+          label={t('settings.debtEvery')}
+          value={debtEvery}
+          options={REMINDER_PERIODS.map((days) => ({ value: String(days), label: t(PERIOD_LABELS[days]) }))}
+          onChange={(value) => {
+            setDebtEvery(value)
+            // the period is this device's, like the time of day: kept here, and the phone hands the system the new days
+            saveReminderEvery(Number(value))
+            if (phone) {
+              void scheduleOnPhone().then((result) => {
+                if (result === 'denied') say(t('debts.remindDenied'), 'warning')
+              })
+            } else {
+              remindersChanged()
+            }
+          }}
+        />
+      </Field>
+    </>
+  )
+}
+
+export function NotificationsSection({ notifyDue, phone, onNotify, say }: { notifyDue: boolean; phone: boolean; onNotify: (on: boolean) => void; say: Say }) {
+  const { t } = useI18n()
+
+  return (
+    <div className="settings-stack">
+      <Rows>
+        <SwitchRow label={t('settings.notifyDue')} checked={notifyDue} onChange={(event) => onNotify(event.target.checked)} />
+        <DebtReminderFields phone={phone} say={say} />
       </Rows>
       <p className="hint">{t(phone ? 'settings.reminderPhone' : 'settings.reminderDesktop')}</p>
     </div>

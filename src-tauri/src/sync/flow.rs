@@ -140,16 +140,28 @@ pub struct PairingRequest {
     pub check_code: String,
 }
 
-fn now_iso() -> String {
-    chrono::Utc::now().format("%Y-%m-%dT%H:%M:%S%.3fZ").to_string()
+/// The time the app goes by (a phone: its wall clock and its distance from the computer's), as a text: when a pairing or a sync was.
+/// It must be the same time the stamps are made with, or "changes since the last sync" would compare two different clocks.
+fn now_iso(conn: &Connection) -> Result<String, SyncError> {
+    Ok(stamp::clock_now(conn)?.format("%Y-%m-%dT%H:%M:%S%.3fZ").to_string())
 }
 
-fn today() -> String {
-    chrono::Utc::now().format("%Y-%m-%d").to_string()
+/// The date of the history entry of a currency change, by the same time.
+fn today(conn: &Connection) -> Result<String, SyncError> {
+    Ok(stamp::clock_now(conn)?.format("%Y-%m-%d").to_string())
 }
 
+/// The hello carries this device's wall clock as the system says it, with no offset: the computer's is the reference time, and the
+/// phone's is what the computer measures the gap against.
 fn hello_of<D: Db>(db: &D, name: &str) -> Result<Hello, SyncError> {
-    db.with(|c| engine::hello(c, name, env!("CARGO_PKG_VERSION")))
+    db.with(|c| engine::hello(c, name, env!("CARGO_PKG_VERSION"), stamp::now_ms()))
+}
+
+/// Phone: the computer's hello is in and was checked. Takes the computer's clock as the reference for this sync (`docs/sync-design.md`,
+/// section 10): the distance from it is kept, and the stamps that are ahead of it are pulled back, before anything is compared.
+fn follow_computer<D: Db>(db: &D, theirs: &Hello) -> Result<(), FlowError> {
+    db.with(|c| engine::follow_desktop_clock(c, theirs, stamp::now_ms()))?;
+    Ok(())
 }
 
 /// The next message; an error message from the other device ends the conversation here.
@@ -343,8 +355,10 @@ fn review_conflicts<D: Db>(
 }
 
 fn exchange_steps<D: Db>(channel: &mut Channel, db: &D, role: Role, mine: &Hello, theirs: &Hello, mode: Mode, prompts: &mut dyn Prompts) -> Result<Exchange, FlowError> {
-    let now_ms = stamp::now_ms();
-    let warnings = engine::check_hello(mine, theirs, now_ms)?;
+    // The wall clock measures the gap between the two devices; the time this device goes by (a phone's is moved by its distance from the
+    // computer's, which `follow_computer` just measured) is what the safety net on incoming stamps and the dates here use.
+    let warnings = engine::check_hello(mine, theirs, stamp::now_ms())?;
+    let now_ms = db.with(|c| Ok(stamp::clock_ms(c)?))?;
 
     // Currency first: the side that is behind takes over the changes and converts its own rows. Only the desktop makes changes.
     match mine.generation.cmp(&theirs.generation) {
@@ -363,7 +377,7 @@ fn exchange_steps<D: Db>(channel: &mut Channel, db: &D, role: Role, mine: &Hello
                 Message::Currency(c) => c.changes,
                 _ => return Err(FlowError::Protocol("message instead of the currency changes")),
             };
-            db.with(|c| engine::apply_currency(c, &changes, &today(), now_ms))?;
+            db.with(|c| engine::apply_currency(c, &changes, &today(c)?, now_ms))?;
         }
         std::cmp::Ordering::Equal => {}
     }
@@ -402,7 +416,7 @@ fn exchange_steps<D: Db>(channel: &mut Channel, db: &D, role: Role, mine: &Hello
         }
     };
     let summary = if receives(role, mode) {
-        db.with(|c| engine::apply(c, &incoming, stamp::now_ms(), mine.since))?
+        db.with(|c| engine::apply(c, &incoming, stamp::clock_ms(c)?, mine.since))?
     } else if incoming.is_empty() {
         Summary::default()
     } else {
@@ -463,7 +477,7 @@ pub fn sync_as_desktop<D: Db>(
         let mine = with_since(hello_of(db, name)?, since, mode);
         channel.send(&Message::Hello(mine.clone()))?;
         let done = exchange(&mut channel, db, Role::Desktop, &mine, &theirs, mode, prompts)?;
-        db.with(|c| peers::touch(c, &expected, &now_iso()))?;
+        db.with(|c| peers::touch(c, &expected, &now_iso(c)?))?;
         Ok(done)
     })();
     match result {
@@ -499,9 +513,11 @@ pub fn sync_as_phone<D: Db>(
         if theirs.device_id != device_id {
             return Err(FlowError::Protocol("device"));
         }
+        engine::check_hello(&first, &theirs, stamp::now_ms())?;
+        follow_computer(db, &theirs)?;
         // The way the sync goes is the desktop's to say.
         let done = exchange(&mut channel, db, Role::Phone, &first, &theirs, theirs.mode, prompts)?;
-        db.with(|c| peers::touch(c, &device_id, &now_iso()))?;
+        db.with(|c| peers::touch(c, &device_id, &now_iso(c)?))?;
         Ok(done)
     })();
     if let Err(error) = &result {
@@ -548,10 +564,10 @@ pub fn pair_as_desktop<D: Db>(
         // it answers with a hello that says what it holds now; only then is it stored, so a phone that turns the pairing down
         // (it holds data from another desktop) leaves nothing behind here
         let theirs = expect_hello(&mut channel)?;
-        db.with(|c| peers::add(c, &first.device_id, &first.name, secret, &now_iso()))?;
+        db.with(|c| peers::add(c, &first.device_id, &first.name, secret, &now_iso(c)?))?;
         prompts.running();
         let done = exchange(&mut channel, db, Role::Desktop, &mine, &theirs, Mode::Both, prompts)?;
-        db.with(|c| peers::touch(c, &first.device_id, &now_iso()))?;
+        db.with(|c| peers::touch(c, &first.device_id, &now_iso(c)?))?;
         Ok(done)
     })();
     if let Err(error) = &result {
@@ -602,25 +618,28 @@ pub fn pair_as_phone<D: Db>(
             _ => return Err(FlowError::Protocol("message instead of the currency changes")),
         };
         let mut mine_since = None;
+        // The clock is followed only for a desktop this phone is going to sync with: one it turns down leaves it as it is.
         if empty {
+            follow_computer(db, &theirs)?;
             db.with(|c| engine::adopt_currency(c, &theirs.currency, theirs.generation, &changes))?;
         } else if known.iter().any(|p| p.device_id == theirs.device_id) {
             // Its data came from this desktop: only the currency changes it has not seen yet are needed.
             if first.generation > theirs.generation {
                 return Err(FlowError::Sync(SyncError::Currency));
             }
+            follow_computer(db, &theirs)?;
             let missing: Vec<_> = changes.into_iter().filter(|c| c.generation > first.generation).collect();
-            db.with(|c| engine::apply_currency(c, &missing, &today(), stamp::now_ms()))?;
+            db.with(|c| engine::apply_currency(c, &missing, &today(c)?, stamp::clock_ms(c)?))?;
             mine_since = db.with(|c| peers::last_sync_ms(c, &theirs.device_id))?;
         } else {
             return Err(FlowError::Sync(SyncError::NotEmpty));
         }
-        db.with(|c| peers::add(c, &theirs.device_id, &theirs.name, &payload.secret, &now_iso()))?;
+        db.with(|c| peers::add(c, &theirs.device_id, &theirs.name, &payload.secret, &now_iso(c)?))?;
         prompts.running();
         let mine = with_since(hello_of(db, name)?, mine_since, Mode::Both);
         channel.send(&Message::Hello(mine.clone()))?;
         let done = exchange(&mut channel, db, Role::Phone, &mine, &theirs, Mode::Both, prompts)?;
-        db.with(|c| peers::touch(c, &theirs.device_id, &now_iso()))?;
+        db.with(|c| peers::touch(c, &theirs.device_id, &now_iso(c)?))?;
         Ok(done)
     })();
     if let Err(error) = &result {
