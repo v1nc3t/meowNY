@@ -282,6 +282,42 @@ li::marker {
   color: var(--muted-foreground);
 }
 
+/* Steps: a numbered list is a how-to, so each item is one step, marked "step 1", "step 2" and so on, in the app's list style
+   (thin lines between the rows). */
+ol {
+  padding: 0;
+  border: 1px solid var(--border);
+  background: var(--card);
+  list-style: none;
+  counter-reset: step;
+}
+
+ol > li {
+  position: relative;
+  margin: 0;
+  padding: 0.5rem 0.75rem 0.5rem 5rem;
+  counter-increment: step;
+}
+
+ol > li + li {
+  border-top: 1px solid var(--border);
+}
+
+ol > li::before {
+  content: 'step ' counter(step);
+  position: absolute;
+  left: 0.75rem;
+  top: 0.5rem;
+  color: var(--ring);
+  font-weight: 600;
+}
+
+/* A long path or command in a step breaks at the edge instead of widening the page. */
+li code,
+p code {
+  overflow-wrap: anywhere;
+}
+
 code {
   padding: 0.1rem 0.3rem;
   border-radius: var(--radius-sm);
