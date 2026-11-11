@@ -77,7 +77,9 @@ html.is-phone :is(.app-logo, .settings-back, .app-main a:not([class]), .app-foot
 }
 
 /* The footer (components/AppFooter.tsx) is centred: the links on one row (a second only when the words are long) with what the app is
-   under them in smaller text. Every link is 44px tall to tap and the rows touch, so there is no gap between them. */
+   under them in smaller text. Every link is 44px tall to tap and the rows touch, so there is no gap between the boxes. The text of each
+   row sits at the edge where the rows meet, so the two lines read as one block with the same room above and below it, not as two lines
+   44px apart. */
 html.is-phone .app-footer {
   flex-direction: column-reverse;
   align-items: center;
@@ -87,19 +89,23 @@ html.is-phone .app-footer {
 
 html.is-phone .app-footer > :is(p, nav) {
   justify-content: center;
-  align-items: center;
   gap: 0 1.25rem;
   margin: 0;
   text-align: center;
 }
 
+html.is-phone .app-footer > nav {
+  align-items: flex-end;
+}
+
 html.is-phone .app-footer > p {
+  align-items: flex-start;
   font-size: 0.6875rem;
 }
 
 html.is-phone .app-footer a {
   display: flex;
-  align-items: center;
+  align-items: inherit;
   min-height: 44px;
 }
 

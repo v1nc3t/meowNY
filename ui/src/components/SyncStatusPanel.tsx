@@ -47,16 +47,18 @@ export default function SyncStatusPanel({
 
   if (status.state === 'waiting') {
     return (
-      <div className="panel sync-panel">
+      <div className="panel sync-panel is-waiting">
         <QrCode text={status.qr} label={t('sync.qrLabel')} />
-        <p className="hint">{t('sync.address', { address: status.address })}</p>
-        <p className="sync-countdown" role="timer">
-          {t('sync.timeLeft', { time: countdownText(status.expiresInSecs) })}
-        </p>
-        <div className="actions">
-          <Button variant="outline" autoFocus onClick={onCancel}>
-            {t('sync.stop')}
-          </Button>
+        <div className="sync-wait">
+          <p className="hint">{t('sync.address', { address: status.address })}</p>
+          <p className="sync-countdown" role="timer">
+            {t('sync.timeLeft', { time: countdownText(status.expiresInSecs) })}
+          </p>
+          <div className="actions">
+            <Button variant="outline" autoFocus onClick={onCancel}>
+              {t('sync.stop')}
+            </Button>
+          </div>
         </div>
       </div>
     )

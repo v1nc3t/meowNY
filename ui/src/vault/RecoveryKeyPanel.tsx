@@ -48,6 +48,12 @@ export default function RecoveryKeyPanel({
     }
   }
 
+  const done = (
+    <Button disabled={!saved} onClick={onDone}>
+      {doneLabel}
+    </Button>
+  )
+
   return (
     <div className="panel">
       {inline ? null : <h1>{t('recovery.yourTitle')}</h1>}
@@ -64,6 +70,8 @@ export default function RecoveryKeyPanel({
         <Button variant="outline" onClick={() => void download()}>
           {downloaded ? t('common.downloaded') : t('common.download')}
         </Button>
+        {/* In a page section the buttons are one row, like the token's; on the lock screens each is as wide as the card. */}
+        {inline ? done : null}
       </div>
       <p className="notice" role="alert">
         {message}
@@ -74,9 +82,7 @@ export default function RecoveryKeyPanel({
           {t('recovery.saved')}
         </label>
       )}
-      <Button disabled={!saved} onClick={onDone}>
-        {doneLabel}
-      </Button>
+      {inline ? null : done}
     </div>
   )
 }

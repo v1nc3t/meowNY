@@ -12,6 +12,9 @@ import { useProfile } from '../hooks/profile'
 import { neighbour, swipeDirection, type Direction } from '../lib/swipe'
 import ShortcutsProvider from '../keys/ShortcutsProvider'
 
+// The round add button has nothing to add on these pages of a phone.
+const NO_ADD = ['/app/settings', '/app/sync']
+
 export default function AppLayout() {
   const [collapsed, setCollapsed] = useState(() => localStorage.getItem('sidebar-collapsed') === '1')
   useDueNotifications()
@@ -87,7 +90,7 @@ export default function AppLayout() {
           {phone ? (
             <>
               <PhoneTabs />
-              <QuickAdd />
+              {NO_ADD.includes(pathname) ? null : <QuickAdd />}
             </>
           ) : null}
         </div>
