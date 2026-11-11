@@ -86,6 +86,12 @@
 /* The foot of a lock screen (components/AppFooter.tsx) is at the bottom of the screen, under the card and never over it, across its width. */
 .gate:has(> .app-footer) {
   grid-template-rows: auto 1fr;
+  /* the foot is the last thing on the screen: a little room under it, not the room under a card */
+  padding-bottom: 0.5rem;
+}
+
+html.is-phone .gate:has(> .app-footer) {
+  padding-bottom: calc(0.5rem + env(safe-area-inset-bottom, 0px));
 }
 
 .gate > .app-footer {
