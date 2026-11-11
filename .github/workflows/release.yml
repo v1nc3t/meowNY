@@ -53,6 +53,7 @@ jobs:
 
       # The docs are recorded by running the command line against the app's own code, which needs the app's libraries.
       - name: Install Linux libraries
+        timeout-minutes: 10
         run: |
           sudo apt-get update
           sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev libssl-dev build-essential pkg-config
@@ -129,6 +130,7 @@ jobs:
           ref: ${{ needs.version.outputs.ref }}
 
       - name: Install Linux libraries
+        timeout-minutes: 10
         run: |
           sudo apt-get update
           sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev libssl-dev build-essential pkg-config file
