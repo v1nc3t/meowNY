@@ -303,9 +303,12 @@ function CategoriesView({ settings, thisMonth }: { settings: MoneySettings; this
       <div className="tx-title budget-title one-line">
         <h1>{t('categories.title')}</h1>
         <div className="tx-actions">
-          <Button onClick={() => setAdding(true)} {...tip('new', t('categories.add'))}>
-            {t('categories.add')}
-          </Button>
+          {/* The phone has the round add button for this. */}
+          {phone ? null : (
+            <Button onClick={() => setAdding(true)} {...tip('new', t('categories.add'))}>
+              {t('categories.add')}
+            </Button>
+          )}
           <MonthNav month={month} thisMonth={thisMonth} onChange={setMonth} />
         </div>
       </div>

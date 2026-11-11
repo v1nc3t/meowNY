@@ -3,9 +3,9 @@ import { cn } from './cn'
 
 /** A small label: a status, a change, a count. */
 export default function Badge({
-  variant = 'default',
+  variant,
   className,
   ...rest
-}: ComponentProps<'span'> & { variant?: 'default' | 'secondary' | 'outline' | 'destructive' | 'success' }) {
+}: ComponentProps<'span'> & { variant: 'secondary' | 'outline' | 'destructive' | 'success' }) {
   return <span className={cn('ui-badge', `ui-badge-${variant}`, className)} {...rest} />
 }

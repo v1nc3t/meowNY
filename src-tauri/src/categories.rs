@@ -9,10 +9,11 @@
 
 use chrono::{DateTime, Utc};
 use rusqlite::{params, Connection, OptionalExtension};
-use serde::{Deserialize, Serialize, Serializer};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 use crate::budgets::{self, Span};
 use crate::clock;
+use crate::db::is_unique_violation;
 use crate::vault::AppError;
 
 const NAME_MAX_CHARS: usize = 50;
@@ -25,14 +26,14 @@ pub enum CategoryType {
 }
 
 impl CategoryType {
-    fn as_sql(self) -> &'static str {
+    pub(crate) fn as_sql(self) -> &'static str {
         match self {
             CategoryType::Income => "INCOME",
             CategoryType::Expense => "EXPENSE",
         }
     }
 
-    fn from_sql(text: &str) -> Result<Self, AppError> {
+    pub(crate) fn from_sql(text: &str) -> Result<Self, AppError> {
         match text {
             "INCOME" => Ok(CategoryType::Income),
             "EXPENSE" => Ok(CategoryType::Expense),
@@ -51,6 +52,11 @@ pub fn parse_id(text: &str) -> Result<i64, AppError> {
         Ok(id) if id > 0 && text.bytes().all(|b| b.is_ascii_digit()) => Ok(id),
         _ => Err(AppError::InvalidInput),
     }
+}
+
+/// For a patch field that can be cleared: left out means unchanged (`None`), `null` means clear it (`Some(None)`).
+pub(crate) fn present_or_null<'de, D: Deserializer<'de>, T: Deserialize<'de>>(deserializer: D) -> Result<Option<Option<T>>, D::Error> {
+    Ok(Some(Option::deserialize(deserializer)?))
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -81,14 +87,6 @@ pub(crate) fn clean_name(name: &str) -> Result<String, AppError> {
         return Err(AppError::InvalidInput);
     }
     Ok(name.to_string())
-}
-
-fn is_unique_violation(error: &rusqlite::Error) -> bool {
-    matches!(
-        error,
-        rusqlite::Error::SqliteFailure(e, _) if e.code == rusqlite::ErrorCode::ConstraintViolation
-            && e.extended_code == rusqlite::ffi::SQLITE_CONSTRAINT_UNIQUE
-    )
 }
 
 fn write_error(error: rusqlite::Error) -> AppError {

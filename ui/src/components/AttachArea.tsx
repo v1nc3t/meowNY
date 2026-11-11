@@ -12,8 +12,8 @@ import Icon from './NavIcon'
 import PreviewModal from './PreviewModal'
 import Button from './ui/Button'
 
-/** The documents of one item, in the dialog that edits it. `compact` is for the quick add of a phone: just the buttons and the list. */
-export default function AttachArea({ attachments, compact = false }: { attachments: Attachments; compact?: boolean }) {
+/** The documents of one item, in the dialog that edits it. */
+export default function AttachArea({ attachments }: { attachments: Attachments }) {
   const t = useT()
   const phone = useProfile() === 'phone'
   const { settings } = useMoneySettings()
@@ -34,9 +34,9 @@ export default function AttachArea({ attachments, compact = false }: { attachmen
 
   return (
     <section className="attach" aria-label={t('docs.title')}>
-      {compact ? null : <h3>{t('docs.title')}</h3>}
+      <h3>{t('docs.title')}</h3>
       {attachments.working ? <p className="hint">{t('docs.adding', { name: attachments.working })}</p> : null}
-      {empty && !compact ? <p className="hint">{t('docs.attachNone')}</p> : null}
+      {empty ? <p className="hint">{t('docs.attachNone')}</p> : null}
       {empty ? null : (
         <ul className="attach-list">
           {attachments.linked.map((doc) => (
@@ -86,11 +86,9 @@ export default function AttachArea({ attachments, compact = false }: { attachmen
             {t('docs.takePhoto')}
           </Button>
         ) : null}
-        {compact ? null : (
-          <Button variant="outline" size="sm" aria-expanded={picking} onClick={() => setPicking((open) => !open)}>
-            {t('docs.attachExisting')}
-          </Button>
-        )}
+        <Button variant="outline" size="sm" aria-expanded={picking} onClick={() => setPicking((open) => !open)}>
+          {t('docs.attachExisting')}
+        </Button>
       </div>
       <input ref={fileInput} type="file" multiple hidden tabIndex={-1} onChange={onChosen} />
       <input ref={photoInput} type="file" accept="image/*" capture="environment" hidden tabIndex={-1} onChange={onChosen} />

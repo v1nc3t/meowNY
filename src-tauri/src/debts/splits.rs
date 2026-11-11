@@ -313,10 +313,6 @@ fn lines_of(conn: &Connection, transaction_id: i64) -> Result<Vec<(i64, Who, i64
     Ok(rows.collect::<Result<_, _>>()?)
 }
 
-pub fn line_count(conn: &Connection, transaction_id: i64) -> Result<u32, AppError> {
-    Ok(conn.query_row("SELECT count(*) FROM transaction_split_lines WHERE transaction_id = ?1", [transaction_id], |r| r.get(0))?)
-}
-
 /// The friends on a bill: those with a part, and the friend who paid it (whose own part may be 0). They stay on it once archived.
 fn people_on(conn: &Connection, transaction_id: i64) -> Result<HashSet<i64>, AppError> {
     let mut people: HashSet<i64> = lines_of(conn, transaction_id)?.into_iter().filter_map(|(_, who, _)| if let Who::Person(id) = who { Some(id) } else { None }).collect();

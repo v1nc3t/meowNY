@@ -1,11 +1,10 @@
-import { Fragment, Suspense, useCallback, useEffect, useMemo, useRef, useState, type TouchEvent } from 'react'
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState, type TouchEvent } from 'react'
 import { Outlet, useLocation, useNavigate } from 'react-router-dom'
 import AppSidebar from '../components/AppSidebar'
 import PhoneTabs, { PHONE_TABS } from '../components/PhoneTabs'
 import QuickAdd from '../components/QuickAdd'
 import Toaster from '../components/Toaster'
 import { preloadAllWhenIdle } from '../pages'
-import { DataVersionContext } from '../hooks/dataVersion'
 import { blocksSwipe, SwipeContext, type SwipeHandler } from '../hooks/swipe'
 import { useDebtReminders } from '../hooks/useDebtReminders'
 import { useDueNotifications } from '../hooks/useDueNotifications'
@@ -13,10 +12,11 @@ import { useProfile } from '../hooks/profile'
 import { neighbour, swipeDirection, type Direction } from '../lib/swipe'
 import ShortcutsProvider from '../keys/ShortcutsProvider'
 
+// The round add button has nothing to add on these pages of a phone.
+const NO_ADD = ['/app/settings', '/app/sync']
+
 export default function AppLayout() {
   const [collapsed, setCollapsed] = useState(() => localStorage.getItem('sidebar-collapsed') === '1')
-  const [dataVersion, setDataVersion] = useState(0)
-  const locked = true
   useDueNotifications()
   useDebtReminders()
   const phone = useProfile() === 'phone'
@@ -73,36 +73,29 @@ export default function AppLayout() {
     })
   }, [])
 
-  const dataChanges = useMemo(() => ({ version: dataVersion, changed: () => setDataVersion((current) => current + 1) }), [dataVersion])
-
-  const shell = ['app-shell', collapsed ? 'is-collapsed' : '', locked ? 'is-locked' : '', phone ? 'is-phone' : ''].filter(Boolean).join(' ')
+  const shell = ['app-shell', collapsed ? 'is-collapsed' : '', 'is-locked', phone ? 'is-phone' : ''].filter(Boolean).join(' ')
 
   return (
-    <DataVersionContext.Provider value={dataChanges}>
-      <SwipeContext.Provider value={swipes}>
-        <ShortcutsProvider onToggleSidebar={toggleSidebar} enabled={!phone}>
-          <div className={shell}>
-            <AppSidebar collapsed={collapsed} onToggle={toggleSidebar} />
-            <div className="app-main" onTouchStart={phone ? onTouchStart : undefined} onTouchEnd={phone ? onTouchEnd : undefined}>
-              <main data-direction={direction ?? undefined}>
-                <Suspense fallback={null}>
-                  {/* A new key draws the page again, so it shows a transaction that the quick add just made. */}
-                  <Fragment key={dataVersion}>
-                    <Outlet />
-                  </Fragment>
-                </Suspense>
-              </main>
-            </div>
-            {phone ? (
-              <>
-                <PhoneTabs />
-                <QuickAdd />
-              </>
-            ) : null}
+    <SwipeContext.Provider value={swipes}>
+      <ShortcutsProvider onToggleSidebar={toggleSidebar} enabled={!phone}>
+        <div className={shell}>
+          <AppSidebar collapsed={collapsed} onToggle={toggleSidebar} />
+          <div className="app-main" onTouchStart={phone ? onTouchStart : undefined} onTouchEnd={phone ? onTouchEnd : undefined}>
+            <main data-direction={direction ?? undefined}>
+              <Suspense fallback={null}>
+                <Outlet />
+              </Suspense>
+            </main>
           </div>
-          <Toaster />
-        </ShortcutsProvider>
-      </SwipeContext.Provider>
-    </DataVersionContext.Provider>
+          {phone ? (
+            <>
+              <PhoneTabs />
+              {NO_ADD.includes(pathname) ? null : <QuickAdd />}
+            </>
+          ) : null}
+        </div>
+        <Toaster />
+      </ShortcutsProvider>
+    </SwipeContext.Provider>
   )
 }

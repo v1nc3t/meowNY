@@ -53,7 +53,7 @@ export default function DuePayments({
         sub={
           <>
             <span>{payment.category}</span>
-            <span>{t('debts.dueOn', { date: formatDate(payment.dueDate, locale) })}</span>
+            <span>{formatDate(payment.dueDate, locale)}</span>
             <span className="due-late">{late(payment)}</span>
           </>
         }

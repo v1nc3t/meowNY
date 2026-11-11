@@ -6,7 +6,7 @@ use chrono::NaiveDate;
 use rusqlite::{params, Connection, OptionalExtension};
 use serde::Serialize;
 
-use crate::budgets::{self, kind_sql, next_month, month_start, Overview, Scope};
+use crate::budgets::{self, next_month, month_start, Overview, Scope};
 use crate::categories::{serialize_id, CategoryType};
 use crate::debts::splits;
 use crate::money::format_amount;
@@ -138,7 +138,7 @@ pub fn category_trend(conn: &Connection, category_id: i64, from: &str, to: &str)
             return Err(AppError::InvalidInput);
         }
         let label = month.format("%Y-%m").to_string();
-        let budget = budgets::series_limit(conn, kind_sql(kind), Some(category_id), &month.to_string())?;
+        let budget = budgets::series_limit(conn, kind.as_sql(), Some(category_id), &month.to_string())?;
         points.push(TrendPoint {
             budgeted: budget.map(format_amount),
             actual: format_amount(actuals.get(&label).copied().unwrap_or(0)),
@@ -224,7 +224,7 @@ pub fn top_categories(conn: &Connection, month: &str, kind: CategoryType, limit:
          GROUP BY c.id ORDER BY total DESC, c.name COLLATE NOCASE, c.id",
     )?;
     let rows = statement
-        .query_map(params![kind_sql(kind), start, end], |r| Ok((r.get::<_, i64>(0)?, r.get::<_, String>(1)?, r.get::<_, i64>(2)?)))?
+        .query_map(params![kind.as_sql(), start, end], |r| Ok((r.get::<_, i64>(0)?, r.get::<_, String>(1)?, r.get::<_, i64>(2)?)))?
         .collect::<Result<Vec<_>, _>>()?;
     let whole: i64 = rows.iter().map(|r| r.2).sum();
     Ok(rows

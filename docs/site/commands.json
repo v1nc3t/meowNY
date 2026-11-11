@@ -2541,7 +2541,7 @@
           "nullable": false,
           "param": "values",
           "required": false,
-          "summary": "The value of each friend, in the order of --people, then of each guest, separated by commas. Not for an equal split.",
+          "summary": "The value of each friend, in the order of --people, then of each guest, separated by commas. Not for an equal split. In PERCENT and EXACT one value, here or --mine, may be left empty (30.00,,20.00) and gets the rest.",
           "type": "string",
           "value": "text",
           "values": []
@@ -3024,7 +3024,7 @@
           "nullable": false,
           "param": "values",
           "required": false,
-          "summary": "The value of each friend, in the order of --people, then of each guest, separated by commas. Not for an equal split.",
+          "summary": "The value of each friend, in the order of --people, then of each guest, separated by commas. Not for an equal split. In PERCENT and EXACT one value, here or --mine, may be left empty (30.00,,20.00) and gets the rest.",
           "type": "string",
           "value": "text",
           "values": []
@@ -3133,7 +3133,7 @@
           "nullable": false,
           "param": "values",
           "required": false,
-          "summary": "The value of each friend, in the order of --people, then of each guest, separated by commas. Not for an equal split.",
+          "summary": "The value of each friend, in the order of --people, then of each guest, separated by commas. Not for an equal split. In PERCENT and EXACT one value, here or --mine, may be left empty (30.00,,20.00) and gets the rest.",
           "type": "string",
           "value": "text",
           "values": []

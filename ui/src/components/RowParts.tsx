@@ -169,7 +169,7 @@ export function NoteSection({ note }: { note: string }) {
 /**
  * A row of a list on the phone: the name and the amount on the first line, what else under them, a chevron on the right. Tapping it
  * opens `children` under it (the details and a labelled button for everything that can be done). A row with no `children` has nothing
- * to open: it is plain, with no chevron.
+ * to open: it is plain, and the room of its chevron is left empty, so its amount ends where the others do.
  */
 export function TapRow({
   id,
@@ -193,6 +193,7 @@ export function TapRow({
   amount?: ReactNode
   /** A button at the end of the first line, where the amount would be: only for a row with nothing to open (no `children`), as a button cannot sit in the one that opens. */
   action?: ReactNode
+  /** One small grey line: a few short parts (spans), each after a dot. If it is too long for the row, the first part is cut with an ellipsis, so the last stays whole. A part with the class `is-line` is a line of its own. */
   sub?: ReactNode
   children?: ReactNode
 } & Omit<ComponentProps<'li'>, 'children' | 'id' | 'onToggle'>) {
@@ -218,9 +219,9 @@ export function TapRow({
           <Icon name="chevron-down" className="chevron" />
         </button>
       ) : (
-        <div className="row-toggle is-plain">
+        <div className={action ? 'row-toggle is-plain has-action' : 'row-toggle is-plain'}>
           {inside}
-          {action}
+          {action ?? <span className="chevron" />}
         </div>
       )}
       {open && children ? (

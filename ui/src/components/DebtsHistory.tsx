@@ -95,7 +95,7 @@ export default function DebtsHistory({
         amount={amount(line)}
         sub={
           <>
-            <span className="is-line">{what(line)}</span>
+            <span>{what(line)}</span>
             {line.balance !== null ? <span>{`${t('debts.balance')} ${money(line.balance)}`}</span> : null}
           </>
         }

@@ -2,9 +2,10 @@
 //! address, no import of contacts). A friend is archived, never deleted: the balance and the history stay, and the name is free to use again.
 
 use rusqlite::{params, Connection, OptionalExtension};
-use serde::{Deserialize, Deserializer, Serialize};
+use serde::{Deserialize, Serialize};
 
-use crate::categories::{clean_name, serialize_id};
+use crate::categories::{clean_name, present_or_null, serialize_id};
+use crate::db::is_unique_violation;
 use crate::money::format_amount;
 use crate::transactions::clean_date;
 use crate::vault::AppError;
@@ -42,12 +43,8 @@ fn from_row(row: &rusqlite::Row) -> rusqlite::Result<Person> {
     })
 }
 
-fn is_name_taken(error: &rusqlite::Error) -> bool {
-    matches!(error, rusqlite::Error::SqliteFailure(e, _) if e.extended_code == rusqlite::ffi::SQLITE_CONSTRAINT_UNIQUE)
-}
-
 fn write_error(error: rusqlite::Error) -> AppError {
-    if is_name_taken(&error) {
+    if is_unique_violation(&error) {
         AppError::NameExists
     } else {
         AppError::from(error)
@@ -90,10 +87,6 @@ pub struct PersonPatch {
     pub remind_on: Option<Option<String>>,
     #[serde(default, deserialize_with = "present_or_null")]
     pub remind_every_days: Option<Option<u32>>,
-}
-
-fn present_or_null<'de, D: Deserializer<'de>, T: Deserialize<'de>>(deserializer: D) -> Result<Option<Option<T>>, D::Error> {
-    Ok(Some(Option::deserialize(deserializer)?))
 }
 
 /// Renames a friend and/or changes the reminder, all or nothing.

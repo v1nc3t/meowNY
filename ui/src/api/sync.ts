@@ -161,11 +161,6 @@ export function isBusy(status: Status): boolean {
   return !(status.state === 'idle' || status.state === 'done' || status.state === 'failed')
 }
 
-/** True when the status is an end that the screen has to show once and then acknowledge. */
-export function isFinished(status: Status): boolean {
-  return status.state === 'done' || status.state === 'failed'
-}
-
 /** How often the screens ask for the status while something runs. */
 export const POLL_MS = 500
 

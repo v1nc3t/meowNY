@@ -165,6 +165,7 @@ pub struct ApiServer {
 
 impl ApiServer {
     /// A server that cannot ask the person anything: a route that needs their yes is always refused.
+    #[cfg(test)]
     pub fn start(vault: Arc<Vault>, routes: &'static [Route], limits: Limits) -> io::Result<Self> {
         Self::start_with(vault, routes, limits, None)
     }
@@ -191,6 +192,7 @@ impl ApiServer {
         }
     }
 
+    #[cfg(test)]
     pub fn addr(&self) -> SocketAddr {
         self.addr
     }
@@ -404,6 +406,7 @@ pub struct Host {
 
 impl Host {
     /// A host that cannot ask the person anything, so routes that need their yes are refused.
+    #[cfg(test)]
     pub fn new(vault: Arc<Vault>) -> Self {
         Self { vault, prompter: None, server: Mutex::new(None) }
     }

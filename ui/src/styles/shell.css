@@ -132,63 +132,32 @@
   margin-top: auto;
 }
 
-/* The foot of the settings and of the lock screens (components/AppFooter.tsx): the copyright, licence and version at the left edge,
-   the links at the right, as plain text on one line with a | between the items of a group (when the links do not fit beside the
-   rest they take a line of their own, still at the right). A link has no box and no underline; under the pointer a line goes
-   through it. The | is drawn in the gap in front of an item, so it takes no room (the component hides the one in front of an item
-   that starts a wrapped line). The gap is the width of the | and twice the room on each side of it as it was before (the phone's is
-   a little less: see phone.css); between the groups it is the least room they keep apart. */
+/* The foot of the settings and of the lock screens (components/AppFooter.tsx): one quiet line of small text under a thin rule, what the
+   app is (version, licence, copyright) at the left and the links at the right. The items are spaced by their gap alone; a link has no
+   box and no underline, and under the pointer a line goes through it. In a narrow window the links go under the rest, still at the
+   right. */
 .app-footer {
-  --sep-gap: 3rem;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.25rem 1.5rem;
   margin: 0;
+  padding: 0.5rem 0 0.25rem;
+  border-top: 1px solid var(--border);
   font-size: 0.8125rem;
   color: var(--muted-foreground);
 }
 
-.app-footer nav {
+.app-footer > p,
+.app-footer > nav {
   display: flex;
   flex-wrap: wrap;
-  align-items: flex-start;
-  gap: 0 var(--sep-gap);
-}
-
-.app-footer ul {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-start;
-  gap: 0.125rem var(--sep-gap);
-  width: auto;
-  max-width: 100%;
+  gap: 0.25rem 1rem;
   margin: 0;
-  padding: 0;
-  list-style: none;
 }
 
-/* The links stay at the right edge, on the first line or on their own. */
-.app-footer ul + ul {
-  justify-content: flex-end;
+.app-footer > nav {
   margin-left: auto;
-}
-
-/* The plain list look (a rule and room above each item) is for lists of rows, not for this. */
-.app-footer li {
-  position: relative;
-  display: block;
-  padding: 0;
-  border: 0;
-}
-
-.app-footer li:not(:first-child)::before {
-  content: '|';
-  position: absolute;
-  top: 50%;
-  left: calc(var(--sep-gap) / -2);
-  transform: translate(-50%, -50%);
-  opacity: 0.5;
-}
-
-.app-footer li[data-first]::before {
-  visibility: hidden;
 }
 
 .app-footer a {

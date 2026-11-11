@@ -2,8 +2,6 @@ export type Theme = 'system' | 'light' | 'dark'
 
 const STORAGE_KEY = 'ui-theme'
 
-export const THEMES: readonly Theme[] = ['system', 'light', 'dark']
-
 /** Anything that is not a known theme means "follow the system". */
 export function parseTheme(value: string | null): Theme {
   return value === 'light' || value === 'dark' ? value : 'system'

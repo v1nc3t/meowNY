@@ -3,9 +3,10 @@
 
 use chrono::NaiveDate;
 use rusqlite::{params, Connection, OptionalExtension};
-use serde::{Deserialize, Deserializer, Serialize};
+use serde::{Deserialize, Serialize};
 
-use crate::categories::{parse_id, serialize_id};
+use crate::categories::{parse_id, present_or_null, serialize_id};
+use crate::db::is_unique_violation;
 use crate::debts::splits::{self, PartOut, Payer};
 use crate::money::{format_amount, parse_positive_amount};
 use crate::vault::AppError;
@@ -67,10 +68,6 @@ pub struct TransactionPatch {
     pub description: Option<Option<String>>,
 }
 
-fn present_or_null<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Option<Option<String>>, D::Error> {
-    Ok(Some(Option::deserialize(deserializer)?))
-}
-
 #[derive(Debug, Clone, Default, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct Filter {
@@ -98,14 +95,10 @@ pub struct Page {
     pub offset: u32,
 }
 
-fn no_controls(text: &str) -> bool {
-    !text.chars().any(char::is_control)
-}
-
 pub(crate) fn clean_name(name: &str) -> Result<String, AppError> {
     let name = name.trim();
     let length = name.chars().count();
-    if length == 0 || length > NAME_MAX_CHARS || !no_controls(name) {
+    if length == 0 || length > NAME_MAX_CHARS || name.chars().any(char::is_control) {
         return Err(AppError::InvalidInput);
     }
     Ok(name.to_string())
@@ -219,13 +212,6 @@ fn category_is_expense(conn: &Connection, id: i64) -> Result<bool, AppError> {
         .is_some())
 }
 
-fn is_uuid_conflict(error: &rusqlite::Error) -> bool {
-    matches!(
-        error,
-        rusqlite::Error::SqliteFailure(e, _) if e.extended_code == rusqlite::ffi::SQLITE_CONSTRAINT_UNIQUE
-    )
-}
-
 /// Creates a transaction, or returns the one already created with the same `client_uuid`.
 pub fn create(conn: &Connection, input: &NewTransaction) -> Result<Transaction, AppError> {
     let name = clean_name(&input.name)?;
@@ -263,7 +249,7 @@ pub fn create(conn: &Connection, input: &NewTransaction) -> Result<Transaction, 
             description,
         }),
         // Lost a race with the same uuid: hand back the winner.
-        Err(e) if is_uuid_conflict(&e) => {
+        Err(e) if is_unique_violation(&e) => {
             uuid.as_deref().map(|u| find_by_uuid(conn, u)).transpose()?.flatten().ok_or(AppError::Internal)
         }
         Err(e) => Err(e.into()),
@@ -591,14 +577,5 @@ mod tests {
             assert_eq!(list(&conn, &filter).err(), Some(AppError::InvalidInput), "{filter:?}");
         }
     }
-
-}
-
-#[cfg(test)]
-mod bench {
-    
-    
-    
-    
 
 }

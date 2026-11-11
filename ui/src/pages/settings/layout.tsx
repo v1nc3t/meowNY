@@ -21,15 +21,13 @@ export function Field({ children }: { children: ReactNode }) {
 /** A yes-or-no setting. The whole row is the label, so tapping anywhere on it flips the switch. */
 export function SwitchRow({
   label,
-  hint,
   aside,
   ...input
-}: Omit<ComponentProps<'input'>, 'type' | 'className'> & { label: string; hint?: ReactNode; /** Shown beside the switch. */ aside?: ReactNode }) {
+}: Omit<ComponentProps<'input'>, 'type' | 'className'> & { label: string; /** Shown beside the switch. */ aside?: ReactNode }) {
   return (
     <label className="settings-row is-switch">
       <span className="settings-row-text">
         <span className="settings-row-label">{label}</span>
-        {hint ? <span className="settings-row-hint">{hint}</span> : null}
       </span>
       <span className="settings-row-control">
         <input type="checkbox" role="switch" className="settings-switch" {...input} />

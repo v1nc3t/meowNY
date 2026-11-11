@@ -44,7 +44,7 @@ const MODE: Param = Param::new("mode", Kind::String, "How the numbers are typed:
 const MINE: Param = Param::new("mine", Kind::String, "Your own value, typed the way the mode says. Leave out for an equal split, or to take the rest in PERCENT and EXACT.");
 const PEOPLE: Param = Param::new("people", Kind::Ids, "The friends the bill is shared with, as ids.");
 const GUESTS: Param = Param::new("guests", Kind::String, "People who are not tracked, by name, separated by commas. Their part leaves your cost and makes no debt.");
-const VALUES: Param = Param::new("values", Kind::String, "The value of each friend, in the order of --people, then of each guest, separated by commas. Not for an equal split.");
+const VALUES: Param = Param::new("values", Kind::String, "The value of each friend, in the order of --people, then of each guest, separated by commas. Not for an equal split. In PERCENT and EXACT one value, here or --mine, may be left empty (30.00,,20.00) and gets the rest.");
 const PAID_BY: Param = Param::new("paidBy", Kind::Id, "The friend who paid the bill, one of --people. Leave out when you paid. Then your part must be above zero: you owe the friend your part, and the others on the bill owe the friend too.");
 
 #[derive(Deserialize)]
@@ -71,7 +71,8 @@ impl SplitArgs {
         };
         let count = self.people.len() + guests.len();
         let values: Vec<Option<String>> = match &self.values {
-            Some(text) => text.split(',').map(|v| Some(v.trim().to_string())).collect(),
+            // an empty one is a value left out: in PERCENT and EXACT, one of them may be, and gets the rest
+            Some(text) => text.split(',').map(|v| Some(v.trim().to_string()).filter(|v| !v.is_empty())).collect(),
             None => vec![None; count],
         };
         if values.len() != count {

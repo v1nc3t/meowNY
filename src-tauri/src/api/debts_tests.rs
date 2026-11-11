@@ -92,6 +92,35 @@ fn a_payment_can_name_the_transaction_it_was_for_and_an_unknown_one_is_refused()
     assert_eq!(story["lines"][1]["transactionDate"], "2026-10-14", "with the day of the transaction, for the screen that opens its month");
 }
 
+#[test]
+fn one_empty_value_gets_the_rest_of_a_split_and_a_friend_can_be_the_one_who_paid() {
+    let (_dir, vault) = seeded();
+    let dinner = first_expense_id(&vault);
+    let anna = id(&ok(&vault, "people.create", json!({ "name": "Anna" })));
+    let bob = id(&ok(&vault, "people.create", json!({ "name": "Bob" })));
+    // `--values 30.00,` leaves Bob's empty: he gets what is left of 100.00 percent, as `mine` left out gets it
+    let rest = ok(&vault, "splits.preview", json!({ "amount": "90.00", "mode": "PERCENT", "mine": "40.00", "people": [anna, bob], "values": "30.00," }));
+    assert_eq!((rest["complete"].as_bool(), rest["parts"][1]["amount"].as_str()), (Some(true), Some("27.00")), "{rest}");
+    let mine = ok(&vault, "splits.preview", json!({ "amount": "90.00", "mode": "PERCENT", "people": [anna, bob], "values": "30.00,30.00" }));
+    assert_eq!(mine["mine"], "36.00", "{mine}");
+    // two empty ones, or one in SHARES, are no split
+    for body in [
+        json!({ "id": dinner, "mode": "PERCENT", "people": [anna, bob], "values": "30.00," }),
+        json!({ "id": dinner, "mode": "SHARES", "mine": "1", "people": [anna, bob], "values": "1," }),
+    ] {
+        let (status, code) = refused(&vault, "transactions.split", body.clone());
+        assert_eq!((status, code.as_str()), INVALID, "{body}");
+    }
+    // a friend who paid: the transaction says so, and an unknown friend or one not on the bill is refused
+    let paid = ok(&vault, "transactions.split", json!({ "id": dinner, "mode": "EQUAL", "people": [anna, bob], "paidBy": anna }));
+    assert_eq!(paid["paidBy"]["name"], "Anna", "{paid}");
+    let again = ok(&vault, "transactions.split", json!({ "id": dinner, "mode": "EQUAL", "people": [anna, bob] }));
+    assert!(again["paidBy"].is_null(), "left out, you paid: {again}");
+    for paid_by in ["99999999", "abc"] {
+        assert_eq!(refused(&vault, "transactions.split", json!({ "id": dinner, "mode": "EQUAL", "people": [anna], "paidBy": paid_by })).0, 400, "{paid_by}");
+    }
+}
+
 // ---- the file ---------------------------------------------------------------------------------
 
 #[test]

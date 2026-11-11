@@ -66,7 +66,6 @@ export default function PhoneSyncBlock({ locale, timezone }: { locale: string; t
 
   return (
     <div className="settings-stack">
-
       <h3 className="settings-subtitle">{t('sync.devices')}</h3>
       {devices && devices.length === 0 && <p className="hint">{t('sync.noDevices')}</p>}
       {devices && devices.length > 0 && (
@@ -75,21 +74,25 @@ export default function PhoneSyncBlock({ locale, timezone }: { locale: string; t
             <Row
               key={device.deviceId}
               actions={
+                <Button variant="outline" size="sm" className="row-primary" disabled={!idle || removing === device.deviceId} onClick={() => setRemoving(device.deviceId)}>
+                  {t('sync.remove')}
+                </Button>
+              }
+              note={
                 removing === device.deviceId ? (
                   <>
-                    <Button variant="destructive" size="sm" onClick={() => void onRemove(device.deviceId)}>
-                      {t('sync.removeYes')}
-                    </Button>
-                    {/* The cancel button takes the focus, so that Enter again does not remove the phone. */}
-                    <Button variant="outline" size="sm" autoFocus onClick={() => setRemoving(null)}>
-                      {t('common.cancel')}
-                    </Button>
+                    <span>{t('sync.removeAsk')}</span>
+                    <span className="cell-answers">
+                      <Button variant="destructive" size="sm" onClick={() => void onRemove(device.deviceId)}>
+                        {t('sync.removeYes')}
+                      </Button>
+                      {/* The cancel button takes the focus, so that Enter again does not remove the phone. */}
+                      <Button variant="outline" size="sm" autoFocus onClick={() => setRemoving(null)}>
+                        {t('common.cancel')}
+                      </Button>
+                    </span>
                   </>
-                ) : (
-                  <Button variant="outline" size="sm" className="row-primary" disabled={!idle} onClick={() => setRemoving(device.deviceId)}>
-                    {t('sync.remove')}
-                  </Button>
-                )
+                ) : null
               }
             >
               <div className="cell-name">
@@ -108,7 +111,6 @@ export default function PhoneSyncBlock({ locale, timezone }: { locale: string; t
           ))}
         </Table>
       )}
-      {removing && <p className="hint">{t('sync.removeAsk')}</p>}
       {devices
         ?.filter((device) => device.currencyBehind)
         .map((device) => (

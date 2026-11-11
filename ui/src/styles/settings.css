@@ -86,6 +86,12 @@
 /* The foot of a lock screen (components/AppFooter.tsx) is at the bottom of the screen, under the card and never over it, across its width. */
 .gate:has(> .app-footer) {
   grid-template-rows: auto 1fr;
+  /* the foot is the last thing on the screen: a little room under it, not the room under a card */
+  padding-bottom: 0.5rem;
+}
+
+html.is-phone .gate:has(> .app-footer) {
+  padding-bottom: calc(0.5rem + env(safe-area-inset-bottom, 0px));
 }
 
 .gate > .app-footer {
@@ -252,10 +258,15 @@
   gap: 0.75rem;
 }
 
+/* This page is the phone's: a button is as wide as the fields above it, one under the other. */
 .settings-block .actions {
   display: flex;
-  flex-wrap: wrap;
+  flex-direction: column;
   gap: 0.5rem;
+}
+
+.settings-block .actions > .ui-btn {
+  width: 100%;
 }
 
 .settings-block .panel {
@@ -270,8 +281,9 @@
    run to the right edge, while a control keeps a sensible width. Narrow: the list is a row of tabs above the section. Phone: the
    list is the page, and a section opens in place of it. */
 .settings-page {
-  /* The columns of a row: its name (a third of the row, but 14 to 26rem), then its control (a control is at most this wide). */
-  --row-cols: minmax(0, clamp(14rem, 30%, 26rem)) minmax(0, 1fr);
+  /* The name of a row is a third of the section, but 14 to 26rem (cqw: of the section, so a row inside a box has the same). A control is
+     at most --control-max wide. */
+  --label-col: clamp(14rem, 30cqw, 26rem);
   --control-max: 28rem;
 }
 
@@ -326,19 +338,8 @@
   container-type: inline-size;
 }
 
-/* A section with no room for a name beside its control (a narrow window with the sidebar open): the name goes above the control. */
-@container (max-width: 36rem) {
-  .settings-row {
-    --row-cols: minmax(0, 1fr);
-  }
-}
-
 .settings-section-head h2 {
   margin: 0;
-  font-size: 1.125rem;
-  font-weight: 600;
-  line-height: 1.3;
-  letter-spacing: -0.01em;
 }
 
 .settings-back {
@@ -380,6 +381,7 @@
 }
 
 .settings-row {
+  --row-cols: minmax(0, var(--label-col)) minmax(0, 1fr);
   display: grid;
   grid-template-columns: var(--row-cols);
   align-items: center;
@@ -388,6 +390,20 @@
   min-height: 3.5rem;
   padding: 0.875rem 0;
   border-bottom: 1px solid var(--border);
+}
+
+/* A section with no room for a name beside its control (a narrow window with the sidebar open): the name goes above the control, which
+   is as wide as the section like the lists are, and a switch stays at the right end of its name's line. */
+@container (max-width: 36rem) {
+  .settings-row {
+    --row-cols: minmax(0, 1fr);
+    --control-max: none;
+  }
+
+  .settings-row.is-switch {
+    --row-cols: minmax(0, 1fr) auto;
+    column-gap: 1rem;
+  }
 }
 
 /* A field brings its own label; it fills the row and lines up with the others. */
@@ -511,9 +527,11 @@
   cursor: not-allowed;
 }
 
-/* The text size slider: a flat track and a square knob in the main colour, like the switch. The app runs in WebKit and Chromium web views. */
+/* The text size slider: a flat track and a square knob in the main colour, like the switch. The app runs in WebKit and Chromium web views.
+   Its 2px margin of its own is gone, so the track runs from edge to edge of the fields above it. */
 .settings-rows input.settings-range {
   appearance: none;
+  margin-inline: 0;
   padding: 0;
   border: 0;
   box-shadow: none;
@@ -556,8 +574,10 @@
   font-size: 0.875rem;
 }
 
-/* What cannot be undone: a red outline round the form. */
+/* What cannot be undone: a red outline round the form. Its edge (the padding and the line) takes room from the name column, so the fields
+   inside start where the fields of the rows outside it do. */
 .settings-danger {
+  --label-col: calc(clamp(14rem, 30cqw, 26rem) - 1rem - 1px);
   padding: 1rem;
   border: 1px solid var(--destructive);
   border-radius: var(--radius-lg);
@@ -576,14 +596,11 @@
 }
 
 /* The foot of the settings (components/AppFooter.tsx), across the whole page. The page lines its children up at the start, so the
-   footer stretches itself; its own background repaints the whole strip (WebKitGTK left stale lines there). A little room under the
-   text keeps it clear of the window's edge; the strip stays low. */
+   footer stretches itself; its own background repaints the whole strip (WebKitGTK left stale lines there). */
 .settings-page .app-footer {
   align-self: stretch;
   /* As wide as the rows above, which keep a gutter on the right for the scroll bar. */
   width: calc(100% - var(--room));
-  padding: 0.5rem 0;
-  border-top: 1px solid var(--border);
   background: var(--background);
 }
 
@@ -593,11 +610,11 @@
   margin: 0;
 }
 
-/* The tokens: the name gets the room (a long one wraps; about 11rem at 1280px, where the section is 42rem wide), the access and the times
-   are at least as wide as their longest word (the times wrap at their spaces, in small print: 11 characters, 8 for the access), and
-   the last column is as wide as its button (the head has a hidden copy of the word, so both are the same in every language). */
+/* The tokens: the name takes what the rest leaves (a long one wraps), the access and each time are columns in ch (the width of a character
+   of 1rem: "read and write" is 14 characters and "19 Dec 2026, 10:30" 18, of 0.875rem), and the last column is as wide as its button (the
+   head has a hidden copy of the word, so both are the same in every language). The columns need 52em; a narrower table is lines (below). */
 .card-list.token-table {
-  --cols: minmax(0, 2.4fr) minmax(8ch, 0.75fr) minmax(11ch, 1fr) minmax(11ch, 1fr) max-content;
+  --cols: minmax(0, 1fr) 13ch 17ch 17ch max-content;
 }
 
 ul.card-list.token-table > li.card-item,
@@ -616,10 +633,11 @@ ul.card-list.token-table > li.list-head {
   visibility: hidden;
 }
 
-/* The paired phones, the same way. The last column is as wide as "ja, entfernen" (the widest of "yes, remove" in the languages), and the
-   button to cancel wraps under it. */
+/* The paired phones: the name takes what the rest leaves. Each date is a column of 17ch (a column in ch is the width of a character of 1rem,
+   and "20 Oct 2026, 11:30" is 18 characters of 0.875rem), so a date is on one line, and the button is as wide as "entfernen", the longest
+   of "remove" in the languages. Longer dates (with AM and PM) wrap at their comma. */
 .card-list.device-table {
-  --cols: minmax(0, 2fr) minmax(11ch, 1fr) minmax(11ch, 1.2fr) 8.75rem;
+  --cols: minmax(0, 1fr) 17ch 17ch 7rem;
 }
 
 .token-table .cell-sub,
@@ -636,12 +654,36 @@ ul.card-list.token-table > li.list-head {
   color: var(--muted-foreground);
 }
 
-.device-table .cell-actions {
+/* The question to remove a phone is under its row: the words at the left, the two answers at the right, where the button of the row above
+   them is. (The note of a row is red where a file is missing; this one is only a question.) */
+.device-table .cell-note {
+  display: flex;
   flex-wrap: wrap;
-  gap: 0.25rem;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem 1rem;
+  padding-bottom: 0.5rem;
+  font-size: 0.875rem;
+  color: var(--muted-foreground);
 }
 
-@container (max-width: 40em) {
+.cell-answers {
+  display: flex;
+  gap: 0.5rem;
+  margin-left: auto;
+}
+
+/* A table with no room for its columns: no head, and a row is the name with its button, then a line for each of the others, which say
+   what they are (the generic rules for 40em, in primitives.css, do the same with two lines). */
+@container (max-width: 52em) {
+  ul.card-list.token-table > li.list-head {
+    display: none;
+  }
+
+  ul.card-list.token-table > li.list-head + li {
+    border-top: 0;
+  }
+
   ul.card-list.token-table > li.card-item {
     grid-template-columns: minmax(0, 1fr) auto;
     grid-template-areas:
@@ -649,9 +691,19 @@ ul.card-list.token-table > li.list-head {
       'sub sub'
       'sub-end sub-end'
       'extra extra';
+    row-gap: 0;
   }
 
-  ul.card-list.token-table .cell-sub-end {
+  .token-table .cell-name {
+    grid-area: name;
+  }
+
+  .token-table .cell-sub {
+    grid-area: sub;
+  }
+
+  .token-table .cell-sub-end {
+    grid-area: sub-end;
     text-align: left;
   }
 
@@ -659,6 +711,16 @@ ul.card-list.token-table > li.list-head {
     grid-area: extra;
   }
 
+  .token-table .cell-actions {
+    grid-area: actions;
+  }
+
+  .token-table [data-label]::before {
+    content: attr(data-label) ' ';
+  }
+}
+
+@container (max-width: 40em) {
   ul.card-list.device-table > li.card-item {
     grid-template-columns: minmax(0, 1fr) auto;
     grid-template-areas:
@@ -671,7 +733,6 @@ ul.card-list.token-table > li.list-head {
     text-align: left;
   }
 
-  .token-table [data-label]::before,
   .device-table [data-label]::before {
     content: attr(data-label) ' ';
   }
@@ -682,10 +743,6 @@ ul.card-list.token-table > li.list-head {
   white-space: normal;
 }
 
-.settings-section .sync-panel {
-  max-width: 32rem;
-}
-
 .card-item.is-expired .card-name,
 .card-item.is-expired .cell-sub,
 .card-item.is-expired .cell-sub-end {
@@ -694,8 +751,13 @@ ul.card-list.token-table > li.list-head {
 
 /* A narrow window: the sections are tabs in a row above the section, and a row stacks its name above its control. */
 @media (max-width: 48em) {
-  .settings-page {
+  .settings-row {
     --row-cols: minmax(0, 1fr);
+  }
+
+  .settings-row.is-switch {
+    --row-cols: minmax(0, 1fr) auto;
+    column-gap: 1rem;
   }
 
   .settings-layout {
@@ -726,10 +788,13 @@ ul.card-list.token-table > li.list-head {
 }
 
 /* The phone: a grouped list of sections, then one section at a time with fields stacked and full width. The foot ends the page: at
-   the bottom when the page is short, after the last row when it is long (the pane leaves room under it for the add button). */
+   the bottom when the page is short, after the last row when it is long. */
 .settings-page.on-phone {
-  --row-cols: minmax(0, 1fr);
   --control-max: none;
+}
+
+.settings-page.on-phone .settings-row {
+  --row-cols: minmax(0, 1fr);
 }
 
 .settings-page.on-phone .settings-layout {
@@ -743,15 +808,17 @@ ul.card-list.token-table > li.list-head {
   flex-shrink: 0;
 }
 
-/* A phone has overlay scroll bars: no wide gutter on the right, so the list is as far from the edge on both sides. */
-.settings-page.on-phone > .tx-pane.wide {
+/* A phone has overlay scroll bars: no wide gutter on the right, so the list is as far from the edge on both sides. These pages have no round
+   add button, so the room that the lists keep under their last row for it is not kept here: the foot sits right above the tabs. (The long
+   selector is to be above the lists' rule in phone.css.) */
+.app-shell.is-phone .app-main > main > section.settings-page > .tx-pane.wide {
   padding-right: var(--edge);
+  padding-bottom: var(--edge);
 }
 
 .settings-page.on-phone .app-footer {
   width: 100%;
   margin-top: auto;
-  padding-bottom: 0;
 }
 
 .settings-list {
@@ -822,16 +889,16 @@ ul.card-list.token-table > li.list-head {
 /* A QR code is always dark on white, whatever the theme: a camera needs that contrast. */
 .qr {
   display: block;
-  align-self: center;
-  width: min(100%, 20rem);
+  width: min(100%, 16rem);
   height: auto;
   border-radius: var(--radius-md);
   background: #fff; /* fixed: a QR code must be dark on white to scan */
 }
 
+/* What a pairing or a sync says, in a box as wide as the content, and everything in it on its left edge. */
 .sync-panel {
   width: 100%;
-  padding: 1rem;
+  padding: 1.25rem;
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
 }
@@ -840,19 +907,50 @@ ul.card-list.token-table > li.list-head {
   margin: 0;
 }
 
+/* The phone's box has the side room of the rows of the list above it (1rem), so the text of both lines up. */
+html.is-phone .sync-panel {
+  padding: 1rem;
+}
+
 .sync-countdown {
   margin: 0;
-  font-family: var(--font);
   font-size: 0.875rem;
-  text-align: center;
   color: var(--foreground);
+}
+
+/* The code to scan: the code at the left, and beside it the address, the time left and the button to stop, which sits level with the
+   foot of the code. With no room beside the code (a narrow section) they go under it. */
+.sync-wait {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.sync-wait .actions {
+  margin-top: 0.5rem;
+}
+
+@container (min-width: 30rem) {
+  .sync-panel.is-waiting {
+    flex-direction: row;
+    gap: 1.5rem;
+  }
+
+  .sync-panel.is-waiting .qr {
+    flex: none;
+    width: 16rem;
+  }
+
+  .sync-panel.is-waiting .sync-wait .actions {
+    margin-top: auto;
+  }
 }
 
 /* The six digits that the person compares with the other screen. */
 .check-code {
+  align-self: flex-start;
   margin: 0;
-  width: 100%;
-  padding: 1rem 1.5rem;
+  padding: 0.75rem 1.5rem;
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   background: var(--muted);
@@ -860,7 +958,6 @@ ul.card-list.token-table > li.list-head {
   font-size: clamp(1.75rem, 1rem + 5vw, 2.5rem);
   font-weight: 600;
   letter-spacing: 0.2em;
-  text-align: center;
   color: var(--foreground);
   user-select: none;
 }
@@ -919,6 +1016,12 @@ html.is-phone .gate > .decrypting:not(.is-below) {
   min-height: calc(100dvh - 10dvh - 2rem - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
 }
 
+/* The card of a password screen is as wide as the boxes of the other pages: its frame and shadow take the 8px of its margins, so they
+   end on the page's 14px sides (at 390px; at 360px it is already as wide as the screen allows). */
+html.is-phone .gate > :is(form:not(.onboard-form), .panel:not(.onboard-welcome)) {
+  width: calc(100% - 8px);
+}
+
 /* The show button fills the 44px field. */
 html.is-phone .field-input button {
   top: 0;
@@ -938,11 +1041,9 @@ html.is-phone .field-input button {
   margin-top: 0.5rem;
 }
 
-/* Typing the six digits on the phone. */
+/* Typing the six digits on the phone: as wide as the label above it, the digits in the middle of the field. */
 .digits-input {
-  max-width: 14rem;
   height: 3rem;
-  align-self: center;
   font-size: 1.75rem;
   letter-spacing: 0.4em;
   text-align: center;
@@ -959,10 +1060,12 @@ html.is-phone .field-input button {
   margin: 0;
 }
 
+/* The two "all from" buttons are two equal columns, with the gap of the versions under them, so each is over its own version; where
+   there is no room for two (a phone) they are one under the other, as wide as the dialog. */
 .review-all {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 15rem), 1fr));
+  gap: 0.75rem;
 }
 
 fieldset.conflict {
@@ -974,7 +1077,7 @@ fieldset.conflict {
 }
 
 .conflict legend {
-  padding-right: 0.75rem;
+  padding: 0 0.75rem 0 0;
   color: var(--foreground);
   font-size: 0.875rem;
   font-weight: 600;

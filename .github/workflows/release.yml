@@ -52,8 +52,14 @@ jobs:
           ref: main
 
       # The docs are recorded by running the command line against the app's own code, which needs the app's libraries.
+      # kernel.org's Ubuntu mirror first: the runners' own stopped answering them on 2026-11-11 (see ci.yml).
       - name: Install Linux libraries
+        timeout-minutes: 10
         run: |
+          if [ -f /etc/apt/apt-mirrors.txt ]; then
+            { printf 'http://mirrors.edge.kernel.org/ubuntu/\tpriority:0\n'; cat /etc/apt/apt-mirrors.txt; } | sudo tee /etc/apt/apt-mirrors.new >/dev/null
+            sudo mv /etc/apt/apt-mirrors.new /etc/apt/apt-mirrors.txt
+          fi
           sudo apt-get update
           sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev libssl-dev build-essential pkg-config
 
@@ -128,8 +134,14 @@ jobs:
         with:
           ref: ${{ needs.version.outputs.ref }}
 
+      # kernel.org's Ubuntu mirror first: the runners' own stopped answering them on 2026-11-11 (see ci.yml).
       - name: Install Linux libraries
+        timeout-minutes: 10
         run: |
+          if [ -f /etc/apt/apt-mirrors.txt ]; then
+            { printf 'http://mirrors.edge.kernel.org/ubuntu/\tpriority:0\n'; cat /etc/apt/apt-mirrors.txt; } | sudo tee /etc/apt/apt-mirrors.new >/dev/null
+            sudo mv /etc/apt/apt-mirrors.new /etc/apt/apt-mirrors.txt
+          fi
           sudo apt-get update
           sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev libssl-dev build-essential pkg-config file
 

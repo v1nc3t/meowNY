@@ -191,10 +191,12 @@ impl Channel {
     }
 
     /// A handle that can end this connection from another thread (a cancel button), which makes a blocked read fail at once.
+    #[cfg(test)]
     pub fn closer(&self) -> Option<TcpStream> {
         self.stream.try_clone().ok()
     }
 
+    #[cfg(test)]
     pub fn close(&mut self) {
         self.session.close();
         let _ = self.stream.shutdown(Shutdown::Both);

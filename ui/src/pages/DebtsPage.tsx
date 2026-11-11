@@ -255,10 +255,10 @@ function DebtsView({ settings, now }: { settings: MoneySettings; now: Today }) {
         }
         amount={<span className={`cell-amount debt-${tone}`}>{tone === 'even' ? '' : money(abs)}</span>}
         sub={
-          <>
+          <span>
             <span className={`debt-${tone}`}>{statusText(tone)}</span>
-            {reminded ? <span className="is-line">{t('debts.dueBadge', { date: formatDate(dueOn.get(person.id) ?? '', settings.locale) })}</span> : null}
-          </>
+            {reminded ? <span>{t('debts.dueBadge', { date: formatDate(dueOn.get(person.id) ?? '', settings.locale) })}</span> : null}
+          </span>
         }
       >
         <div className="row-panel-actions">

@@ -267,12 +267,14 @@ function DocumentsView({ settings }: { settings: MoneySettings }) {
     )
   }
 
-  // A phone row: the name and the size, the day and where the file is under them. It opens to a labelled button for each thing to do
-  // (a file that stays on the computer gets a note and a button to keep it, instead of the preview; the note then replaces the small line;
-  // any other gets the box to keep it on the phone).
+  // A phone row: the name and the size, the day and where the file is under them (or that it is kept on the phone). It opens to a labelled
+  // button for each thing to do (a file that stays on the computer gets a note and a button to keep it, instead of the preview; the note
+  // then replaces the small line; any other gets the box to keep it on the phone).
   function tapRow(doc: Doc) {
     const state = stateOf(doc)
     const offer = canKeepToPreview(doc, phone)
+    const where = state && !(offer && rows.isOpen(doc.id)) ? t(state) : doc.keepOnPhone ? t('docs.keepOnPhone') : null
+    const day = formatDate(doc.documentDate, locale)
     return (
       <TapRow
         key={doc.id}
@@ -281,13 +283,7 @@ function DocumentsView({ settings }: { settings: MoneySettings }) {
         onToggle={() => rows.toggle(doc.id)}
         name={doc.name}
         amount={<span className="cell-size">{formatSize(doc.sizeBytes, locale)}</span>}
-        sub={
-          <>
-            <span>{formatDate(doc.documentDate, locale)}</span>
-            {doc.keepOnPhone ? <span className="row-mark">{t('docs.keepOnPhone')}</span> : null}
-            {state && !(offer && rows.isOpen(doc.id)) ? <span className="is-line">{t(state)}</span> : null}
-          </>
-        }
+        sub={<span>{where ? `${day} · ${where}` : day}</span>}
       >
         {doc.linkCount > 0 ? (
           <section className="detail-section">

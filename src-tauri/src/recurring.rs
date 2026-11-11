@@ -4,9 +4,10 @@
 
 use chrono::{Days, Months, NaiveDate};
 use rusqlite::{params, Connection, OptionalExtension};
-use serde::{Deserialize, Deserializer, Serialize};
+use serde::{Deserialize, Serialize};
 
-use crate::categories::{parse_id, serialize_id};
+use crate::categories::{parse_id, present_or_null, serialize_id};
+use crate::db::is_unique_violation;
 use crate::debts::splits::{self, Template};
 use crate::money::{format_amount, parse_positive_amount};
 use crate::transactions::{category_is_active, clean_date, clean_description, clean_name};
@@ -103,10 +104,6 @@ pub struct RecurringPatch {
     pub end_date: Option<Option<String>>,
     #[serde(default, deserialize_with = "present_or_null")]
     pub description: Option<Option<String>>,
-}
-
-fn present_or_null<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Option<Option<String>>, D::Error> {
-    Ok(Some(Option::deserialize(deserializer)?))
 }
 
 fn parse_date(text: &str) -> Result<NaiveDate, AppError> {
@@ -281,7 +278,7 @@ pub fn update(conn: &Connection, id: i64, patch: &RecurringPatch) -> Result<Recu
         let old = parse_date(&current.next_due_date)?;
         first_on_or_after(start, unit, count, old).ok_or(AppError::InvalidInput)?.to_string()
     } else {
-        current.next_due_date.clone()
+        current.next_due_date
     };
 
     conn.execute(
@@ -407,13 +404,6 @@ fn find_active(conn: &Connection, id: i64) -> Result<Recurring, AppError> {
     }
 }
 
-fn is_unique_conflict(error: &rusqlite::Error) -> bool {
-    matches!(
-        error,
-        rusqlite::Error::SqliteFailure(e, _) if e.extended_code == rusqlite::ffi::SQLITE_CONSTRAINT_UNIQUE
-    )
-}
-
 /// Which occurrence a payment or a skip is for: `None` for the next one (no date, or its date), `Some(date)` for a later one.
 /// A later date must be an occurrence on or before the end date that is neither paid nor skipped. Anything else is refused.
 fn later_occurrence(conn: &Connection, item: &Recurring, due_date: Option<&str>) -> Result<Option<String>, AppError> {
@@ -471,7 +461,7 @@ pub fn pay(
     );
     match inserted {
         Ok(_) => {}
-        Err(e) if is_unique_conflict(&e) => return Err(AppError::InvalidInput),
+        Err(e) if is_unique_violation(&e) => return Err(AppError::InvalidInput),
         Err(e) => return Err(e.into()),
     }
     let created = tx.last_insert_rowid();

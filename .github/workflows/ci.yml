@@ -67,6 +67,7 @@ jobs:
     if: github.event_name != 'schedule'
     name: desktop (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:
@@ -74,9 +75,18 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # The runners' own Ubuntu mirrors (Azure's, then Canonical's, in /etc/apt/apt-mirrors.txt) stopped answering them on 2026-11-11,
+      # so kernel.org's mirror is tried first and theirs stay behind it. A runner that reaches none waits 20 s on each package (once
+      # over an hour): stop after 10 minutes and run it again.
       - name: Install Linux libraries
         if: runner.os == 'Linux'
+        timeout-minutes: 10
         run: |
+          if [ -f /etc/apt/apt-mirrors.txt ]; then
+            { printf 'http://mirrors.edge.kernel.org/ubuntu/\tpriority:0\n'; cat /etc/apt/apt-mirrors.txt; } | sudo tee /etc/apt/apt-mirrors.new >/dev/null
+            sudo mv /etc/apt/apt-mirrors.new /etc/apt/apt-mirrors.txt
+            cat /etc/apt/apt-mirrors.txt
+          fi
           sudo apt-get update
           sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev libssl-dev build-essential pkg-config
 

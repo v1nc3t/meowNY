@@ -122,21 +122,6 @@ pub(crate) fn next_month(first: NaiveDate) -> Result<NaiveDate, AppError> {
     NaiveDate::from_ymd_opt(year, month, 1).ok_or(AppError::InvalidInput)
 }
 
-pub(crate) fn kind_sql(kind: CategoryType) -> &'static str {
-    match kind {
-        CategoryType::Income => "INCOME",
-        CategoryType::Expense => "EXPENSE",
-    }
-}
-
-fn kind_from_sql(text: &str) -> Result<CategoryType, AppError> {
-    match text {
-        "INCOME" => Ok(CategoryType::Income),
-        "EXPENSE" => Ok(CategoryType::Expense),
-        _ => Err(AppError::Internal),
-    }
-}
-
 /// The limit a budget series shows in the month starting `start`: its latest row at or before it.
 pub(crate) fn series_limit(conn: &Connection, kind: &str, category_id: Option<i64>, start: &str) -> Result<Option<i64>, AppError> {
     Ok(conn
@@ -176,7 +161,7 @@ pub fn set_span(conn: &Connection, input: &SetBudget, now: DateTime<Utc>, span: 
     let first = month_start(&input.month)?;
     let start = first.to_string();
     let limit = input.amount_limit.as_deref().map(parse_amount).transpose()?;
-    let kind = kind_sql(input.kind);
+    let kind = input.kind.as_sql();
 
     let timezone: String = conn.query_row("SELECT timezone FROM settings WHERE id = 1", [], |r| r.get(0))?;
     let current = clock::month_start(now, &timezone)?;
@@ -349,7 +334,7 @@ pub(crate) fn effective(conn: &Connection, start: &str) -> Result<Vec<Effective>
     rows.map(|row| {
         let (kind, scope, category_id, limit_minor) = row?;
         let scope = if scope == "GLOBAL" { Scope::Global } else { Scope::Category };
-        Ok(Effective { kind: kind_from_sql(&kind)?, scope, category_id, limit_minor })
+        Ok(Effective { kind: CategoryType::from_sql(&kind)?, scope, category_id, limit_minor })
     })
     .collect()
 }
@@ -360,7 +345,7 @@ fn actual_minor(conn: &Connection, kind: CategoryType, start: &str, end: &str) -
         "SELECT COALESCE(SUM(t.cost_minor), 0), COALESCE(SUM(CASE WHEN c.deleted_at IS NULL OR c.deleted_at >= ?3 THEN t.cost_minor END), 0)
          FROM transaction_costs t JOIN categories c ON c.id = t.category_id
          WHERE c.type = ?1 AND t.payment_date >= ?2 AND t.payment_date < ?3",
-        params![kind_sql(kind), start, end],
+        params![kind.as_sql(), start, end],
         |r| Ok((r.get(0)?, r.get(1)?)),
     )?)
 }
@@ -374,7 +359,7 @@ fn spent_by_category(conn: &Connection, kind: CategoryType, start: &str, end: &s
          WHERE c.type = ?1 AND t.payment_date >= ?2 AND t.payment_date < ?3 AND (c.deleted_at IS NULL OR c.deleted_at >= ?3)
          GROUP BY t.category_id ORDER BY t.category_id",
     )?;
-    let rows = statement.query_map(params![kind_sql(kind), start, end], |r| Ok((r.get::<_, i64>(0)?, r.get::<_, i64>(1)?)))?;
+    let rows = statement.query_map(params![kind.as_sql(), start, end], |r| Ok((r.get::<_, i64>(0)?, r.get::<_, i64>(1)?)))?;
     rows.map(|row| {
         let (id, minor) = row?;
         Ok(CategorySum { category_id: id.to_string(), amount: format_amount(minor) })
@@ -456,7 +441,7 @@ pub fn history(conn: &Connection, now: DateTime<Utc>) -> Result<Vec<MonthHistory
     )?;
     for row in statement.query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?, r.get::<_, Option<i64>>(2)?)))? {
         let (kind, from, limit) = row?;
-        limits.entry(kind_sql(kind_from_sql(&kind)?)).or_default().push((from, limit));
+        limits.entry(CategoryType::from_sql(&kind)?.as_sql()).or_default().push((from, limit));
     }
 
     // What was spent and earned in every month, in one pass over the transactions.
@@ -470,15 +455,15 @@ pub fn history(conn: &Connection, now: DateTime<Utc>) -> Result<Vec<MonthHistory
     let range = (first.to_string(), after_current.to_string());
     for row in statement.query_map([&range.0, &range.1], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?, r.get::<_, i64>(2)?)))? {
         let (month, kind, sum) = row?;
-        actuals.insert((month, kind_sql(kind_from_sql(&kind)?)), sum);
+        actuals.insert((month, CategoryType::from_sql(&kind)?.as_sql()), sum);
     }
 
     let budgeted = |kind: CategoryType, start: &str| -> Option<String> {
-        let rows = limits.get(kind_sql(kind))?;
+        let rows = limits.get(kind.as_sql())?;
         let upto = rows.partition_point(|(from, _)| from.as_str() <= start);
         rows[..upto].last().and_then(|(_, limit)| *limit).map(format_amount)
     };
-    let actual = |month: &str, kind: CategoryType| format_amount(actuals.get(&(month.to_string(), kind_sql(kind))).copied().unwrap_or(0));
+    let actual = |month: &str, kind: CategoryType| format_amount(actuals.get(&(month.to_string(), kind.as_sql())).copied().unwrap_or(0));
 
     let mut rows = Vec::new();
     let mut month = first;
