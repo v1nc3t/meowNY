@@ -551,21 +551,6 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
     )
   }
 
-  /** The small marks of a phone row, after its category: shared with friends and a note. (The desktop's rows have a column for shared.) */
-  function marks(transaction: Transaction) {
-    return (
-      <>
-        {isShared(transaction) ? <span className="row-mark">{t('tx.shared')}</span> : null}
-        {transaction.description?.trim() ? (
-          <span className="row-mark-icon" title={t('common.description')}>
-            <Icon name="note" className="mark-icon" />
-            <span className="sr-only">{t('common.description')}</span>
-          </span>
-        ) : null}
-      </>
-    )
-  }
-
   // A desktop row: name, amount, date, category, an icon if it is shared, then edit, delete and (when there is more to show) the chevron.
   function tableRow(transaction: Transaction) {
     const count = clips[transaction.id] ?? 0
@@ -604,8 +589,8 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
     )
   }
 
-  // A phone row: one button with the name and amount, the category and marks under them. It opens to the details and to labelled
-  // buttons for everything that can be done with the transaction.
+  // A phone row: one button with the name and amount, the category (and "shared") under them. It opens to the details, the description
+  // and the documents, and to labelled buttons for everything that can be done with the transaction.
   function tapRow(transaction: Transaction) {
     const count = clips[transaction.id] ?? 0
     return (
@@ -620,14 +605,7 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
         sub={
           <>
             <span>{categoryName(transaction)}</span>
-            {marks(transaction)}
-            {count ? (
-              <span className="row-mark-icon">
-                <Icon name="clip" className="mark-icon" />
-                <span aria-hidden="true">{count}</span>
-                <span className="sr-only">{t('docs.clip', { count })}</span>
-              </span>
-            ) : null}
+            {isShared(transaction) ? <span>{t('tx.shared')}</span> : null}
           </>
         }
       >

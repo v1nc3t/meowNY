@@ -557,7 +557,7 @@ ul.card-list > li.list-head > .is-end {
   height: 2rem;
 }
 
-/* Small grey words after a name: shared, a note, the documents. */
+/* Small grey words after a name (removed, income, deleted later), and the icon of a shared item in a desktop row. */
 .row-mark {
   flex: none;
   font-size: 0.75rem;
@@ -569,8 +569,6 @@ ul.card-list > li.list-head > .is-end {
   display: inline-flex;
   flex: none;
   align-items: center;
-  gap: 0.25rem;
-  font-size: 0.8125rem;
   color: var(--muted-foreground);
 }
 
@@ -676,13 +674,34 @@ ul.card-list > li.card-item.tap-row {
   align-self: start;
 }
 
+/* The line under the name is one line of small grey parts, each after a dot (also the parts inside the first). When it is too long the
+   first part is cut with an ellipsis (the category, what it was; four characters stay, so the line does not start with a dot), so the
+   date or the state at the end stays whole. In a language with long words and on a narrow screen the end may still be cut. A part with
+   `.is-line` is a line of its own. */
 .row-toggle > .cell-sub {
   grid-area: sub;
   display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.25rem 0.5rem;
-  white-space: normal;
+}
+
+.row-toggle > .cell-sub > * {
+  flex: none;
+}
+
+.row-toggle > .cell-sub > :first-child {
+  flex: 0 1 auto;
+  min-width: 4ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.row-toggle > .cell-sub span + span:not(.is-line)::before {
+  content: '·';
+  margin-inline: 0.25rem;
+  color: var(--muted-foreground);
+}
+
+.row-toggle > .cell-sub:has(> .is-line) {
+  flex-direction: column;
 }
 
 .row-toggle > .chevron {

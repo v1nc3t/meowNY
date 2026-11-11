@@ -128,11 +128,9 @@ export default function FriendLedger({
   const { tone, abs } = balanceView(person.balance)
   // Beside the name, so the short words of the list of friends: "you owe €0.35", "owes you €0.35".
   const summaryText = tone === 'even' ? t('debts.settledUp') : `${t(tone === 'owed' ? 'debts.labelOwesYou' : 'debts.labelYouOwe')} ${money(abs)}`
+  const kindOf = (line: Line) => t(`debts.kind.${line.kind}`)
   // A bill's name is in its label; an entry's note is not, it is in the panel of its row.
-  const lineLabel = (line: Line) => {
-    const kind = t(`debts.kind.${line.kind}`)
-    return line.what && !noteOf(line) ? `${kind}: ${line.what}` : kind
-  }
+  const lineLabel = (line: Line) => (line.what && !noteOf(line) ? `${kindOf(line)}: ${line.what}` : kindOf(line))
   const effectText = (line: Line) => `${line.effect.startsWith('-') ? '-' : '+'}${money(line.effect.replace('-', ''))}`
   const lineKey = (line: Line, at: number) => `${line.entryId ?? 'bill'}-${line.transactionId ?? ''}-${at}`
   const lineItem = (line: Line) => (line.entryId ? `ledger_entry:${line.entryId}` : undefined)
@@ -190,8 +188,8 @@ export default function FriendLedger({
     )
   }
 
-  // A phone row: what it was and how much it changed, the balance under them. It opens to its note, its documents and a labelled button
-  // for each thing that can be done; a line with none of them is plain.
+  // A phone row: what kind of line it was and how much it changed, a bill's name and the balance under them. It opens to its note, its
+  // documents and a labelled button for each thing that can be done; a line with none of them is plain.
   function tapRow(line: Line) {
     const entry = entryOfLine(line, person.id)
     const count = line.entryId ? (clips[line.entryId] ?? 0) : 0
@@ -205,18 +203,12 @@ export default function FriendLedger({
         item={lineItem(line)}
         open={rows.isOpen(key)}
         onToggle={() => rows.toggle(key)}
-        name={lineLabel(line)}
+        name={kindOf(line)}
         amount={change(line)}
         sub={
           <>
+            {line.what && !note ? <span>{line.what}</span> : null}
             <span>{`${t('debts.balance')} ${money(line.balance)}`}</span>
-            {count ? (
-              <span className="row-mark-icon">
-                <Icon name="clip" className="mark-icon" />
-                <span aria-hidden="true">{count}</span>
-                <span className="sr-only">{t('docs.clip', { count })}</span>
-              </span>
-            ) : null}
           </>
         }
       >

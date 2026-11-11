@@ -401,7 +401,7 @@ const SECTIONS = [
       {
         t: 'ul',
         items: [
-          'Dashboard, transactions, recurring, debts and categories are tabs at the bottom. Documents, sync, settings and lock are the icons in the top bar.',
+          'Dashboard, transactions, categories, recurring and debts are tabs at the bottom. Documents, sync, settings and lock are the icons in the top bar.',
           'The round **add** button adds a transaction, a category or a friend, or scans a bill code.',
           'Tap a row to open it. Documents: **take photo**, and **keep on phone** for a file that is on the computer.',
           'Export, backups, the recovery key, pairing and the command line are on the computer only.',

@@ -68,7 +68,7 @@
 
 /* The phone's list, by day: a small heading over the rows of each day. */
 .list-day + .list-day {
-  margin-top: 1.25rem;
+  margin-top: 1rem;
 }
 
 .list-day > h2 {
@@ -671,13 +671,9 @@ ul.card-list.rec-table .cell-actions {
   color: var(--muted-foreground);
 }
 
-/* A line of its own in the small print under a phone row. */
-.row-toggle > .cell-sub > .is-line {
-  flex: 1 1 100%;
-}
-
-/* A phone row that has nothing to open has no chevron, so no room for one. */
-.row-toggle.is-plain {
+/* A phone row that has nothing to open leaves the room of the chevron empty. One with a button of its own (the x of a reminder) has the
+   button in the amount's column instead, and no room for a chevron. */
+.row-toggle.has-action {
   grid-template-columns: minmax(0, 1fr) auto;
   grid-template-areas:
     'name amount'

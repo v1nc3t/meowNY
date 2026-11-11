@@ -75,7 +75,7 @@ export default function DebtNotificationsModal({
                       </Link>
                     }
                     action={<IconAction icon="x" label={t('debts.dismissReminder', { name: friend.name })} onClick={() => onDismiss([friend])} />}
-                    sub={t('debts.dueBadge', { date: formatDate(friend.dueOn, locale) })}
+                    sub={<span>{t('debts.dueBadge', { date: formatDate(friend.dueOn, locale) })}</span>}
                   />
                 ))}
               </ul>

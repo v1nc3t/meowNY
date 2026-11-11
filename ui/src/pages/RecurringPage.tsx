@@ -14,7 +14,6 @@ import Icon from '../components/NavIcon'
 import { IconAction, Row, Table, TapRow } from '../components/RowParts'
 import SectionTabs from '../components/SectionTabs'
 import Modal, { modalFormId } from '../components/Modal'
-import Badge from '../components/ui/Badge'
 import Button from '../components/ui/Button'
 import { EmptyState } from '../components/ui/Pixel'
 import { categories as categoriesApi, type Category } from '../api/categories'
@@ -65,8 +64,6 @@ const CONFIRMED: Record<ConfirmKind, (item: Recurring) => Promise<unknown>> = {
   delete: (item) => recurringApi.remove(item.id),
 }
 const CONFIRM_TITLE = { skip: 'rec.skip', pause: 'rec.pause', end: 'rec.end', delete: 'common.delete' } as const
-/** The look of the word beside the date: overdue is red, the rest are calm. */
-const STATE_BADGE = { overdue: 'destructive', today: 'secondary', paused: 'outline', ended: 'outline' } as const
 
 export default function RecurringPage() {
   const { settings, error } = useMoneySettings()
@@ -346,31 +343,10 @@ function RecurringView({ settings, now }: { settings: MoneySettings; now: Today 
     return <span className={income ? 'cell-amount is-income' : 'cell-amount'}>{income ? `+${text}` : text}</span>
   }
 
-  /**
-   * The small marks after a name: the documents (a button on the desktop, only its number on the phone) and, on the phone, shared with
-   * friends and a note. (The desktop's rows have a column for shared, and the note is in the panel.)
-   */
+  /** The documents of an item, a button after its name on the desktop. (A phone shows them in the opened row.) */
   function marks(item: Recurring) {
     const count = clips[item.id] ?? 0
-    return (
-      <>
-        {phone && item.split ? <span className="row-mark">{t('tx.shared')}</span> : null}
-        {phone && item.description?.trim() ? (
-          <span className="row-mark-icon" title={t('common.description')}>
-            <Icon name="note" className="mark-icon" />
-            <span className="sr-only">{t('common.description')}</span>
-          </span>
-        ) : null}
-        {count && !phone ? <ClipPreview inline target={{ kind: 'recurring', id: item.id }} name={item.name} count={count} /> : null}
-        {count && phone ? (
-          <span className="row-mark-icon">
-            <Icon name="clip" className="mark-icon" />
-            <span aria-hidden="true">{count}</span>
-            <span className="sr-only">{t('docs.clip', { count })}</span>
-          </span>
-        ) : null}
-      </>
-    )
+    return count ? <ClipPreview inline target={{ kind: 'recurring', id: item.id }} name={item.name} count={count} /> : null
   }
 
   /** What a row opens to: who shares it (with a code for each friend) and the description. */
@@ -506,11 +482,13 @@ function RecurringView({ settings, now }: { settings: MoneySettings; now: Today 
     )
   }
 
-  // A phone row: the name and amount, how often and the next due date under them. It opens to the details and a labelled button for
+  // A phone row: the name and amount, and under them one line with the category, how often, the next due date and whether it is shared
+  // (the date is red when it is overdue; a paused or ended item says so instead). It opens to the details and a labelled button for
   // everything that can be done with the item.
   function tapRow({ item, category }: { item: Recurring; category: string }) {
     const status = statusOf(item, now.date)
     const badge = badgeOf(item, status)
+    const when = status === 'upcoming' ? t('debts.dueOn', { date: badge.date }) : status === 'today' || status === 'paused' ? badge.state : `${badge.state} ${badge.date}`
     return (
       <TapRow
         key={item.id}
@@ -523,9 +501,10 @@ function RecurringView({ settings, now }: { settings: MoneySettings; now: Today 
         amount={amount(item)}
         sub={
           <>
-            <span>{`${category}, ${everyText(item)}, ${status === 'ended' ? badge.date : t('debts.dueOn', { date: badge.date })}`}</span>
-            {status !== 'upcoming' ? <Badge variant={STATE_BADGE[status]}>{badge.state}</Badge> : null}
-            {marks(item)}
+            <span>{category}</span>
+            <span>{everyText(item)}</span>
+            <span className={status === 'overdue' ? 'due-late' : undefined}>{when}</span>
+            {item.split ? <span>{t('tx.shared')}</span> : null}
           </>
         }
       >

@@ -473,7 +473,7 @@ ul.card-list > li.list-head > .span-2 {
 }
 
 .row-toggle .due-late {
-  display: inline;
+  font-size: inherit;
 }
 
 /* What is due: name, category, the day with how late it is under it (that wraps, on 14 characters), the amount (an income has a plus
@@ -779,13 +779,12 @@ ul.card-list > li.list-head > .span-2 {
   color: var(--destructive);
 }
 
+/* The size of a document is on the line of its name, where the other lists have their amount: the same size, in grey. */
 .row-toggle > .cell-size {
   grid-area: amount;
   align-self: start;
-  font-size: 0.875rem;
   white-space: nowrap;
   color: var(--muted-foreground);
-  font-variant-numeric: tabular-nums;
 }
 
 /* The page of documents: what is here and where to add more. It lights up when files are held over the window. */
