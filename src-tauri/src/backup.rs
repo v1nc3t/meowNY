@@ -41,6 +41,8 @@ mod stream_tests;
 mod documents_tests;
 #[cfg(test)]
 mod debts_tests;
+#[cfg(test)]
+mod accounts_tests;
 
 use std::collections::{BTreeMap, HashSet};
 use std::fs;
@@ -75,6 +77,8 @@ const TABLES: &[&str] = &[
     "categories",
     "budgets",
     "people",
+    "accounts",
+    "transfers",
     "recurring_transactions",
     "recurring_split_lines",
     "transactions",
@@ -261,6 +265,12 @@ fn replace_all(conn: &mut Connection, tables: &BTreeMap<String, Vec<Row>>) -> Re
     // finished state breaks them.
     let has_parts = present.iter().any(|(name, _)| *name == "recurring_split_lines");
     if has_parts && !crate::debts::splits::check(&tx)? {
+        return Err(AppError::InvalidBackup);
+    }
+    // The main account must be there as the migration made it: a file without it, or with it under another id, is refused whole
+    // (`docs/accounts-design.md`, section 9). An archived one was refused by its row.
+    let has_accounts = present.iter().any(|(name, _)| *name == "accounts");
+    if has_accounts && !crate::accounts::check(&tx)? {
         return Err(AppError::InvalidBackup);
     }
     if has_clock {
@@ -763,6 +773,7 @@ mod tests {
                 interval_count: 1,
                 end_date: None,
                 description: Some("Flat 4, \"Maple\" house".into()),
+                account_id: None,
             },
         )
         .unwrap();
@@ -781,6 +792,7 @@ mod tests {
                     category_id: category.id.to_string(),
                     description: description.map(str::to_string),
                     client_uuid: None,
+                    account_id: None,
                 },
             )
             .unwrap();
@@ -807,6 +819,7 @@ mod tests {
                 category_id: rent.id.to_string(),
                 description: None,
                 client_uuid: None,
+                account_id: None,
             },
         )
         .unwrap();
@@ -839,6 +852,7 @@ mod tests {
                 date: "2026-01-13".into(),
                 note: Some("taxi, \"Maple\" street".into()),
                 transaction_id: Some(dinner.id.to_string()),
+                account_id: None,
             },
         )
         .unwrap();
@@ -853,6 +867,22 @@ mod tests {
         conn.execute("INSERT INTO document_links (document_id, ledger_entry_id) VALUES (2, ?1)", [loan.id]).unwrap();
         let mut conn = conn;
         categories::delete(&mut conn, gym.id, chrono::Utc::now()).unwrap();
+        // a second account and a transfer into it
+        let savings = crate::accounts::create(
+            &conn,
+            &crate::accounts::NewAccount { name: "Savings".into(), kind: crate::accounts::Kind::Savings, number: None, opening_balance: Some("-12.00".into()), opening_date: Some("2026-01-01".into()) },
+            "2026-02-04",
+        )
+        .unwrap();
+        crate::accounts::transfers::create(
+            &conn,
+            &crate::accounts::transfers::NewTransfer { from_account_id: "1".into(), to_account_id: savings.id.to_string(), amount: "50.00".into(), date: "2026-02-01".into(), note: None },
+        )
+        .unwrap();
+        // the dinner, the recurring item with its two payments, and the loan are in it too: every table that has an account has a row in each
+        conn.execute("UPDATE transactions SET account_id = ?1 WHERE name IN ('Dinner', 'Rent')", [savings.id]).unwrap();
+        conn.execute("UPDATE recurring_transactions SET account_id = ?1", [savings.id]).unwrap();
+        conn.execute("UPDATE ledger_entries SET account_id = ?1", [savings.id]).unwrap();
         // a deletion (it leaves a marker for sync) and a change of currency (it is recorded for sync)
         conn.execute("DELETE FROM transactions WHERE name = 'Coffee'", []).unwrap();
         crate::currency::change(&mut conn, "GBP", None, "2026-02-04").unwrap();
@@ -1070,7 +1100,11 @@ mod tests {
             serde_json::json!({ "categories": [{ "id": 1, "type": "EXPENSE", "name": "A" }], "transactions": [
                 { "id": 1, "category_id": 1, "name": "x", "amount_minor": -5, "payment_date": "2026-01-01" }] }),
         ];
-        for case in cases {
+        for mut case in cases {
+            // each has the main account, so it is refused for what is wrong with it and not for a missing account
+            if let Some(tables) = case.as_object_mut() {
+                tables.insert("accounts".into(), main_account());
+            }
             for file in [forged(case.clone()), forged_v1(case.clone())] {
                 let outcome = open(&file, "correct horse").and_then(|s| restore_snapshot(&mut target, &s));
                 assert_eq!(outcome, Err(AppError::InvalidBackup), "{case}");
@@ -1079,14 +1113,20 @@ mod tests {
         }
     }
 
+    /// The rows of `accounts` in a database nobody has touched: the main account as the migration makes it.
+    pub(super) fn main_account() -> Value {
+        Value::Array(dump(&db()).unwrap().rows("accounts").iter().cloned().map(Value::Object).collect())
+    }
+
     #[test]
     fn an_empty_backup_restores_to_an_empty_database() {
-        let file = forged(serde_json::json!({}));
+        let file = forged(serde_json::json!({ "accounts": main_account() }));
         let mut target = lived_in();
         restore(&mut target, &file, "correct horse");
-        for table in TABLES {
+        for table in TABLES.iter().filter(|table| **table != "accounts") {
             assert_eq!(count(&target, table), 0, "{table}");
         }
+        assert_eq!(dump(&target).unwrap().tables, dump(&db()).unwrap().tables, "nothing but the main account every database has");
     }
 
     #[test]

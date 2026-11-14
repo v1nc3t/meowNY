@@ -10,6 +10,9 @@
 //!
 //! Budget against actual for a range compares each category over the months in which it had a budget;
 //! for a single month that is exactly what the budget screen shows.
+//!
+//! A report of every category also has a short table of the accounts, once accounts are in use: what each held on the last day, what it
+//! changed over the months, and the net worth on that day (`docs/accounts-design.md`, section 10).
 
 // What a report reads is only used by the PDF, which the phone's build leaves out.
 #![cfg_attr(mobile, allow(dead_code))]
@@ -28,6 +31,7 @@ use chrono::Duration;
 use rusqlite::Connection;
 use serde::Deserialize;
 
+use crate::accounts;
 use crate::budgets::{month_start, next_month};
 use crate::categories::CategoryType;
 use crate::display::DisplayFormat;
@@ -83,6 +87,35 @@ pub struct ReportLabels {
     pub amount: String,
     pub page: String,
     pub no_data: String,
+    /// The table of accounts: its title, its two columns of numbers and its last line. A caller from before accounts may leave them out, and
+    /// they are then in English, as the command line writes them.
+    #[serde(default = "words::accounts")]
+    pub accounts: String,
+    #[serde(default = "words::balance")]
+    pub balance: String,
+    #[serde(default = "words::change")]
+    pub change: String,
+    #[serde(default = "words::net_worth")]
+    pub net_worth: String,
+}
+
+/// The English words of the table of accounts.
+mod words {
+    pub(super) fn accounts() -> String {
+        "Accounts".to_string()
+    }
+
+    pub(super) fn balance() -> String {
+        "Balance".to_string()
+    }
+
+    pub(super) fn change() -> String {
+        "Change".to_string()
+    }
+
+    pub(super) fn net_worth() -> String {
+        "Net worth".to_string()
+    }
 }
 
 const MONTH_NAMES: [&str; 12] =
@@ -123,14 +156,18 @@ impl ReportLabels {
             amount: s("Amount"),
             page: s("Page"),
             no_data: s("No transactions in this period."),
+            accounts: words::accounts(),
+            balance: words::balance(),
+            change: words::change(),
+            net_worth: words::net_worth(),
         })
     }
 
-    fn all(&self) -> [&String; 18] {
+    fn all(&self) -> [&String; 22] {
         [
             &self.title, &self.period, &self.income, &self.expenses, &self.savings, &self.savings_rate, &self.by_month,
             &self.spending, &self.other, &self.budget_vs_actual, &self.no_budget, &self.transactions, &self.date,
-            &self.category, &self.name, &self.amount, &self.page, &self.no_data,
+            &self.category, &self.name, &self.amount, &self.page, &self.no_data, &self.accounts, &self.balance, &self.change, &self.net_worth,
         ]
     }
 }
@@ -205,6 +242,16 @@ pub(crate) struct ReportData {
     pub transactions: Vec<Tx>,
     /// Debts and their history, when the report was asked for them.
     pub debts: Option<export::debts::DebtsPart>,
+    /// The accounts, in a report of every category once accounts are in use.
+    pub accounts: Option<AccountsPart>,
+}
+
+/// What a report says about accounts, as of the last day of its months.
+pub(crate) struct AccountsPart {
+    /// Each account, the archived ones last: its name, what it held on the last day and what it changed over the months.
+    pub accounts: Vec<(String, i64, i64)>,
+    /// What every account held on the last day plus what friends owed you then, as the dashboard counts it.
+    pub net_worth: i64,
 }
 
 fn months_between(from: &str, to: &str) -> Result<Vec<String>, AppError> {
@@ -223,7 +270,7 @@ fn months_between(from: &str, to: &str) -> Result<Vec<String>, AppError> {
     Ok(months)
 }
 
-fn load(conn: &Connection, options: &ReportOptions, now: chrono::DateTime<chrono::Utc>) -> Result<ReportData, AppError> {
+fn load(conn: &Connection, options: &ReportOptions, now: chrono::DateTime<chrono::Utc>, accounts_in_use: bool) -> Result<ReportData, AppError> {
     let months = months_between(&options.from_month, &options.to_month)?;
     let first_day = month_start(&options.from_month)?;
     let last_day = next_month(month_start(&options.to_month)?)? - Duration::days(1);
@@ -331,6 +378,9 @@ fn load(conn: &Connection, options: &ReportOptions, now: chrono::DateTime<chrono
         None
     };
 
+    // the accounts belong to a report of everything: a limit to some categories would leave out what moved them
+    let accounts = if accounts_in_use && sel.categories.is_none() { Some(accounts_part(conn, &first_day.to_string(), &last_day.to_string())?) } else { None };
+
     Ok(ReportData {
         currency: export::currency(conn)?,
         months: figures,
@@ -342,7 +392,30 @@ fn load(conn: &Connection, options: &ReportOptions, now: chrono::DateTime<chrono
         global_budgets,
         transactions,
         debts,
+        accounts,
     })
+}
+
+/// The accounts of a report: what each held on `last_day`, what it changed from `first_day` to `last_day` (both included), and the net worth on
+/// `last_day`. The numbers are sums of the movements of the accounts, as the account screens have them (`docs/accounts-design.md`, section 3);
+/// what friends owed you is read from their statements, as in the debts of a report.
+fn accounts_part(conn: &Connection, first_day: &str, last_day: &str) -> Result<AccountsPart, AppError> {
+    let mut statement = conn.prepare(
+        "SELECT a.name,
+                COALESCE((SELECT SUM(m.delta_minor) FROM account_movements m WHERE m.account_id = a.id AND m.day <= ?1), 0),
+                COALESCE((SELECT SUM(m.delta_minor) FROM account_movements m WHERE m.account_id = a.id AND m.day < ?2), 0)
+         FROM accounts a ORDER BY a.archived, a.position, a.id",
+    )?;
+    let accounts: Vec<(String, i64, i64)> = statement
+        .query_map([last_day, first_day], |r| Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)?, r.get::<_, i64>(2)?)))?
+        .map(|row| row.map(|(name, after, before)| (name, after, after - before)))
+        .collect::<Result<_, _>>()?;
+    let mut friends = 0;
+    for person in crate::debts::people::list(conn, true)? {
+        let statement = crate::debts::ledger::statement_in(conn, person.id)?;
+        friends += statement.lines.iter().rev().find(|l| l.date.as_str() <= last_day).map_or(0, |l| l.balance_minor);
+    }
+    Ok(AccountsPart { net_worth: accounts.iter().map(|a| a.1).sum::<i64>() + friends, accounts })
 }
 
 /// The numbers of a report, read from the database. Laying out and writing the PDF (`Report::pdf`)
@@ -367,8 +440,10 @@ pub(crate) fn read_at(conn: &Connection, options: &ReportOptions, now: chrono::D
     if (options.include_debts || options.include_due_payments || options.include_debt_history) && options.debts_labels.is_none() {
         return Err(AppError::InvalidInput);
     }
+    // whether accounts are in use is asked first: `summary` has a transaction of its own, which cannot start inside the one below
+    let accounts_in_use = accounts::summary(conn, &export::today_of(conn, now)?)?.in_use;
     let tx = conn.unchecked_transaction()?;
-    Ok(Report(load(&tx, options, now)?))
+    Ok(Report(load(&tx, options, now, accounts_in_use)?))
 }
 
 /// The summary of who owes what as a PDF, with the words in the person's language. The phone's build has no PDF writer.
@@ -469,6 +544,10 @@ mod tests {
             amount: s("Amount"),
             page: s("Page"),
             no_data: s("No transactions in this period."),
+            accounts: s("Accounts"),
+            balance: s("Balance"),
+            change: s("Change"),
+            net_worth: s("Net worth"),
         }
     }
 
@@ -511,6 +590,7 @@ mod tests {
                 category_id: category.to_string(),
                 description: description.map(str::to_string),
                 client_uuid: None,
+                account_id: None,
             },
         )
         .unwrap();
@@ -1012,7 +1092,7 @@ mod tests {
         for (person, kind, amount, date) in
             [(anna, Kind::Lent, "25.00", "2026-01-02"), (anna, Kind::RepaidToMe, "10.00", "2026-01-28"), (bob, Kind::Borrowed, "7.50", "2026-02-02"), (anna, Kind::Lent, "5.00", "2026-04-03")]
         {
-            ledger::add(&w.conn, &NewEntry { person_id: person.to_string(), kind, amount: amount.into(), date: date.into(), note: None, transaction_id: None }).unwrap();
+            ledger::add(&w.conn, &NewEntry { person_id: person.to_string(), kind, amount: amount.into(), date: date.into(), note: None, transaction_id: None, account_id: None }).unwrap();
         }
         w
     }
@@ -1055,7 +1135,7 @@ mod tests {
         // a friend who is owed (a loan from the friend) says so the other way round
         let w2 = indebted();
         let (cara,) = (friend(&w2.conn, "Cara"),);
-        ledger::add(&w2.conn, &NewEntry { person_id: cara.to_string(), kind: Kind::Borrowed, amount: "12.00".into(), date: "2026-01-09".into(), note: None, transaction_id: None }).unwrap();
+        ledger::add(&w2.conn, &NewEntry { person_id: cara.to_string(), kind: Kind::Borrowed, amount: "12.00".into(), date: "2026-01-09".into(), note: None, transaction_id: None, account_id: None }).unwrap();
         let owed = texts(&with_debts("2026-01", "2026-01", true, false), &w2);
         assert!(owed.iter().any(|t| t.contains("you owe 12.00")), "{owed:?}");
     }
@@ -1133,7 +1213,7 @@ mod tests {
         let anna: i64 = w.conn.query_row("SELECT id FROM people WHERE name = 'Anna'", [], |r| r.get(0)).unwrap();
         for day in 1..=28 {
             for _ in 0..4 {
-                ledger::add(&w.conn, &NewEntry { person_id: anna.to_string(), kind: Kind::Lent, amount: "1.00".into(), date: format!("2026-03-{day:02}"), note: Some("a note".into()), transaction_id: None }).unwrap();
+                ledger::add(&w.conn, &NewEntry { person_id: anna.to_string(), kind: Kind::Lent, amount: "1.00".into(), date: format!("2026-03-{day:02}"), note: Some("a note".into()), transaction_id: None, account_id: None }).unwrap();
             }
         }
         let o = with_debts("2026-03", "2026-03", false, true);
@@ -1162,6 +1242,7 @@ mod tests {
                     interval_count: 1,
                     end_date: None,
                     description: None,
+                    account_id: None,
                 },
             )
             .unwrap()
@@ -1233,6 +1314,7 @@ mod tests {
                 interval_count: 1,
                 end_date: Some("2026-02-15".into()),
                 description: None,
+                account_id: None,
             },
         )
         .unwrap();
@@ -1247,5 +1329,234 @@ mod tests {
         assert!(has("2026-01-04") && text.iter().filter(|t| *t == "900.00").count() == 2, "{text:?}");
         // a friend's lines still have the balance, and the payments do not
         assert!(has("Balance") && has("65.00"), "{text:?}");
+    }
+
+    // ---- accounts in the report (docs/accounts-design.md, section 10) -------------------------------------------------
+
+    use crate::accounts::fixtures::{new_account, transfer};
+    use crate::accounts::{Kind as AccountKind, NewAccount, MAIN_ID};
+
+    fn at(text: &str) -> chrono::DateTime<chrono::Utc> {
+        text.parse().unwrap()
+    }
+
+    fn open_account(conn: &Connection, name: &str, kind: AccountKind, opening: &str, date: &str) -> i64 {
+        accounts::create(conn, &NewAccount { kind, opening_balance: Some(opening.into()), opening_date: Some(date.into()), ..new_account(name) }, "2026-04-15").unwrap().id
+    }
+
+    /// The world (the main account holds 5,713.80 on the last day of March: 9,600 of pay, 2,700 of rent, 886.20 of other things, and the 300 that
+    /// left it in two transfers) with three accounts more. Savings opened with 1,000 and took 200 on the 2nd of February, 50 from the old account
+    /// on the 10th of January and 50 on the 1st of April, after the months below. The credit card opened with -240 and took 100 in March. The
+    /// old account opened with 50, gave it all to Savings and is archived.
+    fn with_accounts() -> World {
+        let w = world();
+        let savings = open_account(&w.conn, "Savings", AccountKind::Savings, "1000.00", "2025-12-01");
+        let card = open_account(&w.conn, "Credit card", AccountKind::CreditCard, "-240.00", "2025-12-01");
+        let old = open_account(&w.conn, "Old", AccountKind::Savings, "50.00", "2025-12-01");
+        transfer(&w.conn, MAIN_ID, savings, "200.00", "2026-02-02");
+        transfer(&w.conn, MAIN_ID, card, "100.00", "2026-03-15");
+        transfer(&w.conn, MAIN_ID, savings, "50.00", "2026-04-01");
+        transfer(&w.conn, old, savings, "50.00", "2026-01-10");
+        accounts::archive(&w.conn, old, "2026-04-15").unwrap();
+        w
+    }
+
+    const APRIL: &str = "2026-04-15T12:00:00Z";
+
+    fn accounts_of(o: &ReportOptions, w: &World, now: &str) -> Option<AccountsPart> {
+        read_at(&w.conn, o, at(now)).unwrap().0.accounts
+    }
+
+    #[test]
+    fn the_accounts_table_has_what_each_held_on_the_last_day_what_it_changed_and_the_net_worth() {
+        let w = with_accounts();
+        let o = options("2026-01", "2026-03");
+        let part = accounts_of(&o, &w, APRIL).expect("accounts are in use");
+        assert_eq!(
+            part.accounts,
+            [("Main account".to_string(), 571_380, 571_380), ("Savings".into(), 125_000, 25_000), ("Credit card".into(), -14_000, 10_000), ("Old".into(), 0, -5_000)],
+            "the person's order, the archived one last; the change leaves out what the account held before the first day"
+        );
+        assert_eq!(part.net_worth, 571_380 + 125_000 - 14_000);
+        // the same numbers as the account screens and the dashboard: the transfers add up to nothing, so the 50 of April changes no sum
+        let summary = accounts::summary(&w.conn, "2026-04-15").unwrap();
+        assert_eq!(part.accounts.iter().map(|a| a.1).sum::<i64>().to_string(), summary.in_accounts.replace('.', ""));
+        assert_eq!(part.net_worth.to_string(), summary.net_worth.replace('.', ""));
+        for (name, balance, _) in &part.accounts {
+            let id: i64 = w.conn.query_row("SELECT id FROM accounts WHERE name = ?1", [name], |r| r.get(0)).unwrap();
+            let held = accounts::history(&w.conn, id, "2026", "2026-04-15").unwrap();
+            assert_eq!(format!("{}.{:02}", balance / 100, (balance % 100).abs()), held[2].balance, "{name}: the chart has the balance of the end of March");
+        }
+        // one month: the change is that of the month, and the rest is what was held before it. Main account: two pays, two rents, 356.20 of food
+        // in January, 450.00 and 80.00 in February and the 200.00 to Savings; and of those, in February: one pay, one rent, 450.00, 80.00 and 200.00
+        let february = accounts_of(&options("2026-02", "2026-02"), &w, APRIL).unwrap();
+        assert_eq!(february.accounts[0], ("Main account".to_string(), 351_380, 157_000));
+        assert_eq!(february.accounts[1], ("Savings".to_string(), 125_000, 20_000), "1,000.00 and 50.00 from the old account, and the 200.00 of the month");
+    }
+
+    #[test]
+    fn the_accounts_table_is_on_the_page_with_the_words_of_the_labels_and_the_net_worth_last() {
+        let w = with_accounts();
+        let o = options("2026-01", "2026-03");
+        let page = texts(&o, &w);
+        let place = |needle: &str| page.iter().position(|t| t == needle).unwrap_or_else(|| panic!("{needle:?} is not on the page: {page:?}"));
+        for word in ["Accounts", "Name", "Change", "Balance", "Net worth", "Main account", "Savings", "Credit card", "Old"] {
+            place(word);
+        }
+        assert!(page.iter().any(|t| t == "5,713.80") && page.iter().any(|t| t == "+5,713.80"), "{page:?}");
+        assert!(page.iter().any(|t| t == "-140.00") && page.iter().any(|t| t == "+100.00") && page.iter().any(|t| t == "-50.00"), "a negative balance and a change are signed: {page:?}");
+        assert!(page.iter().any(|t| t == "6,823.80"), "the net worth: {page:?}");
+        // (the first "Savings" is a tile of the page: the account is after the title of the table)
+        let in_table = |needle: &str| place("Accounts") + page[place("Accounts")..].iter().position(|t| t == needle).unwrap();
+        assert!(place("Accounts") < in_table("Main account") && in_table("Main account") < in_table("Savings") && in_table("Savings") < in_table("Credit card"));
+        assert!(in_table("Credit card") < in_table("Old") && in_table("Old") < place("Net worth"));
+        assert!(place("Where the money went") < place("Accounts"), "after the budgets, before the list of transactions");
+        let mut listed = options("2026-01", "2026-03");
+        listed.include_transactions = true;
+        let with_list = texts(&listed, &w);
+        assert!(with_list.iter().position(|t| t == "Net worth") < with_list.iter().position(|t| t == "Transactions"), "the table comes before the long list");
+        // the words are the labels'
+        let mut french = options("2026-01", "2026-03");
+        french.labels.accounts = "Comptes".into();
+        french.labels.balance = "Solde".into();
+        french.labels.change = "Variation".into();
+        french.labels.net_worth = "Patrimoine".into();
+        let page = texts(&french, &w);
+        assert!(["Comptes", "Solde", "Variation", "Patrimoine"].iter().all(|word| page.iter().any(|t| t == word)));
+        assert!(!page.iter().any(|t| t == "Net worth"));
+        // and it is in the file
+        let bytes = read(&w.conn, &o).unwrap().pdf(&o).unwrap();
+        assert!(bytes.starts_with(b"%PDF"));
+    }
+
+    #[test]
+    fn the_accounts_table_is_absent_with_one_account_and_with_a_limit_to_categories() {
+        // nobody who has not chosen to use accounts is shown any
+        let w = world();
+        assert!(accounts_of(&options("2026-01", "2026-03"), &w, APRIL).is_none());
+        let page = texts(&options("2026-01", "2026-03"), &w);
+        for absent in ["Accounts", "Net worth", "Balance", "Change"] {
+            assert!(!page.iter().any(|t| t == absent), "{absent} is in a report of someone with one account");
+        }
+        // an opening balance on the main account is using accounts
+        accounts::update(&w.conn, MAIN_ID, &accounts::AccountPatch { opening_balance: Some("100.00".into()), opening_date: Some("2025-12-01".into()), ..Default::default() }, "2026-04-15").unwrap();
+        let part = accounts_of(&options("2026-01", "2026-03"), &w, APRIL).unwrap();
+        assert_eq!(part.accounts.len(), 1);
+        assert_eq!((part.accounts[0].1, part.net_worth), (571_380 + 10_000 + 30_000, 571_380 + 10_000 + 30_000), "the opening 100.00 and the 300.00 that never left, as there is no other account");
+        // more than one account, but a limit to categories: what moved an account is not all in it
+        let w = with_accounts();
+        let mut limited = options("2026-01", "2026-03");
+        limited.category_ids = Some(vec![w.food.to_string()]);
+        assert!(accounts_of(&limited, &w, APRIL).is_none());
+        let page = texts(&limited, &w);
+        assert!(!page.iter().any(|t| t == "Accounts" || t == "Net worth" || t == "Credit card"), "{page:?}");
+        // every category named is still a limit
+        let mut every: ReportOptions = options("2026-01", "2026-03");
+        every.category_ids = Some(w.conn.prepare("SELECT id FROM categories").unwrap().query_map([], |r| Ok(r.get::<_, i64>(0)?.to_string())).unwrap().map(Result::unwrap).collect());
+        assert!(accounts_of(&every, &w, APRIL).is_none());
+    }
+
+    #[test]
+    fn the_net_worth_has_what_friends_owed_you_on_the_last_day() {
+        let w = with_accounts();
+        let anna = friend(&w.conn, "Anna");
+        for (kind, amount, date) in [(Kind::Lent, "25.00", "2026-01-02"), (Kind::RepaidToMe, "10.00", "2026-01-28"), (Kind::Lent, "5.00", "2026-04-03")] {
+            ledger::add(&w.conn, &NewEntry { person_id: anna.to_string(), kind, amount: amount.into(), date: date.into(), note: None, transaction_id: None, account_id: None }).unwrap();
+        }
+        // on the 31st of January: Anna owes 15.00, and the loan and the repayment are in the main account
+        let january = accounts_of(&options("2026-01", "2026-01"), &w, APRIL).unwrap();
+        let in_accounts: i64 = january.accounts.iter().map(|a| a.1).sum();
+        assert_eq!(january.net_worth, in_accounts + 1_500);
+        // on the 31st of March the same 15.00 (the loan of April is after it); the dashboard of today counts all 20.00
+        let march = accounts_of(&options("2026-01", "2026-03"), &w, APRIL).unwrap();
+        assert_eq!(march.net_worth, march.accounts.iter().map(|a| a.1).sum::<i64>() + 1_500);
+        let summary = accounts::summary(&w.conn, "2026-04-15").unwrap();
+        assert_eq!(summary.friends, "20.00");
+        let to_april = accounts_of(&options("2026-01", "2026-04"), &w, APRIL).unwrap();
+        assert_eq!(to_april.net_worth.to_string(), summary.net_worth.replace('.', ""), "to the end of April it is the dashboard's number");
+    }
+
+    #[test]
+    fn a_month_with_nothing_but_accounts_shows_them_and_not_the_empty_message() {
+        let w = with_accounts();
+        let o = options("2026-06", "2026-06");
+        let page = texts(&o, &w);
+        assert!(!page.iter().any(|t| t == "No transactions in this period."), "{page:?}");
+        assert!(page.iter().any(|t| t == "Accounts") && page.iter().any(|t| t == "5,663.80"), "the main account, after the 50.00 of April: {page:?}");
+        let part = accounts_of(&o, &w, APRIL).unwrap();
+        assert!(part.accounts.iter().all(|a| a.2 == 0), "nothing changed in June: {:?}", part.accounts);
+        // an account that opens after the last day holds nothing on it, and has not changed
+        open_account(&w.conn, "Later", AccountKind::Cash, "70.00", "2026-09-01");
+        let part = accounts_of(&o, &w, APRIL).unwrap();
+        assert_eq!(part.accounts.iter().find(|a| a.0 == "Later").map(|a| (a.1, a.2)), Some((0, 0)));
+        assert_eq!(part.net_worth, part.accounts.iter().map(|a| a.1).sum::<i64>());
+    }
+
+    #[test]
+    fn a_long_odd_name_is_cut_to_fit_and_a_long_table_runs_onto_more_pages() {
+        let w = with_accounts();
+        open_account(&w.conn, &"W".repeat(48), AccountKind::Cash, "1.00", "2026-01-01");
+        open_account(&w.conn, "寿司 account", AccountKind::Cash, "2.00", "2026-01-01");
+        for i in 0..70 {
+            open_account(&w.conn, &format!("Pot {i}"), AccountKind::Savings, "1.00", "2026-01-01");
+        }
+        let o = options("2026-01", "2026-03");
+        let doc = layout::build(&read_at(&w.conn, &o, at(APRIL)).unwrap().0, &o).unwrap();
+        assert!(doc.pages.len() >= 2, "{} pages", doc.pages.len());
+        let metrics = Metrics::new().unwrap();
+        for op in doc.pages.iter().flatten() {
+            if let Op::Text { x, y, size, bold, text, .. } = op {
+                assert!(x + metrics.width(text, *size, *bold) <= doc.width - 44.0 + 0.5, "{text:?} runs past the margin");
+                assert!(*y < doc.height - 30.0 || *y > doc.height - 40.0, "text over the footer area: {y}");
+            }
+        }
+        let texts = doc.texts();
+        assert!(texts.iter().any(|t| t.starts_with("WWW") && t.ends_with('\u{2026}')), "the name is cut with an ellipsis");
+        assert!(texts.iter().any(|t| t.starts_with("?? account")), "what the font lacks is a question mark, as everywhere else");
+        assert_eq!(texts.iter().filter(|t| **t == "Net worth").count(), 1);
+        let last = doc.pages.last().unwrap();
+        assert!(last.iter().any(|op| matches!(op, Op::Text { text, .. } if text == "Net worth")), "the net worth ends the table");
+        assert!(read(&w.conn, &o).unwrap().pdf(&o).unwrap().starts_with(b"%PDF"));
+    }
+
+    #[test]
+    fn the_words_of_the_table_default_to_english_and_are_checked_like_the_others() {
+        // a caller from before accounts (the command line builds its own labels) leaves them out
+        let mut sent = serde_json::json!({
+            "title": "t", "period": "p", "income": "i", "expenses": "e", "savings": "s", "savingsRate": "sr", "byMonth": "b", "spending": "w", "other": "o",
+            "budgetVsActual": "v", "noBudget": "n", "transactions": "x", "date": "d", "category": "c", "name": "m", "amount": "a", "page": "g", "noData": "z",
+        });
+        let old: ReportLabels = serde_json::from_value(sent.clone()).unwrap();
+        assert_eq!((old.accounts.as_str(), old.balance.as_str(), old.change.as_str(), old.net_worth.as_str()), ("Accounts", "Balance", "Change", "Net worth"));
+        let english = ReportLabels::english("2026-01", "2026-01").unwrap();
+        assert_eq!((english.accounts, english.balance, english.change, english.net_worth), (old.accounts, old.balance, old.change, old.net_worth));
+        // sent, they are used; an unknown one is still refused
+        sent["accounts"] = "Comptes".into();
+        sent["netWorth"] = "Patrimoine".into();
+        let french: ReportLabels = serde_json::from_value(sent.clone()).unwrap();
+        assert_eq!((french.accounts.as_str(), french.balance.as_str(), french.net_worth.as_str()), ("Comptes", "Balance", "Patrimoine"));
+        sent["colour"] = "red".into();
+        assert!(serde_json::from_value::<ReportLabels>(sent).is_err());
+        // and they are held to the limits of the rest
+        let w = world();
+        for set in [
+            (|l: &mut ReportLabels| l.accounts = "x".repeat(LABEL_MAX_CHARS + 1)) as fn(&mut ReportLabels),
+            |l| l.balance = "a\nb".into(),
+            |l| l.change = "x".repeat(LABEL_MAX_CHARS + 1),
+            |l| l.net_worth = "\u{7}".into(),
+        ] {
+            let mut o = options("2026-01", "2026-01");
+            set(&mut o.labels);
+            assert_eq!(read(&w.conn, &o).err(), Some(AppError::InvalidInput));
+        }
+    }
+
+    #[test]
+    fn reading_the_report_with_accounts_changes_nothing() {
+        let w = with_accounts();
+        let before = crate::accounts::fixtures::snapshot(&w.conn);
+        let o = options("2026-01", "2026-03");
+        read_at(&w.conn, &o, at(APRIL)).unwrap().pdf(&o).unwrap();
+        assert_eq!(crate::accounts::fixtures::snapshot(&w.conn), before);
     }
 }

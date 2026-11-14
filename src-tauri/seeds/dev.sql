@@ -14,6 +14,9 @@
 --   * debts: friends (one owes you, you owe one, one is settled, one was removed from the list and still owes), a ledger of loans and
 --     repayments, bills shared with friends and a guest, and recurring items that are shared, overdue for several months, overdue with no
 --     fixed amount, and due in a few days
+--   * accounts: the main account renamed Current account (with an IBAN and an opening balance), savings, cash, a credit card that is in the
+--     red and an archived account with history; spending in cash and on the card, a recurring item on the card, a monthly transfer to savings
+--     and one that pays off the card, and a friend who paid back in cash
 -- Amounts and days come from simple arithmetic on the row numbers, so the data is the same every run.
 
 INSERT OR IGNORE INTO settings (id, currency, locale, timezone, language) VALUES (1, 'EUR', 'en-IE', 'Europe/Dublin', 'en');
@@ -369,3 +372,53 @@ INSERT INTO transactions
   (category_id, recurring_transaction_id, recurring_due_date, name, amount_minor, planned_amount_minor, payment_date, description)
 SELECT 10, 12, due, 'Mobile top-up', 1000 + (i * 7) % 5 * 250, NULL, date(due, '+' || (i % 3 + 1) || ' days'), 'Whatever the shop charges'
 FROM (SELECT date(@today, 'start of month', '-' || i || ' months', '+2 days') AS due, i FROM m);
+
+
+-- ---- accounts ---------------------------------------------------------------------------------------------------------------------
+-- Everything above went into the main account, which every database has (id 1). It becomes the current account, with an IBAN and the
+-- balance it had when the history starts. The others are made here and some rows are moved into them.
+UPDATE accounts SET name = 'Current account', number = 'IE29 AIBK 9311 5212 3456 78', opening_balance_minor = 240000,
+                    opening_date = date(@today, 'start of month', '-16 months') WHERE id = 1;
+INSERT INTO accounts (id, name, kind, number, opening_balance_minor, opening_date, archived, position) VALUES
+  (2, 'Savings',     'SAVINGS',     NULL,                  150000, date(@today, 'start of month', '-16 months'), 0, 1),
+  (3, 'Cash',        'CASH',        NULL,                  25000,  date(@today, 'start of month', '-16 months'), 0, 2),
+  (4, 'Credit card', 'CREDIT_CARD', '**** **** **** 4242', -24000, date(@today, 'start of month', '-16 months'), 0, 3),
+  -- closed nine months ago: what was left went to the savings, so it holds nothing and is out of the lists, with its history
+  (5, 'Old savings', 'SAVINGS',     NULL,                  120000, date(@today, 'start of month', '-16 months'), 1, 4);
+
+-- Cash: taxis, coffee and the lunch that was paid in cash. The card: the streaming plan (the recurring item and so its payments), the
+-- trips, the laptop and the concert tickets. The interest goes to the savings. A friend paid back her half of the breakfast in cash.
+UPDATE transactions SET account_id = 3 WHERE name IN ('Taxi', 'Coffee', 'Corner shop', 'Bus ticket', 'Coffee and cake', 'Lunch, "team" day');
+UPDATE recurring_transactions SET account_id = 4 WHERE id = 2;
+UPDATE transactions SET account_id = 4
+ WHERE recurring_transaction_id = 2 OR name IN ('Flights to Lisbon', 'Hotel Lisbon', 'City break Prague', 'New laptop', 'Concert tickets', 'App store');
+UPDATE transactions SET account_id = 2 WHERE name = 'Savings interest';
+UPDATE ledger_entries SET account_id = 3 WHERE note = 'Her half of the breakfast';
+
+-- Transfers: a monthly one to the savings the day after the salary, one that pays what was spent on the card the month before, and cash
+-- from the bank every third month.
+WITH RECURSIVE m(i) AS (SELECT 0 UNION ALL SELECT i + 1 FROM m WHERE i < 15)
+INSERT INTO transfers (from_account_id, to_account_id, amount_minor, transfer_date, note)
+SELECT 1, 2, 70000, d, 'Monthly saving'
+FROM (SELECT date(@today, 'start of month', '-' || i || ' months', '+25 days') AS d FROM m) WHERE d <= @today;
+
+WITH RECURSIVE m(i) AS (SELECT 0 UNION ALL SELECT i + 1 FROM m WHERE i < 15)
+INSERT INTO transfers (from_account_id, to_account_id, amount_minor, transfer_date, note)
+SELECT 1, 4, spent, d, 'Credit card payment'
+FROM (SELECT date(@today, 'start of month', '-' || i || ' months', '+27 days') AS d,
+             (SELECT COALESCE(SUM(t.amount_minor), 0) FROM transactions t
+               WHERE t.account_id = 4 AND t.payment_date >= date(@today, 'start of month', '-' || (i + 1) || ' months')
+                 AND t.payment_date < date(@today, 'start of month', '-' || i || ' months')) AS spent FROM m)
+WHERE d <= @today AND spent > 0;
+
+WITH RECURSIVE m(i) AS (SELECT 0 UNION ALL SELECT i + 1 FROM m WHERE i < 15)
+INSERT INTO transfers (from_account_id, to_account_id, amount_minor, transfer_date, note)
+SELECT 1, 3, 20000, d, 'Cash from the bank'
+FROM (SELECT i, date(@today, 'start of month', '-' || i || ' months', '+2 days') AS d FROM m) WHERE d <= @today AND i % 3 = 0;
+
+-- The old savings account: paid into for six months, then emptied into the savings.
+WITH RECURSIVE m(i) AS (SELECT 10 UNION ALL SELECT i + 1 FROM m WHERE i < 15)
+INSERT INTO transfers (from_account_id, to_account_id, amount_minor, transfer_date, note)
+SELECT 1, 5, 10000, date(@today, 'start of month', '-' || i || ' months', '+9 days'), 'Rainy day' FROM m;
+INSERT INTO transfers (from_account_id, to_account_id, amount_minor, transfer_date, note)
+VALUES (5, 2, 180000, date(@today, 'start of month', '-9 months', '+11 days'), 'Closing the old account');

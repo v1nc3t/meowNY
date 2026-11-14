@@ -26,7 +26,7 @@ fn case() -> Case {
     set_split(&conn, session, &equal(vec![who(eve), guest("Hidden Guest")])).unwrap();
     bill(&conn, w.food, "Bread", "2.00", "2026-03-07");
     let entry = |person: i64, kind: Kind, amount: &str, date: &str, note: Option<&str>| {
-        ledger::add(&conn, &NewEntry { person_id: person.to_string(), kind, amount: amount.into(), date: date.into(), note: note.map(str::to_string), transaction_id: None }).unwrap();
+        ledger::add(&conn, &NewEntry { person_id: person.to_string(), kind, amount: amount.into(), date: date.into(), note: note.map(str::to_string), transaction_id: None, account_id: None }).unwrap();
     };
     entry(anna, Kind::Lent, "10.00", "2026-03-01", Some("taxi"));
     entry(dina, Kind::Borrowed, "7.00", "2026-04-01", Some("lunch"));

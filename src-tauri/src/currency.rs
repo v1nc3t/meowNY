@@ -22,6 +22,9 @@ pub struct Conversion {
     pub budgets: u32,
     /// Entries of the ledger of money lent and borrowed.
     pub ledger: u32,
+    /// Opening balances of accounts, and transfers between them (`docs/accounts-design.md`, section 8).
+    pub accounts: u32,
+    pub transfers: u32,
 }
 
 /// An exchange rate as an exact fraction, so no floating point touches money.
@@ -95,6 +98,8 @@ pub fn change(conn: &mut Connection, new_currency: &str, rate: Option<&str>, tod
         done.recurring = convert_recurring(&tx, rate)?;
         done.budgets = convert_budgets(&tx, rate)?;
         done.ledger = convert_ledger(&tx, rate)?;
+        done.accounts = convert_accounts(&tx, rate)?;
+        done.transfers = convert_transfers(&tx, rate)?;
     }
     // The parts of the shared bills were written while the checks stood aside: they must add up to no more than their bills.
     if !splits::check(&tx)? {
@@ -144,6 +149,8 @@ pub(crate) fn apply_recorded(tx: &rusqlite::Transaction, change: &Recorded, toda
         done.recurring = convert_recurring(tx, rate)?;
         done.budgets = convert_budgets(tx, rate)?;
         done.ledger = convert_ledger(tx, rate)?;
+        done.accounts = convert_accounts(tx, rate)?;
+        done.transfers = convert_transfers(tx, rate)?;
     }
     if !splits::check(tx)? {
         return Err(AppError::Internal);
@@ -198,6 +205,34 @@ fn convert_ledger(tx: &rusqlite::Transaction, rate: Rate) -> Result<u32, AppErro
     Ok(rows.len() as u32)
 }
 
+/// The opening balance of each account that has one, the archived ones too. It may be negative: its size is converted and the sign put
+/// back, so it rounds half away from zero, and it may become zero. The balance of an account is a sum of converted pieces, so it can differ
+/// from the converted old balance by a few cents, as a friend's does.
+fn convert_accounts(tx: &rusqlite::Transaction, rate: Rate) -> Result<u32, AppError> {
+    let rows: Vec<(i64, i64)> = tx
+        .prepare("SELECT id, opening_balance_minor FROM accounts WHERE opening_balance_minor <> 0")?
+        .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?
+        .collect::<Result<_, _>>()?;
+    let mut update = tx.prepare("UPDATE accounts SET opening_balance_minor = ?1 WHERE id = ?2")?;
+    for (id, opening) in &rows {
+        update.execute(params![convert(opening.abs(), rate)? * opening.signum(), id])?;
+    }
+    Ok(rows.len() as u32)
+}
+
+/// Each transfer between accounts, at least one cent.
+fn convert_transfers(tx: &rusqlite::Transaction, rate: Rate) -> Result<u32, AppError> {
+    let rows: Vec<(i64, i64)> = tx
+        .prepare("SELECT id, amount_minor FROM transfers")?
+        .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?
+        .collect::<Result<_, _>>()?;
+    let mut update = tx.prepare("UPDATE transfers SET amount_minor = ?1 WHERE id = ?2")?;
+    for (id, amount) in &rows {
+        update.execute(params![at_least_one(convert(*amount, rate)?), id])?;
+    }
+    Ok(rows.len() as u32)
+}
+
 fn convert_recurring(tx: &rusqlite::Transaction, rate: Rate) -> Result<u32, AppError> {
     let rows: Vec<(i64, i64)> = tx
         .prepare("SELECT id, amount_minor FROM recurring_transactions WHERE amount_minor IS NOT NULL")?
@@ -226,6 +261,8 @@ fn convert_budgets(tx: &rusqlite::Transaction, rate: Rate) -> Result<u32, AppErr
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::accounts::fixtures::{archived_account, balance, new_account, snapshot, transfer, Rng, TODAY};
+    use crate::accounts::{self, NewAccount, MAIN_ID};
     use crate::budgets::{self, Scope, SetBudget};
     use crate::categories::{self, CategoryType};
     use crate::transactions::{self, NewTransaction};
@@ -249,6 +286,7 @@ mod tests {
                 category_id: category.to_string(),
                 description: None,
                 client_uuid: None,
+                account_id: None,
             },
         )
         .unwrap()
@@ -372,5 +410,266 @@ mod tests {
         change(&mut conn, "JPY", Some("160.5"), "2026-10-13").unwrap();
         let min: i64 = conn.query_row("SELECT min(amount_minor) FROM transactions", [], |r| r.get(0)).unwrap();
         assert!(min >= 1);
+    }
+
+    // ---- accounts and transfers (docs/accounts-design.md, section 8 and section 5.5, item 15) ----
+
+    /// An account that opened with `opening` ("-120.00") at the start of 2026. Returns its id.
+    fn account(conn: &Connection, name: &str, opening: &str) -> i64 {
+        accounts::create(conn, &NewAccount { opening_balance: Some(opening.into()), opening_date: Some("2026-01-01".into()), ..new_account(name) }, TODAY).unwrap().id
+    }
+
+    fn opening_of(conn: &Connection, id: i64) -> i64 {
+        conn.query_row("SELECT opening_balance_minor FROM accounts WHERE id = ?1", [id], |r| r.get(0)).unwrap()
+    }
+
+    fn moved_by(conn: &Connection, id: i64) -> i64 {
+        conn.query_row("SELECT amount_minor FROM transfers WHERE id = ?1", [id], |r| r.get(0)).unwrap()
+    }
+
+    /// The opening balance of every account and the amount of every transfer, in the order they were made.
+    fn account_numbers(conn: &Connection) -> Vec<i64> {
+        conn.prepare("SELECT n FROM (SELECT 0 AS t, id, opening_balance_minor AS n FROM accounts UNION ALL SELECT 1, id, amount_minor FROM transfers) ORDER BY t, id")
+            .unwrap()
+            .query_map([], |r| r.get(0))
+            .unwrap()
+            .map(Result::unwrap)
+            .collect()
+    }
+
+    #[test]
+    fn opening_balances_and_transfers_are_converted_with_the_rounding_of_the_others_and_counted() {
+        let (mut conn, _) = db();
+        let savings = account(&conn, "Savings", "100.00");
+        let card = account(&conn, "Card", "-120.05");
+        let odd = account(&conn, "Odd", "0.05");
+        let odd_debt = account(&conn, "Odd debt", "-0.05");
+        let empty = account(&conn, "Empty", "0.00");
+        let big = transfer(&conn, MAIN_ID, savings, "200.00", "2026-02-01");
+        let small = transfer(&conn, savings, card, "0.05", "2026-02-02");
+
+        let done = change(&mut conn, "USD", Some("0.5"), "2026-10-13").unwrap();
+
+        assert_eq!((done.accounts, done.transfers), (4, 2), "the two accounts with nothing to convert are not counted");
+        assert_eq!(opening_of(&conn, savings), 5_000);
+        assert_eq!(opening_of(&conn, card), -6_003, "-60.025 rounds away from zero, as 60.025 rounds up");
+        assert_eq!(opening_of(&conn, odd), 3, "2.5 cents rounds up");
+        assert_eq!(opening_of(&conn, odd_debt), -3, "and -2.5 cents rounds to -3: the size is rounded, the sign is put back");
+        assert_eq!((opening_of(&conn, empty), opening_of(&conn, MAIN_ID)), (0, 0));
+        assert_eq!((moved_by(&conn, big), moved_by(&conn, small)), (10_000, 3));
+        // a balance is the sum of the converted pieces
+        assert_eq!(balance(&conn, savings, TODAY), 5_000 + 10_000 - 3);
+        assert_eq!(balance(&conn, card, TODAY), -6_003 + 3);
+        assert_eq!(accounts::summary(&conn, TODAY).unwrap().in_accounts, "-10.03", "the transfers still add up to nothing");
+    }
+
+    #[test]
+    fn an_opening_balance_may_round_to_nothing_and_a_transfer_never_does() {
+        let (mut conn, _) = db();
+        let cent = account(&conn, "Cent", "0.01");
+        let cent_debt = account(&conn, "Cent debt", "-0.01");
+        let moved = transfer(&conn, cent, cent_debt, "0.01", "2026-02-01");
+        let done = change(&mut conn, "USD", Some("0.001"), "2026-10-13").unwrap();
+        assert_eq!((done.accounts, done.transfers), (2, 1));
+        assert_eq!((opening_of(&conn, cent), opening_of(&conn, cent_debt)), (0, 0), "an opening balance may be zero, and -0 is 0");
+        assert_eq!(moved_by(&conn, moved), 1, "a transfer of one cent stays one cent");
+        // an account whose opening balance became zero is not counted the next time
+        let again = change(&mut conn, "EUR", Some("1000"), "2026-10-14").unwrap();
+        assert_eq!((again.accounts, again.transfers), (0, 1));
+        assert_eq!(moved_by(&conn, moved), 1_000);
+    }
+
+    #[test]
+    fn an_archived_account_is_converted_like_the_others() {
+        let (mut conn, _) = db();
+        let old = account(&conn, "Old", "-80.00");
+        let moved = transfer(&conn, MAIN_ID, old, "30.00", "2026-02-01");
+        accounts::archive(&conn, old, TODAY).unwrap();
+        let empty = archived_account(&conn, "Old and empty");
+        let done = change(&mut conn, "USD", Some("1.08"), "2026-10-13").unwrap();
+        assert_eq!((done.accounts, done.transfers), (1, 1));
+        assert_eq!((opening_of(&conn, old), moved_by(&conn, moved), opening_of(&conn, empty)), (-8_640, 3_240, 0));
+        let account = accounts::get(&conn, old, TODAY).unwrap();
+        assert!(account.archived, "and it is still archived");
+        assert_eq!(account.balance, "-54.00");
+    }
+
+    #[test]
+    fn opening_balances_at_the_bounds_are_converted_and_one_that_leaves_the_range_refuses_the_whole_change() {
+        for (opening, sign) in [("9999999999.99", 1), ("-9999999999.99", -1)] {
+            let (mut conn, food) = db();
+            let small = spend(&conn, food, "10.00");
+            let edge = account(&conn, "Edge", opening);
+            let other = account(&conn, "Other", "5.00");
+            let moved = transfer(&conn, MAIN_ID, other, "7.00", "2026-02-01");
+            let before = snapshot(&conn);
+            for rate in ["1.00000001", "2", "999999999"] {
+                assert_eq!(change(&mut conn, "USD", Some(rate), "2026-10-13"), Err(AppError::InvalidInput), "{opening} at {rate}");
+                assert_eq!(snapshot(&conn), before, "{opening} at {rate}: no row, stamp or history line changed");
+                assert_eq!(currency(&conn), "EUR");
+            }
+            assert_eq!((amount_of(&conn, small), opening_of(&conn, other), moved_by(&conn, moved)), (1_000, 500, 700), "even the small ones are untouched");
+
+            // at a rate that keeps it in the range it is converted, the bound itself included
+            change(&mut conn, "USD", Some("1"), "2026-10-13").unwrap();
+            assert_eq!(opening_of(&conn, edge), sign * MAX_MINOR, "{opening} at 1");
+            change(&mut conn, "GBP", Some("0.5"), "2026-10-14").unwrap();
+            assert_eq!(opening_of(&conn, edge), sign * 500_000_000_000, "{opening} at 0.5: half a cent rounds away from zero");
+            change(&mut conn, "CHF", Some("1.99999999"), "2026-10-15").unwrap();
+            assert_eq!(opening_of(&conn, edge), sign * 999_999_995_000, "{opening}: just inside the range");
+        }
+    }
+
+    #[test]
+    fn a_transfer_that_leaves_the_range_refuses_the_whole_change() {
+        let (mut conn, _) = db();
+        let savings = account(&conn, "Savings", "12.00");
+        let big = transfer(&conn, MAIN_ID, savings, "9999999999.99", "2026-02-01");
+        let before = snapshot(&conn);
+        assert_eq!(change(&mut conn, "USD", Some("1.5"), "2026-10-13"), Err(AppError::InvalidInput));
+        assert_eq!(snapshot(&conn), before);
+        assert_eq!((opening_of(&conn, savings), moved_by(&conn, big), currency(&conn).as_str()), (1_200, MAX_MINOR, "EUR"));
+    }
+
+    #[test]
+    fn converting_there_and_back_gives_the_same_numbers_when_nothing_was_rounded() {
+        let (mut conn, _) = db();
+        let savings = account(&conn, "Savings", "1234.56");
+        let card = account(&conn, "Card", "-0.07");
+        transfer(&conn, MAIN_ID, savings, "250.00", "2026-02-01");
+        transfer(&conn, savings, card, "0.01", "2026-02-02");
+        let before = account_numbers(&conn);
+        let stamps = snapshot(&conn);
+        change(&mut conn, "USD", Some("4"), "2026-10-13").unwrap();
+        assert_eq!(account_numbers(&conn), before.iter().map(|n| n * 4).collect::<Vec<_>>());
+        change(&mut conn, "EUR", Some("0.25"), "2026-10-14").unwrap();
+        assert_eq!(account_numbers(&conn), before);
+        let generation: i64 = conn.query_row("SELECT currency_generation FROM settings", [], |r| r.get(0)).unwrap();
+        assert_eq!(generation, 2, "two changes were recorded");
+        // a conversion is not an edit: no stamp and no `updated_at` moved, on either table
+        let marks = |text: &str| -> Vec<String> { text.lines().take_while(|l| *l != "== transactions").map(str::to_string).collect() };
+        assert_eq!(marks(&snapshot(&conn)), marks(&stamps));
+    }
+
+    #[test]
+    fn converting_twice_rounds_twice_and_what_was_rounded_away_does_not_come_back() {
+        let (mut conn, _) = db();
+        let savings = account(&conn, "Savings", "0.01");
+        let card = account(&conn, "Card", "-33.33");
+        let moved = transfer(&conn, MAIN_ID, savings, "0.01", "2026-02-01");
+        change(&mut conn, "USD", Some("0.4"), "2026-10-13").unwrap();
+        assert_eq!((opening_of(&conn, savings), opening_of(&conn, card), moved_by(&conn, moved)), (0, -1_333, 1));
+        change(&mut conn, "EUR", Some("2.5"), "2026-10-14").unwrap();
+        assert_eq!(opening_of(&conn, savings), 0, "the cent that became nothing stays nothing");
+        assert_eq!(opening_of(&conn, card), -3_333, "-13.33 at 2.5 is -33.325, which rounds away from zero");
+        assert_eq!(moved_by(&conn, moved), 3, "the transfer was kept at one cent, and that cent is converted");
+    }
+
+    #[test]
+    fn a_change_of_the_label_alone_converts_no_account_and_no_transfer() {
+        let (mut conn, _) = db();
+        let savings = account(&conn, "Savings", "-5.00");
+        transfer(&conn, MAIN_ID, savings, "2.00", "2026-02-01");
+        let before = account_numbers(&conn);
+        let done = change(&mut conn, "USD", None, "2026-10-13").unwrap();
+        assert_eq!((done.accounts, done.transfers), (0, 0));
+        assert_eq!(account_numbers(&conn), before);
+    }
+
+    /// The same accounts and transfers on any device: an archived account, a negative opening balance, one of nothing and a transfer of a cent.
+    fn with_accounts() -> Connection {
+        let (conn, _) = db();
+        let savings = account(&conn, "Savings", "1500.37");
+        let card = account(&conn, "Card", "-249.99");
+        let old = account(&conn, "Old", "33.33");
+        let empty = account(&conn, "Empty", "0.00");
+        transfer(&conn, MAIN_ID, savings, "300.00", "2026-02-01");
+        transfer(&conn, savings, card, "0.01", "2026-02-02");
+        transfer(&conn, old, empty, "33.33", "2026-02-03");
+        accounts::archive(&conn, old, TODAY).unwrap();
+        conn
+    }
+
+    fn apply_change_of(desktop: &Connection, phone: &mut Connection) -> Result<Conversion, AppError> {
+        let (generation, from, to, rate, stamp): (i64, String, String, Option<String>, String) = desktop
+            .query_row("SELECT id, from_currency, to_currency, rate, stamp FROM currency_changes ORDER BY id DESC LIMIT 1", [], |r| {
+                Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?))
+            })
+            .unwrap();
+        let tx = phone.transaction().unwrap();
+        sync::stamp::set_applying(&tx, true).unwrap();
+        let done = apply_recorded(&tx, &Recorded { generation, from: &from, to: &to, rate: rate.as_deref(), stamp: &stamp }, "2026-10-13")?;
+        sync::stamp::set_applying(&tx, false).unwrap();
+        tx.commit().unwrap();
+        Ok(done)
+    }
+
+    #[test]
+    fn the_same_conversion_arriving_by_sync_leaves_both_devices_with_the_same_accounts_and_transfers() {
+        for rate in ["1.08", "0.0063", "160", "0.5", "2.5", "1.00000001", "0.001"] {
+            let (mut desktop, mut phone) = (with_accounts(), with_accounts());
+            let stamps = |conn: &Connection| -> Vec<String> {
+                conn.prepare("SELECT stamp || updated_at FROM accounts UNION ALL SELECT stamp || updated_at FROM transfers").unwrap().query_map([], |r| r.get(0)).unwrap().map(Result::unwrap).collect()
+            };
+            let before = stamps(&phone);
+            let made = change(&mut desktop, "USD", Some(rate), "2026-10-13").unwrap();
+            let applied = apply_change_of(&desktop, &mut phone).unwrap();
+            assert_eq!((applied.accounts, applied.transfers), (made.accounts, made.transfers), "rate {rate}");
+            assert_eq!((made.accounts, made.transfers), (3, 3), "rate {rate}: the archived account too");
+            assert_eq!(account_numbers(&phone), account_numbers(&desktop), "rate {rate}");
+            assert_eq!(accounts::summary(&phone, TODAY).unwrap(), accounts::summary(&desktop, TODAY).unwrap(), "rate {rate}");
+            assert_eq!(stamps(&phone), before, "rate {rate}: no stamp moved on the phone");
+            assert!(accounts::check(&phone).unwrap());
+        }
+    }
+
+    #[test]
+    fn a_conversion_arriving_by_sync_that_leaves_the_range_is_refused_and_the_phone_keeps_its_numbers() {
+        let (mut desktop, mut phone) = (with_accounts(), with_accounts());
+        // only the phone has the account that cannot be converted
+        account(&phone, "Edge", "-9999999999.99");
+        let before = snapshot(&phone);
+        change(&mut desktop, "USD", Some("3"), "2026-10-13").unwrap();
+        assert_eq!(apply_change_of(&desktop, &mut phone).err(), Some(AppError::InvalidInput));
+        assert_eq!(snapshot(&phone), before, "the transaction was dropped: nothing changed");
+        assert_eq!(currency(&phone), "EUR");
+    }
+
+    #[test]
+    fn random_accounts_and_rates_keep_the_sign_the_range_and_at_least_a_cent_in_every_transfer() {
+        let mut random = Rng(0xACC0_0575);
+        for round in 0..40 {
+            let (mut conn, _) = db();
+            let rate_text = ["0.0001", "0.37", "1.08", "3.333", "160", "999.99"][round % 6];
+            let rate = parse_rate(rate_text).unwrap();
+            let mut ids = vec![MAIN_ID];
+            for i in 0..5 {
+                let minor = random.between(0, 400_000) as i64 - 200_000;
+                ids.push(account(&conn, &format!("A{i}"), &crate::money::format_amount(minor)));
+            }
+            for _ in 0..8 {
+                let (from, to) = (random.between(0, 5) as usize, random.between(0, 5) as usize);
+                if from != to {
+                    transfer(&conn, ids[from], ids[to], &crate::money::format_amount(random.between(1, 90_000) as i64), "2026-02-01");
+                }
+            }
+            let before = account_numbers(&conn);
+            let transfers_at = before.len() - conn.query_row::<i64, _, _>("SELECT count(*) FROM transfers", [], |r| r.get(0)).unwrap() as usize;
+            change(&mut conn, "USD", Some(rate_text), "2026-10-13").unwrap_or_else(|e| panic!("rate {rate_text}: {e}"));
+            for (at, (old, new)) in before.iter().zip(account_numbers(&conn)).enumerate() {
+                if at < transfers_at {
+                    assert_eq!(new, convert(old.abs(), rate).unwrap() * old.signum(), "opening {old} at {rate_text}");
+                    assert!(new == 0 || new.signum() == old.signum(), "{old} became {new} at {rate_text}");
+                } else {
+                    assert_eq!(new, convert(*old, rate).unwrap().max(1), "transfer {old} at {rate_text}");
+                }
+                assert!(new.abs() <= MAX_MINOR);
+            }
+            // what left one account reached another, so the transfers still add up to nothing
+            let (held, opened): (i64, i64) = conn
+                .query_row("SELECT (SELECT COALESCE(SUM(delta_minor), 0) FROM account_movements), (SELECT SUM(opening_balance_minor) FROM accounts)", [], |r| Ok((r.get(0)?, r.get(1)?)))
+                .unwrap();
+            assert_eq!(held, opened, "round {round} at {rate_text}");
+        }
     }
 }
