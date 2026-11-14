@@ -380,6 +380,29 @@ mod tests {
     }
 
     #[test]
+    fn a_negative_amount_is_a_value_after_a_flag_with_or_without_an_equals_sign() {
+        // The word after a flag is always its value, so `-120.00` is not read as a flag; `=` is the form that cannot be misread.
+        for line in ["accounts create --name Card --kind credit_card --opening-balance=-120.00", "accounts create --name Card --kind credit_card --opening-balance -120.00"] {
+            assert_eq!(Value::Object(run(line).body), json!({ "name": "Card", "kind": "CREDIT_CARD", "openingBalance": "-120.00" }), "{line}");
+        }
+        assert_eq!(Value::Object(run("accounts update 2 --opening-balance=-0.01 --clear-number").body), json!({ "id": "2", "openingBalance": "-0.01", "number": null }));
+        // a kind is matched without regard to case, like the type of a category
+        for kind in ["savings", "Savings", "SAVINGS", "Credit_Card"] {
+            let body = run(&format!("accounts create --name X --kind {kind}")).body;
+            assert_eq!(body["kind"], kind.to_uppercase().as_str());
+        }
+        assert!(usage("accounts create --name X --kind bank").contains("--kind must be one of: CHECKING, SAVINGS, CASH, CREDIT_CARD"));
+        // the ids come as plain words and the lists as they do for a category
+        assert_eq!(Value::Object(run("accounts show 2 --from 2026-11-01 --to 2026-11-30").body), json!({ "id": "2", "from": "2026-11-01", "to": "2026-11-30" }));
+        assert_eq!(Value::Object(run("accounts reorder --ids 1,3,2").body), json!({ "ids": ["1", "3", "2"] }));
+        assert_eq!(
+            Value::Object(run("transfers create --from-account-id 1 --to-account-id 2 --amount 200.00 --date 2026-11-03").body),
+            json!({ "fromAccountId": "1", "toAccountId": "2", "amount": "200.00", "date": "2026-11-03" })
+        );
+        assert_eq!(Value::Object(run("transactions create --name X --amount 1.00 --payment-date 2026-10-14 --category-id 5 --account-id 3").body)["accountId"], "3");
+    }
+
+    #[test]
     fn missing_unknown_and_repeated_flags_are_usage_errors() {
         assert!(usage("transactions create --name X").contains("missing --amount"));
         assert!(usage("categories create --name Pets").contains("missing --type"));
@@ -392,7 +415,7 @@ mod tests {
 
     #[test]
     fn deleting_and_ending_need_yes() {
-        for line in ["transactions delete 5", "categories delete 5", "recurring delete 5", "recurring end 5", "budgets remove --type EXPENSE --month 2026-10"] {
+        for line in ["transactions delete 5", "categories delete 5", "recurring delete 5", "recurring end 5", "budgets remove --type EXPENSE --month 2026-10", "accounts delete 5", "transfers delete 5"] {
             assert!(usage(line).contains("cannot be undone; add --yes"), "{line}");
             let with = format!("{line} --yes");
             assert!(run(&with).globals.yes, "{with}");
@@ -400,6 +423,8 @@ mod tests {
         // Changing something is not deleting it.
         run("transactions update 5 --name X");
         run("recurring pause 5");
+        run("accounts archive 5");
+        run("accounts update 5 --name X");
     }
 
     #[test]

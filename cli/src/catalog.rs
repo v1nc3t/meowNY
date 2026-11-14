@@ -201,7 +201,7 @@ mod tests {
         let destructive: Vec<String> = catalog.commands.iter().filter(|c| c.destructive()).map(Command::name).collect();
         assert_eq!(
             destructive,
-            ["categories delete", "transactions delete", "budgets remove", "recurring delete", "recurring end", "documents delete", "ledger delete"]
+            ["categories delete", "transactions delete", "budgets remove", "recurring delete", "recurring end", "documents delete", "ledger delete", "accounts delete", "transfers delete"]
         );
         assert!(!catalog.find(&["login"]).unwrap().destructive());
         assert!(!catalog.find(&["logout"]).unwrap().destructive());

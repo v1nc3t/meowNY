@@ -46,6 +46,15 @@ const WRITE_ROUTES: &[&str] = &[
     "transactions.unsplit",
     "recurring.split",
     "recurring.unsplit",
+    "accounts.create",
+    "accounts.update",
+    "accounts.archive",
+    "accounts.unarchive",
+    "accounts.delete",
+    "accounts.reorder",
+    "transfers.create",
+    "transfers.update",
+    "transfers.delete",
 ];
 
 const UUID: &str = "123e4567-e89b-12d3-a456-426614174000";
@@ -354,6 +363,16 @@ fn a_refused_write_changes_nothing() {
         ("recurring.delete", json!({ "id": "999999" })),
         ("settings.set", json!({ "timezone": "Mars/Base" })),
         ("settings.set", json!({})),
+        ("transactions.create", json!({ "name": "X", "amount": "1.00", "paymentDate": "2026-10-14", "categoryId": food, "accountId": "999999" })),
+        ("transactions.update", json!({ "id": "1", "accountId": "5" })),
+        ("accounts.create", json!({ "name": "Savings", "kind": "SAVINGS" })),
+        ("accounts.update", json!({ "id": "999999", "name": "X" })),
+        ("accounts.archive", json!({ "id": "1" })),
+        ("accounts.delete", json!({ "id": "1" })),
+        ("accounts.reorder", json!({ "ids": ["1"] })),
+        ("transfers.create", json!({ "fromAccountId": "1", "toAccountId": "1", "amount": "1.00", "date": "2026-10-14" })),
+        ("transfers.update", json!({ "id": "999999", "amount": "2.00" })),
+        ("transfers.delete", json!({ "id": "999999" })),
     ];
     for (name, args) in bad {
         let e = run(&vault, name, args.clone()).expect_err(&format!("{name} {args} was accepted"));
@@ -424,6 +443,15 @@ fn a_locked_app_refuses_every_write_and_nothing_changes() {
         ("transactions.unsplit", json!({ "id": "1" })),
         ("recurring.split", json!({ "id": "1", "mode": "EQUAL", "people": ["1"] })),
         ("recurring.unsplit", json!({ "id": "1" })),
+        ("accounts.create", json!({ "name": "Savings", "kind": "SAVINGS" })),
+        ("accounts.update", json!({ "id": "2", "name": "Rainy day" })),
+        ("accounts.archive", json!({ "id": "2" })),
+        ("accounts.unarchive", json!({ "id": "2" })),
+        ("accounts.delete", json!({ "id": "2" })),
+        ("accounts.reorder", json!({ "ids": ["1", "2"] })),
+        ("transfers.create", json!({ "fromAccountId": "1", "toAccountId": "2", "amount": "1.00", "date": "2026-10-14" })),
+        ("transfers.update", json!({ "id": "1", "amount": "2.00" })),
+        ("transfers.delete", json!({ "id": "1" })),
     ];
     let mut covered: Vec<&str> = cases.iter().map(|(name, _)| *name).collect();
     covered.sort_unstable();

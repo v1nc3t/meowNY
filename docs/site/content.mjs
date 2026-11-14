@@ -42,6 +42,8 @@ const NOUN_TITLES = {
   people: 'Friends',
   ledger: 'Ledger',
   debts: 'Debts',
+  accounts: 'Accounts',
+  transfers: 'Transfers',
   splits: 'Shared bills',
   export: 'Export',
   backup: 'Backup',

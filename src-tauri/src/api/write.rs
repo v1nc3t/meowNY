@@ -154,6 +154,7 @@ pub const TRANSACTIONS_CREATE: Route = Route {
         Param::new("categoryId", Kind::Id, "The category. Its type decides whether this is income or an expense.").required(),
         Param::new("description", Kind::String, "A note."),
         Param::new("clientUuid", Kind::Uuid, "A fresh UUID per transaction, so a retry cannot record it twice."),
+        Param::new("accountId", Kind::Id, "The account it is in: where the money left or came in. The main account if left out. Not an archived one."),
     ],
     confirm: None,
     run: |ctx, args| {
@@ -173,6 +174,7 @@ pub const TRANSACTIONS_UPDATE: Route = Route {
         Param::new("paymentDate", Kind::Date, "The new date."),
         Param::new("categoryId", Kind::Id, "The new category."),
         Param::new("description", Kind::String, "The new note, or null to clear it.").nullable(),
+        Param::new("accountId", Kind::Id, "Moves it to this account, which must not be archived."),
     ],
     confirm: None,
     run: |ctx, mut args| {
@@ -258,6 +260,7 @@ pub const RECURRING_CREATE: Route = Route {
         Param::new("intervalCount", Kind::Integer, "Every how many units, 1 to 1000.").required(),
         Param::new("endDate", Kind::Date, "The last day it can fall due."),
         Param::new("description", Kind::String, "A note."),
+        Param::new("accountId", Kind::Id, "The account its payments are made in. The main account if left out. Not an archived one."),
     ],
     confirm: None,
     run: |ctx, args| {
@@ -280,6 +283,7 @@ pub const RECURRING_UPDATE: Route = Route {
         Param::new("intervalCount", Kind::Integer, "Every how many units, 1 to 1000."),
         Param::new("endDate", Kind::Date, "The new last day, or null for none.").nullable(),
         Param::new("description", Kind::String, "The new note, or null to clear it.").nullable(),
+        Param::new("accountId", Kind::Id, "Moves its payments to this account, which must not be archived."),
     ],
     confirm: None,
     run: |ctx, mut args| {

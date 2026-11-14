@@ -227,7 +227,7 @@ fn a_read_token_cannot_change_anything_and_the_cli_says_so() {
         assert_eq!(failed(&app, &app.read, &args), (3, "forbidden".into()), "{args:?}");
         tried += 1;
     }
-    assert!(tried >= 23, "only {tried} write commands were tried");
+    assert!(tried >= 45, "only {tried} write commands were tried");
     assert_eq!(snapshot(&app), before, "a read token changed something");
 }
 
@@ -630,4 +630,139 @@ fn a_file_that_cannot_be_read_is_exit_2_and_nothing_reaches_the_app() {
     std::fs::write(app.out("a.pdf"), b"%PDF-1.4 x").unwrap();
     assert_eq!(failed(&app, &app.write, &["documents", "add", &app.out("a.pdf"), "--transaction-ids", "999999"]), (4, "not_found".into()));
     assert_eq!(snapshot(&app), before);
+}
+
+// ---- accounts and transfers --------------------------------------------------------------------
+
+#[test]
+fn a_negative_opening_balance_reaches_the_app_with_or_without_an_equals_sign() {
+    let app = app(false);
+    let card = ok(&app, &app.write, &["accounts", "create", "--name", "Card", "--kind", "credit_card", "--opening-balance=-120.00"]);
+    assert_eq!((card["kind"].clone(), card["openingBalance"].clone(), card["balance"].clone(), card["isMain"].clone()), (json!("CREDIT_CARD"), json!("-120.00"), json!("-120.00"), json!(false)));
+    // the word after a flag is its value, so a space works too
+    let loan = ok(&app, &app.write, &["accounts", "create", "--name", "Loan", "--kind", "Cash", "--opening-balance", "-0.01"]);
+    assert_eq!(loan["openingBalance"], "-0.01");
+    // an update by id as a plain word, a number set and then cleared
+    let id = id_of(&card);
+    let changed = ok(&app, &app.write, &["accounts", "update", &id, "--opening-balance=-35.50", "--number", "4242"]);
+    assert_eq!((changed["openingBalance"].clone(), changed["number"].clone(), changed["name"].clone()), (json!("-35.50"), json!("4242"), json!("Card")));
+    assert_eq!(ok(&app, &app.write, &["accounts", "update", &id, "--clear-number"])["number"], Value::Null);
+    // in the table the sign is there
+    let plain = run(&app, &app.read, &["accounts", "list"]);
+    assert_eq!(plain.code, 0);
+    assert!(plain.out.lines().any(|l| l.contains("Card") && l.contains("-35.50")), "{}", plain.out);
+    // forms the app refuses are exit 2, and nothing changes
+    let before = snapshot(&app);
+    for balance in ["-0.00", "+1.00", "1.5", "-1", "10000000000.00", "-10000000000.00", "abc"] {
+        assert_eq!(failed(&app, &app.write, &["accounts", "update", &id, &format!("--opening-balance={balance}")]), (2, "invalid_input".into()), "{balance}");
+    }
+    assert_eq!(snapshot(&app), before);
+    // the largest, each way, is fine
+    assert_eq!(ok(&app, &app.write, &["accounts", "update", &id, "--opening-balance=-9999999999.99"])["openingBalance"], "-9999999999.99");
+    assert_eq!(ok(&app, &app.write, &["accounts", "update", &id, "--opening-balance", "9999999999.99"])["openingBalance"], "9999999999.99");
+}
+
+#[test]
+fn deleting_an_account_or_a_transfer_needs_yes_and_without_it_nothing_is_deleted() {
+    let app = app(true);
+    let spare = id_of(&ok(&app, &app.write, &["accounts", "create", "--name", "Spare", "--kind", "cash"]));
+    let moved = id_of(&ok(&app, &app.write, &["transfers", "create", "--from-account-id", "1", "--to-account-id", &spare, "--amount", "200.00", "--date", "2026-11-03"]));
+    let before = snapshot(&app);
+    assert_eq!(failed(&app, &app.write, &["accounts", "delete", &spare]), (2, "usage".into()));
+    assert_eq!(failed(&app, &app.write, &["transfers", "delete", &moved]), (2, "usage".into()));
+    let plain = run(&app, &app.write, &["accounts", "delete", &spare]);
+    assert!(plain.err.contains("accounts delete cannot be undone; add --yes"), "{}", plain.err);
+    assert_eq!(snapshot(&app), before, "without --yes nothing is deleted");
+    // with --yes the app still refuses an account that has a transfer in it, and the main account
+    assert_eq!(failed(&app, &app.write, &["accounts", "delete", &spare, "--yes"]), (2, "invalid_input".into()));
+    assert_eq!(failed(&app, &app.write, &["accounts", "delete", "1", "--yes"]), (2, "invalid_input".into()));
+    assert_eq!(failed(&app, &app.write, &["accounts", "archive", "1"]), (2, "invalid_input".into()), "the main account is never archived");
+    assert_eq!(snapshot(&app), before);
+    // the transfer goes, then the account
+    let gone = run(&app, &app.write, &["transfers", "delete", &moved, "--yes"]);
+    assert_eq!((gone.code, gone.out.as_str(), gone.err.as_str()), (0, "", "done.\n"));
+    assert_eq!(failed(&app, &app.write, &["transfers", "delete", &moved, "--yes"]), (4, "not_found".into()), "deleting twice");
+    let gone = run(&app, &app.write, &["accounts", "delete", &spare, "--yes"]);
+    assert_eq!((gone.code, gone.out.as_str(), gone.err.as_str()), (0, "", "done.\n"));
+    assert_eq!(failed(&app, &app.write, &["accounts", "delete", &spare, "--yes"]), (4, "not_found".into()));
+    assert_eq!(failed(&app, &app.write, &["accounts", "show", &spare]), (4, "not_found".into()));
+}
+
+#[test]
+fn an_account_is_read_and_ordered_from_the_command_line_and_a_taken_name_is_exit_1() {
+    let app = app(true);
+    // a read token reads everything about accounts
+    let list = ok(&app, &app.read, &["accounts", "list"]);
+    let names: Vec<&str> = list.as_array().unwrap().iter().map(|a| a["name"].as_str().unwrap()).collect();
+    assert_eq!(names, ["Current account", "Savings", "Cash", "Credit card", "Old savings"]);
+    let shown = ok(&app, &app.read, &["accounts", "show", "2", "--from", "2026-09-01", "--to", "2026-09-30"]);
+    assert_eq!((shown["account"]["name"].clone(), shown["from"].clone(), shown["to"].clone()), (json!("Savings"), json!("2026-09-01"), json!("2026-09-30")));
+    assert!(!shown["lines"].as_array().unwrap().is_empty());
+    assert_eq!(ok(&app, &app.read, &["accounts", "history", "2", "--year", "2025"]).as_array().unwrap().len(), 12);
+    assert_eq!(ok(&app, &app.read, &["accounts", "summary"])["accounts"], 5);
+    assert!(ok(&app, &app.read, &["transfers", "list", "--account-id", "2", "--limit", "3"])["transfers"].as_array().unwrap().len() == 3);
+    assert_eq!(failed(&app, &app.read, &["accounts", "show"]), (2, "usage".into()), "the id is needed");
+    assert_eq!(failed(&app, &app.read, &["accounts", "show", "999999"]), (4, "not_found".into()));
+    assert_eq!(failed(&app, &app.read, &["accounts", "show", "1", "--from", "2026-10-31", "--to", "2026-10-01"]), (2, "invalid_input".into()));
+    // the order: every account that is not archived, as a list of ids
+    assert_eq!(ok(&app, &app.write, &["accounts", "reorder", "--ids", "2,1,4,3"]), Value::Null);
+    let names: Vec<String> = ok(&app, &app.read, &["accounts", "list"]).as_array().unwrap().iter().map(|a| a["name"].as_str().unwrap().to_string()).collect();
+    assert_eq!(names, ["Savings", "Current account", "Credit card", "Cash", "Old savings"]);
+    assert_eq!(failed(&app, &app.write, &["accounts", "reorder", "--ids", "2,1,4"]), (2, "invalid_input".into()));
+    assert_eq!(failed(&app, &app.write, &["accounts", "reorder", "--ids", "2,1,4,5"]), (2, "invalid_input".into()), "an archived one is not in the order");
+    // a name that is taken, in any case, is exit 1 `name_exists`; an archived one frees its name
+    assert_eq!(failed(&app, &app.write, &["accounts", "create", "--name", "SAVINGS", "--kind", "cash"]), (1, "name_exists".into()));
+    assert_eq!(failed(&app, &app.write, &["accounts", "update", "3", "--name", "credit card"]), (1, "name_exists".into()));
+    // archive twice and bring back: the same answer each time
+    let first = ok(&app, &app.write, &["accounts", "archive", "3"]);
+    assert_eq!(ok(&app, &app.write, &["accounts", "archive", "3"]), first);
+    assert_eq!(ok(&app, &app.write, &["accounts", "unarchive", "3"])["archived"], false);
+    assert_eq!(ok(&app, &app.write, &["accounts", "unarchive", "3"])["archived"], false);
+}
+
+#[test]
+fn a_transfer_and_a_transaction_name_the_account_from_the_command_line() {
+    let app = app(true);
+    let moved = ok(&app, &app.write, &["transfers", "create", "--from-account-id", "1", "--to-account-id", "2", "--amount", "200.00", "--date", "2026-11-03", "--note", "Rainy day"]);
+    assert_eq!((moved["amount"].clone(), moved["note"].clone(), moved["fromAccountId"].clone()), (json!("200.00"), json!("Rainy day"), json!("1")));
+    let id = id_of(&moved);
+    let changed = ok(&app, &app.write, &["transfers", "update", &id, "--amount", "250.00", "--clear-note"]);
+    assert_eq!((changed["amount"].clone(), changed["note"].clone()), (json!("250.00"), Value::Null));
+    assert_eq!(failed(&app, &app.write, &["transfers", "create", "--from-account-id", "2", "--to-account-id", "2", "--amount", "1.00", "--date", "2026-11-03"]), (2, "invalid_input".into()), "to itself");
+    assert_eq!(failed(&app, &app.write, &["transfers", "create", "--from-account-id", "1", "--to-account-id", "5", "--amount", "1.00", "--date", "2026-11-03"]), (2, "invalid_input".into()), "into an archived account");
+    assert_eq!(failed(&app, &app.write, &["transfers", "create", "--from-account-id", "1", "--to-account-id", "2", "--amount", "0.00", "--date", "2026-11-03"]), (2, "invalid_input".into()));
+
+    let groceries = category(&app, "EXPENSE", "Groceries");
+    let bread = ok(&app, &app.write, &["transactions", "create", "--name", "Bread", "--amount", "2.40", "--payment-date", "2026-10-14", "--category-id", &groceries, "--account-id", "3"]);
+    assert_eq!(bread["accountId"], "3");
+    let in_cash = ok(&app, &app.read, &["transactions", "list", "--account-id", "3", "--q", "Bread"]);
+    assert_eq!((in_cash["total"].clone(), in_cash["transactions"][0]["id"].clone()), (json!(1), bread["id"].clone()));
+    assert_eq!(ok(&app, &app.write, &["transactions", "update", &id_of(&bread), "--account-id", "1"])["accountId"], "1");
+    assert_eq!(failed(&app, &app.write, &["transactions", "create", "--name", "X", "--amount", "1.00", "--payment-date", "2026-10-14", "--category-id", &groceries, "--account-id", "5"]), (2, "invalid_input".into()), "an archived account");
+    assert_eq!(failed(&app, &app.write, &["transactions", "list", "--account-id", "zero"]), (2, "invalid_input".into()));
+}
+
+#[test]
+fn help_for_accounts_and_transfers_lists_their_commands_and_flags() {
+    let app = app(false);
+    let top = run(&app, "", &["--help"]);
+    assert!(top.out.contains("accounts") && top.out.contains("transfers"), "{}", top.out);
+    let accounts = run(&app, "", &["accounts", "--help"]);
+    assert_eq!((accounts.code, accounts.err.as_str()), (0, ""));
+    for verb in ["list", "show", "history", "summary", "create", "update", "archive", "unarchive", "delete", "reorder"] {
+        assert!(accounts.out.lines().any(|l| l.trim_start().starts_with(verb)), "accounts {verb}: {}", accounts.out);
+    }
+    let transfers = run(&app, "", &["transfers", "--help"]);
+    for verb in ["list", "create", "update", "delete"] {
+        assert!(transfers.out.lines().any(|l| l.trim_start().starts_with(verb)), "transfers {verb}: {}", transfers.out);
+    }
+    let create = run(&app, "", &["help", "accounts", "create"]);
+    assert_eq!(create.code, 0);
+    for text in ["--name <text> ", "--kind <CHECKING|SAVINGS|CASH|CREDIT_CARD>", "--opening-balance <text>", "--opening-date <date>", "--number <text>", "Needs a token that can write."] {
+        assert!(create.out.contains(text), "{text}: {}", create.out);
+    }
+    let delete = run(&app, "", &["accounts", "delete", "--help"]);
+    assert!(delete.out.contains("usage: meowny accounts delete <id>") && delete.out.contains("needs --yes"), "{}", delete.out);
+    assert!(run(&app, "", &["transfers", "create", "--help"]).out.contains("--from-account-id <id>"));
+    assert!(run(&app, "", &["transactions", "create", "--help"]).out.contains("--account-id <id>"));
 }

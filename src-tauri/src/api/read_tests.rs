@@ -40,6 +40,11 @@ const READ_ROUTES: &[&str] = &[
     "people.show",
     "debts.summary",
     "splits.preview",
+    "accounts.list",
+    "accounts.show",
+    "accounts.history",
+    "accounts.summary",
+    "transfers.list",
 ];
 
 pub(super) fn at(text: &str) -> DateTime<Utc> {
@@ -186,9 +191,14 @@ fn an_error_message_never_holds_what_the_database_said() {
         ("transactions.list", json!({ "limit": 4294967296u64 })),
         ("transactions.list", json!({ "offset": -3 })),
         ("budgets.overview", json!({ "month": "2026-13" })),
+        ("accounts.show", json!({ "id": "1", "from": "2026-10-31", "to": "2026-10-01" })),
+        ("accounts.show", json!({ "id": "1", "from": "2026-02-30" })),
+        ("accounts.history", json!({ "id": "1", "year": "2026-" })),
+        ("transfers.list", json!({ "limit": 4294967296u64 })),
+        ("transfers.list", json!({ "from": "2026-13-01" })),
     ] {
         let message = run(&vault, name, args).unwrap_err().message.to_lowercase();
-        for leak in ["sqlite", "select", "table", "column", "constraint", "categories", "payment_date"] {
+        for leak in ["sqlite", "select", "table", "column", "constraint", "categories", "payment_date", "accounts", "transfers", "opening_balance"] {
             assert!(!message.contains(leak), "{name}: {message}");
         }
     }
@@ -200,7 +210,14 @@ fn reading_changes_nothing() {
     let before = vault.with_conn(|c| backup::dump(c)).unwrap();
     let id = first_expense(&vault)["id"].as_str().unwrap().to_string();
     for name in READ_ROUTES {
-        for args in [json!({}), json!({ "month": "2026-10", "type": "EXPENSE" }), json!({ "year": "2026" }), json!({ "categoryId": id, "from": "2026-01", "to": "2026-10" })] {
+        for args in [
+            json!({}),
+            json!({ "month": "2026-10", "type": "EXPENSE" }),
+            json!({ "year": "2026" }),
+            json!({ "categoryId": id, "from": "2026-01", "to": "2026-10" }),
+            json!({ "id": "1" }),
+            json!({ "id": "2", "year": "2026" }),
+        ] {
             let _ = run(&vault, name, args);
         }
     }
@@ -221,6 +238,8 @@ fn a_locked_app_gives_no_data_from_any_read_route() {
         "documents.show" => json!({ "id": "1" }),
         "people.show" => json!({ "id": "1" }),
         "splits.preview" => json!({ "amount": "100.00", "mode": "EQUAL", "people": ["1"] }),
+        "accounts.show" => json!({ "id": "1" }),
+        "accounts.history" => json!({ "id": "1", "year": "2026" }),
         _ => json!({}),
     };
     for name in READ_ROUTES {
@@ -243,6 +262,8 @@ fn money_and_ids_are_strings_and_the_only_numbers_are_counts_and_percentages() {
         "documents.show" => json!({ "id": "1" }),
         "people.show" => json!({ "id": "1" }),
         "splits.preview" => json!({ "amount": "100.00", "mode": "SHARES", "mine": "2", "people": ["1"], "guests": "Bob", "values": "1,1" }),
+        "accounts.show" => json!({ "id": "1", "from": "2025-06-01", "to": "2026-10-31" }),
+        "accounts.history" => json!({ "id": "1", "year": "2026" }),
         _ => json!({}),
     };
     // a friend, a shared bill, a loan and a split template, so that their answers are walked too
@@ -275,9 +296,9 @@ fn money_and_ids_are_strings_and_the_only_numbers_are_counts_and_percentages() {
         walk(&ok(&vault, name, args(name)), name, &mut numbers);
     }
     // Counts: `limit`, `offset`, `total` (a page), `intervalCount` (every 2 weeks), `paidCount`, and what an export
-    // would contain (`transactions`, `categories`, `budgets`, `recurring`, `documents`, `people`, `ledger`, `splitBills`, `duePayments`, `debtHistory`, `history`), the weights of a split template (`mine`, `weight`: proportions, not money), the size of a file in bytes and the number of things it is attached to (`sizeBytes`, `linkCount`), `everyDays` (a backup schedule). Percentages: `pctUsed`,
+    // would contain (`transactions`, `categories`, `budgets`, `recurring`, `accounts`, `transfers`, `documents`, `people`, `ledger`, `splitBills`, `duePayments`, `debtHistory`, `history`), how many rows an account holds (`entries`), the weights of a split template (`mine`, `weight`: proportions, not money), the size of a file in bytes and the number of things it is attached to (`sizeBytes`, `linkCount`), `everyDays` (a backup schedule). Percentages: `pctUsed`,
     // `share`, `savingsRate`. Everything else, money above all, is a string.
-    let allowed: BTreeSet<String> = ["intervalCount", "limit", "offset", "paidCount", "pctUsed", "savingsRate", "share", "total", "transactions", "categories", "budgets", "recurring", "documents", "people", "ledger", "splitBills", "duePayments", "debtHistory", "history", "everyDays", "sizeBytes", "linkCount", "mine", "weight"]
+    let allowed: BTreeSet<String> = ["intervalCount", "limit", "offset", "paidCount", "pctUsed", "savingsRate", "share", "total", "transactions", "categories", "budgets", "recurring", "accounts", "transfers", "entries", "documents", "people", "ledger", "splitBills", "duePayments", "debtHistory", "history", "everyDays", "sizeBytes", "linkCount", "mine", "weight"]
         .into_iter()
         .map(String::from)
         .collect();
