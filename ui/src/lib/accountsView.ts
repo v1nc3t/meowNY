@@ -1,5 +1,6 @@
 import type { Account, AccountLine } from '../api/accounts'
 import type { MessageKey } from '../i18n/en'
+import { applyOrder } from './reorder'
 import { saveChoice, storedId } from './sticky'
 
 // What the screens show of the accounts (docs/accounts-design.md, section 13). Nothing here adds money up.
@@ -88,4 +89,68 @@ export function signedView(amount: string, format: (unsigned: string) => string)
   const unsigned = amount.replace('-', '')
   if (Number(unsigned) === 0) return { text: format(unsigned), tone: '' }
   return amount.startsWith('-') ? { text: `-${format(unsigned)}`, tone: 'is-expense' } : { text: `+${format(unsigned)}`, tone: 'is-income' }
+}
+
+// -- the tabs of the page ---------------------------------------------------------------------------------------------------------
+
+export const ACCOUNT_TABS = ['accounts', 'income'] as const
+export type AccountTab = (typeof ACCOUNT_TABS)[number]
+
+/** The tab an address names: `?tab=income` is the income, anything else (no tab, a word nobody knows) the accounts. Other pages link to this. */
+export function accountsTab(search: string | URLSearchParams): AccountTab {
+  return new URLSearchParams(search).get('tab') === 'income' ? 'income' : 'accounts'
+}
+
+/** The query of a tab: none for the accounts, the page's own address. */
+export function tabQuery(tab: AccountTab): Record<string, string> {
+  return tab === 'income' ? { tab } : {}
+}
+
+// -- groups -----------------------------------------------------------------------------------------------------------------------
+
+/** A run of accounts under one heading: `name` is the group's, or null for the accounts that have none (and for the one list of no groups at all). */
+export type AccountGroup = { name: string | null; accounts: Account[] }
+
+/** Whether any account that is not archived has a group: only then the list has headings. */
+export function hasGroups(accounts: readonly Account[]): boolean {
+  return activeAccounts(accounts).some((account) => account.group)
+}
+
+/**
+ * The accounts that are not archived, under their groups: the groups in the order of their first account in the list, the accounts of
+ * each in the list's order, those with no group last. With no group in use, one list with no name. An archived account is never in one.
+ */
+export function groupAccounts(accounts: readonly Account[]): AccountGroup[] {
+  const active = activeAccounts(accounts)
+  if (!hasGroups(active)) return [{ name: null, accounts: active }]
+  const named = new Map<string, Account[]>()
+  const none: Account[] = []
+  for (const account of active) {
+    if (!account.group) none.push(account)
+    else named.set(account.group, [...(named.get(account.group) ?? []), account])
+  }
+  return [...[...named].map(([name, list]) => ({ name, accounts: list })), ...(none.length > 0 ? [{ name: null, accounts: none }] : [])]
+}
+
+/**
+ * The ids of all accounts that are not archived, in the order to send after the accounts of one group were put in the order `ids`
+ * (`group` null is the accounts with no group). Those accounts take the places that the group's accounts had, so nothing outside the
+ * group moves. An id that is not in the group (another group's, an archived account's, an unknown one) and an id said twice count once or not at all.
+ */
+export function reorderWithinGroup(accounts: readonly Account[], group: string | null, ids: readonly string[]): string[] {
+  const active = activeAccounts(accounts)
+  const members = new Set(active.filter((account) => (account.group || null) === group).map((account) => account.id))
+  return applyOrder(active, [...new Set(ids)].filter((id) => members.has(id))).map((account) => account.id)
+}
+
+/** Whether a row says what is available: only when there is a virtual balance (a card limit), "-0.00" being none. */
+export function showAvailable(account: Pick<Account, 'virtualBalance'>): boolean {
+  return Number(account.virtualBalance) !== 0
+}
+
+/** How wide the bar of an amount is, as a percentage of the track: the largest amount of the list fills it. No largest amount, no bar. */
+export function barWidth(amount: string, largest: string): number {
+  const most = Number(largest)
+  const value = Number(amount)
+  return most > 0 && value > 0 ? Math.min(100, (value / most) * 100) : 0
 }

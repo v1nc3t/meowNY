@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { Account, AccountLine, AccountStatement, AccountsSummary, HistoryPoint } from './accounts.ts'
+import { Account, AccountLine, AccountStatement, AccountsSummary, Breakdown, HistoryPoint, Share } from './accounts.ts'
 import { Preview } from './dataExport.ts'
 import { Entry, Line } from './debts.ts'
 import { Recurring } from './recurring.ts'
@@ -22,6 +22,12 @@ const account = {
   changeThisMonth: '-80.10',
   lastActivity: '2026-11-02',
   entries: 42,
+  bic: 'COBADEFFXXX',
+  notes: 'Pays the streaming plan.\nLimit 1000.',
+  group: 'Cards',
+  includeInNetWorth: true,
+  virtualBalance: '1000.00',
+  available: '2520.35',
 }
 const line = { date: '2026-11-02', source: 'TRANSACTION', id: '9', what: 'Lidl', other: 'Groceries', amount: '-12.50', balance: '887.50' }
 const ok = (schema: { safeParse: (value: unknown) => { success: boolean } }, value: unknown) => schema.safeParse(value).success
@@ -49,8 +55,31 @@ test('an account with a wrong shape is refused', () => {
     ['no main flag', { ...account, isMain: undefined }],
     ['a number left out', (({ number: _number, ...rest }) => rest)(account)],
     ['nothing', null],
+    ['a virtual balance as a number', { ...account, virtualBalance: 1000 }],
+    ['a virtual balance with one decimal', { ...account, virtualBalance: '1000.0' }],
+    ['a virtual balance with a plus', { ...account, virtualBalance: '+1.00' }],
+    ['available as a number', { ...account, available: 2520.35 }],
+    ['net worth as a string', { ...account, includeInNetWorth: 'true' }],
+    ['net worth as 1', { ...account, includeInNetWorth: 1 }],
+    ['a BIC as a number', { ...account, bic: 123 }],
+    ['notes as a list', { ...account, notes: ['a'] }],
+    ['a group left undefined', { ...account, group: undefined }],
   ]
   for (const [why, value] of bad) assert.equal(ok(Account, value), false, why)
+  // the backend always sends the six new fields, so an account without one is refused
+  for (const field of ['bic', 'notes', 'group', 'includeInNetWorth', 'virtualBalance', 'available']) {
+    assert.equal(ok(Account, Object.fromEntries(Object.entries(account).filter(([key]) => key !== field))), false, `${field} left out`)
+  }
+})
+
+test('an account with its new fields is accepted, set or not', () => {
+  assert.deepEqual(Account.parse(account), account)
+  const plain = { ...account, bic: null, notes: null, group: null, includeInNetWorth: true, virtualBalance: '0.00', available: '1520.35' }
+  assert.deepEqual(Account.parse(plain), plain)
+  assert.ok(ok(Account, { ...plain, includeInNetWorth: false, virtualBalance: '-250.00', available: '1270.35' }), 'left out of the net worth, a negative virtual balance')
+  assert.ok(ok(Account, { ...plain, virtualBalance: '-0.00' }), 'the schema reads the shape; the app never sends this')
+  assert.ok(ok(Account, { ...plain, notes: 'a\nb', bic: 'COBADEFFXXX' }))
+  assert.ok(ok(Account, { ...plain, balance: '-240.00', virtualBalance: '1000.00', available: '760.00' }))
 })
 
 test('the summary, a statement and the history are accepted, and refused with numbers for money', () => {
@@ -114,12 +143,43 @@ test('a transaction, a recurring item and a ledger entry carry their account', (
 
 test('a conflict of an account or a transfer is read, with its new fields', () => {
   const conflict = { table: 'accounts', id: '2', title: 'Savings', mineDeleted: false, theirsDeleted: false, fields: [] as { field: string; mine: string; theirs: string }[] }
-  for (const field of ['name', 'type', 'number', 'openingBalance', 'openingDate', 'archived']) conflict.fields.push({ field, mine: 'a', theirs: 'b' })
+  for (const field of ['name', 'type', 'number', 'openingBalance', 'openingDate', 'archived', 'bic', 'notes', 'group', 'includeNetWorth', 'virtualBalance']) conflict.fields.push({ field, mine: 'a', theirs: 'b' })
   assert.ok(ok(Conflict, conflict))
   assert.ok(ok(Conflict, { ...conflict, table: 'transfers', fields: ['from', 'to', 'amount', 'date', 'note'].map((field) => ({ field, mine: '', theirs: 'x' })) }))
   assert.ok(ok(Conflict, { ...conflict, table: 'transactions', fields: [{ field: 'account', mine: 'Cash', theirs: 'Savings' }] }))
   assert.equal(ok(Conflict, { ...conflict, table: 'piggy_banks' }), false)
   assert.equal(ok(Conflict, { ...conflict, fields: [{ field: 'iban', mine: '', theirs: '' }] }), false)
+})
+
+const share = { categoryId: '4', name: 'Groceries', amount: '137.00' }
+const breakdown = { from: '2026-11-01', to: '2026-11-30', expenses: [share, { categoryId: '5', name: 'Rent', amount: '0.50' }], income: [{ categoryId: '9', name: 'Salary', amount: '3200.00' }], expenseTotal: '137.50', incomeTotal: '3200.00' }
+
+test('a breakdown as the app sends it is accepted, also an empty one', () => {
+  assert.deepEqual(Breakdown.parse(breakdown), breakdown)
+  const empty = { from: '2026-11-01', to: '2026-11-30', expenses: [], income: [], expenseTotal: '0.00', incomeTotal: '0.00' }
+  assert.deepEqual(Breakdown.parse(empty), empty)
+  assert.ok(ok(Breakdown, { ...empty, income: breakdown.income, incomeTotal: '3200.00' }), 'only one side')
+  assert.ok(ok(Share, { ...share, name: '' }), 'a name is text; the app may send a deleted category by its name')
+})
+
+test('a breakdown with a number for money, or a wrong shape, is refused', () => {
+  const bad: [string, unknown][] = [
+    ['a total as a number', { ...breakdown, expenseTotal: 137.5 }],
+    ['the other total as a number', { ...breakdown, incomeTotal: 3200 }],
+    ['a share amount as a number', { ...breakdown, expenses: [{ ...share, amount: 137 }] }],
+    ['an amount with one decimal', { ...breakdown, expenses: [{ ...share, amount: '137.0' }] }],
+    ['a signed amount', { ...breakdown, expenses: [{ ...share, amount: '-137.00' }] }],
+    ['a signed total', { ...breakdown, incomeTotal: '-1.00' }],
+    ['a category id as a number', { ...breakdown, income: [{ ...breakdown.income[0], categoryId: 9 }] }],
+    ['a category id of zero', { ...breakdown, income: [{ ...breakdown.income[0], categoryId: '0' }] }],
+    ['no name', { ...breakdown, expenses: [{ categoryId: '4', amount: '1.00' }] }],
+    ['expenses as null', { ...breakdown, expenses: null }],
+    ['no income', (({ income: _income, ...rest }) => rest)(breakdown)],
+    ['a date with a time', { ...breakdown, from: '2026-11-01T00:00:00Z' }],
+    ['no period', (({ from: _from, to: _to, ...rest }) => rest)(breakdown)],
+    ['nothing', null],
+  ]
+  for (const [why, value] of bad) assert.equal(ok(Breakdown, value), false, why)
 })
 
 test('the preview of an export counts accounts and transfers when the app says them', () => {

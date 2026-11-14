@@ -20,6 +20,9 @@ export type ShortcutId =
   | 'help'
   | 'lock'
   | 'sidebar'
+  | 'entryExpense'
+  | 'entryIncome'
+  | 'entryTransfer'
 
 export type ShortcutGroup = 'go' | 'actions' | 'lists' | 'general'
 
@@ -27,6 +30,8 @@ export type ShortcutDef = {
   /** The keys, pressed one after another. For a `mod` shortcut it is one key held with Ctrl (Cmd on a Mac). */
   keys: readonly string[]
   mod?: boolean
+  /** One key held with Alt, inside a dialog that answers it itself (the tabs of the add dialog): the matcher below does not see it. */
+  alt?: boolean
   group: ShortcutGroup
   label: MessageKey
   /** For "go to {page}": the name of the page. */
@@ -54,6 +59,9 @@ export const SHORTCUTS: Record<ShortcutId, ShortcutDef> = {
   help: { keys: ['?'], group: 'general', label: 'keys.help' },
   lock: { keys: ['l'], mod: true, group: 'general', label: 'keys.lock' },
   sidebar: { keys: ['b'], mod: true, group: 'general', label: 'keys.sidebar' },
+  entryExpense: { keys: ['1'], alt: true, group: 'actions', label: 'keys.entryTab', page: 'common.expense' },
+  entryIncome: { keys: ['2'], alt: true, group: 'actions', label: 'keys.entryTab', page: 'common.income' },
+  entryTransfer: { keys: ['3'], alt: true, group: 'actions', label: 'keys.entryTab', page: 'entry.tabTransfer' },
 }
 
 const GO_SECOND_KEY: Record<string, ShortcutId> = {
@@ -125,9 +133,10 @@ export function isMac(platform: string): boolean {
   return /mac|iphone|ipad/i.test(platform)
 }
 
-/** The keys as shown to people: "g d", "n", "Ctrl+L" (or "⌘L" on a Mac). */
+/** The keys as shown to people: "g d", "n", "Ctrl+L" (or "⌘L" on a Mac), "Alt+1" (or "⌥1"). */
 export function shortcutKeys(id: ShortcutId, mac: boolean): string {
   const def = SHORTCUTS[id]
+  if (def.alt) return mac ? `⌥${def.keys[0]}` : `Alt+${def.keys[0]}`
   if (def.mod) return mac ? `⌘${def.keys[0].toUpperCase()}` : `Ctrl+${def.keys[0].toUpperCase()}`
   return def.keys.join(' ')
 }

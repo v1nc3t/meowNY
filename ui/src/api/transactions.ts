@@ -62,6 +62,8 @@ export type TransactionFilter = {
   to?: string
   categoryId?: string
   accountId?: string
+  /** Only transactions whose category has this type; left out, both. */
+  kind?: 'INCOME' | 'EXPENSE'
   q?: string
   limit?: number
   offset?: number

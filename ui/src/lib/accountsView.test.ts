@@ -3,7 +3,26 @@ import { afterEach, beforeEach, test } from 'node:test'
 import type { Account } from '../api/accounts.ts'
 import '../i18n/languages.ts'
 import { setActiveLanguage, t } from '../i18n/translate.ts'
-import { accountChoice, accountLabel, accountName, accountOptions, activeAccounts, defaultAccountId, lineWords, MAIN_NAME, rememberAccount, several, signedView } from './accountsView.ts'
+import {
+  accountChoice,
+  accountLabel,
+  accountName,
+  accountOptions,
+  accountsTab,
+  activeAccounts,
+  barWidth,
+  defaultAccountId,
+  groupAccounts,
+  hasGroups,
+  lineWords,
+  MAIN_NAME,
+  rememberAccount,
+  reorderWithinGroup,
+  several,
+  showAvailable,
+  signedView,
+  tabQuery,
+} from './accountsView.ts'
 
 // A stand-in for the browser's storage; `broken` makes every use throw, as storage does when it is blocked.
 let data = new Map<string, string>()
@@ -44,6 +63,12 @@ const account = (id: string, name: string, more: Partial<Account> = {}): Account
   changeThisMonth: '0.00',
   lastActivity: null,
   entries: 0,
+  bic: null,
+  notes: null,
+  group: null,
+  includeInNetWorth: true,
+  virtualBalance: '0.00',
+  available: '0.00',
   ...more,
 })
 const main = account('1', MAIN_NAME)
@@ -160,4 +185,122 @@ test('a signed amount shows its sign and its colour, and nothing is plain', () =
   assert.deepEqual(signedView('-12.50', format), { text: '-€12.50', tone: 'is-expense' })
   assert.deepEqual(signedView('0.00', format), { text: '€0.00', tone: '' })
   assert.deepEqual(signedView('-0.00', format), { text: '€0.00', tone: '' }, 'never a minus on nothing')
+})
+
+// -- groups -----------------------------------------------------------------------------------------------------------------------
+
+const names = (groups: ReturnType<typeof groupAccounts>) => groups.map((group) => [group.name, group.accounts.map((a) => a.id)])
+const a1 = account('1', 'One', { group: 'Bank' })
+const a2 = account('2', 'Two')
+const a3 = account('3', 'Three', { group: 'Cards' })
+const a4 = account('4', 'Four', { group: 'Bank' })
+const a5 = account('5', 'Five', { group: 'Cards', archived: true })
+
+test('with no group in use the list is one run with no name', () => {
+  assert.equal(hasGroups([main, savings]), false)
+  assert.deepEqual(names(groupAccounts([main, savings, cash])), [[null, ['1', '2', '3']]])
+  assert.deepEqual(names(groupAccounts([])), [[null, []]])
+  assert.deepEqual(names(groupAccounts([main, account('9', 'Old', { archived: true, group: 'Bank' })])), [[null, ['1']]], 'the group of an archived account does not count')
+  assert.equal(hasGroups([account('2', 'X', { group: '' })]), false, 'an empty group is none')
+})
+
+test('with some groups the groups come in the order of their first account and the accounts with none come last', () => {
+  assert.equal(hasGroups([a1, a2]), true)
+  assert.deepEqual(names(groupAccounts([a2, a3, a1, a4])), [['Cards', ['3']], ['Bank', ['1', '4']], [null, ['2']]])
+  assert.deepEqual(names(groupAccounts([a1, a2, a3, a4])), [['Bank', ['1', '4']], ['Cards', ['3']], [null, ['2']]], 'a group is one run even when its accounts are apart')
+})
+
+test('with every account in a group there is no "no group" run', () => {
+  assert.deepEqual(names(groupAccounts([a3, a1, a4])), [['Cards', ['3']], ['Bank', ['1', '4']]])
+  assert.deepEqual(names(groupAccounts([a1])), [['Bank', ['1']]])
+})
+
+test('an archived account is never in a group, and groups are told apart by their exact name', () => {
+  assert.deepEqual(names(groupAccounts([a1, a5, a3, old])), [['Bank', ['1']], ['Cards', ['3']]])
+  assert.deepEqual(names(groupAccounts([account('1', 'A', { group: 'bank' }), account('2', 'B', { group: 'Bank' })])), [['bank', ['1']], ['Bank', ['2']]])
+})
+
+test('an account moves only among the accounts of its own group, and every account is sent once', () => {
+  const all = [a1, a2, a3, a4, a5]
+  // the group's two accounts swap; the places of the others stay
+  assert.deepEqual(reorderWithinGroup(all, 'Bank', ['4', '1']), ['4', '2', '3', '1'])
+  assert.deepEqual(reorderWithinGroup(all, 'Bank', ['1', '4']), ['1', '2', '3', '4'], 'no move, no change')
+  assert.deepEqual(reorderWithinGroup(all, null, ['2']), ['1', '2', '3', '4'], 'a run of one')
+  assert.deepEqual(reorderWithinGroup([a1, a2, a3, a4], 'Cards', ['3']), ['1', '2', '3', '4'])
+  // three in a group, the last goes first
+  const three = [account('1', 'A', { group: 'G' }), account('2', 'B'), account('3', 'C', { group: 'G' }), account('4', 'D', { group: 'G' })]
+  assert.deepEqual(reorderWithinGroup(three, 'G', ['4', '1', '3']), ['4', '2', '1', '3'])
+  assert.deepEqual(reorderWithinGroup(three, null, ['2']), ['1', '2', '3', '4'])
+})
+
+test('the first and the last of a group cannot leave it, whatever the ids say', () => {
+  const list = [account('1', 'A', { group: 'G' }), account('2', 'B', { group: 'H' }), account('3', 'C', { group: 'G' })]
+  // an id of the other group is not the group's to place: it is ignored
+  assert.deepEqual(reorderWithinGroup(list, 'G', ['2', '3', '1']), ['3', '2', '1'])
+  assert.deepEqual(reorderWithinGroup(list, 'G', ['3', '2', '1']), ['3', '2', '1'])
+  assert.deepEqual(reorderWithinGroup(list, 'H', ['3', '1', '2']), ['1', '2', '3'], 'ids of another group only: nothing moves')
+})
+
+test('an unknown, archived or repeated id is ignored, and the result is still every active account once', () => {
+  const all = [a1, a2, a3, a4, a5]
+  assert.deepEqual(reorderWithinGroup(all, 'Bank', ['99', '4', '1']), ['4', '2', '3', '1'], 'unknown')
+  assert.deepEqual(reorderWithinGroup(all, 'Cards', ['5', '3']), ['1', '2', '3', '4'], 'archived: not an active account, not sent')
+  assert.deepEqual(reorderWithinGroup(all, 'Bank', ['4', '4', '1', '1']), ['4', '2', '3', '1'], 'twice')
+  assert.deepEqual(reorderWithinGroup(all, 'Bank', []), ['1', '2', '3', '4'], 'none')
+  assert.deepEqual(reorderWithinGroup(all, 'Bank', ['4']), ['1', '2', '3', '4'], 'a part of the group: the one named takes its own place')
+  assert.deepEqual(reorderWithinGroup(all, 'Nobody', ['1', '4']), ['1', '2', '3', '4'], 'a group that is not there')
+  assert.deepEqual(reorderWithinGroup([], null, ['1']), [])
+  for (const ids of [['4', '1'], ['1', '1', '4'], ['x', '1', '4', '3']]) {
+    const sent = reorderWithinGroup(all, 'Bank', ids)
+    assert.deepEqual([...sent].sort(), ['1', '2', '3', '4'], ids.join())
+  }
+})
+
+test('the available line shows only when there is a virtual balance', () => {
+  assert.equal(showAvailable({ virtualBalance: '0.00' }), false)
+  assert.equal(showAvailable({ virtualBalance: '-0.00' }), false, 'minus nothing is nothing')
+  assert.equal(showAvailable({ virtualBalance: '1000.00' }), true)
+  assert.equal(showAvailable({ virtualBalance: '-250.00' }), true)
+  assert.equal(showAvailable({ virtualBalance: '0.01' }), true)
+  assert.equal(showAvailable({ virtualBalance: '-0.01' }), true)
+})
+
+// -- the tab in the address -------------------------------------------------------------------------------------------------------
+
+test('the income tab is ?tab=income, and every other address is the accounts', () => {
+  assert.equal(accountsTab('?tab=income'), 'income')
+  assert.equal(accountsTab('tab=income'), 'income')
+  assert.equal(accountsTab(new URLSearchParams({ tab: 'income' })), 'income')
+  assert.equal(accountsTab(''), 'accounts')
+  assert.equal(accountsTab('?tab=accounts'), 'accounts')
+  for (const bad of ['?tab=', '?tab=INCOME', '?tab=expenses', '?tab=Income ', '?tab=income2', '?other=income', '?tab=nope&tab=income']) {
+    // the word is exact, and the first value is the one that counts
+    assert.equal(accountsTab(bad), 'accounts', bad)
+  }
+  assert.equal(accountsTab('?x=1&tab=income'), 'income')
+})
+
+test('the query of a tab is the one that reads back as it, and the accounts have none', () => {
+  assert.deepEqual(tabQuery('accounts'), {})
+  assert.deepEqual(tabQuery('income'), { tab: 'income' })
+  for (const tab of ['accounts', 'income'] as const) assert.equal(accountsTab(new URLSearchParams(tabQuery(tab))), tab)
+})
+
+// -- the bars of the breakdown ----------------------------------------------------------------------------------------------------
+
+test('the largest amount fills the bar and the others are a share of it', () => {
+  assert.equal(barWidth('200.00', '200.00'), 100)
+  assert.equal(barWidth('100.00', '200.00'), 50)
+  assert.equal(barWidth('0.01', '200.00'), 0.005)
+  assert.equal(barWidth('0.00', '200.00'), 0)
+})
+
+test('a bar needs no division by zero, and never leaves its track', () => {
+  assert.equal(barWidth('0.00', '0.00'), 0, 'a total of zero: no bar')
+  assert.equal(barWidth('5.00', '0.00'), 0, 'no largest amount: no bar')
+  assert.equal(barWidth('50.00', '50.00'), 100, 'one share')
+  assert.equal(barWidth('300.00', '200.00'), 100, 'never past the end')
+  assert.equal(barWidth('-5.00', '200.00'), 0)
+  assert.equal(barWidth('abc', '200.00'), 0)
+  assert.equal(barWidth('5.00', ''), 0)
 })

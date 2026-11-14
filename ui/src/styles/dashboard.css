@@ -403,6 +403,22 @@
   color: var(--foreground);
 }
 
+.dash-group-title a {
+  color: inherit;
+  text-decoration: none;
+  text-underline-offset: 4px;
+}
+
+.dash-group-title a:focus-visible {
+  text-decoration: underline;
+}
+
+@media (hover: hover) {
+  .dash-group-title a:hover {
+    text-decoration: underline;
+  }
+}
+
 .dash-group-title::before {
   content: '';
   width: 8px;

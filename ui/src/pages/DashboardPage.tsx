@@ -594,7 +594,10 @@ function BudgetBars({ bva, settings }: { bva: BudgetVsActual; settings: MoneySet
     <div className="dash-budgets">
       {groups.map((group) => (
         <section key={group.type} className={group.type === 'EXPENSE' ? 'dash-budget-group is-expense' : 'dash-budget-group is-income'}>
-          <h3 className="dash-group-title">{t(group.type === 'EXPENSE' ? 'budgets.expenses' : 'budgets.income')}</h3>
+          <h3 className="dash-group-title">
+            {/* the income's budgets are on the accounts page */}
+            {group.type === 'INCOME' ? <Link to="/app/accounts?tab=income">{t('budgets.income')}</Link> : t('budgets.expenses')}
+          </h3>
           <ul className="dash-bars">
             {group.rows.map((r) => {
               const over = group.type === 'EXPENSE' && r.pct !== null && r.pct > 100

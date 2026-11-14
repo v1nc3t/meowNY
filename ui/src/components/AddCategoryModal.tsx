@@ -20,10 +20,13 @@ const formId = 'category-form'
  * The budget is dated like every budget, so it never changes the months before.
  */
 export default function AddCategoryModal({
+  type: startType = 'EXPENSE',
   month,
   onClose,
   onCreated,
 }: {
+  /** The type the choice starts at: the side of the page it is opened on. Expense when left out. */
+  type?: CategoryType
   /** The month the budget starts in. This month when left out. */
   month?: string
   onClose: () => void
@@ -34,7 +37,7 @@ export default function AddCategoryModal({
   const budgetMonth = month ?? today?.month ?? null
   // Made already, when the budget failed after it: a second try only sets the budget.
   const made = useRef<Category | null>(null)
-  const [type, setType] = useState('EXPENSE')
+  const [type, setType] = useState<string>(startType)
   const typeOptions = [
     { value: 'EXPENSE', label: t('common.expense') },
     { value: 'INCOME', label: t('common.income') },

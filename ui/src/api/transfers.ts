@@ -20,7 +20,19 @@ export type NewTransfer = { fromAccountId: string; toAccountId: string; amount: 
 /** Fields left out stay as they are; `note: null` clears it. */
 export type TransferPatch = { fromAccountId?: string; toAccountId?: string; amount?: string; date?: string; note?: string | null }
 
+export const TransferPage = z.object({
+  transfers: z.array(Transfer),
+  total: z.number().int().nonnegative(),
+  limit: z.number().int().positive(),
+  offset: z.number().int().nonnegative(),
+})
+export type TransferPage = z.infer<typeof TransferPage>
+
+/** `accountId` matches either side of a transfer; `from` and `to` are days ("YYYY-MM-DD"), both included. Newest first. */
+export type TransferFilter = { accountId?: string; from?: string; to?: string; limit?: number; offset?: number }
+
 export const transfers = {
+  list: (filter: TransferFilter = {}) => call('list_transfers', TransferPage, { filter }),
   create: (input: NewTransfer) => call('create_transfer', Transfer, { input }),
   get: (id: string) => call('get_transfer', Transfer, { id }),
   update: (id: string, patch: TransferPatch) => call('update_transfer', Transfer, { id, patch }),

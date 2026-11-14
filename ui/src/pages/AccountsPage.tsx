@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useRef, useState, type MouseEvent } from 'react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
-import { accounts as accountsApi, type Account, type AccountLine, type AccountStatement, type AccountsSummary } from '../api/accounts'
+import { Fragment, useEffect, useMemo, useRef, useState, type MouseEvent, type ReactNode } from 'react'
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { accounts as accountsApi, type Account, type AccountLine, type AccountStatement, type AccountsSummary, type Breakdown } from '../api/accounts'
 import { debts } from '../api/debts'
 import { ApiError, errorText } from '../api/invoke'
 import { shiftMonth } from '../api/months'
@@ -9,9 +9,13 @@ import { transfers as transfersApi, type Transfer } from '../api/transfers'
 import AccountModal from '../components/AccountModal'
 import BalanceChart from '../components/BalanceChart'
 import ConfirmModal from '../components/ConfirmModal'
+import EntryDialog from '../components/EntryDialog'
+import IncomeTab from '../components/IncomeTab'
 import MonthNav from '../components/MonthNav'
 import Icon from '../components/NavIcon'
 import { DayGroups, IconAction, Row, Table, TapRow } from '../components/RowParts'
+import SectionTabs from '../components/SectionTabs'
+import ShareList from '../components/ShareList'
 import TransferModal from '../components/TransferModal'
 import YearNav from '../components/YearNav'
 import Button from '../components/ui/Button'
@@ -21,23 +25,28 @@ import { useGoToTransaction } from '../hooks/useFocusRequest'
 import { useMoneySettings, type MoneySettings } from '../hooks/useMoneySettings'
 import { useOpenRow } from '../hooks/useOpenRow'
 import { useProfile } from '../hooks/profile'
+import { useSwipeHandler } from '../hooks/swipe'
 import { useReorder } from '../hooks/useReorder'
 import { useToast } from '../hooks/toast'
 import { useT } from '../i18n/context'
 import { useShortcut } from '../keys/registry'
 import { tip } from '../keys/tip'
 import { useRowNavigation } from '../keys/useRowNavigation'
-import { accountLabel, accountName, activeAccounts, lineWords, signedView } from '../lib/accountsView'
+import { ACCOUNT_TABS, accountLabel, accountName, accountsTab, activeAccounts, groupAccounts, lineWords, reorderWithinGroup, showAvailable, signedView, tabQuery, type AccountGroup } from '../lib/accountsView'
+import type { EntryTab } from '../lib/entryDialog'
 import { formatDate, formatMoney } from '../lib/money'
 import { lastDay } from '../lib/range'
 import { applyOrder } from '../lib/reorder'
 import { saveChoice, storedChoice } from '../lib/sticky'
+import { step } from '../lib/swipe'
+import { tabPanelProps } from '../lib/tabs'
 
 /** The dialog that is open. A transfer being changed is read first, so the dialog opens with its row. */
 type Dialog =
   | { kind: 'add' }
   | { kind: 'edit'; account: Account }
   | { kind: 'transfer'; transfer: Transfer | null; fromId?: string }
+  | { kind: 'entry'; tab: EntryTab; accountId: string }
   | { kind: 'archive'; account: Account }
   | { kind: 'delete'; account: Account }
   | { kind: 'deleteTransfer'; id: string; name: string }
@@ -70,6 +79,9 @@ function AccountsView({ settings, now }: { settings: MoneySettings; now: Today }
   const [dialog, setDialog] = useState<Dialog>(null)
   const [pending, setPending] = useState(false)
   const [showArchived, setShowArchived] = useState(() => storedChoice('accounts.archived', [false, true], false))
+  // the tab is in the address, so other pages can link to the income (/app/accounts?tab=income); an account's page has no tabs
+  const [params, setParams] = useSearchParams()
+  const tab = accountId ? 'accounts' : accountsTab(params)
   // a row was just dropped in a new place: the click that ends the drag must not open the account
   const dropped = useRef(false)
   const money = (amount: string) => formatMoney(amount, settings.currency, settings.locale)
@@ -92,6 +104,9 @@ function AccountsView({ settings, now }: { settings: MoneySettings; now: Today }
   }, [reload, say])
 
   const active = useMemo(() => activeAccounts(accounts ?? []), [accounts])
+  // the list as it is shown: one run of accounts, or one for each group (the groups in use are what the group field offers)
+  const groups = useMemo(() => groupAccounts(accounts ?? []), [accounts])
+  const grouped = groups.some((group) => group.name !== null)
   const archived = useMemo(() => (accounts ?? []).filter((account) => account.archived), [accounts])
   // a transfer needs two accounts to choose from
   const canTransfer = active.length >= 2
@@ -109,8 +124,8 @@ function AccountsView({ settings, now }: { settings: MoneySettings; now: Today }
       refresh()
     }
   }
-  const reorderItems = useMemo(() => active.map((account) => ({ id: account.id, name: accountName(account, t), deleted: false })), [active, t])
-  const { listRef, hintId, live } = useReorder(reorderItems, (ids) => void onReorder(ids), 'accounts.reordered')
+  /** An account moves among the accounts of its own group; what is sent is still every account that is not archived. */
+  const onReorderGroup = (group: string | null, ids: string[]) => void onReorder(reorderWithinGroup(accounts ?? [], group, ids))
 
   /** Archive, restore, delete: the list is read again whatever the answer, and the dialog that asked closes. */
   async function run(action: () => Promise<unknown>, after?: () => void) {
@@ -140,9 +155,20 @@ function AccountsView({ settings, now }: { settings: MoneySettings; now: Today }
     }
   }
 
-  // Keyboard: n adds an account, j and k move between rows.
-  useShortcut('new', () => setDialog({ kind: 'add' }))
+  const chosen = accountId ? (accounts?.find((account) => account.id === accountId) ?? null) : null
+  /** The one place that adds an entry for an account: the add dialog of the transactions page, on the tab asked for and with this account chosen. */
+  const addEntry = (tab: EntryTab, account: Account) => setDialog({ kind: 'entry', tab, accountId: account.id })
+
+  // Keyboard: n adds an account (an expense, on an account's page; on the income tab the tab has its own), j and k move between rows.
+  useShortcut('new', () => (chosen && !chosen.archived ? addEntry('EXPENSE', chosen) : setDialog({ kind: 'add' })), tab === 'accounts')
   useRowNavigation()
+  // On a phone a swipe moves between the two tabs before it moves to another page.
+  useSwipeHandler((direction) => {
+    const next = step(ACCOUNT_TABS, tab, direction)
+    if (next === null) return false
+    setParams(tabQuery(next), { replace: true })
+    return true
+  }, phone && !accountId)
 
   const link = (account: Account) => `/app/accounts/${account.id}`
 
@@ -165,12 +191,25 @@ function AccountsView({ settings, now }: { settings: MoneySettings; now: Today }
       </span>
     )
   }
+  /** The balance, and under it what is available when the account has a virtual balance. */
+  const balanceCell = (account: Account, className: string) => (
+    <span className={className}>
+      {money(account.balance)}
+      {showAvailable(account) ? <span className="acct-available">{`${t('accounts.available')} ${money(account.available)}`}</span> : null}
+    </span>
+  )
+  /** Small words after the name of an account that the net worth leaves out. */
+  const netWorthMark = (account: Account) => (account.includeInNetWorth ? null : (
+      <span className="row-mark" title={t('accounts.notInNetWorth')}>
+        {t('accounts.notInNetWorth')}
+      </span>
+    ))
   /** Delete for an account with nothing in it, archive for one with rows; the main account has neither. */
   const removal = (account: Account): 'delete' | 'archive' | null => (account.isMain ? null : account.entries === 0 ? 'delete' : 'archive')
 
   // A desktop row: name, type, number, last activity, this month, balance, then edit and archive (or delete, for an empty one). The grip
   // at its start says that the row can be held and dragged. The name is the link for the keyboard (j and k stop on it).
-  function tableRow(account: Account) {
+  function tableRow(account: Account, hintId: string) {
     const way = removal(account)
     return (
       <Row
@@ -192,9 +231,12 @@ function AccountsView({ settings, now }: { settings: MoneySettings; now: Today }
       >
         <div className="cell-name">
           <Icon name="grip" className="row-grip" />
-          <Link className="card-name" to={link(account)} title={nameOf(account)} data-row-focus aria-describedby={hintId}>
-            {nameOf(account)}
-          </Link>
+          <span className="acct-name">
+            <Link className="card-name" to={link(account)} title={nameOf(account)} data-row-focus aria-describedby={hintId}>
+              {nameOf(account)}
+            </Link>
+            {netWorthMark(account)}
+          </span>
         </div>
         <span className="cell-sub">{kindText(account)}</span>
         <span className="cell-sub acct-number" title={account.number ?? undefined}>
@@ -202,7 +244,7 @@ function AccountsView({ settings, now }: { settings: MoneySettings; now: Today }
         </span>
         <span className="cell-sub acct-last">{lastText(account)}</span>
         {monthCell(account, 'cell-amount acct-month')}
-        <span className="cell-amount acct-balance">{money(account.balance)}</span>
+        {balanceCell(account, 'cell-amount acct-balance')}
       </Row>
     )
   }
@@ -218,8 +260,13 @@ function AccountsView({ settings, now }: { settings: MoneySettings; now: Today }
         data-archived={account.archived || undefined}
         open={rows.isOpen(account.id)}
         onToggle={() => rows.toggle(account.id)}
-        name={nameOf(account)}
-        amount={<span className="cell-amount">{money(account.balance)}</span>}
+        name={
+          <>
+            {nameOf(account)}
+            {netWorthMark(account)}
+          </>
+        }
+        amount={balanceCell(account, 'cell-amount')}
         sub={
           <>
             <span>{kindText(account)}</span>
@@ -291,17 +338,32 @@ function AccountsView({ settings, now }: { settings: MoneySettings; now: Today }
         }
       >
         <div className="cell-name">
-          <Link className="card-name" to={link(account)} title={nameOf(account)} data-row-focus>
-            {nameOf(account)}
-          </Link>
+          <span className="acct-name">
+            <Link className="card-name" to={link(account)} title={nameOf(account)} data-row-focus>
+              {nameOf(account)}
+            </Link>
+            {netWorthMark(account)}
+          </span>
         </div>
         <span className="cell-sub">{kindText(account)}</span>
-        <span className="cell-amount">{money(account.balance)}</span>
+        {balanceCell(account, 'cell-amount')}
       </Row>
     )
   }
 
-  const chosen = accountId ? (accounts?.find((account) => account.id === accountId) ?? null) : null
+  /** The heading of a group, when there are groups: the accounts that have none come last, under "no group". */
+  const groupTitle = (group: AccountGroup): ReactNode => (grouped ? <h2 className="acct-group" title={group.name ?? t('accounts.noGroup')}>{group.name ?? t('accounts.noGroup')}</h2> : null)
+  const listHead = (
+    <li className="list-head" aria-hidden="true">
+      <span>{t('common.name')}</span>
+      <span>{t('common.type')}</span>
+      <span className="acct-number">{t('accounts.number')}</span>
+      <span className="acct-last">{t('accounts.lastActivity')}</span>
+      <span className="is-end">{t('accounts.thisMonth')}</span>
+      <span className="is-end">{t('accounts.balance')}</span>
+      <span />
+    </li>
+  )
   const transferDialog = dialog?.kind === 'transfer' ? dialog : null
   const editedTransfer = transferDialog?.transfer ?? null
 
@@ -309,22 +371,53 @@ function AccountsView({ settings, now }: { settings: MoneySettings; now: Today }
     <section className="tx-page accounts-page">
       <div className="tx-title one-line">
         <h1>{t('accounts.title')}</h1>
-        <div className="tx-actions">
-          <Button onClick={() => setDialog({ kind: 'add' })} {...tip('new', t('accounts.add'))}>
-            {t('accounts.add')}
-          </Button>
-          {canTransfer ? (
-            <Button variant="outline" onClick={() => setDialog({ kind: 'transfer', transfer: null, ...(chosen && !chosen.archived ? { fromId: chosen.id } : {}) })}>
-              {t('transfers.add')}
+        {accountId ? (
+          // an account's page: what can be added to it (an archived account takes nothing); two by two on a phone, like the debts
+          chosen && !chosen.archived ? (
+            <div className="tx-actions debts-actions acct-actions">
+              <Button onClick={() => addEntry('EXPENSE', chosen)} {...tip('new', t('accounts.addExpense'))}>
+                {t('accounts.addExpense')}
+              </Button>
+              <Button variant="outline" onClick={() => addEntry('INCOME', chosen)}>
+                {t('accounts.addIncome')}
+              </Button>
+              {canTransfer ? (
+                <Button variant="outline" onClick={() => addEntry('TRANSFER', chosen)}>
+                  {t('transfers.add')}
+                </Button>
+              ) : null}
+            </div>
+          ) : null
+        ) : tab === 'accounts' ? (
+          <div className="tx-actions">
+            <Button onClick={() => setDialog({ kind: 'add' })} {...tip('new', t('accounts.add'))}>
+              {t('accounts.add')}
             </Button>
-          ) : null}
-        </div>
+            {canTransfer ? (
+              <Button variant="outline" onClick={() => setDialog({ kind: 'transfer', transfer: null })}>
+                {t('transfers.add')}
+              </Button>
+            ) : null}
+          </div>
+        ) : null}
       </div>
+      {accountId ? null : (
+        <SectionTabs
+          label={t('accounts.title')}
+          value={tab}
+          onChange={(id) => setParams(tabQuery(id), { replace: true })}
+          tabs={[
+            { id: 'accounts', label: t('accounts.title') },
+            { id: 'income', label: t('budgets.income') },
+          ]}
+        />
+      )}
       {dialog?.kind === 'add' || dialog?.kind === 'edit' ? (
         <AccountModal
           key={dialog.kind === 'edit' ? dialog.account.id : 'new'}
           account={dialog.kind === 'edit' ? dialog.account : null}
           today={now.date}
+          groups={groups.flatMap((group) => group.name ?? [])}
           onClose={() => setDialog(null)}
           onSaved={() => {
             // the dialog may have been closed while it saved, and another opened since: only its own is closed
@@ -346,6 +439,15 @@ function AccountsView({ settings, now }: { settings: MoneySettings; now: Today }
             refresh()
           }}
           onDelete={editedTransfer ? () => setDialog({ kind: 'deleteTransfer', id: editedTransfer.id, name: t('transfers.add') }) : undefined}
+        />
+      ) : null}
+      {dialog?.kind === 'entry' ? (
+        <EntryDialog
+          key={`${dialog.tab}:${dialog.accountId}`}
+          initial={{ tab: dialog.tab, accountId: dialog.accountId }}
+          today={now.date}
+          onClose={() => setDialog(null)}
+          onSaved={refresh}
         />
       ) : null}
       {dialog?.kind === 'archive' ? (
@@ -381,8 +483,10 @@ function AccountsView({ settings, now }: { settings: MoneySettings; now: Today }
           onClose={() => setDialog(null)}
         />
       ) : null}
-      {accounts ? (
-        <div className="tx-pane wide pane-stack">
+      {tab === 'income' ? <IncomeTab settings={settings} thisMonth={now.month} /> : null}
+      {accounts && tab === 'accounts' ? (
+        // its own pane for each page, so that an account opens at its top whatever the list was scrolled to
+        <div key={accountId ?? 'list'} className="tx-pane wide pane-stack" {...(accountId ? {} : tabPanelProps(tab))}>
           {accountId ? (
             chosen ? (
               <AccountPage
@@ -413,28 +517,22 @@ function AccountsView({ settings, now }: { settings: MoneySettings; now: Today }
                   <span className="dash-stat-label">{t('accounts.inAccounts')}</span> <b>{money(summary.inAccounts)}</b>
                 </p>
               ) : null}
-              {active.length > 0 && phone ? <ul className="card-list">{active.map(tapRow)}</ul> : null}
-              {active.length > 0 && !phone ? (
-                // Written out, not a `Table`: the list itself is what the reordering listens on.
-                <ul className="card-list is-table acct-list" ref={listRef}>
-                  <li className="list-head" aria-hidden="true">
-                    <span>{t('common.name')}</span>
-                    <span>{t('common.type')}</span>
-                    <span className="acct-number">{t('accounts.number')}</span>
-                    <span className="acct-last">{t('accounts.lastActivity')}</span>
-                    <span className="is-end">{t('accounts.thisMonth')}</span>
-                    <span className="is-end">{t('accounts.balance')}</span>
-                    <span />
-                  </li>
-                  {active.map(tableRow)}
-                </ul>
-              ) : null}
-              <span id={hintId} className="sr-only">
-                {t('accounts.reorderHint')}
-              </span>
-              <div className="sr-only" aria-live="polite">
-                {live}
-              </div>
+              {active.length > 0 && phone
+                ? groups.map((group) => (
+                    <Fragment key={group.name ?? ''}>
+                      {groupTitle(group)}
+                      <ul className="card-list">{group.accounts.map(tapRow)}</ul>
+                    </Fragment>
+                  ))
+                : null}
+              {active.length > 0 && !phone
+                ? // Written out, not a `Table`: each list is what its reordering listens on, so each group has its own, and the head is over the first only.
+                  groups.map((group, at) => (
+                    <GroupList key={group.name ?? ''} group={group} title={groupTitle(group)} head={at === 0 ? listHead : null} onReorder={onReorderGroup}>
+                      {tableRow}
+                    </GroupList>
+                  ))
+                : null}
               {archived.length > 0 ? (
                 <div className="debts-bar">
                   <label>
@@ -461,6 +559,45 @@ function AccountsView({ settings, now }: { settings: MoneySettings; now: Today }
         </div>
       ) : null}
     </section>
+  )
+}
+
+/**
+ * One run of accounts on the desktop, with the heading of its group when there are groups. Each has its own list, because the list is
+ * what the reordering listens on: an account moves among the accounts of its own group, and the first and the last stop at its edges.
+ */
+function GroupList({
+  group,
+  title,
+  head,
+  onReorder,
+  children,
+}: {
+  group: AccountGroup
+  title: ReactNode
+  /** The row of column names, over the first list only. */
+  head: ReactNode
+  onReorder: (group: string | null, ids: string[]) => void
+  /** Draws a row; `hintId` names the text that tells how to reorder. */
+  children: (account: Account, hintId: string) => ReactNode
+}) {
+  const t = useT()
+  const items = useMemo(() => group.accounts.map((account) => ({ id: account.id, name: accountName(account, t), deleted: false })), [group.accounts, t])
+  const { listRef, hintId, live } = useReorder(items, (ids) => onReorder(group.name, ids), 'accounts.reordered')
+  return (
+    <>
+      {title}
+      <ul className="card-list is-table acct-list" ref={listRef}>
+        {head}
+        {group.accounts.map((account) => children(account, hintId))}
+      </ul>
+      <span id={hintId} className="sr-only">
+        {t('accounts.reorderHint')}
+      </span>
+      <div className="sr-only" aria-live="polite">
+        {live}
+      </div>
+    </>
   )
 }
 
@@ -496,6 +633,7 @@ function AccountPage({
   const rows = useOpenRow()
   const [month, setMonth] = useState(now.month)
   const [statement, setStatement] = useState<AccountStatement | null>(null)
+  const [breakdown, setBreakdown] = useState<Breakdown | null>(null)
   const money = (amount: string) => formatMoney(amount, settings.currency, settings.locale)
 
   useEffect(() => {
@@ -513,12 +651,29 @@ function AccountPage({
     }
   }, [account.id, month, reload, say])
 
+  useEffect(() => {
+    let cancelled = false
+    void accountsApi.breakdown(account.id, `${month}-01`, lastDay(month)).then(
+      (loaded) => {
+        if (!cancelled) setBreakdown(loaded)
+      },
+      (failure) => {
+        if (!cancelled) say(errorText(failure), 'error')
+      },
+    )
+    return () => {
+      cancelled = true
+    }
+  }, [account.id, month, reload, say])
+
   // Keyboard: [ and ] step through months, t jumps to this month.
   useShortcut('prev', () => setMonth((current) => shiftMonth(current, -1)))
   useShortcut('next', () => setMonth((current) => shiftMonth(current, 1)))
   useShortcut('today', () => setMonth(now.month))
 
   // Newest first: the balance after each line still reads the same. The lines of another month are not shown under this one's name.
+  // the same for the two lists by category: a month that was asked for earlier is not shown under this one's name
+  const shown = breakdown && breakdown.from.slice(0, 7) === month ? breakdown : null
   const lines = useMemo(() => (statement && statement.from.slice(0, 7) === month ? [...statement.lines].reverse() : null), [statement, month])
   const keyOf = (line: AccountLine) => `${line.source}-${line.id}`
   const isTransfer = (line: AccountLine) => line.source === 'TRANSFER_IN' || line.source === 'TRANSFER_OUT'
@@ -633,7 +788,9 @@ function AccountPage({
     )
   }
 
-  const details = [t(`accounts.kind.${account.kind}`), account.number].filter(Boolean).join(' · ')
+  const details = [t(`accounts.kind.${account.kind}`), account.number, account.bic && `${t('accounts.bic')} ${account.bic}`, account.group, !account.includeInNetWorth && t('accounts.notInNetWorth')]
+    .filter(Boolean)
+    .join(' · ')
   return (
     <>
       <div className="debts-name">
@@ -654,7 +811,13 @@ function AccountPage({
       <h2 className="debts-heading debts-balance">
         {accountLabel(account, t)}: <span className={account.balance.startsWith('-') ? 'debt-owe' : undefined}>{money(account.balance)}</span>
       </h2>
+      {showAvailable(account) ? (
+        <p className="hint acct-available-line">
+          {t('accounts.available')}: <b>{money(account.available)}</b>
+        </p>
+      ) : null}
       <p className="hint">{details}</p>
+      {account.notes ? <p className="acct-notes">{account.notes}</p> : null}
       {account.isMain ? <p className="hint">{t('accounts.mainHint')}</p> : null}
       <Card className="acct-chart">
         <CardHeader>
@@ -665,6 +828,12 @@ function AccountPage({
         <BalanceChart accountId={account.id} month={month} reload={reload} onPick={setMonth} settings={settings} />
       </Card>
       <MonthNav month={month} thisMonth={now.month} onChange={setMonth} />
+      {shown ? (
+        <div className="acct-breakdown">
+          <ShareList title={t('accounts.spentByCategory')} shares={shown.expenses} total={shown.expenseTotal} tone="expense" money={money} />
+          <ShareList title={t('accounts.cameInByCategory')} shares={shown.income} total={shown.incomeTotal} tone="income" money={money} />
+        </div>
+      ) : null}
       {lines && lines.length === 0 ? <p className="hint">{t('accounts.empty')}</p> : null}
       {lines && lines.length > 0 && phone ? (
         <DayGroups rows={lines} dateOf={(line) => line.date} locale={settings.locale} today={now.date}>

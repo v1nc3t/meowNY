@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react'
+import { Link, useSearchParams } from 'react-router-dom'
 import AccountField from '../components/AccountField'
 import AddCategoryModal from '../components/AddCategoryModal'
 import AttachArea from '../components/AttachArea'
@@ -10,21 +10,23 @@ import SplitEditor from '../components/SplitEditor'
 import Dropdown from '../components/Dropdown'
 import ConfirmModal from '../components/ConfirmModal'
 import DuePayments from '../components/DuePayments'
+import EntryTabs from '../components/EntryTabs'
 import PaidLatePayments from '../components/PaidLatePayments'
 import Icon from '../components/NavIcon'
 import { IconAction, Row, Table, TapRow } from '../components/RowParts'
 import SectionTabs from '../components/SectionTabs'
 import Modal, { modalFormId } from '../components/Modal'
 import Button from '../components/ui/Button'
-import { EmptyState } from '../components/ui/Pixel'
 import type { Account } from '../api/accounts'
 import { categories as categoriesApi, type Category } from '../api/categories'
 import { debts, type Due, type DuePayment, type Person } from '../api/debts'
 import { errorText } from '../api/invoke'
 import { INTERVAL_UNITS, recurring as recurringApi, type IntervalUnit, type Recurring } from '../api/recurring'
+import { stats, type Commitments } from '../api/stats'
 import { useToday, type Today } from '../api/today'
 import { accountChoice, rememberAccount } from '../lib/accountsView'
-import { categoryOptions } from '../lib/categoriesView'
+import { categoryChoices, entryTabs, tabOfCategory, type EntryTab } from '../lib/entryDialog'
+import { groupByType } from '../lib/recurringView'
 import { amountString, formatDate, formatMoney } from '../lib/money'
 import { draftOfTemplate, NOT_SPLIT, reducedWeights, toInput, type SplitState } from '../lib/split'
 import { tabPanelProps } from '../lib/tabs'
@@ -90,13 +92,16 @@ function RecurringView({ settings, now }: { settings: MoneySettings; now: Today 
   // the item whose details are open in the list
   const openRows = useOpenRow()
   const [reload, setReload] = useState(0)
-  const [adding, setAdding] = useState(false)
+  // the dialog that adds an item, on the tab of the list its button is in
+  const [adding, setAdding] = useState<EntryTab | null>(null)
   const [editing, setEditing] = useState<Recurring | null>(null)
   // the item being paid; `dueDate` is the one occurrence of it, or none for its next
   const [paying, setPaying] = useState<{ item: Recurring; dueDate?: string } | null>(null)
   // the overdue occurrence being skipped
   const [skipping, setSkipping] = useState<DuePayment | null>(null)
   const [due, setDue] = useState<Due | null>(null)
+  // what the running items with a fixed amount come to a month, for the title of each list
+  const [commitments, setCommitments] = useState<Commitments | null>(null)
   // the tab is in the address (`?tab=due`), so a link can open it
   const [params, setParams] = useSearchParams()
   const tab = params.get('tab') === 'due' ? 'due' : 'items'
@@ -117,27 +122,33 @@ function RecurringView({ settings, now }: { settings: MoneySettings; now: Today 
   const incomeCategories = useMemo(() => new Set(categories.filter((category) => category.type === 'INCOME').map((category) => category.id)), [categories])
 
   const today = now.date
-  // Active items first, then paused, then ended. Within each, in the category list's order, the items of a category together; items of a
-  // deleted category go last. Each comes with its category's name.
-  const rows = useMemo(() => {
-    const byCategory = new Map<string, Recurring[]>()
-    for (const item of items ?? []) byCategory.set(item.categoryId, [...(byCategory.get(item.categoryId) ?? []), item])
-    const known = categories.filter((c) => byCategory.has(c.id)).map((c) => ({ name: c.name, items: byCategory.get(c.id) ?? [] }))
-    const unknown = [...byCategory].filter(([id]) => !categoryNames.has(id)).map(([, list]) => ({ name: t('tx.deletedCategory'), items: list }))
-    const grouped = [...known, ...unknown].flatMap((group) => group.items.map((item) => ({ item, category: group.name })))
-    // the sort is stable, so the categories keep their order inside each status
-    return grouped.sort((a, b) => STATUS_RANK[statusOf(a.item, today)] - STATUS_RANK[statusOf(b.item, today)])
+  // The two lists, expenses first. In each: active items first, then paused, then ended. Within each, in the category list's order, the items
+  // of a category together; items of a deleted category go last. Each comes with its category's name.
+  const lists = useMemo(() => {
+    const arrange = (list: Recurring[]) => {
+      const byCategory = new Map<string, Recurring[]>()
+      for (const item of list) byCategory.set(item.categoryId, [...(byCategory.get(item.categoryId) ?? []), item])
+      const known = categories.filter((c) => byCategory.has(c.id)).map((c) => ({ name: c.name, items: byCategory.get(c.id) ?? [] }))
+      const unknown = [...byCategory].filter(([id]) => !categoryNames.has(id)).map(([, items]) => ({ name: t('tx.deletedCategory'), items }))
+      const grouped = [...known, ...unknown].flatMap((group) => group.items.map((item) => ({ item, category: group.name })))
+      // the sort is stable, so the categories keep their order inside each status
+      return grouped.sort((a, b) => STATUS_RANK[statusOf(a.item, today)] - STATUS_RANK[statusOf(b.item, today)])
+    }
+    const split = groupByType(items ?? [], categories)
+    return { expenses: arrange(split.expenses), income: arrange(split.income) }
   }, [items, categories, categoryNames, today, t])
 
   useEffect(() => {
     let cancelled = false
-    void Promise.all([categoriesApi.list(), recurringApi.list(), debts.people(true), debts.duePayments()]).then(
-      ([categoryList, list, people, owed]) => {
+    // the totals are only for the titles: without them the lists show their counts alone
+    void Promise.all([categoriesApi.list(), recurringApi.list(), debts.people(true), debts.duePayments(), stats.recurringCommitments().catch(() => null)]).then(
+      ([categoryList, list, people, owed, totals]) => {
         if (cancelled) return
         setCategories(categoryList)
         setItems(list)
         setFriends(people)
         setDue(owed)
+        setCommitments(totals)
       },
       (failure) => {
         if (!cancelled) say(errorText(failure), 'error')
@@ -151,18 +162,18 @@ function RecurringView({ settings, now }: { settings: MoneySettings; now: Today 
   function closeModals() {
     // documents may have been attached or removed in the dialog, so the marks on the list are asked for again
     if (adding || editing) setReload((value) => value + 1)
-    setAdding(false)
+    setAdding(null)
     setEditing(null)
     setPaying(null)
     setSkipping(null)
     setConfirming(null)
   }
 
-  function openAdd() {
+  function openAdd(tab: EntryTab = 'EXPENSE') {
     closeModals()
     attachments.reset()
     setSplit(NOT_SPLIT)
-    setAdding(true)
+    setAdding(tab)
   }
 
   function openEdit(item: Recurring) {
@@ -237,6 +248,11 @@ function RecurringView({ settings, now }: { settings: MoneySettings; now: Today 
     const accountId = String(form.get('accountId') ?? '')
     if (!name || !categoryId || !startDate) {
       say(t('rec.errorRequired'), 'error')
+      return
+    }
+    // an income comes into an account: the field is always there, and has one unless the accounts could not be read
+    if (categories.find((category) => category.id === categoryId)?.type === 'INCOME' && !accountId) {
+      say(t('entry.errorAccount'), 'error')
       return
     }
     if (amountText !== '' && !amount) {
@@ -564,6 +580,16 @@ function RecurringView({ settings, now }: { settings: MoneySettings; now: Today 
     )
   }
 
+  // The title of each list says how many it holds and, when the running ones with a fixed amount come to something, what they come to a month.
+  const summaryOf = (count: number, total: string | undefined) => {
+    const month = total !== undefined && Number(total) > 0 ? ` · ${formatMoney(total, settings.currency, settings.locale)} ${t('dashboard.perMonth')}` : ''
+    return count === 0 ? '' : `${count}${month}`
+  }
+  const sections = [
+    { tab: 'EXPENSE' as const, title: t('rec.expenses'), rows: lists.expenses, empty: t('rec.emptyExpenses'), summary: summaryOf(lists.expenses.length, commitments?.expense) },
+    { tab: 'INCOME' as const, title: t('rec.income'), rows: lists.income, empty: t('rec.emptyIncome'), summary: summaryOf(lists.income.length, commitments?.income) },
+  ]
+
   return (
     <section className="tx-page">
       <div className="tx-title one-line">
@@ -576,8 +602,9 @@ function RecurringView({ settings, now }: { settings: MoneySettings; now: Today 
       </div>
       {adding || editing ? (
         <RecurringModal
-          key={editing ? editing.id : 'new'}
+          key={editing ? editing.id : `new-${adding}`}
           item={editing}
+          startTab={adding ?? 'EXPENSE'}
           todayDate={now.date}
           categories={categories}
           accounts={accounts}
@@ -653,27 +680,42 @@ function RecurringView({ settings, now }: { settings: MoneySettings; now: Today 
         </div>
       ) : null}
       {tab === 'items' && items ? (
-        <div className="tx-pane wide" {...tabPanelProps(tab)}>
-          {items.length === 0 ? <EmptyState text={t('rec.empty')} action={{ label: t('rec.add'), onClick: openAdd }} /> : null}
-          {items.length > 0 && phone ? <ul className="card-list">{rows.map(tapRow)}</ul> : null}
-          {items.length > 0 && !phone ? (
-            <Table
-              className="rec-table"
-              heads={[t('common.name'), { label: t('tx.amount'), className: 'is-end' }, t('sync.field.nextDue'), t('common.category'), t('sync.field.every'), t('debts.colStatus'), '', '']}
-              opens
-            >
-              {rows.map(tableRow)}
-            </Table>
-          ) : null}
+        <div className="tx-pane wide pane-stack" {...tabPanelProps(tab)}>
+          {sections.map((section) => (
+            <Fragment key={section.tab}>
+              <div className="rec-head">
+                <h2 className="rec-title">{section.title}</h2>
+                <span className="rec-count">{section.summary}</span>
+                <Button variant="outline" size="sm" aria-label={`${t('common.add')}: ${section.title}`} onClick={() => openAdd(section.tab)}>
+                  {t('common.add')}
+                </Button>
+              </div>
+              {section.rows.length === 0 ? (
+                <p className="hint">{section.empty}</p>
+              ) : phone ? (
+                <ul className="card-list">{section.rows.map(tapRow)}</ul>
+              ) : (
+                <Table
+                  className="rec-table"
+                  heads={[t('common.name'), { label: t('tx.amount'), className: 'is-end' }, t('sync.field.nextDue'), t('common.category'), t('sync.field.every'), t('debts.colStatus'), '', '']}
+                  opens
+                >
+                  {section.rows.map(tableRow)}
+                </Table>
+              )}
+            </Fragment>
+          ))}
         </div>
       ) : null}
     </section>
   )
 }
 
-// Add and edit share this modal. Field order: name, amount, category, account (with more than one), first due date, repeat, end, description.
+// Add and edit share this modal. Adding has two tabs, expense and income; a change has none (an item keeps its kind) and opens on the tab of its
+// category's type. Field order: name, amount, category, account (with more than one; an income always has it), first due date, repeat, end, description.
 function RecurringModal({
   item,
+  startTab,
   todayDate,
   categories,
   accounts,
@@ -687,6 +729,8 @@ function RecurringModal({
   onCategoryAdded,
 }: {
   item: Recurring | null
+  /** The tab a new item opens on. */
+  startTab: EntryTab
   todayDate: string
   categories: Category[]
   /** Every account; null while they are read. */
@@ -701,6 +745,8 @@ function RecurringModal({
   onCategoryAdded: (category: Category) => void
 }) {
   const t = useT()
+  const tabs = entryTabs(accounts, { editing: item !== null, transfer: false })
+  const [tab, setTab] = useState<EntryTab>(item ? tabOfCategory(categories, item.categoryId) : startTab)
   const [categoryId, setCategoryId] = useState(item?.categoryId ?? '')
   const [amount, setAmount] = useState(item?.amount ?? '')
   // the account the person picked; until then the item's own, or for a new item the last one used. Each payment is made in it.
@@ -709,75 +755,95 @@ function RecurringModal({
   const [hasEnd, setHasEnd] = useState(item?.endDate != null)
   const [addingCategory, setAddingCategory] = useState(false)
   // only an expense can be shared
-  const canSplit = categories.find((category) => category.id === categoryId)?.type !== 'INCOME'
-  const options = categoryOptions(categories, { expense: t('common.expense'), income: t('common.income') })
+  const canSplit = tab === 'EXPENSE'
+  const type = tab === 'INCOME' ? 'INCOME' : 'EXPENSE'
+  const options = categoryChoices(categories, type, item ? { id: item.categoryId, label: t('tx.deletedCategory') } : undefined)
+  // an income needs a category of its own: where there is none the dialog says so and cannot be saved
+  const noIncomeCategory = tab === 'INCOME' && options.length === 0
+
+  // Another tab: the category and the bill split with friends start again; what both have (every other field, the account) stays.
+  function pick(next: EntryTab) {
+    if (next === tab || !tabs.includes(next)) return
+    setTab(next)
+    setCategoryId('')
+    onSplit(NOT_SPLIT)
+  }
+
   return (
     <>
-      <Modal title={item ? t('rec.editTitle') : t('rec.addTitle')} pending={pending} onClose={onClose}>
-        <form id={modalFormId} onSubmit={onSubmit}>
-          <label>
-            {t('common.name')}
-            <input name="name" required maxLength={50} defaultValue={item?.name ?? ''} autoComplete="off" />
-          </label>
-          <label>
-            {t('tx.amount')}
-            <input name="amount" inputMode="decimal" value={amount} onChange={(event) => setAmount(event.target.value)} autoComplete="off" />
-          </label>
-          <Dropdown
-            label={t('common.category')}
-            name="categoryId"
-            value={categoryId}
-            options={options}
-            onChange={setCategoryId}
-            placeholder={t('tx.chooseCategory')}
-            action={{ label: t('categories.add'), onSelect: () => setAddingCategory(true) }}
-          />
-          <AccountField accounts={accounts} name="accountId" value={accountChoice(accounts, account, item?.accountId).value} onChange={setAccount} />
-          <DateField name="startDate" label={t('rec.startDate')} defaultValue={item?.startDate ?? todayDate} today={todayDate} />
-          <CountField label={t('rec.every')} defaultValue={item?.intervalCount ?? 1} />
-          <Dropdown
-            label={t('rec.every')}
-            name="intervalUnit"
-            value={unit}
-            options={INTERVAL_UNITS.map((value) => ({ value, label: t(`rec.unit.${value}`) }))}
-            onChange={(value) => setUnit(value as IntervalUnit)}
-          />
-          <label>
-            <input type="checkbox" checked={hasEnd} onChange={(event) => setHasEnd(event.target.checked)} />
-            {t('rec.hasEnd')}
-          </label>
-          {hasEnd ? (
-            <DateField name="endDate" label={t('rec.endDate')} defaultValue={item?.endDate ?? todayDate} today={todayDate} />
-          ) : null}
-          {canSplit ? (
+      <Modal title={item ? t('rec.editTitle') : t('rec.addTitle')} pending={pending || noIncomeCategory} onClose={onClose}>
+        <EntryTabs tabs={tabs} value={tab} label={t('rec.addTitle')} onChange={pick}>
+          <form id={modalFormId} onSubmit={onSubmit}>
             <label>
-              <input type="checkbox" checked={split.on} onChange={(event) => onSplit({ ...split, on: event.target.checked })} />
-              {t('split.switch')}
+              {t('common.name')}
+              <input name="name" required maxLength={50} defaultValue={item?.name ?? ''} autoComplete="off" />
             </label>
-          ) : split.on ? (
-            <p className="hint">{t('split.onlyExpenses')}</p>
-          ) : null}
-          {canSplit && split.on ? (
-            <SplitEditor
-              amount={amount.trim() === '' ? null : amount}
-              draft={split.draft}
-              onChange={(draft) => onSplit({ ...split, draft, touched: true })}
-              onReady={onSplitReady}
+            <label>
+              {t('tx.amount')}
+              <input name="amount" inputMode="decimal" value={amount} onChange={(event) => setAmount(event.target.value)} autoComplete="off" />
+            </label>
+            {noIncomeCategory ? (
+              <p className="hint">
+                {t('entry.noIncomeCategory')} <Link to="/app/accounts?tab=income" onClick={() => onClose()}>{t('entry.addIncomeCategory')}</Link>
+              </p>
+            ) : (
+              <Dropdown
+                label={t('common.category')}
+                name="categoryId"
+                value={categoryId}
+                options={options}
+                onChange={setCategoryId}
+                placeholder={t('tx.chooseCategory')}
+                action={{ label: t('categories.add'), onSelect: () => setAddingCategory(true) }}
+              />
+            )}
+            <AccountField accounts={accounts} name="accountId" value={accountChoice(accounts, account, item?.accountId).value} onChange={setAccount} into={tab === 'INCOME'} />
+            <DateField name="startDate" label={t('rec.startDate')} defaultValue={item?.startDate ?? todayDate} today={todayDate} />
+            <CountField label={t('rec.every')} defaultValue={item?.intervalCount ?? 1} />
+            <Dropdown
+              label={t('rec.every')}
+              name="intervalUnit"
+              value={unit}
+              options={INTERVAL_UNITS.map((value) => ({ value, label: t(`rec.unit.${value}`) }))}
+              onChange={(value) => setUnit(value as IntervalUnit)}
             />
-          ) : null}
-          <label>
-            {t('common.description')}
-            <textarea name="description" rows={3} maxLength={255} placeholder={t('common.optional')} defaultValue={item?.description ?? ''} autoComplete="off" />
-          </label>
-        </form>
-        <AttachArea attachments={attachments} />
+            <label>
+              <input type="checkbox" checked={hasEnd} onChange={(event) => setHasEnd(event.target.checked)} />
+              {t('rec.hasEnd')}
+            </label>
+            {hasEnd ? (
+              <DateField name="endDate" label={t('rec.endDate')} defaultValue={item?.endDate ?? todayDate} today={todayDate} />
+            ) : null}
+            {canSplit ? (
+              <label>
+                <input type="checkbox" checked={split.on} onChange={(event) => onSplit({ ...split, on: event.target.checked })} />
+                {t('split.switch')}
+              </label>
+            ) : null}
+            {canSplit && split.on ? (
+              <SplitEditor
+                amount={amount.trim() === '' ? null : amount}
+                draft={split.draft}
+                onChange={(draft) => onSplit({ ...split, draft, touched: true })}
+                onReady={onSplitReady}
+              />
+            ) : null}
+            <label>
+              {t('common.description')}
+              <textarea name="description" rows={3} maxLength={255} placeholder={t('common.optional')} defaultValue={item?.description ?? ''} autoComplete="off" />
+            </label>
+          </form>
+          <AttachArea attachments={attachments} />
+        </EntryTabs>
       </Modal>
       {addingCategory ? (
         <AddCategoryModal
+          type={type}
           onClose={() => setAddingCategory(false)}
           onCreated={(category) => {
             onCategoryAdded(category)
-            setCategoryId(category.id)
+            // a category of the other type is made, and is not on this tab's list
+            if (category.type === type) setCategoryId(category.id)
             setAddingCategory(false)
           }}
         />

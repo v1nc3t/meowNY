@@ -7,6 +7,7 @@ import {
   accountSubmit,
   chooseSide,
   dialogNext,
+  hasDetails,
   transferStart,
   transferSubmit,
   type AccountFields,
@@ -40,12 +41,19 @@ const account = (id: string, name: string, more: Partial<Account> = {}): Account
   changeThisMonth: '0.00',
   lastActivity: null,
   entries: 0,
+  bic: null,
+  notes: null,
+  group: null,
+  includeInNetWorth: true,
+  virtualBalance: '0.00',
+  available: '0.00',
   ...more,
 })
 const main = account('1', 'Main account')
 const card = account('2', 'Card', { kind: 'CREDIT_CARD', number: 'DE00 1234', openingBalance: '-120.00', openingDate: '2026-01-01' })
 const cash = account('3', 'Cash', { kind: 'CASH' })
 const old = account('4', 'Old', { archived: true })
+const detailed = account('5', 'Card', { kind: 'CREDIT_CARD', bic: 'COBADEFF', group: 'Cards', virtualBalance: '-5.50', includeInNetWorth: false, notes: 'line 1\nline 2' })
 
 // -- the states (section 5.4) -----------------------------------------------------------------------------------------------------
 
@@ -85,12 +93,47 @@ test('a failed save can be tried again with the same fields', () => {
 // -- the account dialog -----------------------------------------------------------------------------------------------------------
 
 test('a new account opens empty, as checking, dated today', () => {
-  assert.deepEqual(accountFields(null, '', TODAY), { name: '', kind: 'CHECKING', number: '', balance: '', date: TODAY })
+  assert.deepEqual(accountFields(null, '', TODAY), {
+    name: '',
+    kind: 'CHECKING',
+    number: '',
+    balance: '',
+    date: TODAY,
+    bic: '',
+    group: '',
+    virtualBalance: '',
+    includeInNetWorth: true,
+    notes: '',
+  })
 })
 
 test('an account opens with its row; no opening balance is an empty field dated today', () => {
-  assert.deepEqual(accountFields(card, 'Card', TODAY), { name: 'Card', kind: 'CREDIT_CARD', number: 'DE00 1234', balance: '-120.00', date: '2026-01-01' })
-  assert.deepEqual(accountFields(main, 'hauptkonto', TODAY), { name: 'hauptkonto', kind: 'CHECKING', number: '', balance: '', date: TODAY })
+  assert.deepEqual(accountFields(card, 'Card', TODAY), {
+    name: 'Card',
+    kind: 'CREDIT_CARD',
+    number: 'DE00 1234',
+    balance: '-120.00',
+    date: '2026-01-01',
+    bic: '',
+    group: '',
+    virtualBalance: '',
+    includeInNetWorth: true,
+    notes: '',
+  })
+  assert.deepEqual(accountFields(main, 'hauptkonto', TODAY), { ...accountFields(null, '', TODAY), name: 'hauptkonto' })
+  // what is behind "more" comes from the row; a virtual balance of 0.00 is an empty field
+  assert.deepEqual(accountFields(detailed, 'Card', TODAY), {
+    name: 'Card',
+    kind: 'CREDIT_CARD',
+    number: '',
+    balance: '',
+    date: TODAY,
+    bic: 'COBADEFF',
+    group: 'Cards',
+    virtualBalance: '-5.50',
+    includeInNetWorth: false,
+    notes: 'line 1\nline 2',
+  })
 })
 
 test('a new account is sent with what was typed, and the opening balance only when there is one', () => {
@@ -154,6 +197,102 @@ test('a first opening balance is sent with its date, and a rename of the main ac
     request: { patch: { openingBalance: '900.00', openingDate: TODAY } },
   })
   assert.deepEqual(accountSubmit('EDITING', main, shown, { ...shown, name: 'Current account' }), { do: 'send', request: { patch: { name: 'Current account' } } })
+})
+
+// -- what is behind "more" ---------------------------------------------------------------------------------------------------------
+
+const empty = accountFields(null, '', TODAY)
+const send = (more: Partial<AccountFields>) => accountSubmit('EDITING', null, null, { ...empty, name: 'Savings', ...more })
+const refused = (more: Partial<AccountFields>) => (send(more) as { error?: string }).error
+
+test('"more" opens by default exactly when the account being changed has any of the five set', () => {
+  assert.equal(hasDetails(null), false, 'a new account has none')
+  assert.equal(hasDetails(main), false)
+  assert.equal(hasDetails(card), false, 'a number and an opening balance are not behind "more"')
+  assert.equal(hasDetails(account('6', 'A', { bic: 'X' })), true)
+  assert.equal(hasDetails(account('6', 'A', { notes: 'x' })), true)
+  assert.equal(hasDetails(account('6', 'A', { group: 'x' })), true)
+  assert.equal(hasDetails(account('6', 'A', { includeInNetWorth: false })), true, 'left out of the net worth is a setting')
+  assert.equal(hasDetails(account('6', 'A', { virtualBalance: '1000.00' })), true)
+  assert.equal(hasDetails(account('6', 'A', { virtualBalance: '-0.01' })), true)
+  assert.equal(hasDetails(account('6', 'A', { virtualBalance: '0.00' })), false)
+  assert.equal(hasDetails(detailed), true)
+})
+
+test('a BIC is 20 characters at most, a group 50, the notes 1000', () => {
+  assert.equal(send({ bic: 'B'.repeat(20) }).do, 'send')
+  assert.equal(refused({ bic: 'B'.repeat(21) }), 'accounts.bicError')
+  assert.equal(send({ bic: 'é'.repeat(20) }).do, 'send', 'characters, not bytes')
+  assert.equal(refused({ bic: 'a\tb' }), 'accounts.bicError', 'no control character')
+  assert.equal(send({ group: 'G'.repeat(50) }).do, 'send')
+  assert.equal(refused({ group: 'G'.repeat(51) }), 'accounts.groupError')
+  assert.equal(refused({ group: 'a\nb' }), 'accounts.groupError', 'a group is one line')
+  assert.equal(send({ notes: 'n'.repeat(1000) }).do, 'send')
+  assert.equal(refused({ notes: 'n'.repeat(1001) }), 'accounts.notesError')
+  assert.equal(refused({ notes: 'a\u0000b' }), 'accounts.notesError', 'no control character but the line break')
+  assert.equal(refused({ notes: 'a\tb' }), 'accounts.notesError')
+  // the spaces around are not counted: they are cut
+  assert.equal(send({ bic: ` ${'B'.repeat(20)} `, notes: ` \n${'n'.repeat(1000)}\n ` }).do, 'send')
+})
+
+test('the notes keep their line breaks', () => {
+  assert.deepEqual(send({ notes: ' first\nsecond\n\nthird ' }), { do: 'send', request: { create: { name: 'Savings', kind: 'CHECKING', notes: 'first\nsecond\n\nthird' } } })
+})
+
+test('a virtual balance follows the rules of the opening balance', () => {
+  const virtual = (virtualBalance: string) => (send({ virtualBalance }) as { request?: { create: { virtualBalance?: string } } }).request?.create.virtualBalance
+  assert.equal(virtual('1000'), '1000.00')
+  assert.equal(virtual('1.5'), '1.50')
+  assert.equal(virtual('1,50'), '1.50', 'a comma is a point')
+  assert.equal(virtual('-5.5'), '-5.50')
+  assert.equal(virtual('9999999999.99'), '9999999999.99')
+  assert.equal(virtual('-9999999999.99'), '-9999999999.99')
+  assert.equal(virtual(''), undefined, 'empty is 0.00 and is not sent')
+  assert.equal(virtual('0'), undefined)
+  assert.equal(virtual(' 0.00 '), undefined)
+  for (const bad of ['-0.00', '-0', '+1', '+1.00', '1.555', 'abc', '-', '10000000000', '-10000000000', '- 5', '1 000']) {
+    assert.equal(refused({ virtualBalance: bad }), 'accounts.balanceError', bad)
+  }
+})
+
+test('a new account is sent with only the details that were filled in', () => {
+  assert.deepEqual(send({}), { do: 'send', request: { create: { name: 'Savings', kind: 'CHECKING' } } }, 'the defaults are not sent')
+  assert.deepEqual(send({ bic: '  ', group: '  ', notes: ' \n ', virtualBalance: '  ' }), { do: 'send', request: { create: { name: 'Savings', kind: 'CHECKING' } } }, 'spaces are nothing')
+  assert.deepEqual(send({ bic: ' COBADEFF ', group: ' Cards ', notes: 'n', virtualBalance: '1000', includeInNetWorth: false }), {
+    do: 'send',
+    request: { create: { name: 'Savings', kind: 'CHECKING', bic: 'COBADEFF', group: 'Cards', notes: 'n', includeInNetWorth: false, virtualBalance: '1000.00' } },
+  })
+})
+
+test('an edit sends only the details that changed, and null for one that was cleared', () => {
+  const start = accountFields(detailed, 'Card', TODAY)
+  const patch = (more: Partial<AccountFields>) => accountSubmit('EDITING', detailed, start, { ...start, ...more })
+  assert.deepEqual(patch({}), { do: 'close' }, 'nothing changed')
+  assert.deepEqual(patch({ bic: 'NEW' }), { do: 'send', request: { patch: { bic: 'NEW' } } })
+  assert.deepEqual(patch({ bic: '' }), { do: 'send', request: { patch: { bic: null } } })
+  assert.deepEqual(patch({ bic: '   ' }), { do: 'send', request: { patch: { bic: null } } }, 'spaces alone clear it')
+  assert.deepEqual(patch({ group: ' ' }), { do: 'send', request: { patch: { group: null } } })
+  assert.deepEqual(patch({ group: 'Other' }), { do: 'send', request: { patch: { group: 'Other' } } })
+  assert.deepEqual(patch({ notes: '\n\n' }), { do: 'send', request: { patch: { notes: null } } })
+  assert.deepEqual(patch({ notes: 'line 1\nline 2\nline 3' }), { do: 'send', request: { patch: { notes: 'line 1\nline 2\nline 3' } } })
+  assert.deepEqual(patch({ virtualBalance: '' }), { do: 'send', request: { patch: { virtualBalance: '0.00' } } }, 'a virtual balance is cleared to 0.00, not to null')
+  assert.deepEqual(patch({ virtualBalance: '-5.5' }), { do: 'close' }, 'the same amount written another way')
+  assert.deepEqual(patch({ virtualBalance: '7' }), { do: 'send', request: { patch: { virtualBalance: '7.00' } } })
+  assert.deepEqual(patch({ includeInNetWorth: true }), { do: 'send', request: { patch: { includeInNetWorth: true } } })
+  assert.deepEqual(patch({ bic: 'NEW', group: ' ', includeInNetWorth: true }), { do: 'send', request: { patch: { bic: 'NEW', group: null, includeInNetWorth: true } } })
+})
+
+test('a switch toggled and toggled back is not a change', () => {
+  const start = accountFields(main, 'Main', TODAY)
+  const toggled = { ...start, includeInNetWorth: !start.includeInNetWorth }
+  assert.deepEqual(accountSubmit('EDITING', main, start, toggled), { do: 'send', request: { patch: { includeInNetWorth: false } } })
+  assert.deepEqual(accountSubmit('EDITING', main, start, { ...toggled, includeInNetWorth: !toggled.includeInNetWorth }), { do: 'close' })
+})
+
+test('details that were set before are not asked again, and one that is wrong beyond the dialog is refused whole', () => {
+  const start = accountFields(detailed, 'Card', TODAY)
+  assert.deepEqual(accountSubmit('EDITING', detailed, start, { ...start, name: 'Visa' }), { do: 'send', request: { patch: { name: 'Visa' } } })
+  assert.deepEqual(accountSubmit('EDITING', detailed, start, { ...start, name: 'Visa', notes: 'n'.repeat(1001) }), { do: 'refuse', error: 'accounts.notesError' })
 })
 
 // -- the transfer dialog ----------------------------------------------------------------------------------------------------------

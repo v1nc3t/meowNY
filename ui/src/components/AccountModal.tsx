@@ -1,28 +1,34 @@
-import { useState, type FormEvent } from 'react'
+import { useId, useState, type FormEvent } from 'react'
 import { accounts as accountsApi, ACCOUNT_KINDS, type Account, type AccountKind } from '../api/accounts'
 import { errorText } from '../api/invoke'
 import { useToast } from '../hooks/toast'
 import { useT } from '../i18n/context'
-import { accountFields, accountSubmit, dialogNext, type AccountFields, type DialogState } from '../lib/accountDialogs'
+import { accountFields, accountSubmit, BIC_MAX, dialogNext, GROUP_MAX, hasDetails, NOTES_MAX, type AccountFields, type DialogState } from '../lib/accountDialogs'
 import { accountName } from '../lib/accountsView'
 import DatePicker from './DatePicker'
 import Dropdown from './Dropdown'
+import Icon from './NavIcon'
 import Modal, { modalFormId } from './Modal'
+import Button from './ui/Button'
 
 /**
  * A new account, or one being changed: its name, type, an optional number, and what it held on a day (the opening balance, which may be
- * below 0 and is 0.00 when left empty). An edit sends only what changed, and one that changed nothing just closes. The states are those
- * of docs/accounts-design.md, section 5.4: a wrong field or a failed save is a toast, and the fields stay as typed.
+ * below 0 and is 0.00 when left empty). Behind "more": a BIC, a group, a virtual balance, whether the net worth counts it, notes. An
+ * edit sends only what changed, and one that changed nothing just closes. The states are those of docs/accounts-design.md, section 5.4:
+ * a wrong field or a failed save is a toast, and the fields stay as typed.
  */
 export default function AccountModal({
   account,
   today,
+  groups,
   onClose,
   onSaved,
 }: {
   /** The account to change; none for a new one. */
   account: Account | null
   today: string
+  /** The groups in use, offered for the group field. */
+  groups: string[]
   onClose: () => void
   /** Told when the account is saved. It is called even if the dialog was closed while saving, so the page can read its list again. */
   onSaved: (saved: Account) => void
@@ -32,6 +38,11 @@ export default function AccountModal({
   const [start] = useState<AccountFields>(() => accountFields(account, account ? accountName(account, t) : '', today))
   const [fields, setFields] = useState(start)
   const [state, setState] = useState<DialogState>('EDITING')
+  // shut for a new account, and for one with nothing behind it
+  const [more, setMore] = useState(hasDetails(account))
+  const moreId = useId()
+  const groupsId = useId()
+  const virtualHintId = useId()
   const set = (patch: Partial<AccountFields>) => setFields((current) => ({ ...current, ...patch }))
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
@@ -89,6 +100,49 @@ export default function AccountModal({
           <span>{t('accounts.openingDate')}</span>
           <DatePicker kind="date" value={fields.date} label={t('accounts.openingDate')} today={today} onChange={(date) => set({ date })} />
         </div>
+        <Button variant="outline" className="acct-more" aria-expanded={more} aria-controls={more ? moreId : undefined} onClick={() => setMore((open) => !open)}>
+          {t('accounts.more')}
+          <Icon name="chevron-down" className="btn-icon chevron" />
+        </Button>
+        {more ? (
+          <div id={moreId} className="acct-more-fields">
+            <label>
+              {t('accounts.bic')}
+              <input name="bic" maxLength={BIC_MAX} autoComplete="off" spellCheck={false} placeholder={t('common.optional')} value={fields.bic} onChange={(event) => set({ bic: event.target.value })} />
+            </label>
+            <label>
+              {t('accounts.group')}
+              <input name="group" list={groupsId} maxLength={GROUP_MAX} autoComplete="off" placeholder={t('common.optional')} value={fields.group} onChange={(event) => set({ group: event.target.value })} />
+            </label>
+            <datalist id={groupsId}>
+              {groups.map((name) => (
+                <option key={name} value={name} />
+              ))}
+            </datalist>
+            <label>
+              {t('accounts.virtualBalance')}
+              <input
+                name="virtualBalance"
+                autoComplete="off"
+                placeholder="0.00"
+                aria-describedby={virtualHintId}
+                value={fields.virtualBalance}
+                onChange={(event) => set({ virtualBalance: event.target.value })}
+              />
+            </label>
+            <p className="hint" id={virtualHintId}>
+              {t('accounts.virtualHint')}
+            </p>
+            <label>
+              <input type="checkbox" checked={fields.includeInNetWorth} onChange={(event) => set({ includeInNetWorth: event.target.checked })} />
+              {t('accounts.inNetWorth')}
+            </label>
+            <label>
+              {t('accounts.notes')}
+              <textarea name="notes" rows={3} maxLength={NOTES_MAX} placeholder={t('common.optional')} value={fields.notes} onChange={(event) => set({ notes: event.target.value })} />
+            </label>
+          </div>
+        ) : null}
       </form>
     </Modal>
   )

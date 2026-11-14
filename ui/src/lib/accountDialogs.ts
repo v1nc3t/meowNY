@@ -27,25 +27,67 @@ export type Step<T> = { do: 'ignore' } | { do: 'refuse'; error: MessageKey } | {
 
 // -- the account dialog ---------------------------------------------------------------------------------------------------------
 
-export type AccountFields = { name: string; kind: AccountKind; number: string; balance: string; date: string }
+/** The most characters of a BIC, a group name and the notes (docs/accounts-design.md, section 20.2). The name's is `NAME_MAX`. */
+export const BIC_MAX = 20
+export const GROUP_MAX = 50
+export const NOTES_MAX = 1000
+
+export type AccountFields = {
+  name: string
+  kind: AccountKind
+  number: string
+  balance: string
+  date: string
+  bic: string
+  group: string
+  /** Empty means 0.00. */
+  virtualBalance: string
+  includeInNetWorth: boolean
+  notes: string
+}
+
+/** Whether the account has any of the five details that sit behind "more": the dialog then opens with them shown. A new account has none. */
+export function hasDetails(account: Account | null): boolean {
+  return account !== null && (account.bic !== null || account.notes !== null || account.group !== null || !account.includeInNetWorth || Number(account.virtualBalance) !== 0)
+}
 
 /**
  * The fields the dialog opens with: empty with the defaults for a new account (`shownName` is not used), the row for one that exists.
  * `shownName` is the name as the lists show it (the main account in the person's language). No opening balance reads as an empty
- * field, and then the date starts at today: the stored one says nothing (the main account's is 1970).
+ * field, and then the date starts at today: the stored one says nothing (the main account's is 1970). No virtual balance is an empty field.
  */
 export function accountFields(account: Account | null, shownName: string, today: string): AccountFields {
-  if (!account) return { name: '', kind: 'CHECKING', number: '', balance: '', date: today }
+  if (!account) {
+    return { name: '', kind: 'CHECKING', number: '', balance: '', date: today, bic: '', group: '', virtualBalance: '', includeInNetWorth: true, notes: '' }
+  }
   const none = account.openingBalance === '0.00'
-  return { name: shownName, kind: account.kind, number: account.number ?? '', balance: none ? '' : account.openingBalance, date: none ? today : account.openingDate }
+  return {
+    name: shownName,
+    kind: account.kind,
+    number: account.number ?? '',
+    balance: none ? '' : account.openingBalance,
+    date: none ? today : account.openingDate,
+    bic: account.bic ?? '',
+    group: account.group ?? '',
+    virtualBalance: Number(account.virtualBalance) === 0 ? '' : account.virtualBalance,
+    includeInNetWorth: account.includeInNetWorth,
+    notes: account.notes ?? '',
+  }
+}
+
+/** Trimmed text of at most `max` characters with no control character (a line break is none when `lineBreaks`), or null. Empty is fine: it means nothing there. */
+function clean(input: string, max: number, lineBreaks = false): string | null {
+  const text = input.trim()
+  const chars = [...text]
+  return chars.length > max || chars.some((char) => /\p{Cc}/u.test(char) && !(lineBreaks && char === '\n')) ? null : text
 }
 
 export type AccountRequest = { create: NewAccount } | { patch: AccountPatch }
 
 /**
  * A submit of the account dialog. `account` and `start` (the fields it opened with) are null for a new account. An edit sends only what
- * changed. A name is compared with the one shown at the start, so the main account is not renamed to its own translation. The date of
- * an opening balance of 0.00 says nothing and is not sent.
+ * changed, and `null` for a BIC, group or notes that was emptied (spaces alone are empty). A name is compared with the one shown at the
+ * start, so the main account is not renamed to its own translation. The date of an opening balance of 0.00 says nothing and is not sent.
  */
 export function accountSubmit(state: DialogState, account: Account | null, start: AccountFields | null, fields: AccountFields): Step<AccountRequest> {
   if (state !== 'EDITING') return { do: 'ignore' }
@@ -53,11 +95,31 @@ export function accountSubmit(state: DialogState, account: Account | null, start
   if (name === null) return { do: 'refuse', error: 'accounts.nameError' }
   const balance = fields.balance.trim() === '' ? '0.00' : signedAmountString(fields.balance)
   if (balance === null) return { do: 'refuse', error: 'accounts.balanceError' }
+  const virtual = fields.virtualBalance.trim() === '' ? '0.00' : signedAmountString(fields.virtualBalance)
+  if (virtual === null) return { do: 'refuse', error: 'accounts.balanceError' }
+  const bic = clean(fields.bic, BIC_MAX)
+  if (bic === null) return { do: 'refuse', error: 'accounts.bicError' }
+  const group = clean(fields.group, GROUP_MAX)
+  if (group === null) return { do: 'refuse', error: 'accounts.groupError' }
+  const notes = clean(fields.notes, NOTES_MAX, true)
+  if (notes === null) return { do: 'refuse', error: 'accounts.notesError' }
   const number = fields.number.trim()
   if (!account) {
     return {
       do: 'send',
-      request: { create: { name, kind: fields.kind, ...(number ? { number } : {}), ...(balance !== '0.00' ? { openingBalance: balance, openingDate: fields.date } : {}) } },
+      request: {
+        create: {
+          name,
+          kind: fields.kind,
+          ...(number ? { number } : {}),
+          ...(balance !== '0.00' ? { openingBalance: balance, openingDate: fields.date } : {}),
+          ...(bic ? { bic } : {}),
+          ...(group ? { group } : {}),
+          ...(notes ? { notes } : {}),
+          ...(fields.includeInNetWorth ? {} : { includeInNetWorth: false }),
+          ...(virtual !== '0.00' ? { virtualBalance: virtual } : {}),
+        },
+      },
     }
   }
   const patch: AccountPatch = {}
@@ -66,6 +128,11 @@ export function accountSubmit(state: DialogState, account: Account | null, start
   if (number !== (account.number ?? '')) patch.number = number === '' ? null : number
   if (balance !== account.openingBalance) patch.openingBalance = balance
   if (balance !== '0.00' && fields.date !== account.openingDate) patch.openingDate = fields.date
+  if (bic !== (account.bic ?? '')) patch.bic = bic === '' ? null : bic
+  if (group !== (account.group ?? '')) patch.group = group === '' ? null : group
+  if (notes !== (account.notes ?? '')) patch.notes = notes === '' ? null : notes
+  if (fields.includeInNetWorth !== account.includeInNetWorth) patch.includeInNetWorth = fields.includeInNetWorth
+  if (virtual !== account.virtualBalance) patch.virtualBalance = virtual
   return Object.keys(patch).length === 0 ? { do: 'close' } : { do: 'send', request: { patch } }
 }
 

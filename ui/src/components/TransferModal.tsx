@@ -6,10 +6,9 @@ import { useToast } from '../hooks/toast'
 import { useT } from '../i18n/context'
 import { chooseSide, dialogNext, transferStart, transferSubmit, type DialogState, type TransferFields } from '../lib/accountDialogs'
 import { accountOptions, rememberAccount } from '../lib/accountsView'
-import DatePicker from './DatePicker'
-import Dropdown from './Dropdown'
 import Icon from './NavIcon'
 import Modal, { modalFormId } from './Modal'
+import TransferInputs from './TransferInputs'
 import Button from './ui/Button'
 
 /**
@@ -76,20 +75,7 @@ export default function TransferModal({
   return (
     <Modal title={transfer ? t('transfers.editTitle') : t('transfers.addTitle')} pending={state === 'SAVING'} onClose={onClose}>
       <form id={modalFormId} onSubmit={(event) => void onSubmit(event)}>
-        <Dropdown label={t('transfers.from')} value={fields.from} options={options} onChange={(id) => choose('from', id)} />
-        <Dropdown label={t('transfers.to')} value={fields.to} options={options} onChange={(id) => choose('to', id)} />
-        <label>
-          {t('tx.amount')}
-          <input name="amount" required inputMode="decimal" autoComplete="off" data-autofocus value={fields.amount} onChange={(event) => set({ amount: event.target.value })} />
-        </label>
-        <div className="tx-date-group">
-          <span>{t('report.date')}</span>
-          <DatePicker kind="date" value={fields.date} label={t('report.date')} today={today} onChange={(date) => set({ date })} />
-        </div>
-        <label>
-          {t('debts.note')}
-          <textarea name="note" rows={3} maxLength={200} autoComplete="off" placeholder={t('common.optional')} value={fields.note} onChange={(event) => set({ note: event.target.value })} />
-        </label>
+        <TransferInputs {...fields} options={options} today={today} onChoose={choose} onChange={set} />
         {transfer && onDelete ? (
           <Button variant="outline" size="sm" className="row-danger" onClick={onDelete}>
             <Icon name="trash" className="btn-icon" />

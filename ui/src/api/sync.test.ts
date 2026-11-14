@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { test } from 'node:test'
 import { allChosen, choicesInOrder, cleanDigits, clockGapText, FIELDS, locksAfterBackground, PHONE_PASSPHRASE_GOOD, phoneClockGap, REASON_KEYS, reasonNeedsUpdate, shouldWarn, Status, TABLES, wantsLongerPassphrase } from './sync.ts'
+import { en } from '../i18n/en.ts'
 import { Today } from './today.ts'
 
 // What the Rust side sends, as its own tests show it (sync/service.rs, sync/peers.rs, vault.rs).
@@ -148,4 +149,9 @@ test('the tables and fields are the ones the Rust side sends', () => {
   const facts = /fn facts\(conn[\s\S]*?\n\}\n/.exec(engine)?.[0] ?? ''
   const sent = new Set([...facts.matchAll(/\("(\w+)", /g)].map((m) => m[1]))
   for (const field of sent) assert.ok((FIELDS as readonly string[]).includes(field ?? ''), `${field} is not a known field`)
+})
+
+test('every field a conflict can name has its words, the five of an account too', () => {
+  for (const field of FIELDS) assert.ok(`sync.field.${field}` in en, `sync.field.${field}`)
+  for (const field of ['bic', 'notes', 'group', 'includeNetWorth', 'virtualBalance']) assert.ok((FIELDS as readonly string[]).includes(field), field)
 })
