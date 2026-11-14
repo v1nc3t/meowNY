@@ -86,7 +86,7 @@ const SECTIONS = [
           'Rust owns the database, the keys and every rule. The command line is a client of the running app over its local API, and its route table is one table in Rust.',
           'Money is integer minor units (`*_minor`). A schema change is the next numbered migration, appended to `MIGRATIONS` in `src-tauri/src/migrate.rs`.',
           'Files: Rust `snake_case` (`x.rs` plus `x/`, tests in `x_tests.rs`), React `PascalCase.tsx`, other TypeScript `camelCase.ts` with `name.test.ts` beside it.',
-          `Design notes: ${file('docs/sync-design.md')}, ${file('docs/documents-design.md')}, ${file('docs/debts-design.md')}.`,
+          `Design notes: ${file('docs/sync-design.md')}, ${file('docs/documents-design.md')}, ${file('docs/debts-design.md')}, ${file('docs/accounts-design.md')}.`,
         ],
       },
     ],

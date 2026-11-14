@@ -1,6 +1,6 @@
 // The guide: what each part of meowNY does, and what it keeps where. Every how-to is a numbered list of steps; what a thing
 // is, and what it stores, is a short paragraph or list. This page is the user documentation; there is no Markdown copy of it.
-// How sync, documents and debts are built is in the design notes in docs/.
+// How sync, documents, debts and accounts are built is in the design notes in docs/.
 
 import { REPO, SPONSOR } from './render.mjs'
 import { gallery } from './shots.mjs'
@@ -11,10 +11,10 @@ const RELEASES = `${REPO}/releases/latest`
 /** The screenshots each section shows, under its text; missing files are left out. */
 const PICTURES = {
   start: ['lock', 'phone-lock'],
-  budgeting: ['dashboard', 'categories', 'recurring', 'transactions'],
+  budgeting: ['dashboard', 'categories', 'recurring', 'transactions', 'accounts', 'account'],
   documents: ['documents', 'preview-pdf', 'preview-csv'],
   debts: ['debts', 'friend', 'split', 'bill-code', 'debt-history'],
-  phone: ['phone-sync', 'phone-dashboard', 'phone-quick-add', 'phone-debts', 'phone-categories'],
+  phone: ['phone-sync', 'phone-dashboard', 'phone-quick-add', 'phone-debts', 'phone-categories', 'phone-accounts'],
   backup: ['export'],
   privacy: ['settings'],
 }
@@ -113,13 +113,14 @@ const SECTIONS = [
     id: 'budgeting',
     title: 'Budgeting',
     blocks: [
-      { t: 'p', text: 'The pages you use most: **dashboard**, **transactions**, **categories** (the budgets are there too) and **recurring**. On the phone they are tabs at the bottom, and the round **add** button replaces **add transaction** and **add category**.' },
+      { t: 'p', text: 'The pages you use most: **dashboard**, **transactions**, **categories** (the budgets are there too) and **recurring**. **accounts** shows where your money is: [accounts](#accounts). On the phone the first four are tabs at the bottom, and the round **add** button replaces **add transaction** and **add category**.' },
       { t: 'h3', id: 'dashboard', text: 'Dashboard' },
       {
         t: 'ul',
         items: [
           'Income, expenses, savings and the savings rate of a month, with how much each changed from the month before. Click a month on the year chart to look at it; the arrows change the year, and arrow keys move along the chart.',
           'Spending by category, your budgets against what you spent, what friends owe you and what you owe, and the recurring items that are overdue, due soon or split with friends.',
+          'Once you use accounts (you have more than one, or the main account has an opening balance): **net worth**. It is what is **in accounts** plus what **friends** owe you, minus what you owe them. Click it to open **accounts**.',
           'A new, empty dashboard shows **first steps**: add a transaction, set a budget, add a friend, pair your phone.',
         ],
       },
@@ -130,6 +131,7 @@ const SECTIONS = [
         items: [
           'Open **transactions** and press **add transaction** (or press `n`).',
           'Type a name and an amount, and choose a category. To make a new one, choose **add category** in the list.',
+          'With more than one account, choose the **account** the money left or reached. It starts at the one you used last.',
           'Check the payment date. It starts at today. Day, month and year are lists you can also type into: for a month, `nov`, `november` or `11` all work. Press Enter or leave the field to take it. A date that cannot exist stays red.',
           'Add a description if you like. It can run over several lines.',
           'Optional: tick **split this bill** to share it with friends ([split a bill](#split)), or **attach documents** to keep a receipt with it ([attach](#attach)).',
@@ -144,10 +146,65 @@ const SECTIONS = [
           'Open **transactions**. Under **period** choose **month**, **year** or **range**.',
           'For a month or a year, step with the arrows (or `[` and `]`). **current** brings you back to this month or year. For a **range**, choose the **from** and **to** days.',
           'Choose a **category**, or type in **search** (press `/`) part of a name or description.',
+          'With more than one account, choose an **account** to see only its transactions. **all accounts** shows everything again. Each row names its account.',
           'Under the list, choose how many **rows** a page shows (10, 50 or 100) and use the page buttons.',
         ],
       },
-      { t: 'p', text: 'meowNY remembers the kind of period, the category and the number of rows the next time. The dates are remembered only until you close the app. On the phone, the period and the category are behind the **filters** button.' },
+      { t: 'p', text: 'meowNY remembers the kind of period, the category, the account and the number of rows the next time. The dates are remembered only until you close the app. On the phone, the period, the category and the account are behind the **filters** button.' },
+      { t: 'h3', id: 'accounts', text: 'Accounts' },
+      { t: 'p', text: 'An account is a place your money is: a bank account, savings, cash, a credit card. Every transaction, recurring item and debt entry is in one account. You start with one, the **main account**, and everything goes into it. While you have only one account, no form asks for an account, and you can leave this page alone.' },
+      { t: 'p', text: '**Add an account:**' },
+      {
+        t: 'ol',
+        items: [
+          'Open **accounts** (or press `g` then `a`) and press **add account** (or press `n`).',
+          'Type a name and choose the type: **checking**, **savings**, **cash** or **credit card**.',
+          'Add an **account number** if you like: an IBAN, or anything that helps you tell it apart.',
+          'Type the **opening balance**: what the account held, and **on** which day. Empty means 0.00. It can start with a minus, for a credit card you owe on.',
+          'Press **done**.',
+        ],
+      },
+      { t: 'p', text: 'The list shows each account with its type, **last activity**, what **this month** did to it and its **balance**; a wide window shows the **account number** too. **in accounts**, above the list, is the total of all accounts, archived ones too. The pencil edits an account.' },
+      { t: 'p', text: '**Look at one account:**' },
+      {
+        t: 'ol',
+        items: [
+          'Click its row. On the phone, tap it and press **open**.',
+          'The chart shows its balance over the year, month by month. The arrows change the year.',
+          'Under it, step through the months (the arrows, or `[` and `]`). Each line is something that moved the account, the newest first, with the **balance after** it.',
+          'A transaction\'s line leads to the transaction, a friend\'s line to their history. A transfer\'s line has the pencil and the bin.',
+          'Press **back** to return to the list.',
+        ],
+      },
+      { t: 'p', text: '**Change the order:**' },
+      {
+        t: 'ol',
+        items: ['On the computer, find the grip at the start of an account row.', 'Hold it and drag the row up or down. With the keyboard, focus the row and press `Alt` with the up or down arrow.'],
+      },
+      { t: 'p', text: 'The order goes to your phone with the next sync. It cannot be changed on the phone.' },
+      { t: 'p', text: '**Archive, restore, delete:**' },
+      {
+        t: 'ul',
+        items: [
+          'For an account you no longer use, press **archive** on its row and confirm. It leaves the lists and the forms; its history and balance stay. If it still holds money, the question says how much: move it out with a transfer first if the account is closed.',
+          'Tick **archived**, under the list, to see the archived accounts. **restore** brings one back.',
+          'An account with nothing in it has the bin in place of **archive**: **delete** removes it for good.',
+          'The **main account** always stays. You can rename and edit it, but not archive or delete it. New entries go there when no account is chosen.',
+        ],
+      },
+      { t: 'p', text: '**What the balance counts:** the opening balance, from its day on; your income, and the expenses you paid; transfers; and money you lent, borrowed or got back from friends, or paid back to them. An entry dated after today counts from its day. A split bill you paid counts whole, because the whole amount left your account; one a friend paid counts for nothing until you pay them back. Budgets and statistics still count only your part.' },
+      { t: 'h3', id: 'transfers', text: 'Move money between accounts' },
+      { t: 'p', text: 'A transfer moves money from one of your accounts to another. It is not income and not an expense, and no budget or statistic counts it. The **transfer** button is there once you have two accounts.' },
+      {
+        t: 'ol',
+        items: [
+          'Open **accounts** and press **transfer**, next to **add account**. With an account open, the transfer starts from it. On the phone, you can also tap an account and press **transfer**.',
+          'Choose the accounts **from** and **to**. If you choose the account the other side holds, the two swap.',
+          'Type the amount and check the date. It starts at today. Add a note if you like.',
+          'Press **done**.',
+        ],
+      },
+      { t: 'p', text: 'To change or delete a transfer, open one of its two accounts, go to its month, and press the pencil or the bin on its line (on the phone, tap the line first).' },
       { t: 'h3', id: 'categories', text: 'Categories' },
       { t: 'p', text: 'Categories sort transactions into expenses and income. **categories** shows both side by side for one month (change it with the arrows or `[` and `]`), and each category shows what you spent or earned that month next to its budget. Spent is green within the budget and red above it; earned is green above its budget.' },
       {
@@ -189,6 +246,7 @@ const SECTIONS = [
           'Press **done**.',
         ],
       },
+      { t: 'p', text: 'With more than one account, the form has an **account** too, and each payment is made in it. If that account is archived by then, the payment goes to the main account.' },
       { t: 'p', text: '**Pay one:**' },
       {
         t: 'ol',
@@ -289,13 +347,14 @@ const SECTIONS = [
           'Press **done**.',
         ],
       },
+      { t: 'p', text: 'With more than one account, the dialog also asks for the **account**: choose where the money left or arrived, so that cash you lent comes out of the cash account.' },
       { t: 'h3', id: 'settle', text: 'Mark as paid' },
       {
         t: 'ol',
         items: [
           'Press **mark as paid** on the friend\'s row, or on their page. It is there while the balance is not zero.',
           'Check the amount. It starts as the whole balance; type less for a part payment.',
-          'Set the date, and add a note if you like.',
+          'Set the date, and add a note if you like. With more than one account, choose the **account** the money went to or came from.',
           'Optional: choose **link a transaction**, search, and pick the one this payment was for (a bill you paid for them, say). It is only a reference: no amount changes. The history line gets a **go to the transaction** button.',
           'Press **done**.',
         ],
@@ -401,7 +460,7 @@ const SECTIONS = [
       {
         t: 'ul',
         items: [
-          'Dashboard, transactions, categories, recurring and debts are tabs at the bottom. Documents, sync, settings and lock are the icons in the top bar.',
+          'Dashboard, transactions, categories, recurring and debts are tabs at the bottom. Accounts, documents, sync, settings and lock are the icons in the top bar.',
           'The round **add** button adds a transaction, a category or a friend, or scans a bill code.',
           'Tap a row to open it. Documents: **take photo**, and **keep on phone** for a file that is on the computer.',
           'Export, backups, the recovery key, pairing and the command line are on the computer only.',
@@ -456,6 +515,7 @@ const SECTIONS = [
           'Press **export** and choose where to save it.',
         ],
       },
+      { t: 'p', text: 'Accounts and transfers are in the files. Each transaction, recurring item and debt entry names its account. A JSON or Excel export with no limit also lists the accounts with their balances, and the transfers. A limited export names only the accounts of what it holds, with no balances, numbers or transfers. Backups hold accounts and transfers like everything else.' },
       { t: 'p', text: '**Delete all my data** (settings › your data) wipes the database, documents, keys and settings on this device. You type DELETE to confirm.' },
     ],
   },
@@ -478,11 +538,11 @@ const SECTIONS = [
         t: 'table',
         head: ['What', 'Where', 'Protection'],
         rows: [
-          ['Categories, budgets, transactions, recurring items, debts, the change history', '`meowny.db`', 'Encrypted'],
+          ['Categories, budgets, accounts (names, numbers, opening balances), transfers, transactions, recurring items, debts, the change history', '`meowny.db`', 'Encrypted'],
           ['Documents', '`documents/`, one sealed file each with a random name', 'Encrypted, per-file key'],
           ['Lock settings, the wrapped keys', '`vault.json`', 'No financial data'],
           ['Language, theme, text size, sidebar, this device\'s name, the name on bill codes, the time and how often of debt reminders', 'The window\'s local storage', 'No financial data, not encrypted'],
-          ['The filters you chose (kind of period, category, rows per page, document type, removed friends); the last category used for a bill code; the day a notice or reminder was shown; the reminders you cleared (friend numbers and days)', 'The window\'s local storage', 'Numbers, days and choices only: no amounts, descriptions or names. The filters are forgotten when all data is erased or restored'],
+          ['The filters you chose (kind of period, category, rows per page, document type, removed friends), the account filter, whether archived accounts are shown; the last account used (a number); the last category used for a bill code; the day a notice or reminder was shown; the reminders you cleared (friend numbers and days)', 'The window\'s local storage', 'Numbers, days and choices only: no amounts, descriptions or names. The filters are forgotten when all data is erased or restored'],
           ['A document open in another program', '`open/`, only while open', '**Not encrypted**, removed on lock and close'],
           ['Command line tokens', '`meowny.db` (only a hash); the token file of `meowny login`', 'Read-only by default, expire, revocable'],
         ],
@@ -503,7 +563,7 @@ const SECTIONS = [
       },
       { t: 'p', text: 'There are no other network calls. CI lists every place in the code that could open a connection and fails on a new one. The command line API listens on `127.0.0.1` only, is off until you turn it on, and needs a token; exports, backups and copies of documents through it need your yes in the app each time.' },
       { t: 'p', text: '**Delete all my data** removes the database, `documents/`, `open/`, `vault.json` and the keychain entry. It leaves backups and exports you saved elsewhere, and the token file of `meowny login` (which stops working).' },
-      { t: 'p', text: `How it is built: [sync](${doc('sync-design.md')}), [documents](${doc('documents-design.md')}), [debts](${doc('debts-design.md')}).` },
+      { t: 'p', text: `How it is built: [sync](${doc('sync-design.md')}), [documents](${doc('documents-design.md')}), [debts](${doc('debts-design.md')}), [accounts](${doc('accounts-design.md')}).` },
     ],
   },
   {
@@ -515,7 +575,7 @@ const SECTIONS = [
         t: 'table',
         head: ['Keys', 'Does'],
         rows: [
-          ['`g` then `d` `t` `c` `r`', 'dashboard, transactions, categories, recurring'],
+          ['`g` then `d` `t` `a` `c` `r`', 'dashboard, transactions, accounts, categories, recurring'],
           ['`g` then `f` `o` `e` `s`', 'debts, documents, export, settings'],
           ['`n`', 'new'],
           ['`/`', 'search'],
@@ -523,7 +583,7 @@ const SECTIONS = [
           ['`t`', 'this month (or year)'],
           ['arrow keys', 'the next button, row or field that way; in a text field, left and right move the cursor first'],
           ['`j` `k`', 'next, previous row'],
-          ['`Alt` + up or down arrow', 'move a category one place'],
+          ['`Alt` + up or down arrow', 'move a category or an account one place'],
           ['`Esc`', 'close a row, a list or a dialog'],
           ['`Ctrl/Cmd+L`', 'lock'],
           ['`Ctrl/Cmd+B`', 'sidebar'],
