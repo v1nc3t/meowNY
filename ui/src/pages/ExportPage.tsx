@@ -278,6 +278,8 @@ function ExportForm({ today, settings, categories }: { today: Today; settings: M
     categories: t('nav.categories'),
     budgets: t('nav.budgets'),
     recurring: t('nav.recurring'),
+    accounts: t('export.partAccounts'),
+    transfers: t('export.partTransfers'),
     documents: t('nav.documents'),
     people: t('nav.debts'),
     due: t('debts.dueTitle'),
@@ -458,7 +460,8 @@ function ExportForm({ today, settings, categories }: { today: Today; settings: M
                 <Group title={t('export.include')}>
                   <div className="export-chips">
                     {partsOfFile.map((section) => {
-                      const off = section === 'history' && limited
+                      // the change history and the transfers are only in a file with no limits
+                      const off = (section === 'history' || section === 'transfers') && limited
                       return (
                         <Chip key={section} checked={!off && choice.sections.includes(section)} disabled={off} onChange={(on) => togglePart(section, on)}>
                           {partName[section]}
@@ -515,6 +518,8 @@ function ExportForm({ today, settings, categories }: { today: Today; settings: M
                         {hasPart('recurring') && <Row label={t('nav.recurring')} value={String(preview.recurring)} />}
                       </>
                     )}
+                    {listed && hasPart('accounts') && (preview.accounts ?? 0) > 0 && <Row label={t('export.partAccounts')} value={String(preview.accounts)} />}
+                    {listed && hasPart('transfers') && (preview.transfers ?? 0) > 0 && <Row label={t('export.partTransfers')} value={String(preview.transfers)} />}
                     {listed && hasPart('documents') && preview.documents > 0 && <Row label={t('nav.documents')} value={String(preview.documents)} />}
                     {listed && (hasPart('transactions') || hasPart('ledger')) && preview.splitBills > 0 && <Row label={t('export.sharedBills')} value={String(preview.splitBills)} />}
                     {listed && hasPart('people') && preview.people > 0 && <Row label={t('nav.debts')} value={String(preview.people)} />}

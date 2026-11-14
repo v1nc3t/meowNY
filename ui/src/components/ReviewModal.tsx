@@ -34,7 +34,9 @@ export default function ReviewModal({
 
   function valueText(field: Conflict['fields'][number]['field'], value: string): string {
     if (value === '') return '-'
-    if (field === 'amount' && settings) return formatMoney(value, settings.currency, settings.locale)
+    if ((field === 'amount' || field === 'openingBalance') && settings) return formatMoney(value, settings.currency, settings.locale)
+    // the type of an account is one of its four kinds; of a category, income or expense
+    if (field === 'type' && (value === 'CHECKING' || value === 'SAVINGS' || value === 'CASH' || value === 'CREDIT_CARD')) return t(`accounts.kind.${value}`)
     if (field === 'type') return t(value === 'INCOME' ? 'common.income' : 'common.expense')
     if (field === 'active' || field === 'keepOnPhone' || field === 'archived') return t(value === 'yes' ? 'common.yes' : 'common.no')
     if (field === 'kind' && (value === 'LENT' || value === 'BORROWED' || value === 'REPAID_TO_ME' || value === 'REPAID_BY_ME')) return t(`debts.kind.${value}`)

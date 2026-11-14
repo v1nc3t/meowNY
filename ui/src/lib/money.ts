@@ -11,6 +11,18 @@ export function amountString(raw: string, allowZero: boolean): string | null {
   return (allowZero ? budgetAmount : transactionAmount).test(amount) ? amount : null
 }
 
+/**
+ * An amount that may be below 0, for an opening balance: as `amountString` with zero allowed, and a minus in front for a negative one
+ * ("-120", "-120,5"). A minus on nothing or on zero, a plus, and a space after the minus return null, as the app refuses them.
+ */
+export function signedAmountString(raw: string): string | null {
+  const text = raw.trim()
+  if (!text.startsWith('-')) return amountString(text, true)
+  const rest = text.slice(1)
+  const amount = /^\d/.test(rest) ? amountString(rest, true) : null
+  return amount === null || amount === '0.00' ? null : `-${amount}`
+}
+
 const currencyFormatter = memoByKey(
   (locale: string, currency: string) => `${locale}|${currency}`,
   (locale: string, currency: string) => {

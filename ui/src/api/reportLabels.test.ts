@@ -7,7 +7,7 @@ import { reportLabels } from './reportLabels.ts'
 
 // The fields the app's PDF writer expects, one for one (the Rust side refuses unknown or missing ones).
 const FIELDS = [
-  'amount', 'budgetVsActual', 'byMonth', 'category', 'date', 'expenses', 'income', 'name', 'noBudget', 'noData', 'other',
+  'accounts', 'amount', 'balance', 'budgetVsActual', 'byMonth', 'category', 'change', 'date', 'expenses', 'income', 'name', 'netWorth', 'noBudget', 'noData', 'other',
   'page', 'period', 'savings', 'savingsRate', 'spending', 'title', 'transactions',
 ]
 

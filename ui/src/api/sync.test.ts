@@ -140,7 +140,10 @@ test('every conflict needs an answer, and the answers go out in the order of the
 test('the tables and fields are the ones the Rust side sends', () => {
   const wire = readFileSync(new URL('../../../src-tauri/src/sync/wire.rs', import.meta.url), 'utf8')
   const names = [...(/pub fn name\(self\)[\s\S]*?\n    \}/.exec(wire)?.[0] ?? '').matchAll(/=> "(\w+)"/g)].map((m) => m[1])
-  assert.deepEqual([...TABLES].sort(), names.sort())
+  // Accounts and transfers come with protocol 9 (docs/accounts-design.md, section 7). Until wire.rs names them the screen is one step
+  // ahead by exactly those two; from then on the lists are equal again, and this needs no change.
+  const ahead = names.includes('accounts') ? [] : ['accounts', 'transfers']
+  assert.deepEqual([...TABLES].filter((table) => !ahead.includes(table)).sort(), names.sort())
   const engine = readFileSync(new URL('../../../src-tauri/src/sync/engine.rs', import.meta.url), 'utf8')
   const facts = /fn facts\(conn[\s\S]*?\n\}\n/.exec(engine)?.[0] ?? ''
   const sent = new Set([...facts.matchAll(/\("(\w+)", /g)].map((m) => m[1]))

@@ -1,0 +1,212 @@
+/* Accounts: the list, the archived ones, an account's page, and the places of other pages that name an account. Everything else on
+   these screens is the lists, cards and charts of the other pages (primitives.css, dashboard.css, debts-docs.css). */
+
+/* What all accounts hold together, at the right over the list. */
+.acct-total {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: flex-end;
+  gap: 0.25rem 0.5rem;
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.acct-total b {
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: var(--foreground);
+}
+
+/* The accounts as a table: name, type, number, last activity, this month, balance, then two buttons of 2rem. The type is one of four
+   short words in small print (the longest, "carte de crédit", is 15 characters of 0.875rem), a date has 10 of them, and an amount with
+   its sign has 16 characters of room, as in the transactions. The name and the number share the rest. A row can be held and dragged,
+   like a category: no text selection or touch menu when it is held, and every row equally tall (see the categories, money.css). */
+.card-list.acct-list {
+  --cols: minmax(8rem, 1.4fr) 14ch minmax(0, 1fr) 12ch 16ch 16ch 4.25rem;
+  --grip-room: calc(12px + 0.5rem);
+}
+
+ul.card-list.acct-list > li.card-item {
+  cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+
+.acct-list .row-grip {
+  width: 12px;
+  height: 12px;
+  flex: none;
+  margin-left: -0.625rem;
+  margin-right: 0.625rem;
+  color: var(--muted-foreground);
+  cursor: grab;
+}
+
+ul.card-list.acct-list > li.list-head > :first-child {
+  padding-left: var(--grip-room);
+}
+
+/* This month in small print on the phone, coloured like the amounts. */
+.acct-month-sub.is-income {
+  color: var(--success);
+}
+
+.acct-month-sub.is-expense {
+  color: var(--destructive);
+}
+
+/* With less room the number goes first, then the last activity; narrower than 40em a row is two lines: the name and the balance, the
+   type and this month. */
+@container (max-width: 64em) {
+  ul.card-list.acct-list > li.card-item,
+  ul.card-list.acct-list > li.list-head {
+    grid-template-columns: minmax(8rem, 1fr) 14ch 12ch 16ch 16ch 4.25rem;
+  }
+
+  ul.card-list.acct-list .acct-number {
+    display: none;
+  }
+}
+
+@container (max-width: 52em) {
+  ul.card-list.acct-list > li.card-item,
+  ul.card-list.acct-list > li.list-head {
+    grid-template-columns: minmax(8rem, 1fr) 14ch 16ch 16ch 4.25rem;
+  }
+
+  ul.card-list.acct-list .acct-last {
+    display: none;
+  }
+}
+
+@container (max-width: 40em) {
+  ul.card-list.acct-list > li.card-item {
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    grid-template-areas:
+      'name balance actions'
+      'sub month actions';
+  }
+
+  ul.card-list.acct-list .acct-balance {
+    grid-area: balance;
+  }
+
+  ul.card-list.acct-list .acct-month {
+    grid-area: month;
+    font-size: 0.875rem;
+    font-weight: 400;
+  }
+}
+
+/* The archived accounts: name, type, balance, then restore (the longest, "wiederherstellen", has 16 characters of 0.875rem and its
+   padding) and the place of delete. */
+.card-list.acct-archived {
+  --cols: minmax(0, 1fr) 14ch 16ch calc(15ch + 4rem);
+}
+
+ul.card-list.acct-archived > li.card-item {
+  cursor: pointer;
+}
+
+.acct-archived .row-primary {
+  max-width: none;
+  padding-inline: 0.5rem;
+  white-space: nowrap;
+}
+
+/* An account's page. The chart sits in a card, like the year on the dashboard. */
+.acct-chart {
+  container-type: inline-size;
+}
+
+.line-balance {
+  stroke: var(--c-savings);
+}
+
+.dot-balance {
+  fill: var(--c-savings);
+}
+
+/* What moved the account in a month: the day, what it was, the category (or the other account, or the friend), what it did to the
+   balance and the balance after it, then up to two buttons of 2rem. Narrower than 46em the third column goes, and a row is two lines:
+   what it was and the amount, the day and the balance. */
+.card-list.acct-lines {
+  --cols: 12ch minmax(8rem, 1.4fr) minmax(0, 1fr) 16ch 14.5ch 4.25rem;
+}
+
+.acct-lines .cell-sub-end {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.acct-lines .cell-actions {
+  min-width: 4.25rem;
+}
+
+@container (max-width: 46em) {
+  ul.card-list.acct-lines > li.list-head {
+    display: none;
+  }
+
+  ul.card-list.acct-lines > li.list-head + li {
+    border-top: 0;
+  }
+
+  ul.card-list.acct-lines > li.card-item {
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    grid-template-areas:
+      'name amount actions'
+      'sub sub-end actions';
+    row-gap: 0;
+  }
+
+  ul.card-list.acct-lines .cell-name {
+    grid-area: name;
+  }
+
+  ul.card-list.acct-lines .cell-amount {
+    grid-area: amount;
+  }
+
+  ul.card-list.acct-lines .line-date {
+    grid-area: sub;
+  }
+
+  ul.card-list.acct-lines .line-other {
+    display: none;
+  }
+
+  ul.card-list.acct-lines .cell-sub-end {
+    grid-area: sub-end;
+  }
+
+  ul.card-list.acct-lines .cell-actions {
+    grid-area: actions;
+  }
+}
+
+/* The transactions, with more than one account: one more column, the account, after the category. It goes when the rows become two
+   lines, where the category has the place. */
+.card-list.tx-list.has-account {
+  --cols: minmax(0, 2.2fr) 16ch 12ch minmax(0, 1.2fr) minmax(0, 1fr) 2ch 6.5rem;
+}
+
+@container (max-width: 40em) {
+  ul.card-list.tx-list.has-account .cell-account {
+    display: none;
+  }
+}
+
+/* Net worth on the dashboard: the number, and under it what it is made of. */
+.dash-worth {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+/* The phone's top bar has one more icon: on a narrow phone the icons give way rather than push the bar wider than the screen. */
+.phone-actions {
+  min-width: 0;
+}

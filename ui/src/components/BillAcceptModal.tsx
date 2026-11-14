@@ -2,10 +2,13 @@ import { useEffect, useState, type FormEvent } from 'react'
 import { categories as categoriesApi, cleanCategoryName, type Category } from '../api/categories'
 import { debts, type BillPreview, type Person } from '../api/debts'
 import { ApiError, errorText } from '../api/invoke'
+import { useAccounts } from '../hooks/useAccounts'
 import { useMoneySettings } from '../hooks/useMoneySettings'
 import { useToast } from '../hooks/toast'
 import { useT } from '../i18n/context'
+import { accountChoice, rememberAccount } from '../lib/accountsView'
 import { amountString, convertAmount, formatDate, formatMoney, parseRate } from '../lib/money'
+import AccountField from './AccountField'
 import Dropdown from './Dropdown'
 import Modal, { modalFormId } from './Modal'
 
@@ -48,6 +51,10 @@ export default function BillAcceptModal({
   const [rate, setRate] = useState('')
   const [amount, setAmount] = useState('')
   const [amountEdited, setAmountEdited] = useState(false)
+  // with more than one account: the one the part is recorded in (the expense and what is owed), the last one used until another is picked
+  const accounts = useAccounts()
+  const [account, setAccount] = useState<string | null>(null)
+  const choice = accountChoice(accounts, account)
   const say = useToast()
   const [pending, setPending] = useState(false)
   const money = (value: string, currency: string) => (settings ? formatMoney(value, currency, settings.locale) : value)
@@ -101,7 +108,9 @@ export default function BillAcceptModal({
         addExpense,
         ...(addExpense ? { categoryId } : {}),
         ...(needsRate ? { rate: rate.trim(), ...(amountEdited && typedAmount ? { amount: typedAmount } : {}) } : {}),
+        ...(choice.send ? { accountId: choice.send } : {}),
       })
+      if (choice.shown) rememberAccount(choice.value)
       try {
         if (addExpense) localStorage.setItem(CATEGORY_KEY, categoryId)
       } catch {
@@ -192,6 +201,7 @@ export default function BillAcceptModal({
                 placeholder={t('tx.chooseCategory')}
               />
             ) : null}
+            <AccountField accounts={accounts} value={choice.value} onChange={setAccount} />
           </>
         )}
       </form>

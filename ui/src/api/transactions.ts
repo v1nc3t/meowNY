@@ -17,6 +17,8 @@ export type Payer = z.infer<typeof Payer>
 export const Transaction = z.object({
   id: z.string().regex(/^[1-9]\d*$/),
   categoryId: z.string().regex(/^[1-9]\d*$/),
+  /** The account the money left or reached. A bill a friend paid has one too, and moves nothing in it. */
+  accountId: z.string().regex(/^[1-9]\d*$/),
   clientUuid: z.string().nullable(),
   name: z.string(),
   /** What was paid. Decimal string such as "12.50". Never converted to a number for storage or sums. */
@@ -46,6 +48,8 @@ export type NewTransaction = {
   paymentDate: string
   categoryId: string
   description?: string | null
+  /** Left out, a new transaction goes to the main account. It must be an account that is not archived. */
+  accountId?: string
   /** Makes create safe to retry: the same value never creates a second transaction. */
   clientUuid?: string
 }
@@ -57,6 +61,7 @@ export type TransactionFilter = {
   from?: string
   to?: string
   categoryId?: string
+  accountId?: string
   q?: string
   limit?: number
   offset?: number

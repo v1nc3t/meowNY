@@ -1,11 +1,14 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { categories as categoriesApi, type Category } from '../api/categories'
-import { debts, ENTRY_KINDS, type Entry, type EntryKind, type Person } from '../api/debts'
+import { debts, ENTRY_KINDS, type EntryKind, type EntryOfLine, type Person } from '../api/debts'
 import { errorText } from '../api/invoke'
+import { useAccounts } from '../hooks/useAccounts'
 import { useAttachments } from '../hooks/useAttachments'
 import { useToast } from '../hooks/toast'
 import { useT } from '../i18n/context'
+import { accountChoice, rememberAccount } from '../lib/accountsView'
 import { amountString } from '../lib/money'
+import AccountField from './AccountField'
 import AttachArea from './AttachArea'
 import DatePicker from './DatePicker'
 import Dropdown from './Dropdown'
@@ -14,7 +17,8 @@ import Modal, { modalFormId } from './Modal'
 
 /**
  * Money lent, borrowed or paid back, as an entry in a friend's ledger. Adding one that was borrowed can also add the person's share to
- * their expenses in the same step ("someone else paid"). Documents (a loan note, an invoice) are attached here.
+ * their expenses in the same step ("someone else paid"). Documents (a loan note, an invoice) are attached here. With more than one
+ * account the dialog asks which one the money left or reached, so a repayment in cash goes to the cash account.
  */
 export default function EntryModal({
   entry,
@@ -25,7 +29,7 @@ export default function EntryModal({
   onSaved,
 }: {
   /** The entry to change; none for a new one. */
-  entry: Entry | null
+  entry: EntryOfLine | null
   /** The kind a new entry starts as. */
   kind?: EntryKind
   /** The friend a new entry starts with. */
@@ -44,6 +48,11 @@ export default function EntryModal({
   const [alsoExpense, setAlsoExpense] = useState(false)
   const [categoryId, setCategoryId] = useState('')
   const [addingFriend, setAddingFriend] = useState(false)
+  // The account: the one picked, else the entry's own, else (a new entry) the last one used. An entry whose account the statement did
+  // not say has no field and keeps its account.
+  const accounts = useAccounts()
+  const [account, setAccount] = useState<string | null>(null)
+  const choice = accountChoice(entry && !entry.accountId ? null : accounts, account, entry?.accountId)
   const say = useToast()
   const [pending, setPending] = useState(false)
   // The documents of an entry that exists are stored and linked at once; those of one being made wait for it to be saved.
@@ -93,10 +102,10 @@ export default function EntryModal({
     let notAttached: string[] = []
     try {
       if (entry) {
-        await debts.updateEntry(entry.id, { personId, kind, amount, date, note: note || null })
+        await debts.updateEntry(entry.id, { personId, kind, amount, date, note: note || null, ...(choice.send ? { accountId: choice.send } : {}) })
       } else {
         const created = await debts.addEntry(
-          { personId, kind, amount, date, ...(note ? { note } : {}) },
+          { personId, kind, amount, date, ...(note ? { note } : {}), ...(choice.send ? { accountId: choice.send } : {}) },
           withExpense ? { name: expenseName, categoryId } : undefined,
         )
         notAttached = await attachments.commit({ kind: 'ledger_entry', id: created.id })
@@ -107,6 +116,7 @@ export default function EntryModal({
     } finally {
       setPending(false)
     }
+    if (choice.shown) rememberAccount(choice.value)
     onSaved(notAttached)
   }
 
@@ -128,6 +138,7 @@ export default function EntryModal({
             options={ENTRY_KINDS.map((value) => ({ value, label: t(`debts.kind.${value}`) }))}
             onChange={(value) => setKind(value as EntryKind)}
           />
+          <AccountField accounts={choice.shown ? accounts : null} value={choice.value} onChange={setAccount} />
           <label>
             {t('tx.amount')}
             <input name="amount" required inputMode="decimal" defaultValue={entry?.amount ?? ''} autoComplete="off" />

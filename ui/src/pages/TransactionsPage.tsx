@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
+import AccountField from '../components/AccountField'
 import AddCategoryModal from '../components/AddCategoryModal'
 import AttachArea from '../components/AttachArea'
 import BillCodeModal from '../components/BillCodeModal'
@@ -15,17 +16,20 @@ import Button from '../components/ui/Button'
 import { EmptyState } from '../components/ui/Pixel'
 import DatePicker from '../components/DatePicker'
 import SplitEditor from '../components/SplitEditor'
+import type { Account } from '../api/accounts'
 import { categories as categoriesApi, type Category } from '../api/categories'
 import { debts } from '../api/debts'
 import { errorText } from '../api/invoke'
 import { shiftMonth } from '../api/months'
 import { useToday, type Today } from '../api/today'
 import { transactions as transactionsApi, type Transaction, type TransactionPage } from '../api/transactions'
+import { accountChoice, accountLabel, activeAccounts, rememberAccount, several } from '../lib/accountsView'
 import { categoryOptions } from '../lib/categoriesView'
 import { amountString, formatDate, formatMoney } from '../lib/money'
 import { apiBound, presentRange, shiftBound, type RangeMode } from '../lib/range'
 import { recall, saveChoice, storedChoice, storedId, useRemember } from '../lib/sticky'
 import { draftOfBill, equalDraft, NOT_SPLIT, toInput, type SplitState } from '../lib/split'
+import { useAccounts } from '../hooks/useAccounts'
 import { useAttachments, type Attachments } from '../hooks/useAttachments'
 import { useClipCounts } from '../hooks/useClipCounts'
 import { useFocusRequest, useJumpTo } from '../hooks/useFocusRequest'
@@ -43,7 +47,7 @@ import { remindersChanged } from '../lib/reminders'
 type TransactionList = TransactionPage
 /** A bill with parts of others, or a friend who paid it. */
 const isShared = (transaction: Transaction) => transaction.split.length > 0 || transaction.paidBy !== null
-type MenuName = 'range' | 'show' | 'category'
+type MenuName = 'range' | 'show' | 'category' | 'account'
 const MODES = ['year', 'month', 'date'] as const
 const LIMITS = [10, 50, 100] as const
 type Filters = {
@@ -51,6 +55,8 @@ type Filters = {
   from: string
   to: string
   categoryId: string
+  /** Only with more than one account; '' is every account. */
+  accountId: string
   q: string
 }
 
@@ -72,6 +78,7 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
   const [filters, setFilters] = useState<Filters>(() => ({
     ...presentRange(storedChoice('tx.period', MODES, 'month'), now),
     categoryId: storedId('tx.category'),
+    accountId: storedId('tx.account'),
     q: '',
     ...recall<Partial<Filters>>('transactions.range', () => ({})),
   }))
@@ -114,6 +121,17 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
     saveChoice('tx.category', '')
     setFilters((current) => ({ ...current, categoryId: '' }))
   }, [categoriesReady, categoryKnown])
+  // The accounts are only spoken of with more than one that is not archived: then the list can be limited to one, and each row names its own.
+  const accounts = useAccounts(reload)
+  const multi = several(accounts)
+  const accountNames = useMemo(() => new Map((accounts ?? []).map((account) => [account.id, accountLabel(account, t)])), [accounts, t])
+  // a remembered account that is gone, archived or the only one left is no longer a filter, and the list is not asked for it before that is known
+  const accountKnown = filters.accountId === '' || (multi && activeAccounts(accounts ?? []).some((account) => account.id === filters.accountId))
+  useEffect(() => {
+    if (accounts === null || accountKnown) return
+    saveChoice('tx.account', '')
+    setFilters((current) => ({ ...current, accountId: '' }))
+  }, [accounts, accountKnown])
   // the phone keeps the period and the category behind a "filters" button
   const [filtersOpen, setFiltersOpen] = useState(false)
   const filtersId = useId()
@@ -135,7 +153,7 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
   }, [reload])
 
   useEffect(() => {
-    if (!categoryKnown) return
+    if (!categoryKnown || !accountKnown) return
     let cancelled = false
     const from = apiBound(filters.mode, filters.from, 'from')
     const to = apiBound(filters.mode, filters.to, 'to')
@@ -145,6 +163,7 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
         ...(from ? { from } : {}),
         ...(to ? { to } : {}),
         ...(filters.categoryId ? { categoryId: filters.categoryId } : {}),
+        ...(filters.accountId ? { accountId: filters.accountId } : {}),
         ...(q ? { q } : {}),
         limit,
         offset,
@@ -160,12 +179,12 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
     return () => {
       cancelled = true
     }
-  }, [filters.mode, filters.from, filters.to, filters.categoryId, categoryKnown, searchText, limit, offset, reload, say])
+  }, [filters.mode, filters.from, filters.to, filters.categoryId, filters.accountId, categoryKnown, accountKnown, searchText, limit, offset, reload, say])
 
   useEffect(() => {
     if (!focus) return
     const month = focus.date.slice(0, 7)
-    setFilters({ mode: 'month', from: month, to: month, categoryId: '', q: '' })
+    setFilters({ mode: 'month', from: month, to: month, categoryId: '', accountId: '', q: '' })
     setLimit(100)
     setOffset(0)
   }, [focus])
@@ -264,6 +283,8 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
     const paymentDate = String(form.get('paymentDate') ?? '')
     const categoryId = String(form.get('categoryId') ?? '')
     const description = String(form.get('description') ?? '').trim()
+    // the form has the field only with more than one account; without it nothing is said and a new row goes to the main account
+    const accountId = String(form.get('accountId') ?? '')
     if (!name || !paymentDate || !categoryId) {
       say(t('tx.errorRequired'), 'error')
       return
@@ -272,7 +293,15 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
       say(t('tx.errorAmount'), 'error')
       return
     }
-    const body = { name, amount, paymentDate, categoryId, description: description.length > 0 ? description : null }
+    const body = {
+      name,
+      amount,
+      paymentDate,
+      categoryId,
+      description: description.length > 0 ? description : null,
+      // a row that stays in its account says nothing about it (it may be an archived one)
+      ...(accountId && accountId !== editing?.accountId ? { accountId } : {}),
+    }
     // A shared bill is saved when its numbers add up; one that was shared and is left alone is scaled by the app to a new amount.
     const hadSplit = editing ? isShared(editing) : false
     const wantsSplit = split.on && categories.find((category) => category.id === categoryId)?.type !== 'INCOME'
@@ -310,6 +339,8 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
     }
     // a shared bill changes what friends owe, and so the reminders
     if (input) remindersChanged()
+    // the next new row starts in this account
+    rememberAccount(accountId)
     closeModal()
     setReload((value) => value + 1)
   }
@@ -331,6 +362,12 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
     return t('tx.allCategories')
   }
 
+  function pickAccount(accountId: string) {
+    saveChoice('tx.account', accountId)
+    patchFilters({ accountId })
+    setMenu(null)
+  }
+
   function pickCategory(categoryId: string) {
     saveChoice('tx.category', categoryId)
     patchFilters({ categoryId })
@@ -347,7 +384,7 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
   const currentPeriod = filters.mode === 'year' ? now.date.slice(0, 4) : now.month
   const atCurrentPeriod = filters.from === currentPeriod && filters.to === currentPeriod
   // how many filters are not as they start (this month, every category): the phone's filters button counts them
-  const activeFilters = (atCurrentMonth ? 0 : 1) + (filters.categoryId ? 1 : 0)
+  const activeFilters = (atCurrentMonth ? 0 : 1) + (filters.categoryId ? 1 : 0) + (filters.accountId ? 1 : 0)
   const categoryName = (transaction: Transaction) => categoryNames.get(transaction.categoryId) ?? (categoriesReady ? t('tx.deletedCategory') : '')
 
   // The period: a year, a month of a year, or exact dates (from one day to another, the end never before the start).
@@ -452,6 +489,29 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
       ))}
     </Pick>
   )
+
+  // With more than one account: all of them, or one. It sits beside the category.
+  const accountText = filters.accountId ? (accountNames.get(filters.accountId) ?? '') : t('accounts.allAccounts')
+  const accountPick = multi ? (
+    <Pick
+      label={t('accounts.account')}
+      className="scope"
+      text={accountText}
+      title={accountText}
+      open={menu === 'account'}
+      onToggle={() => setMenu((current) => (current === 'account' ? null : 'account'))}
+      onClose={() => setMenu(null)}
+    >
+      <PickOption selected={!filters.accountId} onClick={() => pickAccount('')}>
+        {t('accounts.allAccounts')}
+      </PickOption>
+      {activeAccounts(accounts ?? []).map((account) => (
+        <PickOption key={`account-${account.id}`} selected={filters.accountId === account.id} onClick={() => pickAccount(account.id)}>
+          {accountNames.get(account.id) ?? ''}
+        </PickOption>
+      ))}
+    </Pick>
+  ) : null
 
   // Under the list: the pages, and how many rows a page has.
   const foot =
@@ -577,6 +637,11 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
         {amount(transaction)}
         <span className="cell-sub-end">{formatDate(transaction.paymentDate, settings.locale)}</span>
         <span className="cell-sub">{categoryName(transaction)}</span>
+        {multi ? (
+          <span className="cell-sub cell-account" title={accountNames.get(transaction.accountId)}>
+            {accountNames.get(transaction.accountId) ?? ''}
+          </span>
+        ) : null}
         <span className="cell-mark">
           {isShared(transaction) ? (
             <span className="row-mark-icon" title={t('tx.shared')}>
@@ -605,6 +670,7 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
         sub={
           <>
             <span>{categoryName(transaction)}</span>
+            {multi ? <span>{accountNames.get(transaction.accountId) ?? ''}</span> : null}
             {isShared(transaction) ? <span>{t('tx.shared')}</span> : null}
           </>
         }
@@ -670,6 +736,7 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
             {filtersOpen ? (
               <div className="filter-panel" id={filtersId}>
                 {categoryPick}
+                {accountPick}
                 {rangeControls}
               </div>
             ) : null}
@@ -677,6 +744,7 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
         ) : (
           <>
             {categoryPick}
+            {accountPick}
             {rangeControls}
           </>
         )}
@@ -687,6 +755,7 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
           transaction={editing}
           todayDate={now.date}
           categories={categories}
+          accounts={accounts}
           pending={pending}
           attachments={attachments}
           split={split}
@@ -720,7 +789,19 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
                 {tapRow}
               </DayGroups>
             ) : (
-              <Table className="tx-list" heads={[t('common.name'), { label: t('tx.amount'), className: 'is-end' }, t('sync.field.date'), t('common.category'), '', '']} opens>
+              <Table
+                className={multi ? 'tx-list has-account' : 'tx-list'}
+                heads={[
+                  t('common.name'),
+                  { label: t('tx.amount'), className: 'is-end' },
+                  t('sync.field.date'),
+                  t('common.category'),
+                  ...(multi ? [{ label: t('accounts.account'), className: 'cell-account' }] : []),
+                  '',
+                  '',
+                ]}
+                opens
+              >
                 {page.transactions.map(tableRow)}
               </Table>
             )}
@@ -733,11 +814,12 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
   )
 }
 
-// Add and edit share this modal. Field order: name, amount, category, date, description.
+// Add and edit share this modal. Field order: name, amount, category, account (with more than one), date, description.
 function TransactionModal({
   transaction,
   todayDate,
   categories,
+  accounts,
   pending,
   attachments,
   split,
@@ -750,6 +832,8 @@ function TransactionModal({
   transaction: Transaction | null
   todayDate: string
   categories: Category[]
+  /** Every account; null while they are read. */
+  accounts: Account[] | null
   pending: boolean
   attachments: Attachments
   split: SplitState
@@ -762,6 +846,8 @@ function TransactionModal({
   const t = useT()
   const [categoryId, setCategoryId] = useState(transaction?.categoryId ?? '')
   const [amount, setAmount] = useState(transaction?.amount ?? '')
+  // the account the person picked; until then the row's own, or for a new row the last one used
+  const [account, setAccount] = useState<string | null>(null)
   const [addingCategory, setAddingCategory] = useState(false)
   // The documents area is behind a switch, as the split is. It is open when the transaction already has documents (they are listed
   // as soon as they are loaded) or files were chosen for a new one, and then it cannot be closed on them.
@@ -804,6 +890,7 @@ function TransactionModal({
             placeholder={t('tx.chooseCategory')}
             action={{ label: t('categories.add'), onSelect: () => setAddingCategory(true) }}
           />
+          <AccountField accounts={accounts} name="accountId" value={accountChoice(accounts, account, transaction?.accountId).value} onChange={setAccount} />
           <PaymentDate defaultValue={transaction?.paymentDate ?? todayDate} />
           {canSplit ? (
             <label>

@@ -1,4 +1,4 @@
-import type { Entry, Line } from '../api/debts'
+import type { EntryOfLine, Line } from '../api/debts'
 
 /** Who owes whom, from a balance such as "-12.50" (negative: the person owes the friend). `abs` is the amount without its sign. */
 export function balanceView(balance: string): { tone: 'owed' | 'owe' | 'even'; abs: string } {
@@ -8,7 +8,7 @@ export function balanceView(balance: string): { tone: 'owed' | 'owe' | 'even'; a
 }
 
 /** An entry as the edit dialog takes it, from its line in a friend's statement (the note of an entry is what the line says it is). */
-export function entryOfLine(line: Line, personId: string): Entry | null {
+export function entryOfLine(line: Line, personId: string): EntryOfLine | null {
   if (line.entryId === null || line.kind === 'BILL') return null
   return {
     id: line.entryId,
@@ -18,6 +18,7 @@ export function entryOfLine(line: Line, personId: string): Entry | null {
     date: line.date,
     note: line.what === '' ? null : line.what,
     transactionId: line.transactionId,
+    ...(line.accountId ? { accountId: line.accountId } : {}),
   }
 }
 

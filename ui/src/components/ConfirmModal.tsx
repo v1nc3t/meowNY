@@ -1,4 +1,4 @@
-import type { FormEvent } from 'react'
+import type { FormEvent, ReactNode } from 'react'
 import { useT } from '../i18n/context'
 import Modal, { modalFormId } from './Modal'
 
@@ -8,12 +8,15 @@ import Modal, { modalFormId } from './Modal'
  */
 export default function ConfirmModal({
   title,
+  text,
   pending = false,
   danger = true,
   onConfirm,
   onClose,
 }: {
   title: string
+  /** What will happen, in a sentence or two over the question. */
+  text?: ReactNode
   pending?: boolean
   /** The yes button is red. Turn it off for something that is easy to undo (pausing an item). */
   danger?: boolean
@@ -28,6 +31,7 @@ export default function ConfirmModal({
   return (
     <Modal title={title} pending={pending} danger={danger} doneLabel={t('common.yes')} cancelLabel={t('common.no')} onClose={onClose}>
       <form id={modalFormId} onSubmit={onSubmit}>
+        {text ? <p className="hint">{text}</p> : null}
         <p className="confirm-text" tabIndex={-1} data-autofocus>
           {t('common.areYouSure')}
         </p>

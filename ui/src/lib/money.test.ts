@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { amountString, convertAmount, fromMinor, parseRate, toMinor } from './money.ts'
+import { amountString, convertAmount, fromMinor, parseRate, signedAmountString, toMinor } from './money.ts'
 
 test('transaction amounts pad to two decimals and reject empty, zero, and negative', () => {
   assert.equal(amountString('10', false), '10.00')
@@ -55,4 +55,30 @@ test('a comma is a decimal mark like the dot, and nothing else with a separator 
   assert.equal(amountString('29,50', false), '29.50')
   assert.equal(amountString(' 0,05 ', false), '0.05')
   for (const bad of ['29,', '29.', ',5', '1,234.50', '1.234,50', '29,555', '29,5,0', '29;50', '-29,50']) assert.equal(amountString(bad, false), null, bad)
+})
+
+test('a signed amount is an amount with an optional minus, and zero is allowed', () => {
+  assert.equal(signedAmountString('120'), '120.00')
+  assert.equal(signedAmountString('-120'), '-120.00')
+  assert.equal(signedAmountString('1.5'), '1.50')
+  assert.equal(signedAmountString('-1.5'), '-1.50')
+  assert.equal(signedAmountString(' -0.05 '), '-0.05')
+  assert.equal(signedAmountString('0'), '0.00')
+  assert.equal(signedAmountString('0.00'), '0.00')
+  // a comma is a decimal mark, as in every other amount
+  assert.equal(signedAmountString('1,50'), '1.50')
+  assert.equal(signedAmountString('-1,5'), '-1.50')
+})
+
+test('a signed amount refuses what the app refuses', () => {
+  for (const bad of ['', ' ', '-', '--1', '-0', '-0.0', '-0.00', '-0,00', '+1', '+1.00', '1.555', '-1.555', '1.', '-.5', '- 5', '-01.00', '1e3', '−5', '1,234.50', 'abc', '5-']) {
+    assert.equal(signedAmountString(bad), null, bad)
+  }
+})
+
+test('a signed amount has the bounds of the app on both sides', () => {
+  assert.equal(signedAmountString('9999999999.99'), '9999999999.99')
+  assert.equal(signedAmountString('-9999999999.99'), '-9999999999.99')
+  assert.equal(signedAmountString('10000000000'), null)
+  assert.equal(signedAmountString('-10000000000.00'), null)
 })

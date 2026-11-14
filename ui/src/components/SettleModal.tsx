@@ -2,10 +2,13 @@ import { useState, type FormEvent } from 'react'
 import { debts, type Person } from '../api/debts'
 import { errorText } from '../api/invoke'
 import type { Transaction } from '../api/transactions'
+import { useAccounts } from '../hooks/useAccounts'
 import { useMoneySettings } from '../hooks/useMoneySettings'
 import { useToast } from '../hooks/toast'
 import { useT } from '../i18n/context'
+import { accountChoice, rememberAccount } from '../lib/accountsView'
 import { amountString, formatMoney, fromMinor, toMinor } from '../lib/money'
+import AccountField from './AccountField'
 import DatePicker from './DatePicker'
 import Modal, { modalFormId } from './Modal'
 import TransactionLink from './TransactionLink'
@@ -13,7 +16,8 @@ import TransactionLink from './TransactionLink'
 /**
  * "Mark as paid": a payment between the person and a friend. The amount starts as the whole balance. A larger one is accepted, and
  * the dialog says first that the balance will turn around. A checkbox can drop that difference: then the whole balance is recorded.
- * A transaction can be linked as what the payment was for, for example a bill paid for them; it is only a reference.
+ * A transaction can be linked as what the payment was for, for example a bill paid for them; it is only a reference. With more than
+ * one account the dialog asks which one the money left or reached.
  */
 export default function SettleModal({
   person,
@@ -36,6 +40,10 @@ export default function SettleModal({
   const [pending, setPending] = useState(false)
   const [keep, setKeep] = useState(false)
   const [linked, setLinked] = useState<Transaction | null>(null)
+  // the account picked, or until then the last one used
+  const accounts = useAccounts()
+  const [account, setAccount] = useState<string | null>(null)
+  const choice = accountChoice(accounts, account)
   const money = (value: string) => (settings ? formatMoney(value, settings.currency, settings.locale) : value)
 
   // More than the debt: said before it is confirmed. Only a comparison of two amounts, the rest is worked out by the app.
@@ -56,13 +64,14 @@ export default function SettleModal({
     }
     setPending(true)
     try {
-      await debts.settle(person.id, { amount: keeping ? whole : typed, date, ...(note ? { note } : {}), ...(linked ? { transactionId: linked.id } : {}) })
+      await debts.settle(person.id, { amount: keeping ? whole : typed, date, ...(note ? { note } : {}), ...(linked ? { transactionId: linked.id } : {}), ...(choice.send ? { accountId: choice.send } : {}) })
     } catch (failure) {
       say(errorText(failure), 'error')
       return
     } finally {
       setPending(false)
     }
+    if (choice.shown) rememberAccount(choice.value)
     onDone()
   }
 
@@ -85,6 +94,7 @@ export default function SettleModal({
           <span>{t('report.date')}</span>
           <DatePicker kind="date" value={date} label={t('report.date')} today={today} onChange={setDate} />
         </div>
+        <AccountField accounts={accounts} value={choice.value} onChange={setAccount} />
         <label>
           {t('debts.note')}
           <textarea name="note" rows={3} maxLength={200} autoComplete="off" />

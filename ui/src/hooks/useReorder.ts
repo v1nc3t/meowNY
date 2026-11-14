@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef, useState } from 'react'
 import { useProfile } from './profile'
 import { useT } from '../i18n/context'
+import type { MessageKey } from '../i18n/en'
 import { activeIds, HOLD_MS, HOLD_SLOP, moveItem, scrollStep, shifts, targetIndex } from '../lib/reorder'
 
 type Item = { id: string; name: string; deleted: boolean }
@@ -39,17 +40,18 @@ function scrollParent(from: HTMLElement): HTMLElement | null {
 /**
  * Reordering of a list of rows (`data-reorder-id` on each, inside the element given to `listRef`): hold a row and drag it, or
  * Alt+arrow up and down on a focused row. `items` are the rows in order; read-only (deleted) ones stay where they are and are
- * left out of the ids that `onReorder` gets. Pointer events, because the app blocks native dragging.
+ * left out of the ids that `onReorder` gets. Pointer events, because the app blocks native dragging. `movedText` is what a screen reader
+ * hears after a move, with {name}, {position} and {count}.
  */
-export function useReorder(items: Item[] | null, onReorder: (ids: string[]) => void) {
+export function useReorder(items: Item[] | null, onReorder: (ids: string[]) => void, movedText: MessageKey = 'categories.reordered') {
   const t = useT()
   const phone = useProfile() === 'phone'
   const [list, setList] = useState<HTMLElement | null>(null)
   const [live, setLive] = useState('')
   const hintId = useId()
-  const latest = useRef({ items, onReorder, t, phone })
+  const latest = useRef({ items, onReorder, t, phone, movedText })
   useEffect(() => {
-    latest.current = { items, onReorder, t, phone }
+    latest.current = { items, onReorder, t, phone, movedText }
   })
 
   useEffect(() => {
@@ -74,7 +76,7 @@ export function useReorder(items: Item[] | null, onReorder: (ids: string[]) => v
 
     function announce(id: string, position: number, count: number) {
       const name = latest.current.items?.find((item) => item.id === id)?.name ?? ''
-      setLive(latest.current.t('categories.reordered', { name, position, count }))
+      setLive(latest.current.t(latest.current.movedText, { name, position, count }))
     }
 
     function stopPress() {

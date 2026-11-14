@@ -17,6 +17,16 @@ test('the second key of a chord is not also a single-key shortcut', () => {
   assert.equal(m.handle(press('t'), 60), 'today', 'on its own it is "today"')
 })
 
+test('g then a goes to the accounts, and a on its own does nothing', () => {
+  const m = new KeyMatcher()
+  m.handle(press('g'), 0)
+  assert.equal(m.handle(press('a'), 50), 'goAccounts')
+  assert.equal(m.handle(press('a'), 60), null, 'the chord is used up')
+  m.handle(press('g'), 100)
+  assert.equal(m.handle(press('A'), 150), 'goAccounts', 'whatever the caps lock says')
+  assert.deepEqual(SHORTCUTS.goAccounts, { keys: ['g', 'a'], group: 'go', label: 'keys.goTo', page: 'nav.accounts' })
+})
+
 test('a chord times out and a wrong second key cancels it', () => {
   const m = new KeyMatcher()
   m.handle(press('g'), 0)

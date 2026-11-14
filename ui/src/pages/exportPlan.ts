@@ -39,6 +39,12 @@ export const TEXT_MAX_CHARS = 100
 /** The parts that have a sheet in an Excel file: everything but the change history. */
 const SHEETED: readonly ExportSection[] = EXPORT_SECTIONS.filter((section) => section !== 'history')
 
+/** The parts that are only in a file with no limits: the change history and the transfers (docs/accounts-design.md, section 10). */
+export const WHOLE_ONLY: readonly ExportSection[] = ['history', 'transfers']
+
+/** Whether a part can be in a file of this choice: every part with no limit, all but the ones above with one. */
+const allowed = (section: ExportSection, choice: Choice) => !WHOLE_ONLY.includes(section) || !isLimited(choice)
+
 export type Span = { firstDate: string | null; lastDate: string | null }
 
 export type Problem = 'dates' | 'categories' | 'months' | 'amount' | 'sections'
@@ -78,10 +84,10 @@ export function isLimited(choice: Choice): boolean {
   return choice.limitDates || !choice.allCategories || choice.kind !== '' || choice.minAmount.trim() !== '' || choice.maxAmount.trim() !== '' || choice.text.trim() !== '' || choice.split !== ''
 }
 
-/** The parts that go into a file of this format: for JSON all but a history that a limit would leave out, for Excel those with a sheet. */
+/** The parts that go into a file of this format: for JSON all but those a limit leaves out, for Excel those of them with a sheet. */
 export function sectionsFor(format: ExportFormat, choice: Choice): ExportSection[] {
-  if (format === 'json') return choice.sections.filter((section) => section !== 'history' || !isLimited(choice))
-  if (format === 'xlsx') return choice.sections.filter((section) => SHEETED.includes(section))
+  if (format === 'json') return choice.sections.filter((section) => allowed(section, choice))
+  if (format === 'xlsx') return choice.sections.filter((section) => SHEETED.includes(section) && allowed(section, choice))
   return choice.sections
 }
 
@@ -165,7 +171,7 @@ export function selectionFor(format: ExportFormat, choice: Choice): ExportSelect
   const sections = sectionsFor(format, choice)
   // a limit leaves the ledger out unless it is asked for, and choosing its part is asking
   if (isLimited(choice) && sections.includes('ledger')) selection.includeDebts = true
-  const every = format === 'json' ? EXPORT_SECTIONS.filter((section) => section !== 'history' || !isLimited(choice)) : SHEETED
+  const every = (format === 'json' ? EXPORT_SECTIONS : SHEETED).filter((section) => allowed(section, choice))
   if (sections.length !== every.length) selection.sections = sections
   return selection
 }

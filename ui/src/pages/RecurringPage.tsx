@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react'
 import { useSearchParams } from 'react-router-dom'
+import AccountField from '../components/AccountField'
 import AddCategoryModal from '../components/AddCategoryModal'
 import AttachArea from '../components/AttachArea'
 import BillCodeModal from '../components/BillCodeModal'
@@ -16,15 +17,18 @@ import SectionTabs from '../components/SectionTabs'
 import Modal, { modalFormId } from '../components/Modal'
 import Button from '../components/ui/Button'
 import { EmptyState } from '../components/ui/Pixel'
+import type { Account } from '../api/accounts'
 import { categories as categoriesApi, type Category } from '../api/categories'
 import { debts, type Due, type DuePayment, type Person } from '../api/debts'
 import { errorText } from '../api/invoke'
 import { INTERVAL_UNITS, recurring as recurringApi, type IntervalUnit, type Recurring } from '../api/recurring'
 import { useToday, type Today } from '../api/today'
+import { accountChoice, rememberAccount } from '../lib/accountsView'
 import { categoryOptions } from '../lib/categoriesView'
 import { amountString, formatDate, formatMoney } from '../lib/money'
 import { draftOfTemplate, NOT_SPLIT, reducedWeights, toInput, type SplitState } from '../lib/split'
 import { tabPanelProps } from '../lib/tabs'
+import { useAccounts } from '../hooks/useAccounts'
 import { useAttachments, type Attachments } from '../hooks/useAttachments'
 import { useClipCounts } from '../hooks/useClipCounts'
 import { useFocusRequest, useJumpTo } from '../hooks/useFocusRequest'
@@ -77,6 +81,8 @@ function RecurringView({ settings, now }: { settings: MoneySettings; now: Today 
   const t = useT()
   const phone = useProfile() === 'phone'
   const [categories, setCategories] = useState<Category[]>([])
+  // for the account field of the form, which is only there with more than one account
+  const accounts = useAccounts()
   const [items, setItems] = useState<Recurring[] | null>(null)
   // every friend, removed ones too: a template may still name one
   const [friends, setFriends] = useState<Person[]>([])
@@ -227,6 +233,8 @@ function RecurringView({ settings, now }: { settings: MoneySettings; now: Today 
     const count = Number(form.get('intervalCount'))
     const endDate = String(form.get('endDate') ?? '')
     const description = String(form.get('description') ?? '').trim()
+    // the form has the field only with more than one account; without it a new item is in the main account
+    const accountId = String(form.get('accountId') ?? '')
     if (!name || !categoryId || !startDate) {
       say(t('rec.errorRequired'), 'error')
       return
@@ -248,6 +256,8 @@ function RecurringView({ settings, now }: { settings: MoneySettings; now: Today 
       intervalCount: count,
       endDate: endDate || null,
       description: description || null,
+      // an item that stays in its account says nothing about it (it may be an archived one)
+      ...(accountId && accountId !== editing?.accountId ? { accountId } : {}),
     }
     // Payments are shared by the proportions of the template. Only an expense can be, and the app wants the template off before an item
     // moves to an income category.
@@ -279,6 +289,7 @@ function RecurringView({ settings, now }: { settings: MoneySettings; now: Today 
       setPending(false)
     }
     if (notAttached.length > 0) say(t('docs.attachFailed', { names: notAttached.join(', ') }), 'warning')
+    rememberAccount(accountId)
     closeModals()
     setReload((value) => value + 1)
   }
@@ -569,6 +580,7 @@ function RecurringView({ settings, now }: { settings: MoneySettings; now: Today 
           item={editing}
           todayDate={now.date}
           categories={categories}
+          accounts={accounts}
           pending={pending}
           attachments={attachments}
           split={split}
@@ -659,11 +671,12 @@ function RecurringView({ settings, now }: { settings: MoneySettings; now: Today 
   )
 }
 
-// Add and edit share this modal. Field order: name, amount, category, first due date, repeat, end, description.
+// Add and edit share this modal. Field order: name, amount, category, account (with more than one), first due date, repeat, end, description.
 function RecurringModal({
   item,
   todayDate,
   categories,
+  accounts,
   pending,
   attachments,
   split,
@@ -676,6 +689,8 @@ function RecurringModal({
   item: Recurring | null
   todayDate: string
   categories: Category[]
+  /** Every account; null while they are read. */
+  accounts: Account[] | null
   pending: boolean
   attachments: Attachments
   split: SplitState
@@ -688,6 +703,8 @@ function RecurringModal({
   const t = useT()
   const [categoryId, setCategoryId] = useState(item?.categoryId ?? '')
   const [amount, setAmount] = useState(item?.amount ?? '')
+  // the account the person picked; until then the item's own, or for a new item the last one used. Each payment is made in it.
+  const [account, setAccount] = useState<string | null>(null)
   const [unit, setUnit] = useState<IntervalUnit>(item?.intervalUnit ?? 'MONTH')
   const [hasEnd, setHasEnd] = useState(item?.endDate != null)
   const [addingCategory, setAddingCategory] = useState(false)
@@ -715,6 +732,7 @@ function RecurringModal({
             placeholder={t('tx.chooseCategory')}
             action={{ label: t('categories.add'), onSelect: () => setAddingCategory(true) }}
           />
+          <AccountField accounts={accounts} name="accountId" value={accountChoice(accounts, account, item?.accountId).value} onChange={setAccount} />
           <DateField name="startDate" label={t('rec.startDate')} defaultValue={item?.startDate ?? todayDate} today={todayDate} />
           <CountField label={t('rec.every')} defaultValue={item?.intervalCount ?? 1} />
           <Dropdown
