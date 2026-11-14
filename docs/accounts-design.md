@@ -837,3 +837,129 @@ demo data). Everyone runs `npm run check` before handing over.
 - By hand, computer and phone widths: section 5.4 for both dialogs; one account shows no account field anywhere.
 
 **Package 6**: `npm run check:docs`.
+
+## 20. Round two: closer to Firefly III
+
+Asked by the owner after the first round was built. Section numbers 1 to 19 stay; where this section disagrees with them, this
+section wins. Migration `0019_account_details.sql`. Sync protocol **10**.
+
+### 20.1 What changes
+
+1. **Three kinds of entry, as Firefly's withdrawal, deposit and transfer.** The add dialog on the transactions page (and the quick
+   add) has three tabs: **expense**, **income**, **transfer**. The expense tab lists only expense categories, the income tab only
+   income categories, the transfer tab holds the fields of `TransferModal`. An edit opens on the tab of the row and shows no tabs.
+2. **Income names its account.** On the income tab (transaction and recurring) the account field is always shown, also with one
+   account, and is labelled "into account". An expense keeps the `several` rule of section 13.
+3. **Transfers are on the transactions page.** Tabs above the list: **all**, **expenses**, **income**, **transfers**. "all" is
+   what the page shows today (income and expenses). "transfers" lists the transfers (date, from, to, amount, note) with the date
+   and account filters and the pager; a row opens the transfer dialog.
+4. **Recurring items are two lists**: recurring expenses and recurring income, each with its own title, count and monthly total.
+   The recurring dialog has two tabs (expense, income); the income tab has the account field of point 2.
+5. **Income moves to the accounts page**, as Firefly keeps revenue under Accounts. The accounts page has two tabs: **accounts**
+   and **income**. The income tab is the income half that the categories page had (income categories, their budgets, what came
+   in this month, add, rename, delete, reorder). The categories page keeps expenses and history.
+6. **More of what a Firefly account has** (20.2): BIC, notes, a group, "include in net worth", a virtual balance; on the account's
+   page what was spent and what came in by category for the period shown, a month to month navigation, and "add" buttons that
+   open the dialog of point 1 with this account already chosen.
+
+Not built, with the reason: a currency per account, liabilities and piggy banks (not goals, section 1); expense and revenue
+counterparty accounts (categories do that job here); reconciliation (it needs a fourth kind of movement; correct the opening
+balance instead); attachments on an account (the document links table would have to be rebuilt); the "shared" role and a
+credit card's payment day (the kind `CHECK` of 0018 cannot be widened without rebuilding a table four others point at);
+recurring transfers; rules.
+
+### 20.2 The rows (migration 0019)
+
+`ALTER TABLE accounts ADD COLUMN` only, no table is rebuilt:
+
+| Column | Type | Rule |
+|---|---|---|
+| `bic` | `TEXT` | `NULL` or 1 to 20 characters, no control character, trimmed |
+| `notes` | `TEXT` | `NULL` or 1 to 1000 characters; line breaks allowed, no other control character |
+| `group_name` | `TEXT` | `NULL` or 1 to 50 characters, a name as an account name |
+| `include_net_worth` | `INTEGER NOT NULL DEFAULT 1` | 0 or 1 |
+| `virtual_balance_minor` | `INTEGER NOT NULL DEFAULT 0` | within ±999999999999 |
+
+Each has its `CHECK` in the column definition. The account triggers that list columns (`updated_at`, sync stamp) are dropped and
+made again with the five new columns, exactly as 0018 did for the tables it touched. The main account keeps its constants: the
+new columns have their defaults there, so two devices still hold one identical row and nothing is stamped.
+
+### 20.3 The numbers
+
+- `balance` stays what the account really holds (section 3). The virtual balance never enters it, a statement, a chart or net worth.
+- `available` = `balance` + virtual balance: what the account can still pay, for example a credit card with a limit of 1000.00
+  (virtual balance "1000.00") and a balance of "-240.00" has "760.00" available. Shown only when the virtual balance is not 0.
+- Net worth (`Summary.inAccounts`, `netWorth`) adds only accounts with `include_net_worth = 1`. `Summary.accounts` and `inUse`
+  count every account as before. The report's accounts table and its net worth line follow the same rule: an excluded account is
+  listed with its balance and marked, and is left out of the net worth line.
+- Currency change: `virtual_balance_minor` is converted as the opening balance is (section 8).
+
+### 20.4 Core
+
+```
+Account       gains  bic: string|null, notes: string|null, group: string|null, includeInNetWorth: bool,
+                     virtualBalance: "1000.00", available: "760.00"
+NewAccount    gains  bic?, notes?, group?, includeInNetWorth? (true), virtualBalance? ("0.00")
+AccountPatch  gains  bic? (null clears), notes? (null clears), group? (null clears), includeInNetWorth?, virtualBalance?
+Breakdown     { from, to, expenses: [Share], income: [Share], expenseTotal: "410.00", incomeTotal: "3200.00" }
+Share         { categoryId: string, name: string, amount: "137.00" }      // largest first, then by name
+```
+
+- `accounts::breakdown(conn, id, from, to) -> Breakdown`, Tauri command `account_breakdown(id, from, to)`: the transactions of the
+  account in the period (both days included) that moved it (`paid_by IS NULL`, as the view), added up by category. Transfers and
+  ledger entries are not in it. An unknown id is `NotFound`; `from` after `to` is `InvalidInput`.
+- `transactions::Filter` gains `kind: Option<"INCOME"|"EXPENSE">` (JSON `kind`): only transactions whose category has that type.
+- New Tauri command `list_transfers(filter)` over `transfers::list` (the transfers tab).
+- Editing an archived account stays refused. The new fields follow state machine 5.1 like the old ones: a save that changes
+  nothing makes no stamp.
+
+### 20.5 Sync, backup, export, report, demo data
+
+- `AccountRow` gains `bic`, `notes`, `group`, `includeNetWorth` (0 or 1), `virtualBalanceMinor`; `parse_row` checks them as 20.2;
+  the main account's row may carry any of them. `PROTOCOL` 10; a protocol 9 peer is told to update. Conflict facts gain `bic`,
+  `notes`, `group`, `includeNetWorth`, `virtualBalance`.
+- Backup: nothing to list (same tables); a round trip keeps the five fields. A backup made at schema 18 restores with the defaults.
+- Export: JSON `accounts` and the Excel `Accounts` sheet gain the five fields (not in a limited export, section 10).
+- Demo data: the credit card gets a virtual balance and a BIC; savings gets a group and a note; the archived account is left out
+  of net worth.
+
+### 20.6 Command line and API
+
+- `accounts.create`, `accounts.update`: `bic`, `notes`, `group` (`Kind::String`), `includeInNetWorth` (a boolean, as the existing
+  boolean arguments), `virtualBalance` (`Kind::String`, signed, as `openingBalance`).
+- `accounts.breakdown` (read): `id`, `from`, `to` (default this month). `meowny accounts breakdown 2`.
+- `transactions.list`: `kind` (`income` or `expense`, any case on the command line).
+- The recorded docs and `schema.json` are made again.
+
+### 20.7 The screens
+
+All in the app's existing look (lower-case words, the mono face, hairline boxes, `SectionTabs` for tabs, `Modal`, `Dropdown`,
+`DatePicker`, the row parts of `RowParts`). One page serves computer and phone; every new part must be right at 360 px wide
+and at 1280 px.
+
+- **Add dialog** (`TransactionModal`): `SectionTabs` under the title with expense, income, transfer; the tab chosen last is not
+  remembered (it opens on expense; from an account's page "add income" opens on income, "transfer" on transfer). Changing tab
+  keeps what both tabs have (amount, date, description/note) and drops the rest. Split is on the expense tab only. Keys: the
+  existing shortcut opens the dialog; `Alt+1`, `Alt+2`, `Alt+3` choose a tab. With no income category the income tab says so and
+  links to the income tab of the accounts page.
+- **Transactions page**: the four tabs of 20.1 point 3 above the filters. On "transfers" the category filter and the search are
+  hidden. With `several` false the transfers tab is hidden (there is nothing to move money between).
+- **Recurring page**: two sections, expenses first; an empty section shows its empty line, not nothing.
+- **Accounts page**: tabs accounts and income. List rows are grouped under their group's name when any account has a group
+  (accounts without one under "no group", last); reorder works inside a group. A row shows "available" under the balance when
+  20.3 says so, and a small mark when it is left out of net worth.
+- **Account dialog**: name, type, number, opening balance and date as now; below them, shut behind "more": BIC, group (a text
+  field that offers the groups in use), virtual balance, "count in net worth" (a switch, on), notes.
+- **Account's page**: under the chart a month navigation (`MonthNav`) that sets the period of the statement and of two small
+  lists side by side (stacked on the phone): "spent by category" and "came in by category", each a row per category with a bar
+  and the amount, and its total. The title row has "add expense", "add income", "transfer". The notes show under the title.
+- **Categories page**: expenses and history only.
+
+### 20.8 Tests
+
+Each package tests its edge cases and odd transitions as section 19 asks: the new fields at their bounds and refused beyond;
+`null` clears; a patch that changes nothing makes no stamp; net worth with every account excluded, with the main account
+excluded, with an archived one excluded; `available` with a negative virtual balance; a breakdown of an empty period, of a
+period with only transfers, with a split bill a friend paid (not counted), with a future day; `kind` with a category that
+changed type; sync of each new field in both directions and a protocol 9 peer; a conversion of the virtual balance at the
+bounds; the dialog's tab changes (what is kept, what is dropped, an edit has no tabs, double submit ignored).
