@@ -14,6 +14,7 @@ use serde_json::Value;
 
 use super::crypto::MAX_PLAINTEXT;
 use super::stamp::Stamp;
+use crate::accounts::MAIN_SYNC_ID;
 use crate::documents::names::{is_clean_name, MediaType};
 use crate::documents::seal::CHUNK_SIZE;
 use crate::documents::MAX_DOCUMENT_BYTES;
@@ -26,8 +27,9 @@ use crate::{categories, transactions, vault};
 /// ledger entry); protocol 5 adds the category order (`position`) and the skipped dates of a recurring item; protocol 6 makes the
 /// computer's clock the reference (the `clock` of a hello is the wall clock, a gap between the clocks no longer stops a sync, and the
 /// phone pulls its stamps back to the computer's time); protocol 7 lets descriptions and notes hold line breaks; protocol 8 lets a split bill
-/// and the template of a recurring item name the friend who paid (`paidBy`). A device that speaks an older protocol is told to update.
-pub const PROTOCOL: u32 = 8;
+/// and the template of a recurring item name the friend who paid (`paidBy`); protocol 9 adds the tables `accounts` and `transfers` and the
+/// account of a transaction, a recurring item and a ledger entry (`account`). A device that speaks an older protocol is told to update.
+pub const PROTOCOL: u32 = 9;
 /// Digest entries in one message, and rows in one message. Messages are also cut by size (`SOFT_MESSAGE_BYTES`).
 pub const MAX_ENTRIES_PER_MESSAGE: usize = 400;
 pub const MAX_ROWS_PER_MESSAGE: usize = 200;
@@ -39,7 +41,7 @@ pub const CHUNK_BYTES: usize = 24 * 1024;
 pub const MAX_CHUNK_TEXT: usize = CHUNK_BYTES / 3 * 4;
 /// More than this many rows of one table in a sync is not a budget of one person.
 pub const MAX_ROWS_PER_TABLE: usize = 2_000_000;
-/// The highest place a category can have in its list.
+/// The highest place a category or an account can have in its list.
 const MAX_POSITION: i64 = 1_000_000;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
@@ -48,9 +50,11 @@ pub enum Table {
     Settings,
     Categories,
     People,
+    Accounts,
     RecurringTransactions,
     Budgets,
     Transactions,
+    Transfers,
     LedgerEntries,
     Documents,
     DocumentLinks,
@@ -58,13 +62,15 @@ pub enum Table {
 
 impl Table {
     /// In the order they are sent and applied: a row's references always point at a table earlier in the list.
-    pub const ALL: [Table; 9] = [
+    pub const ALL: [Table; 11] = [
         Table::Settings,
         Table::Categories,
         Table::People,
+        Table::Accounts,
         Table::RecurringTransactions,
         Table::Budgets,
         Table::Transactions,
+        Table::Transfers,
         Table::LedgerEntries,
         Table::Documents,
         Table::DocumentLinks,
@@ -75,6 +81,8 @@ impl Table {
             Table::Settings => "settings",
             Table::Categories => "categories",
             Table::People => "people",
+            Table::Accounts => "accounts",
+            Table::Transfers => "transfers",
             Table::LedgerEntries => "ledger_entries",
             Table::RecurringTransactions => "recurring_transactions",
             Table::Budgets => "budgets",
@@ -501,6 +509,11 @@ fn note_ok(text: &str) -> bool {
     (1..=200).contains(&length) && text.trim() == text && transactions::clean_lines(text).is_some_and(|clean| clean == text)
 }
 
+/// The number of an account: 1 to 50 characters, already trimmed, with no control characters.
+fn number_ok(text: &str) -> bool {
+    (1..=50).contains(&text.chars().count()) && text.trim() == text && !text.chars().any(char::is_control)
+}
+
 /// Who a part belongs to: exactly one of a friend (a `sync_id`) and a guest (a plain name).
 fn who_ok(person: &Option<String>, guest: &Option<String>) -> bool {
     match (person, guest) {
@@ -611,6 +624,8 @@ pub struct RecurringRow {
     pub stamp: String,
     /// The `sync_id` of the category.
     pub category: String,
+    /// The `sync_id` of the account.
+    pub account: String,
     pub name: String,
     pub description: Option<String>,
     pub amount_minor: Option<i64>,
@@ -673,6 +688,42 @@ pub struct PersonRow {
     pub updated_at: String,
 }
 
+/// An account: a place the money is. The main account has the same `sync_id` on every device (`accounts::MAIN_SYNC_ID`) and is never
+/// archived (`docs/accounts-design.md`, section 7.2).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct AccountRow {
+    pub sync_id: String,
+    pub stamp: String,
+    pub name: String,
+    pub kind: String,
+    pub number: Option<String>,
+    /// Signed: a credit card starts below zero.
+    pub opening_balance_minor: i64,
+    pub opening_date: String,
+    pub archived: i64,
+    /// Place in the list of accounts, from 0.
+    pub position: i64,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+/// Money moved between two accounts.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct TransferRow {
+    pub sync_id: String,
+    pub stamp: String,
+    /// The `sync_id`s of the account the money left and of the one it went to.
+    pub from: String,
+    pub to: String,
+    pub amount_minor: i64,
+    pub transfer_date: String,
+    pub note: Option<String>,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
 /// An entry of the ledger: money lent, borrowed or paid back with one friend.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -681,6 +732,8 @@ pub struct LedgerRow {
     pub stamp: String,
     /// The `sync_id` of the friend.
     pub person: String,
+    /// The `sync_id` of the account.
+    pub account: String,
     pub kind: String,
     pub amount_minor: i64,
     pub entry_date: String,
@@ -715,6 +768,8 @@ pub struct TransactionRow {
     pub sync_id: String,
     pub stamp: String,
     pub category: String,
+    /// The `sync_id` of the account.
+    pub account: String,
     /// The `sync_id` of the recurring item it was paid from, if there is one.
     pub recurring: Option<String>,
     pub recurring_due_date: Option<String>,
@@ -772,6 +827,8 @@ pub enum Row {
     Settings(SettingsRow),
     Category(CategoryRow),
     Person(PersonRow),
+    Account(AccountRow),
+    Transfer(TransferRow),
     Ledger(LedgerRow),
     Recurring(RecurringRow),
     Budget(BudgetRow),
@@ -786,6 +843,8 @@ impl Row {
             Row::Settings(_) => "settings",
             Row::Category(r) => &r.sync_id,
             Row::Person(r) => &r.sync_id,
+            Row::Account(r) => &r.sync_id,
+            Row::Transfer(r) => &r.sync_id,
             Row::Ledger(r) => &r.sync_id,
             Row::Recurring(r) => &r.sync_id,
             Row::Budget(r) => &r.sync_id,
@@ -800,6 +859,8 @@ impl Row {
             Row::Settings(r) => &r.stamp,
             Row::Category(r) => &r.stamp,
             Row::Person(r) => &r.stamp,
+            Row::Account(r) => &r.stamp,
+            Row::Transfer(r) => &r.stamp,
             Row::Ledger(r) => &r.stamp,
             Row::Recurring(r) => &r.stamp,
             Row::Budget(r) => &r.stamp,
@@ -817,6 +878,8 @@ pub fn parse_row(table: Table, value: &Value) -> Result<Row, WireError> {
         Table::Settings => Row::Settings(serde_json::from_value(value.clone()).map_err(|_| WireError::Format)?),
         Table::Categories => Row::Category(serde_json::from_value(value.clone()).map_err(|_| WireError::Format)?),
         Table::People => Row::Person(serde_json::from_value(value.clone()).map_err(|_| WireError::Format)?),
+        Table::Accounts => Row::Account(serde_json::from_value(value.clone()).map_err(|_| WireError::Format)?),
+        Table::Transfers => Row::Transfer(serde_json::from_value(value.clone()).map_err(|_| WireError::Format)?),
         Table::LedgerEntries => Row::Ledger(serde_json::from_value(value.clone()).map_err(|_| WireError::Format)?),
         Table::RecurringTransactions => Row::Recurring(serde_json::from_value(value.clone()).map_err(|_| WireError::Format)?),
         Table::Budgets => Row::Budget(serde_json::from_value(value.clone()).map_err(|_| WireError::Format)?),
@@ -856,9 +919,35 @@ pub fn parse_row(table: Table, value: &Value) -> Result<Row, WireError> {
                 && timestamp_ok(&r.created_at)
                 && timestamp_ok(&r.updated_at)
         }
+        Row::Account(r) => {
+            sync_id_ok(&r.sync_id)
+                && category_name_ok(&r.name)
+                && ["CHECKING", "SAVINGS", "CASH", "CREDIT_CARD"].contains(&r.kind.as_str())
+                && r.number.as_deref().is_none_or(number_ok)
+                && (-MAX_MINOR..=MAX_MINOR).contains(&r.opening_balance_minor)
+                && date_ok(&r.opening_date)
+                && [0, 1].contains(&r.archived)
+                // the main account is never archived
+                && (r.sync_id != MAIN_SYNC_ID || r.archived == 0)
+                && (0..=MAX_POSITION).contains(&r.position)
+                && timestamp_ok(&r.created_at)
+                && timestamp_ok(&r.updated_at)
+        }
+        Row::Transfer(r) => {
+            sync_id_ok(&r.sync_id)
+                && sync_id_ok(&r.from)
+                && sync_id_ok(&r.to)
+                && r.from != r.to
+                && money_ok(r.amount_minor, 1)
+                && date_ok(&r.transfer_date)
+                && r.note.as_deref().is_none_or(note_ok)
+                && timestamp_ok(&r.created_at)
+                && timestamp_ok(&r.updated_at)
+        }
         Row::Ledger(r) => {
             sync_id_ok(&r.sync_id)
                 && sync_id_ok(&r.person)
+                && sync_id_ok(&r.account)
                 && ["LENT", "BORROWED", "REPAID_TO_ME", "REPAID_BY_ME"].contains(&r.kind.as_str())
                 && money_ok(r.amount_minor, 1)
                 && date_ok(&r.entry_date)
@@ -872,6 +961,7 @@ pub fn parse_row(table: Table, value: &Value) -> Result<Row, WireError> {
             sync_id_ok(&r.sync_id)
                 && r.split.as_ref().is_none_or(template_ok)
                 && sync_id_ok(&r.category)
+                && sync_id_ok(&r.account)
                 && name_ok(&r.name)
                 && description_ok(&r.description)
                 && r.amount_minor.is_none_or(|a| money_ok(a, 1))
@@ -905,6 +995,7 @@ pub fn parse_row(table: Table, value: &Value) -> Result<Row, WireError> {
         Row::Transaction(r) => {
             sync_id_ok(&r.sync_id)
                 && sync_id_ok(&r.category)
+                && sync_id_ok(&r.account)
                 && option_sync_id(&r.recurring)
                 && option_date(&r.recurring_due_date)
                 && (r.recurring.is_none() || r.recurring_due_date.is_some())
@@ -950,6 +1041,8 @@ pub fn row_to_value(row: &Row) -> Value {
         Row::Settings(r) => serde_json::to_value(r),
         Row::Category(r) => serde_json::to_value(r),
         Row::Person(r) => serde_json::to_value(r),
+        Row::Account(r) => serde_json::to_value(r),
+        Row::Transfer(r) => serde_json::to_value(r),
         Row::Ledger(r) => serde_json::to_value(r),
         Row::Recurring(r) => serde_json::to_value(r),
         Row::Budget(r) => serde_json::to_value(r),
@@ -978,13 +1071,13 @@ mod tests {
     }
 
     fn transaction() -> Value {
-        json!({"syncId": ID_B, "stamp": STAMP, "category": ID_A, "recurring": null, "recurringDueDate": null, "clientUuid": null,
+        json!({"syncId": ID_B, "stamp": STAMP, "category": ID_A, "account": MAIN_SYNC_ID, "recurring": null, "recurringDueDate": null, "clientUuid": null,
                "name": "Coffee", "amountMinor": 350, "plannedAmountMinor": null, "paymentDate": "2026-03-01", "description": null,
                "paidBy": null, "split": [], "createdAt": TS, "updatedAt": TS})
     }
 
     fn recurring() -> Value {
-        json!({"syncId": ID_B, "stamp": STAMP, "category": ID_A, "name": "Rent", "description": "Flat 4", "amountMinor": 90000,
+        json!({"syncId": ID_B, "stamp": STAMP, "category": ID_A, "account": MAIN_SYNC_ID, "name": "Rent", "description": "Flat 4", "amountMinor": 90000,
                "startDate": "2026-01-01", "intervalUnit": "MONTH", "intervalCount": 1, "nextDueDate": "2026-03-01", "skippedDates": "[]", "endDate": null,
                "isActive": 1, "split": null, "createdAt": TS, "updatedAt": TS})
     }
@@ -995,8 +1088,23 @@ mod tests {
     }
 
     fn entry() -> Value {
-        json!({"syncId": ID_B, "stamp": STAMP, "person": ID_A, "kind": "LENT", "amountMinor": 2500, "entryDate": "2026-03-01", "note": "taxi",
+        json!({"syncId": ID_B, "stamp": STAMP, "person": ID_A, "account": MAIN_SYNC_ID, "kind": "LENT", "amountMinor": 2500, "entryDate": "2026-03-01", "note": "taxi",
                "transaction": null, "originId": null, "createdAt": TS, "updatedAt": TS})
+    }
+
+    fn account() -> Value {
+        json!({"syncId": ID_A, "stamp": STAMP, "name": "Savings", "kind": "SAVINGS", "number": "IE29 AIBK 9311 5212 3456 78", "openingBalanceMinor": -12000,
+               "openingDate": "2026-01-01", "archived": 0, "position": 2, "createdAt": TS, "updatedAt": TS})
+    }
+
+    fn main_account() -> Value {
+        json!({"syncId": MAIN_SYNC_ID, "stamp": "0000000000000-0000-00000000", "name": "Main account", "kind": "CHECKING", "number": null, "openingBalanceMinor": 0,
+               "openingDate": "1970-01-01", "archived": 0, "position": 0, "createdAt": "1970-01-01T00:00:00.000Z", "updatedAt": "1970-01-01T00:00:00.000Z"})
+    }
+
+    fn transfer() -> Value {
+        json!({"syncId": ID_B, "stamp": STAMP, "from": MAIN_SYNC_ID, "to": ID_A, "amountMinor": 20000, "transferDate": "2026-03-01", "note": "to savings",
+               "createdAt": TS, "updatedAt": TS})
     }
 
     fn shared() -> Value {
@@ -1051,6 +1159,17 @@ mod tests {
             (Table::People, changed(changed(person(), "remindOn", json!("2026-04-01")), "remindEveryDays", json!(30))),
             (Table::LedgerEntries, entry()),
             (Table::LedgerEntries, changed(changed(entry(), "transaction", json!(ID_A)), "originId", json!(ID_B))),
+            (Table::Accounts, account()),
+            (Table::Accounts, main_account()),
+            (Table::Accounts, changed(account(), "number", json!(null))),
+            (Table::Accounts, changed(account(), "archived", json!(1))),
+            (Table::Accounts, changed(account(), "openingBalanceMinor", json!(MAX_MINOR))),
+            (Table::Accounts, changed(account(), "openingBalanceMinor", json!(-MAX_MINOR))),
+            (Table::Accounts, changed(account(), "position", json!(MAX_POSITION))),
+            (Table::Transfers, transfer()),
+            (Table::Transfers, changed(transfer(), "note", json!(null))),
+            (Table::Transfers, changed(transfer(), "amountMinor", json!(1))),
+            (Table::Transfers, changed(transfer(), "amountMinor", json!(MAX_MINOR))),
             (Table::RecurringTransactions, recurring()),
             (Table::RecurringTransactions, templated()),
             (Table::Budgets, budget()),
@@ -1087,11 +1206,11 @@ mod tests {
 
     #[test]
     fn there_is_a_table_for_every_kind_of_row_and_the_protocol_knows_it() {
-        assert_eq!(PROTOCOL, 8);
+        assert_eq!(PROTOCOL, 9);
         let names: Vec<&str> = Table::ALL.iter().map(|t| t.name()).collect();
         assert_eq!(
             names,
-            ["settings", "categories", "people", "recurring_transactions", "budgets", "transactions", "ledger_entries", "documents", "document_links"]
+            ["settings", "categories", "people", "accounts", "recurring_transactions", "budgets", "transactions", "transfers", "ledger_entries", "documents", "document_links"]
         );
         // what a row points at is always in an earlier table, so it is there when the row is applied
         let position = |t: Table| Table::ALL.iter().position(|x| *x == t).unwrap();
@@ -1101,6 +1220,10 @@ mod tests {
         assert!(position(Table::People) < position(Table::Transactions) && position(Table::People) < position(Table::RecurringTransactions));
         assert!(position(Table::LedgerEntries) > position(Table::Transactions) && position(Table::LedgerEntries) > position(Table::People));
         assert!(position(Table::DocumentLinks) > position(Table::LedgerEntries));
+        // every row that names an account comes after the accounts, and a transfer after the transactions it is sent with
+        for table in [Table::RecurringTransactions, Table::Transactions, Table::Transfers, Table::LedgerEntries] {
+            assert!(position(Table::Accounts) < position(table), "{table:?}");
+        }
         // the order of the tables is the order they are declared in, which is how a map of them is walked
         let mut sorted = Table::ALL.to_vec();
         sorted.sort();
@@ -1275,6 +1398,135 @@ mod tests {
         assert!(parse_row(Table::Transactions, &changed(transaction(), "description", json!("line\nbreak"))).is_ok());
         assert!(parse_row(Table::RecurringTransactions, &changed(recurring(), "description", json!("line\nbreak"))).is_ok());
         assert!(parse_row(Table::LedgerEntries, &changed(entry(), "note", json!("line\nbreak"))).is_ok());
+    }
+
+    #[test]
+    fn every_field_of_an_account_is_checked() {
+        let bad: Vec<(&str, Value)> = vec![
+            ("syncId", json!("nope")),
+            ("syncId", json!(ID_A.to_uppercase())),
+            ("syncId", json!(1)),
+            ("stamp", json!("nope")),
+            ("name", json!("")),
+            ("name", json!(" Savings")),
+            ("name", json!("Savings ")),
+            ("name", json!("a".repeat(51))),
+            ("name", json!("tab\there")),
+            ("name", json!("two\nlines")),
+            ("name", json!(null)),
+            ("kind", json!("BROKERAGE")),
+            ("kind", json!("savings")),
+            ("kind", json!("Savings")),
+            ("kind", json!("")),
+            ("kind", json!(null)),
+            ("number", json!("")),
+            ("number", json!("1".repeat(51))),
+            ("number", json!("12\n34")),
+            ("number", json!("12\u{7}34")),
+            ("number", json!(" 1234")),
+            ("number", json!("1234 ")),
+            ("number", json!(1234)),
+            ("openingBalanceMinor", json!(MAX_MINOR + 1)),
+            ("openingBalanceMinor", json!(-MAX_MINOR - 1)),
+            ("openingBalanceMinor", json!(1.5)),
+            ("openingBalanceMinor", json!("100")),
+            ("openingBalanceMinor", json!(null)),
+            ("openingDate", json!("2026-02-30")),
+            ("openingDate", json!("2026-1-1")),
+            ("openingDate", json!("")),
+            ("openingDate", json!(null)),
+            ("archived", json!(2)),
+            ("archived", json!(-1)),
+            ("archived", json!(true)),
+            ("archived", json!(null)),
+            ("position", json!(-1)),
+            ("position", json!(MAX_POSITION + 1)),
+            ("position", json!("1")),
+            ("position", json!(1.5)),
+            ("createdAt", json!("2026-03-01 10:00:00")),
+            ("updatedAt", json!("2026-13-01T10:00:00.250Z")),
+        ];
+        for (key, value) in bad {
+            let row = changed(account(), key, value.clone());
+            assert!(parse_row(Table::Accounts, &row).is_err(), "{key} = {value}");
+        }
+        // the main account is never archived, with any other change on top of it either
+        assert!(parse_row(Table::Accounts, &changed(main_account(), "archived", json!(1))).is_err());
+        assert!(parse_row(Table::Accounts, &changed(changed(main_account(), "archived", json!(1)), "name", json!("Wallet"))).is_err());
+        // an account of another id may be archived, and renamed, and have any balance within the limit
+        assert!(parse_row(Table::Accounts, &changed(account(), "archived", json!(1))).is_ok());
+        assert!(parse_row(Table::Accounts, &changed(main_account(), "name", json!("Wallet"))).is_ok());
+        // an unknown field, and each field that must be there
+        let mut extra = account();
+        extra["balance"] = json!("5.00");
+        assert!(parse_row(Table::Accounts, &extra).is_err());
+        for key in ["syncId", "stamp", "name", "kind", "openingBalanceMinor", "openingDate", "archived", "position", "createdAt", "updatedAt"] {
+            let mut missing = account();
+            missing.as_object_mut().unwrap().remove(key);
+            assert!(parse_row(Table::Accounts, &missing).is_err(), "{key} missing");
+        }
+        assert!(parse_row(Table::Accounts, &transfer()).is_err(), "a transfer is not an account");
+        assert!(parse_row(Table::Transfers, &account()).is_err(), "an account is not a transfer");
+    }
+
+    #[test]
+    fn every_field_of_a_transfer_is_checked() {
+        let bad: Vec<(&str, Value)> = vec![
+            ("syncId", json!("nope")),
+            ("syncId", json!(ID_B.to_uppercase())),
+            ("stamp", json!("nope")),
+            ("from", json!("1")),
+            ("from", json!(ID_A.to_uppercase())),
+            ("from", json!(null)),
+            ("to", json!("1")),
+            ("to", json!(ID_A.to_uppercase())),
+            ("to", json!(null)),
+            // two accounts, never the same one twice
+            ("to", json!(MAIN_SYNC_ID)),
+            ("amountMinor", json!(0)),
+            ("amountMinor", json!(-1)),
+            ("amountMinor", json!(MAX_MINOR + 1)),
+            ("amountMinor", json!(1.5)),
+            ("amountMinor", json!("200")),
+            ("transferDate", json!("2026-02-30")),
+            ("transferDate", json!("2026-3-1")),
+            ("transferDate", json!(null)),
+            ("note", json!("")),
+            ("note", json!(" padded")),
+            ("note", json!("x".repeat(201))),
+            ("note", json!("tab\there")),
+            ("note", json!("line\r\nbreak")),
+            ("createdAt", json!("2026-03-01")),
+            ("updatedAt", json!("nope")),
+        ];
+        for (key, value) in bad {
+            let row = changed(transfer(), key, value.clone());
+            assert!(parse_row(Table::Transfers, &row).is_err(), "{key} = {value}");
+        }
+        assert!(parse_row(Table::Transfers, &changed(transfer(), "from", json!(ID_A))).is_err(), "from and to are both the same account");
+        assert!(parse_row(Table::Transfers, &changed(transfer(), "note", json!("line\nbreak"))).is_ok());
+        assert!(parse_row(Table::Transfers, &changed(transfer(), "note", json!("x".repeat(200)))).is_ok());
+        let mut extra = transfer();
+        extra["account"] = json!(MAIN_SYNC_ID);
+        assert!(parse_row(Table::Transfers, &extra).is_err());
+        for key in ["syncId", "stamp", "from", "to", "amountMinor", "transferDate", "createdAt", "updatedAt"] {
+            let mut missing = transfer();
+            missing.as_object_mut().unwrap().remove(key);
+            assert!(parse_row(Table::Transfers, &missing).is_err(), "{key} missing");
+        }
+    }
+
+    #[test]
+    fn a_transaction_a_recurring_item_and_a_ledger_entry_name_their_account_by_a_sync_id() {
+        for (table, row) in [(Table::Transactions, transaction()), (Table::RecurringTransactions, recurring()), (Table::LedgerEntries, entry())] {
+            let mut missing = row.clone();
+            missing.as_object_mut().unwrap().remove("account");
+            assert!(parse_row(table, &missing).is_err(), "{table:?}: no account");
+            for bad in [json!(null), json!("1"), json!(""), json!("x".repeat(32)), json!(ID_A.to_uppercase()), json!(&MAIN_SYNC_ID[1..]), json!(1)] {
+                assert!(parse_row(table, &changed(row.clone(), "account", bad.clone())).is_err(), "{table:?}: {bad}");
+            }
+            assert!(parse_row(table, &changed(row.clone(), "account", json!(ID_A))).is_ok(), "{table:?}: any account the other device has");
+        }
     }
 
     #[test]

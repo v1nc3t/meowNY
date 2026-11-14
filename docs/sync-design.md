@@ -82,7 +82,7 @@ There is no Diffie-Hellman step, so that last case is the honest limit. Secrets 
 
 JSON messages with a `t` field, one per frame, long lists split. Money in minor units.
 
-1. `hello`: id, name, versions (schema must match; protocol 8: a split bill's payer), wall clock (a gap
+1. `hello`: id, name, versions (schema must match; protocol 9: accounts and transfers), wall clock (a gap
    above a minute is told to the person, never stops the sync; section 10), currency generation, `since`, and the direction the
    desktop chose (both ways, to the computer, to the phone). Right after it the phone takes the computer's clock as the reference
    (section 10).
@@ -98,13 +98,15 @@ States are compared, not change logs, so a broken or half sync is repaired by th
 
 ## 9. Database changes
 
-Migrations `0008`, `0009`, `0012`, `0013`, `0014`, `0015`, `0016`, `0017`: a random `sync_id` and a `stamp` on every shared row (`categories`,
-`budgets`, `recurring_transactions`, `transactions`, `people`, `ledger_entries`, `documents`, `document_links`, the
+Migrations `0008`, `0009`, `0012`, `0013`, `0014`, `0015`, `0016`, `0017`, `0018`: a random `sync_id` and a `stamp` on every shared row (`categories`,
+`budgets`, `recurring_transactions`, `transactions`, `people`, `ledger_entries`, `accounts`, `transfers`, `documents`, `document_links`, the
 shared part of `settings`); `sync_deleted` markers made by delete triggers; `categories.merged_into`; `categories.position` (the order the person chose, per type; a move gives the row a new stamp,
 so it travels in the category row, and ties are settled by id); `recurring_transactions.skipped_dates` (a JSON array of the later
 occurrences skipped one by one, sorted, at most 100; part of protocol 5, checked when a row arrives); `sync_clock`;
 `sync_peers`; `currency_changes`; `transactions.paid_by` and `recurring_transactions.split_paid_by` (the friend who paid a split
-bill, sent as that person's `sync_id`; part of protocol 8). Stamps come from triggers, which stand aside while
+bill, sent as that person's `sync_id`; part of protocol 8); `accounts` (the main account has the same `sync_id` and the oldest stamp on every
+device, so it is one account without a merge; `accounts.position` travels in the row) and `transfers`; `account_id` of `transactions`,
+`recurring_transactions` and `ledger_entries`, sent as the account's `sync_id`; part of protocol 9. Stamps come from triggers, which stand aside while
 `sync_clock.applying` is on (`0016` adds `sync_clock.offset_ms` to the clock they read, section 10). A
 bill's parts and a recurring item's template travel inside their parent's row. Never synced: `audit_log`,
 `backup_schedule`, `api_tokens`, `sync_peers`, `sync_clock`, the language, lock settings.
@@ -143,15 +145,17 @@ The larger stamp wins the whole row; a deletion marker is a row. Duplicates are 
 or lower `sync_id` stays, the other becomes a marker or is merged with `merged_into` and its rows move. A recurring
 item's next due date moves past a payment it already has, and on past the occurrences after it that are paid or skipped; a payment of a later
 occurrence leaves it where it is. A bill's parts are replaced with their bill. Stamps these rules
-make are derived from the stamps involved (`derive`, `moved`), never the clock, so both devices agree. Only the desktop
+make are derived from the stamps involved (`derive`, `moved`), never the clock, so both devices agree. Accounts are never merged by name.
+Rows of an account deleted on the other device move to the main account and take the later of their stamp and the deletion's; a transfer
+left with the main account on both sides becomes a marker. `accounts-design.md`, section 7. Only the desktop
 changes the currency; the lower generation converts all its rows first, and an out-of-range result stops the sync.
 Documents: `documents-design.md`, section 10.
 
 ## 12. Applying changes safely
 
 Rows from the other device are untrusted. Only synced tables and known fields; the same checks as the screens and the
-API; bound parameters only; a fixed order (settings, categories, friends, recurring, budgets, transactions, ledger,
-documents, links, markers); unknown references stop the sync; `foreign_key_check` and `integrity_check` before commit.
+API; bound parameters only; a fixed order (settings, categories, friends, accounts, recurring, budgets, transactions,
+transfers, ledger, documents, links, markers); unknown references stop the sync; `foreign_key_check` and `integrity_check` before commit.
 Nothing from a sync is logged.
 
 ## 13. The phone

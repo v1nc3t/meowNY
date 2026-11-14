@@ -47,7 +47,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             let food = categories::create(c, "Food", CategoryType::Expense)?.id;
             categories::create(c, "Salary", CategoryType::Income)?;
             for (name, amount) in [("Coffee", "3.50"), ("Tea", "2.00")] {
-                transactions::create(c, &NewTransaction { name: name.into(), amount: amount.into(), payment_date: "2026-10-01".into(), category_id: food.to_string(), description: None, client_uuid: None })?;
+                transactions::create(c, &NewTransaction { name: name.into(), amount: amount.into(), payment_date: "2026-10-01".into(), category_id: food.to_string(), description: None, client_uuid: None, account_id: None })?;
             }
             Ok(())
         })?;
@@ -60,7 +60,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             let (name, amount) = (args.get(3).ok_or("a name")?, args.get(4).ok_or("an amount")?);
             vault.with_conn(|c| {
                 let food: i64 = c.query_row("SELECT id FROM categories WHERE name = 'Food'", [], |r| r.get(0))?;
-                transactions::create(c, &NewTransaction { name: name.clone(), amount: amount.clone(), payment_date: "2026-10-02".into(), category_id: food.to_string(), description: None, client_uuid: None })?;
+                transactions::create(c, &NewTransaction { name: name.clone(), amount: amount.clone(), payment_date: "2026-10-02".into(), category_id: food.to_string(), description: None, client_uuid: None, account_id: None })?;
                 Ok(())
             })?;
             println!("added {name} {amount}");

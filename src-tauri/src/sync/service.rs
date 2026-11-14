@@ -537,7 +537,7 @@ mod tests {
         let food = crate::categories::create(&conn, "Food", crate::categories::CategoryType::Expense).unwrap().id;
         crate::transactions::create(
             &conn,
-            &crate::transactions::NewTransaction { name: "Coffee".into(), amount: "3.50".into(), payment_date: "2026-03-02".into(), category_id: food.to_string(), description: None, client_uuid: None },
+            &crate::transactions::NewTransaction { name: "Coffee".into(), amount: "3.50".into(), payment_date: "2026-03-02".into(), category_id: food.to_string(), description: None, client_uuid: None, account_id: None },
         )
         .unwrap();
     }
@@ -663,7 +663,7 @@ mod tests {
             let food: i64 = conn.query_row("SELECT id FROM categories", [], |r| r.get(0)).unwrap();
             crate::transactions::create(
                 &conn,
-                &crate::transactions::NewTransaction { name: "From the phone".into(), amount: "9.00".into(), payment_date: "2026-03-03".into(), category_id: food.to_string(), description: None, client_uuid: None },
+                &crate::transactions::NewTransaction { name: "From the phone".into(), amount: "9.00".into(), payment_date: "2026-03-03".into(), category_id: food.to_string(), description: None, client_uuid: None, account_id: None },
             )
             .unwrap();
         }

@@ -85,11 +85,17 @@ fn a_new_row_gets_a_sync_id_and_a_stamp_in_every_shared_table() {
     let conn = db();
     settings(&conn);
     let c = category(&conn, "Food");
+    conn.execute("INSERT INTO accounts (name, kind, opening_date) VALUES ('Cash', 'CASH', '2026-01-01')", []).unwrap();
+    let cash = conn.last_insert_rowid();
+    conn.execute("INSERT INTO transfers (from_account_id, to_account_id, amount_minor, transfer_date) VALUES (1, ?1, 100, '2026-01-02')", [cash]).unwrap();
+    let transfer = conn.last_insert_rowid();
     let ids = [
         ("categories", c),
         ("budgets", budget(&conn, c)),
         ("recurring_transactions", recurring(&conn, c, "Rent")),
         ("transactions", transaction(&conn, c, "Coffee")),
+        ("accounts", cash),
+        ("transfers", transfer),
     ];
     let device = stamp::device_id(&conn).unwrap();
     assert!(is_hex32(&device));
@@ -102,6 +108,13 @@ fn a_new_row_gets_a_sync_id_and_a_stamp_in_every_shared_table() {
     let settings_stamp: String = conn.query_row("SELECT stamp FROM settings", [], |r| r.get(0)).unwrap();
     assert!(Stamp::is_valid(&settings_stamp));
     assert_eq!(settings_stamp.len(), STAMP_LEN);
+    // the main account is the one row no device made: the same id and the oldest stamp there is on every device
+    assert_eq!(text(&conn, "SELECT sync_id FROM accounts WHERE id = ?1", 1), "00000000000000000000000000000001");
+    assert_eq!(text(&conn, "SELECT stamp FROM accounts WHERE id = ?1", 1), "0000000000000-0000-00000000");
+    // and every table that carries a stamp is one the sync pulls back and the clock catches up with
+    for table in ["accounts", "transfers"] {
+        assert!(stamp::STAMPED_TABLES.contains(&table), "{table}");
+    }
 }
 
 #[test]

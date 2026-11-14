@@ -470,8 +470,8 @@ a real date, `note_ok`. `account` on the three old rows is a valid sync id.
 - `Applier::accounts`: by `sync_id`, the newer stamp wins the whole row; a marker newer than the row keeps it deleted, an older
   one is removed. **Accounts are never merged by name**: two accounts with one name can be two real accounts, and a merge would
   add their balances.
-- `Applier::account(sync_id) -> (local id, moved)`: the account if it is here; `MAIN_ID` and `moved` when it has a marker here;
-  otherwise `Invalid("reference")`. Used by `recurring`, `transactions`, `ledger` and the new `transfers`. A moved row takes
+- `Applier::account(sync_id) -> (local id, deleted_at)`: the account if it is here; `MAIN_ID` and the stamp of its marker when it has a
+  marker here; otherwise `Invalid("reference")`. Used by `recurring`, `transactions`, `ledger` and the new `transfers`. A moved row takes
   `max(its stamp, the marker's stamp)`; `updated_at` stays as sent.
 - `Applier::transfers`: the ordinary rules. After resolving both sides, a transfer whose sides are equal is not written: an
   existing row is deleted and a marker with stamp `after(that max)` is put.
@@ -594,9 +594,10 @@ Routes in a new `src-tauri/src/api/accounts.rs` (tests `api/accounts_tests.rs`),
 
 - New optional argument `accountId` (`Kind::Id`) on `transactions.create`, `transactions.update`, `transactions.list`,
   `recurring.create`, `recurring.update`, `ledger.add`, `ledger.update`, `people.settle`.
-- `kind` is a `Kind::String`, accepted in any case (`savings`, `CREDIT_CARD`), as `categories.create --type`.
+- `kind` is a `Kind::String` that lists its four words in capitals, accepted in any case on the command line (`savings`, `Credit_Card`), as `categories.create --type`: the command line matches the words without regard to case; the HTTP API takes them exactly.
 - `openingBalance` is a `Kind::String`, not `Kind::Money` (which has no sign); `parse_signed_amount` checks it. On the command
-  line a negative value is written `--opening-balance=-120.00`, because a word that starts with `-` is read as a flag.
+  line a negative value is written `--opening-balance=-120.00`; `--opening-balance -120.00` works too, because the word after a flag is always
+  its value (`cli/src/args.rs`).
 - After the routes: `cd cli && cargo run --example dump_schema > schema.json`; examples in the tour of `cli/tests/docs.rs`
   (list, create, update, show, a transfer, summary, archive, a transaction with `--account-id`, and one refusal: archiving the main
   account); `cd cli && UPDATE_DOCS=1 cargo test --offline --test docs`; `npm run docs`. The `meowny` skill is out of scope.
