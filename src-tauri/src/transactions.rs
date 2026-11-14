@@ -5,6 +5,7 @@ use chrono::NaiveDate;
 use rusqlite::{params, Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
 
+use crate::accounts;
 use crate::categories::{parse_id, present_or_null, serialize_id};
 use crate::db::is_unique_violation;
 use crate::debts::splits::{self, PartOut, Payer};
@@ -24,6 +25,9 @@ pub struct Transaction {
     pub id: i64,
     #[serde(serialize_with = "serialize_id")]
     pub category_id: i64,
+    /// The account the money left or reached (`docs/accounts-design.md`).
+    #[serde(serialize_with = "serialize_id")]
+    pub account_id: i64,
     pub client_uuid: Option<String>,
     pub name: String,
     /// What was paid. Decimal string, e.g. "12.50".
@@ -50,6 +54,9 @@ pub struct NewTransaction {
     pub description: Option<String>,
     #[serde(default)]
     pub client_uuid: Option<String>,
+    /// Left out means the main account.
+    #[serde(default)]
+    pub account_id: Option<String>,
 }
 
 /// Fields left out stay as they are. `description: null` clears it.
@@ -66,6 +73,9 @@ pub struct TransactionPatch {
     pub category_id: Option<String>,
     #[serde(default, deserialize_with = "present_or_null")]
     pub description: Option<Option<String>>,
+    /// Moves the transaction to another account, which must not be archived.
+    #[serde(default)]
+    pub account_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]
@@ -78,6 +88,8 @@ pub struct Filter {
     pub to: Option<String>,
     #[serde(default)]
     pub category_id: Option<String>,
+    #[serde(default)]
+    pub account_id: Option<String>,
     /// Matches the name or description, ignoring ASCII case.
     #[serde(default)]
     pub q: Option<String>,
@@ -141,7 +153,7 @@ pub(crate) fn clean_uuid(text: &str) -> Result<String, AppError> {
     }
 }
 
-const COLUMNS: &str = "id, category_id, client_uuid, name, amount_minor, payment_date, description";
+const COLUMNS: &str = "id, category_id, client_uuid, name, amount_minor, payment_date, description, account_id";
 
 fn from_row(row: &rusqlite::Row) -> rusqlite::Result<Transaction> {
     Ok(Transaction {
@@ -155,6 +167,7 @@ fn from_row(row: &rusqlite::Row) -> rusqlite::Result<Transaction> {
         paid_by: None,
         payment_date: row.get(5)?,
         description: row.get(6)?,
+        account_id: row.get(7)?,
     })
 }
 
@@ -229,16 +242,18 @@ pub fn create(conn: &Connection, input: &NewTransaction) -> Result<Transaction, 
     if !category_is_active(conn, category_id)? {
         return Err(AppError::InvalidInput);
     }
+    let account_id = accounts::for_new_row(conn, input.account_id.as_deref())?;
 
     let inserted = conn.execute(
-        "INSERT INTO transactions (category_id, client_uuid, name, amount_minor, payment_date, description)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
-        params![category_id, uuid, name, minor, date, description],
+        "INSERT INTO transactions (category_id, client_uuid, name, amount_minor, payment_date, description, account_id)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+        params![category_id, uuid, name, minor, date, description, account_id],
     );
     match inserted {
         Ok(_) => Ok(Transaction {
             id: conn.last_insert_rowid(),
             category_id,
+            account_id,
             client_uuid: uuid,
             name,
             amount: format_amount(minor),
@@ -289,6 +304,7 @@ pub fn update(conn: &Connection, id: i64, patch: &TransactionPatch) -> Result<Tr
         Some(description) => clean_description(description.as_deref())?,
         None => current.description.clone(),
     };
+    let account_id = accounts::for_moved_row(conn, current.account_id, patch.account_id.as_deref())?;
 
     // A bill that is shared keeps its parts adding up to the bill: a new amount rescales every part, yours included, and a split bill
     // stays an expense. The parts are written before the amount when it shrinks and after it when it grows, so they never pass the bill.
@@ -300,9 +316,9 @@ pub fn update(conn: &Connection, id: i64, patch: &TransactionPatch) -> Result<Tr
     let write = |conn: &Connection| -> Result<(), AppError> {
         conn.execute(
             "UPDATE transactions
-             SET name = ?1, amount_minor = ?2, payment_date = ?3, category_id = ?4, description = ?5
+             SET name = ?1, amount_minor = ?2, payment_date = ?3, category_id = ?4, description = ?5, account_id = ?7
              WHERE id = ?6",
-            params![name, minor, date, category_id, description, id],
+            params![name, minor, date, category_id, description, id, account_id],
         )?;
         Ok(())
     };
@@ -346,6 +362,7 @@ pub fn list(conn: &Connection, filter: &Filter) -> Result<Page, AppError> {
     let from = filter.from.as_deref().map(clean_date).transpose()?;
     let to = filter.to.as_deref().map(clean_date).transpose()?;
     let category = filter.category_id.as_deref().map(parse_id).transpose()?;
+    let account = filter.account_id.as_deref().map(parse_id).transpose()?;
     let pattern = match filter.q.as_deref().map(str::trim).filter(|q| !q.is_empty()) {
         Some(q) if q.chars().count() > SEARCH_MAX_CHARS => return Err(AppError::InvalidInput),
         Some(q) => Some(like_pattern(q)),
@@ -372,6 +389,10 @@ pub fn list(conn: &Connection, filter: &Filter) -> Result<Page, AppError> {
     if let Some(category) = category {
         clauses.push("category_id = ?");
         values.push(Box::new(category));
+    }
+    if let Some(account) = account {
+        clauses.push("account_id = ?");
+        values.push(Box::new(account));
     }
     if let Some(pattern) = pattern {
         clauses.push("(name LIKE ? ESCAPE '\\' OR description LIKE ? ESCAPE '\\')");
@@ -422,6 +443,7 @@ mod tests {
             category_id: category.to_string(),
             description: None,
             client_uuid: None,
+            account_id: None,
         }
     }
 

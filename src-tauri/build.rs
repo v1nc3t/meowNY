@@ -124,6 +124,20 @@ const COMMANDS: &[&str] = &[
     "bill_preview",
     "bill_accept",
     "debts_reminders",
+    "list_accounts",
+    "create_account",
+    "update_account",
+    "archive_account",
+    "unarchive_account",
+    "delete_account",
+    "reorder_accounts",
+    "account_statement",
+    "account_history",
+    "accounts_summary",
+    "create_transfer",
+    "get_transfer",
+    "update_transfer",
+    "delete_transfer",
 ];
 
 fn main() {

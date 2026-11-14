@@ -44,7 +44,7 @@ fn count(conn: &rusqlite::Connection, table: &str) -> i64 {
 }
 
 fn accepting(text: &str, person: Option<i64>) -> Accept {
-    Accept { text: text.into(), person_id: person.map(|p| p.to_string()), new_friend: None, add_expense: false, category_id: None, rate: None, amount: None }
+    Accept { text: text.into(), person_id: person.map(|p| p.to_string()), new_friend: None, add_expense: false, category_id: None, rate: None, amount: None, account_id: None }
 }
 
 // ---- making a code ----------------------------------------------------------------------------
@@ -141,6 +141,7 @@ fn rent(w: &World, amount: Option<&str>) -> i64 {
             interval_count: 1,
             end_date: None,
             description: None,
+            account_id: None,
         },
     )
     .unwrap()

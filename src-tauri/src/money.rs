@@ -34,6 +34,18 @@ pub fn parse_positive_amount(text: &str) -> Result<i64, AppError> {
     }
 }
 
+/// An amount that may be negative, such as the opening balance of a credit card: `parse_amount` with an optional leading `-`.
+/// "-0.00" is refused: zero has one spelling.
+pub fn parse_signed_amount(text: &str) -> Result<i64, AppError> {
+    match text.strip_prefix('-') {
+        Some(rest) => match parse_amount(rest)? {
+            0 => Err(AppError::InvalidInput),
+            minor => Ok(-minor),
+        },
+        None => parse_amount(text),
+    }
+}
+
 /// Negative values appear in results such as "remaining" when spending passes the budget.
 pub fn format_amount(minor: i64) -> String {
     let sign = if minor < 0 { "-" } else { "" };
@@ -68,6 +80,25 @@ mod tests {
     fn positive_rejects_zero() {
         assert_eq!(parse_positive_amount("0.00"), Err(AppError::InvalidInput));
         assert_eq!(parse_positive_amount("0.01"), Ok(1));
+    }
+
+    #[test]
+    fn a_signed_amount_may_start_with_one_minus_and_nothing_else() {
+        assert_eq!(parse_signed_amount("0.00"), Ok(0));
+        assert_eq!(parse_signed_amount("12.50"), Ok(1250));
+        assert_eq!(parse_signed_amount("-12.50"), Ok(-1250));
+        assert_eq!(parse_signed_amount("-0.01"), Ok(-1));
+        assert_eq!(parse_signed_amount("9999999999.99"), Ok(MAX_MINOR));
+        assert_eq!(parse_signed_amount("-9999999999.99"), Ok(-MAX_MINOR));
+        for bad in [
+            "", "-", "-0.00", "--1.00", "+1.00", "-+1.00", "1.00-", "- 1.00", " -1.00", "-1", "-1.5", "1.5", "-1.234", "-.50", "-01.00",
+            "10000000000.00", "-10000000000.00", "-1,00", "-abc", "\u{2212}1.00",
+        ] {
+            assert_eq!(parse_signed_amount(bad), Err(AppError::InvalidInput), "{bad:?}");
+        }
+        for text in ["-0.07", "3.10", "-100.00", "0.00"] {
+            assert_eq!(format_amount(parse_signed_amount(text).unwrap()), text);
+        }
     }
 
     #[test]

@@ -369,6 +369,7 @@ mod tests {
                 category_id: category.to_string(),
                 description: None,
                 client_uuid: None,
+                account_id: None,
             },
         )
         .unwrap();
@@ -501,6 +502,7 @@ mod tests {
                     interval_count: 1,
                     end_date: None,
                     description: None,
+                    account_id: None,
                 },
             )
             .unwrap()

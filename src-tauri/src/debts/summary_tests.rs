@@ -5,7 +5,7 @@ use super::splits::set_split;
 use super::summary::{statement_text, summary, summary_csv, Labels};
 
 fn entry(conn: &rusqlite::Connection, person: i64, kind: Kind, amount: &str, date: &str, note: Option<&str>) {
-    ledger::add(conn, &NewEntry { person_id: person.to_string(), kind, amount: amount.into(), date: date.into(), note: note.map(str::to_string), transaction_id: None }).unwrap();
+    ledger::add(conn, &NewEntry { person_id: person.to_string(), kind, amount: amount.into(), date: date.into(), note: note.map(str::to_string), transaction_id: None, account_id: None }).unwrap();
 }
 
 #[test]

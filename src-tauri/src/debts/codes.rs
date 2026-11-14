@@ -288,6 +288,9 @@ pub struct Accept {
     /// For a code in another currency: the converted amount, when the person changed what the rate gives.
     #[serde(default)]
     pub amount: Option<String>,
+    /// The account of the entry, and of the expense when there is one; none is the main account.
+    #[serde(default)]
+    pub account_id: Option<String>,
 }
 
 /// Takes a code in: the friend (made if new), the expense (when asked) and the `BORROWED` entry with the code's id, linked to the expense,
@@ -336,6 +339,7 @@ pub fn accept(conn: &Connection, input: &Accept) -> Result<Entry, AppError> {
         date: code.date.clone(),
         note: Some(note.chars().take(200).collect()),
         transaction_id: None,
+        account_id: input.account_id.clone(),
     };
     let entry = if input.add_expense {
         let category_id = input.category_id.clone().ok_or(AppError::InvalidInput)?;

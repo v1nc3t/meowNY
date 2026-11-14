@@ -12,6 +12,7 @@ use rusqlite::{params, Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
 
 use super::people::{self, Person};
+use crate::accounts;
 use crate::categories::{parse_id, present_or_null, serialize_id};
 use crate::money::{format_amount, parse_positive_amount};
 use crate::transactions::{self, clean_date, NewTransaction};
@@ -68,6 +69,9 @@ pub struct Entry {
     pub id: i64,
     #[serde(serialize_with = "serialize_id")]
     pub person_id: i64,
+    /// The account the money left or reached (`docs/accounts-design.md`).
+    #[serde(serialize_with = "serialize_id")]
+    pub account_id: i64,
     pub kind: Kind,
     /// Decimal string, e.g. "12.50". Always positive: the kind says which way it goes.
     pub amount: String,
@@ -88,6 +92,9 @@ pub struct NewEntry {
     pub note: Option<String>,
     #[serde(default)]
     pub transaction_id: Option<String>,
+    /// Left out means the main account.
+    #[serde(default)]
+    pub account_id: Option<String>,
 }
 
 /// Fields left out stay as they are. `note: null` and `transactionId: null` clear them.
@@ -106,6 +113,9 @@ pub struct EntryPatch {
     pub note: Option<Option<String>>,
     #[serde(default, deserialize_with = "present_or_null")]
     pub transaction_id: Option<Option<String>>,
+    /// Moves the entry to another account, which must not be archived.
+    #[serde(default)]
+    pub account_id: Option<String>,
 }
 
 /// The expense that "I borrowed" adds to your expenses along with the entry.
@@ -117,7 +127,7 @@ pub struct Expense {
 }
 
 /// Empty means "no note".
-fn clean_note(text: Option<&str>) -> Result<Option<String>, AppError> {
+pub(crate) fn clean_note(text: Option<&str>) -> Result<Option<String>, AppError> {
     let Some(text) = text.map(str::trim).filter(|t| !t.is_empty()) else { return Ok(None) };
     let text = transactions::clean_lines(text).ok_or(AppError::InvalidInput)?;
     if text.chars().count() > NOTE_MAX_CHARS {
@@ -126,7 +136,7 @@ fn clean_note(text: Option<&str>) -> Result<Option<String>, AppError> {
     Ok(Some(text))
 }
 
-const COLUMNS: &str = "id, person_id, kind, amount_minor, entry_date, note, transaction_id";
+const COLUMNS: &str = "id, person_id, kind, amount_minor, entry_date, note, transaction_id, account_id";
 
 fn from_row(row: &rusqlite::Row) -> rusqlite::Result<Entry> {
     let kind: String = row.get(2)?;
@@ -138,6 +148,7 @@ fn from_row(row: &rusqlite::Row) -> rusqlite::Result<Entry> {
         date: row.get(4)?,
         note: row.get(5)?,
         transaction_id: row.get::<_, Option<i64>>(6)?.map(|id| id.to_string()),
+        account_id: row.get(7)?,
     })
 }
 
@@ -177,15 +188,17 @@ pub(crate) fn add_from(conn: &Connection, input: &NewEntry, origin: Option<&str>
             return Err(AppError::InvalidInput);
         }
     }
+    let account_id = accounts::for_new_row(conn, input.account_id.as_deref())?;
     conn.execute(
-        "INSERT INTO ledger_entries (person_id, kind, amount_minor, entry_date, note, transaction_id, origin_id) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
-        params![person_id, input.kind.as_sql(), minor, date, note, transaction_id, origin],
+        "INSERT INTO ledger_entries (person_id, kind, amount_minor, entry_date, note, transaction_id, origin_id, account_id) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+        params![person_id, input.kind.as_sql(), minor, date, note, transaction_id, origin, account_id],
     )?;
     get(conn, conn.last_insert_rowid())
 }
 
 /// "I borrowed", with your share added to your expenses: the expense (the given name, your amount, the date, the category, which must be an
-/// expense category) and the `BORROWED` entry linked to it, in one step or not at all.
+/// expense category) and the `BORROWED` entry linked to it, in one step or not at all. Both are in the account of the entry: together they
+/// leave its balance as it was, which is right, the friend paid.
 pub fn borrow_with_expense(conn: &Connection, input: &NewEntry, expense: &Expense) -> Result<Entry, AppError> {
     let tx = conn.unchecked_transaction()?;
     let entry = borrow_in(&tx, input, expense, None)?;
@@ -215,6 +228,7 @@ pub(crate) fn borrow_in(conn: &Connection, input: &NewEntry, expense: &Expense, 
             category_id: expense.category_id.clone(),
             description: None,
             client_uuid: None,
+            account_id: input.account_id.clone(),
         },
     )?;
     add_from(conn, &NewEntry { transaction_id: Some(spent.id.to_string()), ..input.clone() }, origin)
@@ -256,10 +270,11 @@ pub fn update(conn: &Connection, id: i64, patch: &EntryPatch) -> Result<Entry, A
         Some(None) => None,
         None => current.transaction_id.as_deref().map(parse_id).transpose()?,
     };
+    let account_id = accounts::for_moved_row(conn, current.account_id, patch.account_id.as_deref())?;
     // Every column is written, so that a change of the link alone is an edit too (the stamp triggers do not watch it by itself).
     conn.execute(
-        "UPDATE ledger_entries SET person_id = ?1, kind = ?2, amount_minor = ?3, entry_date = ?4, note = ?5, transaction_id = ?6 WHERE id = ?7",
-        params![person_id, kind.as_sql(), minor, date, note, transaction_id, id],
+        "UPDATE ledger_entries SET person_id = ?1, kind = ?2, amount_minor = ?3, entry_date = ?4, note = ?5, transaction_id = ?6, account_id = ?8 WHERE id = ?7",
+        params![person_id, kind.as_sql(), minor, date, note, transaction_id, id, account_id],
     )?;
     get(conn, id)
 }
@@ -287,7 +302,9 @@ pub struct Settled {
 /// Marks a payment between you and a friend. It is a repayment in the direction that reduces the debt: they paid you back when they owe you,
 /// you paid them back when you owe them. With no `amount` it is the whole balance. An amount larger than the debt is accepted. When the
 /// balance reaches 0 the friend's reminder is cleared. `transaction_id` is the transaction the payment was for, if any: only a reference,
-/// it changes no amount.
+/// it changes no amount. `account_id` is the account the money reached or left; none is the main account.
+// Each argument is one field of the dialog.
+#[allow(clippy::too_many_arguments)]
 pub fn settle(
     conn: &Connection,
     person_id: i64,
@@ -295,6 +312,7 @@ pub fn settle(
     date: Option<&str>,
     note: Option<&str>,
     transaction_id: Option<&str>,
+    account_id: Option<&str>,
     today: &str,
 ) -> Result<Settled, AppError> {
     let tx = conn.unchecked_transaction()?;
@@ -316,6 +334,7 @@ pub fn settle(
             date: date.unwrap_or(today).to_string(),
             note: note.map(str::to_string),
             transaction_id: transaction_id.map(str::to_string),
+            account_id: account_id.map(str::to_string),
         },
     )?;
     let after = balance_minor(&tx, person_id)?;

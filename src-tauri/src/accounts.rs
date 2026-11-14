@@ -1,0 +1,482 @@
+//! Accounts: the places your money is (`docs/accounts-design.md`). A bank account, savings, cash, a credit card.
+//!
+//! * Every transaction, recurring item and ledger entry belongs to one account, and a transfer (`transfers`) moves money between two.
+//! * There is always the main account (`MAIN_ID`): a row that names no account goes there, and it is never archived or deleted.
+//! * A balance is stored nowhere. The view `account_movements` has one row for everything that moved an account, and every number
+//!   here is a sum of its `delta_minor`: the balance on a day is the sum up to that day (section 3).
+//! * An account with rows is archived, not deleted: its history and its balance stay.
+
+use rusqlite::{params, Connection, OptionalExtension};
+use serde::{Deserialize, Serialize};
+
+use crate::budgets;
+use crate::categories::{clean_name, parse_id, present_or_null, serialize_id};
+use crate::money::{format_amount, parse_signed_amount};
+use crate::transactions::clean_date;
+use crate::vault::AppError;
+
+pub mod transfers;
+
+#[cfg(test)]
+mod balance_tests;
+#[cfg(test)]
+mod command_tests;
+#[cfg(test)]
+pub(crate) mod fixtures;
+#[cfg(test)]
+mod lifecycle_tests;
+#[cfg(test)]
+mod table_tests;
+#[cfg(test)]
+mod transfers_tests;
+
+/// The main account: the same local id and `sync_id` on every device, made by migration 0018 (section 4.3).
+pub const MAIN_ID: i64 = 1;
+pub const MAIN_SYNC_ID: &str = "00000000000000000000000000000001";
+/// The name the migration gives it. The screens show it in the person's language while it is still this.
+pub const MAIN_NAME: &str = "Main account";
+
+const NUMBER_MAX_CHARS: usize = 50;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum Kind {
+    Checking,
+    Savings,
+    Cash,
+    CreditCard,
+}
+
+impl Kind {
+    pub fn as_sql(self) -> &'static str {
+        match self {
+            Kind::Checking => "CHECKING",
+            Kind::Savings => "SAVINGS",
+            Kind::Cash => "CASH",
+            Kind::CreditCard => "CREDIT_CARD",
+        }
+    }
+
+    pub fn from_sql(text: &str) -> Result<Kind, AppError> {
+        match text {
+            "CHECKING" => Ok(Kind::Checking),
+            "SAVINGS" => Ok(Kind::Savings),
+            "CASH" => Ok(Kind::Cash),
+            "CREDIT_CARD" => Ok(Kind::CreditCard),
+            _ => Err(AppError::Internal),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Account {
+    #[serde(serialize_with = "serialize_id")]
+    pub id: i64,
+    pub name: String,
+    pub kind: Kind,
+    /// An IBAN or anything that tells the account apart.
+    pub number: Option<String>,
+    /// Decimal string that may be negative, e.g. "-120.00". It counts from `opening_date`.
+    pub opening_balance: String,
+    pub opening_date: String,
+    pub archived: bool,
+    pub is_main: bool,
+    /// What the account holds today.
+    pub balance: String,
+    /// What moved it from the first of this month to today.
+    pub change_this_month: String,
+    /// The latest day up to today on which something other than the opening balance moved it.
+    pub last_activity: Option<String>,
+    /// How many transactions, recurring items, ledger entries and transfers point at it. An account with none can be deleted.
+    pub entries: u32,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct NewAccount {
+    pub name: String,
+    pub kind: Kind,
+    #[serde(default)]
+    pub number: Option<String>,
+    /// Left out means "0.00".
+    #[serde(default)]
+    pub opening_balance: Option<String>,
+    /// Left out means today.
+    #[serde(default)]
+    pub opening_date: Option<String>,
+}
+
+/// Fields left out stay as they are. `number: null` clears it.
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct AccountPatch {
+    #[serde(default)]
+    pub name: Option<String>,
+    #[serde(default)]
+    pub kind: Option<Kind>,
+    #[serde(default, deserialize_with = "present_or_null")]
+    pub number: Option<Option<String>>,
+    #[serde(default)]
+    pub opening_balance: Option<String>,
+    #[serde(default)]
+    pub opening_date: Option<String>,
+}
+
+/// Empty means "no number".
+fn clean_number(text: Option<&str>) -> Result<Option<String>, AppError> {
+    let Some(text) = text.map(str::trim).filter(|t| !t.is_empty()) else { return Ok(None) };
+    if text.chars().count() > NUMBER_MAX_CHARS || text.chars().any(char::is_control) {
+        return Err(AppError::InvalidInput);
+    }
+    Ok(Some(text.to_string()))
+}
+
+/// Whether the account exists and is not archived.
+pub fn is_active(conn: &Connection, id: i64) -> Result<bool, AppError> {
+    Ok(conn.query_row("SELECT 1 FROM accounts WHERE id = ?1 AND archived = 0", [id], |_| Ok(())).optional()?.is_some())
+}
+
+/// The account of a new row: the main account when none is named, otherwise the named one, which must exist and not be archived
+/// (section 5.2). A missing account and an archived one are refused alike, as an unknown category is.
+pub fn for_new_row(conn: &Connection, account_id: Option<&str>) -> Result<i64, AppError> {
+    let Some(text) = account_id else { return Ok(MAIN_ID) };
+    let id = parse_id(text)?;
+    if !is_active(conn, id)? {
+        return Err(AppError::InvalidInput);
+    }
+    Ok(id)
+}
+
+/// The account of a row that is edited: the one it has when none is named or its own is named again (it may be archived by now), otherwise
+/// the named one, as for a new row.
+pub(crate) fn for_moved_row(conn: &Connection, current: i64, account_id: Option<&str>) -> Result<i64, AppError> {
+    match account_id {
+        Some(text) if parse_id(text)? != current => for_new_row(conn, Some(text)),
+        _ => Ok(current),
+    }
+}
+
+/// Whether the main account is as it must be: there, with its own `sync_id`, and not archived. A sync checks it before its commit and a
+/// restore before it keeps a file.
+pub fn check(conn: &Connection) -> Result<bool, AppError> {
+    Ok(conn
+        .query_row("SELECT 1 FROM accounts WHERE id = ?1 AND sync_id = ?2 AND archived = 0", params![MAIN_ID, MAIN_SYNC_ID], |_| Ok(()))
+        .optional()?
+        .is_some())
+}
+
+/// `?1` is today. The numbers come from the view, so there is one definition of what moves an account.
+const SELECT: &str = "SELECT a.id, a.name, a.kind, a.number, a.opening_balance_minor, a.opening_date, a.archived,
+       COALESCE((SELECT SUM(m.delta_minor) FROM account_movements m WHERE m.account_id = a.id AND m.day <= ?1), 0),
+       COALESCE((SELECT SUM(m.delta_minor) FROM account_movements m WHERE m.account_id = a.id AND m.day <= ?1 AND m.day >= substr(?1, 1, 8) || '01'), 0),
+       (SELECT MAX(m.day) FROM account_movements m WHERE m.account_id = a.id AND m.day <= ?1 AND m.source <> 'OPENING'),
+       (SELECT count(*) FROM transactions WHERE account_id = a.id) + (SELECT count(*) FROM recurring_transactions WHERE account_id = a.id)
+       + (SELECT count(*) FROM ledger_entries WHERE account_id = a.id) + (SELECT count(*) FROM transfers WHERE from_account_id = a.id OR to_account_id = a.id)
+     FROM accounts a";
+
+fn from_row(row: &rusqlite::Row) -> rusqlite::Result<Account> {
+    let kind: String = row.get(2)?;
+    let id: i64 = row.get(0)?;
+    Ok(Account {
+        id,
+        name: row.get(1)?,
+        kind: Kind::from_sql(&kind).map_err(|_| rusqlite::Error::InvalidQuery)?,
+        number: row.get(3)?,
+        opening_balance: format_amount(row.get(4)?),
+        opening_date: row.get(5)?,
+        archived: row.get::<_, i64>(6)? == 1,
+        is_main: id == MAIN_ID,
+        balance: format_amount(row.get(7)?),
+        change_this_month: format_amount(row.get(8)?),
+        last_activity: row.get(9)?,
+        entries: row.get(10)?,
+    })
+}
+
+/// The accounts in the person's order, the archived ones after the others.
+pub fn list(conn: &Connection, today: &str) -> Result<Vec<Account>, AppError> {
+    let today = clean_date(today)?;
+    let mut statement = conn.prepare_cached(&format!("{SELECT} ORDER BY a.archived, a.position, a.id"))?;
+    let rows = statement.query_map([&today], from_row)?;
+    Ok(rows.collect::<Result<_, _>>()?)
+}
+
+pub fn get(conn: &Connection, id: i64, today: &str) -> Result<Account, AppError> {
+    let today = clean_date(today)?;
+    conn.query_row(&format!("{SELECT} WHERE a.id = ?2"), params![today, id], from_row).optional()?.ok_or(AppError::NotFound)
+}
+
+/// A name is checked on this device only, among the accounts that are not archived, ignoring case (SQLite folds ASCII letters only). There
+/// is no unique index: two devices that pick the same name keep two accounts (section 16, choice 4).
+fn name_is_taken(conn: &Connection, name: &str, except: Option<i64>) -> Result<bool, AppError> {
+    Ok(conn
+        .query_row("SELECT 1 FROM accounts WHERE name = ?1 COLLATE NOCASE AND archived = 0 AND id IS NOT ?2", params![name, except], |_| Ok(()))
+        .optional()?
+        .is_some())
+}
+
+/// A new account goes to the end of the list.
+pub fn create(conn: &Connection, input: &NewAccount, today: &str) -> Result<Account, AppError> {
+    let name = clean_name(&input.name)?;
+    let number = clean_number(input.number.as_deref())?;
+    let opening = input.opening_balance.as_deref().map(parse_signed_amount).transpose()?.unwrap_or(0);
+    let date = clean_date(input.opening_date.as_deref().unwrap_or(today))?;
+    let tx = conn.unchecked_transaction()?;
+    if name_is_taken(&tx, &name, None)? {
+        return Err(AppError::NameExists);
+    }
+    tx.execute(
+        "INSERT INTO accounts (name, kind, number, opening_balance_minor, opening_date, position)
+         VALUES (?1, ?2, ?3, ?4, ?5, (SELECT MAX(position) + 1 FROM accounts))",
+        params![name, input.kind.as_sql(), number, opening, date],
+    )?;
+    let account = get(&tx, tx.last_insert_rowid(), today)?;
+    tx.commit()?;
+    Ok(account)
+}
+
+/// Changes an account that is not archived (restore it first). The stamp moves only when something changed.
+pub fn update(conn: &Connection, id: i64, patch: &AccountPatch, today: &str) -> Result<Account, AppError> {
+    let tx = conn.unchecked_transaction()?;
+    let current = get(&tx, id, today)?;
+    if current.archived {
+        return Err(AppError::InvalidInput);
+    }
+    let name = match &patch.name {
+        Some(name) => clean_name(name)?,
+        None => current.name,
+    };
+    let kind = patch.kind.unwrap_or(current.kind);
+    let number = match &patch.number {
+        Some(number) => clean_number(number.as_deref())?,
+        None => current.number,
+    };
+    let opening = parse_signed_amount(patch.opening_balance.as_deref().unwrap_or(&current.opening_balance))?;
+    let date = clean_date(patch.opening_date.as_deref().unwrap_or(&current.opening_date))?;
+    if name_is_taken(&tx, &name, Some(id))? {
+        return Err(AppError::NameExists);
+    }
+    tx.execute(
+        "UPDATE accounts SET name = ?1, kind = ?2, number = ?3, opening_balance_minor = ?4, opening_date = ?5 WHERE id = ?6",
+        params![name, kind.as_sql(), number, opening, date, id],
+    )?;
+    let account = get(&tx, id, today)?;
+    tx.commit()?;
+    Ok(account)
+}
+
+/// Sets the order of the accounts that are not archived: `ids` is all of them, in the new order. Only the rows that move are written,
+/// so the others keep their sync stamp.
+pub fn reorder(conn: &Connection, ids: &[i64]) -> Result<(), AppError> {
+    if ids.iter().collect::<std::collections::HashSet<_>>().len() != ids.len() {
+        return Err(AppError::InvalidInput);
+    }
+    let tx = conn.unchecked_transaction()?;
+    for id in ids {
+        if !is_active(&tx, *id)? {
+            return Err(AppError::InvalidInput);
+        }
+    }
+    let active: i64 = tx.query_row("SELECT count(*) FROM accounts WHERE archived = 0", [], |r| r.get(0))?;
+    if active != ids.len() as i64 {
+        return Err(AppError::InvalidInput);
+    }
+    for (position, id) in ids.iter().enumerate() {
+        tx.execute("UPDATE accounts SET position = ?1 WHERE id = ?2 AND position != ?1", params![position as i64, id])?;
+    }
+    tx.commit()?;
+    Ok(())
+}
+
+/// Takes an account out of the lists and pickers. Its rows, its history and its balance stay, and no row of it is written. The main
+/// account is never archived; an account that is archived already is answered as it is.
+pub fn archive(conn: &Connection, id: i64, today: &str) -> Result<Account, AppError> {
+    let current = get(conn, id, today)?;
+    if current.is_main {
+        return Err(AppError::InvalidInput);
+    }
+    if current.archived {
+        return Ok(current);
+    }
+    conn.execute("UPDATE accounts SET archived = 1 WHERE id = ?1", [id])?;
+    get(conn, id, today)
+}
+
+/// Brings an archived account back. The name must not have been taken by another account in the meantime. An account that is not
+/// archived is answered as it is.
+pub fn restore(conn: &Connection, id: i64, today: &str) -> Result<Account, AppError> {
+    let tx = conn.unchecked_transaction()?;
+    let current = get(&tx, id, today)?;
+    if !current.archived {
+        return Ok(current);
+    }
+    if name_is_taken(&tx, &current.name, Some(id))? {
+        return Err(AppError::NameExists);
+    }
+    tx.execute("UPDATE accounts SET archived = 0 WHERE id = ?1", [id])?;
+    let account = get(&tx, id, today)?;
+    tx.commit()?;
+    Ok(account)
+}
+
+/// Deletes an account that nothing points at, archived or not. The main account and an account with rows are refused; the trigger
+/// `trg_accounts_keep_main` and the foreign keys are the net under this.
+pub fn delete(conn: &Connection, id: i64) -> Result<(), AppError> {
+    let tx = conn.unchecked_transaction()?;
+    let entries: Option<i64> = tx
+        .query_row(
+            "SELECT (SELECT count(*) FROM transactions WHERE account_id = a.id) + (SELECT count(*) FROM recurring_transactions WHERE account_id = a.id)
+                  + (SELECT count(*) FROM ledger_entries WHERE account_id = a.id) + (SELECT count(*) FROM transfers WHERE from_account_id = a.id OR to_account_id = a.id)
+             FROM accounts a WHERE a.id = ?1",
+            [id],
+            |r| r.get(0),
+        )
+        .optional()?;
+    let entries = entries.ok_or(AppError::NotFound)?;
+    if id == MAIN_ID || entries > 0 {
+        return Err(AppError::InvalidInput);
+    }
+    tx.execute("DELETE FROM accounts WHERE id = ?1", [id])?;
+    tx.commit()?;
+    Ok(())
+}
+
+/// What an account holds at the end of `day`: everything that moved it up to that day (section 3).
+fn balance_on(conn: &Connection, id: i64, day: &str) -> Result<i64, AppError> {
+    Ok(conn.query_row(
+        "SELECT COALESCE(SUM(delta_minor), 0) FROM account_movements WHERE account_id = ?1 AND day <= ?2",
+        params![id, day],
+        |r| r.get(0),
+    )?)
+}
+
+/// One movement of an account.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Line {
+    pub date: String,
+    /// `OPENING`, `TRANSACTION`, `TRANSFER_IN`, `TRANSFER_OUT` or `LEDGER`.
+    pub source: String,
+    /// The id of the account, the transaction, the transfer or the ledger entry, by `source`.
+    pub id: String,
+    /// The name of the transaction, or the note of the transfer or the entry; empty when there is none.
+    pub what: String,
+    /// The category, the other account of a transfer, or the friend.
+    pub other: Option<String>,
+    /// What it did to the account: negative when money left it.
+    pub amount: String,
+    /// The balance after this line.
+    pub balance: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Statement {
+    pub account: Account,
+    pub from: String,
+    pub to: String,
+    /// What the account held before `from`.
+    pub balance_before: String,
+    /// Oldest first.
+    pub lines: Vec<Line>,
+    /// What it held at the end of `to`.
+    pub balance_after: String,
+}
+
+/// What moved an account from `from` to `to` (both days included), oldest first, with the balance after each line. On one day the opening
+/// balance comes first, then transactions, transfers in, transfers out and ledger entries.
+pub fn statement(conn: &Connection, id: i64, from: &str, to: &str, today: &str) -> Result<Statement, AppError> {
+    let from = clean_date(from)?;
+    let to = clean_date(to)?;
+    if from > to {
+        return Err(AppError::InvalidInput);
+    }
+    let tx = conn.unchecked_transaction()?;
+    let account = get(&tx, id, today)?;
+    let before: i64 = tx.query_row(
+        "SELECT COALESCE(SUM(delta_minor), 0) FROM account_movements WHERE account_id = ?1 AND day < ?2",
+        params![id, from],
+        |r| r.get(0),
+    )?;
+    let mut statement = tx.prepare_cached(
+        "SELECT m.day, m.source, m.source_id, m.delta_minor,
+                CASE m.source WHEN 'TRANSACTION' THEN t.name WHEN 'LEDGER' THEN e.note WHEN 'OPENING' THEN NULL ELSE x.note END,
+                CASE m.source WHEN 'TRANSACTION' THEN c.name WHEN 'LEDGER' THEN p.name WHEN 'OPENING' THEN NULL ELSE o.name END
+         FROM account_movements m
+         LEFT JOIN transactions t ON m.source = 'TRANSACTION' AND t.id = m.source_id
+         LEFT JOIN categories c ON c.id = t.category_id
+         LEFT JOIN ledger_entries e ON m.source = 'LEDGER' AND e.id = m.source_id
+         LEFT JOIN people p ON p.id = e.person_id
+         LEFT JOIN transfers x ON m.source IN ('TRANSFER_IN', 'TRANSFER_OUT') AND x.id = m.source_id
+         LEFT JOIN accounts o ON o.id = CASE m.source WHEN 'TRANSFER_IN' THEN x.from_account_id ELSE x.to_account_id END
+         WHERE m.account_id = ?1 AND m.day >= ?2 AND m.day <= ?3
+         ORDER BY m.day, CASE m.source WHEN 'OPENING' THEN 0 WHEN 'TRANSACTION' THEN 1 WHEN 'TRANSFER_IN' THEN 2 WHEN 'TRANSFER_OUT' THEN 3 ELSE 4 END, m.source_id",
+    )?;
+    let rows = statement.query_map(params![id, from, to], |r| {
+        Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?, r.get::<_, i64>(2)?, r.get::<_, i64>(3)?, r.get::<_, Option<String>>(4)?, r.get::<_, Option<String>>(5)?))
+    })?;
+    let mut running = before;
+    let mut lines = Vec::new();
+    for row in rows {
+        let (date, source, source_id, delta, what, other) = row?;
+        running += delta;
+        lines.push(Line { date, source, id: source_id.to_string(), what: what.unwrap_or_default(), other, amount: format_amount(delta), balance: format_amount(running) });
+    }
+    Ok(Statement { account, from, to, balance_before: format_amount(before), lines, balance_after: format_amount(running) })
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct HistoryPoint {
+    /// "YYYY-MM".
+    pub month: String,
+    pub balance: String,
+}
+
+/// The balance at the end of each month of `year` ("YYYY"), for the chart: on the last day of a month that is over, on `today` for the
+/// current month, and no point for a month that has not begun.
+pub fn history(conn: &Connection, id: i64, year: &str, today: &str) -> Result<Vec<HistoryPoint>, AppError> {
+    let today = clean_date(today)?;
+    budgets::month_start(&format!("{year}-01"))?;
+    let tx = conn.unchecked_transaction()?;
+    get(&tx, id, &today)?;
+    let mut points = Vec::new();
+    for m in 1..=12 {
+        let month = format!("{year}-{m:02}");
+        let first = budgets::month_start(&month)?;
+        if first.to_string() > today {
+            break;
+        }
+        let last = budgets::next_month(first)?.pred_opt().ok_or(AppError::InvalidInput)?.to_string();
+        let balance = balance_on(&tx, id, last.as_str().min(today.as_str()))?;
+        points.push(HistoryPoint { month, balance: format_amount(balance) });
+    }
+    Ok(points)
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Summary {
+    /// What every account holds today, the archived ones too.
+    pub in_accounts: String,
+    /// What friends owe you minus what you owe them: money a friend owes you is yours.
+    pub friends: String,
+    pub net_worth: String,
+    /// How many accounts there are, the archived ones too.
+    pub accounts: u32,
+    /// Whether the person uses accounts: there is more than the main account, or it has an opening balance.
+    pub in_use: bool,
+}
+
+pub fn summary(conn: &Connection, today: &str) -> Result<Summary, AppError> {
+    let today = clean_date(today)?;
+    let tx = conn.unchecked_transaction()?;
+    let in_accounts: i64 = tx.query_row("SELECT COALESCE(SUM(delta_minor), 0) FROM account_movements WHERE day <= ?1", [&today], |r| r.get(0))?;
+    let friends: i64 = tx.query_row("SELECT COALESCE(SUM(balance_minor), 0) FROM person_balances", [], |r| r.get(0))?;
+    let (accounts, in_use): (u32, bool) = tx.query_row(
+        "SELECT count(*), count(*) > 1 OR COALESCE(SUM(opening_balance_minor <> 0), 0) > 0 FROM accounts",
+        [],
+        |r| Ok((r.get(0)?, r.get(1)?)),
+    )?;
+    Ok(Summary { in_accounts: format_amount(in_accounts), friends: format_amount(friends), net_worth: format_amount(in_accounts + friends), accounts, in_use })
+}

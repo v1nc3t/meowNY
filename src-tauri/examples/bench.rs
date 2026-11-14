@@ -60,7 +60,7 @@ fn main() {
         for i in 0..count {
             let day = start + chrono::Duration::days((i * 3500 / count) as i64);
             let (cat, name) = if i % 12 == 0 { (income[i % 6], "Salary") } else { (cats[(i * 7) % 30], if i % 3 == 0 { "Coffee" } else { "Groceries" }) };
-            let input = NewTransaction { name: format!("{name} {}", i % 50), amount: format!("{}.{:02}", 1 + i % 90, i % 100), payment_date: day.to_string(), category_id: cat.to_string(), description: if i % 4 == 0 { Some(format!("note number {i} about something")) } else { None }, client_uuid: None };
+            let input = NewTransaction { name: format!("{name} {}", i % 50), amount: format!("{}.{:02}", 1 + i % 90, i % 100), payment_date: day.to_string(), category_id: cat.to_string(), description: if i % 4 == 0 { Some(format!("note number {i} about something")) } else { None }, client_uuid: None, account_id: None };
             match transactions::create(a, &input) {
                 Ok(t) => ids.push((t.id, i % 12 != 0)),
                 Err(e) => panic!("{e:?} for {input:?}"),
