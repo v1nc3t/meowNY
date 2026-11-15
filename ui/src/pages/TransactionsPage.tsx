@@ -815,7 +815,7 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
       ) : null}
       {editingTransfer && accounts ? (
         <TransferModal
-          key={editingTransfer.id}
+          key={`transfer:${editingTransfer.id}`}
           transfer={editingTransfer}
           accounts={accounts}
           today={now.date}

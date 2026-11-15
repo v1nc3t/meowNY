@@ -412,9 +412,10 @@ function AccountsView({ settings, now }: { settings: MoneySettings; now: Today }
           ]}
         />
       )}
+      {/* the dialogs and the pane are siblings: each key says what it is, or the pane of account 4 and the dialog of account 4 are one child */}
       {dialog?.kind === 'add' || dialog?.kind === 'edit' ? (
         <AccountModal
-          key={dialog.kind === 'edit' ? dialog.account.id : 'new'}
+          key={dialog.kind === 'edit' ? `account:${dialog.account.id}` : 'account:new'}
           account={dialog.kind === 'edit' ? dialog.account : null}
           today={now.date}
           groups={groups.flatMap((group) => group.name ?? [])}
@@ -428,7 +429,7 @@ function AccountsView({ settings, now }: { settings: MoneySettings; now: Today }
       ) : null}
       {transferDialog && accounts ? (
         <TransferModal
-          key={editedTransfer?.id ?? 'new'}
+          key={`transfer:${editedTransfer?.id ?? 'new'}`}
           transfer={editedTransfer}
           accounts={accounts}
           fromId={transferDialog.fromId}
@@ -443,7 +444,7 @@ function AccountsView({ settings, now }: { settings: MoneySettings; now: Today }
       ) : null}
       {dialog?.kind === 'entry' ? (
         <EntryDialog
-          key={`${dialog.tab}:${dialog.accountId}`}
+          key={`entry:${dialog.tab}:${dialog.accountId}`}
           initial={{ tab: dialog.tab, accountId: dialog.accountId }}
           today={now.date}
           onClose={() => setDialog(null)}
@@ -486,7 +487,7 @@ function AccountsView({ settings, now }: { settings: MoneySettings; now: Today }
       {tab === 'income' ? <IncomeTab settings={settings} thisMonth={now.month} /> : null}
       {accounts && tab === 'accounts' ? (
         // its own pane for each page, so that an account opens at its top whatever the list was scrolled to
-        <div key={accountId ?? 'list'} className="tx-pane wide pane-stack" {...(accountId ? {} : tabPanelProps(tab))}>
+        <div key={`pane:${accountId ?? 'list'}`} className="tx-pane wide pane-stack" {...(accountId ? {} : tabPanelProps(tab))}>
           {accountId ? (
             chosen ? (
               <AccountPage
