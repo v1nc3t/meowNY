@@ -659,7 +659,7 @@ fn following_the_computer_pulls_back_every_stamp_that_is_ahead_and_nothing_else(
         spend(&phone, food, "New, ahead", "1.00");
         transactions::delete(&phone, tea).unwrap();
         // an account, a transfer, and the main account (which until now had the oldest stamp there is)
-        let cash = crate::accounts::create(&phone, &crate::accounts::NewAccount { name: "Cash, ahead".into(), kind: crate::accounts::Kind::Cash, number: None, opening_balance: None, opening_date: Some("2026-01-01".into()) }, TODAY).unwrap().id;
+        let cash = crate::accounts::create(&phone, &crate::accounts::NewAccount { name: "Cash, ahead".into(), kind: crate::accounts::Kind::Cash, number: None, opening_balance: None, opening_date: Some("2026-01-01".into()), bic: None, notes: None, group: None, include_in_net_worth: None, virtual_balance: None }, TODAY).unwrap().id;
         crate::accounts::transfers::create(
             &phone,
             &crate::accounts::transfers::NewTransfer { from_account_id: crate::accounts::MAIN_ID.to_string(), to_account_id: cash.to_string(), amount: "1.00".into(), date: "2026-03-01".into(), note: None },
@@ -1292,7 +1292,7 @@ fn edit_accounts(conn: &mut Connection, rng: &mut Rng) {
         0 | 1 => {
             let opening = (rng.below(2) == 0).then(|| format!("{}{}.{:02}", if rng.below(3) == 0 { "-" } else { "" }, rng.below(500), rng.below(100)));
             let number = (rng.below(2) == 0).then(|| format!("IE{}", rng.below(100)));
-            let _ = accounts::create(conn, &NewAccount { name: rng.pick(ACCOUNT_NAMES).to_string(), kind: kind(rng), number, opening_balance: opening, opening_date: Some(date(rng)) }, TODAY);
+            let _ = accounts::create(conn, &NewAccount { name: rng.pick(ACCOUNT_NAMES).to_string(), kind: kind(rng), number, opening_balance: opening, opening_date: Some(date(rng)), bic: None, notes: None, group: None, include_in_net_worth: None, virtual_balance: None }, TODAY);
         }
         2 if !all.is_empty() => {
             let patch = AccountPatch { name: Some(rng.pick(ACCOUNT_NAMES).to_string()), ..Default::default() };
@@ -1603,7 +1603,7 @@ fn nothing_that_stays_on_a_device_is_ever_sent() {
     spend(&phone, phone_food, "From the phone", "5.00");
     // Accounts and transfers are shared, and the history their triggers write is not: an account and a transfer on each device
     for (conn, tag) in [(&desktop, "desktop"), (&phone, "phone")] {
-        let account = crate::accounts::create(conn, &crate::accounts::NewAccount { name: format!("Account of the {tag}"), kind: crate::accounts::Kind::Savings, number: None, opening_balance: None, opening_date: Some("2026-01-01".into()) }, TODAY).unwrap().id;
+        let account = crate::accounts::create(conn, &crate::accounts::NewAccount { name: format!("Account of the {tag}"), kind: crate::accounts::Kind::Savings, number: None, opening_balance: None, opening_date: Some("2026-01-01".into()), bic: None, notes: None, group: None, include_in_net_worth: None, virtual_balance: None }, TODAY).unwrap().id;
         crate::accounts::transfers::create(
             conn,
             &crate::accounts::transfers::NewTransfer { from_account_id: crate::accounts::MAIN_ID.to_string(), to_account_id: account.to_string(), amount: "6.00".into(), date: "2026-03-05".into(), note: Some(format!("Transfer of the {tag}")) },

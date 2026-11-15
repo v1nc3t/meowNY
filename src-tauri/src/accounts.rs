@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize};
 use crate::budgets;
 use crate::categories::{clean_name, parse_id, present_or_null, serialize_id};
 use crate::money::{format_amount, parse_signed_amount};
-use crate::transactions::clean_date;
+use crate::transactions::{clean_date, clean_lines};
 use crate::vault::AppError;
 
 pub mod transfers;
@@ -37,6 +37,8 @@ pub const MAIN_SYNC_ID: &str = "00000000000000000000000000000001";
 pub const MAIN_NAME: &str = "Main account";
 
 const NUMBER_MAX_CHARS: usize = 50;
+const BIC_MAX_CHARS: usize = 20;
+const NOTES_MAX_CHARS: usize = 1000;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
@@ -90,6 +92,18 @@ pub struct Account {
     pub last_activity: Option<String>,
     /// How many transactions, recurring items, ledger entries and transfers point at it. An account with none can be deleted.
     pub entries: u32,
+    /// The bank's identifier code.
+    pub bic: Option<String>,
+    /// Free text, line breaks allowed.
+    pub notes: Option<String>,
+    /// The name of the group the account is listed under.
+    pub group: Option<String>,
+    /// Whether `Summary` counts what the account holds (section 20.3).
+    pub include_in_net_worth: bool,
+    /// Decimal string that may be negative, e.g. a credit card's limit "1000.00". It is in no balance, statement, chart or net worth.
+    pub virtual_balance: String,
+    /// What the account can still pay: `balance` plus `virtual_balance`.
+    pub available: String,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -105,9 +119,21 @@ pub struct NewAccount {
     /// Left out means today.
     #[serde(default)]
     pub opening_date: Option<String>,
+    #[serde(default)]
+    pub bic: Option<String>,
+    #[serde(default)]
+    pub notes: Option<String>,
+    #[serde(default)]
+    pub group: Option<String>,
+    /// Left out means true.
+    #[serde(default)]
+    pub include_in_net_worth: Option<bool>,
+    /// Left out means "0.00".
+    #[serde(default)]
+    pub virtual_balance: Option<String>,
 }
 
-/// Fields left out stay as they are. `number: null` clears it.
+/// Fields left out stay as they are. `number`, `bic`, `notes` and `group` clear with `null`.
 #[derive(Debug, Clone, Default, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct AccountPatch {
@@ -121,15 +147,40 @@ pub struct AccountPatch {
     pub opening_balance: Option<String>,
     #[serde(default)]
     pub opening_date: Option<String>,
+    #[serde(default, deserialize_with = "present_or_null")]
+    pub bic: Option<Option<String>>,
+    #[serde(default, deserialize_with = "present_or_null")]
+    pub notes: Option<Option<String>>,
+    #[serde(default, deserialize_with = "present_or_null")]
+    pub group: Option<Option<String>>,
+    #[serde(default)]
+    pub include_in_net_worth: Option<bool>,
+    #[serde(default)]
+    pub virtual_balance: Option<String>,
 }
 
-/// Empty means "no number".
-fn clean_number(text: Option<&str>) -> Result<Option<String>, AppError> {
+/// A number or a BIC: one line of at most `max` characters. Empty means "none".
+fn clean_short(text: Option<&str>, max: usize) -> Result<Option<String>, AppError> {
     let Some(text) = text.map(str::trim).filter(|t| !t.is_empty()) else { return Ok(None) };
-    if text.chars().count() > NUMBER_MAX_CHARS || text.chars().any(char::is_control) {
+    if text.chars().count() > max || text.chars().any(char::is_control) {
         return Err(AppError::InvalidInput);
     }
     Ok(Some(text.to_string()))
+}
+
+/// Notes may hold line breaks and no other control character, as a description does. Empty means "no notes".
+fn clean_notes(text: Option<&str>) -> Result<Option<String>, AppError> {
+    let Some(text) = text.map(str::trim).filter(|t| !t.is_empty()) else { return Ok(None) };
+    let text = clean_lines(text).ok_or(AppError::InvalidInput)?;
+    if text.chars().count() > NOTES_MAX_CHARS {
+        return Err(AppError::InvalidInput);
+    }
+    Ok(Some(text))
+}
+
+/// A group is named as an account is. Empty means "no group".
+fn clean_group(text: Option<&str>) -> Result<Option<String>, AppError> {
+    text.map(str::trim).filter(|t| !t.is_empty()).map(clean_name).transpose()
 }
 
 /// Whether the account exists and is not archived.
@@ -172,12 +223,14 @@ const SELECT: &str = "SELECT a.id, a.name, a.kind, a.number, a.opening_balance_m
        COALESCE((SELECT SUM(m.delta_minor) FROM account_movements m WHERE m.account_id = a.id AND m.day <= ?1 AND m.day >= substr(?1, 1, 8) || '01'), 0),
        (SELECT MAX(m.day) FROM account_movements m WHERE m.account_id = a.id AND m.day <= ?1 AND m.source <> 'OPENING'),
        (SELECT count(*) FROM transactions WHERE account_id = a.id) + (SELECT count(*) FROM recurring_transactions WHERE account_id = a.id)
-       + (SELECT count(*) FROM ledger_entries WHERE account_id = a.id) + (SELECT count(*) FROM transfers WHERE from_account_id = a.id OR to_account_id = a.id)
+       + (SELECT count(*) FROM ledger_entries WHERE account_id = a.id) + (SELECT count(*) FROM transfers WHERE from_account_id = a.id OR to_account_id = a.id),
+       a.bic, a.notes, a.group_name, a.include_net_worth, a.virtual_balance_minor
      FROM accounts a";
 
 fn from_row(row: &rusqlite::Row) -> rusqlite::Result<Account> {
     let kind: String = row.get(2)?;
     let id: i64 = row.get(0)?;
+    let (balance, virtual_balance): (i64, i64) = (row.get(7)?, row.get(15)?);
     Ok(Account {
         id,
         name: row.get(1)?,
@@ -187,10 +240,16 @@ fn from_row(row: &rusqlite::Row) -> rusqlite::Result<Account> {
         opening_date: row.get(5)?,
         archived: row.get::<_, i64>(6)? == 1,
         is_main: id == MAIN_ID,
-        balance: format_amount(row.get(7)?),
+        balance: format_amount(balance),
         change_this_month: format_amount(row.get(8)?),
         last_activity: row.get(9)?,
         entries: row.get(10)?,
+        bic: row.get(11)?,
+        notes: row.get(12)?,
+        group: row.get(13)?,
+        include_in_net_worth: row.get::<_, i64>(14)? == 1,
+        virtual_balance: format_amount(virtual_balance),
+        available: format_amount(balance + virtual_balance),
     })
 }
 
@@ -219,17 +278,21 @@ fn name_is_taken(conn: &Connection, name: &str, except: Option<i64>) -> Result<b
 /// A new account goes to the end of the list.
 pub fn create(conn: &Connection, input: &NewAccount, today: &str) -> Result<Account, AppError> {
     let name = clean_name(&input.name)?;
-    let number = clean_number(input.number.as_deref())?;
+    let number = clean_short(input.number.as_deref(), NUMBER_MAX_CHARS)?;
     let opening = input.opening_balance.as_deref().map(parse_signed_amount).transpose()?.unwrap_or(0);
     let date = clean_date(input.opening_date.as_deref().unwrap_or(today))?;
+    let bic = clean_short(input.bic.as_deref(), BIC_MAX_CHARS)?;
+    let notes = clean_notes(input.notes.as_deref())?;
+    let group = clean_group(input.group.as_deref())?;
+    let virtual_balance = input.virtual_balance.as_deref().map(parse_signed_amount).transpose()?.unwrap_or(0);
     let tx = conn.unchecked_transaction()?;
     if name_is_taken(&tx, &name, None)? {
         return Err(AppError::NameExists);
     }
     tx.execute(
-        "INSERT INTO accounts (name, kind, number, opening_balance_minor, opening_date, position)
-         VALUES (?1, ?2, ?3, ?4, ?5, (SELECT MAX(position) + 1 FROM accounts))",
-        params![name, input.kind.as_sql(), number, opening, date],
+        "INSERT INTO accounts (name, kind, number, opening_balance_minor, opening_date, position, bic, notes, group_name, include_net_worth, virtual_balance_minor)
+         VALUES (?1, ?2, ?3, ?4, ?5, (SELECT MAX(position) + 1 FROM accounts), ?6, ?7, ?8, ?9, ?10)",
+        params![name, input.kind.as_sql(), number, opening, date, bic, notes, group, input.include_in_net_worth.unwrap_or(true), virtual_balance],
     )?;
     let account = get(&tx, tx.last_insert_rowid(), today)?;
     tx.commit()?;
@@ -249,17 +312,32 @@ pub fn update(conn: &Connection, id: i64, patch: &AccountPatch, today: &str) -> 
     };
     let kind = patch.kind.unwrap_or(current.kind);
     let number = match &patch.number {
-        Some(number) => clean_number(number.as_deref())?,
+        Some(number) => clean_short(number.as_deref(), NUMBER_MAX_CHARS)?,
         None => current.number,
     };
     let opening = parse_signed_amount(patch.opening_balance.as_deref().unwrap_or(&current.opening_balance))?;
     let date = clean_date(patch.opening_date.as_deref().unwrap_or(&current.opening_date))?;
+    let bic = match &patch.bic {
+        Some(bic) => clean_short(bic.as_deref(), BIC_MAX_CHARS)?,
+        None => current.bic,
+    };
+    let notes = match &patch.notes {
+        Some(notes) => clean_notes(notes.as_deref())?,
+        None => current.notes,
+    };
+    let group = match &patch.group {
+        Some(group) => clean_group(group.as_deref())?,
+        None => current.group,
+    };
+    let include = patch.include_in_net_worth.unwrap_or(current.include_in_net_worth);
+    let virtual_balance = parse_signed_amount(patch.virtual_balance.as_deref().unwrap_or(&current.virtual_balance))?;
     if name_is_taken(&tx, &name, Some(id))? {
         return Err(AppError::NameExists);
     }
     tx.execute(
-        "UPDATE accounts SET name = ?1, kind = ?2, number = ?3, opening_balance_minor = ?4, opening_date = ?5 WHERE id = ?6",
-        params![name, kind.as_sql(), number, opening, date, id],
+        "UPDATE accounts SET name = ?1, kind = ?2, number = ?3, opening_balance_minor = ?4, opening_date = ?5,
+                bic = ?6, notes = ?7, group_name = ?8, include_net_worth = ?9, virtual_balance_minor = ?10 WHERE id = ?11",
+        params![name, kind.as_sql(), number, opening, date, bic, notes, group, include, virtual_balance, id],
     )?;
     let account = get(&tx, id, today)?;
     tx.commit()?;
@@ -457,12 +535,12 @@ pub fn history(conn: &Connection, id: i64, year: &str, today: &str) -> Result<Ve
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Summary {
-    /// What every account holds today, the archived ones too.
+    /// What every account that counts in net worth holds today, the archived ones too.
     pub in_accounts: String,
     /// What friends owe you minus what you owe them: money a friend owes you is yours.
     pub friends: String,
     pub net_worth: String,
-    /// How many accounts there are, the archived ones too.
+    /// How many accounts there are, the archived ones too, and the ones that do not count in net worth.
     pub accounts: u32,
     /// Whether the person uses accounts: there is more than the main account, or it has an opening balance.
     pub in_use: bool,
@@ -471,7 +549,11 @@ pub struct Summary {
 pub fn summary(conn: &Connection, today: &str) -> Result<Summary, AppError> {
     let today = clean_date(today)?;
     let tx = conn.unchecked_transaction()?;
-    let in_accounts: i64 = tx.query_row("SELECT COALESCE(SUM(delta_minor), 0) FROM account_movements WHERE day <= ?1", [&today], |r| r.get(0))?;
+    let in_accounts: i64 = tx.query_row(
+        "SELECT COALESCE(SUM(m.delta_minor), 0) FROM account_movements m JOIN accounts a ON a.id = m.account_id WHERE m.day <= ?1 AND a.include_net_worth = 1",
+        [&today],
+        |r| r.get(0),
+    )?;
     let friends: i64 = tx.query_row("SELECT COALESCE(SUM(balance_minor), 0) FROM person_balances", [], |r| r.get(0))?;
     let (accounts, in_use): (u32, bool) = tx.query_row(
         "SELECT count(*), count(*) > 1 OR COALESCE(SUM(opening_balance_minor <> 0), 0) > 0 FROM accounts",
@@ -479,4 +561,66 @@ pub fn summary(conn: &Connection, today: &str) -> Result<Summary, AppError> {
         |r| Ok((r.get(0)?, r.get(1)?)),
     )?;
     Ok(Summary { in_accounts: format_amount(in_accounts), friends: format_amount(friends), net_worth: format_amount(in_accounts + friends), accounts, in_use })
+}
+
+/// What an account paid or took in for one category in a period.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Share {
+    #[serde(serialize_with = "serialize_id")]
+    pub category_id: i64,
+    /// A category that was deleted since keeps its name here.
+    pub name: String,
+    /// Always positive, the whole amount of the transactions.
+    pub amount: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Breakdown {
+    pub from: String,
+    pub to: String,
+    /// Categories of expenses, the largest amount first, then by name.
+    pub expenses: Vec<Share>,
+    /// Categories of income, in the same order.
+    pub income: Vec<Share>,
+    pub expense_total: String,
+    pub income_total: String,
+}
+
+/// What an account paid and took in from `from` to `to` (both days included), by category. It reads the same movements as the balance
+/// does, so a bill a friend paid is not in it and a bill you paid is in it whole; transfers and ledger entries are not transactions and are
+/// not in it. A period that reaches into the future holds the rows dated there: this is a report of a period, not of today.
+pub fn breakdown(conn: &Connection, id: i64, from: &str, to: &str) -> Result<Breakdown, AppError> {
+    let from = clean_date(from)?;
+    let to = clean_date(to)?;
+    if from > to {
+        return Err(AppError::InvalidInput);
+    }
+    let tx = conn.unchecked_transaction()?;
+    tx.query_row("SELECT 1 FROM accounts WHERE id = ?1", [id], |_| Ok(())).optional()?.ok_or(AppError::NotFound)?;
+    let mut statement = tx.prepare_cached(
+        "SELECT c.id, c.name, c.type, SUM(m.delta_minor)
+         FROM account_movements m
+         JOIN transactions t ON m.source = 'TRANSACTION' AND t.id = m.source_id
+         JOIN categories c ON c.id = t.category_id
+         WHERE m.account_id = ?1 AND m.day >= ?2 AND m.day <= ?3
+         GROUP BY c.id ORDER BY abs(SUM(m.delta_minor)) DESC, c.name COLLATE NOCASE, c.id",
+    )?;
+    let rows = statement.query_map(params![id, from, to], |r| Ok((r.get::<_, i64>(0)?, r.get::<_, String>(1)?, r.get::<_, String>(2)?, r.get::<_, i64>(3)?)))?;
+    let (mut expenses, mut income) = (Vec::new(), Vec::new());
+    let (mut expense_total, mut income_total) = (0i64, 0i64);
+    for row in rows {
+        // the view signs a movement by the type of the category: money out is negative
+        let (category_id, name, kind, delta) = row?;
+        let share = Share { category_id, name, amount: format_amount(delta.abs()) };
+        if kind == "INCOME" {
+            income_total += delta;
+            income.push(share);
+        } else {
+            expense_total -= delta;
+            expenses.push(share);
+        }
+    }
+    Ok(Breakdown { from, to, expenses, income, expense_total: format_amount(expense_total), income_total: format_amount(income_total) })
 }

@@ -69,11 +69,17 @@ fn a_new_account_goes_to_the_end_of_the_list_with_what_was_given_and_the_default
             change_this_month: "0.00".into(),
             last_activity: None,
             entries: 0,
+            bic: None,
+            notes: None,
+            group: None,
+            include_in_net_worth: true,
+            virtual_balance: "0.00".into(),
+            available: "0.00".into(),
         }
     );
     let card = create(
         &w.conn,
-        &NewAccount { name: "Card".into(), kind: Kind::CreditCard, number: Some(" 1234 5678 ".into()), opening_balance: Some("-120.00".into()), opening_date: Some("2026-01-01".into()) },
+        &NewAccount { kind: Kind::CreditCard, number: Some(" 1234 5678 ".into()), opening_balance: Some("-120.00".into()), opening_date: Some("2026-01-01".into()), ..new_account("Card") },
         TODAY,
     )
     .unwrap();
@@ -177,6 +183,7 @@ fn an_update_writes_the_fields_given_and_makes_a_stamp_only_when_something_chang
         number: Some(Some("IE29 AIBK".into())),
         opening_balance: Some("1500.00".into()),
         opening_date: Some("2026-01-01".into()),
+        ..Default::default()
     };
     let changed = update(&w.conn, id, &patch, TODAY).unwrap();
     assert_eq!(
@@ -221,6 +228,365 @@ fn an_update_with_a_bad_field_changes_nothing() {
         assert_refused(&w.conn, INVALID, what, || update(&w.conn, id, &patch, TODAY));
     }
     assert_eq!(get(&w.conn, id, TODAY).unwrap().name, "Savings");
+}
+
+// ---- the details: BIC, notes, group, net worth, virtual balance (section 20) ---------------------
+
+use serde_json::{json, Value};
+
+/// A new account of one field, built the way the page sends it (JSON), so that `null` and a missing field are what they are on the wire.
+fn made(conn: &rusqlite::Connection, field: &str, value: Value, name: &str) -> Result<Account, AppError> {
+    create(conn, &serde_json::from_value(json!({ "name": name, "kind": "CASH", field: value })).unwrap(), TODAY)
+}
+
+fn changed(conn: &rusqlite::Connection, id: i64, field: &str, value: Value) -> Result<Account, AppError> {
+    update(conn, id, &serde_json::from_value(json!({ field: value })).unwrap(), TODAY)
+}
+
+/// What the page reads of an account in `field`.
+fn read(account: &Account, field: &str) -> Value {
+    serde_json::to_value(account).unwrap()[field].clone()
+}
+
+#[test]
+fn a_new_account_keeps_its_details_cleaned_and_the_defaults_for_the_rest() {
+    let w = world();
+    let full = create(
+        &w.conn,
+        &NewAccount {
+            bic: Some("  DEUTDEFF500 ".into()),
+            notes: Some("  Opened in 2019.\r\nCall the branch on Mondays.  ".into()),
+            group: Some(" Bank A ".into()),
+            include_in_net_worth: Some(false),
+            virtual_balance: Some("1000.00".into()),
+            opening_balance: Some("-240.00".into()),
+            ..new_account("Card")
+        },
+        TODAY,
+    )
+    .unwrap();
+    assert_eq!(
+        (full.bic.as_deref(), full.notes.as_deref(), full.group.as_deref(), full.include_in_net_worth, full.virtual_balance.as_str(), full.balance.as_str(), full.available.as_str()),
+        (Some("DEUTDEFF500"), Some("Opened in 2019.\nCall the branch on Mondays."), Some("Bank A"), false, "1000.00", "-240.00", "760.00"),
+        "trimmed, the line break made `\\n`, and available is the balance plus the virtual balance"
+    );
+    assert_eq!(get(&w.conn, full.id, TODAY).unwrap(), full);
+    assert_eq!(list(&w.conn, TODAY).unwrap()[1], full);
+    // nothing given: no BIC, no notes, no group, counted in net worth, no virtual balance; and `null` is nothing given
+    let plain = create(&w.conn, &new_account("Plain"), TODAY).unwrap();
+    assert_eq!((plain.bic, plain.notes, plain.group, plain.include_in_net_worth, plain.virtual_balance.as_str(), plain.available.as_str()), (None, None, None, true, "0.00", "0.00"));
+    let nulls: NewAccount = serde_json::from_value(json!({ "name": "Nulls", "kind": "CASH", "bic": null, "notes": null, "group": null, "includeInNetWorth": null, "virtualBalance": null })).unwrap();
+    let nulls = create(&w.conn, &nulls, TODAY).unwrap();
+    assert_eq!((nulls.bic, nulls.notes, nulls.group, nulls.include_in_net_worth, nulls.virtual_balance.as_str()), (None, None, None, true, "0.00"));
+    // a field that is only spaces is none
+    let blank = create(&w.conn, &NewAccount { bic: Some("   ".into()), notes: Some(" \n\t \r\n ".into()), group: Some("  ".into()), ..new_account("Blank") }, TODAY).unwrap();
+    assert_eq!((blank.bic, blank.notes, blank.group), (None, None, None));
+    // the row in the table holds the cleaned text
+    assert_eq!(text(&w.conn, &format!("SELECT bic || '|' || replace(notes, char(10), '/') || '|' || group_name || '|' || include_net_worth || '|' || virtual_balance_minor FROM accounts WHERE id = {}", full.id)), "DEUTDEFF500|Opened in 2019./Call the branch on Mondays.|Bank A|0|100000");
+}
+
+/// A field with what is accepted (as sent, and as read back) and what is refused.
+type FieldCases = Vec<(&'static str, Vec<(String, Value)>, Vec<String>)>;
+
+/// The values of each field: what is accepted with what it becomes, and what is refused, whether the account is made or changed.
+fn details() -> FieldCases {
+    let ok = |pairs: Vec<(String, &str)>| pairs.into_iter().map(|(input, shown)| (input, json!(shown))).collect::<Vec<_>>();
+    vec![
+        (
+            "bic",
+            ok(vec![("D".into(), "D"), ("x".repeat(20), &"x".repeat(20)), (" DEUT DEFF ".into(), "DEUT DEFF"), ("é".repeat(20), &"é".repeat(20)), (format!("  {}  ", "x".repeat(20)), &"x".repeat(20))]),
+            vec!["x".repeat(21), "é".repeat(21), "AB\tCD".into(), "AB\nCD".into(), "AB\u{7}".into(), "A\u{85}B".into(), "AB\u{0}".into()],
+        ),
+        (
+            "notes",
+            ok(vec![
+                ("x".repeat(1000), &"x".repeat(1000)),
+                ("one\ntwo".into(), "one\ntwo"),
+                ("one\r\ntwo".into(), "one\ntwo"),
+                ("one\rtwo".into(), "one\ntwo"),
+                ("é".repeat(1000), &"é".repeat(1000)),
+                // the length is counted after the line breaks are made `\n`: 499 breaks and 2 letters are 1000 characters
+                (format!("{}xx", "x\r\n".repeat(499)), &format!("{}xx", "x\n".repeat(499))),
+            ]),
+            vec![
+                "x".repeat(1001),
+                "é".repeat(1001),
+                format!("{}xxx", "x\r\n".repeat(499)),
+                "a\tb".into(),
+                "a\u{7}b".into(),
+                "a\u{0}b".into(),
+                "a\u{85}b".into(),
+                "a\u{1b}[0m".into(),
+            ],
+        ),
+        (
+            "group",
+            ok(vec![("g".into(), "g"), ("x".repeat(50), &"x".repeat(50)), (" Bank A ".into(), "Bank A"), ("é".repeat(50), &"é".repeat(50))]),
+            vec!["x".repeat(51), "é".repeat(51), "a\nb".into(), "a\tb".into(), "a\u{7}b".into()],
+        ),
+        (
+            "virtualBalance",
+            ok(vec![
+                ("9999999999.99".into(), "9999999999.99"),
+                ("-9999999999.99".into(), "-9999999999.99"),
+                ("0.00".into(), "0.00"),
+                ("-0.01".into(), "-0.01"),
+                ("0.01".into(), "0.01"),
+                ("1000.00".into(), "1000.00"),
+            ]),
+            ["10000000000.00", "-10000000000.00", "9999999999.995", "-0.00", "1.5", "+1.00", "", "1,00", "1e3", " 1.00", "1000", "--1.00", ".50", "0.5", "00.50", "1.000", "NaN", "-"].map(String::from).to_vec(),
+        ),
+    ]
+}
+
+#[test]
+fn each_new_text_or_money_field_is_accepted_at_its_bound_and_refused_beyond_it_when_made_and_when_changed() {
+    let w = world();
+    let target = account(&w.conn, "Target");
+    for (field, accepted, refused) in details() {
+        for (n, (input, shown)) in accepted.iter().enumerate() {
+            let made = made(&w.conn, field, json!(input), &format!("{field} {n}")).unwrap_or_else(|e| panic!("create {field} {input:?}: {e:?}"));
+            assert_eq!(&read(&made, field), shown, "create {field}");
+            let after = changed(&w.conn, target, field, json!(input)).unwrap_or_else(|e| panic!("update {field} {input:?}: {e:?}"));
+            assert_eq!(&read(&after, field), shown, "update {field}");
+            assert_eq!(read(&get(&w.conn, target, TODAY).unwrap(), field), *shown);
+        }
+        let kept = read(&get(&w.conn, target, TODAY).unwrap(), field);
+        for (n, input) in refused.iter().enumerate() {
+            assert_refused(&w.conn, INVALID, &format!("create {field} {input:?}"), || made(&w.conn, field, json!(input), &format!("refused {field} {n}")));
+            assert_refused(&w.conn, INVALID, &format!("update {field} {input:?}"), || changed(&w.conn, target, field, json!(input)));
+        }
+        assert_eq!(read(&get(&w.conn, target, TODAY).unwrap(), field), kept, "{field}: a refused change leaves the value");
+    }
+}
+
+#[test]
+fn the_new_fields_of_the_json_a_page_sends_are_text_text_text_a_boolean_and_text_and_nothing_else() {
+    for (what, body) in [
+        ("a number for the BIC", json!({ "bic": 5 })),
+        ("a boolean for the notes", json!({ "notes": true })),
+        ("an array for the group", json!({ "group": ["a"] })),
+        ("text for the flag", json!({ "includeInNetWorth": "yes" })),
+        ("a number for the flag", json!({ "includeInNetWorth": 1 })),
+        ("a number for the virtual balance", json!({ "virtualBalance": 1000 })),
+        ("a float for the virtual balance", json!({ "virtualBalance": 10.5 })),
+        ("the answer's own field", json!({ "available": "1.00" })),
+        ("a snake_case name", json!({ "include_in_net_worth": true })),
+        ("the column's name", json!({ "group_name": "x" })),
+        ("an unknown field", json!({ "color": "red" })),
+    ] {
+        assert!(serde_json::from_value::<AccountPatch>(body.clone()).is_err(), "patch: {what}");
+        let mut input = json!({ "name": "A", "kind": "CASH" });
+        input.as_object_mut().unwrap().extend(body.as_object().unwrap().clone());
+        assert!(serde_json::from_value::<NewAccount>(input).is_err(), "new account: {what}");
+    }
+    // `null` clears the three that can be cleared, and is "unchanged" for the other two
+    let patch: AccountPatch = serde_json::from_value(json!({ "bic": null, "notes": null, "group": null, "includeInNetWorth": null, "virtualBalance": null })).unwrap();
+    assert_eq!((patch.bic, patch.notes, patch.group, patch.include_in_net_worth, patch.virtual_balance), (Some(None), Some(None), Some(None), None, None));
+    let patch: AccountPatch = serde_json::from_value(json!({})).unwrap();
+    assert_eq!((patch.bic, patch.notes, patch.group), (None, None, None), "left out is unchanged");
+}
+
+#[test]
+fn null_clears_a_bic_a_notes_and_a_group_and_a_field_of_only_spaces_does_too() {
+    let w = world();
+    let id = create(
+        &w.conn,
+        &NewAccount { bic: Some("DEUTDEFF".into()), notes: Some("a\nb".into()), group: Some("Bank".into()), include_in_net_worth: Some(false), virtual_balance: Some("5.00".into()), ..new_account("A") },
+        TODAY,
+    )
+    .unwrap()
+    .id;
+    for (field, field_name) in [("bic", "bic"), ("notes", "notes"), ("group", "group")] {
+        let before = stamp_of(&w.conn, "accounts", id);
+        let cleared = changed(&w.conn, id, field, Value::Null).unwrap();
+        assert_eq!(read(&cleared, field_name), Value::Null, "{field}");
+        assert!(stamp_of(&w.conn, "accounts", id) > before, "{field}: clearing a value is a change");
+        // the others stayed
+        assert_eq!((cleared.name.as_str(), cleared.include_in_net_worth, cleared.virtual_balance.as_str()), ("A", false, "5.00"));
+        assert_nothing_written(&w.conn, "clearing what is clear", || changed(&w.conn, id, field, Value::Null));
+    }
+    let account = get(&w.conn, id, TODAY).unwrap();
+    assert_eq!((account.bic, account.notes, account.group), (None, None, None));
+    // only spaces (and for the notes only breaks and tabs) clear it as well
+    for (field, blank) in [("bic", "   "), ("notes", " \n\r\n\t "), ("group", "  \t ")] {
+        changed(&w.conn, id, field, json!("x")).unwrap();
+        let before = stamp_of(&w.conn, "accounts", id);
+        assert_eq!(read(&changed(&w.conn, id, field, json!(blank)).unwrap(), field), Value::Null, "{field}");
+        assert!(stamp_of(&w.conn, "accounts", id) > before, "{field}");
+        assert_nothing_written(&w.conn, "blank again", || changed(&w.conn, id, field, json!(blank)));
+    }
+    // a field that is not in the patch stays
+    changed(&w.conn, id, "bic", json!("KEEP")).unwrap();
+    assert_eq!(update(&w.conn, id, &AccountPatch { name: Some("B".into()), ..Default::default() }, TODAY).unwrap().bic.as_deref(), Some("KEEP"));
+}
+
+/// One account that holds `first`, and then every spelling of "the value it has" writes nothing and makes no stamp.
+fn nothing_changes(field: &str, first: Value, same: &[Value]) {
+    let w = world();
+    let id = account(&w.conn, "A");
+    let before_any = stamp_of(&w.conn, "accounts", id);
+    changed(&w.conn, id, field, first.clone()).unwrap();
+    assert!(stamp_of(&w.conn, "accounts", id) > before_any, "{field}: the first value is a change");
+    for value in std::iter::once(&first).chain(same) {
+        assert_nothing_written(&w.conn, &format!("{field} = {value}"), || changed(&w.conn, id, field, value.clone()));
+    }
+    // together with the other fields at their values, and with an empty patch
+    assert_nothing_written(&w.conn, "an empty patch", || update(&w.conn, id, &AccountPatch::default(), TODAY));
+    let current = get(&w.conn, id, TODAY).unwrap();
+    assert_nothing_written(&w.conn, "all the fields as they are", || {
+        update(
+            &w.conn,
+            id,
+            &AccountPatch {
+                name: Some(current.name.clone()),
+                kind: Some(current.kind),
+                bic: Some(current.bic.clone()),
+                notes: Some(current.notes.clone()),
+                group: Some(current.group.clone()),
+                include_in_net_worth: Some(current.include_in_net_worth),
+                virtual_balance: Some(current.virtual_balance.clone()),
+                ..Default::default()
+            },
+            TODAY,
+        )
+    });
+    // and a field that was never set, cleared or set to nothing
+    if field != "includeInNetWorth" && field != "virtualBalance" {
+        let fresh = account(&w.conn, "Never set");
+        assert_nothing_written(&w.conn, "null on a field that is null", || changed(&w.conn, fresh, field, Value::Null));
+        assert_nothing_written(&w.conn, "spaces on a field that is null", || changed(&w.conn, fresh, field, json!("   ")));
+    }
+}
+
+#[test]
+fn a_patch_that_sets_the_bic_to_what_it_has_writes_nothing() {
+    nothing_changes("bic", json!("DEUTDEFF"), &[json!("  DEUTDEFF "), json!("DEUTDEFF\u{20}")]);
+}
+
+#[test]
+fn a_patch_that_sets_the_notes_to_what_they_are_writes_nothing() {
+    nothing_changes("notes", json!("one\ntwo"), &[json!("one\r\ntwo"), json!("one\rtwo"), json!("\n one\ntwo \n")]);
+}
+
+#[test]
+fn a_patch_that_sets_the_group_to_what_it_is_writes_nothing() {
+    nothing_changes("group", json!("Bank A"), &[json!(" Bank A "), json!("Bank A\t")]);
+}
+
+#[test]
+fn a_patch_that_sets_the_flag_to_what_it_is_writes_nothing() {
+    nothing_changes("includeInNetWorth", json!(false), &[json!(false)]);
+    // the default is true: saying so is no change either
+    let w = world();
+    let id = account(&w.conn, "A");
+    assert_nothing_written(&w.conn, "true on an account that counts", || changed(&w.conn, id, "includeInNetWorth", json!(true)));
+}
+
+#[test]
+fn a_patch_that_sets_the_virtual_balance_to_what_it_is_writes_nothing() {
+    nothing_changes("virtualBalance", json!("1000.00"), &[json!("1000.00")]);
+    let w = world();
+    let id = account(&w.conn, "A");
+    assert_nothing_written(&w.conn, "0.00 on an account that has none", || changed(&w.conn, id, "virtualBalance", json!("0.00")));
+}
+
+#[test]
+fn a_new_detail_that_changes_makes_a_stamp_and_a_good_one_with_a_bad_one_changes_nothing() {
+    let w = world();
+    let id = account(&w.conn, "A");
+    for (field, value) in [("bic", json!("DEUTDEFF")), ("notes", json!("n")), ("group", json!("g")), ("includeInNetWorth", json!(false)), ("virtualBalance", json!("1.00"))] {
+        let before = stamp_of(&w.conn, "accounts", id);
+        changed(&w.conn, id, field, value).unwrap();
+        assert!(stamp_of(&w.conn, "accounts", id) > before, "{field}");
+    }
+    let other = account(&w.conn, "Other");
+    let bad = [
+        ("a good BIC with a long group", json!({ "bic": "NEW", "group": "x".repeat(51) })),
+        ("a good group with a bad virtual balance", json!({ "group": "New", "virtualBalance": "-0.00" })),
+        ("a good flag with notes that hold a tab", json!({ "includeInNetWorth": true, "notes": "a\tb" })),
+        ("a good virtual balance with a long BIC", json!({ "virtualBalance": "9.00", "bic": "x".repeat(21) })),
+        ("good details with a bad opening balance", json!({ "bic": "NEW", "notes": "n", "openingBalance": "1.5" })),
+        ("good details with a taken name", json!({ "bic": "NEW", "name": "Other" })),
+    ];
+    for (what, body) in bad {
+        let patch: AccountPatch = serde_json::from_value(body).unwrap();
+        let expected = if what.contains("taken name") { NAME_EXISTS } else { INVALID };
+        assert_refused(&w.conn, expected, what, || update(&w.conn, id, &patch, TODAY));
+    }
+    // the same on create: a bad detail makes no account
+    for (what, input) in [
+        ("long BIC", NewAccount { bic: Some("x".repeat(21)), ..new_account("New") }),
+        ("notes with a tab", NewAccount { notes: Some("a\tb".into()), ..new_account("New") }),
+        ("long group", NewAccount { group: Some("x".repeat(51)), ..new_account("New") }),
+        ("virtual balance beyond the range", NewAccount { virtual_balance: Some("10000000000.00".into()), ..new_account("New") }),
+        ("good details and a taken name", NewAccount { bic: Some("NEW".into()), ..new_account("other") }),
+    ] {
+        let expected = if what.contains("taken name") { NAME_EXISTS } else { INVALID };
+        assert_refused(&w.conn, expected, what, || create(&w.conn, &input, TODAY));
+    }
+    assert_eq!(get(&w.conn, other, TODAY).unwrap().bic, None);
+}
+
+#[test]
+fn an_archived_account_takes_no_new_detail_until_it_is_restored() {
+    let w = world();
+    let id = create(&w.conn, &NewAccount { bic: Some("OLD".into()), notes: Some("old".into()), group: Some("Old".into()), virtual_balance: Some("5.00".into()), ..new_account("Old") }, TODAY).unwrap().id;
+    archive(&w.conn, id, TODAY).unwrap();
+    let held = get(&w.conn, id, TODAY).unwrap();
+    for (field, value) in [
+        ("bic", json!("NEW")),
+        ("bic", json!(null)),
+        ("bic", json!("OLD")),
+        ("notes", json!("new")),
+        ("notes", json!(null)),
+        ("group", json!("New")),
+        ("group", json!(null)),
+        ("includeInNetWorth", json!(false)),
+        ("includeInNetWorth", json!(true)),
+        ("virtualBalance", json!("9.00")),
+        ("virtualBalance", json!("5.00")),
+    ] {
+        assert_refused(&w.conn, INVALID, &format!("{field} = {value} on an archived account"), || changed(&w.conn, id, field, value.clone()));
+    }
+    assert_eq!(get(&w.conn, id, TODAY).unwrap(), held, "nothing changed");
+    restore(&w.conn, id, TODAY).unwrap();
+    assert_eq!(read(&changed(&w.conn, id, "bic", json!("NEW")).unwrap(), "bic"), json!("NEW"));
+    assert!(!changed(&w.conn, id, "includeInNetWorth", json!(false)).unwrap().include_in_net_worth);
+    // the details stay while it is archived and come back with it
+    archive(&w.conn, id, TODAY).unwrap();
+    let archived = get(&w.conn, id, TODAY).unwrap();
+    assert_eq!((archived.bic.as_deref(), archived.notes.as_deref(), archived.group.as_deref(), archived.include_in_net_worth, archived.virtual_balance.as_str()), (Some("NEW"), Some("old"), Some("Old"), false, "5.00"));
+}
+
+#[test]
+fn the_main_account_takes_all_five_fields_like_any_other_and_stays_the_main_account() {
+    let w = world();
+    let made = update(
+        &w.conn,
+        MAIN_ID,
+        &AccountPatch {
+            bic: Some(Some("DEUTDEFF".into())),
+            notes: Some(Some("the one that always stays\nsecond line".into())),
+            group: Some(Some("Bank A".into())),
+            include_in_net_worth: Some(false),
+            virtual_balance: Some("-50.00".into()),
+            ..Default::default()
+        },
+        TODAY,
+    )
+    .unwrap();
+    assert_eq!(
+        (made.bic.as_deref(), made.notes.as_deref(), made.group.as_deref(), made.include_in_net_worth, made.virtual_balance.as_str(), made.available.as_str(), made.is_main, made.archived),
+        (Some("DEUTDEFF"), Some("the one that always stays\nsecond line"), Some("Bank A"), false, "-50.00", "-50.00", true, false)
+    );
+    assert!(stamp_of(&w.conn, "accounts", MAIN_ID).as_str() > crate::sync::engine::UNSET_STAMP, "the first real edit gives it a real stamp");
+    assert_eq!(text(&w.conn, "SELECT sync_id FROM accounts WHERE id = 1"), super::MAIN_SYNC_ID);
+    assert!(super::check(&w.conn).unwrap());
+    // and each of the five can be cleared again
+    let cleared = update(&w.conn, MAIN_ID, &serde_json::from_value(json!({ "bic": null, "notes": null, "group": null, "includeInNetWorth": true, "virtualBalance": "0.00" })).unwrap(), TODAY).unwrap();
+    assert_eq!((cleared.bic, cleared.notes, cleared.group, cleared.include_in_net_worth, cleared.virtual_balance.as_str()), (None, None, None, true, "0.00"));
+    assert_refused(&w.conn, INVALID, "it still cannot be archived", || archive(&w.conn, MAIN_ID, TODAY));
 }
 
 // ---- ACTIVE: reorder -------------------------------------------------------------------------

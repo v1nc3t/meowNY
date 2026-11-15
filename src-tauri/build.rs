@@ -133,11 +133,13 @@ const COMMANDS: &[&str] = &[
     "reorder_accounts",
     "account_statement",
     "account_history",
+    "account_breakdown",
     "accounts_summary",
     "create_transfer",
     "get_transfer",
     "update_transfer",
     "delete_transfer",
+    "list_transfers",
 ];
 
 fn main() {

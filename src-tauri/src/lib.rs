@@ -361,11 +361,13 @@ pub fn run() {
             commands::reorder_accounts,
             commands::account_statement,
             commands::account_history,
+            commands::account_breakdown,
             commands::accounts_summary,
             commands::create_transfer,
             commands::get_transfer,
             commands::update_transfer,
             commands::delete_transfer,
+            commands::list_transfers,
         ])
         .build(tauri::generate_context!())
         .expect("error while building meowNY")

@@ -135,11 +135,13 @@
     "allow-reorder-accounts",
     "allow-account-statement",
     "allow-account-history",
+    "allow-account-breakdown",
     "allow-accounts-summary",
     "allow-create-transfer",
     "allow-get-transfer",
     "allow-update-transfer",
     "allow-delete-transfer",
+    "allow-list-transfers",
     "core:event:allow-listen",
     "core:event:allow-unlisten",
     {

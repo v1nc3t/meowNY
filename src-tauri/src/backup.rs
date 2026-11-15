@@ -870,7 +870,7 @@ mod tests {
         // a second account and a transfer into it
         let savings = crate::accounts::create(
             &conn,
-            &crate::accounts::NewAccount { name: "Savings".into(), kind: crate::accounts::Kind::Savings, number: None, opening_balance: Some("-12.00".into()), opening_date: Some("2026-01-01".into()) },
+            &crate::accounts::NewAccount { name: "Savings".into(), kind: crate::accounts::Kind::Savings, number: None, opening_balance: Some("-12.00".into()), opening_date: Some("2026-01-01".into()), bic: None, notes: None, group: None, include_in_net_worth: None, virtual_balance: None },
             "2026-02-04",
         )
         .unwrap();

@@ -6,7 +6,8 @@ use rusqlite::Connection;
 
 use super::fixtures::*;
 use super::transfers;
-use super::{create, get, history, list, statement, summary, update, AccountPatch, HistoryPoint, Kind, Line, NewAccount, MAIN_ID, MAIN_NAME};
+use super::{breakdown, create, get, history, list, statement, summary, update, AccountPatch, Breakdown, HistoryPoint, Kind, Line, NewAccount, Share, MAIN_ID, MAIN_NAME};
+use crate::categories::{self, CategoryType};
 use crate::debts::fixtures::{equal, who};
 use crate::debts::ledger::{self, Expense, NewEntry};
 use crate::debts::people;
@@ -449,4 +450,533 @@ fn net_worth_is_every_account_today_plus_what_friends_owe_and_accounts_are_in_us
     assert_eq!(summary(&w.conn, "2026-11-14").unwrap().net_worth, "5940.00");
     assert_refused(&w.conn, INVALID, "a today that is no date", || summary(&w.conn, "now"));
     assert_nothing_written(&w.conn, "reading the summary and the list", || summary(&w.conn, TODAY).and(list(&w.conn, TODAY)));
+}
+
+// ---- the virtual balance and what is available (section 20.3) ----------------------------------
+
+fn limit_of(conn: &Connection, name: &str, opening: &str, virtual_balance: &str) -> i64 {
+    create(conn, &NewAccount { opening_balance: Some(opening.into()), opening_date: Some("2026-01-01".into()), virtual_balance: Some(virtual_balance.into()), ..new_account(name) }, TODAY).unwrap().id
+}
+
+fn set_virtual(conn: &Connection, id: i64, amount: &str) -> super::Account {
+    update(conn, id, &AccountPatch { virtual_balance: Some(amount.into()), ..Default::default() }, TODAY).unwrap()
+}
+
+fn count_in_net_worth(conn: &Connection, id: i64, counts: bool) {
+    update(conn, id, &AccountPatch { include_in_net_worth: Some(counts), ..Default::default() }, TODAY).unwrap();
+}
+
+#[test]
+fn available_is_the_balance_plus_the_virtual_balance_for_every_sign_of_either() {
+    let w = world();
+    for (n, (balance, virtual_balance, available)) in [
+        ("100.00", "50.00", "150.00"),
+        ("100.00", "0.00", "100.00"),
+        ("100.00", "-30.00", "70.00"),
+        ("100.00", "-100.00", "0.00"),
+        ("100.00", "-130.00", "-30.00"),
+        ("0.00", "0.00", "0.00"),
+        ("0.00", "1000.00", "1000.00"),
+        ("-240.00", "1000.00", "760.00"),
+        ("-240.00", "240.00", "0.00"),
+        ("-240.00", "100.00", "-140.00"),
+        ("-240.00", "-10.00", "-250.00"),
+        ("-0.01", "0.01", "0.00"),
+        ("9999999999.99", "9999999999.99", "19999999999.98"),
+        ("-9999999999.99", "-9999999999.99", "-19999999999.98"),
+    ]
+    .iter()
+    .enumerate()
+    {
+        let id = limit_of(&w.conn, &format!("A{n}"), balance, virtual_balance);
+        for shown in [get(&w.conn, id, TODAY).unwrap(), list(&w.conn, TODAY).unwrap().into_iter().find(|a| a.id == id).unwrap()] {
+            assert_eq!((shown.balance.as_str(), shown.virtual_balance.as_str(), shown.available.as_str()), (*balance, *virtual_balance, *available), "balance {balance} and virtual {virtual_balance}");
+        }
+    }
+    // an account that was given no virtual balance: available is the balance
+    let plain = opened(&w.conn, "Plain", "-12.50", "2026-01-01");
+    assert_eq!((get(&w.conn, plain, TODAY).unwrap().virtual_balance.as_str(), get(&w.conn, plain, TODAY).unwrap().available.as_str()), ("0.00", "-12.50"));
+    // the answer of an update and of the list says the same
+    let json = serde_json::to_value(set_virtual(&w.conn, plain, "100.00")).unwrap();
+    assert_eq!((json["balance"].as_str(), json["virtualBalance"].as_str(), json["available"].as_str()), (Some("-12.50"), Some("100.00"), Some("87.50")));
+}
+
+#[test]
+fn a_credit_card_with_a_limit_follows_its_rows_in_available_and_the_future_is_not_in_it() {
+    let w = world();
+    let card = limit_of(&w.conn, "Card", "-100.00", "1000.00");
+    let now = |a: i64| {
+        let c = get(&w.conn, a, TODAY).unwrap();
+        (c.balance, c.available)
+    };
+    assert_eq!(now(card), ("-100.00".to_string(), "900.00".to_string()));
+    on(&w.conn, card, w.food, "Shop", "140.00", "2026-11-01");
+    assert_eq!(now(card), ("-240.00".to_string(), "760.00".to_string()), "balance -240.00 and a limit of 1000.00: 760.00 can still be spent");
+    on(&w.conn, card, w.food, "Later", "100.00", "2026-11-20");
+    assert_eq!(now(card), ("-240.00".to_string(), "760.00".to_string()), "a row dated after today is in neither");
+    on(&w.conn, card, w.salary, "Refund", "40.00", "2026-11-05");
+    assert_eq!(now(card), ("-200.00".to_string(), "800.00".to_string()));
+    transfer(&w.conn, MAIN_ID, card, "200.00", "2026-11-06");
+    assert_eq!(now(card), ("0.00".to_string(), "1000.00".to_string()));
+    // the limit changes what is available and nothing else; a negative one is allowed
+    assert_eq!(set_virtual(&w.conn, card, "500.00").available, "500.00");
+    assert_eq!(set_virtual(&w.conn, card, "-50.00").available, "-50.00");
+    assert_eq!((set_virtual(&w.conn, card, "0.00").available.as_str(), get(&w.conn, card, TODAY).unwrap().balance.as_str()), ("0.00", "0.00"));
+    assert_eq!(get(&w.conn, card, "2026-11-25").unwrap().available, "-100.00", "a later today brings the row of the 20th into both");
+}
+
+/// Everything the virtual balance must leave alone, as text: each account's numbers, its statement, its chart, and net worth.
+fn numbers(conn: &Connection, accounts: &[i64]) -> Vec<String> {
+    let mut out = Vec::new();
+    for id in accounts {
+        let a = get(conn, *id, TODAY).unwrap();
+        out.push(format!("{} {} {:?} {} {} {}", a.balance, a.change_this_month, a.last_activity, a.entries, a.opening_balance, a.include_in_net_worth));
+        let s = statement(conn, *id, "2026-01-01", "2026-12-31", TODAY).unwrap();
+        out.push(format!("{} {} {:?}", s.balance_before, s.balance_after, s.lines));
+        out.push(format!("{:?}", history(conn, *id, "2026", TODAY).unwrap()));
+    }
+    out.push(format!("{:?}", summary(conn, TODAY).unwrap()));
+    out
+}
+
+#[test]
+fn the_virtual_balance_is_in_no_balance_statement_chart_or_net_worth() {
+    let w = world();
+    let anna = friend(&w.conn, "Anna");
+    let card = opened(&w.conn, "Card", "-100.00", "2026-01-01");
+    let cash = opened(&w.conn, "Cash", "50.00", "2026-02-01");
+    on(&w.conn, card, w.food, "Shop", "140.00", "2026-11-01");
+    on(&w.conn, MAIN_ID, w.salary, "Pay", "1000.00", "2026-11-02");
+    on(&w.conn, cash, w.food, "Later", "5.00", "2026-12-01");
+    transfer(&w.conn, MAIN_ID, card, "200.00", "2026-11-06");
+    entry(&w.conn, cash, anna, ledger::Kind::Lent, "10.00", "2026-11-07");
+    let accounts = [MAIN_ID, card, cash];
+    let before = numbers(&w.conn, &accounts);
+    for amount in ["1000.00", "-500.00", "9999999999.99", "-9999999999.99", "0.01"] {
+        for id in accounts {
+            set_virtual(&w.conn, id, amount);
+        }
+        assert_eq!(numbers(&w.conn, &accounts), before, "virtual balance {amount} on every account");
+    }
+    // the account inside a statement carries the virtual balance and what is available, and the lines and balances are as before
+    let st = statement(&w.conn, card, "2026-11-01", "2026-11-30", TODAY).unwrap();
+    assert_eq!((st.account.virtual_balance.as_str(), st.account.available.as_str(), st.account.balance.as_str()), ("0.01", "-39.99", "-40.00"));
+    // back to none: the same again
+    for id in accounts {
+        set_virtual(&w.conn, id, "0.00");
+    }
+    assert_eq!(numbers(&w.conn, &accounts), before);
+    assert_eq!(balance(&w.conn, card, TODAY), -4000);
+}
+
+// ---- "count in net worth" ----------------------------------------------------------------------
+
+#[test]
+fn net_worth_adds_only_the_accounts_that_count_and_what_friends_owe_is_always_in() {
+    let w = world();
+    let anna = friend(&w.conn, "Anna");
+    on(&w.conn, MAIN_ID, w.salary, "Pay", "1000.00", "2026-11-01");
+    entry(&w.conn, MAIN_ID, anna, ledger::Kind::Lent, "40.00", "2026-11-02");
+    let savings = opened(&w.conn, "Savings", "5000.00", "2026-01-01");
+    let cash = opened(&w.conn, "Cash", "200.00", "2026-01-01");
+    let card = opened(&w.conn, "Card", "-300.00", "2026-01-01");
+    let figures = || {
+        let s = summary(&w.conn, TODAY).unwrap();
+        (s.in_accounts, s.friends, s.net_worth, s.accounts, s.in_use)
+    };
+    let expect = |in_accounts: &str, net_worth: &str| (in_accounts.to_string(), "40.00".to_string(), net_worth.to_string(), 4u32, true);
+    // main 960.00, savings 5000.00, cash 200.00, card -300.00
+    assert_eq!(figures(), expect("5860.00", "5900.00"));
+
+    // one account that does not count
+    count_in_net_worth(&w.conn, cash, false);
+    assert_eq!(figures(), expect("5660.00", "5700.00"));
+    // only the main account left out
+    count_in_net_worth(&w.conn, cash, true);
+    count_in_net_worth(&w.conn, MAIN_ID, false);
+    assert_eq!(figures(), expect("4900.00", "4940.00"), "the main account may be left out like any other");
+    // a negative account left out makes net worth larger
+    count_in_net_worth(&w.conn, card, false);
+    assert_eq!(figures(), expect("5200.00", "5240.00"));
+    // every account left out: nothing in accounts, and friends still count
+    count_in_net_worth(&w.conn, savings, false);
+    count_in_net_worth(&w.conn, cash, false);
+    assert_eq!(figures(), expect("0.00", "40.00"), "no account counts: 0.00 in accounts, what friends owe is net worth");
+    assert_eq!(serde_json::to_value(summary(&w.conn, TODAY).unwrap()).unwrap(), serde_json::json!({ "inAccounts": "0.00", "friends": "40.00", "netWorth": "40.00", "accounts": 4, "inUse": true }));
+    // the balances themselves did not change, whatever counts
+    assert_eq!([MAIN_ID, savings, cash, card].map(|id| get(&w.conn, id, TODAY).unwrap().balance), ["960.00", "5000.00", "200.00", "-300.00"].map(String::from));
+    // switching it back brings the number back
+    for id in [MAIN_ID, savings, cash, card] {
+        count_in_net_worth(&w.conn, id, true);
+    }
+    assert_eq!(figures(), expect("5860.00", "5900.00"));
+    // turning it on for an account that counts, and off twice, are no changes of the number
+    count_in_net_worth(&w.conn, cash, true);
+    count_in_net_worth(&w.conn, cash, false);
+    count_in_net_worth(&w.conn, cash, false);
+    assert_eq!(figures(), expect("5660.00", "5700.00"));
+}
+
+#[test]
+fn an_archived_account_counts_in_net_worth_when_its_flag_is_on_and_not_when_it_is_off() {
+    let w = world();
+    let old = opened(&w.conn, "Old", "700.00", "2026-01-01");
+    let in_accounts = || summary(&w.conn, TODAY).unwrap().in_accounts;
+    assert_eq!(in_accounts(), "700.00");
+    // archived with the flag on: still counted, as before
+    super::archive(&w.conn, old, TODAY).unwrap();
+    assert_eq!(in_accounts(), "700.00");
+    // the flag cannot be changed while it is archived; restore, change, archive again
+    assert_refused(&w.conn, INVALID, "the flag of an archived account", || update(&w.conn, old, &AccountPatch { include_in_net_worth: Some(false), ..Default::default() }, TODAY));
+    super::restore(&w.conn, old, TODAY).unwrap();
+    count_in_net_worth(&w.conn, old, false);
+    assert_eq!(in_accounts(), "0.00");
+    super::archive(&w.conn, old, TODAY).unwrap();
+    assert_eq!(in_accounts(), "0.00", "archived and left out");
+    assert!(!get(&w.conn, old, TODAY).unwrap().include_in_net_worth, "the flag stays with it");
+    assert_eq!(get(&w.conn, old, TODAY).unwrap().balance, "700.00");
+    super::restore(&w.conn, old, TODAY).unwrap();
+    assert_eq!(in_accounts(), "0.00", "restoring does not turn it on");
+    count_in_net_worth(&w.conn, old, true);
+    assert_eq!(in_accounts(), "700.00");
+}
+
+#[test]
+fn the_count_of_accounts_and_in_use_do_not_depend_on_what_counts_in_net_worth() {
+    let w = world();
+    // only the main account, left out: with an opening balance it is in use; with none it is not
+    count_in_net_worth(&w.conn, MAIN_ID, false);
+    let s = summary(&w.conn, TODAY).unwrap();
+    assert_eq!((s.in_accounts.as_str(), s.net_worth.as_str(), s.accounts, s.in_use), ("0.00", "0.00", 1, false), "an untouched main account is not in use, counted or not");
+    update(&w.conn, MAIN_ID, &AccountPatch { opening_balance: Some("100.00".into()), opening_date: Some("2026-01-01".into()), ..Default::default() }, TODAY).unwrap();
+    let s = summary(&w.conn, TODAY).unwrap();
+    assert_eq!((s.in_accounts.as_str(), s.net_worth.as_str(), s.accounts, s.in_use), ("0.00", "0.00", 1, true), "it holds 100.00 and counts for nothing, but accounts are in use");
+    count_in_net_worth(&w.conn, MAIN_ID, true);
+    assert_eq!(summary(&w.conn, TODAY).unwrap().in_accounts, "100.00");
+    // a second account, left out from the start, makes accounts in use and is counted in `accounts`
+    let w = world();
+    create(&w.conn, &NewAccount { include_in_net_worth: Some(false), opening_balance: Some("5.00".into()), opening_date: Some("2026-01-01".into()), ..new_account("Off") }, TODAY).unwrap();
+    let s = summary(&w.conn, TODAY).unwrap();
+    assert_eq!((s.in_accounts.as_str(), s.accounts, s.in_use), ("0.00", 2, true));
+    // an account whose rows are all in the future and is left out
+    let later = opened(&w.conn, "Later", "10.00", "2027-01-01");
+    count_in_net_worth(&w.conn, later, false);
+    assert_eq!(summary(&w.conn, "2027-02-01").unwrap().in_accounts, "0.00");
+    count_in_net_worth(&w.conn, later, true);
+    assert_eq!(summary(&w.conn, "2027-02-01").unwrap().in_accounts, "10.00");
+    assert_eq!(summary(&w.conn, TODAY).unwrap().in_accounts, "0.00");
+    assert_nothing_written(&w.conn, "reading the summary", || summary(&w.conn, TODAY));
+}
+
+#[test]
+fn net_worth_and_available_equal_a_plain_sum_for_random_rows_flags_and_virtual_balances() {
+    for seed in [3u64, 11, 2026, 424_242] {
+        let w = world();
+        let mut rng = Rng(seed);
+        let ids = [MAIN_ID, account(&w.conn, "A"), opened(&w.conn, "B", "-80.00", "2026-02-01"), account(&w.conn, "C"), opened(&w.conn, "D", "300.00", "2026-12-20")];
+        let mut moves = vec![Move { account: ids[2], day: "2026-02-01".into(), delta: -8000, opening: true }, Move { account: ids[4], day: "2026-12-20".into(), delta: 30_000, opening: true }];
+        for _ in 0..90 {
+            let account = ids[rng.between(0, 4) as usize];
+            let (minor, amount) = cents(&mut rng);
+            let date = day(&mut rng);
+            match rng.between(0, 3) {
+                0 => {
+                    on(&w.conn, account, w.food, "Shop", &amount, &date);
+                    moves.push(Move { account, day: date, delta: -minor, opening: false });
+                }
+                1 => {
+                    on(&w.conn, account, w.salary, "Pay", &amount, &date);
+                    moves.push(Move { account, day: date, delta: minor, opening: false });
+                }
+                _ => {
+                    let to = ids[(ids.iter().position(|a| *a == account).unwrap() + 1 + rng.between(0, 3) as usize) % 5];
+                    transfers::create(&w.conn, &new_transfer(account, to, &amount, &date)).unwrap();
+                    moves.push(Move { account, day: date.clone(), delta: -minor, opening: false });
+                    moves.push(Move { account: to, day: date, delta: minor, opening: false });
+                }
+            }
+        }
+        for round in 0..6 {
+            let mut counts = Vec::new();
+            let mut virtual_minor = Vec::new();
+            for id in ids {
+                let on = round == 0 || rng.between(0, 2) > 0;
+                let limit = rng.between(0, 600_000) as i64 - 300_000;
+                update(&w.conn, id, &AccountPatch { include_in_net_worth: Some(on), virtual_balance: Some(format_amount(limit)), ..Default::default() }, TODAY).unwrap();
+                counts.push(on);
+                virtual_minor.push(limit);
+            }
+            let held: Vec<i64> = ids.iter().map(|id| model_balance(&moves, *id, TODAY)).collect();
+            let expected: i64 = held.iter().zip(&counts).filter(|(_, on)| **on).map(|(b, _)| *b).sum();
+            let s = summary(&w.conn, TODAY).unwrap();
+            assert_eq!((s.in_accounts.as_str(), s.net_worth.as_str(), s.friends.as_str(), s.accounts), (format_amount(expected).as_str(), format_amount(expected).as_str(), "0.00", 5), "seed {seed} round {round}");
+            for (n, id) in ids.iter().enumerate() {
+                let a = get(&w.conn, *id, TODAY).unwrap();
+                assert_eq!((a.balance, a.available, a.include_in_net_worth), (format_amount(held[n]), format_amount(held[n] + virtual_minor[n]), counts[n]), "seed {seed} round {round} account {id}");
+            }
+        }
+    }
+}
+
+// ---- what an account paid and took in, by category (section 20.4) ------------------------------
+
+fn expense_category(conn: &Connection, name: &str) -> i64 {
+    categories::create(conn, name, CategoryType::Expense).unwrap().id
+}
+
+fn income_category(conn: &Connection, name: &str) -> i64 {
+    categories::create(conn, name, CategoryType::Income).unwrap().id
+}
+
+/// (name, amount) of each share, in order.
+fn shares(list: &[Share]) -> Vec<(&str, &str)> {
+    list.iter().map(|s| (s.name.as_str(), s.amount.as_str())).collect()
+}
+
+const NOT_FOUND: crate::vault::AppError = crate::vault::AppError::NotFound;
+
+#[test]
+fn the_breakdown_of_an_empty_period_has_empty_lists_and_totals_of_zero() {
+    let w = world();
+    let b = breakdown(&w.conn, MAIN_ID, "2026-11-01", "2026-11-30").unwrap();
+    assert_eq!(b, Breakdown { from: "2026-11-01".into(), to: "2026-11-30".into(), expenses: vec![], income: vec![], expense_total: "0.00".into(), income_total: "0.00".into() });
+    assert_eq!(serde_json::to_value(&b).unwrap(), serde_json::json!({ "from": "2026-11-01", "to": "2026-11-30", "expenses": [], "income": [], "expenseTotal": "0.00", "incomeTotal": "0.00" }));
+    // rows outside the period make it no less empty, and a one-day period is a period
+    on(&w.conn, MAIN_ID, w.food, "Shop", "9.00", "2026-10-31");
+    on(&w.conn, MAIN_ID, w.salary, "Pay", "9.00", "2026-12-01");
+    assert_eq!(breakdown(&w.conn, MAIN_ID, "2026-11-01", "2026-11-30").unwrap(), b);
+    assert_eq!(breakdown(&w.conn, MAIN_ID, "2026-11-13", "2026-11-13").unwrap().expense_total, "0.00");
+    assert_nothing_written(&w.conn, "reading a breakdown", || breakdown(&w.conn, MAIN_ID, "2026-01-01", "2026-12-31"));
+}
+
+#[test]
+fn transfers_ledger_entries_and_opening_balances_are_not_in_a_breakdown() {
+    let w = world();
+    let anna = friend(&w.conn, "Anna");
+    let cash = opened(&w.conn, "Cash", "500.00", "2026-11-02");
+    transfer(&w.conn, MAIN_ID, cash, "200.00", "2026-11-03");
+    transfer(&w.conn, cash, MAIN_ID, "10.00", "2026-11-04");
+    entry(&w.conn, cash, anna, ledger::Kind::Lent, "20.00", "2026-11-05");
+    entry(&w.conn, cash, anna, ledger::Kind::Borrowed, "30.00", "2026-11-05");
+    entry(&w.conn, MAIN_ID, anna, ledger::Kind::RepaidToMe, "5.00", "2026-11-06");
+    entry(&w.conn, MAIN_ID, anna, ledger::Kind::RepaidByMe, "6.00", "2026-11-06");
+    for account in [MAIN_ID, cash] {
+        let b = breakdown(&w.conn, account, "2026-11-01", "2026-11-30").unwrap();
+        assert_eq!((b.expenses, b.income, b.expense_total.as_str(), b.income_total.as_str()), (vec![], vec![], "0.00", "0.00"), "account {account}: only transfers, entries and an opening balance moved it");
+    }
+    // one transaction among them is the only thing in it
+    on(&w.conn, cash, w.food, "Shop", "12.50", "2026-11-07");
+    let b = breakdown(&w.conn, cash, "2026-11-01", "2026-11-30").unwrap();
+    assert_eq!((shares(&b.expenses), b.expense_total.as_str(), b.income.len()), (vec![("Food", "12.50")], "12.50", 0));
+}
+
+#[test]
+fn a_bill_you_paid_counts_whole_and_a_bill_a_friend_paid_not_at_all() {
+    let w = world();
+    let (anna, bob) = (friend(&w.conn, "Anna"), friend(&w.conn, "Bob"));
+    let cash = account(&w.conn, "Cash");
+    // 90.00 you paid, shared in three: the account paid all of it, whatever your part is
+    let dinner = on(&w.conn, MAIN_ID, w.food, "Dinner", "90.00", "2026-11-02");
+    set_split(&w.conn, dinner, &equal(vec![who(anna), who(bob)])).unwrap();
+    // 40.00 Bob paid: nothing left the account
+    let lunch = on(&w.conn, MAIN_ID, w.food, "Lunch", "40.00", "2026-11-04");
+    set_split(&w.conn, lunch, &paid_by(bob, equal(vec![who(bob)]))).unwrap();
+    // the same in another category, so that a bill nobody paid for the account cannot hide in a shared total
+    let rent = on(&w.conn, MAIN_ID, w.rent, "Their rent", "500.00", "2026-11-04");
+    set_split(&w.conn, rent, &paid_by(anna, equal(vec![who(anna)]))).unwrap();
+    let b = breakdown(&w.conn, MAIN_ID, "2026-11-01", "2026-11-30").unwrap();
+    assert_eq!((shares(&b.expenses), b.expense_total.as_str()), (vec![("Food", "90.00")], "90.00"));
+    // "my share of a bill": an expense in the account, and the borrowing beside it is not one
+    ledger::borrow_with_expense(
+        &w.conn,
+        &NewEntry { person_id: anna.to_string(), kind: ledger::Kind::Borrowed, amount: "25.00".into(), date: "2026-11-06".into(), note: None, transaction_id: None, account_id: Some(cash.to_string()) },
+        &Expense { name: "Cinema".into(), category_id: w.food.to_string() },
+    )
+    .unwrap();
+    let b = breakdown(&w.conn, cash, "2026-11-01", "2026-11-30").unwrap();
+    assert_eq!((shares(&b.expenses), b.expense_total.as_str(), b.income_total.as_str()), (vec![("Food", "25.00")], "25.00", "0.00"));
+    // the same bill, if its payer is changed back to you, comes in whole
+    set_split(&w.conn, lunch, &equal(vec![who(bob)])).unwrap();
+    assert_eq!(shares(&breakdown(&w.conn, MAIN_ID, "2026-11-01", "2026-11-30").unwrap().expenses), vec![("Food", "130.00")]);
+}
+
+#[test]
+fn the_first_and_the_last_day_are_in_the_period_and_the_day_before_and_after_are_not() {
+    let w = world();
+    for (day, name) in [("2026-10-31", "Before"), ("2026-11-01", "First"), ("2026-11-15", "Middle"), ("2026-11-30", "Last"), ("2026-12-01", "After")] {
+        on(&w.conn, MAIN_ID, w.food, name, "1.00", day);
+        on(&w.conn, MAIN_ID, w.salary, name, "2.00", day);
+    }
+    let b = breakdown(&w.conn, MAIN_ID, "2026-11-01", "2026-11-30").unwrap();
+    assert_eq!((shares(&b.expenses), shares(&b.income), b.expense_total.as_str(), b.income_total.as_str()), (vec![("Food", "3.00")], vec![("Salary", "6.00")], "3.00", "6.00"), "three days of five");
+    for (from, to, expense) in [("2026-11-01", "2026-11-01", "1.00"), ("2026-11-30", "2026-11-30", "1.00"), ("2026-10-31", "2026-11-01", "2.00"), ("2026-11-30", "2026-12-01", "2.00"), ("2026-11-02", "2026-11-29", "1.00"), ("2026-11-16", "2026-11-29", "0.00")] {
+        assert_eq!(breakdown(&w.conn, MAIN_ID, from, to).unwrap().expense_total, expense, "{from} to {to}");
+    }
+}
+
+#[test]
+fn a_day_after_today_inside_the_period_is_in_it_and_the_period_decides_not_today() {
+    let w = world();
+    on(&w.conn, MAIN_ID, w.food, "Soon", "20.00", "2026-11-20");
+    on(&w.conn, MAIN_ID, w.salary, "Next month", "100.00", "2026-12-24");
+    assert_eq!(balance(&w.conn, MAIN_ID, TODAY), 0, "today's balance has neither");
+    let b = breakdown(&w.conn, MAIN_ID, "2026-11-01", "2026-11-30").unwrap();
+    assert_eq!((shares(&b.expenses), b.income.len()), (vec![("Food", "20.00")], 0));
+    let b = breakdown(&w.conn, MAIN_ID, "2026-12-01", "2027-01-31").unwrap();
+    assert_eq!((b.expenses.len(), shares(&b.income)), (0, vec![("Salary", "100.00")]), "a period wholly after today");
+    assert_eq!(breakdown(&w.conn, MAIN_ID, "2026-01-01", "2026-11-12").unwrap().expense_total, "0.00", "a period before them");
+}
+
+#[test]
+fn categories_are_ordered_largest_first_then_by_name_ignoring_case_and_split_by_their_type() {
+    let w = world();
+    let (zoo, apple, bakery, cherry) = (expense_category(&w.conn, "Zoo"), expense_category(&w.conn, "apple"), expense_category(&w.conn, "Bakery"), expense_category(&w.conn, "cherry"));
+    let (tips, bonus, big) = (income_category(&w.conn, "Tips"), income_category(&w.conn, "bonus"), income_category(&w.conn, "Gift"));
+    for (category, amount) in [(cherry, "10.00"), (zoo, "20.00"), (bakery, "10.00"), (apple, "10.00"), (w.food, "10.01"), (w.rent, "9.99")] {
+        on(&w.conn, MAIN_ID, category, "x", amount, "2026-11-10");
+    }
+    for (category, amount) in [(tips, "5.00"), (bonus, "5.00"), (big, "7.00"), (w.salary, "6.99")] {
+        on(&w.conn, MAIN_ID, category, "x", amount, "2026-11-10");
+    }
+    // a second row in a category adds to it and can move it up
+    on(&w.conn, MAIN_ID, w.rent, "y", "0.02", "2026-11-11");
+    let b = breakdown(&w.conn, MAIN_ID, "2026-11-01", "2026-11-30").unwrap();
+    assert_eq!(shares(&b.expenses), [("Zoo", "20.00"), ("Food", "10.01"), ("Rent", "10.01"), ("apple", "10.00"), ("Bakery", "10.00"), ("cherry", "10.00")], "equal amounts go by name, upper and lower case alike");
+    assert_eq!(shares(&b.income), [("Gift", "7.00"), ("Salary", "6.99"), ("bonus", "5.00"), ("Tips", "5.00")]);
+    assert_eq!((b.expense_total.as_str(), b.income_total.as_str()), ("70.02", "23.99"));
+    // a category of each type with one name is two shares, one in each list
+    let same_expense = expense_category(&w.conn, "Gift");
+    on(&w.conn, MAIN_ID, same_expense, "x", "3.00", "2026-11-12");
+    let b = breakdown(&w.conn, MAIN_ID, "2026-11-01", "2026-11-30").unwrap();
+    assert!(b.expenses.iter().any(|s| s.name == "Gift" && s.amount == "3.00") && b.income.iter().any(|s| s.name == "Gift" && s.amount == "7.00"));
+    // the JSON of a share
+    assert_eq!(serde_json::to_value(&b.income[0]).unwrap(), serde_json::json!({ "categoryId": big.to_string(), "name": "Gift", "amount": "7.00" }));
+}
+
+#[test]
+fn a_category_that_was_deleted_still_shows_by_name_and_a_new_one_with_its_name_is_another_share() {
+    let mut w = world();
+    let games = expense_category(&w.conn, "Games");
+    let gift = income_category(&w.conn, "Gift");
+    on(&w.conn, MAIN_ID, games, "Chess", "12.00", "2026-11-03");
+    on(&w.conn, MAIN_ID, gift, "Card", "30.00", "2026-11-03");
+    categories::delete(&mut w.conn, games, chrono::Utc::now()).unwrap();
+    categories::delete(&mut w.conn, gift, chrono::Utc::now()).unwrap();
+    let b = breakdown(&w.conn, MAIN_ID, "2026-11-01", "2026-11-30").unwrap();
+    assert_eq!((shares(&b.expenses), shares(&b.income)), (vec![("Games", "12.00")], vec![("Gift", "30.00")]));
+    assert_eq!(b.expenses[0].category_id, games);
+    // its name is free again: a new category of that name is a second share, and the older one comes first at an equal amount
+    let again = expense_category(&w.conn, "Games");
+    on(&w.conn, MAIN_ID, again, "Go", "12.00", "2026-11-04");
+    let b = breakdown(&w.conn, MAIN_ID, "2026-11-01", "2026-11-30").unwrap();
+    assert_eq!(b.expenses.iter().map(|s| (s.category_id, s.amount.as_str())).collect::<Vec<_>>(), [(games, "12.00"), (again, "12.00")]);
+    assert_eq!(b.expense_total, "24.00");
+}
+
+#[test]
+fn another_accounts_rows_are_out_and_an_archived_account_is_still_read() {
+    let w = world();
+    let cash = account(&w.conn, "Cash");
+    let old = account(&w.conn, "Old");
+    on(&w.conn, MAIN_ID, w.food, "Main", "1.00", "2026-11-05");
+    on(&w.conn, cash, w.food, "Cash", "20.00", "2026-11-05");
+    on(&w.conn, cash, w.salary, "Cash pay", "300.00", "2026-11-05");
+    on(&w.conn, old, w.food, "Old", "400.00", "2026-11-05");
+    on(&w.conn, old, w.salary, "Old pay", "5000.00", "2026-11-05");
+    let of = |id: i64| {
+        let b = breakdown(&w.conn, id, "2026-11-01", "2026-11-30").unwrap();
+        (b.expense_total, b.income_total)
+    };
+    assert_eq!([of(MAIN_ID), of(cash), of(old)], [("1.00", "0.00"), ("20.00", "300.00"), ("400.00", "5000.00")].map(|(a, b)| (a.to_string(), b.to_string())));
+    super::archive(&w.conn, old, TODAY).unwrap();
+    assert_eq!(of(old), ("400.00".to_string(), "5000.00".to_string()), "archiving changes no number");
+    // a row moved to another account moves with it
+    let moved = on(&w.conn, MAIN_ID, w.food, "Moved", "7.00", "2026-11-06");
+    assert_eq!(of(MAIN_ID).0, "8.00");
+    crate::transactions::update(&w.conn, moved, &crate::transactions::TransactionPatch { account_id: Some(cash.to_string()), ..Default::default() }).unwrap();
+    assert_eq!((of(MAIN_ID).0, of(cash).0), ("1.00".to_string(), "27.00".to_string()));
+}
+
+#[test]
+fn a_breakdown_of_an_unknown_account_is_not_found_and_bad_dates_are_invalid() {
+    let w = world();
+    on(&w.conn, MAIN_ID, w.food, "Shop", "1.00", "2026-11-05");
+    assert_refused(&w.conn, NOT_FOUND, "an account that is not there", || breakdown(&w.conn, 99, "2026-11-01", "2026-11-30"));
+    assert_refused(&w.conn, NOT_FOUND, "id 0", || breakdown(&w.conn, 0, "2026-11-01", "2026-11-30"));
+    let cash = account(&w.conn, "Cash");
+    super::delete(&w.conn, cash).unwrap();
+    assert_refused(&w.conn, NOT_FOUND, "an account that was deleted", || breakdown(&w.conn, cash, "2026-11-01", "2026-11-30"));
+    for (from, to) in [("2026-11-30", "2026-11-01"), ("2026-02-30", "2026-03-01"), ("2026-02-01", "2026-02-30"), ("2026-2-1", "2026-11-30"), ("2026-11-01", "2026-11-3"), ("", "2026-11-30"), ("2026-11-01", ""), ("today", "2026-11-30"), ("2026-13-01", "2026-13-02"), ("20261101", "20261130")] {
+        assert_refused(&w.conn, INVALID, &format!("{from:?} to {to:?}"), || breakdown(&w.conn, MAIN_ID, from, to));
+    }
+    // the dates are looked at first, as a statement does
+    assert_refused(&w.conn, INVALID, "bad dates for an account that is not there", || breakdown(&w.conn, 99, "2026-11-30", "2026-11-01"));
+    // a period of one day, and from = to, is fine
+    assert_eq!(breakdown(&w.conn, MAIN_ID, "2026-11-05", "2026-11-05").unwrap().expense_total, "1.00");
+}
+
+#[test]
+fn the_breakdown_equals_a_plain_sum_by_category_for_random_rows_and_periods() {
+    struct Row {
+        account: i64,
+        category: i64,
+        minor: i64,
+        day: String,
+        counted: bool,
+    }
+    for seed in [5u64, 17, 2026, 31_337] {
+        let w = world();
+        let mut rng = Rng(seed);
+        let (games, bonus) = (expense_category(&w.conn, "games"), income_category(&w.conn, "Bonus"));
+        let names = [(w.food, "Food", false), (w.rent, "Rent", false), (games, "games", false), (w.salary, "Salary", true), (bonus, "Bonus", true)];
+        let (anna, bob) = (friend(&w.conn, "Anna"), friend(&w.conn, "Bob"));
+        let ids = [MAIN_ID, account(&w.conn, "Savings"), opened(&w.conn, "Card", "-50.00", "2026-03-01")];
+        let mut rows = Vec::new();
+        for _ in 0..150 {
+            let account = ids[rng.between(0, 2) as usize];
+            let (category, _, income) = names[rng.between(0, 4) as usize];
+            let (mut minor, _) = cents(&mut rng);
+            if rng.between(0, 2) == 0 {
+                // round amounts make equal totals, so that the order by name is used
+                minor = (minor / 5000 + 1) * 5000;
+            }
+            let date = day(&mut rng);
+            let id = on(&w.conn, account, category, "x", &format_amount(minor), &date);
+            let mut counted = true;
+            if !income && rng.between(0, 4) == 0 {
+                set_split(&w.conn, id, &paid_by(bob, equal(vec![who(bob)]))).unwrap();
+                counted = false;
+            } else if !income && rng.between(0, 4) == 0 {
+                set_split(&w.conn, id, &equal(vec![who(anna)])).unwrap();
+            }
+            rows.push(Row { account, category, minor, day: date, counted });
+            if rng.between(0, 3) == 0 {
+                let to = ids[(ids.iter().position(|a| *a == account).unwrap() + 1) % 3];
+                transfers::create(&w.conn, &new_transfer(account, to, &format_amount(minor), &day(&mut rng))).unwrap();
+                entry(&w.conn, account, anna, ledger::Kind::Lent, &format_amount(minor), &day(&mut rng));
+            }
+        }
+        for _ in 0..60 {
+            let (mut from, mut to) = (day(&mut rng), day(&mut rng));
+            if from > to {
+                std::mem::swap(&mut from, &mut to);
+            }
+            let account = ids[rng.between(0, 2) as usize];
+            let mut sums: std::collections::BTreeMap<i64, i64> = std::collections::BTreeMap::new();
+            for row in rows.iter().filter(|r| r.account == account && r.counted && r.day >= from && r.day <= to) {
+                *sums.entry(row.category).or_default() += row.minor;
+            }
+            let mut wanted: Vec<(i64, i64, String, bool)> = sums.iter().map(|(c, m)| (*c, *m, names.iter().find(|n| n.0 == *c).unwrap().1.to_string(), names.iter().find(|n| n.0 == *c).unwrap().2)).collect();
+            wanted.sort_by(|a, b| b.1.cmp(&a.1).then_with(|| a.2.to_lowercase().cmp(&b.2.to_lowercase())).then_with(|| a.0.cmp(&b.0)));
+            let share = |income: bool| wanted.iter().filter(|r| r.3 == income).map(|r| Share { category_id: r.0, name: r.2.clone(), amount: format_amount(r.1) }).collect::<Vec<_>>();
+            let total = |income: bool| format_amount(wanted.iter().filter(|r| r.3 == income).map(|r| r.1).sum());
+            let expected = Breakdown { from: from.clone(), to: to.clone(), expenses: share(false), income: share(true), expense_total: total(false), income_total: total(true) };
+            let got = breakdown(&w.conn, account, &from, &to).unwrap();
+            assert_eq!(got, expected, "seed {seed}, account {account}, {from} to {to}");
+            // the totals are the sum of the shares, and every share is a positive amount
+            let sum = |list: &[Share]| list.iter().map(|s| crate::money::parse_amount(&s.amount).unwrap()).sum::<i64>();
+            assert_eq!((format_amount(sum(&got.expenses)), format_amount(sum(&got.income))), (got.expense_total.clone(), got.income_total.clone()));
+            assert!(got.expenses.iter().chain(&got.income).all(|s| s.amount != "0.00" && !s.amount.starts_with('-')));
+        }
+    }
 }

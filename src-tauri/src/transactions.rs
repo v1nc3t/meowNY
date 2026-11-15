@@ -90,6 +90,9 @@ pub struct Filter {
     pub category_id: Option<String>,
     #[serde(default)]
     pub account_id: Option<String>,
+    /// "INCOME" or "EXPENSE": only the transactions whose category has that type.
+    #[serde(default)]
+    pub kind: Option<String>,
     /// Matches the name or description, ignoring ASCII case.
     #[serde(default)]
     pub q: Option<String>,
@@ -363,6 +366,11 @@ pub fn list(conn: &Connection, filter: &Filter) -> Result<Page, AppError> {
     let to = filter.to.as_deref().map(clean_date).transpose()?;
     let category = filter.category_id.as_deref().map(parse_id).transpose()?;
     let account = filter.account_id.as_deref().map(parse_id).transpose()?;
+    let kind = match filter.kind.as_deref() {
+        Some(kind @ ("INCOME" | "EXPENSE")) => Some(kind),
+        Some(_) => return Err(AppError::InvalidInput),
+        None => None,
+    };
     let pattern = match filter.q.as_deref().map(str::trim).filter(|q| !q.is_empty()) {
         Some(q) if q.chars().count() > SEARCH_MAX_CHARS => return Err(AppError::InvalidInput),
         Some(q) => Some(like_pattern(q)),
@@ -393,6 +401,10 @@ pub fn list(conn: &Connection, filter: &Filter) -> Result<Page, AppError> {
     if let Some(account) = account {
         clauses.push("account_id = ?");
         values.push(Box::new(account));
+    }
+    if let Some(kind) = kind {
+        clauses.push("category_id IN (SELECT id FROM categories WHERE type = ?)");
+        values.push(Box::new(kind.to_string()));
     }
     if let Some(pattern) = pattern {
         clauses.push("(name LIKE ? ESCAPE '\\' OR description LIKE ? ESCAPE '\\')");
@@ -600,4 +612,93 @@ mod tests {
         }
     }
 
+    fn of_kind(kind: &str) -> Filter {
+        Filter { kind: Some(kind.into()), ..Default::default() }
+    }
+
+    // A category's type never changes (a trigger refuses it, `schema_tests`), so "the category now has that type" cannot differ from
+    // "the category had that type when the row was made": there is no test of a category that changed type.
+    #[test]
+    fn list_filters_by_the_type_of_the_category_and_total_counts_the_same_set() {
+        let (conn, _, _) = seeded();
+        assert_eq!(names(&conn, of_kind("INCOME")), ["Pay"]);
+        assert_eq!(names(&conn, of_kind("EXPENSE")), ["Aldi", "Lidl", "Tesco"]);
+        assert_eq!(list(&conn, &of_kind("INCOME")).unwrap().total, 1);
+        assert_eq!(list(&conn, &of_kind("EXPENSE")).unwrap().total, 3);
+        assert_eq!(list(&conn, &Filter::default()).unwrap().total, 4, "no kind: both");
+        // a page of the set: the total is the whole set, not the page
+        let page = list(&conn, &Filter { limit: Some(2), offset: Some(1), ..of_kind("EXPENSE") }).unwrap();
+        assert_eq!((page.transactions.iter().map(|t| t.name.as_str()).collect::<Vec<_>>(), page.total, page.limit, page.offset), (vec!["Lidl", "Tesco"], 3, 2, 1));
+        assert_eq!(list(&conn, &Filter { offset: Some(5), ..of_kind("EXPENSE") }).unwrap().total, 3, "past the end: no rows, the same total");
+        // a kind with nothing in it: no rows, a total of 0
+        let (empty, _, salary) = seeded();
+        empty.execute("DELETE FROM transactions WHERE category_id = ?1", [salary]).unwrap();
+        let none = list(&empty, &of_kind("INCOME")).unwrap();
+        assert_eq!((none.transactions.len(), none.total), (0, 0));
+        assert_eq!(list(&empty, &of_kind("EXPENSE")).unwrap().total, 3);
+        assert_eq!(list(&db().0, &of_kind("EXPENSE")).unwrap().total, 0);
+    }
+
+    #[test]
+    fn the_kind_filter_combines_with_the_account_the_dates_the_category_and_the_search() {
+        let (conn, food, salary) = seeded();
+        conn.execute("INSERT INTO accounts (name, kind, opening_date) VALUES ('Cash', 'CASH', '2026-01-01')", []).unwrap();
+        let rent = categories::create(&conn, "Rent", CategoryType::Expense).unwrap().id;
+        let bonus = categories::create(&conn, "Bonus", CategoryType::Income).unwrap().id;
+        let cash = |category: i64, name: &str, date: &str| {
+            create(&conn, &NewTransaction { account_id: Some("2".into()), ..new(category, name, "5.00", date) }).unwrap();
+        };
+        cash(food, "Kiosk", "2026-06-15");
+        cash(rent, "Pitch", "2026-07-02");
+        cash(bonus, "Tip", "2026-06-20");
+        let combined = |kind: &str, account: Option<&str>, from: Option<&str>, to: Option<&str>, category: Option<i64>, q: Option<&str>| {
+            names(
+                &conn,
+                Filter {
+                    kind: Some(kind.into()),
+                    account_id: account.map(str::to_string),
+                    from: from.map(str::to_string),
+                    to: to.map(str::to_string),
+                    category_id: category.map(|c| c.to_string()),
+                    q: q.map(str::to_string),
+                    ..Default::default()
+                },
+            )
+        };
+        assert_eq!(combined("EXPENSE", Some("2"), None, None, None, None), ["Pitch", "Kiosk"]);
+        assert_eq!(combined("INCOME", Some("2"), None, None, None, None), ["Tip"]);
+        assert_eq!(combined("INCOME", Some("1"), None, None, None, None), ["Pay"]);
+        assert_eq!(combined("EXPENSE", Some("2"), Some("2026-07-01"), None, None, None), ["Pitch"]);
+        assert_eq!(combined("EXPENSE", None, Some("2026-06-15"), Some("2026-06-15"), None, None), ["Kiosk", "Lidl"]);
+        assert_eq!(combined("INCOME", None, Some("2026-06-15"), Some("2026-06-30"), None, None), ["Tip", "Pay"]);
+        assert_eq!(combined("EXPENSE", None, None, None, None, Some("ki")), ["Kiosk"]);
+        assert_eq!(combined("INCOME", None, None, None, None, Some("ki")), Vec::<String>::new(), "the search and the kind both hold");
+        assert_eq!(combined("EXPENSE", None, None, None, Some(food), None), ["Aldi", "Kiosk", "Lidl", "Tesco"]);
+        // a category of the other type matches nothing, and a category of this type matches its rows
+        assert_eq!(combined("INCOME", None, None, None, Some(food), None), Vec::<String>::new());
+        assert_eq!(combined("INCOME", None, None, None, Some(salary), None), ["Pay"]);
+        // everything together
+        assert_eq!(combined("EXPENSE", Some("2"), Some("2026-06-01"), Some("2026-06-30"), Some(food), Some("kiosk")), ["Kiosk"]);
+    }
+
+    #[test]
+    fn the_kind_filter_keeps_the_rows_of_a_category_that_was_deleted() {
+        let (mut conn, food, _) = seeded();
+        categories::delete(&mut conn, food, chrono::Utc::now()).unwrap();
+        assert_eq!(names(&conn, of_kind("EXPENSE")), ["Aldi", "Lidl", "Tesco"], "a deleted category still has its type");
+    }
+
+    #[test]
+    fn a_kind_that_is_not_exactly_income_or_expense_is_refused() {
+        let (conn, _, _) = seeded();
+        for kind in ["income", "expense", "Income", "TRANSFER", "", " INCOME", "INCOME ", "ALL", "INCOME,EXPENSE", "1"] {
+            assert_eq!(list(&conn, &of_kind(kind)).err(), Some(AppError::InvalidInput), "{kind:?}");
+        }
+        // the JSON the page sends: `kind` is text, and `null` means no filter
+        assert_eq!(serde_json::from_str::<Filter>(r#"{"kind":"EXPENSE"}"#).unwrap().kind.as_deref(), Some("EXPENSE"));
+        assert_eq!(serde_json::from_str::<Filter>(r#"{"kind":null}"#).unwrap().kind, None);
+        assert!(serde_json::from_str::<Filter>(r#"{"kind":1}"#).is_err());
+        // a bad kind is refused before any other filter is looked at, and an empty string is not "no filter"
+        assert_eq!(list(&conn, &Filter { kind: Some("TRANSFER".into()), limit: Some(0), ..Default::default() }).err(), Some(AppError::InvalidInput));
+    }
 }

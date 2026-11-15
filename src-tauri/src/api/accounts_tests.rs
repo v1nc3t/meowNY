@@ -19,8 +19,10 @@ const INVALID: (u16, &str) = (400, "invalid_input");
 const NOT_FOUND: (u16, &str) = (404, "not_found");
 const NAME_EXISTS: (u16, &str) = (409, "name_exists");
 
-const ACCOUNT_KEYS: [&str; 12] =
-    ["archived", "balance", "changeThisMonth", "entries", "id", "isMain", "kind", "lastActivity", "name", "number", "openingBalance", "openingDate"];
+const ACCOUNT_KEYS: [&str; 18] = [
+    "archived", "available", "balance", "bic", "changeThisMonth", "entries", "group", "id", "includeInNetWorth", "isMain", "kind", "lastActivity", "name", "notes", "number", "openingBalance", "openingDate",
+    "virtualBalance",
+];
 const TRANSFER_KEYS: [&str; 6] = ["amount", "date", "fromAccountId", "id", "note", "toAccountId"];
 
 const READ_ROUTES: [&str; 5] = ["accounts.list", "accounts.show", "accounts.history", "accounts.summary", "transfers.list"];

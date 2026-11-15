@@ -500,6 +500,265 @@ fn a_sync_or_a_restore_writing_the_two_tables_keeps_the_stamps_it_brings_and_lea
     assert_eq!(text(&w.conn, "SELECT last_ms || '-' || last_counter FROM sync_clock"), clock, "and the clock that makes stamps did not move");
 }
 
+// ---- migration 0019: the details of an account -------------------------------------------------
+
+const DETAILS: [&str; 5] = ["bic", "notes", "group_name", "include_net_worth", "virtual_balance_minor"];
+
+/// The twelve columns of 0018, as one line, so that "nothing moved" is one comparison.
+fn old_columns(conn: &Connection) -> Vec<String> {
+    conn.prepare("SELECT id || '|' || sync_id || '|' || COALESCE(stamp, 'none') || '|' || name || '|' || kind || '|' || COALESCE(number, 'none') || '|' || opening_balance_minor || '|' || opening_date || '|' || archived || '|' || position || '|' || created_at || '|' || updated_at FROM accounts ORDER BY id")
+        .unwrap()
+        .query_map([], |r| r.get::<_, String>(0))
+        .unwrap()
+        .map(Result::unwrap)
+        .collect()
+}
+
+/// Everything a write would move besides the accounts' own columns: the other tables of this feature, the markers, the history and the clock.
+fn around(conn: &Connection) -> Vec<String> {
+    let mut all = Vec::new();
+    for sql in [
+        "SELECT id || ' ' || sync_id || ' ' || stamp || ' ' || updated_at || ' ' || from_account_id || ' ' || to_account_id || ' ' || amount_minor FROM transfers ORDER BY id",
+        "SELECT id || ' ' || sync_id || ' ' || stamp || ' ' || updated_at || ' ' || account_id FROM transactions ORDER BY id",
+        "SELECT id || ' ' || sync_id || ' ' || stamp || ' ' || updated_at || ' ' || account_id FROM ledger_entries ORDER BY id",
+        "SELECT id || ' ' || sync_id || ' ' || kind || ' ' || stamp FROM sync_deleted ORDER BY id",
+        "SELECT id || ' ' || entity_type || ' ' || action || ' ' || COALESCE(old_values, '') || ' ' || COALESCE(new_values, '') FROM audit_log ORDER BY id",
+        "SELECT last_ms || ' ' || last_counter FROM sync_clock",
+    ] {
+        all.extend(conn.prepare(sql).unwrap().query_map([], |r| r.get::<_, String>(0)).unwrap().map(Result::unwrap));
+    }
+    all
+}
+
+#[test]
+fn a_new_database_has_the_five_detail_columns_with_their_defaults_on_the_untouched_main_account() {
+    let w = world();
+    assert!(!text(&w.conn, "PRAGMA cipher_version").is_empty(), "these tests run on the SQLCipher build the app ships");
+    let columns = text(
+        &w.conn,
+        "SELECT group_concat(name || ' ' || type || ' notnull=' || \"notnull\" || ' default=' || COALESCE(dflt_value, 'none'), ', ')
+         FROM (SELECT * FROM pragma_table_info('accounts') WHERE name IN ('bic', 'notes', 'group_name', 'include_net_worth', 'virtual_balance_minor') ORDER BY cid)",
+    );
+    assert_eq!(
+        columns,
+        "bic TEXT notnull=0 default=none, notes TEXT notnull=0 default=none, group_name TEXT notnull=0 default=none, include_net_worth INTEGER notnull=1 default=1, virtual_balance_minor INTEGER notnull=1 default=0"
+    );
+    let row = text(
+        &w.conn,
+        "SELECT id || '|' || sync_id || '|' || stamp || '|' || updated_at || '|' || created_at || '|' || COALESCE(bic, 'none') || '|' || COALESCE(notes, 'none') || '|' || COALESCE(group_name, 'none')
+                || '|' || include_net_worth || '|' || virtual_balance_minor FROM accounts",
+    );
+    assert_eq!(row, format!("{MAIN_ID}|{MAIN_SYNC_ID}|{UNSET_STAMP}|1970-01-01T00:00:00.000Z|1970-01-01T00:00:00.000Z|none|none|none|1|0"));
+    assert_eq!(one(&w.conn, "SELECT count(*) FROM audit_log WHERE entity_type = 'accounts'"), 0, "no history of it");
+    // the two triggers were made again with the five columns among those they watch
+    for trigger in ["trg_accounts_updated_at", "trg_accounts_sync_update"] {
+        assert_eq!(one(&w.conn, &format!("SELECT count(*) FROM sqlite_master WHERE type = 'trigger' AND name = '{trigger}'")), 1, "{trigger}");
+        let sql = text(&w.conn, &format!("SELECT sql FROM sqlite_master WHERE name = '{trigger}'"));
+        let watched = sql.split(" ON accounts").next().unwrap().to_string();
+        for column in DETAILS {
+            assert!(watched.contains(column), "{trigger} does not watch {column}: {watched}");
+            assert!(sql.contains(&format!("NEW.{column} IS NOT OLD.{column}")), "{trigger} does not compare {column}");
+        }
+    }
+    assert!(text(&w.conn, "SELECT sql FROM sqlite_master WHERE name = 'trg_accounts_sync_update'").contains("offset_ms"), "the stamp is made with the clock of 0016");
+}
+
+/// An old database with accounts of every state, transfers, rows in them, a deleted account and an edited or untouched main account.
+fn database_at_18(edit_main: bool) -> Connection {
+    let mut conn = Connection::open_in_memory().unwrap();
+    conn.execute_batch("PRAGMA foreign_keys = ON;").unwrap();
+    crate::migrate::run_up_to(&mut conn, 18).unwrap();
+    assert_eq!(one(&conn, "PRAGMA user_version"), 18);
+    conn.execute_batch(
+        "INSERT INTO categories (type, name) VALUES ('EXPENSE', 'Food'), ('INCOME', 'Salary');
+         INSERT INTO people (name) VALUES ('Anna');
+         INSERT INTO accounts (name, kind, number, opening_balance_minor, opening_date) VALUES ('Savings', 'SAVINGS', 'IE29', 150000, '2026-01-01'), ('Cash', 'CASH', NULL, 0, '2026-02-01'), ('Card', 'CREDIT_CARD', NULL, -24000, '2026-03-01');
+         UPDATE accounts SET archived = 1 WHERE name = 'Card';
+         INSERT INTO accounts (name, kind, opening_date) VALUES ('Gone', 'CASH', '2026-04-01');
+         DELETE FROM accounts WHERE name = 'Gone';
+         INSERT INTO transfers (from_account_id, to_account_id, amount_minor, transfer_date, note) VALUES (2, 3, 5000, '2026-05-01', 'pocket'), (3, 1, 700, '2026-05-02', NULL);
+         INSERT INTO transactions (category_id, name, amount_minor, payment_date, account_id) VALUES (1, 'Shop', 1250, '2026-05-03', 2), (2, 'Pay', 200000, '2026-05-04', 1);
+         INSERT INTO ledger_entries (person_id, kind, amount_minor, entry_date, account_id) VALUES (1, 'LENT', 2000, '2026-05-05', 3);",
+    )
+    .unwrap();
+    if edit_main {
+        conn.execute("UPDATE accounts SET name = 'Current account', number = 'NL91' WHERE id = 1", []).unwrap();
+    }
+    conn
+}
+
+#[test]
+fn migrating_from_version_18_writes_no_row_gives_the_defaults_and_leaves_the_main_account_as_it_was() {
+    for edit_main in [false, true] {
+        let mut conn = database_at_18(edit_main);
+        let (accounts_before, around_before) = (old_columns(&conn), around(&conn));
+        assert_eq!(accounts_before.len(), 4, "the main account and three of the person's");
+        assert_eq!(one(&conn, "SELECT count(*) FROM sync_deleted WHERE kind = 'accounts'"), 1, "a marker of the deleted account is there to be kept");
+        let main_before = accounts_before[0].clone();
+        assert_eq!(main_before.contains(UNSET_STAMP), !edit_main, "the main account has its constant stamp, or a real one once it was edited");
+
+        crate::migrate::run(&mut conn).unwrap();
+
+        assert_eq!(one(&conn, "PRAGMA user_version"), i64::from(crate::migrate::latest_version()));
+        assert!(conn.query_row("PRAGMA foreign_keys", [], |r| r.get::<_, bool>(0)).unwrap(), "foreign keys are back on");
+        assert_eq!(one(&conn, "SELECT count(*) FROM pragma_foreign_key_check"), 0);
+        assert_eq!(old_columns(&conn), accounts_before, "no stamp, no date and no other column of an account moved (main edited: {edit_main})");
+        assert_eq!(around(&conn), around_before, "nothing around them moved: no transfer, row, marker, history row or tick of the clock");
+        assert_eq!(old_columns(&conn)[0], main_before);
+        if !edit_main {
+            assert_eq!(old_columns(&conn)[0], format!("1|{MAIN_SYNC_ID}|{UNSET_STAMP}|{MAIN_NAME}|CHECKING|none|0|1970-01-01|0|0|1970-01-01T00:00:00.000Z|1970-01-01T00:00:00.000Z"));
+        }
+        // every account, the main one, the archived one and the others, holds the defaults
+        assert_eq!(one(&conn, "SELECT count(*) FROM accounts WHERE bic IS NULL AND notes IS NULL AND group_name IS NULL AND include_net_worth = 1 AND virtual_balance_minor = 0"), 4);
+        // the numbers are the ones of the rows: main 2000.00 + 7.00 in; Savings 1500.00 - 50.00 - 12.50; Cash 50.00 - 7.00 - 20.00; Card -240.00
+        let balances = [1, 2, 3, 4].map(|id| balance(&conn, id, "2026-12-31"));
+        assert_eq!(balances, [200_700, 143_750, 2300, -24_000]);
+        // the triggers that were made again work on the old rows: each detail is a change, and a stamp is made
+        for (id, change) in [(1, "notes = 'main'"), (2, "bic = 'DEUTDEFF'"), (3, "group_name = 'Bank'"), (4, "include_net_worth = 0")] {
+            let before = stamp_of(&conn, "accounts", id);
+            conn.execute(&format!("UPDATE accounts SET {change} WHERE id = {id}"), []).unwrap();
+            assert!(stamp_of(&conn, "accounts", id) > before, "account {id}: {change}");
+        }
+        assert!(stamp_of(&conn, "accounts", 1).as_str() > UNSET_STAMP);
+    }
+}
+
+#[test]
+fn every_check_of_the_five_columns_refuses_its_bad_values_in_plain_sql() {
+    let w = world();
+    let id = raw_account(&w.conn, "A");
+    let set = |column: &str, value: &str| exec(&w.conn, &format!("UPDATE accounts SET {column} = {value} WHERE id = {id}"));
+    let quoted = |text: &str| format!("'{text}'");
+    // (column, constraint, accepted, refused)
+    let cases: [(&str, &str, Vec<String>, Vec<String>); 5] = [
+        (
+            "bic",
+            "ck_accounts_bic",
+            vec!["NULL".into(), quoted("D"), quoted(&"x".repeat(20)), quoted("DEUTDEFF500"), quoted(&"é".repeat(20))],
+            vec![quoted(""), quoted(&"x".repeat(21)), quoted(&"é".repeat(21))],
+        ),
+        (
+            "notes",
+            "ck_accounts_notes",
+            vec!["NULL".into(), quoted("n"), quoted(&"x".repeat(1000)), quoted("one\ntwo"), quoted(&"é".repeat(1000))],
+            vec![quoted(""), quoted(&"x".repeat(1001)), quoted(&"é".repeat(1001))],
+        ),
+        (
+            "group_name",
+            "ck_accounts_group",
+            vec!["NULL".into(), quoted("g"), quoted(&"x".repeat(50)), quoted(&"é".repeat(50))],
+            vec![quoted(""), quoted(&"x".repeat(51)), quoted(&"é".repeat(51))],
+        ),
+        (
+            "include_net_worth",
+            "ck_accounts_include_net_worth",
+            vec!["0".into(), "1".into()],
+            vec!["2".into(), "-1".into(), "NULL".into(), "10".into(), "0.5".into()],
+        ),
+        (
+            "virtual_balance_minor",
+            "ck_accounts_virtual",
+            vec!["0".into(), "999999999999".into(), "-999999999999".into(), "-1".into(), "1".into()],
+            vec!["1000000000000".into(), "-1000000000000".into(), "NULL".into(), "1.5".into(), quoted("twelve")],
+        ),
+    ];
+    for (column, constraint, accepted, refused_values) in cases {
+        for value in &accepted {
+            assert!(set(column, value).is_ok(), "{column} = {}", value.chars().take(30).collect::<String>());
+        }
+        for value in &refused_values {
+            let error = set(column, value).expect_err(&format!("{column} = {}", value.chars().take(30).collect::<String>())).to_string();
+            // a missing value is refused by NOT NULL and a text in a whole-number column by the strict table; the rest by the named check
+            assert!(error.contains(constraint) || error.contains("NOT NULL") || error.contains("cannot store"), "{column}: {error}");
+        }
+    }
+    // the same checks on a new row, and a row that names none of them gets the defaults
+    for (column, bad) in [("bic", quoted(&"x".repeat(21))), ("notes", quoted(&"x".repeat(1001))), ("group_name", quoted(&"x".repeat(51))), ("include_net_worth", "2".to_string()), ("virtual_balance_minor", "1000000000000".to_string())] {
+        assert!(exec(&w.conn, &format!("INSERT INTO accounts (name, kind, opening_date, {column}) VALUES ('B', 'CASH', '2026-01-01', {bad})")).is_err(), "insert with {column}");
+    }
+    assert_eq!(one(&w.conn, "SELECT count(*) FROM accounts"), 2, "the refused inserts made no row");
+    let plain = raw_account(&w.conn, "C");
+    assert_eq!(text(&w.conn, &format!("SELECT COALESCE(bic, 'n') || COALESCE(notes, 'n') || COALESCE(group_name, 'n') || include_net_worth || virtual_balance_minor FROM accounts WHERE id = {plain}")), "nnn10");
+    // a refused change leaves the value it had
+    set("bic", "'KEEP'").unwrap();
+    assert!(set("bic", &quoted(&"x".repeat(21))).is_err());
+    assert_eq!(text(&w.conn, &format!("SELECT bic FROM accounts WHERE id = {id}")), "KEEP");
+}
+
+#[test]
+fn each_detail_column_is_a_change_of_the_row_and_the_same_value_again_is_not() {
+    let w = world();
+    let id = raw_account(&w.conn, "A");
+    for (column, first, other) in [("bic", "'DEUTDEFF'", "'BOFIIE2D'"), ("notes", "'line one\nline two'", "'x'"), ("group_name", "'Bank'", "'Cash'"), ("include_net_worth", "0", "1"), ("virtual_balance_minor", "100000", "-5")] {
+        age(&w.conn, "accounts", id);
+        let made = stamp_of(&w.conn, "accounts", id);
+        // the same value as it has: nothing moves
+        exec(&w.conn, &format!("UPDATE accounts SET {column} = {column} WHERE id = {id}")).unwrap();
+        assert_eq!((stamp_of(&w.conn, "accounts", id), updated_at_of(&w.conn, "accounts", id)), (made.clone(), OLD.to_string()), "{column}: no change");
+        // a change moves the stamp and `updated_at`; writing the same thing again moves neither
+        for (n, value) in [first, other, first].iter().enumerate() {
+            age(&w.conn, "accounts", id);
+            let before = stamp_of(&w.conn, "accounts", id);
+            exec(&w.conn, &format!("UPDATE accounts SET {column} = {value} WHERE id = {id}")).unwrap();
+            let after = stamp_of(&w.conn, "accounts", id);
+            assert!(after > before, "{column} step {n}: a new stamp");
+            assert_ne!(updated_at_of(&w.conn, "accounts", id), OLD, "{column} step {n}: and `updated_at` moved");
+            age(&w.conn, "accounts", id);
+            exec(&w.conn, &format!("UPDATE accounts SET {column} = {value} WHERE id = {id}")).unwrap();
+            assert_eq!((stamp_of(&w.conn, "accounts", id), updated_at_of(&w.conn, "accounts", id)), (after, OLD.to_string()), "{column} step {n}: the same value again");
+        }
+    }
+    // from a value to nothing, and from nothing to a value, are changes too
+    for column in ["bic", "notes", "group_name"] {
+        exec(&w.conn, &format!("UPDATE accounts SET {column} = 'x' WHERE id = {id}")).unwrap();
+        let before = stamp_of(&w.conn, "accounts", id);
+        exec(&w.conn, &format!("UPDATE accounts SET {column} = NULL WHERE id = {id}")).unwrap();
+        let cleared = stamp_of(&w.conn, "accounts", id);
+        assert!(cleared > before, "{column}: clearing it");
+        exec(&w.conn, &format!("UPDATE accounts SET {column} = NULL WHERE id = {id}")).unwrap();
+        assert_eq!(stamp_of(&w.conn, "accounts", id), cleared, "{column}: clearing what is clear");
+    }
+}
+
+#[test]
+fn the_detail_triggers_stand_aside_while_a_sync_or_a_restore_is_writing() {
+    let w = world();
+    let id = raw_account(&w.conn, "A");
+    let made = stamp_of(&w.conn, "accounts", id);
+    let clock = text(&w.conn, "SELECT last_ms || '-' || last_counter FROM sync_clock");
+    applying(&w.conn, true);
+    age(&w.conn, "accounts", id);
+    for change in ["bic = 'DEUTDEFF'", "notes = 'n'", "group_name = 'Bank'", "include_net_worth = 0", "virtual_balance_minor = 100000"] {
+        exec(&w.conn, &format!("UPDATE accounts SET {change} WHERE id = {id}")).unwrap();
+        assert_eq!((stamp_of(&w.conn, "accounts", id), updated_at_of(&w.conn, "accounts", id)), (made.clone(), OLD.to_string()), "{change}: nothing moves while applying");
+    }
+    // the stamp and the date it brings are kept, and the clock that makes stamps did not tick
+    exec(&w.conn, &format!("UPDATE accounts SET stamp = '1760000000000-0001-aaaaaaaa', updated_at = '2026-02-02T00:00:00.000Z', notes = 'theirs' WHERE id = {id}")).unwrap();
+    assert_eq!((stamp_of(&w.conn, "accounts", id).as_str(), updated_at_of(&w.conn, "accounts", id).as_str()), ("1760000000000-0001-aaaaaaaa", "2026-02-02T00:00:00.000Z"));
+    assert_eq!(text(&w.conn, "SELECT last_ms || '-' || last_counter FROM sync_clock"), clock);
+    // a new row with the details, as a sync writes it, keeps the stamp it brings
+    exec(&w.conn, "INSERT INTO accounts (name, kind, opening_date, stamp, bic, notes, group_name, include_net_worth, virtual_balance_minor) VALUES ('B', 'CASH', '2026-01-01', '1760000000000-0002-aaaaaaaa', 'X', 'n', 'g', 0, 5)").unwrap();
+    assert_eq!(text(&w.conn, "SELECT stamp FROM accounts WHERE name = 'B'"), "1760000000000-0002-aaaaaaaa");
+    assert_eq!(text(&w.conn, "SELECT last_ms || '-' || last_counter FROM sync_clock"), clock);
+    applying(&w.conn, false);
+    // and back to normal: the next change is stamped
+    let before = stamp_of(&w.conn, "accounts", id);
+    exec(&w.conn, &format!("UPDATE accounts SET notes = 'mine' WHERE id = {id}")).unwrap();
+    assert!(stamp_of(&w.conn, "accounts", id) > before);
+}
+
+#[test]
+fn the_main_account_gets_its_first_real_stamp_from_a_change_of_a_detail_alone() {
+    for change in ["notes = 'my main account'", "bic = 'DEUTDEFF'", "group_name = 'Bank'", "include_net_worth = 0", "virtual_balance_minor = 1"] {
+        let w = world();
+        exec(&w.conn, &format!("UPDATE accounts SET {change} WHERE id = 1")).unwrap();
+        assert!(stamp_of(&w.conn, "accounts", 1).as_str() > UNSET_STAMP, "{change}");
+        assert_ne!(updated_at_of(&w.conn, "accounts", 1), "1970-01-01T00:00:00.000Z", "{change}");
+        assert_eq!(text(&w.conn, "SELECT sync_id FROM accounts WHERE id = 1"), MAIN_SYNC_ID);
+        assert!(super::check(&w.conn).unwrap());
+    }
+}
+
 // ---- the view --------------------------------------------------------------------------------
 
 #[test]

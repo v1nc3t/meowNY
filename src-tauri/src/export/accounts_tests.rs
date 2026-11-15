@@ -94,7 +94,8 @@ fn the_json_has_every_account_with_what_it_holds_and_every_transfer_and_the_acco
     assert_eq!(
         file["accounts"][2],
         json!({ "id": c.cash.to_string(), "name": "Cash", "kind": "CASH", "number": null, "openingBalance": "250.00", "openingDate": "2025-12-01", "archived": false,
-                "isMain": false, "balance": "150.00", "changeThisMonth": "0.00", "lastActivity": "2026-02-15" })
+                "isMain": false, "balance": "150.00", "changeThisMonth": "0.00", "lastActivity": "2026-02-15",
+                "bic": null, "notes": null, "group": null, "includeInNetWorth": true, "virtualBalance": "0.00", "available": "150.00" })
     );
     assert_eq!(file["accounts"][3]["openingBalance"], "-240.00");
     assert_eq!((file["accounts"][1]["number"].as_str(), file["accounts"][4]["archived"].as_bool(), file["accounts"][0]["isMain"].as_bool()), (Some("IE29 AIBK 9311 5212 3456 78"), Some(true), Some(true)));

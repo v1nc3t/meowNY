@@ -232,11 +232,13 @@ pub const COMMANDS: &[&str] = &[
     "reorder_accounts",
     "account_statement",
     "account_history",
+    "account_breakdown",
     "accounts_summary",
     "create_transfer",
     "get_transfer",
     "update_transfer",
     "delete_transfer",
+    "list_transfers",
 ];
 
 #[tauri::command]
@@ -1281,7 +1283,14 @@ pub fn account_history(vault: Shared, id: String, year: String) -> Result<Vec<Hi
     vault.with_conn(|c| accounts::history(c, id, &year, &today))
 }
 
-/// Net worth: what the accounts hold today plus what friends owe.
+/// What an account paid and took in from `from` to `to` (both days included), by category.
+#[tauri::command]
+pub fn account_breakdown(vault: Shared, id: String, from: String, to: String) -> Result<accounts::Breakdown, AppError> {
+    let id = categories::parse_id(&id)?;
+    vault.with_conn(|c| accounts::breakdown(c, id, &from, &to))
+}
+
+/// Net worth: what the accounts that count hold today plus what friends owe.
 #[tauri::command]
 pub fn accounts_summary(vault: Shared) -> Result<accounts::Summary, AppError> {
     let today = today_text(&vault)?;
@@ -1291,6 +1300,12 @@ pub fn accounts_summary(vault: Shared) -> Result<accounts::Summary, AppError> {
 #[tauri::command]
 pub fn create_transfer(vault: Shared, input: NewTransfer) -> Result<Transfer, AppError> {
     vault.with_conn(|c| transfers::create(c, &input))
+}
+
+/// Newest first, with the filters of the transfers tab.
+#[tauri::command]
+pub fn list_transfers(vault: Shared, filter: transfers::Filter) -> Result<transfers::Page, AppError> {
+    vault.with_conn(|c| transfers::list(c, &filter))
 }
 
 #[tauri::command]
