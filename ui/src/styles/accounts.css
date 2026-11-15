@@ -168,6 +168,18 @@ ul.card-list.acct-archived > li.card-item {
   min-width: 4.25rem;
 }
 
+/* A line with nothing in the column of the other side (a transfer has no category) lets what it was take that column too, so a long
+   name is not cut with the room next to it empty. */
+@container (width > 52em) {
+  ul.card-list.acct-lines > li.card-item > .cell-name:has(+ .line-other:empty) {
+    grid-column: span 2;
+  }
+
+  ul.card-list.acct-lines > li.card-item > .line-other:empty {
+    display: none;
+  }
+}
+
 @container (max-width: 52em) {
   ul.card-list.acct-lines > li.list-head {
     display: none;
@@ -374,18 +386,6 @@ html.is-phone .tx-actions.acct-actions > :last-child:nth-child(odd) {
 /* The account dialog: "more" opens a part of its own under the fields that are always there. */
 .acct-more {
   align-self: flex-start;
-}
-
-/* With "more" open the dialog is taller than a phone: it scrolls inside its sheet, and its buttons stay at the foot of the sheet. The
-   padding takes the place of the sheet's own at the bottom (so the offset is that padding, too), and the buttons are where they were when
-   the end is reached. */
-.modal-panel:has(.acct-more-fields) > .modal-actions {
-  position: sticky;
-  bottom: -1.5rem;
-  z-index: 1;
-  margin-bottom: -1.5rem;
-  padding-block: 0.75rem 1.5rem;
-  background: var(--background);
 }
 
 .acct-more-fields {

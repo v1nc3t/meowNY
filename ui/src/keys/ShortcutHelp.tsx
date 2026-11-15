@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react'
+import { useFootLine } from '../hooks/useFootLine'
 import { useReturnFocus } from '../hooks/useReturnFocus'
 import { useT } from '../i18n/context'
 import { keysFor, shortcutName } from './tip'
@@ -19,6 +20,7 @@ export default function ShortcutHelp({ onClose }: { onClose: () => void }) {
 
   // before the effect below: the dialog takes the focus there
   useReturnFocus()
+  useFootLine(ref)
 
   useEffect(() => {
     ref.current?.showModal()

@@ -271,12 +271,17 @@ body:has(dialog[open]) {
 }
 
 .modal-panel {
+  /* What the buttons at the foot cover (their bar: 2rem of padding and line, and the button, which is taller on a phone: phone.css), and the
+     room (tokens.css) that a scrolling area keeps: a field that the keyboard scrolls into view stops above them, with its focus ring. */
+  --foot-btn: 2.25rem;
   display: flex;
   flex-direction: column;
   align-items: stretch;
   gap: 1rem;
   max-height: calc(100svh - 2rem);
-  padding: 1.5rem;
+  /* No padding at the bottom: it is the padding of the buttons, so that they end at the edge of the dialog (see below). */
+  padding: 1.5rem 1.5rem 0;
+  scroll-padding-bottom: calc(var(--room) + 2rem + var(--foot-btn));
   overflow: auto;
   border-radius: var(--radius-lg);
   background-color: var(--background);
@@ -289,15 +294,25 @@ body:has(dialog[open]) {
   justify-content: flex-end;
   align-items: center;
   gap: 0.5rem;
-  /* The buttons stay at the bottom of the dialog while its body scrolls (a short window, a long form), and cover what scrolls under them: the
-     solid fill below them (no blur, the colour of the dialog) is the panel's padding, where the body would show between them and the edge. */
+}
+
+/* The buttons stay at the bottom of the dialog while its body scrolls (a short window, a long form). Their row is a bar as wide as the dialog,
+   from side to side of the panel's padding, in the colour of the dialog, and ends at its bottom edge, so nothing of the body shows behind or
+   beside it. It has the padding of the panel (1.5rem at the sides and below), and starts 0.5rem under the body (the gap of the panel is 1rem,
+   and the line and the padding under it make up the rest), where the focus ring of the last field has room. The line over the bar shows only
+   while there is body under it (data-scrolled, by hooks/useFootLine.ts). */
+.modal-panel > .modal-actions {
   position: sticky;
   bottom: 0;
   z-index: 1;
-  margin-top: -0.5rem;
-  padding-top: 0.5rem;
+  margin: -0.5rem -1.5rem 0;
+  padding: calc(0.5rem - var(--border-width)) 1.5rem 1.5rem;
+  border-top: var(--border-width) solid transparent;
   background: var(--background);
-  box-shadow: 0 1.5rem 0 var(--background);
+}
+
+.modal-panel[data-scrolled] > .modal-actions {
+  border-top-color: var(--border);
 }
 
 .modal-head {

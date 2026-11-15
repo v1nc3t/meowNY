@@ -50,6 +50,11 @@ html.is-phone .modal-actions {
   align-items: stretch;
 }
 
+/* The buttons at the foot of a dialog are 44px tall, and the green one keeps 2px of its box for the shadow (above). */
+html.is-phone .modal-panel {
+  --foot-btn: 46px;
+}
+
 html.is-phone .modal-actions > .ui-btn {
   height: auto;
 }
@@ -127,6 +132,19 @@ html.is-phone .app-footer > p a {
   padding: calc(0.25rem + env(safe-area-inset-top, 0px)) 1rem 0.25rem;
   border-bottom: var(--border-width) solid var(--border);
   background: var(--background);
+  container-type: inline-size;
+  container-name: phone-bar;
+}
+
+/* The bar holds the cat and the name at the left and five icons of 44px at the right. The name goes, and the cat stays, in a bar too narrow
+   for all of it. The width asked about is the bar inside its padding: the cat (32px), the name (84px) and the icons (5 x 44px) are 336px,
+   and the gap between the logo and the icons (1rem), the gap in the logo (0.5rem) and the gaps between the icons (4 x 0.25rem) are 2.5rem.
+   The icons keep their size, and the name is back as soon as it fits. The link has a label of its own (components/AppSidebar.tsx), so it
+   keeps its name. */
+@container phone-bar (max-width: calc(336px + 2.5rem)) {
+  .app-logo-word {
+    display: none;
+  }
 }
 
 .phone-actions {

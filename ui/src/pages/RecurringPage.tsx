@@ -594,11 +594,14 @@ function RecurringView({ settings, now }: { settings: MoneySettings; now: Today 
     <section className="tx-page">
       <div className="tx-title one-line">
         <h1>{t('rec.title')}</h1>
-        <div className="tx-actions">
-          <Button onClick={() => openAdd()} {...tip('new', t('rec.add'))}>
-            {t('rec.add')}
-          </Button>
-        </div>
+        {/* The phone has the add button of each list for this. */}
+        {phone ? null : (
+          <div className="tx-actions">
+            <Button onClick={() => openAdd()} {...tip('new', t('rec.add'))}>
+              {t('rec.add')}
+            </Button>
+          </div>
+        )}
       </div>
       {adding || editing ? (
         <RecurringModal

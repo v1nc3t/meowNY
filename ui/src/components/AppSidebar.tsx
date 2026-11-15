@@ -36,9 +36,10 @@ export default function AppSidebar({
     // A phone has a bar at the top: the name on the left, and accounts, documents, sync, settings and lock on the right (the other pages are tabs).
     return (
       <header className="phone-header">
-        <Link to="/app/dashboard" className="app-logo">
+        {/* the name has a label of its own: the word goes when the bar is too narrow for it (phone.css) */}
+        <Link to="/app/dashboard" className="app-logo" aria-label="meowny">
           <Logo />
-          meowny
+          <span className="app-logo-word">meowny</span>
         </Link>
         <nav className="phone-actions" aria-label={t('nav.settings')}>
           <NavLink

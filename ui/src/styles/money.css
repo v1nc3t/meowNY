@@ -41,22 +41,39 @@
 
 /* The transfers as a table: the day, from, to, the amount (as wide as in the transactions, and as neutral: no sign, no colour), the note, then
    edit and delete (two buttons of 2rem and the gap). Narrower than 40em the head goes and a row is two lines: from and to (side by side, with an
-   arrow between them) and the amount, the day and the note under them. Narrower than 30em the buttons go to the line of the note, and the amount
-   to the line of the day, so that from and to have the whole width of the first. */
+   arrow between them, each as wide as its name) and the amount, the day and the note under them (the note has the room that the day leaves).
+   Narrower than 30em the buttons go to the line of the note, and the amount to the line of the day, so that from and to have the whole width
+   of the first. */
 .card-list.tx-transfers {
-  --cols: 12ch minmax(0, 1.5fr) minmax(0, 1.5fr) 16ch minmax(0, 1fr) 4.25rem;
+  --cols: 12ch minmax(0, 1fr) minmax(0, 1fr) 16ch minmax(0, 2fr) 4.25rem;
 }
 
 .tx-transfers .xfer-route {
   display: contents;
 }
 
+/* Where subgrid is known the rows share the list's columns, and the columns are as wide as what is in them: the day and the amount by
+   their content, from and to by the longest name (up to 12rem), and the note has all that is left, so it is cut only when the list is
+   really narrow (the 40em rules below take over there). Without subgrid each row has the fixed columns above. */
+@supports (grid-template-columns: subgrid) {
+  .card-list.tx-transfers {
+    display: grid;
+    grid-template-columns: max-content fit-content(12rem) fit-content(12rem) max-content minmax(10rem, 1fr) 4.25rem;
+  }
+
+  ul.card-list.tx-transfers > li.card-item,
+  ul.card-list.tx-transfers > li.list-head {
+    grid-column: 1 / -1;
+    grid-template-columns: subgrid;
+  }
+}
+
 @container (max-width: 40em) {
   ul.card-list.is-table.tx-transfers > li.card-item {
-    grid-template-columns: minmax(0, 1fr) auto auto;
+    grid-template-columns: auto minmax(0, 1fr) auto auto;
     grid-template-areas:
-      'route amount actions'
-      'date note actions';
+      'route route amount actions'
+      'date note note actions';
   }
 
   ul.card-list.is-table.tx-transfers .xfer-route {
@@ -67,7 +84,7 @@
   }
 
   ul.card-list.is-table.tx-transfers .xfer-route > .cell-name {
-    flex: 1 1 0;
+    flex: 0 1 auto;
   }
 
   ul.card-list.is-table.tx-transfers .xfer-to::before {
@@ -86,6 +103,7 @@
 
   ul.card-list.is-table.tx-transfers .xfer-note {
     grid-area: note;
+    text-align: right;
   }
 }
 
@@ -96,6 +114,10 @@
       'route route'
       'date amount'
       'note actions';
+  }
+
+  ul.card-list.is-table.tx-transfers .xfer-note {
+    text-align: left;
   }
 }
 
