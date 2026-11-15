@@ -971,3 +971,165 @@ excluded, with an archived one excluded; `available` with a negative virtual bal
 period with only transfers, with a split bill a friend paid (not counted), with a future day; `kind` with a category that
 changed type; sync of each new field in both directions and a protocol 9 peer; a conversion of the virtual balance at the
 bounds; the dialog's tab changes (what is kept, what is dropped, an edit has no tabs, double submit ignored).
+
+## 21. Round three: a currency per account
+
+Asked by the owner: an account in lei beside accounts in euro. Section 1 named this "not a goal"; this section replaces that line and
+section 20.1's "a currency per account" in the not-built list. Migration `0020_account_currency.sql`. Sync protocol **11**.
+
+### 21.1 The idea
+
+- The app keeps **one currency for budgets, statistics, the dashboard and net worth**: the app's currency (`settings.currency`),
+  called the *main currency* here. Nothing in budgets, statistics, categories, debts or the report's income and expense parts changes.
+- An account may be in **another currency** (a *foreign account*). Its balance, its statement, its chart and its breakdown are in
+  its own currency.
+- A transaction in a foreign account has **two amounts**: `amount` in the main currency, which is what every budget and statistic
+  counts, exactly as before; and `nativeAmount`, what really left or reached the account, in the account's currency. In a
+  main-currency account there is only `amount`. (Firefly calls this the foreign amount.)
+- A transfer between two accounts with different currencies has two amounts: `amount` leaves the first account in its currency and
+  `toAmount` reaches the second in its currency.
+- A foreign account has a **rate**, typed by the person, never fetched: how many units of its currency one unit of the main currency
+  buys ("1 EUR = 5.00 RON" is rate "5.00"). It is used for two things only: net worth (the balance turned into the main currency)
+  and the amount the forms suggest. No history of rates is kept; changing the rate changes no stored amount.
+- All currencies have two decimals in this app (as the app's own currency has).
+
+Limits, chosen to keep it small, each named where it bites:
+- The main account is always in the main currency.
+- Recurring items and ledger entries (debts) live only in main-currency accounts: naming a foreign account for them is refused.
+- The currency of an account can be changed only while nothing points at it (`entries == 0`).
+- The app's own currency cannot be changed while a foreign account exists (`shortcut:` in `currency::change`: refuse, do not convert).
+
+### 21.2 The rows (migration 0020)
+
+`ALTER TABLE … ADD COLUMN` only:
+
+| Table | Column | Rule |
+|---|---|---|
+| `accounts` | `currency TEXT` | `NULL` = the main currency (it follows a change of the app's currency by itself). Otherwise three capital letters (`GLOB '[A-Z][A-Z][A-Z]'`). |
+| `accounts` | `rate TEXT` | `NULL` when `currency` is `NULL`, required otherwise: a decimal the app's rate parser accepts, greater than 0 (the `CHECK` only ties it to `currency`; the parser is in Rust) |
+| `transactions` | `native_amount_minor INTEGER` | `NULL`, or 0 to 999999999999 (as `amount_minor`) |
+| `transfers` | `to_amount_minor INTEGER` | `NULL`, or 1 to 999999999999 |
+
+`CHECK (id <> 1 OR currency IS NULL)` on accounts cannot be added to an existing table, so the rule for the main account is in Rust,
+in `accounts::check` and in a trigger (`trg_accounts_main_currency`, `RAISE(ABORT)` unless `applying`). The triggers of `accounts`,
+`transactions` and `transfers` that list columns (`updated_at`, sync stamp, audit) are dropped and made again with the new columns,
+as 0019 did. The view `account_movements` is dropped and made again:
+
+- a transaction moves its account by `native_amount_minor` when the account is foreign **and** the column is not `NULL`, else by
+  `amount_minor` (so a stale native amount on a row that ended in a main-currency account is harmless, and a foreign row that
+  somehow has none still counts);
+- `TRANSFER_IN` moves the `to` account by `COALESCE(to_amount_minor, amount_minor)`; `TRANSFER_OUT` by `amount_minor`;
+- the opening balance and ledger entries as before.
+
+### 21.3 The rules
+
+A row "is foreign" when its account's `currency` is not `NULL`. `foreign(a, b)` for a transfer: the two accounts' currencies differ
+(`NULL` equals `NULL`; `NULL` differs from 'RON'; 'RON' equals 'RON').
+
+| What | Rule | Refusal |
+|---|---|---|
+| create account | `currency` left out, or equal to the main currency (any case): stored `NULL`, `rate` must be left out. Another code: `rate` required | `InvalidInput` |
+| update account | `rate` may change at any time for a foreign account; a rate for a main-currency account is refused. `currency` may change only when `entries == 0`; to a foreign code needs a rate (in the patch or already there); to the main currency clears the rate | `InvalidInput` |
+| the main account | `currency` and `rate` are refused | `InvalidInput` |
+| create transaction in a foreign account | `nativeAmount` required ("0.01" to the maximum; "0.00" allowed exactly where `amount` allows it); `amount` required as always | `InvalidInput` |
+| create transaction in a main-currency account | `nativeAmount` must be left out | `InvalidInput` |
+| update transaction | staying in a foreign account: `nativeAmount` may change. Moving into a foreign account (from any account): `nativeAmount` required in the same patch. Moving into a main-currency account: `nativeAmount` must be left out and the stored one is cleared. A patch with `nativeAmount` for a row that is and stays in a main-currency account | `InvalidInput` |
+| create transfer | currencies differ: `toAmount` required. Same currency: `toAmount` must be left out | `InvalidInput` |
+| update transfer | after the patch the sides' currencies differ: a `toAmount` must be in the patch if a side or `amount`… no: required in the patch only when the row has none; when a side changes so that the currencies now differ it is required in the patch. Currencies equal after the patch: `toAmount` in the patch is refused and the stored one is cleared | `InvalidInput` |
+| recurring item, ledger entry, settle, accepting a bill code | the account named must be in the main currency. Paying a recurring item whose account became foreign cannot happen (currency changes only with no entries) | `InvalidInput` |
+| split bill in a foreign account | allowed: the split works on `amount` (main currency); the account moves by `nativeAmount` when you paid and by nothing when a friend paid (section 3) | |
+| change of the app's currency | refused while any account, archived or not, is foreign | `InvalidInput` |
+| archive, restore, delete, reorder, groups, details | as before; the virtual balance and the opening balance are in the account's currency | |
+
+Numbers:
+- `Account.balance`, `changeThisMonth`, `available`, `openingBalance`, `virtualBalance`, the statement, history and breakdown of a
+  foreign account are in its currency.
+- `Account.balanceInMain` = `balance` turned into the main currency at the account's rate (`balance / rate`, half away from zero, to
+  the cent); for a main-currency account it equals `balance`.
+- `Summary.inAccounts` = the sum of `balanceInMain` over the accounts that count in net worth. `netWorth` as before on top of it.
+- A transfer between different currencies is not zero-sum in numbers; each side moves by its own amount.
+
+### 21.4 Core (`src-tauri/src/accounts.rs`, `accounts/transfers.rs`, `transactions.rs`)
+
+```
+Account       gains  currency: "RON" (always a code: the main currency's for a main-currency account), foreign: bool,
+                     rate: "5.00"|null, balanceInMain: "12.34"
+NewAccount    gains  currency?, rate?
+AccountPatch  gains  currency?, rate?, balance?      // balance: see 21.5
+Transaction   gains  nativeAmount: "113.74"|null
+NewTransaction, TransactionPatch gain  nativeAmount?
+Transfer      gains  toAmount: "40.20"|null
+NewTransfer, TransferPatch gain  toAmount?
+Line (statement) amounts are in the account's currency; Statement gains currency: "RON"
+Breakdown gains currency: "RON"; its amounts are in the account's currency
+```
+
+- `accounts::require_main_currency(conn, account_id)` for the recurring, ledger, settle and bill-code paths.
+- `accounts::to_main(minor, rate)` (divide by the rate, half away from zero, sign kept) built on the existing rate parser of
+  `currency.rs` (`parse_rate`, `convert`): the inverse rate is the same fraction upside down. A rate of 0 or one the parser refuses
+  is `InvalidInput`.
+- `accounts::check` also: the main account's currency is `NULL`; every account has a rate exactly when it has a currency.
+
+### 21.5 Set the balance
+
+"I have 1662.90 on this account today": `AccountPatch.balance` (and `accounts.update --balance`, and a field in the edit dialog).
+The core sets `opening_balance := opening_balance + (balance − current balance today)`, so the account holds exactly that today and
+every earlier balance moves by the same amount. It is in the account's currency, signed, within the opening balance's bounds after
+the change; it cannot be given together with `openingBalance` (`InvalidInput`); a `balance` equal to the current one writes nothing.
+
+### 21.6 Sync, currency, backup, export, report, demo data
+
+- Wire: `AccountRow` gains `currency`, `rate` (both optional, null for a main-currency account; `parse_row`: a code of three capitals,
+  a rate the parser accepts, both or neither, neither for the main account); `TransactionRow` gains `nativeAmountMinor` (optional,
+  0 to `MAX_MINOR`); `TransferRow` gains `toAmountMinor` (optional, 1 to `MAX_MINOR`). `PROTOCOL` 11. Facts: `currency`, `rate`,
+  `nativeAmount`, `toAmount`. A row moved to the main account because its account was deleted on the other device (section 7.4) keeps
+  its stored native amount; the view ignores it there.
+- Two devices can end with a foreign account whose currency equals the app's (one changed the app's currency while the other made
+  the account). It stays a foreign account with its rate; nothing breaks, and the person can fix it by hand.
+- `currency::change` and the recorded conversion: refused while a foreign account exists; with none, as before.
+- Backup: a round trip keeps the four columns; a backup of schema 19 restores with `NULL`s.
+- Export: JSON accounts gain `currency`, `rate`, `balanceInMain`; transactions gain `nativeAmount` and transfers `toAmount`; CSV gets
+  two columns at the end, `native_amount` and `account_currency`; Excel the same on the transactions sheet, `Currency` and `Rate`
+  on the accounts sheet, `Arrives` on the transfers sheet. A limited export gives an account its `currency` beside id, name and kind.
+- Report: in the accounts table a foreign account's balance and change carry its code ("RON 120.00"); the net worth line is in the
+  main currency (21.3).
+- Demo data: one foreign account ("Lei account", RON, rate 5.00) with a few transactions and a transfer in each direction.
+
+### 21.7 Command line and API
+
+- `accounts.create`, `accounts.update`: `currency` (`Kind::String`, any case), `rate` (`Kind::String`); `accounts.update`: `balance`
+  (`Kind::String`, signed).
+- `transactions.create`, `transactions.update`: `nativeAmount` (`Kind::String`).
+- `transfers.create`, `transfers.update`: `toAmount` (`Kind::String`).
+
+### 21.8 The screens
+
+- **Account dialog**: under type, **currency** (a short text field, three letters, the main currency by default; disabled with a
+  line of why when the account has entries or is the main account). When it is not the main currency: **rate**, written as a
+  sentence, "1 EUR = [5.00] RON". In an edit: **balance today**, empty by default, with the hint "sets the opening balance so the
+  account holds this today".
+- **Money**: an amount of a foreign account is always shown with its own currency (the locale's format for that currency). The
+  accounts list shows the balance in the account's currency and, under it, small, the value in the main currency ("≈ €24.00");
+  "in accounts" and net worth are in the main currency.
+- **Add dialog**, expense and income tabs, with a foreign account chosen: the amount field is labelled with the account's currency
+  ("amount (RON)") and is the native amount; under it a second field "in EUR" filled from the rate while the person has not typed
+  in it, and theirs once they have. With a main-currency account: one amount field, as now.
+- **Transfer** between different currencies: "amount (EUR)" leaves, and a second field "arrives (RON)" filled from the two rates
+  until typed in.
+- **Lists**: the transactions page shows the main-currency amount as now and, beside it, small, the native amount with its code. An
+  account's page (statement, chart, breakdown, title) is in the account's currency.
+- **Recurring and debts dialogs**: the account field lists only main-currency accounts.
+- **Settings › currency**: with a foreign account, the change button is disabled with a line of why.
+
+### 21.9 Tests
+
+As sections 19 and 20.8 ask, with the odd transitions named: a rate of "0", "-1", "abc", "5,00"; a currency of two letters, in
+lower case (accepted, stored in capitals), equal to the main currency (stored `NULL`); a currency change with one entry refused and
+after the entry is moved away allowed; the main account refused; a transaction moved main→foreign without and with `nativeAmount`,
+foreign→main (cleared), foreign→foreign (kept unless given); a native amount given for a main-currency account; a transfer made
+between RON and EUR, then one side changed so both are EUR (the second amount cleared) and back (required again); a transfer RON→RON
+(no second amount); net worth with a foreign account at several rates, excluded, archived, negative; `balance` set to the current
+value (nothing written), to a value beyond the bounds, together with `openingBalance`, on an archived account, on a foreign account,
+with future-dated rows (they are not part of "today"); recurring, ledger, settle and bill code refused for a foreign account;
+the app's currency change refused with a foreign account, archived or not, and allowed again after it is deleted; sync of each new
+field both ways, the main account with a currency refused, a protocol 10 peer told to update.
