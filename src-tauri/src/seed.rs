@@ -168,6 +168,43 @@ mod tests {
     }
 
     #[test]
+    fn the_accounts_of_the_seed_have_their_details_and_net_worth_leaves_the_archived_one_out() {
+        use crate::accounts::{self, Account};
+        for today in DAYS {
+            let conn = seeded(today);
+            let list = accounts::list(&conn, today).unwrap();
+            let [current, savings, cash, card, old] = &list[..] else { panic!("{today}: {} accounts", list.len()) };
+            let details = |a: &Account| (a.bic.clone(), a.notes.clone(), a.group.clone(), a.include_in_net_worth, a.virtual_balance.clone());
+            // the credit card has a limit of 1000.00 as its virtual balance, and a BIC: what it can still pay is its balance and the limit
+            assert_eq!(details(card), (Some("COBADEFFXXX".into()), None, None, true, "1000.00".into()), "{today}");
+            assert_eq!(money(&card.available), money(&card.balance) + 100_000, "{today}: {card:?}");
+            assert!(money(&card.balance) < 0 && money(&card.available) < 100_000, "{today}: it is in the red, so less than the whole limit is left");
+            // the savings have a group and a note of two lines; the current account a group
+            assert_eq!(details(savings), (None, Some("Emergency fund\nAim: six months of rent".into()), Some("Savings".into()), true, "0.00".into()), "{today}");
+            assert_eq!(savings.notes.as_deref().unwrap().lines().count(), 2, "{today}");
+            assert_eq!(details(current), (None, None, Some("Everyday".into()), true, "0.00".into()), "{today}");
+            // cash has none, and the archived account is left out of net worth
+            assert_eq!(details(cash), (None, None, None, true, "0.00".into()), "{today}");
+            assert_eq!(details(old), (None, None, None, false, "0.00".into()), "{today}");
+            assert!(old.archived && list.iter().filter(|a| !a.include_in_net_worth).count() == 1, "{today}: only the archived one");
+            for a in [current, savings, cash, old] {
+                assert_eq!(a.available, a.balance, "{today}: {} has no virtual balance, so what is available is what it holds", a.name);
+            }
+            assert!(accounts::check(&conn).unwrap(), "{today}");
+            // net worth counts the others and not it, and `accounts` still counts all five
+            let summary = accounts::summary(&conn, today).unwrap();
+            let counted: i64 = list.iter().filter(|a| a.include_in_net_worth).map(|a| money(&a.balance)).sum();
+            assert_eq!((money(&summary.in_accounts), summary.accounts, summary.in_use), (counted, 5, true), "{today}");
+            // it holds nothing, so prove it by putting something in it: net worth does not move, until the account is counted
+            conn.execute("INSERT INTO transactions (category_id, name, amount_minor, payment_date, account_id) VALUES (1, 'Found money', 10000, ?1, 5)", [today]).unwrap();
+            assert_eq!(accounts::get(&conn, 5, today).unwrap().balance, "100.00", "{today}");
+            assert_eq!(accounts::summary(&conn, today).unwrap(), summary, "{today}: the archived account is not in net worth");
+            conn.execute("UPDATE accounts SET include_net_worth = 1 WHERE id = 5", []).unwrap();
+            assert_eq!(money(&accounts::summary(&conn, today).unwrap().in_accounts), counted + 10_000, "{today}: and when it is counted it is");
+        }
+    }
+
+    #[test]
     fn what_the_seed_put_in_each_account_is_there_and_the_balances_add_up() {
         use crate::accounts::{self, MAIN_ID};
         for today in DAYS {

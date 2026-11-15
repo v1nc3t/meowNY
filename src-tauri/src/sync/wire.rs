@@ -28,8 +28,9 @@ use crate::{categories, transactions, vault};
 /// computer's clock the reference (the `clock` of a hello is the wall clock, a gap between the clocks no longer stops a sync, and the
 /// phone pulls its stamps back to the computer's time); protocol 7 lets descriptions and notes hold line breaks; protocol 8 lets a split bill
 /// and the template of a recurring item name the friend who paid (`paidBy`); protocol 9 adds the tables `accounts` and `transfers` and the
-/// account of a transaction, a recurring item and a ledger entry (`account`). A device that speaks an older protocol is told to update.
-pub const PROTOCOL: u32 = 9;
+/// account of a transaction, a recurring item and a ledger entry (`account`); protocol 10 adds the details of an account (`bic`, `notes`,
+/// `group`, `includeNetWorth`, `virtualBalanceMinor`). A device that speaks an older protocol is told to update.
+pub const PROTOCOL: u32 = 10;
 /// Digest entries in one message, and rows in one message. Messages are also cut by size (`SOFT_MESSAGE_BYTES`).
 pub const MAX_ENTRIES_PER_MESSAGE: usize = 400;
 pub const MAX_ROWS_PER_MESSAGE: usize = 200;
@@ -503,15 +504,24 @@ fn description_ok(text: &Option<String>) -> bool {
     }
 }
 
-/// A note of a ledger entry: 1 to 200 characters, already trimmed, with no control characters but `\n`.
-fn note_ok(text: &str) -> bool {
-    let length = text.chars().count();
-    (1..=200).contains(&length) && text.trim() == text && transactions::clean_lines(text).is_some_and(|clean| clean == text)
+/// Text of 1 to `max` characters, already trimmed, with no control characters but `\n`.
+fn lines_ok(text: &str, max: usize) -> bool {
+    (1..=max).contains(&text.chars().count()) && text.trim() == text && transactions::clean_lines(text).is_some_and(|clean| clean == text)
 }
 
-/// The number of an account: 1 to 50 characters, already trimmed, with no control characters.
-fn number_ok(text: &str) -> bool {
-    (1..=50).contains(&text.chars().count()) && text.trim() == text && !text.chars().any(char::is_control)
+/// A note of a ledger entry or a transfer.
+fn note_ok(text: &str) -> bool {
+    lines_ok(text, 200)
+}
+
+/// The notes of an account.
+fn notes_ok(text: &str) -> bool {
+    lines_ok(text, 1000)
+}
+
+/// The number or the BIC of an account: 1 to `max` characters, already trimmed, with no control characters.
+fn short_ok(text: &str, max: usize) -> bool {
+    (1..=max).contains(&text.chars().count()) && text.trim() == text && !text.chars().any(char::is_control)
 }
 
 /// Who a part belongs to: exactly one of a friend (a `sync_id`) and a guest (a plain name).
@@ -689,7 +699,7 @@ pub struct PersonRow {
 }
 
 /// An account: a place the money is. The main account has the same `sync_id` on every device (`accounts::MAIN_SYNC_ID`) and is never
-/// archived (`docs/accounts-design.md`, section 7.2).
+/// archived (`docs/accounts-design.md`, sections 7.2 and 20.2).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct AccountRow {
@@ -704,6 +714,14 @@ pub struct AccountRow {
     pub archived: i64,
     /// Place in the list of accounts, from 0.
     pub position: i64,
+    pub bic: Option<String>,
+    pub notes: Option<String>,
+    /// The name of the group the account is listed under.
+    pub group: Option<String>,
+    /// 0 or 1: whether net worth counts the account.
+    pub include_net_worth: i64,
+    /// Signed, like the opening balance: a credit card's limit is positive.
+    pub virtual_balance_minor: i64,
     pub created_at: String,
     pub updated_at: String,
 }
@@ -923,13 +941,18 @@ pub fn parse_row(table: Table, value: &Value) -> Result<Row, WireError> {
             sync_id_ok(&r.sync_id)
                 && category_name_ok(&r.name)
                 && ["CHECKING", "SAVINGS", "CASH", "CREDIT_CARD"].contains(&r.kind.as_str())
-                && r.number.as_deref().is_none_or(number_ok)
+                && r.number.as_deref().is_none_or(|n| short_ok(n, 50))
                 && (-MAX_MINOR..=MAX_MINOR).contains(&r.opening_balance_minor)
                 && date_ok(&r.opening_date)
                 && [0, 1].contains(&r.archived)
                 // the main account is never archived
                 && (r.sync_id != MAIN_SYNC_ID || r.archived == 0)
                 && (0..=MAX_POSITION).contains(&r.position)
+                && r.bic.as_deref().is_none_or(|b| short_ok(b, 20))
+                && r.notes.as_deref().is_none_or(notes_ok)
+                && r.group.as_deref().is_none_or(category_name_ok)
+                && [0, 1].contains(&r.include_net_worth)
+                && (-MAX_MINOR..=MAX_MINOR).contains(&r.virtual_balance_minor)
                 && timestamp_ok(&r.created_at)
                 && timestamp_ok(&r.updated_at)
         }
@@ -1094,12 +1117,14 @@ mod tests {
 
     fn account() -> Value {
         json!({"syncId": ID_A, "stamp": STAMP, "name": "Savings", "kind": "SAVINGS", "number": "IE29 AIBK 9311 5212 3456 78", "openingBalanceMinor": -12000,
-               "openingDate": "2026-01-01", "archived": 0, "position": 2, "createdAt": TS, "updatedAt": TS})
+               "openingDate": "2026-01-01", "archived": 0, "position": 2, "bic": "DEUTDEFF500", "notes": "joint account\nsince 2020", "group": "Everyday",
+               "includeNetWorth": 1, "virtualBalanceMinor": 100000, "createdAt": TS, "updatedAt": TS})
     }
 
     fn main_account() -> Value {
         json!({"syncId": MAIN_SYNC_ID, "stamp": "0000000000000-0000-00000000", "name": "Main account", "kind": "CHECKING", "number": null, "openingBalanceMinor": 0,
-               "openingDate": "1970-01-01", "archived": 0, "position": 0, "createdAt": "1970-01-01T00:00:00.000Z", "updatedAt": "1970-01-01T00:00:00.000Z"})
+               "openingDate": "1970-01-01", "archived": 0, "position": 0, "bic": null, "notes": null, "group": null, "includeNetWorth": 1, "virtualBalanceMinor": 0,
+               "createdAt": "1970-01-01T00:00:00.000Z", "updatedAt": "1970-01-01T00:00:00.000Z"})
     }
 
     fn transfer() -> Value {
@@ -1166,6 +1191,13 @@ mod tests {
             (Table::Accounts, changed(account(), "openingBalanceMinor", json!(MAX_MINOR))),
             (Table::Accounts, changed(account(), "openingBalanceMinor", json!(-MAX_MINOR))),
             (Table::Accounts, changed(account(), "position", json!(MAX_POSITION))),
+            (Table::Accounts, changed(account(), "bic", json!(null))),
+            (Table::Accounts, changed(account(), "notes", json!(null))),
+            (Table::Accounts, changed(account(), "group", json!(null))),
+            (Table::Accounts, changed(account(), "includeNetWorth", json!(0))),
+            (Table::Accounts, changed(account(), "virtualBalanceMinor", json!(-250))),
+            (Table::Accounts, changed(account(), "virtualBalanceMinor", json!(MAX_MINOR))),
+            (Table::Accounts, changed(account(), "virtualBalanceMinor", json!(-MAX_MINOR))),
             (Table::Transfers, transfer()),
             (Table::Transfers, changed(transfer(), "note", json!(null))),
             (Table::Transfers, changed(transfer(), "amountMinor", json!(1))),
@@ -1206,7 +1238,7 @@ mod tests {
 
     #[test]
     fn there_is_a_table_for_every_kind_of_row_and_the_protocol_knows_it() {
-        assert_eq!(PROTOCOL, 9);
+        assert_eq!(PROTOCOL, 10);
         let names: Vec<&str> = Table::ALL.iter().map(|t| t.name()).collect();
         assert_eq!(
             names,
@@ -1460,13 +1492,116 @@ mod tests {
         let mut extra = account();
         extra["balance"] = json!("5.00");
         assert!(parse_row(Table::Accounts, &extra).is_err());
-        for key in ["syncId", "stamp", "name", "kind", "openingBalanceMinor", "openingDate", "archived", "position", "createdAt", "updatedAt"] {
+        for key in ["syncId", "stamp", "name", "kind", "openingBalanceMinor", "openingDate", "archived", "position", "includeNetWorth", "virtualBalanceMinor", "createdAt", "updatedAt"] {
             let mut missing = account();
             missing.as_object_mut().unwrap().remove(key);
             assert!(parse_row(Table::Accounts, &missing).is_err(), "{key} missing");
         }
         assert!(parse_row(Table::Accounts, &transfer()).is_err(), "a transfer is not an account");
         assert!(parse_row(Table::Transfers, &account()).is_err(), "an account is not a transfer");
+    }
+
+    #[test]
+    fn the_details_of_an_account_are_checked_as_the_screens_check_them() {
+        let bad: Vec<(&str, Value)> = vec![
+            ("bic", json!("")),
+            ("bic", json!("x".repeat(21))),
+            ("bic", json!("é".repeat(21))),
+            ("bic", json!("DEUT\tDEFF")),
+            ("bic", json!("DEUT\nDEFF")),
+            ("bic", json!("DEUT\u{7}DEFF")),
+            ("bic", json!(" DEUTDEFF")),
+            ("bic", json!("DEUTDEFF ")),
+            ("bic", json!(12)),
+            ("notes", json!("")),
+            ("notes", json!("x".repeat(1001))),
+            ("notes", json!("é".repeat(1001))),
+            ("notes", json!("a\tb")),
+            ("notes", json!("a\u{7}b")),
+            ("notes", json!("a\rb")),
+            ("notes", json!("a\r\nb")),
+            ("notes", json!(" leading")),
+            ("notes", json!("trailing\n")),
+            ("notes", json!(5)),
+            ("group", json!("")),
+            ("group", json!(" Everyday")),
+            ("group", json!("Everyday ")),
+            ("group", json!("a".repeat(51))),
+            ("group", json!("two\nlines")),
+            ("group", json!("tab\there")),
+            ("group", json!(7)),
+            ("includeNetWorth", json!(2)),
+            ("includeNetWorth", json!(-1)),
+            ("includeNetWorth", json!(true)),
+            ("includeNetWorth", json!(1.5)),
+            ("includeNetWorth", json!("1")),
+            ("includeNetWorth", json!(null)),
+            ("virtualBalanceMinor", json!(MAX_MINOR + 1)),
+            ("virtualBalanceMinor", json!(-MAX_MINOR - 1)),
+            ("virtualBalanceMinor", json!(1.5)),
+            ("virtualBalanceMinor", json!("100")),
+            ("virtualBalanceMinor", json!(null)),
+        ];
+        // the main account's row may carry the details, so it is held to the same rules
+        for base in [account(), main_account()] {
+            for (key, value) in &bad {
+                let shown: String = value.to_string().chars().take(40).collect();
+                assert!(parse_row(Table::Accounts, &changed(base.clone(), key, value.clone())).is_err(), "{key} = {shown}");
+            }
+        }
+        let good: Vec<(&str, Value)> = vec![
+            ("bic", json!(null)),
+            ("bic", json!("D")),
+            ("bic", json!("x".repeat(20))),
+            ("bic", json!("é".repeat(20))),
+            ("notes", json!(null)),
+            ("notes", json!("n")),
+            ("notes", json!("x".repeat(1000))),
+            ("notes", json!("é".repeat(1000))),
+            ("notes", json!("one\ntwo\n\nfour")),
+            ("group", json!(null)),
+            ("group", json!("g")),
+            ("group", json!("x".repeat(50))),
+            ("group", json!("é".repeat(50))),
+            ("includeNetWorth", json!(0)),
+            ("includeNetWorth", json!(1)),
+            ("virtualBalanceMinor", json!(0)),
+            ("virtualBalanceMinor", json!(1)),
+            ("virtualBalanceMinor", json!(-1)),
+            ("virtualBalanceMinor", json!(MAX_MINOR)),
+            ("virtualBalanceMinor", json!(-MAX_MINOR)),
+        ];
+        for base in [account(), main_account()] {
+            for (key, value) in &good {
+                let row = changed(base.clone(), key, value.clone());
+                let read = parse_row(Table::Accounts, &row).unwrap_or_else(|e| panic!("{key} = {value}: {e}"));
+                assert_eq!(row_to_value(&read), row, "{key}");
+            }
+        }
+        // an optional detail that is left out reads as nothing (as `number` does) and is written back as null; the two others must be there
+        for key in ["bic", "notes", "group"] {
+            let mut left_out = account();
+            left_out.as_object_mut().unwrap().remove(key);
+            let read = parse_row(Table::Accounts, &left_out).unwrap_or_else(|e| panic!("{key} left out: {e}"));
+            assert_eq!(row_to_value(&read)[key], json!(null), "{key}");
+        }
+        let mut plain = main_account();
+        for key in ["number", "bic", "notes", "group"] {
+            plain.as_object_mut().unwrap().remove(key);
+        }
+        assert_eq!(row_to_value(&parse_row(Table::Accounts, &plain).unwrap()), main_account(), "the row of a device before the details is the one with their defaults");
+        for key in ["includeNetWorth", "virtualBalanceMinor"] {
+            let mut missing = account();
+            missing.as_object_mut().unwrap().remove(key);
+            assert!(parse_row(Table::Accounts, &missing).is_err(), "{key} is required");
+        }
+        // a detail on its own does not make an unknown field fine
+        let mut extra = account();
+        extra["available"] = json!("1000.00");
+        assert!(parse_row(Table::Accounts, &extra).is_err(), "`available` is worked out, never sent");
+        let mut renamed = account();
+        renamed["includeInNetWorth"] = json!(true);
+        assert!(parse_row(Table::Accounts, &renamed).is_err());
     }
 
     #[test]

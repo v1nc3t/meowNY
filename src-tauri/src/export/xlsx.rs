@@ -340,11 +340,24 @@ fn write(data: &Data, codes: &Codes) -> Result<Vec<u8>, XlsxError> {
     if data.wants(Section::Accounts) {
         // The accounts, with what each holds today. With a limit only the name and the type of those the file speaks of: the rest would tell about
         // what the file leaves out.
-        let (opening, balance) = (format!("Opening balance ({})", data.currency), format!("Balance ({})", data.currency));
+        let (opening, balance, held) = (format!("Opening balance ({})", data.currency), format!("Balance ({})", data.currency), format!("Virtual balance ({})", data.currency));
         let s = sheet(
             &mut book,
             "Accounts",
-            &[("Name", 30.0), ("Type", 14.0), ("Number", 28.0), (&opening, 20.0), ("Opening date", 14.0), ("Archived", 10.0), (&balance, 16.0)],
+            &[
+                ("Name", 30.0),
+                ("Type", 14.0),
+                ("Number", 28.0),
+                (&opening, 20.0),
+                ("Opening date", 14.0),
+                ("Archived", 10.0),
+                (&balance, 16.0),
+                ("BIC", 16.0),
+                ("Group", 20.0),
+                (&held, 20.0),
+                ("In net worth", 12.0),
+                ("Notes", 44.0),
+            ],
         )?;
         for (i, a) in data.accounts.iter().enumerate() {
             let row = i as u32 + 1;
@@ -360,6 +373,13 @@ fn write(data: &Data, codes: &Codes) -> Result<Vec<u8>, XlsxError> {
                 if let Ok(minor) = crate::money::parse_signed_amount(&a.balance) {
                     money(s, row, 6, minor, &cash)?;
                 }
+                text(s, row, 7, a.bic.as_deref().unwrap_or(""))?;
+                text(s, row, 8, a.group.as_deref().unwrap_or(""))?;
+                if let Ok(minor) = crate::money::parse_signed_amount(&a.virtual_balance) {
+                    money(s, row, 9, minor, &cash)?;
+                }
+                s.write_boolean(row, 10, a.include_in_net_worth)?;
+                text(s, row, 11, a.notes.as_deref().unwrap_or(""))?;
             }
         }
     }
@@ -972,6 +992,11 @@ mod tests {
         Cell::Text(text.into())
     }
 
+    /// A cell with nothing in it, or with an empty text.
+    fn blank(cell: &Cell) -> bool {
+        matches!(cell, Cell::Empty) || *cell == text_cell("")
+    }
+
     #[test]
     fn the_accounts_and_the_transfers_have_a_sheet_each_and_three_sheets_say_which_account_a_row_is_in() {
         use super::super::accounts_tests::case;
@@ -982,9 +1007,15 @@ mod tests {
 
         let accounts = rows(&mut book, "Accounts");
         assert_eq!(accounts.len(), 1 + 5);
-        assert_eq!(strings(&accounts[..1]), ["Name", "Type", "Number", "Opening balance (EUR)", "Opening date", "Archived", "Balance (EUR)"]);
+        assert_eq!(
+            strings(&accounts[..1]),
+            ["Name", "Type", "Number", "Opening balance (EUR)", "Opening date", "Archived", "Balance (EUR)", "BIC", "Group", "Virtual balance (EUR)", "In net worth", "Notes"],
+            "the columns of before keep their place and the details are at the end"
+        );
         let card = accounts.iter().find(|r| r[0] == text_cell("Credit card")).unwrap();
-        assert_eq!(card[1..], [text_cell("CREDIT_CARD"), text_cell("4242"), Cell::Number(-240.0), Cell::Date(serial(2025, 12, 1)), Cell::Bool(false), Cell::Number(-945.5)]);
+        assert_eq!(card[1..7], [text_cell("CREDIT_CARD"), text_cell("4242"), Cell::Number(-240.0), Cell::Date(serial(2025, 12, 1)), Cell::Bool(false), Cell::Number(-945.5)]);
+        assert!(blank(&card[7]) && blank(&card[8]) && blank(&card[11]), "no BIC, no group and no notes: no text");
+        assert_eq!((&card[9], &card[10]), (&Cell::Number(0.0), &Cell::Bool(true)), "no virtual balance, and it counts in net worth");
         let old = accounts.iter().find(|r| r[0] == text_cell("Old savings")).unwrap();
         assert_eq!((&old[5], &old[6]), (&Cell::Bool(true), &Cell::Number(200.0)), "an archived account is in, with what it holds");
         let main = &accounts[1];
@@ -1092,6 +1123,85 @@ mod tests {
         build(&c.conn, &Selection::default(), &DisplayFormat::default());
         build(&c.conn, &Selection { category_ids: Some(vec![c.rent.to_string()]), ..Default::default() }, &DisplayFormat::default());
         assert_eq!(crate::accounts::fixtures::snapshot(&c.conn), before);
+    }
+
+    #[test]
+    fn the_accounts_sheet_ends_with_the_bic_the_group_the_virtual_balance_the_net_worth_choice_and_the_notes() {
+        use super::super::accounts_tests::{detailed, AWKWARD_NOTES};
+        let c = detailed();
+        let bytes = build(&c.conn, &Selection::default(), &DisplayFormat::default());
+        let mut book = open(&bytes);
+        let accounts = rows(&mut book, "Accounts");
+        assert_eq!(accounts.len(), 1 + 5);
+        assert!(accounts.iter().all(|r| r.len() == 12), "twelve columns in every row");
+        let by = |name: &str| accounts.iter().find(|r| r[0] == text_cell(name)).unwrap();
+        let cash = by("Cash");
+        assert_eq!(cash[1], text_cell("CASH"));
+        assert_eq!(cash[3..7], [Cell::Number(250.0), Cell::Date(serial(2025, 12, 1)), Cell::Bool(false), Cell::Number(150.0)], "what was there is where it was");
+        assert_eq!(
+            cash[7..],
+            [text_cell("COBADEFFXXX"), text_cell("Everyday"), Cell::Number(0.0), Cell::Bool(false), text_cell(&neutralise(AWKWARD_NOTES))],
+            "the notes start with `=`, so they are text with an apostrophe, and keep their line break, comma and quotes"
+        );
+        assert_eq!(cash[11], text_cell("'=1+1 first line\nsecond, \"quoted\" line"));
+        let card = by("Credit card");
+        assert_eq!(card[7..11], [text_cell("DEUTDEFF500"), text_cell("Cards"), Cell::Number(1000.0), Cell::Bool(true)], "a virtual balance is a number");
+        assert!(blank(&card[11]));
+        assert_eq!(card[6], Cell::Number(-945.5), "and it is in no balance");
+        let savings = by("Savings");
+        assert_eq!(savings[7..], [text_cell("'@BIC"), text_cell("'=Savings"), Cell::Number(-25.5), Cell::Bool(true), text_cell("'-minus note")], "a BIC, a group and notes that look like formulas are text");
+        let old = by("Old savings");
+        assert_eq!((&old[5], &old[10], &old[11], &old[8]), (&Cell::Bool(true), &Cell::Bool(false), &text_cell("closed 2025"), &text_cell("Old")), "an archived account left out of net worth");
+        let main = by("Main account");
+        assert!(blank(&main[7]) && blank(&main[8]) && blank(&main[11]));
+        assert_eq!((&main[9], &main[10]), (&Cell::Number(0.0), &Cell::Bool(true)));
+        // no cell of the sheet starts like a formula, and no part of the file holds a formula
+        for cell in strings(&accounts) {
+            assert!(!cell.starts_with(['=', '+', '-', '@', '\t', '\r']), "{cell:?}");
+        }
+        for name in Book::open(&bytes).parts.keys().filter(|n| n.starts_with("xl/worksheets/sheet")) {
+            let part = Book::open(&bytes).part(name);
+            assert!(!part.contains("<f>") && !part.contains("<f "), "{name} has a formula");
+        }
+    }
+
+    #[test]
+    fn a_limit_leaves_every_detail_out_of_the_workbook() {
+        use super::super::accounts_tests::detailed;
+        let c = detailed();
+        let secrets = ["COBADEFFXXX", "DEUTDEFF500", "@BIC", "Everyday", "Cards", "=Savings", "first line", "quoted", "minus note", "closed 2025", "Group", "BIC", "Notes", "In net worth", "Virtual balance"];
+        for selection in [
+            Selection { category_ids: Some(vec![c.secret.to_string()]), ..Default::default() },
+            Selection { from: Some("2026-02-10".into()), to: Some("2026-02-12".into()), ..Default::default() },
+        ] {
+            let mut book = open(&build(&c.conn, &selection, &DisplayFormat::default()));
+            let accounts = rows(&mut book, "Accounts");
+            assert!(accounts.len() > 1, "{selection:?}");
+            assert_eq!(accounts[0].len(), 12, "the sheet has its columns");
+            for row in &accounts[1..] {
+                assert!(row[2..].iter().all(|cell| matches!(cell, Cell::Empty)), "no number, no balance and none of the details, not even the mark or a zero: {row:?}");
+            }
+            for name in book.sheet_names() {
+                let all = strings(&rows(&mut book, &name));
+                for hidden in secrets {
+                    // (the headings of the sheet of accounts are the one place these words are)
+                    if name == "Accounts" && ["Group", "BIC", "Notes", "In net worth", "Virtual balance"].contains(&hidden) {
+                        continue;
+                    }
+                    assert!(!all.iter().any(|cell| cell.contains(hidden)), "{name} leaked {hidden:?}");
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn building_the_workbook_of_accounts_with_details_changes_nothing() {
+        use super::super::accounts_tests::detailed;
+        let c = detailed();
+        let before = crate::accounts::fixtures::snapshot(&c.conn);
+        build(&c.conn, &Selection::default(), &DisplayFormat::default());
+        build(&c.conn, &Selection { category_ids: Some(vec![c.rent.to_string()]), ..Default::default() }, &DisplayFormat::default());
+        assert_eq!(crate::accounts::fixtures::snapshot(&c.conn), before, "the details, the stamps and the history are as they were");
     }
 
     #[test]

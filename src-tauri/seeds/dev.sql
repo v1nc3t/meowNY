@@ -14,9 +14,10 @@
 --   * debts: friends (one owes you, you owe one, one is settled, one was removed from the list and still owes), a ledger of loans and
 --     repayments, bills shared with friends and a guest, and recurring items that are shared, overdue for several months, overdue with no
 --     fixed amount, and due in a few days
---   * accounts: the main account renamed Current account (with an IBAN and an opening balance), savings, cash, a credit card that is in the
---     red and an archived account with history; spending in cash and on the card, a recurring item on the card, a monthly transfer to savings
---     and one that pays off the card, and a friend who paid back in cash
+--   * accounts: the main account renamed Current account (with an IBAN, an opening balance and a group), savings (a group and a note), cash,
+--     a credit card that is in the red (a limit of 1000.00 as its virtual balance, and a BIC) and an archived account with history that net
+--     worth leaves out; spending in cash and on the card, a recurring item on the card, a monthly transfer to savings and one that pays off
+--     the card, and a friend who paid back in cash
 -- Amounts and days come from simple arithmetic on the row numbers, so the data is the same every run.
 
 INSERT OR IGNORE INTO settings (id, currency, locale, timezone, language) VALUES (1, 'EUR', 'en-IE', 'Europe/Dublin', 'en');
@@ -375,16 +376,21 @@ FROM (SELECT date(@today, 'start of month', '-' || i || ' months', '+2 days') AS
 
 
 -- ---- accounts ---------------------------------------------------------------------------------------------------------------------
--- Everything above went into the main account, which every database has (id 1). It becomes the current account, with an IBAN and the
--- balance it had when the history starts. The others are made here and some rows are moved into them.
+-- Everything above went into the main account, which every database has (id 1). It becomes the current account, with an IBAN, a group and
+-- the balance it had when the history starts. The others are made here and some rows are moved into them. The credit card has a limit of
+-- 1000.00 (its virtual balance) and a BIC, the savings a group and a note of two lines, and the archived account is left out of net worth.
 UPDATE accounts SET name = 'Current account', number = 'IE29 AIBK 9311 5212 3456 78', opening_balance_minor = 240000,
-                    opening_date = date(@today, 'start of month', '-16 months') WHERE id = 1;
-INSERT INTO accounts (id, name, kind, number, opening_balance_minor, opening_date, archived, position) VALUES
-  (2, 'Savings',     'SAVINGS',     NULL,                  150000, date(@today, 'start of month', '-16 months'), 0, 1),
-  (3, 'Cash',        'CASH',        NULL,                  25000,  date(@today, 'start of month', '-16 months'), 0, 2),
-  (4, 'Credit card', 'CREDIT_CARD', '**** **** **** 4242', -24000, date(@today, 'start of month', '-16 months'), 0, 3),
+                    opening_date = date(@today, 'start of month', '-16 months'), group_name = 'Everyday' WHERE id = 1;
+INSERT INTO accounts (id, name, kind, number, opening_balance_minor, opening_date, archived, position, bic, notes, group_name, include_net_worth, virtual_balance_minor) VALUES
+  (2, 'Savings',     'SAVINGS',     NULL,                  150000, date(@today, 'start of month', '-16 months'), 0, 1,
+      NULL, 'Emergency fund' || char(10) || 'Aim: six months of rent', 'Savings', 1, 0),
+  (3, 'Cash',        'CASH',        NULL,                  25000,  date(@today, 'start of month', '-16 months'), 0, 2,
+      NULL, NULL, NULL, 1, 0),
+  (4, 'Credit card', 'CREDIT_CARD', '**** **** **** 4242', -24000, date(@today, 'start of month', '-16 months'), 0, 3,
+      'COBADEFFXXX', NULL, NULL, 1, 100000),
   -- closed nine months ago: what was left went to the savings, so it holds nothing and is out of the lists, with its history
-  (5, 'Old savings', 'SAVINGS',     NULL,                  120000, date(@today, 'start of month', '-16 months'), 1, 4);
+  (5, 'Old savings', 'SAVINGS',     NULL,                  120000, date(@today, 'start of month', '-16 months'), 1, 4,
+      NULL, NULL, NULL, 0, 0);
 
 -- Cash: taxis, coffee and the lunch that was paid in cash. The card: the streaming plan (the recurring item and so its payments), the
 -- trips, the laptop and the concert tickets. The interest goes to the savings. A friend paid back her half of the breakfast in cash.

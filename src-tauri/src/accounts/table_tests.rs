@@ -561,6 +561,19 @@ fn a_new_database_has_the_five_detail_columns_with_their_defaults_on_the_untouch
         }
     }
     assert!(text(&w.conn, "SELECT sql FROM sqlite_master WHERE name = 'trg_accounts_sync_update'").contains("offset_ms"), "the stamp is made with the clock of 0016");
+    // and so were the three of the history: they name the five columns in the rows they write, and the one of a change in what it waits for
+    for trigger in ["trg_accounts_audit_insert", "trg_accounts_audit_update", "trg_accounts_audit_delete"] {
+        assert_eq!(one(&w.conn, &format!("SELECT count(*) FROM sqlite_master WHERE type = 'trigger' AND name = '{trigger}'")), 1, "{trigger}");
+        let sql = text(&w.conn, &format!("SELECT sql FROM sqlite_master WHERE name = '{trigger}'"));
+        for column in DETAILS {
+            assert!(sql.contains(&format!("'{column}'")), "{trigger} does not write {column}");
+        }
+        assert!(!sql.contains("sync_id") && !sql.contains("'stamp'"), "{trigger}: the history keeps no sync column");
+    }
+    let waits_for = text(&w.conn, "SELECT sql FROM sqlite_master WHERE name = 'trg_accounts_audit_update'");
+    for column in DETAILS {
+        assert!(waits_for.contains(&format!("OLD.{column} IS NOT NEW.{column}")), "a change of {column} alone is a change to write down");
+    }
 }
 
 /// An old database with accounts of every state, transfers, rows in them, a deleted account and an edited or untouched main account.
@@ -756,6 +769,153 @@ fn the_main_account_gets_its_first_real_stamp_from_a_change_of_a_detail_alone() 
         assert_ne!(updated_at_of(&w.conn, "accounts", 1), "1970-01-01T00:00:00.000Z", "{change}");
         assert_eq!(text(&w.conn, "SELECT sync_id FROM accounts WHERE id = 1"), MAIN_SYNC_ID);
         assert!(super::check(&w.conn).unwrap());
+    }
+}
+
+/// The history of one account, oldest first: the action and the old and new values as the JSON the trigger wrote.
+fn history_of(conn: &Connection, id: i64) -> Vec<(String, Option<serde_json::Value>, Option<serde_json::Value>)> {
+    conn.prepare("SELECT action, old_values, new_values FROM audit_log WHERE entity_type = 'accounts' AND entity_id = ?1 ORDER BY id")
+        .unwrap()
+        .query_map([id.to_string()], |r| {
+            let parse = |text: Option<String>| text.map(|t| serde_json::from_str(&t).unwrap());
+            Ok((r.get::<_, String>(0)?, parse(r.get(1)?), parse(r.get(2)?)))
+        })
+        .unwrap()
+        .map(Result::unwrap)
+        .collect()
+}
+
+#[test]
+fn a_change_of_one_detail_alone_writes_one_history_row_with_its_old_and_new_value() {
+    use serde_json::json;
+    let w = world();
+    let id = raw_account(&w.conn, "A");
+    // (column, a value, another, what the history shows for the starting value and for the two)
+    let steps = [
+        ("bic", "'DEUTDEFF'", "'BOFIIE2D'", json!(null), json!("DEUTDEFF"), json!("BOFIIE2D")),
+        ("notes", "'line one\nline two'", "'x'", json!(null), json!("line one\nline two"), json!("x")),
+        ("group_name", "'Bank'", "'Cash'", json!(null), json!("Bank"), json!("Cash")),
+        ("include_net_worth", "0", "1", json!(1), json!(0), json!(1)),
+        ("virtual_balance_minor", "100000", "-5", json!(0), json!(100_000), json!(-5)),
+    ];
+    for (column, first, other, start, first_json, other_json) in steps {
+        let mut shown = start.clone();
+        for (value, value_json) in [(first, first_json.clone()), (other, other_json.clone()), (first, first_json.clone())] {
+            let before = history_of(&w.conn, id).len();
+            exec(&w.conn, &format!("UPDATE accounts SET {column} = {value} WHERE id = {id}")).unwrap();
+            let history = history_of(&w.conn, id);
+            assert_eq!(history.len(), before + 1, "{column} = {value}: one row, not none and not two");
+            let (action, old, new) = history.last().unwrap();
+            let (old, new) = (old.as_ref().unwrap(), new.as_ref().unwrap());
+            assert_eq!(action, "UPDATE", "{column}");
+            assert_eq!((&old[column], &new[column]), (&shown, &value_json), "{column}: the value it had and the value it has");
+            // nothing else changed in the row it shows, and the other four details are as they were
+            for other_column in ["name", "kind", "number", "opening_balance_minor", "opening_date", "archived", "position", "bic", "notes", "group_name", "include_net_worth", "virtual_balance_minor"] {
+                if other_column != column {
+                    assert_eq!(old[other_column], new[other_column], "{column}: {other_column} did not change");
+                }
+            }
+            assert!(old.get("sync_id").is_none() && new.get("stamp").is_none(), "{column}: no sync column");
+            shown = value_json;
+            // the same value again writes nothing
+            exec(&w.conn, &format!("UPDATE accounts SET {column} = {value} WHERE id = {id}")).unwrap();
+            assert_eq!(history_of(&w.conn, id).len(), before + 1, "{column} = {value} again");
+        }
+    }
+    // clearing and setting a text detail: from a value to nothing and from nothing to a value are changes too
+    for column in ["bic", "notes", "group_name"] {
+        exec(&w.conn, &format!("UPDATE accounts SET {column} = 'x' WHERE id = {id}")).unwrap();
+        let before = history_of(&w.conn, id).len();
+        exec(&w.conn, &format!("UPDATE accounts SET {column} = NULL WHERE id = {id}")).unwrap();
+        let history = history_of(&w.conn, id);
+        assert_eq!(history.len(), before + 1, "{column}: cleared");
+        let (_, old, new) = history.last().unwrap();
+        assert_eq!((&old.as_ref().unwrap()[column], &new.as_ref().unwrap()[column]), (&json!("x"), &json!(null)), "{column}");
+        exec(&w.conn, &format!("UPDATE accounts SET {column} = NULL WHERE id = {id}")).unwrap();
+        assert_eq!(history_of(&w.conn, id).len(), before + 1, "{column}: clearing what is clear writes nothing");
+    }
+    // the five at once are one row too
+    let before = history_of(&w.conn, id).len();
+    exec(&w.conn, &format!("UPDATE accounts SET bic = 'B', notes = 'N', group_name = 'G', include_net_worth = 0, virtual_balance_minor = 7 WHERE id = {id}")).unwrap();
+    assert_eq!(history_of(&w.conn, id).len(), before + 1);
+}
+
+#[test]
+fn an_update_that_changes_no_column_writes_no_history_row_whatever_it_writes() {
+    let w = world();
+    let id = raw_account(&w.conn, "A");
+    exec(&w.conn, &format!("UPDATE accounts SET bic = 'B', notes = 'N', group_name = 'G', include_net_worth = 0, virtual_balance_minor = 7 WHERE id = {id}")).unwrap();
+    let history = history_of(&w.conn, id).len();
+    for same in [
+        "bic = bic",
+        "bic = 'B', notes = 'N', group_name = 'G', include_net_worth = 0, virtual_balance_minor = 7",
+        "include_net_worth = include_net_worth, virtual_balance_minor = virtual_balance_minor",
+        "name = name, kind = kind, number = number, opening_balance_minor = opening_balance_minor, opening_date = opening_date, archived = archived, position = position",
+        "bic = bic, notes = notes, group_name = group_name, include_net_worth = include_net_worth, virtual_balance_minor = virtual_balance_minor",
+    ] {
+        exec(&w.conn, &format!("UPDATE accounts SET {same} WHERE id = {id}")).unwrap();
+    }
+    exec(&w.conn, "UPDATE accounts SET bic = 'B' WHERE id = -1").unwrap();
+    assert_eq!(history_of(&w.conn, id).len(), history, "no row");
+    // a write of `updated_at` alone is not a change either (the trigger that keeps it does the same)
+    age(&w.conn, "accounts", id);
+    assert_eq!(history_of(&w.conn, id).len(), history, "an old date written by hand: no row");
+}
+
+#[test]
+fn the_history_of_a_new_and_of_a_deleted_account_carries_the_five_details() {
+    use serde_json::json;
+    let w = world();
+    exec(
+        &w.conn,
+        "INSERT INTO accounts (name, kind, opening_date, bic, notes, group_name, include_net_worth, virtual_balance_minor)
+         VALUES ('Card', 'CREDIT_CARD', '2026-01-01', 'DEUTDEFF500', 'one' || char(10) || 'two', 'Cards', 0, 100000)",
+    )
+    .unwrap();
+    let id = w.conn.last_insert_rowid();
+    exec(&w.conn, "INSERT INTO accounts (name, kind, opening_date) VALUES ('Plain', 'CASH', '2026-01-01')").unwrap();
+    let plain = w.conn.last_insert_rowid();
+    let details = |row: &serde_json::Value| [row["bic"].clone(), row["notes"].clone(), row["group_name"].clone(), row["include_net_worth"].clone(), row["virtual_balance_minor"].clone()];
+    let made = history_of(&w.conn, id);
+    assert_eq!(made.len(), 1);
+    let (action, old, new) = &made[0];
+    assert_eq!((action.as_str(), old.is_none()), ("INSERT", true));
+    assert_eq!(details(new.as_ref().unwrap()), [json!("DEUTDEFF500"), json!("one\ntwo"), json!("Cards"), json!(0), json!(100_000)]);
+    let defaults = history_of(&w.conn, plain);
+    assert_eq!(details(defaults[0].2.as_ref().unwrap()), [json!(null), json!(null), json!(null), json!(1), json!(0)], "a row that names none of them: the defaults");
+    // a change on the way, and then the delete: it keeps what the account was
+    exec(&w.conn, &format!("UPDATE accounts SET group_name = 'Plastic', virtual_balance_minor = 90000 WHERE id = {id}")).unwrap();
+    exec(&w.conn, &format!("DELETE FROM accounts WHERE id = {id}")).unwrap();
+    let history = history_of(&w.conn, id);
+    assert_eq!(history.iter().map(|h| h.0.as_str()).collect::<Vec<_>>(), ["INSERT", "UPDATE", "DELETE"]);
+    let (_, old, new) = &history[1];
+    assert_eq!((old.as_ref().unwrap()["group_name"].clone(), new.as_ref().unwrap()["group_name"].clone()), (json!("Cards"), json!("Plastic")));
+    assert_eq!((old.as_ref().unwrap()["virtual_balance_minor"].clone(), new.as_ref().unwrap()["virtual_balance_minor"].clone()), (json!(100_000), json!(90_000)));
+    let (action, old, new) = &history[2];
+    assert_eq!((action.as_str(), new.is_none()), ("DELETE", true));
+    assert_eq!(details(old.as_ref().unwrap()), [json!("DEUTDEFF500"), json!("one\ntwo"), json!("Plastic"), json!(0), json!(90_000)]);
+}
+
+#[test]
+fn the_main_account_has_no_history_until_a_detail_of_it_changes_and_then_it_has_one_row() {
+    use serde_json::json;
+    for (change, column, expected) in [
+        ("notes = 'mine'", "notes", json!("mine")),
+        ("bic = 'DEUTDEFF'", "bic", json!("DEUTDEFF")),
+        ("group_name = 'Everyday'", "group_name", json!("Everyday")),
+        ("include_net_worth = 0", "include_net_worth", json!(0)),
+        ("virtual_balance_minor = 1", "virtual_balance_minor", json!(1)),
+    ] {
+        let w = world();
+        assert!(history_of(&w.conn, MAIN_ID).is_empty(), "the migration wrote none");
+        exec(&w.conn, &format!("UPDATE accounts SET {change} WHERE id = 1")).unwrap();
+        let history = history_of(&w.conn, MAIN_ID);
+        assert_eq!(history.len(), 1, "{change}: one row, an update, and none for its making");
+        let (action, old, new) = &history[0];
+        assert_eq!(action, "UPDATE");
+        assert_eq!(new.as_ref().unwrap()[column], expected, "{change}");
+        assert_ne!(old.as_ref().unwrap()[column], expected, "{change}");
+        assert_eq!(new.as_ref().unwrap()["name"], json!(MAIN_NAME));
     }
 }
 

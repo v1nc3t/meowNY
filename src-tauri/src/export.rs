@@ -11,8 +11,9 @@
 //! Debts are listed too: the friends, the ledger of money lent and borrowed, and the parts of every shared bill; each transaction has what was
 //! paid (`amount`) and what it costs you (`my_share`). A limited export keeps to what it contains (see `debts.rs`).
 //! Accounts are listed too, and each transaction, recurring item and ledger entry says which one it is in. With no limit the file has every
-//! account with its balance and every transfer; with a limit it names the accounts its rows are in and nothing more about them, and has no
-//! transfers (`docs/accounts-design.md`, section 10).
+//! account with its balance and its details (BIC, notes, group, whether net worth counts it, virtual balance) and every transfer; with a
+//! limit it names the accounts its rows are in and nothing more about them, and has no transfers (`docs/accounts-design.md`, sections 10 and
+//! 20.5).
 //! The device-specific scheduled-backup setup, which holds a passphrase, and the access tokens of the
 //! command-line client are never exported.
 
@@ -781,6 +782,8 @@ fn accounts_json(conn: &Connection, sel: &Parsed, today: &str) -> Result<Vec<Val
             let mut whole = serde_json::to_value(a).map_err(|_| AppError::Internal)?;
             if let Some(fields) = whole.as_object_mut() {
                 fields.remove("entries");
+                // worked out from the balance and the virtual balance, both of which are in the file
+                fields.remove("available");
             }
             Ok(whole)
         })

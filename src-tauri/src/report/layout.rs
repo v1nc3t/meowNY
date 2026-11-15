@@ -518,11 +518,21 @@ impl Builder<'_> {
         self.text_right(balance_right, base, 8.5, true, MUTED, &balance);
         self.line(self.left, self.y + 17.0, self.right, self.y + 17.0, 0.8, GRID);
         self.y += 20.0;
-        for (name, balance, change) in &part.accounts {
+        for (name, balance, change, counts) in &part.accounts {
             self.ensure(row);
             let base = Self::baseline(self.y, row, 9.5);
             let signed = if *change >= 0 { format!("+{}", self.fmt.money(*change)) } else { self.fmt.money(*change) };
-            self.text_fit(self.left, base, 9.5, false, INK, name, change_right - self.left - 90.0);
+            let room = change_right - self.left - 90.0;
+            if *counts {
+                self.text_fit(self.left, base, 9.5, false, INK, name, room);
+            } else {
+                // the mark tells why this balance is not in the net worth, so the name is cut before it is; a very long mark is cut too
+                let mark = self.m.fit(&self.labels.not_in_net_worth, 8.0, false, room * 0.6);
+                let shown = self.m.fit(name, 9.5, false, room - self.m.width(&mark, 8.0, false) - 5.0);
+                let after_name = self.left + self.m.width(&shown, 9.5, false) + 5.0;
+                self.text(self.left, base, 9.5, false, INK, &shown);
+                self.text(after_name, base, 8.0, false, MUTED, &mark);
+            }
             self.text_right(change_right, base, 9.5, false, if *change < 0 { OVER_TEXT } else { INCOME }, &signed);
             self.text_right(balance_right, base, 9.5, false, if *balance < 0 { OVER_TEXT } else { INK }, &self.fmt.money(*balance));
             self.line(self.left, self.y + row, self.right, self.y + row, 0.3, GRID);

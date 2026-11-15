@@ -324,7 +324,7 @@ fn a_fresh_phone_is_empty_for_pairing_until_anything_about_accounts_is_changed()
     let fresh = || device("EUR");
     assert!(engine::is_empty(&fresh()).unwrap(), "only the untouched main account");
     type Edit = fn(&Connection);
-    let edits: [(&str, Edit); 6] = [
+    let edits: [(&str, Edit); 11] = [
         ("a rename of the main account", |c| rename(c, MAIN_ID, "Wallet")),
         ("its opening balance", |c| {
             accounts::update(c, MAIN_ID, &AccountPatch { opening_balance: Some("10.00".into()), ..Default::default() }, TODAY).unwrap();
@@ -342,6 +342,21 @@ fn a_fresh_phone_is_empty_for_pairing_until_anything_about_accounts_is_changed()
         ("an account that was made and deleted again (it leaves a marker)", |c| {
             let cash = open(c, "Cash");
             accounts::delete(c, cash).unwrap();
+        }),
+        ("a BIC of the main account", |c| {
+            accounts::update(c, MAIN_ID, &AccountPatch { bic: Some(Some("DEUTDEFF".into())), ..Default::default() }, TODAY).unwrap();
+        }),
+        ("its notes", |c| {
+            accounts::update(c, MAIN_ID, &AccountPatch { notes: Some(Some("mine".into())), ..Default::default() }, TODAY).unwrap();
+        }),
+        ("its group", |c| {
+            accounts::update(c, MAIN_ID, &AccountPatch { group: Some(Some("Everyday".into())), ..Default::default() }, TODAY).unwrap();
+        }),
+        ("leaving it out of net worth", |c| {
+            accounts::update(c, MAIN_ID, &AccountPatch { include_in_net_worth: Some(false), ..Default::default() }, TODAY).unwrap();
+        }),
+        ("a virtual balance of the main account", |c| {
+            accounts::update(c, MAIN_ID, &AccountPatch { virtual_balance: Some("1.00".into()), ..Default::default() }, TODAY).unwrap();
         }),
     ];
     for (what, edit) in edits {
@@ -402,6 +417,11 @@ fn a_main_account_row_that_is_archived_is_refused_even_when_it_gets_past_the_wir
         opening_date: "1970-01-01".into(),
         archived: 1,
         position: 0,
+        bic: None,
+        notes: None,
+        group: None,
+        include_net_worth: 1,
+        virtual_balance_minor: 0,
         created_at: "1970-01-01T00:00:00.000Z".into(),
         updated_at: "1970-01-01T00:00:00.000Z".into(),
     };
@@ -1153,6 +1173,40 @@ fn a_change_of_currency_converts_opening_balances_and_transfers_on_both_devices_
 }
 
 #[test]
+fn a_change_of_currency_converts_virtual_balances_on_both_devices_without_sending_them() {
+    // (rate, what -100.50 on Cash, 1000.00 on Savings and 250.00 on the main account become, in minor units)
+    for (rate, expected) in [("0.001", [-10, 100, 25]), ("1.08", [-10_854, 108_000, 27_000]), ("160", [-1_608_000, 16_000_000, 4_000_000])] {
+        let (mut desktop, mut phone) = met_with_accounts();
+        let (cash, savings) = (account_id(&desktop, "Cash"), account_id(&desktop, "Savings"));
+        for (id, virtual_balance) in [(cash, "-100.50"), (savings, "1000.00"), (MAIN_ID, "250.00")] {
+            accounts::update(&desktop, id, &AccountPatch { virtual_balance: Some(virtual_balance.into()), ..Default::default() }, TODAY).unwrap();
+        }
+        settle(&mut desktop, &mut phone);
+        pause();
+        currency::change(&mut desktop, "USD", Some(rate), TODAY).unwrap();
+        let outcome = settle(&mut desktop, &mut phone);
+        assert!(!outcome.compared.contains(&Table::Accounts), "both devices converted them alike: {:?}", outcome.compared);
+        assert!(outcome.first.is_empty() && outcome.second.is_empty(), "no row travelled: {outcome:?}");
+        for conn in [&desktop, &phone] {
+            let held = [
+                count(conn, "SELECT virtual_balance_minor FROM accounts WHERE name = 'Cash'"),
+                count(conn, "SELECT virtual_balance_minor FROM accounts WHERE name = 'Savings'"),
+                count(conn, "SELECT virtual_balance_minor FROM accounts WHERE id = 1"),
+            ];
+            assert_eq!(held, expected, "rate {rate}: half away from zero, on both devices");
+        }
+        // (the local ids differ between the devices, so the accounts are compared by name)
+        let shown = |conn: &Connection| {
+            let mut list: Vec<_> = accounts::list(conn, TODAY).unwrap().into_iter().map(|a| (a.name, a.balance, a.virtual_balance, a.available)).collect();
+            list.sort();
+            list
+        };
+        assert_eq!(shown(&phone), shown(&desktop), "rate {rate}: `available` too");
+        assert_eq!(accounts::summary(&phone, TODAY).unwrap(), accounts::summary(&desktop, TODAY).unwrap(), "rate {rate}");
+    }
+}
+
+#[test]
 fn what_a_device_changed_in_accounts_and_transfers_counts_as_waiting_for_the_next_sync() {
     let conn = device("EUR");
     let before = peers::changes_since(&conn, 0).unwrap();
@@ -1164,4 +1218,489 @@ fn what_a_device_changed_in_accounts_and_transfers_counts_as_waiting_for_the_nex
     transfers::delete(&conn, transfer_named(&conn, "t")).unwrap();
     accounts::delete(&conn, cash).unwrap();
     assert_eq!(peers::changes_since(&conn, 0).unwrap(), before + 3, "the two rows are gone, their markers are changes in their place");
+}
+
+// --- the details of an account: protocol 10 (docs/accounts-design.md, section 20) ------------------------------------------
+
+/// What a person sees of the five details of an account: BIC, notes, group, whether net worth counts it, virtual balance.
+type Details = (Option<String>, Option<String>, Option<String>, bool, String);
+
+fn plain_details() -> Details {
+    (None, None, None, true, "0.00".into())
+}
+
+fn details_of(conn: &Connection, sync_id: &str) -> Details {
+    let id = count(conn, &format!("SELECT id FROM accounts WHERE sync_id = '{sync_id}'"));
+    let a = accounts::get(conn, id, TODAY).unwrap();
+    (a.bic, a.notes, a.group, a.include_in_net_worth, a.virtual_balance)
+}
+
+/// Each detail on its own: its name on the wire, the patch that sets it, what that makes the details, and the patch that clears it.
+fn one_detail_at_a_time() -> Vec<(&'static str, AccountPatch, Details, AccountPatch)> {
+    vec![
+        (
+            "bic",
+            AccountPatch { bic: Some(Some("DEUTDEFF500".into())), ..Default::default() },
+            (Some("DEUTDEFF500".into()), None, None, true, "0.00".into()),
+            AccountPatch { bic: Some(None), ..Default::default() },
+        ),
+        (
+            "notes",
+            AccountPatch { notes: Some(Some("first line\nsecond line".into())), ..Default::default() },
+            (None, Some("first line\nsecond line".into()), None, true, "0.00".into()),
+            AccountPatch { notes: Some(None), ..Default::default() },
+        ),
+        (
+            "group",
+            AccountPatch { group: Some(Some("Everyday".into())), ..Default::default() },
+            (None, None, Some("Everyday".into()), true, "0.00".into()),
+            AccountPatch { group: Some(None), ..Default::default() },
+        ),
+        (
+            "includeNetWorth",
+            AccountPatch { include_in_net_worth: Some(false), ..Default::default() },
+            (None, None, None, false, "0.00".into()),
+            AccountPatch { include_in_net_worth: Some(true), ..Default::default() },
+        ),
+        (
+            "virtualBalance",
+            AccountPatch { virtual_balance: Some("-250.00".into()), ..Default::default() },
+            (None, None, None, true, "-250.00".into()),
+            AccountPatch { virtual_balance: Some("0.00".into()), ..Default::default() },
+        ),
+    ]
+}
+
+#[test]
+fn each_detail_set_on_one_device_arrives_on_the_other_and_clearing_it_there_arrives_back() {
+    for on_desktop in [true, false] {
+        for (field, set, expected, clear) in one_detail_at_a_time() {
+            let (mut desktop, mut phone) = met_with_accounts();
+            let cash = account_sync_id(&desktop, "Cash");
+            let (changed, other) = if on_desktop { (&desktop, &phone) } else { (&phone, &desktop) };
+            let before = text(other, &format!("SELECT stamp FROM accounts WHERE sync_id = '{cash}'"));
+            accounts::update(changed, account_id(changed, "Cash"), &set, TODAY).unwrap();
+            let outcome = settle(&mut desktop, &mut phone);
+            assert_eq!((outcome.compared.as_slice(), outcome.differences), ([Table::Accounts].as_slice(), false), "{field}: only the accounts were compared");
+            for conn in [&desktop, &phone] {
+                assert_eq!(details_of(conn, &cash), expected, "{field} set on the {}", if on_desktop { "desktop" } else { "phone" });
+                assert_eq!(text(conn, &format!("SELECT name FROM accounts WHERE sync_id = '{cash}'")), "Cash", "{field}: the rest of the row is as it was");
+            }
+            let other = if on_desktop { &phone } else { &desktop };
+            assert!(text(other, &format!("SELECT stamp FROM accounts WHERE sync_id = '{cash}'")) > before, "{field}: the stamp came with it");
+
+            // the other device clears it again, and that arrives where it was set
+            pause();
+            accounts::update(other, account_id(other, "Cash"), &clear, TODAY).unwrap();
+            settle(&mut desktop, &mut phone);
+            for conn in [&desktop, &phone] {
+                assert_eq!(details_of(conn, &cash), plain_details(), "{field} cleared on the other device");
+                assert_eq!(count(conn, &format!("SELECT count(*) FROM accounts WHERE sync_id = '{cash}' AND bic IS NULL AND notes IS NULL AND group_name IS NULL")), 1, "cleared is null, not an empty text");
+            }
+        }
+    }
+}
+
+#[test]
+fn an_account_made_with_every_detail_comes_to_a_new_phone_whole_even_at_the_bounds() {
+    for (virtual_balance, notes) in [("9999999999.99", "n".repeat(1000)), ("-9999999999.99", "é\nx\n".repeat(250)), ("0.00", "a".into())] {
+        let mut desktop = device("EUR");
+        let mut phone = new_phone(&desktop);
+        let new = NewAccount {
+            name: "Card".into(),
+            kind: Kind::CreditCard,
+            number: None,
+            opening_balance: Some("-10.00".into()),
+            opening_date: Some("2026-01-01".into()),
+            bic: Some("B".repeat(20)),
+            notes: Some(notes.clone()),
+            group: Some("é".repeat(50)),
+            include_in_net_worth: Some(false),
+            virtual_balance: Some(virtual_balance.into()),
+        };
+        let made = accounts::create(&desktop, &new, TODAY).unwrap();
+        assert_eq!(made.notes.as_deref(), Some(notes.trim()));
+        settle(&mut desktop, &mut phone);
+        let sent = details_of(&desktop, &account_sync_id(&desktop, "Card"));
+        assert_eq!(sent, (Some("B".repeat(20)), Some(notes.trim().to_string()), Some("é".repeat(50)), false, virtual_balance.to_string()));
+        assert_eq!(details_of(&phone, &account_sync_id(&phone, "Card")), sent, "virtual balance {virtual_balance}");
+        assert_eq!(accounts::list(&phone, TODAY).unwrap(), accounts::list(&desktop, TODAY).unwrap(), "even `available` is the same");
+    }
+}
+
+#[test]
+fn a_newer_edit_of_only_a_detail_wins_over_an_older_rename_of_the_same_account_as_a_whole_row() {
+    for (field, set, expected, _) in one_detail_at_a_time() {
+        for detail_first in [true, false] {
+            for detail_on_desktop in [true, false] {
+                let (desktop, phone) = met_with_accounts();
+                let (mut detailer, mut renamer) = if detail_on_desktop { (desktop, phone) } else { (phone, desktop) };
+                let cash = account_sync_id(&detailer, "Cash");
+                if detail_first {
+                    accounts::update(&detailer, account_id(&detailer, "Cash"), &set, TODAY).unwrap();
+                    pause();
+                    rename(&renamer, account_id(&renamer, "Cash"), "Cash box");
+                } else {
+                    rename(&renamer, account_id(&renamer, "Cash"), "Cash box");
+                    pause();
+                    accounts::update(&detailer, account_id(&detailer, "Cash"), &set, TODAY).unwrap();
+                }
+                settle(&mut detailer, &mut renamer);
+                // the later change decides the whole row, so the earlier one is gone from both: the rename is lost to the detail,
+                // and the detail to the rename
+                let (name, details) = if detail_first { ("Cash box", plain_details()) } else { ("Cash", expected.clone()) };
+                for conn in [&detailer, &renamer] {
+                    assert_eq!(text(conn, &format!("SELECT name FROM accounts WHERE sync_id = '{cash}'")), name, "{field}, detail first: {detail_first}");
+                    assert_eq!(details_of(conn, &cash), details, "{field}, detail first: {detail_first}");
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn both_devices_changing_the_details_of_one_account_is_an_ordinary_conflict_with_the_facts_to_choose_from() {
+    for (choice, want_desktop) in [(engine::Choice::Mine, true), (engine::Choice::Theirs, false)] {
+        let (mut desktop, mut phone) = met_with_accounts();
+        let cash = account_sync_id(&desktop, "Cash");
+        let met = now();
+        pause();
+        accounts::update(
+            &desktop,
+            account_id(&desktop, "Cash"),
+            &AccountPatch {
+                bic: Some(Some("DESKTOP".into())),
+                notes: Some(Some("from the desktop".into())),
+                group: Some(Some("Everyday".into())),
+                include_in_net_worth: Some(false),
+                virtual_balance: Some("1000.00".into()),
+                ..Default::default()
+            },
+            TODAY,
+        )
+        .unwrap();
+        accounts::update(
+            &phone,
+            account_id(&phone, "Cash"),
+            &AccountPatch {
+                bic: Some(Some("PHONE".into())),
+                notes: Some(Some("from the phone\nin two lines".into())),
+                group: Some(Some("Savings".into())),
+                virtual_balance: Some("-5.50".into()),
+                ..Default::default()
+            },
+            TODAY,
+        )
+        .unwrap();
+        let (conflicts, views) = conflicts_between(&desktop, &phone, met);
+        assert_eq!(conflicts.len(), 1);
+        assert_eq!((conflicts[0].table, conflicts[0].id.as_str()), (Table::Accounts, cash.as_str()));
+        assert_eq!(views[0].title, "Cash");
+        assert_eq!(
+            fields(&views, Table::Accounts),
+            texts(&[
+                ("bic", "DESKTOP", "PHONE"),
+                ("notes", "from the desktop", "from the phone\nin two lines"),
+                ("group", "Everyday", "Savings"),
+                ("includeNetWorth", "no", "yes"),
+                ("virtualBalance", "1000.00", "-5.50"),
+            ]),
+            "the five facts, in this order, and nothing else"
+        );
+        engine::decide(&mut desktop, &conflicts, &[choice]).unwrap();
+        settle(&mut desktop, &mut phone);
+        let expected: Details = if want_desktop {
+            (Some("DESKTOP".into()), Some("from the desktop".into()), Some("Everyday".into()), false, "1000.00".into())
+        } else {
+            (Some("PHONE".into()), Some("from the phone\nin two lines".into()), Some("Savings".into()), true, "-5.50".into())
+        };
+        for conn in [&desktop, &phone] {
+            assert_eq!(details_of(conn, &cash), expected, "{choice:?}");
+        }
+    }
+}
+
+#[test]
+fn a_conflict_lists_only_the_details_that_differ_and_a_cleared_one_as_nothing() {
+    let (desktop, phone) = met_with_accounts();
+    let cash = account_id(&desktop, "Cash");
+    // the same on both ...
+    for conn in [&desktop, &phone] {
+        accounts::update(conn, account_id(conn, "Cash"), &AccountPatch { notes: Some(Some("shared".into())), group: Some(Some("Bank".into())), ..Default::default() }, TODAY).unwrap();
+    }
+    let (mut desktop, mut phone) = (desktop, phone);
+    settle(&mut desktop, &mut phone);
+    let met = now();
+    pause();
+    // ... then each clears or changes one thing, and the facts are those two only
+    accounts::update(&desktop, cash, &AccountPatch { group: Some(None), include_in_net_worth: Some(false), ..Default::default() }, TODAY).unwrap();
+    accounts::update(&phone, account_id(&phone, "Cash"), &AccountPatch { bic: Some(Some("PHONE".into())), virtual_balance: Some("0.01".into()), ..Default::default() }, TODAY).unwrap();
+    let (conflicts, views) = conflicts_between(&desktop, &phone, met);
+    assert_eq!(conflicts.len(), 1);
+    assert_eq!(
+        fields(&views, Table::Accounts),
+        texts(&[("bic", "", "PHONE"), ("group", "", "Bank"), ("includeNetWorth", "no", "yes"), ("virtualBalance", "0.00", "0.01")]),
+        "nothing is shown for a cleared text, and the notes that are the same are not listed"
+    );
+    engine::decide(&mut desktop, &conflicts, &[engine::Choice::Mine]).unwrap();
+    settle(&mut desktop, &mut phone);
+    for conn in [&desktop, &phone] {
+        assert_eq!(details_of(conn, &account_sync_id(conn, "Cash")), (None, Some("shared".into()), None, false, "0.00".into()));
+    }
+}
+
+#[test]
+fn the_main_account_with_details_arrives_on_the_other_device_and_both_stay_one_account() {
+    for on_desktop in [true, false] {
+        let (mut desktop, mut phone) = paired();
+        let (changed, other) = if on_desktop { (&desktop, &phone) } else { (&phone, &desktop) };
+        assert_eq!(text(other, "SELECT stamp FROM accounts"), UNSET_STAMP);
+        pause();
+        accounts::update(
+            changed,
+            MAIN_ID,
+            &AccountPatch {
+                bic: Some(Some("COBADEFFXXX".into())),
+                notes: Some(Some("where the salary lands\nmain bank".into())),
+                group: Some(Some("Everyday".into())),
+                include_in_net_worth: Some(false),
+                virtual_balance: Some("500.00".into()),
+                ..Default::default()
+            },
+            TODAY,
+        )
+        .unwrap();
+        assert!(text(changed, "SELECT stamp FROM accounts").as_str() > UNSET_STAMP, "a change of the details alone gives it a real stamp");
+        let outcome = settle(&mut desktop, &mut phone);
+        assert_eq!(outcome.compared, [Table::Accounts]);
+        let expected: Details = (Some("COBADEFFXXX".into()), Some("where the salary lands\nmain bank".into()), Some("Everyday".into()), false, "500.00".into());
+        for conn in [&desktop, &phone] {
+            assert_eq!(count(conn, "SELECT count(*) FROM accounts"), 1, "one main account, not two");
+            assert_eq!((count(conn, "SELECT id FROM accounts"), text(conn, "SELECT sync_id FROM accounts")), (1, MAIN_SYNC_ID.to_string()));
+            assert_eq!(details_of(conn, MAIN_SYNC_ID), expected);
+            assert_eq!(text(conn, "SELECT name FROM accounts"), "Main account", "the rest of the row is as it was");
+            assert_eq!(count(conn, "SELECT count(*) FROM sync_deleted WHERE kind = 'accounts'"), 0, "no deletion of an account");
+        }
+        // the other device puts the main account back to its defaults, and that arrives too
+        pause();
+        let other = if on_desktop { &phone } else { &desktop };
+        accounts::update(
+            other,
+            MAIN_ID,
+            &AccountPatch { bic: Some(None), notes: Some(None), group: Some(None), include_in_net_worth: Some(true), virtual_balance: Some("0.00".into()), ..Default::default() },
+            TODAY,
+        )
+        .unwrap();
+        settle(&mut desktop, &mut phone);
+        for conn in [&desktop, &phone] {
+            assert_eq!(count(conn, "SELECT count(*) FROM accounts"), 1);
+            assert_eq!(details_of(conn, MAIN_SYNC_ID), plain_details());
+        }
+    }
+}
+
+#[test]
+fn the_same_details_set_on_both_devices_before_they_meet_make_no_conflict_and_one_account() {
+    let (mut desktop, mut phone) = paired();
+    let met = now();
+    pause();
+    for conn in [&desktop, &phone] {
+        accounts::update(conn, MAIN_ID, &AccountPatch { group: Some(Some("Everyday".into())), virtual_balance: Some("10.00".into()), ..Default::default() }, TODAY).unwrap();
+    }
+    // two edits of one row that came out the same are still two edits: the review shows nothing to choose between
+    let (conflicts, views) = conflicts_between(&desktop, &phone, met);
+    assert_eq!(conflicts.len(), 1);
+    assert!(fields(&views, Table::Accounts).is_empty(), "no fact differs");
+    engine::decide(&mut desktop, &conflicts, &[engine::Choice::Theirs]).unwrap();
+    settle(&mut desktop, &mut phone);
+    for conn in [&desktop, &phone] {
+        assert_eq!(details_of(conn, MAIN_SYNC_ID), (None, None, Some("Everyday".into()), true, "10.00".into()));
+    }
+}
+
+#[test]
+fn leaving_an_account_out_of_net_worth_on_one_device_gives_the_same_summary_on_the_other() {
+    let (mut desktop, mut phone) = met_with_accounts();
+    for (name, opening) in [("Cash", "50.00"), ("Savings", "200.00")] {
+        accounts::update(&desktop, account_id(&desktop, name), &AccountPatch { opening_balance: Some(opening.into()), opening_date: Some("2026-01-01".into()), ..Default::default() }, TODAY).unwrap();
+    }
+    settle(&mut desktop, &mut phone);
+    let summary = |conn: &Connection| accounts::summary(conn, TODAY).unwrap();
+    assert_eq!((summary(&desktop).in_accounts.as_str(), summary(&desktop).accounts), ("250.00", 3));
+    assert_eq!(summary(&phone), summary(&desktop));
+
+    // the phone leaves Savings out: both count 50.00, and both still count three accounts
+    pause();
+    accounts::update(&phone, account_id(&phone, "Savings"), &AccountPatch { include_in_net_worth: Some(false), ..Default::default() }, TODAY).unwrap();
+    settle(&mut desktop, &mut phone);
+    for conn in [&desktop, &phone] {
+        let s = summary(conn);
+        assert_eq!((s.in_accounts.as_str(), s.net_worth.as_str(), s.accounts), ("50.00", "50.00", 3));
+        assert_eq!(accounts::get(conn, account_id(conn, "Savings"), TODAY).unwrap().balance, "200.00", "its balance did not change");
+    }
+    assert_eq!(summary(&phone), summary(&desktop));
+
+    // an archived account that was left out stays out on both
+    pause();
+    accounts::update(&desktop, account_id(&desktop, "Cash"), &AccountPatch { include_in_net_worth: Some(false), ..Default::default() }, TODAY).unwrap();
+    accounts::archive(&desktop, account_id(&desktop, "Cash"), TODAY).unwrap();
+    settle(&mut desktop, &mut phone);
+    assert_eq!(summary(&phone), summary(&desktop));
+    assert_eq!(summary(&phone).in_accounts, "0.00");
+
+    // with every account left out, net worth is what friends owe and nothing else; the main account too
+    pause();
+    accounts::update(&desktop, MAIN_ID, &AccountPatch { include_in_net_worth: Some(false), ..Default::default() }, TODAY).unwrap();
+    settle(&mut desktop, &mut phone);
+    assert_eq!((summary(&phone).in_accounts.as_str(), summary(&phone).accounts), ("0.00", 3));
+    assert_eq!(summary(&phone), summary(&desktop));
+
+    // and counting one again arrives as well
+    pause();
+    accounts::update(&phone, account_id(&phone, "Savings"), &AccountPatch { include_in_net_worth: Some(true), ..Default::default() }, TODAY).unwrap();
+    settle(&mut desktop, &mut phone);
+    assert_eq!(summary(&desktop).in_accounts, "200.00");
+    assert_eq!(summary(&phone), summary(&desktop));
+}
+
+#[test]
+fn a_virtual_balance_travels_without_changing_any_balance_or_the_net_worth() {
+    let (mut desktop, mut phone) = met_with_accounts();
+    accounts::update(&desktop, account_id(&desktop, "Cash"), &AccountPatch { opening_balance: Some("-240.00".into()), opening_date: Some("2026-01-01".into()), ..Default::default() }, TODAY).unwrap();
+    settle(&mut desktop, &mut phone);
+    let before = accounts::summary(&phone, TODAY).unwrap();
+    pause();
+    accounts::update(&desktop, account_id(&desktop, "Cash"), &AccountPatch { virtual_balance: Some("1000.00".into()), ..Default::default() }, TODAY).unwrap();
+    settle(&mut desktop, &mut phone);
+    let cash = accounts::get(&phone, account_id(&phone, "Cash"), TODAY).unwrap();
+    assert_eq!((cash.balance.as_str(), cash.virtual_balance.as_str(), cash.available.as_str()), ("-240.00", "1000.00", "760.00"));
+    assert_eq!(accounts::summary(&phone, TODAY).unwrap(), before);
+    assert_eq!(accounts_shown(&phone), accounts_shown(&desktop));
+}
+
+/// The row of an account as the wire carries it, read back out of what a device would send.
+fn wire_row_of(conn: &Connection, name: &str) -> serde_json::Value {
+    let id = account_sync_id(conn, name);
+    let line = snapshot(conn).unwrap().into_iter().find(|l| l.starts_with("accounts:") && l.contains(&id)).unwrap();
+    serde_json::from_str(line.trim_start_matches("accounts:")).unwrap()
+}
+
+#[test]
+fn what_the_screens_accept_as_a_detail_is_what_the_wire_accepts_and_the_other_way_round() {
+    let long = |c: &str, n: usize| c.repeat(n);
+    let candidates = [
+        "".to_string(), " ".into(), "a".into(), " a".into(), "a ".into(), "a b".into(), long("x", 20), long("x", 21), long("é", 20), long("é", 21), long("x", 50), long("x", 51),
+        long("x", 1000), long("x", 1001), "a\tb".into(), "a\nb".into(), "a\r\nb".into(), "a\rb".into(), "a\n".into(), "\na".into(), "a\u{7}b".into(), "a\u{7f}b".into(),
+        "a\u{85}b".into(), "\u{85}a".into(), "a\u{a0}".into(), "\u{a0}a".into(), "a\u{200b}b".into(), "=1+1".into(), "line one\n\nline three".into(),
+    ];
+    // an account as a device sends it, to put each candidate into
+    let base = {
+        let device = device("EUR");
+        open(&device, "A");
+        wire_row_of(&device, "A")
+    };
+    let mut kept_by_the_screens = 0;
+    for candidate in &candidates {
+        for field in ["bic", "notes", "group"] {
+            let device = device("EUR");
+            let mut new = NewAccount { name: "A".into(), kind: Kind::Cash, number: None, opening_balance: None, opening_date: Some("2026-01-01".into()), bic: None, notes: None, group: None, include_in_net_worth: None, virtual_balance: None };
+            match field {
+                "bic" => new.bic = Some(candidate.clone()),
+                "notes" => new.notes = Some(candidate.clone()),
+                _ => new.group = Some(candidate.clone()),
+            }
+            let mut row = base.clone();
+            row[field] = serde_json::json!(candidate);
+            let wire_accepts = wire::parse_row(Table::Accounts, &row).is_ok();
+            match accounts::create(&device, &new, TODAY) {
+                Ok(made) => {
+                    // what the screens keep is a valid row: what they trimmed or normalised is already done
+                    let kept = match field {
+                        "bic" => made.bic,
+                        "notes" => made.notes,
+                        _ => made.group,
+                    };
+                    let sent = wire_row_of(&device, "A");
+                    assert_eq!(sent[field], serde_json::json!(kept), "{field} = {candidate:?}");
+                    assert!(wire::parse_row(Table::Accounts, &sent).is_ok(), "{field} = {candidate:?} is kept by the screens and refused by the wire");
+                    // and what the wire accepts is kept as it is, not trimmed or repaired
+                    if wire_accepts {
+                        assert_eq!(kept.as_deref(), Some(candidate.as_str()), "{field} = {candidate:?}");
+                    }
+                    kept_by_the_screens += 1;
+                }
+                Err(e) => {
+                    assert_eq!(e, crate::vault::AppError::InvalidInput, "{field} = {candidate:?}");
+                    assert!(!wire_accepts, "{field} = {candidate:?} is accepted by the wire and refused by the screens");
+                    assert_eq!(count(&device, "SELECT count(*) FROM accounts"), 1, "a refused account is not made");
+                }
+            }
+        }
+    }
+    assert!(kept_by_the_screens > 40, "the list is not all refusals: {kept_by_the_screens}");
+}
+
+#[test]
+fn a_row_in_the_shape_of_protocol_9_is_refused_by_the_collector_and_nothing_is_applied() {
+    let (_desktop, phone) = paired();
+    let before = snapshot(&phone).unwrap();
+    let mut old = wire_row_of(&phone, "Main account");
+    for key in ["bic", "notes", "group", "includeNetWorth", "virtualBalanceMinor"] {
+        old.as_object_mut().unwrap().remove(key);
+    }
+    old["name"] = serde_json::json!("Renamed by an old phone");
+    old["stamp"] = serde_json::json!(newer_than_everything());
+    let message = wire::RowsMessage { table: Table::Accounts, rows: vec![old], deleted: vec![], last: true };
+    assert!(RowsCollector::new(vec![Table::Accounts]).push(message).is_err(), "the two required details are missing");
+    assert_eq!(snapshot(&phone).unwrap(), before);
+}
+
+#[test]
+fn a_device_that_speaks_protocol_9_is_told_to_update_whichever_of_the_two_it_is() {
+    let (a, b) = (device("EUR"), device("EUR"));
+    let new = engine::hello(&a, "desktop", "0.1.0", now()).unwrap();
+    let mut old = engine::hello(&b, "phone", "0.1.0", now()).unwrap();
+    assert_eq!(new.protocol, 10);
+    old.protocol = 9;
+    assert!(matches!(engine::check_hello(&new, &old, now()), Err(SyncError::ProtocolMismatch)));
+    assert!(matches!(engine::check_hello(&old, &new, now()), Err(SyncError::ProtocolMismatch)));
+    // the schema is the other check: the details are a migration too, and a device at schema 18 is told to update by that one
+    assert_eq!(new.schema, crate::migrate::latest_version());
+}
+
+/// A desktop that changed all five details of Cash and a phone that has not heard of it.
+fn details_changed_on_the_desktop() -> (Connection, Connection) {
+    let (desktop, phone) = met_with_accounts();
+    accounts::update(
+        &desktop,
+        account_id(&desktop, "Cash"),
+        &AccountPatch { bic: Some(Some("DESKTOP".into())), notes: Some(Some("a\nb".into())), group: Some(Some("G".into())), include_in_net_worth: Some(false), virtual_balance: Some("9.99".into()), ..Default::default() },
+        TODAY,
+    )
+    .unwrap();
+    (desktop, phone)
+}
+
+#[test]
+fn a_sync_cut_after_any_message_leaves_the_details_of_an_account_as_they_were_and_the_next_one_finishes_it() {
+    let total = {
+        let (mut desktop, mut phone) = details_changed_on_the_desktop();
+        sync(&mut desktop, &mut phone, TODAY, now(), None).unwrap().messages
+    };
+    assert!(total > 6, "{total} messages");
+    for cut in 0..total {
+        let (mut desktop, mut phone) = details_changed_on_the_desktop();
+        let cash = account_sync_id(&desktop, "Cash");
+        let before = (snapshot(&desktop).unwrap(), snapshot(&phone).unwrap());
+        assert!(sync_cut_after(&mut desktop, &mut phone, TODAY, now(), cut).is_err(), "cut after {cut} of {total} messages");
+        // never half of the details: the phone has the row it had, or the whole new one
+        if cut < total - 2 {
+            assert_eq!((snapshot(&desktop).unwrap(), snapshot(&phone).unwrap()), before, "cut after {cut} of {total} messages: nothing was applied");
+            assert_eq!(details_of(&phone, &cash), plain_details());
+        } else {
+            assert_same(&desktop, &phone, &format!("cut after {cut} of {total}: both had applied it"));
+        }
+        settle(&mut desktop, &mut phone);
+        assert_eq!(details_of(&phone, &cash), (Some("DESKTOP".into()), Some("a\nb".into()), Some("G".into()), false, "9.99".into()), "cut after {cut}");
+    }
 }

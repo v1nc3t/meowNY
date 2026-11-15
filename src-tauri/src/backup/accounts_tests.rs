@@ -298,7 +298,22 @@ fn fill(v: &Vault) {
     v.with_conn(|conn| {
         let cash = account(conn, "Cash");
         transfer(conn, MAIN_ID, cash, "20.00", "2026-02-02");
-        accounts::update(conn, MAIN_ID, &AccountPatch { name: Some("Mine".into()), opening_balance: Some("100.00".into()), ..Default::default() }, TODAY)?;
+        accounts::update(
+            conn,
+            MAIN_ID,
+            &AccountPatch {
+                name: Some("Mine".into()),
+                opening_balance: Some("100.00".into()),
+                bic: Some(Some("COBADEFF".into())),
+                notes: Some(Some("two\nlines".into())),
+                group: Some(Some("Everyday".into())),
+                include_in_net_worth: Some(false),
+                virtual_balance: Some("500.00".into()),
+                ..Default::default()
+            },
+            TODAY,
+        )?;
+        accounts::update(conn, cash, &AccountPatch { group: Some(Some("Pocket".into())), virtual_balance: Some("-5.00".into()), ..Default::default() }, TODAY)?;
         accounts::archive(conn, cash, TODAY)?;
         Ok(())
     })
@@ -354,4 +369,180 @@ fn a_restore_through_the_vault_of_a_file_without_the_main_account_is_refused_and
     // a good one, with the main account in it, is taken
     v.restore_backup(&forged(json!({ "accounts": main_account() })), PASSPHRASE, "RESTORE").unwrap();
     assert_eq!(v.with_conn(|c| Ok(count(c, "SELECT count(*) FROM accounts"))).unwrap(), 1);
+}
+
+// ---- the details of an account (docs/accounts-design.md, section 20.5) --------------------------------------------------------
+
+const DETAILS: [&str; 5] = ["bic", "notes", "group_name", "include_net_worth", "virtual_balance_minor"];
+
+#[test]
+fn the_five_details_of_every_account_come_back_exactly_with_notes_of_two_lines_and_an_excluded_account() {
+    let source = lived_in();
+    // the main account too, and an archived account that net worth leaves out
+    accounts::update(
+        &source,
+        MAIN_ID,
+        &AccountPatch { bic: Some(Some("COBADEFFXXX".into())), notes: Some(Some("where the pay lands\n\nand a gap".into())), group: Some(Some("Everyday".into())), virtual_balance: Some("-5.00".into()), ..Default::default() },
+        TODAY,
+    )
+    .unwrap();
+    let card = accounts::create(
+        &source,
+        &accounts::NewAccount { kind: accounts::Kind::CreditCard, include_in_net_worth: Some(false), virtual_balance: Some("9999999999.99".into()), bic: Some("B".repeat(20)), notes: Some("n".repeat(1000)), group: Some("g".repeat(50)), ..crate::accounts::fixtures::new_account("Card") },
+        TODAY,
+    )
+    .unwrap()
+    .id;
+    accounts::archive(&source, card, TODAY).unwrap();
+    let before = dump(&source).unwrap();
+    let rows = before.rows("accounts");
+    assert_eq!(rows.len(), 3);
+    // what the file holds: the raw columns, the notes with their line breaks, the flag as 0 and the amount as minor units
+    assert_eq!(
+        (&rows[1]["bic"], &rows[1]["notes"], &rows[1]["group_name"], &rows[1]["include_net_worth"], &rows[1]["virtual_balance_minor"]),
+        (&json!("DEUTDEFF500"), &json!("first line\nsecond, \"line\" =1+1"), &json!("Savings 日本語"), &json!(0), &json!(-100_000))
+    );
+    assert_eq!((&rows[0]["include_net_worth"], &rows[0]["virtual_balance_minor"], &rows[2]["virtual_balance_minor"]), (&json!(1), &json!(-500), &json!(999_999_999_999_i64)));
+
+    let mut target = db();
+    restore(&mut target, &seal(&before, PASSPHRASE).unwrap()).unwrap();
+
+    assert_eq!(dump(&target).unwrap(), before, "every column of every account, the five included");
+    for column in DETAILS {
+        assert_eq!(dump(&target).unwrap().rows("accounts").iter().map(|r| r[column].clone()).collect::<Vec<_>>(), rows.iter().map(|r| r[column].clone()).collect::<Vec<_>>(), "{column}");
+    }
+    // and they are alive: the same list (with `available`) and the same net worth, which leaves the two accounts out
+    assert_eq!(accounts::list(&target, TODAY).unwrap(), accounts::list(&source, TODAY).unwrap());
+    let summary = accounts::summary(&target, TODAY).unwrap();
+    assert_eq!(summary, accounts::summary(&source, TODAY).unwrap());
+    let main_alone = accounts::get(&target, MAIN_ID, TODAY).unwrap();
+    assert_eq!(summary.in_accounts, main_alone.balance, "only the main account counts: Savings and the card are left out");
+    assert_eq!(main_alone.available, crate::money::format_amount(crate::money::parse_signed_amount(&main_alone.balance).unwrap() - 500), "a negative virtual balance takes from what is available");
+    assert!(accounts::check(&target).unwrap());
+    // a stamp or a date did not move, and a change of a detail made after the restore is a change like any other
+    let stamp = |conn: &Connection| conn.query_row::<String, _, _>("SELECT stamp FROM accounts WHERE id = 2", [], |r| r.get(0)).unwrap();
+    assert_eq!(stamp(&target), before.rows("accounts")[1]["stamp"].as_str().unwrap());
+    accounts::update(&target, 2, &AccountPatch { include_in_net_worth: Some(true), ..Default::default() }, TODAY).unwrap();
+    assert_ne!(stamp(&target), before.rows("accounts")[1]["stamp"].as_str().unwrap(), "a new stamp");
+}
+
+#[test]
+fn a_backup_made_at_schema_18_restores_with_the_defaults_and_moves_no_stamp_or_date() {
+    let old = database_at_18();
+    let file_rows = dump(&old).unwrap();
+    assert_eq!(file_rows.schema_version, 18);
+    assert_eq!(file_rows.rows("accounts").len(), 3);
+    for row in file_rows.rows("accounts") {
+        for column in DETAILS {
+            assert!(!row.contains_key(column), "a file of version 18 has no {column}");
+        }
+    }
+    // the target has accounts with details of its own, which the restore replaces
+    let mut target = lived_in();
+    assert!(count(&target, "SELECT count(*) FROM accounts WHERE bic IS NOT NULL AND notes IS NOT NULL AND group_name IS NOT NULL AND include_net_worth = 0 AND virtual_balance_minor <> 0") > 0);
+    restore(&mut target, &seal(&file_rows, PASSPHRASE).unwrap()).unwrap();
+
+    let after = dump(&target).unwrap();
+    assert_eq!(after.schema_version, crate::migrate::latest_version());
+    assert_eq!(after.rows("accounts").len(), 3, "the three of the file and none of the target's");
+    for row in after.rows("accounts") {
+        assert_eq!((&row["bic"], &row["notes"], &row["group_name"], &row["include_net_worth"], &row["virtual_balance_minor"]), (&Value::Null, &Value::Null, &Value::Null, &json!(1), &json!(0)), "{}", row["name"]);
+    }
+    for (was, is) in file_rows.rows("accounts").iter().zip(after.rows("accounts")) {
+        for (column, value) in was {
+            assert_eq!(&is[column], value, "{column} of {}: the migration moved no stamp, no date and no other column", was["name"]);
+        }
+    }
+    let list = accounts::list(&target, TODAY).unwrap();
+    assert_eq!(list.iter().map(|a| a.name.as_str()).collect::<Vec<_>>(), ["Current account", "Savings", "Card"], "the archived one last");
+    assert!(list.iter().all(|a| a.bic.is_none() && a.notes.is_none() && a.group.is_none() && a.include_in_net_worth && a.virtual_balance == "0.00" && a.available == a.balance));
+    // every account counts in net worth, the archived one too
+    let summary = accounts::summary(&target, TODAY).unwrap();
+    let held = count(&target, "SELECT COALESCE(SUM(delta_minor), 0) FROM account_movements");
+    assert_eq!(crate::money::parse_signed_amount(&summary.in_accounts).unwrap(), held);
+    assert_eq!(summary.accounts, 3);
+    assert!(accounts::check(&target).unwrap());
+    // the main account edited at 18 keeps its real stamp, and the untouched ones keep the oldest
+    assert_ne!(after.rows("accounts")[0]["stamp"], json!(crate::sync::engine::UNSET_STAMP));
+    // and a detail can be set at once
+    accounts::update(&target, 2, &AccountPatch { notes: Some(Some("now".into())), ..Default::default() }, TODAY).unwrap();
+}
+
+/// A database at schema version 18, the one before the details: three accounts (the main one renamed, a saving one, an archived card), a
+/// transfer and rows in them, and the rest of `old_database`.
+fn database_at_18() -> Connection {
+    let old = old_database(18);
+    for sql in [
+        "UPDATE accounts SET name = 'Current account' WHERE id = 1",
+        "INSERT INTO accounts (name, kind, number, opening_balance_minor, opening_date, position) VALUES ('Savings', 'SAVINGS', 'IE29', 150000, '2026-01-01', 1), ('Card', 'CREDIT_CARD', NULL, -24000, '2026-02-01', 2)",
+        "UPDATE accounts SET archived = 1 WHERE name = 'Card'",
+        "INSERT INTO transfers (from_account_id, to_account_id, amount_minor, transfer_date, note) VALUES (1, 2, 5000, '2026-02-01', 'saving')",
+        "UPDATE transactions SET account_id = 2 WHERE name = 'Dinner'",
+    ] {
+        old.execute(sql, []).unwrap();
+    }
+    old
+}
+
+#[test]
+fn a_restore_replaces_the_details_that_were_there_with_the_ones_of_the_file() {
+    let source = db();
+    accounts::update(&source, MAIN_ID, &AccountPatch { group: Some(Some("From the file".into())), include_in_net_worth: Some(false), ..Default::default() }, TODAY).unwrap();
+    let mut target = lived_in();
+    assert_eq!(count(&target, "SELECT count(*) FROM accounts WHERE bic IS NOT NULL"), 1);
+    let file = seal(&dump(&source).unwrap(), PASSPHRASE).unwrap();
+    restore(&mut target, &file).unwrap();
+    assert_eq!(dump(&target).unwrap(), dump(&source).unwrap());
+    assert_eq!(count(&target, "SELECT count(*) FROM accounts"), 1);
+    assert_eq!(count(&target, "SELECT count(*) FROM accounts WHERE bic IS NULL AND notes IS NULL AND group_name = 'From the file' AND include_net_worth = 0 AND virtual_balance_minor = 0"), 1);
+    // the first account made after it is the second, and has the defaults
+    let next = account(&target, "Cash");
+    let made = accounts::get(&target, next, TODAY).unwrap();
+    assert_eq!((made.bic, made.notes, made.group, made.include_in_net_worth, made.virtual_balance.as_str()), (None, None, None, true, "0.00"));
+}
+
+#[test]
+fn a_file_that_breaks_the_rules_of_the_details_is_refused_whole_and_changes_nothing() {
+    let base = dump(&lived_in()).unwrap();
+    type Change = Box<dyn Fn(&mut Snapshot)>;
+    let on_savings = |column: &'static str, value: Value| -> Change { Box::new(move |s| set(s, "accounts", 1, column, value.clone())) };
+    let cases: Vec<(&str, Change)> = vec![
+        ("an empty BIC", on_savings("bic", json!(""))),
+        ("a BIC of 21 characters", on_savings("bic", json!("x".repeat(21)))),
+        ("a BIC of 21 characters that are not ASCII", on_savings("bic", json!("é".repeat(21)))),
+        ("empty notes", on_savings("notes", json!(""))),
+        ("notes of 1001 characters", on_savings("notes", json!("x".repeat(1001)))),
+        ("a group that is empty", on_savings("group_name", json!(""))),
+        ("a group of 51 characters", on_savings("group_name", json!("x".repeat(51)))),
+        ("a net worth choice of 2", on_savings("include_net_worth", json!(2))),
+        ("a net worth choice of -1", on_savings("include_net_worth", json!(-1))),
+        ("a net worth choice of nothing", on_savings("include_net_worth", Value::Null)),
+        ("a net worth choice of text", on_savings("include_net_worth", json!("yes"))),
+        ("a virtual balance one above the range", on_savings("virtual_balance_minor", json!(1_000_000_000_000_i64))),
+        ("a virtual balance one below the range", on_savings("virtual_balance_minor", json!(-1_000_000_000_000_i64))),
+        ("a virtual balance of nothing", on_savings("virtual_balance_minor", Value::Null)),
+        ("a virtual balance with decimals", on_savings("virtual_balance_minor", json!(1.5))),
+        ("a virtual balance of text", on_savings("virtual_balance_minor", json!("a lot"))),
+        ("a bad detail on the main account", Box::new(|s| set(s, "accounts", 0, "include_net_worth", json!(3)))),
+    ];
+    for (label, change) in cases {
+        let mut broken = base.clone();
+        change(&mut broken);
+        let mut target = with_its_own_data();
+        let before = dump(&target).unwrap();
+        let marks = snapshot(&target);
+        let file = seal(&broken, PASSPHRASE).unwrap();
+        assert_eq!(restore(&mut target, &file), Err(AppError::InvalidBackup), "{label}");
+        assert_eq!(dump(&target).unwrap(), before, "{label}: nothing changed");
+        assert_eq!(snapshot(&target), marks, "{label}: and no stamp, marker or history line");
+        assert!(accounts::check(&target).unwrap(), "{label}");
+    }
+    // the bounds themselves are taken
+    for (column, value) in [("virtual_balance_minor", json!(999_999_999_999_i64)), ("virtual_balance_minor", json!(-999_999_999_999_i64)), ("bic", json!("x".repeat(20))), ("notes", json!("x".repeat(1000))), ("group_name", json!("x".repeat(50))), ("include_net_worth", json!(0))] {
+        let mut edited = base.clone();
+        set(&mut edited, "accounts", 1, column, value.clone());
+        let mut target = with_its_own_data();
+        restore(&mut target, &seal(&edited, PASSPHRASE).unwrap()).unwrap_or_else(|e| panic!("{column}: {e:?}"));
+        assert_eq!(dump(&target).unwrap().rows("accounts")[1][column], value, "{column}");
+    }
 }

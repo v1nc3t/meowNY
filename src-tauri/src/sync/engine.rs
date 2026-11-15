@@ -322,7 +322,8 @@ fn load_rows(conn: &Connection, table: Table, wanted: &HashSet<&String>) -> Resu
         }
         Table::Accounts => {
             let mut stmt = conn.prepare(
-                "SELECT sync_id, stamp, name, kind, number, opening_balance_minor, opening_date, archived, position, created_at, updated_at
+                "SELECT sync_id, stamp, name, kind, number, opening_balance_minor, opening_date, archived, position, bic, notes, group_name, include_net_worth,
+                        virtual_balance_minor, created_at, updated_at
                  FROM accounts ORDER BY sync_id",
             )?;
             for r in stmt.query_map([], |r| {
@@ -336,8 +337,13 @@ fn load_rows(conn: &Connection, table: Table, wanted: &HashSet<&String>) -> Resu
                     opening_date: r.get(6)?,
                     archived: r.get(7)?,
                     position: r.get(8)?,
-                    created_at: r.get(9)?,
-                    updated_at: r.get(10)?,
+                    bic: r.get(9)?,
+                    notes: r.get(10)?,
+                    group: r.get(11)?,
+                    include_net_worth: r.get(12)?,
+                    virtual_balance_minor: r.get(13)?,
+                    created_at: r.get(14)?,
+                    updated_at: r.get(15)?,
                 })
             })? {
                 let r = r?;
@@ -1422,17 +1428,24 @@ impl<'a> Applier<'a> {
                     self.note_overwrite(&local);
                     self.run(
                         "UPDATE accounts SET stamp = ?2, name = ?3, kind = ?4, number = ?5, opening_balance_minor = ?6, opening_date = ?7, archived = ?8,
-                         position = ?9, created_at = ?10 WHERE id = ?1",
-                        params![id, r.stamp, r.name, r.kind, r.number, r.opening_balance_minor, r.opening_date, r.archived, r.position, r.created_at],
+                         position = ?9, bic = ?10, notes = ?11, group_name = ?12, include_net_worth = ?13, virtual_balance_minor = ?14, created_at = ?15 WHERE id = ?1",
+                        params![
+                            id, r.stamp, r.name, r.kind, r.number, r.opening_balance_minor, r.opening_date, r.archived, r.position, r.bic, r.notes, r.group, r.include_net_worth,
+                            r.virtual_balance_minor, r.created_at
+                        ],
                     )?;
                     self.set_updated_at(Table::Accounts, id, &r.updated_at)?;
                     self.summary.updated += 1;
                 }
                 None => {
                     self.run(
-                        "INSERT INTO accounts (sync_id, stamp, name, kind, number, opening_balance_minor, opening_date, archived, position, created_at, updated_at)
-                         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
-                        params![r.sync_id, r.stamp, r.name, r.kind, r.number, r.opening_balance_minor, r.opening_date, r.archived, r.position, r.created_at, r.updated_at],
+                        "INSERT INTO accounts (sync_id, stamp, name, kind, number, opening_balance_minor, opening_date, archived, position, bic, notes, group_name,
+                                               include_net_worth, virtual_balance_minor, created_at, updated_at)
+                         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)",
+                        params![
+                            r.sync_id, r.stamp, r.name, r.kind, r.number, r.opening_balance_minor, r.opening_date, r.archived, r.position, r.bic, r.notes, r.group,
+                            r.include_net_worth, r.virtual_balance_minor, r.created_at, r.updated_at
+                        ],
                     )?;
                     self.summary.added += 1;
                 }
@@ -2637,6 +2650,11 @@ fn facts(conn: &Connection, row: &Row) -> Vec<(&'static str, String)> {
             ("openingBalance", crate::money::format_amount(r.opening_balance_minor)),
             ("openingDate", r.opening_date.clone()),
             ("archived", if r.archived == 1 { "yes" } else { "no" }.to_string()),
+            ("bic", some(&r.bic)),
+            ("notes", some(&r.notes)),
+            ("group", some(&r.group)),
+            ("includeNetWorth", if r.include_net_worth == 1 { "yes" } else { "no" }.to_string()),
+            ("virtualBalance", crate::money::format_amount(r.virtual_balance_minor)),
         ],
         Row::Transfer(r) => vec![
             ("from", account_name(conn, &r.from)),

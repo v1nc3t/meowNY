@@ -867,10 +867,22 @@ mod tests {
         conn.execute("INSERT INTO document_links (document_id, ledger_entry_id) VALUES (2, ?1)", [loan.id]).unwrap();
         let mut conn = conn;
         categories::delete(&mut conn, gym.id, chrono::Utc::now()).unwrap();
-        // a second account and a transfer into it
+        // a second account, with all five details set (a BIC, notes of two lines, a group, left out of net worth, a virtual balance), and a
+        // transfer into it
         let savings = crate::accounts::create(
             &conn,
-            &crate::accounts::NewAccount { name: "Savings".into(), kind: crate::accounts::Kind::Savings, number: None, opening_balance: Some("-12.00".into()), opening_date: Some("2026-01-01".into()), bic: None, notes: None, group: None, include_in_net_worth: None, virtual_balance: None },
+            &crate::accounts::NewAccount {
+                name: "Savings".into(),
+                kind: crate::accounts::Kind::Savings,
+                number: None,
+                opening_balance: Some("-12.00".into()),
+                opening_date: Some("2026-01-01".into()),
+                bic: Some("DEUTDEFF500".into()),
+                notes: Some("first line\nsecond, \"line\" =1+1".into()),
+                group: Some("Savings 日本語".into()),
+                include_in_net_worth: Some(false),
+                virtual_balance: Some("-1000.00".into()),
+            },
             "2026-02-04",
         )
         .unwrap();

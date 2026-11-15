@@ -502,12 +502,15 @@ fn hellos_are_checked_for_version_clock_and_identity() {
     assert!(matches!(engine::check_hello(&mine, &changed(&|h| h.schema += 1), now()), Err(SyncError::SchemaMismatch { newer_here: false })));
     assert!(matches!(engine::check_hello(&mine, &changed(&|h| h.schema -= 1), now()), Err(SyncError::SchemaMismatch { newer_here: true })));
     assert!(matches!(engine::check_hello(&mine, &changed(&|h| h.protocol += 1), now()), Err(SyncError::ProtocolMismatch)));
-    // a device of the version before accounts and transfers (protocol 8) is told to update, whichever of the two it is
-    assert_eq!(wire::PROTOCOL, 9);
-    assert!(matches!(engine::check_hello(&mine, &changed(&|h| h.protocol = 8), now()), Err(SyncError::ProtocolMismatch)));
-    let mut old = mine.clone();
-    old.protocol = 8;
-    assert!(matches!(engine::check_hello(&old, &theirs, now()), Err(SyncError::ProtocolMismatch)));
+    // a device of the version before accounts and transfers (protocol 8) and one before the details of an account (protocol 9) are told to
+    // update, whichever of the two they are
+    assert_eq!(wire::PROTOCOL, 10);
+    for old_protocol in [8, 9] {
+        assert!(matches!(engine::check_hello(&mine, &changed(&|h| h.protocol = old_protocol), now()), Err(SyncError::ProtocolMismatch)), "protocol {old_protocol}");
+        let mut old = mine.clone();
+        old.protocol = old_protocol;
+        assert!(matches!(engine::check_hello(&old, &theirs, now()), Err(SyncError::ProtocolMismatch)), "protocol {old_protocol}");
+    }
     assert!(matches!(engine::check_hello(&mine, &changed(&|h| h.device_id = mine.device_id.clone()), now()), Err(SyncError::Invalid(_))));
     assert!(matches!(engine::check_hello(&mine, &changed(&|h| h.currency = "USD".into()), now()), Err(SyncError::Currency)));
 
@@ -1268,7 +1271,8 @@ const ACCOUNT_NAMES: &[&str] = &["Savings", "Cash", "Card", "Wallet"];
 
 /// Something a person might do with accounts and transfers. Few names, so the two devices often make an account of one name (which
 /// stay two accounts); accounts with nothing in them are deleted now and then, which makes the rows the other device put in them move to
-/// the main account; rows are made, moved and edited in accounts, so there is always something to move.
+/// the main account; rows are made, moved and edited in accounts, so there is always something to move. The details of an account (BIC,
+/// notes, group, whether it counts in net worth, virtual balance) are made with it, set, changed and cleared one at a time or all at once.
 fn edit_accounts(conn: &mut Connection, rng: &mut Rng) {
     use crate::accounts::transfers::{self, NewTransfer, TransferPatch};
     use crate::accounts::{self, AccountPatch, Kind, NewAccount};
@@ -1288,11 +1292,47 @@ fn edit_accounts(conn: &mut Connection, rng: &mut Rng) {
     let account = |rng: &mut Rng| (!active.is_empty() && rng.below(5) != 0).then(|| rng.pick(&active).to_string());
     let kind = |rng: &mut Rng| *rng.pick(&[Kind::Checking, Kind::Savings, Kind::Cash, Kind::CreditCard]);
     let date = |rng: &mut Rng| format!("2026-03-{:02}", 1 + rng.below(28));
-    match rng.below(20) {
+    // a detail, or nothing: a few values each, so that two devices often write the same one and often write different ones
+    let bic = |rng: &mut Rng| (rng.below(2) == 0).then(|| format!("BIC{}", rng.below(3)));
+    let notes = |rng: &mut Rng| (rng.below(2) == 0).then(|| format!("line {}\nline {}", rng.below(3), rng.below(3)));
+    let group = |rng: &mut Rng| (rng.below(2) == 0).then(|| rng.pick(&["Everyday", "Savings", "Cards"]).to_string());
+    let virtual_balance = |rng: &mut Rng| format!("{}{}.{:02}", if rng.below(3) == 0 { "-" } else { "" }, rng.below(2000), rng.below(100));
+    match rng.below(22) {
         0 | 1 => {
             let opening = (rng.below(2) == 0).then(|| format!("{}{}.{:02}", if rng.below(3) == 0 { "-" } else { "" }, rng.below(500), rng.below(100)));
             let number = (rng.below(2) == 0).then(|| format!("IE{}", rng.below(100)));
-            let _ = accounts::create(conn, &NewAccount { name: rng.pick(ACCOUNT_NAMES).to_string(), kind: kind(rng), number, opening_balance: opening, opening_date: Some(date(rng)), bic: None, notes: None, group: None, include_in_net_worth: None, virtual_balance: None }, TODAY);
+            let new = NewAccount {
+                name: rng.pick(ACCOUNT_NAMES).to_string(),
+                kind: kind(rng),
+                number,
+                opening_balance: opening,
+                opening_date: Some(date(rng)),
+                bic: bic(rng),
+                notes: notes(rng),
+                group: group(rng),
+                include_in_net_worth: (rng.below(2) == 0).then(|| rng.below(2) == 0),
+                virtual_balance: (rng.below(2) == 0).then(|| virtual_balance(rng)),
+            };
+            let _ = accounts::create(conn, &new, TODAY);
+        }
+        20 | 21 if !all.is_empty() => {
+            // one or more of the details, and nothing else, so that a change of a detail alone is what the other device meets
+            let mut patch = AccountPatch::default();
+            match rng.below(6) {
+                0 => patch.bic = Some(bic(rng)),
+                1 => patch.notes = Some(notes(rng)),
+                2 => patch.group = Some(group(rng)),
+                3 => patch.include_in_net_worth = Some(rng.below(2) == 0),
+                4 => patch.virtual_balance = Some(virtual_balance(rng)),
+                _ => {
+                    patch.bic = Some(bic(rng));
+                    patch.notes = Some(notes(rng));
+                    patch.group = Some(group(rng));
+                    patch.include_in_net_worth = Some(rng.below(2) == 0);
+                    patch.virtual_balance = Some(virtual_balance(rng));
+                }
+            }
+            let _ = accounts::update(conn, *rng.pick(&all), &patch, TODAY);
         }
         2 if !all.is_empty() => {
             let patch = AccountPatch { name: Some(rng.pick(ACCOUNT_NAMES).to_string()), ..Default::default() };
@@ -1603,7 +1643,19 @@ fn nothing_that_stays_on_a_device_is_ever_sent() {
     spend(&phone, phone_food, "From the phone", "5.00");
     // Accounts and transfers are shared, and the history their triggers write is not: an account and a transfer on each device
     for (conn, tag) in [(&desktop, "desktop"), (&phone, "phone")] {
-        let account = crate::accounts::create(conn, &crate::accounts::NewAccount { name: format!("Account of the {tag}"), kind: crate::accounts::Kind::Savings, number: None, opening_balance: None, opening_date: Some("2026-01-01".into()), bic: None, notes: None, group: None, include_in_net_worth: None, virtual_balance: None }, TODAY).unwrap().id;
+        let new = crate::accounts::NewAccount {
+            name: format!("Account of the {tag}"),
+            kind: crate::accounts::Kind::Savings,
+            number: None,
+            opening_balance: None,
+            opening_date: Some("2026-01-01".into()),
+            bic: Some(format!("BIC-{tag}")),
+            notes: Some(format!("Notes of the {tag}")),
+            group: Some(format!("Group of the {tag}")),
+            include_in_net_worth: Some(false),
+            virtual_balance: Some("12.00".into()),
+        };
+        let account = crate::accounts::create(conn, &new, TODAY).unwrap().id;
         crate::accounts::transfers::create(
             conn,
             &crate::accounts::transfers::NewTransfer { from_account_id: crate::accounts::MAIN_ID.to_string(), to_account_id: account.to_string(), amount: "6.00".into(), date: "2026-03-05".into(), note: Some(format!("Transfer of the {tag}")) },
@@ -1616,6 +1668,9 @@ fn nothing_that_stays_on_a_device_is_ever_sent() {
     let said = String::from_utf8_lossy(&outcome.transcript).to_string();
     assert!(said.contains("From the desktop") && said.contains("From the phone"), "the transcript has nothing in it: {} bytes", outcome.transcript.len());
     assert!(said.contains("Account of the desktop") && said.contains("Transfer of the phone"), "the accounts and transfers are sent");
+    for sent in ["BIC-desktop", "Notes of the phone", "Group of the desktop", "\"includeNetWorth\":0", "\"virtualBalanceMinor\":1200"] {
+        assert!(said.contains(sent), "the details of an account are sent: {sent}");
+    }
     for tag in ["DESKTOP", "PHONE"] {
         assert!(!said.contains(&sentinel(tag)), "something that stays on the {tag} was sent");
     }
@@ -1626,6 +1681,7 @@ fn nothing_that_stays_on_a_device_is_ever_sent() {
     assert_eq!(count(&phone, "SELECT count(*) FROM audit_log WHERE new_values LIKE '%SECRET-DESKTOP%'"), 0);
     // the history the triggers of accounts and transfers write (each device keeps its own, in the names of the columns) is not on the wire
     assert!(!said.contains("entity_type") && !said.contains("opening_balance_minor") && !said.contains("from_account_id"), "a row of the history of accounts or transfers was sent");
+    assert!(!said.contains("group_name") && !said.contains("include_net_worth") && !said.contains("virtual_balance_minor"), "the history of the details of an account was sent");
     assert_eq!(count(&desktop, "SELECT count(*) FROM api_tokens WHERE name LIKE '%PHONE%'"), 0);
     assert_eq!(count(&phone, "SELECT count(*) FROM api_tokens WHERE name LIKE '%DESKTOP%'"), 0);
     assert_eq!(text(&desktop, "SELECT language FROM settings"), "de");

@@ -339,6 +339,49 @@ fn a_new_phone_gets_the_accounts_the_transfers_and_the_account_of_every_row_in_i
     assert!(crate::accounts::check(&phone.conn.lock().unwrap()).unwrap());
 }
 
+/// The details of the desktop's accounts (the main one's too) come to a new phone in its first copy, over a real connection.
+#[test]
+fn a_new_phone_gets_the_details_of_the_accounts_in_its_first_copy() {
+    use crate::accounts::{self, AccountPatch, Kind, NewAccount};
+    let desktop = desktop_with_data();
+    {
+        let conn = desktop.conn.lock().unwrap();
+        accounts::update(
+            &conn,
+            accounts::MAIN_ID,
+            &AccountPatch { bic: Some(Some("COBADEFFXXX".into())), notes: Some(Some("main\nbank".into())), group: Some(Some("Everyday".into())), include_in_net_worth: Some(false), virtual_balance: Some("-5.00".into()), ..Default::default() },
+            "2026-03-15",
+        )
+        .unwrap();
+        let card = NewAccount {
+            name: "Card".into(),
+            kind: Kind::CreditCard,
+            number: None,
+            opening_balance: Some("-100.00".into()),
+            opening_date: Some("2026-01-01".into()),
+            bic: Some("DEUTDEFF500".into()),
+            notes: None,
+            group: Some("Cards".into()),
+            include_in_net_worth: None,
+            virtual_balance: Some("1000.00".into()),
+        };
+        accounts::create(&conn, &card, "2026-03-15").unwrap();
+    }
+    let phone = db("EUR");
+    let result = pair(&desktop, &phone, true);
+    let (on_desktop, on_phone) = (result.desktop.unwrap(), result.phone.unwrap());
+    assert!(!on_desktop.differences && !on_phone.differences);
+    same(&desktop, &phone);
+    let list = accounts::list(&phone.conn.lock().unwrap(), "2026-03-15").unwrap();
+    assert_eq!(list, accounts::list(&desktop.conn.lock().unwrap(), "2026-03-15").unwrap(), "the same accounts, with the same details and the same `available`");
+    assert_eq!(count(&phone, "SELECT count(*) FROM accounts"), 2, "the main account is one, not two");
+    let main = &list[0];
+    assert_eq!((main.bic.as_deref(), main.notes.as_deref(), main.group.as_deref(), main.include_in_net_worth, main.virtual_balance.as_str()), (Some("COBADEFFXXX"), Some("main\nbank"), Some("Everyday"), false, "-5.00"));
+    let card = &list[1];
+    assert_eq!((card.bic.as_deref(), card.group.as_deref(), card.include_in_net_worth, card.virtual_balance.as_str(), card.available.as_str()), (Some("DEUTDEFF500"), Some("Cards"), true, "1000.00", "900.00"));
+    assert!(accounts::check(&phone.conn.lock().unwrap()).unwrap());
+}
+
 #[test]
 fn a_phone_that_scanned_another_code_is_not_answered() {
     let desktop = desktop_with_data();
@@ -736,8 +779,8 @@ fn the_phone_is_told_why_a_sync_stops() {
     assert!(matches!(handle.join().unwrap(), Err(FlowError::Sync(SyncError::SchemaMismatch { newer_here: false }))));
 }
 
-#[test]
-fn a_phone_of_the_version_before_accounts_is_told_to_update() {
+/// A phone that says it speaks `protocol` is told to update, over a real connection, and the desktop's sync ends with that error.
+fn a_phone_of_an_older_protocol_is_told_to_update(protocol: u32) {
     let desktop = desktop_with_data();
     let phone = db("EUR");
     pair(&desktop, &phone, true).phone.unwrap();
@@ -752,8 +795,8 @@ fn a_phone_of_the_version_before_accounts_is_told_to_update() {
     };
     let mut channel = net::connect(&payload, Ikm::for_sync(&paired[0].1, &payload.secret), limits(), None).unwrap();
     let mut hello = phone.with(|c| engine::hello(c, "Phone", "0.9.0", super::stamp::now_ms())).unwrap();
-    assert_eq!(hello.protocol, 9);
-    hello.protocol = 8;
+    assert_eq!(hello.protocol, 10);
+    hello.protocol = protocol;
     channel.send(&Message::Hello(hello)).unwrap();
     let _desktops_hello = channel.receive();
     let code = match channel.receive() {
@@ -766,6 +809,16 @@ fn a_phone_of_the_version_before_accounts_is_told_to_update() {
     };
     assert_eq!(code, "protocol_mismatch");
     assert!(matches!(handle.join().unwrap(), Err(FlowError::Sync(SyncError::ProtocolMismatch))));
+}
+
+#[test]
+fn a_phone_of_the_version_before_accounts_is_told_to_update() {
+    a_phone_of_an_older_protocol_is_told_to_update(8);
+}
+
+#[test]
+fn a_phone_of_the_version_before_the_details_of_an_account_is_told_to_update() {
+    a_phone_of_an_older_protocol_is_told_to_update(9);
 }
 
 #[test]

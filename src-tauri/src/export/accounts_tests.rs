@@ -90,16 +90,16 @@ fn the_json_has_every_account_with_what_it_holds_and_every_transfer_and_the_acco
     assert_eq!(named(&file["accounts"]), ["Main account", "Savings", "Cash", "Credit card", "Old savings"], "in the person's order, the archived one last");
     let balances: Vec<&str> = file["accounts"].as_array().unwrap().iter().map(|a| a["balance"].as_str().unwrap()).collect();
     assert_eq!(balances, ["1800.00", "1700.00", "150.00", "-945.50", "200.00"], "what each holds on the day of the export");
-    // every field of an account but its row count
+    // every field of an account but its row count and what is worked out from two others in the file (`available`)
     assert_eq!(
         file["accounts"][2],
         json!({ "id": c.cash.to_string(), "name": "Cash", "kind": "CASH", "number": null, "openingBalance": "250.00", "openingDate": "2025-12-01", "archived": false,
                 "isMain": false, "balance": "150.00", "changeThisMonth": "0.00", "lastActivity": "2026-02-15",
-                "bic": null, "notes": null, "group": null, "includeInNetWorth": true, "virtualBalance": "0.00", "available": "150.00" })
+                "bic": null, "notes": null, "group": null, "includeInNetWorth": true, "virtualBalance": "0.00" })
     );
     assert_eq!(file["accounts"][3]["openingBalance"], "-240.00");
     assert_eq!((file["accounts"][1]["number"].as_str(), file["accounts"][4]["archived"].as_bool(), file["accounts"][0]["isMain"].as_bool()), (Some("IE29 AIBK 9311 5212 3456 78"), Some(true), Some(true)));
-    assert!(file["accounts"].as_array().unwrap().iter().all(|a| a.get("entries").is_none()));
+    assert!(file["accounts"].as_array().unwrap().iter().all(|a| a.get("entries").is_none() && a.get("available").is_none()));
 
     let transfers = file["transfers"].as_array().unwrap();
     assert_eq!(transfers.len(), 3);
@@ -328,6 +328,145 @@ fn exporting_changes_nothing() {
         workbook(&c.conn, &selection, &Default::default()).unwrap();
     }
     assert_eq!(snapshot(&c.conn), before, "no row, stamp, marker or history line");
+    assert_eq!(c.conn.query_row::<i64, _, _>("SELECT count(*) FROM audit_log", [], |r| r.get(0)).unwrap(), history);
+}
+
+// ---- the details of an account (docs/accounts-design.md, section 20.5) -----------------------------------------------
+
+/// The notes of Cash below: a leading `=`, a line break, a comma and quotes, which are what a spreadsheet and a CSV reader trip on.
+pub(super) const AWKWARD_NOTES: &str = "=1+1 first line\nsecond, \"quoted\" line";
+
+/// `case()` with details on four of its accounts. Cash: a BIC, `AWKWARD_NOTES`, a group, left out of net worth. The credit card: a BIC, a group
+/// and a limit of 1000.00 as its virtual balance. Savings: a BIC, a group and a note that all look like formulas, and a virtual balance of
+/// -25.50. Old savings (archived, so by SQL): left out of net worth, with a note and a group. The main account keeps the defaults.
+pub(super) fn detailed() -> Case {
+    let c = case();
+    let set = |id: i64, patch: accounts::AccountPatch| {
+        accounts::update(&c.conn, id, &patch, TODAY).unwrap();
+    };
+    set(c.cash, accounts::AccountPatch { bic: Some(Some("COBADEFFXXX".into())), notes: Some(Some(AWKWARD_NOTES.into())), group: Some(Some("Everyday".into())), include_in_net_worth: Some(false), ..Default::default() });
+    set(c.card, accounts::AccountPatch { bic: Some(Some("DEUTDEFF500".into())), group: Some(Some("Cards".into())), virtual_balance: Some("1000.00".into()), ..Default::default() });
+    set(
+        c.savings,
+        accounts::AccountPatch { bic: Some(Some("@BIC".into())), notes: Some(Some("-minus note".into())), group: Some(Some("=Savings".into())), virtual_balance: Some("-25.50".into()), ..Default::default() },
+    );
+    c.conn.execute("UPDATE accounts SET include_net_worth = 0, notes = 'closed 2025', group_name = 'Old' WHERE id = ?1", [c.old]).unwrap();
+    c
+}
+
+/// What the file says about one account, by name.
+fn account_named<'a>(file: &'a Value, name: &str) -> &'a Value {
+    file["accounts"].as_array().unwrap().iter().find(|a| a["name"] == name).unwrap_or_else(|| panic!("no account {name}"))
+}
+
+#[test]
+fn the_json_has_the_five_details_of_every_account_and_not_the_amount_worked_out_from_two_of_them() {
+    let c = detailed();
+    let file = file(&c.conn, &Selection::default());
+    assert_eq!(
+        account_named(&file, "Cash"),
+        &json!({ "id": c.cash.to_string(), "name": "Cash", "kind": "CASH", "number": null, "openingBalance": "250.00", "openingDate": "2025-12-01", "archived": false,
+                 "isMain": false, "balance": "150.00", "changeThisMonth": "0.00", "lastActivity": "2026-02-15",
+                 "bic": "COBADEFFXXX", "notes": AWKWARD_NOTES, "group": "Everyday", "includeInNetWorth": false, "virtualBalance": "0.00" }),
+        "the JSON holds the text as it is: the line break, the comma, the quotes and the `=` are not touched"
+    );
+    let card = account_named(&file, "Credit card");
+    assert_eq!((&card["bic"], &card["notes"], &card["group"], &card["includeInNetWorth"], &card["virtualBalance"]), (&json!("DEUTDEFF500"), &json!(null), &json!("Cards"), &json!(true), &json!("1000.00")));
+    assert_eq!(card["balance"], "-945.50", "a virtual balance is in no balance");
+    let savings = account_named(&file, "Savings");
+    assert_eq!((&savings["bic"], &savings["notes"], &savings["group"], &savings["virtualBalance"]), (&json!("@BIC"), &json!("-minus note"), &json!("=Savings"), &json!("-25.50")));
+    let old = account_named(&file, "Old savings");
+    assert_eq!((&old["archived"], &old["includeInNetWorth"], &old["notes"], &old["group"], &old["bic"]), (&json!(true), &json!(false), &json!("closed 2025"), &json!("Old"), &json!(null)));
+    let main = account_named(&file, "Main account");
+    assert_eq!((&main["bic"], &main["notes"], &main["group"], &main["includeInNetWorth"], &main["virtualBalance"]), (&json!(null), &json!(null), &json!(null), &json!(true), &json!("0.00")));
+    // every account has the same sixteen fields: the five are always there, null or a default when the person set nothing
+    let keys = |a: &Value| -> BTreeSet<String> { a.as_object().unwrap().keys().cloned().collect() };
+    let expected: BTreeSet<String> = [
+        "id", "name", "kind", "number", "openingBalance", "openingDate", "archived", "isMain", "balance", "changeThisMonth", "lastActivity", "bic", "notes", "group", "includeInNetWorth", "virtualBalance",
+    ]
+    .map(String::from)
+    .into();
+    for a in file["accounts"].as_array().unwrap() {
+        assert_eq!(keys(a), expected, "{}", a["name"]);
+    }
+    // it is a figure the file can work out: the balance and the virtual balance are both in it
+    assert!(file["accounts"].as_array().unwrap().iter().all(|a| a.get("available").is_none()));
+}
+
+#[test]
+fn a_limited_export_gives_an_account_no_detail_in_the_json_and_the_csv_has_none_at_all() {
+    let c = detailed();
+    let secrets = ["COBADEFFXXX", "DEUTDEFF500", "@BIC", "Everyday", "Cards", "=Savings", "1000.00", "-25.50", "first line", "quoted", "-minus note", "closed 2025"];
+    let selections = [
+        Selection { category_ids: Some(vec![c.secret.to_string()]), ..Default::default() },
+        Selection { category_ids: Some(vec![c.rent.to_string(), c.salary.to_string()]), include_debts: true, ..Default::default() },
+        Selection { from: Some("2026-02-10".into()), to: Some("2026-02-12".into()), ..Default::default() },
+        Selection { from: Some("2026-01-01".into()), sections: Some(vec![Section::Accounts, Section::Transactions, Section::Recurring]), ..Default::default() },
+    ];
+    for selection in &selections {
+        let limited = file(&c.conn, selection);
+        let listed = limited["accounts"].as_array().unwrap();
+        assert!(!listed.is_empty(), "{selection:?}: some account is named");
+        for a in listed {
+            let keys: Vec<&str> = a.as_object().unwrap().keys().map(String::as_str).collect();
+            assert_eq!(keys.len(), 3, "{selection:?}: only the id, the name and the kind: {keys:?}");
+            for key in ["id", "name", "kind"] {
+                assert!(keys.contains(&key), "{selection:?}: {key}");
+            }
+        }
+        let text = serde_json::to_string(&limited).unwrap();
+        for hidden in secrets.iter().chain(["\"bic\"", "\"notes\"", "\"group\"", "\"includeInNetWorth\"", "\"virtualBalance\"", "\"available\""].iter()) {
+            assert!(!text.contains(hidden), "{selection:?}: {hidden:?} leaked into a limited export");
+        }
+    }
+    // Cash and the card are named by the session and the plan, and have details, and the file has none of them
+    let therapy = file(&c.conn, &selections[0]);
+    assert_eq!(therapy["accounts"], json!([{ "id": c.cash.to_string(), "name": "Cash", "kind": "CASH" }, { "id": c.card.to_string(), "name": "Credit card", "kind": "CREDIT_CARD" }]));
+    // the CSV is the transactions, and an account is a name in its last column: nothing of the details, with a limit or without
+    let before = csv(&case().conn, &Selection::default()).unwrap();
+    let all = csv(&c.conn, &Selection::default()).unwrap();
+    assert_eq!(all, before, "the same CSV as without the details");
+    for selection in std::iter::once(&Selection::default()).chain(&selections) {
+        let text = csv(&c.conn, selection).unwrap();
+        assert!(!secrets.iter().any(|secret| text.contains(secret)), "{selection:?}");
+        assert!(text.lines().next().unwrap().ends_with("my_share,account"), "the columns are what they were");
+    }
+}
+
+#[test]
+fn a_file_of_the_accounts_alone_has_the_details_and_a_limited_one_of_them_has_none() {
+    let c = detailed();
+    let only = file(&c.conn, &Selection { sections: Some(vec![Section::Accounts]), ..Default::default() });
+    assert_eq!(account_named(&only, "Credit card")["virtualBalance"], "1000.00");
+    assert_eq!(only.as_object().unwrap().len(), 6, "the accounts and the ordinary head of the file: {:?}", only.as_object().unwrap().keys().collect::<Vec<_>>());
+    // with a limit that names every account, they are still only named
+    let dated = file(&c.conn, &Selection { from: Some("2026-01-01".into()), sections: Some(vec![Section::Accounts, Section::Transactions, Section::Recurring, Section::Ledger]), ..Default::default() });
+    assert!(dated["accounts"].as_array().unwrap().iter().all(|a| a.as_object().unwrap().len() == 3));
+}
+
+#[test]
+fn exporting_accounts_with_details_changes_nothing() {
+    let c = detailed();
+    let before = snapshot(&c.conn);
+    let history: i64 = c.conn.query_row("SELECT count(*) FROM audit_log", [], |r| r.get(0)).unwrap();
+    let details = |conn: &Connection| -> Vec<String> {
+        conn.prepare("SELECT stamp || '|' || updated_at || '|' || COALESCE(bic, '-') || '|' || COALESCE(notes, '-') || '|' || COALESCE(group_name, '-') || '|' || include_net_worth || '|' || virtual_balance_minor FROM accounts ORDER BY id")
+            .unwrap()
+            .query_map([], |r| r.get(0))
+            .unwrap()
+            .map(Result::unwrap)
+            .collect()
+    };
+    let held = details(&c.conn);
+    for selection in [Selection::default(), Selection { category_ids: Some(vec![c.rent.to_string()]), include_debts: true, ..Default::default() }, Selection { sections: Some(vec![Section::Accounts]), ..Default::default() }] {
+        csv(&c.conn, &selection).unwrap();
+        json(&c.conn, &selection, now()).unwrap();
+        preview(&c.conn, &selection).unwrap();
+        preview_text(&c.conn, &selection, TextFormat::Json, now()).unwrap();
+        let _ = workbook(&c.conn, &selection, &Default::default());
+    }
+    assert_eq!(snapshot(&c.conn), before, "no row, stamp, marker or history line: the new columns are in the snapshot");
+    assert_eq!(details(&c.conn), held);
     assert_eq!(c.conn.query_row::<i64, _, _>("SELECT count(*) FROM audit_log", [], |r| r.get(0)).unwrap(), history);
 }
 
