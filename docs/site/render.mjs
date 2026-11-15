@@ -4,8 +4,9 @@
 // Text may use a little markup: `code`, **bold**, *italic* and [text](link). Everything else is plain text and is
 // escaped, so nothing a command prints can become markup.
 //
-// Every page of the site sits in the same frame as the app: a sidebar with the pages and this page's contents, and
-// the page beside it (on a narrow screen, the sidebar is a strip above the page).
+// Every page of the site has the same frame: a header with the name and the four pages, and one column of text. A long page
+// also has its contents: a sticky list beside the text on a wide screen, and a folded list (`<details>`, no script) above
+// the text on a narrow one.
 
 import { readFileSync } from 'node:fs'
 
@@ -13,35 +14,16 @@ export const REPO = 'https://github.com/v1nc3t/meowNY'
 /** Where people can support the project; the money goes toward the App Store and Google Play. */
 export const SPONSOR = 'https://ko-fi.com/v1nc3t'
 
-/** The logo, the app's own favicon (scripts/logo.py draws it), for the sidebar. */
+/** The logo, the app's own favicon (scripts/logo.py draws it), for the header. */
 const LOGO = readFileSync(new URL('../../ui/public/favicon.svg', import.meta.url), 'utf8').trim().replace('<svg ', '<svg class="logo" aria-hidden="true" ')
 
-/** The pages of the site, in the order of the sidebar. */
+/** The pages of the site, in the order of the header. */
 export const PAGES = [
-  { file: 'index.html', label: 'home', icon: 'home' },
-  { file: 'guide.html', label: 'guide', icon: 'guide' },
-  { file: 'cli.html', label: 'command line', icon: 'terminal' },
-  { file: 'develop.html', label: 'develop', icon: 'build' },
+  { file: 'index.html', label: 'home' },
+  { file: 'guide.html', label: 'guide' },
+  { file: 'cli.html', label: 'command line' },
+  { file: 'develop.html', label: 'develop' },
 ]
-
-/** The app's line icons (ui/src/components/NavIcon.tsx), and a few for the site. */
-const ICONS = {
-  home: 'M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z',
-  guide: 'M12 6c-2-1.5-5-2-8-2v14c3 0 6 .5 8 2 2-1.5 5-2 8-2V4c-3 0-6 .5-8 2zM12 6v14',
-  terminal: 'M4 5h16v14H4zM7.5 9.5l2.5 2.5-2.5 2.5M12 15h4.5',
-  source: 'M9 8l-4 4 4 4M15 8l4 4-4 4',
-  budgets: 'M5 19V9M12 19V5M19 19v-7',
-  transactions: 'M4 7h16M4 12h16M4 17h16',
-  recurring: 'M5 12a7 7 0 0 1 12-5l2 2M19 4v5h-5M19 12a7 7 0 0 1-12 5l-2-2M5 20v-5h5',
-  documents: 'M7 3h7l5 5v13H7zM14 3v5h5M10 13h6M10 17h6',
-  debts: 'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM14.6 9.3c-.4-.8-1.4-1.3-2.6-1.3-1.4 0-2.6.7-2.6 1.8 0 2.4 5.2 1.2 5.2 3.6 0 1.1-1.2 1.8-2.6 1.8-1.2 0-2.2-.5-2.6-1.3M12 6.5V8M12 16v1.5',
-  sync: 'M4 8h14M14 4l4 4-4 4M20 16H6M10 12l-4 4 4 4',
-  export: 'M12 15V4M8 8l4-4 4 4M5 14v5h14v-5',
-  lock: 'M6 11h12v9H6zM9 11V8a3 3 0 0 1 6 0v3',
-  build: 'M14.5 4.5a4 4 0 0 0-5 5L4 15l5 5 5.5-5.5a4 4 0 0 0 5-5l-2.5 2.5-2.5-.5-.5-2.5z',
-}
-
-export const icon = (name) => `<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="${ICONS[name]}"/></svg>`
 
 export const escapeHtml = (text) =>
   String(text).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
@@ -147,21 +129,21 @@ function blockHtml(block) {
 
 const anchor = (id) => ` <a class="anchor" href="#${id}" aria-label="link to this section">#</a>`
 
-/** This page's contents for the sidebar: groups of links, each with an optional title. */
+/** This page's contents: groups of links, each with an optional title (shown only when there is more than one group). */
 export function tocHtml(groups) {
   return groups
     .map(
       (group) =>
-        `<div class="group">${group.title ? `<p class="group-title">${group.href ? `<a href="#${group.href}">${escapeHtml(group.title)}</a>` : escapeHtml(group.title)}</p>` : ''}` +
+        `<div class="group">${group.title && groups.length > 1 ? `<p class="group-title">${group.href ? `<a href="#${group.href}">${escapeHtml(group.title)}</a>` : escapeHtml(group.title)}</p>` : ''}` +
         (group.links.length ? `<ul class="${group.cls ?? ''}">${group.links.map((l) => `<li><a href="#${l.id}">${escapeHtml(l.text)}</a></li>`).join('')}</ul>` : '') +
         `</div>`,
     )
     .join('')
 }
 
-/** A whole page of the site: the app's sidebar, then the page. `file` marks the page you are on. */
+/** A whole page of the site: the header, then the contents (wide screens only) and the page. `file` marks the page you are on. */
 export function shell({ file, title, description, toc = [], body, wide = false }) {
-  const pages = PAGES.map((p) => `<a class="nav-item" href="${p.file}"${p.file === file ? ' aria-current="page"' : ''}>${icon(p.icon)}<span>${escapeHtml(p.label)}</span></a>`).join('\n')
+  const pages = PAGES.map((p) => `<a class="nav-item" href="${p.file}"${p.file === file ? ' aria-current="page"' : ''}>${escapeHtml(p.label)}</a>`).join('\n')
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -175,16 +157,15 @@ export function shell({ file, title, description, toc = [], body, wide = false }
 </head>
 <body>
 <a class="skip" href="#main">Skip to the content</a>
-<div class="shell">
-<aside class="side">
+<header class="top">
 <a class="brand" href="index.html">${LOGO}<span>meowny</span></a>
-<nav class="side-nav" aria-label="Pages">
+<nav aria-label="Pages">
 ${pages}
 </nav>
+</header>
+<div class="page${wide ? ' wide' : ''}">
 ${toc.length ? `<nav class="toc" aria-label="On this page">\n${tocHtml(toc)}\n</nav>` : ''}
-<div class="side-foot"><a class="nav-item" href="${REPO}">${icon('source')}<span>source</span></a></div>
-</aside>
-<main id="main"${wide ? ' class="wide"' : ''}>
+<main id="main">
 ${body}
 </main>
 </div>
@@ -197,8 +178,9 @@ export function toHtml(page) {
   const sections = page.sections
     .map((s) => `<section class="doc" id="${s.id}"><h2>${escapeHtml(s.title)}${anchor(s.id)}</h2>${s.blocks.map(blockHtml).join('\n')}</section>`)
     .join('\n')
+  const fold = page.nav.length ? `<details class="fold"><summary>on this page</summary>\n${tocHtml(page.nav)}\n</details>\n` : ''
   const body = `<header class="hero" id="top"><h1>${escapeHtml(page.title)}</h1><p class="lead">${inlineHtml(page.lead)}</p></header>
-${sections}
+${fold}${sections}
 <footer><p>${inlineHtml(page.footer)}</p></footer>`
   return shell({ file: page.file, title: page.title, description: page.description, toc: page.nav, body })
 }

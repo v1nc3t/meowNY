@@ -150,7 +150,7 @@ test('every page is one document with a language, a title, a skip link and a hea
   assert.ok(tables > 30 && (html.match(/<th scope="col">/g) ?? []).length >= tables * 2, 'every table has column headers')
 })
 
-test('the site has the landing page, the guide and the command line reference, each in the same sidebar', () => {
+test('the site has the landing page, the guide and the command line reference, each with the same header', () => {
   const { pages } = build()
   assert.deepEqual(Object.keys(pages), PAGES.map((p) => p.file))
   for (const [file, page] of Object.entries(pages)) {
@@ -170,6 +170,24 @@ test('a link to another page, or to a place on it, must exist', () => {
   assert.ok(problems.some((p) => p.includes('faq.html')), 'a page that is not on the site')
 })
 
+test('the places that the app, the README and the design notes link to are still on the guide', () => {
+  const { pages } = build()
+  const ids = [...pages['guide.html'].matchAll(/\sid="([^"]+)"/g)].map((m) => m[1])
+  // guide.html#... in README.md, SECURITY.md and docs/*.md; the sections and parts the new guide added come with them
+  for (const id of ['install', 'accounts', 'transfers', 'documents', 'debts', 'phone', 'privacy', 'add-entry', 'account-details', 'net-worth', 'income']) assert.ok(ids.includes(id), id)
+})
+
+test('every page has the same plain header, and a long page its contents twice: beside the text, and folded above it', () => {
+  const { pages } = build()
+  for (const [file, html] of Object.entries(pages)) {
+    assert.ok(/<header class="top">\n<a class="brand" href="index.html">/.test(html), `${file}: the header`)
+    assert.ok(!/<script/i.test(html), `${file}: the site has no script`)
+  }
+  for (const file of ['guide.html', 'cli.html', 'develop.html']) {
+    assert.ok(pages[file].includes('<nav class="toc" aria-label="On this page">') && pages[file].includes('<details class="fold">'), file)
+  }
+})
+
 test('a page asks for nothing from anywhere else, and only reaches out with plain links', () => {
   const { pages, css } = build(inputs(), new Set())
   for (const [file, html] of Object.entries(pages)) {
@@ -186,16 +204,17 @@ test('a page asks for nothing from anywhere else, and only reaches out with plai
 })
 
 test('a screenshot is shown once its file exists, and an empty frame until then', () => {
+  // The landing page shows one screenshot, the dashboard (it used to show a gallery of many).
   const empty = landingHtml()
   const figures = (empty.match(/<figure class="shot/g) ?? []).length
-  assert.ok(figures >= 10, 'the landing page shows a gallery')
+  assert.equal(figures, 1, 'the landing page shows one screenshot')
   assert.equal((empty.match(/class="shot-frame/g) ?? []).length, figures, 'a frame for each screenshot')
   for (const caption of [...empty.matchAll(/<figcaption>([^<]+)<\/figcaption>/g)].map((m) => m[1])) {
     assert.ok(Object.values(SHOTS).some((s) => s.caption === caption), caption)
   }
   const one = landingHtml({ images: new Set(['dashboard']) })
   assert.ok(one.includes('<source srcset="images/dashboard-dark.png" media="(prefers-color-scheme: dark)"><img src="images/dashboard-light.png" alt="'), 'a light picture, and a dark one for a dark theme')
-  assert.equal((one.match(/class="shot-frame/g) ?? []).length, figures - 1, 'the frame is gone once its picture is there')
+  assert.equal((one.match(/class="shot-frame/g) ?? []).length, 0, 'the frame is gone once its picture is there')
   assert.deepEqual(lintPage(one), [])
   assert.ok(lintPage(one.replace('images/dashboard-light.png', 'https://example.org/x.png')).length > 0, 'a picture from elsewhere')
   assert.ok(lintPage(one.replace('images/dashboard-dark.png', 'https://example.org/x.png')).length > 0, 'a dark picture from elsewhere')
