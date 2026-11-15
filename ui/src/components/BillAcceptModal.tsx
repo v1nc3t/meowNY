@@ -54,7 +54,7 @@ export default function BillAcceptModal({
   // with more than one account: the one the part is recorded in (the expense and what is owed), the last one used until another is picked
   const accounts = useAccounts()
   const [account, setAccount] = useState<string | null>(null)
-  const choice = accountChoice(accounts, account)
+  const choice = accountChoice(accounts, account, undefined, true)
   const say = useToast()
   const [pending, setPending] = useState(false)
   const money = (value: string, currency: string) => (settings ? formatMoney(value, currency, settings.locale) : value)
@@ -201,7 +201,7 @@ export default function BillAcceptModal({
                 placeholder={t('tx.chooseCategory')}
               />
             ) : null}
-            <AccountField accounts={accounts} value={choice.value} onChange={setAccount} />
+            <AccountField accounts={accounts} value={choice.value} onChange={setAccount} mainOnly />
           </>
         )}
       </form>

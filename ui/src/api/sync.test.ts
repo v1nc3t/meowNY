@@ -155,3 +155,17 @@ test('every field a conflict can name has its words, the five of an account too'
   for (const field of FIELDS) assert.ok(`sync.field.${field}` in en, `sync.field.${field}`)
   for (const field of ['bic', 'notes', 'group', 'includeNetWorth', 'virtualBalance']) assert.ok((FIELDS as readonly string[]).includes(field), field)
 })
+
+test('the screen knows the four facts of a currency per account before the engine sends them', () => {
+  // docs/accounts-design.md, section 21.6: `currency` and `rate` of an account, `nativeAmount` of a transaction, `toAmount` of a transfer. The engine's list
+  // is checked one way only (what it sends must be known here), so the screen can be ahead of it and the check needs no change when the engine catches up.
+  const engine = readFileSync(new URL('../../../src-tauri/src/sync/engine.rs', import.meta.url), 'utf8')
+  const facts = /fn facts\(conn[\s\S]*?\n\}\n/.exec(engine)?.[0] ?? ''
+  const sent = new Set([...facts.matchAll(/\("(\w+)", /g)].map((m) => m[1]))
+  for (const field of ['currency', 'rate', 'nativeAmount', 'toAmount']) {
+    assert.ok((FIELDS as readonly string[]).includes(field), `${field} is a known field`)
+    assert.ok(`sync.field.${field}` in en, `${field} has its words`)
+  }
+  // and whatever the engine does send, today or later, is known
+  for (const sentField of sent) assert.ok((FIELDS as readonly string[]).includes(sentField), `${sentField} is not a known field`)
+})

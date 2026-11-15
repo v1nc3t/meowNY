@@ -3,7 +3,7 @@ import { afterEach, test } from 'node:test'
 import { transactions, TransactionPage } from './transactions.ts'
 import { Transfer, TransferPage, transfers } from './transfers.ts'
 
-const transfer = { id: '3', fromAccountId: '1', toAccountId: '2', amount: '200.00', date: '2026-11-03', note: 'Monthly saving' }
+const transfer = { id: '3', fromAccountId: '1', toAccountId: '2', amount: '200.00', toAmount: null, date: '2026-11-03', note: 'Monthly saving' }
 const page = { transfers: [transfer, { ...transfer, id: '4', note: null }], total: 7, limit: 50, offset: 0 }
 const ok = (schema: { safeParse: (value: unknown) => { success: boolean } }, value: unknown) => schema.safeParse(value).success
 
@@ -41,6 +41,8 @@ test('a page of transfers with a wrong shape is refused', () => {
     ['an id as a number', { ...page, transfers: [{ ...transfer, id: 3 }] }],
     ['a date with a time', { ...page, transfers: [{ ...transfer, date: '2026-11-03T00:00:00Z' }] }],
     ['no note field', { ...page, transfers: [(({ note: _note, ...rest }) => rest)(transfer)] }],
+    ['no amount that arrived field', { ...page, transfers: [(({ toAmount: _toAmount, ...rest }) => rest)(transfer)] }],
+    ['an amount that arrived as a number', { ...page, transfers: [{ ...transfer, toAmount: 995 }] }],
     ['the total as text', { ...page, total: '7' }],
     ['a negative total', { ...page, total: -1 }],
     ['a limit of 0', { ...page, limit: 0 }],
@@ -59,6 +61,18 @@ test('the list of transfers asks list_transfers with the filter, and checks the 
   assert.deepEqual(sent, [{ command: 'list_transfers', args: { filter } }])
   await transfers.list()
   assert.deepEqual(sent[1].args, { filter: {} }, 'no filter is an empty one')
+})
+
+test('a transfer between two currencies is sent with the amount that arrives, and read back', async () => {
+  const made = { ...transfer, toAmount: '995.00' }
+  const sent = backend(() => made)
+  const input = { fromAccountId: '1', toAccountId: '2', amount: '200.00', date: '2026-11-03', toAmount: '995.00' }
+  assert.deepEqual(await transfers.create(input), made)
+  assert.deepEqual(await transfers.update('3', { toAmount: '990.00' }), made)
+  assert.deepEqual(sent, [
+    { command: 'create_transfer', args: { input } },
+    { command: 'update_transfer', args: { id: '3', patch: { toAmount: '990.00' } } },
+  ])
 })
 
 test('a wrong answer to list_transfers is an error, not a list', async () => {

@@ -10,15 +10,20 @@ export const Transfer = z.object({
   toAccountId: id,
   /** Always above 0. */
   amount: z.string().regex(/^\d+\.\d{2}$/),
+  /** What reached the other account, in its currency: only for a transfer between accounts in different currencies. `amount` is then what left, in the currency of the first. */
+  toAmount: z.string().regex(/^\d+\.\d{2}$/).nullable(),
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   note: z.string().nullable(),
 })
 export type Transfer = z.infer<typeof Transfer>
 
-export type NewTransfer = { fromAccountId: string; toAccountId: string; amount: string; date: string; note?: string }
+export type NewTransfer = { fromAccountId: string; toAccountId: string; amount: string; date: string; note?: string; toAmount?: string }
 
-/** Fields left out stay as they are; `note: null` clears it. */
-export type TransferPatch = { fromAccountId?: string; toAccountId?: string; amount?: string; date?: string; note?: string | null }
+/**
+ * Fields left out stay as they are; `note: null` clears it. `toAmount` is required when the two accounts end in different currencies and the
+ * transfer has none; it is refused when they end in the same one (the app clears a stored one).
+ */
+export type TransferPatch = { fromAccountId?: string; toAccountId?: string; amount?: string; date?: string; note?: string | null; toAmount?: string }
 
 export const TransferPage = z.object({
   transfers: z.array(Transfer),

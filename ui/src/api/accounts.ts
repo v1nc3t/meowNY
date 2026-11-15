@@ -8,6 +8,10 @@ const date = z.string().regex(/^\d{4}-\d{2}-\d{2}$/)
 const signed = z.string().regex(/^-?\d+\.\d{2}$/)
 /** Money that never is: what a category added up to. */
 const unsigned = z.string().regex(/^\d+\.\d{2}$/)
+/** A currency as three letters ("RON"). Capitals when the app stores it, but the check does not depend on that. */
+const currency = z.string().regex(/^[A-Za-z]{3}$/)
+/** A typed exchange rate as the app keeps it: "5.00", "0.0063". */
+const rate = z.string().regex(/^\d+(?:\.\d+)?$/)
 
 export const ACCOUNT_KINDS = ['CHECKING', 'SAVINGS', 'CASH', 'CREDIT_CARD'] as const
 export const AccountKind = z.enum(ACCOUNT_KINDS)
@@ -42,6 +46,17 @@ export const Account = z.object({
   virtualBalance: signed,
   /** The balance plus the virtual balance. */
   available: signed,
+  /**
+   * The currency its amounts are in: always a code, the app's own for an account in the app's currency. The balance, the change, the opening and
+   * virtual balance, what is available, its statement, chart and breakdown are in it (docs/accounts-design.md, section 21).
+   */
+  currency,
+  /** The account is in another currency than the app's: then it has a `rate`, and a transaction in it has two amounts. */
+  foreign: z.boolean(),
+  /** How many units of its currency one unit of the app's currency buys ("5.00" for 1 EUR = 5.00 RON); null for an account in the app's currency. */
+  rate: rate.nullable(),
+  /** The balance in the app's currency, at the rate: the same as `balance` for an account in the app's currency. */
+  balanceInMain: signed,
 })
 export type Account = z.infer<typeof Account>
 
@@ -60,6 +75,9 @@ export type NewAccount = {
   includeInNetWorth?: boolean
   /** "0.00" when left out. */
   virtualBalance?: string
+  /** Left out, or the app's currency (any case): the account is in the app's currency and `rate` must be left out. Another code needs a `rate`. */
+  currency?: string
+  rate?: string
 }
 
 /** Fields left out stay as they are; `null` clears `number`, `bic`, `notes` and `group`. */
@@ -74,10 +92,16 @@ export type AccountPatch = {
   group?: string | null
   includeInNetWorth?: boolean
   virtualBalance?: string
+  /** Only while nothing points at the account. The app's currency (any case) makes it an account in the app's currency and clears its rate. */
+  currency?: string
+  /** For an account in another currency, at any time; refused for one in the app's currency. */
+  rate?: string
+  /** What the account holds today, in its currency: the app sets the opening balance to make it so. Not together with `openingBalance`. */
+  balance?: string
 }
 
 export const AccountsSummary = z.object({
-  /** The balances of all accounts together, archived ones too. */
+  /** The balances of all accounts together, archived ones too, in the app's currency (an account in another one at its rate). */
   inAccounts: signed,
   /** What friends owe you minus what you owe them. */
   friends: signed,
@@ -108,6 +132,8 @@ export type AccountLine = z.infer<typeof AccountLine>
 
 export const AccountStatement = z.object({
   account: Account,
+  /** The currency of the amounts and balances of the lines: the account's. */
+  currency,
   from: date,
   to: date,
   balanceBefore: signed,
@@ -127,6 +153,8 @@ export type Share = z.infer<typeof Share>
 
 /** What an account spent and took in over a period, by category (transfers and ledger entries are not in it): largest first. */
 export const Breakdown = z.object({
+  /** The currency of the amounts: the account's. */
+  currency,
   from: date,
   to: date,
   expenses: z.array(Share),

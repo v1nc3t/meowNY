@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from 'react'
 import { allChosen, choicesInOrder, parseEvery, type Choice, type Conflict } from '../api/sync'
+import { useAccounts } from '../hooks/useAccounts'
 import { useMoneySettings } from '../hooks/useMoneySettings'
 import { useT } from '../i18n/context'
 import { formatMoney } from '../lib/money'
@@ -27,14 +28,30 @@ export default function ReviewModal({
 }) {
   const t = useT()
   const { settings } = useMoneySettings()
+  const accounts = useAccounts()
   const [chosen, setChosen] = useState<Record<string, Choice | undefined>>({})
   const [pending, setPending] = useState(false)
   const mineLabel = t(side === 'desktop' ? 'sync.side.thisComputer' : 'sync.side.thisPhone')
   const theirsLabel = t(side === 'desktop' ? 'sync.side.yourPhone' : 'sync.side.yourComputer')
 
-  function valueText(field: Conflict['fields'][number]['field'], value: string): string {
+  /**
+   * The currency an amount of an account is in, for the two versions of a conflict: what that version says its currency is (nothing: the app's), else
+   * the currency of the account of that name on this device. The app's own for anything but an account; a transfer's amount is in the currency of its
+   * first account, which the conflict does not name, so with an account in another currency it is written plain.
+   */
+  function currencyOf(conflict: Conflict, choice: 'mine' | 'theirs'): string | undefined {
+    if (conflict.table === 'transfers') return accounts?.some((account) => account.foreign) ? undefined : settings?.currency
+    if (!settings || conflict.table !== 'accounts') return settings?.currency
+    const said = conflict.fields.find((field) => field.field === 'currency')
+    if (said) return (choice === 'mine' ? said.mine : said.theirs) || settings.currency
+    const account = accounts?.find((each) => each.name === conflict.title)
+    return account?.foreign ? account.currency : settings.currency
+  }
+
+  function valueText(field: Conflict['fields'][number]['field'], value: string, currency: string | undefined): string {
     if (value === '') return '-'
-    if ((field === 'amount' || field === 'openingBalance' || field === 'virtualBalance') && settings) return formatMoney(value, settings.currency, settings.locale)
+    // what a transaction or a transfer was in its account's currency, and a rate, are numbers: the conflict does not say which currency (an account's amounts are written in its own)
+    if ((field === 'amount' || field === 'openingBalance' || field === 'virtualBalance') && settings && currency) return formatMoney(value, currency, settings.locale)
     // the type of an account is one of its four kinds; of a category, income or expense
     if (field === 'type' && (value === 'CHECKING' || value === 'SAVINGS' || value === 'CASH' || value === 'CREDIT_CARD')) return t(`accounts.kind.${value}`)
     if (field === 'type') return t(value === 'INCOME' ? 'common.income' : 'common.expense')
@@ -96,7 +113,7 @@ export default function ReviewModal({
                       conflict.fields.map((field) => (
                         <span className="conflict-field" key={field.field}>
                           <span>{t(`sync.field.${field.field}`)}</span>
-                          <b>{valueText(field.field, choice === 'mine' ? field.mine : field.theirs)}</b>
+                          <b>{valueText(field.field, choice === 'mine' ? field.mine : field.theirs, currencyOf(conflict, choice))}</b>
                         </span>
                       ))
                     )}

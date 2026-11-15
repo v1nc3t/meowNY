@@ -19,18 +19,30 @@ export function activeAccounts(accounts: readonly Account[]): Account[] {
 }
 
 /**
- * The rule that hides it all: more than one account that is not archived. When it is false no form has an account field, the
- * transactions have no account filter or column, and nothing asks about accounts.
+ * The accounts a field can offer: the ones that are not archived, and with `mainOnly` (the recurring items and the debts, which live only in
+ * the app's currency: docs/accounts-design.md, section 21.1) only those in the app's currency.
  */
-export function several(accounts: readonly Account[] | null): boolean {
-  return accounts !== null && activeAccounts(accounts).length > 1
+export function listable(accounts: readonly Account[], mainOnly = false): Account[] {
+  return activeAccounts(accounts).filter((account) => !(mainOnly && account.foreign))
 }
 
-/** The account a new row starts with: the last one used if it is still there and not archived, else the first in the list. '' with no account. */
-export function defaultAccountId(accounts: readonly Account[]): string {
-  const active = activeAccounts(accounts)
+/**
+ * The rule that hides it all: more than one account that is not archived. When it is false no form has an account field, the
+ * transactions have no account filter or column, and nothing asks about accounts. With `mainOnly` only the accounts such a field would list
+ * count: a form that offers one account has nothing to ask.
+ */
+export function several(accounts: readonly Account[] | null, mainOnly = false): boolean {
+  return accounts !== null && listable(accounts, mainOnly).length > 1
+}
+
+/**
+ * The account a new row starts with: the last one used if it is still there and not archived (and, with `mainOnly`, in the app's currency),
+ * else the first in the list. '' with no account.
+ */
+export function defaultAccountId(accounts: readonly Account[], mainOnly = false): string {
+  const choices = listable(accounts, mainOnly)
   const last = storedId(LAST)
-  return active.find((account) => account.id === last)?.id ?? active[0]?.id ?? ''
+  return choices.find((account) => account.id === last)?.id ?? choices[0]?.id ?? ''
 }
 
 /** Remembers the account a row was saved in, for the next new row. */
@@ -50,23 +62,61 @@ export function accountLabel(account: Pick<Account, 'name' | 'isMain' | 'archive
 }
 
 /**
- * The choices of an account field: the accounts that are not archived, and before them each of `keep` that is archived (the account
- * a row or a side of a transfer already has), so that it shows and stays unless it is changed.
+ * The choices of an account field: the accounts that are not archived (with `mainOnly`, those in the app's currency), and before them each of
+ * `keep` that the field would not list otherwise (the account a row or a side of a transfer already has: archived, or in another currency
+ * where only the app's is offered), so that it shows and stays unless it is changed.
  */
-export function accountOptions(accounts: readonly Account[], t: Translate, keep: readonly (string | undefined)[] = []): { value: string; label: string }[] {
-  const kept = accounts.filter((account) => account.archived && keep.includes(account.id))
-  return [...kept, ...activeAccounts(accounts)].map((account) => ({ value: account.id, label: accountLabel(account, t) }))
+export function accountOptions(
+  accounts: readonly Account[],
+  t: Translate,
+  keep: readonly (string | undefined)[] = [],
+  mainOnly = false,
+): { value: string; label: string }[] {
+  const listed = listable(accounts, mainOnly)
+  const kept = accounts.filter((account) => keep.includes(account.id) && !listed.includes(account))
+  return [...kept, ...listed].map((account) => ({ value: account.id, label: accountLabel(account, t) }))
 }
 
 /**
  * The account field of a form. `chosen` is what the person picked (null: nothing yet), `current` the account the row already has (none
  * for a new row). `shown`: whether the form has the field at all. `value`: what it holds. `send`: the account to send, or undefined
- * when there is nothing to say: no field, or the account the row already has.
+ * when there is nothing to say: no field, or the account the row already has. `mainOnly`: the form offers only accounts in the app's currency.
  */
-export function accountChoice(accounts: readonly Account[] | null, chosen: string | null, current?: string): { shown: boolean; value: string; send: string | undefined } {
-  const shown = several(accounts)
-  const value = chosen ?? current ?? (accounts ? defaultAccountId(accounts) : '')
+export function accountChoice(
+  accounts: readonly Account[] | null,
+  chosen: string | null,
+  current?: string,
+  mainOnly = false,
+): { shown: boolean; value: string; send: string | undefined } {
+  const shown = several(accounts, mainOnly)
+  const value = chosen ?? current ?? (accounts ? defaultAccountId(accounts, mainOnly) : '')
   return { shown, value, send: shown && value !== '' && value !== current ? value : undefined }
+}
+
+// -- the currency of an account ------------------------------------------------------------------------------------------------------
+
+/** The account with this id, if there is one. */
+export function accountById(accounts: readonly Account[] | null, id: string): Account | null {
+  return accounts?.find((account) => account.id === id) ?? null
+}
+
+/** The app's currency: the one the main account is in (it is never in another). '' while there is no account to say. */
+export function mainCurrency(accounts: readonly Account[] | null): string {
+  return (accounts?.find((account) => account.isMain) ?? accounts?.find((account) => !account.foreign))?.currency ?? ''
+}
+
+/**
+ * What an account's currency is for comparing: '' for an account in the app's currency, else its code in capitals. Two accounts are in
+ * different currencies exactly when their keys differ (the app compares them so: an account in the app's own currency that was made as a
+ * foreign one on another device is still a foreign account).
+ */
+export function currencyKey(account: Pick<Account, 'foreign' | 'currency'> | null): string {
+  return account?.foreign ? account.currency.toUpperCase() : ''
+}
+
+/** The rate of an account for turning amounts through the app's currency: null for one in the app's currency (rate 1). */
+export function rateOf(account: Pick<Account, 'foreign' | 'rate'> | null): string | null {
+  return account?.foreign ? account.rate : null
 }
 
 /**

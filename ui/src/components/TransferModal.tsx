@@ -4,7 +4,19 @@ import { errorText } from '../api/invoke'
 import { transfers as transfersApi, type Transfer } from '../api/transfers'
 import { useToast } from '../hooks/toast'
 import { useT } from '../i18n/context'
-import { chooseSide, dialogNext, transferStart, transferSubmit, type DialogState, type TransferFields } from '../lib/accountDialogs'
+import {
+  arrivalText,
+  chooseSide,
+  dialogNext,
+  transferCurrencies,
+  transferFieldsOf,
+  transferFieldsOfRow,
+  transferStart,
+  transferSubmit,
+  withArrival,
+  type DialogState,
+  type TransferFields,
+} from '../lib/accountDialogs'
 import { accountOptions, rememberAccount } from '../lib/accountsView'
 import Icon from './NavIcon'
 import Modal, { modalFormId } from './Modal'
@@ -40,20 +52,19 @@ export default function TransferModal({
 }) {
   const t = useT()
   const say = useToast()
-  const [fields, setFields] = useState<TransferFields>(() =>
-    transfer
-      ? { from: transfer.fromAccountId, to: transfer.toAccountId, amount: transfer.amount, date: transfer.date, note: transfer.note ?? '' }
-      : { ...transferStart(accounts, fromId), amount: '', date: today, note: '' },
-  )
+  const [fields, setFields] = useState<TransferFields>(() => (transfer ? transferFieldsOfRow(transfer) : transferFieldsOf(transferStart(accounts, fromId), today)))
   const [state, setState] = useState<DialogState>('EDITING')
-  const set = (patch: Partial<TransferFields>) => setFields((current) => ({ ...current, ...patch }))
+  // typing the amount of arrival makes it theirs; the others are plain
+  const set = ({ arrives, ...rest }: Partial<Pick<TransferFields, 'amount' | 'date' | 'note'>> & { arrives?: string }) =>
+    setFields((current) => (arrives === undefined ? { ...current, ...rest } : { ...withArrival(current, arrives), ...rest }))
   const choose = (side: 'from' | 'to', id: string) => setFields((current) => ({ ...current, ...chooseSide(current, side, id) }))
   // the accounts to choose from, and the sides the transfer was saved with if they are archived by now
   const options = accountOptions(accounts, t, [transfer?.fromAccountId, transfer?.toAccountId])
+  const currencies = transferCurrencies(accounts, fields)
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    const step = transferSubmit(state, transfer, fields)
+    const step = transferSubmit(state, transfer, fields, accounts)
     if (step.do === 'ignore') return
     if (step.do === 'refuse') return say(t(step.error), 'error')
     if (step.do === 'close') return onClose()
@@ -75,7 +86,19 @@ export default function TransferModal({
   return (
     <Modal title={transfer ? t('transfers.editTitle') : t('transfers.addTitle')} pending={state === 'SAVING'} onClose={onClose}>
       <form id={modalFormId} onSubmit={(event) => void onSubmit(event)}>
-        <TransferInputs {...fields} options={options} today={today} onChoose={choose} onChange={set} />
+        <TransferInputs
+          from={fields.from}
+          to={fields.to}
+          amount={fields.amount}
+          date={fields.date}
+          note={fields.note}
+          options={options}
+          today={today}
+          amountCode={currencies.amount}
+          arrives={currencies.arrives ? { code: currencies.arrives, value: arrivalText(accounts, fields) } : null}
+          onChoose={choose}
+          onChange={set}
+        />
         {transfer && onDelete ? (
           <Button variant="outline" size="sm" className="row-danger" onClick={onDelete}>
             <Icon name="trash" className="btn-icon" />

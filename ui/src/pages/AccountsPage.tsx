@@ -34,7 +34,7 @@ import { tip } from '../keys/tip'
 import { useRowNavigation } from '../keys/useRowNavigation'
 import { ACCOUNT_TABS, accountLabel, accountName, accountsTab, activeAccounts, groupAccounts, lineWords, reorderWithinGroup, showAvailable, signedView, tabQuery, type AccountGroup } from '../lib/accountsView'
 import type { EntryTab } from '../lib/entryDialog'
-import { formatDate, formatMoney } from '../lib/money'
+import { breakable, formatDate, formatMoney, moneyIn } from '../lib/money'
 import { lastDay } from '../lib/range'
 import { applyOrder } from '../lib/reorder'
 import { saveChoice, storedChoice } from '../lib/sticky'
@@ -85,6 +85,11 @@ function AccountsView({ settings, now }: { settings: MoneySettings; now: Today }
   // a row was just dropped in a new place: the click that ends the drag must not open the account
   const dropped = useRef(false)
   const money = (amount: string) => formatMoney(amount, settings.currency, settings.locale)
+  /** What an account holds, moved or has in the account's own currency (the app's for one in the app's currency, as always). */
+  const moneyOf = (account: Pick<Account, 'foreign' | 'currency'>) => (account.foreign ? moneyIn(account.currency, settings.locale) : money)
+  /** The same for a cell of a list, where an amount in another currency (longer by its code) may break after the code rather than reach the buttons. */
+  const cellMoney = (account: Pick<Account, 'foreign' | 'currency'>) => (account.foreign ? (amount: string) => breakable(moneyOf(account)(amount)) : money)
+  const wrap = (account: Pick<Account, 'foreign'>) => (account.foreign ? ' is-wrap' : '')
 
   useEffect(() => {
     let cancelled = false
@@ -183,27 +188,31 @@ function AccountsView({ settings, now }: { settings: MoneySettings; now: Today }
   const lastText = (account: Account) => (account.lastActivity ? formatDate(account.lastActivity, settings.locale) : t('accounts.noActivity'))
   /** What the month did to the account so far: green with a plus, red with a minus, plain when nothing. */
   const monthCell = (account: Account, className: string) => {
-    const view = signedView(account.changeThisMonth, money)
+    const view = signedView(account.changeThisMonth, cellMoney(account))
     return (
-      <span className={`${className} ${view.tone}`}>
+      <span className={`${className} ${view.tone}${wrap(account)}`}>
         <span className="sr-only">{t('accounts.thisMonth')} </span>
         {view.text}
       </span>
     )
   }
-  /** The balance, and under it what is available when the account has a virtual balance. */
+  /** The balance in the account's currency, and under it what is available when the account has a virtual balance, and what it is worth in the app's currency when it is in another. */
   const balanceCell = (account: Account, className: string) => (
-    <span className={className}>
-      {money(account.balance)}
-      {showAvailable(account) ? <span className="acct-available">{`${t('accounts.available')} ${money(account.available)}`}</span> : null}
+    <span className={`${className}${wrap(account)}`}>
+      {cellMoney(account)(account.balance)}
+      {showAvailable(account) ? <span className="acct-available">{`${t('accounts.available')} ${moneyOf(account)(account.available)}`}</span> : null}
+      {account.foreign ? <span className="acct-available acct-in-main">{t('accounts.inMain', { amount: money(account.balanceInMain) })}</span> : null}
     </span>
   )
-  /** Small words after the name of an account that the net worth leaves out. */
-  const netWorthMark = (account: Account) => (account.includeInNetWorth ? null : (
-      <span className="row-mark" title={t('accounts.notInNetWorth')}>
-        {t('accounts.notInNetWorth')}
+  /** Small words under the name of an account: its currency when it is not the app's, and that the net worth leaves it out. */
+  const marks = (account: Account) => {
+    const words = [account.foreign ? account.currency.toUpperCase() : '', account.includeInNetWorth ? '' : t('accounts.notInNetWorth')].filter(Boolean).join(' · ')
+    return words === '' ? null : (
+      <span className="row-mark" title={words}>
+        {words}
       </span>
-    ))
+    )
+  }
   /** Delete for an account with nothing in it, archive for one with rows; the main account has neither. */
   const removal = (account: Account): 'delete' | 'archive' | null => (account.isMain ? null : account.entries === 0 ? 'delete' : 'archive')
 
@@ -235,7 +244,7 @@ function AccountsView({ settings, now }: { settings: MoneySettings; now: Today }
             <Link className="card-name" to={link(account)} title={nameOf(account)} data-row-focus aria-describedby={hintId}>
               {nameOf(account)}
             </Link>
-            {netWorthMark(account)}
+            {marks(account)}
           </span>
         </div>
         <span className="cell-sub">{kindText(account)}</span>
@@ -263,7 +272,7 @@ function AccountsView({ settings, now }: { settings: MoneySettings; now: Today }
         name={
           <>
             {nameOf(account)}
-            {netWorthMark(account)}
+            {marks(account)}
           </>
         }
         amount={balanceCell(account, 'cell-amount')}
@@ -342,7 +351,7 @@ function AccountsView({ settings, now }: { settings: MoneySettings; now: Today }
             <Link className="card-name" to={link(account)} title={nameOf(account)} data-row-focus>
               {nameOf(account)}
             </Link>
-            {netWorthMark(account)}
+            {marks(account)}
           </span>
         </div>
         <span className="cell-sub">{kindText(account)}</span>
@@ -418,6 +427,7 @@ function AccountsView({ settings, now }: { settings: MoneySettings; now: Today }
           key={dialog.kind === 'edit' ? `account:${dialog.account.id}` : 'account:new'}
           account={dialog.kind === 'edit' ? dialog.account : null}
           today={now.date}
+          mainCurrency={settings.currency}
           groups={groups.flatMap((group) => group.name ?? [])}
           onClose={() => setDialog(null)}
           onSaved={() => {
@@ -457,7 +467,7 @@ function AccountsView({ settings, now }: { settings: MoneySettings; now: Today }
           text={
             <>
               {t('accounts.archiveText')}
-              {dialog.account.balance === '0.00' ? null : ` ${t('accounts.archiveHolds', { amount: money(dialog.account.balance) })}`}
+              {dialog.account.balance === '0.00' ? null : ` ${t('accounts.archiveHolds', { amount: moneyOf(dialog.account)(dialog.account.balance) })}`}
             </>
           }
           danger={false}
@@ -635,7 +645,13 @@ function AccountPage({
   const [month, setMonth] = useState(now.month)
   const [statement, setStatement] = useState<AccountStatement | null>(null)
   const [breakdown, setBreakdown] = useState<Breakdown | null>(null)
-  const money = (amount: string) => formatMoney(amount, settings.currency, settings.locale)
+  // The page of an account is in the account's currency: its title, balance and what is available, the statement (its lines and the balance after
+  // each) and the two lists by category. The value in the app's currency is the one thing in the app's own.
+  const appMoney = (amount: string) => formatMoney(amount, settings.currency, settings.locale)
+  const money = account.foreign ? moneyIn(account.currency, settings.locale) : appMoney
+  const statementMoney = (shown: { currency: string }) => (account.foreign ? moneyIn(shown.currency, settings.locale) : appMoney)
+  // in the lines of the statement an amount may break after its code (see the lists of accounts)
+  const lineWrap = account.foreign ? ' is-wrap' : ''
 
   useEffect(() => {
     let cancelled = false
@@ -675,12 +691,17 @@ function AccountPage({
   // Newest first: the balance after each line still reads the same. The lines of another month are not shown under this one's name.
   // the same for the two lists by category: a month that was asked for earlier is not shown under this one's name
   const shown = breakdown && breakdown.from.slice(0, 7) === month ? breakdown : null
+  // the lines and the two lists say which currency they are in (the account's)
+  const lineMoney = (amount: string) => {
+    const text = (statement ? statementMoney(statement) : money)(amount)
+    return account.foreign ? breakable(text) : text
+  }
   const lines = useMemo(() => (statement && statement.from.slice(0, 7) === month ? [...statement.lines].reverse() : null), [statement, month])
   const keyOf = (line: AccountLine) => `${line.source}-${line.id}`
   const isTransfer = (line: AccountLine) => line.source === 'TRANSFER_IN' || line.source === 'TRANSFER_OUT'
   const amountCell = (line: AccountLine) => {
-    const view = signedView(line.amount, money)
-    return <span className={`cell-amount ${view.tone}`}>{view.text}</span>
+    const view = signedView(line.amount, lineMoney)
+    return <span className={`cell-amount ${view.tone}${lineWrap}`}>{view.text}</span>
   }
 
   /** The line of a friend's debts: the friend is found by name (a line names them, it has no id of theirs), and their history opens on it. */
@@ -732,7 +753,7 @@ function AccountPage({
           {words.other}
         </span>
         {amountCell(line)}
-        <span className="cell-sub-end">{money(line.balance)}</span>
+        <span className={`cell-sub-end${lineWrap}`}>{lineMoney(line.balance)}</span>
       </Row>
     )
   }
@@ -753,7 +774,7 @@ function AccountPage({
         sub={
           <>
             {words.other ? <span>{words.other}</span> : null}
-            <span>{`${t('accounts.balanceAfter')} ${money(line.balance)}`}</span>
+            <span>{`${t('accounts.balanceAfter')} ${lineMoney(line.balance)}`}</span>
           </>
         }
       >
@@ -789,7 +810,14 @@ function AccountPage({
     )
   }
 
-  const details = [t(`accounts.kind.${account.kind}`), account.number, account.bic && `${t('accounts.bic')} ${account.bic}`, account.group, !account.includeInNetWorth && t('accounts.notInNetWorth')]
+  const details = [
+    t(`accounts.kind.${account.kind}`),
+    account.number,
+    account.bic && `${t('accounts.bic')} ${account.bic}`,
+    account.group,
+    account.foreign && account.rate !== null && t('accounts.rateLine', { main: settings.currency.toUpperCase(), rate: account.rate, code: account.currency.toUpperCase() }),
+    !account.includeInNetWorth && t('accounts.notInNetWorth'),
+  ]
     .filter(Boolean)
     .join(' · ')
   return (
@@ -812,6 +840,7 @@ function AccountPage({
       <h2 className="debts-heading debts-balance">
         {accountLabel(account, t)}: <span className={account.balance.startsWith('-') ? 'debt-owe' : undefined}>{money(account.balance)}</span>
       </h2>
+      {account.foreign ? <p className="hint acct-available-line">{t('accounts.inMain', { amount: appMoney(account.balanceInMain) })}</p> : null}
       {showAvailable(account) ? (
         <p className="hint acct-available-line">
           {t('accounts.available')}: <b>{money(account.available)}</b>
@@ -826,13 +855,13 @@ function AccountPage({
             <YearNav month={month} thisMonth={now.month} onChange={setMonth} />
           </CardAction>
         </CardHeader>
-        <BalanceChart accountId={account.id} month={month} reload={reload} onPick={setMonth} settings={settings} />
+        <BalanceChart accountId={account.id} currency={account.foreign ? account.currency : settings.currency} month={month} reload={reload} onPick={setMonth} settings={settings} />
       </Card>
       <MonthNav month={month} thisMonth={now.month} onChange={setMonth} />
       {shown ? (
         <div className="acct-breakdown">
-          <ShareList title={t('accounts.spentByCategory')} shares={shown.expenses} total={shown.expenseTotal} tone="expense" money={money} />
-          <ShareList title={t('accounts.cameInByCategory')} shares={shown.income} total={shown.incomeTotal} tone="income" money={money} />
+          <ShareList title={t('accounts.spentByCategory')} shares={shown.expenses} total={shown.expenseTotal} tone="expense" money={statementMoney(shown)} />
+          <ShareList title={t('accounts.cameInByCategory')} shares={shown.income} total={shown.incomeTotal} tone="income" money={statementMoney(shown)} />
         </div>
       ) : null}
       {lines && lines.length === 0 ? <p className="hint">{t('accounts.empty')}</p> : null}

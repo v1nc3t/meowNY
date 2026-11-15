@@ -260,13 +260,31 @@ ul.card-list.acct-archived > li.card-item {
   margin-top: 0.5rem;
 }
 
-/* What is available, under the balance (an account with a virtual balance): small and quiet, at the right like the amount. */
+/* What is available, under the balance (an account with a virtual balance), and what an account in another currency is worth in the app's
+   (the same small quiet line): at the right like the amount. */
 .acct-available {
   display: block;
   font-size: 0.75rem;
   font-weight: 400;
   white-space: normal;
   color: var(--muted-foreground);
+}
+
+/* An amount in another currency is longer than one in the app's by its code ("RON 9,999,999,999.99"): in a column as wide as 16 characters it
+   breaks after the code, onto a second line at the right, rather than reaching the buttons (the text has an ordinary space there: lib/money.ts,
+   `breakable`). On a phone the amount's own column is as wide as it needs, so it is held to the width of those 16 characters. */
+.cell-amount.is-wrap {
+  min-width: 0;
+  max-width: 10rem;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.cell-sub-end.is-wrap {
+  overflow: visible;
+  text-overflow: clip;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 /* "not in net worth" under the name of a desktop row: the name keeps its ellipsis on its own line, and the words are not cut (a name
@@ -411,4 +429,48 @@ html.is-phone .tx-actions.acct-actions > :last-child:nth-child(odd) {
 /* The phone's top bar has one more icon: on a narrow phone the icons give way rather than push the bar wider than the screen. */
 .phone-actions {
   min-width: 0;
+}
+
+/* "1 EUR = [ 5.00 ] RON" in the account dialog: the rate typed between the words it says. The words keep together; the field has the room
+   that is left, and goes to a line of its own when that is too little (a narrow dialog). */
+.rate-sentence {
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.375rem 0.5rem;
+  font-size: 0.875rem;
+}
+
+.rate-sentence > span {
+  flex: none;
+  white-space: nowrap;
+}
+
+.rate-sentence > input {
+  flex: 1 1 6rem;
+  width: auto;
+  min-width: 0;
+}
+
+/* What a transaction was in its account's own currency, small and quiet under the amount in the app's (a row of the transactions). It is
+   cut with an ellipsis rather than being wider than the amount's column, which is as wide as 16 characters of the row's size. */
+.cell-native {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 0.75rem;
+  font-weight: 400;
+  color: var(--muted-foreground);
+}
+
+/* A transfer between two currencies in one cell: "what left \2192 what arrived". On a line when there is room; the arrival under the amount
+   on a phone and where a row is two lines, so the names keep their room. */
+html.is-phone .cell-amount.is-pair > .pair-to {
+  display: block;
+}
+
+@container (max-width: 40em) {
+  ul.card-list.tx-transfers .cell-amount.is-pair > .pair-to {
+    display: block;
+  }
 }

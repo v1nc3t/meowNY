@@ -18,12 +18,15 @@ import { niceCeil } from '../pages/dashboardMath'
  */
 export default function BalanceChart({
   accountId,
+  currency,
   month,
   reload,
   onPick,
   settings,
 }: {
   accountId: string
+  /** What the balances are in: the account's currency (its readout is written in it). */
+  currency: string
   /** The month shown under the chart ("YYYY-MM"); its year is the year drawn. */
   month: string
   /** Read again when this changes: something moved the account. */
@@ -61,7 +64,7 @@ export default function BalanceChart({
   const at = (point: HistoryPoint) => Number(point.month.slice(5, 7)) - 1
   const current = points.findIndex((point) => point.month === month)
   const shown = hover !== null && hover < points.length ? hover : current
-  const money = (amount: string) => formatMoney(amount, settings.currency, settings.locale)
+  const money = (amount: string) => formatMoney(amount, currency, settings.locale)
 
   const plotW = Math.max(0, width - PAD.left - PAD.right)
   const slot = plotW / 12

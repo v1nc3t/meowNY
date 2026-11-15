@@ -4,6 +4,7 @@ import type { Account } from '../api/accounts.ts'
 import '../i18n/languages.ts'
 import { setActiveLanguage, t } from '../i18n/translate.ts'
 import {
+  accountById,
   accountChoice,
   accountLabel,
   accountName,
@@ -11,11 +12,15 @@ import {
   accountsTab,
   activeAccounts,
   barWidth,
+  currencyKey,
   defaultAccountId,
   groupAccounts,
   hasGroups,
   lineWords,
+  listable,
   MAIN_NAME,
+  mainCurrency,
+  rateOf,
   rememberAccount,
   reorderWithinGroup,
   several,
@@ -69,6 +74,10 @@ const account = (id: string, name: string, more: Partial<Account> = {}): Account
   includeInNetWorth: true,
   virtualBalance: '0.00',
   available: '0.00',
+  currency: 'EUR',
+  foreign: false,
+  rate: null,
+  balanceInMain: '0.00',
   ...more,
 })
 const main = account('1', MAIN_NAME)
@@ -303,4 +312,75 @@ test('a bar needs no division by zero, and never leaves its track', () => {
   assert.equal(barWidth('-5.00', '200.00'), 0)
   assert.equal(barWidth('abc', '200.00'), 0)
   assert.equal(barWidth('5.00', ''), 0)
+})
+
+// -- accounts in another currency: the fields of the recurring items and the debts offer only the app's own (section 21.8) ------------
+
+const lei = account('10', 'Lei account', { currency: 'RON', foreign: true, rate: '5.00' })
+const lei2 = account('11', 'Lei savings', { currency: 'RON', foreign: true, rate: '4.90' })
+const oldLei = account('12', 'Old lei', { currency: 'RON', foreign: true, rate: '5.00', archived: true })
+const options = (accounts: Account[], keep: string[] = [], mainOnly = false) => accountOptions(accounts, t, keep, mainOnly).map((option) => option.value)
+
+test('a field for the app\'s currency alone lists only the accounts in it, archived ones and those in another currency left out', () => {
+  assert.deepEqual(listable([main, savings, lei, old, oldLei], true).map((account) => account.id), ['1', '2'])
+  assert.deepEqual(listable([main, savings, lei, old, oldLei]).map((account) => account.id), ['1', '2', '10'], 'without the rule: every account that is not archived')
+  assert.deepEqual(options([main, savings, lei, lei2], [], true), ['1', '2'])
+  assert.deepEqual(options([main, savings, lei, lei2]), ['1', '2', '10', '11'], 'a form that takes every currency lists them all')
+  assert.deepEqual(options([lei, main], [], true), ['1'])
+})
+
+test('"more than one account" counts only the accounts the field would list', () => {
+  assert.equal(several([main, lei], true), false, 'one in the app\'s currency and one in lei: the recurring dialog has nothing to ask')
+  assert.equal(several([main, lei, lei2], true), false, 'only extras in another currency')
+  assert.equal(several([main, lei, lei2, oldLei], true), false, 'with archived ones')
+  assert.equal(several([main, savings, lei], true), true, 'two in the app\'s currency')
+  assert.equal(several([main, lei]), true, 'for a form that lists every currency: two')
+  assert.equal(several([main, old, lei], true), false, 'an archived one in the app\'s currency does not make two')
+  assert.equal(several(null, true), false)
+  assert.equal(several([], true), false)
+})
+
+test('an account the row already has stays in the list, also when it is in another currency, and comes first', () => {
+  assert.deepEqual(options([main, savings, lei], ['10'], true), ['10', '1', '2'], 'an item whose account is somehow in lei')
+  assert.deepEqual(options([main, savings, lei, old], ['4', '10'], true), ['10', '4', '1', '2'], 'archived and in lei: in the order of the accounts, before the others')
+  assert.deepEqual(options([main, savings, lei], ['1'], true), ['1', '2'], 'one that is listed anyway is not said twice')
+  assert.deepEqual(options([main, savings, lei], ['10'], false), ['1', '2', '10'], 'where lei is offered, it is where it is')
+  assert.deepEqual(options([main, savings, lei], ['99'], true), ['1', '2'], 'an account that is not there')
+  assert.deepEqual(accountOptions([main, lei], t, ['10'], true).map((option) => option.label), ['Lei account', 'main account'])
+})
+
+test('the choice of a field for the app\'s currency alone: shown with two, the default and the last one used from among them', () => {
+  assert.deepEqual(accountChoice([main, lei], null, undefined, true), { shown: false, value: '1', send: undefined })
+  assert.deepEqual(accountChoice([main, savings, lei], null, undefined, true), { shown: true, value: '1', send: '1' })
+  data.set('choice.account.last', '10')
+  assert.equal(defaultAccountId([main, savings, lei]), '10', 'the last one used, when any currency will do')
+  assert.equal(defaultAccountId([main, savings, lei], true), '1', 'but not one in another currency where only the app\'s is offered')
+  assert.deepEqual(accountChoice([main, savings, lei], null, undefined, true), { shown: true, value: '1', send: '1' })
+  data.set('choice.account.last', '2')
+  assert.equal(defaultAccountId([main, savings, lei], true), '2')
+  // a row that is in an account in lei says nothing of it, and shows it
+  assert.deepEqual(accountChoice([main, savings, lei], null, '10', true), { shown: true, value: '10', send: undefined })
+  assert.deepEqual(accountChoice([main, savings, lei], '1', '10', true), { shown: true, value: '1', send: '1' }, 'until another is chosen')
+  assert.deepEqual(accountChoice([main, lei], null, '10', true), { shown: false, value: '10', send: undefined }, 'no field: the row keeps its account')
+  assert.equal(defaultAccountId([lei, lei2], true), '', 'no account in the app\'s currency at all (it cannot be: the main account is one)')
+})
+
+test('the currency of an account: the app\'s is the main account\'s, accounts compare by what is stored, and a rate is only for one in another currency', () => {
+  assert.equal(mainCurrency([lei, main, savings]), 'EUR')
+  assert.equal(mainCurrency([lei, savings]), 'EUR', 'with no main account in the list: the first in the app\'s currency')
+  assert.equal(mainCurrency([lei]), '')
+  assert.equal(mainCurrency(null), '')
+  assert.equal(mainCurrency([]), '')
+  assert.equal(currencyKey(main), '')
+  assert.equal(currencyKey(savings), '')
+  assert.equal(currencyKey(lei), 'RON')
+  assert.equal(currencyKey({ foreign: true, currency: 'ron' }), 'RON')
+  assert.equal(currencyKey(account('13', 'Odd', { currency: 'EUR', foreign: true, rate: '1.00' })), 'EUR', 'a foreign account with the app\'s code is not an account in the app\'s currency')
+  assert.equal(currencyKey(null), '')
+  assert.equal(rateOf(lei), '5.00')
+  assert.equal(rateOf(main), null, 'rate 1')
+  assert.equal(rateOf(null), null)
+  assert.equal(accountById([main, lei], '10'), lei)
+  assert.equal(accountById([main, lei], '99'), null)
+  assert.equal(accountById(null, '1'), null)
 })

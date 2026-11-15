@@ -43,7 +43,7 @@ export default function SettleModal({
   // the account picked, or until then the last one used
   const accounts = useAccounts()
   const [account, setAccount] = useState<string | null>(null)
-  const choice = accountChoice(accounts, account)
+  const choice = accountChoice(accounts, account, undefined, true)
   const money = (value: string) => (settings ? formatMoney(value, settings.currency, settings.locale) : value)
 
   // More than the debt: said before it is confirmed. Only a comparison of two amounts, the rest is worked out by the app.
@@ -94,7 +94,7 @@ export default function SettleModal({
           <span>{t('report.date')}</span>
           <DatePicker kind="date" value={date} label={t('report.date')} today={today} onChange={setDate} />
         </div>
-        <AccountField accounts={accounts} value={choice.value} onChange={setAccount} />
+        <AccountField accounts={accounts} value={choice.value} onChange={setAccount} mainOnly />
         <label>
           {t('debts.note')}
           <textarea name="note" rows={3} maxLength={200} autoComplete="off" />

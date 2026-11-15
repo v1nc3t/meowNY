@@ -19,8 +19,8 @@ import { shiftMonth } from '../api/months'
 import { useToday, type Today } from '../api/today'
 import { transactions as transactionsApi, type Transaction, type TransactionPage } from '../api/transactions'
 import { transfers as transfersApi, type Transfer, type TransferPage } from '../api/transfers'
-import { accountLabel, activeAccounts, several } from '../lib/accountsView'
-import { formatDate, formatMoney } from '../lib/money'
+import { accountById, accountLabel, activeAccounts, currencyKey, several } from '../lib/accountsView'
+import { formatDate, formatMoney, moneyIn } from '../lib/money'
 import { apiBound, presentRange, shiftBound, type RangeMode } from '../lib/range'
 import { recall, saveChoice, storedChoice, storedId, useRemember } from '../lib/sticky'
 import { isShared } from '../lib/split'
@@ -519,12 +519,36 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
       </div>
     ) : null
 
-  /** What the person's share was: income in green with a plus, spending in red with a minus, and nothing at all plain. */
-  function amount(transaction: Transaction) {
+  /**
+   * What a transaction was in the account's own currency, when its account is in another one (the app's amount is the one in the row): small and quiet,
+   * under the amount on the computer and in the small print of the row on the phone. Null for a transaction in an account in the app's currency; a native
+   * amount that stayed on a row that moved there means nothing and is not shown.
+   */
+  function nativeText(transaction: Transaction): string | null {
+    const account = transaction.nativeAmount === null ? null : accountById(accounts, transaction.accountId)
+    return transaction.nativeAmount !== null && account?.foreign ? moneyIn(account.currency, settings.locale)(transaction.nativeAmount) : null
+  }
+
+  /** What the person's share was: income in green with a plus, spending in red with a minus, and nothing at all plain. `withNative` adds what it was in the account's currency. */
+  function amount(transaction: Transaction, withNative = true) {
     const text = formatMoney(transaction.myShare, settings.currency, settings.locale)
-    if (Number(transaction.myShare) === 0) return <span className="cell-amount">{text}</span>
+    const native = withNative ? nativeText(transaction) : null
+    const small = native ? <span className="cell-native">{native}</span> : null
+    if (Number(transaction.myShare) === 0) {
+      return (
+        <span className="cell-amount">
+          {text}
+          {small}
+        </span>
+      )
+    }
     const income = incomeCategories.has(transaction.categoryId)
-    return <span className={income ? 'cell-amount is-income' : 'cell-amount is-expense'}>{income ? `+${text}` : `-${text}`}</span>
+    return (
+      <span className={income ? 'cell-amount is-income' : 'cell-amount is-expense'}>
+        {income ? `+${text}` : `-${text}`}
+        {small}
+      </span>
+    )
   }
 
   /** What a row opens to: the split, with a code for each friend on it (not for the one who paid), the description and the documents (`count` of them). */
@@ -641,11 +665,12 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
         open={rows.isOpen(transaction.id)}
         onToggle={() => rows.toggle(transaction.id)}
         name={transaction.name}
-        amount={amount(transaction)}
+        amount={amount(transaction, false)}
         sub={
           <>
             <span>{categoryName(transaction)}</span>
             {multi ? <span>{accountNames.get(transaction.accountId) ?? ''}</span> : null}
+            {nativeText(transaction) ? <span>{nativeText(transaction)}</span> : null}
             {isShared(transaction) ? <span>{t('tx.shared')}</span> : null}
           </>
         }
@@ -666,8 +691,23 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
   }
 
   const transferName = (transfer: Transfer) => `${accountNames.get(transfer.fromAccountId) ?? ''} → ${accountNames.get(transfer.toAccountId) ?? ''}`
-  /** What was moved: neutral, it is neither income nor spending. */
-  const transferAmount = (transfer: Transfer) => <span className="cell-amount">{formatMoney(transfer.amount, settings.currency, settings.locale)}</span>
+  /**
+   * What was moved: neutral, it is neither income nor spending. Each side in its own account's currency (the app's for an account in the app's
+   * currency): one amount, or "what left → what arrived" when the two sides are in different currencies.
+   */
+  const transferAmount = (transfer: Transfer) => {
+    const from = accountById(accounts, transfer.fromAccountId)
+    const to = accountById(accounts, transfer.toAccountId)
+    const side = (account: typeof from, value: string) => (account?.foreign ? moneyIn(account.currency, settings.locale)(value) : formatMoney(value, settings.currency, settings.locale))
+    if (transfer.toAmount === null || from === null || to === null || currencyKey(from) === currencyKey(to)) {
+      return <span className="cell-amount">{side(from, transfer.amount)}</span>
+    }
+    return (
+      <span className="cell-amount is-pair">
+        <span>{side(from, transfer.amount)}</span> <span className="pair-to">{`→ ${side(to, transfer.toAmount)}`}</span>
+      </span>
+    )
+  }
 
   // A desktop row of the transfers: the day, from, to, the amount, the note, then edit and delete.
   function transferRow(transfer: Transfer) {

@@ -9,16 +9,20 @@ import { useAccounts } from '../hooks/useAccounts'
 import { useAttachments } from '../hooks/useAttachments'
 import { useToast } from '../hooks/toast'
 import { useT } from '../i18n/context'
-import { chooseSide, dialogNext, transferSubmit, type DialogState } from '../lib/accountDialogs'
+import { arrivalText, chooseSide, dialogNext, transferCurrencies, transferSubmit, withArrival, type DialogState } from '../lib/accountDialogs'
 import { accountOptions, rememberAccount } from '../lib/accountsView'
 import {
   accountField,
   categoryChoices,
   changeTab,
+  chooseAccount,
   entryOf,
   entryStart,
   entryTabs,
+  nativeView,
+  splitAmount,
   transactionBody,
+  withInMain,
   type EntryContext,
   type EntryState,
   type EntryTab,
@@ -121,7 +125,7 @@ function EntryForm({
   const tabs = entryTabs(accounts, { editing: transaction !== null || savedId !== null, transfer: true })
   const context: EntryContext = { accounts, tabs, today, accountId: initial?.accountId }
   const [entry, setEntry] = useState<EntryState>(() => {
-    if (transaction) return entryOf(transaction, loaded)
+    if (transaction) return entryOf(transaction, loaded, accounts)
     const start = entryStart(context, initial?.tab)
     if (!initial?.split || start.tab !== 'EXPENSE') return start
     const friends = initial.friend ? [{ personId: initial.friend.id, name: initial.friend.name }] : []
@@ -165,8 +169,12 @@ function EntryForm({
   const hasDocuments = attachments.linked.length > 0 || attachments.pending.length > 0 || attachments.working !== ''
   const showDocuments = docsOn || hasDocuments
   const hadSplit = transaction ? isShared(transaction) : false
-  const rescaled = hadSplit && !entry.split.touched && amountString(entry.amount, false) !== transaction?.amount
+  // with an account in another currency there are two amounts; what a bill is split over, and what counts, is the one in the app's currency
+  const native = nativeView(accounts, entry, transaction)
+  const billAmount = splitAmount(accounts, entry, transaction)
+  const rescaled = hadSplit && !entry.split.touched && amountString(billAmount, false) !== transaction?.amount
   const account = accountField(accounts, type, entry.account, transaction?.accountId)
+  const currencies = transferCurrencies(accounts, entry)
 
   /** Sends one request; an error gives the fields back, an answer closes the dialog and tells the opener. */
   async function send(work: () => Promise<void>, remember: string) {
@@ -188,7 +196,7 @@ function EntryForm({
     event.preventDefault()
     if (state !== 'EDITING') return
     if (entry.tab === 'TRANSFER') {
-      const step = transferSubmit(state, null, { from: entry.from, to: entry.to, amount: entry.amount, date: entry.date, note: entry.text })
+      const step = transferSubmit(state, null, { from: entry.from, to: entry.to, amount: entry.amount, date: entry.date, note: entry.text, arrives: entry.arrives, arrivesTouched: entry.arrivesTouched }, accounts)
       if (step.do === 'refuse') say(t(step.error), 'error')
       else if (step.do === 'send' && 'create' in step.request) {
         const request = step.request.create
@@ -198,7 +206,7 @@ function EntryForm({
     }
     const built = transactionBody(entry, accounts, transaction)
     if ('error' in built) {
-      say(t(built.error), 'error')
+      say(t(built.error, built.vars), 'error')
       return
     }
     // A shared bill is saved when its numbers add up; one that was shared and is left alone is scaled by the app to a new amount.
@@ -243,8 +251,12 @@ function EntryForm({
                 note={entry.text}
                 options={accountOptions(accounts, t)}
                 today={today}
+                amountCode={currencies.amount}
+                arrives={currencies.arrives ? { code: currencies.arrives, value: arrivalText(accounts, entry) } : null}
                 onChoose={(side, id) => setEntry((current) => ({ ...current, ...chooseSide(current, side, id) }))}
-                onChange={({ note, ...rest }) => set({ ...rest, ...(note !== undefined ? { text: note } : {}) })}
+                onChange={({ note, arrives, ...rest }) =>
+                  setEntry((current) => ({ ...(arrives !== undefined ? withArrival(current, arrives) : current), ...rest, ...(note !== undefined ? { text: note } : {}) }))
+                }
               />
             ) : (
               <>
@@ -253,9 +265,15 @@ function EntryForm({
                   <input name="name" required maxLength={50} value={entry.name} onChange={(event) => set({ name: event.target.value })} autoComplete="off" />
                 </label>
                 <label>
-                  {t('tx.amount')}
+                  {native ? t('entry.amountIn', { code: native.code }) : t('tx.amount')}
                   <input name="amount" required inputMode="decimal" value={entry.amount} onChange={(event) => set({ amount: event.target.value })} autoComplete="off" />
                 </label>
+                {native ? (
+                  <label>
+                    {t('entry.inMain', { code: native.mainCode })}
+                    <input name="inMain" required inputMode="decimal" value={native.inMain} onChange={(event) => setEntry((current) => withInMain(current, event.target.value))} autoComplete="off" />
+                  </label>
+                ) : null}
                 {noIncomeCategory ? (
                   <p className="hint">
                     {t('entry.noIncomeCategory')} <Link to="/app/accounts?tab=income" onClick={() => onClose()}>{t('entry.addIncomeCategory')}</Link>
@@ -270,7 +288,12 @@ function EntryForm({
                     action={{ label: t('categories.add'), onSelect: () => setAddingCategory(true) }}
                   />
                 )}
-                <AccountField accounts={accounts} value={account.value} onChange={(chosen) => set({ account: chosen })} into={entry.tab === 'INCOME'} />
+                <AccountField
+                  accounts={accounts}
+                  value={account.value}
+                  onChange={(chosen) => setEntry((current) => chooseAccount(accounts, current, transaction, chosen))}
+                  into={entry.tab === 'INCOME'}
+                />
                 <div className="tx-date-group">
                   <span>{t('tx.paymentDate')}</span>
                   <DatePicker kind="date" value={entry.date} label={t('tx.paymentDate')} today={today} onChange={(date) => set({ date })} />
@@ -285,7 +308,7 @@ function EntryForm({
                   rescaled ? (
                     <p className="hint">{t('split.rescaled')}</p>
                   ) : (
-                    <SplitEditor amount={entry.amount} draft={entry.split.draft} onChange={(draft) => setSplit({ ...entry.split, draft, touched: true })} onReady={onSplitReady} />
+                    <SplitEditor amount={billAmount} draft={entry.split.draft} onChange={(draft) => setSplit({ ...entry.split, draft, touched: true })} onReady={onSplitReady} />
                   )
                 ) : null}
                 <label>

@@ -800,7 +800,7 @@ function RecurringModal({
                 action={{ label: t('categories.add'), onSelect: () => setAddingCategory(true) }}
               />
             )}
-            <AccountField accounts={accounts} name="accountId" value={accountChoice(accounts, account, item?.accountId).value} onChange={setAccount} into={tab === 'INCOME'} />
+            <AccountField accounts={accounts} name="accountId" value={accountChoice(accounts, account, item?.accountId, true).value} onChange={setAccount} into={tab === 'INCOME'} mainOnly />
             <DateField name="startDate" label={t('rec.startDate')} defaultValue={item?.startDate ?? todayDate} today={todayDate} />
             <CountField label={t('rec.every')} defaultValue={item?.intervalCount ?? 1} />
             <Dropdown

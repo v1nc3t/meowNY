@@ -52,7 +52,7 @@ export default function EntryModal({
   // not say has no field and keeps its account.
   const accounts = useAccounts()
   const [account, setAccount] = useState<string | null>(null)
-  const choice = accountChoice(entry && !entry.accountId ? null : accounts, account, entry?.accountId)
+  const choice = accountChoice(entry && !entry.accountId ? null : accounts, account, entry?.accountId, true)
   const say = useToast()
   const [pending, setPending] = useState(false)
   // The documents of an entry that exists are stored and linked at once; those of one being made wait for it to be saved.
@@ -138,7 +138,7 @@ export default function EntryModal({
             options={ENTRY_KINDS.map((value) => ({ value, label: t(`debts.kind.${value}`) }))}
             onChange={(value) => setKind(value as EntryKind)}
           />
-          <AccountField accounts={choice.shown ? accounts : null} value={choice.value} onChange={setAccount} />
+          <AccountField accounts={choice.shown ? accounts : null} value={choice.value} onChange={setAccount} mainOnly />
           <label>
             {t('tx.amount')}
             <input name="amount" required inputMode="decimal" defaultValue={entry?.amount ?? ''} autoComplete="off" />
