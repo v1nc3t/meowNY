@@ -121,15 +121,28 @@
       "json": {
         "exit": 0,
         "stderr": "",
-        "stdout": "{\"archived\":true,\"balance\":\"-120.00\",\"changeThisMonth\":\"0.00\",\"entries\":0,\"id\":\"6\",\"isMain\":false,\"kind\":\"CREDIT_CARD\",\"lastActivity\":null,\"name\":\"Store card\",\"number\":\"4242\",\"openingBalance\":\"-120.00\",\"openingDate\":\"2026-01-01\"}\n"
+        "stdout": "{\"archived\":true,\"available\":\"380.00\",\"balance\":\"-120.00\",\"bic\":\"BNPAFRPP\",\"changeThisMonth\":\"0.00\",\"entries\":0,\"group\":\"Cards\",\"id\":\"6\",\"includeInNetWorth\":false,\"isMain\":false,\"kind\":\"CREDIT_CARD\",\"lastActivity\":null,\"name\":\"Store card\",\"notes\":\"Limit 500.00\",\"number\":\"4242\",\"openingBalance\":\"-120.00\",\"openingDate\":\"2026-01-01\",\"virtualBalance\":\"500.00\"}\n"
       }
     },
-    "accounts create": {
-      "command": "meowny accounts create --name \"Shop card\" --kind credit_card --opening-balance=-120.00 --opening-date 2026-01-01",
+    "accounts breakdown": {
+      "command": "meowny accounts breakdown 3 --from 2026-09-01 --to 2026-09-30",
+      "human": {
+        "exit": 0,
+        "stderr": "",
+        "stdout": "expenseTotal: 68.15\nfrom: 2026-09-01\nincomeTotal: 0.00\nto: 2026-09-30\n\nexpenses\nname        amount  categoryId\nEating out   55.06           7\nTransport    13.09           6\n\nincome\n(none)\n"
+      },
       "json": {
         "exit": 0,
         "stderr": "",
-        "stdout": "{\"archived\":false,\"balance\":\"-120.00\",\"changeThisMonth\":\"0.00\",\"entries\":0,\"id\":\"6\",\"isMain\":false,\"kind\":\"CREDIT_CARD\",\"lastActivity\":null,\"name\":\"Shop card\",\"number\":null,\"openingBalance\":\"-120.00\",\"openingDate\":\"2026-01-01\"}\n"
+        "stdout": "{\"expenseTotal\":\"68.15\",\"expenses\":[{\"amount\":\"55.06\",\"categoryId\":\"7\",\"name\":\"Eating out\"},{\"amount\":\"13.09\",\"categoryId\":\"6\",\"name\":\"Transport\"}],\"from\":\"2026-09-01\",\"income\":[],\"incomeTotal\":\"0.00\",\"to\":\"2026-09-30\"}\n"
+      }
+    },
+    "accounts create": {
+      "command": "meowny accounts create --name \"Shop card\" --kind credit_card --opening-balance=-120.00 --opening-date 2026-01-01 --bic BNPAFRPP --group Cards --virtual-balance 500.00 --notes \"Limit 500.00\"",
+      "json": {
+        "exit": 0,
+        "stderr": "",
+        "stdout": "{\"archived\":false,\"available\":\"380.00\",\"balance\":\"-120.00\",\"bic\":\"BNPAFRPP\",\"changeThisMonth\":\"0.00\",\"entries\":0,\"group\":\"Cards\",\"id\":\"6\",\"includeInNetWorth\":true,\"isMain\":false,\"kind\":\"CREDIT_CARD\",\"lastActivity\":null,\"name\":\"Shop card\",\"notes\":\"Limit 500.00\",\"number\":null,\"openingBalance\":\"-120.00\",\"openingDate\":\"2026-01-01\",\"virtualBalance\":\"500.00\"}\n"
       }
     },
     "accounts delete": {
@@ -158,13 +171,13 @@
       "human": {
         "exit": 0,
         "stderr": "",
-        "stdout": "id  name             archived   balance  changeThisMonth  entries  isMain  kind         lastActivity  number                       openingBalance  openingDate\n 1  Current account  false      8615.27             0.00      421  true    CHECKING     2026-10-13    IE29 AIBK 9311 5212 3456 78         2400.00  2025-06-01\n 2  Savings          false     13871.65             0.00       21  false   SAVINGS      2026-09-26    -                                   1500.00  2025-06-01\n 3  Cash             false       580.72             0.00       37  false   CASH         2026-10-13    -                                    250.00  2025-06-01\n 4  Credit card      false      -297.09             0.00       43  …",
+        "stdout": "id  name             archived  available   balance  bic          changeThisMonth  entries  group     includeInNetWorth  isMain  kind         lastActivity  notes                                   number                       openingBalance  openingDate  virtualBalance\n 1  Current account  false       8615.27   8615.27  -                       0.00      421  Everyday  true               true    CHECKING     2026-10-13    -                                       IE29 AIBK 9311 5212 3456 78         2400.00  2025-06-01             0.00\n 2  Savings          false      13871.65  13871.65  -                       0.00       21  Savings   true               false   SAVINGS      2026-09-26    Emergency…",
         "truncated": true
       },
       "json": {
         "exit": 0,
         "stderr": "",
-        "stdout": "[{\"archived\":false,\"balance\":\"8615.27\",\"changeThisMonth\":\"0.00\",\"entries\":421,\"id\":\"1\",\"isMain\":true,\"kind\":\"CHECKING\",\"lastActivity\":\"2026-10-13\",\"name\":\"Current account\",\"number\":\"IE29 AIBK 9311 5212 3456 78\",\"openingBalance\":\"2400.00\",\"openingDate\":\"2025-06-01\"},{\"archived\":false,\"balance\":\"13871.65\",\"changeThisMonth\":\"0.00\",\"entries\":21,\"id\":\"2\",\"isMain\":false,\"kind\":\"SAVINGS\",\"lastActivity\":\"2026-09-26\",\"name\":\"Savings\",\"number\":null,\"openingBalance\":\"1500.00\",\"openingDate\":\"2025-06-01\"},{\"archived\":false,\"balance\":\"580.72\",\"changeThisMonth\":\"0.00\",\"entries\":37,\"id\":\"3\",\"isMain\":false,\"kind\":\"CASH\",\"lastActivity\":\"2026-10-13\",\"name\":\"Cash\",\"number\":null,\"openingBalance\":\"250.00\",\"openin…",
+        "stdout": "[{\"archived\":false,\"available\":\"8615.27\",\"balance\":\"8615.27\",\"bic\":null,\"changeThisMonth\":\"0.00\",\"entries\":421,\"group\":\"Everyday\",\"id\":\"1\",\"includeInNetWorth\":true,\"isMain\":true,\"kind\":\"CHECKING\",\"lastActivity\":\"2026-10-13\",\"name\":\"Current account\",\"notes\":null,\"number\":\"IE29 AIBK 9311 5212 3456 78\",\"openingBalance\":\"2400.00\",\"openingDate\":\"2025-06-01\",\"virtualBalance\":\"0.00\"},{\"archived\":false,\"available\":\"13871.65\",\"balance\":\"13871.65\",\"bic\":null,\"changeThisMonth\":\"0.00\",\"entries\":21,\"group\":\"Savings\",\"id\":\"2\",\"includeInNetWorth\":true,\"isMain\":false,\"kind\":\"SAVINGS\",\"lastActivity\":\"2026-09-26\",\"name\":\"Savings\",\"notes\":\"Emergency fund\\nAim: six months of rent\",\"number\":null,\"openingBalance\"…",
         "truncated": true
       }
     },
@@ -181,12 +194,12 @@
       "human": {
         "exit": 0,
         "stderr": "",
-        "stdout": "account: {\"archived\":false,\"balance\":\"-122.95\",\"changeThisMonth\":\"0.00\",\"entries\":1,\"id\":\"6\",\"isMain\":false,\"kind\":\"CREDIT_CARD\",\"lastActivity\":\"2026-10-14\",\"name\":\"Store card\",\"number\":\"4242\",\"openingBalance\":\"-120.00\",\"openingDate\":\"2026-01-01\"}\nbalanceAfter: -122.95\nbalanceBefore: -120.00\nfrom: 2026-10-01\nto: 2026-10-31\n\nlines\n id  amount  balance  date        other    source       what\n424   -2.95  -122.95  2026-10-14  Animals  TRANSACTION  Bread\n"
+        "stdout": "account: {\"archived\":false,\"available\":\"377.05\",\"balance\":\"-122.95\",\"bic\":\"BNPAFRPP\",\"changeThisMonth\":\"0.00\",\"entries\":1,\"group\":\"Cards\",\"id\":\"6\",\"includeInNetWorth\":false,\"isMain\":false,\"kind\":\"CREDIT_CARD\",\"lastActivity\":\"2026-10-14\",\"name\":\"Store card\",\"notes\":\"Limit 500.00\",\"number\":\"4242\",\"openingBalance\":\"-120.00\",\"openingDate\":\"2026-01-01\",\"virtualBalance\":\"500.00\"}\nbalanceAfter: -122.95\nbalanceBefore: -120.00\nfrom: 2026-10-01\nto: 2026-10-31\n\nlines\n id  amount  balance  date        other    source       what\n424   -2.95  -122.95  2026-10-14  Animals  TRANSACTION  Bread\n"
       },
       "json": {
         "exit": 0,
         "stderr": "",
-        "stdout": "{\"account\":{\"archived\":false,\"balance\":\"-122.95\",\"changeThisMonth\":\"0.00\",\"entries\":1,\"id\":\"6\",\"isMain\":false,\"kind\":\"CREDIT_CARD\",\"lastActivity\":\"2026-10-14\",\"name\":\"Store card\",\"number\":\"4242\",\"openingBalance\":\"-120.00\",\"openingDate\":\"2026-01-01\"},\"balanceAfter\":\"-122.95\",\"balanceBefore\":\"-120.00\",\"from\":\"2026-10-01\",\"lines\":[{\"amount\":\"-2.95\",\"balance\":\"-122.95\",\"date\":\"2026-10-14\",\"id\":\"424\",\"other\":\"Animals\",\"source\":\"TRANSACTION\",\"what\":\"Bread\"}],\"to\":\"2026-10-31\"}\n"
+        "stdout": "{\"account\":{\"archived\":false,\"available\":\"377.05\",\"balance\":\"-122.95\",\"bic\":\"BNPAFRPP\",\"changeThisMonth\":\"0.00\",\"entries\":1,\"group\":\"Cards\",\"id\":\"6\",\"includeInNetWorth\":false,\"isMain\":false,\"kind\":\"CREDIT_CARD\",\"lastActivity\":\"2026-10-14\",\"name\":\"Store card\",\"notes\":\"Limit 500.00\",\"number\":\"4242\",\"openingBalance\":\"-120.00\",\"openingDate\":\"2026-01-01\",\"virtualBalance\":\"500.00\"},\"balanceAfter\":\"-122.95\",\"balanceBefore\":\"-120.00\",\"from\":\"2026-10-01\",\"lines\":[{\"amount\":\"-2.95\",\"balance\":\"-122.95\",\"date\":\"2026-10-14\",\"id\":\"424\",\"other\":\"Animals\",\"source\":\"TRANSACTION\",\"what\":\"Bread\"}],\"to\":\"2026-10-31\"}\n"
       }
     },
     "accounts summary": {
@@ -207,15 +220,15 @@
       "json": {
         "exit": 0,
         "stderr": "",
-        "stdout": "{\"archived\":false,\"balance\":\"-120.00\",\"changeThisMonth\":\"0.00\",\"entries\":0,\"id\":\"6\",\"isMain\":false,\"kind\":\"CREDIT_CARD\",\"lastActivity\":null,\"name\":\"Store card\",\"number\":\"4242\",\"openingBalance\":\"-120.00\",\"openingDate\":\"2026-01-01\"}\n"
+        "stdout": "{\"archived\":false,\"available\":\"380.00\",\"balance\":\"-120.00\",\"bic\":\"BNPAFRPP\",\"changeThisMonth\":\"0.00\",\"entries\":0,\"group\":\"Cards\",\"id\":\"6\",\"includeInNetWorth\":false,\"isMain\":false,\"kind\":\"CREDIT_CARD\",\"lastActivity\":null,\"name\":\"Store card\",\"notes\":\"Limit 500.00\",\"number\":\"4242\",\"openingBalance\":\"-120.00\",\"openingDate\":\"2026-01-01\",\"virtualBalance\":\"500.00\"}\n"
       }
     },
     "accounts update": {
-      "command": "meowny accounts update 6 --name \"Store card\" --number 4242",
+      "command": "meowny accounts update 6 --name \"Store card\" --number 4242 --include-in-net-worth=false",
       "json": {
         "exit": 0,
         "stderr": "",
-        "stdout": "{\"archived\":false,\"balance\":\"-122.95\",\"changeThisMonth\":\"0.00\",\"entries\":1,\"id\":\"6\",\"isMain\":false,\"kind\":\"CREDIT_CARD\",\"lastActivity\":\"2026-10-14\",\"name\":\"Store card\",\"number\":\"4242\",\"openingBalance\":\"-120.00\",\"openingDate\":\"2026-01-01\"}\n"
+        "stdout": "{\"archived\":false,\"available\":\"377.05\",\"balance\":\"-122.95\",\"bic\":\"BNPAFRPP\",\"changeThisMonth\":\"0.00\",\"entries\":1,\"group\":\"Cards\",\"id\":\"6\",\"includeInNetWorth\":false,\"isMain\":false,\"kind\":\"CREDIT_CARD\",\"lastActivity\":\"2026-10-14\",\"name\":\"Store card\",\"notes\":\"Limit 500.00\",\"number\":\"4242\",\"openingBalance\":\"-120.00\",\"openingDate\":\"2026-01-01\",\"virtualBalance\":\"500.00\"}\n"
       }
     },
     "backup create": {
@@ -223,7 +236,7 @@
       "human": {
         "exit": 0,
         "stderr": "waiting for you to allow this in the meowNY app...\n",
-        "stdout": "bytes: 236513\npath: /home/you/meowny.meowbak\n"
+        "stdout": "bytes: 237525\npath: /home/you/meowny.meowbak\n"
       }
     },
     "backup schedule": {
@@ -334,13 +347,13 @@
       "human": {
         "exit": 0,
         "stderr": "",
-        "stdout": "incomeTotal: 3240.00\ntotal: 1287.98\nunknown: 4\n\npayments\nname               amount  category       categoryId  daysOverdue  dueDate     income  recurringId\nYoga class          32.00  Entertainment           8          101  2026-08-05  false            11\nMobile top-up           -  Utilities              10           72  2026-09-03  false            12\nYoga class          32.00  Entertainment           8           70  2026-09-05  false            11\nMobile top-up           -  Utilities              10           42  2026-10-03  false            12\nYoga class          32.00  Entertainment           8           40  2026-10-05  false            11\nCleaning service    30.00  Utilities             …",
+        "stdout": "incomeTotal: 3240.00\ntotal: 1287.98\nunknown: 4\n\npayments\nname               amount  category       categoryId  daysOverdue  dueDate     income  recurringId\nYoga class          32.00  Entertainment           8          102  2026-08-05  false            11\nMobile top-up           -  Utilities              10           73  2026-09-03  false            12\nYoga class          32.00  Entertainment           8           71  2026-09-05  false            11\nMobile top-up           -  Utilities              10           43  2026-10-03  false            12\nYoga class          32.00  Entertainment           8           41  2026-10-05  false            11\nCleaning service    30.00  Utilities             …",
         "truncated": true
       },
       "json": {
         "exit": 0,
         "stderr": "",
-        "stdout": "{\"incomeTotal\":\"3240.00\",\"payments\":[{\"amount\":\"32.00\",\"category\":\"Entertainment\",\"categoryId\":\"8\",\"daysOverdue\":101,\"dueDate\":\"2026-08-05\",\"income\":false,\"name\":\"Yoga class\",\"recurringId\":\"11\"},{\"amount\":null,\"category\":\"Utilities\",\"categoryId\":\"10\",\"daysOverdue\":72,\"dueDate\":\"2026-09-03\",\"income\":false,\"name\":\"Mobile top-up\",\"recurringId\":\"12\"},{\"amount\":\"32.00\",\"category\":\"Entertainment\",\"categoryId\":\"8\",\"daysOverdue\":70,\"dueDate\":\"2026-09-05\",\"income\":false,\"name\":\"Yoga class\",\"recurringId\":\"11\"},{\"amount\":null,\"category\":\"Utilities\",\"categoryId\":\"10\",\"daysOverdue\":42,\"dueDate\":\"2026-10-03\",\"income\":false,\"name\":\"Mobile top-up\",\"recurringId\":\"12\"},{\"amount\":\"32.00\",\"category\":\"Entertainm…",
+        "stdout": "{\"incomeTotal\":\"3240.00\",\"payments\":[{\"amount\":\"32.00\",\"category\":\"Entertainment\",\"categoryId\":\"8\",\"daysOverdue\":102,\"dueDate\":\"2026-08-05\",\"income\":false,\"name\":\"Yoga class\",\"recurringId\":\"11\"},{\"amount\":null,\"category\":\"Utilities\",\"categoryId\":\"10\",\"daysOverdue\":73,\"dueDate\":\"2026-09-03\",\"income\":false,\"name\":\"Mobile top-up\",\"recurringId\":\"12\"},{\"amount\":\"32.00\",\"category\":\"Entertainment\",\"categoryId\":\"8\",\"daysOverdue\":71,\"dueDate\":\"2026-09-05\",\"income\":false,\"name\":\"Yoga class\",\"recurringId\":\"11\"},{\"amount\":null,\"category\":\"Utilities\",\"categoryId\":\"10\",\"daysOverdue\":43,\"dueDate\":\"2026-10-03\",\"income\":false,\"name\":\"Mobile top-up\",\"recurringId\":\"12\"},{\"amount\":\"32.00\",\"category\":\"Entertainm…",
         "truncated": true
       }
     },
@@ -364,12 +377,12 @@
       "human": {
         "exit": 0,
         "stderr": "",
-        "stdout": "today: 2026-11-14\n\ndue\nname   dueOn       personId\nTomás  2026-11-08         2\nMarta  2026-11-09         1\nBob    2026-11-09         6\nAnna   2026-11-10         5\nSorin  2026-11-14         4\n\nupcoming\ncount  date\n    1  2026-11-14\n    1  2026-11-15\n    2  2026-11-16\n    1  2026-11-17\n"
+        "stdout": "today: 2026-11-15\n\ndue\nname   dueOn       personId\nMarta  2026-11-09         1\nBob    2026-11-09         6\nAnna   2026-11-10         5\nSorin  2026-11-14         4\nTomás  2026-11-15         2\n\nupcoming\ncount  date\n    1  2026-11-15\n    2  2026-11-16\n    1  2026-11-17\n    1  2026-11-21\n"
       },
       "json": {
         "exit": 0,
         "stderr": "",
-        "stdout": "{\"due\":[{\"dueOn\":\"2026-11-08\",\"name\":\"Tomás\",\"personId\":\"2\"},{\"dueOn\":\"2026-11-09\",\"name\":\"Marta\",\"personId\":\"1\"},{\"dueOn\":\"2026-11-09\",\"name\":\"Bob\",\"personId\":\"6\"},{\"dueOn\":\"2026-11-10\",\"name\":\"Anna\",\"personId\":\"5\"},{\"dueOn\":\"2026-11-14\",\"name\":\"Sorin\",\"personId\":\"4\"}],\"today\":\"2026-11-14\",\"upcoming\":[{\"count\":1,\"date\":\"2026-11-14\"},{\"count\":1,\"date\":\"2026-11-15\"},{\"count\":2,\"date\":\"2026-11-16\"},{\"count\":1,\"date\":\"2026-11-17\"}]}\n"
+        "stdout": "{\"due\":[{\"dueOn\":\"2026-11-09\",\"name\":\"Marta\",\"personId\":\"1\"},{\"dueOn\":\"2026-11-09\",\"name\":\"Bob\",\"personId\":\"6\"},{\"dueOn\":\"2026-11-10\",\"name\":\"Anna\",\"personId\":\"5\"},{\"dueOn\":\"2026-11-14\",\"name\":\"Sorin\",\"personId\":\"4\"},{\"dueOn\":\"2026-11-15\",\"name\":\"Tomás\",\"personId\":\"2\"}],\"today\":\"2026-11-15\",\"upcoming\":[{\"count\":1,\"date\":\"2026-11-15\"},{\"count\":2,\"date\":\"2026-11-16\"},{\"count\":1,\"date\":\"2026-11-17\"},{\"count\":1,\"date\":\"2026-11-21\"}]}\n"
       }
     },
     "debts summary": {
@@ -390,7 +403,7 @@
       "json": {
         "exit": 0,
         "stderr": "",
-        "stdout": "{\"alreadyThere\":false,\"createdAt\":\"2026-11-14T13:57:09.188Z\",\"documentDate\":\"2026-10-01\",\"hasFile\":true,\"id\":\"1\",\"keepOnPhone\":false,\"linkCount\":0,\"mediaType\":\"application/pdf\",\"name\":\"boiler-receipt.pdf\",\"sha256\":\"735a7713978716d1e65eb6bf069e2f410eb72ec5b285861be417aeca0feeb935\",\"sizeBytes\":45}\n"
+        "stdout": "{\"alreadyThere\":false,\"createdAt\":\"2026-11-15T18:45:02.787Z\",\"documentDate\":\"2026-10-01\",\"hasFile\":true,\"id\":\"1\",\"keepOnPhone\":false,\"linkCount\":0,\"mediaType\":\"application/pdf\",\"name\":\"boiler-receipt.pdf\",\"sha256\":\"735a7713978716d1e65eb6bf069e2f410eb72ec5b285861be417aeca0feeb935\",\"sizeBytes\":45}\n"
       }
     },
     "documents delete": {
@@ -422,12 +435,12 @@
       "human": {
         "exit": 0,
         "stderr": "",
-        "stdout": "limit: 50\noffset: 0\ntotal: 1\n\ndocuments\nid  name                createdAt                 documentDate  hasFile  keepOnPhone  linkCount  mediaType        sha256                                                        sizeBytes\n 1  boiler-receipt.pdf  2026-11-14T13:57:09.188Z  2026-10-01    true     false                0  application/pdf  735a7713978716d1e65eb6bf069e2f410eb72ec5b285861be417aeca0fe…         45\n"
+        "stdout": "limit: 50\noffset: 0\ntotal: 1\n\ndocuments\nid  name                createdAt                 documentDate  hasFile  keepOnPhone  linkCount  mediaType        sha256                                                        sizeBytes\n 1  boiler-receipt.pdf  2026-11-15T18:45:02.787Z  2026-10-01    true     false                0  application/pdf  735a7713978716d1e65eb6bf069e2f410eb72ec5b285861be417aeca0fe…         45\n"
       },
       "json": {
         "exit": 0,
         "stderr": "",
-        "stdout": "{\"documents\":[{\"createdAt\":\"2026-11-14T13:57:09.188Z\",\"documentDate\":\"2026-10-01\",\"hasFile\":true,\"id\":\"1\",\"keepOnPhone\":false,\"linkCount\":0,\"mediaType\":\"application/pdf\",\"name\":\"boiler-receipt.pdf\",\"sha256\":\"735a7713978716d1e65eb6bf069e2f410eb72ec5b285861be417aeca0feeb935\",\"sizeBytes\":45}],\"limit\":50,\"offset\":0,\"total\":1}\n"
+        "stdout": "{\"documents\":[{\"createdAt\":\"2026-11-15T18:45:02.787Z\",\"documentDate\":\"2026-10-01\",\"hasFile\":true,\"id\":\"1\",\"keepOnPhone\":false,\"linkCount\":0,\"mediaType\":\"application/pdf\",\"name\":\"boiler-receipt.pdf\",\"sha256\":\"735a7713978716d1e65eb6bf069e2f410eb72ec5b285861be417aeca0feeb935\",\"sizeBytes\":45}],\"limit\":50,\"offset\":0,\"total\":1}\n"
       }
     },
     "documents show": {
@@ -435,12 +448,12 @@
       "human": {
         "exit": 0,
         "stderr": "",
-        "stdout": "createdAt: 2026-11-14T13:57:09.188Z\ndocumentDate: 2026-10-01\nhasFile: true\nid: 1\nkeepOnPhone: false\nlinkCount: 0\nmediaType: application/pdf\nname: boiler-receipt.pdf\nsha256: 735a7713978716d1e65eb6bf069e2f410eb72ec5b285861be417aeca0feeb935\nsizeBytes: 45\n\nlinks\n(none)\n"
+        "stdout": "createdAt: 2026-11-15T18:45:02.787Z\ndocumentDate: 2026-10-01\nhasFile: true\nid: 1\nkeepOnPhone: false\nlinkCount: 0\nmediaType: application/pdf\nname: boiler-receipt.pdf\nsha256: 735a7713978716d1e65eb6bf069e2f410eb72ec5b285861be417aeca0feeb935\nsizeBytes: 45\n\nlinks\n(none)\n"
       },
       "json": {
         "exit": 0,
         "stderr": "",
-        "stdout": "{\"createdAt\":\"2026-11-14T13:57:09.188Z\",\"documentDate\":\"2026-10-01\",\"hasFile\":true,\"id\":\"1\",\"keepOnPhone\":false,\"linkCount\":0,\"links\":[],\"mediaType\":\"application/pdf\",\"name\":\"boiler-receipt.pdf\",\"sha256\":\"735a7713978716d1e65eb6bf069e2f410eb72ec5b285861be417aeca0feeb935\",\"sizeBytes\":45}\n"
+        "stdout": "{\"createdAt\":\"2026-11-15T18:45:02.787Z\",\"documentDate\":\"2026-10-01\",\"hasFile\":true,\"id\":\"1\",\"keepOnPhone\":false,\"linkCount\":0,\"links\":[],\"mediaType\":\"application/pdf\",\"name\":\"boiler-receipt.pdf\",\"sha256\":\"735a7713978716d1e65eb6bf069e2f410eb72ec5b285861be417aeca0feeb935\",\"sizeBytes\":45}\n"
       }
     },
     "documents unlink": {
@@ -456,7 +469,7 @@
       "json": {
         "exit": 0,
         "stderr": "",
-        "stdout": "{\"createdAt\":\"2026-11-14T13:57:09.188Z\",\"documentDate\":\"2026-10-01\",\"hasFile\":true,\"id\":\"1\",\"keepOnPhone\":true,\"linkCount\":0,\"mediaType\":\"application/pdf\",\"name\":\"Boiler repair\",\"sha256\":\"735a7713978716d1e65eb6bf069e2f410eb72ec5b285861be417aeca0feeb935\",\"sizeBytes\":45}\n"
+        "stdout": "{\"createdAt\":\"2026-11-15T18:45:02.787Z\",\"documentDate\":\"2026-10-01\",\"hasFile\":true,\"id\":\"1\",\"keepOnPhone\":true,\"linkCount\":0,\"mediaType\":\"application/pdf\",\"name\":\"Boiler repair\",\"sha256\":\"735a7713978716d1e65eb6bf069e2f410eb72ec5b285861be417aeca0feeb935\",\"sizeBytes\":45}\n"
       }
     },
     "export csv": {
@@ -480,7 +493,7 @@
       "human": {
         "exit": 0,
         "stderr": "",
-        "stdout": "bytes: 30965\npath: /home/you/debts.json\n"
+        "stdout": "bytes: 30967\npath: /home/you/debts.json\n"
       }
     },
     "export pdf": {
@@ -488,7 +501,7 @@
       "human": {
         "exit": 0,
         "stderr": "",
-        "stdout": "bytes: 46020\npath: /home/you/report.pdf\n"
+        "stdout": "bytes: 46279\npath: /home/you/report.pdf\n"
       }
     },
     "export preview": {
@@ -509,7 +522,7 @@
       "human": {
         "exit": 0,
         "stderr": "",
-        "stdout": "bytes: 36027\npath: /home/you/budget.xlsx\n"
+        "stdout": "bytes: 36260\npath: /home/you/budget.xlsx\n"
       }
     },
     "ledger add": {
@@ -654,7 +667,7 @@
       "json": {
         "exit": 0,
         "stderr": "",
-        "stdout": "{\"accountId\":\"1\",\"amount\":\"20.00\",\"categoryId\":\"16\",\"description\":null,\"endDate\":\"2026-11-14\",\"id\":\"13\",\"intervalCount\":1,\"intervalUnit\":\"MONTH\",\"isActive\":false,\"name\":\"Vet plan plus\",\"nextDueDate\":\"2026-12-20\",\"split\":null,\"startDate\":\"2026-10-20\"}\n"
+        "stdout": "{\"accountId\":\"1\",\"amount\":\"20.00\",\"categoryId\":\"16\",\"description\":null,\"endDate\":\"2026-11-15\",\"id\":\"13\",\"intervalCount\":1,\"intervalUnit\":\"MONTH\",\"isActive\":false,\"name\":\"Vet plan plus\",\"nextDueDate\":\"2026-12-20\",\"split\":null,\"startDate\":\"2026-10-20\"}\n"
       }
     },
     "recurring list": {
@@ -859,12 +872,12 @@
       "human": {
         "exit": 0,
         "stderr": "",
-        "stdout": "api: 1\napp: meowny\nschemaVersion: 18\nscope: read\nversion: 0.3.0\n"
+        "stdout": "api: 1\napp: meowny\nschemaVersion: 19\nscope: read\nversion: 0.3.0\n"
       },
       "json": {
         "exit": 0,
         "stderr": "",
-        "stdout": "{\"api\":1,\"app\":\"meowny\",\"schemaVersion\":18,\"scope\":\"read\",\"version\":\"0.3.0\"}\n"
+        "stdout": "{\"api\":1,\"app\":\"meowny\",\"schemaVersion\":19,\"scope\":\"read\",\"version\":\"0.3.0\"}\n"
       }
     },
     "today": {
@@ -872,12 +885,12 @@
       "human": {
         "exit": 0,
         "stderr": "",
-        "stdout": "date: 2026-11-14\nmonth: 2026-11\n"
+        "stdout": "date: 2026-11-15\nmonth: 2026-11\n"
       },
       "json": {
         "exit": 0,
         "stderr": "",
-        "stdout": "{\"date\":\"2026-11-14\",\"month\":\"2026-11\"}\n"
+        "stdout": "{\"date\":\"2026-11-15\",\"month\":\"2026-11\"}\n"
       }
     },
     "transactions create": {
@@ -897,16 +910,16 @@
       }
     },
     "transactions list": {
-      "command": "meowny transactions list --limit 4",
+      "command": "meowny transactions list --kind income --limit 4",
       "human": {
         "exit": 0,
-        "stderr": "showing 1-4 of 423; next page: --offset 4\n",
-        "stdout": "limit: 4\noffset: 0\ntotal: 423\n\ntransactions\n id  name             paymentDate  amount  accountId  categoryId  clientUuid  description  myShare  paidBy\n403  Coffee           2026-10-13     3.20          3           7  -           Flat white      3.20  -\n402  Bus ticket       2026-10-13     2.80          3           6  -           -               2.80  -\n401  Corner shop      2026-10-13     4.50          3           5  -           -               4.50  -\n291  Board game cafe  2026-10-13    51.83          1           8  -           -              51.83  -\n"
+        "stderr": "showing 1-4 of 26; next page: --offset 4\n",
+        "stdout": "limit: 4\noffset: 0\ntotal: 26\n\ntransactions\n id  name              paymentDate   amount  accountId  categoryId  clientUuid  description             myShare  paidBy\n 82  Salary            2026-09-25   3240.00          1           1  -           Monthly pay             3240.00  -\n372  Logo design       2026-09-17    450.00          1           2  -           Invoice paid by client   450.00  -\n 83  Salary            2026-08-25   3240.00          1           1  -           Monthly pay             3240.00  -\n377  Savings interest  2026-07-28     13.11          2           3  -           -                         13.11  -\n"
       },
       "json": {
         "exit": 0,
         "stderr": "",
-        "stdout": "{\"limit\":4,\"offset\":0,\"total\":423,\"transactions\":[{\"accountId\":\"3\",\"amount\":\"3.20\",\"categoryId\":\"7\",\"clientUuid\":null,\"description\":\"Flat white\",\"id\":\"403\",\"myShare\":\"3.20\",\"name\":\"Coffee\",\"paidBy\":null,\"paymentDate\":\"2026-10-13\",\"split\":[]},{\"accountId\":\"3\",\"amount\":\"2.80\",\"categoryId\":\"6\",\"clientUuid\":null,\"description\":null,\"id\":\"402\",\"myShare\":\"2.80\",\"name\":\"Bus ticket\",\"paidBy\":null,\"paymentDate\":\"2026-10-13\",\"split\":[]},{\"accountId\":\"3\",\"amount\":\"4.50\",\"categoryId\":\"5\",\"clientUuid\":null,\"description\":null,\"id\":\"401\",\"myShare\":\"4.50\",\"name\":\"Corner shop\",\"paidBy\":null,\"paymentDate\":\"2026-10-13\",\"split\":[]},{\"accountId\":\"1\",\"amount\":\"51.83\",\"categoryId\":\"8\",\"clientUuid\":null,\"description…",
+        "stdout": "{\"limit\":4,\"offset\":0,\"total\":26,\"transactions\":[{\"accountId\":\"1\",\"amount\":\"3240.00\",\"categoryId\":\"1\",\"clientUuid\":null,\"description\":\"Monthly pay\",\"id\":\"82\",\"myShare\":\"3240.00\",\"name\":\"Salary\",\"paidBy\":null,\"paymentDate\":\"2026-09-25\",\"split\":[]},{\"accountId\":\"1\",\"amount\":\"450.00\",\"categoryId\":\"2\",\"clientUuid\":null,\"description\":\"Invoice paid by client\",\"id\":\"372\",\"myShare\":\"450.00\",\"name\":\"Logo design\",\"paidBy\":null,\"paymentDate\":\"2026-09-17\",\"split\":[]},{\"accountId\":\"1\",\"amount\":\"3240.00\",\"categoryId\":\"1\",\"clientUuid\":null,\"description\":\"Monthly pay\",\"id\":\"83\",\"myShare\":\"3240.00\",\"name\":\"Salary\",\"paidBy\":null,\"paymentDate\":\"2026-08-25\",\"split\":[]},{\"accountId\":\"2\",\"amount\":\"13.11\",\"categor…",
         "truncated": true
       }
     },

@@ -363,6 +363,7 @@ pub static ALL: &[Route] = &[
     accounts::ACCOUNTS_LIST,
     accounts::ACCOUNTS_SHOW,
     accounts::ACCOUNTS_HISTORY,
+    accounts::ACCOUNTS_BREAKDOWN,
     accounts::ACCOUNTS_SUMMARY,
     accounts::TRANSFERS_LIST,
     accounts::ACCOUNTS_CREATE,

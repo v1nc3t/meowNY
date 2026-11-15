@@ -100,6 +100,7 @@ pub const TRANSACTIONS_LIST: Route = Route {
         Param::new("to", Kind::Date, "Only on or before this date."),
         Param::new("categoryId", Kind::Id, "Only this category."),
         Param::new("accountId", Kind::Id, "Only this account."),
+        KIND,
         Param::new("q", Kind::String, "Only transactions whose name or description contains this text."),
         Param::new("limit", Kind::Integer, "How many to return, 1 to 100. Default 50."),
         Param::new("offset", Kind::Integer, "How many to skip, for the next page. Default 0."),

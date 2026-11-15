@@ -133,7 +133,7 @@ fn tour(app: &App) -> (Map<String, Value>, Vec<Value>) {
     t.example("today", read, "meowny today", &["today"], true, true, None);
     t.example("settings get", read, "meowny settings get", &["settings", "get"], true, true, None);
     t.example("categories list", read, "meowny categories list --type expense", &["categories", "list", "--type", "expense"], true, true, None);
-    t.example("transactions list", read, "meowny transactions list --limit 4", &["transactions", "list", "--limit", "4"], true, true, None);
+    t.example("transactions list", read, "meowny transactions list --kind income --limit 4", &["transactions", "list", "--kind", "income", "--limit", "4"], true, true, None);
     t.example("budgets overview", read, "meowny budgets overview --month 2026-09", &["budgets", "overview", "--month", "2026-09"], true, true, None);
     t.example("budgets history", read, "meowny budgets history", &["budgets", "history"], true, true, None);
     t.example("recurring list", read, "meowny recurring list", &["recurring", "list"], true, true, None);
@@ -150,6 +150,8 @@ fn tour(app: &App) -> (Map<String, Value>, Vec<Value>) {
     t.example("accounts list", read, "meowny accounts list", &["accounts", "list"], true, true, None);
     t.example("accounts summary", read, "meowny accounts summary", &["accounts", "summary"], true, true, None);
     t.example("accounts history", read, "meowny accounts history 2 --year 2025", &["accounts", "history", "2", "--year", "2025"], true, true, None);
+    // What the cash account paid and took in over a month that is over, by category: the days are given, so it does not move with the clock.
+    t.example("accounts breakdown", read, "meowny accounts breakdown 3 --from 2026-09-01 --to 2026-09-30", &["accounts", "breakdown", "3", "--from", "2026-09-01", "--to", "2026-09-30"], true, true, None);
     t.example("transfers list", read, "meowny transfers list --account-id 2 --limit 3", &["transfers", "list", "--account-id", "2", "--limit", "3"], true, true, None);
 
     // Changing: a category, a transaction, a budget.
@@ -157,13 +159,16 @@ fn tour(app: &App) -> (Map<String, Value>, Vec<Value>) {
     t.capture(write, &Tour::strings(&["settings", "set", "--language", "en"]), None, &[]); // and back, for what follows
     let pets = Tour::id(&t.example("categories create", write, "meowny categories create --name Pets --type expense", &["categories", "create", "--name", "Pets", "--type", "expense"], false, true, None));
     t.example("categories rename", write, &format!("meowny categories rename {pets} --name Animals"), &["categories", "rename", &pets, "--name", "Animals"], false, true, None);
-    // A card in the red: a negative opening balance is written with an equals sign. The days are far enough back that what it holds
-    // and what changed this month stay the same as the months go by.
+    // A card in the red with a limit of 500.00 (its virtual balance, so 380.00 is available): a negative opening balance is written with an equals sign.
+    // The days are far enough back that what it holds and what changed this month stay the same as the months go by.
     let card = Tour::id(&t.example(
         "accounts create",
         write,
-        "meowny accounts create --name \"Shop card\" --kind credit_card --opening-balance=-120.00 --opening-date 2026-01-01",
-        &["accounts", "create", "--name", "Shop card", "--kind", "credit_card", "--opening-balance=-120.00", "--opening-date", "2026-01-01"],
+        "meowny accounts create --name \"Shop card\" --kind credit_card --opening-balance=-120.00 --opening-date 2026-01-01 --bic BNPAFRPP --group Cards --virtual-balance 500.00 --notes \"Limit 500.00\"",
+        &[
+            "accounts", "create", "--name", "Shop card", "--kind", "credit_card", "--opening-balance=-120.00", "--opening-date", "2026-01-01", "--bic", "BNPAFRPP", "--group", "Cards", "--virtual-balance", "500.00",
+            "--notes", "Limit 500.00",
+        ],
         false,
         true,
         None,
@@ -182,7 +187,16 @@ fn tour(app: &App) -> (Map<String, Value>, Vec<Value>) {
     t.example("budgets remove", write, &format!("meowny budgets remove --type expense --month 2027-01 --category-id {pets} --yes"), &["budgets", "remove", "--type", "expense", "--month", "2027-01", "--category-id", &pets, "--yes"], false, true, None);
 
     // Accounts and transfers: money moved between your own accounts is never income or an expense.
-    t.example("accounts update", write, &format!("meowny accounts update {card} --name \"Store card\" --number 4242"), &["accounts", "update", &card, "--name", "Store card", "--number", "4242"], false, true, None);
+    // A yes or no flag is on when it is given; to turn it off it takes an equals sign.
+    t.example(
+        "accounts update",
+        write,
+        &format!("meowny accounts update {card} --name \"Store card\" --number 4242 --include-in-net-worth=false"),
+        &["accounts", "update", &card, "--name", "Store card", "--number", "4242", "--include-in-net-worth=false"],
+        false,
+        true,
+        None,
+    );
     t.example(
         "accounts show",
         read,

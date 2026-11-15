@@ -1,6 +1,7 @@
 //! The routes for accounts and transfers (`docs/accounts-design.md`, sections 6 and 12).
 //!
-//! A `read` token can list the accounts, read what moved one, its balance month by month, and the net worth, and list the transfers.
+//! A `read` token can list the accounts, read what moved one, what it paid and took in by category, its balance month by month, and the net
+//! worth, and list the transfers.
 //! A `write` token can add, change, archive, bring back, delete and order the accounts, and add, change and delete transfers, with the
 //! rules the screens follow: the main account is never archived or deleted, an account with rows is archived and not deleted, a name is
 //! unique among the accounts that are not archived, a transfer needs two different accounts that are not archived.
@@ -36,7 +37,7 @@ fn this_month(today: &str) -> Result<(String, String), ApiError> {
 pub const ACCOUNTS_LIST: Route = Route {
     name: "accounts.list",
     scope: Scope::Read,
-    summary: "The accounts in the person's order, the archived ones last, each with what it holds today (balance), what changed this month, its last activity and how many rows (entries) are in it. The main account has isMain true.",
+    summary: "The accounts in the person's order, the archived ones last, each with what it holds today (balance), what changed this month, its last activity and how many rows (entries) are in it, and its details: BIC, notes, group, whether net worth counts it, and the virtual balance with what is available (balance plus virtual balance). The main account has isMain true.",
     params: &[],
     confirm: None,
     run: |ctx, _| {
@@ -87,10 +88,33 @@ pub const ACCOUNTS_HISTORY: Route = Route {
     },
 };
 
+pub const ACCOUNTS_BREAKDOWN: Route = Route {
+    name: "accounts.breakdown",
+    scope: Scope::Read,
+    summary: "What an account paid out and took in from one day to another, both included, by category: for expenses and for income the categories with their amounts, the largest first, and the total of each. Transfers, ledger entries and a bill a friend paid are not in it. This month if the days are left out.",
+    params: &[
+        ACCOUNT.required(),
+        Param::new("from", Kind::Date, "The first day. The first of this month if left out."),
+        Param::new("to", Kind::Date, "The last day. The last of this month if left out."),
+    ],
+    confirm: None,
+    run: |ctx, mut args| {
+        let id = take_id(&mut args, "id")?;
+        #[derive(Deserialize)]
+        struct Args {
+            from: Option<String>,
+            to: Option<String>,
+        }
+        let Args { from, to } = parse(args)?;
+        let (first, last) = this_month(&today(ctx)?)?;
+        reply(ctx.vault.with_conn(|c| accounts::breakdown(c, id, from.as_deref().unwrap_or(&first), to.as_deref().unwrap_or(&last)))?)
+    },
+};
+
 pub const ACCOUNTS_SUMMARY: Route = Route {
     name: "accounts.summary",
     scope: Scope::Read,
-    summary: "Net worth: what the accounts hold in all (the archived ones too), what friends owe you (negative: you owe them) and the two added. Also how many accounts there are, and whether accounts are in use: there is more than the main account, or it has an opening balance.",
+    summary: "Net worth: what the accounts that count in it hold in all (the archived ones too), what friends owe you (negative: you owe them) and the two added. An account can be left out of net worth, and a virtual balance is never in it. Also how many accounts there are, those left out too, and whether accounts are in use: there is more than the main account, or it has an opening balance.",
     params: &[],
     confirm: None,
     run: |ctx, _| {
@@ -129,6 +153,11 @@ pub const ACCOUNTS_CREATE: Route = Route {
         Param::new("number", Kind::String, "An IBAN or anything that tells it apart, up to 50 characters."),
         Param::new("openingBalance", Kind::String, "What it held on the opening date, which may be negative, like -120.00. 0.00 if left out."),
         Param::new("openingDate", Kind::Date, "The day it held that. Today if left out."),
+        Param::new("bic", Kind::String, "The bank's BIC, up to 20 characters."),
+        Param::new("notes", Kind::String, "Notes, up to 1000 characters. Line breaks are kept."),
+        Param::new("group", Kind::String, "The group it is listed under, like Bank, up to 50 characters."),
+        Param::new("includeInNetWorth", Kind::Boolean, "Whether net worth counts it. True if left out."),
+        Param::new("virtualBalance", Kind::String, "An amount added to the balance to show what is available, like the limit of a credit card, which may be negative, like -50.00. It is never in the balance or in net worth. 0.00 if left out."),
     ],
     confirm: None,
     run: |ctx, args| {
@@ -141,7 +170,7 @@ pub const ACCOUNTS_CREATE: Route = Route {
 pub const ACCOUNTS_UPDATE: Route = Route {
     name: "accounts.update",
     scope: Scope::Write,
-    summary: "Changes an account that is not archived (bring it back first). Fields left out stay as they are; a null number clears it.",
+    summary: "Changes an account that is not archived (bring it back first). Fields left out stay as they are; a null number, BIC, notes or group clears it.",
     params: &[
         ACCOUNT.required(),
         Param::new("name", Kind::String, "The new name."),
@@ -149,6 +178,11 @@ pub const ACCOUNTS_UPDATE: Route = Route {
         Param::new("number", Kind::String, "The new number, or null to clear it.").nullable(),
         Param::new("openingBalance", Kind::String, "What it held on the opening date, which may be negative, like -120.00."),
         Param::new("openingDate", Kind::Date, "The day it held that."),
+        Param::new("bic", Kind::String, "The new BIC, or null to clear it.").nullable(),
+        Param::new("notes", Kind::String, "The new notes, or null to clear them.").nullable(),
+        Param::new("group", Kind::String, "The new group, or null to clear it.").nullable(),
+        Param::new("includeInNetWorth", Kind::Boolean, "Whether net worth counts it."),
+        Param::new("virtualBalance", Kind::String, "The new virtual balance, which may be negative, like -50.00."),
     ],
     confirm: None,
     run: |ctx, mut args| {

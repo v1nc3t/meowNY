@@ -120,6 +120,19 @@
           "values": []
         },
         {
+          "flag": "--kind",
+          "nullable": false,
+          "param": "kind",
+          "required": false,
+          "summary": "Only INCOME or only EXPENSE. Leave out for both.",
+          "type": "string",
+          "value": "INCOME|EXPENSE",
+          "values": [
+            "INCOME",
+            "EXPENSE"
+          ]
+        },
+        {
           "flag": "--q",
           "nullable": false,
           "param": "q",
@@ -154,7 +167,7 @@
       "route": "transactions.list",
       "scope": "read",
       "summary": "Transactions, newest first, with the total that match. Up to 100 a page, 50 unless limit says otherwise.",
-      "usage": "meowny transactions list [--from <date>] [--to <date>] [--category-id <id>] [--account-id <id>] [--q <text>] [--limit <number>] [--offset <number>]"
+      "usage": "meowny transactions list [--from <date>] [--to <date>] [--category-id <id>] [--account-id <id>] [--kind <INCOME|EXPENSE>] [--q <text>] [--limit <number>] [--offset <number>]"
     },
     {
       "command": "budgets overview",
@@ -3325,7 +3338,7 @@
       "positional": null,
       "route": "accounts.list",
       "scope": "read",
-      "summary": "The accounts in the person's order, the archived ones last, each with what it holds today (balance), what changed this month, its last activity and how many rows (entries) are in it. The main account has isMain true.",
+      "summary": "The accounts in the person's order, the archived ones last, each with what it holds today (balance), what changed this month, its last activity and how many rows (entries) are in it, and its details: BIC, notes, group, whether net worth counts it, and the virtual balance with what is available (balance plus virtual balance). The main account has isMain true.",
       "usage": "meowny accounts list"
     },
     {
@@ -3403,6 +3416,48 @@
       "usage": "meowny accounts history <id> --year <year>"
     },
     {
+      "command": "accounts breakdown",
+      "confirm": false,
+      "destructive": false,
+      "flags": [
+        {
+          "flag": "--id",
+          "nullable": false,
+          "param": "id",
+          "required": true,
+          "summary": "The account.",
+          "type": "id",
+          "value": "id",
+          "values": []
+        },
+        {
+          "flag": "--from",
+          "nullable": false,
+          "param": "from",
+          "required": false,
+          "summary": "The first day. The first of this month if left out.",
+          "type": "date",
+          "value": "date",
+          "values": []
+        },
+        {
+          "flag": "--to",
+          "nullable": false,
+          "param": "to",
+          "required": false,
+          "summary": "The last day. The last of this month if left out.",
+          "type": "date",
+          "value": "date",
+          "values": []
+        }
+      ],
+      "positional": "id",
+      "route": "accounts.breakdown",
+      "scope": "read",
+      "summary": "What an account paid out and took in from one day to another, both included, by category: for expenses and for income the categories with their amounts, the largest first, and the total of each. Transfers, ledger entries and a bill a friend paid are not in it. This month if the days are left out.",
+      "usage": "meowny accounts breakdown <id> [--from <date>] [--to <date>]"
+    },
+    {
       "command": "accounts summary",
       "confirm": false,
       "destructive": false,
@@ -3410,7 +3465,7 @@
       "positional": null,
       "route": "accounts.summary",
       "scope": "read",
-      "summary": "Net worth: what the accounts hold in all (the archived ones too), what friends owe you (negative: you owe them) and the two added. Also how many accounts there are, and whether accounts are in use: there is more than the main account, or it has an opening balance.",
+      "summary": "Net worth: what the accounts that count in it hold in all (the archived ones too), what friends owe you (negative: you owe them) and the two added. An account can be left out of net worth, and a virtual balance is never in it. Also how many accounts there are, those left out too, and whether accounts are in use: there is more than the main account, or it has an opening balance.",
       "usage": "meowny accounts summary"
     },
     {
@@ -3534,13 +3589,63 @@
           "type": "date",
           "value": "date",
           "values": []
+        },
+        {
+          "flag": "--bic",
+          "nullable": false,
+          "param": "bic",
+          "required": false,
+          "summary": "The bank's BIC, up to 20 characters.",
+          "type": "string",
+          "value": "text",
+          "values": []
+        },
+        {
+          "flag": "--notes",
+          "nullable": false,
+          "param": "notes",
+          "required": false,
+          "summary": "Notes, up to 1000 characters. Line breaks are kept.",
+          "type": "string",
+          "value": "text",
+          "values": []
+        },
+        {
+          "flag": "--group",
+          "nullable": false,
+          "param": "group",
+          "required": false,
+          "summary": "The group it is listed under, like Bank, up to 50 characters.",
+          "type": "string",
+          "value": "text",
+          "values": []
+        },
+        {
+          "flag": "--include-in-net-worth",
+          "nullable": false,
+          "param": "includeInNetWorth",
+          "required": false,
+          "summary": "Whether net worth counts it. True if left out.",
+          "type": "boolean",
+          "value": "boolean",
+          "values": []
+        },
+        {
+          "flag": "--virtual-balance",
+          "nullable": false,
+          "param": "virtualBalance",
+          "required": false,
+          "summary": "An amount added to the balance to show what is available, like the limit of a credit card, which may be negative, like -50.00. It is never in the balance or in net worth. 0.00 if left out.",
+          "type": "string",
+          "value": "text",
+          "values": []
         }
       ],
       "positional": null,
       "route": "accounts.create",
       "scope": "write",
       "summary": "Adds an account at the end of the list. Its name is 1 to 50 characters and unique among the accounts that are not archived, whatever the case.",
-      "usage": "meowny accounts create --name <text> --kind <CHECKING|SAVINGS|CASH|CREDIT_CARD> [--number <text>] [--opening-balance <text>] [--opening-date <date>]"
+      "usage": "meowny accounts create --name <text> --kind <CHECKING|SAVINGS|CASH|CREDIT_CARD> [--number <text>] [--opening-balance <text>] [--opening-date <date>] [--bic <text>] [--notes <text>] [--group <text>] [--include-in-net-worth <boolean>] [--virtual-balance <text>]"
     },
     {
       "command": "accounts update",
@@ -3616,13 +3721,78 @@
           "type": "date",
           "value": "date",
           "values": []
+        },
+        {
+          "flag": "--bic",
+          "nullable": true,
+          "param": "bic",
+          "required": false,
+          "summary": "The new BIC, or null to clear it.",
+          "type": "string",
+          "value": "text",
+          "values": []
+        },
+        {
+          "clears": "bic",
+          "flag": "--clear-bic",
+          "summary": "Clears bic."
+        },
+        {
+          "flag": "--notes",
+          "nullable": true,
+          "param": "notes",
+          "required": false,
+          "summary": "The new notes, or null to clear them.",
+          "type": "string",
+          "value": "text",
+          "values": []
+        },
+        {
+          "clears": "notes",
+          "flag": "--clear-notes",
+          "summary": "Clears notes."
+        },
+        {
+          "flag": "--group",
+          "nullable": true,
+          "param": "group",
+          "required": false,
+          "summary": "The new group, or null to clear it.",
+          "type": "string",
+          "value": "text",
+          "values": []
+        },
+        {
+          "clears": "group",
+          "flag": "--clear-group",
+          "summary": "Clears group."
+        },
+        {
+          "flag": "--include-in-net-worth",
+          "nullable": false,
+          "param": "includeInNetWorth",
+          "required": false,
+          "summary": "Whether net worth counts it.",
+          "type": "boolean",
+          "value": "boolean",
+          "values": []
+        },
+        {
+          "flag": "--virtual-balance",
+          "nullable": false,
+          "param": "virtualBalance",
+          "required": false,
+          "summary": "The new virtual balance, which may be negative, like -50.00.",
+          "type": "string",
+          "value": "text",
+          "values": []
         }
       ],
       "positional": "id",
       "route": "accounts.update",
       "scope": "write",
-      "summary": "Changes an account that is not archived (bring it back first). Fields left out stay as they are; a null number clears it.",
-      "usage": "meowny accounts update <id> [--name <text>] [--kind <CHECKING|SAVINGS|CASH|CREDIT_CARD>] [--number <text>] [--opening-balance <text>] [--opening-date <date>]"
+      "summary": "Changes an account that is not archived (bring it back first). Fields left out stay as they are; a null number, BIC, notes or group clears it.",
+      "usage": "meowny accounts update <id> [--name <text>] [--kind <CHECKING|SAVINGS|CASH|CREDIT_CARD>] [--number <text>] [--opening-balance <text>] [--opening-date <date>] [--bic <text>] [--notes <text>] [--group <text>] [--include-in-net-worth <boolean>] [--virtual-balance <text>]"
     },
     {
       "command": "accounts archive",

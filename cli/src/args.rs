@@ -403,6 +403,36 @@ mod tests {
     }
 
     #[test]
+    fn the_details_of_an_account_the_breakdown_and_the_kind_of_a_list_become_what_the_app_takes() {
+        // a negative virtual balance is a value after a flag, with or without an equals sign, as an opening balance is
+        for line in ["accounts create --name Card --kind cash --virtual-balance=-50.00", "accounts create --name Card --kind cash --virtual-balance -50.00"] {
+            assert_eq!(Value::Object(run(line).body), json!({ "name": "Card", "kind": "CASH", "virtualBalance": "-50.00" }), "{line}");
+        }
+        // the switch is on when given, and off or on with an equals sign; the word after it is not its value
+        assert_eq!(Value::Object(run("accounts update 2 --include-in-net-worth").body), json!({ "id": "2", "includeInNetWorth": true }));
+        assert_eq!(Value::Object(run("accounts update 2 --include-in-net-worth=false").body), json!({ "id": "2", "includeInNetWorth": false }));
+        assert_eq!(Value::Object(run("accounts create --name X --kind cash --include-in-net-worth=true").body)["includeInNetWorth"], true);
+        assert!(usage("accounts update 2 --include-in-net-worth false").contains("unexpected argument \"false\""));
+        assert!(usage("accounts update 2 --include-in-net-worth=no").contains("--include-in-net-worth must be true or false"));
+        // the three texts that can be cleared have a clear flag on update and none on create
+        assert_eq!(Value::Object(run("accounts update 2 --clear-bic --clear-notes --clear-group").body), json!({ "id": "2", "bic": null, "notes": null, "group": null }));
+        assert!(usage("accounts create --name X --kind cash --clear-bic").contains("no flag --clear-bic"));
+        assert!(usage("accounts update 2 --clear-virtual-balance").contains("no flag --clear-virtual-balance"));
+        assert!(usage("accounts update 2 --bic X --clear-bic").contains("--bic was given more than once"));
+        assert_eq!(Value::Object(run("accounts create --name X --kind cash --bic DEUTDEFF --notes Hi --group Bank").body), json!({ "name": "X", "kind": "CASH", "bic": "DEUTDEFF", "notes": "Hi", "group": "Bank" }));
+        // a breakdown: the id as a plain word or a flag, and the days
+        assert_eq!(Value::Object(run("accounts breakdown 2 --from 2026-11-01 --to 2026-11-30").body), json!({ "id": "2", "from": "2026-11-01", "to": "2026-11-30" }));
+        assert_eq!(Value::Object(run("accounts breakdown --id 2").body), json!({ "id": "2" }));
+        assert!(usage("accounts breakdown").contains("give the id: meowny accounts breakdown <id>"));
+        // the kind of a list is matched without regard to case, like the type of a category
+        for kind in ["income", "Income", "INCOME"] {
+            assert_eq!(Value::Object(run(&format!("transactions list --kind {kind}")).body), json!({ "kind": "INCOME" }), "{kind}");
+        }
+        assert_eq!(Value::Object(run("transactions list --kind=Expense --limit 3").body), json!({ "kind": "EXPENSE", "limit": 3 }));
+        assert!(usage("transactions list --kind nonsense").contains("--kind must be one of: INCOME, EXPENSE"));
+    }
+
+    #[test]
     fn missing_unknown_and_repeated_flags_are_usage_errors() {
         assert!(usage("transactions create --name X").contains("missing --amount"));
         assert!(usage("categories create --name Pets").contains("missing --type"));

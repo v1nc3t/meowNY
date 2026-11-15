@@ -70,6 +70,16 @@
           "type": "id"
         },
         {
+          "name": "kind",
+          "required": false,
+          "summary": "Only INCOME or only EXPENSE. Leave out for both.",
+          "type": "string",
+          "values": [
+            "INCOME",
+            "EXPENSE"
+          ]
+        },
+        {
           "name": "q",
           "required": false,
           "summary": "Only transactions whose name or description contains this text.",
@@ -2035,7 +2045,7 @@
       "name": "accounts.list",
       "params": [],
       "scope": "read",
-      "summary": "The accounts in the person's order, the archived ones last, each with what it holds today (balance), what changed this month, its last activity and how many rows (entries) are in it. The main account has isMain true."
+      "summary": "The accounts in the person's order, the archived ones last, each with what it holds today (balance), what changed this month, its last activity and how many rows (entries) are in it, and its details: BIC, notes, group, whether net worth counts it, and the virtual balance with what is available (balance plus virtual balance). The main account has isMain true."
     },
     {
       "name": "accounts.show",
@@ -2082,10 +2092,35 @@
       "summary": "What an account held at the end of each month of a year, for a chart: on the last day of a month that is over, today for this month, and no point for a month that has not begun."
     },
     {
+      "name": "accounts.breakdown",
+      "params": [
+        {
+          "name": "id",
+          "required": true,
+          "summary": "The account.",
+          "type": "id"
+        },
+        {
+          "name": "from",
+          "required": false,
+          "summary": "The first day. The first of this month if left out.",
+          "type": "date"
+        },
+        {
+          "name": "to",
+          "required": false,
+          "summary": "The last day. The last of this month if left out.",
+          "type": "date"
+        }
+      ],
+      "scope": "read",
+      "summary": "What an account paid out and took in from one day to another, both included, by category: for expenses and for income the categories with their amounts, the largest first, and the total of each. Transfers, ledger entries and a bill a friend paid are not in it. This month if the days are left out."
+    },
+    {
       "name": "accounts.summary",
       "params": [],
       "scope": "read",
-      "summary": "Net worth: what the accounts hold in all (the archived ones too), what friends owe you (negative: you owe them) and the two added. Also how many accounts there are, and whether accounts are in use: there is more than the main account, or it has an opening balance."
+      "summary": "Net worth: what the accounts that count in it hold in all (the archived ones too), what friends owe you (negative: you owe them) and the two added. An account can be left out of net worth, and a virtual balance is never in it. Also how many accounts there are, those left out too, and whether accounts are in use: there is more than the main account, or it has an opening balance."
     },
     {
       "name": "transfers.list",
@@ -2162,6 +2197,36 @@
           "required": false,
           "summary": "The day it held that. Today if left out.",
           "type": "date"
+        },
+        {
+          "name": "bic",
+          "required": false,
+          "summary": "The bank's BIC, up to 20 characters.",
+          "type": "string"
+        },
+        {
+          "name": "notes",
+          "required": false,
+          "summary": "Notes, up to 1000 characters. Line breaks are kept.",
+          "type": "string"
+        },
+        {
+          "name": "group",
+          "required": false,
+          "summary": "The group it is listed under, like Bank, up to 50 characters.",
+          "type": "string"
+        },
+        {
+          "name": "includeInNetWorth",
+          "required": false,
+          "summary": "Whether net worth counts it. True if left out.",
+          "type": "boolean"
+        },
+        {
+          "name": "virtualBalance",
+          "required": false,
+          "summary": "An amount added to the balance to show what is available, like the limit of a credit card, which may be negative, like -50.00. It is never in the balance or in net worth. 0.00 if left out.",
+          "type": "string"
         }
       ],
       "scope": "write",
@@ -2212,10 +2277,43 @@
           "required": false,
           "summary": "The day it held that.",
           "type": "date"
+        },
+        {
+          "name": "bic",
+          "nullable": true,
+          "required": false,
+          "summary": "The new BIC, or null to clear it.",
+          "type": "string"
+        },
+        {
+          "name": "notes",
+          "nullable": true,
+          "required": false,
+          "summary": "The new notes, or null to clear them.",
+          "type": "string"
+        },
+        {
+          "name": "group",
+          "nullable": true,
+          "required": false,
+          "summary": "The new group, or null to clear it.",
+          "type": "string"
+        },
+        {
+          "name": "includeInNetWorth",
+          "required": false,
+          "summary": "Whether net worth counts it.",
+          "type": "boolean"
+        },
+        {
+          "name": "virtualBalance",
+          "required": false,
+          "summary": "The new virtual balance, which may be negative, like -50.00.",
+          "type": "string"
         }
       ],
       "scope": "write",
-      "summary": "Changes an account that is not archived (bring it back first). Fields left out stay as they are; a null number clears it."
+      "summary": "Changes an account that is not archived (bring it back first). Fields left out stay as they are; a null number, BIC, notes or group clears it."
     },
     {
       "name": "accounts.archive",

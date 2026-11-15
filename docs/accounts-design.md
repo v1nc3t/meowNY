@@ -880,8 +880,9 @@ recurring transfers; rules.
 | `include_net_worth` | `INTEGER NOT NULL DEFAULT 1` | 0 or 1 |
 | `virtual_balance_minor` | `INTEGER NOT NULL DEFAULT 0` | within ±999999999999 |
 
-Each has its `CHECK` in the column definition. The account triggers that list columns (`updated_at`, sync stamp) are dropped and
-made again with the five new columns, exactly as 0018 did for the tables it touched. The main account keeps its constants: the
+Each has its `CHECK` in the column definition. The account triggers that list columns (`updated_at`, sync stamp) and the three
+audit triggers (`trg_accounts_audit_insert`, `_update`, `_delete`: the history) are dropped and made again with the five new columns,
+exactly as 0018 did for the tables it touched; without that, a change of a detail alone would leave no row of history. The main account keeps its constants: the
 new columns have their defaults there, so two devices still hold one identical row and nothing is stamped.
 
 ### 20.3 The numbers
@@ -919,7 +920,14 @@ Share         { categoryId: string, name: string, amount: "137.00" }      // lar
   the main account's row may carry any of them. `PROTOCOL` 10; a protocol 9 peer is told to update. Conflict facts gain `bic`,
   `notes`, `group`, `includeNetWorth`, `virtualBalance`.
 - Backup: nothing to list (same tables); a round trip keeps the five fields. A backup made at schema 18 restores with the defaults.
-- Export: JSON `accounts` and the Excel `Accounts` sheet gain the five fields (not in a limited export, section 10).
+- Currency: `Conversion.accounts` counts the accounts that have an opening balance or a virtual balance that is not 0 (an account with
+  both counts once); `apply_recorded` does the same (section 20.3).
+- Report: the accounts table lists every account; one with `include_net_worth = 0` is marked with a new `ReportLabels` field
+  `notInNetWorth` ("(not in net worth)" when the caller leaves it out, as for the four labels of section 10) and is left out of the net
+  worth line, which is `accounts::summary`'s number for the last day. The virtual balance is not in the report.
+- Export: JSON `accounts` and the Excel `Accounts` sheet gain the five fields (not in a limited export, section 10). The JSON has no
+  `available`: it is worked out from the balance and the virtual balance, which are both in the file. The Excel sheet gets BIC, Group,
+  Virtual balance, In net worth and Notes after the Balance column.
 - Demo data: the credit card gets a virtual balance and a BIC; savings gets a group and a note; the archived account is left out
   of net worth.
 

@@ -43,6 +43,7 @@ const READ_ROUTES: &[&str] = &[
     "accounts.list",
     "accounts.show",
     "accounts.history",
+    "accounts.breakdown",
     "accounts.summary",
     "transfers.list",
 ];
@@ -168,6 +169,11 @@ fn the_shape_of_each_kind_of_argument_is_checked_before_the_route_runs() {
         assert_eq!(refused(&vault, "transactions.list", json!({ "categoryId": id })), invalid, "id {id:?}");
     }
     assert_eq!(refused(&vault, "categories.list", json!({ "type": "income" })), invalid);
+    // the kind of a transaction list is the same two words, exact
+    for kind in ["income", "Expense", "BOTH", "", "INCOME "] {
+        assert_eq!(refused(&vault, "transactions.list", json!({ "kind": kind })), invalid, "kind {kind:?}");
+    }
+    assert_eq!(refused(&vault, "transactions.list", json!({ "kind": 1 })), invalid);
     assert_eq!(refused(&vault, "categories.list", json!({ "type": "BOTH" })), invalid);
     assert_eq!(refused(&vault, "stats.top", json!({ "month": "2026-09" })), invalid, "type is required");
     assert_eq!(refused(&vault, "stats.trend", json!({ "from": "2026-01", "to": "2026-10" })), invalid, "categoryId is required");
@@ -194,6 +200,11 @@ fn an_error_message_never_holds_what_the_database_said() {
         ("accounts.show", json!({ "id": "1", "from": "2026-10-31", "to": "2026-10-01" })),
         ("accounts.show", json!({ "id": "1", "from": "2026-02-30" })),
         ("accounts.history", json!({ "id": "1", "year": "2026-" })),
+        ("accounts.breakdown", json!({ "id": "1", "from": "2026-10-31", "to": "2026-10-01" })),
+        ("accounts.breakdown", json!({ "id": "1", "to": "2026-13-01" })),
+        ("accounts.breakdown", json!({ "id": "999999" })),
+        ("transactions.list", json!({ "kind": "income" })),
+        ("transactions.list", json!({ "kind": "BOTH" })),
         ("transfers.list", json!({ "limit": 4294967296u64 })),
         ("transfers.list", json!({ "from": "2026-13-01" })),
     ] {
@@ -240,6 +251,7 @@ fn a_locked_app_gives_no_data_from_any_read_route() {
         "splits.preview" => json!({ "amount": "100.00", "mode": "EQUAL", "people": ["1"] }),
         "accounts.show" => json!({ "id": "1" }),
         "accounts.history" => json!({ "id": "1", "year": "2026" }),
+        "accounts.breakdown" => json!({ "id": "1" }),
         _ => json!({}),
     };
     for name in READ_ROUTES {
@@ -264,6 +276,7 @@ fn money_and_ids_are_strings_and_the_only_numbers_are_counts_and_percentages() {
         "splits.preview" => json!({ "amount": "100.00", "mode": "SHARES", "mine": "2", "people": ["1"], "guests": "Bob", "values": "1,1" }),
         "accounts.show" => json!({ "id": "1", "from": "2025-06-01", "to": "2026-10-31" }),
         "accounts.history" => json!({ "id": "1", "year": "2026" }),
+        "accounts.breakdown" => json!({ "id": "1", "from": "2025-06-01", "to": "2026-10-31" }),
         _ => json!({}),
     };
     // a friend, a shared bill, a loan and a split template, so that their answers are walked too
@@ -305,4 +318,42 @@ fn money_and_ids_are_strings_and_the_only_numbers_are_counts_and_percentages() {
     let new: Vec<_> = numbers.difference(&allowed).collect();
     assert!(new.is_empty(), "a new number in an answer: {new:?}. Money must be a string; if this is not money, add it to the list above");
     assert!(numbers.len() >= 5, "the walk found almost no numbers, so it is not looking at the answers: {numbers:?}");
+}
+
+#[test]
+fn the_transactions_of_the_demo_data_are_listed_by_kind_and_the_two_kinds_are_all_of_them() {
+    let (_dir, vault) = seeded();
+    let all = ok(&vault, "transactions.list", json!({}));
+    let kind = |kind: &str, extra: Value| {
+        let mut body = json!({ "kind": kind, "limit": 100 });
+        for (key, value) in extra.as_object().unwrap() {
+            body[key] = value.clone();
+        }
+        ok(&vault, "transactions.list", body)
+    };
+    let (income, expense) = (kind("INCOME", json!({})), kind("EXPENSE", json!({})));
+    assert_eq!(income["total"].as_u64().unwrap() + expense["total"].as_u64().unwrap(), all["total"].as_u64().unwrap());
+    assert!(income["total"].as_u64().unwrap() > 0 && expense["total"].as_u64().unwrap() > 0);
+    // no row is in a category of the other side (a category that was deleted since is not listed, but its rows keep their kind)
+    let side = |kind: &str| -> BTreeSet<String> { ok(&vault, "categories.list", json!({ "type": kind })).as_array().unwrap().iter().map(|c| c["id"].as_str().unwrap().to_string()).collect() };
+    let (income_ids, expense_ids) = (side("INCOME"), side("EXPENSE"));
+    assert!(!income_ids.is_empty() && !expense_ids.is_empty());
+    for row in income["transactions"].as_array().unwrap() {
+        assert!(!expense_ids.contains(row["categoryId"].as_str().unwrap()), "{row}");
+    }
+    for row in expense["transactions"].as_array().unwrap() {
+        assert!(!income_ids.contains(row["categoryId"].as_str().unwrap()), "{row}");
+    }
+    // the same page of the same days as a list without the kind, less the other kind
+    let (from, to) = ("2026-09-01", "2026-09-30");
+    let (in_month, out_month, both) = (kind("INCOME", json!({ "from": from, "to": to })), kind("EXPENSE", json!({ "from": from, "to": to })), ok(&vault, "transactions.list", json!({ "from": from, "to": to })));
+    assert_eq!(in_month["total"].as_u64().unwrap() + out_month["total"].as_u64().unwrap(), both["total"].as_u64().unwrap());
+    // a page of one: the same row as the first of the whole kind, and the total of the kind
+    let first = kind("INCOME", json!({ "limit": 1 }));
+    assert_eq!((&first["transactions"][0], &first["total"]), (&income["transactions"][0], &income["total"]));
+    // an account: the rows of its kind in it
+    for id in ["1", "2", "3"] {
+        let (a, b, both) = (kind("INCOME", json!({ "accountId": id })), kind("EXPENSE", json!({ "accountId": id })), ok(&vault, "transactions.list", json!({ "accountId": id })));
+        assert_eq!(a["total"].as_u64().unwrap() + b["total"].as_u64().unwrap(), both["total"].as_u64().unwrap(), "account {id}");
+    }
 }
