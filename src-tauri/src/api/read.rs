@@ -94,7 +94,7 @@ fn categories_list(ctx: &Ctx, args: Map<String, Value>) -> Result<Value, ApiErro
 pub const TRANSACTIONS_LIST: Route = Route {
     name: "transactions.list",
     scope: Scope::Read,
-    summary: "Transactions, newest first, with the total that match. Up to 100 a page, 50 unless limit says otherwise.",
+    summary: "Transactions, newest first, with the total that match. Up to 100 a page, 50 unless limit says otherwise. amount is in the app's currency; for a row in an account in another currency nativeAmount is what moved that account, in its currency.",
     params: &[
         Param::new("from", Kind::Date, "Only on or after this date."),
         Param::new("to", Kind::Date, "Only on or before this date."),

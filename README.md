@@ -26,7 +26,7 @@
 
 meowNY tracks income and expenses against monthly budgets. It is a [Tauri](https://tauri.app) app: a Rust core and a React UI, with all data in one encrypted SQLite file on your machine. A phone app (Android; iPhone later) keeps a full offline copy and syncs with the computer over your home wifi. A command line program, `meowny`, lets scripts and AI agents use the running app.
 
-- **Budgeting:** categories, transactions (expense, income and transfer in one add dialog), monthly budgets, recurring items, statistics. Accounts (bank, savings, cash, credit card) with groups, a balance each, transfers between them, and net worth. Seven languages, light and dark themes, keyboard shortcuts.
+- **Budgeting:** categories, transactions (expense, income and transfer in one add dialog), monthly budgets, recurring items, statistics. Accounts (bank, savings, cash, credit card) with groups, a balance each, an account in another currency if you have one, transfers between them, and net worth. Seven languages, light and dark themes, keyboard shortcuts.
 - **Documents:** receipts and invoices attached to transactions, encrypted, previewed inside the app.
 - **Debts and shared bills:** a ledger per friend, split bills (budgets count only your part), QR bill codes, reminders.
 - **Phone:** a full offline copy that syncs straight to the computer, with no server.

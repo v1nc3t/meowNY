@@ -1086,8 +1086,12 @@ in today's balance, so moving it could not set it.
 - Wire: `AccountRow` gains `currency`, `rate` (both optional, null for a main-currency account; `parse_row`: a code of three capitals,
   a rate the parser accepts, both or neither, neither for the main account); `TransactionRow` gains `nativeAmountMinor` (optional,
   0 to `MAX_MINOR`); `TransferRow` gains `toAmountMinor` (optional, 1 to `MAX_MINOR`). `PROTOCOL` 11. Facts: `currency`, `rate`,
-  `nativeAmount`, `toAmount`. A row moved to the main account because its account was deleted on the other device (section 7.4) keeps
-  its stored native amount; the view ignores it there.
+  `nativeAmount`, `toAmount`. A transaction moved to the main account because its account was deleted on the other device (section 7.4)
+  keeps its stored native amount; the view ignores it there. A transfer whose side is moved to the main account that way keeps its second
+  amount only while the two sides are still in different currencies; when both are in the app's currency the second amount is set to
+  `NULL` (the view would count it into the main account), on the device that deleted the account and on the other one alike. The amounts
+  of such a rescued transfer may then be in mixed units (the first one may be in the deleted account's currency, and so may a second one
+  that is kept because the other side is in another currency), and the person corrects them.
 - Two devices can end with a foreign account whose currency equals the app's (one changed the app's currency while the other made
   the account). It stays a foreign account with its rate; nothing breaks, and the person can fix it by hand.
 - `currency::change`: refused (`InvalidInput`, a relabel too) while a foreign account exists, archived or not; with none, as before.
@@ -1101,7 +1105,8 @@ in today's balance, so moving it could not set it.
 - Backup: a round trip keeps the four columns; a backup of schema 19 restores with `NULL`s.
 - Export: JSON accounts gain `currency`, `rate`, `balanceInMain`; transactions gain `nativeAmount` and transfers `toAmount`; CSV gets
   two columns at the end, `native_amount` and `account_currency`; Excel the same on the transactions sheet, `Currency` and `Rate`
-  on the accounts sheet, `Arrives` on the transfers sheet. A limited export gives an account its `currency` beside id, name and kind.
+  on the accounts sheet, `Arrives` on the transfers sheet; an amount in a foreign account's own currency has the plain number format of
+  two decimals, with no symbol of the app's. A limited export gives an account its `currency` beside id, name and kind.
 - Report: in the accounts table a foreign account's balance and change carry its code ("RON 120.00"); the net worth line is in the
   main currency (21.3).
 - Demo data: one foreign account ("Lei account", RON, rate 5.00) with a few transactions and a transfer in each direction.
@@ -1110,8 +1115,11 @@ in today's balance, so moving it could not set it.
 
 - `accounts.create`, `accounts.update`: `currency` (`Kind::String`, any case), `rate` (`Kind::String`); `accounts.update`: `balance`
   (`Kind::String`, signed).
-- `transactions.create`, `transactions.update`: `nativeAmount` (`Kind::String`).
-- `transfers.create`, `transfers.update`: `toAmount` (`Kind::String`).
+- `transactions.create`, `transactions.update`: `nativeAmount` (`Kind::Money`, as `amount` is: the shape check takes exactly what the core takes).
+- `transfers.create`, `transfers.update`: `toAmount` (`Kind::Money`, likewise).
+- The routes that name an account for a recurring item, a ledger entry or a settlement say in their help that it must be in the app's currency;
+  the core's refusal is a 400 `invalid_input`. No route changes the app's currency (`settings.set` does not take it), so the refusal of 21.3 is
+  the app's own, and `settings.set` says so in its help. The confirmation of a JSON export lists the currency and the rate among the account details.
 
 ### 21.8 The screens
 

@@ -294,6 +294,11 @@ fn money_and_ids_are_strings_and_the_only_numbers_are_counts_and_percentages() {
             Ok(())
         })
         .unwrap();
+    // an account in another currency with a row and a transfer in it, so that the answers that carry two amounts and a rate are walked too
+    let wallet = ok(&vault, "accounts.create", json!({ "name": "Lei wallet", "kind": "CASH", "currency": "RON", "rate": "5.00" }))["id"].as_str().unwrap().to_string();
+    let category = first_expense(&vault)["id"].as_str().unwrap().to_string();
+    ok(&vault, "transactions.create", json!({ "name": "Coffee", "amount": "1.00", "paymentDate": "2026-10-10", "categoryId": category, "accountId": wallet, "nativeAmount": "5.00" }));
+    ok(&vault, "transfers.create", json!({ "fromAccountId": "1", "toAccountId": wallet, "amount": "10.00", "toAmount": "52.00", "date": "2026-10-11" }));
     let mut numbers = BTreeSet::new();
     fn walk(value: &Value, key: &str, numbers: &mut BTreeSet<String>) {
         match value {
@@ -356,4 +361,52 @@ fn the_transactions_of_the_demo_data_are_listed_by_kind_and_the_two_kinds_are_al
         let (a, b, both) = (kind("INCOME", json!({ "accountId": id })), kind("EXPENSE", json!({ "accountId": id })), ok(&vault, "transactions.list", json!({ "accountId": id })));
         assert_eq!(a["total"].as_u64().unwrap() + b["total"].as_u64().unwrap(), both["total"].as_u64().unwrap(), "account {id}");
     }
+}
+
+#[test]
+fn the_rows_of_the_demo_account_in_lei_list_what_moved_it_in_lei_and_no_other_row_has_a_second_amount() {
+    let (_dir, vault) = seeded();
+    // every transaction of the app is listed, page by page: only those in the account in lei have a native amount
+    let mut rows = Vec::new();
+    for offset in (0..).step_by(100) {
+        let page = ok(&vault, "transactions.list", json!({ "limit": 100, "offset": offset }));
+        let more = page["transactions"].as_array().unwrap().clone();
+        if more.is_empty() {
+            break;
+        }
+        rows.extend(more);
+    }
+    assert_eq!(rows.len() as u64, ok(&vault, "transactions.list", json!({ "limit": 1 }))["total"].as_u64().unwrap());
+    let (in_lei, elsewhere): (Vec<&Value>, Vec<&Value>) = rows.iter().partition(|t| t["accountId"] == "6");
+    assert_eq!(in_lei.len(), 12, "ten expenses and two incomes");
+    assert!(elsewhere.iter().all(|t| t["nativeAmount"].is_null()), "a row in an account in the app's currency has no second amount");
+    for t in &in_lei {
+        let (amount, native) = (t["amount"].as_str().unwrap(), t["nativeAmount"].as_str().expect("a row in lei has what moved the account"));
+        assert!(amount.len() >= 4 && native.len() >= 4 && native.contains('.'), "{t}");
+        assert_ne!(amount, native, "the demo data has the two apart: {t}");
+    }
+    // the account moves by the native amount: each line of its statement is a native amount, the sign by the side of the category
+    let by_id: std::collections::BTreeMap<&str, &str> = in_lei.iter().map(|t| (t["id"].as_str().unwrap(), t["nativeAmount"].as_str().unwrap())).collect();
+    let statement = ok(&vault, "accounts.show", json!({ "id": "6", "from": "2000-01-01", "to": "2026-12-31" }));
+    assert_eq!(statement["currency"], "RON");
+    let mut seen = 0;
+    for line in statement["lines"].as_array().unwrap().iter().filter(|l| l["source"] == "TRANSACTION") {
+        assert_eq!(line["amount"].as_str().unwrap().trim_start_matches('-'), by_id[line["id"].as_str().unwrap()], "{line}");
+        seen += 1;
+    }
+    assert_eq!(seen, 12);
+    // the two transfers have a second amount, and no other transfer has
+    let page = ok(&vault, "transfers.list", json!({ "limit": 100 }));
+    let total = page["total"].as_u64().unwrap();
+    let mut all: Vec<Value> = page["transfers"].as_array().unwrap().clone();
+    if total > 100 {
+        all.extend(ok(&vault, "transfers.list", json!({ "limit": 100, "offset": 100 }))["transfers"].as_array().unwrap().clone());
+    }
+    assert_eq!(all.len() as u64, total);
+    for t in &all {
+        let touches_lei = t["fromAccountId"] == "6" || t["toAccountId"] == "6";
+        assert_eq!(t["toAmount"].is_string(), touches_lei, "{t}");
+    }
+    let (leaving, arriving) = (all.iter().filter(|t| t["fromAccountId"] == "6").count(), all.iter().filter(|t| t["toAccountId"] == "6").count());
+    assert_eq!((leaving, arriving), (1, 1), "a transfer each way");
 }

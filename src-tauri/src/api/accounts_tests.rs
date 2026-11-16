@@ -175,11 +175,11 @@ fn requests(w: &World) -> Vec<(&'static str, Value)> {
         ("transfers.list", json!({ "accountId": w.a, "from": "2026-10-01", "to": "2026-10-31", "limit": 10, "offset": 0 })),
         (
             "accounts.create",
-            json!({ "name": "New", "kind": "CASH", "number": "N1", "openingBalance": "1.00", "openingDate": "2026-10-01", "bic": "BIC1", "notes": "n", "group": "G", "includeInNetWorth": false, "virtualBalance": "-5.00" }),
+            json!({ "name": "New", "kind": "CASH", "number": "N1", "openingBalance": "1.00", "openingDate": "2026-10-01", "bic": "BIC1", "notes": "n", "group": "G", "includeInNetWorth": false, "virtualBalance": "-5.00", "currency": "RON", "rate": "5.00" }),
         ),
         (
             "accounts.update",
-            json!({ "id": w.a, "name": "Renamed", "kind": "SAVINGS", "number": "N2", "openingBalance": "2.00", "openingDate": "2026-10-02", "bic": "BIC2", "notes": "m", "group": "H", "includeInNetWorth": false, "virtualBalance": "5.00" }),
+            json!({ "id": w.a, "name": "Renamed", "kind": "SAVINGS", "number": "N2", "openingBalance": "2.00", "openingDate": "2026-10-02", "bic": "BIC2", "notes": "m", "group": "H", "includeInNetWorth": false, "virtualBalance": "5.00", "currency": "EUR" }),
         ),
         ("accounts.archive", json!({ "id": w.a })),
         ("accounts.unarchive", json!({ "id": w.archived })),
@@ -230,6 +230,8 @@ fn the_new_routes_have_the_scopes_and_arguments_of_the_design_note() {
                 ("group", Kind::String, false, false),
                 ("includeInNetWorth", Kind::Boolean, false, false),
                 ("virtualBalance", Kind::String, false, false),
+                ("currency", Kind::String, false, false),
+                ("rate", Kind::String, false, false),
             ],
         ),
         (
@@ -246,6 +248,9 @@ fn the_new_routes_have_the_scopes_and_arguments_of_the_design_note() {
                 ("group", Kind::String, false, true),
                 ("includeInNetWorth", Kind::Boolean, false, false),
                 ("virtualBalance", Kind::String, false, false),
+                ("currency", Kind::String, false, false),
+                ("rate", Kind::String, false, false),
+                ("balance", Kind::String, false, false),
             ],
         ),
         ("accounts.archive", &[("id", Kind::Id, true, false)]),
@@ -260,6 +265,7 @@ fn the_new_routes_have_the_scopes_and_arguments_of_the_design_note() {
                 ("amount", Kind::Money, true, false),
                 ("date", Kind::Date, true, false),
                 ("note", Kind::String, false, false),
+                ("toAmount", Kind::Money, false, false),
             ],
         ),
         (
@@ -271,6 +277,7 @@ fn the_new_routes_have_the_scopes_and_arguments_of_the_design_note() {
                 ("amount", Kind::Money, false, false),
                 ("date", Kind::Date, false, false),
                 ("note", Kind::String, false, true),
+                ("toAmount", Kind::Money, false, false),
             ],
         ),
         ("transfers.delete", &[("id", Kind::Id, true, false)]),
@@ -279,7 +286,8 @@ fn the_new_routes_have_the_scopes_and_arguments_of_the_design_note() {
         let got: Vec<Arg> = route(name).params.iter().map(|p| (p.name, p.kind, p.required, p.nullable)).collect();
         assert_eq!(got, expected, "{name}");
     }
-    // The kind is the four words of the core, and the opening balance is text because money has no sign.
+    // The kind is the four words of the core, and the opening balance, the balance and the virtual balance are text because money has no sign.
+    // The currency is text, as the rate is: the core says what it takes. The two other amounts are money as `amount` is, so they take what it takes.
     let kinds = [crate::accounts::Kind::Checking, crate::accounts::Kind::Savings, crate::accounts::Kind::Cash, crate::accounts::Kind::CreditCard];
     for name in ["accounts.create", "accounts.update"] {
         let words: Vec<&str> = route(name).params.iter().find(|p| p.name == "kind").unwrap().values.to_vec();
@@ -305,13 +313,17 @@ fn every_account_answer_has_the_fields_of_the_design_note_with_ids_and_money_as_
     let (_dir, vault) = seeded();
     let list = listed(&vault);
     let names: Vec<&str> = list.iter().map(|a| a["name"].as_str().unwrap()).collect();
-    assert_eq!(names, ["Current account", "Savings", "Cash", "Credit card", "Old savings"], "the person's order, the archived one last");
+    assert_eq!(names, ["Current account", "Savings", "Cash", "Credit card", "Lei account", "Old savings"], "the person's order, the archived one last");
     for a in &list {
         assert_eq!(keys(a), ACCOUNT_KEYS, "{a}");
         assert!(a["id"].as_str().unwrap().bytes().all(|b| b.is_ascii_digit()), "{a}");
-        for money in ["openingBalance", "balance", "changeThisMonth", "virtualBalance", "available"] {
+        for money in ["openingBalance", "balance", "changeThisMonth", "virtualBalance", "available", "balanceInMain"] {
             assert!(is_money(a[money].as_str().unwrap_or("not text")), "{money} of {a}");
         }
+        // the currency is always a code, the rate is text exactly for an account that is foreign, and an account in the app's currency is worth what it holds
+        assert!(a["currency"].as_str().is_some_and(|c| c.len() == 3 && c.bytes().all(|b| b.is_ascii_uppercase())) && a["foreign"].is_boolean(), "{a}");
+        assert_eq!(a["rate"].is_string(), a["foreign"] == true, "{a}");
+        assert!(a["foreign"] == true || (a["currency"] == "EUR" && a["balanceInMain"] == a["balance"]), "{a}");
         assert!(a["archived"].is_boolean() && a["isMain"].is_boolean() && a["includeInNetWorth"].is_boolean() && a["entries"].is_u64(), "{a}");
         assert!(a["number"].is_null() || a["number"].is_string(), "{a}");
         for text in ["bic", "notes", "group"] {
@@ -323,7 +335,12 @@ fn every_account_answer_has_the_fields_of_the_design_note_with_ids_and_money_as_
     }
     assert_eq!((list[0]["id"].as_str(), list[0]["isMain"].as_bool()), (Some("1"), Some(true)));
     assert_eq!(list.iter().filter(|a| a["isMain"] == true).count(), 1);
-    assert_eq!(list.iter().map(|a| a["archived"].as_bool().unwrap()).collect::<Vec<_>>(), [false, false, false, false, true]);
+    assert_eq!(list.iter().map(|a| a["archived"].as_bool().unwrap()).collect::<Vec<_>>(), [false, false, false, false, false, true]);
+    // the demo's account in lei is the one foreign account: its rate is text, and it is worth its balance divided by the rate
+    assert_eq!(list.iter().filter(|a| a["foreign"] == true).map(|a| a["name"].as_str().unwrap()).collect::<Vec<_>>(), ["Lei account"]);
+    let lei_account = &list[4];
+    assert_eq!((lei_account["id"].as_str(), lei_account["currency"].as_str(), lei_account["rate"].as_str()), (Some("6"), Some("RON"), Some("5.00")));
+    assert_eq!(cents(lei_account["balanceInMain"].as_str().unwrap()), (cents(lei_account["balance"].as_str().unwrap()) as f64 / 5.0).round() as i64, "the balance at 5.00 lei to the euro");
     assert_eq!(list[3]["kind"], "CREDIT_CARD");
     assert!(cents(list[3]["balance"].as_str().unwrap()) < 0 && cents(list[3]["openingBalance"].as_str().unwrap()) < 0, "a card is in the red");
 
@@ -352,12 +369,12 @@ fn every_account_answer_has_the_fields_of_the_design_note_with_ids_and_money_as_
     // net worth
     let summary = ok(&vault, "accounts.summary", json!({}));
     assert_eq!(keys(&summary), ["accounts", "friends", "inAccounts", "inUse", "netWorth"]);
-    assert_eq!((summary["accounts"].as_u64(), summary["inUse"].as_bool()), (Some(5), Some(true)));
+    assert_eq!((summary["accounts"].as_u64(), summary["inUse"].as_bool()), (Some(6), Some(true)));
     for money in ["friends", "inAccounts", "netWorth"] {
         assert!(is_money(summary[money].as_str().unwrap()), "{money}");
     }
-    let held_in_all: i64 = list.iter().filter(|a| a["includeInNetWorth"] == true).map(|a| cents(a["balance"].as_str().unwrap())).sum();
-    assert_eq!(cents(summary["inAccounts"].as_str().unwrap()), held_in_all, "the accounts that count, the archived ones too; the others are left out");
+    let held_in_all: i64 = list.iter().filter(|a| a["includeInNetWorth"] == true).map(|a| cents(a["balanceInMain"].as_str().unwrap())).sum();
+    assert_eq!(cents(summary["inAccounts"].as_str().unwrap()), held_in_all, "the accounts that count, the archived ones too, each in the app's currency; the others are left out");
     assert_eq!(cents(summary["netWorth"].as_str().unwrap()), held_in_all + cents(summary["friends"].as_str().unwrap()));
 }
 
@@ -375,6 +392,7 @@ fn a_transfer_answers_with_its_fields_and_a_page_of_them_with_its_counts() {
         assert!(t["id"].is_string() && t["fromAccountId"].is_string() && t["toAccountId"].is_string(), "{t}");
         assert!(is_money(t["amount"].as_str().unwrap()) && cents(t["amount"].as_str().unwrap()) > 0, "{t}");
         assert!(t["note"].is_null() || t["note"].is_string(), "{t}");
+        assert!(t["toAmount"].is_null() || t["toAmount"].as_str().is_some_and(|m| is_money(m) && cents(m) > 0), "{t}");
         assert_ne!(t["fromAccountId"], t["toAccountId"], "{t}");
     }
     let dates: Vec<&str> = rows.iter().map(|t| t["date"].as_str().unwrap()).collect();
@@ -816,7 +834,7 @@ fn the_main_account_takes_all_five_details_and_is_still_the_main_account() {
 /// figure that disagrees with the balances shown fails here.
 fn worth(vault: &Vault) -> (String, String, String) {
     let summary = ok(vault, "accounts.summary", json!({}));
-    let counted: i64 = listed(vault).iter().filter(|a| a["includeInNetWorth"] == true).map(|a| cents(a["balance"].as_str().unwrap())).sum();
+    let counted: i64 = listed(vault).iter().filter(|a| a["includeInNetWorth"] == true).map(|a| cents(a["balanceInMain"].as_str().unwrap())).sum();
     let text = |key: &str| summary[key].as_str().unwrap().to_string();
     assert_eq!(cents(&text("inAccounts")), counted, "what the accounts that count hold: {summary}");
     assert_eq!(cents(&text("netWorth")), counted + cents(&text("friends")), "{summary}");
@@ -1796,7 +1814,7 @@ fn transactions_are_listed_for_one_account() {
     assert!(some["total"].as_u64().unwrap() >= 1 && some["total"].as_u64() < cash["total"].as_u64());
     assert!(some["transactions"].as_array().unwrap().iter().all(|t| t["accountId"] == "3" && t["name"].as_str().unwrap().to_lowercase().contains("taxi")));
     // each account has its own rows, and together they are all of them
-    let total: u64 = ["1", "2", "3", "4", "5"].iter().map(|id| ok(&vault, "transactions.list", json!({ "accountId": id }))["total"].as_u64().unwrap()).sum();
+    let total: u64 = ["1", "2", "3", "4", "5", "6"].iter().map(|id| ok(&vault, "transactions.list", json!({ "accountId": id }))["total"].as_u64().unwrap()).sum();
     assert_eq!(total, all["total"].as_u64().unwrap());
     // an account that is not there has no rows; a shape that is not an id is refused
     assert_eq!(ok(&vault, "transactions.list", json!({ "accountId": "999999" }))["total"], 0);
@@ -1917,6 +1935,20 @@ fn an_unknown_argument_is_refused_by_every_new_route_and_a_name_in_the_wrong_cas
     refuse(&vault, "transactions.delete", json!({ "id": "1", "accountId": "1" }), INVALID);
     refuse(&vault, "transactions.split", json!({ "id": "1", "mode": "EQUAL", "accountId": "1" }), INVALID);
     refuse(&vault, "recurring.pay", json!({ "id": "1", "accountId": "1" }), INVALID);
+    // each new amount belongs to one kind of row: a transaction has a native amount, a transfer an amount that arrives, a new account no balance
+    for (name, body, unknown) in [
+        ("transactions.create", json!({ "name": "X", "amount": "1.00", "paymentDate": "2026-10-14", "categoryId": "1", "toAmount": "1.00" }), "toAmount"),
+        ("transactions.update", json!({ "id": "1", "toAmount": "1.00" }), "toAmount"),
+        ("transfers.create", json!({ "fromAccountId": w.a, "toAccountId": w.b, "amount": "1.00", "date": "2026-10-01", "nativeAmount": "1.00" }), "nativeAmount"),
+        ("transfers.update", json!({ "id": w.transfer, "nativeAmount": "1.00" }), "nativeAmount"),
+        ("recurring.create", json!({ "name": "X", "categoryId": "1", "startDate": "2026-10-20", "intervalUnit": "MONTH", "intervalCount": 1, "nativeAmount": "1.00" }), "nativeAmount"),
+        ("recurring.update", json!({ "id": "1", "nativeAmount": "1.00" }), "nativeAmount"),
+        ("ledger.add", json!({ "personId": "1", "kind": "LENT", "amount": "1.00", "date": "2026-10-14", "nativeAmount": "1.00" }), "nativeAmount"),
+        ("accounts.create", json!({ "name": "New", "kind": "CASH", "balance": "1.00" }), "balance"),
+        ("accounts.create", json!({ "name": "New", "kind": "CASH", "nativeAmount": "1.00" }), "nativeAmount"),
+    ] {
+        assert_eq!(refuse(&vault, name, body, INVALID), format!("unknown argument `{unknown}`"), "{name}");
+    }
 }
 
 #[test]
@@ -2014,6 +2046,18 @@ fn a_value_of_the_wrong_kind_is_refused_by_name_and_changes_nothing() {
             bad["accountId"] = value.clone();
             let message = refuse(&vault, name, bad, INVALID);
             assert!(message.starts_with("`accountId` must be "), "{name} {value}: {message}");
+        }
+    }
+    // and for the second amount of a transaction, which is money as the first is
+    for value in wrong(Kind::Money, false) {
+        for (name, body) in [
+            ("transactions.create", json!({ "name": "X", "amount": "1.00", "paymentDate": "2026-10-14", "categoryId": food, "accountId": w.a })),
+            ("transactions.update", json!({ "id": tx })),
+        ] {
+            let mut bad = body.clone();
+            bad["nativeAmount"] = value.clone();
+            let message = refuse(&vault, name, bad, INVALID);
+            assert!(message.starts_with("`nativeAmount` must be "), "{name} {value}: {message}");
         }
     }
 }
@@ -2126,7 +2170,7 @@ fn a_read_token_reads_accounts_and_transfers_and_cannot_write_any_of_them() {
         assert_eq!(reply.json()["ok"], true, "{name}");
         assert!(!reply.body.contains(&h.read) && !reply.body.contains(&h.write), "{name}");
     }
-    assert_eq!(call(port, Some(&h.read), "accounts.list", "{}").data().as_array().unwrap().len(), 5);
+    assert_eq!(call(port, Some(&h.read), "accounts.list", "{}").data().as_array().unwrap().len(), 6);
 
     // every write route: a read token is refused before anything else is looked at, with a valid request and with none
     let world = World { a: "2".into(), b: "3".into(), archived: "5".into(), empty: "2".into(), transfer: "1".into(), active: vec!["1".into(), "2".into(), "3".into(), "4".into()] };
@@ -2281,11 +2325,972 @@ fn the_person_is_told_that_a_file_holds_accounts_and_transfers() {
     let r = rig(true);
     let json = r.path("all.json");
     assert_eq!(r.post("export.json", json!({ "out": json })).status, 200);
-    assert!(r.last().contains("5 accounts by name, type, number, balance and details (BIC, group, notes, virtual balance, net worth), and ") && r.last().contains(" transfers between them"), "{}", r.last());
+    assert!(r.last().contains("6 accounts by name, type, number, balance and details (BIC, group, notes, virtual balance, net worth, currency and rate), and ") && r.last().contains(" transfers between them"), "{}", r.last());
     let file: Value = serde_json::from_str(&std::fs::read_to_string(&json).unwrap()).unwrap();
-    assert_eq!(file["accounts"].as_array().unwrap().len(), 5, "what the person was told is what the file holds");
+    assert_eq!(file["accounts"].as_array().unwrap().len(), 6, "what the person was told is what the file holds");
     assert!(file["transfers"].as_array().unwrap().len() >= 16);
     // a CSV is only the transactions, and says nothing of accounts
     assert_eq!(r.post("export.csv", json!({ "out": r.path("t.csv") })).status, 200);
     assert!(!r.last().contains("accounts"), "{}", r.last());
+}
+
+// ---- a currency per account ---------------------------------------------------------------------
+//
+// Section 21 of the design note. The app's currency is EUR here, and "1 EUR = 5.00 RON" is the rate "5.00". What a row does to an account
+// in lei is in lei (`nativeAmount` of a transaction, `toAmount` of a transfer); `amount` of a transaction is always in the app's currency.
+
+/// An account in lei, five to the euro, opened on 2026-01-01.
+fn lei(vault: &Vault, name: &str, opening: &str) -> String {
+    id_of(&ok(vault, "accounts.create", json!({ "name": name, "kind": "CHECKING", "currency": "RON", "rate": "5.00", "openingBalance": opening, "openingDate": "2026-01-01" })))
+}
+
+/// A transaction in an account of another currency: `amount` in the app's currency, `native` in the account's.
+fn spend_native(vault: &Vault, category: &str, name: &str, amount: &str, native: &str, date: &str, account: &str) -> Value {
+    ok(vault, "transactions.create", json!({ "name": name, "amount": amount, "paymentDate": date, "categoryId": category, "accountId": account, "nativeAmount": native }))
+}
+
+/// A transfer between accounts of two currencies: `amount` leaves the first, `arrives` reaches the second.
+fn transfer_across(vault: &Vault, from: &str, to: &str, amount: &str, arrives: &str, date: &str) -> Value {
+    ok(vault, "transfers.create", json!({ "fromAccountId": from, "toAccountId": to, "amount": amount, "toAmount": arrives, "date": date }))
+}
+
+/// What an account says of its currency: the code, whether it is foreign, the rate, and what it is worth in the app's currency.
+fn currency_of(account: &Value) -> (&str, bool, Option<&str>, &str) {
+    (account["currency"].as_str().unwrap(), account["foreign"].as_bool().unwrap(), account["rate"].as_str(), account["balanceInMain"].as_str().unwrap())
+}
+
+/// The row of `transactions.list` with this id.
+fn row(vault: &Vault, id: &str) -> Value {
+    ok(vault, "transactions.list", json!({ "limit": 100 }))["transactions"].as_array().unwrap().iter().find(|t| t["id"] == id).unwrap_or_else(|| panic!("no transaction {id}")).clone()
+}
+
+#[test]
+fn an_account_in_another_currency_is_made_with_a_rate_and_says_what_it_is_worth_in_the_apps_currency() {
+    let (_dir, vault) = fresh();
+    let made = ok(&vault, "accounts.create", json!({ "name": "Lei account", "kind": "CHECKING", "currency": "RON", "rate": "5.00", "openingBalance": "1000.00", "openingDate": "2026-01-01", "virtualBalance": "500.00" }));
+    assert_eq!(keys(&made), ACCOUNT_KEYS);
+    assert_eq!(currency_of(&made), ("RON", true, Some("5.00"), "200.00"));
+    // everything the account holds is in lei, what is available too; only balanceInMain is in euro, and the virtual balance is never in it
+    assert_eq!((made["openingBalance"].as_str(), made["balance"].as_str(), made["virtualBalance"].as_str(), made["available"].as_str()), (Some("1000.00"), Some("1000.00"), Some("500.00"), Some("1500.00")));
+    assert_eq!(find(&vault, &id_of(&made)), made, "the list says what the answer said");
+    // the main account and any account made without a currency are in the app's currency, with no rate, and worth what they hold
+    let main = find(&vault, "1");
+    assert_eq!(currency_of(&main), ("EUR", false, None, main["balance"].as_str().unwrap()));
+    let plain = account(&vault, "Wallet");
+    assert_eq!(currency_of(&find(&vault, &plain)), ("EUR", false, None, "0.00"));
+    // the statement and the breakdown of each say the currency of their amounts
+    let (lei_statement, lei_breakdown) = (ok(&vault, "accounts.show", json!({ "id": id_of(&made) })), ok(&vault, "accounts.breakdown", json!({ "id": id_of(&made) })));
+    assert_eq!((lei_statement["currency"].as_str(), lei_breakdown["currency"].as_str()), (Some("RON"), Some("RON")));
+    assert_eq!(lei_statement["account"], made);
+    assert_eq!((ok(&vault, "accounts.show", json!({ "id": plain }))["currency"].as_str(), ok(&vault, "accounts.breakdown", json!({ "id": plain }))["currency"].as_str()), (Some("EUR"), Some("EUR")));
+}
+
+#[test]
+fn a_currency_is_three_letters_in_any_case_stored_in_capitals_and_the_apps_own_is_no_other_currency() {
+    let (_dir, vault) = fresh();
+    for (n, code) in ["ron", "Ron", "rOn", "RON"].iter().enumerate() {
+        let made = ok(&vault, "accounts.create", json!({ "name": format!("Lei {n}"), "kind": "CASH", "currency": code, "rate": "5.00" }));
+        assert_eq!(currency_of(&made), ("RON", true, Some("5.00"), "0.00"), "{code}");
+    }
+    // the app's own currency, in any case, is not another one: the account has no rate, and takes none
+    for (n, code) in ["eur", "Eur", "EUR"].iter().enumerate() {
+        let made = ok(&vault, "accounts.create", json!({ "name": format!("Euro {n}"), "kind": "CASH", "currency": code }));
+        assert_eq!((currency_of(&made), made["rate"].clone()), (("EUR", false, None, "0.00"), Value::Null), "{code}");
+        refuse(&vault, "accounts.create", json!({ "name": "Euro rate", "kind": "CASH", "currency": code, "rate": "1.00" }), INVALID);
+        refuse(&vault, "accounts.create", json!({ "name": "Euro rate", "kind": "CASH", "currency": code, "rate": "5.00" }), INVALID);
+    }
+    // not a code: too short, too long, a digit, a space, a sign, letters that are not capitals once the case is folded, and three bytes that are one character
+    for code in ["RO", "ROMN", "RO1", "R0N", "", " ", "1", "123", "R N", "RO-", "ÄÖ", "ÄÖÜ", "€", "日", "RÖN", "RON1", "R.N"] {
+        refuse(&vault, "accounts.create", json!({ "name": "Bad", "kind": "CASH", "currency": code, "rate": "5.00" }), INVALID);
+    }
+    // another currency needs a rate, and a rate needs another currency
+    refuse(&vault, "accounts.create", json!({ "name": "Bad", "kind": "CASH", "currency": "RON" }), INVALID);
+    refuse(&vault, "accounts.create", json!({ "name": "Bad", "kind": "CASH", "rate": "5.00" }), INVALID);
+    for value in [json!(5), json!(true), json!(null), json!(["RON"]), json!({ "a": 1 }), json!(1.5)] {
+        assert_eq!(refuse(&vault, "accounts.create", json!({ "name": "Bad", "kind": "CASH", "currency": value, "rate": "5.00" }), INVALID), "`currency` must be a string", "{value}");
+    }
+    assert_eq!(listed(&vault).len(), 8, "the main account, four in lei and three in euro: nothing else was made");
+}
+
+#[test]
+fn a_rate_is_more_than_zero_with_up_to_eight_decimals_and_is_kept_as_typed() {
+    let (_dir, vault) = fresh();
+    for (n, rate) in ["5", "5.00", "0.5", "0.00000001", "999999999.99999999", "4.9735", "10", "999999999"].iter().enumerate() {
+        let made = ok(&vault, "accounts.create", json!({ "name": format!("Rate {n}"), "kind": "CASH", "currency": "RON", "rate": rate }));
+        assert_eq!(made["rate"], *rate, "kept as it was typed");
+    }
+    let id = listed(&vault).iter().find(|a| a["name"] == "Rate 0").map(id_of).unwrap();
+    // the spaces round it are dropped
+    assert_eq!(ok(&vault, "accounts.create", json!({ "name": "Spaced", "kind": "CASH", "currency": "RON", "rate": "  4.97 " }))["rate"], "4.97");
+    assert_eq!(ok(&vault, "accounts.update", json!({ "id": id, "rate": " 5.10 " }))["rate"], "5.10");
+    let long = "1".repeat(21);
+    for rate in [
+        "0", "0.0", "0.00", "0.00000000", "-1", "-1.00", "-0.5", "+5.00", "abc", "5,00", "", " ", ".5", "5.", "1.123456789", "0.000000001", "1000000000", "1000000000.00", "05.00", "1e2", "5 .00", "٥.٠٠", "NaN", "5.00.1", "5/1",
+        long.as_str(),
+    ] {
+        refuse(&vault, "accounts.create", json!({ "name": "Bad", "kind": "CASH", "currency": "RON", "rate": rate }), INVALID);
+        refuse(&vault, "accounts.update", json!({ "id": id, "rate": rate }), INVALID);
+    }
+    for value in [json!(5), json!(5.0), json!(true), json!(null), json!(["5.00"])] {
+        assert_eq!(refuse(&vault, "accounts.create", json!({ "name": "Bad", "kind": "CASH", "currency": "RON", "rate": value }), INVALID), "`rate` must be a string", "{value}");
+        assert_eq!(refuse(&vault, "accounts.update", json!({ "id": id, "rate": value }), INVALID), "`rate` must be a string", "{value}");
+    }
+    assert_eq!(find(&vault, &id)["rate"], "5.10", "a refused rate changed nothing");
+}
+
+#[test]
+fn a_rate_so_small_that_the_balance_does_not_fit_shows_the_bound_it_passed_and_the_list_stays_readable() {
+    let (_dir, vault) = fresh();
+    let make = |name: &str, rate: &str, opening: &str| id_of(&ok(&vault, "accounts.create", json!({ "name": name, "kind": "CASH", "currency": "RON", "rate": rate, "openingBalance": opening, "openingDate": "2026-01-01" })));
+    let (up, down, tiny) = (make("Up", "0.00000001", "1000.00"), make("Down", "0.00000001", "-1000.00"), make("Tiny", "999999999.99999999", "1000.00"));
+    assert_eq!(find(&vault, &up)["balanceInMain"], "9999999999.99", "the bound it passed, and no error");
+    assert_eq!(find(&vault, &down)["balanceInMain"], "-9999999999.99");
+    assert_eq!(find(&vault, &tiny)["balanceInMain"], "0.00", "a rate that makes it less than a cent");
+    assert_eq!(ok(&vault, "accounts.summary", json!({}))["inAccounts"], "0.00", "the two bounds cancel, and net worth can still be asked");
+    ok(&vault, "accounts.update", json!({ "id": down, "includeInNetWorth": false }));
+    assert_eq!(ok(&vault, "accounts.summary", json!({}))["inAccounts"], "9999999999.99");
+    // the balance itself is still what it is
+    assert_eq!((held(&vault, &up), held(&vault, &down)), ("1000.00".to_string(), "-1000.00".to_string()));
+}
+
+#[test]
+fn the_main_account_stays_in_the_apps_currency_whatever_is_asked() {
+    let (_dir, vault) = fresh();
+    for body in [
+        json!({ "currency": "RON" }),
+        json!({ "currency": "ron", "rate": "5.00" }),
+        json!({ "currency": "RON", "rate": "5.00" }),
+        json!({ "currency": "EUR" }),
+        json!({ "currency": "eur" }),
+        json!({ "currency": "EUR", "rate": "5.00" }),
+        json!({ "rate": "5.00" }),
+        json!({ "name": "Renamed", "currency": "RON", "rate": "5.00" }),
+        json!({ "name": "Renamed", "balance": "10.00", "rate": "5.00" }),
+    ] {
+        refuse(&vault, "accounts.update", with(body, "id", json!("1")), INVALID);
+    }
+    assert_eq!((order(&vault), currency_of(&find(&vault, "1"))), (vec!["Main account".to_string()], ("EUR", false, None, "0.00")));
+    // what the main account may do, it still does
+    assert_eq!(ok(&vault, "accounts.update", json!({ "id": "1", "name": "Current account", "balance": "10.00" }))["balance"], "10.00");
+}
+
+#[test]
+fn a_new_rate_changes_what_a_foreign_account_is_worth_in_the_apps_currency_and_no_amount_that_is_stored() {
+    let (_dir, vault) = fresh();
+    let food = category(&vault, "EXPENSE", "Food");
+    let (lei, euro) = (lei(&vault, "Lei account", "1000.00"), account(&vault, "Euro account"));
+    spend_native(&vault, &food, "Boots", "4.00", "20.00", "2026-10-03", &lei);
+    transfer_across(&vault, &euro, &lei, "40.00", "200.00", "2026-10-06");
+    let (rows, moves) = (ok(&vault, "transactions.list", json!({})), ok(&vault, "transfers.list", json!({})));
+    let statement = ok(&vault, "accounts.show", json!({ "id": lei, "from": "2026-01-01", "to": "2026-12-31" }));
+    assert_eq!(currency_of(&find(&vault, &lei)), ("RON", true, Some("5.00"), "236.00"), "1180.00 lei at 5.00 to the euro");
+    assert_eq!(ok(&vault, "accounts.summary", json!({}))["inAccounts"], "196.00", "236.00 in lei and 40.00 less in euro");
+
+    let changed = ok(&vault, "accounts.update", json!({ "id": lei, "rate": "4.00" }));
+    assert_eq!(currency_of(&changed), ("RON", true, Some("4.00"), "295.00"));
+    assert_eq!((changed["balance"].as_str(), changed["openingBalance"].as_str(), changed["entries"].as_u64()), (Some("1180.00"), Some("1000.00"), Some(2)));
+    // no amount that is stored moved: not the rows, not the statement
+    assert_eq!((ok(&vault, "transactions.list", json!({})), ok(&vault, "transfers.list", json!({}))), (rows, moves));
+    let after = ok(&vault, "accounts.show", json!({ "id": lei, "from": "2026-01-01", "to": "2026-12-31" }));
+    assert_eq!((&after["lines"], &after["balanceBefore"], &after["balanceAfter"]), (&statement["lines"], &statement["balanceBefore"], &statement["balanceAfter"]));
+    assert_eq!(ok(&vault, "accounts.summary", json!({}))["inAccounts"], "255.00", "net worth follows the rate");
+    // a rate for an account in the app's currency, for the main account and for an archived one is refused
+    refuse(&vault, "accounts.update", json!({ "id": euro, "rate": "5.00" }), INVALID);
+    refuse(&vault, "accounts.update", json!({ "id": "1", "rate": "5.00" }), INVALID);
+    ok(&vault, "accounts.archive", json!({ "id": lei }));
+    refuse(&vault, "accounts.update", json!({ "id": lei, "rate": "3.00" }), INVALID);
+    assert_eq!(currency_of(&find(&vault, &lei)), ("RON", true, Some("4.00"), "295.00"), "an archived account keeps its rate and still counts");
+    assert_eq!(ok(&vault, "accounts.summary", json!({}))["inAccounts"], "255.00");
+}
+
+#[test]
+fn the_currency_of_an_account_changes_only_while_nothing_is_in_it_and_the_apps_own_clears_the_rate() {
+    let (_dir, vault) = fresh();
+    let food = category(&vault, "EXPENSE", "Food");
+    let anna = id_of(&ok(&vault, "people.create", json!({ "name": "Anna" })));
+    // each of the four kinds of row counts as an entry
+    let (by_tx, by_rec, by_loan, by_transfer) = (account(&vault, "A"), account(&vault, "B"), account(&vault, "C"), account(&vault, "D"));
+    let tx = id_of(&spend(&vault, &food, "Bread", "2.00", "2026-10-01", Some(&by_tx)));
+    let rec = id_of(&ok(&vault, "recurring.create", json!({ "name": "Gym", "amount": "20.00", "categoryId": food, "startDate": "2026-10-20", "intervalUnit": "MONTH", "intervalCount": 1, "accountId": by_rec })));
+    let loan = id_of(&ok(&vault, "ledger.add", json!({ "personId": anna, "kind": "LENT", "amount": "9.00", "date": "2026-10-02", "accountId": by_loan })));
+    let moved = transfer(&vault, "1", &by_transfer, "5.00", "2026-10-01");
+    for id in [&by_tx, &by_rec, &by_loan, &by_transfer] {
+        assert_eq!(find(&vault, id)["entries"], 1);
+        for code in ["RON", "ron", "USD"] {
+            refuse(&vault, "accounts.update", json!({ "id": id, "currency": code, "rate": "5.00" }), INVALID);
+        }
+        // and the rest of that patch is not applied
+        refuse(&vault, "accounts.update", json!({ "id": id, "name": "Renamed", "currency": "RON", "rate": "5.00" }), INVALID);
+        assert_eq!(currency_of(&find(&vault, id)).0, "EUR");
+    }
+    // the entries go, and each account changes
+    assert_eq!(ok(&vault, "transactions.delete", json!({ "id": tx })), Value::Null);
+    assert_eq!(ok(&vault, "recurring.delete", json!({ "id": rec })), Value::Null);
+    assert_eq!(ok(&vault, "ledger.delete", json!({ "id": loan })), Value::Null);
+    assert_eq!(ok(&vault, "transfers.delete", json!({ "id": moved })), Value::Null);
+    for id in [&by_tx, &by_rec, &by_loan, &by_transfer] {
+        assert_eq!(find(&vault, id)["entries"], 0);
+        assert_eq!(currency_of(&ok(&vault, "accounts.update", json!({ "id": id, "currency": "RON", "rate": "5.00" }))), ("RON", true, Some("5.00"), "0.00"));
+    }
+    // a foreign account that nothing is in: another code keeps the rate it has, or takes a new one with it
+    assert_eq!(currency_of(&ok(&vault, "accounts.update", json!({ "id": by_tx, "currency": "usd" }))), ("USD", true, Some("5.00"), "0.00"));
+    assert_eq!(currency_of(&ok(&vault, "accounts.update", json!({ "id": by_tx, "currency": "GBP", "rate": "0.85" }))), ("GBP", true, Some("0.85"), "0.00"));
+    // the app's own currency makes it an ordinary account again, which has no rate, and a rate with it is refused
+    refuse(&vault, "accounts.update", json!({ "id": by_tx, "currency": "EUR", "rate": "1.00" }), INVALID);
+    refuse(&vault, "accounts.update", json!({ "id": by_tx, "currency": "eur", "rate": "0.85" }), INVALID);
+    let back = ok(&vault, "accounts.update", json!({ "id": by_tx, "currency": "eur" }));
+    assert_eq!((currency_of(&back), back["rate"].clone()), (("EUR", false, None, "0.00"), Value::Null), "the rate is cleared");
+    refuse(&vault, "accounts.update", json!({ "id": by_tx, "rate": "5.00" }), INVALID);
+    // an account in the app's currency becomes foreign only with a rate
+    refuse(&vault, "accounts.update", json!({ "id": by_tx, "currency": "RON" }), INVALID);
+    assert_eq!(currency_of(&ok(&vault, "accounts.update", json!({ "id": by_tx, "currency": "RON", "rate": "4.97" }))), ("RON", true, Some("4.97"), "0.00"));
+
+    // a foreign account with an entry keeps its currency: the same code may come with a new rate, any other code is refused, the app's own too
+    let l = lei(&vault, "Lei account", "100.00");
+    let boots = id_of(&spend_native(&vault, &food, "Boots", "4.00", "20.00", "2026-10-03", &l));
+    for body in [json!({ "currency": "USD" }), json!({ "currency": "USD", "rate": "1.10" }), json!({ "currency": "EUR" }), json!({ "currency": "eur" })] {
+        refuse(&vault, "accounts.update", with(body, "id", json!(l)), INVALID);
+    }
+    assert_eq!(currency_of(&ok(&vault, "accounts.update", json!({ "id": l, "currency": "ron", "rate": "4.50" }))), ("RON", true, Some("4.50"), "17.78"), "80.00 lei at 4.50, rounded away from zero");
+    // the row leaves for the main account (and loses its native amount), and the account is free to change
+    ok(&vault, "transactions.update", json!({ "id": boots, "accountId": "1" }));
+    assert_eq!(currency_of(&ok(&vault, "accounts.update", json!({ "id": l, "currency": "EUR" }))), ("EUR", false, None, "100.00"));
+}
+
+#[test]
+fn a_patch_equal_to_what_the_account_has_writes_nothing_for_the_currency_the_rate_and_the_balance() {
+    let (_dir, vault) = fresh();
+    let food = category(&vault, "EXPENSE", "Food");
+    let (l, euro) = (lei(&vault, "Lei account", "1000.00"), account(&vault, "Euro account"));
+    spend_native(&vault, &food, "Boots", "4.00", "20.00", "2026-10-03", &l);
+    spend(&vault, &food, "Bread", "2.00", "2026-10-03", Some(&euro));
+    let (foreign, plain) = (find(&vault, &l), find(&vault, &euro));
+    let before = dump(&vault);
+    for body in [
+        json!({ "currency": "RON" }),
+        json!({ "currency": "ron" }),
+        json!({ "rate": "5.00" }),
+        json!({ "rate": " 5.00 " }),
+        json!({ "currency": "RON", "rate": "5.00" }),
+        json!({ "balance": "980.00" }),
+        json!({ "currency": "ron", "rate": "5.00", "balance": "980.00", "name": "Lei account" }),
+    ] {
+        assert_eq!(ok(&vault, "accounts.update", with(body.clone(), "id", json!(l))), foreign, "{body}");
+        assert_eq!(dump(&vault), before, "{body} wrote something: a stamp, a time or a line of the history");
+    }
+    for body in [json!({ "currency": "EUR" }), json!({ "currency": "eur" }), json!({ "balance": "-2.00" })] {
+        assert_eq!(ok(&vault, "accounts.update", with(body.clone(), "id", json!(euro))), plain, "{body}");
+        assert_eq!(dump(&vault), before, "{body}");
+    }
+    // the check can see a change: the same rate written another way is kept as typed, and that is a change
+    assert_eq!(ok(&vault, "accounts.update", json!({ "id": l, "rate": "5.0" }))["rate"], "5.0");
+    assert_ne!(dump(&vault), before);
+}
+
+#[test]
+fn an_archived_account_in_another_currency_keeps_its_currency_and_its_rate_and_cannot_be_changed_until_it_is_brought_back() {
+    let (_dir, vault) = fresh();
+    let l = lei(&vault, "Lei account", "1000.00");
+    let archived = ok(&vault, "accounts.archive", json!({ "id": l }));
+    assert_eq!(currency_of(&archived), ("RON", true, Some("5.00"), "200.00"), "archiving changes no figure");
+    assert_eq!(ok(&vault, "accounts.summary", json!({}))["inAccounts"], "200.00", "and it still counts in net worth");
+    for body in [json!({ "rate": "4.00" }), json!({ "currency": "USD", "rate": "1.10" }), json!({ "currency": "EUR" }), json!({ "balance": "5.00" }), json!({ "rate": "5.00" })] {
+        refuse(&vault, "accounts.update", with(body, "id", json!(l)), INVALID);
+    }
+    assert_eq!(find(&vault, &l), archived);
+    assert_eq!(ok(&vault, "accounts.show", json!({ "id": l }))["currency"], "RON", "it is read with its currency");
+    assert_eq!(currency_of(&ok(&vault, "accounts.unarchive", json!({ "id": l }))), ("RON", true, Some("5.00"), "200.00"));
+    assert_eq!(currency_of(&ok(&vault, "accounts.update", json!({ "id": l, "rate": "4.00" }))), ("RON", true, Some("4.00"), "250.00"));
+}
+
+// ---- the balance of today -----------------------------------------------------------------------
+
+#[test]
+fn the_balance_of_today_is_set_by_moving_the_opening_balance_by_the_difference_and_every_earlier_balance_moves_with_it() {
+    let (_dir, vault) = fresh();
+    let (food, pay) = (category(&vault, "EXPENSE", "Food"), category(&vault, "INCOME", "Pay"));
+    let a = id_of(&ok(&vault, "accounts.create", json!({ "name": "Current", "kind": "CHECKING", "openingBalance": "100.00", "openingDate": "2026-01-01" })));
+    spend(&vault, &food, "Boots", "30.00", "2026-02-01", Some(&a));
+    spend(&vault, &pay, "Gift", "10.00", "2026-03-01", Some(&a));
+    transfer(&vault, "1", &a, "5.00", "2026-04-01");
+    assert_eq!(held(&vault, &a), "85.00");
+    let statement = || ok(&vault, "accounts.show", json!({ "id": a, "from": "2026-02-01", "to": "2026-12-31" }));
+    let january = || ok(&vault, "accounts.history", json!({ "id": a, "year": "2026" }))[0]["balance"].clone();
+    assert_eq!((statement()["balanceBefore"].clone(), january()), (json!("100.00"), json!("100.00")));
+
+    let set = ok(&vault, "accounts.update", json!({ "id": a, "balance": "500.00" }));
+    assert_eq!(keys(&set), ACCOUNT_KEYS);
+    assert_eq!((set["balance"].as_str(), set["openingBalance"].as_str(), set["openingDate"].as_str(), set["entries"].as_u64()), (Some("500.00"), Some("515.00"), Some("2026-01-01"), Some(3)), "moved by 415.00");
+    assert_eq!(held(&vault, &a), "500.00");
+    // every earlier balance moved by the same 415.00, and what moved the account is as it was
+    let after = statement();
+    assert_eq!((after["balanceBefore"].as_str(), after["balanceAfter"].as_str()), (Some("515.00"), Some("500.00")));
+    assert_eq!(after["lines"].as_array().unwrap().iter().map(|l| l["amount"].as_str().unwrap()).collect::<Vec<_>>(), ["-30.00", "10.00", "5.00"]);
+    assert_eq!(january(), json!("515.00"));
+    // below what it holds, below zero, and zero
+    assert_eq!(ok(&vault, "accounts.update", json!({ "id": a, "balance": "-50.00" }))["openingBalance"], "-35.00");
+    assert_eq!(held(&vault, &a), "-50.00");
+    let zero = ok(&vault, "accounts.update", json!({ "id": a, "balance": "0.00" }));
+    assert_eq!((zero["balance"].as_str(), zero["openingBalance"].as_str()), (Some("0.00"), Some("15.00")));
+    // with another field of the same patch: both are applied
+    let both = ok(&vault, "accounts.update", json!({ "id": a, "name": "Renamed", "balance": "7.50" }));
+    assert_eq!((both["name"].as_str(), both["balance"].as_str(), both["openingBalance"].as_str()), (Some("Renamed"), Some("7.50"), Some("22.50")));
+    // the main account is like the others
+    let main = ok(&vault, "accounts.update", json!({ "id": "1", "balance": "250.00" }));
+    assert_eq!((main["balance"].as_str(), main["openingBalance"].as_str()), (Some("250.00"), Some("255.00")), "the transfer of 5.00 out of it is kept");
+    // a balance equal to the current one writes nothing, whatever the account
+    let before = dump(&vault);
+    for (id, balance) in [(a.as_str(), "7.50"), ("1", "250.00")] {
+        let shown = find(&vault, id);
+        assert_eq!(ok(&vault, "accounts.update", json!({ "id": id, "balance": balance })), shown);
+        assert_eq!(dump(&vault), before, "{id}");
+    }
+}
+
+#[test]
+fn the_balance_is_given_with_the_texts_of_an_opening_balance_and_nothing_else() {
+    let (_dir, vault) = fresh();
+    // on an account with nothing in it the two are the same number, so each text must get the same answer from both
+    let (by_balance, by_opening) = (account(&vault, "By balance"), account(&vault, "By opening"));
+    let texts = [
+        "0.00", "0.01", "-0.01", "-120.00", "9999999999.99", "-9999999999.99", "1234567890.12", "-0.00", "+1.00", "1.5", "1", "-1", "1.", ".5", "-.50", "1.005", "10000000000.00", "-10000000000.00", "9999999999.995",
+        "99999999999.99", "--1.00", "- 1.00", " 1.00", "1.00 ", "1,00", "1e3", "-1e3", "NaN", "abc", "", "-", "０.００", "1.00\n", "0x10.00", "05.00",
+    ];
+    let mut accepted = 0;
+    for text in texts {
+        let (b, o) = (run(&vault, "accounts.update", json!({ "id": by_balance, "balance": text })), run(&vault, "accounts.update", json!({ "id": by_opening, "openingBalance": text })));
+        match (b, o) {
+            (Ok(b), Ok(o)) => {
+                assert_eq!((b["balance"].as_str(), b["openingBalance"].as_str()), (Some(text), Some(text)), "{text:?} comes back as written");
+                assert_eq!(o["balance"], b["balance"]);
+                accepted += 1;
+            }
+            (Err(b), Err(o)) => assert_eq!(((b.status, b.code), (o.status, o.code)), (INVALID, INVALID), "{text:?}"),
+            (b, o) => panic!("{text:?}: balance {b:?}, opening balance {o:?}"),
+        }
+    }
+    assert_eq!(accepted, 7, "the first seven are the good ones");
+    // a number is not text, and null is not a value
+    for value in [json!(5), json!(-1.5), json!(true), json!(null), json!(["1.00"])] {
+        assert_eq!(refuse(&vault, "accounts.update", json!({ "id": by_balance, "balance": value }), INVALID), "`balance` must be a string", "{value}");
+    }
+}
+
+#[test]
+fn the_balance_may_not_take_the_opening_balance_past_its_bounds_and_nothing_changes_when_it_would() {
+    let (_dir, vault) = fresh();
+    let (food, pay) = (category(&vault, "EXPENSE", "Food"), category(&vault, "INCOME", "Pay"));
+    let (up, down) = (account(&vault, "Up"), account(&vault, "Down"));
+    spend(&vault, &pay, "Gift", "10.00", "2026-10-01", Some(&up));
+    spend(&vault, &food, "Lunch", "10.00", "2026-10-01", Some(&down));
+    // 10.00 came in: the opening balance is the balance less 10.00, and may not go below -9999999999.99
+    assert_eq!(ok(&vault, "accounts.update", json!({ "id": up, "balance": "9999999999.99" }))["openingBalance"], "9999999989.99");
+    assert_eq!(ok(&vault, "accounts.update", json!({ "id": up, "balance": "-9999999989.99" }))["openingBalance"], "-9999999999.99", "exactly the bound");
+    refuse(&vault, "accounts.update", json!({ "id": up, "balance": "-9999999990.00" }), INVALID);
+    refuse(&vault, "accounts.update", json!({ "id": up, "balance": "-9999999999.99" }), INVALID);
+    // 10.00 went out: it may not go above 9999999999.99
+    assert_eq!(ok(&vault, "accounts.update", json!({ "id": down, "balance": "9999999989.99" }))["openingBalance"], "9999999999.99", "exactly the bound");
+    refuse(&vault, "accounts.update", json!({ "id": down, "balance": "9999999990.00" }), INVALID);
+    refuse(&vault, "accounts.update", json!({ "id": down, "balance": "9999999999.99" }), INVALID);
+    assert_eq!(ok(&vault, "accounts.update", json!({ "id": down, "balance": "-9999999999.99" }))["openingBalance"], "-9999999989.99");
+    // beyond what money can be at all
+    for balance in ["10000000000.00", "-10000000000.00", "99999999999999999999.00"] {
+        refuse(&vault, "accounts.update", json!({ "id": up, "balance": balance }), INVALID);
+    }
+}
+
+#[test]
+fn the_balance_cannot_be_given_with_the_opening_balance_and_not_for_an_archived_account() {
+    let (_dir, vault) = fresh();
+    let a = id_of(&ok(&vault, "accounts.create", json!({ "name": "Current", "kind": "CHECKING", "openingBalance": "100.00", "openingDate": "2026-01-01" })));
+    // together, whatever the two say, even when they agree
+    for body in [json!({ "balance": "100.00", "openingBalance": "100.00" }), json!({ "balance": "5.00", "openingBalance": "5.00" }), json!({ "balance": "5.00", "openingBalance": "0.00" }), json!({ "name": "X", "balance": "5.00", "openingBalance": "9.00" })] {
+        refuse(&vault, "accounts.update", with(body, "id", json!(a)), INVALID);
+    }
+    refuse(&vault, "accounts.update", json!({ "id": "1", "balance": "5.00", "openingBalance": "5.00" }), INVALID);
+    // an archived account is brought back first, for this as for everything
+    ok(&vault, "accounts.archive", json!({ "id": a }));
+    refuse(&vault, "accounts.update", json!({ "id": a, "balance": "5.00" }), INVALID);
+    refuse(&vault, "accounts.update", json!({ "id": a, "balance": "100.00" }), INVALID);
+    ok(&vault, "accounts.unarchive", json!({ "id": a }));
+    assert_eq!(ok(&vault, "accounts.update", json!({ "id": a, "balance": "5.00" }))["openingBalance"], "5.00");
+    // an account that is not there
+    refuse(&vault, "accounts.update", json!({ "id": "999999", "balance": "5.00" }), NOT_FOUND);
+}
+
+#[test]
+fn the_balance_of_an_account_in_another_currency_is_in_its_currency_and_worth_its_value_in_the_apps() {
+    let (_dir, vault) = fresh();
+    let food = category(&vault, "EXPENSE", "Food");
+    let l = lei(&vault, "Lei account", "0.00");
+    spend_native(&vault, &food, "Boots", "20.00", "100.00", "2026-10-03", &l);
+    assert_eq!(currency_of(&find(&vault, &l)), ("RON", true, Some("5.00"), "-20.00"));
+    let set = ok(&vault, "accounts.update", json!({ "id": l, "balance": "500.00" }));
+    assert_eq!((set["balance"].as_str(), set["openingBalance"].as_str(), set["currency"].as_str()), (Some("500.00"), Some("600.00"), Some("RON")), "lei, and the 100.00 lei the boots cost are kept");
+    assert_eq!(currency_of(&set), ("RON", true, Some("5.00"), "100.00"), "500.00 lei at 5.00 to the euro");
+    // it can be negative, and with the rate changed in the same patch the new rate is what it is worth at
+    let both = ok(&vault, "accounts.update", json!({ "id": l, "balance": "-50.00", "rate": "4.00" }));
+    assert_eq!(currency_of(&both), ("RON", true, Some("4.00"), "-12.50"));
+    assert_eq!(both["openingBalance"], "50.00");
+}
+
+#[test]
+fn rows_dated_after_today_are_no_part_of_the_balance_of_today_and_are_kept_when_it_is_set() {
+    let (_dir, vault) = fresh();
+    let (food, pay) = (category(&vault, "EXPENSE", "Food"), category(&vault, "INCOME", "Pay"));
+    let a = id_of(&ok(&vault, "accounts.create", json!({ "name": "Current", "kind": "CHECKING", "openingBalance": "100.00", "openingDate": "2026-01-01" })));
+    spend(&vault, &pay, "Gift", "7.00", "2026-10-10", Some(&a));
+    spend(&vault, &food, "Rent", "30.00", "2026-10-20", Some(&a));
+    transfer(&vault, &a, "1", "1.00", "2026-10-25");
+    assert_eq!(held(&vault, &a), "107.00", "today is the 14th");
+    let set = ok(&vault, "accounts.update", json!({ "id": a, "balance": "200.00" }));
+    assert_eq!((set["balance"].as_str(), set["openingBalance"].as_str()), (Some("200.00"), Some("193.00")), "only the 7.00 that came in before today is taken out");
+    assert_eq!(ok(&vault, "accounts.show", json!({ "id": a, "from": "2026-10-01", "to": "2026-10-31" }))["balanceAfter"], "169.00", "the rows to come still change it: 200.00 less 30.00 and 1.00");
+}
+
+#[test]
+fn an_opening_date_after_today_refuses_the_balance_unless_the_same_patch_moves_it_back() {
+    let (_dir, vault) = fresh();
+    let a = id_of(&ok(&vault, "accounts.create", json!({ "name": "Later", "kind": "CHECKING", "openingBalance": "50.00", "openingDate": "2026-11-01" })));
+    assert_eq!(held(&vault, &a), "0.00", "an opening balance dated later is not in today's balance");
+    refuse(&vault, "accounts.update", json!({ "id": a, "balance": "10.00" }), INVALID);
+    refuse(&vault, "accounts.update", json!({ "id": a, "balance": "0.00" }), INVALID);
+    // a date after today in the same patch is refused too, tomorrow as much as next year; today is not after
+    let b = account(&vault, "Earlier");
+    refuse(&vault, "accounts.update", json!({ "id": b, "balance": "10.00", "openingDate": "2026-10-15" }), INVALID);
+    refuse(&vault, "accounts.update", json!({ "id": b, "balance": "10.00", "openingDate": "2027-01-01" }), INVALID);
+    refuse(&vault, "accounts.update", json!({ "id": b, "balance": "10.00", "openingDate": "2026-02-30" }), INVALID);
+    let today = ok(&vault, "accounts.update", json!({ "id": b, "balance": "10.00", "openingDate": "2026-10-14" }));
+    assert_eq!((today["balance"].as_str(), today["openingBalance"].as_str(), today["openingDate"].as_str()), (Some("10.00"), Some("10.00"), Some("2026-10-14")));
+    // the date that is after today is put right in the same patch
+    let fixed = ok(&vault, "accounts.update", json!({ "id": a, "balance": "10.00", "openingDate": "2026-01-01" }));
+    assert_eq!((fixed["balance"].as_str(), fixed["openingBalance"].as_str(), fixed["openingDate"].as_str()), (Some("10.00"), Some("10.00"), Some("2026-01-01")));
+}
+
+// ---- a transaction in an account of another currency --------------------------------------------
+
+#[test]
+fn a_transaction_in_an_account_of_another_currency_needs_what_really_moved_it_and_answers_both_amounts() {
+    let (_dir, vault) = fresh();
+    let (food, pay) = (category(&vault, "EXPENSE", "Food"), category(&vault, "INCOME", "Pay"));
+    let (l, euro) = (lei(&vault, "Lei account", "1000.00"), account(&vault, "Euro account"));
+    // without it: refused, and nothing is made
+    let boots = json!({ "name": "Boots", "amount": "4.00", "paymentDate": "2026-10-03", "categoryId": food, "accountId": l });
+    refuse(&vault, "transactions.create", boots.clone(), INVALID);
+    let made = ok(&vault, "transactions.create", with(boots.clone(), "nativeAmount", json!("20.00")));
+    assert_eq!((made["amount"].as_str(), made["nativeAmount"].as_str(), made["accountId"].as_str()), (Some("4.00"), Some("20.00"), Some(l.as_str())));
+    // the account moved by what really left it, and is worth the amount in the app's currency at its rate
+    assert_eq!(held(&vault, &l), "980.00");
+    assert_eq!(currency_of(&find(&vault, &l)), ("RON", true, Some("5.00"), "196.00"));
+    // an income is the same, the other way
+    let gift = spend_native(&vault, &pay, "Gift", "2.00", "10.00", "2026-10-05", &l);
+    assert_eq!((gift["amount"].as_str(), gift["nativeAmount"].as_str()), (Some("2.00"), Some("10.00")));
+    assert_eq!(held(&vault, &l), "990.00");
+    // listed with both, and the same numbers twice are fine
+    let listed_row = row(&vault, &id_of(&made));
+    assert_eq!((listed_row["amount"].as_str(), listed_row["nativeAmount"].as_str()), (Some("4.00"), Some("20.00")));
+    assert_eq!(spend_native(&vault, &food, "Same", "3.00", "3.00", "2026-10-06", &l)["nativeAmount"], "3.00");
+    assert_eq!(held(&vault, &l), "987.00");
+    // an account in the app's currency, the main account and no account at all take none
+    for account in [json!(euro), json!("1"), json!(null)] {
+        let mut body = json!({ "name": "Bread", "amount": "4.00", "paymentDate": "2026-10-03", "categoryId": food, "nativeAmount": "4.00" });
+        if !account.is_null() {
+            body["accountId"] = account.clone();
+        }
+        refuse(&vault, "transactions.create", body, INVALID);
+    }
+    // made without one, such a row answers none, in the answer and in the list
+    for account in [Some(euro.as_str()), Some("1"), None] {
+        let plain = spend(&vault, &food, "Bread", "4.00", "2026-10-03", account);
+        assert_eq!(plain["nativeAmount"], Value::Null, "{account:?}");
+        assert_eq!(row(&vault, &id_of(&plain))["nativeAmount"], Value::Null, "{account:?}");
+    }
+    // an archived account of another currency is refused as any archived account is
+    ok(&vault, "accounts.archive", json!({ "id": l }));
+    refuse(&vault, "transactions.create", with(boots, "nativeAmount", json!("20.00")), INVALID);
+}
+
+#[test]
+fn the_native_amount_is_checked_as_the_amount_is_and_a_refused_one_changes_nothing() {
+    let (_dir, vault) = fresh();
+    let food = category(&vault, "EXPENSE", "Food");
+    let l = lei(&vault, "Lei account", "0.00");
+    let body = |native: Value| json!({ "name": "Boots", "amount": "4.00", "paymentDate": "2026-10-03", "categoryId": food, "accountId": l, "nativeAmount": native });
+    for good in ["0.01", "0.10", "20.00", "1234567.89", "9999999999.99"] {
+        let made = ok(&vault, "transactions.create", body(json!(good)));
+        assert_eq!(made["nativeAmount"], good, "{good} comes back as written");
+        assert_eq!(row(&vault, &id_of(&made))["nativeAmount"], good);
+    }
+    let t = id_of(&spend_native(&vault, &food, "One", "1.00", "5.00", "2026-10-04", &l));
+    for bad in ["0.00", "12.5", "12", "12.", ".50", "12.500", "01.00", "-1.00", "+1.00", "1,50", "1e3", " 1.00", "1.00 ", "１２.５０", "10000000000.00", "99999999999.99", ""] {
+        refuse(&vault, "transactions.create", body(json!(bad)), INVALID);
+        refuse(&vault, "transactions.update", json!({ "id": t, "nativeAmount": bad }), INVALID);
+    }
+    for value in [json!(12.5), json!(20), json!(true), json!(null), json!(["1.00"])] {
+        let message = refuse(&vault, "transactions.create", body(value.clone()), INVALID);
+        assert_eq!(message, "`nativeAmount` must be an amount as text with two decimals, like \"12.50\"", "{value}");
+        refuse(&vault, "transactions.update", json!({ "id": t, "nativeAmount": value }), INVALID);
+    }
+    // the amount is checked as ever: a good native amount does not make a bad amount good
+    for amount in ["0.00", "-4.00", "4", "10000000000.00"] {
+        refuse(&vault, "transactions.create", with(body(json!("20.00")), "amount", json!(amount)), INVALID);
+        refuse(&vault, "transactions.update", json!({ "id": t, "amount": amount, "nativeAmount": "20.00" }), INVALID);
+    }
+    assert_eq!(row(&vault, &t)["nativeAmount"], "5.00");
+}
+
+#[test]
+fn a_transaction_moved_between_accounts_takes_gives_up_and_keeps_its_native_amount_as_the_note_says() {
+    let (_dir, vault) = fresh();
+    let (food, pay) = (category(&vault, "EXPENSE", "Food"), category(&vault, "INCOME", "Pay"));
+    let (l1, l2, euro) = (lei(&vault, "Lei one", "100.00"), lei(&vault, "Lei two", "100.00"), account(&vault, "Euro account"));
+    let t = id_of(&spend(&vault, &food, "Bread", "2.00", "2026-10-01", None));
+    assert_eq!(held(&vault, "1"), "-2.00");
+    // a row that is and stays in an account in the app's currency takes none, named account or not
+    for body in [json!({ "nativeAmount": "10.00" }), json!({ "accountId": "1", "nativeAmount": "10.00" }), json!({ "accountId": euro, "nativeAmount": "10.00" })] {
+        refuse(&vault, "transactions.update", with(body, "id", json!(t)), INVALID);
+    }
+    // main to foreign: the native amount is needed in the same patch
+    refuse(&vault, "transactions.update", json!({ "id": t, "accountId": l1 }), INVALID);
+    refuse(&vault, "transactions.update", json!({ "id": t, "accountId": l1, "amount": "3.00" }), INVALID);
+    let moved = ok(&vault, "transactions.update", json!({ "id": t, "accountId": l1, "nativeAmount": "10.00" }));
+    assert_eq!((moved["accountId"].as_str(), moved["amount"].as_str(), moved["nativeAmount"].as_str()), (Some(l1.as_str()), Some("2.00"), Some("10.00")));
+    assert_eq!((held(&vault, "1"), held(&vault, &l1)), ("0.00".into(), "90.00".to_string()), "the money followed the row, in its own amount");
+    // in the foreign account it changes in place, and a patch that leaves it out keeps it
+    assert_eq!(ok(&vault, "transactions.update", json!({ "id": t, "nativeAmount": "12.00" }))["nativeAmount"], "12.00");
+    assert_eq!(held(&vault, &l1), "88.00");
+    let amount_only = ok(&vault, "transactions.update", json!({ "id": t, "amount": "3.00" }));
+    assert_eq!((amount_only["amount"].as_str(), amount_only["nativeAmount"].as_str()), (Some("3.00"), Some("12.00")), "the euro amount changes alone");
+    assert_eq!(held(&vault, &l1), "88.00", "and the account does not move: it is in lei");
+    let other = ok(&vault, "transactions.update", json!({ "id": t, "name": "Bread 2", "paymentDate": "2026-10-02", "description": "note" }));
+    assert_eq!((other["name"].as_str(), other["nativeAmount"].as_str()), (Some("Bread 2"), Some("12.00")));
+    // the same native amount again changes nothing (a transaction takes a new stamp on any update, as it always did, but the history sees no change)
+    let history = || vault.with_conn(|c| Ok(c.query_row("SELECT count(*) FROM audit_log", [], |r| r.get::<_, i64>(0))?)).unwrap();
+    let (before, lines) = (row(&vault, &t), history());
+    assert_eq!(ok(&vault, "transactions.update", json!({ "id": t, "nativeAmount": "12.00" }))["nativeAmount"], "12.00");
+    assert_eq!((row(&vault, &t), history()), (before, lines));
+    // foreign to foreign keeps it unless a new one is given
+    let kept = ok(&vault, "transactions.update", json!({ "id": t, "accountId": l2 }));
+    assert_eq!((kept["accountId"].as_str(), kept["nativeAmount"].as_str()), (Some(l2.as_str()), Some("12.00")));
+    assert_eq!((held(&vault, &l1), held(&vault, &l2)), ("100.00".into(), "88.00".to_string()));
+    let given = ok(&vault, "transactions.update", json!({ "id": t, "accountId": l1, "nativeAmount": "15.00" }));
+    assert_eq!((given["accountId"].as_str(), given["nativeAmount"].as_str()), (Some(l1.as_str()), Some("15.00")));
+    assert_eq!((held(&vault, &l1), held(&vault, &l2)), ("85.00".into(), "100.00".to_string()));
+    assert_eq!(ok(&vault, "transactions.update", json!({ "id": t, "accountId": l1, "name": "Bread 3" }))["nativeAmount"], "15.00", "naming its own account again is no move");
+
+    // foreign to an account in the app's currency: the native amount is cleared, and one given with it is refused
+    for body in [json!({ "accountId": "1", "nativeAmount": "1.00" }), json!({ "accountId": euro, "nativeAmount": "1.00" })] {
+        refuse(&vault, "transactions.update", with(body, "id", json!(t)), INVALID);
+    }
+    let back = ok(&vault, "transactions.update", json!({ "id": t, "accountId": euro }));
+    assert_eq!((back["accountId"].as_str(), back["nativeAmount"].clone()), (Some(euro.as_str()), Value::Null));
+    assert_eq!(row(&vault, &t)["nativeAmount"], Value::Null);
+    assert_eq!((held(&vault, &euro), held(&vault, &l1)), ("-3.00".into(), "100.00".to_string()), "the amount in euro now moves it");
+    // into a foreign account again it needs one: the old one is gone
+    refuse(&vault, "transactions.update", json!({ "id": t, "accountId": l1 }), INVALID);
+    refuse(&vault, "transactions.update", json!({ "id": t, "accountId": l2 }), INVALID);
+    let again = ok(&vault, "transactions.update", json!({ "id": t, "accountId": l2, "nativeAmount": "9.00" }));
+    assert_eq!((again["nativeAmount"].as_str(), held(&vault, &l2).as_str()), (Some("9.00"), "91.00"));
+    // the main account too: out of it and into it
+    let main = ok(&vault, "transactions.update", json!({ "id": t, "accountId": "1" }));
+    assert_eq!((main["accountId"].as_str(), main["nativeAmount"].clone()), (Some("1"), Value::Null));
+    assert_eq!(held(&vault, "1"), "-3.00");
+    // an income moves the same way
+    let income = id_of(&spend(&vault, &pay, "Gift", "2.00", "2026-10-05", Some(&euro)));
+    assert_eq!(ok(&vault, "transactions.update", json!({ "id": income, "accountId": l1, "nativeAmount": "10.00" }))["nativeAmount"], "10.00");
+    assert_eq!((held(&vault, &euro), held(&vault, &l1)), ("0.00".into(), "110.00".to_string()));
+}
+
+#[test]
+fn budgets_and_statistics_count_the_amount_in_the_apps_currency_and_the_balance_the_native_one() {
+    let (_dir, vault) = fresh();
+    let (food, pay) = (category(&vault, "EXPENSE", "Food"), category(&vault, "INCOME", "Pay"));
+    ok(&vault, "budgets.set", json!({ "type": "EXPENSE", "month": "2026-10", "amountLimit": "200.00" }));
+    ok(&vault, "budgets.set", json!({ "type": "EXPENSE", "month": "2026-10", "amountLimit": "100.00", "categoryId": food }));
+    let l = lei(&vault, "Lei account", "1000.00");
+    spend_native(&vault, &food, "Boots", "4.00", "20.00", "2026-10-03", &l);
+    spend(&vault, &food, "Bread", "6.00", "2026-10-04", None);
+    spend_native(&vault, &pay, "Gift", "2.00", "10.00", "2026-10-05", &l);
+    // the budget, the month, the top list: 4.00 and 6.00 in euro, never 20.00 lei
+    let line = |lines: &Value| lines.as_array().unwrap().iter().find(|c| c["categoryId"] == food.as_str()).unwrap().clone();
+    let budget = ok(&vault, "stats.budget", json!({ "month": "2026-10" }));
+    let food_line = line(&budget["categories"]);
+    assert_eq!((food_line["actual"].as_str(), food_line["remaining"].as_str()), (Some("10.00"), Some("90.00")));
+    let year = ok(&vault, "stats.year", json!({ "year": "2026" }));
+    let october = &year[9];
+    assert_eq!((october["month"].as_str(), october["expense"].as_str(), october["income"].as_str(), october["savings"].as_str()), (Some("2026-10"), Some("10.00"), Some("2.00"), Some("-8.00")));
+    let top = ok(&vault, "stats.top", json!({ "month": "2026-10", "type": "EXPENSE" }));
+    assert_eq!((top[0]["categoryId"].as_str(), top[0]["actual"].as_str()), (Some(food.as_str()), Some("10.00")));
+    // the account moved by the native amounts, the main account by the amount in euro, and the list shows both of each
+    assert_eq!((held(&vault, &l), held(&vault, "1")), ("990.00".into(), "-6.00".to_string()));
+    let rows = ok(&vault, "transactions.list", json!({ "accountId": l }));
+    let sums: Vec<(&str, &str)> = rows["transactions"].as_array().unwrap().iter().map(|t| (t["amount"].as_str().unwrap(), t["nativeAmount"].as_str().unwrap())).collect();
+    assert_eq!(sums, [("2.00", "10.00"), ("4.00", "20.00")], "newest first");
+    // a new rate moves no statistic and no budget
+    ok(&vault, "accounts.update", json!({ "id": l, "rate": "2.00" }));
+    assert_eq!(ok(&vault, "stats.budget", json!({ "month": "2026-10" })), budget);
+}
+
+// ---- transfers between currencies ---------------------------------------------------------------
+
+#[test]
+fn a_transfer_between_accounts_of_different_currencies_needs_what_arrives_and_each_side_moves_by_its_own_amount() {
+    let (_dir, vault) = fresh();
+    let euro = id_of(&ok(&vault, "accounts.create", json!({ "name": "Euro account", "kind": "CHECKING", "openingBalance": "1000.00", "openingDate": "2026-01-01" })));
+    let (l, l2) = (lei(&vault, "Lei account", "0.00"), lei(&vault, "Lei savings", "0.00"));
+    let usd = id_of(&ok(&vault, "accounts.create", json!({ "name": "Dollar account", "kind": "CHECKING", "currency": "USD", "rate": "1.10" })));
+    let body = |from: &str, to: &str, amount: &str| json!({ "fromAccountId": from, "toAccountId": to, "amount": amount, "date": "2026-10-03" });
+    // EUR to RON, RON to EUR, the main account (EUR) to RON, RON to USD and USD to RON: each needs it
+    for (from, to) in [(&euro, &l), (&l, &euro), (&"1".to_string(), &l), (&l, &usd), (&usd, &l), (&euro, &usd)] {
+        refuse(&vault, "transfers.create", body(from, to, "40.00"), INVALID);
+    }
+    // given, it is answered with the amount, and each side moves by its own: 40.00 euro leave, 200.00 lei arrive
+    let made = transfer_across(&vault, &euro, &l, "40.00", "200.00", "2026-10-03");
+    assert_eq!(keys(&made), TRANSFER_KEYS);
+    assert_eq!((made["amount"].as_str(), made["toAmount"].as_str(), made["fromAccountId"].as_str(), made["toAccountId"].as_str()), (Some("40.00"), Some("200.00"), Some(euro.as_str()), Some(l.as_str())));
+    assert_eq!((held(&vault, &euro), held(&vault, &l)), ("960.00".into(), "200.00".to_string()));
+    // back: 100.00 lei leave, 19.00 euro arrive
+    transfer_across(&vault, &l, &euro, "100.00", "19.00", "2026-10-04");
+    assert_eq!((held(&vault, &euro), held(&vault, &l)), ("979.00".into(), "100.00".to_string()));
+    // two foreign currencies; and the main account, in euro
+    transfer_across(&vault, &l, &usd, "50.00", "11.00", "2026-10-05");
+    assert_eq!((held(&vault, &l), held(&vault, &usd)), ("50.00".into(), "11.00".to_string()));
+    transfer_across(&vault, "1", &l, "10.00", "52.00", "2026-10-06");
+    assert_eq!((held(&vault, "1"), held(&vault, &l)), ("-10.00".into(), "102.00".to_string()));
+    // each statement shows what that side did, in its own currency
+    let into = ok(&vault, "accounts.show", json!({ "id": usd, "from": "2026-10-01", "to": "2026-10-31" }));
+    assert_eq!((into["currency"].as_str(), into["lines"][0]["amount"].as_str(), into["lines"][0]["source"].as_str(), into["lines"][0]["other"].as_str()), (Some("USD"), Some("11.00"), Some("TRANSFER_IN"), Some("Lei account")));
+    let out = ok(&vault, "accounts.show", json!({ "id": euro, "from": "2026-10-01", "to": "2026-10-31" }));
+    assert_eq!(out["lines"].as_array().unwrap().iter().map(|l| (l["source"].as_str().unwrap(), l["amount"].as_str().unwrap())).collect::<Vec<_>>(), [("TRANSFER_OUT", "-40.00"), ("TRANSFER_IN", "19.00")]);
+    // the same currency on both sides takes none: euro to euro, lei to lei, and a second amount equal to the first is no exception
+    assert_eq!(ok(&vault, "transfers.create", body(&euro, "1", "5.00"))["toAmount"], Value::Null);
+    assert_eq!(ok(&vault, "transfers.create", with(body(&l, &l2, "5.00"), "date", json!("2026-10-07")))["toAmount"], Value::Null);
+    for (from, to) in [(euro.as_str(), "1"), (l.as_str(), l2.as_str()), (l2.as_str(), l.as_str())] {
+        for arrives in ["5.00", "1.00", "0.01"] {
+            refuse(&vault, "transfers.create", with(body(from, to, "5.00"), "toAmount", json!(arrives)), INVALID);
+        }
+    }
+    // the list answers it, and it is null for a transfer of one currency
+    let page = ok(&vault, "transfers.list", json!({ "accountId": l, "limit": 100 }));
+    let seen: Vec<(Option<&str>, Option<&str>)> = page["transfers"].as_array().unwrap().iter().map(|t| (t["amount"].as_str(), t["toAmount"].as_str())).collect();
+    assert_eq!(seen, [(Some("5.00"), None), (Some("10.00"), Some("52.00")), (Some("50.00"), Some("11.00")), (Some("100.00"), Some("19.00")), (Some("40.00"), Some("200.00"))], "newest first");
+    // the sum of the balances over currencies is no number, and it is not zero-sum: each side moved by its own amount
+    assert_eq!(ok(&vault, "transfers.list", json!({}))["total"], 6, "the refused ones made none");
+}
+
+#[test]
+fn what_arrives_is_checked_as_an_amount_is_and_a_refused_one_makes_no_transfer() {
+    let (_dir, vault) = fresh();
+    let l = lei(&vault, "Lei account", "0.00");
+    let body = |arrives: Value| json!({ "fromAccountId": "1", "toAccountId": l, "amount": "40.00", "toAmount": arrives, "date": "2026-10-03" });
+    for good in ["0.01", "200.00", "9999999999.99"] {
+        assert_eq!(ok(&vault, "transfers.create", body(json!(good)))["toAmount"], good);
+    }
+    let t = id_of(&transfer_across(&vault, "1", &l, "1.00", "5.00", "2026-10-03"));
+    for bad in ["0.00", "12.5", "12", "12.", ".50", "12.500", "01.00", "-1.00", "+1.00", "1,50", "1e3", " 1.00", "1.00 ", "１２.５０", "10000000000.00", ""] {
+        refuse(&vault, "transfers.create", body(json!(bad)), INVALID);
+        refuse(&vault, "transfers.update", json!({ "id": t, "toAmount": bad }), INVALID);
+    }
+    for value in [json!(200), json!(12.5), json!(true), json!(null), json!(["1.00"])] {
+        assert_eq!(refuse(&vault, "transfers.create", body(value.clone()), INVALID), "`toAmount` must be an amount as text with two decimals, like \"12.50\"", "{value}");
+        refuse(&vault, "transfers.update", json!({ "id": t, "toAmount": value }), INVALID);
+    }
+    // what leaves is checked as ever, whatever arrives
+    for amount in ["0.00", "-40.00", "40", "10000000000.00"] {
+        refuse(&vault, "transfers.create", with(body(json!("200.00")), "amount", json!(amount)), INVALID);
+        refuse(&vault, "transfers.update", json!({ "id": t, "amount": amount, "toAmount": "200.00" }), INVALID);
+    }
+    assert_eq!(ok(&vault, "transfers.list", json!({}))["total"], 4);
+}
+
+#[test]
+fn a_transfer_is_changed_so_that_the_currencies_become_equal_and_different_again_as_the_note_says() {
+    let (_dir, vault) = fresh();
+    let (euro, euro2) = (account(&vault, "Euro account"), account(&vault, "Euro savings"));
+    let (l1, l2) = (lei(&vault, "Lei one", "0.00"), lei(&vault, "Lei two", "0.00"));
+    let t = id_of(&transfer_across(&vault, &euro, &l1, "40.00", "200.00", "2026-10-03"));
+    let shown = || ok(&vault, "transfers.list", json!({ "limit": 100 }))["transfers"][0].clone();
+    assert_eq!((held(&vault, &euro), held(&vault, &l1)), ("-40.00".into(), "200.00".to_string()));
+
+    // the amount that leaves changes alone: what arrives is kept
+    let more = ok(&vault, "transfers.update", json!({ "id": t, "amount": "50.00" }));
+    assert_eq!((more["amount"].as_str(), more["toAmount"].as_str()), (Some("50.00"), Some("200.00")));
+    // what arrives changes alone: the other side does not move
+    let less = ok(&vault, "transfers.update", json!({ "id": t, "toAmount": "250.00" }));
+    assert_eq!((less["amount"].as_str(), less["toAmount"].as_str()), (Some("50.00"), Some("250.00")));
+    assert_eq!((held(&vault, &euro), held(&vault, &l1)), ("-50.00".into(), "250.00".to_string()));
+    // and the same one again writes nothing
+    let before = dump(&vault);
+    assert_eq!(ok(&vault, "transfers.update", json!({ "id": t, "toAmount": "250.00" })), less);
+    assert_eq!(dump(&vault), before);
+
+    // a side changes so that both are in euro: what arrives is cleared, and one given with it is refused
+    refuse(&vault, "transfers.update", json!({ "id": t, "toAccountId": euro2, "toAmount": "250.00" }), INVALID);
+    refuse(&vault, "transfers.update", json!({ "id": t, "toAccountId": euro2, "toAmount": "50.00" }), INVALID);
+    let same = ok(&vault, "transfers.update", json!({ "id": t, "toAccountId": euro2 }));
+    assert_eq!((same["toAccountId"].as_str(), same["amount"].as_str(), same["toAmount"].clone()), (Some(euro2.as_str()), Some("50.00"), Value::Null));
+    assert_eq!(shown()["toAmount"], Value::Null);
+    assert_eq!((held(&vault, &euro), held(&vault, &euro2), held(&vault, &l1)), ("-50.00".into(), "50.00".into(), "0.00".to_string()), "the euro that left is the euro that arrived");
+    // a patch that names a toAmount for a transfer of one currency is refused, whatever it says
+    for arrives in ["50.00", "250.00", "0.01"] {
+        refuse(&vault, "transfers.update", json!({ "id": t, "toAmount": arrives }), INVALID);
+    }
+    // and different again: what arrives is needed, as the transfer has none now
+    refuse(&vault, "transfers.update", json!({ "id": t, "toAccountId": l1 }), INVALID);
+    refuse(&vault, "transfers.update", json!({ "id": t, "toAccountId": l1, "amount": "60.00" }), INVALID);
+    let different = ok(&vault, "transfers.update", json!({ "id": t, "toAccountId": l1, "toAmount": "180.00" }));
+    assert_eq!((different["toAccountId"].as_str(), different["toAmount"].as_str()), (Some(l1.as_str()), Some("180.00")));
+    assert_eq!((held(&vault, &euro2), held(&vault, &l1)), ("0.00".into(), "180.00".to_string()));
+    // one side changes and they still differ: it is kept unless a new one is given
+    let kept = ok(&vault, "transfers.update", json!({ "id": t, "toAccountId": l2 }));
+    assert_eq!((kept["toAccountId"].as_str(), kept["toAmount"].as_str()), (Some(l2.as_str()), Some("180.00")));
+    let from_main = ok(&vault, "transfers.update", json!({ "id": t, "fromAccountId": "1" }));
+    assert_eq!((from_main["fromAccountId"].as_str(), from_main["toAmount"].as_str()), (Some("1"), Some("180.00")), "the main account is in euro as well");
+    // both sides in lei: cleared; back to euro to lei: needed
+    let lei_to_lei = ok(&vault, "transfers.update", json!({ "id": t, "fromAccountId": l1 }));
+    assert_eq!((lei_to_lei["fromAccountId"].as_str(), lei_to_lei["toAccountId"].as_str(), lei_to_lei["toAmount"].clone()), (Some(l1.as_str()), Some(l2.as_str()), Value::Null));
+    refuse(&vault, "transfers.update", json!({ "id": t, "toAmount": "5.00" }), INVALID);
+    refuse(&vault, "transfers.update", json!({ "id": t, "fromAccountId": euro }), INVALID);
+    let again = ok(&vault, "transfers.update", json!({ "id": t, "fromAccountId": euro, "toAmount": "175.00", "amount": "35.00" }));
+    assert_eq!((again["amount"].as_str(), again["toAmount"].as_str()), (Some("35.00"), Some("175.00")));
+    // both sides swapped: each side now leaves and arrives in the other currency, and what arrives is kept
+    let swapped = ok(&vault, "transfers.update", json!({ "id": t, "fromAccountId": l2, "toAccountId": euro }));
+    assert_eq!((swapped["fromAccountId"].as_str(), swapped["toAccountId"].as_str(), swapped["amount"].as_str(), swapped["toAmount"].as_str()), (Some(l2.as_str()), Some(euro.as_str()), Some("35.00"), Some("175.00")));
+    assert_eq!(ok(&vault, "transfers.list", json!({}))["total"], 1);
+}
+
+#[test]
+fn a_transfer_between_currencies_can_be_edited_while_the_foreign_side_is_archived_and_deleted_with_its_balances_back() {
+    let (_dir, vault) = fresh();
+    let (euro, l) = (account(&vault, "Euro account"), lei(&vault, "Lei account", "0.00"));
+    let t = id_of(&transfer_across(&vault, &euro, &l, "40.00", "200.00", "2026-10-03"));
+    ok(&vault, "accounts.archive", json!({ "id": l }));
+    // the side that does not change may be archived: what arrives may change, and so may what leaves
+    assert_eq!(ok(&vault, "transfers.update", json!({ "id": t, "toAmount": "210.00" }))["toAmount"], "210.00");
+    assert_eq!(ok(&vault, "transfers.update", json!({ "id": t, "toAccountId": l, "amount": "41.00" }))["amount"], "41.00", "naming it again is no change");
+    assert_eq!((held(&vault, &euro), held(&vault, &l)), ("-41.00".into(), "210.00".to_string()));
+    // but no side moves into an archived account, and a transfer between currencies cannot be made with one
+    let l2 = lei(&vault, "Lei two", "0.00");
+    ok(&vault, "accounts.archive", json!({ "id": l2 }));
+    refuse(&vault, "transfers.update", json!({ "id": t, "toAccountId": l2 }), INVALID);
+    refuse(&vault, "transfers.create", json!({ "fromAccountId": euro, "toAccountId": l, "amount": "1.00", "toAmount": "5.00", "date": "2026-10-03" }), INVALID);
+    // deleting it brings both balances back, each by its own amount
+    assert_eq!(ok(&vault, "transfers.delete", json!({ "id": t })), Value::Null);
+    assert_eq!((held(&vault, &euro), held(&vault, &l)), ("0.00".into(), "0.00".to_string()));
+}
+
+// ---- what stays in the app's currency ---------------------------------------------------------
+
+#[test]
+fn a_recurring_item_a_ledger_entry_and_a_settlement_are_refused_for_an_account_of_another_currency_and_nothing_changes() {
+    let (_dir, vault) = fresh();
+    let food = category(&vault, "EXPENSE", "Food");
+    let anna = id_of(&ok(&vault, "people.create", json!({ "name": "Anna" })));
+    let (l, euro) = (lei(&vault, "Lei account", "100.00"), account(&vault, "Euro account"));
+    let item = |account: &str| json!({ "name": "Gym", "amount": "20.00", "categoryId": food, "startDate": "2026-10-20", "intervalUnit": "MONTH", "intervalCount": 1, "accountId": account });
+    let entry = |kind: &str, account: &str| json!({ "personId": anna, "kind": kind, "amount": "9.00", "date": "2026-10-02", "accountId": account });
+    // each works in an account in the app's currency: what is refused below is refused for the currency
+    let rec = id_of(&ok(&vault, "recurring.create", item(&euro)));
+    let led = id_of(&ok(&vault, "ledger.add", entry("LENT", &euro)));
+    assert_eq!(ok(&vault, "ledger.add", json!({ "personId": anna, "kind": "BORROWED", "amount": "3.00", "date": "2026-10-02", "expenseName": "Pizza", "expenseCategoryId": food, "accountId": euro }))["accountId"], euro.as_str());
+
+    refuse(&vault, "recurring.create", item(&l), INVALID);
+    refuse(&vault, "recurring.update", json!({ "id": rec, "accountId": l }), INVALID);
+    refuse(&vault, "recurring.update", json!({ "id": rec, "accountId": l, "name": "Gym 2", "amount": "5.00" }), INVALID);
+    for kind in ["LENT", "BORROWED", "REPAID_TO_ME", "REPAID_BY_ME"] {
+        refuse(&vault, "ledger.add", entry(kind, &l), INVALID);
+    }
+    // a borrowing that adds an expense: neither is made
+    refuse(&vault, "ledger.add", json!({ "personId": anna, "kind": "BORROWED", "amount": "3.00", "date": "2026-10-02", "expenseName": "Taxi", "expenseCategoryId": food, "accountId": l }), INVALID);
+    assert_eq!(ok(&vault, "transactions.list", json!({ "q": "Taxi" }))["total"], 0);
+    refuse(&vault, "ledger.update", json!({ "id": led, "accountId": l }), INVALID);
+    refuse(&vault, "ledger.update", json!({ "id": led, "accountId": l, "amount": "1.00", "note": "x" }), INVALID);
+    refuse(&vault, "people.settle", json!({ "id": anna, "accountId": l }), INVALID);
+    refuse(&vault, "people.settle", json!({ "id": anna, "amount": "1.00", "date": "2026-10-05", "note": "x", "accountId": l }), INVALID);
+    // what was there stays where it was, and the account of the others still takes them
+    assert_eq!(find(&vault, &l)["entries"], 0);
+    assert_eq!(ok(&vault, "recurring.update", json!({ "id": rec, "name": "Gym 2" }))["accountId"], euro.as_str());
+    assert_eq!(ok(&vault, "ledger.update", json!({ "id": led, "amount": "10.00" }))["accountId"], euro.as_str());
+    assert_eq!(ok(&vault, "people.settle", json!({ "id": anna, "amount": "1.00", "accountId": euro }))["entry"]["accountId"], euro.as_str());
+    // an account that was foreign and is not any more takes them
+    assert_eq!(find(&vault, &l)["entries"], 0);
+    ok(&vault, "accounts.update", json!({ "id": l, "currency": "EUR" }));
+    assert_eq!(ok(&vault, "recurring.create", item(&l))["accountId"], l.as_str());
+}
+
+#[test]
+fn the_apps_currency_cannot_change_while_an_account_is_in_another_currency_archived_or_not_and_the_routes_follow_it_after() {
+    let (_dir, vault) = fresh();
+    let l = lei(&vault, "Lei account", "100.00");
+    // the person changes it in the app: there is no route for it, and `settings.set` does not take it
+    assert_eq!(run(&vault, "settings.set", json!({ "currency": "USD" })).unwrap_err().message, "unknown argument `currency`");
+    let change = |code: &str, rate: Option<&str>| vault.with_conn(|c| crate::currency::change(c, code, rate, "2026-10-14"));
+    let refused_change = |when: &str| {
+        let before = dump(&vault);
+        for (code, rate) in [("USD", Some("1.10")), ("USD", None), ("RON", None), ("RON", Some("5.00")), ("EUR", None)] {
+            assert_eq!(change(code, rate), Err(crate::vault::AppError::InvalidInput), "{when}: {code} {rate:?}");
+            assert_eq!(dump(&vault), before, "{when}: {code} {rate:?}");
+        }
+        assert_eq!(ok(&vault, "settings.get", json!({}))["currency"], "EUR");
+    };
+    refused_change("with the account");
+    ok(&vault, "accounts.archive", json!({ "id": l }));
+    refused_change("with the account archived");
+    // deleted, the account is gone and the change goes through: the main account follows it, and what is in the app's currency is converted
+    assert_eq!(ok(&vault, "accounts.delete", json!({ "id": l })), Value::Null);
+    change("USD", Some("2.00")).unwrap();
+    assert_eq!(ok(&vault, "settings.get", json!({}))["currency"], "USD");
+    assert_eq!(currency_of(&find(&vault, "1")), ("USD", false, None, "0.00"));
+    // the routes follow it: the app's currency is no other currency, and the old one is
+    assert_eq!(currency_of(&ok(&vault, "accounts.create", json!({ "name": "Dollars", "kind": "CASH", "currency": "usd" }))), ("USD", false, None, "0.00"));
+    refuse(&vault, "accounts.create", json!({ "name": "Euros", "kind": "CASH", "currency": "EUR" }), INVALID);
+    let euros = ok(&vault, "accounts.create", json!({ "name": "Euros", "kind": "CASH", "currency": "eur", "rate": "0.50" }));
+    assert_eq!(currency_of(&euros), ("EUR", true, Some("0.50"), "0.00"));
+    // and it holds the app's currency still while that account exists
+    assert_eq!(change("GBP", None), Err(crate::vault::AppError::InvalidInput));
+    ok(&vault, "accounts.delete", json!({ "id": id_of(&euros) }));
+    assert!(change("GBP", None).is_ok());
+}
+
+#[test]
+fn net_worth_turns_each_account_of_another_currency_into_the_apps_at_its_own_rate_and_rounds_away_from_zero() {
+    let (_dir, vault) = fresh();
+    ok(&vault, "accounts.update", json!({ "id": "1", "openingBalance": "100.00", "openingDate": "2026-01-01" }));
+    let make = |name: &str, code: &str, rate: &str, opening: &str| id_of(&ok(&vault, "accounts.create", json!({ "name": name, "kind": "SAVINGS", "currency": code, "rate": rate, "openingBalance": opening, "openingDate": "2026-01-01" })));
+    let (at_five, at_four) = (make("Lei at five", "RON", "5.00", "1000.00"), make("Lei at four", "RON", "4.00", "1000.00"));
+    let (dollars, pounds, francs, owed, card) = (make("Dollars", "USD", "1.10", "110.00"), make("Pounds", "GBP", "3.00", "2.00"), make("Francs", "CHF", "2.00", "0.01"), make("Francs owed", "CHF", "2.00", "-0.01"), make("Card", "RON", "3.00", "-10.00"));
+    let hidden = make("Hidden", "RON", "5.00", "5000.00");
+    ok(&vault, "accounts.update", json!({ "id": hidden, "includeInNetWorth": false }));
+    // each is worth its balance divided by its rate, to the cent, half away from zero, the sign kept
+    for (id, worth_in_euro) in [(&at_five, "200.00"), (&at_four, "250.00"), (&dollars, "100.00"), (&pounds, "0.67"), (&francs, "0.01"), (&owed, "-0.01"), (&card, "-3.33"), (&hidden, "1000.00")] {
+        assert_eq!(find(&vault, id)["balanceInMain"], worth_in_euro, "{}", find(&vault, id)["name"]);
+    }
+    // 100.00 and 200.00 and 250.00 and 100.00 and 0.67 and 0.01 and -0.01 and -3.33 make 647.34; the one left out is not in it
+    assert_eq!(worth(&vault), ("647.34".to_string(), "0.00".to_string(), "647.34".to_string()));
+    assert_eq!(ok(&vault, "accounts.summary", json!({}))["accounts"], 9);
+    // friends: what is lent leaves the main account and is owed to you, so net worth stays
+    let anna = id_of(&ok(&vault, "people.create", json!({ "name": "Anna" })));
+    ok(&vault, "ledger.add", json!({ "personId": anna, "kind": "LENT", "amount": "20.00", "date": "2026-10-02" }));
+    assert_eq!(worth(&vault), ("627.34".to_string(), "20.00".to_string(), "647.34".to_string()));
+    // an archived account still counts
+    ok(&vault, "accounts.archive", json!({ "id": dollars }));
+    assert_eq!(worth(&vault).0, "627.34");
+    // a new rate moves net worth by what it moves the account: 1000.00 lei at 2.50 is 400.00, not 200.00
+    ok(&vault, "accounts.update", json!({ "id": at_five, "rate": "2.50" }));
+    assert_eq!(worth(&vault).0, "827.34");
+    // put back, it counts at its own rate; another account, left out, is out
+    ok(&vault, "accounts.update", json!({ "id": hidden, "includeInNetWorth": true }));
+    assert_eq!(worth(&vault).0, "1827.34");
+    // every account left out: nothing in the accounts, and net worth is what friends owe
+    for a in listed(&vault) {
+        if a["archived"] == false {
+            ok(&vault, "accounts.update", json!({ "id": a["id"], "includeInNetWorth": false }));
+        } else {
+            ok(&vault, "accounts.unarchive", json!({ "id": a["id"] }));
+            ok(&vault, "accounts.update", json!({ "id": a["id"], "includeInNetWorth": false }));
+        }
+    }
+    assert_eq!(worth(&vault), ("0.00".to_string(), "20.00".to_string(), "20.00".to_string()));
+}
+
+#[test]
+fn the_statement_the_breakdown_and_the_history_of_an_account_in_another_currency_are_in_its_currency() {
+    let (_dir, vault) = fresh();
+    let (food, pay) = (category(&vault, "EXPENSE", "Food"), category(&vault, "INCOME", "Pay"));
+    let (l, euro) = (lei(&vault, "Lei account", "1000.00"), account(&vault, "Euro account"));
+    spend_native(&vault, &food, "Boots", "4.00", "20.00", "2026-10-03", &l);
+    spend_native(&vault, &pay, "Gift", "2.00", "10.00", "2026-10-05", &l);
+    transfer_across(&vault, &euro, &l, "40.00", "200.00", "2026-10-06");
+
+    let shown = ok(&vault, "accounts.show", json!({ "id": l, "from": "2026-10-01", "to": "2026-10-31" }));
+    assert_eq!(shown["currency"], "RON");
+    let lines: Vec<(&str, &str, &str)> = shown["lines"].as_array().unwrap().iter().map(|x| (x["source"].as_str().unwrap(), x["amount"].as_str().unwrap(), x["balance"].as_str().unwrap())).collect();
+    assert_eq!(lines, [("TRANSACTION", "-20.00", "980.00"), ("TRANSACTION", "10.00", "990.00"), ("TRANSFER_IN", "200.00", "1190.00")], "what really moved the account, in lei");
+    assert_eq!((shown["balanceBefore"].as_str(), shown["balanceAfter"].as_str()), (Some("1000.00"), Some("1190.00")));
+    assert_eq!((shown["account"]["changeThisMonth"].as_str(), shown["account"]["lastActivity"].as_str(), shown["account"]["balanceInMain"].as_str()), (Some("190.00"), Some("2026-10-06"), Some("238.00")));
+
+    let breakdown = ok(&vault, "accounts.breakdown", json!({ "id": l, "from": "2026-10-01", "to": "2026-10-31" }));
+    assert_eq!(
+        breakdown,
+        json!({
+            "currency": "RON", "from": "2026-10-01", "to": "2026-10-31", "expenseTotal": "20.00", "incomeTotal": "10.00",
+            "expenses": [{ "categoryId": food, "name": "Food", "amount": "20.00" }],
+            "income": [{ "categoryId": pay, "name": "Pay", "amount": "10.00" }],
+        }),
+        "the native amounts, not the 4.00 and 2.00 that budgets count"
+    );
+    let history = ok(&vault, "accounts.history", json!({ "id": l, "year": "2026" }));
+    assert_eq!((history[0]["balance"].as_str(), history[9]["balance"].as_str()), (Some("1000.00"), Some("1190.00")));
+    // an account in the app's currency says the app's
+    let (other, other_breakdown) = (ok(&vault, "accounts.show", json!({ "id": euro })), ok(&vault, "accounts.breakdown", json!({ "id": euro })));
+    assert_eq!((other["currency"].as_str(), other_breakdown["currency"].as_str()), (Some("EUR"), Some("EUR")));
+}
+
+// ---- over HTTP ----------------------------------------------------------------------------------
+
+#[test]
+fn over_http_a_write_token_makes_accounts_and_rows_in_another_currency_and_a_read_token_reads_them_and_cannot_change_any() {
+    let h = http();
+    let port = h.server.port();
+    let post = |token: &str, route: &str, body: Value| {
+        let reply = call(port, Some(token), route, &body.to_string());
+        assert_eq!(reply.status, 200, "{route}: {}", reply.body);
+        assert_eq!(reply.json()["ok"], true);
+        reply.data()
+    };
+    let food = ok(&h.vault, "categories.list", json!({ "type": "EXPENSE" }))[0]["id"].as_str().unwrap().to_string();
+    let made = post(&h.write, "accounts.create", json!({ "name": "Lei wallet", "kind": "CASH", "currency": "ron", "rate": "5.00", "openingBalance": "100.00", "openingDate": "2026-01-01" }));
+    assert_eq!(keys(&made), ACCOUNT_KEYS);
+    assert_eq!(currency_of(&made), ("RON", true, Some("5.00"), "20.00"));
+    let id = id_of(&made);
+    let spent = post(&h.write, "transactions.create", json!({ "name": "Coffee", "amount": "1.00", "paymentDate": "2026-10-10", "categoryId": food, "accountId": id, "nativeAmount": "5.00" }));
+    assert_eq!((spent["amount"].as_str(), spent["nativeAmount"].as_str()), (Some("1.00"), Some("5.00")));
+    let moved = post(&h.write, "transfers.create", json!({ "fromAccountId": "1", "toAccountId": id, "amount": "10.00", "toAmount": "52.00", "date": "2026-10-11" }));
+    assert_eq!(keys(&moved), TRANSFER_KEYS);
+    assert_eq!(post(&h.write, "accounts.update", json!({ "id": id, "balance": "500.00" }))["openingBalance"], "453.00");
+    assert_eq!(currency_of(&post(&h.write, "accounts.update", json!({ "id": id, "rate": "4.00" }))), ("RON", true, Some("4.00"), "125.00"));
+    // a read token sees all of it
+    let list = post(&h.read, "accounts.list", json!({}));
+    let seen = list.as_array().unwrap().iter().find(|a| a["id"] == id.as_str()).unwrap().clone();
+    assert_eq!((currency_of(&seen), seen["balance"].as_str()), (("RON", true, Some("4.00"), "125.00"), Some("500.00")));
+    assert_eq!(post(&h.read, "accounts.show", json!({ "id": id }))["currency"], "RON");
+    assert_eq!(post(&h.read, "transactions.list", json!({ "accountId": id }))["transactions"][0]["nativeAmount"], "5.00");
+    assert_eq!(post(&h.read, "transfers.list", json!({ "accountId": id }))["transfers"][0]["toAmount"], "52.00");
+
+    // a read token cannot write any of it, and nothing changes
+    let before = dump(&h.vault);
+    for (route, body) in [
+        ("accounts.create", json!({ "name": "Another", "kind": "CASH", "currency": "USD", "rate": "1.10" })),
+        ("accounts.update", json!({ "id": id, "rate": "3.00" })),
+        ("accounts.update", json!({ "id": id, "currency": "EUR" })),
+        ("accounts.update", json!({ "id": id, "balance": "1.00" })),
+        ("transactions.create", json!({ "name": "Tea", "amount": "1.00", "paymentDate": "2026-10-10", "categoryId": food, "accountId": id, "nativeAmount": "5.00" })),
+        ("transactions.update", json!({ "id": id_of(&spent), "nativeAmount": "6.00" })),
+        ("transfers.create", json!({ "fromAccountId": "1", "toAccountId": id, "amount": "1.00", "toAmount": "5.00", "date": "2026-10-11" })),
+        ("transfers.update", json!({ "id": id_of(&moved), "toAmount": "60.00" })),
+    ] {
+        let refused = call(port, Some(&h.read), route, &body.to_string());
+        assert_eq!((refused.status, refused.code().as_str()), (403, "forbidden"), "{route} {body}");
+    }
+    assert_eq!(dump(&h.vault), before, "a read token changed something");
+
+    // the refusals over the wire: 400, and the reason for a wrong kind of value, and nothing of the rules underneath
+    for (route, body, message) in [
+        ("transactions.create", json!({ "name": "Tea", "amount": "1.00", "paymentDate": "2026-10-10", "categoryId": food, "accountId": id }), "invalid input"),
+        ("transactions.create", json!({ "name": "Tea", "amount": "1.00", "paymentDate": "2026-10-10", "categoryId": food, "nativeAmount": "5.00" }), "invalid input"),
+        ("transactions.create", json!({ "name": "Tea", "amount": "1.00", "paymentDate": "2026-10-10", "categoryId": food, "accountId": id, "nativeAmount": 5 }), "`nativeAmount` must be an amount as text with two decimals, like \"12.50\""),
+        ("transfers.create", json!({ "fromAccountId": "1", "toAccountId": id, "amount": "1.00", "date": "2026-10-11" }), "invalid input"),
+        ("transfers.create", json!({ "fromAccountId": "1", "toAccountId": "2", "amount": "1.00", "toAmount": "1.00", "date": "2026-10-11" }), "invalid input"),
+        ("transfers.update", json!({ "id": id_of(&moved), "toAmount": "5" }), "`toAmount` must be an amount as text with two decimals, like \"12.50\""),
+        ("accounts.update", json!({ "id": id, "balance": "5.00", "openingBalance": "5.00" }), "invalid input"),
+        ("accounts.update", json!({ "id": id, "rate": "0" }), "invalid input"),
+        ("accounts.update", json!({ "id": id, "currency": "RO" }), "invalid input"),
+        ("accounts.update", json!({ "id": "1", "currency": "RON", "rate": "5.00" }), "invalid input"),
+    ] {
+        let reply = call(port, Some(&h.write), route, &body.to_string());
+        assert_eq!((reply.status, reply.code().as_str(), reply.message().as_str()), (400, "invalid_input", message), "{route} {body}");
+    }
+    assert_eq!(dump(&h.vault), before, "a refused request changed something");
+    assert_eq!(call(port, Some(&h.read), "status", "").status, 200);
+    assert_eq!(h.server.panics(), 0);
 }

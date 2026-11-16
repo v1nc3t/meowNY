@@ -35,7 +35,7 @@ const BUDGET_CATEGORY: Param = Param::new("categoryId", Kind::Id, "The category.
 pub const SETTINGS_SET: Route = Route {
     name: "settings.set",
     scope: Scope::Write,
-    summary: "Changes the number and date format, the time zone or the language. Give at least one. The currency is changed in the app.",
+    summary: "Changes the number and date format, the time zone or the language. Give at least one. The currency is changed in the app, and not while an account is in another currency.",
     params: &[
         Param::new("locale", Kind::String, "How numbers and dates are written, like en-IE."),
         Param::new("timezone", Kind::String, "A time zone name, like Europe/Dublin."),
@@ -149,12 +149,13 @@ pub const TRANSACTIONS_CREATE: Route = Route {
     summary: "Records a transaction. With a clientUuid, sending the same request again gives back the first transaction instead of making another.",
     params: &[
         Param::new("name", Kind::String, "What it was, 1 to 50 characters.").required(),
-        Param::new("amount", Kind::Money, "More than zero, like 12.50.").required(),
+        Param::new("amount", Kind::Money, "More than zero, like 12.50. Always in the app's currency, which budgets and statistics count.").required(),
         Param::new("paymentDate", Kind::Date, "The day it was paid.").required(),
         Param::new("categoryId", Kind::Id, "The category. Its type decides whether this is income or an expense.").required(),
         Param::new("description", Kind::String, "A note."),
         Param::new("clientUuid", Kind::Uuid, "A fresh UUID per transaction, so a retry cannot record it twice."),
         Param::new("accountId", Kind::Id, "The account it is in: where the money left or came in. The main account if left out. Not an archived one."),
+        Param::new("nativeAmount", Kind::Money, "What really left or reached the account, in the account's currency, more than zero, like 20.00. Required when the account is in another currency than the app's, refused when it is not."),
     ],
     confirm: None,
     run: |ctx, args| {
@@ -170,11 +171,12 @@ pub const TRANSACTIONS_UPDATE: Route = Route {
     params: &[
         Param::new("id", Kind::Id, "The transaction.").required(),
         Param::new("name", Kind::String, "The new name."),
-        Param::new("amount", Kind::Money, "The new amount, more than zero."),
+        Param::new("amount", Kind::Money, "The new amount, more than zero, in the app's currency."),
         Param::new("paymentDate", Kind::Date, "The new date."),
         Param::new("categoryId", Kind::Id, "The new category."),
         Param::new("description", Kind::String, "The new note, or null to clear it.").nullable(),
         Param::new("accountId", Kind::Id, "Moves it to this account, which must not be archived."),
+        Param::new("nativeAmount", Kind::Money, "The new amount in the account's currency, more than zero. Needed when it moves into an account in another currency than the app's; kept when it moves between such accounts and this is left out; refused for a row in an account in the app's currency, where moving it clears it."),
     ],
     confirm: None,
     run: |ctx, mut args| {
@@ -260,7 +262,7 @@ pub const RECURRING_CREATE: Route = Route {
         Param::new("intervalCount", Kind::Integer, "Every how many units, 1 to 1000.").required(),
         Param::new("endDate", Kind::Date, "The last day it can fall due."),
         Param::new("description", Kind::String, "A note."),
-        Param::new("accountId", Kind::Id, "The account its payments are made in. The main account if left out. Not an archived one."),
+        Param::new("accountId", Kind::Id, "The account its payments are made in. The main account if left out. Not an archived one, and not one in another currency than the app's."),
     ],
     confirm: None,
     run: |ctx, args| {
@@ -283,7 +285,7 @@ pub const RECURRING_UPDATE: Route = Route {
         Param::new("intervalCount", Kind::Integer, "Every how many units, 1 to 1000."),
         Param::new("endDate", Kind::Date, "The new last day, or null for none.").nullable(),
         Param::new("description", Kind::String, "The new note, or null to clear it.").nullable(),
-        Param::new("accountId", Kind::Id, "Moves its payments to this account, which must not be archived."),
+        Param::new("accountId", Kind::Id, "Moves its payments to this account, which must not be archived or in another currency than the app's."),
     ],
     confirm: None,
     run: |ctx, mut args| {

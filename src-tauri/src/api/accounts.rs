@@ -37,7 +37,7 @@ fn this_month(today: &str) -> Result<(String, String), ApiError> {
 pub const ACCOUNTS_LIST: Route = Route {
     name: "accounts.list",
     scope: Scope::Read,
-    summary: "The accounts in the person's order, the archived ones last, each with what it holds today (balance), what changed this month, its last activity and how many rows (entries) are in it, and its details: BIC, notes, group, whether net worth counts it, and the virtual balance with what is available (balance plus virtual balance). The main account has isMain true.",
+    summary: "The accounts in the person's order, the archived ones last, each with what it holds today (balance), what changed this month, its last activity and how many rows (entries) are in it, and its details: BIC, notes, group, whether net worth counts it, and the virtual balance with what is available (balance plus virtual balance). An account in another currency (foreign true) has its figures in that currency, with the rate typed for it and balanceInMain, its balance in the app's currency. The main account has isMain true.",
     params: &[],
     confirm: None,
     run: |ctx, _| {
@@ -49,7 +49,7 @@ pub const ACCOUNTS_LIST: Route = Route {
 pub const ACCOUNTS_SHOW: Route = Route {
     name: "accounts.show",
     scope: Scope::Read,
-    summary: "One account and what moved it from one day to another, both included, oldest first: each line with what it did to the account (negative: money left) and the balance after it, and the balance before the first day and after the last. This month if the days are left out.",
+    summary: "One account and what moved it from one day to another, both included, oldest first: each line with what it did to the account (negative: money left) and the balance after it, and the balance before the first day and after the last. All in the account's currency (currency). This month if the days are left out.",
     params: &[
         ACCOUNT.required(),
         Param::new("from", Kind::Date, "The first day. The first of this month if left out."),
@@ -73,7 +73,7 @@ pub const ACCOUNTS_SHOW: Route = Route {
 pub const ACCOUNTS_HISTORY: Route = Route {
     name: "accounts.history",
     scope: Scope::Read,
-    summary: "What an account held at the end of each month of a year, for a chart: on the last day of a month that is over, today for this month, and no point for a month that has not begun.",
+    summary: "What an account held at the end of each month of a year, for a chart, in the account's currency: on the last day of a month that is over, today for this month, and no point for a month that has not begun.",
     params: &[ACCOUNT.required(), Param::new("year", Kind::Year, "The year, like 2026.").required()],
     confirm: None,
     run: |ctx, mut args| {
@@ -91,7 +91,7 @@ pub const ACCOUNTS_HISTORY: Route = Route {
 pub const ACCOUNTS_BREAKDOWN: Route = Route {
     name: "accounts.breakdown",
     scope: Scope::Read,
-    summary: "What an account paid out and took in from one day to another, both included, by category: for expenses and for income the categories with their amounts, the largest first, and the total of each. Transfers, ledger entries and a bill a friend paid are not in it. This month if the days are left out.",
+    summary: "What an account paid out and took in from one day to another, both included, by category: for expenses and for income the categories with their amounts, the largest first, and the total of each, in the account's currency (currency). Transfers, ledger entries and a bill a friend paid are not in it. This month if the days are left out.",
     params: &[
         ACCOUNT.required(),
         Param::new("from", Kind::Date, "The first day. The first of this month if left out."),
@@ -114,7 +114,7 @@ pub const ACCOUNTS_BREAKDOWN: Route = Route {
 pub const ACCOUNTS_SUMMARY: Route = Route {
     name: "accounts.summary",
     scope: Scope::Read,
-    summary: "Net worth: what the accounts that count in it hold in all (the archived ones too), what friends owe you (negative: you owe them) and the two added. An account can be left out of net worth, and a virtual balance is never in it. Also how many accounts there are, those left out too, and whether accounts are in use: there is more than the main account, or it has an opening balance.",
+    summary: "Net worth, in the app's currency: what the accounts that count in it hold in all (the archived ones too, an account in another currency turned into the app's currency at its rate), what friends owe you (negative: you owe them) and the two added. An account can be left out of net worth, and a virtual balance is never in it. Also how many accounts there are, those left out too, and whether accounts are in use: there is more than the main account, or it has an opening balance.",
     params: &[],
     confirm: None,
     run: |ctx, _| {
@@ -126,7 +126,7 @@ pub const ACCOUNTS_SUMMARY: Route = Route {
 pub const TRANSFERS_LIST: Route = Route {
     name: "transfers.list",
     scope: Scope::Read,
-    summary: "Transfers between your accounts, newest first, with the total that match. Up to 100 a page, 50 unless limit says otherwise. A transfer is never income or expense.",
+    summary: "Transfers between your accounts, newest first, with the total that match. Up to 100 a page, 50 unless limit says otherwise. A transfer is never income or expense. Between accounts in different currencies, amount is what left the first, in its currency, and toAmount what reached the second, in its currency.",
     params: &[
         Param::new("accountId", Kind::Id, "Only the transfers that leave or reach this account."),
         Param::new("from", Kind::Date, "Only on or after this date."),
@@ -158,6 +158,8 @@ pub const ACCOUNTS_CREATE: Route = Route {
         Param::new("group", Kind::String, "The group it is listed under, like Bank, up to 50 characters."),
         Param::new("includeInNetWorth", Kind::Boolean, "Whether net worth counts it. True if left out."),
         Param::new("virtualBalance", Kind::String, "An amount added to the balance to show what is available, like the limit of a credit card, which may be negative, like -50.00. It is never in the balance or in net worth. 0.00 if left out."),
+        Param::new("currency", Kind::String, "The currency of the account, three letters like RON, in any case. Left out, or the app's own currency, makes an account in the app's currency, which takes no rate. Another code needs a rate."),
+        Param::new("rate", Kind::String, "How many units of its currency one unit of the app's currency buys, like 5.00 for 1 EUR = 5.00 RON: more than zero, up to 8 decimals. Required with another currency, refused without one. You type it; nothing is fetched."),
     ],
     confirm: None,
     run: |ctx, args| {
@@ -183,6 +185,9 @@ pub const ACCOUNTS_UPDATE: Route = Route {
         Param::new("group", Kind::String, "The new group, or null to clear it.").nullable(),
         Param::new("includeInNetWorth", Kind::Boolean, "Whether net worth counts it."),
         Param::new("virtualBalance", Kind::String, "The new virtual balance, which may be negative, like -50.00."),
+        Param::new("currency", Kind::String, "The new currency, three letters like RON, in any case. Only while nothing is in the account (entries is 0), and never for the main account. Another code than the app's needs a rate, here or already there; the app's own currency clears the rate."),
+        Param::new("rate", Kind::String, "The new rate, like 5.00 for 1 EUR = 5.00 RON: more than zero, up to 8 decimals. Changes balanceInMain and net worth, and no amount that is stored. Refused for the main account and for an account in the app's currency, unless currency in the same request makes it another."),
+        Param::new("balance", Kind::String, "What the account holds today, in its own currency, which may be negative, like -50.00: its opening balance moves by the difference. Not together with openingBalance, and refused when the opening date is after today."),
     ],
     confirm: None,
     run: |ctx, mut args| {
@@ -255,13 +260,14 @@ pub const ACCOUNTS_REORDER: Route = Route {
 pub const TRANSFERS_CREATE: Route = Route {
     name: "transfers.create",
     scope: Scope::Write,
-    summary: "Moves money between two of your accounts. It is never income or expense and is in no budget or statistic: only the two balances change. The accounts must differ and neither may be archived.",
+    summary: "Moves money between two of your accounts. It is never income or expense and is in no budget or statistic: only the two balances change. The accounts must differ and neither may be archived. Between accounts in different currencies it needs toAmount.",
     params: &[
         Param::new("fromAccountId", Kind::Id, "The account the money leaves.").required(),
         Param::new("toAccountId", Kind::Id, "The account the money reaches.").required(),
-        Param::new("amount", Kind::Money, "More than zero, like 200.00.").required(),
+        Param::new("amount", Kind::Money, "More than zero, like 200.00, in the currency of the account it leaves.").required(),
         Param::new("date", Kind::Date, "The day it moved.").required(),
         Param::new("note", Kind::String, "A note, up to 200 characters."),
+        Param::new("toAmount", Kind::Money, "What reaches the second account, in its currency, more than zero, like 200.00. Required when the two accounts are in different currencies, refused when they are in the same."),
     ],
     confirm: None,
     run: |ctx, args| {
@@ -278,9 +284,10 @@ pub const TRANSFERS_UPDATE: Route = Route {
         TRANSFER.required(),
         Param::new("fromAccountId", Kind::Id, "The account the money leaves."),
         Param::new("toAccountId", Kind::Id, "The account the money reaches."),
-        Param::new("amount", Kind::Money, "More than zero, like 200.00."),
+        Param::new("amount", Kind::Money, "More than zero, like 200.00, in the currency of the account it leaves."),
         Param::new("date", Kind::Date, "The day it moved."),
         Param::new("note", Kind::String, "The new note, or null to clear it.").nullable(),
+        Param::new("toAmount", Kind::Money, "What reaches the second account, in its currency, more than zero. Needed when the two accounts, as they are after this change, are in different currencies and the transfer has none yet; refused when they are in the same currency (a stored one is then cleared)."),
     ],
     confirm: None,
     run: |ctx, mut args| {

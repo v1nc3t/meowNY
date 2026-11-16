@@ -261,7 +261,7 @@ pub const PEOPLE_SETTLE: Route = Route {
         Param::new("date", Kind::Date, "The day it was paid. Today if left out."),
         Param::new("note", Kind::String, "A note, up to 200 characters."),
         Param::new("transactionId", Kind::Id, "A transaction the payment was for, such as a bill you paid for them. Only a reference: no amount changes."),
-        Param::new("accountId", Kind::Id, "The account the money reached or left. The main account if left out. Not an archived one."),
+        Param::new("accountId", Kind::Id, "The account the money reached or left. The main account if left out. Not an archived one, and not one in another currency than the app's."),
     ],
     confirm: None,
     run: |ctx, mut args| {
@@ -298,7 +298,7 @@ pub const LEDGER_ADD: Route = Route {
         Param::new("transactionId", Kind::Id, "A transaction this belongs to."),
         Param::new("expenseName", Kind::String, "BORROWED only: the name of the expense that is made for your share (1 to 50 characters). Needs expenseCategoryId."),
         Param::new("expenseCategoryId", Kind::Id, "BORROWED only: the expense category for your share. Needs expenseName."),
-        Param::new("accountId", Kind::Id, "The account the money reached or left (for a borrowing with an expense, the expense too is in it). The main account if left out. Not an archived one."),
+        Param::new("accountId", Kind::Id, "The account the money reached or left (for a borrowing with an expense, the expense too is in it). The main account if left out. Not an archived one, and not one in another currency than the app's."),
     ],
     confirm: None,
     run: |ctx, args| {
@@ -342,7 +342,7 @@ pub const LEDGER_UPDATE: Route = Route {
         Param::new("date", Kind::Date, "The day it happened."),
         Param::new("note", Kind::String, "The new note, or null to clear it.").nullable(),
         Param::new("transactionId", Kind::Id, "The transaction it belongs to, or null for none.").nullable(),
-        Param::new("accountId", Kind::Id, "Moves it to this account, which must not be archived."),
+        Param::new("accountId", Kind::Id, "Moves it to this account, which must not be archived or in another currency than the app's."),
     ],
     confirm: None,
     run: |ctx, mut args| {

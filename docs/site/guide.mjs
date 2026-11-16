@@ -222,7 +222,7 @@ const SECTIONS = [
           'Open **recurring** and press **add recurring transaction** (or press `n`). The **add** button of a list opens the dialog on that list\'s tab.',
           'Choose the **expense** or the **income** tab (or press `Alt+1` or `Alt+2`).',
           'Type a name and choose a category; the list holds the categories of that kind. Type an amount, or leave it empty for a bill with no fixed amount: it shows **varies** and asks for the amount when you pay it.',
-          'Choose the account. An expense asks for it with more than one account; an income always asks, under **into account**.',
+          'Choose the account. An expense asks for it with more than one account; an income always asks, under **into account**. The list holds the accounts in your currency only.',
           'Set the **first due date**, and **repeat every** a number of days, weeks, months or years.',
           'Tick **stops on a date** if it ends, and set that date.',
           'Press **done**.',
@@ -257,20 +257,21 @@ const SECTIONS = [
     title: 'Accounts',
     blocks: [
       { t: 'p', text: 'An account is a place your money is: a bank account, savings, cash, a credit card. Every transaction, recurring item and debt entry is in one account. You start with one, the **main account**, and everything goes into it. While you have only one account, only an income asks for one, and you can leave this page alone.' },
-      { t: 'p', text: 'The **accounts** page has two tabs: **accounts**, the list below, and **income**, your income categories ([income categories](#income)). All accounts use your currency. **Not in meowNY:** reconciliation (correct the opening balance instead), recurring transfers, rules, liabilities, piggy banks and files attached to an account.' },
+      { t: 'p', text: 'The **accounts** page has two tabs: **accounts**, the list below, and **income**, your income categories ([income categories](#income)). An account can be in another currency than yours ([an account in another currency](#account-currency)). **Not in meowNY:** reconciliation (correct the opening balance instead), recurring transfers, rules, liabilities, piggy banks and files attached to an account.' },
       { t: 'h3', id: 'add-account', text: 'Add an account' },
       {
         t: 'ol',
         items: [
           'Open **accounts** (or press `g` then `a`) and press **add account** (or press `n`).',
           'Type a name and choose the type: **checking**, **savings**, **cash** or **credit card**.',
+          'Leave the **currency** as it is, or type another, such as RON ([an account in another currency](#account-currency)).',
           'Add an **account number** if you like: an IBAN, or anything that helps you tell it apart.',
           'Type the **opening balance**: what the account held, and **on** which day. Empty means 0.00. It can start with a minus, for a credit card you owe on.',
           'Optional: press **more** for a BIC, a group, a virtual balance and notes ([account details](#account-details)).',
           'Press **done**.',
         ],
       },
-      { t: 'p', text: 'The list shows each account with its type, **last activity**, what **this month** did to it and its **balance**; a wide window shows the **account number** too. An account with a virtual balance shows **available** under its balance, and one that net worth leaves out says **not in net worth**. **in accounts**, above the list, is the total of the accounts that count in net worth, archived ones too. The pencil edits an account.' },
+      { t: 'p', text: 'The list shows each account with its type, **last activity**, what **this month** did to it and its **balance**; a wide window shows the **account number** too. An account in another currency shows its balance in that currency and, small under it, **≈** its value in yours. An account with a virtual balance shows **available** under its balance, and one that net worth leaves out says **not in net worth**. **in accounts**, above the list, is the total of the accounts that count in net worth, archived ones too. The pencil edits an account.' },
       { t: 'h3', id: 'look-account', text: 'Look at one account' },
       {
         t: 'ol',
@@ -302,6 +303,48 @@ const SECTIONS = [
         ],
       },
       { t: 'p', text: 'When any account has a group, the list has a heading for each group, and the accounts without one come last, under **no group**. To move an account to another group, change its **group**.' },
+      { t: 'h3', id: 'balance-today', text: 'Set what it holds today' },
+      {
+        t: 'ol',
+        items: [
+          'Open the account dialog with the pencil on its row. A new account has no **balance today**: type its opening balance instead.',
+          'Type what the account holds today in **balance today**. It can start with a minus. Under it, meowNY says what it does: it sets the opening balance so the account holds this today.',
+          'Press **done**.',
+        ],
+      },
+      { t: 'p', text: 'meowNY moves the **opening balance** by the difference, so every earlier balance moves by the same amount and your entries stay as they are. While **balance today** has a value, **opening balance** is shut: the two cannot be sent together. An opening day after today cannot be used with it. For an account in another currency, type it in that currency.' },
+      { t: 'h3', id: 'account-currency', text: 'An account in another currency' },
+      { t: 'p', text: 'meowNY keeps one currency for your budgets, statistics and net worth: yours, the one you chose when you started. An account can be in another, such as a lei account next to your euro accounts.' },
+      {
+        t: 'ol',
+        items: [
+          'Open the account dialog (**add account**, or the pencil on a row).',
+          'Under the type, type the **currency**: three letters, such as RON. Leave your own currency there for an account in it.',
+          'A line appears under it: **1 EUR =** a field, then **RON**. Type the rate as that sentence says: if 1 EUR buys 5 lei, type 5.00.',
+          'Type the **opening balance**. The label names the currency, because it is now in lei. Press **done**.',
+        ],
+      },
+      { t: 'p', text: '**The rate is yours.** Nothing is fetched from anywhere. It is used for two things: the **≈** value of the account in your currency, which **in accounts** and net worth add up, and the amount the forms suggest. Change it any time with the pencil. It changes no amount you stored, only that value.' },
+      { t: 'p', text: '**An entry in such an account has two amounts:**' },
+      {
+        t: 'ul',
+        items: [
+          'In **add transaction**, an expense or an income in the account shows **amount (RON)**: what really left the account or reached it. Under it, **in EUR** starts from the rate while you have not typed in it. Type your own figure when you know it, from your bank, say.',
+          'Budgets and statistics count the euro amount, **in EUR**, as they count any entry. The balance of the account moves by the lei.',
+          'A transfer between accounts of different currencies has what leaves and what arrives: **amount (EUR)** and **arrives (RON)**. The second starts from the two rates until you type your own. Each account moves by its own amount.',
+          'The transactions page shows the euro amount and, small beside it, the amount in lei with its code. The page of the account, its statement, its chart and its breakdown are all in lei.',
+        ],
+      },
+      { t: 'p', text: '**What is not possible:**' },
+      {
+        t: 'ul',
+        items: [
+          'The **main account** stays in your currency.',
+          'Recurring items and debts stay in your currency: their account field lists only accounts in it.',
+          'The currency of an account cannot change once something is in it (a transaction, a transfer, a recurring item or a debt entry). The dialog says to move its entries away first.',
+          'Your own currency cannot be changed while such an account exists. In **settings**, the **change** button beside **currency** is off, and the line under it says: an account in another currency exists; the app\'s currency cannot be changed. Delete the account, or move its entries away and put it back in your currency, first.',
+        ],
+      },
       { t: 'h3', id: 'account-order', text: 'Change the order' },
       {
         t: 'ol',
@@ -343,7 +386,7 @@ const SECTIONS = [
       },
       { t: 'p', text: 'You find your transfers on the **transfers** tab of **transactions**, and as lines in the statement of each of the two accounts. To change or delete one, press the pencil or the bin on its line there (on the phone, tap the line first).' },
       { t: 'h3', id: 'net-worth', text: 'Net worth' },
-      { t: 'p', text: 'On the dashboard, **net worth** is what is **in accounts** plus what **friends** owe you, minus what you owe them. **in accounts** adds up only the accounts that **count in net worth**, archived ones too. The virtual balance never counts.' },
+      { t: 'p', text: 'On the dashboard, **net worth** is what is **in accounts** plus what **friends** owe you, minus what you owe them. **in accounts** adds up only the accounts that **count in net worth**, archived ones too, each in your currency: an account in another currency counts at its rate. The virtual balance never counts.' },
       { t: 'h3', id: 'income', text: 'Income categories' },
       { t: 'p', text: 'The **income** tab of **accounts** holds your income categories, their budgets and what came in this month. It works as **categories** does for expenses. Earned is green above its budget.' },
       {
@@ -434,7 +477,7 @@ const SECTIONS = [
           'Press **done**.',
         ],
       },
-      { t: 'p', text: 'With more than one account, the dialog also asks for the **account**: choose where the money left or arrived, so that cash you lent comes out of the cash account.' },
+      { t: 'p', text: 'With more than one account, the dialog also asks for the **account**: choose where the money left or arrived, so that cash you lent comes out of the cash account. The list holds the accounts in your currency only.' },
       { t: 'h3', id: 'settle', text: 'Mark as paid' },
       {
         t: 'ol',
@@ -607,7 +650,7 @@ const SECTIONS = [
         t: 'ul',
         items: [
           'Each transaction, recurring item and debt entry names its account.',
-          'A JSON or Excel export with no limit also lists the accounts with their balances and details (BIC, group, notes, virtual balance, whether net worth counts them), and the transfers.',
+          'A JSON or Excel export with no limit also lists the accounts with their balances and details (BIC, group, notes, virtual balance, whether net worth counts them, currency and rate), and the transfers. A transaction in an account in another currency has its amount in that currency too, and a transfer between currencies what arrived.',
           'A limited export names only the accounts of what it holds, with no balances, numbers or transfers.',
           'Backups hold accounts and transfers like everything else.',
         ],
@@ -634,7 +677,7 @@ const SECTIONS = [
         t: 'table',
         head: ['What', 'Where', 'Protection'],
         rows: [
-          ['Categories, budgets, accounts (names, numbers, BIC, groups, notes, opening and virtual balances, whether net worth counts them), transfers, transactions, recurring items, debts, the change history', '`meowny.db`', 'Encrypted'],
+          ['Categories, budgets, accounts (names, numbers, BIC, groups, notes, opening and virtual balances, currencies and rates, whether net worth counts them), transfers, transactions (with the amount in the account\'s currency), recurring items, debts, the change history', '`meowny.db`', 'Encrypted'],
           ['Documents', '`documents/`, one sealed file each with a random name', 'Encrypted, per-file key'],
           ['Lock settings, the wrapped keys', '`vault.json`', 'No financial data'],
           ['Language, theme, text size, sidebar, this device\'s name, the name on bill codes, the time and how often of debt reminders', 'The window\'s local storage', 'No financial data, not encrypted'],

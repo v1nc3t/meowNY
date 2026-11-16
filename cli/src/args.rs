@@ -433,6 +433,40 @@ mod tests {
     }
 
     #[test]
+    fn the_currency_the_rate_the_balance_and_the_second_amounts_become_what_the_app_takes() {
+        // a new account in another currency: the code and the rate are text, and the app says what it takes
+        assert_eq!(Value::Object(run("accounts create --name Lei --kind checking --currency ron --rate 5.00").body), json!({ "name": "Lei", "kind": "CHECKING", "currency": "ron", "rate": "5.00" }));
+        assert_eq!(Value::Object(run("accounts update 3 --currency RON --rate=4.97").body), json!({ "id": "3", "currency": "RON", "rate": "4.97" }));
+        // a balance may be negative: a value after a flag, with or without an equals sign, as an opening balance is
+        for line in ["accounts update 3 --balance=-50.00", "accounts update 3 --balance -50.00"] {
+            assert_eq!(Value::Object(run(line).body), json!({ "id": "3", "balance": "-50.00" }), "{line}");
+        }
+        assert_eq!(Value::Object(run("accounts update 3 --balance 1662.90").body), json!({ "id": "3", "balance": "1662.90" }));
+        // given with an opening balance it still reaches the app, which refuses the two together
+        assert_eq!(Value::Object(run("accounts update 3 --balance 1.00 --opening-balance=-2.00").body), json!({ "id": "3", "balance": "1.00", "openingBalance": "-2.00" }));
+        // none of them can be cleared, and a new account has no balance to set
+        for flag in ["currency", "rate", "balance"] {
+            assert!(usage(&format!("accounts update 3 --clear-{flag}")).contains(&format!("no flag --clear-{flag}")), "{flag}");
+        }
+        assert!(usage("accounts create --name X --kind cash --balance 1.00").contains("no flag --balance"));
+        assert!(usage("accounts update 3 --rate 5.00 --rate 4.00").contains("--rate was given more than once"));
+        assert!(usage("accounts update 3 --balance").contains("--balance needs a value"));
+        // the second amount of a transaction and of a transfer are amounts, each for its own command
+        let create = "transactions create --name X --amount 4.00 --payment-date 2026-10-14 --category-id 5 --account-id 6";
+        assert_eq!(Value::Object(run(&format!("{create} --native-amount 20.00")).body), json!({ "name": "X", "amount": "4.00", "paymentDate": "2026-10-14", "categoryId": "5", "accountId": "6", "nativeAmount": "20.00" }));
+        assert_eq!(Value::Object(run("transactions update 7 --native-amount=20.00 --account-id 6").body), json!({ "id": "7", "nativeAmount": "20.00", "accountId": "6" }));
+        let moved = "--from-account-id 2 --to-account-id 6 --amount 40.00 --date 2026-10-14";
+        assert_eq!(Value::Object(run(&format!("transfers create {moved} --to-amount 200.00")).body), json!({ "fromAccountId": "2", "toAccountId": "6", "amount": "40.00", "date": "2026-10-14", "toAmount": "200.00" }));
+        assert_eq!(Value::Object(run("transfers update 3 --to-amount 180.00").body), json!({ "id": "3", "toAmount": "180.00" }));
+        assert!(usage(&format!("transfers create {moved} --native-amount 1.00")).contains("no flag --native-amount"));
+        assert!(usage(&format!("{create} --to-amount 1.00")).contains("no flag --to-amount"));
+        assert!(usage("transactions update 7 --clear-native-amount").contains("no flag --clear-native-amount"));
+        assert!(usage("transfers update 3 --clear-to-amount").contains("no flag --clear-to-amount"));
+        assert!(usage("transactions update 7 --native-amount 1.00 --native-amount 2.00").contains("--native-amount was given more than once"));
+        assert!(usage("transfers update 3 --to-amount").contains("--to-amount needs a value"));
+    }
+
+    #[test]
     fn missing_unknown_and_repeated_flags_are_usage_errors() {
         assert!(usage("transactions create --name X").contains("missing --amount"));
         assert!(usage("categories create --name Pets").contains("missing --type"));
