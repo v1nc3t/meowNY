@@ -15,7 +15,7 @@ pub(crate) const TODAY: &str = "2026-11-13";
 pub(crate) const INVALID: AppError = AppError::InvalidInput;
 
 pub(crate) fn new_account(name: &str) -> NewAccount {
-    NewAccount { name: name.into(), kind: Kind::Checking, number: None, opening_balance: None, opening_date: None, bic: None, notes: None, group: None, include_in_net_worth: None, virtual_balance: None }
+    NewAccount { name: name.into(), kind: Kind::Checking, number: None, opening_balance: None, opening_date: None, bic: None, notes: None, group: None, include_in_net_worth: None, virtual_balance: None, currency: None, rate: None }
 }
 
 /// A checking account with nothing in it. Returns its id.
@@ -31,7 +31,7 @@ pub(crate) fn archived_account(conn: &Connection, name: &str) -> i64 {
 }
 
 pub(crate) fn new_transfer(from: i64, to: i64, amount: &str, date: &str) -> NewTransfer {
-    NewTransfer { from_account_id: from.to_string(), to_account_id: to.to_string(), amount: amount.into(), date: date.into(), note: None }
+    NewTransfer { from_account_id: from.to_string(), to_account_id: to.to_string(), amount: amount.into(), date: date.into(), note: None, to_amount: None }
 }
 
 pub(crate) fn transfer(conn: &Connection, from: i64, to: i64, amount: &str, date: &str) -> i64 {

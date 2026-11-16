@@ -793,6 +793,7 @@ mod tests {
                     description: description.map(str::to_string),
                     client_uuid: None,
                     account_id: None,
+                    native_amount: None,
                 },
             )
             .unwrap();
@@ -820,6 +821,7 @@ mod tests {
                 description: None,
                 client_uuid: None,
                 account_id: None,
+                native_amount: None,
             },
         )
         .unwrap();
@@ -882,13 +884,14 @@ mod tests {
                 group: Some("Savings 日本語".into()),
                 include_in_net_worth: Some(false),
                 virtual_balance: Some("-1000.00".into()),
+                currency: None, rate: None,
             },
             "2026-02-04",
         )
         .unwrap();
         crate::accounts::transfers::create(
             &conn,
-            &crate::accounts::transfers::NewTransfer { from_account_id: "1".into(), to_account_id: savings.id.to_string(), amount: "50.00".into(), date: "2026-02-01".into(), note: None },
+            &crate::accounts::transfers::NewTransfer { from_account_id: "1".into(), to_account_id: savings.id.to_string(), amount: "50.00".into(), date: "2026-02-01".into(), note: None, to_amount: None },
         )
         .unwrap();
         // the dinner, the recurring item with its two payments, and the loan are in it too: every table that has an account has a row in each

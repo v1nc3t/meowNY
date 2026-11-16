@@ -75,6 +75,10 @@ fn a_new_account_goes_to_the_end_of_the_list_with_what_was_given_and_the_default
             include_in_net_worth: true,
             virtual_balance: "0.00".into(),
             available: "0.00".into(),
+            currency: "EUR".into(),
+            foreign: false,
+            rate: None,
+            balance_in_main: "0.00".into(),
         }
     );
     let card = create(
@@ -692,7 +696,7 @@ fn archiving_changes_no_number_and_writes_none_of_the_rows_of_the_account() {
 }
 
 fn tx(category: i64, name: &str, amount: &str, date: &str) -> crate::transactions::NewTransaction {
-    crate::transactions::NewTransaction { name: name.into(), amount: amount.into(), payment_date: date.into(), category_id: category.to_string(), description: None, client_uuid: None, account_id: None }
+    crate::transactions::NewTransaction { name: name.into(), amount: amount.into(), payment_date: date.into(), category_id: category.to_string(), description: None, client_uuid: None, account_id: None, native_amount: None }
 }
 
 /// 5.5 items 3 (the part on this device) and 4.
@@ -838,4 +842,331 @@ fn the_check_of_the_main_account_fails_when_it_is_missing_or_is_another_row() {
     assert!(!super::check(&w.conn).unwrap(), "no row with id 1");
     w.conn.execute("UPDATE accounts SET sync_id = ?1 WHERE id = 2", [super::MAIN_SYNC_ID]).unwrap();
     assert!(!super::check(&w.conn).unwrap(), "the main sync id on another id");
+}
+
+// ---- a currency of its own (section 21.3) -------------------------------------------------------
+
+/// An account in another currency. Returns its id.
+fn foreign(conn: &rusqlite::Connection, name: &str, code: &str, rate: &str) -> i64 {
+    create(conn, &NewAccount { currency: Some(code.into()), rate: Some(rate.into()), ..new_account(name) }, TODAY).unwrap().id
+}
+
+fn currency_patch(currency: Option<&str>, rate: Option<&str>) -> AccountPatch {
+    AccountPatch { currency: currency.map(str::to_string), rate: rate.map(str::to_string), ..Default::default() }
+}
+
+/// What the table holds for the currency and the rate of an account.
+fn stored(conn: &rusqlite::Connection, id: i64) -> (Option<String>, Option<String>) {
+    conn.query_row("SELECT currency, rate FROM accounts WHERE id = ?1", [id], |r| Ok((r.get(0)?, r.get(1)?))).unwrap()
+}
+
+fn native_tx(conn: &rusqlite::Connection, category: i64, account: i64, amount: &str, native: &str) -> i64 {
+    transactions::create(conn, &transactions::NewTransaction { native_amount: Some(native.into()), account_id: Some(account.to_string()), ..tx(category, "Shop", amount, "2026-01-10") }).unwrap().id
+}
+
+#[test]
+fn a_new_account_in_another_currency_keeps_the_code_in_capitals_and_the_rate_as_typed() {
+    let w = world();
+    let lei = create(&w.conn, &NewAccount { currency: Some(" ron ".into()), rate: Some(" 4.9769 ".into()), opening_balance: Some("100.00".into()), opening_date: Some("2026-01-01".into()), ..new_account("Lei") }, TODAY).unwrap();
+    assert_eq!((lei.currency.as_str(), lei.foreign, lei.rate.as_deref(), lei.balance.as_str(), lei.balance_in_main.as_str()), ("RON", true, Some("4.9769"), "100.00", "20.09"));
+    assert_eq!(stored(&w.conn, lei.id), (Some("RON".into()), Some("4.9769".into())), "capitals and the rate without the spaces round it");
+    assert_eq!(get(&w.conn, lei.id, TODAY).unwrap(), lei);
+    assert_eq!(list(&w.conn, TODAY).unwrap()[1], lei);
+    // the same code in any case, the rate as typed: "5.000000" is not made "5.00"
+    let usd = foreign(&w.conn, "Dollars", "uSd", "5.000000");
+    assert_eq!(stored(&w.conn, usd), (Some("USD".into()), Some("5.000000".into())));
+    // an account that names neither is in the main currency, and answers its code
+    let plain = account(&w.conn, "Savings");
+    let plain = get(&w.conn, plain, TODAY).unwrap();
+    assert_eq!((plain.currency.as_str(), plain.foreign, plain.rate.as_deref(), plain.balance_in_main.as_str()), ("EUR", false, None, "0.00"));
+    assert_eq!(stored(&w.conn, plain.id), (None, None));
+    assert_eq!(get(&w.conn, MAIN_ID, TODAY).unwrap().currency, "EUR");
+    // it follows the app's currency by itself, and an account with a currency of its own does not
+    w.conn.execute("UPDATE settings SET currency = 'GBP'", []).unwrap();
+    assert_eq!((get(&w.conn, plain.id, TODAY).unwrap().currency.as_str(), get(&w.conn, MAIN_ID, TODAY).unwrap().currency.as_str(), get(&w.conn, lei.id, TODAY).unwrap().currency.as_str()), ("GBP", "GBP", "RON"));
+}
+
+#[test]
+fn a_currency_equal_to_the_main_one_in_any_case_is_stored_as_none_and_takes_no_rate() {
+    let w = world();
+    for (n, code) in ["EUR", "eur", " Eur ", "eUR"].iter().enumerate() {
+        let made = create(&w.conn, &NewAccount { currency: Some(code.to_string()), ..new_account(&format!("A{n}")) }, TODAY).unwrap();
+        assert_eq!((made.currency.as_str(), made.foreign, made.rate.as_deref()), ("EUR", false, None), "{code:?}");
+        assert_eq!(stored(&w.conn, made.id), (None, None), "{code:?}: stored as none");
+        assert_refused(&w.conn, INVALID, &format!("a rate for {code:?}, the main currency"), || create(&w.conn, &NewAccount { currency: Some(code.to_string()), rate: Some("1.00".into()), ..new_account("B") }, TODAY));
+    }
+    assert_refused(&w.conn, INVALID, "a rate with no currency", || create(&w.conn, &NewAccount { rate: Some("5.00".into()), ..new_account("B") }, TODAY));
+    // and with another code, a rate is needed
+    assert_refused(&w.conn, INVALID, "another currency with no rate", || create(&w.conn, &NewAccount { currency: Some("RON".into()), ..new_account("B") }, TODAY));
+    assert_eq!(one(&w.conn, "SELECT count(*) FROM accounts"), 5, "the four that were made and the main account");
+}
+
+#[test]
+fn a_currency_is_three_letters_and_a_rate_is_what_the_rate_parser_takes_above_zero() {
+    let w = world();
+    let try_with = |currency: &str, rate: &str| create(&w.conn, &NewAccount { currency: Some(currency.into()), rate: Some(rate.into()), ..new_account("X") }, TODAY);
+    for bad in ["", " ", "RO", "r", "RONN", "R0N", "123", "R N", "R-N", "RÓN", "ÀBC", "日本語"] {
+        assert_refused(&w.conn, INVALID, &format!("currency {bad:?}"), || try_with(bad, "5.00"));
+    }
+    // what `parse_rate` refuses, a rate of a change of the currency: zero, negative, a comma, no digits, too many digits
+    let long = "1".repeat(21);
+    for bad in [
+        "0", "0.0", "0.00000000", "-1", "-0.5", "+5", "abc", "5,00", "5.", ".5", "", " ", "5 .00", "5e0", "1_0", "05.00", "1234567890", "1.123456789", "5.00.1", "٥", long.as_str(), "1.1111111111111111111",
+    ] {
+        assert_refused(&w.conn, INVALID, &format!("rate {bad:?}"), || try_with("RON", bad));
+    }
+    // and what it takes: up to nine whole digits and eight decimals, kept as typed, spaces round it dropped
+    for (n, (typed, kept)) in [("5", "5"), ("5.00", "5.00"), ("0.5", "0.5"), ("0.00000001", "0.00000001"), ("999999999.99999999", "999999999.99999999"), ("5.000000", "5.000000"), (" 5.25 ", "5.25"), ("160", "160")].iter().enumerate() {
+        let made = create(&w.conn, &NewAccount { currency: Some("RON".into()), rate: Some(typed.to_string()), ..new_account(&format!("Ok{n}")) }, TODAY).unwrap();
+        assert_eq!(made.rate.as_deref(), Some(*kept), "{typed:?}");
+        assert!(made.rate.unwrap().chars().count() <= 20);
+    }
+    assert_eq!(one(&w.conn, "SELECT count(*) FROM accounts"), 9, "only the good ones were made");
+}
+
+#[test]
+fn a_rate_changes_at_any_time_for_a_foreign_account_and_changes_no_stored_amount() {
+    let w = world();
+    let lei = foreign(&w.conn, "Lei", "RON", "5.00");
+    update(&w.conn, lei, &AccountPatch { opening_balance: Some("500.00".into()), opening_date: Some("2026-01-01".into()), ..Default::default() }, TODAY).unwrap();
+    native_tx(&w.conn, w.food, lei, "20.00", "100.00");
+    let sent = transfers::create(&w.conn, &transfers::NewTransfer { to_amount: Some("498.00".into()), ..new_transfer(MAIN_ID, lei, "100.00", "2026-02-01") }).unwrap().id;
+    assert_eq!(get(&w.conn, lei, TODAY).unwrap().entries, 2, "it has rows, and a rate may still change");
+    let amounts = |conn: &rusqlite::Connection| {
+        (text(conn, "SELECT group_concat(amount_minor || ':' || COALESCE(native_amount_minor, 'x'), ',') FROM transactions"), text(conn, "SELECT group_concat(amount_minor || ':' || COALESCE(to_amount_minor, 'x'), ',') FROM transfers"), text(conn, "SELECT opening_balance_minor || ':' || virtual_balance_minor FROM accounts WHERE id = 2"))
+    };
+    let before = (amounts(&w.conn), get(&w.conn, lei, TODAY).unwrap(), stamp_of(&w.conn, "accounts", lei));
+    assert_eq!((before.1.balance.as_str(), before.1.balance_in_main.as_str()), ("898.00", "179.60"));
+
+    let changed = update(&w.conn, lei, &currency_patch(None, Some("4.00")), TODAY).unwrap();
+    assert_eq!((changed.rate.as_deref(), changed.balance.as_str(), changed.balance_in_main.as_str(), changed.currency.as_str()), (Some("4.00"), "898.00", "224.50", "RON"), "the balance in the main currency follows the rate");
+    assert_eq!(amounts(&w.conn), before.0, "no amount of any row, and no opening balance, was converted");
+    assert!(stamp_of(&w.conn, "accounts", lei) > before.2, "a new rate is a change of the account");
+    assert_eq!(transfers::get(&w.conn, sent).unwrap().to_amount.as_deref(), Some("498.00"));
+    // the same text again writes nothing; a different spelling of the same number is another text, so it is written
+    assert_nothing_written(&w.conn, "the same rate", || update(&w.conn, lei, &currency_patch(None, Some("4.00")), TODAY));
+    assert_nothing_written(&w.conn, "the same rate with spaces", || update(&w.conn, lei, &currency_patch(None, Some(" 4.00 ")), TODAY));
+    let respelt = update(&w.conn, lei, &currency_patch(None, Some("4.0")), TODAY).unwrap();
+    assert_eq!((respelt.rate.as_deref(), respelt.balance_in_main.as_str()), (Some("4.0"), "224.50"));
+    // with other fields, and a bad rate changes nothing
+    let renamed = update(&w.conn, lei, &AccountPatch { name: Some("Lei account".into()), rate: Some("2".into()), ..Default::default() }, TODAY).unwrap();
+    assert_eq!((renamed.name.as_str(), renamed.rate.as_deref(), renamed.balance_in_main.as_str()), ("Lei account", Some("2"), "449.00"));
+    assert_refused(&w.conn, INVALID, "a rate of 0 with a good name", || update(&w.conn, lei, &AccountPatch { name: Some("Other".into()), rate: Some("0".into()), ..Default::default() }, TODAY));
+}
+
+#[test]
+fn a_rate_for_an_account_in_the_main_currency_and_a_currency_or_rate_for_the_main_account_are_refused() {
+    let w = world();
+    let savings = account(&w.conn, "Savings");
+    assert_refused(&w.conn, INVALID, "a rate for an account in the main currency", || update(&w.conn, savings, &currency_patch(None, Some("5.00")), TODAY));
+    assert_refused(&w.conn, INVALID, "a rate with the main currency", || update(&w.conn, savings, &currency_patch(Some("eur"), Some("5.00")), TODAY));
+    // the main account: refused for either field, whatever the value, alone or with a good field
+    for (what, patch) in [
+        ("a rate", currency_patch(None, Some("5.00"))),
+        ("a foreign currency", currency_patch(Some("RON"), None)),
+        ("a foreign currency and a rate", currency_patch(Some("RON"), Some("5.00"))),
+        ("the main currency", currency_patch(Some("EUR"), None)),
+        ("the main currency in lower case", currency_patch(Some("eur"), None)),
+        ("a bad rate", currency_patch(None, Some("0"))),
+        ("a currency and a good name", AccountPatch { name: Some("Everyday".into()), currency: Some("RON".into()), rate: Some("5.00".into()), ..Default::default() }),
+    ] {
+        assert_refused(&w.conn, INVALID, &format!("the main account: {what}"), || update(&w.conn, MAIN_ID, &patch, TODAY));
+    }
+    assert_eq!((get(&w.conn, MAIN_ID, TODAY).unwrap().currency.as_str(), get(&w.conn, MAIN_ID, TODAY).unwrap().name.as_str()), ("EUR", MAIN_NAME));
+    assert_eq!((stored(&w.conn, MAIN_ID), stored(&w.conn, savings)), ((None, None), (None, None)));
+}
+
+/// One row of each kind that makes an account have an entry, and how to take it away again.
+#[allow(clippy::type_complexity)]
+fn entries_of_every_kind(w: &World, id: i64, main_currency: bool) -> Vec<(&'static str, Box<dyn Fn(&rusqlite::Connection)>)> {
+    let anna = friend(&w.conn, &format!("Anna {id}"));
+    let mut kinds: Vec<(&'static str, Box<dyn Fn(&rusqlite::Connection)>)> = Vec::new();
+    let native = |amount: &str| if main_currency { None } else { Some(amount.to_string()) };
+    let made = transactions::create(&w.conn, &transactions::NewTransaction { native_amount: native("50.00"), account_id: Some(id.to_string()), ..tx(w.food, "Shop", "10.00", "2026-01-10") }).unwrap().id;
+    kinds.push(("a transaction", Box::new(move |c| transactions::delete(c, made).unwrap())));
+    let from = transfers::create(&w.conn, &transfers::NewTransfer { to_amount: if main_currency { None } else { Some("9.00".into()) }, ..new_transfer(id, MAIN_ID, "40.00", "2026-01-11") }).unwrap().id;
+    kinds.push(("a transfer that leaves it", Box::new(move |c| transfers::delete(c, from).unwrap())));
+    let to = transfers::create(&w.conn, &transfers::NewTransfer { to_amount: if main_currency { None } else { Some("9.00".into()) }, ..new_transfer(MAIN_ID, id, "40.00", "2026-01-12") }).unwrap().id;
+    kinds.push(("a transfer that reaches it", Box::new(move |c| transfers::delete(c, to).unwrap())));
+    if main_currency {
+        let item = recurring_in(&w.conn, w.rent, id);
+        kinds.push(("a recurring item", Box::new(move |c| recurring::delete(c, item).unwrap())));
+        let entry = entry_in(&w.conn, anna, id);
+        kinds.push(("a ledger entry", Box::new(move |c| ledger::delete(c, entry).unwrap())));
+    }
+    kinds
+}
+
+#[test]
+fn the_currency_changes_only_while_nothing_points_at_the_account_and_again_once_it_is_moved_away() {
+    // from the main currency to another
+    let w = world();
+    let probe = account(&w.conn, "Probe");
+    let kinds = entries_of_every_kind(&w, probe, true);
+    assert_eq!(kinds.len(), 5, "a transaction, a transfer on either side, a recurring item and a ledger entry");
+    let to_foreign = currency_patch(Some("RON"), Some("5.00"));
+    for (what, _) in &kinds {
+        assert_refused(&w.conn, INVALID, &format!("to another currency with {what} in it"), || update(&w.conn, probe, &to_foreign, TODAY));
+    }
+    // one by one: while any is left it is still refused, and with the last one gone it is allowed
+    let last = kinds.len() - 1;
+    for (n, (what, remove)) in kinds.iter().enumerate() {
+        assert_refused(&w.conn, INVALID, &format!("before {what} is taken away"), || update(&w.conn, probe, &to_foreign, TODAY));
+        remove(&w.conn);
+        if n < last {
+            assert_refused(&w.conn, INVALID, &format!("after {what} is gone, with others left"), || update(&w.conn, probe, &to_foreign, TODAY));
+        }
+    }
+    assert_eq!(get(&w.conn, probe, TODAY).unwrap().entries, 0);
+    let changed = update(&w.conn, probe, &to_foreign, TODAY).unwrap();
+    assert_eq!((changed.currency.as_str(), changed.foreign, changed.rate.as_deref()), ("RON", true, Some("5.00")));
+
+    // from a foreign currency to the main one, and to another, with a transaction or a transfer in it
+    for (what, patch) in [("to the main currency", currency_patch(Some("EUR"), None)), ("to another currency", currency_patch(Some("USD"), Some("1.10"))), ("to another currency, no new rate", currency_patch(Some("USD"), None))] {
+        let w = world();
+        let lei = foreign(&w.conn, "Lei", "RON", "5.00");
+        let kinds = entries_of_every_kind(&w, lei, false);
+        assert_eq!(kinds.len(), 3);
+        for (kind, remove) in &kinds {
+            assert_refused(&w.conn, INVALID, &format!("{what} with {kind} in it"), || update(&w.conn, lei, &patch, TODAY));
+            remove(&w.conn);
+        }
+        assert!(update(&w.conn, lei, &patch, TODAY).is_ok(), "{what}: allowed once nothing points at it");
+    }
+}
+
+#[test]
+fn going_back_to_the_main_currency_clears_the_rate_and_a_new_foreign_code_keeps_the_rate_it_has_unless_given_one() {
+    let w = world();
+    let lei = foreign(&w.conn, "Lei", "RON", "5.00");
+    // to the main currency, in any case: the rate goes
+    let back = update(&w.conn, lei, &currency_patch(Some("eur"), None), TODAY).unwrap();
+    assert_eq!((back.currency.as_str(), back.foreign, back.rate.as_deref(), back.balance_in_main.as_str()), ("EUR", false, None, "0.00"));
+    assert_eq!(stored(&w.conn, lei), (None, None));
+    // a rate in the same patch is refused, and so is a foreign code without one
+    assert_refused(&w.conn, INVALID, "the main currency with a rate", || update(&w.conn, lei, &currency_patch(Some("EUR"), Some("1.00")), TODAY));
+    assert_refused(&w.conn, INVALID, "a foreign currency with no rate", || update(&w.conn, lei, &currency_patch(Some("RON"), None), TODAY));
+    assert_eq!(stored(&w.conn, lei), (None, None));
+    let again = update(&w.conn, lei, &currency_patch(Some("ron"), Some("4.95")), TODAY).unwrap();
+    assert_eq!((again.currency.as_str(), again.rate.as_deref()), ("RON", Some("4.95")));
+    // another foreign code: the rate that is there stays unless the patch gives one
+    let usd = update(&w.conn, lei, &currency_patch(Some("USD"), None), TODAY).unwrap();
+    assert_eq!((usd.currency.as_str(), usd.rate.as_deref()), ("USD", Some("4.95")));
+    let gbp = update(&w.conn, lei, &currency_patch(Some("GBP"), Some("0.86")), TODAY).unwrap();
+    assert_eq!((gbp.currency.as_str(), gbp.rate.as_deref()), ("GBP", Some("0.86")));
+    // all in one patch with other fields
+    let all = update(&w.conn, lei, &AccountPatch { name: Some("Pounds".into()), currency: Some("EUR".into()), opening_balance: Some("5.00".into()), ..Default::default() }, TODAY).unwrap();
+    assert_eq!((all.name.as_str(), all.currency.as_str(), all.rate.as_deref(), all.opening_balance.as_str()), ("Pounds", "EUR", None, "5.00"));
+}
+
+#[test]
+fn a_patch_that_changes_nothing_in_the_currency_writes_nothing_even_with_rows_in_the_account() {
+    let w = world();
+    let lei = foreign(&w.conn, "Lei", "RON", "5.00");
+    let savings = account(&w.conn, "Savings");
+    native_tx(&w.conn, w.food, lei, "20.00", "100.00");
+    transactions::create(&w.conn, &transactions::NewTransaction { account_id: Some(savings.to_string()), ..tx(w.food, "Shop", "3.00", "2026-01-10") }).unwrap();
+    for (what, id, patch) in [
+        ("the currency it has", lei, currency_patch(Some("RON"), None)),
+        ("the currency it has, in lower case", lei, currency_patch(Some("ron"), None)),
+        ("the currency it has, with spaces", lei, currency_patch(Some(" Ron "), None)),
+        ("the rate it has", lei, currency_patch(None, Some("5.00"))),
+        ("both as they are", lei, currency_patch(Some("ron"), Some("5.00"))),
+        ("the main currency of an account in it", savings, currency_patch(Some("eur"), None)),
+        ("the main currency in capitals", savings, currency_patch(Some("EUR"), None)),
+        ("an empty patch", lei, AccountPatch::default()),
+    ] {
+        let answer = assert_nothing_written(&w.conn, what, || update(&w.conn, id, &patch, TODAY));
+        assert_eq!(answer, get(&w.conn, id, TODAY).unwrap(), "{what}");
+    }
+    // and a real change in the same patch is one change: one new stamp
+    let before = stamp_of(&w.conn, "accounts", lei);
+    update(&w.conn, lei, &AccountPatch { currency: Some("ron".into()), rate: Some("5.00".into()), notes: Some(Some("lei".into())), ..Default::default() }, TODAY).unwrap();
+    assert!(stamp_of(&w.conn, "accounts", lei) > before);
+}
+
+#[test]
+fn an_archived_account_takes_no_currency_or_rate_until_it_is_restored() {
+    let w = world();
+    let lei = foreign(&w.conn, "Lei", "RON", "5.00");
+    let empty = account(&w.conn, "Empty");
+    archive(&w.conn, lei, TODAY).unwrap();
+    archive(&w.conn, empty, TODAY).unwrap();
+    for (what, id, patch) in [
+        ("a new rate", lei, currency_patch(None, Some("4.00"))),
+        ("the rate it has", lei, currency_patch(None, Some("5.00"))),
+        ("the main currency", lei, currency_patch(Some("EUR"), None)),
+        ("another currency", empty, currency_patch(Some("USD"), Some("1.10"))),
+        ("a balance", empty, AccountPatch { balance: Some("5.00".into()), ..Default::default() }),
+    ] {
+        assert_refused(&w.conn, INVALID, &format!("{what}, archived"), || update(&w.conn, id, &patch, TODAY));
+    }
+    restore(&w.conn, lei, TODAY).unwrap();
+    assert_eq!(update(&w.conn, lei, &currency_patch(None, Some("4.00")), TODAY).unwrap().rate.as_deref(), Some("4.00"));
+}
+
+#[test]
+fn an_update_with_a_bad_currency_or_rate_changes_nothing_and_so_do_the_good_fields_with_it() {
+    let w = world();
+    let lei = foreign(&w.conn, "Lei", "RON", "5.00");
+    let savings = account(&w.conn, "Savings");
+    for (what, id, patch) in [
+        ("a code of two letters", lei, currency_patch(Some("RO"), None)),
+        ("a blank code", lei, currency_patch(Some(" "), None)),
+        ("a rate of 0", lei, currency_patch(None, Some("0"))),
+        ("a rate of -1", lei, currency_patch(None, Some("-1"))),
+        ("a rate with a comma", lei, currency_patch(None, Some("5,00"))),
+        ("a blank rate", lei, currency_patch(None, Some(""))),
+        ("a rate of 21 characters", lei, currency_patch(None, Some(&"1".repeat(21)))),
+        ("a good name with a bad rate", lei, AccountPatch { name: Some("Fine".into()), rate: Some("abc".into()), ..Default::default() }),
+        ("a good rate with a bad code", lei, currency_patch(Some("R0N"), Some("5.00"))),
+        ("a foreign currency with a bad rate", savings, currency_patch(Some("USD"), Some("0"))),
+        ("a foreign currency and no rate", savings, currency_patch(Some("USD"), None)),
+        ("a balance and an opening balance", lei, AccountPatch { balance: Some("5.00".into()), opening_balance: Some("5.00".into()), ..Default::default() }),
+    ] {
+        assert_refused(&w.conn, INVALID, what, || update(&w.conn, id, &patch, TODAY));
+    }
+    assert_eq!((stored(&w.conn, lei), get(&w.conn, lei, TODAY).unwrap().name.as_str().to_string()), ((Some("RON".into()), Some("5.00".into())), "Lei".to_string()));
+}
+
+#[test]
+fn the_json_of_a_new_account_and_of_a_patch_has_the_new_fields_and_still_refuses_unknown_ones() {
+    use serde_json::json;
+    let new: NewAccount = serde_json::from_value(json!({ "name": "Lei", "kind": "CASH", "currency": "ron", "rate": "5.00" })).unwrap();
+    assert_eq!((new.currency.as_deref(), new.rate.as_deref()), (Some("ron"), Some("5.00")));
+    let plain: NewAccount = serde_json::from_value(json!({ "name": "Cash", "kind": "CASH" })).unwrap();
+    assert_eq!((plain.currency, plain.rate), (None, None));
+    let patch: AccountPatch = serde_json::from_value(json!({ "currency": "usd", "rate": "1.10", "balance": "-12.50" })).unwrap();
+    assert_eq!((patch.currency.as_deref(), patch.rate.as_deref(), patch.balance.as_deref()), (Some("usd"), Some("1.10"), Some("-12.50")));
+    for unknown in [json!({ "foreign": true }), json!({ "balanceInMain": "1.00" }), json!({ "Currency": "RON" }), json!({ "exchangeRate": "5" })] {
+        assert!(serde_json::from_value::<AccountPatch>(unknown.clone()).is_err(), "{unknown}");
+    }
+    assert!(serde_json::from_value::<NewAccount>(json!({ "name": "x", "kind": "CASH", "foreign": true })).is_err());
+}
+
+#[test]
+fn the_check_fails_for_a_main_account_with_a_currency_and_for_a_currency_without_a_rate() {
+    let w = world();
+    let lei = foreign(&w.conn, "Lei", "RON", "5.00");
+    assert!(super::check(&w.conn).unwrap(), "a main account in the main currency and every account with both or neither");
+    // what a damaged backup or a hostile sync could leave behind: the triggers stand aside while it is written, and for the half-written
+    // ones the table's own CHECK is switched off too
+    applying(&w.conn, true);
+    let forced = |sql: &str| {
+        w.conn.execute_batch("PRAGMA ignore_check_constraints = ON").unwrap();
+        w.conn.execute(sql, []).unwrap();
+        w.conn.execute_batch("PRAGMA ignore_check_constraints = OFF").unwrap();
+    };
+    for (what, damage, repair) in [
+        ("the main account with a currency and a rate", "UPDATE accounts SET currency = 'RON', rate = '5.00' WHERE id = 1", "UPDATE accounts SET currency = NULL, rate = NULL WHERE id = 1"),
+        ("the main account with a currency and no rate", "UPDATE accounts SET currency = 'RON' WHERE id = 1", "UPDATE accounts SET currency = NULL WHERE id = 1"),
+        ("an account with a currency and no rate", "UPDATE accounts SET rate = NULL WHERE id = 2", "UPDATE accounts SET rate = '5.00' WHERE id = 2"),
+        ("an account with a rate and no currency", "UPDATE accounts SET currency = NULL WHERE id = 2", "UPDATE accounts SET currency = 'RON' WHERE id = 2"),
+    ] {
+        forced(damage);
+        assert!(!super::check(&w.conn).unwrap(), "{what}");
+        forced(repair);
+        assert!(super::check(&w.conn).unwrap(), "{what}: repaired");
+    }
+    assert_eq!(stored(&w.conn, lei), (Some("RON".into()), Some("5.00".into())));
 }

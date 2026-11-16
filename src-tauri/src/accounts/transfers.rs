@@ -4,7 +4,7 @@
 use rusqlite::{params, Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
 
-use super::{for_moved_row, for_new_row};
+use super::{currencies_differ, for_moved_row, for_new_row};
 use crate::categories::{parse_id, present_or_null, serialize_id};
 use crate::debts::ledger::clean_note;
 use crate::money::{format_amount, parse_positive_amount};
@@ -20,8 +20,10 @@ pub struct Transfer {
     pub from_account_id: i64,
     #[serde(serialize_with = "serialize_id")]
     pub to_account_id: i64,
-    /// Decimal string, e.g. "200.00". Always positive: it leaves `from` and arrives in `to`.
+    /// Decimal string, e.g. "200.00". Always positive: it leaves `from`, in its currency, and arrives in `to` when the two currencies are the same.
     pub amount: String,
+    /// What arrives in `to`, in its currency, when the two accounts are in different currencies (`docs/accounts-design.md`, section 21).
+    pub to_amount: Option<String>,
     pub date: String,
     pub note: Option<String>,
 }
@@ -35,6 +37,9 @@ pub struct NewTransfer {
     pub date: String,
     #[serde(default)]
     pub note: Option<String>,
+    /// Required when the currencies of the two accounts differ, refused when they are the same (section 21.3).
+    #[serde(default)]
+    pub to_amount: Option<String>,
 }
 
 /// Fields left out stay as they are. `note: null` clears it.
@@ -51,6 +56,10 @@ pub struct TransferPatch {
     pub date: Option<String>,
     #[serde(default, deserialize_with = "present_or_null")]
     pub note: Option<Option<String>>,
+    /// Looking at the two accounts as they are after the patch: refused when their currencies are the same; when they differ it changes what
+    /// arrives, and it is required when the transfer has none yet.
+    #[serde(default)]
+    pub to_amount: Option<String>,
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]
@@ -78,7 +87,7 @@ pub struct Page {
     pub offset: u32,
 }
 
-const COLUMNS: &str = "id, from_account_id, to_account_id, amount_minor, transfer_date, note";
+const COLUMNS: &str = "id, from_account_id, to_account_id, amount_minor, transfer_date, note, to_amount_minor";
 
 fn from_row(row: &rusqlite::Row) -> rusqlite::Result<Transfer> {
     Ok(Transfer {
@@ -86,6 +95,7 @@ fn from_row(row: &rusqlite::Row) -> rusqlite::Result<Transfer> {
         from_account_id: row.get(1)?,
         to_account_id: row.get(2)?,
         amount: format_amount(row.get(3)?),
+        to_amount: row.get::<_, Option<i64>>(6)?.map(format_amount),
         date: row.get(4)?,
         note: row.get(5)?,
     })
@@ -98,16 +108,17 @@ pub fn get(conn: &Connection, id: i64) -> Result<Transfer, AppError> {
 /// Both accounts must exist, not be archived, and differ.
 pub fn create(conn: &Connection, input: &NewTransfer) -> Result<Transfer, AppError> {
     let minor = parse_positive_amount(&input.amount)?;
+    let arrives = input.to_amount.as_deref().map(parse_positive_amount).transpose()?;
     let date = clean_date(&input.date)?;
     let note = clean_note(input.note.as_deref())?;
     let from = for_new_row(conn, Some(&input.from_account_id))?;
     let to = for_new_row(conn, Some(&input.to_account_id))?;
-    if from == to {
+    if from == to || currencies_differ(conn, from, to)? != arrives.is_some() {
         return Err(AppError::InvalidInput);
     }
     conn.execute(
-        "INSERT INTO transfers (from_account_id, to_account_id, amount_minor, transfer_date, note) VALUES (?1, ?2, ?3, ?4, ?5)",
-        params![from, to, minor, date, note],
+        "INSERT INTO transfers (from_account_id, to_account_id, amount_minor, transfer_date, note, to_amount_minor) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+        params![from, to, minor, date, note, arrives],
     )?;
     get(conn, conn.last_insert_rowid())
 }
@@ -127,9 +138,22 @@ pub fn update(conn: &Connection, id: i64, patch: &TransferPatch) -> Result<Trans
         Some(note) => clean_note(note.as_deref())?,
         None => current.note,
     };
+    // The two currencies as they are after the patch: when they differ the transfer ends with a second amount, the one given or the one it
+    // has, and a transfer that has none must be given one; when they are the same it has none, and one that is given is refused.
+    let given = patch.to_amount.as_deref().map(parse_positive_amount).transpose()?;
+    let arrives = if currencies_differ(conn, from, to)? {
+        match given {
+            Some(arrives) => Some(arrives),
+            None => Some(parse_positive_amount(current.to_amount.as_deref().ok_or(AppError::InvalidInput)?)?),
+        }
+    } else if given.is_some() {
+        return Err(AppError::InvalidInput);
+    } else {
+        None
+    };
     conn.execute(
-        "UPDATE transfers SET from_account_id = ?1, to_account_id = ?2, amount_minor = ?3, transfer_date = ?4, note = ?5 WHERE id = ?6",
-        params![from, to, minor, date, note, id],
+        "UPDATE transfers SET from_account_id = ?1, to_account_id = ?2, amount_minor = ?3, transfer_date = ?4, note = ?5, to_amount_minor = ?7 WHERE id = ?6",
+        params![from, to, minor, date, note, id, arrives],
     )?;
     get(conn, id)
 }

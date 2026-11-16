@@ -1045,7 +1045,8 @@ Numbers:
 - `Account.balance`, `changeThisMonth`, `available`, `openingBalance`, `virtualBalance`, the statement, history and breakdown of a
   foreign account are in its currency.
 - `Account.balanceInMain` = `balance` turned into the main currency at the account's rate (`balance / rate`, half away from zero, to
-  the cent); for a main-currency account it equals `balance`.
+  the cent); for a main-currency account it equals `balance`. A value that does not fit (a rate of 0.00000001 on a large balance) shows
+  the bound it passed, ±9999999999.99, so one odd rate never makes the list of accounts unreadable.
 - `Summary.inAccounts` = the sum of `balanceInMain` over the accounts that count in net worth. `netWorth` as before on top of it.
 - A transfer between different currencies is not zero-sum in numbers; each side moves by its own amount.
 
@@ -1074,8 +1075,11 @@ Breakdown gains currency: "RON"; its amounts are in the account's currency
 
 "I have 1662.90 on this account today": `AccountPatch.balance` (and `accounts.update --balance`, and a field in the edit dialog).
 The core sets `opening_balance := opening_balance + (balance − current balance today)`, so the account holds exactly that today and
-every earlier balance moves by the same amount. It is in the account's currency, signed, within the opening balance's bounds after
+every earlier balance moves by the same amount; it works this out as `balance −` what moved the account up to today besides its
+opening balance, which is the same number. It is in the account's currency, signed, within the opening balance's bounds after
 the change; it cannot be given together with `openingBalance` (`InvalidInput`); a `balance` equal to the current one writes nothing.
+An opening date after today, in the account or in the same patch, is refused (`InvalidInput`): an opening balance dated later is not
+in today's balance, so moving it could not set it.
 
 ### 21.6 Sync, currency, backup, export, report, demo data
 
@@ -1086,7 +1090,14 @@ the change; it cannot be given together with `openingBalance` (`InvalidInput`); 
   its stored native amount; the view ignores it there.
 - Two devices can end with a foreign account whose currency equals the app's (one changed the app's currency while the other made
   the account). It stays a foreign account with its rate; nothing breaks, and the person can fix it by hand.
-- `currency::change` and the recorded conversion: refused while a foreign account exists; with none, as before.
+- `currency::change`: refused (`InvalidInput`, a relabel too) while a foreign account exists, archived or not; with none, as before.
+  The recorded conversion (`apply_recorded`) is not refused, because the other device already made the change and refusing would
+  stop the sync for good; it converts what is in the app's currency and leaves what is in a foreign account's own currency alone:
+  the opening balance and the virtual balance of an account with a currency of its own, every `native_amount_minor`, the amount of
+  a transfer that leaves such an account (`amount_minor`) and the amount that arrives in one (`to_amount_minor`). A transfer's
+  `to_amount_minor` that arrives in an account in the main currency is converted, so a transfer from a foreign account to the main
+  account is converted in its second amount only, and one from the main account to a foreign account in its first only. Each is at
+  least one cent, as before, and a transfer with nothing to convert is not counted in `Conversion.transfers`.
 - Backup: a round trip keeps the four columns; a backup of schema 19 restores with `NULL`s.
 - Export: JSON accounts gain `currency`, `rate`, `balanceInMain`; transactions gain `nativeAmount` and transfers `toAmount`; CSV gets
   two columns at the end, `native_amount` and `account_currency`; Excel the same on the transactions sheet, `Currency` and `Rate`

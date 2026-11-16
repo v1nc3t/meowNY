@@ -9,7 +9,7 @@ use crate::accounts;
 use crate::categories::{parse_id, present_or_null, serialize_id};
 use crate::db::is_unique_violation;
 use crate::debts::splits::{self, PartOut, Payer};
-use crate::money::{format_amount, parse_positive_amount};
+use crate::money::{format_amount, parse_amount, parse_positive_amount};
 use crate::vault::AppError;
 
 const NAME_MAX_CHARS: usize = 50;
@@ -30,8 +30,11 @@ pub struct Transaction {
     pub account_id: i64,
     pub client_uuid: Option<String>,
     pub name: String,
-    /// What was paid. Decimal string, e.g. "12.50".
+    /// What was paid, in the app's currency. Decimal string, e.g. "12.50".
     pub amount: String,
+    /// What really left or reached a foreign account, in that account's currency (`docs/accounts-design.md`, section 21). None for a row in an
+    /// account in the main currency, whatever the column holds.
+    pub native_amount: Option<String>,
     /// What it costs you: the amount minus the parts of the friends and guests it is shared with (`transaction_costs`). The same as
     /// `amount` for a bill that is not split. Budgets, statistics and reports add up this, never `amount`.
     pub my_share: String,
@@ -57,6 +60,9 @@ pub struct NewTransaction {
     /// Left out means the main account.
     #[serde(default)]
     pub account_id: Option<String>,
+    /// What really left or reached the account, in its currency: required for a foreign account, refused for any other (section 21.3).
+    #[serde(default)]
+    pub native_amount: Option<String>,
 }
 
 /// Fields left out stay as they are. `description: null` clears it.
@@ -76,6 +82,9 @@ pub struct TransactionPatch {
     /// Moves the transaction to another account, which must not be archived.
     #[serde(default)]
     pub account_id: Option<String>,
+    /// In a foreign account it may change; into one it is required; into any other account, or for a row that stays in one, it is refused.
+    #[serde(default)]
+    pub native_amount: Option<String>,
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]
@@ -156,7 +165,9 @@ pub(crate) fn clean_uuid(text: &str) -> Result<String, AppError> {
     }
 }
 
-const COLUMNS: &str = "id, category_id, client_uuid, name, amount_minor, payment_date, description, account_id";
+/// The native amount is read only for a row in a foreign account: one left on a row in any other account is no part of it.
+const COLUMNS: &str = "id, category_id, client_uuid, name, amount_minor, payment_date, description, account_id,
+    CASE WHEN EXISTS (SELECT 1 FROM accounts a WHERE a.id = transactions.account_id AND a.currency IS NOT NULL) THEN native_amount_minor END";
 
 fn from_row(row: &rusqlite::Row) -> rusqlite::Result<Transaction> {
     Ok(Transaction {
@@ -165,6 +176,7 @@ fn from_row(row: &rusqlite::Row) -> rusqlite::Result<Transaction> {
         client_uuid: row.get(2)?,
         name: row.get(3)?,
         amount: format_amount(row.get(4)?),
+        native_amount: row.get::<_, Option<i64>>(8)?.map(format_amount),
         my_share: format_amount(row.get(4)?),
         split: Vec::new(),
         paid_by: None,
@@ -232,6 +244,7 @@ fn category_is_expense(conn: &Connection, id: i64) -> Result<bool, AppError> {
 pub fn create(conn: &Connection, input: &NewTransaction) -> Result<Transaction, AppError> {
     let name = clean_name(&input.name)?;
     let minor = parse_positive_amount(&input.amount)?;
+    let native = input.native_amount.as_deref().map(parse_positive_amount).transpose()?;
     let date = clean_date(&input.payment_date)?;
     let category_id = parse_id(&input.category_id)?;
     let description = clean_description(input.description.as_deref())?;
@@ -246,11 +259,15 @@ pub fn create(conn: &Connection, input: &NewTransaction) -> Result<Transaction, 
         return Err(AppError::InvalidInput);
     }
     let account_id = accounts::for_new_row(conn, input.account_id.as_deref())?;
+    // a foreign account needs what really moved it, and any other account has no use for one (section 21.3)
+    if accounts::is_foreign(conn, account_id)? != native.is_some() {
+        return Err(AppError::InvalidInput);
+    }
 
     let inserted = conn.execute(
-        "INSERT INTO transactions (category_id, client_uuid, name, amount_minor, payment_date, description, account_id)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
-        params![category_id, uuid, name, minor, date, description, account_id],
+        "INSERT INTO transactions (category_id, client_uuid, name, amount_minor, payment_date, description, account_id, native_amount_minor)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+        params![category_id, uuid, name, minor, date, description, account_id, native],
     );
     match inserted {
         Ok(_) => Ok(Transaction {
@@ -260,6 +277,7 @@ pub fn create(conn: &Connection, input: &NewTransaction) -> Result<Transaction, 
             client_uuid: uuid,
             name,
             amount: format_amount(minor),
+            native_amount: native.map(format_amount),
             my_share: format_amount(minor),
             split: Vec::new(),
             paid_by: None,
@@ -289,6 +307,7 @@ pub fn update(conn: &Connection, id: i64, patch: &TransactionPatch) -> Result<Tr
         Some(amount) => parse_positive_amount(amount)?,
         None => parse_positive_amount(&current.amount)?,
     };
+    let native_given = patch.native_amount.as_deref().map(parse_positive_amount).transpose()?;
     let date = match &patch.payment_date {
         Some(date) => clean_date(date)?,
         None => current.payment_date.clone(),
@@ -308,6 +327,19 @@ pub fn update(conn: &Connection, id: i64, patch: &TransactionPatch) -> Result<Tr
         None => current.description.clone(),
     };
     let account_id = accounts::for_moved_row(conn, current.account_id, patch.account_id.as_deref())?;
+    // In a foreign account the native amount is the one given, else the one the row has; a row that comes from another account must be given
+    // one. In any other account there is none, and one that is given is refused; a value left on the row is dropped (section 21.3).
+    let native = if accounts::is_foreign(conn, account_id)? {
+        match native_given {
+            Some(native) => Some(native),
+            None if accounts::is_foreign(conn, current.account_id)? => current.native_amount.as_deref().map(parse_amount).transpose()?,
+            None => return Err(AppError::InvalidInput),
+        }
+    } else if native_given.is_some() {
+        return Err(AppError::InvalidInput);
+    } else {
+        None
+    };
 
     // A bill that is shared keeps its parts adding up to the bill: a new amount rescales every part, yours included, and a split bill
     // stays an expense. The parts are written before the amount when it shrinks and after it when it grows, so they never pass the bill.
@@ -319,9 +351,9 @@ pub fn update(conn: &Connection, id: i64, patch: &TransactionPatch) -> Result<Tr
     let write = |conn: &Connection| -> Result<(), AppError> {
         conn.execute(
             "UPDATE transactions
-             SET name = ?1, amount_minor = ?2, payment_date = ?3, category_id = ?4, description = ?5, account_id = ?7
+             SET name = ?1, amount_minor = ?2, payment_date = ?3, category_id = ?4, description = ?5, account_id = ?7, native_amount_minor = ?8
              WHERE id = ?6",
-            params![name, minor, date, category_id, description, id, account_id],
+            params![name, minor, date, category_id, description, id, account_id, native],
         )?;
         Ok(())
     };
@@ -456,6 +488,7 @@ mod tests {
             description: None,
             client_uuid: None,
             account_id: None,
+            native_amount: None,
         }
     }
 

@@ -148,6 +148,7 @@ fn a_restore_removes_the_accounts_and_transfers_that_were_there() {
     target.execute("INSERT INTO transactions (category_id, name, amount_minor, payment_date, account_id) VALUES (1, 'In cash', 100, '2026-02-02', ?1)", [cash]).unwrap();
 
     let source = db();
+    source.execute("INSERT INTO settings (id, currency) VALUES (1, 'EUR')", []).unwrap();
     accounts::update(&source, MAIN_ID, &AccountPatch { name: Some("Renamed".into()), ..Default::default() }, TODAY).unwrap();
     let file = seal(&dump(&source).unwrap(), PASSPHRASE).unwrap();
     restore(&mut target, &file).unwrap();
@@ -260,6 +261,7 @@ fn a_file_without_a_valid_main_account_is_refused_even_when_it_reaches_the_real_
 #[test]
 fn rows_that_name_no_account_go_to_the_main_account() {
     let file = forged(json!({
+        "settings": [{ "id": 1, "currency": "EUR" }],
         "accounts": main_account(),
         "categories": [{ "id": 1, "type": "EXPENSE", "name": "Food" }],
         "transactions": [{ "id": 1, "category_id": 1, "name": "x", "amount_minor": 500, "payment_date": "2026-01-01" }],
@@ -487,6 +489,7 @@ fn database_at_18() -> Connection {
 #[test]
 fn a_restore_replaces_the_details_that_were_there_with_the_ones_of_the_file() {
     let source = db();
+    source.execute("INSERT INTO settings (id, currency) VALUES (1, 'EUR')", []).unwrap();
     accounts::update(&source, MAIN_ID, &AccountPatch { group: Some(Some("From the file".into())), include_in_net_worth: Some(false), ..Default::default() }, TODAY).unwrap();
     let mut target = lived_in();
     assert_eq!(count(&target, "SELECT count(*) FROM accounts WHERE bic IS NOT NULL"), 1);
@@ -545,4 +548,67 @@ fn a_file_that_breaks_the_rules_of_the_details_is_refused_whole_and_changes_noth
         restore(&mut target, &seal(&edited, PASSPHRASE).unwrap()).unwrap_or_else(|e| panic!("{column}: {e:?}"));
         assert_eq!(dump(&target).unwrap().rows("accounts")[1][column], value, "{column}");
     }
+}
+
+#[test]
+fn a_backup_made_at_schema_19_restores_with_the_four_currency_columns_empty_and_moves_no_stamp_or_date() {
+    let old = old_database(19);
+    for sql in [
+        "INSERT INTO accounts (name, kind, opening_balance_minor, opening_date, position, bic, virtual_balance_minor) VALUES ('Savings', 'SAVINGS', 150000, '2026-01-01', 1, 'DEUTDEFF', 500)",
+        "INSERT INTO transfers (from_account_id, to_account_id, amount_minor, transfer_date) VALUES (1, 2, 5000, '2026-02-01')",
+        "UPDATE transactions SET account_id = 2 WHERE name = 'Dinner'",
+    ] {
+        old.execute(sql, []).unwrap();
+    }
+    let file_rows = dump(&old).unwrap();
+    assert_eq!(file_rows.schema_version, 19);
+    for (table, column) in [("accounts", "currency"), ("accounts", "rate"), ("transactions", "native_amount_minor"), ("transfers", "to_amount_minor")] {
+        assert!(file_rows.rows(table).iter().all(|row| !row.contains_key(column)), "a file of version 19 has no {column}");
+    }
+    // restored into a target that has a currency of its own in it, which the file replaces (the check of the main account runs in a database of the file's version)
+    let mut target = lived_in();
+    let lei = accounts::create(&target, &accounts::NewAccount { currency: Some("RON".into()), rate: Some("5.00".into()), ..crate::accounts::fixtures::new_account("Lei") }, TODAY).unwrap().id;
+    assert_eq!(count(&target, &format!("SELECT count(*) FROM accounts WHERE id = {lei} AND currency = 'RON'")), 1);
+    restore(&mut target, &seal(&file_rows, PASSPHRASE).unwrap()).unwrap();
+
+    let after = dump(&target).unwrap();
+    assert_eq!(after.schema_version, crate::migrate::latest_version());
+    for row in after.rows("accounts") {
+        assert_eq!((&row["currency"], &row["rate"]), (&Value::Null, &Value::Null), "{}", row["name"]);
+    }
+    assert!(after.rows("transactions").iter().all(|r| r["native_amount_minor"].is_null()));
+    assert!(after.rows("transfers").iter().all(|r| r["to_amount_minor"].is_null()));
+    for table in ["accounts", "transactions", "transfers"] {
+        for (was, is) in file_rows.rows(table).iter().zip(after.rows(table)) {
+            for (column, value) in was {
+                assert_eq!(&is[column], value, "{table}.{column}: the migration moved no stamp, no date and no other column");
+            }
+        }
+    }
+    assert_eq!(accounts::list(&target, TODAY).unwrap().iter().map(|a| (a.currency.as_str(), a.foreign)).collect::<Vec<_>>(), [("EUR", false), ("EUR", false)]);
+    assert!(accounts::check(&target).unwrap());
+    // a round trip of what has a currency keeps the four columns
+    let source = lived_in();
+    let lei = accounts::create(&source, &accounts::NewAccount { currency: Some("RON".into()), rate: Some("4.9769".into()), ..crate::accounts::fixtures::new_account("Lei") }, TODAY).unwrap().id;
+    crate::transactions::create(
+        &source,
+        &crate::transactions::NewTransaction {
+            name: "Lei shop".into(),
+            amount: "20.00".into(),
+            payment_date: "2026-02-03".into(),
+            category_id: "1".into(),
+            description: None,
+            client_uuid: None,
+            account_id: Some(lei.to_string()),
+            native_amount: Some("99.54".into()),
+        },
+    )
+    .unwrap();
+    accounts::transfers::create(&source, &accounts::transfers::NewTransfer { to_amount: Some("49.77".into()), ..crate::accounts::fixtures::new_transfer(MAIN_ID, lei, "10.00", "2026-02-04") }).unwrap();
+    let before = dump(&source).unwrap();
+    let mut other = db();
+    restore(&mut other, &seal(&before, PASSPHRASE).unwrap()).unwrap();
+    assert_eq!(dump(&other).unwrap(), before, "the four columns come back as they were");
+    assert_eq!(accounts::list(&other, TODAY).unwrap(), accounts::list(&source, TODAY).unwrap());
+    assert!(accounts::check(&other).unwrap());
 }

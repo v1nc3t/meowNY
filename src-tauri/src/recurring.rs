@@ -231,6 +231,7 @@ pub fn create(conn: &Connection, input: &NewRecurring) -> Result<Recurring, AppE
         return Err(AppError::InvalidInput);
     }
     let account_id = accounts::for_new_row(conn, input.account_id.as_deref())?;
+    accounts::require_main_currency(conn, account_id)?;
 
     conn.execute(
         "INSERT INTO recurring_transactions
@@ -271,6 +272,7 @@ pub fn update(conn: &Connection, id: i64, patch: &RecurringPatch) -> Result<Recu
         None => current.description.clone(),
     };
     let account_id = accounts::for_moved_row(conn, current.account_id, patch.account_id.as_deref())?;
+    accounts::require_main_currency(conn, account_id)?;
     // A split item stays an expense: take the split off first to move it to an income category.
     if current.split.is_some() && category_id != current.category_id && !category_is_expense(conn, category_id)? {
         return Err(AppError::InvalidInput);

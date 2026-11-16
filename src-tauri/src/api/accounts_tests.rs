@@ -19,11 +19,11 @@ const INVALID: (u16, &str) = (400, "invalid_input");
 const NOT_FOUND: (u16, &str) = (404, "not_found");
 const NAME_EXISTS: (u16, &str) = (409, "name_exists");
 
-const ACCOUNT_KEYS: [&str; 18] = [
-    "archived", "available", "balance", "bic", "changeThisMonth", "entries", "group", "id", "includeInNetWorth", "isMain", "kind", "lastActivity", "name", "notes", "number", "openingBalance", "openingDate",
-    "virtualBalance",
+const ACCOUNT_KEYS: [&str; 22] = [
+    "archived", "available", "balance", "balanceInMain", "bic", "changeThisMonth", "currency", "entries", "foreign", "group", "id", "includeInNetWorth", "isMain", "kind", "lastActivity", "name", "notes", "number",
+    "openingBalance", "openingDate", "rate", "virtualBalance",
 ];
-const TRANSFER_KEYS: [&str; 6] = ["amount", "date", "fromAccountId", "id", "note", "toAccountId"];
+const TRANSFER_KEYS: [&str; 7] = ["amount", "date", "fromAccountId", "id", "note", "toAccountId", "toAmount"];
 
 const READ_ROUTES: [&str; 6] = ["accounts.list", "accounts.show", "accounts.history", "accounts.breakdown", "accounts.summary", "transfers.list"];
 const WRITE_ROUTES: [&str; 9] = [
@@ -329,7 +329,7 @@ fn every_account_answer_has_the_fields_of_the_design_note_with_ids_and_money_as_
 
     // a statement: the account, the days, what it held before and after, and a line for each movement
     let statement = ok(&vault, "accounts.show", json!({ "id": "1" }));
-    assert_eq!(keys(&statement), ["account", "balanceAfter", "balanceBefore", "from", "lines", "to"]);
+    assert_eq!(keys(&statement), ["account", "balanceAfter", "balanceBefore", "currency", "from", "lines", "to"]);
     assert_eq!(keys(&statement["account"]), ACCOUNT_KEYS);
     assert_eq!((statement["from"].as_str(), statement["to"].as_str()), (Some("2026-10-01"), Some("2026-10-31")), "this month, by default");
     assert!(is_money(statement["balanceBefore"].as_str().unwrap()) && is_money(statement["balanceAfter"].as_str().unwrap()));
@@ -1488,7 +1488,7 @@ fn a_breakdown_adds_up_what_an_account_paid_and_took_in_by_category_and_nothing_
     let (b, _, _) = busy(&vault);
     let before = dump(&vault);
     let october = ok(&vault, "accounts.breakdown", json!({ "id": b, "from": "2026-10-01", "to": "2026-10-31" }));
-    assert_eq!(keys(&october), ["expenseTotal", "expenses", "from", "income", "incomeTotal", "to"]);
+    assert_eq!(keys(&october), ["currency", "expenseTotal", "expenses", "from", "income", "incomeTotal", "to"]);
     assert_eq!((october["from"].as_str(), october["to"].as_str()), (Some("2026-10-01"), Some("2026-10-31")));
     // the largest first, a tie by name; Food is the whole of the lunch the person paid (60.00) and not the dinner a friend paid
     assert_eq!(shares(&october["expenses"]), pairs(&[("Rent", "400.00"), ("Food", "110.00"), ("Art", "50.00"), ("Fun", "50.00"), ("Zed", "50.00")]));
@@ -2254,7 +2254,7 @@ fn over_http_a_write_token_sets_the_details_a_read_token_reads_them_and_the_kind
 
     // a breakdown is a read: with a token that can only read
     let report = post(&h.read, "accounts.breakdown", json!({ "id": "1", "from": "2025-01-01", "to": "2026-12-31" }));
-    assert_eq!(keys(&report), ["expenseTotal", "expenses", "from", "income", "incomeTotal", "to"]);
+    assert_eq!(keys(&report), ["currency", "expenseTotal", "expenses", "from", "income", "incomeTotal", "to"]);
     assert_eq!((total_of(&report["expenses"]), total_of(&report["income"])), (cents(report["expenseTotal"].as_str().unwrap()), cents(report["incomeTotal"].as_str().unwrap())));
     assert!(report["expenses"].as_array().unwrap().iter().all(|s| s["categoryId"].is_string() && s["amount"].is_string()));
     assert_eq!(post(&h.read, "accounts.breakdown", json!({ "id": "1" }))["from"], post(&h.read, "accounts.show", json!({ "id": "1" }))["from"], "the same days as a statement without days");

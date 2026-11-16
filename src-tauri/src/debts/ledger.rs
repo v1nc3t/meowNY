@@ -189,6 +189,7 @@ pub(crate) fn add_from(conn: &Connection, input: &NewEntry, origin: Option<&str>
         }
     }
     let account_id = accounts::for_new_row(conn, input.account_id.as_deref())?;
+    accounts::require_main_currency(conn, account_id)?;
     conn.execute(
         "INSERT INTO ledger_entries (person_id, kind, amount_minor, entry_date, note, transaction_id, origin_id, account_id) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
         params![person_id, input.kind.as_sql(), minor, date, note, transaction_id, origin, account_id],
@@ -211,6 +212,8 @@ pub(crate) fn borrow_in(conn: &Connection, input: &NewEntry, expense: &Expense, 
     if input.kind != Kind::Borrowed {
         return Err(AppError::InvalidInput);
     }
+    // the expense is made first, and an account of another currency would refuse it for want of a native amount: say what is wrong
+    accounts::require_main_currency(conn, accounts::for_new_row(conn, input.account_id.as_deref())?)?;
     let category = parse_id(&expense.category_id)?;
     let is_expense: bool = conn
         .query_row("SELECT type = 'EXPENSE' AND deleted_at IS NULL FROM categories WHERE id = ?1", [category], |r| r.get(0))
@@ -229,6 +232,7 @@ pub(crate) fn borrow_in(conn: &Connection, input: &NewEntry, expense: &Expense, 
             description: None,
             client_uuid: None,
             account_id: input.account_id.clone(),
+            native_amount: None,
         },
     )?;
     add_from(conn, &NewEntry { transaction_id: Some(spent.id.to_string()), ..input.clone() }, origin)
@@ -271,6 +275,7 @@ pub fn update(conn: &Connection, id: i64, patch: &EntryPatch) -> Result<Entry, A
         None => current.transaction_id.as_deref().map(parse_id).transpose()?,
     };
     let account_id = accounts::for_moved_row(conn, current.account_id, patch.account_id.as_deref())?;
+    accounts::require_main_currency(conn, account_id)?;
     // Every column is written, so that a change of the link alone is an edit too (the stamp triggers do not watch it by itself).
     conn.execute(
         "UPDATE ledger_entries SET person_id = ?1, kind = ?2, amount_minor = ?3, entry_date = ?4, note = ?5, transaction_id = ?6, account_id = ?8 WHERE id = ?7",

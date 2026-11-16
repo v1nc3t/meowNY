@@ -95,7 +95,8 @@ fn the_json_has_every_account_with_what_it_holds_and_every_transfer_and_the_acco
         file["accounts"][2],
         json!({ "id": c.cash.to_string(), "name": "Cash", "kind": "CASH", "number": null, "openingBalance": "250.00", "openingDate": "2025-12-01", "archived": false,
                 "isMain": false, "balance": "150.00", "changeThisMonth": "0.00", "lastActivity": "2026-02-15",
-                "bic": null, "notes": null, "group": null, "includeInNetWorth": true, "virtualBalance": "0.00" })
+                "bic": null, "notes": null, "group": null, "includeInNetWorth": true, "virtualBalance": "0.00",
+                "currency": "EUR", "foreign": false, "rate": null, "balanceInMain": "150.00" })
     );
     assert_eq!(file["accounts"][3]["openingBalance"], "-240.00");
     assert_eq!((file["accounts"][1]["number"].as_str(), file["accounts"][4]["archived"].as_bool(), file["accounts"][0]["isMain"].as_bool()), (Some("IE29 AIBK 9311 5212 3456 78"), Some(true), Some(true)));
@@ -367,7 +368,8 @@ fn the_json_has_the_five_details_of_every_account_and_not_the_amount_worked_out_
         account_named(&file, "Cash"),
         &json!({ "id": c.cash.to_string(), "name": "Cash", "kind": "CASH", "number": null, "openingBalance": "250.00", "openingDate": "2025-12-01", "archived": false,
                  "isMain": false, "balance": "150.00", "changeThisMonth": "0.00", "lastActivity": "2026-02-15",
-                 "bic": "COBADEFFXXX", "notes": AWKWARD_NOTES, "group": "Everyday", "includeInNetWorth": false, "virtualBalance": "0.00" }),
+                 "bic": "COBADEFFXXX", "notes": AWKWARD_NOTES, "group": "Everyday", "includeInNetWorth": false, "virtualBalance": "0.00",
+                 "currency": "EUR", "foreign": false, "rate": null, "balanceInMain": "150.00" }),
         "the JSON holds the text as it is: the line break, the comma, the quotes and the `=` are not touched"
     );
     let card = account_named(&file, "Credit card");
@@ -382,7 +384,8 @@ fn the_json_has_the_five_details_of_every_account_and_not_the_amount_worked_out_
     // every account has the same sixteen fields: the five are always there, null or a default when the person set nothing
     let keys = |a: &Value| -> BTreeSet<String> { a.as_object().unwrap().keys().cloned().collect() };
     let expected: BTreeSet<String> = [
-        "id", "name", "kind", "number", "openingBalance", "openingDate", "archived", "isMain", "balance", "changeThisMonth", "lastActivity", "bic", "notes", "group", "includeInNetWorth", "virtualBalance",
+        "id", "name", "kind", "number", "openingBalance", "openingDate", "archived", "isMain", "balance", "changeThisMonth", "lastActivity", "bic", "notes", "group", "includeInNetWorth", "virtualBalance", "currency",
+        "foreign", "rate", "balanceInMain",
     ]
     .map(String::from)
     .into();

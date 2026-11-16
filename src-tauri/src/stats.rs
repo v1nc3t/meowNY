@@ -370,6 +370,7 @@ mod tests {
                 description: None,
                 client_uuid: None,
                 account_id: None,
+                native_amount: None,
             },
         )
         .unwrap();

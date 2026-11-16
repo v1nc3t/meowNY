@@ -1402,6 +1402,7 @@ mod tests {
                         description: Some("Café \"quoted\"".into()),
                         client_uuid: None,
                         account_id: None,
+                        native_amount: None,
                     },
                 )?;
             }

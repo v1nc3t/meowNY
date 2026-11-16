@@ -1127,6 +1127,7 @@ mod tests {
                 description: description.map(str::to_string),
                 client_uuid: None,
                 account_id: None,
+                native_amount: None,
             },
         )
         .unwrap();

@@ -66,7 +66,7 @@ pub(super) fn category(conn: &Connection, name: &str, kind: CategoryType) -> i64
 pub(super) fn spend(conn: &Connection, category_id: i64, name: &str, amount: &str) -> i64 {
     transactions::create(
         conn,
-        &NewTransaction { name: name.into(), amount: amount.into(), payment_date: "2026-03-02".into(), category_id: category_id.to_string(), description: None, client_uuid: None, account_id: None },
+        &NewTransaction { name: name.into(), amount: amount.into(), payment_date: "2026-03-02".into(), category_id: category_id.to_string(), description: None, client_uuid: None, account_id: None, native_amount: None },
     )
     .unwrap()
     .id
@@ -156,7 +156,7 @@ fn the_same_entry_sent_from_both_devices_becomes_one() {
         pause();
         transactions::create(
             conn,
-            &NewTransaction { name: name.into(), amount: "4.00".into(), payment_date: "2026-03-03".into(), category_id: food.to_string(), description: None, client_uuid: Some(uuid.into()), account_id: None },
+            &NewTransaction { name: name.into(), amount: "4.00".into(), payment_date: "2026-03-03".into(), category_id: food.to_string(), description: None, client_uuid: Some(uuid.into()), account_id: None, native_amount: None },
         )
         .unwrap();
     }
@@ -662,10 +662,10 @@ fn following_the_computer_pulls_back_every_stamp_that_is_ahead_and_nothing_else(
         spend(&phone, food, "New, ahead", "1.00");
         transactions::delete(&phone, tea).unwrap();
         // an account, a transfer, and the main account (which until now had the oldest stamp there is)
-        let cash = crate::accounts::create(&phone, &crate::accounts::NewAccount { name: "Cash, ahead".into(), kind: crate::accounts::Kind::Cash, number: None, opening_balance: None, opening_date: Some("2026-01-01".into()), bic: None, notes: None, group: None, include_in_net_worth: None, virtual_balance: None }, TODAY).unwrap().id;
+        let cash = crate::accounts::create(&phone, &crate::accounts::NewAccount { name: "Cash, ahead".into(), kind: crate::accounts::Kind::Cash, number: None, opening_balance: None, opening_date: Some("2026-01-01".into()), bic: None, notes: None, group: None, include_in_net_worth: None, virtual_balance: None, currency: None, rate: None }, TODAY).unwrap().id;
         crate::accounts::transfers::create(
             &phone,
-            &crate::accounts::transfers::NewTransfer { from_account_id: crate::accounts::MAIN_ID.to_string(), to_account_id: cash.to_string(), amount: "1.00".into(), date: "2026-03-01".into(), note: None },
+            &crate::accounts::transfers::NewTransfer { from_account_id: crate::accounts::MAIN_ID.to_string(), to_account_id: cash.to_string(), amount: "1.00".into(), date: "2026-03-01".into(), note: None, to_amount: None },
         )
         .unwrap();
         crate::accounts::update(&phone, crate::accounts::MAIN_ID, &crate::accounts::AccountPatch { name: Some("Main, ahead".into()), ..Default::default() }, TODAY).unwrap();
@@ -999,6 +999,7 @@ fn edit(conn: &mut Connection, rng: &mut Rng) {
                     description: if rng.below(3) == 0 { Some("a note".into()) } else { None },
                     client_uuid: uuid,
                     account_id: None,
+                    native_amount: None,
                 },
             );
         }
@@ -1312,6 +1313,7 @@ fn edit_accounts(conn: &mut Connection, rng: &mut Rng) {
                 group: group(rng),
                 include_in_net_worth: (rng.below(2) == 0).then(|| rng.below(2) == 0),
                 virtual_balance: (rng.below(2) == 0).then(|| virtual_balance(rng)),
+                currency: None, rate: None,
             };
             let _ = accounts::create(conn, &new, TODAY);
         }
@@ -1367,7 +1369,7 @@ fn edit_accounts(conn: &mut Connection, rng: &mut Rng) {
         10 | 11 if active.len() > 1 => {
             let (from, to) = (*rng.pick(&active), *rng.pick(&active));
             let note = (rng.below(2) == 0).then(|| format!("note {}", rng.below(4)));
-            let _ = transfers::create(conn, &NewTransfer { from_account_id: from.to_string(), to_account_id: to.to_string(), amount: format!("{}.{:02}", 1 + rng.below(300), rng.below(100)), date: date(rng), note });
+            let _ = transfers::create(conn, &NewTransfer { from_account_id: from.to_string(), to_account_id: to.to_string(), amount: format!("{}.{:02}", 1 + rng.below(300), rng.below(100)), date: date(rng), note, to_amount: None });
         }
         12 if !transfers_now.is_empty() => {
             let patch = match rng.below(4) {
@@ -1392,6 +1394,7 @@ fn edit_accounts(conn: &mut Connection, rng: &mut Rng) {
                     description: None,
                     client_uuid: None,
                     account_id: account(rng),
+                    native_amount: None,
                 },
             );
         }
@@ -1654,11 +1657,12 @@ fn nothing_that_stays_on_a_device_is_ever_sent() {
             group: Some(format!("Group of the {tag}")),
             include_in_net_worth: Some(false),
             virtual_balance: Some("12.00".into()),
+            currency: None, rate: None,
         };
         let account = crate::accounts::create(conn, &new, TODAY).unwrap().id;
         crate::accounts::transfers::create(
             conn,
-            &crate::accounts::transfers::NewTransfer { from_account_id: crate::accounts::MAIN_ID.to_string(), to_account_id: account.to_string(), amount: "6.00".into(), date: "2026-03-05".into(), note: Some(format!("Transfer of the {tag}")) },
+            &crate::accounts::transfers::NewTransfer { from_account_id: crate::accounts::MAIN_ID.to_string(), to_account_id: account.to_string(), amount: "6.00".into(), date: "2026-03-05".into(), note: Some(format!("Transfer of the {tag}")), to_amount: None },
         )
         .unwrap();
     }

@@ -6,19 +6,20 @@ use rusqlite::Connection;
 
 use super::fixtures::*;
 use super::transfers;
-use super::{breakdown, create, get, history, list, statement, summary, update, AccountPatch, Breakdown, HistoryPoint, Kind, Line, NewAccount, Share, MAIN_ID, MAIN_NAME};
+use super::{breakdown, create, get, history, list, statement, summary, to_main, update, AccountPatch, Breakdown, HistoryPoint, Kind, Line, NewAccount, Share, MAIN_ID, MAIN_NAME};
 use crate::categories::{self, CategoryType};
 use crate::debts::fixtures::{equal, who};
 use crate::debts::ledger::{self, Expense, NewEntry};
 use crate::debts::people;
 use crate::debts::splits::{set_split, SplitInput};
-use crate::money::format_amount;
+use crate::money::{format_amount, MAX_MINOR};
 use crate::transactions::{self, NewTransaction};
+use crate::vault::AppError;
 
 fn on(conn: &Connection, account: i64, category: i64, name: &str, amount: &str, date: &str) -> i64 {
     transactions::create(
         conn,
-        &NewTransaction { name: name.into(), amount: amount.into(), payment_date: date.into(), category_id: category.to_string(), description: None, client_uuid: None, account_id: Some(account.to_string()) },
+        &NewTransaction { name: name.into(), amount: amount.into(), payment_date: date.into(), category_id: category.to_string(), description: None, client_uuid: None, account_id: Some(account.to_string()), native_amount: None },
     )
     .unwrap()
     .id
@@ -739,8 +740,8 @@ const NOT_FOUND: crate::vault::AppError = crate::vault::AppError::NotFound;
 fn the_breakdown_of_an_empty_period_has_empty_lists_and_totals_of_zero() {
     let w = world();
     let b = breakdown(&w.conn, MAIN_ID, "2026-11-01", "2026-11-30").unwrap();
-    assert_eq!(b, Breakdown { from: "2026-11-01".into(), to: "2026-11-30".into(), expenses: vec![], income: vec![], expense_total: "0.00".into(), income_total: "0.00".into() });
-    assert_eq!(serde_json::to_value(&b).unwrap(), serde_json::json!({ "from": "2026-11-01", "to": "2026-11-30", "expenses": [], "income": [], "expenseTotal": "0.00", "incomeTotal": "0.00" }));
+    assert_eq!(b, Breakdown { currency: "EUR".into(), from: "2026-11-01".into(), to: "2026-11-30".into(), expenses: vec![], income: vec![], expense_total: "0.00".into(), income_total: "0.00".into() });
+    assert_eq!(serde_json::to_value(&b).unwrap(), serde_json::json!({ "currency": "EUR", "from": "2026-11-01", "to": "2026-11-30", "expenses": [], "income": [], "expenseTotal": "0.00", "incomeTotal": "0.00" }));
     // rows outside the period make it no less empty, and a one-day period is a period
     on(&w.conn, MAIN_ID, w.food, "Shop", "9.00", "2026-10-31");
     on(&w.conn, MAIN_ID, w.salary, "Pay", "9.00", "2026-12-01");
@@ -970,7 +971,7 @@ fn the_breakdown_equals_a_plain_sum_by_category_for_random_rows_and_periods() {
             wanted.sort_by(|a, b| b.1.cmp(&a.1).then_with(|| a.2.to_lowercase().cmp(&b.2.to_lowercase())).then_with(|| a.0.cmp(&b.0)));
             let share = |income: bool| wanted.iter().filter(|r| r.3 == income).map(|r| Share { category_id: r.0, name: r.2.clone(), amount: format_amount(r.1) }).collect::<Vec<_>>();
             let total = |income: bool| format_amount(wanted.iter().filter(|r| r.3 == income).map(|r| r.1).sum());
-            let expected = Breakdown { from: from.clone(), to: to.clone(), expenses: share(false), income: share(true), expense_total: total(false), income_total: total(true) };
+            let expected = Breakdown { currency: "EUR".into(), from: from.clone(), to: to.clone(), expenses: share(false), income: share(true), expense_total: total(false), income_total: total(true) };
             let got = breakdown(&w.conn, account, &from, &to).unwrap();
             assert_eq!(got, expected, "seed {seed}, account {account}, {from} to {to}");
             // the totals are the sum of the shares, and every share is a positive amount
@@ -979,4 +980,419 @@ fn the_breakdown_equals_a_plain_sum_by_category_for_random_rows_and_periods() {
             assert!(got.expenses.iter().chain(&got.income).all(|s| s.amount != "0.00" && !s.amount.starts_with('-')));
         }
     }
+}
+
+// ---- a currency of its own: the numbers (section 21.3) ---------------------------------------------
+
+/// An account in another currency, opened with `opening` at the start of 2026. Returns its id.
+fn lei(conn: &Connection, name: &str, code: &str, rate: &str, opening: &str) -> i64 {
+    create(conn, &NewAccount { currency: Some(code.into()), rate: Some(rate.into()), opening_balance: Some(opening.into()), opening_date: Some("2026-01-01".into()), ..new_account(name) }, TODAY).unwrap().id
+}
+
+/// A transaction in a foreign account: `amount` in the main currency, `native` in the account's.
+fn native_on(conn: &Connection, account: i64, category: i64, name: &str, amount: &str, native: &str, date: &str) -> i64 {
+    transactions::create(
+        conn,
+        &NewTransaction {
+            name: name.into(),
+            amount: amount.into(),
+            payment_date: date.into(),
+            category_id: category.to_string(),
+            description: None,
+            client_uuid: None,
+            account_id: Some(account.to_string()),
+            native_amount: Some(native.into()),
+        },
+    )
+    .unwrap()
+    .id
+}
+
+/// `minor / (numerator / denominator)`, half away from zero, in 128 bits: the plain way to work it out.
+fn model_to_main(minor: i64, numerator: i128, denominator: i128) -> i128 {
+    let size = (i128::from(minor).abs() * denominator * 2 + numerator) / (2 * numerator);
+    size * i128::from(minor.signum())
+}
+
+#[test]
+fn to_main_divides_by_the_rate_and_rounds_half_away_from_zero_for_both_signs() {
+    for (minor, rate, expected) in [
+        (0, "2", 0),
+        (1, "2", 1),
+        (-1, "2", -1),
+        (2, "2", 1),
+        (3, "2", 2),
+        (-3, "2", -2),
+        (1, "3", 0),
+        (2, "3", 1),
+        (-2, "3", -1),
+        (100, "3", 33),
+        (101, "3", 34),
+        (-101, "3", -34),
+        (4, "10", 0),
+        (5, "10", 1),
+        (-5, "10", -1),
+        (1, "0.5", 2),
+        (-1, "0.5", -2),
+        (12_345, "5.00", 2469),
+        (12_345, "4.9769", 2480),
+        (-12_345, "4.9769", -2480),
+        (10_000, "1.08", 9259),
+        (50, "1", 50),
+        (-50, "1.0", -50),
+        (1, "999999999.99999999", 0),
+        (1, "0.00000001", 100_000_000),
+    ] {
+        assert_eq!(to_main(minor, rate), Ok(expected), "{minor} at {rate}");
+        assert_eq!(to_main(-minor, rate), Ok(-expected), "{} at {rate}: the sign is kept and the rounding does not depend on it", -minor);
+    }
+    // against the plain way, at the bounds and with rates below and above 1
+    for rate in [("1", 1, 1), ("2", 2, 1), ("0.5", 5, 10), ("1.00000001", 100_000_001, 100_000_000), ("0.99999999", 99_999_999, 100_000_000), ("4.9769", 49_769, 10_000), ("160.5", 1605, 10)] {
+        for minor in [0, 1, 7, 99, 100, 1234, 500_000_000_000, MAX_MINOR - 1, MAX_MINOR] {
+            for minor in [minor, -minor] {
+                let wanted = model_to_main(minor, rate.1, rate.2);
+                match to_main(minor, rate.0) {
+                    Ok(got) => assert_eq!(i128::from(got), wanted, "{minor} at {}", rate.0),
+                    Err(e) => assert!(e == INVALID && wanted.abs() > i128::from(MAX_MINOR), "{minor} at {}: {e:?} for {wanted}", rate.0),
+                }
+            }
+        }
+    }
+    assert_eq!(to_main(MAX_MINOR, "1"), Ok(MAX_MINOR));
+    assert_eq!(to_main(-MAX_MINOR, "1"), Ok(-MAX_MINOR));
+}
+
+#[test]
+fn to_main_refuses_what_leaves_the_range_and_a_bad_rate_and_never_overflows() {
+    // twice as much, at a rate of one half: the last amount that fits and the first that does not
+    assert_eq!(to_main(499_999_999_999, "0.5"), Ok(999_999_999_998));
+    assert_eq!(to_main(-499_999_999_999, "0.5"), Ok(-999_999_999_998));
+    assert_eq!(to_main(500_000_000_000, "0.5"), Err(INVALID));
+    assert_eq!(to_main(-500_000_000_000, "0.5"), Err(INVALID));
+    for minor in [MAX_MINOR, -MAX_MINOR, i64::MAX, i64::MIN, i64::MIN + 1, 1_000_000_000_000] {
+        for rate in ["0.5", "0.00000001", "0.99999999"] {
+            assert_eq!(to_main(minor, rate), Err(INVALID), "{minor} at {rate}");
+        }
+    }
+    for minor in [i64::MAX, i64::MIN, i64::MIN + 1, MAX_MINOR + 1, -MAX_MINOR - 1] {
+        assert!(to_main(minor, "1").is_err(), "{minor} at 1");
+    }
+    assert_eq!(to_main(i64::MAX, "999999999").map(i128::from), Ok(model_to_main(i64::MAX, 999_999_999, 1)), "a big amount at a big rate fits, and the work does not overflow");
+    assert_eq!(to_main(1, "0.00000001"), Ok(100_000_000));
+    for bad in ["0", "0.0", "-1", "-0.5", "abc", "5,00", "", " ", " 5", "5 ", "5.", ".5", "+5", "1e3", "1234567890", "1.123456789"] {
+        assert_eq!(to_main(100, bad), Err(INVALID), "{bad:?}");
+    }
+}
+
+#[test]
+fn the_value_of_a_foreign_account_in_the_main_currency_follows_the_sign_and_the_rate() {
+    let w = world();
+    let rich = lei(&w.conn, "Lei", "RON", "5.00", "123.45");
+    let owing = lei(&w.conn, "Card", "RON", "5.00", "-123.45");
+    let empty = lei(&w.conn, "Empty", "USD", "1.10", "0.00");
+    let cent = lei(&w.conn, "Cents", "RON", "3", "0.02");
+    let plain = opened(&w.conn, "Euros", "-77.70", "2026-01-01");
+    let of = |id: i64| {
+        let a = get(&w.conn, id, TODAY).unwrap();
+        (a.balance, a.balance_in_main)
+    };
+    assert_eq!(of(rich), ("123.45".into(), "24.69".into()));
+    assert_eq!(of(owing), ("-123.45".into(), "-24.69".into()), "the sign is kept");
+    assert_eq!(of(empty), ("0.00".into(), "0.00".into()));
+    assert_eq!(of(cent), ("0.02".into(), "0.01".into()), "two cents at a rate of three: 0.67 rounds up");
+    assert_eq!(of(plain), ("-77.70".into(), "-77.70".into()), "an account in the main currency: the balance");
+    assert_eq!(of(MAIN_ID), ("0.00".into(), "0.00".into()));
+    // the rate decides, and a new rate moves the value and no stored number
+    update(&w.conn, rich, &AccountPatch { rate: Some("0.5".into()), ..Default::default() }, TODAY).unwrap();
+    assert_eq!(of(rich), ("123.45".into(), "246.90".into()));
+    update(&w.conn, owing, &AccountPatch { rate: Some("160".into()), ..Default::default() }, TODAY).unwrap();
+    assert_eq!(of(owing), ("-123.45".into(), "-0.77".into()));
+    assert_eq!(list(&w.conn, TODAY).unwrap().len(), 6);
+    // a value that cannot be shown shows the bound it passed, and does not make the list unreadable
+    let big = lei(&w.conn, "Big", "RON", "0.5", "9999999999.99");
+    let debt = lei(&w.conn, "Big debt", "RON", "0.00000001", "-9999999999.99");
+    assert_eq!(of(big), ("9999999999.99".into(), "9999999999.99".into()));
+    assert_eq!(of(debt), ("-9999999999.99".into(), "-9999999999.99".into()));
+    assert_eq!(list(&w.conn, TODAY).unwrap().len(), 8);
+    assert!(summary(&w.conn, TODAY).is_ok());
+}
+
+#[test]
+fn net_worth_adds_each_account_in_the_main_currency_at_its_own_rate_whatever_its_state() {
+    let w = world();
+    let anna = friend(&w.conn, "Anna");
+    let savings = opened(&w.conn, "Savings", "100.00", "2026-01-01");
+    let lei1 = lei(&w.conn, "Lei", "RON", "5.00", "1000.00");
+    let lei2 = lei(&w.conn, "More lei", "RON", "4.00", "100.00");
+    let usd = lei(&w.conn, "Dollars", "USD", "1.10", "330.00");
+    let card = lei(&w.conn, "Card", "RON", "5.00", "-50.00");
+    let summed = || {
+        let s = summary(&w.conn, TODAY).unwrap();
+        (s.in_accounts, s.friends, s.net_worth, s.accounts, s.in_use)
+    };
+    let s = |a: &str, f: &str, n: &str, count: u32| (a.to_string(), f.to_string(), n.to_string(), count, true);
+    // 100.00 + 200.00 + 25.00 + 300.00 - 10.00
+    assert_eq!(summed(), s("615.00", "0.00", "615.00", 6));
+    // money a friend owes you is yours, in the main currency
+    entry(&w.conn, MAIN_ID, anna, ledger::Kind::Lent, "40.00", "2026-11-02");
+    assert_eq!(summed(), s("575.00", "40.00", "615.00", 6), "lending moved 40.00 out of the main account and into what friends owe");
+    // the same currency at two rates: each account at its own
+    update(&w.conn, lei2, &AccountPatch { rate: Some("5.00".into()), ..Default::default() }, TODAY).unwrap();
+    assert_eq!(summed(), s("570.00", "40.00", "610.00", 6), "100.00 lei is 20.00 now, not 25.00");
+    // an account that does not count is left out, however it is in its own currency
+    update(&w.conn, usd, &AccountPatch { include_in_net_worth: Some(false), ..Default::default() }, TODAY).unwrap();
+    assert_eq!(summed(), s("270.00", "40.00", "310.00", 6), "the count of accounts does not change");
+    // archived, a foreign account still counts; archived and excluded it does not
+    super::archive(&w.conn, lei1, TODAY).unwrap();
+    assert_eq!(summed(), s("270.00", "40.00", "310.00", 6));
+    update(&w.conn, card, &AccountPatch { include_in_net_worth: Some(false), ..Default::default() }, TODAY).unwrap();
+    assert_eq!(summed(), s("280.00", "40.00", "320.00", 6), "the negative one is out: 10.00 more");
+    update(&w.conn, usd, &AccountPatch { include_in_net_worth: Some(true), ..Default::default() }, TODAY).unwrap();
+    assert_eq!(summed(), s("580.00", "40.00", "620.00", 6));
+    // rows move a foreign account by its own amounts, and net worth by their value: a foreign expense of 100.00 lei, 20.00 at 5.00
+    native_on(&w.conn, lei2, w.food, "Shop", "19.00", "100.00", "2026-11-03");
+    assert_eq!(summed(), s("560.00", "40.00", "600.00", 6), "the amount in the main currency of the row, 19.00, plays no part: the account lost 100.00 lei");
+    // a transfer between currencies: out of savings by its amount, into the foreign account by its own
+    transfers::create(&w.conn, &transfers::NewTransfer { to_amount: Some("249.00".into()), ..new_transfer(savings, usd, "50.00", "2026-11-04") }).unwrap();
+    assert_eq!(summed(), s("736.36", "40.00", "776.36", 6), "50.00 left savings and 249.00 dollars reached the other account, 226.36 worth of them: a transfer between currencies is not zero-sum");
+}
+
+#[test]
+fn a_foreign_accounts_statement_chart_breakdown_and_change_this_month_are_in_its_own_currency() {
+    let w = world();
+    // this month is November 2026 (TODAY is 2026-11-13); the account opened with 100.00 lei in October
+    let lei = create(&w.conn, &NewAccount { currency: Some("RON".into()), rate: Some("5.00".into()), opening_balance: Some("100.00".into()), opening_date: Some("2026-10-01".into()), ..new_account("Lei") }, TODAY).unwrap().id;
+    native_on(&w.conn, lei, w.food, "Shop", "20.00", "100.00", "2026-11-02");
+    let pay = transactions::create(
+        &w.conn,
+        &NewTransaction { native_amount: Some("49.00".into()), account_id: Some(lei.to_string()), ..tx_in(w.salary, "Pay", "10.00", "2026-11-03") },
+    )
+    .unwrap()
+    .id;
+    transfers::create(&w.conn, &transfers::NewTransfer { to_amount: Some("249.00".into()), ..new_transfer(MAIN_ID, lei, "50.00", "2026-11-05") }).unwrap();
+    transfers::create(&w.conn, &transfers::NewTransfer { to_amount: Some("5.90".into()), ..new_transfer(lei, MAIN_ID, "30.00", "2026-11-06") }).unwrap();
+
+    let account = get(&w.conn, lei, TODAY).unwrap();
+    assert_eq!((account.balance.as_str(), account.change_this_month.as_str(), account.last_activity.as_deref(), account.currency.as_str()), ("268.00", "168.00", Some("2026-11-06"), "RON"));
+    assert_eq!(account.balance_in_main, "53.60");
+
+    let s = statement(&w.conn, lei, "2026-11-01", "2026-11-30", TODAY).unwrap();
+    assert_eq!((s.currency.as_str(), s.account.currency.as_str(), s.balance_before.as_str(), s.balance_after.as_str()), ("RON", "RON", "100.00", "268.00"));
+    let lines: Vec<(&str, &str, &str, &str)> = s.lines.iter().map(|l| (l.date.as_str(), l.source.as_str(), l.amount.as_str(), l.balance.as_str())).collect();
+    assert_eq!(
+        lines,
+        [("2026-11-02", "TRANSACTION", "-100.00", "0.00"), ("2026-11-03", "TRANSACTION", "49.00", "49.00"), ("2026-11-05", "TRANSFER_IN", "249.00", "298.00"), ("2026-11-06", "TRANSFER_OUT", "-30.00", "268.00")],
+        "every amount is the one the account really moved by, not the amount in the main currency"
+    );
+    assert_eq!(s.lines[1].id, pay.to_string());
+    assert_eq!(serde_json::to_value(&s).unwrap()["currency"], "RON");
+    // the main account is in euro: the same two transfers, each by its own amount
+    let main = statement(&w.conn, MAIN_ID, "2026-11-01", "2026-11-30", TODAY).unwrap();
+    assert_eq!(main.currency, "EUR");
+    assert_eq!(main.lines.iter().map(|l| (l.source.as_str(), l.amount.as_str())).collect::<Vec<_>>(), [("TRANSFER_OUT", "-50.00"), ("TRANSFER_IN", "5.90")]);
+    // the chart: the balance at the end of each month, in lei
+    let points = history(&w.conn, lei, "2026", TODAY).unwrap();
+    assert_eq!(points.len(), 11);
+    assert_eq!((points[8].balance.as_str(), points[9].balance.as_str(), points[10].balance.as_str()), ("0.00", "100.00", "268.00"));
+    // the breakdown: what the account paid and took in, in lei
+    let b = breakdown(&w.conn, lei, "2026-11-01", "2026-11-30").unwrap();
+    assert_eq!(b.currency, "RON");
+    assert_eq!((shares(&b.expenses), shares(&b.income), b.expense_total.as_str(), b.income_total.as_str()), (vec![("Food", "100.00")], vec![("Salary", "49.00")], "100.00", "49.00"));
+    let b = breakdown(&w.conn, MAIN_ID, "2026-11-01", "2026-11-30").unwrap();
+    assert_eq!((b.currency.as_str(), b.expenses.len(), b.income.len()), ("EUR", 0, 0), "transfers are no part of it");
+    assert_eq!(serde_json::to_value(&b).unwrap()["currency"], "EUR");
+    // the rate moves none of this
+    update(&w.conn, lei, &AccountPatch { rate: Some("4.00".into()), ..Default::default() }, TODAY).unwrap();
+    assert_eq!(statement(&w.conn, lei, "2026-11-01", "2026-11-30", TODAY).unwrap().lines, s.lines);
+    assert_eq!(get(&w.conn, lei, TODAY).unwrap().balance_in_main, "67.00");
+    // an unknown account has no currency to report
+    assert_eq!(breakdown(&w.conn, 99, "2026-11-01", "2026-11-30"), Err(AppError::NotFound));
+}
+
+/// A transaction as a main-currency account takes it, with the amount of the person's choice.
+fn tx_in(category: i64, name: &str, amount: &str, date: &str) -> NewTransaction {
+    NewTransaction { name: name.into(), amount: amount.into(), payment_date: date.into(), category_id: category.to_string(), description: None, client_uuid: None, account_id: None, native_amount: None }
+}
+
+#[test]
+fn what_is_available_is_in_the_currency_of_the_account_and_the_virtual_balance_is_never_converted() {
+    let w = world();
+    let card = lei(&w.conn, "Card", "RON", "5.00", "-240.00");
+    update(&w.conn, card, &AccountPatch { virtual_balance: Some("1000.00".into()), ..Default::default() }, TODAY).unwrap();
+    let shown = get(&w.conn, card, TODAY).unwrap();
+    assert_eq!((shown.balance.as_str(), shown.virtual_balance.as_str(), shown.available.as_str(), shown.balance_in_main.as_str()), ("-240.00", "1000.00", "760.00", "-48.00"));
+    // the limit is no part of net worth or of the value in the main currency
+    assert_eq!(summary(&w.conn, TODAY).unwrap().in_accounts, "-48.00");
+    // a row of the account moves what is available by its native amount
+    native_on(&w.conn, card, w.food, "Shop", "9.00", "45.00", "2026-11-02");
+    let shown = get(&w.conn, card, TODAY).unwrap();
+    assert_eq!((shown.balance.as_str(), shown.available.as_str(), shown.balance_in_main.as_str()), ("-285.00", "715.00", "-57.00"));
+    // the limit in lei, and a limit that is negative
+    update(&w.conn, card, &AccountPatch { virtual_balance: Some("-300.00".into()), ..Default::default() }, TODAY).unwrap();
+    assert_eq!(get(&w.conn, card, TODAY).unwrap().available, "-585.00");
+    // a rate that changes leaves the lei alone
+    update(&w.conn, card, &AccountPatch { rate: Some("2".into()), ..Default::default() }, TODAY).unwrap();
+    let shown = get(&w.conn, card, TODAY).unwrap();
+    assert_eq!((shown.available.as_str(), shown.virtual_balance.as_str(), shown.balance_in_main.as_str()), ("-585.00", "-300.00", "-142.50"));
+}
+
+// ---- "set the balance" (section 21.5) --------------------------------------------------------------
+
+fn set_balance(balance: &str) -> AccountPatch {
+    AccountPatch { balance: Some(balance.into()), ..Default::default() }
+}
+
+fn opening_of(conn: &Connection, id: i64) -> i64 {
+    one(conn, &format!("SELECT opening_balance_minor FROM accounts WHERE id = {id}"))
+}
+
+#[test]
+fn setting_the_balance_moves_the_opening_balance_by_the_difference_up_or_down() {
+    let w = world();
+    let cash = opened(&w.conn, "Cash", "100.00", "2026-01-01");
+    on(&w.conn, cash, w.food, "Shop", "20.00", "2026-11-02");
+    assert_eq!(get(&w.conn, cash, TODAY).unwrap().balance, "80.00");
+    let made = stamp_of(&w.conn, "accounts", cash);
+    // higher
+    let up = update(&w.conn, cash, &set_balance("1662.90"), TODAY).unwrap();
+    assert_eq!((up.balance.as_str(), up.opening_balance.as_str()), ("1662.90", "1682.90"));
+    assert!(stamp_of(&w.conn, "accounts", cash) > made);
+    // lower, and negative
+    let down = update(&w.conn, cash, &set_balance("50.00"), TODAY).unwrap();
+    assert_eq!((down.balance.as_str(), down.opening_balance.as_str()), ("50.00", "70.00"));
+    let negative = update(&w.conn, cash, &set_balance("-5.00"), TODAY).unwrap();
+    assert_eq!((negative.balance.as_str(), negative.opening_balance.as_str()), ("-5.00", "15.00"));
+    let zero = update(&w.conn, cash, &set_balance("0.00"), TODAY).unwrap();
+    assert_eq!((zero.balance.as_str(), zero.opening_balance.as_str()), ("0.00", "20.00"));
+    // a balance that makes the opening balance nothing leaves no opening movement at all
+    let nothing = update(&w.conn, cash, &set_balance("-20.00"), TODAY).unwrap();
+    assert_eq!((nothing.balance.as_str(), nothing.opening_balance.as_str()), ("-20.00", "0.00"));
+    assert_eq!(one(&w.conn, &format!("SELECT count(*) FROM account_movements WHERE account_id = {cash} AND source = 'OPENING'")), 0);
+    // the rows were never touched, and only the opening balance moved
+    assert_eq!(text(&w.conn, "SELECT amount_minor || ' ' || payment_date FROM transactions"), "2000 2026-11-02");
+    assert_eq!(get(&w.conn, cash, TODAY).unwrap().last_activity.as_deref(), Some("2026-11-02"));
+    // the main account is an account like the others
+    let main = update(&w.conn, MAIN_ID, &set_balance("250.00"), TODAY).unwrap();
+    assert_eq!((main.balance.as_str(), main.opening_balance.as_str()), ("250.00", "250.00"));
+}
+
+#[test]
+fn setting_the_balance_to_what_it_is_writes_nothing_and_makes_no_stamp() {
+    let w = world();
+    let cash = opened(&w.conn, "Cash", "100.00", "2026-01-01");
+    on(&w.conn, cash, w.food, "Shop", "20.00", "2026-11-02");
+    on(&w.conn, cash, w.food, "Later", "7.00", "2026-12-01");
+    let before = get(&w.conn, cash, TODAY).unwrap();
+    assert_eq!(before.balance, "80.00");
+    assert_eq!(assert_nothing_written(&w.conn, "the balance it has", || update(&w.conn, cash, &set_balance("80.00"), TODAY)), before);
+    // an account with no rows at all, and the main account
+    let empty = account(&w.conn, "Empty");
+    assert_nothing_written(&w.conn, "0.00 on an empty account", || update(&w.conn, empty, &set_balance("0.00"), TODAY));
+    assert_nothing_written(&w.conn, "0.00 on the untouched main account", || update(&w.conn, MAIN_ID, &set_balance("0.00"), TODAY));
+    // with a field that is as it is, too
+    assert_nothing_written(&w.conn, "the balance and the name it has", || update(&w.conn, cash, &AccountPatch { name: Some("Cash".into()), balance: Some("80.00".into()), ..Default::default() }, TODAY));
+    // and another balance and back is two changes
+    update(&w.conn, cash, &set_balance("81.00"), TODAY).unwrap();
+    update(&w.conn, cash, &set_balance("80.00"), TODAY).unwrap();
+    assert_eq!(get(&w.conn, cash, TODAY).unwrap(), before);
+}
+
+#[test]
+fn a_balance_that_would_leave_the_range_or_is_badly_written_changes_nothing() {
+    let w = world();
+    let cash = opened(&w.conn, "Cash", "100.00", "2026-01-01");
+    on(&w.conn, cash, w.food, "Shop", "20.00", "2026-11-02");
+    // the opening balance would be the balance wanted plus 20.00 (or minus 20.00 on the other side): one cent beyond is refused, the bound is allowed
+    assert_refused(&w.conn, INVALID, "the largest balance, which needs an opening balance beyond the largest", || update(&w.conn, cash, &set_balance("9999999999.99"), TODAY));
+    assert_refused(&w.conn, INVALID, "one cent beyond the opening balance", || update(&w.conn, cash, &set_balance("9999999980.00"), TODAY));
+    let at_bound = update(&w.conn, cash, &set_balance("9999999979.99"), TODAY).unwrap();
+    assert_eq!((at_bound.balance.as_str(), at_bound.opening_balance.as_str()), ("9999999979.99", "9999999999.99"));
+    assert_eq!(opening_of(&w.conn, cash), MAX_MINOR);
+    // negative side: with money in, the largest debt cannot be reached
+    on(&w.conn, cash, w.salary, "Pay", "50.00", "2026-11-03");
+    assert_refused(&w.conn, INVALID, "the largest debt, which needs an opening balance below the smallest", || update(&w.conn, cash, &set_balance("-9999999999.99"), TODAY));
+    assert_refused(&w.conn, INVALID, "one cent beyond the smallest opening balance", || update(&w.conn, cash, &set_balance("-9999999970.00"), TODAY));
+    assert_eq!(update(&w.conn, cash, &set_balance("-9999999969.99"), TODAY).unwrap().opening_balance, "-9999999999.99");
+    // forms that are not an amount
+    for bad in ["", " ", "abc", "1.5", "1", "-0.00", "+1.00", "1,00", "--1.00", "10000000000.00", "-10000000000.00", " 5.00", "5.00 "] {
+        assert_refused(&w.conn, INVALID, &format!("balance {bad:?}"), || update(&w.conn, cash, &set_balance(bad), TODAY));
+    }
+    // with an opening balance in the same patch, whatever it says
+    for opening in ["0.00", "5.00", "-5.00", "70.00"] {
+        assert_refused(&w.conn, INVALID, &format!("balance and opening balance {opening}"), || update(&w.conn, cash, &AccountPatch { balance: Some("30.00".into()), opening_balance: Some(opening.into()), ..Default::default() }, TODAY));
+    }
+    // the first of the failures did not make a stamp either, and a good field with a bad balance changes nothing
+    assert_refused(&w.conn, INVALID, "a good name with a bad balance", || update(&w.conn, cash, &AccountPatch { name: Some("Fine".into()), balance: Some("1.5".into()), ..Default::default() }, TODAY));
+    assert_refused(&w.conn, AppError::NotFound, "an account that is not there", || update(&w.conn, 99, &set_balance("1.00"), TODAY));
+}
+
+#[test]
+fn setting_the_balance_counts_today_and_leaves_the_rows_of_later_days_to_apply_later() {
+    let w = world();
+    let cash = opened(&w.conn, "Cash", "100.00", "2026-01-01");
+    on(&w.conn, cash, w.food, "Shop", "20.00", "2026-11-02");
+    on(&w.conn, cash, w.food, "Tomorrow", "30.00", "2026-11-14");
+    on(&w.conn, cash, w.salary, "Pay day", "500.00", "2026-12-01");
+    transfer(&w.conn, cash, MAIN_ID, "10.00", "2027-01-01");
+    assert_eq!(balance(&w.conn, cash, TODAY), 8000, "today: 100.00 - 20.00");
+    let set = update(&w.conn, cash, &set_balance("1000.00"), TODAY).unwrap();
+    assert_eq!((set.balance.as_str(), set.opening_balance.as_str()), ("1000.00", "1020.00"), "the future rows are no part of today's balance");
+    assert_eq!([TODAY, "2026-11-14", "2026-12-01", "2027-01-01"].map(|d| balance(&w.conn, cash, d)), [100_000, 97_000, 147_000, 146_000], "and they still apply on their days");
+    // 'today' is the one the caller gives: a day later the row of that day is in
+    assert_eq!(get(&w.conn, cash, "2026-11-14").unwrap().balance, "970.00");
+    let later = update(&w.conn, cash, &set_balance("500.00"), "2026-11-14").unwrap();
+    assert_eq!(later.balance, "500.00");
+    assert_eq!(opening_of(&w.conn, cash), 55_000, "1020.00 - 970.00 + 500.00");
+    // an opening balance dated after today is not in today's balance, so it cannot be moved to set it
+    let ahead = create(&w.conn, &NewAccount { opening_balance: Some("40.00".into()), opening_date: Some("2026-12-31".into()), ..new_account("Ahead") }, TODAY).unwrap().id;
+    assert_refused(&w.conn, INVALID, "a balance for an account that opens later", || update(&w.conn, ahead, &set_balance("10.00"), TODAY));
+    // unless the same patch brings it to a day that is not after today
+    let moved = update(&w.conn, ahead, &AccountPatch { balance: Some("10.00".into()), opening_date: Some("2026-11-13".into()), ..Default::default() }, TODAY).unwrap();
+    assert_eq!((moved.balance.as_str(), moved.opening_balance.as_str(), moved.opening_date.as_str()), ("10.00", "10.00", "2026-11-13"));
+    assert_refused(&w.conn, INVALID, "a patch that moves the opening date to after today", || update(&w.conn, cash, &AccountPatch { balance: Some("1.00".into()), opening_date: Some("2026-12-31".into()), ..Default::default() }, TODAY));
+}
+
+#[test]
+fn setting_the_balance_moves_every_earlier_balance_by_the_same_amount() {
+    let w = world();
+    let cash = opened(&w.conn, "Cash", "100.00", "2026-01-01");
+    on(&w.conn, cash, w.food, "Shop", "10.00", "2026-02-01");
+    on(&w.conn, cash, w.salary, "Pay", "5.00", "2026-03-01");
+    transfer(&w.conn, cash, MAIN_ID, "20.00", "2026-04-01");
+    let read = |from: &str| {
+        let s = statement(&w.conn, cash, from, "2026-12-31", TODAY).unwrap();
+        (s.balance_before.clone(), s.lines.iter().map(|l| l.balance.clone()).collect::<Vec<_>>(), s.balance_after.clone())
+    };
+    let before = (read("2026-01-01"), read("2026-03-01"), history(&w.conn, cash, "2026", TODAY).unwrap());
+    assert_eq!(before.0, ("0.00".into(), vec!["100.00".into(), "90.00".into(), "95.00".into(), "75.00".into()], "75.00".into()));
+    // 75.00 becomes 500.00: every balance, on every day, is 425.00 more from the opening day on
+    update(&w.conn, cash, &set_balance("500.00"), TODAY).unwrap();
+    assert_eq!(read("2026-01-01"), ("0.00".into(), vec!["525.00".into(), "515.00".into(), "520.00".into(), "500.00".into()], "500.00".into()));
+    assert_eq!(read("2026-03-01"), ("515.00".into(), vec!["520.00".into(), "500.00".into()], "500.00".into()), "a statement that starts later: the balance before it moved too");
+    let chart: Vec<String> = history(&w.conn, cash, "2026", TODAY).unwrap().iter().map(|p| p.balance.clone()).collect();
+    let was: Vec<String> = before.2.iter().map(|p| p.balance.clone()).collect();
+    assert_eq!(chart.len(), was.len());
+    for (new, old) in chart.iter().zip(&was) {
+        assert_eq!(new.replace('.', "").parse::<i64>().unwrap() - old.replace('.', "").parse::<i64>().unwrap(), 42_500, "{new} against {old}");
+    }
+    // the other accounts and the transfer's other side did not move
+    assert_eq!(balance(&w.conn, MAIN_ID, TODAY), 2000);
+    assert_eq!(one(&w.conn, "SELECT amount_minor FROM transfers"), 2000);
+}
+
+#[test]
+fn the_balance_of_a_foreign_account_is_set_in_its_own_currency_and_its_value_follows() {
+    let w = world();
+    let lei = lei(&w.conn, "Lei", "RON", "5.00", "100.00");
+    native_on(&w.conn, lei, w.food, "Shop", "20.00", "100.00", "2026-11-02");
+    assert_eq!(get(&w.conn, lei, TODAY).unwrap().balance, "0.00");
+    let set = update(&w.conn, lei, &set_balance("1662.90"), TODAY).unwrap();
+    assert_eq!((set.balance.as_str(), set.opening_balance.as_str(), set.balance_in_main.as_str(), set.currency.as_str()), ("1662.90", "1762.90", "332.58", "RON"));
+    assert_eq!(text(&w.conn, "SELECT amount_minor || ' ' || native_amount_minor FROM transactions"), "2000 10000", "the transaction is as it was");
+    // the currency and the balance together, for an account that is made foreign by the same patch: nothing points at it
+    let fresh = account(&w.conn, "Fresh");
+    let both = update(&w.conn, fresh, &AccountPatch { currency: Some("usd".into()), rate: Some("1.10".into()), balance: Some("330.00".into()), ..Default::default() }, TODAY).unwrap();
+    assert_eq!((both.currency.as_str(), both.balance.as_str(), both.balance_in_main.as_str()), ("USD", "330.00", "300.00"));
+    // and net worth sees it in the main currency
+    assert_eq!(summary(&w.conn, TODAY).unwrap().in_accounts, "632.58");
 }

@@ -30,13 +30,13 @@ pub struct Conversion {
 
 /// An exchange rate as an exact fraction, so no floating point touches money.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-struct Rate {
-    numerator: i128,
-    denominator: i128,
+pub(crate) struct Rate {
+    pub(crate) numerator: i128,
+    pub(crate) denominator: i128,
 }
 
 /// "1.08", "0.0063", "160": 1 to 9 whole digits (no leading zeros), up to 8 decimals, above zero.
-fn parse_rate(text: &str) -> Result<Rate, AppError> {
+pub(crate) fn parse_rate(text: &str) -> Result<Rate, AppError> {
     let (whole, fraction) = text.split_once('.').unwrap_or((text, ""));
     let digits = |s: &str| s.bytes().all(|b| b.is_ascii_digit());
     let well_formed = !whole.is_empty()
@@ -57,7 +57,7 @@ fn parse_rate(text: &str) -> Result<Rate, AppError> {
 }
 
 /// Rounds half up. Amounts are never negative.
-fn convert(minor: i64, rate: Rate) -> Result<i64, AppError> {
+pub(crate) fn convert(minor: i64, rate: Rate) -> Result<i64, AppError> {
     let scaled = i128::from(minor) * rate.numerator;
     let rounded = (scaled * 2 + rate.denominator) / (2 * rate.denominator);
     i64::try_from(rounded).ok().filter(|v| *v <= MAX_MINOR).ok_or(AppError::InvalidInput)
@@ -68,7 +68,7 @@ pub(crate) fn convert_at(minor: i64, rate: &str) -> Result<i64, AppError> {
     convert(minor, parse_rate(rate)?)
 }
 
-fn normalize_code(code: &str) -> Result<String, AppError> {
+pub(crate) fn normalize_code(code: &str) -> Result<String, AppError> {
     let code = code.trim().to_ascii_uppercase();
     if code.len() == 3 && code.bytes().all(|b| b.is_ascii_uppercase()) {
         Ok(code)
@@ -78,8 +78,13 @@ fn normalize_code(code: &str) -> Result<String, AppError> {
 }
 
 /// Changes the currency. With `rate`, every stored amount is converted; without it, only the label changes.
-/// Either everything changes or nothing does.
+/// Either everything changes or nothing does. It is refused while any account, archived or not, has a currency of its own: what such an
+/// account holds is in that currency, which neither a conversion nor a new label would leave right (section 21.1).
 pub fn change(conn: &mut Connection, new_currency: &str, rate: Option<&str>, today: &str) -> Result<Conversion, AppError> {
+    // shortcut: refuse, do not convert. A foreign account would need a rate of its own to the new currency; ask for one when people ask.
+    if conn.query_row("SELECT EXISTS (SELECT 1 FROM accounts WHERE currency IS NOT NULL)", [], |r| r.get(0))? {
+        return Err(AppError::InvalidInput);
+    }
     let new_currency = normalize_code(new_currency)?;
     let rate_text = rate.map(str::to_string);
     let rate = rate.map(parse_rate).transpose()?;
@@ -137,6 +142,11 @@ pub(crate) struct Recorded<'a> {
 /// Applies a change that another device made: the same conversion with the same rate and rounding, the same record, and
 /// the generation moves up by one. It must be the next generation, and from the currency this device has now. The caller
 /// has turned `applying` on, so no row gets a new stamp. Either everything changes or nothing does.
+///
+/// It is not refused when this device has a foreign account: the other device has already changed its currency, and refusing would stop the
+/// sync for good. What is in a foreign account's own currency is left as it is: its opening balance and virtual balance, every native
+/// amount of a transaction, the amount of a transfer that leaves it, and the amount that arrives in it. What is in the app's currency is
+/// converted, a transfer's second amount too when it arrives in an account of the app's currency (section 21.6).
 pub(crate) fn apply_recorded(tx: &rusqlite::Transaction, change: &Recorded, today: &str) -> Result<Conversion, AppError> {
     let (current, generation): (String, i64) =
         tx.query_row("SELECT currency, currency_generation FROM settings WHERE id = 1", [], |r| Ok((r.get(0)?, r.get(1)?)))?;
@@ -175,6 +185,7 @@ fn at_least_one(minor: i64) -> i64 {
     minor.max(1)
 }
 
+/// `amount_minor` and `planned_amount_minor` only: `native_amount_minor` is in the currency of a foreign account and is never converted.
 fn convert_transactions(tx: &rusqlite::Transaction, rate: Rate) -> Result<u32, AppError> {
     let rows: Vec<(i64, i64, Option<i64>)> = tx
         .prepare("SELECT id, amount_minor, planned_amount_minor FROM transactions")?
@@ -213,10 +224,10 @@ fn convert_signed(minor: i64, rate: Rate) -> Result<i64, AppError> {
 
 /// The opening balance and the virtual balance of each account that has one, the archived ones too. Both may be negative, so both are
 /// converted by `convert_signed`. The balance of an account is a sum of converted pieces, so it can differ from the converted old balance
-/// by a few cents, as a friend's does.
+/// by a few cents, as a friend's does. An account with a currency of its own is left out: both are in that currency.
 fn convert_accounts(tx: &rusqlite::Transaction, rate: Rate) -> Result<u32, AppError> {
     let rows: Vec<(i64, i64, i64)> = tx
-        .prepare("SELECT id, opening_balance_minor, virtual_balance_minor FROM accounts WHERE opening_balance_minor <> 0 OR virtual_balance_minor <> 0")?
+        .prepare("SELECT id, opening_balance_minor, virtual_balance_minor FROM accounts WHERE (opening_balance_minor <> 0 OR virtual_balance_minor <> 0) AND currency IS NULL")?
         .query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))?
         .collect::<Result<_, _>>()?;
     let mut update = tx.prepare("UPDATE accounts SET opening_balance_minor = ?1, virtual_balance_minor = ?2 WHERE id = ?3")?;
@@ -226,17 +237,34 @@ fn convert_accounts(tx: &rusqlite::Transaction, rate: Rate) -> Result<u32, AppEr
     Ok(rows.len() as u32)
 }
 
-/// Each transfer between accounts, at least one cent.
+/// Each transfer between accounts, at least one cent. `amount_minor` leaves the `from` account and `to_amount_minor` (when there is one)
+/// arrives in the `to` account, each in the currency of its own account: one that is in an account's own currency is left as it is, so a
+/// transfer between two accounts with a currency of their own is not touched. A transfer with nothing to convert is not counted.
 fn convert_transfers(tx: &rusqlite::Transaction, rate: Rate) -> Result<u32, AppError> {
-    let rows: Vec<(i64, i64)> = tx
-        .prepare("SELECT id, amount_minor FROM transfers")?
-        .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?
+    let rows: Vec<(i64, i64, Option<i64>, bool, bool)> = tx
+        .prepare(
+            "SELECT x.id, x.amount_minor, x.to_amount_minor, f.currency IS NOT NULL, t.currency IS NOT NULL
+             FROM transfers x JOIN accounts f ON f.id = x.from_account_id JOIN accounts t ON t.id = x.to_account_id",
+        )?
+        .query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?)))?
         .collect::<Result<_, _>>()?;
-    let mut update = tx.prepare("UPDATE transfers SET amount_minor = ?1 WHERE id = ?2")?;
-    for (id, amount) in &rows {
-        update.execute(params![at_least_one(convert(*amount, rate)?), id])?;
+    let mut update = tx.prepare("UPDATE transfers SET amount_minor = ?1, to_amount_minor = ?2 WHERE id = ?3")?;
+    let mut converted = 0;
+    for (id, amount, arrives, from_foreign, to_foreign) in rows {
+        let leaves_in_main = !from_foreign;
+        let arrives_in_main = arrives.is_some() && !to_foreign;
+        if !leaves_in_main && !arrives_in_main {
+            continue;
+        }
+        let amount = if leaves_in_main { at_least_one(convert(amount, rate)?) } else { amount };
+        let arrives = match arrives {
+            Some(minor) if arrives_in_main => Some(at_least_one(convert(minor, rate)?)),
+            other => other,
+        };
+        update.execute(params![amount, arrives, id])?;
+        converted += 1;
     }
-    Ok(rows.len() as u32)
+    Ok(converted)
 }
 
 fn convert_recurring(tx: &rusqlite::Transaction, rate: Rate) -> Result<u32, AppError> {
@@ -267,8 +295,9 @@ fn convert_budgets(tx: &rusqlite::Transaction, rate: Rate) -> Result<u32, AppErr
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::accounts::fixtures::{archived_account, balance, new_account, snapshot, transfer, Rng, TODAY};
-    use crate::accounts::{self, NewAccount, MAIN_ID};
+    use crate::accounts::fixtures::{archived_account, balance, new_account, new_transfer, snapshot, transfer, Rng, TODAY};
+    use crate::accounts::transfers::NewTransfer;
+    use crate::accounts::{self, AccountPatch, NewAccount, MAIN_ID};
     use crate::budgets::{self, Scope, SetBudget};
     use crate::categories::{self, CategoryType};
     use crate::transactions::{self, NewTransaction};
@@ -293,6 +322,7 @@ mod tests {
                 description: None,
                 client_uuid: None,
                 account_id: None,
+                native_amount: None,
             },
         )
         .unwrap()
@@ -906,5 +936,222 @@ mod tests {
                 }
             }
         }
+    }
+
+    // ---- accounts in a currency of their own (docs/accounts-design.md, sections 21.1 and 21.6) ----
+
+    /// An account in another currency, opened with `opening` at the start of 2026. Returns its id.
+    fn foreign(conn: &Connection, name: &str, code: &str, opening: &str) -> i64 {
+        accounts::create(
+            conn,
+            &NewAccount { currency: Some(code.into()), rate: Some("5.00".into()), opening_balance: Some(opening.into()), opening_date: Some("2026-01-01".into()), ..new_account(name) },
+            TODAY,
+        )
+        .unwrap()
+        .id
+    }
+
+    fn generation(conn: &Connection) -> i64 {
+        conn.query_row("SELECT currency_generation FROM settings", [], |r| r.get(0)).unwrap()
+    }
+
+    #[test]
+    fn the_currency_is_not_changed_while_an_account_has_one_of_its_own_archived_or_not_and_the_refusal_changes_nothing() {
+        let (mut conn, food) = db();
+        let small = spend(&conn, food, "10.00");
+        let savings = account(&conn, "Savings", "100.00");
+        let lei = foreign(&conn, "Lei", "RON", "500.00");
+        let usd = foreign(&conn, "Dollars", "USD", "20.00");
+        transfer(&conn, MAIN_ID, savings, "5.00", "2026-02-01");
+        let before = snapshot(&conn);
+        let refused = |conn: &mut Connection, what: &str| {
+            for (code, rate) in [("USD", Some("2")), ("GBP", None), ("USD", Some("1")), ("US", Some("2")), ("EUR", Some("2"))] {
+                assert_eq!(change(&mut *conn, code, rate, "2026-10-13").err(), Some(AppError::InvalidInput), "{what}: {code} {rate:?}");
+            }
+        };
+        refused(&mut conn, "with two foreign accounts");
+        assert_eq!((currency(&conn).as_str(), generation(&conn), amount_of(&conn, small), opening_of(&conn, savings), opening_of(&conn, lei)), ("EUR", 0, 1_000, 10_000, 50_000));
+        assert_eq!(snapshot(&conn), before, "no row, stamp, marker, history row or tick of the clock changed");
+        assert_eq!(conn.query_row::<i64, _, _>("SELECT count(*) FROM currency_changes", [], |r| r.get(0)).unwrap(), 0, "and nothing was recorded");
+        // one of them gone is not enough, and an archived one counts as much as the others
+        accounts::delete(&conn, usd).unwrap();
+        refused(&mut conn, "with one foreign account");
+        accounts::archive(&conn, lei, TODAY).unwrap();
+        let archived = snapshot(&conn);
+        refused(&mut conn, "with only an archived foreign account");
+        assert_eq!(snapshot(&conn), archived);
+        // set back to the main currency, it is an account like the others and the change is allowed
+        accounts::restore(&conn, lei, TODAY).unwrap();
+        accounts::update(&conn, lei, &AccountPatch { currency: Some("eur".into()), ..Default::default() }, TODAY).unwrap();
+        let done = change(&mut conn, "USD", Some("2"), "2026-10-13").unwrap();
+        assert_eq!((done.accounts, done.transfers, currency(&conn).as_str(), generation(&conn)), (2, 1, "USD", 1));
+        assert_eq!((opening_of(&conn, lei), opening_of(&conn, savings), amount_of(&conn, small)), (100_000, 20_000, 2_000), "the account that came back is converted like the others");
+    }
+
+    #[test]
+    fn the_currency_is_changed_again_once_the_last_foreign_account_is_deleted() {
+        let (mut conn, _) = db();
+        let lei = foreign(&conn, "Lei", "RON", "500.00");
+        let old = foreign(&conn, "Old lei", "RON", "0.00");
+        accounts::archive(&conn, old, TODAY).unwrap();
+        assert_eq!(change(&mut conn, "USD", None, "2026-10-13").err(), Some(AppError::InvalidInput), "not even a change of the label alone");
+        accounts::delete(&conn, lei).unwrap();
+        assert_eq!(change(&mut conn, "USD", None, "2026-10-13").err(), Some(AppError::InvalidInput), "the archived one is still there");
+        accounts::delete(&conn, old).unwrap();
+        change(&mut conn, "USD", None, "2026-10-13").unwrap();
+        assert_eq!((currency(&conn).as_str(), generation(&conn)), ("USD", 1));
+        // a new account in another currency makes it refuse again, and the main currency's own code is not "another"
+        let same = accounts::create(&conn, &NewAccount { currency: Some("usd".into()), ..new_account("Dollars") }, TODAY).unwrap();
+        assert!(!same.foreign, "an account that names the main currency is one in the main currency");
+        change(&mut conn, "GBP", None, "2026-10-14").unwrap();
+        foreign(&conn, "Lei", "RON", "1.00");
+        assert_eq!(change(&mut conn, "EUR", None, "2026-10-15").err(), Some(AppError::InvalidInput));
+        assert_eq!((currency(&conn).as_str(), generation(&conn)), ("GBP", 2));
+    }
+
+    /// A device with accounts in the main currency, accounts in lei and in dollars, and a transfer of every kind between them.
+    fn with_foreign_accounts() -> (Connection, i64) {
+        let (conn, food) = db();
+        let savings = account(&conn, "Savings", "1000.00");
+        accounts::update(&conn, savings, &AccountPatch { virtual_balance: Some("250.00".into()), ..Default::default() }, TODAY).unwrap();
+        let lei = foreign(&conn, "Lei", "RON", "500.00");
+        let more_lei = foreign(&conn, "More lei", "RON", "0.00");
+        let usd = foreign(&conn, "Dollars", "USD", "10.00");
+        accounts::update(&conn, lei, &AccountPatch { virtual_balance: Some("100.00".into()), ..Default::default() }, TODAY).unwrap();
+        spend(&conn, food, "10.00");
+        transactions::create(
+            &conn,
+            &NewTransaction {
+                name: "Lei shop".into(),
+                amount: "20.00".into(),
+                payment_date: "2026-06-15".into(),
+                category_id: food.to_string(),
+                description: None,
+                client_uuid: None,
+                account_id: Some(lei.to_string()),
+                native_amount: Some("100.00".into()),
+            },
+        )
+        .unwrap();
+        let arriving = |from: i64, to: i64, amount: &str, arrives: Option<&str>| {
+            accounts::transfers::create(&conn, &NewTransfer { to_amount: arrives.map(str::to_string), ..new_transfer(from, to, amount, "2026-02-01") }).unwrap();
+        };
+        arriving(MAIN_ID, savings, "100.00", None); // 1: both in the main currency
+        arriving(MAIN_ID, lei, "10.00", Some("49.00")); // 2: leaves in the main currency, arrives in lei
+        arriving(lei, MAIN_ID, "30.00", Some("6.00")); // 3: leaves in lei, arrives in the main currency
+        arriving(lei, more_lei, "15.00", None); // 4: lei to lei
+        arriving(lei, usd, "20.00", Some("4.00")); // 5: lei to dollars
+        arriving(usd, savings, "5.00", Some("4.50")); // 6: dollars to the main currency
+        (conn, food)
+    }
+
+    fn transfer_amounts(conn: &Connection) -> Vec<(i64, i64, Option<i64>)> {
+        conn.prepare("SELECT id, amount_minor, to_amount_minor FROM transfers ORDER BY id").unwrap().query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?))).unwrap().map(Result::unwrap).collect()
+    }
+
+    fn account_figures(conn: &Connection) -> Vec<(String, i64, i64)> {
+        conn.prepare("SELECT name, opening_balance_minor, virtual_balance_minor FROM accounts ORDER BY id").unwrap().query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?))).unwrap().map(Result::unwrap).collect()
+    }
+
+    fn stamps_of_everything(conn: &Connection) -> Vec<String> {
+        conn.prepare("SELECT stamp || updated_at FROM accounts UNION ALL SELECT stamp || updated_at FROM transfers UNION ALL SELECT stamp || updated_at FROM transactions")
+            .unwrap()
+            .query_map([], |r| r.get(0))
+            .unwrap()
+            .map(Result::unwrap)
+            .collect()
+    }
+
+    #[test]
+    fn a_conversion_arriving_by_sync_converts_what_is_in_the_main_currency_and_leaves_a_foreign_accounts_own_amounts_alone() {
+        for rate in ["2", "0.5", "1.08", "0.001", "160"] {
+            let (mut desktop, mut phone) = (with_foreign_accounts().0, with_foreign_accounts().0);
+            // the desktop never knew the accounts in other currencies: only the phone has them
+            for table_and_filter in ["DELETE FROM transfers WHERE id > 1", "DELETE FROM transactions WHERE account_id > 1", "DELETE FROM accounts WHERE currency IS NOT NULL"] {
+                desktop.execute(table_and_filter, []).unwrap();
+            }
+            let parsed = parse_rate(rate).unwrap();
+            change(&mut desktop, "USD", Some(rate), "2026-10-13").unwrap();
+            let (accounts_before, transfers_before, stamps) = (account_figures(&phone), transfer_amounts(&phone), stamps_of_everything(&phone));
+            let natives_before: Vec<Option<i64>> = phone.prepare("SELECT native_amount_minor FROM transactions ORDER BY id").unwrap().query_map([], |r| r.get(0)).unwrap().map(Result::unwrap).collect();
+            let lei_balance = balance(&phone, 3, TODAY);
+            assert_eq!(natives_before, [None, Some(10_000)]);
+
+            let applied = apply_change_of(&desktop, &mut phone).unwrap();
+
+            let converted = |minor: i64| at_least_one(convert(minor, parsed).unwrap());
+            let signed = |minor: i64| convert(minor.abs(), parsed).unwrap() * minor.signum();
+            // the accounts: the ones in the main currency are converted, the ones in lei and in dollars are not (the main account, savings: 1000.00 and a limit of 250.00)
+            let names = ["Main account", "Savings", "Lei", "More lei", "Dollars"];
+            let after = account_figures(&phone);
+            assert_eq!(after.iter().map(|a| a.0.as_str()).collect::<Vec<_>>(), names);
+            assert_eq!((after[0].1, after[0].2), (0, 0));
+            assert_eq!((after[1].1, after[1].2), (signed(100_000), signed(25_000)), "rate {rate}: savings, in the main currency");
+            assert_eq!(&after[2..], &accounts_before[2..], "rate {rate}: the opening balance and the virtual balance of an account in its own currency are as they were");
+            // the rows: the amount in the main currency of every transaction, and never a native amount
+            let amounts: Vec<i64> = phone.prepare("SELECT amount_minor FROM transactions ORDER BY id").unwrap().query_map([], |r| r.get(0)).unwrap().map(Result::unwrap).collect();
+            assert_eq!(amounts, [converted(1_000), converted(2_000)], "rate {rate}");
+            let natives: Vec<Option<i64>> = phone.prepare("SELECT native_amount_minor FROM transactions ORDER BY id").unwrap().query_map([], |r| r.get(0)).unwrap().map(Result::unwrap).collect();
+            assert_eq!(natives, natives_before, "rate {rate}: what was paid in lei is in lei still");
+            // the transfers, each amount by the currency of its own account
+            let t = |n: usize| transfers_before[n - 1];
+            let expected = [
+                (1, converted(t(1).1), None),                            // main currency to main currency: converted
+                (2, converted(t(2).1), t(2).2),                          // leaves in the main currency, arrives in lei: only what leaves
+                (3, t(3).1, t(3).2.map(converted)),                      // leaves in lei, arrives in the main currency: only what arrives
+                (4, t(4).1, None),                                       // lei to lei: neither
+                (5, t(5).1, t(5).2),                                     // lei to dollars: neither
+                (6, t(6).1, t(6).2.map(converted)),                      // dollars to the main currency: only what arrives
+            ];
+            assert_eq!(transfer_amounts(&phone), expected, "rate {rate}");
+            // counted as the others are: the rows that had something converted
+            assert_eq!((applied.transactions, applied.accounts, applied.transfers), (2, 1, 4), "rate {rate}");
+            // the lei account holds what it held, in lei
+            assert_eq!(balance(&phone, 3, TODAY), lei_balance, "rate {rate}");
+            assert_eq!(stamps_of_everything(&phone), stamps, "rate {rate}: no stamp moved on the phone");
+            assert_eq!((currency(&phone).as_str(), generation(&phone)), ("USD", 1));
+            assert!(accounts::check(&phone).unwrap());
+        }
+    }
+
+    #[test]
+    fn an_amount_that_arrives_in_the_main_currency_and_leaves_the_range_refuses_the_whole_conversion_but_one_that_arrives_in_a_foreign_account_does_not() {
+        let desktop_with_a_change = || {
+            let (mut desktop, _) = db();
+            change(&mut desktop, "USD", Some("2"), "2026-10-13").unwrap();
+            desktop
+        };
+        // lei to the main currency: 9999999999.99 arrives in the main currency, and twice that is out of range
+        let (mut phone, _) = db();
+        let lei = foreign(&phone, "Lei", "RON", "500.00");
+        let big = accounts::transfers::create(&phone, &NewTransfer { to_amount: Some("9999999999.99".into()), ..new_transfer(lei, MAIN_ID, "10.00", "2026-02-01") }).unwrap().id;
+        account(&phone, "Savings", "5.00");
+        let before = snapshot(&phone);
+        assert_eq!(apply_change_of(&desktop_with_a_change(), &mut phone).err(), Some(AppError::InvalidInput));
+        assert_eq!(snapshot(&phone), before, "the whole conversion was dropped: nothing changed, the small amounts included");
+        assert_eq!((currency(&phone).as_str(), generation(&phone)), ("EUR", 0));
+        assert_eq!(transfer_amounts(&phone), [(big, 1_000, Some(MAX_MINOR))]);
+        // the same amount arriving in the account in lei is in lei, and is left as it is
+        let (mut phone, _) = db();
+        let lei = foreign(&phone, "Lei", "RON", "500.00");
+        accounts::transfers::create(&phone, &NewTransfer { to_amount: Some("9999999999.99".into()), ..new_transfer(MAIN_ID, lei, "10.00", "2026-02-01") }).unwrap();
+        // and the one that leaves in lei is too: 9999999999.99 lei leaves, to the main account, which gets a small amount
+        accounts::transfers::create(&phone, &NewTransfer { to_amount: Some("1.00".into()), ..new_transfer(lei, MAIN_ID, "9999999999.99", "2026-02-02") }).unwrap();
+        let applied = apply_change_of(&desktop_with_a_change(), &mut phone).unwrap();
+        assert_eq!(applied.transfers, 2);
+        assert_eq!(transfer_amounts(&phone), [(1, 2_000, Some(MAX_MINOR)), (2, MAX_MINOR, Some(200))]);
+        assert_eq!((currency(&phone).as_str(), generation(&phone)), ("USD", 1));
+    }
+
+    #[test]
+    fn a_tiny_amount_that_arrives_in_the_main_currency_stays_one_cent_like_every_transfer() {
+        let (mut desktop, _) = db();
+        change(&mut desktop, "USD", Some("0.001"), "2026-10-13").unwrap();
+        let (mut phone, _) = db();
+        let lei = foreign(&phone, "Lei", "RON", "500.00");
+        accounts::transfers::create(&phone, &NewTransfer { to_amount: Some("0.01".into()), ..new_transfer(lei, MAIN_ID, "10.00", "2026-02-01") }).unwrap();
+        accounts::transfers::create(&phone, &NewTransfer { to_amount: Some("0.01".into()), ..new_transfer(MAIN_ID, lei, "0.01", "2026-02-02") }).unwrap();
+        apply_change_of(&desktop, &mut phone).unwrap();
+        assert_eq!(transfer_amounts(&phone), [(1, 1_000, Some(1)), (2, 1, Some(1))], "one cent converted at 0.001 is a cent, not nothing; what is in lei is not touched");
     }
 }

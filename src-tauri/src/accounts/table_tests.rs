@@ -960,3 +960,511 @@ fn the_view_has_one_row_for_each_thing_that_moved_an_account_with_its_sign() {
     .map(|(a, day, delta, source, id): (i64, &str, i64, &str, i64)| (a, day.to_string(), delta, source.to_string(), id));
     assert_eq!(rows, expected);
 }
+
+// ---- migration 0020: a currency per account (section 21.2) -------------------------------------
+
+/// The seventeen columns of an account at 0019, as one line each, so that "nothing moved" is one comparison.
+fn columns_at_19(conn: &Connection) -> Vec<String> {
+    conn.prepare(
+        "SELECT id || '|' || sync_id || '|' || COALESCE(stamp, 'none') || '|' || name || '|' || kind || '|' || COALESCE(number, 'none') || '|' || opening_balance_minor || '|' || opening_date
+                || '|' || archived || '|' || position || '|' || created_at || '|' || updated_at || '|' || COALESCE(bic, 'none') || '|' || COALESCE(notes, 'none') || '|' || COALESCE(group_name, 'none')
+                || '|' || include_net_worth || '|' || virtual_balance_minor FROM accounts ORDER BY id",
+    )
+    .unwrap()
+    .query_map([], |r| r.get::<_, String>(0))
+    .unwrap()
+    .map(Result::unwrap)
+    .collect()
+}
+
+/// How many lines of history a row has.
+fn lines_of(conn: &Connection, entity: &str, id: i64) -> i64 {
+    conn.query_row("SELECT count(*) FROM audit_log WHERE entity_type = ?1 AND entity_id = ?2", params![entity, id.to_string()], |r| r.get(0)).unwrap()
+}
+
+/// The new values the latest line of history of a row wrote, as JSON.
+fn latest_values(conn: &Connection, entity: &str, id: i64) -> (serde_json::Value, serde_json::Value) {
+    let (old, new): (Option<String>, Option<String>) = conn
+        .query_row("SELECT old_values, new_values FROM audit_log WHERE entity_type = ?1 AND entity_id = ?2 ORDER BY id DESC LIMIT 1", params![entity, id.to_string()], |r| Ok((r.get(0)?, r.get(1)?)))
+        .unwrap();
+    let parse = |text: Option<String>| text.map_or(serde_json::Value::Null, |t| serde_json::from_str(&t).unwrap());
+    (parse(old), parse(new))
+}
+
+#[test]
+fn a_new_database_has_the_four_currency_columns_empty_on_the_untouched_main_account() {
+    let w = world();
+    assert!(!text(&w.conn, "PRAGMA cipher_version").is_empty(), "these tests run on the SQLCipher build the app ships, where a column CHECK may name another column");
+    let described = |table: &str, names: &str| {
+        text(
+            &w.conn,
+            &format!("SELECT group_concat(name || ' ' || type || ' notnull=' || \"notnull\" || ' default=' || COALESCE(dflt_value, 'none'), ', ') FROM (SELECT * FROM pragma_table_info('{table}') WHERE name IN ({names}) ORDER BY cid)"),
+        )
+    };
+    assert_eq!(described("accounts", "'currency', 'rate'"), "currency TEXT notnull=0 default=none, rate TEXT notnull=0 default=none");
+    assert_eq!(described("transactions", "'native_amount_minor'"), "native_amount_minor INTEGER notnull=0 default=none");
+    assert_eq!(described("transfers", "'to_amount_minor'"), "to_amount_minor INTEGER notnull=0 default=none");
+    let row = text(
+        &w.conn,
+        "SELECT id || '|' || sync_id || '|' || stamp || '|' || updated_at || '|' || created_at || '|' || COALESCE(currency, 'none') || '|' || COALESCE(rate, 'none') FROM accounts",
+    );
+    assert_eq!(row, format!("{MAIN_ID}|{MAIN_SYNC_ID}|{UNSET_STAMP}|1970-01-01T00:00:00.000Z|1970-01-01T00:00:00.000Z|none|none"));
+    assert_eq!(one(&w.conn, "SELECT count(*) FROM audit_log WHERE entity_type = 'accounts'"), 0, "no history of it");
+    assert!(super::check(&w.conn).unwrap());
+    // every trigger of the three tables that lists the columns it watches was made again with the new ones among them
+    let watch = [
+        ("accounts", ["trg_accounts_updated_at", "trg_accounts_sync_update", "trg_accounts_audit_insert", "trg_accounts_audit_update", "trg_accounts_audit_delete"], vec!["currency", "rate"]),
+        ("transactions", ["trg_transactions_updated_at", "trg_transactions_sync_update", "trg_transactions_audit_insert", "trg_transactions_audit_update", "trg_transactions_audit_delete"], vec!["native_amount_minor"]),
+        ("transfers", ["trg_transfers_updated_at", "trg_transfers_sync_update", "trg_transfers_audit_insert", "trg_transfers_audit_update", "trg_transfers_audit_delete"], vec!["to_amount_minor"]),
+    ];
+    for (table, triggers, columns) in watch {
+        for trigger in triggers {
+            assert_eq!(one(&w.conn, &format!("SELECT count(*) FROM sqlite_master WHERE type = 'trigger' AND name = '{trigger}' AND tbl_name = '{table}'")), 1, "{trigger}");
+            let sql = text(&w.conn, &format!("SELECT sql FROM sqlite_master WHERE name = '{trigger}'"));
+            for column in &columns {
+                if trigger.ends_with("_updated_at") || trigger.ends_with("_sync_update") {
+                    let watched = sql.split(&format!(" ON {table}")).next().unwrap().to_string();
+                    assert!(watched.contains(column), "{trigger} does not watch {column}");
+                    if table != "transactions" {
+                        assert!(sql.contains(&format!("NEW.{column} IS NOT OLD.{column}")), "{trigger} does not compare {column}");
+                    }
+                } else {
+                    assert!(sql.contains(&format!("'{column}'")), "{trigger} does not write {column}");
+                    if trigger.ends_with("_audit_update") {
+                        assert!(sql.contains(&format!("OLD.{column} IS NOT NEW.{column}")), "{trigger} does not wait for a change of {column}");
+                    }
+                }
+            }
+        }
+    }
+    // the clock block of the stamp and the form of the guard are the ones the migrations before it use
+    for trigger in ["trg_accounts_sync_update", "trg_transactions_sync_update", "trg_transfers_sync_update"] {
+        assert!(text(&w.conn, &format!("SELECT sql FROM sqlite_master WHERE name = '{trigger}'")).contains("offset_ms"), "{trigger}: the clock of 0016");
+    }
+    assert_eq!(one(&w.conn, "SELECT count(*) FROM sqlite_master WHERE name = 'trg_accounts_main_currency'"), 1);
+}
+
+/// An old database with accounts of every state, transfers, rows in them and an edited or untouched main account.
+fn database_at_19(edit_main: bool) -> Connection {
+    let mut conn = Connection::open_in_memory().unwrap();
+    conn.execute_batch("PRAGMA foreign_keys = ON;").unwrap();
+    crate::migrate::run_up_to(&mut conn, 19).unwrap();
+    assert_eq!(one(&conn, "PRAGMA user_version"), 19);
+    conn.execute_batch(
+        "INSERT INTO categories (type, name) VALUES ('EXPENSE', 'Food'), ('INCOME', 'Salary');
+         INSERT INTO people (name) VALUES ('Anna');
+         INSERT INTO accounts (name, kind, number, opening_balance_minor, opening_date, bic, notes, group_name, include_net_worth, virtual_balance_minor)
+           VALUES ('Savings', 'SAVINGS', 'IE29', 150000, '2026-01-01', 'DEUTDEFF', 'rainy day', 'Bank', 1, 0), ('Cash', 'CASH', NULL, 0, '2026-02-01', NULL, NULL, NULL, 0, 0), ('Card', 'CREDIT_CARD', NULL, -24000, '2026-03-01', NULL, NULL, NULL, 1, 100000);
+         UPDATE accounts SET archived = 1 WHERE name = 'Card';
+         INSERT INTO transfers (from_account_id, to_account_id, amount_minor, transfer_date, note) VALUES (2, 3, 5000, '2026-05-01', 'pocket'), (3, 1, 700, '2026-05-02', NULL);
+         INSERT INTO transactions (category_id, name, amount_minor, payment_date, account_id) VALUES (1, 'Shop', 1250, '2026-05-03', 2), (2, 'Pay', 200000, '2026-05-04', 1);
+         INSERT INTO ledger_entries (person_id, kind, amount_minor, entry_date, account_id) VALUES (1, 'LENT', 2000, '2026-05-05', 3);",
+    )
+    .unwrap();
+    if edit_main {
+        conn.execute("UPDATE accounts SET name = 'Current account', notes = 'mine' WHERE id = 1", []).unwrap();
+    }
+    conn
+}
+
+#[test]
+fn migrating_from_version_19_writes_no_row_leaves_the_four_columns_empty_and_the_main_account_as_it_was() {
+    for edit_main in [false, true] {
+        let mut conn = database_at_19(edit_main);
+        let (accounts_before, around_before) = (columns_at_19(&conn), around(&conn));
+        let balances_before = [1, 2, 3, 4].map(|id| balance(&conn, id, "2026-12-31"));
+        assert_eq!(accounts_before.len(), 4);
+        assert_eq!(accounts_before[0].contains(UNSET_STAMP), !edit_main, "the main account has its constant stamp, or a real one once it was edited");
+
+        crate::migrate::run(&mut conn).unwrap();
+
+        assert_eq!(one(&conn, "PRAGMA user_version"), i64::from(crate::migrate::latest_version()));
+        assert!(conn.query_row("PRAGMA foreign_keys", [], |r| r.get::<_, bool>(0)).unwrap(), "foreign keys are back on");
+        assert_eq!(one(&conn, "SELECT count(*) FROM pragma_foreign_key_check"), 0);
+        assert_eq!(columns_at_19(&conn), accounts_before, "no stamp, no date and no other column of an account moved (main edited: {edit_main})");
+        assert_eq!(around(&conn), around_before, "nothing around them moved: no row, stamp, marker, history row or tick of the clock");
+        if !edit_main {
+            assert_eq!(columns_at_19(&conn)[0], format!("1|{MAIN_SYNC_ID}|{UNSET_STAMP}|{MAIN_NAME}|CHECKING|none|0|1970-01-01|0|0|1970-01-01T00:00:00.000Z|1970-01-01T00:00:00.000Z|none|none|none|1|0"));
+        }
+        assert_eq!(one(&conn, "SELECT count(*) FROM accounts WHERE currency IS NULL AND rate IS NULL"), 4, "every account is in the main currency");
+        assert_eq!(one(&conn, "SELECT count(*) FROM transactions WHERE native_amount_minor IS NULL"), 2);
+        assert_eq!(one(&conn, "SELECT count(*) FROM transfers WHERE to_amount_minor IS NULL"), 2);
+        assert_eq!([1, 2, 3, 4].map(|id| balance(&conn, id, "2026-12-31")), balances_before, "the view made again gives the numbers it gave");
+        assert_eq!(balances_before, [200_700, 143_750, 2300, -24_000]);
+        assert!(super::check(&conn).unwrap());
+        // the triggers that were made again work on the old rows: each new column is a change, and a stamp, a date and a line of history are made
+        let old_date = |table: &str, id: i64| conn.execute(&format!("UPDATE {table} SET updated_at = '{OLD}' WHERE id = {id}"), []).unwrap();
+        for (table, id, change) in [("accounts", 2, "currency = 'RON', rate = '5.00'"), ("transactions", 1, "native_amount_minor = 600"), ("transfers", 1, "to_amount_minor = 25000")] {
+            old_date(table, id);
+            let (before, lines) = (stamp_of(&conn, table, id), lines_of(&conn, table, id));
+            conn.execute(&format!("UPDATE {table} SET {change} WHERE id = {id}"), []).unwrap();
+            assert!(stamp_of(&conn, table, id) > before, "{table} {id}: {change}");
+            assert_ne!(updated_at_of(&conn, table, id), OLD, "{table} {id}: `updated_at` moved");
+            assert_eq!(lines_of(&conn, table, id), lines + 1, "{table} {id}: one line of history");
+        }
+    }
+}
+
+#[test]
+fn every_check_of_the_new_columns_refuses_its_bad_values_in_plain_sql() {
+    let w = world();
+    let id = raw_account(&w.conn, "A");
+    let quoted = |text: &str| format!("'{text}'");
+    let who = w.food;
+    let conn = &w.conn;
+    conn.execute(&format!("INSERT INTO transactions (category_id, name, amount_minor, payment_date, account_id) VALUES ({who}, 'Shop', 1250, '2026-01-10', {id})"), []).unwrap();
+    let tx = w.conn.last_insert_rowid();
+    let other = raw_account(&w.conn, "B");
+    let moved = raw_transfer(&w.conn, id, other);
+    let sets = |table: &'static str, row: i64| move |change: &str| (exec(conn, &format!("UPDATE {table} SET {change} WHERE id = {row}")), format!("{table} {change}"));
+
+    // the currency: three capital letters or nothing (the rate goes with it, so both are written)
+    let account = sets("accounts", id);
+    for good in ["RON", "USD", "EUR", "ZZZ", "AAA"] {
+        assert!(account(&format!("currency = '{good}', rate = '5.00'")).0.is_ok(), "{good}");
+    }
+    for bad in ["ron", "Ron", "RO", "RONN", "R0N", "R N", " RON", "RON ", "RÓN", "ÀBC", "", "123", "R-N"] {
+        let (result, what) = account(&format!("currency = {}, rate = '5.00'", quoted(bad)));
+        let error = result.expect_err(&what).to_string();
+        assert!(error.contains("ck_accounts_currency"), "{bad:?}: {error}");
+    }
+    // the rate goes with the currency: both or neither, 1 to 20 characters
+    assert!(account("currency = NULL, rate = NULL").0.is_ok());
+    for (change, ok) in [
+        ("currency = 'RON', rate = '5.00'", true),
+        ("rate = '5.50'", true),
+        ("rate = '1'", true),
+        ("rate = '12345678.12345678'", true),
+        ("rate = '12345678912345678912'", true),
+        ("rate = '123456789123456789123'", false),
+        ("rate = ''", false),
+        ("rate = NULL", false),
+        ("currency = NULL", false),
+    ] {
+        let (result, what) = account(change);
+        assert_eq!(result.is_ok(), ok, "{what}: {result:?}");
+        if !ok {
+            assert!(result.unwrap_err().to_string().contains("ck_accounts_rate"), "{what}");
+        }
+    }
+    assert!(account("currency = NULL, rate = NULL").0.is_ok());
+    assert!(account("rate = '5.00'").0.unwrap_err().to_string().contains("ck_accounts_rate"), "a rate for an account in the main currency");
+    assert_eq!(text(&w.conn, &format!("SELECT COALESCE(currency, 'none') || COALESCE(rate, 'none') FROM accounts WHERE id = {id}")), "nonenone", "a refused change leaves the account as it was");
+    // the same checks on a new row
+    for (columns, values, ok) in [
+        ("currency, rate", "'RON', '5.00'", true),
+        ("currency, rate", "NULL, NULL", true),
+        ("", "", true),
+        ("currency", "'RON'", false),
+        ("rate", "'5.00'", false),
+        ("currency, rate", "'ron', '5.00'", false),
+        ("currency, rate", "'RON', ''", false),
+    ] {
+        let (columns, values) = if columns.is_empty() { (String::new(), String::new()) } else { (format!(", {columns}"), format!(", {values}")) };
+        let result = exec(&w.conn, &format!("INSERT INTO accounts (name, kind, opening_date{columns}) VALUES ('N', 'CASH', '2026-01-01'{values})"));
+        assert_eq!(result.is_ok(), ok, "insert {columns} = {values}: {result:?}");
+    }
+
+    // the native amount of a transaction: nothing, or 0 to the largest amount
+    let native = sets("transactions", tx);
+    for good in ["NULL", "0", "1", "999999999999", "1250"] {
+        assert!(native(&format!("native_amount_minor = {good}")).0.is_ok(), "{good}");
+    }
+    for bad in ["-1", "1000000000000", "-999999999999", "1.5", "'twelve'"] {
+        let (result, what) = native(&format!("native_amount_minor = {bad}"));
+        let error = result.expect_err(&what).to_string();
+        assert!(error.contains("ck_transactions_native") || error.contains("cannot store"), "{bad}: {error}");
+    }
+    assert!(exec(&w.conn, &format!("INSERT INTO transactions (category_id, name, amount_minor, payment_date, native_amount_minor) VALUES ({who}, 'x', 100, '2026-01-10', -1)")).is_err());
+    assert!(exec(&w.conn, &format!("INSERT INTO transactions (category_id, name, amount_minor, payment_date, native_amount_minor) VALUES ({who}, 'x', 100, '2026-01-10', 1000000000000)")).is_err());
+    // the amount that arrives in a transfer: nothing, or 1 to the largest amount
+    let arrives = sets("transfers", moved);
+    for good in ["NULL", "1", "999999999999", "4000"] {
+        assert!(arrives(&format!("to_amount_minor = {good}")).0.is_ok(), "{good}");
+    }
+    for bad in ["0", "-1", "1000000000000", "1.5", "'twelve'"] {
+        let (result, what) = arrives(&format!("to_amount_minor = {bad}"));
+        let error = result.expect_err(&what).to_string();
+        assert!(error.contains("ck_transfers_to_amount") || error.contains("cannot store"), "{bad}: {error}");
+    }
+    assert!(exec(&w.conn, &format!("INSERT INTO transfers (from_account_id, to_account_id, amount_minor, transfer_date, to_amount_minor) VALUES ({id}, {other}, 5, '2026-03-01', 0)")).is_err());
+    assert_eq!(one(&w.conn, "SELECT count(*) FROM transfers"), 1, "the refused inserts made no row");
+}
+
+#[test]
+fn the_main_account_is_kept_in_the_main_currency_unless_a_sync_or_a_restore_is_writing() {
+    let w = world();
+    let main = |change: &str| refused(&w.conn, &format!("UPDATE accounts SET {change} WHERE id = 1"));
+    assert!(main("currency = 'RON', rate = '5.00'").contains("the main account is in the main currency"));
+    assert!(main("currency = 'EUR', rate = '1.00'").contains("the main account is in the main currency"), "whatever the code");
+    assert_eq!(text(&w.conn, "SELECT COALESCE(currency, 'none') || '|' || COALESCE(rate, 'none') || '|' || stamp FROM accounts WHERE id = 1"), format!("none|none|{UNSET_STAMP}"), "a refused write changes nothing");
+    assert_eq!(one(&w.conn, "SELECT count(*) FROM audit_log WHERE entity_type = 'accounts'"), 0);
+    // writing nothing to it, or the other columns, is not refused, and another account may have any currency
+    exec(&w.conn, "UPDATE accounts SET currency = NULL WHERE id = 1").unwrap();
+    exec(&w.conn, "UPDATE accounts SET notes = 'mine' WHERE id = 1").unwrap();
+    let a = raw_account(&w.conn, "A");
+    exec(&w.conn, &format!("UPDATE accounts SET currency = 'RON', rate = '5.00' WHERE id = {a}")).unwrap();
+    // a sync and a restore write rows as they come and `accounts::check` is what refuses the result
+    applying(&w.conn, true);
+    exec(&w.conn, "UPDATE accounts SET currency = 'RON', rate = '5.00' WHERE id = 1").unwrap();
+    assert!(!super::check(&w.conn).unwrap(), "the check refuses a main account with a currency");
+    exec(&w.conn, "UPDATE accounts SET currency = NULL, rate = NULL WHERE id = 1").unwrap();
+    assert!(super::check(&w.conn).unwrap());
+}
+
+#[test]
+fn each_new_column_is_a_change_of_its_row_and_the_same_value_again_is_not() {
+    let w = world();
+    let a = raw_account(&w.conn, "A");
+    let b = raw_account(&w.conn, "B");
+    let tx = {
+        w.conn.execute(&format!("INSERT INTO transactions (category_id, name, amount_minor, payment_date, account_id) VALUES ({}, 'Shop', 1250, '2026-01-10', {a})", w.food), []).unwrap();
+        w.conn.last_insert_rowid()
+    };
+    let x = raw_transfer(&w.conn, a, b);
+    // (table, row, a first change, other changes: every one is a change of what the row had before it)
+    let steps: [(&str, i64, Vec<&str>); 3] = [
+        ("accounts", a, vec!["currency = 'RON', rate = '5.00'", "rate = '5.50'", "currency = 'USD'", "currency = NULL, rate = NULL", "currency = 'USD', rate = '1.10'"]),
+        ("transactions", tx, vec!["native_amount_minor = 600", "native_amount_minor = 601", "native_amount_minor = 0", "native_amount_minor = NULL", "native_amount_minor = 600"]),
+        ("transfers", x, vec!["to_amount_minor = 25000", "to_amount_minor = 25001", "to_amount_minor = NULL", "to_amount_minor = 1"]),
+    ];
+    for (table, id, changes) in steps {
+        for change in changes {
+            age(&w.conn, table, id);
+            let (before, lines) = (stamp_of(&w.conn, table, id), lines_of(&w.conn, table, id));
+            exec(&w.conn, &format!("UPDATE {table} SET {change} WHERE id = {id}")).unwrap();
+            let after = stamp_of(&w.conn, table, id);
+            assert!(after > before, "{table}: {change}: a new stamp");
+            assert_ne!(updated_at_of(&w.conn, table, id), OLD, "{table}: {change}: and `updated_at` moved");
+            assert_eq!(lines_of(&w.conn, table, id), lines + 1, "{table}: {change}: one line of history, with the value that was and the value that is");
+            let (old, new) = latest_values(&w.conn, table, id);
+            let column = change.split(" = ").next().unwrap();
+            assert_ne!(old[column], new[column], "{table}: {change}");
+            // the same thing again writes no line of history (and, but for a transaction, whose triggers never compared values, no stamp)
+            age(&w.conn, table, id);
+            exec(&w.conn, &format!("UPDATE {table} SET {change} WHERE id = {id}")).unwrap();
+            assert_eq!(lines_of(&w.conn, table, id), lines + 1, "{table}: {change} again: no line of history");
+            if table != "transactions" {
+                assert_eq!((stamp_of(&w.conn, table, id), updated_at_of(&w.conn, table, id)), (after, OLD.to_string()), "{table}: {change} again: no stamp and no `updated_at`");
+            }
+        }
+    }
+    // a no-op write of every column of an account and of a transfer makes nothing either
+    for (table, id, same) in [
+        ("accounts", a, "currency = currency, rate = rate, name = name, notes = notes"),
+        ("transfers", x, "to_amount_minor = to_amount_minor, amount_minor = amount_minor, note = note"),
+    ] {
+        age(&w.conn, table, id);
+        let (stamp, lines) = (stamp_of(&w.conn, table, id), lines_of(&w.conn, table, id));
+        exec(&w.conn, &format!("UPDATE {table} SET {same} WHERE id = {id}")).unwrap();
+        assert_eq!((stamp_of(&w.conn, table, id), updated_at_of(&w.conn, table, id), lines_of(&w.conn, table, id)), (stamp, OLD.to_string(), lines), "{table}");
+    }
+    let lines = lines_of(&w.conn, "transactions", tx);
+    exec(&w.conn, &format!("UPDATE transactions SET native_amount_minor = native_amount_minor, name = name WHERE id = {tx}")).unwrap();
+    assert_eq!(lines_of(&w.conn, "transactions", tx), lines, "and no line of history for a transaction written with what it has");
+}
+
+#[test]
+fn a_new_and_a_deleted_row_carry_the_new_columns_in_its_history() {
+    use serde_json::json;
+    let w = world();
+    exec(&w.conn, "INSERT INTO accounts (name, kind, opening_date, currency, rate) VALUES ('Lei', 'CASH', '2026-01-01', 'RON', '4.9769')").unwrap();
+    let lei = w.conn.last_insert_rowid();
+    let plain = raw_account(&w.conn, "Plain");
+    let (_, new) = latest_values(&w.conn, "accounts", lei);
+    assert_eq!((new["currency"].clone(), new["rate"].clone()), (json!("RON"), json!("4.9769")));
+    let (_, new) = latest_values(&w.conn, "accounts", plain);
+    assert_eq!((new["currency"].clone(), new["rate"].clone()), (json!(null), json!(null)), "a row that names neither: none");
+    exec(&w.conn, &format!("INSERT INTO transactions (category_id, name, amount_minor, payment_date, account_id, native_amount_minor) VALUES ({}, 'Shop', 2000, '2026-01-10', {lei}, 9954)", w.food)).unwrap();
+    let tx = w.conn.last_insert_rowid();
+    exec(&w.conn, &format!("INSERT INTO transfers (from_account_id, to_account_id, amount_minor, transfer_date, to_amount_minor) VALUES (1, {lei}, 1000, '2026-01-11', 4977)")).unwrap();
+    let x = w.conn.last_insert_rowid();
+    assert_eq!(latest_values(&w.conn, "transactions", tx).1["native_amount_minor"], json!(9954));
+    assert_eq!(latest_values(&w.conn, "transfers", x).1["to_amount_minor"], json!(4977));
+    exec(&w.conn, &format!("DELETE FROM transactions WHERE id = {tx}")).unwrap();
+    exec(&w.conn, &format!("DELETE FROM transfers WHERE id = {x}")).unwrap();
+    exec(&w.conn, &format!("DELETE FROM accounts WHERE id = {lei}")).unwrap();
+    let (old, new) = latest_values(&w.conn, "transactions", tx);
+    assert_eq!((old["native_amount_minor"].clone(), new.clone()), (json!(9954), json!(null)), "what the transaction was");
+    let (old, _) = latest_values(&w.conn, "transfers", x);
+    assert_eq!(old["to_amount_minor"], json!(4977));
+    let (old, _) = latest_values(&w.conn, "accounts", lei);
+    assert_eq!((old["currency"].clone(), old["rate"].clone()), (json!("RON"), json!("4.9769")));
+}
+
+#[test]
+fn the_new_columns_stand_aside_while_a_sync_or_a_restore_is_writing_and_keep_the_stamp_they_bring() {
+    let w = world();
+    let a = raw_account(&w.conn, "A");
+    let b = raw_account(&w.conn, "B");
+    w.conn.execute(&format!("INSERT INTO transactions (category_id, name, amount_minor, payment_date, account_id) VALUES ({}, 'Shop', 1250, '2026-01-10', {a})", w.food), []).unwrap();
+    let tx = w.conn.last_insert_rowid();
+    let x = raw_transfer(&w.conn, a, b);
+    let clock = text(&w.conn, "SELECT last_ms || '-' || last_counter FROM sync_clock");
+    let made: Vec<String> = [("accounts", a), ("transactions", tx), ("transfers", x)].iter().map(|(t, id)| stamp_of(&w.conn, t, *id)).collect();
+    applying(&w.conn, true);
+    for (table, id) in [("accounts", a), ("transactions", tx), ("transfers", x)] {
+        age(&w.conn, table, id);
+    }
+    exec(&w.conn, &format!("UPDATE accounts SET currency = 'RON', rate = '5.00' WHERE id = {a}")).unwrap();
+    exec(&w.conn, &format!("UPDATE transactions SET native_amount_minor = 600 WHERE id = {tx}")).unwrap();
+    exec(&w.conn, &format!("UPDATE transfers SET to_amount_minor = 25000 WHERE id = {x}")).unwrap();
+    let after: Vec<String> = [("accounts", a), ("transactions", tx), ("transfers", x)].iter().map(|(t, id)| stamp_of(&w.conn, t, *id)).collect();
+    assert_eq!(after, made, "nothing is stamped while applying");
+    for table in ["accounts", "transactions", "transfers"] {
+        let id = match table { "accounts" => a, "transactions" => tx, _ => x };
+        assert_eq!(updated_at_of(&w.conn, table, id), OLD, "{table}: `updated_at` stays");
+    }
+    assert_eq!(text(&w.conn, "SELECT last_ms || '-' || last_counter FROM sync_clock"), clock, "and the clock that makes stamps did not tick");
+    // rows as a sync writes them keep the stamp they bring
+    exec(&w.conn, "INSERT INTO accounts (name, kind, opening_date, stamp, currency, rate) VALUES ('C', 'CASH', '2026-01-01', '1760000000000-0002-aaaaaaaa', 'USD', '1.10')").unwrap();
+    assert_eq!(text(&w.conn, "SELECT stamp FROM accounts WHERE name = 'C'"), "1760000000000-0002-aaaaaaaa");
+    assert_eq!(text(&w.conn, "SELECT last_ms || '-' || last_counter FROM sync_clock"), clock);
+    applying(&w.conn, false);
+    // and back to normal: the next change is stamped
+    exec(&w.conn, &format!("UPDATE transfers SET to_amount_minor = 25001 WHERE id = {x}")).unwrap();
+    assert!(stamp_of(&w.conn, "transfers", x) > made[2]);
+}
+
+#[test]
+fn writing_the_main_account_the_currency_it_has_is_no_change_and_makes_no_stamp_or_history() {
+    // its currency cannot change (the trigger), so the new columns never make its first stamp
+    let w = world();
+    exec(&w.conn, "UPDATE accounts SET currency = NULL, rate = NULL WHERE id = 1").unwrap();
+    assert_eq!(stamp_of(&w.conn, "accounts", 1), UNSET_STAMP, "writing it what it has is no change");
+    assert_eq!(one(&w.conn, "SELECT count(*) FROM audit_log WHERE entity_type = 'accounts'"), 0);
+}
+
+// ---- the view, with a currency of its own ---------------------------------------------------------
+
+#[test]
+fn the_view_moves_a_foreign_account_by_its_native_amounts_and_any_other_by_the_amounts() {
+    let w = world();
+    let anna = friend(&w.conn, "Anna");
+    w.conn
+        .execute_batch(&format!(
+            "INSERT INTO accounts (name, kind, opening_balance_minor, opening_date, currency, rate) VALUES ('Lei', 'CASH', 50000, '2026-01-01', 'RON', '5.00');
+             INSERT INTO accounts (name, kind, opening_date, currency, rate) VALUES ('Dollars', 'CASH', '2026-01-01', 'USD', '1.10');
+             INSERT INTO accounts (name, kind, opening_date) VALUES ('Euro', 'CASH', '2026-01-01');
+             -- a foreign account: the native amount counts, whatever the sign; one with none falls back to the amount
+             INSERT INTO transactions (category_id, name, amount_minor, payment_date, account_id, native_amount_minor) VALUES
+               ({food}, 'Shop', 2000, '2026-01-10', 2, 10000), ({salary}, 'Pay', 100000, '2026-01-31', 2, 505000), ({food}, 'No native', 300, '2026-02-01', 2, NULL);
+             -- a friend paid: nothing moved
+             INSERT INTO transactions (category_id, name, amount_minor, payment_date, account_id, native_amount_minor, paid_by) VALUES ({food}, 'Dinner', 4000, '2026-02-02', 2, 20000, {anna});
+             -- a main-currency account: the amount counts and a native amount left on the row is ignored
+             INSERT INTO transactions (category_id, name, amount_minor, payment_date, account_id, native_amount_minor) VALUES ({food}, 'Stale', 700, '2026-02-03', 4, 3500), ({salary}, 'Stale pay', 900, '2026-02-04', 1, 4500);
+             -- a transfer between currencies: each side by its own amount; one with no second amount arrives as it left
+             INSERT INTO transfers (from_account_id, to_account_id, amount_minor, transfer_date, to_amount_minor) VALUES (1, 2, 1000, '2026-02-05', 4977), (2, 3, 5000, '2026-02-06', 1100), (4, 1, 60, '2026-02-07', NULL), (2, 4, 100, '2026-02-08', 20);",
+            food = w.food,
+            salary = w.salary
+        ))
+        .unwrap();
+    let rows: Vec<(i64, String, i64, String, i64)> = w
+        .conn
+        .prepare("SELECT account_id, day, delta_minor, source, source_id FROM account_movements ORDER BY day, source, account_id")
+        .unwrap()
+        .query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?)))
+        .unwrap()
+        .map(Result::unwrap)
+        .collect();
+    let expected = [
+        (2, "2026-01-01", 50_000, "OPENING", 2),
+        (2, "2026-01-10", -10_000, "TRANSACTION", 1),
+        (2, "2026-01-31", 505_000, "TRANSACTION", 2),
+        (2, "2026-02-01", -300, "TRANSACTION", 3),
+        (4, "2026-02-03", -700, "TRANSACTION", 5),
+        (1, "2026-02-04", 900, "TRANSACTION", 6),
+        (2, "2026-02-05", 4977, "TRANSFER_IN", 1),
+        (1, "2026-02-05", -1000, "TRANSFER_OUT", 1),
+        (3, "2026-02-06", 1100, "TRANSFER_IN", 2),
+        (2, "2026-02-06", -5000, "TRANSFER_OUT", 2),
+        (1, "2026-02-07", 60, "TRANSFER_IN", 3),
+        (4, "2026-02-07", -60, "TRANSFER_OUT", 3),
+        (4, "2026-02-08", 20, "TRANSFER_IN", 4),
+        (2, "2026-02-08", -100, "TRANSFER_OUT", 4),
+    ]
+    .map(|(a, day, delta, source, id): (i64, &str, i64, &str, i64)| (a, day.to_string(), delta, source.to_string(), id));
+    // the order inside a day is by source then account here; sort the expected the same way
+    let mut expected = expected.to_vec();
+    expected.sort_by(|x, y| (&x.1, &x.3, x.0).cmp(&(&y.1, &y.3, y.0)));
+    assert_eq!(rows, expected);
+    // the columns of the view are the ones it always had, in their order
+    assert_eq!(text(&w.conn, "SELECT group_concat(name, ',') FROM pragma_table_info('account_movements')"), "account_id,day,delta_minor,source,source_id");
+}
+
+#[test]
+fn every_account_balance_equals_a_plain_sum_for_random_rows_in_a_mix_of_currencies() {
+    for seed in [0xC0FF_EE20_u64, 0x20_0BAD_CAFE, 0x5EED_0020, 0x1234_5020] {
+        let mut rng = Rng(seed);
+        let w = world();
+        let anna = friend(&w.conn, "Anna");
+        // (id, foreign): the main account, two foreign ones, one in the main currency, and an archived foreign one
+        let mut accounts = vec![(MAIN_ID, false)];
+        for (name, currency) in [("Lei", Some("RON")), ("Dollars", Some("USD")), ("Euro", None), ("Old lei", Some("RON"))] {
+            let opening = rng.between(0, 400_000) as i64 - 200_000;
+            let (column, value) = match currency {
+                Some(code) => (", currency, rate".to_string(), format!(", '{code}', '{}.{:02}'", rng.between(1, 9), rng.between(0, 99))),
+                None => (String::new(), String::new()),
+            };
+            w.conn
+                .execute(&format!("INSERT INTO accounts (name, kind, opening_balance_minor, opening_date{column}) VALUES ('{name}', 'CASH', {opening}, '2026-0{}-01'{value})", rng.between(1, 9)), [])
+                .unwrap();
+            accounts.push((w.conn.last_insert_rowid(), currency.is_some()));
+        }
+        w.conn.execute(&format!("UPDATE accounts SET archived = 1 WHERE id = {}", accounts[4].0), []).unwrap();
+        let mut moves: Vec<(i64, String, i64)> = w
+            .conn
+            .prepare("SELECT id, opening_date, opening_balance_minor FROM accounts WHERE opening_balance_minor <> 0")
+            .unwrap()
+            .query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))
+            .unwrap()
+            .map(Result::unwrap)
+            .collect();
+        let date = |rng: &mut Rng| format!("2026-{:02}-{:02}", rng.between(1, 12), rng.between(1, 28));
+        let maybe = |rng: &mut Rng, minor: i64| if rng.between(0, 2) == 0 { "NULL".to_string() } else { format!("{minor}") };
+        for _ in 0..40 {
+            let (account, foreign) = accounts[rng.between(0, 4) as usize];
+            let (income, friend_paid) = (rng.between(0, 3) == 0, rng.between(0, 5) == 0);
+            let (amount, native) = (rng.between(1, 90_000) as i64, rng.between(1, 500_000) as i64);
+            let native_text = maybe(&mut rng, native);
+            let day = date(&mut rng);
+            let (category, payer) = (if income { w.salary } else { w.food }, if friend_paid && !income { anna.to_string() } else { "NULL".to_string() });
+            w.conn
+                .execute(
+                    &format!("INSERT INTO transactions (category_id, name, amount_minor, payment_date, account_id, native_amount_minor, paid_by) VALUES ({category}, 'x', {amount}, '{day}', {account}, {native_text}, {payer})"),
+                    [],
+                )
+                .unwrap();
+            if payer == "NULL" {
+                // the native amount counts only on a foreign account, and only when the row has one
+                let counted = if foreign && native_text != "NULL" { native } else { amount };
+                moves.push((account, day, if income { counted } else { -counted }));
+            }
+        }
+        for _ in 0..25 {
+            let (from, to) = (accounts[rng.between(0, 4) as usize].0, accounts[rng.between(0, 4) as usize].0);
+            if from == to {
+                continue;
+            }
+            let (amount, arrives) = (rng.between(1, 90_000) as i64, rng.between(1, 500_000) as i64);
+            let arrives_text = maybe(&mut rng, arrives);
+            let day = date(&mut rng);
+            w.conn.execute(&format!("INSERT INTO transfers (from_account_id, to_account_id, amount_minor, transfer_date, to_amount_minor) VALUES ({from}, {to}, {amount}, '{day}', {arrives_text})"), []).unwrap();
+            moves.push((from, day.clone(), -amount));
+            moves.push((to, day, if arrives_text == "NULL" { amount } else { arrives }));
+        }
+        for _ in 0..10 {
+            let account = accounts[rng.between(0, 4) as usize].0;
+            let (kind, sign) = [("LENT", -1), ("BORROWED", 1), ("REPAID_TO_ME", 1), ("REPAID_BY_ME", -1)][rng.between(0, 3) as usize];
+            let (amount, day) = (rng.between(1, 9_000) as i64, date(&mut rng));
+            w.conn.execute(&format!("INSERT INTO ledger_entries (person_id, kind, amount_minor, entry_date, account_id) VALUES ({anna}, '{kind}', {amount}, '{day}', {account})"), []).unwrap();
+            moves.push((account, day, sign * amount));
+        }
+        for (account, _) in &accounts {
+            for day in ["2025-12-31", "2026-03-15", "2026-06-30", TODAY, "2026-12-31", "2027-01-01"] {
+                let model: i64 = moves.iter().filter(|m| m.0 == *account && m.1.as_str() <= day).map(|m| m.2).sum();
+                assert_eq!(balance(&w.conn, *account, day), model, "seed {seed:#x}, account {account}, on {day}");
+            }
+        }
+    }
+}

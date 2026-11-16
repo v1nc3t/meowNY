@@ -5,13 +5,16 @@
 //! * A balance is stored nowhere. The view `account_movements` has one row for everything that moved an account, and every number
 //!   here is a sum of its `delta_minor`: the balance on a day is the sum up to that day (section 3).
 //! * An account with rows is archived, not deleted: its history and its balance stay.
+//! * An account may be in a currency of its own (section 21): its numbers are in that currency, and only `balance_in_main` and net worth are in
+//!   the app's. Budgets, statistics and the like never see a foreign amount.
 
 use rusqlite::{params, Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
 
 use crate::budgets;
 use crate::categories::{clean_name, parse_id, present_or_null, serialize_id};
-use crate::money::{format_amount, parse_signed_amount};
+use crate::currency;
+use crate::money::{format_amount, parse_signed_amount, MAX_MINOR};
 use crate::transactions::{clean_date, clean_lines};
 use crate::vault::AppError;
 
@@ -38,6 +41,7 @@ pub const MAIN_NAME: &str = "Main account";
 
 const NUMBER_MAX_CHARS: usize = 50;
 const BIC_MAX_CHARS: usize = 20;
+const RATE_MAX_CHARS: usize = 20;
 const NOTES_MAX_CHARS: usize = 1000;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -104,6 +108,15 @@ pub struct Account {
     pub virtual_balance: String,
     /// What the account can still pay: `balance` plus `virtual_balance`.
     pub available: String,
+    /// The currency every amount of the account is in: its own code, or the app's currency for an account in the main currency.
+    pub currency: String,
+    /// Whether the account has a currency of its own.
+    pub foreign: bool,
+    /// How many units of the account's currency one unit of the app's currency buys, as typed ("5.00"). None for an account in the main
+    /// currency.
+    pub rate: Option<String>,
+    /// `balance` in the app's currency: at `rate` for a foreign account, the same as `balance` for the others.
+    pub balance_in_main: String,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -131,6 +144,12 @@ pub struct NewAccount {
     /// Left out means "0.00".
     #[serde(default)]
     pub virtual_balance: Option<String>,
+    /// Three letters, in any case. Left out, or the app's currency, means an account in the main currency, which takes no `rate`.
+    #[serde(default)]
+    pub currency: Option<String>,
+    /// Required with another currency (section 21.3).
+    #[serde(default)]
+    pub rate: Option<String>,
 }
 
 /// Fields left out stay as they are. `number`, `bic`, `notes` and `group` clear with `null`.
@@ -157,6 +176,16 @@ pub struct AccountPatch {
     pub include_in_net_worth: Option<bool>,
     #[serde(default)]
     pub virtual_balance: Option<String>,
+    /// Only while nothing points at the account; the main account takes none.
+    #[serde(default)]
+    pub currency: Option<String>,
+    /// Any time for a foreign account; the main account and an account in the main currency take none.
+    #[serde(default)]
+    pub rate: Option<String>,
+    /// What the account holds today, in its own currency: the core moves the opening balance by the difference (section 21.5). Not with
+    /// `opening_balance`.
+    #[serde(default)]
+    pub balance: Option<String>,
 }
 
 /// A number or a BIC: one line of at most `max` characters. Empty means "none".
@@ -181,6 +210,90 @@ fn clean_notes(text: Option<&str>) -> Result<Option<String>, AppError> {
 /// A group is named as an account is. Empty means "no group".
 fn clean_group(text: Option<&str>) -> Result<Option<String>, AppError> {
     text.map(str::trim).filter(|t| !t.is_empty()).map(clean_name).transpose()
+}
+
+/// A rate as the person typed it: one the rate parser takes (above 0, up to 8 decimals), at most 20 characters, spaces round it dropped.
+fn clean_rate(text: &str) -> Result<String, AppError> {
+    let text = text.trim();
+    currency::parse_rate(text)?;
+    if text.chars().count() > RATE_MAX_CHARS {
+        return Err(AppError::InvalidInput);
+    }
+    Ok(text.to_string())
+}
+
+/// The currency and the rate an account ends with (section 21.3); `current` is what it has now, none and none for a new one, and `entries`
+/// how many rows point at it. A code equal to the app's currency, in any case, is stored as none and takes no rate. The code changes only while
+/// nothing points at the account. Another code needs a rate, the one in the input or the one already there; a rate that stays for an account
+/// that is foreign and stays so changes at any time.
+fn resolve_currency(
+    conn: &Connection,
+    current: (Option<&str>, Option<&str>),
+    entries: u32,
+    currency: Option<&str>,
+    rate: Option<&str>,
+) -> Result<(Option<String>, Option<String>), AppError> {
+    let rate = rate.map(clean_rate).transpose()?;
+    let code = match currency {
+        Some(text) => {
+            let code = currency::normalize_code(text)?;
+            (code != crate::export::currency(conn)?).then_some(code)
+        }
+        None => current.0.map(str::to_string),
+    };
+    if code.as_deref() != current.0 && entries > 0 {
+        return Err(AppError::InvalidInput);
+    }
+    match (code, rate) {
+        (None, None) => Ok((None, None)),
+        (None, Some(_)) => Err(AppError::InvalidInput),
+        (Some(code), rate) => match rate.or_else(|| current.1.map(str::to_string)) {
+            Some(rate) => Ok((Some(code), Some(rate))),
+            None => Err(AppError::InvalidInput),
+        },
+    }
+}
+
+/// Whether the account is in a currency of its own.
+pub(crate) fn is_foreign(conn: &Connection, id: i64) -> Result<bool, AppError> {
+    Ok(conn.query_row("SELECT currency IS NOT NULL FROM accounts WHERE id = ?1", [id], |r| r.get(0)).optional()?.unwrap_or(false))
+}
+
+/// Refuses an account in a currency of its own. A recurring item, a ledger entry, a settlement and a bill code are in the app's currency
+/// only (section 21.1).
+pub fn require_main_currency(conn: &Connection, account_id: i64) -> Result<(), AppError> {
+    if is_foreign(conn, account_id)? {
+        return Err(AppError::InvalidInput);
+    }
+    Ok(())
+}
+
+/// Whether two accounts are in different currencies: the codes differ, and the app's currency (no code) is one of them as much as another.
+pub(crate) fn currencies_differ(conn: &Connection, a: i64, b: i64) -> Result<bool, AppError> {
+    Ok(conn.query_row(
+        "SELECT (SELECT currency FROM accounts WHERE id = ?1) IS NOT (SELECT currency FROM accounts WHERE id = ?2)",
+        params![a, b],
+        |r| r.get(0),
+    )?)
+}
+
+/// `minor`, an amount in the currency of an account, in the app's currency: divided by `rate`, the number of units of the first that one unit
+/// of the second buys. Half away from zero to the cent, sign kept; the rate is parsed as a change of currency parses it, and the result must
+/// stay within ±`MAX_MINOR`, else `InvalidInput`.
+pub fn to_main(minor: i64, rate: &str) -> Result<i64, AppError> {
+    let rate = currency::parse_rate(rate)?;
+    // dividing by a rate is multiplying by the same fraction upside down
+    let inverse = currency::Rate { numerator: rate.denominator, denominator: rate.numerator };
+    Ok(currency::convert(minor.checked_abs().ok_or(AppError::InvalidInput)?, inverse)? * minor.signum())
+}
+
+/// What `minor` is worth in the app's currency for an account with this `rate` (none: an account in the main currency). An amount that does
+/// not fit shows the bound it passed, so one odd rate never makes the whole list of accounts unreadable.
+fn in_main(minor: i64, rate: Option<&str>) -> i64 {
+    match rate {
+        None => minor,
+        Some(rate) => to_main(minor, rate).unwrap_or(MAX_MINOR * minor.signum()),
+    }
 }
 
 /// Whether the account exists and is not archived.
@@ -208,13 +321,25 @@ pub(crate) fn for_moved_row(conn: &Connection, current: i64, account_id: Option<
     }
 }
 
-/// Whether the main account is as it must be: there, with its own `sync_id`, and not archived. A sync checks it before its commit and a
-/// restore before it keeps a file.
+/// Whether the accounts are as they must be: the main account is there, with its own `sync_id`, not archived and in the main currency, and
+/// every account has a rate exactly when it has a currency of its own. A sync checks it before its commit and a restore before it keeps a file.
+/// A restore checks a file of an older schema in a database of that schema, before it is migrated forward: where the table has no currency
+/// yet, only the first part can be asked.
 pub fn check(conn: &Connection) -> Result<bool, AppError> {
-    Ok(conn
+    let main = conn
         .query_row("SELECT 1 FROM accounts WHERE id = ?1 AND sync_id = ?2 AND archived = 0", params![MAIN_ID, MAIN_SYNC_ID], |_| Ok(()))
         .optional()?
-        .is_some())
+        .is_some();
+    let has_currency: bool = conn.query_row("SELECT count(*) > 0 FROM pragma_table_info('accounts') WHERE name = 'currency'", [], |r| r.get(0))?;
+    if !main || !has_currency {
+        return Ok(main);
+    }
+    Ok(conn.query_row(
+        "SELECT NOT EXISTS (SELECT 1 FROM accounts WHERE id = ?1 AND currency IS NOT NULL)
+            AND NOT EXISTS (SELECT 1 FROM accounts WHERE (currency IS NULL) <> (rate IS NULL))",
+        [MAIN_ID],
+        |r| r.get(0),
+    )?)
 }
 
 /// `?1` is today. The numbers come from the view, so there is one definition of what moves an account.
@@ -224,13 +349,15 @@ const SELECT: &str = "SELECT a.id, a.name, a.kind, a.number, a.opening_balance_m
        (SELECT MAX(m.day) FROM account_movements m WHERE m.account_id = a.id AND m.day <= ?1 AND m.source <> 'OPENING'),
        (SELECT count(*) FROM transactions WHERE account_id = a.id) + (SELECT count(*) FROM recurring_transactions WHERE account_id = a.id)
        + (SELECT count(*) FROM ledger_entries WHERE account_id = a.id) + (SELECT count(*) FROM transfers WHERE from_account_id = a.id OR to_account_id = a.id),
-       a.bic, a.notes, a.group_name, a.include_net_worth, a.virtual_balance_minor
+       a.bic, a.notes, a.group_name, a.include_net_worth, a.virtual_balance_minor,
+       COALESCE(a.currency, (SELECT currency FROM settings WHERE id = 1)), a.currency IS NOT NULL, a.rate
      FROM accounts a";
 
 fn from_row(row: &rusqlite::Row) -> rusqlite::Result<Account> {
     let kind: String = row.get(2)?;
     let id: i64 = row.get(0)?;
     let (balance, virtual_balance): (i64, i64) = (row.get(7)?, row.get(15)?);
+    let rate: Option<String> = row.get(18)?;
     Ok(Account {
         id,
         name: row.get(1)?,
@@ -250,6 +377,10 @@ fn from_row(row: &rusqlite::Row) -> rusqlite::Result<Account> {
         include_in_net_worth: row.get::<_, i64>(14)? == 1,
         virtual_balance: format_amount(virtual_balance),
         available: format_amount(balance + virtual_balance),
+        currency: row.get(16)?,
+        foreign: row.get::<_, i64>(17)? == 1,
+        balance_in_main: format_amount(in_main(balance, rate.as_deref())),
+        rate,
     })
 }
 
@@ -285,25 +416,28 @@ pub fn create(conn: &Connection, input: &NewAccount, today: &str) -> Result<Acco
     let notes = clean_notes(input.notes.as_deref())?;
     let group = clean_group(input.group.as_deref())?;
     let virtual_balance = input.virtual_balance.as_deref().map(parse_signed_amount).transpose()?.unwrap_or(0);
+    let (currency, rate) = resolve_currency(conn, (None, None), 0, input.currency.as_deref(), input.rate.as_deref())?;
     let tx = conn.unchecked_transaction()?;
     if name_is_taken(&tx, &name, None)? {
         return Err(AppError::NameExists);
     }
     tx.execute(
-        "INSERT INTO accounts (name, kind, number, opening_balance_minor, opening_date, position, bic, notes, group_name, include_net_worth, virtual_balance_minor)
-         VALUES (?1, ?2, ?3, ?4, ?5, (SELECT MAX(position) + 1 FROM accounts), ?6, ?7, ?8, ?9, ?10)",
-        params![name, input.kind.as_sql(), number, opening, date, bic, notes, group, input.include_in_net_worth.unwrap_or(true), virtual_balance],
+        "INSERT INTO accounts (name, kind, number, opening_balance_minor, opening_date, position, bic, notes, group_name, include_net_worth, virtual_balance_minor, currency, rate)
+         VALUES (?1, ?2, ?3, ?4, ?5, (SELECT MAX(position) + 1 FROM accounts), ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
+        params![name, input.kind.as_sql(), number, opening, date, bic, notes, group, input.include_in_net_worth.unwrap_or(true), virtual_balance, currency, rate],
     )?;
     let account = get(&tx, tx.last_insert_rowid(), today)?;
     tx.commit()?;
     Ok(account)
 }
 
-/// Changes an account that is not archived (restore it first). The stamp moves only when something changed.
+/// Changes an account that is not archived (restore it first). The stamp moves only when something changed. `balance` sets the opening balance
+/// so that the account holds exactly that today (section 21.5): what moved it up to today besides the opening balance is kept, and the opening
+/// balance becomes the rest. That needs an opening date that is not after today, since an opening balance dated later is not in today's balance.
 pub fn update(conn: &Connection, id: i64, patch: &AccountPatch, today: &str) -> Result<Account, AppError> {
     let tx = conn.unchecked_transaction()?;
     let current = get(&tx, id, today)?;
-    if current.archived {
+    if current.archived || (id == MAIN_ID && (patch.currency.is_some() || patch.rate.is_some())) || (patch.balance.is_some() && patch.opening_balance.is_some()) {
         return Err(AppError::InvalidInput);
     }
     let name = match &patch.name {
@@ -315,8 +449,23 @@ pub fn update(conn: &Connection, id: i64, patch: &AccountPatch, today: &str) -> 
         Some(number) => clean_short(number.as_deref(), NUMBER_MAX_CHARS)?,
         None => current.number,
     };
-    let opening = parse_signed_amount(patch.opening_balance.as_deref().unwrap_or(&current.opening_balance))?;
     let date = clean_date(patch.opening_date.as_deref().unwrap_or(&current.opening_date))?;
+    let opening = match &patch.balance {
+        Some(text) => {
+            let today = clean_date(today)?;
+            let others: i64 = tx.query_row(
+                "SELECT COALESCE(SUM(delta_minor), 0) FROM account_movements WHERE account_id = ?1 AND day <= ?2 AND source <> 'OPENING'",
+                params![id, today],
+                |r| r.get(0),
+            )?;
+            let opening = parse_signed_amount(text)? - others;
+            if date > today || opening.abs() > MAX_MINOR {
+                return Err(AppError::InvalidInput);
+            }
+            opening
+        }
+        None => parse_signed_amount(patch.opening_balance.as_deref().unwrap_or(&current.opening_balance))?,
+    };
     let bic = match &patch.bic {
         Some(bic) => clean_short(bic.as_deref(), BIC_MAX_CHARS)?,
         None => current.bic,
@@ -331,13 +480,15 @@ pub fn update(conn: &Connection, id: i64, patch: &AccountPatch, today: &str) -> 
     };
     let include = patch.include_in_net_worth.unwrap_or(current.include_in_net_worth);
     let virtual_balance = parse_signed_amount(patch.virtual_balance.as_deref().unwrap_or(&current.virtual_balance))?;
+    let held = current.foreign.then_some(current.currency.as_str());
+    let (currency, rate) = resolve_currency(&tx, (held, current.rate.as_deref()), current.entries, patch.currency.as_deref(), patch.rate.as_deref())?;
     if name_is_taken(&tx, &name, Some(id))? {
         return Err(AppError::NameExists);
     }
     tx.execute(
         "UPDATE accounts SET name = ?1, kind = ?2, number = ?3, opening_balance_minor = ?4, opening_date = ?5,
-                bic = ?6, notes = ?7, group_name = ?8, include_net_worth = ?9, virtual_balance_minor = ?10 WHERE id = ?11",
-        params![name, kind.as_sql(), number, opening, date, bic, notes, group, include, virtual_balance, id],
+                bic = ?6, notes = ?7, group_name = ?8, include_net_worth = ?9, virtual_balance_minor = ?10, currency = ?12, rate = ?13 WHERE id = ?11",
+        params![name, kind.as_sql(), number, opening, date, bic, notes, group, include, virtual_balance, id, currency, rate],
     )?;
     let account = get(&tx, id, today)?;
     tx.commit()?;
@@ -452,6 +603,8 @@ pub struct Line {
 #[serde(rename_all = "camelCase")]
 pub struct Statement {
     pub account: Account,
+    /// The currency of every amount in it: the account's.
+    pub currency: String,
     pub from: String,
     pub to: String,
     /// What the account held before `from`.
@@ -501,7 +654,7 @@ pub fn statement(conn: &Connection, id: i64, from: &str, to: &str, today: &str) 
         running += delta;
         lines.push(Line { date, source, id: source_id.to_string(), what: what.unwrap_or_default(), other, amount: format_amount(delta), balance: format_amount(running) });
     }
-    Ok(Statement { account, from, to, balance_before: format_amount(before), lines, balance_after: format_amount(running) })
+    Ok(Statement { currency: account.currency.clone(), account, from, to, balance_before: format_amount(before), lines, balance_after: format_amount(running) })
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -535,7 +688,7 @@ pub fn history(conn: &Connection, id: i64, year: &str, today: &str) -> Result<Ve
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Summary {
-    /// What every account that counts in net worth holds today, the archived ones too.
+    /// What every account that counts in net worth holds today, the archived ones too, in the app's currency: a foreign account at its rate.
     pub in_accounts: String,
     /// What friends owe you minus what you owe them: money a friend owes you is yours.
     pub friends: String,
@@ -549,11 +702,14 @@ pub struct Summary {
 pub fn summary(conn: &Connection, today: &str) -> Result<Summary, AppError> {
     let today = clean_date(today)?;
     let tx = conn.unchecked_transaction()?;
-    let in_accounts: i64 = tx.query_row(
-        "SELECT COALESCE(SUM(m.delta_minor), 0) FROM account_movements m JOIN accounts a ON a.id = m.account_id WHERE m.day <= ?1 AND a.include_net_worth = 1",
-        [&today],
-        |r| r.get(0),
-    )?;
+    // each account is turned into the app's currency on its own: a sum over several currencies is no number
+    let in_accounts: i64 = tx
+        .prepare(
+            "SELECT a.rate, COALESCE((SELECT SUM(m.delta_minor) FROM account_movements m WHERE m.account_id = a.id AND m.day <= ?1), 0)
+             FROM accounts a WHERE a.include_net_worth = 1",
+        )?
+        .query_map([&today], |r| Ok(in_main(r.get(1)?, r.get::<_, Option<String>>(0)?.as_deref())))?
+        .sum::<Result<i64, _>>()?;
     let friends: i64 = tx.query_row("SELECT COALESCE(SUM(balance_minor), 0) FROM person_balances", [], |r| r.get(0))?;
     let (accounts, in_use): (u32, bool) = tx.query_row(
         "SELECT count(*), count(*) > 1 OR COALESCE(SUM(opening_balance_minor <> 0), 0) > 0 FROM accounts",
@@ -578,6 +734,8 @@ pub struct Share {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Breakdown {
+    /// The currency of every amount in it: the account's.
+    pub currency: String,
     pub from: String,
     pub to: String,
     /// Categories of expenses, the largest amount first, then by name.
@@ -598,7 +756,10 @@ pub fn breakdown(conn: &Connection, id: i64, from: &str, to: &str) -> Result<Bre
         return Err(AppError::InvalidInput);
     }
     let tx = conn.unchecked_transaction()?;
-    tx.query_row("SELECT 1 FROM accounts WHERE id = ?1", [id], |_| Ok(())).optional()?.ok_or(AppError::NotFound)?;
+    let currency: String = tx
+        .query_row("SELECT COALESCE(currency, (SELECT currency FROM settings WHERE id = 1)) FROM accounts WHERE id = ?1", [id], |r| r.get(0))
+        .optional()?
+        .ok_or(AppError::NotFound)?;
     let mut statement = tx.prepare_cached(
         "SELECT c.id, c.name, c.type, SUM(m.delta_minor)
          FROM account_movements m
@@ -622,5 +783,5 @@ pub fn breakdown(conn: &Connection, id: i64, from: &str, to: &str) -> Result<Bre
             expenses.push(share);
         }
     }
-    Ok(Breakdown { from, to, expenses, income, expense_total: format_amount(expense_total), income_total: format_amount(income_total) })
+    Ok(Breakdown { currency, from, to, expenses, income, expense_total: format_amount(expense_total), income_total: format_amount(income_total) })
 }

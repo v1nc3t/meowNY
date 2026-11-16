@@ -924,7 +924,7 @@ fn a_breakdown_is_printed_for_a_person_and_as_json_and_a_read_token_may_ask_for_
     assert_eq!(
         report,
         json!({
-            "from": "2026-11-01", "to": "2026-11-30", "expenseTotal": "42.50", "incomeTotal": "500.00",
+            "currency": "EUR", "from": "2026-11-01", "to": "2026-11-30", "expenseTotal": "42.50", "incomeTotal": "500.00",
             "expenses": [{ "categoryId": food, "name": "Food", "amount": "42.50" }],
             "income": [{ "categoryId": pay, "name": "Pay", "amount": "500.00" }],
         })
