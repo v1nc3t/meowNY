@@ -9,14 +9,27 @@ export function categoryOptions(categories: Category[], names: { expense: string
   return [...section('EXPENSE', names.expense), ...section('INCOME', names.income)]
 }
 
-/** The tabs of the categories page on a phone: the expenses, and the history once there is some. (The income is on the accounts page.) */
-export function categoryTabs(hasHistory: boolean): readonly ('EXPENSE' | 'HISTORY')[] {
-  return hasHistory ? ['EXPENSE', 'HISTORY'] : ['EXPENSE']
+export type CategoryTab = 'EXPENSE' | 'INCOME' | 'HISTORY'
+
+/** The tabs of the categories page on a phone: the expenses, the income, and the history once there is some. (The computer shows them all at once.) */
+export function categoryTabs(hasHistory: boolean): readonly CategoryTab[] {
+  return hasHistory ? ['EXPENSE', 'INCOME', 'HISTORY'] : ['EXPENSE', 'INCOME']
 }
 
-/** The tab to show: the one chosen if it is among `tabs`, else the expenses (a tab that is gone, such as the old income, or a word nobody knows). */
-export function shownTab(tabs: readonly ('EXPENSE' | 'HISTORY')[], chosen: string): 'EXPENSE' | 'HISTORY' {
+/** The tab to show: the one chosen if it is among `tabs`, else the expenses (a tab that is gone, such as the history of no months, or a word nobody knows). */
+export function shownTab(tabs: readonly CategoryTab[], chosen: string): CategoryTab {
   return tabs.find((tab) => tab === chosen) ?? 'EXPENSE'
+}
+
+/** The tab an address names: `?tab=income` and `?tab=history`, so other pages can link to the income (a phone shows that tab, the computer scrolls to that part). No tab and a word nobody knows are the expenses. */
+export function tabOfSearch(search: string | URLSearchParams): CategoryTab {
+  const wanted = new URLSearchParams(search).get('tab')
+  return wanted === 'income' ? 'INCOME' : wanted === 'history' ? 'HISTORY' : 'EXPENSE'
+}
+
+/** The query of a tab: none for the expenses, the page's own address. */
+export function tabQuery(tab: CategoryTab): Record<string, string> {
+  return tab === 'INCOME' ? { tab: 'income' } : tab === 'HISTORY' ? { tab: 'history' } : {}
 }
 
 // -- the budgets of one side --------------------------------------------------------------------------------------------------

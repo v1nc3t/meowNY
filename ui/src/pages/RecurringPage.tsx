@@ -787,7 +787,7 @@ function RecurringModal({
             </label>
             {noIncomeCategory ? (
               <p className="hint">
-                {t('entry.noIncomeCategory')} <Link to="/app/accounts?tab=income" onClick={() => onClose()}>{t('entry.addIncomeCategory')}</Link>
+                {t('entry.noIncomeCategory')} <Link to="/app/categories?tab=income" onClick={() => onClose()}>{t('entry.addIncomeCategory')}</Link>
               </p>
             ) : (
               <Dropdown

@@ -868,6 +868,10 @@ balance instead); attachments on an account (the document links table would have
 credit card's payment day (the kind `CHECK` of 0018 cannot be widened without rebuilding a table four others point at);
 recurring transfers; rules.
 
+Point 5 was undone at the owner's request: the income is on the categories page again, as it was before (expenses and income side by
+side on the computer, with the history under them; three tabs on the phone), and the accounts page has no tabs. An old link to
+`/app/accounts?tab=income` goes to `/app/categories?tab=income`.
+
 ### 20.2 The rows (migration 0019)
 
 `ALTER TABLE accounts ADD COLUMN` only, no table is rebuilt:
@@ -949,11 +953,11 @@ and at 1280 px.
   remembered (it opens on expense; from an account's page "add income" opens on income, "transfer" on transfer). Changing tab
   keeps what both tabs have (amount, date, description/note) and drops the rest. Split is on the expense tab only. Keys: the
   existing shortcut opens the dialog; `Alt+1`, `Alt+2`, `Alt+3` choose a tab. With no income category the income tab says so and
-  links to the income tab of the accounts page.
+  links to the income categories on the categories page (`/app/categories?tab=income`).
 - **Transactions page**: the four tabs of 20.1 point 3 above the filters. On "transfers" the category filter and the search are
   hidden. With `several` false the transfers tab is hidden (there is nothing to move money between).
 - **Recurring page**: two sections, expenses first; an empty section shows its empty line, not nothing.
-- **Accounts page**: tabs accounts and income. List rows are grouped under their group's name when any account has a group
+- **Accounts page**: the list, no tabs (20.1 point 5 was undone). List rows are grouped under their group's name when any account has a group
   (accounts without one under "no group", last); reorder works inside a group. A row shows "available" under the balance when
   20.3 says so, and a small mark when it is left out of net worth.
 - **Account dialog**: name, type, number, opening balance and date as now; below them, shut behind "more": BIC, group (a text
@@ -961,7 +965,11 @@ and at 1280 px.
 - **Account's page**: under the chart a month navigation (`MonthNav`) that sets the period of the statement and of two small
   lists side by side (stacked on the phone): "spent by category" and "came in by category", each a row per category with a bar
   and the amount, and its total. The title row has "add expense", "add income", "transfer". The notes show under the title.
-- **Categories page**: expenses and history only.
+- **Categories page**: on the computer the budgets of the expenses and of the income side by side (one under the other when the pane is
+  narrower than 77rem), then the history; on a phone three tabs, expenses, income and history (the history once there is some). The tab
+  is in the address (`?tab=income`, `?tab=history`) so other pages can link to the income: a phone shows that tab, the computer scrolls
+  to that part. The add button of the title opens the add-category dialog as an expense (on a phone, as the side of the tab that is
+  shown), and the add of an empty side as that side.
 
 ### 20.8 Tests
 

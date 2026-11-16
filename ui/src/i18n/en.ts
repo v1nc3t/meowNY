@@ -939,6 +939,7 @@ export const en = {
   'accounts.balanceToday': 'balance today',
   'accounts.balanceTodayHint': 'sets the opening balance so the account holds this today.',
   'accounts.inMain': '≈ {amount}',
+  'accounts.inMainAbout': 'about {amount} in {code}',
   'accounts.rateLine': '1 {main} = {rate} {code}',
   'accounts.labelIn': '{label} ({code})',
   'entry.amountIn': 'amount ({code})',

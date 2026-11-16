@@ -927,6 +927,7 @@ export const de: Messages = {
   'accounts.balanceToday': 'saldo heute',
   'accounts.balanceTodayHint': 'setzt den anfangssaldo so, dass das konto heute diesen betrag hält.',
   'accounts.inMain': '≈ {amount}',
+  'accounts.inMainAbout': 'etwa {amount} in {code}',
   'accounts.rateLine': '1 {main} = {rate} {code}',
   'accounts.labelIn': '{label} ({code})',
   'entry.amountIn': 'betrag ({code})',

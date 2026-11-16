@@ -924,6 +924,7 @@ export const ro: Messages = {
   'accounts.balanceToday': 'sold azi',
   'accounts.balanceTodayHint': 'setează soldul inițial astfel încât contul să aibă azi această sumă.',
   'accounts.inMain': '≈ {amount}',
+  'accounts.inMainAbout': 'aproximativ {amount} în {code}',
   'accounts.rateLine': '1 {main} = {rate} {code}',
   'accounts.labelIn': '{label} ({code})',
   'entry.amountIn': 'sumă ({code})',

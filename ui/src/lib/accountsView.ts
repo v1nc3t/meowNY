@@ -141,19 +141,22 @@ export function signedView(amount: string, format: (unsigned: string) => string)
   return amount.startsWith('-') ? { text: `-${format(unsigned)}`, tone: 'is-expense' } : { text: `+${format(unsigned)}`, tone: 'is-income' }
 }
 
-// -- the tabs of the page ---------------------------------------------------------------------------------------------------------
+// -- the address and the name of a row -----------------------------------------------------------------------------------------------
 
-export const ACCOUNT_TABS = ['accounts', 'income'] as const
-export type AccountTab = (typeof ACCOUNT_TABS)[number]
-
-/** The tab an address names: `?tab=income` is the income, anything else (no tab, a word nobody knows) the accounts. Other pages link to this. */
-export function accountsTab(search: string | URLSearchParams): AccountTab {
-  return new URLSearchParams(search).get('tab') === 'income' ? 'income' : 'accounts'
+/**
+ * Whether an address is the old one of the income tab (`?tab=income`) that the accounts page had for a while: the income is on the
+ * categories page again (docs/accounts-design.md, section 20.1), and a link of that kind goes there. Nothing else is: no tab, another word.
+ */
+export function oldIncomeAddress(search: string | URLSearchParams): boolean {
+  return new URLSearchParams(search).get('tab') === 'income'
 }
 
-/** The query of a tab: none for the accounts, the page's own address. */
-export function tabQuery(tab: AccountTab): Record<string, string> {
-  return tab === 'income' ? { tab } : {}
+/**
+ * The small words under the name of an account in a list: that the net worth leaves it out, else none. An account in another currency
+ * says nothing more here: its currency is in its balance ("RON 0.32"), and what it is worth in the app's under that.
+ */
+export function nameMark(account: Pick<Account, 'includeInNetWorth'>, t: Translate): string {
+  return account.includeInNetWorth ? '' : t('accounts.notInNetWorth')
 }
 
 // -- groups -----------------------------------------------------------------------------------------------------------------------

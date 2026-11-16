@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useMemo, useRef, useState, type MouseEvent, type ReactNode } from 'react'
-import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { Link, Navigate, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { accounts as accountsApi, type Account, type AccountLine, type AccountStatement, type AccountsSummary, type Breakdown } from '../api/accounts'
 import { debts } from '../api/debts'
 import { ApiError, errorText } from '../api/invoke'
@@ -10,11 +10,9 @@ import AccountModal from '../components/AccountModal'
 import BalanceChart from '../components/BalanceChart'
 import ConfirmModal from '../components/ConfirmModal'
 import EntryDialog from '../components/EntryDialog'
-import IncomeTab from '../components/IncomeTab'
 import MonthNav from '../components/MonthNav'
 import Icon from '../components/NavIcon'
 import { DayGroups, IconAction, Row, Table, TapRow } from '../components/RowParts'
-import SectionTabs from '../components/SectionTabs'
 import ShareList from '../components/ShareList'
 import TransferModal from '../components/TransferModal'
 import YearNav from '../components/YearNav'
@@ -25,21 +23,18 @@ import { useGoToTransaction } from '../hooks/useFocusRequest'
 import { useMoneySettings, type MoneySettings } from '../hooks/useMoneySettings'
 import { useOpenRow } from '../hooks/useOpenRow'
 import { useProfile } from '../hooks/profile'
-import { useSwipeHandler } from '../hooks/swipe'
 import { useReorder } from '../hooks/useReorder'
 import { useToast } from '../hooks/toast'
 import { useT } from '../i18n/context'
 import { useShortcut } from '../keys/registry'
 import { tip } from '../keys/tip'
 import { useRowNavigation } from '../keys/useRowNavigation'
-import { ACCOUNT_TABS, accountLabel, accountName, accountsTab, activeAccounts, groupAccounts, lineWords, reorderWithinGroup, showAvailable, signedView, tabQuery, type AccountGroup } from '../lib/accountsView'
+import { accountLabel, accountName, activeAccounts, groupAccounts, lineWords, nameMark, oldIncomeAddress, reorderWithinGroup, showAvailable, signedView, type AccountGroup } from '../lib/accountsView'
 import type { EntryTab } from '../lib/entryDialog'
 import { breakable, formatDate, formatMoney, moneyIn } from '../lib/money'
 import { lastDay } from '../lib/range'
 import { applyOrder } from '../lib/reorder'
 import { saveChoice, storedChoice } from '../lib/sticky'
-import { step } from '../lib/swipe'
-import { tabPanelProps } from '../lib/tabs'
 
 /** The dialog that is open. A transfer being changed is read first, so the dialog opens with its row. */
 type Dialog =
@@ -55,6 +50,10 @@ type Dialog =
 export default function AccountsPage() {
   const { settings, error } = useMoneySettings()
   const now = useToday()
+  const { accountId } = useParams()
+  const { search } = useLocation()
+  // the income tab this page had for a while is on the categories page again: an old link goes there
+  if (!accountId && oldIncomeAddress(search)) return <Navigate to="/app/categories?tab=income" replace />
   if (error) return <p className="notice">{error}</p>
   if (!settings || !now) return null
   return <AccountsView settings={settings} now={now} />
@@ -79,9 +78,6 @@ function AccountsView({ settings, now }: { settings: MoneySettings; now: Today }
   const [dialog, setDialog] = useState<Dialog>(null)
   const [pending, setPending] = useState(false)
   const [showArchived, setShowArchived] = useState(() => storedChoice('accounts.archived', [false, true], false))
-  // the tab is in the address, so other pages can link to the income (/app/accounts?tab=income); an account's page has no tabs
-  const [params, setParams] = useSearchParams()
-  const tab = accountId ? 'accounts' : accountsTab(params)
   // a row was just dropped in a new place: the click that ends the drag must not open the account
   const dropped = useRef(false)
   const money = (amount: string) => formatMoney(amount, settings.currency, settings.locale)
@@ -164,16 +160,9 @@ function AccountsView({ settings, now }: { settings: MoneySettings; now: Today }
   /** The one place that adds an entry for an account: the add dialog of the transactions page, on the tab asked for and with this account chosen. */
   const addEntry = (tab: EntryTab, account: Account) => setDialog({ kind: 'entry', tab, accountId: account.id })
 
-  // Keyboard: n adds an account (an expense, on an account's page; on the income tab the tab has its own), j and k move between rows.
-  useShortcut('new', () => (chosen && !chosen.archived ? addEntry('EXPENSE', chosen) : setDialog({ kind: 'add' })), tab === 'accounts')
+  // Keyboard: n adds an account (an expense, on an account's page), j and k move between rows.
+  useShortcut('new', () => (chosen && !chosen.archived ? addEntry('EXPENSE', chosen) : setDialog({ kind: 'add' })))
   useRowNavigation()
-  // On a phone a swipe moves between the two tabs before it moves to another page.
-  useSwipeHandler((direction) => {
-    const next = step(ACCOUNT_TABS, tab, direction)
-    if (next === null) return false
-    setParams(tabQuery(next), { replace: true })
-    return true
-  }, phone && !accountId)
 
   const link = (account: Account) => `/app/accounts/${account.id}`
 
@@ -197,16 +186,25 @@ function AccountsView({ settings, now }: { settings: MoneySettings; now: Today }
     )
   }
   /** The balance in the account's currency, and under it what is available when the account has a virtual balance, and what it is worth in the app's currency when it is in another. */
-  const balanceCell = (account: Account, className: string) => (
-    <span className={`${className}${wrap(account)}`}>
-      {cellMoney(account)(account.balance)}
-      {showAvailable(account) ? <span className="acct-available">{`${t('accounts.available')} ${moneyOf(account)(account.available)}`}</span> : null}
-      {account.foreign ? <span className="acct-available acct-in-main">{t('accounts.inMain', { amount: money(account.balanceInMain) })}</span> : null}
-    </span>
-  )
-  /** Small words under the name of an account: its currency when it is not the app's, and that the net worth leaves it out. */
+  const balanceCell = (account: Account, className: string) => {
+    // "≈" alone says little to a screen reader: it hears the words, the title shows them
+    const about = t('accounts.inMainAbout', { amount: money(account.balanceInMain), code: settings.currency.toUpperCase() })
+    return (
+      <span className={`${className}${wrap(account)}`}>
+        {cellMoney(account)(account.balance)}
+        {showAvailable(account) ? <span className="acct-available">{`${t('accounts.available')} ${moneyOf(account)(account.available)}`}</span> : null}
+        {account.foreign ? (
+          <span className="acct-available acct-in-main" title={about}>
+            <span aria-hidden="true">{t('accounts.inMain', { amount: money(account.balanceInMain) })}</span>
+            <span className="sr-only">{about}</span>
+          </span>
+        ) : null}
+      </span>
+    )
+  }
+  /** Small words under the name of an account: that the net worth leaves it out (its currency is in its balance). */
   const marks = (account: Account) => {
-    const words = [account.foreign ? account.currency.toUpperCase() : '', account.includeInNetWorth ? '' : t('accounts.notInNetWorth')].filter(Boolean).join(' · ')
+    const words = nameMark(account, t)
     return words === '' ? null : (
       <span className="row-mark" title={words}>
         {words}
@@ -397,7 +395,7 @@ function AccountsView({ settings, now }: { settings: MoneySettings; now: Today }
               ) : null}
             </div>
           ) : null
-        ) : tab === 'accounts' ? (
+        ) : (
           <div className="tx-actions">
             <Button onClick={() => setDialog({ kind: 'add' })} {...tip('new', t('accounts.add'))}>
               {t('accounts.add')}
@@ -408,19 +406,8 @@ function AccountsView({ settings, now }: { settings: MoneySettings; now: Today }
               </Button>
             ) : null}
           </div>
-        ) : null}
+        )}
       </div>
-      {accountId ? null : (
-        <SectionTabs
-          label={t('accounts.title')}
-          value={tab}
-          onChange={(id) => setParams(tabQuery(id), { replace: true })}
-          tabs={[
-            { id: 'accounts', label: t('accounts.title') },
-            { id: 'income', label: t('budgets.income') },
-          ]}
-        />
-      )}
       {/* the dialogs and the pane are siblings: each key says what it is, or the pane of account 4 and the dialog of account 4 are one child */}
       {dialog?.kind === 'add' || dialog?.kind === 'edit' ? (
         <AccountModal
@@ -494,10 +481,9 @@ function AccountsView({ settings, now }: { settings: MoneySettings; now: Today }
           onClose={() => setDialog(null)}
         />
       ) : null}
-      {tab === 'income' ? <IncomeTab settings={settings} thisMonth={now.month} /> : null}
-      {accounts && tab === 'accounts' ? (
+      {accounts ? (
         // its own pane for each page, so that an account opens at its top whatever the list was scrolled to
-        <div key={`pane:${accountId ?? 'list'}`} className="tx-pane wide pane-stack" {...(accountId ? {} : tabPanelProps(tab))}>
+        <div key={`pane:${accountId ?? 'list'}`} className="tx-pane wide pane-stack">
           {accountId ? (
             chosen ? (
               <AccountPage

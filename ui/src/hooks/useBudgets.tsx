@@ -15,15 +15,18 @@ import { useToast } from './toast'
 import type { MoneySettings } from './useMoneySettings'
 
 /**
- * Everything one side of the budgets needs: its categories and its overview for a month, setting the budget, reordering, and the
- * dialogs to add, change and delete a category (`dialogs`, drawn anywhere on the page). `half` is what `BudgetHalf` takes; `reload`
- * changes whenever something was saved, for the parts of the page that read from the same data (the history).
+ * Everything the budgets of a month need: the categories and the overview, setting the budget, reordering, and the dialogs to add,
+ * change and delete a category (`dialogs`, drawn anywhere on the page). `half(side)` is what `BudgetHalf` takes for the expenses or the
+ * income; `reload` changes whenever something was saved, for the parts of the page that read from the same data (the history).
  */
-export function useBudgets({ type, month, thisMonth, settings }: { type: Side; month: string; thisMonth: string; settings: MoneySettings }): {
-  half: Omit<ComponentProps<typeof BudgetHalf>, 'hideTitle'>
+export function useBudgets({ month, thisMonth, settings }: { month: string; thisMonth: string; settings: MoneySettings }): {
+  half: (type: Side) => Omit<ComponentProps<typeof BudgetHalf>, 'hideTitle'>
   dialogs: ReactNode
-  add: () => void
+  /** Opens the dialog for a new category, with the type of this side chosen (the expenses when left out). */
+  add: (type?: Side) => void
   reload: number
+  /** Whether the categories and the overview are read: the lists have their height. */
+  ready: boolean
   /** An amount for a list: zero and "not set" both read as a dash. */
   money: (amount: string) => string
 } {
@@ -33,8 +36,8 @@ export function useBudgets({ type, month, thisMonth, settings }: { type: Side; m
   const [categories, setCategories] = useState<CategoryInMonth[] | null>(null)
   const [reload, setReload] = useState(0)
   const refresh = () => setReload((value) => value + 1)
-  // the dialogs: a new category, the one being changed, the one about to be deleted
-  const [adding, setAdding] = useState(false)
+  // the dialogs: a new category (and the type it starts as), the one being changed, the one about to be deleted
+  const [adding, setAdding] = useState<Side | null>(null)
   const [editing, setEditing] = useState<Category | null>(null)
   const [deleting, setDeleting] = useState<Category | null>(null)
   const [pending, setPending] = useState(false)
@@ -145,7 +148,7 @@ export function useBudgets({ type, month, thisMonth, settings }: { type: Side; m
   const money = (amount: string) => (Number(amount) === 0 ? '-' : formatMoney(amount, settings.currency, settings.locale))
 
   return {
-    half: {
+    half: (type) => ({
       type,
       month,
       overview: MONTH.test(month) ? overview : [],
@@ -155,17 +158,17 @@ export function useBudgets({ type, month, thisMonth, settings }: { type: Side; m
       onEdit: setEditing,
       onDelete: setDeleting,
       onReorder: (ids) => void onReorder(ids),
-      onAdd: () => setAdding(true),
-    },
+      onAdd: () => setAdding(type),
+    }),
     dialogs: (
       <>
         {adding ? (
           <AddCategoryModal
-            type={type as CategoryType}
+            type={adding as CategoryType}
             month={month}
-            onClose={() => setAdding(false)}
+            onClose={() => setAdding(null)}
             onCreated={() => {
-              setAdding(false)
+              setAdding(null)
               refresh()
             }}
           />
@@ -209,8 +212,9 @@ export function useBudgets({ type, month, thisMonth, settings }: { type: Side; m
         ) : null}
       </>
     ),
-    add: () => setAdding(true),
+    add: (type = 'EXPENSE') => setAdding(type),
     reload,
+    ready: categories !== null && overview !== null,
     money,
   }
 }

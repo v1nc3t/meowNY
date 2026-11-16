@@ -12,7 +12,7 @@ import { useT } from '../i18n/context'
 
 /**
  * One side of the budgets, expenses or income: its budget and what it adds up to this month, then its categories with what each adds
- * up to and its budget. The pages that show a side (the categories for expenses, the accounts for income) load it with `useBudgets`.
+ * up to and its budget. The categories page loads both sides with `useBudgets`.
  */
 export default function BudgetHalf({
   hideTitle = false,
@@ -49,7 +49,7 @@ export default function BudgetHalf({
   const spent = spentFor(overview, type)
   const budgeted = side?.budgeted ?? ''
   return (
-    <section className="budget-half">
+    <section className="budget-half" data-side={type}>
       {hideTitle ? null : <CardTitle>{t(type === 'EXPENSE' ? 'budgets.expenses' : 'budgets.income')}</CardTitle>}
       <ul className="card-list sum-list">
         <BudgetRow

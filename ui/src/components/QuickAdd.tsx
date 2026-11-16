@@ -30,7 +30,8 @@ export default function QuickAdd() {
             <button type="button" onClick={() => go(location.pathname === '/app/transactions' ? `${location.pathname}${location.search}` : '/app/transactions', { add: true })}>
               {t('tx.add')}
             </button>
-            <button type="button" onClick={() => go('/app/categories', { add: true })}>
+            {/* on the categories page the tab stays: the form opens for the side that is shown */}
+            <button type="button" onClick={() => go(location.pathname === '/app/categories' ? `${location.pathname}${location.search}` : '/app/categories', { add: true })}>
               {t('categories.add')}
             </button>
             <button type="button" onClick={() => go('/app/debts', { addFriend: true })}>

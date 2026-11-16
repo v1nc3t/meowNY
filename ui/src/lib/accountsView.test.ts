@@ -9,7 +9,6 @@ import {
   accountLabel,
   accountName,
   accountOptions,
-  accountsTab,
   activeAccounts,
   barWidth,
   currencyKey,
@@ -20,13 +19,14 @@ import {
   listable,
   MAIN_NAME,
   mainCurrency,
+  nameMark,
+  oldIncomeAddress,
   rateOf,
   rememberAccount,
   reorderWithinGroup,
   several,
   showAvailable,
   signedView,
-  tabQuery,
 } from './accountsView.ts'
 
 // A stand-in for the browser's storage; `broken` makes every use throw, as storage does when it is blocked.
@@ -274,25 +274,17 @@ test('the available line shows only when there is a virtual balance', () => {
   assert.equal(showAvailable({ virtualBalance: '-0.01' }), true)
 })
 
-// -- the tab in the address -------------------------------------------------------------------------------------------------------
+// -- the old address of the income tab --------------------------------------------------------------------------------------------
 
-test('the income tab is ?tab=income, and every other address is the accounts', () => {
-  assert.equal(accountsTab('?tab=income'), 'income')
-  assert.equal(accountsTab('tab=income'), 'income')
-  assert.equal(accountsTab(new URLSearchParams({ tab: 'income' })), 'income')
-  assert.equal(accountsTab(''), 'accounts')
-  assert.equal(accountsTab('?tab=accounts'), 'accounts')
-  for (const bad of ['?tab=', '?tab=INCOME', '?tab=expenses', '?tab=Income ', '?tab=income2', '?other=income', '?tab=nope&tab=income']) {
+test('?tab=income is the old address of the income tab, which the categories page has again; no other address is', () => {
+  assert.equal(oldIncomeAddress('?tab=income'), true)
+  assert.equal(oldIncomeAddress('tab=income'), true)
+  assert.equal(oldIncomeAddress(new URLSearchParams({ tab: 'income' })), true)
+  assert.equal(oldIncomeAddress('?x=1&tab=income'), true)
+  for (const other of ['', '?', '?tab=', '?tab=accounts', '?tab=INCOME', '?tab=Income ', '?tab=income2', '?tab=expenses', '?other=income', '?tab=nope&tab=income']) {
     // the word is exact, and the first value is the one that counts
-    assert.equal(accountsTab(bad), 'accounts', bad)
+    assert.equal(oldIncomeAddress(other), false, other)
   }
-  assert.equal(accountsTab('?x=1&tab=income'), 'income')
-})
-
-test('the query of a tab is the one that reads back as it, and the accounts have none', () => {
-  assert.deepEqual(tabQuery('accounts'), {})
-  assert.deepEqual(tabQuery('income'), { tab: 'income' })
-  for (const tab of ['accounts', 'income'] as const) assert.equal(accountsTab(new URLSearchParams(tabQuery(tab))), tab)
 })
 
 // -- the bars of the breakdown ----------------------------------------------------------------------------------------------------
@@ -320,6 +312,18 @@ const lei = account('10', 'Lei account', { currency: 'RON', foreign: true, rate:
 const lei2 = account('11', 'Lei savings', { currency: 'RON', foreign: true, rate: '4.90' })
 const oldLei = account('12', 'Old lei', { currency: 'RON', foreign: true, rate: '5.00', archived: true })
 const options = (accounts: Account[], keep: string[] = [], mainOnly = false) => accountOptions(accounts, t, keep, mainOnly).map((option) => option.value)
+
+test('under the name of a row: only that net worth leaves it out; an account in another currency says nothing more there', () => {
+  assert.equal(nameMark(main, t), '', 'an ordinary account')
+  assert.equal(nameMark(lei, t), '', 'in another currency: the currency is in the balance, the value under it')
+  assert.equal(nameMark(old, t), '', 'archived')
+  assert.equal(nameMark(oldLei, t), '', 'archived and in another currency')
+  assert.equal(nameMark({ ...savings, includeInNetWorth: false }, t), 'not in net worth')
+  assert.equal(nameMark({ ...lei, includeInNetWorth: false }, t), 'not in net worth', 'in another currency and left out: the words alone, no code')
+  assert.equal(nameMark({ ...old, includeInNetWorth: false }, t), 'not in net worth', 'archived and left out')
+  setActiveLanguage('de')
+  assert.equal(nameMark({ ...lei, includeInNetWorth: false }, t), 'nicht im nettovermögen', 'in the person\'s language')
+})
 
 test('a field for the app\'s currency alone lists only the accounts in it, archived ones and those in another currency left out', () => {
   assert.deepEqual(listable([main, savings, lei, old, oldLei], true).map((account) => account.id), ['1', '2'])

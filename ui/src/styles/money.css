@@ -265,8 +265,12 @@ html.is-phone .split-table td {
   height: 3.5rem;
 }
 
-/* The categories page: the budgets of the expenses, then the history, all in the pane under the title, which scrolls as the pane of the
-   other pages does. The income's budgets are on the accounts page and use the same half. */
+/* The categories page: the budgets of expenses and income side by side, then the history, all in the pane under the title, which
+   scrolls as the pane of the other pages does. */
+.budget-page {
+  container-type: inline-size;
+  container-name: budget;
+}
 
 /* The picker is wider than a phone: "current" goes under it rather than past the edge. */
 .budget-title .tx-actions,
@@ -276,6 +280,21 @@ html.is-phone .split-table td {
 
 .budget-view > * + * {
   margin-top: 1.5rem;
+}
+
+.budget-split {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  align-items: start;
+  gap: 1.5rem;
+}
+
+/* No room for two sides: one under the other. A side needs about 37.5rem for a category name of 8rem (after its grip) beside what it
+   adds up to, its budget and the buttons; two of them, the gap between and the room at the edge of the pane make 77rem. */
+@container budget (max-width: 77rem) {
+  .budget-split {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 /* The half is a container (its dialogs are drawn into the body, so it holds nothing fixed): narrower than 28em, which is what the columns

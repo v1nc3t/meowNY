@@ -926,6 +926,7 @@ export const pt: Messages = {
   'accounts.balanceToday': 'saldo hoje',
   'accounts.balanceTodayHint': 'define o saldo inicial para que a conta tenha hoje este valor.',
   'accounts.inMain': '≈ {amount}',
+  'accounts.inMainAbout': 'cerca de {amount} em {code}',
   'accounts.rateLine': '1 {main} = {rate} {code}',
   'accounts.labelIn': '{label} ({code})',
   'entry.amountIn': 'montante ({code})',

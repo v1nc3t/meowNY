@@ -1,22 +1,46 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import type { Overview } from '../api/budgets.ts'
-import { amountsFor, categoryTabs, earnedClass, shownTab, spentClass, spentFor } from './categoriesView.ts'
+import { amountsFor, categoryTabs, earnedClass, shownTab, spentClass, spentFor, tabOfSearch, tabQuery } from './categoriesView.ts'
 
-test('the categories page has the expenses, and the history once there is some; the income is on the accounts page', () => {
-  assert.deepEqual(categoryTabs(false), ['EXPENSE'])
-  assert.deepEqual(categoryTabs(true), ['EXPENSE', 'HISTORY'])
-  for (const tabs of [categoryTabs(false), categoryTabs(true)]) assert.equal((tabs as readonly string[]).includes('INCOME'), false)
+test('on a phone the categories page has the tabs expenses and income, and the history once there is some', () => {
+  assert.deepEqual(categoryTabs(false), ['EXPENSE', 'INCOME'])
+  assert.deepEqual(categoryTabs(true), ['EXPENSE', 'INCOME', 'HISTORY'])
 })
 
-test('a tab that is gone falls back to the expenses', () => {
-  assert.equal(shownTab(categoryTabs(true), 'INCOME'), 'EXPENSE', 'an old income tab')
+test('a tab that is gone falls back to the expenses, and the income is a tab again', () => {
+  assert.equal(shownTab(categoryTabs(true), 'INCOME'), 'INCOME', 'an old remembered income tab')
+  assert.equal(shownTab(categoryTabs(false), 'INCOME'), 'INCOME')
   assert.equal(shownTab(categoryTabs(true), 'HISTORY'), 'HISTORY')
   assert.equal(shownTab(categoryTabs(true), 'EXPENSE'), 'EXPENSE')
   assert.equal(shownTab(categoryTabs(false), 'HISTORY'), 'EXPENSE', 'the history went with the months')
   assert.equal(shownTab(categoryTabs(true), ''), 'EXPENSE')
   assert.equal(shownTab(categoryTabs(true), 'income'), 'EXPENSE', 'a word in other letters')
   assert.equal(shownTab([], 'EXPENSE'), 'EXPENSE')
+})
+
+test('the tab is in the address: ?tab=income and ?tab=history, and every other address is the expenses', () => {
+  assert.equal(tabOfSearch('?tab=income'), 'INCOME')
+  assert.equal(tabOfSearch('tab=income'), 'INCOME', 'with no question mark too')
+  assert.equal(tabOfSearch(new URLSearchParams({ tab: 'income' })), 'INCOME')
+  assert.equal(tabOfSearch('?x=1&tab=history'), 'HISTORY', 'other parameters stay out of the way')
+  assert.equal(tabOfSearch('?tab=income&tab=history'), 'INCOME', 'the first one counts')
+  for (const bad of ['', '?', '?tab=', '?tab=expenses', '?tab=INCOME', '?tab=Income ', '?tab=income2', '?tab=nope', '?other=income', '?tab=%00']) {
+    assert.equal(tabOfSearch(bad), 'EXPENSE', bad)
+  }
+})
+
+test('the query of a tab reads back as it, and the expenses have none', () => {
+  assert.deepEqual(tabQuery('EXPENSE'), {})
+  assert.deepEqual(tabQuery('INCOME'), { tab: 'income' })
+  assert.deepEqual(tabQuery('HISTORY'), { tab: 'history' })
+  for (const tab of ['EXPENSE', 'INCOME', 'HISTORY'] as const) assert.equal(tabOfSearch(new URLSearchParams(tabQuery(tab))), tab)
+})
+
+test('an address that names a tab the page does not have shows the expenses', () => {
+  const tabs = categoryTabs(false)
+  assert.equal(shownTab(tabs, tabOfSearch('?tab=history')), 'EXPENSE', 'no history yet')
+  assert.equal(shownTab(tabs, tabOfSearch('?tab=income')), 'INCOME')
 })
 
 const overview: Overview[] = [

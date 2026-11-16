@@ -234,11 +234,6 @@ ul.card-list.acct-archived > li.card-item {
   }
 }
 
-/* The title row keeps its height on the income tab, which has no button in it, so the tabs under it do not move. */
-.accounts-page > .tx-title.one-line {
-  min-height: 2.5rem;
-}
-
 /* The groups of the list: a small heading over each run of accounts (the ones with no group come last). Each run is a list of its own
    with the same columns, so the amounts line up from one to the next. A long name ends in an ellipsis; the whole of it is the title. */
 .acct-group {
@@ -412,9 +407,7 @@ html.is-phone .tx-actions.acct-actions > :last-child:nth-child(odd) {
   gap: 0.875rem;
 }
 
-/* The income tab: add a category, and the month, on one line (the month's picker goes under on a window too narrow for both). The month's
-   picker, here and on an account's page, wraps rather than leaving the window (a phone keeps its one line, which fits). */
-.acct-income-bar,
+/* The month's picker on an account's page wraps rather than leaving the window (a phone keeps its one line, which fits). */
 .accounts-page .month-nav {
   flex-wrap: wrap;
 }

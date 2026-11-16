@@ -12,7 +12,7 @@ const RELEASES = `${REPO}/releases/latest`
 const PICTURES = {
   start: ['lock', 'phone-lock'],
   budgeting: ['dashboard', 'transactions', 'add-income', 'transactions-transfers', 'categories', 'recurring'],
-  accounts: ['accounts', 'account', 'accounts-income'],
+  accounts: ['accounts', 'account'],
   documents: ['documents', 'preview-pdf', 'preview-csv'],
   debts: ['debts', 'friend', 'split', 'bill-code'],
   phone: ['phone-sync', 'phone-dashboard', 'phone-transactions', 'phone-quick-add', 'phone-entry', 'phone-recurring', 'phone-debts', 'phone-categories', 'phone-accounts'],
@@ -114,7 +114,7 @@ const SECTIONS = [
     id: 'budgeting',
     title: 'Budgeting',
     blocks: [
-      { t: 'p', text: 'The pages you use most: **dashboard**, **transactions**, **categories** (your expense budgets are there) and **recurring**. **accounts** shows where your money is, and holds your income categories: [accounts](#accounts). On the phone the first four are tabs at the bottom, and the round **add** button replaces **add transaction** and **add category**.' },
+      { t: 'p', text: 'The pages you use most: **dashboard**, **transactions**, **categories** (your budgets are there) and **recurring**. **accounts** shows where your money is: [accounts](#accounts). On the phone the first four are tabs at the bottom, and the round **add** button replaces **add transaction** and **add category**.' },
       { t: 'h3', id: 'dashboard', text: 'Dashboard' },
       {
         t: 'ul',
@@ -165,7 +165,7 @@ const SECTIONS = [
         t: 'ol',
         items: [
           'Press **add transaction** (or `n`) and choose the **income** tab (or press `Alt+2`).',
-          'Type a name and an amount, and choose a category. The list holds income categories only. With none yet, the dialog says so, and **add one** takes you to the income tab of **accounts** ([income categories](#income)).',
+          'Type a name and an amount, and choose a category. The list holds income categories only. With none yet, the dialog says so, and **add one** takes you to the income side of **categories** ([income categories](#income)).',
           'Under **into account**, choose where the money comes in. It is always asked, also with one account.',
           'Check the payment date, and add a description or **attach documents** if you like. An income cannot be split.',
           'Press **done**.',
@@ -186,12 +186,12 @@ const SECTIONS = [
       { t: 'p', text: 'meowNY remembers the kind of period, the category, the account and the number of rows the next time. The dates are remembered only until you close the app. On the phone, the period, the category and the account are behind the **filters** button.' },
       { t: 'p', text: 'The **transfers** tab lists each transfer with its **date**, **from**, **to**, **amount** and **note**. Only the period and the account apply there (an account matches either side of a transfer); the category and the search are hidden. The pencil edits a transfer and the bin deletes it (on the phone, tap the row first).' },
       { t: 'h3', id: 'categories', text: 'Categories' },
-      { t: 'p', text: 'Categories sort what you spend and what comes in. **categories** shows the expense categories for one month (change it with the arrows or `[` and `]`), each with what you spent that month next to its budget: green within the budget, red above it. Under them is the **budget history**. The income categories are on the **income** tab of **accounts** ([income categories](#income)).' },
+      { t: 'p', text: 'Categories sort what you spend and what comes in. **categories** shows expenses and income side by side for one month (change it with the arrows or `[` and `]`), with the **budget history** under them. In a narrow window the two sit one under the other. Each category shows what you spent or earned that month next to its budget. Spent is green within the budget and red above it; earned is green above its budget. On the phone the page has three tabs: **expenses**, **income** and **budget history** (the history is there once you have some). More on [income categories](#income).' },
       {
         t: 'ol',
         items: [
           'Open **categories** and press **add category** (or press `n`).',
-          'Type a name, and choose whether it is an expense or income. It starts as an expense; an income category shows on **accounts**.',
+          'Type a name, and choose whether it is an expense or income. It starts as an expense, except on the phone\'s **income** tab, where it starts as an income.',
           'Type a budget from this month on, if you want one.',
           'Press **done**.',
         ],
@@ -203,17 +203,28 @@ const SECTIONS = [
       },
       { t: 'p', text: 'The order is kept for expenses and for income apart, and goes to your phone with the next sync. **Delete** asks for which months: only this month (the category stays), this month and later, or all months.' },
       { t: 'h3', id: 'budget', text: 'Budgets' },
-      { t: 'p', text: 'A budget is set per month and category, and carries into later months. Expense budgets are on **categories**, income budgets on the **income** tab of **accounts**; both work the same.' },
+      { t: 'p', text: 'A budget is set per month and category, and carries into later months. Expense budgets and income budgets are both on **categories**, and they work the same.' },
       {
         t: 'ol',
         items: [
-          'Open **categories** (or **accounts**, **income** tab) and choose the month.',
-          'Press the pencil on **monthly budget**.',
+          'Open **categories** and choose the month.',
+          'On the expenses or the income side, press the pencil on **monthly budget**.',
           'Type the amount and press **save**. To remove the budget, press **clear**.',
           'For one category, press the pencil on its row instead, type the amount under **budget from … on**, and press **done**. You can rename it there too.',
         ],
       },
       { t: 'p', text: 'Change a budget of a past month and meowNY asks how far the change reaches: only that month, that month and later, or every month. Category budgets cannot add up to more than the monthly budget. On **categories**, the list of months under the budgets shows each month\'s spending and earnings against their budgets; click one to look at it.' },
+      { t: 'h3', id: 'income', text: 'Income categories' },
+      { t: 'p', text: 'The income side of **categories** holds your income categories, their budgets and what came in this month. It works as the expenses side does. Earned is green above its budget. On the phone it is the **income** tab.' },
+      {
+        t: 'ol',
+        items: [
+          'Open **categories**. On the phone, choose the **income** tab.',
+          'Press **add category** (or press `n`). Type a name, choose **income** as the type (on the phone\'s **income** tab it is chosen already), type a budget if you want one, and press **done**.',
+          'Choose the month with the arrows (or `[` and `]`). For the budget of all income, press the pencil on **monthly budget**; for one category, press the pencil on its row ([budgets](#budget)).',
+          'To change the order, hold the grip at the start of a row and drag, or use `Alt` with the up or down arrow.',
+        ],
+      },
       { t: 'h3', id: 'recurring', text: 'Recurring items' },
       { t: 'p', text: 'Rent, salary, subscriptions: what comes back. The page has two lists, **recurring expenses** and **recurring income**. Each title shows how many items the list holds and what the running ones with a fixed amount come to **per month**. In a list, active items come first, then paused and ended ones, each group by category.' },
       {
@@ -257,7 +268,7 @@ const SECTIONS = [
     title: 'Accounts',
     blocks: [
       { t: 'p', text: 'An account is a place your money is: a bank account, savings, cash, a credit card. Every transaction, recurring item and debt entry is in one account. You start with one, the **main account**, and everything goes into it. While you have only one account, only an income asks for one, and you can leave this page alone.' },
-      { t: 'p', text: 'The **accounts** page has two tabs: **accounts**, the list below, and **income**, your income categories ([income categories](#income)). An account can be in another currency than yours ([an account in another currency](#account-currency)). **Not in meowNY:** reconciliation (correct the opening balance instead), recurring transfers, rules, liabilities, piggy banks and files attached to an account.' },
+      { t: 'p', text: 'The **accounts** page is the list below. An account can be in another currency than yours ([an account in another currency](#account-currency)). **Not in meowNY:** reconciliation (correct the opening balance instead), recurring transfers, rules, liabilities, piggy banks and files attached to an account.' },
       { t: 'h3', id: 'add-account', text: 'Add an account' },
       {
         t: 'ol',
@@ -387,17 +398,6 @@ const SECTIONS = [
       { t: 'p', text: 'You find your transfers on the **transfers** tab of **transactions**, and as lines in the statement of each of the two accounts. To change or delete one, press the pencil or the bin on its line there (on the phone, tap the line first).' },
       { t: 'h3', id: 'net-worth', text: 'Net worth' },
       { t: 'p', text: 'On the dashboard, **net worth** is what is **in accounts** plus what **friends** owe you, minus what you owe them. **in accounts** adds up only the accounts that **count in net worth**, archived ones too, each in your currency: an account in another currency counts at its rate. The virtual balance never counts.' },
-      { t: 'h3', id: 'income', text: 'Income categories' },
-      { t: 'p', text: 'The **income** tab of **accounts** holds your income categories, their budgets and what came in this month. It works as **categories** does for expenses. Earned is green above its budget.' },
-      {
-        t: 'ol',
-        items: [
-          'Open **accounts** and choose the **income** tab.',
-          'Press **add category** (or press `n`). The type starts as income. Type a name, a budget if you want one, and press **done**.',
-          'Choose the month with the arrows (or `[` and `]`). For the budget of all income, press the pencil on **monthly budget**; for one category, press the pencil on its row ([budgets](#budget)).',
-          'To change the order, hold the grip at the start of a row and drag, or use `Alt` with the up or down arrow.',
-        ],
-      },
     ],
   },
   {
