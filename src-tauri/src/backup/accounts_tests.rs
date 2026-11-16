@@ -28,8 +28,8 @@ fn accounts_transfers_and_the_account_of_every_row_come_back_exactly() {
         assert!(before.rows(table).iter().any(|r| r["account_id"] == json!(2)), "the test data has a row of {table} in the second account");
     }
     assert!(before.rows("transactions").iter().any(|r| r["account_id"] == json!(1)), "and one in the main account");
-    assert_eq!(before.rows("accounts").len(), 2);
-    assert_eq!(before.rows("transfers").len(), 1);
+    assert_eq!(before.rows("accounts").len(), 3, "the main account, Savings and the account in lei");
+    assert_eq!(before.rows("transfers").len(), 2);
 
     let file = seal(&before, PASSPHRASE).unwrap();
     let mut target = db();
@@ -40,12 +40,12 @@ fn accounts_transfers_and_the_account_of_every_row_come_back_exactly() {
     assert!(accounts::check(&target).unwrap());
     assert_eq!(accounts::list(&target, TODAY).unwrap(), accounts::list(&source, TODAY).unwrap());
     assert_eq!(accounts::summary(&target, TODAY).unwrap(), accounts::summary(&source, TODAY).unwrap());
-    for id in [1, 2] {
+    for id in [1, 2, 3] {
         assert_eq!(accounts::statement(&target, id, "2026-01-01", "2026-12-31", TODAY).unwrap(), accounts::statement(&source, id, "2026-01-01", "2026-12-31", TODAY).unwrap(), "account {id}");
     }
     // a row made after the restore works: the ids carry on from the file, and the new account is the next one
     let cash = account(&target, "Cash");
-    assert_eq!(cash, 3);
+    assert_eq!(cash, 4);
     transfer(&target, 2, cash, "1.00", "2026-03-01");
     assert_eq!(accounts::delete(&target, 2), Err(AppError::InvalidInput), "an account with rows is still not deleted");
 }
@@ -73,7 +73,8 @@ fn the_main_account_keeps_its_own_name_number_and_opening_balance_and_an_archive
     assert_eq!((main["name"].as_str(), main["opening_balance_minor"].as_i64()), (Some("Current account"), Some(-12_000)));
     let list = accounts::list(&target, TODAY).unwrap();
     assert_eq!((list[0].name.as_str(), list[0].is_main, list[0].archived), ("Current account", true, false));
-    assert_eq!((list[1].name.as_str(), list[1].archived, list[1].entries > 0), ("Savings", true, true), "it is archived, with its rows and its balance");
+    assert_eq!((list[2].name.as_str(), list[2].archived, list[2].entries > 0), ("Savings", true, true), "it is archived, last, with its rows and its balance");
+    assert_eq!((list[1].name.as_str(), list[1].currency.as_str(), list[1].rate.as_deref()), ("Lei account", "RON", Some("4.9769")), "and the account in lei is where it was");
     assert_eq!(list, accounts::list(&source, TODAY).unwrap());
 }
 
@@ -398,13 +399,13 @@ fn the_five_details_of_every_account_come_back_exactly_with_notes_of_two_lines_a
     accounts::archive(&source, card, TODAY).unwrap();
     let before = dump(&source).unwrap();
     let rows = before.rows("accounts");
-    assert_eq!(rows.len(), 3);
+    assert_eq!(rows.len(), 4, "the main account, Savings, the account in lei and the card");
     // what the file holds: the raw columns, the notes with their line breaks, the flag as 0 and the amount as minor units
     assert_eq!(
         (&rows[1]["bic"], &rows[1]["notes"], &rows[1]["group_name"], &rows[1]["include_net_worth"], &rows[1]["virtual_balance_minor"]),
         (&json!("DEUTDEFF500"), &json!("first line\nsecond, \"line\" =1+1"), &json!("Savings 日本語"), &json!(0), &json!(-100_000))
     );
-    assert_eq!((&rows[0]["include_net_worth"], &rows[0]["virtual_balance_minor"], &rows[2]["virtual_balance_minor"]), (&json!(1), &json!(-500), &json!(999_999_999_999_i64)));
+    assert_eq!((&rows[0]["include_net_worth"], &rows[0]["virtual_balance_minor"], &rows[3]["virtual_balance_minor"]), (&json!(1), &json!(-500), &json!(999_999_999_999_i64)));
 
     let mut target = db();
     restore(&mut target, &seal(&before, PASSPHRASE).unwrap()).unwrap();
@@ -418,7 +419,9 @@ fn the_five_details_of_every_account_come_back_exactly_with_notes_of_two_lines_a
     let summary = accounts::summary(&target, TODAY).unwrap();
     assert_eq!(summary, accounts::summary(&source, TODAY).unwrap());
     let main_alone = accounts::get(&target, MAIN_ID, TODAY).unwrap();
-    assert_eq!(summary.in_accounts, main_alone.balance, "only the main account counts: Savings and the card are left out");
+    let lei = accounts::list(&target, TODAY).unwrap().into_iter().find(|a| a.foreign).unwrap();
+    let counted = crate::money::parse_signed_amount(&main_alone.balance).unwrap() + crate::money::parse_signed_amount(&lei.balance_in_main).unwrap();
+    assert_eq!(summary.in_accounts, crate::money::format_amount(counted), "only the main account and the account in lei count, the latter in the app's currency: Savings and the card are left out");
     assert_eq!(main_alone.available, crate::money::format_amount(crate::money::parse_signed_amount(&main_alone.balance).unwrap() - 500), "a negative virtual balance takes from what is available");
     assert!(accounts::check(&target).unwrap());
     // a stamp or a date did not move, and a change of a detail made after the restore is a change like any other
@@ -587,28 +590,126 @@ fn a_backup_made_at_schema_19_restores_with_the_four_currency_columns_empty_and_
     }
     assert_eq!(accounts::list(&target, TODAY).unwrap().iter().map(|a| (a.currency.as_str(), a.foreign)).collect::<Vec<_>>(), [("EUR", false), ("EUR", false)]);
     assert!(accounts::check(&target).unwrap());
-    // a round trip of what has a currency keeps the four columns
+}
+
+// ---- a currency per account (docs/accounts-design.md, section 21.6) ---------------------------------------------------------------
+
+/// Where the account in lei, its payment and its transfer are in the rows of `lived_in()`: (account, payment, transfer) as indexes in their tables.
+fn lei_rows(snapshot: &Snapshot) -> (usize, usize, usize) {
+    let at = |table: &str, column: &str, value: &str| snapshot.rows(table).iter().position(|r| r[column] == json!(value)).unwrap_or_else(|| panic!("no {value} in {table}"));
+    (at("accounts", "name", "Lei account"), at("transactions", "name", "Lei shop"), snapshot.rows("transfers").iter().position(|r| r["to_amount_minor"] != Value::Null).expect("a transfer with a second amount"))
+}
+
+#[test]
+fn the_four_columns_of_a_currency_per_account_come_back_exactly_at_their_bounds_too() {
     let source = lived_in();
-    let lei = accounts::create(&source, &accounts::NewAccount { currency: Some("RON".into()), rate: Some("4.9769".into()), ..crate::accounts::fixtures::new_account("Lei") }, TODAY).unwrap().id;
-    crate::transactions::create(
-        &source,
-        &crate::transactions::NewTransaction {
-            name: "Lei shop".into(),
-            amount: "20.00".into(),
-            payment_date: "2026-02-03".into(),
-            category_id: "1".into(),
-            description: None,
-            client_uuid: None,
-            account_id: Some(lei.to_string()),
-            native_amount: Some("99.54".into()),
-        },
-    )
-    .unwrap();
-    accounts::transfers::create(&source, &accounts::transfers::NewTransfer { to_amount: Some("49.77".into()), ..crate::accounts::fixtures::new_transfer(MAIN_ID, lei, "10.00", "2026-02-04") }).unwrap();
     let before = dump(&source).unwrap();
-    let mut other = db();
-    restore(&mut other, &seal(&before, PASSPHRASE).unwrap()).unwrap();
-    assert_eq!(dump(&other).unwrap(), before, "the four columns come back as they were");
-    assert_eq!(accounts::list(&other, TODAY).unwrap(), accounts::list(&source, TODAY).unwrap());
-    assert!(accounts::check(&other).unwrap());
+    let (lei, payment, moved) = lei_rows(&before);
+    // what the file holds: the raw columns, the rate as typed and the two amounts in minor units
+    assert_eq!((&before.rows("accounts")[lei]["currency"], &before.rows("accounts")[lei]["rate"]), (&json!("RON"), &json!("4.9769")));
+    assert_eq!(before.rows("transactions")[payment]["native_amount_minor"], json!(9954));
+    assert_eq!(before.rows("transfers")[moved]["to_amount_minor"], json!(4977));
+    assert!(before.rows("accounts").iter().filter(|r| r["currency"] != Value::Null).count() == 1, "the others have none of their own");
+    assert!(before.rows("transactions").iter().filter(|r| r["native_amount_minor"] != Value::Null).count() == 1);
+
+    let mut target = db();
+    restore(&mut target, &seal(&before, PASSPHRASE).unwrap()).unwrap();
+    assert_eq!(dump(&target).unwrap(), before, "the four columns, and every stamp and date beside them");
+    assert_eq!(accounts::list(&target, TODAY).unwrap(), accounts::list(&source, TODAY).unwrap(), "the balance in lei and what it is worth in the app's currency");
+    assert_eq!(accounts::summary(&target, TODAY).unwrap(), accounts::summary(&source, TODAY).unwrap());
+    assert_eq!(accounts::statement(&target, 3, "2026-01-01", "2026-12-31", TODAY).unwrap(), accounts::statement(&source, 3, "2026-01-01", "2026-12-31", TODAY).unwrap());
+    assert!(accounts::check(&target).unwrap());
+
+    // the bounds: the smallest and the largest rate, a native amount of 0 and the largest, the largest second amount
+    for (rate, native, arrives) in [("0.00000001", 0_i64, 999_999_999_999_i64), ("999999999.99999999", 999_999_999_999, 1), ("160", 1, 999_999_999_999)] {
+        source.execute("UPDATE accounts SET rate = ?1 WHERE name = 'Lei account'", [rate]).unwrap();
+        source.execute("UPDATE transactions SET native_amount_minor = ?1 WHERE name = 'Lei shop'", [native]).unwrap();
+        source.execute("UPDATE transfers SET to_amount_minor = ?1 WHERE to_amount_minor IS NOT NULL", [arrives]).unwrap();
+        let edited = dump(&source).unwrap();
+        let mut other = lived_in();
+        restore(&mut other, &seal(&edited, PASSPHRASE).unwrap()).unwrap_or_else(|e| panic!("rate {rate}: {e:?}"));
+        assert_eq!(dump(&other).unwrap(), edited, "rate {rate}, native {native}, second amount {arrives}");
+        assert_eq!(accounts::list(&other, TODAY).unwrap(), accounts::list(&source, TODAY).unwrap(), "rate {rate}");
+        assert!(accounts::check(&other).unwrap());
+    }
+    // a restore of a file with none replaces what a currency of its own the target had, and a row made after it works as in any database
+    let none = db();
+    none.execute("INSERT INTO settings (id, currency) VALUES (1, 'EUR')", []).unwrap();
+    let mut target = lived_in();
+    assert_eq!(count(&target, "SELECT count(*) FROM accounts WHERE currency IS NOT NULL"), 1);
+    restore(&mut target, &seal(&dump(&none).unwrap(), PASSPHRASE).unwrap()).unwrap();
+    assert_eq!(count(&target, "SELECT count(*) FROM accounts WHERE currency IS NOT NULL OR rate IS NOT NULL"), 0);
+    assert_eq!(count(&target, "SELECT count(*) FROM transactions WHERE native_amount_minor IS NOT NULL"), 0);
+    let lei = accounts::create(&target, &accounts::NewAccount { currency: Some("USD".into()), rate: Some("1.10".into()), ..crate::accounts::fixtures::new_account("Dollars") }, TODAY).unwrap();
+    assert_eq!((lei.id, lei.currency.as_str(), lei.foreign), (2, "USD", true));
+}
+
+/// Each change to the rows below makes a file the app could not have written. Every one is refused whole, and nothing changes.
+#[test]
+fn a_file_that_breaks_the_rules_of_a_currency_per_account_is_refused_whole_and_changes_nothing() {
+    let base = dump(&lived_in()).unwrap();
+    let (lei, payment, moved) = lei_rows(&base);
+    type Change = Box<dyn Fn(&mut Snapshot)>;
+    let account = move |column: &'static str, value: Value| -> Change { Box::new(move |s| set(s, "accounts", lei, column, value.clone())) };
+    let main = |column: &'static str, value: Value| -> Change { Box::new(move |s| set(s, "accounts", 0, column, value.clone())) };
+    let cases: Vec<(&str, Change)> = vec![
+        ("the main account in a currency, with a rate", Box::new(|s| { set(s, "accounts", 0, "currency", json!("RON")); set(s, "accounts", 0, "rate", json!("5.00")) })),
+        ("the main account in a currency, with no rate", main("currency", json!("RON"))),
+        ("the main account with a rate and no currency", main("rate", json!("5.00"))),
+        ("a currency with no rate", account("rate", Value::Null)),
+        ("a rate with no currency", account("currency", Value::Null)),
+        ("a currency in small letters", account("currency", json!("ron"))),
+        ("a currency of two letters", account("currency", json!("RO"))),
+        ("a currency of four letters", account("currency", json!("RONN"))),
+        ("a currency with a digit", account("currency", json!("R0N"))),
+        ("an empty rate", account("rate", json!(""))),
+        ("a rate of 21 characters", account("rate", json!("1".repeat(21)))),
+        ("a currency that is a number", account("currency", json!(643))),
+        ("a native amount below zero", Box::new(move |s| set(s, "transactions", payment, "native_amount_minor", json!(-1)))),
+        ("a native amount above the range", Box::new(move |s| set(s, "transactions", payment, "native_amount_minor", json!(1_000_000_000_000_i64)))),
+        ("a native amount with decimals", Box::new(move |s| set(s, "transactions", payment, "native_amount_minor", json!(1.5)))),
+        ("a native amount of text", Box::new(move |s| set(s, "transactions", payment, "native_amount_minor", json!("99.54")))),
+        ("a second amount of nothing", Box::new(move |s| set(s, "transfers", moved, "to_amount_minor", json!(0)))),
+        ("a second amount below zero", Box::new(move |s| set(s, "transfers", moved, "to_amount_minor", json!(-5)))),
+        ("a second amount above the range", Box::new(move |s| set(s, "transfers", moved, "to_amount_minor", json!(1_000_000_000_000_i64)))),
+        ("a second amount of text", Box::new(move |s| set(s, "transfers", moved, "to_amount_minor", json!("49.77")))),
+    ];
+    for (label, change) in cases {
+        let mut broken = base.clone();
+        change(&mut broken);
+        let mut target = with_its_own_data();
+        let before = dump(&target).unwrap();
+        let marks = snapshot(&target);
+        let file = seal(&broken, PASSPHRASE).unwrap();
+        assert_eq!(restore(&mut target, &file), Err(AppError::InvalidBackup), "{label}");
+        assert_eq!(dump(&target).unwrap(), before, "{label}: nothing changed");
+        assert_eq!(snapshot(&target), marks, "{label}: and no stamp, marker or history line");
+        assert!(accounts::check(&target).unwrap(), "{label}");
+        assert_eq!(count(&target, "SELECT applying FROM sync_clock"), 0, "{label}: the checks stand again");
+    }
+    // the main account in a currency is the one the database itself lets through while rows are written (its trigger stands aside), so it is
+    // also refused when the file reaches the real database: it is written, found out, and all of it is undone
+    for (label, rate) in [("with a rate", Some("5.00")), ("with no rate", None)] {
+        let mut broken = base.clone();
+        set(&mut broken, "accounts", 0, "currency", json!("RON"));
+        set(&mut broken, "accounts", 0, "rate", rate.map_or(Value::Null, |r| json!(r)));
+        let mut target = with_its_own_data();
+        let before = dump(&target).unwrap();
+        let rows = open(&seal(&broken, PASSPHRASE).unwrap(), PASSPHRASE).unwrap().tables;
+        assert_eq!(replace_all(&mut target, &rows), Err(AppError::InvalidBackup), "the main account in a currency {label}");
+        assert_eq!(dump(&target).unwrap(), before, "{label}: the transaction was dropped");
+    }
+    // and the bounds themselves are taken
+    for (label, change) in [
+        ("a native amount of 0", Box::new(move |s: &mut Snapshot| set(s, "transactions", payment, "native_amount_minor", json!(0))) as Change),
+        ("the largest native amount", Box::new(move |s| set(s, "transactions", payment, "native_amount_minor", json!(999_999_999_999_i64)))),
+        ("a second amount of 1", Box::new(move |s| set(s, "transfers", moved, "to_amount_minor", json!(1)))),
+        ("a currency that is the app's own", account("currency", json!("GBP"))),
+    ] {
+        let mut edited = base.clone();
+        change(&mut edited);
+        let mut target = with_its_own_data();
+        restore(&mut target, &seal(&edited, PASSPHRASE).unwrap()).unwrap_or_else(|e| panic!("{label}: {e:?}"));
+        assert!(accounts::check(&target).unwrap(), "{label}");
+    }
 }

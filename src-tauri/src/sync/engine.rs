@@ -323,7 +323,7 @@ fn load_rows(conn: &Connection, table: Table, wanted: &HashSet<&String>) -> Resu
         Table::Accounts => {
             let mut stmt = conn.prepare(
                 "SELECT sync_id, stamp, name, kind, number, opening_balance_minor, opening_date, archived, position, bic, notes, group_name, include_net_worth,
-                        virtual_balance_minor, created_at, updated_at
+                        virtual_balance_minor, currency, rate, created_at, updated_at
                  FROM accounts ORDER BY sync_id",
             )?;
             for r in stmt.query_map([], |r| {
@@ -342,8 +342,10 @@ fn load_rows(conn: &Connection, table: Table, wanted: &HashSet<&String>) -> Resu
                     group: r.get(11)?,
                     include_net_worth: r.get(12)?,
                     virtual_balance_minor: r.get(13)?,
-                    created_at: r.get(14)?,
-                    updated_at: r.get(15)?,
+                    currency: r.get(14)?,
+                    rate: r.get(15)?,
+                    created_at: r.get(16)?,
+                    updated_at: r.get(17)?,
                 })
             })? {
                 let r = r?;
@@ -354,7 +356,7 @@ fn load_rows(conn: &Connection, table: Table, wanted: &HashSet<&String>) -> Resu
         }
         Table::Transfers => {
             let mut stmt = conn.prepare(
-                "SELECT x.sync_id, x.stamp, f.sync_id, t.sync_id, x.amount_minor, x.transfer_date, x.note, x.created_at, x.updated_at
+                "SELECT x.sync_id, x.stamp, f.sync_id, t.sync_id, x.amount_minor, x.transfer_date, x.note, x.created_at, x.updated_at, x.to_amount_minor
                  FROM transfers x JOIN accounts f ON f.id = x.from_account_id JOIN accounts t ON t.id = x.to_account_id ORDER BY x.sync_id",
             )?;
             for r in stmt.query_map([], |r| {
@@ -364,6 +366,7 @@ fn load_rows(conn: &Connection, table: Table, wanted: &HashSet<&String>) -> Resu
                     from: r.get(2)?,
                     to: r.get(3)?,
                     amount_minor: r.get(4)?,
+                    to_amount_minor: r.get(9)?,
                     transfer_date: r.get(5)?,
                     note: r.get(6)?,
                     created_at: r.get(7)?,
@@ -467,7 +470,7 @@ fn load_rows(conn: &Connection, table: Table, wanted: &HashSet<&String>) -> Resu
             let mut parts = parts_by_bill(conn)?;
             let mut stmt = conn.prepare(
                 "SELECT t.sync_id, t.stamp, c.sync_id, r.sync_id, t.recurring_due_date, t.client_uuid, t.name, t.amount_minor,
-                        t.planned_amount_minor, t.payment_date, t.description, t.created_at, t.updated_at, p.sync_id, a.sync_id
+                        t.planned_amount_minor, t.payment_date, t.description, t.created_at, t.updated_at, p.sync_id, a.sync_id, t.native_amount_minor
                  FROM transactions t JOIN categories c ON c.id = t.category_id JOIN accounts a ON a.id = t.account_id
                  LEFT JOIN recurring_transactions r ON r.id = t.recurring_transaction_id
                  LEFT JOIN people p ON p.id = t.paid_by ORDER BY t.sync_id",
@@ -483,6 +486,7 @@ fn load_rows(conn: &Connection, table: Table, wanted: &HashSet<&String>) -> Resu
                     client_uuid: r.get(5)?,
                     name: r.get(6)?,
                     amount_minor: r.get(7)?,
+                    native_amount_minor: r.get(15)?,
                     planned_amount_minor: r.get(8)?,
                     payment_date: r.get(9)?,
                     description: r.get(10)?,
@@ -1407,7 +1411,8 @@ impl<'a> Applier<'a> {
             .collect::<Result<_, _>>()?;
         list.sort_by(|a, b| a.sync_id.cmp(&b.sync_id));
         for r in list {
-            if r.sync_id == MAIN_SYNC_ID && r.archived != 0 {
+            // the main account is never archived and always in the app's currency, and an account has a rate exactly when it has a currency
+            if (r.sync_id == MAIN_SYNC_ID && (r.archived != 0 || r.currency.is_some())) || r.currency.is_some() != r.rate.is_some() {
                 return Err(SyncError::Invalid("account"));
             }
             if let Some(marker) = self.marker(&r.sync_id)? {
@@ -1428,10 +1433,11 @@ impl<'a> Applier<'a> {
                     self.note_overwrite(&local);
                     self.run(
                         "UPDATE accounts SET stamp = ?2, name = ?3, kind = ?4, number = ?5, opening_balance_minor = ?6, opening_date = ?7, archived = ?8,
-                         position = ?9, bic = ?10, notes = ?11, group_name = ?12, include_net_worth = ?13, virtual_balance_minor = ?14, created_at = ?15 WHERE id = ?1",
+                         position = ?9, bic = ?10, notes = ?11, group_name = ?12, include_net_worth = ?13, virtual_balance_minor = ?14, currency = ?15, rate = ?16,
+                         created_at = ?17 WHERE id = ?1",
                         params![
                             id, r.stamp, r.name, r.kind, r.number, r.opening_balance_minor, r.opening_date, r.archived, r.position, r.bic, r.notes, r.group, r.include_net_worth,
-                            r.virtual_balance_minor, r.created_at
+                            r.virtual_balance_minor, r.currency, r.rate, r.created_at
                         ],
                     )?;
                     self.set_updated_at(Table::Accounts, id, &r.updated_at)?;
@@ -1440,11 +1446,11 @@ impl<'a> Applier<'a> {
                 None => {
                     self.run(
                         "INSERT INTO accounts (sync_id, stamp, name, kind, number, opening_balance_minor, opening_date, archived, position, bic, notes, group_name,
-                                               include_net_worth, virtual_balance_minor, created_at, updated_at)
-                         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)",
+                                               include_net_worth, virtual_balance_minor, currency, rate, created_at, updated_at)
+                         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18)",
                         params![
                             r.sync_id, r.stamp, r.name, r.kind, r.number, r.opening_balance_minor, r.opening_date, r.archived, r.position, r.bic, r.notes, r.group,
-                            r.include_net_worth, r.virtual_balance_minor, r.created_at, r.updated_at
+                            r.include_net_worth, r.virtual_balance_minor, r.currency, r.rate, r.created_at, r.updated_at
                         ],
                     )?;
                     self.summary.added += 1;
@@ -1457,13 +1463,26 @@ impl<'a> Applier<'a> {
     /// Everything that points at an account the other device deleted moves to the main account and takes the later of its own stamp and
     /// the deletion's, so both devices work out the same stamp (the device that deleted it does the same from its end, `account`). A
     /// transfer between that account and the main account would have the main account on both sides: it goes, and leaves the marker
-    /// both devices work out (`docs/accounts-design.md`, section 7.4).
+    /// both devices work out (`docs/accounts-design.md`, section 7.4). A transaction keeps its native amount, which the view ignores in an
+    /// account of the app's currency. A transfer whose two sides are then both in the app's currency loses its second amount, for the view
+    /// would count it into the main account; the other device does the same (`transfers`), and the person corrects the amounts, which may
+    /// still be in the foreign account's currency (section 21.6).
     fn empty_account(&mut self, id: i64, deleted_at: &str) -> Result<(), SyncError> {
         for table in ["transactions", "recurring_transactions", "ledger_entries"] {
             self.run(&format!("UPDATE {table} SET account_id = ?3, stamp = max(stamp, ?1) WHERE account_id = ?2"), params![deleted_at, id, MAIN_ID])?;
         }
-        self.run("UPDATE transfers SET from_account_id = ?3, stamp = max(stamp, ?1) WHERE from_account_id = ?2 AND to_account_id <> ?3", params![deleted_at, id, MAIN_ID])?;
-        self.run("UPDATE transfers SET to_account_id = ?3, stamp = max(stamp, ?1) WHERE to_account_id = ?2 AND from_account_id <> ?3", params![deleted_at, id, MAIN_ID])?;
+        self.run(
+            "UPDATE transfers SET from_account_id = ?3, stamp = max(stamp, ?1),
+             to_amount_minor = CASE WHEN (SELECT currency FROM accounts WHERE id = to_account_id) IS NULL THEN NULL ELSE to_amount_minor END
+             WHERE from_account_id = ?2 AND to_account_id <> ?3",
+            params![deleted_at, id, MAIN_ID],
+        )?;
+        self.run(
+            "UPDATE transfers SET to_account_id = ?3, stamp = max(stamp, ?1),
+             to_amount_minor = CASE WHEN (SELECT currency FROM accounts WHERE id = from_account_id) IS NULL THEN NULL ELSE to_amount_minor END
+             WHERE to_account_id = ?2 AND from_account_id <> ?3",
+            params![deleted_at, id, MAIN_ID],
+        )?;
         let left: Vec<(i64, String, String)> = self
             .tx
             .prepare_cached("SELECT id, sync_id, stamp FROM transfers WHERE from_account_id = ?1 OR to_account_id = ?1")?
@@ -1511,6 +1530,7 @@ impl<'a> Applier<'a> {
                     continue;
                 }
             }
+            let rescued = from_deleted.is_some() || to_deleted.is_some();
             let stamp = later(later(r.stamp.clone(), from_deleted), to_deleted);
             if from == to {
                 if let Some((id, _)) = &existing {
@@ -1520,22 +1540,25 @@ impl<'a> Applier<'a> {
                 self.summary.dropped += 1;
                 continue;
             }
+            // a side whose account was deleted here is the main account now; with the other side in the app's currency too, the second amount has
+            // no place and is dropped, as `empty_account` drops it on the device that deleted the account
+            let to_amount = if rescued && !accounts::currencies_differ(self.tx, from, to)? { None } else { r.to_amount_minor };
             match &existing {
                 Some((id, local)) => {
                     self.note_overwrite(local);
                     self.run(
-                        "UPDATE transfers SET stamp = ?2, from_account_id = ?3, to_account_id = ?4, amount_minor = ?5, transfer_date = ?6, note = ?7, created_at = ?8
-                         WHERE id = ?1",
-                        params![id, stamp, from, to, r.amount_minor, r.transfer_date, r.note, r.created_at],
+                        "UPDATE transfers SET stamp = ?2, from_account_id = ?3, to_account_id = ?4, amount_minor = ?5, transfer_date = ?6, note = ?7, created_at = ?8,
+                         to_amount_minor = ?9 WHERE id = ?1",
+                        params![id, stamp, from, to, r.amount_minor, r.transfer_date, r.note, r.created_at, to_amount],
                     )?;
                     self.set_updated_at(Table::Transfers, *id, &r.updated_at)?;
                     self.summary.updated += 1;
                 }
                 None => {
                     self.run(
-                        "INSERT INTO transfers (sync_id, stamp, from_account_id, to_account_id, amount_minor, transfer_date, note, created_at, updated_at)
-                         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
-                        params![r.sync_id, stamp, from, to, r.amount_minor, r.transfer_date, r.note, r.created_at, r.updated_at],
+                        "INSERT INTO transfers (sync_id, stamp, from_account_id, to_account_id, amount_minor, transfer_date, note, created_at, updated_at, to_amount_minor)
+                         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+                        params![r.sync_id, stamp, from, to, r.amount_minor, r.transfer_date, r.note, r.created_at, r.updated_at, to_amount],
                     )?;
                     self.summary.added += 1;
                 }
@@ -1830,8 +1853,8 @@ impl<'a> Applier<'a> {
                     self.run(
                         "UPDATE transactions SET stamp = ?2, category_id = ?3, recurring_transaction_id = ?4, recurring_due_date = ?5, client_uuid = ?6,
                          name = ?7, amount_minor = ?8, planned_amount_minor = ?9, payment_date = ?10, description = ?11, created_at = ?12, paid_by = ?13,
-                         account_id = ?14 WHERE id = ?1",
-                        params![id, stamp, category, recurring, r.recurring_due_date, r.client_uuid, r.name, r.amount_minor, r.planned_amount_minor, r.payment_date, r.description, r.created_at, paid_by, account],
+                         account_id = ?14, native_amount_minor = ?15 WHERE id = ?1",
+                        params![id, stamp, category, recurring, r.recurring_due_date, r.client_uuid, r.name, r.amount_minor, r.planned_amount_minor, r.payment_date, r.description, r.created_at, paid_by, account, r.native_amount_minor],
                     )?;
                     self.set_updated_at(Table::Transactions, *id, &when)?;
                     self.summary.updated += 1;
@@ -1840,9 +1863,9 @@ impl<'a> Applier<'a> {
                 None => {
                     self.run(
                         "INSERT INTO transactions (sync_id, stamp, category_id, recurring_transaction_id, recurring_due_date, client_uuid, name,
-                         amount_minor, planned_amount_minor, payment_date, description, created_at, updated_at, paid_by, account_id)
-                         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)",
-                        params![r.sync_id, stamp, category, recurring, r.recurring_due_date, r.client_uuid, r.name, r.amount_minor, r.planned_amount_minor, r.payment_date, r.description, r.created_at, when, paid_by, account],
+                         amount_minor, planned_amount_minor, payment_date, description, created_at, updated_at, paid_by, account_id, native_amount_minor)
+                         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)",
+                        params![r.sync_id, stamp, category, recurring, r.recurring_due_date, r.client_uuid, r.name, r.amount_minor, r.planned_amount_minor, r.payment_date, r.description, r.created_at, when, paid_by, account, r.native_amount_minor],
                     )?;
                     self.summary.added += 1;
                     self.tx.last_insert_rowid()
@@ -2637,6 +2660,7 @@ fn facts(conn: &Connection, row: &Row) -> Vec<(&'static str, String)> {
         Row::Transaction(r) => vec![
             ("name", r.name.clone()),
             ("amount", money_text(Some(r.amount_minor))),
+            ("nativeAmount", money_text(r.native_amount_minor)),
             ("date", r.payment_date.clone()),
             ("category", category_name(conn, &r.category)),
             ("description", some(&r.description)),
@@ -2655,11 +2679,14 @@ fn facts(conn: &Connection, row: &Row) -> Vec<(&'static str, String)> {
             ("group", some(&r.group)),
             ("includeNetWorth", if r.include_net_worth == 1 { "yes" } else { "no" }.to_string()),
             ("virtualBalance", crate::money::format_amount(r.virtual_balance_minor)),
+            ("currency", some(&r.currency)),
+            ("rate", some(&r.rate)),
         ],
         Row::Transfer(r) => vec![
             ("from", account_name(conn, &r.from)),
             ("to", account_name(conn, &r.to)),
             ("amount", money_text(Some(r.amount_minor))),
+            ("toAmount", money_text(r.to_amount_minor)),
             ("date", r.transfer_date.clone()),
             ("note", some(&r.note)),
         ],

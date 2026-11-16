@@ -737,7 +737,8 @@ mod tests {
     }
 
     /// A database with a bit of everything: every table has rows, text has awkward characters,
-    /// there are edits and a deleted category so the history is not trivial.
+    /// there are edits and a deleted category so the history is not trivial. It has an account in another currency (RON, rate 4.9769), a
+    /// payment in it with a native amount and a transfer to it with a second amount.
     pub(super) fn lived_in() -> Connection {
         let conn = db();
         conn.execute(
@@ -901,6 +902,46 @@ mod tests {
         // a deletion (it leaves a marker for sync) and a change of currency (it is recorded for sync)
         conn.execute("DELETE FROM transactions WHERE name = 'Coffee'", []).unwrap();
         crate::currency::change(&mut conn, "GBP", None, "2026-02-04").unwrap();
+        // an account in another currency, made after the change (the app's currency cannot change while one exists), a payment in it that
+        // really paid 99.54 lei, and a transfer into it that brought 49.77 lei: the four columns of a currency per account have a row each
+        let lei = crate::accounts::create(
+            &conn,
+            &crate::accounts::NewAccount {
+                name: "Lei account".into(),
+                kind: crate::accounts::Kind::Checking,
+                number: None,
+                opening_balance: Some("100.00".into()),
+                opening_date: Some("2026-01-01".into()),
+                bic: None,
+                notes: None,
+                group: None,
+                include_in_net_worth: None,
+                virtual_balance: None,
+                currency: Some("RON".into()),
+                rate: Some("4.9769".into()),
+            },
+            "2026-02-04",
+        )
+        .unwrap();
+        transactions::create(
+            &conn,
+            &transactions::NewTransaction {
+                name: "Lei shop".into(),
+                amount: "20.00".into(),
+                payment_date: "2026-02-03".into(),
+                category_id: rent.id.to_string(),
+                description: None,
+                client_uuid: None,
+                account_id: Some(lei.id.to_string()),
+                native_amount: Some("99.54".into()),
+            },
+        )
+        .unwrap();
+        crate::accounts::transfers::create(
+            &conn,
+            &crate::accounts::transfers::NewTransfer { from_account_id: "1".into(), to_account_id: lei.id.to_string(), amount: "10.00".into(), date: "2026-02-04".into(), note: None, to_amount: Some("49.77".into()) },
+        )
+        .unwrap();
         conn
     }
 
@@ -968,7 +1009,7 @@ mod tests {
             .query_row("SELECT description FROM transactions WHERE name = 'Salary'", [], |r| r.get(0))
             .unwrap();
         assert_eq!(description, "Café “bonus” \\ 日本語 'x'; DROP TABLE transactions;--");
-        assert_eq!(count(&target, "transactions"), 5, "six were made and one deleted");
+        assert_eq!(count(&target, "transactions"), 6, "seven were made and one deleted");
     }
 
     #[test]

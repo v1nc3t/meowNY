@@ -18,6 +18,8 @@
 --     a credit card that is in the red (a limit of 1000.00 as its virtual balance, and a BIC) and an archived account with history that net
 --     worth leaves out; spending in cash and on the card, a recurring item on the card, a monthly transfer to savings and one that pays off
 --     the card, and a friend who paid back in cash
+--   * a currency per account: the Lei account (RON at 5.00 lei to the euro) with ten expenses and two incomes that each carry what the
+--     account really paid and the amount in euro that the budgets count, and a transfer in each direction between it and the current account
 -- Amounts and days come from simple arithmetic on the row numbers, so the data is the same every run.
 
 INSERT OR IGNORE INTO settings (id, currency, locale, timezone, language) VALUES (1, 'EUR', 'en-IE', 'Europe/Dublin', 'en');
@@ -428,3 +430,31 @@ INSERT INTO transfers (from_account_id, to_account_id, amount_minor, transfer_da
 SELECT 1, 5, 10000, date(@today, 'start of month', '-' || i || ' months', '+9 days'), 'Rainy day' FROM m;
 INSERT INTO transfers (from_account_id, to_account_id, amount_minor, transfer_date, note)
 VALUES (5, 2, 180000, date(@today, 'start of month', '-9 months', '+11 days'), 'Closing the old account');
+
+
+-- ---- a currency per account -------------------------------------------------------------------------------------------------------------
+-- The Lei account: an account in Romanian lei at 5.00 lei to the euro, opened eight months ago with 1,500.00 lei. Each row in it has `amount_minor`
+-- in euro, which every budget and statistic counts, and `native_amount_minor`, what the account really paid or got, in lei; the lei are always
+-- five times the euro, so every number is exact. No recurring item and no entry of the ledger is in it (they live only in accounts in euro).
+INSERT INTO accounts (id, name, kind, number, opening_balance_minor, opening_date, archived, position, bic, notes, group_name, include_net_worth, virtual_balance_minor, currency, rate) VALUES
+  (6, 'Lei account', 'CHECKING', NULL, 150000, date(@today, 'start of month', '-8 months'), 0, 5, NULL, NULL, 'Everyday', 1, 0, 'RON', '5.00');
+
+-- Ten expenses and two incomes, all months ago (the newest is a month back), so they are in the past on any day.
+INSERT INTO transactions (category_id, name, amount_minor, native_amount_minor, payment_date, description, account_id) VALUES
+  (5,  'Mega Image',          1600,  8000,  date(@today, 'start of month', '-7 months', '+3 days'),  NULL,                    6),
+  (5,  'Kaufland',            2500,  12500, date(@today, 'start of month', '-6 months', '+8 days'),  'Weekend shop',          6),
+  (7,  'Pizzerie',            1300,  6500,  date(@today, 'start of month', '-6 months', '+17 days'), NULL,                    6),
+  (6,  'Bilet de tren',       900,   4500,  date(@today, 'start of month', '-5 months', '+4 days'),  'Cluj - București',      6),
+  (2,  'Consulting in lei',   12000, 60000, date(@today, 'start of month', '-5 months', '+15 days'), 'Invoice paid in lei',   6),
+  (7,  'Cafenea',             450,   2250,  date(@today, 'start of month', '-4 months', '+11 days'), NULL,                    6),
+  (11, 'Farmacie',            550,   2750,  date(@today, 'start of month', '-4 months', '+20 days'), NULL,                    6),
+  (8,  'Cinema',              700,   3500,  date(@today, 'start of month', '-3 months', '+6 days'),  NULL,                    6),
+  (5,  'Piața',               800,   4000,  date(@today, 'start of month', '-2 months', '+9 days'),  NULL,                    6),
+  (6,  'Taxi',                600,   3000,  date(@today, 'start of month', '-2 months', '+22 days'), 'Late night',            6),
+  (5,  'Kaufland',            1800,  9000,  date(@today, 'start of month', '-1 months', '+5 days'),  NULL,                    6),
+  (3,  'Dobândă în lei',      300,   1500,  date(@today, 'start of month', '-1 months', '+27 days'), NULL,                    6);
+
+-- Euro out and lei in, and lei out and euro in: the first amount leaves the first account in its currency, the second arrives in the other.
+INSERT INTO transfers (from_account_id, to_account_id, amount_minor, to_amount_minor, transfer_date, note) VALUES
+  (1, 6, 20000, 100000, date(@today, 'start of month', '-7 months', '+10 days'), 'Lei for the trip'),
+  (6, 1, 50000, 10000,  date(@today, 'start of month', '-3 months', '+12 days'), 'Lei back to the current account');

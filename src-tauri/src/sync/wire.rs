@@ -19,7 +19,7 @@ use crate::documents::names::{is_clean_name, MediaType};
 use crate::documents::seal::CHUNK_SIZE;
 use crate::documents::MAX_DOCUMENT_BYTES;
 use crate::money::MAX_MINOR;
-use crate::{categories, transactions, vault};
+use crate::{categories, currency, transactions, vault};
 
 /// The version of this protocol, in `hello`.
 /// Protocol 3 adds the tables `documents` and `document_links`; protocol 4 adds `people` and `ledger_entries`, the parts of a shared
@@ -29,8 +29,9 @@ use crate::{categories, transactions, vault};
 /// phone pulls its stamps back to the computer's time); protocol 7 lets descriptions and notes hold line breaks; protocol 8 lets a split bill
 /// and the template of a recurring item name the friend who paid (`paidBy`); protocol 9 adds the tables `accounts` and `transfers` and the
 /// account of a transaction, a recurring item and a ledger entry (`account`); protocol 10 adds the details of an account (`bic`, `notes`,
-/// `group`, `includeNetWorth`, `virtualBalanceMinor`). A device that speaks an older protocol is told to update.
-pub const PROTOCOL: u32 = 10;
+/// `group`, `includeNetWorth`, `virtualBalanceMinor`); protocol 11 adds a currency per account (`currency` and `rate` of an account, `nativeAmountMinor`
+/// of a transaction, `toAmountMinor` of a transfer). A device that speaks an older protocol is told to update.
+pub const PROTOCOL: u32 = 11;
 /// Digest entries in one message, and rows in one message. Messages are also cut by size (`SOFT_MESSAGE_BYTES`).
 pub const MAX_ENTRIES_PER_MESSAGE: usize = 400;
 pub const MAX_ROWS_PER_MESSAGE: usize = 200;
@@ -524,6 +525,17 @@ fn short_ok(text: &str, max: usize) -> bool {
     (1..=max).contains(&text.chars().count()) && text.trim() == text && !text.chars().any(char::is_control)
 }
 
+/// The currency of an account: three capital letters, as `currency::normalize_code` stores it.
+fn currency_ok(text: &str) -> bool {
+    text.len() == 3 && text.bytes().all(|b| b.is_ascii_uppercase())
+}
+
+/// The rate of an account as the screens keep it (`accounts::clean_rate`): 1 to 20 characters that the rate parser takes, so above 0. Outer
+/// spaces and signs are not digits, so the parser refuses them.
+fn rate_ok(text: &str) -> bool {
+    (1..=20).contains(&text.chars().count()) && currency::parse_rate(text).is_ok()
+}
+
 /// Who a part belongs to: exactly one of a friend (a `sync_id`) and a guest (a plain name).
 fn who_ok(person: &Option<String>, guest: &Option<String>) -> bool {
     match (person, guest) {
@@ -722,6 +734,10 @@ pub struct AccountRow {
     pub include_net_worth: i64,
     /// Signed, like the opening balance: a credit card's limit is positive.
     pub virtual_balance_minor: i64,
+    /// Three capital letters when the account is in a currency of its own; none for an account in the app's currency.
+    pub currency: Option<String>,
+    /// How many units of the account's currency one unit of the app's currency buys, as typed: there exactly when `currency` is.
+    pub rate: Option<String>,
     pub created_at: String,
     pub updated_at: String,
 }
@@ -736,6 +752,8 @@ pub struct TransferRow {
     pub from: String,
     pub to: String,
     pub amount_minor: i64,
+    /// What arrives in the second account, in its currency, when the two accounts are in different currencies.
+    pub to_amount_minor: Option<i64>,
     pub transfer_date: String,
     pub note: Option<String>,
     pub created_at: String,
@@ -794,6 +812,8 @@ pub struct TransactionRow {
     pub client_uuid: Option<String>,
     pub name: String,
     pub amount_minor: i64,
+    /// What really moved the account, in its currency, when the account is in a currency of its own; `amount_minor` is in the app's currency.
+    pub native_amount_minor: Option<i64>,
     pub planned_amount_minor: Option<i64>,
     pub payment_date: String,
     pub description: Option<String>,
@@ -953,6 +973,11 @@ pub fn parse_row(table: Table, value: &Value) -> Result<Row, WireError> {
                 && r.group.as_deref().is_none_or(category_name_ok)
                 && [0, 1].contains(&r.include_net_worth)
                 && (-MAX_MINOR..=MAX_MINOR).contains(&r.virtual_balance_minor)
+                && r.currency.as_deref().is_none_or(currency_ok)
+                && r.rate.as_deref().is_none_or(rate_ok)
+                // a rate exactly when there is a currency, and the main account is always in the app's currency
+                && r.currency.is_some() == r.rate.is_some()
+                && (r.sync_id != MAIN_SYNC_ID || r.currency.is_none())
                 && timestamp_ok(&r.created_at)
                 && timestamp_ok(&r.updated_at)
         }
@@ -962,6 +987,7 @@ pub fn parse_row(table: Table, value: &Value) -> Result<Row, WireError> {
                 && sync_id_ok(&r.to)
                 && r.from != r.to
                 && money_ok(r.amount_minor, 1)
+                && r.to_amount_minor.is_none_or(|a| money_ok(a, 1))
                 && date_ok(&r.transfer_date)
                 && r.note.as_deref().is_none_or(note_ok)
                 && timestamp_ok(&r.created_at)
@@ -1025,6 +1051,7 @@ pub fn parse_row(table: Table, value: &Value) -> Result<Row, WireError> {
                 && r.client_uuid.as_deref().is_none_or(|u| transactions::clean_uuid(u).is_ok_and(|clean| clean == u))
                 && name_ok(&r.name)
                 && money_ok(r.amount_minor, 1)
+                && r.native_amount_minor.is_none_or(|a| money_ok(a, 0))
                 && r.planned_amount_minor.is_none_or(|a| money_ok(a, 0))
                 && date_ok(&r.payment_date)
                 && description_ok(&r.description)
@@ -1095,7 +1122,7 @@ mod tests {
 
     fn transaction() -> Value {
         json!({"syncId": ID_B, "stamp": STAMP, "category": ID_A, "account": MAIN_SYNC_ID, "recurring": null, "recurringDueDate": null, "clientUuid": null,
-               "name": "Coffee", "amountMinor": 350, "plannedAmountMinor": null, "paymentDate": "2026-03-01", "description": null,
+               "name": "Coffee", "amountMinor": 350, "nativeAmountMinor": null, "plannedAmountMinor": null, "paymentDate": "2026-03-01", "description": null,
                "paidBy": null, "split": [], "createdAt": TS, "updatedAt": TS})
     }
 
@@ -1118,17 +1145,22 @@ mod tests {
     fn account() -> Value {
         json!({"syncId": ID_A, "stamp": STAMP, "name": "Savings", "kind": "SAVINGS", "number": "IE29 AIBK 9311 5212 3456 78", "openingBalanceMinor": -12000,
                "openingDate": "2026-01-01", "archived": 0, "position": 2, "bic": "DEUTDEFF500", "notes": "joint account\nsince 2020", "group": "Everyday",
-               "includeNetWorth": 1, "virtualBalanceMinor": 100000, "createdAt": TS, "updatedAt": TS})
+               "includeNetWorth": 1, "virtualBalanceMinor": 100000, "currency": null, "rate": null, "createdAt": TS, "updatedAt": TS})
     }
 
     fn main_account() -> Value {
         json!({"syncId": MAIN_SYNC_ID, "stamp": "0000000000000-0000-00000000", "name": "Main account", "kind": "CHECKING", "number": null, "openingBalanceMinor": 0,
                "openingDate": "1970-01-01", "archived": 0, "position": 0, "bic": null, "notes": null, "group": null, "includeNetWorth": 1, "virtualBalanceMinor": 0,
-               "createdAt": "1970-01-01T00:00:00.000Z", "updatedAt": "1970-01-01T00:00:00.000Z"})
+               "currency": null, "rate": null, "createdAt": "1970-01-01T00:00:00.000Z", "updatedAt": "1970-01-01T00:00:00.000Z"})
+    }
+
+    /// The same account in Romanian lei, at 5.00 lei to the euro.
+    fn foreign_account() -> Value {
+        changed(changed(account(), "currency", json!("RON")), "rate", json!("5.00"))
     }
 
     fn transfer() -> Value {
-        json!({"syncId": ID_B, "stamp": STAMP, "from": MAIN_SYNC_ID, "to": ID_A, "amountMinor": 20000, "transferDate": "2026-03-01", "note": "to savings",
+        json!({"syncId": ID_B, "stamp": STAMP, "from": MAIN_SYNC_ID, "to": ID_A, "amountMinor": 20000, "toAmountMinor": null, "transferDate": "2026-03-01", "note": "to savings",
                "createdAt": TS, "updatedAt": TS})
     }
 
@@ -1198,7 +1230,15 @@ mod tests {
             (Table::Accounts, changed(account(), "virtualBalanceMinor", json!(-250))),
             (Table::Accounts, changed(account(), "virtualBalanceMinor", json!(MAX_MINOR))),
             (Table::Accounts, changed(account(), "virtualBalanceMinor", json!(-MAX_MINOR))),
+            (Table::Accounts, foreign_account()),
+            (Table::Accounts, changed(foreign_account(), "rate", json!("0.00000001"))),
+            (Table::Accounts, changed(foreign_account(), "rate", json!("999999999.99999999"))),
+            (Table::Accounts, changed(foreign_account(), "rate", json!("160"))),
+            (Table::Accounts, changed(foreign_account(), "currency", json!("ZZZ"))),
+            (Table::Accounts, changed(foreign_account(), "archived", json!(1))),
             (Table::Transfers, transfer()),
+            (Table::Transfers, changed(transfer(), "toAmountMinor", json!(1))),
+            (Table::Transfers, changed(transfer(), "toAmountMinor", json!(MAX_MINOR))),
             (Table::Transfers, changed(transfer(), "note", json!(null))),
             (Table::Transfers, changed(transfer(), "amountMinor", json!(1))),
             (Table::Transfers, changed(transfer(), "amountMinor", json!(MAX_MINOR))),
@@ -1206,6 +1246,9 @@ mod tests {
             (Table::RecurringTransactions, templated()),
             (Table::Budgets, budget()),
             (Table::Transactions, transaction()),
+            (Table::Transactions, changed(transaction(), "nativeAmountMinor", json!(0))),
+            (Table::Transactions, changed(transaction(), "nativeAmountMinor", json!(1750))),
+            (Table::Transactions, changed(transaction(), "nativeAmountMinor", json!(MAX_MINOR))),
             (Table::Transactions, shared()),
             (Table::Transactions, changed(shared(), "paidBy", json!(ID_A))),
             (Table::RecurringTransactions, changed(templated(), "split", json!({"mine": 2, "paidBy": ID_A, "parts": [{"person": ID_A, "guest": null, "weight": 1}]}))),
@@ -1238,7 +1281,7 @@ mod tests {
 
     #[test]
     fn there_is_a_table_for_every_kind_of_row_and_the_protocol_knows_it() {
-        assert_eq!(PROTOCOL, 10);
+        assert_eq!(PROTOCOL, 11);
         let names: Vec<&str> = Table::ALL.iter().map(|t| t.name()).collect();
         assert_eq!(
             names,
@@ -1602,6 +1645,114 @@ mod tests {
         let mut renamed = account();
         renamed["includeInNetWorth"] = json!(true);
         assert!(parse_row(Table::Accounts, &renamed).is_err());
+    }
+
+    #[test]
+    fn the_currency_and_the_rate_of_an_account_are_checked_as_the_screens_check_them() {
+        let bad: Vec<(&str, Value)> = vec![
+            ("currency", json!("ron")),
+            ("currency", json!("Ron")),
+            ("currency", json!("RO")),
+            ("currency", json!("R")),
+            ("currency", json!("RONN")),
+            ("currency", json!("R0N")),
+            ("currency", json!("R N")),
+            ("currency", json!("")),
+            ("currency", json!(" RON")),
+            ("currency", json!("RON ")),
+            ("currency", json!("RO\n")),
+            ("currency", json!("ÄÖÜ")),
+            ("currency", json!("RÖ")),
+            ("currency", json!(643)),
+            ("currency", json!(true)),
+            ("rate", json!("0")),
+            ("rate", json!("0.0")),
+            ("rate", json!("0.00000000")),
+            ("rate", json!("-1")),
+            ("rate", json!("-5.00")),
+            ("rate", json!("+5.00")),
+            ("rate", json!("abc")),
+            ("rate", json!("5,00")),
+            ("rate", json!("5.")),
+            ("rate", json!(".5")),
+            ("rate", json!("05.00")),
+            ("rate", json!("1e3")),
+            ("rate", json!("5.123456789")),
+            ("rate", json!("1234567890")),
+            ("rate", json!("")),
+            ("rate", json!("1".repeat(21))),
+            ("rate", json!("5".repeat(20))),
+            ("rate", json!(" 5.00")),
+            ("rate", json!("5.00 ")),
+            ("rate", json!("5 .00")),
+            ("rate", json!("5.00\n")),
+            ("rate", json!("٥.٠٠")),
+            ("rate", json!(5)),
+            ("rate", json!(5.0)),
+        ];
+        for (key, value) in &bad {
+            let shown: String = value.to_string().chars().take(40).collect();
+            assert!(parse_row(Table::Accounts, &changed(foreign_account(), key, value.clone())).is_err(), "{key} = {shown}");
+        }
+        // a currency without a rate, a rate without a currency, and a currency of the main account
+        assert!(parse_row(Table::Accounts, &changed(foreign_account(), "rate", json!(null))).is_err(), "a currency with no rate");
+        assert!(parse_row(Table::Accounts, &changed(foreign_account(), "currency", json!(null))).is_err(), "a rate with no currency");
+        let mut no_rate = foreign_account();
+        no_rate.as_object_mut().unwrap().remove("rate");
+        assert!(parse_row(Table::Accounts, &no_rate).is_err(), "a currency whose rate is left out");
+        let mut no_currency = foreign_account();
+        no_currency.as_object_mut().unwrap().remove("currency");
+        assert!(parse_row(Table::Accounts, &no_currency).is_err(), "a rate whose currency is left out");
+        assert!(parse_row(Table::Accounts, &changed(account(), "rate", json!("5.00"))).is_err(), "a rate for an account in the app's currency");
+        assert!(parse_row(Table::Accounts, &changed(account(), "currency", json!("RON"))).is_err(), "a currency for an account that has no rate");
+        assert!(parse_row(Table::Accounts, &changed(changed(main_account(), "currency", json!("RON")), "rate", json!("5.00"))).is_err(), "the main account is in the app's currency");
+        assert!(parse_row(Table::Accounts, &changed(main_account(), "currency", json!("RON"))).is_err());
+        assert!(parse_row(Table::Accounts, &changed(main_account(), "rate", json!("5.00"))).is_err());
+        // the bounds, and what is the same row with the fields left out
+        for rate in ["5", "5.00", "0.00000001", "999999999.99999999", "1", "0.5"] {
+            let row = changed(foreign_account(), "rate", json!(rate));
+            assert_eq!(row_to_value(&parse_row(Table::Accounts, &row).unwrap()), row, "{rate}");
+        }
+        // every code of three capitals, not only the ones that exist
+        for code in ["AAA", "ZZZ", "XXX", "EUR"] {
+            assert!(parse_row(Table::Accounts, &changed(foreign_account(), "currency", json!(code))).is_ok(), "{code}");
+        }
+        // a device of protocol 10 sends neither: they are read as nothing, and written back as null
+        for base in [account(), main_account()] {
+            let mut old = base.clone();
+            for key in ["currency", "rate"] {
+                old.as_object_mut().unwrap().remove(key);
+            }
+            let read = parse_row(Table::Accounts, &old).unwrap();
+            assert_eq!(row_to_value(&read), base);
+            match read {
+                Row::Account(r) => assert_eq!((r.currency, r.rate), (None, None)),
+                _ => unreachable!(),
+            }
+        }
+    }
+
+    #[test]
+    fn the_amount_a_foreign_row_really_moved_is_checked_in_a_transaction_and_in_a_transfer() {
+        for (value, ok) in [(json!(null), true), (json!(0), true), (json!(1), true), (json!(MAX_MINOR), true), (json!(-1), false), (json!(MAX_MINOR + 1), false), (json!(1.5), false), (json!("17.50"), false), (json!(true), false)] {
+            let row = changed(transaction(), "nativeAmountMinor", value.clone());
+            assert_eq!(parse_row(Table::Transactions, &row).is_ok(), ok, "nativeAmountMinor = {value}");
+        }
+        for (value, ok) in [(json!(null), true), (json!(1), true), (json!(MAX_MINOR), true), (json!(0), false), (json!(-1), false), (json!(MAX_MINOR + 1), false), (json!(1.5), false), (json!("40.20"), false), (json!(true), false)] {
+            let row = changed(transfer(), "toAmountMinor", value.clone());
+            assert_eq!(parse_row(Table::Transfers, &row).is_ok(), ok, "toAmountMinor = {value}");
+        }
+        // left out, they are nothing, as `number` and `bic` are: the row of a device of protocol 10
+        for (table, base, key) in [(Table::Transactions, transaction(), "nativeAmountMinor"), (Table::Transfers, transfer(), "toAmountMinor")] {
+            let mut old = base.clone();
+            old.as_object_mut().unwrap().remove(key);
+            assert_eq!(row_to_value(&parse_row(table, &old).unwrap()), base, "{key} left out");
+        }
+        // a row of another table does not take them
+        assert!(parse_row(Table::LedgerEntries, &changed(entry(), "nativeAmountMinor", json!(100))).is_err());
+        assert!(parse_row(Table::RecurringTransactions, &changed(recurring(), "nativeAmountMinor", json!(100))).is_err());
+        assert!(parse_row(Table::Transactions, &changed(transaction(), "toAmountMinor", json!(100))).is_err());
+        assert!(parse_row(Table::Transfers, &changed(transfer(), "nativeAmountMinor", json!(100))).is_err());
     }
 
     #[test]

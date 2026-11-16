@@ -502,10 +502,10 @@ fn hellos_are_checked_for_version_clock_and_identity() {
     assert!(matches!(engine::check_hello(&mine, &changed(&|h| h.schema += 1), now()), Err(SyncError::SchemaMismatch { newer_here: false })));
     assert!(matches!(engine::check_hello(&mine, &changed(&|h| h.schema -= 1), now()), Err(SyncError::SchemaMismatch { newer_here: true })));
     assert!(matches!(engine::check_hello(&mine, &changed(&|h| h.protocol += 1), now()), Err(SyncError::ProtocolMismatch)));
-    // a device of the version before accounts and transfers (protocol 8) and one before the details of an account (protocol 9) are told to
-    // update, whichever of the two they are
-    assert_eq!(wire::PROTOCOL, 10);
-    for old_protocol in [8, 9] {
+    // a device of the version before accounts and transfers (protocol 8), one before the details of an account (protocol 9) and one before a
+    // currency per account (protocol 10) are told to update, whichever of the two they are
+    assert_eq!(wire::PROTOCOL, 11);
+    for old_protocol in [8, 9, 10] {
         assert!(matches!(engine::check_hello(&mine, &changed(&|h| h.protocol = old_protocol), now()), Err(SyncError::ProtocolMismatch)), "protocol {old_protocol}");
         let mut old = mine.clone();
         old.protocol = old_protocol;
@@ -851,6 +851,7 @@ fn a_marker_for_a_row_this_device_never_had_is_remembered_so_the_row_cannot_come
                 client_uuid: None,
                 name: "Ghost".into(),
                 amount_minor: 100,
+                native_amount_minor: None,
                 planned_amount_minor: None,
                 payment_date: "2026-03-01".into(),
                 description: None,
@@ -1274,6 +1275,9 @@ const ACCOUNT_NAMES: &[&str] = &["Savings", "Cash", "Card", "Wallet"];
 /// stay two accounts); accounts with nothing in them are deleted now and then, which makes the rows the other device put in them move to
 /// the main account; rows are made, moved and edited in accounts, so there is always something to move. The details of an account (BIC,
 /// notes, group, whether it counts in net worth, virtual balance) are made with it, set, changed and cleared one at a time or all at once.
+/// Some accounts are in a currency of their own at a rate typed by hand (the rate changes, and the currency of an empty account does):
+/// what is paid in one carries the amount it really paid, and a transfer between two currencies carries what arrives, all within the
+/// rules of the screens (a recurring item and an entry of the ledger stay out of such an account).
 fn edit_accounts(conn: &mut Connection, rng: &mut Rng) {
     use crate::accounts::transfers::{self, NewTransfer, TransferPatch};
     use crate::accounts::{self, AccountPatch, Kind, NewAccount};
@@ -1291,6 +1295,18 @@ fn edit_accounts(conn: &mut Connection, rng: &mut Rng) {
     let friends = ids(conn, "SELECT id FROM people WHERE archived = 0");
     // an account of the pick, or none: the row goes to the main account
     let account = |rng: &mut Rng| (!active.is_empty() && rng.below(5) != 0).then(|| rng.pick(&active).to_string());
+    // the same among the accounts in the app's currency: a recurring item and an entry of the ledger live only there
+    let plain = ids(conn, "SELECT id FROM accounts WHERE archived = 0 AND currency IS NULL ORDER BY position, id");
+    let plain_account = |rng: &mut Rng| (!plain.is_empty() && rng.below(5) != 0).then(|| rng.pick(&plain).to_string());
+    // a currency (the app's own among them: then there is none) and a rate typed by hand, and an amount
+    let code = |rng: &mut Rng| *rng.pick(&["RON", "USD", "GBP", "EUR"]);
+    let rate = |rng: &mut Rng| format!("{}.{:02}", 1 + rng.below(9), rng.below(100));
+    let amount = |rng: &mut Rng| format!("{}.{:02}", 1 + rng.below(300), rng.below(100));
+    // what a payment in this account really paid, if the account is in a currency of its own
+    let native = |conn: &Connection, rng: &mut Rng, account: &Option<String>| -> Option<String> {
+        let id: i64 = account.as_deref()?.parse().ok()?;
+        accounts::is_foreign(conn, id).unwrap_or(false).then(|| amount(rng))
+    };
     let kind = |rng: &mut Rng| *rng.pick(&[Kind::Checking, Kind::Savings, Kind::Cash, Kind::CreditCard]);
     let date = |rng: &mut Rng| format!("2026-03-{:02}", 1 + rng.below(28));
     // a detail, or nothing: a few values each, so that two devices often write the same one and often write different ones
@@ -1298,10 +1314,11 @@ fn edit_accounts(conn: &mut Connection, rng: &mut Rng) {
     let notes = |rng: &mut Rng| (rng.below(2) == 0).then(|| format!("line {}\nline {}", rng.below(3), rng.below(3)));
     let group = |rng: &mut Rng| (rng.below(2) == 0).then(|| rng.pick(&["Everyday", "Savings", "Cards"]).to_string());
     let virtual_balance = |rng: &mut Rng| format!("{}{}.{:02}", if rng.below(3) == 0 { "-" } else { "" }, rng.below(2000), rng.below(100));
-    match rng.below(22) {
+    match rng.below(26) {
         0 | 1 => {
             let opening = (rng.below(2) == 0).then(|| format!("{}{}.{:02}", if rng.below(3) == 0 { "-" } else { "" }, rng.below(500), rng.below(100)));
             let number = (rng.below(2) == 0).then(|| format!("IE{}", rng.below(100)));
+            let own = (rng.below(3) == 0).then(|| code(rng));
             let new = NewAccount {
                 name: rng.pick(ACCOUNT_NAMES).to_string(),
                 kind: kind(rng),
@@ -1313,7 +1330,8 @@ fn edit_accounts(conn: &mut Connection, rng: &mut Rng) {
                 group: group(rng),
                 include_in_net_worth: (rng.below(2) == 0).then(|| rng.below(2) == 0),
                 virtual_balance: (rng.below(2) == 0).then(|| virtual_balance(rng)),
-                currency: None, rate: None,
+                currency: own.map(str::to_string),
+                rate: own.filter(|c| *c != "EUR").map(|_| rate(rng)),
             };
             let _ = accounts::create(conn, &new, TODAY);
         }
@@ -1369,21 +1387,34 @@ fn edit_accounts(conn: &mut Connection, rng: &mut Rng) {
         10 | 11 if active.len() > 1 => {
             let (from, to) = (*rng.pick(&active), *rng.pick(&active));
             let note = (rng.below(2) == 0).then(|| format!("note {}", rng.below(4)));
-            let _ = transfers::create(conn, &NewTransfer { from_account_id: from.to_string(), to_account_id: to.to_string(), amount: format!("{}.{:02}", 1 + rng.below(300), rng.below(100)), date: date(rng), note, to_amount: None });
+            // what arrives is asked for exactly when the two accounts are in different currencies
+            let arrives = accounts::currencies_differ(conn, from, to).unwrap_or(false).then(|| amount(rng));
+            let _ = transfers::create(conn, &NewTransfer { from_account_id: from.to_string(), to_account_id: to.to_string(), amount: format!("{}.{:02}", 1 + rng.below(300), rng.below(100)), date: date(rng), note, to_amount: arrives });
         }
         12 if !transfers_now.is_empty() => {
-            let patch = match rng.below(4) {
+            let id = *rng.pick(&transfers_now);
+            let mut patch = match rng.below(4) {
                 0 => TransferPatch { amount: Some(format!("{}.00", 1 + rng.below(300))), ..Default::default() },
                 1 => TransferPatch { from_account_id: account(rng), ..Default::default() },
                 2 => TransferPatch { to_account_id: account(rng), ..Default::default() },
                 _ => TransferPatch { date: Some(date(rng)), note: Some((rng.below(2) == 0).then(|| "edited".to_string())), ..Default::default() },
             };
-            let _ = transfers::update(conn, *rng.pick(&transfers_now), &patch);
+            // looking at the two sides as they are after the patch: what arrives is given when they differ in currency (always, when the
+            // transfer has none yet, and now and then to change it) and never when they do not (the stored one is then cleared by the core)
+            let current = transfers::get(conn, id).unwrap();
+            let side = |given: &Option<String>, now: i64| given.as_deref().and_then(|g| g.parse().ok()).unwrap_or(now);
+            let (from, to) = (side(&patch.from_account_id, current.from_account_id), side(&patch.to_account_id, current.to_account_id));
+            if accounts::currencies_differ(conn, from, to).unwrap_or(false) && (current.to_amount.is_none() || rng.below(2) == 0) {
+                patch.to_amount = Some(amount(rng));
+            }
+            let _ = transfers::update(conn, id, &patch);
         }
         13 if !transfers_now.is_empty() => {
             transfers::delete(conn, *rng.pick(&transfers_now)).unwrap();
         }
         14 | 15 if !expenses.is_empty() => {
+            let account_id = account(rng);
+            let native_amount = native(conn, rng, &account_id);
             let _ = transactions::create(
                 conn,
                 &NewTransaction {
@@ -1393,8 +1424,8 @@ fn edit_accounts(conn: &mut Connection, rng: &mut Rng) {
                     category_id: rng.pick(&expenses).to_string(),
                     description: None,
                     client_uuid: None,
-                    account_id: account(rng),
-                    native_amount: None,
+                    account_id,
+                    native_amount,
                 },
             );
         }
@@ -1410,7 +1441,7 @@ fn edit_accounts(conn: &mut Connection, rng: &mut Rng) {
                     interval_count: 1,
                     end_date: None,
                     description: None,
-                    account_id: account(rng),
+                    account_id: plain_account(rng),
                 },
             );
         }
@@ -1421,7 +1452,7 @@ fn edit_accounts(conn: &mut Connection, rng: &mut Rng) {
                 let kind = *rng.pick(&[ledger::Kind::Lent, ledger::Kind::Borrowed, ledger::Kind::RepaidToMe, ledger::Kind::RepaidByMe]);
                 let _ = ledger::add(
                     conn,
-                    &ledger::NewEntry { person_id: rng.pick(&friends).to_string(), kind, amount: format!("{}.00", 1 + rng.below(200)), date: date(rng), note: None, transaction_id: None, account_id: account(rng) },
+                    &ledger::NewEntry { person_id: rng.pick(&friends).to_string(), kind, amount: format!("{}.00", 1 + rng.below(200)), date: date(rng), note: None, transaction_id: None, account_id: plain_account(rng) },
                 );
             }
         }
@@ -1430,16 +1461,30 @@ fn edit_accounts(conn: &mut Connection, rng: &mut Rng) {
             let (bills, items, entries) = (ids(conn, "SELECT id FROM transactions"), ids(conn, "SELECT id FROM recurring_transactions"), ids(conn, "SELECT id FROM ledger_entries"));
             match rng.below(3) {
                 0 if !bills.is_empty() => {
-                    let _ = transactions::update(conn, *rng.pick(&bills), &transactions::TransactionPatch { account_id: account(rng), ..Default::default() });
+                    // into an account of another currency the amount it really paid goes with it, out of one it is left out (and cleared)
+                    let account_id = account(rng);
+                    let native_amount = native(conn, rng, &account_id);
+                    let _ = transactions::update(conn, *rng.pick(&bills), &transactions::TransactionPatch { account_id, native_amount, ..Default::default() });
                 }
                 1 if !items.is_empty() => {
-                    let _ = recurring::update(conn, *rng.pick(&items), &recurring::RecurringPatch { account_id: account(rng), ..Default::default() });
+                    let _ = recurring::update(conn, *rng.pick(&items), &recurring::RecurringPatch { account_id: plain_account(rng), ..Default::default() });
                 }
                 _ if !entries.is_empty() => {
-                    let _ = ledger::update(conn, *rng.pick(&entries), &ledger::EntryPatch { account_id: account(rng), ..Default::default() });
+                    let _ = ledger::update(conn, *rng.pick(&entries), &ledger::EntryPatch { account_id: plain_account(rng), ..Default::default() });
                 }
                 _ => {}
             }
+        }
+        22 | 23 if !all.is_empty() => {
+            // the rate of an account: refused for an account in the app's currency
+            let patch = AccountPatch { rate: Some(rate(rng)), ..Default::default() };
+            let _ = accounts::update(conn, *rng.pick(&all), &patch, TODAY);
+        }
+        24 if !empty.is_empty() => {
+            // the currency of an account that has nothing in it: another one with its rate, or back to the app's, which has none
+            let own = code(rng);
+            let patch = AccountPatch { currency: Some(own.to_string()), rate: (own != "EUR").then(|| rate(rng)), ..Default::default() };
+            let _ = accounts::update(conn, *rng.pick(&empty), &patch, TODAY);
         }
         _ => {}
     }

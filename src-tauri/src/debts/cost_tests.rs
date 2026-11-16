@@ -285,8 +285,8 @@ fn every_module_counts_your_part_of_a_shared_bill() {
         let from_json: i64 = json["transactions"].as_array().unwrap().iter().map(|t| minor(t["myShare"].as_str().unwrap())).sum();
         assert_eq!(from_json, by_hand, "json seed {seed}");
         let csv = export::csv(conn, &all).unwrap();
-        // `my_share` is the column before the last, which is the account
-        let from_csv: i64 = csv.lines().skip(1).map(|l| minor(l.trim_end().rsplit(',').nth(1).unwrap())).sum();
+        // `my_share` is the fourth column from the end: the account, what it really paid and the code of its currency come after it
+        let from_csv: i64 = csv.lines().skip(1).map(|l| minor(l.trim_end().rsplit(',').nth(3).unwrap())).sum();
         assert_eq!(from_csv, by_hand, "csv seed {seed}");
     }
 }

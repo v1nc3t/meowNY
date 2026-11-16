@@ -796,7 +796,7 @@ fn a_phone_of_an_older_protocol_is_told_to_update(protocol: u32) {
     };
     let mut channel = net::connect(&payload, Ikm::for_sync(&paired[0].1, &payload.secret), limits(), None).unwrap();
     let mut hello = phone.with(|c| engine::hello(c, "Phone", "0.9.0", super::stamp::now_ms())).unwrap();
-    assert_eq!(hello.protocol, 10);
+    assert_eq!(hello.protocol, 11);
     hello.protocol = protocol;
     channel.send(&Message::Hello(hello)).unwrap();
     let _desktops_hello = channel.receive();
@@ -820,6 +820,11 @@ fn a_phone_of_the_version_before_accounts_is_told_to_update() {
 #[test]
 fn a_phone_of_the_version_before_the_details_of_an_account_is_told_to_update() {
     a_phone_of_an_older_protocol_is_told_to_update(9);
+}
+
+#[test]
+fn a_phone_of_the_version_before_a_currency_per_account_is_told_to_update() {
+    a_phone_of_an_older_protocol_is_told_to_update(10);
 }
 
 #[test]

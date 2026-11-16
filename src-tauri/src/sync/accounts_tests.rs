@@ -422,6 +422,8 @@ fn a_main_account_row_that_is_archived_is_refused_even_when_it_gets_past_the_wir
         group: None,
         include_net_worth: 1,
         virtual_balance_minor: 0,
+        currency: None,
+        rate: None,
         created_at: "1970-01-01T00:00:00.000Z".into(),
         updated_at: "1970-01-01T00:00:00.000Z".into(),
     };
@@ -1661,7 +1663,7 @@ fn a_device_that_speaks_protocol_9_is_told_to_update_whichever_of_the_two_it_is(
     let (a, b) = (device("EUR"), device("EUR"));
     let new = engine::hello(&a, "desktop", "0.1.0", now()).unwrap();
     let mut old = engine::hello(&b, "phone", "0.1.0", now()).unwrap();
-    assert_eq!(new.protocol, 10);
+    assert_eq!(new.protocol, 11);
     old.protocol = 9;
     assert!(matches!(engine::check_hello(&new, &old, now()), Err(SyncError::ProtocolMismatch)));
     assert!(matches!(engine::check_hello(&old, &new, now()), Err(SyncError::ProtocolMismatch)));
@@ -1704,4 +1706,790 @@ fn a_sync_cut_after_any_message_leaves_the_details_of_an_account_as_they_were_an
         settle(&mut desktop, &mut phone);
         assert_eq!(details_of(&phone, &cash), (Some("DESKTOP".into()), Some("a\nb".into()), Some("G".into()), false, "9.99".into()), "cut after {cut}");
     }
+}
+
+// --- a currency per account: protocol 11 (docs/accounts-design.md, section 21) -------------------------------------------------
+
+/// An account in another currency, at `rate` of its units to one euro, with an opening balance of its own in that currency (dated the first
+/// of January). Returns its local id.
+fn open_foreign(conn: &Connection, name: &str, code: &str, rate: &str, opening: &str) -> i64 {
+    accounts::create(
+        conn,
+        &NewAccount {
+            name: name.into(),
+            kind: Kind::Checking,
+            number: None,
+            opening_balance: Some(opening.into()),
+            opening_date: Some("2026-01-01".into()),
+            bic: None,
+            notes: None,
+            group: None,
+            include_in_net_worth: None,
+            virtual_balance: None,
+            currency: Some(code.into()),
+            rate: Some(rate.into()),
+        },
+        TODAY,
+    )
+    .unwrap()
+    .id
+}
+
+/// A payment of 4.00 in the app's currency; in an account of another currency, `native` is what that account really paid.
+fn spend_native(conn: &Connection, name: &str, account: i64, native: Option<&str>) -> i64 {
+    let food = id_of(conn, "categories", "Food");
+    transactions::create(
+        conn,
+        &NewTransaction {
+            name: name.into(),
+            amount: "4.00".into(),
+            payment_date: "2026-03-02".into(),
+            category_id: food.to_string(),
+            description: None,
+            client_uuid: None,
+            account_id: Some(account.to_string()),
+            native_amount: native.map(str::to_string),
+        },
+    )
+    .unwrap()
+    .id
+}
+
+/// A transfer with what arrives, when the two accounts are in different currencies; `note` is its name.
+fn move_between_currencies(conn: &Connection, from: i64, to: i64, amount: &str, arrives: Option<&str>, note: &str) -> i64 {
+    transfers::create(
+        conn,
+        &NewTransfer { from_account_id: from.to_string(), to_account_id: to.to_string(), amount: amount.into(), date: "2026-03-03".into(), note: Some(note.into()), to_amount: arrives.map(str::to_string) },
+    )
+    .unwrap()
+    .id
+}
+
+type InCurrencies = (String, String, String, String, Option<String>);
+
+/// What a device shows of its accounts, by name (the local ids differ): balance, what it is worth in the app's currency, currency, rate.
+fn accounts_in_currencies(conn: &Connection) -> Vec<InCurrencies> {
+    let mut list: Vec<_> = accounts::list(conn, TODAY).unwrap().into_iter().map(|a| (a.name, a.balance, a.balance_in_main, a.currency, a.rate)).collect();
+    list.sort();
+    list
+}
+
+fn in_currencies(conn: &Connection, name: &str) -> InCurrencies {
+    accounts_in_currencies(conn).into_iter().find(|a| a.0 == name).unwrap_or_else(|| panic!("no account {name}"))
+}
+
+/// What a payment really moved its account by, in the account's currency: nothing for an account in the app's currency.
+fn native_of(conn: &Connection, name: &str) -> Option<i64> {
+    conn.query_row("SELECT native_amount_minor FROM transactions WHERE name = ?1", [name], |r| r.get(0)).unwrap()
+}
+
+/// What a transfer brought to its second account, when the two were in different currencies.
+fn arrives_of(conn: &Connection, note: &str) -> Option<i64> {
+    conn.query_row("SELECT to_amount_minor FROM transfers WHERE note = ?1", [note], |r| r.get(0)).unwrap()
+}
+
+/// What a patch does, as the person says it, the patch (made where it is made, for the local ids), what it leaves the row in and the amount there.
+type Step<P> = (&'static str, Box<dyn Fn(&Connection) -> P>, &'static str, Option<i64>);
+
+fn who(on_desktop: bool) -> &'static str {
+    if on_desktop {
+        "desktop"
+    } else {
+        "phone"
+    }
+}
+
+#[test]
+fn a_foreign_account_with_its_payments_and_transfers_between_currencies_arrives_with_the_same_balances_and_net_worth() {
+    for on_desktop in [true, false] {
+        let (mut desktop, mut phone) = met_with_accounts();
+        let made = if on_desktop { &desktop } else { &phone };
+        category(made, "Salary", CategoryType::Income);
+        let (cash, savings) = (account_id(made, "Cash"), account_id(made, "Savings"));
+        let lei = open_foreign(made, "Lei account", "RON", "5.00", "100.00");
+        spend_native(made, "Lei lunch", lei, Some("20.00"));
+        spend_native(made, "Cash lunch", cash, None);
+        let salary = id_of(made, "categories", "Salary");
+        transactions::create(
+            made,
+            &NewTransaction { name: "Pay in lei".into(), amount: "100.00".into(), payment_date: "2026-03-01".into(), category_id: salary.to_string(), description: None, client_uuid: None, account_id: Some(lei.to_string()), native_amount: Some("500.00".into()) },
+        )
+        .unwrap();
+        // a transfer in each direction between the euro and the lei, one between two euro accounts that has no second amount
+        move_between_currencies(made, cash, lei, "10.00", Some("50.50"), "T cash to lei");
+        move_between_currencies(made, lei, savings, "100.00", Some("19.00"), "T lei to savings");
+        move_between_currencies(made, MAIN_ID, lei, "20.00", Some("100.00"), "T main to lei");
+        move_between_currencies(made, lei, MAIN_ID, "50.00", Some("10.00"), "T lei to main");
+        move_between_currencies(made, cash, savings, "5.00", None, "T cash to savings");
+        let outcome = settle(&mut desktop, &mut phone);
+        assert!(outcome.compared.contains(&Table::Accounts) && outcome.compared.contains(&Table::Transactions) && outcome.compared.contains(&Table::Transfers), "{:?}", outcome.compared);
+        for conn in [&desktop, &phone] {
+            let label = format!("made on the {}", who(on_desktop));
+            // 100.00 + 500.00 - 20.00 + 50.50 - 100.00 + 100.00 - 50.00 lei, and at 5.00 that is 116.10 euro
+            assert_eq!(in_currencies(conn, "Lei account"), ("Lei account".into(), "580.50".into(), "116.10".into(), "RON".into(), Some("5.00".into())), "{label}");
+            assert_eq!(in_currencies(conn, "Cash").1, "-19.00", "{label}");
+            assert_eq!(in_currencies(conn, "Savings").1, "24.00", "{label}: 19.00 from the lei and 5.00 from Cash");
+            assert_eq!(in_currencies(conn, "Main account").1, "-10.00", "{label}");
+            let summary = accounts::summary(conn, TODAY).unwrap();
+            assert_eq!((summary.in_accounts.as_str(), summary.accounts), ("111.10", 4), "{label}: -10.00 - 19.00 + 24.00 + 116.10");
+            assert_eq!([native_of(conn, "Lei lunch"), native_of(conn, "Pay in lei"), native_of(conn, "Cash lunch")], [Some(2000), Some(50_000), None], "{label}");
+            assert_eq!(count(conn, "SELECT amount_minor FROM transactions WHERE name = 'Lei lunch'"), 400, "{label}: the amount in the app's currency is what budgets count");
+            assert_eq!(count(conn, "SELECT count(*) FROM transactions WHERE name = 'Cash lunch' AND native_amount_minor IS NULL"), 1, "{label}: null, not zero");
+            assert_eq!(
+                [arrives_of(conn, "T cash to lei"), arrives_of(conn, "T lei to savings"), arrives_of(conn, "T main to lei"), arrives_of(conn, "T lei to main"), arrives_of(conn, "T cash to savings")],
+                [Some(5050), Some(1900), Some(10_000), Some(1000), None],
+                "{label}"
+            );
+            assert_eq!([count(conn, "SELECT amount_minor FROM transfers WHERE note = 'T lei to savings'"), count(conn, "SELECT amount_minor FROM transfers WHERE note = 'T main to lei'")], [10_000, 2000], "{label}");
+        }
+        assert_eq!(accounts_in_currencies(&desktop), accounts_in_currencies(&phone));
+        assert_eq!(accounts::summary(&desktop, TODAY).unwrap(), accounts::summary(&phone, TODAY).unwrap());
+    }
+}
+
+#[test]
+fn a_foreign_account_made_with_the_largest_amounts_and_the_smallest_and_largest_rate_comes_to_a_new_phone_whole() {
+    for (rate, opening, native, arrives) in [("0.00000001", "9999999999.99", "9999999999.99", "9999999999.99"), ("999999999.99999999", "-9999999999.99", "0.01", "0.01"), ("1", "0.00", "0.01", "5.00")] {
+        let mut desktop = device("EUR");
+        let mut phone = new_phone(&desktop);
+        category(&desktop, "Food", CategoryType::Expense);
+        let lei = open_foreign(&desktop, "Lei account", "RON", rate, opening);
+        let food = id_of(&desktop, "categories", "Food");
+        // a payment that really paid more than the amount in the app's currency, and one that paid the least a screen takes: both are in the rules
+        transactions::create(
+            &desktop,
+            &NewTransaction { name: "Native".into(), amount: "0.01".into(), payment_date: "2026-03-02".into(), category_id: food.to_string(), description: None, client_uuid: None, account_id: Some(lei.to_string()), native_amount: Some(native.into()) },
+        )
+        .unwrap();
+        move_between_currencies(&desktop, MAIN_ID, lei, "9999999999.99", Some(arrives), "T big");
+        settle(&mut desktop, &mut phone);
+        assert_eq!(in_currencies(&phone, "Lei account"), in_currencies(&desktop, "Lei account"), "rate {rate}");
+        assert_eq!(text(&phone, "SELECT rate FROM accounts WHERE name = 'Lei account'"), rate);
+        assert_eq!(count(&phone, "SELECT native_amount_minor FROM transactions WHERE name = 'Native'"), (native.replace('.', "")).parse::<i64>().unwrap(), "rate {rate}");
+        assert_eq!(count(&phone, "SELECT to_amount_minor FROM transfers WHERE note = 'T big'"), arrives.replace('.', "").parse::<i64>().unwrap(), "rate {rate}");
+        assert_eq!(accounts::summary(&phone, TODAY).unwrap(), accounts::summary(&desktop, TODAY).unwrap(), "rate {rate}");
+    }
+}
+
+#[test]
+fn a_new_rate_arrives_and_changes_what_a_foreign_account_is_worth_and_no_stored_amount() {
+    for on_desktop in [true, false] {
+        let (mut desktop, mut phone) = met_with_accounts();
+        let lei = open_foreign(&desktop, "Lei account", "RON", "5.00", "100.00");
+        spend_native(&desktop, "Lei lunch", lei, Some("20.00"));
+        settle(&mut desktop, &mut phone);
+        assert_eq!(in_currencies(&phone, "Lei account"), ("Lei account".into(), "80.00".into(), "16.00".into(), "RON".into(), Some("5.00".into())));
+        pause();
+        let (changed, other) = if on_desktop { (&desktop, &phone) } else { (&phone, &desktop) };
+        let before = text(other, "SELECT stamp FROM accounts WHERE name = 'Lei account'");
+        accounts::update(changed, account_id(changed, "Lei account"), &AccountPatch { rate: Some("4.00".into()), ..Default::default() }, TODAY).unwrap();
+        let outcome = settle(&mut desktop, &mut phone);
+        assert_eq!((outcome.compared.as_slice(), outcome.differences), ([Table::Accounts].as_slice(), false), "only the account travelled");
+        for conn in [&desktop, &phone] {
+            assert_eq!(in_currencies(conn, "Lei account"), ("Lei account".into(), "80.00".into(), "20.00".into(), "RON".into(), Some("4.00".into())), "changed on the {}", who(on_desktop));
+            assert_eq!((native_of(conn, "Lei lunch"), count(conn, "SELECT amount_minor FROM transactions WHERE name = 'Lei lunch'")), (Some(2000), 400), "no stored amount moves with a rate");
+            assert_eq!(accounts::summary(conn, TODAY).unwrap().in_accounts, "20.00");
+        }
+        let other = if on_desktop { &phone } else { &desktop };
+        assert!(text(other, "SELECT stamp FROM accounts WHERE name = 'Lei account'") > before, "the stamp came with it");
+        // and the other device sets it again, to the far end of what a rate can be
+        pause();
+        accounts::update(other, account_id(other, "Lei account"), &AccountPatch { rate: Some("160".into()), ..Default::default() }, TODAY).unwrap();
+        settle(&mut desktop, &mut phone);
+        for conn in [&desktop, &phone] {
+            assert_eq!(in_currencies(conn, "Lei account").2, "0.50", "80.00 at 160");
+        }
+    }
+}
+
+#[test]
+fn a_newer_rename_wins_over_an_older_new_rate_as_a_whole_row_and_the_older_rate_is_not_merged_in() {
+    let (mut desktop, mut phone) = met_with_accounts();
+    open_foreign(&desktop, "Lei account", "RON", "5.00", "100.00");
+    settle(&mut desktop, &mut phone);
+    pause();
+    accounts::update(&desktop, account_id(&desktop, "Lei account"), &AccountPatch { rate: Some("4.00".into()), ..Default::default() }, TODAY).unwrap();
+    pause();
+    rename(&phone, account_id(&phone, "Lei account"), "Lei savings");
+    settle(&mut desktop, &mut phone);
+    for conn in [&desktop, &phone] {
+        assert_eq!(in_currencies(conn, "Lei savings"), ("Lei savings".into(), "100.00".into(), "20.00".into(), "RON".into(), Some("5.00".into())), "the newer whole row, with the rate it had");
+    }
+}
+
+#[test]
+fn the_currency_of_an_empty_account_changes_on_either_device_and_arrives_with_its_rate_and_back_to_the_app_s_currency() {
+    for first_on_desktop in [true, false] {
+        let (mut desktop, mut phone) = met_with_accounts();
+        open_foreign(&desktop, "Money", "RON", "5.00", "0.00");
+        settle(&mut desktop, &mut phone);
+        let steps = [
+            (AccountPatch { currency: Some("usd".into()), rate: Some("1.10".into()), ..Default::default() }, "USD", Some("1.10")),
+            // the app's own currency, in any case: no currency of its own, so no rate
+            (AccountPatch { currency: Some("eur".into()), ..Default::default() }, "EUR", None),
+            (AccountPatch { currency: Some("GBP".into()), rate: Some("0.85".into()), ..Default::default() }, "GBP", Some("0.85")),
+            // a new code keeps the rate that is there
+            (AccountPatch { currency: Some("RON".into()), ..Default::default() }, "RON", Some("0.85")),
+        ];
+        for (step, (patch, code, rate)) in steps.into_iter().enumerate() {
+            pause();
+            let on_desktop = first_on_desktop == (step % 2 == 0);
+            let changed = if on_desktop { &desktop } else { &phone };
+            accounts::update(changed, account_id(changed, "Money"), &patch, TODAY).unwrap();
+            let outcome = settle(&mut desktop, &mut phone);
+            assert_eq!(outcome.compared, [Table::Accounts], "step {step}");
+            for conn in [&desktop, &phone] {
+                let shown = in_currencies(conn, "Money");
+                assert_eq!((shown.3.as_str(), shown.4.as_deref()), (code, rate), "step {step} made on the {}", who(on_desktop));
+                // none for the app's currency: null in the table, not the code of it
+                assert_eq!(count(conn, "SELECT count(*) FROM accounts WHERE name = 'Money' AND currency IS NULL AND rate IS NULL"), (code == "EUR") as i64, "step {step}");
+            }
+        }
+    }
+}
+
+#[test]
+fn a_payment_moved_between_a_main_and_a_foreign_account_on_one_device_arrives_with_its_native_amount_set_kept_changed_and_cleared() {
+    for on_desktop in [true, false] {
+        let (mut desktop, mut phone) = met_with_accounts();
+        open_foreign(&desktop, "Lei account", "RON", "5.00", "0.00");
+        open_foreign(&desktop, "Dollars", "USD", "1.10", "0.00");
+        let cash = account_id(&desktop, "Cash");
+        spend_in(&desktop, "Lunch", cash);
+        settle(&mut desktop, &mut phone);
+        // (what the patch does, the account the payment is then in, what it really paid there)
+        let steps: Vec<Step<TransactionPatch>> = vec![
+            ("main to foreign, with its native amount", Box::new(|c| TransactionPatch { account_id: Some(account_id(c, "Lei account").to_string()), native_amount: Some("20.00".into()), ..Default::default() }), "Lei account", Some(2000)),
+            ("a new native amount, staying", Box::new(|_| TransactionPatch { native_amount: Some("21.50".into()), ..Default::default() }), "Lei account", Some(2150)),
+            ("foreign to main: cleared", Box::new(|c| TransactionPatch { account_id: Some(account_id(c, "Cash").to_string()), ..Default::default() }), "Cash", None),
+            ("main to foreign again", Box::new(|c| TransactionPatch { account_id: Some(account_id(c, "Lei account").to_string()), native_amount: Some("30.00".into()), ..Default::default() }), "Lei account", Some(3000)),
+            ("foreign to foreign: kept", Box::new(|c| TransactionPatch { account_id: Some(account_id(c, "Dollars").to_string()), ..Default::default() }), "Dollars", Some(3000)),
+            ("foreign to foreign, with a new one", Box::new(|c| TransactionPatch { account_id: Some(account_id(c, "Lei account").to_string()), native_amount: Some("1.00".into()), ..Default::default() }), "Lei account", Some(100)),
+            ("foreign to the main account", Box::new(|_| TransactionPatch { account_id: Some(MAIN_ID.to_string()), ..Default::default() }), "Main account", None),
+        ];
+        for (step, (what, patch, account, native)) in steps.into_iter().enumerate() {
+            pause();
+            // the two devices take turns, so each end meets the other's change to a row it made itself
+            let changed = if (step % 2 == 0) == on_desktop { &desktop } else { &phone };
+            transactions::update(changed, id_of(changed, "transactions", "Lunch"), &patch(changed)).unwrap();
+            let outcome = settle(&mut desktop, &mut phone);
+            assert_eq!((outcome.compared.as_slice(), outcome.differences), ([Table::Transactions].as_slice(), false), "{what}");
+            for conn in [&desktop, &phone] {
+                assert_eq!(text(conn, "SELECT a.name FROM transactions t JOIN accounts a ON a.id = t.account_id WHERE t.name = 'Lunch'"), account, "{what}");
+                assert_eq!(native_of(conn, "Lunch"), native, "{what}");
+                assert_eq!(count(conn, "SELECT amount_minor FROM transactions WHERE name = 'Lunch'"), 500, "{what}: the amount in the app's currency never moves");
+            }
+            assert_eq!(accounts_in_currencies(&desktop), accounts_in_currencies(&phone), "{what}");
+        }
+    }
+}
+
+#[test]
+fn a_transfer_whose_sides_change_currency_arrives_with_its_second_amount_set_and_cleared() {
+    let (mut desktop, mut phone) = met_with_accounts();
+    open_foreign(&desktop, "Lei account", "RON", "5.00", "0.00");
+    let (cash, lei) = (account_id(&desktop, "Cash"), account_id(&desktop, "Lei account"));
+    move_between_currencies(&desktop, cash, lei, "10.00", Some("50.00"), "T");
+    settle(&mut desktop, &mut phone);
+    // (the patch on the phone, then on the desktop, and what arrives afterwards: the second side and the amount that arrives there)
+    let steps: Vec<Step<TransferPatch>> = vec![
+        ("a new amount that arrives", Box::new(|_| TransferPatch { to_amount: Some("52.50".into()), ..Default::default() }), "Lei account", Some(5250)),
+        ("the second side is now in the app's currency: cleared", Box::new(|c| TransferPatch { to_account_id: Some(account_id(c, "Savings").to_string()), ..Default::default() }), "Savings", None),
+        ("a side in a currency again: required", Box::new(|c| TransferPatch { to_account_id: Some(account_id(c, "Lei account").to_string()), to_amount: Some("49.00".into()), ..Default::default() }), "Lei account", Some(4900)),
+        ("only the first side changes: kept", Box::new(|_| TransferPatch { from_account_id: Some(MAIN_ID.to_string()), ..Default::default() }), "Lei account", Some(4900)),
+    ];
+    for (step, (what, patch, to, arrives)) in steps.into_iter().enumerate() {
+        pause();
+        let on_phone = step % 2 == 0;
+        let changed = if on_phone { &phone } else { &desktop };
+        transfers::update(changed, transfer_named(changed, "T"), &patch(changed)).unwrap();
+        let outcome = settle(&mut desktop, &mut phone);
+        assert_eq!((outcome.compared.as_slice(), outcome.differences), ([Table::Transfers].as_slice(), false), "{what}");
+        for conn in [&desktop, &phone] {
+            assert_eq!(text(conn, "SELECT t.name FROM transfers x JOIN accounts t ON t.id = x.to_account_id WHERE x.note = 'T'"), to, "{what}");
+            assert_eq!(arrives_of(conn, "T"), arrives, "{what}");
+        }
+        assert_eq!(accounts_in_currencies(&desktop), accounts_in_currencies(&phone), "{what}");
+    }
+}
+
+#[test]
+fn both_devices_changing_the_currency_and_the_rate_of_an_empty_account_is_a_conflict_that_lists_both_facts() {
+    for (choice, expected) in [(engine::Choice::Mine, ("GBP", Some("0.85"))), (engine::Choice::Theirs, ("USD", Some("1.20")))] {
+        let (mut desktop, mut phone) = met_with_accounts();
+        open_foreign(&desktop, "Money", "USD", "1.10", "0.00");
+        settle(&mut desktop, &mut phone);
+        let met = now();
+        pause();
+        accounts::update(&desktop, account_id(&desktop, "Money"), &AccountPatch { currency: Some("GBP".into()), rate: Some("0.85".into()), ..Default::default() }, TODAY).unwrap();
+        accounts::update(&phone, account_id(&phone, "Money"), &AccountPatch { rate: Some("1.20".into()), ..Default::default() }, TODAY).unwrap();
+        let (conflicts, views) = conflicts_between(&desktop, &phone, met);
+        assert_eq!(conflicts.len(), 1);
+        assert_eq!(views[0].title, "Money");
+        assert_eq!(fields(&views, Table::Accounts), texts(&[("currency", "GBP", "USD"), ("rate", "0.85", "1.20")]), "the currency and the rate, and nothing else");
+        engine::decide(&mut desktop, &conflicts, &[choice]).unwrap();
+        settle(&mut desktop, &mut phone);
+        for conn in [&desktop, &phone] {
+            let shown = in_currencies(conn, "Money");
+            assert_eq!((shown.3.as_str(), shown.4.as_deref()), expected, "{choice:?}");
+        }
+    }
+    // one device sets the app's currency, which clears both: they show as nothing
+    let (mut desktop, mut phone) = met_with_accounts();
+    open_foreign(&desktop, "Money", "USD", "1.10", "0.00");
+    settle(&mut desktop, &mut phone);
+    let met = now();
+    pause();
+    accounts::update(&desktop, account_id(&desktop, "Money"), &AccountPatch { currency: Some("EUR".into()), ..Default::default() }, TODAY).unwrap();
+    accounts::update(&phone, account_id(&phone, "Money"), &AccountPatch { rate: Some("1.20".into()), ..Default::default() }, TODAY).unwrap();
+    let (_, views) = conflicts_between(&desktop, &phone, met);
+    assert_eq!(fields(&views, Table::Accounts), texts(&[("currency", "", "USD"), ("rate", "", "1.20")]));
+}
+
+#[test]
+fn both_devices_changing_the_native_amount_of_a_payment_and_what_arrives_of_a_transfer_is_a_conflict_that_lists_them() {
+    let world = || {
+        let (mut desktop, mut phone) = met_with_accounts();
+        let lei = open_foreign(&desktop, "Lei account", "RON", "5.00", "0.00");
+        let cash = account_id(&desktop, "Cash");
+        spend_native(&desktop, "Lei lunch", lei, Some("20.00"));
+        move_between_currencies(&desktop, cash, lei, "10.00", Some("50.00"), "T cash to lei");
+        settle(&mut desktop, &mut phone);
+        (desktop, phone)
+    };
+    let (mut desktop, mut phone) = world();
+    let met = now();
+    pause();
+    transactions::update(&desktop, id_of(&desktop, "transactions", "Lei lunch"), &TransactionPatch { native_amount: Some("21.00".into()), ..Default::default() }).unwrap();
+    transfers::update(&desktop, transfer_named(&desktop, "T cash to lei"), &TransferPatch { to_amount: Some("51.00".into()), ..Default::default() }).unwrap();
+    transactions::update(&phone, id_of(&phone, "transactions", "Lei lunch"), &TransactionPatch { native_amount: Some("22.00".into()), ..Default::default() }).unwrap();
+    transfers::update(&phone, transfer_named(&phone, "T cash to lei"), &TransferPatch { to_amount: Some("52.00".into()), ..Default::default() }).unwrap();
+    let (conflicts, views) = conflicts_between(&desktop, &phone, met);
+    assert_eq!(conflicts.iter().map(|c| c.table).collect::<Vec<_>>(), [Table::Transactions, Table::Transfers]);
+    assert_eq!(fields(&views, Table::Transactions), texts(&[("nativeAmount", "21.00", "22.00")]), "only what differs");
+    assert_eq!(fields(&views, Table::Transfers), texts(&[("toAmount", "51.00", "52.00")]));
+    engine::decide(&mut desktop, &conflicts, &[engine::Choice::Theirs, engine::Choice::Mine]).unwrap();
+    settle(&mut desktop, &mut phone);
+    for conn in [&desktop, &phone] {
+        assert_eq!((native_of(conn, "Lei lunch"), arrives_of(conn, "T cash to lei")), (Some(2200), Some(5100)));
+    }
+
+    // a native amount that one device cleared by moving the payment to the main account is nothing in the review, beside the account
+    let (desktop, phone) = world();
+    let met = now();
+    pause();
+    transactions::update(&desktop, id_of(&desktop, "transactions", "Lei lunch"), &TransactionPatch { account_id: Some(account_id(&desktop, "Cash").to_string()), ..Default::default() }).unwrap();
+    transactions::update(&phone, id_of(&phone, "transactions", "Lei lunch"), &TransactionPatch { native_amount: Some("23.00".into()), ..Default::default() }).unwrap();
+    let (_, views) = conflicts_between(&desktop, &phone, met);
+    assert_eq!(fields(&views, Table::Transactions), texts(&[("nativeAmount", "", "23.00"), ("account", "Cash", "Lei account")]));
+    // and a transfer made between two euro accounts has no second amount to show
+    let (desktop, phone) = world();
+    let met = now();
+    pause();
+    transfers::update(&desktop, transfer_named(&desktop, "T cash to lei"), &TransferPatch { to_account_id: Some(account_id(&desktop, "Savings").to_string()), ..Default::default() }).unwrap();
+    transfers::update(&phone, transfer_named(&phone, "T cash to lei"), &TransferPatch { to_amount: Some("60.00".into()), ..Default::default() }).unwrap();
+    let (_, views) = conflicts_between(&desktop, &phone, met);
+    assert_eq!(fields(&views, Table::Transfers), texts(&[("to", "Savings", "Lei account"), ("toAmount", "", "60.00")]));
+}
+
+#[test]
+fn a_foreign_account_deleted_on_one_device_while_the_other_puts_rows_with_second_amounts_in_it_ends_equal_by_the_rule_for_the_second_amount() {
+    // who deletes, which of the two the sync is started from, and whether the rows are older or newer than the deletion
+    for (deleter_is_desktop, deleter_first, rows_are_older) in [(true, true, true), (true, true, false), (true, false, true), (true, false, false), (false, true, true), (false, true, false), (false, false, true), (false, false, false)] {
+        let label = format!("deleter on the desktop: {deleter_is_desktop}, sync started by the deleter: {deleter_first}, rows older: {rows_are_older}");
+        let (mut desktop, mut phone) = met_with_accounts();
+        open_foreign(&desktop, "Lei account", "RON", "5.00", "0.00");
+        open_foreign(&desktop, "Lei two", "RON", "5.00", "0.00");
+        open_foreign(&desktop, "Dollars", "USD", "1.10", "0.00");
+        settle(&mut desktop, &mut phone);
+        pause();
+        let (mut a, mut b) = if deleter_is_desktop { (desktop, phone) } else { (phone, desktop) };
+        let lei = account_sync_id(&a, "Lei account");
+        // what the adder puts in the account: a payment, and a transfer from and to each kind of account, between currencies or not
+        let put_rows = |b: &Connection| {
+            let (lei, lei_two, dollars, cash) = (account_id(b, "Lei account"), account_id(b, "Lei two"), account_id(b, "Dollars"), account_id(b, "Cash"));
+            spend_native(b, "R payment", lei, Some("20.00"));
+            move_between_currencies(b, cash, lei, "10.00", Some("50.00"), "T cash to lei");
+            move_between_currencies(b, lei, cash, "100.00", Some("19.00"), "T lei to cash");
+            move_between_currencies(b, MAIN_ID, lei, "20.00", Some("100.00"), "T main to lei");
+            move_between_currencies(b, lei, MAIN_ID, "50.00", Some("10.00"), "T lei to main");
+            move_between_currencies(b, lei, lei_two, "5.00", None, "T lei to lei two");
+            move_between_currencies(b, dollars, lei, "10.00", Some("55.00"), "T dollars to lei");
+        };
+        let delete_lei = |a: &Connection| accounts::delete(a, account_id(a, "Lei account")).unwrap();
+        if rows_are_older {
+            put_rows(&b);
+            pause();
+            delete_lei(&a);
+        } else {
+            delete_lei(&a);
+            pause();
+            put_rows(&b);
+        }
+        let deleted_at = marker_of(&a, &lei).unwrap();
+        let transfer_sync_ids: Vec<String> = ["T main to lei", "T lei to main"].iter().map(|n| text(&b, &format!("SELECT sync_id FROM transfers WHERE note = '{n}'"))).collect();
+        if deleter_first {
+            settle(&mut a, &mut b);
+        } else {
+            settle(&mut b, &mut a);
+        }
+        for (who, conn) in [("deleter", &a), ("adder", &b)] {
+            let label = format!("{label}, on the {who}");
+            assert_eq!(count(conn, "SELECT count(*) FROM accounts WHERE name = 'Lei account'"), 0, "{label}");
+            assert_eq!(marker_of(conn, &lei).as_deref(), Some(deleted_at.as_str()), "{label}: the same marker");
+            // the payment is in the main account and keeps what it really paid, which the view ignores there
+            assert_eq!(text(conn, "SELECT a.name FROM transactions t JOIN accounts a ON a.id = t.account_id WHERE t.name = 'R payment'"), "Main account", "{label}");
+            assert_eq!((native_of(conn, "R payment"), count(conn, "SELECT amount_minor FROM transactions WHERE name = 'R payment'")), (Some(2000), 400), "{label}");
+            // (from, to, what arrives): a side in the main account and the other in the app's currency too loses its second amount; one that
+            // is still between two currencies keeps it
+            let sides = |note: &str| -> (String, String, Option<i64>) {
+                conn.query_row(
+                    "SELECT f.name, t.name, x.to_amount_minor FROM transfers x JOIN accounts f ON f.id = x.from_account_id JOIN accounts t ON t.id = x.to_account_id WHERE x.note = ?1",
+                    [note],
+                    |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+                )
+                .unwrap()
+            };
+            assert_eq!(sides("T cash to lei"), ("Cash".into(), "Main account".into(), None), "{label}");
+            assert_eq!(sides("T lei to cash"), ("Main account".into(), "Cash".into(), None), "{label}");
+            assert_eq!(sides("T lei to lei two"), ("Main account".into(), "Lei two".into(), None), "{label}: it had none, and still has none");
+            assert_eq!(sides("T dollars to lei"), ("Dollars".into(), "Main account".into(), Some(5500)), "{label}: dollars to the euro is still between two currencies");
+            for sync_id in &transfer_sync_ids {
+                assert_eq!(count(conn, &format!("SELECT count(*) FROM transfers WHERE sync_id = '{sync_id}'")), 0, "{label}: a transfer with the main account on both sides is gone");
+                assert!(marker_of(conn, sync_id).is_some(), "{label}");
+            }
+            assert_eq!(count(conn, "SELECT count(*) FROM transfers"), 4, "{label}");
+            // the amounts of the rescued transfers are in mixed units, and both devices add them up the same way: the 100.00 that left the lei
+            // account counts as 100.00 of euro going out of the main account and into Cash
+            assert_eq!([in_currencies(conn, "Main account").1, in_currencies(conn, "Cash").1], ["-44.00", "90.00"], "{label}");
+        }
+        assert_eq!(accounts_in_currencies(&a), accounts_in_currencies(&b), "{label}");
+        assert_eq!(accounts::summary(&a, TODAY).unwrap(), accounts::summary(&b, TODAY).unwrap(), "{label}");
+    }
+}
+
+#[test]
+fn a_transfer_that_keeps_its_second_amount_after_a_deletion_is_one_the_core_can_correct_and_the_correction_arrives() {
+    let (mut desktop, mut phone) = met_with_accounts();
+    open_foreign(&desktop, "Lei account", "RON", "5.00", "0.00");
+    open_foreign(&desktop, "Dollars", "USD", "1.10", "0.00");
+    settle(&mut desktop, &mut phone);
+    pause();
+    move_between_currencies(&phone, account_id(&phone, "Dollars"), account_id(&phone, "Lei account"), "10.00", Some("55.00"), "T dollars to lei");
+    pause();
+    accounts::delete(&desktop, account_id(&desktop, "Lei account")).unwrap();
+    settle(&mut desktop, &mut phone);
+    assert_eq!(arrives_of(&desktop, "T dollars to lei"), Some(5500), "the lei figure now arrives in the main account");
+    pause();
+    // the person corrects it: 10.00 dollars are about 9.00 euro
+    transfers::update(&desktop, transfer_named(&desktop, "T dollars to lei"), &TransferPatch { to_amount: Some("9.00".into()), ..Default::default() }).unwrap();
+    settle(&mut desktop, &mut phone);
+    for conn in [&desktop, &phone] {
+        assert_eq!((arrives_of(conn, "T dollars to lei"), in_currencies(conn, "Main account").1), (Some(900), "9.00".into()));
+    }
+}
+
+#[test]
+fn a_change_of_currency_made_where_there_is_no_foreign_account_runs_on_a_device_with_one_and_leaves_what_is_in_its_own_currency_alone() {
+    for rate in [Some("1.10"), None] {
+        let (mut desktop, mut phone) = met_with_accounts();
+        // the phone makes the account after they met, so the desktop, which never heard of it, may change its currency
+        let (lei, cash, savings) = (open_foreign(&phone, "Lei account", "RON", "5.00", "100.00"), account_id(&phone, "Cash"), account_id(&phone, "Savings"));
+        spend_native(&phone, "Lei lunch", lei, Some("20.00"));
+        spend_in(&phone, "Cash lunch", cash);
+        move_between_currencies(&phone, cash, lei, "10.00", Some("50.00"), "T cash to lei");
+        move_between_currencies(&phone, lei, MAIN_ID, "100.00", Some("20.00"), "T lei to main");
+        move_between_currencies(&phone, cash, savings, "10.00", None, "T cash to savings");
+        let balance_before = in_currencies(&phone, "Lei account").1;
+        assert_eq!(balance_before, "30.00", "100.00 - 20.00 + 50.00 - 100.00");
+        currency::change(&mut desktop, "USD", rate, TODAY).unwrap();
+        settle(&mut desktop, &mut phone);
+        // (rate 1.10) what is in the app's currency is converted; what is in lei is not
+        let converted = |minor: i64| if rate.is_some() { minor * 11 / 10 } else { minor };
+        for conn in [&desktop, &phone] {
+            let label = format!("rate {rate:?}");
+            assert_eq!(text(conn, "SELECT currency FROM settings"), "USD", "{label}");
+            assert_eq!(count(conn, "SELECT amount_minor FROM transactions WHERE name = 'Cash lunch'"), converted(500), "{label}: the app's currency");
+            assert_eq!(count(conn, "SELECT amount_minor FROM transactions WHERE name = 'Lei lunch'"), converted(400), "{label}: its amount in the app's currency");
+            assert_eq!(native_of(conn, "Lei lunch"), Some(2000), "{label}: what the lei account really paid");
+            assert_eq!(count(conn, "SELECT amount_minor FROM transfers WHERE note = 'T cash to lei'"), converted(1000), "{label}: leaves Cash, which is in the app's currency");
+            assert_eq!(arrives_of(conn, "T cash to lei"), Some(5000), "{label}: arrives in lei");
+            assert_eq!(count(conn, "SELECT amount_minor FROM transfers WHERE note = 'T lei to main'"), 10_000, "{label}: leaves the lei account");
+            assert_eq!(arrives_of(conn, "T lei to main"), Some(converted(2000)), "{label}: arrives in the main account, which is in the app's currency");
+            assert_eq!(count(conn, "SELECT amount_minor FROM transfers WHERE note = 'T cash to savings'"), converted(1000), "{label}");
+            assert_eq!(arrives_of(conn, "T cash to savings"), None, "{label}");
+            assert_eq!(count(conn, "SELECT opening_balance_minor FROM accounts WHERE name = 'Lei account'"), 10_000, "{label}: the opening balance is in lei");
+            assert_eq!(in_currencies(conn, "Lei account").1, balance_before, "{label}: the balance of the lei account does not move");
+            assert_eq!(in_currencies(conn, "Lei account").4.as_deref(), Some("5.00"), "{label}: nor does its rate");
+            assert_eq!(in_currencies(conn, "Cash").1, format!("{}.{:02}", -(converted(500) + converted(1000) + converted(1000)) / 100, (converted(500) + converted(1000) + converted(1000)) % 100), "{label}");
+        }
+        assert_eq!(accounts_in_currencies(&desktop), accounts_in_currencies(&phone), "rate {rate:?}");
+        assert_eq!(accounts::summary(&desktop, TODAY).unwrap(), accounts::summary(&phone, TODAY).unwrap());
+        assert_eq!(count(&phone, "SELECT currency_generation FROM settings"), 1);
+    }
+}
+
+#[test]
+fn a_change_of_currency_that_the_other_device_made_is_not_refused_by_a_device_with_a_foreign_account_even_when_the_core_refuses_to_make_one_there() {
+    let (mut desktop, mut phone) = met_with_accounts();
+    open_foreign(&phone, "Lei account", "RON", "5.00", "0.00");
+    // the person cannot change the currency where a foreign account is ...
+    let before = snapshot(&phone).unwrap();
+    assert!(currency::change(&mut phone, "USD", Some("1.10"), TODAY).is_err());
+    assert_eq!(snapshot(&phone).unwrap(), before, "refused, nothing written");
+    // ... but the one made on the desktop runs on the phone, or the two would never agree again
+    currency::change(&mut desktop, "USD", Some("1.10"), TODAY).unwrap();
+    settle(&mut desktop, &mut phone);
+    assert_eq!(text(&phone, "SELECT currency FROM settings"), "USD");
+    assert_eq!(in_currencies(&phone, "Lei account").3, "RON");
+    // and now neither may change it again while the account is there
+    assert!(currency::change(&mut desktop, "GBP", Some("0.80"), TODAY).is_err());
+    accounts::delete(&desktop, account_id(&desktop, "Lei account")).unwrap();
+    settle(&mut desktop, &mut phone);
+    currency::change(&mut desktop, "GBP", Some("0.80"), TODAY).unwrap();
+    settle(&mut desktop, &mut phone);
+    assert_eq!(text(&phone, "SELECT currency FROM settings"), "GBP");
+}
+
+#[test]
+fn a_batch_that_would_leave_the_main_account_in_a_currency_or_a_currency_with_no_rate_is_refused_whole() {
+    let (_desktop, mut phone) = paired();
+    let before = snapshot(&phone).unwrap();
+    let main = wire_row_of(&phone, "Main account");
+    let account_row = |sync_id: &str, name: &str, position: i64| {
+        let mut row = main.clone();
+        row["syncId"] = serde_json::json!(sync_id);
+        row["name"] = serde_json::json!(name);
+        row["position"] = serde_json::json!(position);
+        row["stamp"] = serde_json::json!(newer_than_everything());
+        row
+    };
+    let good = account_row(&"ab".repeat(16), "Lei account", 1);
+    let cases = [
+        ("the main account in lei, with a rate", MAIN_SYNC_ID.to_string(), [("currency", serde_json::json!("RON")), ("rate", serde_json::json!("5.00"))]),
+        ("the main account in lei, with no rate", MAIN_SYNC_ID.to_string(), [("currency", serde_json::json!("RON")), ("rate", serde_json::json!(null))]),
+        ("the main account with a rate", MAIN_SYNC_ID.to_string(), [("currency", serde_json::json!(null)), ("rate", serde_json::json!("5.00"))]),
+        ("an account in lei with no rate", "cd".repeat(16), [("currency", serde_json::json!("RON")), ("rate", serde_json::json!(null))]),
+        ("an account with a rate and no currency", "cd".repeat(16), [("currency", serde_json::json!(null)), ("rate", serde_json::json!("5.00"))]),
+    ];
+    for (what, sync_id, changes) in cases {
+        let mut bad = account_row(&sync_id, "Renamed", 0);
+        for (key, value) in changes {
+            bad[key] = value;
+        }
+        // the wire refuses it ...
+        assert!(wire::parse_row(Table::Accounts, &bad).is_err(), "{what}");
+        // ... and so does the applier when it is put in by hand with a good account in the same batch, which then does not stay either
+        let rows = [good.clone(), bad].into_iter().map(|v| Row::Account(serde_json::from_value(v).unwrap())).collect();
+        let mut incoming = Incoming::default();
+        incoming.rows.insert(Table::Accounts, rows);
+        let result = engine::apply(&mut phone, &incoming, now(), None);
+        assert!(matches!(result, Err(SyncError::Invalid("account"))), "{what}: {result:?}");
+        assert_eq!(snapshot(&phone).unwrap(), before, "{what}: nothing at all was applied, the good account neither");
+        assert!(accounts::check(&phone).unwrap(), "{what}");
+        assert_eq!(count(&phone, "SELECT applying FROM sync_clock"), 0, "{what}");
+    }
+    // the same two rows without the mistake go in
+    let mut incoming = Incoming::default();
+    incoming.rows.insert(Table::Accounts, vec![Row::Account(serde_json::from_value(good).unwrap())]);
+    engine::apply(&mut phone, &incoming, now(), None).unwrap();
+    assert_eq!(count(&phone, "SELECT count(*) FROM accounts"), 2);
+}
+
+#[test]
+fn rows_of_a_foreign_account_with_a_native_amount_or_a_second_amount_that_break_a_rule_of_the_wire_stop_the_collector_and_change_nothing() {
+    let (desktop, phone) = met_with_accounts();
+    let lei = open_foreign(&desktop, "Lei account", "RON", "5.00", "0.00");
+    spend_native(&desktop, "Lei lunch", lei, Some("20.00"));
+    move_between_currencies(&desktop, account_id(&desktop, "Cash"), lei, "10.00", Some("50.00"), "T cash to lei");
+    let before = snapshot(&phone).unwrap();
+    let row = |table: Table, name: &str| -> serde_json::Value {
+        let prefix = format!("{}:", table.name());
+        let line = snapshot(&desktop).unwrap().into_iter().find(|l| l.starts_with(&prefix) && l.contains(name)).unwrap();
+        let mut value: serde_json::Value = serde_json::from_str(line.trim_start_matches(&prefix)).unwrap();
+        value["stamp"] = serde_json::json!(newer_than_everything());
+        value
+    };
+    let (account, payment, transfer) = (row(Table::Accounts, "Lei account"), row(Table::Transactions, "Lei lunch"), row(Table::Transfers, "T cash to lei"));
+    let with = |mut v: serde_json::Value, key: &str, to: serde_json::Value| {
+        v[key] = to;
+        v
+    };
+    let bad = [
+        (Table::Accounts, with(account.clone(), "currency", serde_json::json!("ron"))),
+        (Table::Accounts, with(account.clone(), "rate", serde_json::json!("5,00"))),
+        (Table::Accounts, with(account, "rate", serde_json::json!(null))),
+        (Table::Transactions, with(payment.clone(), "nativeAmountMinor", serde_json::json!(-1))),
+        (Table::Transactions, with(payment, "nativeAmountMinor", serde_json::json!(crate::money::MAX_MINOR + 1))),
+        (Table::Transfers, with(transfer.clone(), "toAmountMinor", serde_json::json!(0))),
+        (Table::Transfers, with(transfer, "toAmountMinor", serde_json::json!(crate::money::MAX_MINOR + 1))),
+    ];
+    for (table, value) in bad {
+        let message = wire::RowsMessage { table, rows: vec![value.clone()], deleted: vec![], last: true };
+        assert!(RowsCollector::new(vec![table]).push(message).is_err(), "{table:?}: {value}");
+    }
+    assert_eq!(snapshot(&phone).unwrap(), before);
+}
+
+#[test]
+fn the_snapshot_sees_each_new_column_and_the_digest_and_the_hashes_go_by_the_stamps() {
+    let world = || {
+        let (mut desktop, mut phone) = met_with_accounts();
+        let lei = open_foreign(&desktop, "Lei account", "RON", "5.00", "100.00");
+        spend_native(&desktop, "Lei lunch", lei, Some("20.00"));
+        move_between_currencies(&desktop, account_id(&desktop, "Cash"), lei, "10.00", Some("50.00"), "T cash to lei");
+        settle(&mut desktop, &mut phone);
+        (desktop, phone)
+    };
+    // a column written the way a sync writes it, with no stamp: the snapshot shows it, and the digest, which is the stamps, does not
+    for (what, sql) in [
+        ("the currency", "UPDATE accounts SET currency = 'USD' WHERE name = 'Lei account'"),
+        ("the rate", "UPDATE accounts SET rate = '4.00' WHERE name = 'Lei account'"),
+        ("the native amount", "UPDATE transactions SET native_amount_minor = 1 WHERE name = 'Lei lunch'"),
+        ("what arrives", "UPDATE transfers SET to_amount_minor = 1 WHERE note = 'T cash to lei'"),
+    ] {
+        let (desktop, phone) = world();
+        assert_same(&desktop, &phone, "before");
+        let hashes = engine::hashes(&engine::digest(&desktop).unwrap());
+        crate::accounts::fixtures::applying(&desktop, true);
+        desktop.execute(sql, []).unwrap();
+        crate::accounts::fixtures::applying(&desktop, false);
+        assert_ne!(snapshot(&desktop).unwrap(), snapshot(&phone).unwrap(), "{what} is in the snapshot");
+        assert_eq!(engine::hashes(&engine::digest(&desktop).unwrap()), hashes, "{what}: the digest is the stamps");
+    }
+    // the same changes made as a person makes them get a stamp, so the hash of the table changes and the other device is sent the row
+    let (mut desktop, mut phone) = world();
+    let hashes = engine::hashes(&engine::digest(&desktop).unwrap());
+    pause();
+    accounts::update(&desktop, account_id(&desktop, "Lei account"), &AccountPatch { rate: Some("4.00".into()), ..Default::default() }, TODAY).unwrap();
+    transactions::update(&desktop, id_of(&desktop, "transactions", "Lei lunch"), &TransactionPatch { native_amount: Some("21.00".into()), ..Default::default() }).unwrap();
+    transfers::update(&desktop, transfer_named(&desktop, "T cash to lei"), &TransferPatch { to_amount: Some("51.00".into()), ..Default::default() }).unwrap();
+    let now_hashes = engine::hashes(&engine::digest(&desktop).unwrap());
+    for table in [Table::Accounts, Table::Transactions, Table::Transfers] {
+        let of = |hashes: &[(Table, String)]| hashes.iter().find(|(t, _)| *t == table).unwrap().1.clone();
+        assert_ne!(of(&now_hashes), of(&hashes), "{table:?}");
+    }
+    let outcome = settle(&mut desktop, &mut phone);
+    assert_eq!(outcome.compared, [Table::Accounts, Table::Transactions, Table::Transfers]);
+    assert_eq!((native_of(&phone, "Lei lunch"), arrives_of(&phone, "T cash to lei"), in_currencies(&phone, "Lei account").4), (Some(2100), Some(5100), Some("4.00".into())));
+}
+
+#[test]
+fn what_the_screens_accept_as_a_currency_and_a_rate_is_what_the_wire_accepts_and_the_other_way_round() {
+    let currencies = ["RON", "ron", "Ron", " ron ", "RO", "RONN", "R0N", "R N", "", " ", "ÄÖÜ", "EUR", "eur", "XXX", "AAA"];
+    let rates = [
+        "5", "5.00", "0.5", "0.00000001", "0.000000001", "999999999.99999999", "999999999", "1000000000", "0", "0.00", "00.5", "05", "-1", "+1", "5.", ".5", "5,00", "1e3", "abc", "", " ", " 5.00",
+        "5.00 ", "5 .00", "٥", "1.123456789",
+    ];
+    // an account as a device sends it, to put each candidate into
+    let base = {
+        let device = device("EUR");
+        open_foreign(&device, "A", "RON", "5.00", "0.00");
+        wire_row_of(&device, "A")
+    };
+    let make = |currency: &str, rate: Option<&str>| {
+        let device = device("EUR");
+        let new = NewAccount { name: "A".into(), kind: Kind::Cash, number: None, opening_balance: None, opening_date: Some("2026-01-01".into()), bic: None, notes: None, group: None, include_in_net_worth: None, virtual_balance: None, currency: Some(currency.into()), rate: rate.map(str::to_string) };
+        let made = accounts::create(&device, &new, TODAY);
+        (device, made)
+    };
+    let (mut kept_currencies, mut kept_rates) = (0, 0);
+    for candidate in currencies {
+        let mut row = base.clone();
+        row["currency"] = serde_json::json!(candidate);
+        let wire_accepts = wire::parse_row(Table::Accounts, &row).is_ok();
+        // the app's own currency takes no rate on a screen (it is no currency of its own), the wire takes it as a code like another
+        match make(candidate, (!candidate.trim().eq_ignore_ascii_case("EUR")).then_some("5.00")) {
+            (device, Ok(made)) => {
+                // what the screens keep is a valid row: capitals, no spaces, and the app's own currency is no currency at all
+                let sent = wire_row_of(&device, "A");
+                assert!(wire::parse_row(Table::Accounts, &sent).is_ok(), "{candidate:?} is kept by the screens and refused by the wire");
+                assert_eq!(sent["currency"], if made.foreign { serde_json::json!(made.currency) } else { serde_json::json!(null) }, "{candidate:?}");
+                assert_eq!(sent["rate"], if made.foreign { serde_json::json!("5.00") } else { serde_json::json!(null) }, "{candidate:?}");
+                // what the wire accepts as it is, the screens keep as it is (the app's own code is the one they turn into none)
+                if wire_accepts && candidate != "EUR" {
+                    assert_eq!(made.currency, candidate, "{candidate:?}");
+                }
+                kept_currencies += 1;
+            }
+            (device, Err(e)) => {
+                assert_eq!(e, crate::vault::AppError::InvalidInput, "{candidate:?}");
+                assert!(!wire_accepts, "{candidate:?} is accepted by the wire and refused by the screens");
+                assert_eq!(count(&device, "SELECT count(*) FROM accounts"), 1, "a refused account is not made");
+            }
+        }
+    }
+    for candidate in rates {
+        let mut row = base.clone();
+        row["rate"] = serde_json::json!(candidate);
+        let wire_accepts = wire::parse_row(Table::Accounts, &row).is_ok();
+        match make("RON", Some(candidate)) {
+            (device, Ok(made)) => {
+                let sent = wire_row_of(&device, "A");
+                assert!(wire::parse_row(Table::Accounts, &sent).is_ok(), "{candidate:?} is kept by the screens and refused by the wire");
+                assert_eq!(sent["rate"], serde_json::json!(candidate.trim()), "{candidate:?}: kept as typed, outer spaces apart");
+                if wire_accepts {
+                    assert_eq!(made.rate.as_deref(), Some(candidate), "{candidate:?}");
+                }
+                kept_rates += 1;
+            }
+            (device, Err(e)) => {
+                assert_eq!(e, crate::vault::AppError::InvalidInput, "{candidate:?}");
+                assert!(!wire_accepts, "{candidate:?} is accepted by the wire and refused by the screens");
+                assert_eq!(count(&device, "SELECT count(*) FROM accounts"), 1, "a refused account is not made");
+            }
+        }
+    }
+    assert!(kept_currencies >= 6 && kept_rates >= 6, "the lists are not all refusals: {kept_currencies} and {kept_rates}");
+}
+
+/// A desktop that made a foreign account, a payment and a transfer in it after the two met, and a phone that has not heard of them.
+fn foreign_made_on_the_desktop() -> (Connection, Connection) {
+    let (desktop, phone) = met_with_accounts();
+    let lei = open_foreign(&desktop, "Lei account", "RON", "5.00", "100.00");
+    spend_native(&desktop, "Lei lunch", lei, Some("20.00"));
+    move_between_currencies(&desktop, account_id(&desktop, "Cash"), lei, "10.00", Some("50.50"), "T cash to lei");
+    (desktop, phone)
+}
+
+#[test]
+fn a_sync_cut_after_any_message_leaves_a_foreign_account_with_its_rows_as_they_were_and_the_next_one_finishes_it() {
+    let total = {
+        let (mut desktop, mut phone) = foreign_made_on_the_desktop();
+        sync(&mut desktop, &mut phone, TODAY, now(), None).unwrap().messages
+    };
+    assert!(total > 6, "{total} messages");
+    for cut in 0..total {
+        let (mut desktop, mut phone) = foreign_made_on_the_desktop();
+        let before = (snapshot(&desktop).unwrap(), snapshot(&phone).unwrap());
+        assert!(sync_cut_after(&mut desktop, &mut phone, TODAY, now(), cut).is_err(), "cut after {cut} of {total} messages");
+        // never half of it: the phone has nothing of the account, or all of it (the account, the payment and the transfer are applied together)
+        if cut < total - 2 {
+            assert_eq!((snapshot(&desktop).unwrap(), snapshot(&phone).unwrap()), before, "cut after {cut} of {total} messages: nothing was applied");
+            assert_eq!(count(&phone, "SELECT count(*) FROM accounts WHERE currency IS NOT NULL"), 0);
+        } else {
+            assert_same(&desktop, &phone, &format!("cut after {cut} of {total}: both had applied it"));
+        }
+        settle(&mut desktop, &mut phone);
+        assert_eq!(in_currencies(&phone, "Lei account"), ("Lei account".into(), "130.50".into(), "26.10".into(), "RON".into(), Some("5.00".into())), "cut after {cut}");
+        assert_eq!((native_of(&phone, "Lei lunch"), arrives_of(&phone, "T cash to lei")), (Some(2000), Some(5050)), "cut after {cut}");
+    }
+}
+
+#[test]
+fn a_device_that_speaks_protocol_10_is_told_to_update_whichever_of_the_two_it_is_and_nothing_is_exchanged() {
+    let (a, b) = (device("EUR"), device("EUR"));
+    let new = engine::hello(&a, "desktop", "0.1.0", now()).unwrap();
+    let mut old = engine::hello(&b, "phone", "0.1.0", now()).unwrap();
+    assert_eq!(new.protocol, 11);
+    old.protocol = 10;
+    assert!(matches!(engine::check_hello(&new, &old, now()), Err(SyncError::ProtocolMismatch)));
+    assert!(matches!(engine::check_hello(&old, &new, now()), Err(SyncError::ProtocolMismatch)));
+    // a row in the shape of protocol 10 is a good row of protocol 11 (the new fields are optional), so the hello is what stops the old device
+    let (_desktop, phone) = paired();
+    let mut old_row = wire_row_of(&phone, "Main account");
+    for key in ["currency", "rate"] {
+        old_row.as_object_mut().unwrap().remove(key);
+    }
+    assert!(wire::parse_row(Table::Accounts, &old_row).is_ok());
 }

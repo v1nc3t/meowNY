@@ -90,8 +90,8 @@ mod tests {
             assert_eq!(count(&conn, "people"), 4, "{today}");
             assert!(count(&conn, "ledger_entries") >= 9 && count(&conn, "transaction_split_lines") >= 16, "{today}: debts");
             assert!(count(&conn, "transactions") > 250, "{today}: {} transactions", count(&conn, "transactions"));
-            assert_eq!(count(&conn, "accounts"), 5, "{today}");
-            assert!(count(&conn, "transfers") >= 16, "{today}: {} transfers", count(&conn, "transfers"));
+            assert_eq!(count(&conn, "accounts"), 6, "{today}");
+            assert!(count(&conn, "transfers") >= 18, "{today}: {} transfers", count(&conn, "transfers"));
             assert!(crate::accounts::check(&conn).unwrap(), "{today}: the main account is as it must be");
             assert_eq!(count(&conn, "audit_log"), 0, "{today}: demo rows are not user history");
         }
@@ -132,10 +132,10 @@ mod tests {
             let conn = seeded(today);
             let list = accounts::list(&conn, today).unwrap();
             let names: Vec<&str> = list.iter().map(|a| a.name.as_str()).collect();
-            assert_eq!(names, ["Current account", "Savings", "Cash", "Credit card", "Old savings"], "{today}: the person's order, the archived one last");
+            assert_eq!(names, ["Current account", "Savings", "Cash", "Credit card", "Lei account", "Old savings"], "{today}: the person's order, the archived one last");
             let kinds: Vec<Kind> = list.iter().map(|a| a.kind).collect();
-            assert_eq!(kinds, [Kind::Checking, Kind::Savings, Kind::Cash, Kind::CreditCard, Kind::Savings], "{today}");
-            let (current, savings, cash, card, old) = (&list[0], &list[1], &list[2], &list[3], &list[4]);
+            assert_eq!(kinds, [Kind::Checking, Kind::Savings, Kind::Cash, Kind::CreditCard, Kind::Checking, Kind::Savings], "{today}");
+            let (current, savings, cash, card, lei, old) = (&list[0], &list[1], &list[2], &list[3], &list[4], &list[5]);
             // the main account is the current account: an IBAN and an opening balance sixteen months back
             assert!(current.is_main && !current.archived && current.number.as_deref().is_some_and(|n| n.starts_with("IE")), "{today}");
             assert!(money(&current.opening_balance) > 0, "{today}");
@@ -145,7 +145,7 @@ mod tests {
             assert_eq!(list.iter().filter(|a| a.archived).count(), 1, "{today}");
             // the card is in the red, and the others are not
             assert!(money(&card.balance) < 0 && money(&card.opening_balance) < 0, "{today}: {card:?}");
-            for held in [current, savings, cash] {
+            for held in [current, savings, cash, lei] {
                 assert!(money(&held.balance) > 0, "{today}: {} holds {}", held.name, held.balance);
             }
             // and none of them was below zero at the end of a month since they opened (the card never above)
@@ -173,7 +173,7 @@ mod tests {
         for today in DAYS {
             let conn = seeded(today);
             let list = accounts::list(&conn, today).unwrap();
-            let [current, savings, cash, card, old] = &list[..] else { panic!("{today}: {} accounts", list.len()) };
+            let [current, savings, cash, card, lei, old] = &list[..] else { panic!("{today}: {} accounts", list.len()) };
             let details = |a: &Account| (a.bic.clone(), a.notes.clone(), a.group.clone(), a.include_in_net_worth, a.virtual_balance.clone());
             // the credit card has a limit of 1000.00 as its virtual balance, and a BIC: what it can still pay is its balance and the limit
             assert_eq!(details(card), (Some("COBADEFFXXX".into()), None, None, true, "1000.00".into()), "{today}");
@@ -186,15 +186,16 @@ mod tests {
             // cash has none, and the archived account is left out of net worth
             assert_eq!(details(cash), (None, None, None, true, "0.00".into()), "{today}");
             assert_eq!(details(old), (None, None, None, false, "0.00".into()), "{today}");
+            assert_eq!(details(lei), (None, None, Some("Everyday".into()), true, "0.00".into()), "{today}");
             assert!(old.archived && list.iter().filter(|a| !a.include_in_net_worth).count() == 1, "{today}: only the archived one");
-            for a in [current, savings, cash, old] {
+            for a in [current, savings, cash, lei, old] {
                 assert_eq!(a.available, a.balance, "{today}: {} has no virtual balance, so what is available is what it holds", a.name);
             }
             assert!(accounts::check(&conn).unwrap(), "{today}");
             // net worth counts the others and not it, and `accounts` still counts all five
             let summary = accounts::summary(&conn, today).unwrap();
-            let counted: i64 = list.iter().filter(|a| a.include_in_net_worth).map(|a| money(&a.balance)).sum();
-            assert_eq!((money(&summary.in_accounts), summary.accounts, summary.in_use), (counted, 5, true), "{today}");
+            let counted: i64 = list.iter().filter(|a| a.include_in_net_worth).map(|a| money(&a.balance_in_main)).sum();
+            assert_eq!((money(&summary.in_accounts), summary.accounts, summary.in_use), (counted, 6, true), "{today}");
             // it holds nothing, so prove it by putting something in it: net worth does not move, until the account is counted
             conn.execute("INSERT INTO transactions (category_id, name, amount_minor, payment_date, account_id) VALUES (1, 'Found money', 10000, ?1, 5)", [today]).unwrap();
             assert_eq!(accounts::get(&conn, 5, today).unwrap().balance, "100.00", "{today}");
@@ -229,9 +230,10 @@ mod tests {
             assert_eq!(future, 0, "{today}: none is in the future");
             // the balances add up. What every account holds together is what the person had, what came in, less what they paid, and the ledger:
             // the transfers move money and add nothing
+            // (the account in lei is in lei: its opening balance is turned into euro at its rate of 5.00; its payments have their amount in euro)
             let by_hand: i64 = conn
                 .query_row(
-                    "SELECT (SELECT COALESCE(SUM(opening_balance_minor), 0) FROM accounts)
+                    "SELECT (SELECT COALESCE(SUM(CASE WHEN currency IS NULL THEN opening_balance_minor ELSE opening_balance_minor / 5 END), 0) FROM accounts)
                           + (SELECT COALESCE(SUM(CASE c.type WHEN 'INCOME' THEN t.amount_minor ELSE -t.amount_minor END), 0)
                                FROM transactions t JOIN categories c ON c.id = t.category_id WHERE t.paid_by IS NULL AND t.payment_date <= ?1)
                           + (SELECT COALESCE(SUM(CASE WHEN kind IN ('BORROWED', 'REPAID_TO_ME') THEN amount_minor ELSE -amount_minor END), 0)
@@ -243,9 +245,28 @@ mod tests {
             let summary = accounts::summary(&conn, today).unwrap();
             assert_eq!(money(&summary.in_accounts), by_hand, "{today}");
             let list = accounts::list(&conn, today).unwrap();
-            assert_eq!(list.iter().map(|a| money(&a.balance)).sum::<i64>(), by_hand, "{today}: the accounts add up to what is in them");
-            let moved: i64 = conn.query_row("SELECT COALESCE(SUM(delta_minor), 0) FROM account_movements WHERE source IN ('TRANSFER_IN', 'TRANSFER_OUT')", [], |r| r.get(0)).unwrap();
-            assert_eq!(moved, 0, "{today}: what left one account reached another");
+            assert_eq!(list.iter().map(|a| money(&a.balance_in_main)).sum::<i64>(), by_hand, "{today}: the accounts add up to what is in them, the lei at their rate");
+            // what left one account reached another: in one currency to the cent, and between the euro and the lei at 5.00 lei to the euro
+            let moved: i64 = conn
+                .query_row(
+                    "SELECT COALESCE(SUM(m.delta_minor), 0) FROM account_movements m JOIN transfers x ON x.id = m.source_id JOIN accounts a ON a.id = m.account_id
+                      WHERE m.source IN ('TRANSFER_IN', 'TRANSFER_OUT') AND a.currency IS NULL
+                        AND (SELECT currency FROM accounts WHERE id = x.from_account_id) IS NULL AND (SELECT currency FROM accounts WHERE id = x.to_account_id) IS NULL",
+                    [],
+                    |r| r.get(0),
+                )
+                .unwrap();
+            assert_eq!(moved, 0, "{today}: what left one account in euro reached another");
+            let across: i64 = conn
+                .query_row(
+                    "SELECT COALESCE(SUM(CASE WHEN f.currency IS NULL THEN -x.amount_minor ELSE -x.amount_minor / 5 END
+                                       + CASE WHEN t.currency IS NULL THEN COALESCE(x.to_amount_minor, x.amount_minor) ELSE COALESCE(x.to_amount_minor, x.amount_minor) / 5 END), 0)
+                       FROM transfers x JOIN accounts f ON f.id = x.from_account_id JOIN accounts t ON t.id = x.to_account_id",
+                    [],
+                    |r| r.get(0),
+                )
+                .unwrap();
+            assert_eq!(across, 0, "{today}: nor does a transfer between the euro and the lei make or lose any value at the rate");
             // each account's statement over the whole history ends at its balance
             for account in &list {
                 let statement = accounts::statement(&conn, account.id, "2000-01-01", today, today).unwrap();
@@ -253,7 +274,75 @@ mod tests {
             }
             // and it is what the dashboard would say
             assert_eq!(money(&summary.net_worth), money(&summary.in_accounts) + money(&summary.friends), "{today}");
-            assert!(summary.in_use && summary.accounts == 5, "{today}");
+            assert!(summary.in_use && summary.accounts == 6, "{today}");
+        }
+    }
+
+    #[test]
+    fn the_lei_account_of_the_seed_is_a_foreign_account_that_follows_every_rule_and_holds_what_its_rows_say_on_any_day() {
+        use crate::accounts;
+        for today in DAYS {
+            let mut conn = seeded(today);
+            assert!(accounts::check(&conn).unwrap(), "{today}");
+            let lei = accounts::get(&conn, 6, today).unwrap();
+            assert_eq!((lei.name.as_str(), lei.currency.as_str(), lei.foreign, lei.rate.as_deref()), ("Lei account", "RON", true, Some("5.00")), "{today}");
+            assert!(!lei.archived && lei.include_in_net_worth && lei.group.as_deref() == Some("Everyday"), "{today}");
+            // opened months back, with ten expenses and two incomes that carry what the account really paid, and the amount in euro is a fifth of it
+            let (expenses, incomes): (i64, i64) = conn
+                .query_row(
+                    "SELECT SUM(c.type = 'EXPENSE'), SUM(c.type = 'INCOME') FROM transactions t JOIN categories c ON c.id = t.category_id WHERE t.account_id = 6",
+                    [],
+                    |r| Ok((r.get(0)?, r.get(1)?)),
+                )
+                .unwrap();
+            assert_eq!((expenses, incomes), (10, 2), "{today}");
+            let odd: i64 = conn.query_row("SELECT count(*) FROM transactions WHERE account_id = 6 AND (native_amount_minor IS NULL OR native_amount_minor <> amount_minor * 5)", [], |r| r.get(0)).unwrap();
+            assert_eq!(odd, 0, "{today}: every row in it has its native amount, five times its amount in euro");
+            let elsewhere: i64 = conn.query_row("SELECT count(*) FROM transactions WHERE account_id <> 6 AND native_amount_minor IS NOT NULL", [], |r| r.get(0)).unwrap();
+            assert_eq!(elsewhere, 0, "{today}: no other row has one");
+            // its balance is its opening balance and the sum of what its rows say in lei, which is what the statement ends with
+            let native: i64 = conn
+                .query_row(
+                    "SELECT COALESCE(SUM(CASE c.type WHEN 'INCOME' THEN t.native_amount_minor ELSE -t.native_amount_minor END), 0)
+                       FROM transactions t JOIN categories c ON c.id = t.category_id WHERE t.account_id = 6 AND t.payment_date <= ?1",
+                    [today],
+                    |r| r.get(0),
+                )
+                .unwrap();
+            // one transfer in lei (euro out of the current account) and one out (euro in): what arrives and what leaves, each in lei
+            let moved: i64 = conn
+                .query_row(
+                    "SELECT COALESCE(SUM(CASE WHEN to_account_id = 6 THEN to_amount_minor ELSE -amount_minor END), 0) FROM transfers WHERE (to_account_id = 6 OR from_account_id = 6) AND transfer_date <= ?1",
+                    [today],
+                    |r| r.get(0),
+                )
+                .unwrap();
+            assert_eq!(money(&lei.balance), 150_000 + native + moved, "{today}: {lei:?}");
+            assert_eq!(money(&lei.balance_in_main), money(&lei.balance) / 5, "{today}: at its rate, exactly");
+            let statement = accounts::statement(&conn, 6, "2000-01-01", today, today).unwrap();
+            assert_eq!((statement.currency.as_str(), statement.balance_after.as_str()), ("RON", lei.balance.as_str()), "{today}");
+            // the transfers between it and the current account, one each way, both amounts
+            let both: Vec<(i64, i64, i64, i64)> = conn
+                .prepare("SELECT from_account_id, to_account_id, amount_minor, to_amount_minor FROM transfers WHERE to_account_id = 6 OR from_account_id = 6 ORDER BY transfer_date")
+                .unwrap()
+                .query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)))
+                .unwrap()
+                .map(Result::unwrap)
+                .collect();
+            assert_eq!(both, [(1, 6, 20_000, 100_000), (6, 1, 50_000, 10_000)], "{today}");
+            // the dashboard counts it in euro: the sum of what each account that counts is worth in the app's currency
+            let list = accounts::list(&conn, today).unwrap();
+            let worth: i64 = list.iter().filter(|a| a.include_in_net_worth).map(|a| money(&a.balance_in_main)).sum();
+            assert_eq!(money(&accounts::summary(&conn, today).unwrap().in_accounts), worth, "{today}");
+            // no recurring item and no entry of the ledger is in it
+            for table in ["recurring_transactions", "ledger_entries"] {
+                assert_eq!(conn.query_row(&format!("SELECT count(*) FROM {table} WHERE account_id = 6"), [], |r| r.get::<_, i64>(0)).unwrap(), 0, "{today}: {table}");
+            }
+            // the app's currency cannot be changed while it is there, a relabel included, and nothing is written by trying
+            let before = crate::accounts::fixtures::snapshot(&conn);
+            assert_eq!(crate::currency::change(&mut conn, "USD", Some("1.10"), today), Err(crate::vault::AppError::InvalidInput), "{today}");
+            assert_eq!(crate::currency::change(&mut conn, "USD", None, today), Err(crate::vault::AppError::InvalidInput), "{today}");
+            assert_eq!(crate::accounts::fixtures::snapshot(&conn), before, "{today}");
         }
     }
 

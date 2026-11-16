@@ -82,7 +82,7 @@ There is no Diffie-Hellman step, so that last case is the honest limit. Secrets 
 
 JSON messages with a `t` field, one per frame, long lists split. Money in minor units.
 
-1. `hello`: id, name, versions (schema must match; protocol 10: account details), wall clock (a gap
+1. `hello`: id, name, versions (schema must match; protocol 11: a currency per account), wall clock (a gap
    above a minute is told to the person, never stops the sync; section 10), currency generation, `since`, and the direction the
    desktop chose (both ways, to the computer, to the phone). Right after it the phone takes the computer's clock as the reference
    (section 10).
@@ -98,7 +98,7 @@ States are compared, not change logs, so a broken or half sync is repaired by th
 
 ## 9. Database changes
 
-Migrations `0008`, `0009`, `0012`, `0013`, `0014`, `0015`, `0016`, `0017`, `0018`, `0019`: a random `sync_id` and a `stamp` on every shared row (`categories`,
+Migrations `0008`, `0009`, `0012`, `0013`, `0014`, `0015`, `0016`, `0017`, `0018`, `0019`, `0020`: a random `sync_id` and a `stamp` on every shared row (`categories`,
 `budgets`, `recurring_transactions`, `transactions`, `people`, `ledger_entries`, `accounts`, `transfers`, `documents`, `document_links`, the
 shared part of `settings`); `sync_deleted` markers made by delete triggers; `categories.merged_into`; `categories.position` (the order the person chose, per type; a move gives the row a new stamp,
 so it travels in the category row, and ties are settled by id); `recurring_transactions.skipped_dates` (a JSON array of the later
@@ -107,7 +107,7 @@ occurrences skipped one by one, sorted, at most 100; part of protocol 5, checked
 bill, sent as that person's `sync_id`; part of protocol 8); `accounts` (the main account has the same `sync_id` and the oldest stamp on every
 device, so it is one account without a merge; `accounts.position` travels in the row) and `transfers`; `account_id` of `transactions`,
 `recurring_transactions` and `ledger_entries`, sent as the account's `sync_id`; part of protocol 9; the five columns of `accounts` that `0019` adds, `bic`, `notes`,
-`group_name` (sent as `group`), `include_net_worth` and `virtual_balance_minor`, which travel in the account's row like the others; part of protocol 10. Stamps come from triggers, which stand aside while
+`group_name` (sent as `group`), `include_net_worth` and `virtual_balance_minor`, which travel in the account's row like the others; part of protocol 10; the four columns that `0020` adds, `accounts.currency` and `accounts.rate` (sent as `currency` and `rate`), `transactions.native_amount_minor` (`nativeAmountMinor`) and `transfers.to_amount_minor` (`toAmountMinor`), which travel in their rows, all optional on the wire; part of protocol 11. Stamps come from triggers, which stand aside while
 `sync_clock.applying` is on (`0016` adds `sync_clock.offset_ms` to the clock they read, section 10). A
 bill's parts and a recurring item's template travel inside their parent's row. Never synced: `audit_log`,
 `backup_schedule`, `api_tokens`, `sync_peers`, `sync_clock`, the language, lock settings.
@@ -148,7 +148,7 @@ item's next due date moves past a payment it already has, and on past the occurr
 occurrence leaves it where it is. A bill's parts are replaced with their bill. Stamps these rules
 make are derived from the stamps involved (`derive`, `moved`), never the clock, so both devices agree. Accounts are never merged by name.
 Rows of an account deleted on the other device move to the main account and take the later of their stamp and the deletion's; a transfer
-left with the main account on both sides becomes a marker. `accounts-design.md`, section 7. Only the desktop
+left with the main account on both sides becomes a marker. A transfer that is then between two accounts in the app's currency loses its second amount (`toAmountMinor`), on both devices, and a transaction keeps its native amount, which counts for nothing in an account in the app's currency: the amounts of such a transfer may still be in the foreign account's currency, and the person corrects them. `accounts-design.md`, sections 7 and 21.6. Only the desktop
 changes the currency; the lower generation converts all its rows first, and an out-of-range result stops the sync.
 Documents: `documents-design.md`, section 10.
 

@@ -106,7 +106,7 @@ fn the_json_has_every_account_with_what_it_holds_and_every_transfer_and_the_acco
     assert_eq!(transfers.len(), 3);
     assert_eq!(
         transfers[0],
-        json!({ "id": "1", "date": "2026-02-02", "fromAccountId": "1", "from": "Main account", "toAccountId": c.savings.to_string(), "to": "Savings", "amount": "300.00", "note": "monthly saving" })
+        json!({ "id": "1", "date": "2026-02-02", "fromAccountId": "1", "from": "Main account", "toAccountId": c.savings.to_string(), "to": "Savings", "amount": "300.00", "toAmount": null, "note": "monthly saving" })
     );
     assert_eq!((transfers[1]["from"].as_str(), transfers[1]["to"].as_str(), transfers[1]["note"].is_null()), (Some("Savings"), Some("Old savings"), true), "an archived account is named too");
     assert_eq!(transfers[2]["amount"], "200.00");
@@ -129,12 +129,12 @@ fn the_json_has_every_account_with_what_it_holds_and_every_transfer_and_the_acco
 }
 
 #[test]
-fn the_csv_has_the_account_as_its_last_column_and_the_others_keep_their_place() {
+fn the_csv_has_the_account_what_it_really_paid_and_its_currency_after_the_columns_of_before() {
     let c = case();
     let text = csv(&c.conn, &Selection::default()).unwrap();
-    assert!(text.starts_with("\u{feff}date,type,category,name,amount,currency,description,documents,my_share,account\r\n"), "{}", &text[..90]);
+    assert!(text.starts_with("\u{feff}date,type,category,name,amount,currency,description,documents,my_share,account,native_amount,account_currency\r\n"), "{}", &text[..120]);
     let rows = read_csv(&text);
-    assert!(rows.iter().all(|r| r.len() == 10));
+    assert!(rows.iter().all(|r| r.len() == 12));
     let account_of = |name: &str, date: &str| rows[1..].iter().find(|r| r[3] == name && r[0] == date).unwrap()[9].clone();
     assert_eq!(account_of("Pay", "2026-01-25"), "Main account");
     assert_eq!(account_of("Session", "2026-02-10"), "Cash");
@@ -146,6 +146,8 @@ fn the_csv_has_the_account_as_its_last_column_and_the_others_keep_their_place() 
     // a limit changes which rows there are and nothing else
     let limited = csv(&c.conn, &Selection { category_ids: Some(vec![c.secret.to_string()]), ..Default::default() }).unwrap();
     assert_eq!(read_csv(&limited).iter().map(|r| r[9].as_str()).collect::<Vec<_>>(), ["account", "Cash"]);
+    // an account in the app's currency has no native amount, and says the code of its currency, which is the app's
+    assert!(rows[1..].iter().all(|r| r[10].is_empty() && r[11] == "EUR"), "{rows:?}");
 }
 
 #[test]
@@ -178,7 +180,7 @@ fn with_only_the_main_account_every_file_holds_it_and_nothing_else() {
         assert!(file[part].as_array().unwrap().iter().all(|r| r["accountId"] == "1" && r["account"] == "Main account"), "{part}");
     }
     let rows = read_csv(&csv(&conn, &Selection::default()).unwrap());
-    assert!(rows[1..].iter().all(|r| r[9] == "Main account"));
+    assert!(rows[1..].iter().all(|r| r[9] == "Main account" && r[10].is_empty() && r[11] == "EUR"));
     let p = preview(&conn, &Selection::default()).unwrap();
     assert_eq!((p.accounts, p.transfers), (1, 0));
     // renamed, it is as typed, and its opening balance and number are in
@@ -205,8 +207,8 @@ fn a_limited_export_names_the_accounts_of_its_rows_and_nothing_more_about_them()
     let selection = Selection { category_ids: Some(vec![c.secret.to_string()]), ..Default::default() };
     let limited = file(&c.conn, &selection);
     assert_eq!(limited["accounts"], json!([
-        { "id": c.cash.to_string(), "name": "Cash", "kind": "CASH" },
-        { "id": c.card.to_string(), "name": "Credit card", "kind": "CREDIT_CARD" },
+        { "id": c.cash.to_string(), "name": "Cash", "kind": "CASH", "currency": "EUR" },
+        { "id": c.card.to_string(), "name": "Credit card", "kind": "CREDIT_CARD", "currency": "EUR" },
     ]));
     assert!(limited.get("transfers").is_none(), "a transfer is between two accounts, and the file does not speak of the rest");
     let text = serde_json::to_string(&limited).unwrap();
@@ -244,7 +246,7 @@ fn an_archived_account_is_listed_whole_with_no_limit_and_named_only_by_its_rows_
     assert_eq!(whole["accounts"][4]["archived"], true);
     assert_eq!(whole["accounts"][4]["balance"], "3400.00", "200.00 and the pay");
     let limited = file(&c.conn, &Selection { category_ids: Some(vec![c.salary.to_string()]), ..Default::default() });
-    assert_eq!(limited["accounts"], json!([{ "id": c.old.to_string(), "name": "Old savings", "kind": "SAVINGS" }]));
+    assert_eq!(limited["accounts"], json!([{ "id": c.old.to_string(), "name": "Old savings", "kind": "SAVINGS", "currency": "EUR" }]));
 }
 
 #[test]
@@ -310,7 +312,7 @@ fn a_name_with_commas_quotes_or_a_formula_is_text_in_the_csv_and_exact_in_the_js
         let r = rows[1..].iter().find(|r| r[3] == format!("in {i}")).unwrap();
         assert_eq!(r[9], neutralise(name), "{name:?}");
     }
-    assert!(rows.iter().all(|r| r.len() == 10), "the line break did not split a row");
+    assert!(rows.iter().all(|r| r.len() == 12), "the line break did not split a row");
     assert_eq!(rows[1..].iter().find(|r| r[3] == "in 6").unwrap()[9], "x, y\r\nz");
     assert_eq!(rows[1..].iter().find(|r| r[3] == "in 0").unwrap()[9], "Rent, \"joint\"", "quoted, and no apostrophe: it does not start like a formula");
     assert_eq!(rows[1..].iter().find(|r| r[3] == "in 5").unwrap()[9], "'\t=tab");
@@ -412,8 +414,8 @@ fn a_limited_export_gives_an_account_no_detail_in_the_json_and_the_csv_has_none_
         assert!(!listed.is_empty(), "{selection:?}: some account is named");
         for a in listed {
             let keys: Vec<&str> = a.as_object().unwrap().keys().map(String::as_str).collect();
-            assert_eq!(keys.len(), 3, "{selection:?}: only the id, the name and the kind: {keys:?}");
-            for key in ["id", "name", "kind"] {
+            assert_eq!(keys.len(), 4, "{selection:?}: only the id, the name, the kind and the currency: {keys:?}");
+            for key in ["id", "name", "kind", "currency"] {
                 assert!(keys.contains(&key), "{selection:?}: {key}");
             }
         }
@@ -424,7 +426,10 @@ fn a_limited_export_gives_an_account_no_detail_in_the_json_and_the_csv_has_none_
     }
     // Cash and the card are named by the session and the plan, and have details, and the file has none of them
     let therapy = file(&c.conn, &selections[0]);
-    assert_eq!(therapy["accounts"], json!([{ "id": c.cash.to_string(), "name": "Cash", "kind": "CASH" }, { "id": c.card.to_string(), "name": "Credit card", "kind": "CREDIT_CARD" }]));
+    assert_eq!(
+        therapy["accounts"],
+        json!([{ "id": c.cash.to_string(), "name": "Cash", "kind": "CASH", "currency": "EUR" }, { "id": c.card.to_string(), "name": "Credit card", "kind": "CREDIT_CARD", "currency": "EUR" }])
+    );
     // the CSV is the transactions, and an account is a name in its last column: nothing of the details, with a limit or without
     let before = csv(&case().conn, &Selection::default()).unwrap();
     let all = csv(&c.conn, &Selection::default()).unwrap();
@@ -432,7 +437,7 @@ fn a_limited_export_gives_an_account_no_detail_in_the_json_and_the_csv_has_none_
     for selection in std::iter::once(&Selection::default()).chain(&selections) {
         let text = csv(&c.conn, selection).unwrap();
         assert!(!secrets.iter().any(|secret| text.contains(secret)), "{selection:?}");
-        assert!(text.lines().next().unwrap().ends_with("my_share,account"), "the columns are what they were");
+        assert!(text.lines().next().unwrap().ends_with("my_share,account,native_amount,account_currency"), "the columns are what they were");
     }
 }
 
@@ -444,7 +449,7 @@ fn a_file_of_the_accounts_alone_has_the_details_and_a_limited_one_of_them_has_no
     assert_eq!(only.as_object().unwrap().len(), 6, "the accounts and the ordinary head of the file: {:?}", only.as_object().unwrap().keys().collect::<Vec<_>>());
     // with a limit that names every account, they are still only named
     let dated = file(&c.conn, &Selection { from: Some("2026-01-01".into()), sections: Some(vec![Section::Accounts, Section::Transactions, Section::Recurring, Section::Ledger]), ..Default::default() });
-    assert!(dated["accounts"].as_array().unwrap().iter().all(|a| a.as_object().unwrap().len() == 3));
+    assert!(dated["accounts"].as_array().unwrap().iter().all(|a| a.as_object().unwrap().len() == 4));
 }
 
 #[test]
@@ -561,7 +566,7 @@ fn every_choice_names_the_accounts_of_the_rows_it_holds_and_gives_each_row_its_a
             let want_names: Vec<&str> = want.iter().map(|at| spread.names[*at]).collect();
             assert_eq!(named(&file["accounts"]), want_names, "accounts, {label}");
             if limited(&selection) {
-                assert!(file["accounts"].as_array().unwrap().iter().all(|a| a.as_object().unwrap().len() == 3), "only the id, the name and the kind: {label}");
+                assert!(file["accounts"].as_array().unwrap().iter().all(|a| a.as_object().unwrap().len() == 4), "only the id, the name, the kind and the currency: {label}");
             }
             with_accounts += 1;
         } else {
@@ -582,4 +587,166 @@ fn every_choice_names_the_accounts_of_the_rows_it_holds_and_gives_each_row_its_a
         }
     }
     assert!(with_accounts > 40, "enough of the choices asked for the accounts: {with_accounts}");
+}
+
+// ---- a currency per account (docs/accounts-design.md, section 21.6) --------------------------------------------------------
+
+/// `case()` and a Romanian-lei account at 5.00 lei to the euro with 100.00 lei on it (since 2025-12-01), which has a payment of 4.00 in the
+/// Rent category that really paid 20.00 lei (2026-03-02) and two transfers between currencies: 10.00 euro from Cash that became 50.50 lei
+/// (2026-03-03), and 100.00 lei to Savings that became 19.00 euro (2026-03-04). So it holds 30.50 lei, which is 6.10 euro, Cash 140.00 and Savings
+/// 1719.00. Returns the case and the id of the lei account.
+pub(super) fn foreign_case() -> (Case, i64) {
+    let c = case();
+    let lei = accounts::create(&c.conn, &NewAccount { currency: Some("RON".into()), rate: Some("5.00".into()), ..opened("Lei account", Kind::Checking, None, "100.00") }, TODAY).unwrap().id;
+    crate::transactions::create(
+        &c.conn,
+        &crate::transactions::NewTransaction {
+            name: "Lei lunch".into(),
+            amount: "4.00".into(),
+            payment_date: "2026-03-02".into(),
+            category_id: c.rent.to_string(),
+            description: None,
+            client_uuid: None,
+            account_id: Some(lei.to_string()),
+            native_amount: Some("20.00".into()),
+        },
+    )
+    .unwrap();
+    for (from, to, amount, arrives, date, note) in [(c.cash, lei, "10.00", "50.50", "2026-03-03", "cash to lei"), (lei, c.savings, "100.00", "19.00", "2026-03-04", "lei to savings")] {
+        accounts::transfers::create(&c.conn, &NewTransfer { note: Some(note.into()), to_amount: Some(arrives.into()), ..new_transfer(from, to, amount, date) }).unwrap();
+    }
+    (c, lei)
+}
+
+#[test]
+fn the_json_says_the_currency_rate_and_worth_of_each_account_and_what_each_row_really_moved() {
+    let (c, lei) = foreign_case();
+    let file = file(&c.conn, &Selection::default());
+    assert_eq!(named(&file["accounts"]), ["Main account", "Savings", "Cash", "Credit card", "Lei account", "Old savings"], "the archived one is last");
+    let lei_row = account_named(&file, "Lei account");
+    assert_eq!(
+        lei_row,
+        &json!({ "id": lei.to_string(), "name": "Lei account", "kind": "CHECKING", "number": null, "openingBalance": "100.00", "openingDate": "2025-12-01", "archived": false,
+                 "isMain": false, "balance": "30.50", "changeThisMonth": "0.00", "lastActivity": "2026-03-04",
+                 "bic": null, "notes": null, "group": null, "includeInNetWorth": true, "virtualBalance": "0.00",
+                 "currency": "RON", "foreign": true, "rate": "5.00", "balanceInMain": "6.10" }),
+        "every amount of it is in lei, and what it is worth in the app's currency is beside them"
+    );
+    // an account in the app's currency says so: its code, no rate, and its worth is its balance
+    let savings = account_named(&file, "Savings");
+    assert_eq!((&savings["currency"], &savings["foreign"], &savings["rate"], &savings["balance"], &savings["balanceInMain"]), (&json!("EUR"), &json!(false), &json!(null), &json!("1719.00"), &json!("1719.00")));
+    // the worth of the accounts that count is what the dashboard calls them
+    let worth: i64 = file["accounts"].as_array().unwrap().iter().filter(|a| a["includeInNetWorth"] == true).map(|a| crate::money::parse_signed_amount(a["balanceInMain"].as_str().unwrap()).unwrap()).sum();
+    assert_eq!(format_amount(worth), accounts::summary(&c.conn, TODAY).unwrap().in_accounts);
+    assert_eq!(format_amount(worth), "2919.60", "1800.00 + 1719.00 + 140.00 - 945.50 + 200.00 + 6.10");
+    // the lunch has its amount in the app's currency, which the budgets count, and the lei the account really paid; the others have no native amount
+    let lunch = row(&file, "transactions", "Lei lunch", "");
+    assert_eq!((&lunch["amount"], &lunch["nativeAmount"], &lunch["account"], &lunch["myShare"]), (&json!("4.00"), &json!("20.00"), &json!("Lei account"), &json!("4.00")));
+    for t in file["transactions"].as_array().unwrap().iter().filter(|t| t["name"] != "Lei lunch") {
+        assert_eq!(t["nativeAmount"], json!(null), "{}", t["name"]);
+    }
+    // the transfers between currencies say what arrived, the others do not
+    let arrives = |note: &str| file["transfers"].as_array().unwrap().iter().find(|x| x["note"] == note).unwrap()["toAmount"].clone();
+    assert_eq!((arrives("cash to lei"), arrives("lei to savings"), arrives("monthly saving")), (json!("50.50"), json!("19.00"), json!(null)));
+    let to_savings = file["transfers"].as_array().unwrap().iter().find(|x| x["note"] == "lei to savings").unwrap();
+    assert_eq!((&to_savings["from"], &to_savings["to"], &to_savings["amount"]), (&json!("Lei account"), &json!("Savings"), &json!("100.00")), "what left is in lei");
+    // the app's currency of the file is still the app's: the amounts of the budgets and the statistics are in it
+    assert_eq!(file["settings"]["currency"], "EUR");
+    assert_eq!(preview(&c.conn, &Selection::default()).unwrap().accounts, 6);
+}
+
+#[test]
+fn the_csv_has_what_each_payment_really_paid_and_the_currency_of_its_account_and_the_old_columns_are_as_before() {
+    let (c, _) = foreign_case();
+    let text = csv(&c.conn, &Selection::default()).unwrap();
+    let rows = read_csv(&text);
+    assert!(rows.iter().all(|r| r.len() == 12));
+    assert_eq!(rows[0][9..], ["account", "native_amount", "account_currency"]);
+    let lunch = rows[1..].iter().find(|r| r[3] == "Lei lunch").unwrap();
+    // the amount and the currency of the file are the app's, as for every row; the account's own currency and amount are the last two
+    assert_eq!(lunch[..], ["2026-03-02", "EXPENSE", "Rent", "Lei lunch", "4.00", "EUR", "", "", "4.00", "Lei account", "20.00", "RON"]);
+    for r in rows[1..].iter().filter(|r| r[3] != "Lei lunch") {
+        assert_eq!((r[10].as_str(), r[11].as_str()), ("", "EUR"), "{}: no native amount, and the account is in the app's currency", r[3]);
+    }
+    // the ten columns of before are what they were: the same file with the two columns taken off is the file of the world without the lei
+    let before = csv(&case().conn, &Selection::default()).unwrap();
+    let cut = |text: &str| -> Vec<Vec<String>> { read_csv(text).into_iter().map(|r| r[..10].to_vec()).filter(|r| r[3] != "Lei lunch").collect() };
+    assert_eq!(cut(&text), cut(&before));
+    // a payment of a main-currency account: the cells are empty, not zero
+    assert!(before.lines().skip(1).all(|l| l.ends_with(",,EUR")), "{before}");
+    // a limit keeps the two columns, and a row in the lei account still says what it paid
+    let limited = read_csv(&csv(&c.conn, &Selection { category_ids: Some(vec![c.rent.to_string()]), ..Default::default() }).unwrap());
+    assert!(limited.iter().all(|r| r.len() == 12));
+    assert_eq!(limited.iter().find(|r| r[3] == "Lei lunch").map(|r| (r[10].as_str(), r[11].as_str())), Some(("20.00", "RON")));
+}
+
+#[test]
+fn a_limited_json_names_the_currency_of_the_accounts_of_its_rows_and_nothing_about_their_rate_or_worth() {
+    let (c, lei) = foreign_case();
+    let rent = file(&c.conn, &Selection { category_ids: Some(vec![c.rent.to_string()]), ..Default::default() });
+    assert_eq!(
+        rent["accounts"],
+        json!([
+            { "id": "1", "name": "Main account", "kind": "CHECKING", "currency": "EUR" },
+            { "id": c.card.to_string(), "name": "Credit card", "kind": "CREDIT_CARD", "currency": "EUR" },
+            { "id": lei.to_string(), "name": "Lei account", "kind": "CHECKING", "currency": "RON" },
+        ])
+    );
+    assert!(rent.get("transfers").is_none());
+    assert_eq!(row(&rent, "transactions", "Lei lunch", "")["nativeAmount"], "20.00", "a row still says what it really paid");
+    let text = serde_json::to_string(&rent).unwrap();
+    for hidden in ["\"rate\"", "\"balanceInMain\"", "\"foreign\"", "5.00", "30.50", "6.10", "openingBalance", "toAmount", "50.50", "19.00", "cash to lei"] {
+        assert!(!text.contains(hidden), "{hidden:?} leaked into a limited export");
+    }
+    // an export of the accounts alone under a limit has them named by their rows, with their currency
+    let alone = file(&c.conn, &Selection { from: Some("2026-03-02".into()), to: Some("2026-03-02".into()), sections: Some(vec![Section::Accounts, Section::Transactions]), ..Default::default() });
+    assert_eq!(alone["accounts"], json!([{ "id": lei.to_string(), "name": "Lei account", "kind": "CHECKING", "currency": "RON" }]), "the lunch is the one row of that day");
+}
+
+#[test]
+fn a_foreign_account_with_a_name_that_looks_like_a_formula_is_text_in_the_csv_and_its_amounts_are_numbers() {
+    let (c, lei) = foreign_case();
+    c.conn.execute("UPDATE accounts SET name = '=SUM(1+1)' WHERE id = ?1", [lei]).unwrap();
+    let rows = read_csv(&csv(&c.conn, &Selection::default()).unwrap());
+    let lunch = rows[1..].iter().find(|r| r[3] == "Lei lunch").unwrap();
+    assert_eq!((lunch[9].as_str(), lunch[10].as_str(), lunch[11].as_str()), ("'=SUM(1+1)", "20.00", "RON"), "the name is text, the amount is a number that is not prefixed");
+    for row in &rows[1..] {
+        for cell in row {
+            assert!(!cell.starts_with(['=', '+', '-', '@', '\t', '\r']), "{cell:?} would run as a formula");
+        }
+    }
+    let json_file = file(&c.conn, &Selection::default());
+    assert_eq!(row(&json_file, "transactions", "Lei lunch", "")["account"], "=SUM(1+1)", "the JSON holds the name as it is");
+}
+
+#[test]
+fn exporting_accounts_in_other_currencies_changes_nothing() {
+    let (c, _) = foreign_case();
+    let before = snapshot(&c.conn);
+    let history: i64 = c.conn.query_row("SELECT count(*) FROM audit_log", [], |r| r.get(0)).unwrap();
+    for selection in [Selection::default(), Selection { category_ids: Some(vec![c.rent.to_string()]), include_debts: true, ..Default::default() }, Selection { sections: Some(vec![Section::Accounts, Section::Transfers]), ..Default::default() }] {
+        csv(&c.conn, &selection).unwrap();
+        json(&c.conn, &selection, now()).unwrap();
+        preview(&c.conn, &selection).unwrap();
+        preview_text(&c.conn, &selection, TextFormat::Json, now()).unwrap();
+        workbook(&c.conn, &selection, &Default::default()).unwrap();
+    }
+    assert_eq!(snapshot(&c.conn), before, "no row, stamp, marker or history line: the new columns are in the snapshot");
+    assert_eq!(c.conn.query_row::<i64, _, _>("SELECT count(*) FROM audit_log", [], |r| r.get(0)).unwrap(), history);
+}
+
+#[test]
+fn a_main_currency_world_gives_null_and_empty_values_for_the_new_fields_in_every_format() {
+    let c = case();
+    let file = file(&c.conn, &Selection::default());
+    assert!(file["transactions"].as_array().unwrap().iter().all(|t| t.as_object().unwrap().contains_key("nativeAmount") && t["nativeAmount"].is_null()), "the key is there, and null");
+    assert!(file["transfers"].as_array().unwrap().iter().all(|x| x.as_object().unwrap().contains_key("toAmount") && x["toAmount"].is_null()));
+    assert!(file["accounts"].as_array().unwrap().iter().all(|a| a["currency"] == "EUR" && a["rate"].is_null() && a["balanceInMain"] == a["balance"]));
+    // the currency changed to another one: the accounts' code follows it (they have none of their own)
+    let mut conn = c.conn;
+    crate::currency::change(&mut conn, "USD", Some("2"), TODAY).unwrap();
+    let usd = self::file(&conn, &Selection::default());
+    assert!(usd["accounts"].as_array().unwrap().iter().all(|a| a["currency"] == "USD" && a["foreign"] == false));
+    let rows = read_csv(&csv(&conn, &Selection::default()).unwrap());
+    assert!(rows[1..].iter().all(|r| r[10].is_empty() && r[11] == "USD"));
 }
