@@ -42,7 +42,9 @@ guest, at most 30 per bill, one per person. Triggers refuse lines on income and 
 while a sync, restore or conversion writes; `splits::check` checks the result). Changing a line gives its parent a new
 stamp. `document_links` gained a ledger entry target. `0017` adds `transactions.paid_by` and
 `recurring_transactions.split_paid_by` (a person, `NULL` for you), puts them in the triggers that stamp a row and set
-`updated_at`, extends the refusal of income to a bill with a payer, and makes `person_balances` again.
+`updated_at`, extends the refusal of income to a bill with a payer, and makes `person_balances` again. `0018` adds
+`ledger_entries.account_id`: every entry is in one of the person's accounts (the main account when none is named), and it
+moves that account's balance (`accounts-design.md`, sections 3 and 4.4).
 
 ## 5. Splitting a bill
 
@@ -61,7 +63,10 @@ part. A template has the same payer, and each payment copies it. Taking the spli
 Lend, borrow, paid back to me, paid back by me, each with friend, date, amount, note and optional documents. Mark as
 paid starts at the whole balance and says first when an amount turns the balance around. "This was my share of a
 bill" makes the expense and the `BORROWED` entry together; paying back later is an entry, never a second expense.
-Nothing that sums income or expense reads the ledger.
+Nothing that sums income or expense reads the ledger. An entry has an account, the one the money left or reached: lending
+and paying back take from its balance, borrowing and being paid back add to it. The expense and the entry of "my share of a
+bill" are in the same account and cancel there, because the friend paid. Mark as paid takes the account too. An account's
+balance is the only sum that reads the ledger (`accounts-design.md`, section 3).
 
 ## 7. Every sum uses the cost
 
@@ -78,7 +83,8 @@ Both devices get the same numbers.
 
 ## 9. Sync
 
-Protocol 8 (4 brought these tables, 8 the payer). `people` and `ledger_entries` are ordinary synced tables. A bill's lines
+Protocol 9 (4 brought these tables, 8 the payer, 9 the account of an entry, sent as the account's `sync_id`; an entry whose
+account was deleted on the other device moves to the main account: `accounts-design.md`, section 7). `people` and `ledger_entries` are ordinary synced tables. A bill's lines
 travel inside its transaction's row, and the winning row replaces all local lines; a template travels inside its item. The
 payer travels as the person's `sync_id` in the bill's row and in the template (`paidBy`), and a merged friend's bills and
 templates move to the one kept. Same-name active friends merge (lower `sync_id` kept, rows moved, two lines for one friend
@@ -116,7 +122,8 @@ A summary or one friend's statement is saved as TXT, CSV or PDF for the person t
 
 Read: people, a person's ledger, balances, split preview. Write: people, ledger entries, settle, set or clear a
 transaction's or recurring item's split (a split takes `paidBy`, a friend's id, and a transaction or template shows
-`paidBy` as `{personId, name}` or null). Exporting debts needs the person's yes. Bill codes and notifications need the
+`paidBy` as `{personId, name}` or null). An entry shows its `accountId`; adding or changing an entry and settle take an
+optional `accountId` (none: the main account for a new entry). Exporting debts needs the person's yes. Bill codes and notifications need the
 person at the app and are not in the API.
 
 ## 14. The screens

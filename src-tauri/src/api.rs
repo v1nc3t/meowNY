@@ -25,6 +25,7 @@
 //! Requests never count as user activity, so the idle lock still fires while a script is running.
 //! The server logs nothing and keeps nothing: tokens and bodies exist only for the length of a call.
 
+mod accounts;
 mod confirmed;
 mod debts;
 mod documents;
@@ -470,6 +471,8 @@ impl Host {
     }
 }
 
+#[cfg(test)]
+mod accounts_tests;
 #[cfg(test)]
 mod confirmed_tests;
 #[cfg(test)]

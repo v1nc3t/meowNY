@@ -22,6 +22,8 @@ export type Template = z.infer<typeof Template>
 export const Recurring = z.object({
   id,
   categoryId: id,
+  /** The account its payments are made in (the main account, when this one is archived by then). */
+  accountId: id,
   name: z.string(),
   description: z.string().nullable(),
   /** Decimal string such as "12.50", never converted to a number for storage or sums. Null for a bill with no fixed amount. */
@@ -50,6 +52,8 @@ export type NewRecurring = {
   intervalCount: number
   endDate?: string | null
   description?: string | null
+  /** Left out, a new item is in the main account. */
+  accountId?: string
 }
 
 /** Fields left out stay as they are; `endDate: null` and `description: null` clear them, and `amount: null` makes it a bill with no fixed amount. */

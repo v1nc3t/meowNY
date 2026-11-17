@@ -19,14 +19,14 @@ use crate::recurring::{self, NewRecurring, Unit};
 use crate::transactions::{self, NewTransaction};
 use crate::{currency, migrate};
 
-const TODAY: &str = "2026-03-15";
+pub(super) const TODAY: &str = "2026-03-15";
 
-fn now() -> u64 {
+pub(super) fn now() -> u64 {
     stamp::now_ms()
 }
 
 /// A device that has been through its first run: its settings exist, in `currency`.
-fn device(currency: &str) -> Connection {
+pub(super) fn device(currency: &str) -> Connection {
     let mut conn = Connection::open_in_memory().unwrap();
     conn.execute_batch("PRAGMA foreign_keys = ON;").unwrap();
     migrate::run(&mut conn).unwrap();
@@ -35,7 +35,7 @@ fn device(currency: &str) -> Connection {
 }
 
 /// Fails with only the lines that differ, so a failure can be read.
-fn assert_same(a: &Connection, b: &Connection, label: &str) {
+pub(super) fn assert_same(a: &Connection, b: &Connection, label: &str) {
     let (x, y) = (snapshot(a).unwrap(), snapshot(b).unwrap());
     if x != y {
         let short = |l: &String| l.chars().take(1000).collect::<String>();
@@ -46,7 +46,7 @@ fn assert_same(a: &Connection, b: &Connection, label: &str) {
 }
 
 /// A sync that must end with the two equal after this one round, and a second one that must find nothing to do.
-fn sync_ok(a: &mut Connection, b: &mut Connection) -> Outcome {
+pub(super) fn sync_ok(a: &mut Connection, b: &mut Connection) -> Outcome {
     let outcome = sync(a, b, TODAY, now(), None).unwrap();
     assert!(!outcome.differences, "the two still differ after one sync: {outcome:?}");
     assert_same(a, b, "after one sync");
@@ -55,18 +55,18 @@ fn sync_ok(a: &mut Connection, b: &mut Connection) -> Outcome {
     outcome
 }
 
-fn pause() {
+pub(super) fn pause() {
     std::thread::sleep(Duration::from_millis(3));
 }
 
-fn category(conn: &Connection, name: &str, kind: CategoryType) -> i64 {
+pub(super) fn category(conn: &Connection, name: &str, kind: CategoryType) -> i64 {
     categories::create(conn, name, kind).unwrap().id
 }
 
-fn spend(conn: &Connection, category_id: i64, name: &str, amount: &str) -> i64 {
+pub(super) fn spend(conn: &Connection, category_id: i64, name: &str, amount: &str) -> i64 {
     transactions::create(
         conn,
-        &NewTransaction { name: name.into(), amount: amount.into(), payment_date: "2026-03-02".into(), category_id: category_id.to_string(), description: None, client_uuid: None },
+        &NewTransaction { name: name.into(), amount: amount.into(), payment_date: "2026-03-02".into(), category_id: category_id.to_string(), description: None, client_uuid: None, account_id: None, native_amount: None },
     )
     .unwrap()
     .id
@@ -81,25 +81,25 @@ fn budget(conn: &Connection, category_id: Option<i64>, month: &str, limit: Optio
     .unwrap();
 }
 
-fn rent(conn: &Connection, category_id: i64) -> i64 {
+pub(super) fn rent(conn: &Connection, category_id: i64) -> i64 {
     recurring::create(
         conn,
-        &NewRecurring { name: "Rent".into(), amount: Some("900.00".into()), category_id: category_id.to_string(), start_date: "2026-03-01".into(), interval_unit: Unit::Month, interval_count: 1, end_date: None, description: None },
+        &NewRecurring { name: "Rent".into(), amount: Some("900.00".into()), category_id: category_id.to_string(), start_date: "2026-03-01".into(), interval_unit: Unit::Month, interval_count: 1, end_date: None, description: None, account_id: None },
     )
     .unwrap()
     .id
 }
 
-fn count(conn: &Connection, sql: &str) -> i64 {
+pub(super) fn count(conn: &Connection, sql: &str) -> i64 {
     conn.query_row(sql, [], |r| r.get(0)).unwrap()
 }
 
-fn text(conn: &Connection, sql: &str) -> String {
+pub(super) fn text(conn: &Connection, sql: &str) -> String {
     conn.query_row(sql, [], |r| r.get(0)).unwrap()
 }
 
 /// A phone as it is when it has just been paired: its first-run settings give way to the desktop's.
-fn new_phone(desktop: &Connection) -> Connection {
+pub(super) fn new_phone(desktop: &Connection) -> Connection {
     let mut phone = device("EUR");
     let changes = engine::changes_after(desktop, 0).unwrap();
     let (currency, generation): (String, i64) = desktop.query_row("SELECT currency, currency_generation FROM settings", [], |r| Ok((r.get(0)?, r.get(1)?))).unwrap();
@@ -108,7 +108,7 @@ fn new_phone(desktop: &Connection) -> Connection {
 }
 
 /// A desktop with a bit of everything, already synced to a new phone.
-fn paired() -> (Connection, Connection) {
+pub(super) fn paired() -> (Connection, Connection) {
     let mut desktop = device("EUR");
     let mut phone = new_phone(&desktop);
     let income = category(&desktop, "Salary", CategoryType::Income);
@@ -127,7 +127,7 @@ fn paired() -> (Connection, Connection) {
     (desktop, phone)
 }
 
-fn id_of(conn: &Connection, table: &str, name: &str) -> i64 {
+pub(super) fn id_of(conn: &Connection, table: &str, name: &str) -> i64 {
     conn.query_row(&format!("SELECT id FROM {table} WHERE name = ?1"), [name], |r| r.get(0)).unwrap()
 }
 
@@ -156,7 +156,7 @@ fn the_same_entry_sent_from_both_devices_becomes_one() {
         pause();
         transactions::create(
             conn,
-            &NewTransaction { name: name.into(), amount: "4.00".into(), payment_date: "2026-03-03".into(), category_id: food.to_string(), description: None, client_uuid: Some(uuid.into()) },
+            &NewTransaction { name: name.into(), amount: "4.00".into(), payment_date: "2026-03-03".into(), category_id: food.to_string(), description: None, client_uuid: Some(uuid.into()), account_id: None, native_amount: None },
         )
         .unwrap();
     }
@@ -303,7 +303,7 @@ fn a_category_with_the_same_name_on_both_devices_becomes_one_and_takes_everythin
     budget(&phone, Some(p_gym), "2026-06", Some("70.00"));
     let d_item = recurring::create(
         &desktop,
-        &NewRecurring { name: "Gym fee".into(), amount: Some("30.00".into()), category_id: d_gym.to_string(), start_date: "2026-03-05".into(), interval_unit: Unit::Month, interval_count: 1, end_date: None, description: None },
+        &NewRecurring { name: "Gym fee".into(), amount: Some("30.00".into()), category_id: d_gym.to_string(), start_date: "2026-03-05".into(), interval_unit: Unit::Month, interval_count: 1, end_date: None, description: None, account_id: None },
     )
     .unwrap()
     .id;
@@ -502,6 +502,15 @@ fn hellos_are_checked_for_version_clock_and_identity() {
     assert!(matches!(engine::check_hello(&mine, &changed(&|h| h.schema += 1), now()), Err(SyncError::SchemaMismatch { newer_here: false })));
     assert!(matches!(engine::check_hello(&mine, &changed(&|h| h.schema -= 1), now()), Err(SyncError::SchemaMismatch { newer_here: true })));
     assert!(matches!(engine::check_hello(&mine, &changed(&|h| h.protocol += 1), now()), Err(SyncError::ProtocolMismatch)));
+    // a device of the version before accounts and transfers (protocol 8), one before the details of an account (protocol 9) and one before a
+    // currency per account (protocol 10) are told to update, whichever of the two they are
+    assert_eq!(wire::PROTOCOL, 11);
+    for old_protocol in [8, 9, 10] {
+        assert!(matches!(engine::check_hello(&mine, &changed(&|h| h.protocol = old_protocol), now()), Err(SyncError::ProtocolMismatch)), "protocol {old_protocol}");
+        let mut old = mine.clone();
+        old.protocol = old_protocol;
+        assert!(matches!(engine::check_hello(&old, &theirs, now()), Err(SyncError::ProtocolMismatch)), "protocol {old_protocol}");
+    }
     assert!(matches!(engine::check_hello(&mine, &changed(&|h| h.device_id = mine.device_id.clone()), now()), Err(SyncError::Invalid(_))));
     assert!(matches!(engine::check_hello(&mine, &changed(&|h| h.currency = "USD".into()), now()), Err(SyncError::Currency)));
 
@@ -652,12 +661,20 @@ fn following_the_computer_pulls_back_every_stamp_that_is_ahead_and_nothing_else(
         phone.execute("UPDATE settings SET timezone = 'Europe/Paris'", []).unwrap();
         spend(&phone, food, "New, ahead", "1.00");
         transactions::delete(&phone, tea).unwrap();
+        // an account, a transfer, and the main account (which until now had the oldest stamp there is)
+        let cash = crate::accounts::create(&phone, &crate::accounts::NewAccount { name: "Cash, ahead".into(), kind: crate::accounts::Kind::Cash, number: None, opening_balance: None, opening_date: Some("2026-01-01".into()), bic: None, notes: None, group: None, include_in_net_worth: None, virtual_balance: None, currency: None, rate: None }, TODAY).unwrap().id;
+        crate::accounts::transfers::create(
+            &phone,
+            &crate::accounts::transfers::NewTransfer { from_account_id: crate::accounts::MAIN_ID.to_string(), to_account_id: cash.to_string(), amount: "1.00".into(), date: "2026-03-01".into(), note: None, to_amount: None },
+        )
+        .unwrap();
+        crate::accounts::update(&phone, crate::accounts::MAIN_ID, &crate::accounts::AccountPatch { name: Some("Main, ahead".into()), ..Default::default() }, TODAY).unwrap();
     });
     // the record of currency changes carries a stamp too
     phone.execute("UPDATE currency_changes SET stamp = ?1", [Stamp::new(now() + 3 * DAY, 9, "abcdef01").format()]).unwrap();
     let ahead = engine::digest(&phone).unwrap();
     let h = now();
-    assert!(ahead.0.values().flatten().filter(|(_, (s, _))| Stamp::parse(s).unwrap().ms > h).count() >= 5, "the edits above are ahead");
+    assert!(ahead.0.values().flatten().filter(|(_, (s, _))| Stamp::parse(s).unwrap().ms > h).count() >= 8, "the edits above are ahead");
 
     let hello = engine::hello(&desktop, "desktop", "0.1.0", h).unwrap();
     engine::follow_desktop_clock(&mut phone, &hello, h + 3 * DAY).unwrap();
@@ -700,7 +717,7 @@ fn a_peer_that_did_not_pull_its_stamps_back_is_still_refused() {
 
 // --- what arrives is not trusted --------------------------------------------------------------------------------
 
-fn rows_to(source: &Connection, target: &Connection) -> Incoming {
+pub(super) fn rows_to(source: &Connection, target: &Connection) -> Incoming {
     let (ds, dt) = (engine::digest(source).unwrap(), engine::digest(target).unwrap());
     let tables = Table::ALL.to_vec();
     let mut collector = RowsCollector::new(tables.clone());
@@ -828,11 +845,13 @@ fn a_marker_for_a_row_this_device_never_had_is_remembered_so_the_row_cannot_come
                 sync_id: id.into(),
                 stamp: Stamp::new(now() - 1000, 0, "abcdef01").format(),
                 category: p_food,
+                account: crate::accounts::MAIN_SYNC_ID.into(),
                 recurring: None,
                 recurring_due_date: None,
                 client_uuid: None,
                 name: "Ghost".into(),
                 amount_minor: 100,
+                native_amount_minor: None,
                 planned_amount_minor: None,
                 payment_date: "2026-03-01".into(),
                 description: None,
@@ -914,9 +933,13 @@ fn a_large_database_travels_in_frames_that_fit_and_converges() {
 
 // --- random edits ---------------------------------------------------------------------------------------------------
 
-struct Rng(u64);
+pub(super) struct Rng(u64);
 
 impl Rng {
+    pub(super) fn new(seed: u64) -> Rng {
+        Rng(seed.wrapping_mul(0x9E37_79B9_7F4A_7C15) | 1)
+    }
+
     fn next(&mut self) -> u64 {
         self.0 ^= self.0 << 13;
         self.0 ^= self.0 >> 7;
@@ -924,11 +947,11 @@ impl Rng {
         self.0
     }
 
-    fn below(&mut self, n: u64) -> u64 {
+    pub(super) fn below(&mut self, n: u64) -> u64 {
         self.next() % n
     }
 
-    fn pick<'a, T>(&mut self, items: &'a [T]) -> &'a T {
+    pub(super) fn pick<'a, T>(&mut self, items: &'a [T]) -> &'a T {
         &items[self.below(items.len() as u64) as usize]
     }
 }
@@ -946,12 +969,13 @@ fn edit(conn: &mut Connection, rng: &mut Rng) {
     let kind = if rng.below(4) == 0 { CategoryType::Income } else { CategoryType::Expense };
     let categories_now = ids(conn, "SELECT id FROM categories WHERE deleted_at IS NULL AND type = 'EXPENSE'");
     let any_category = ids(conn, "SELECT id FROM categories WHERE deleted_at IS NULL");
-    match rng.below(31) {
+    match rng.below(37) {
         0 => {
             let _ = categories::create(conn, rng.pick(NAMES), kind);
         }
         14..=20 => edit_documents(conn, rng),
         21..=30 => edit_debts(conn, rng),
+        31..=36 => edit_accounts(conn, rng),
         1 if !any_category.is_empty() => {
             if rng.below(4) == 0 {
                 let mut order = categories_now.clone();
@@ -975,6 +999,8 @@ fn edit(conn: &mut Connection, rng: &mut Rng) {
                     category_id: rng.pick(&categories_now).to_string(),
                     description: if rng.below(3) == 0 { Some("a note".into()) } else { None },
                     client_uuid: uuid,
+                    account_id: None,
+                    native_amount: None,
                 },
             );
         }
@@ -1024,6 +1050,7 @@ fn edit(conn: &mut Connection, rng: &mut Rng) {
                     interval_count: 1 + rng.below(3) as u32,
                     end_date: None,
                     description: None,
+                    account_id: None,
                 },
             );
         }
@@ -1190,6 +1217,7 @@ fn edit_debts(conn: &mut Connection, rng: &mut Rng) {
                     date: format!("2026-03-{:02}", 1 + rng.below(28)),
                     note: (rng.below(2) == 0).then(|| format!("note {}", rng.below(4))),
                     transaction_id: link,
+                    account_id: None,
                 },
             );
         }
@@ -1236,6 +1264,227 @@ fn edit_debts(conn: &mut Connection, rng: &mut Rng) {
             if !docs.is_empty() {
                 let _ = library::link(conn, *rng.pick(&docs), &LinkTarget { kind: TargetKind::LedgerEntry, id: rng.pick(&entries).to_string() });
             }
+        }
+        _ => {}
+    }
+}
+
+const ACCOUNT_NAMES: &[&str] = &["Savings", "Cash", "Card", "Wallet"];
+
+/// Something a person might do with accounts and transfers. Few names, so the two devices often make an account of one name (which
+/// stay two accounts); accounts with nothing in them are deleted now and then, which makes the rows the other device put in them move to
+/// the main account; rows are made, moved and edited in accounts, so there is always something to move. The details of an account (BIC,
+/// notes, group, whether it counts in net worth, virtual balance) are made with it, set, changed and cleared one at a time or all at once.
+/// Some accounts are in a currency of their own at a rate typed by hand (the rate changes, and the currency of an empty account does):
+/// what is paid in one carries the amount it really paid, and a transfer between two currencies carries what arrives, all within the
+/// rules of the screens (a recurring item and an entry of the ledger stay out of such an account).
+fn edit_accounts(conn: &mut Connection, rng: &mut Rng) {
+    use crate::accounts::transfers::{self, NewTransfer, TransferPatch};
+    use crate::accounts::{self, AccountPatch, Kind, NewAccount};
+    let all = ids(conn, "SELECT id FROM accounts");
+    let active = ids(conn, "SELECT id FROM accounts WHERE archived = 0 ORDER BY position, id");
+    let archived = ids(conn, "SELECT id FROM accounts WHERE archived = 1");
+    let empty = ids(
+        conn,
+        "SELECT id FROM accounts a WHERE id <> 1 AND NOT EXISTS (SELECT 1 FROM transactions WHERE account_id = a.id)
+         AND NOT EXISTS (SELECT 1 FROM recurring_transactions WHERE account_id = a.id) AND NOT EXISTS (SELECT 1 FROM ledger_entries WHERE account_id = a.id)
+         AND NOT EXISTS (SELECT 1 FROM transfers WHERE from_account_id = a.id OR to_account_id = a.id)",
+    );
+    let transfers_now = ids(conn, "SELECT id FROM transfers");
+    let expenses = ids(conn, "SELECT id FROM categories WHERE deleted_at IS NULL AND type = 'EXPENSE'");
+    let friends = ids(conn, "SELECT id FROM people WHERE archived = 0");
+    // an account of the pick, or none: the row goes to the main account
+    let account = |rng: &mut Rng| (!active.is_empty() && rng.below(5) != 0).then(|| rng.pick(&active).to_string());
+    // the same among the accounts in the app's currency: a recurring item and an entry of the ledger live only there
+    let plain = ids(conn, "SELECT id FROM accounts WHERE archived = 0 AND currency IS NULL ORDER BY position, id");
+    let plain_account = |rng: &mut Rng| (!plain.is_empty() && rng.below(5) != 0).then(|| rng.pick(&plain).to_string());
+    // a currency (the app's own among them: then there is none) and a rate typed by hand, and an amount
+    let code = |rng: &mut Rng| *rng.pick(&["RON", "USD", "GBP", "EUR"]);
+    let rate = |rng: &mut Rng| format!("{}.{:02}", 1 + rng.below(9), rng.below(100));
+    let amount = |rng: &mut Rng| format!("{}.{:02}", 1 + rng.below(300), rng.below(100));
+    // what a payment in this account really paid, if the account is in a currency of its own
+    let native = |conn: &Connection, rng: &mut Rng, account: &Option<String>| -> Option<String> {
+        let id: i64 = account.as_deref()?.parse().ok()?;
+        accounts::is_foreign(conn, id).unwrap_or(false).then(|| amount(rng))
+    };
+    let kind = |rng: &mut Rng| *rng.pick(&[Kind::Checking, Kind::Savings, Kind::Cash, Kind::CreditCard]);
+    let date = |rng: &mut Rng| format!("2026-03-{:02}", 1 + rng.below(28));
+    // a detail, or nothing: a few values each, so that two devices often write the same one and often write different ones
+    let bic = |rng: &mut Rng| (rng.below(2) == 0).then(|| format!("BIC{}", rng.below(3)));
+    let notes = |rng: &mut Rng| (rng.below(2) == 0).then(|| format!("line {}\nline {}", rng.below(3), rng.below(3)));
+    let group = |rng: &mut Rng| (rng.below(2) == 0).then(|| rng.pick(&["Everyday", "Savings", "Cards"]).to_string());
+    let virtual_balance = |rng: &mut Rng| format!("{}{}.{:02}", if rng.below(3) == 0 { "-" } else { "" }, rng.below(2000), rng.below(100));
+    match rng.below(26) {
+        0 | 1 => {
+            let opening = (rng.below(2) == 0).then(|| format!("{}{}.{:02}", if rng.below(3) == 0 { "-" } else { "" }, rng.below(500), rng.below(100)));
+            let number = (rng.below(2) == 0).then(|| format!("IE{}", rng.below(100)));
+            let own = (rng.below(3) == 0).then(|| code(rng));
+            let new = NewAccount {
+                name: rng.pick(ACCOUNT_NAMES).to_string(),
+                kind: kind(rng),
+                number,
+                opening_balance: opening,
+                opening_date: Some(date(rng)),
+                bic: bic(rng),
+                notes: notes(rng),
+                group: group(rng),
+                include_in_net_worth: (rng.below(2) == 0).then(|| rng.below(2) == 0),
+                virtual_balance: (rng.below(2) == 0).then(|| virtual_balance(rng)),
+                currency: own.map(str::to_string),
+                rate: own.filter(|c| *c != "EUR").map(|_| rate(rng)),
+            };
+            let _ = accounts::create(conn, &new, TODAY);
+        }
+        20 | 21 if !all.is_empty() => {
+            // one or more of the details, and nothing else, so that a change of a detail alone is what the other device meets
+            let mut patch = AccountPatch::default();
+            match rng.below(6) {
+                0 => patch.bic = Some(bic(rng)),
+                1 => patch.notes = Some(notes(rng)),
+                2 => patch.group = Some(group(rng)),
+                3 => patch.include_in_net_worth = Some(rng.below(2) == 0),
+                4 => patch.virtual_balance = Some(virtual_balance(rng)),
+                _ => {
+                    patch.bic = Some(bic(rng));
+                    patch.notes = Some(notes(rng));
+                    patch.group = Some(group(rng));
+                    patch.include_in_net_worth = Some(rng.below(2) == 0);
+                    patch.virtual_balance = Some(virtual_balance(rng));
+                }
+            }
+            let _ = accounts::update(conn, *rng.pick(&all), &patch, TODAY);
+        }
+        2 if !all.is_empty() => {
+            let patch = AccountPatch { name: Some(rng.pick(ACCOUNT_NAMES).to_string()), ..Default::default() };
+            let _ = accounts::update(conn, *rng.pick(&all), &patch, TODAY);
+        }
+        3 if !all.is_empty() => {
+            let patch = AccountPatch { kind: Some(kind(rng)), number: Some((rng.below(2) == 0).then(|| format!("NL{}", rng.below(100)))), opening_balance: Some(format!("{}.00", rng.below(300))), ..Default::default() };
+            let _ = accounts::update(conn, *rng.pick(&all), &patch, TODAY);
+        }
+        4 if !active.is_empty() => {
+            let _ = accounts::archive(conn, *rng.pick(&active), TODAY);
+        }
+        5 if !archived.is_empty() => {
+            let _ = accounts::restore(conn, *rng.pick(&archived), TODAY);
+        }
+        6 | 7 if !empty.is_empty() => {
+            accounts::delete(conn, *rng.pick(&empty)).unwrap();
+        }
+        8 if !all.is_empty() => {
+            // refused when it has rows, as on a screen
+            let _ = accounts::delete(conn, *rng.pick(&all));
+        }
+        9 if active.len() > 1 => {
+            let mut order = active.clone();
+            if rng.below(2) == 0 {
+                order.reverse();
+            } else {
+                order.rotate_left(1);
+            }
+            accounts::reorder(conn, &order).unwrap();
+        }
+        10 | 11 if active.len() > 1 => {
+            let (from, to) = (*rng.pick(&active), *rng.pick(&active));
+            let note = (rng.below(2) == 0).then(|| format!("note {}", rng.below(4)));
+            // what arrives is asked for exactly when the two accounts are in different currencies
+            let arrives = accounts::currencies_differ(conn, from, to).unwrap_or(false).then(|| amount(rng));
+            let _ = transfers::create(conn, &NewTransfer { from_account_id: from.to_string(), to_account_id: to.to_string(), amount: format!("{}.{:02}", 1 + rng.below(300), rng.below(100)), date: date(rng), note, to_amount: arrives });
+        }
+        12 if !transfers_now.is_empty() => {
+            let id = *rng.pick(&transfers_now);
+            let mut patch = match rng.below(4) {
+                0 => TransferPatch { amount: Some(format!("{}.00", 1 + rng.below(300))), ..Default::default() },
+                1 => TransferPatch { from_account_id: account(rng), ..Default::default() },
+                2 => TransferPatch { to_account_id: account(rng), ..Default::default() },
+                _ => TransferPatch { date: Some(date(rng)), note: Some((rng.below(2) == 0).then(|| "edited".to_string())), ..Default::default() },
+            };
+            // looking at the two sides as they are after the patch: what arrives is given when they differ in currency (always, when the
+            // transfer has none yet, and now and then to change it) and never when they do not (the stored one is then cleared by the core)
+            let current = transfers::get(conn, id).unwrap();
+            let side = |given: &Option<String>, now: i64| given.as_deref().and_then(|g| g.parse().ok()).unwrap_or(now);
+            let (from, to) = (side(&patch.from_account_id, current.from_account_id), side(&patch.to_account_id, current.to_account_id));
+            if accounts::currencies_differ(conn, from, to).unwrap_or(false) && (current.to_amount.is_none() || rng.below(2) == 0) {
+                patch.to_amount = Some(amount(rng));
+            }
+            let _ = transfers::update(conn, id, &patch);
+        }
+        13 if !transfers_now.is_empty() => {
+            transfers::delete(conn, *rng.pick(&transfers_now)).unwrap();
+        }
+        14 | 15 if !expenses.is_empty() => {
+            let account_id = account(rng);
+            let native_amount = native(conn, rng, &account_id);
+            let _ = transactions::create(
+                conn,
+                &NewTransaction {
+                    name: format!("in an account {}", rng.below(1000)),
+                    amount: format!("{}.{:02}", 1 + rng.below(500), rng.below(100)),
+                    payment_date: date(rng),
+                    category_id: rng.pick(&expenses).to_string(),
+                    description: None,
+                    client_uuid: None,
+                    account_id,
+                    native_amount,
+                },
+            );
+        }
+        16 if !expenses.is_empty() => {
+            let _ = recurring::create(
+                conn,
+                &NewRecurring {
+                    name: format!("bill in an account {}", rng.below(5)),
+                    amount: Some("19.99".into()),
+                    category_id: rng.pick(&expenses).to_string(),
+                    start_date: "2026-03-01".into(),
+                    interval_unit: Unit::Month,
+                    interval_count: 1,
+                    end_date: None,
+                    description: None,
+                    account_id: plain_account(rng),
+                },
+            );
+        }
+        17 => {
+            if friends.is_empty() {
+                let _ = people::create(conn, rng.pick(FRIENDS));
+            } else {
+                let kind = *rng.pick(&[ledger::Kind::Lent, ledger::Kind::Borrowed, ledger::Kind::RepaidToMe, ledger::Kind::RepaidByMe]);
+                let _ = ledger::add(
+                    conn,
+                    &ledger::NewEntry { person_id: rng.pick(&friends).to_string(), kind, amount: format!("{}.00", 1 + rng.below(200)), date: date(rng), note: None, transaction_id: None, account_id: plain_account(rng) },
+                );
+            }
+        }
+        18 | 19 => {
+            // a row moves to another account (or back to the main one)
+            let (bills, items, entries) = (ids(conn, "SELECT id FROM transactions"), ids(conn, "SELECT id FROM recurring_transactions"), ids(conn, "SELECT id FROM ledger_entries"));
+            match rng.below(3) {
+                0 if !bills.is_empty() => {
+                    // into an account of another currency the amount it really paid goes with it, out of one it is left out (and cleared)
+                    let account_id = account(rng);
+                    let native_amount = native(conn, rng, &account_id);
+                    let _ = transactions::update(conn, *rng.pick(&bills), &transactions::TransactionPatch { account_id, native_amount, ..Default::default() });
+                }
+                1 if !items.is_empty() => {
+                    let _ = recurring::update(conn, *rng.pick(&items), &recurring::RecurringPatch { account_id: plain_account(rng), ..Default::default() });
+                }
+                _ if !entries.is_empty() => {
+                    let _ = ledger::update(conn, *rng.pick(&entries), &ledger::EntryPatch { account_id: plain_account(rng), ..Default::default() });
+                }
+                _ => {}
+            }
+        }
+        22 | 23 if !all.is_empty() => {
+            // the rate of an account: refused for an account in the app's currency
+            let patch = AccountPatch { rate: Some(rate(rng)), ..Default::default() };
+            let _ = accounts::update(conn, *rng.pick(&all), &patch, TODAY);
+        }
+        24 if !empty.is_empty() => {
+            // the currency of an account that has nothing in it: another one with its rate, or back to the app's, which has none
+            let own = code(rng);
+            let patch = AccountPatch { currency: Some(own.to_string()), rate: (own != "EUR").then(|| rate(rng)), ..Default::default() };
+            let _ = accounts::update(conn, *rng.pick(&empty), &patch, TODAY);
         }
         _ => {}
     }
@@ -1298,6 +1547,47 @@ fn random_edits_on_both_devices_always_end_the_same_after_one_sync() {
                 assert_eq!(count(conn, "SELECT applying FROM sync_clock"), 0);
                 assert_eq!(text(conn, "PRAGMA integrity_check"), "ok");
                 assert_eq!(count(conn, "SELECT count(*) FROM (SELECT name, type FROM categories WHERE deleted_at IS NULL GROUP BY name, type HAVING count(*) > 1)"), 0, "seed {seed}: two active categories of one name");
+                assert!(crate::accounts::check(conn).unwrap(), "seed {seed}: the main account is not as it must be");
+            }
+        }
+    }
+}
+
+/// Accounts and transfers alone, and a lot of them: the two devices make, rename, archive, restore, reorder and delete accounts, move
+/// rows between them and make transfers, with the deletions of empty accounts meeting rows the other device put in them.
+#[test]
+fn random_edits_of_accounts_and_transfers_always_end_the_same_after_one_sync() {
+    for seed in first_seed(1)..first_seed(1) + seeds(80) {
+        let mut rng = Rng::new(seed);
+        let mut desktop = device("EUR");
+        let mut phone = device("EUR");
+        category(&desktop, "Food", CategoryType::Expense);
+        people::create(&desktop, "Anna").unwrap();
+        sync_ok(&mut desktop, &mut phone);
+        for round in 0..4 {
+            for _ in 0..(3 + rng.below(12)) {
+                edit_accounts(&mut desktop, &mut rng);
+            }
+            pause();
+            for _ in 0..(3 + rng.below(12)) {
+                edit_accounts(&mut phone, &mut rng);
+            }
+            if rng.below(2) == 0 {
+                pause();
+            }
+            // the sync is started from either side
+            let outcome = if round % 2 == 0 { sync(&mut desktop, &mut phone, TODAY, now(), None) } else { sync(&mut phone, &mut desktop, TODAY, now(), None) }
+                .unwrap_or_else(|e| panic!("seed {seed} round {round}: {e}"));
+            assert_same(&desktop, &phone, &format!("seed {seed} round {round} ({outcome:?})"));
+            assert!(!outcome.differences, "seed {seed} round {round}: differ after one sync: {outcome:?}");
+            let again = sync(&mut desktop, &mut phone, TODAY, now(), None).unwrap();
+            assert!(again.compared.is_empty() && again.first.is_empty() && again.second.is_empty(), "seed {seed} round {round}: not settled: {again:?}");
+            for conn in [&desktop, &phone] {
+                assert!(crate::accounts::check(conn).unwrap(), "seed {seed} round {round}");
+                assert_eq!(count(conn, "SELECT count(*) FROM pragma_foreign_key_check"), 0, "seed {seed}");
+                assert_eq!(count(conn, "SELECT count(*) FROM transfers WHERE from_account_id = to_account_id"), 0, "seed {seed}");
+                assert_eq!(count(conn, "SELECT count(*) FROM accounts WHERE id = 1 AND archived = 0"), 1, "seed {seed}");
+                assert_eq!(text(conn, "PRAGMA integrity_check"), "ok");
             }
         }
     }
@@ -1339,7 +1629,7 @@ fn random_edits_with_a_currency_change_in_between_still_converge() {
 ///
 /// Phase 10 (debts): `people` and `ledger_entries` are shared like the rest; the two tables of parts belong to their transaction and to
 /// their recurring item and travel inside their rows.
-const SHARED_TABLES: [&str; 13] = [
+const SHARED_TABLES: [&str; 15] = [
     "settings",
     "categories",
     "budgets",
@@ -1353,6 +1643,9 @@ const SHARED_TABLES: [&str; 13] = [
     "recurring_split_lines",
     "sync_deleted",
     "currency_changes",
+    // shared from protocol 9 on (`docs/accounts-design.md`, section 7)
+    "accounts",
+    "transfers",
 ];
 const LOCAL_TABLES: [&str; 5] = ["audit_log", "api_tokens", "backup_schedule", "sync_clock", "sync_peers"];
 
@@ -1371,9 +1664,9 @@ fn every_table_is_either_shared_or_stays_on_its_device() {
     for listed in SHARED_TABLES.iter().chain(LOCAL_TABLES.iter()) {
         assert!(names.iter().any(|n| n == listed), "{listed} is listed but there is no such table");
     }
-    // The sync can only name nine tables of rows (the parts of bills and the weights of templates go inside two of them), so nothing
+    // The sync can only name eleven tables of rows (the parts of bills and the weights of templates go inside two of them), so nothing
     // else can be asked for or sent.
-    assert_eq!(wire::Table::ALL.len(), 9);
+    assert_eq!(wire::Table::ALL.len(), 11);
 }
 
 #[test]
@@ -1396,11 +1689,37 @@ fn nothing_that_stays_on_a_device_is_ever_sent() {
     spend(&desktop, food, "From the desktop", "4.00");
     let phone_food = id_of(&phone, "categories", "Food");
     spend(&phone, phone_food, "From the phone", "5.00");
+    // Accounts and transfers are shared, and the history their triggers write is not: an account and a transfer on each device
+    for (conn, tag) in [(&desktop, "desktop"), (&phone, "phone")] {
+        let new = crate::accounts::NewAccount {
+            name: format!("Account of the {tag}"),
+            kind: crate::accounts::Kind::Savings,
+            number: None,
+            opening_balance: None,
+            opening_date: Some("2026-01-01".into()),
+            bic: Some(format!("BIC-{tag}")),
+            notes: Some(format!("Notes of the {tag}")),
+            group: Some(format!("Group of the {tag}")),
+            include_in_net_worth: Some(false),
+            virtual_balance: Some("12.00".into()),
+            currency: None, rate: None,
+        };
+        let account = crate::accounts::create(conn, &new, TODAY).unwrap().id;
+        crate::accounts::transfers::create(
+            conn,
+            &crate::accounts::transfers::NewTransfer { from_account_id: crate::accounts::MAIN_ID.to_string(), to_account_id: account.to_string(), amount: "6.00".into(), date: "2026-03-05".into(), note: Some(format!("Transfer of the {tag}")), to_amount: None },
+        )
+        .unwrap();
+    }
 
     let outcome = sync(&mut desktop, &mut phone, TODAY, now(), None).unwrap();
     assert!(!outcome.differences);
     let said = String::from_utf8_lossy(&outcome.transcript).to_string();
     assert!(said.contains("From the desktop") && said.contains("From the phone"), "the transcript has nothing in it: {} bytes", outcome.transcript.len());
+    assert!(said.contains("Account of the desktop") && said.contains("Transfer of the phone"), "the accounts and transfers are sent");
+    for sent in ["BIC-desktop", "Notes of the phone", "Group of the desktop", "\"includeNetWorth\":0", "\"virtualBalanceMinor\":1200"] {
+        assert!(said.contains(sent), "the details of an account are sent: {sent}");
+    }
     for tag in ["DESKTOP", "PHONE"] {
         assert!(!said.contains(&sentinel(tag)), "something that stays on the {tag} was sent");
     }
@@ -1409,6 +1728,9 @@ fn nothing_that_stays_on_a_device_is_ever_sent() {
     // And nothing arrived in the tables of the other side.
     assert_eq!(count(&desktop, "SELECT count(*) FROM audit_log WHERE new_values LIKE '%SECRET-PHONE%'"), 0);
     assert_eq!(count(&phone, "SELECT count(*) FROM audit_log WHERE new_values LIKE '%SECRET-DESKTOP%'"), 0);
+    // the history the triggers of accounts and transfers write (each device keeps its own, in the names of the columns) is not on the wire
+    assert!(!said.contains("entity_type") && !said.contains("opening_balance_minor") && !said.contains("from_account_id"), "a row of the history of accounts or transfers was sent");
+    assert!(!said.contains("group_name") && !said.contains("include_net_worth") && !said.contains("virtual_balance_minor"), "the history of the details of an account was sent");
     assert_eq!(count(&desktop, "SELECT count(*) FROM api_tokens WHERE name LIKE '%PHONE%'"), 0);
     assert_eq!(count(&phone, "SELECT count(*) FROM api_tokens WHERE name LIKE '%DESKTOP%'"), 0);
     assert_eq!(text(&desktop, "SELECT language FROM settings"), "de");
@@ -1854,7 +2176,7 @@ mod debts {
     fn lend(conn: &Connection, person: i64, amount: &str, date: &str) -> i64 {
         ledger::add(
             conn,
-            &ledger::NewEntry { person_id: person.to_string(), kind: ledger::Kind::Lent, amount: amount.into(), date: date.into(), note: None, transaction_id: None },
+            &ledger::NewEntry { person_id: person.to_string(), kind: ledger::Kind::Lent, amount: amount.into(), date: date.into(), note: None, transaction_id: None, account_id: None },
         )
         .unwrap()
         .id
@@ -2139,7 +2461,7 @@ mod debts {
         let take = |conn: &Connection, expense: bool| {
             accept(
                 conn,
-                &Accept { text: code.clone(), person_id: None, new_friend: Some("Vincent".into()), add_expense: expense, category_id: expense.then(|| food(conn).to_string()), rate: None, amount: None },
+                &Accept { text: code.clone(), person_id: None, new_friend: Some("Vincent".into()), add_expense: expense, category_id: expense.then(|| food(conn).to_string()), rate: None, amount: None, account_id: None },
             )
             .unwrap();
         };
@@ -2234,6 +2556,7 @@ mod debts {
             sync_id: "cd".repeat(16),
             stamp: Stamp::new(now(), 0, "abcdef01").format(),
             person: "ab".repeat(16),
+            account: crate::accounts::MAIN_SYNC_ID.into(),
             kind: "LENT".into(),
             amount_minor: 100,
             entry_date: "2026-03-01".into(),

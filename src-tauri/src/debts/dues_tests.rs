@@ -15,6 +15,7 @@ fn item(conn: &rusqlite::Connection, name: &str, amount: Option<&str>, category:
             interval_count: every.1,
             end_date: end.map(str::to_string),
             description: None,
+            account_id: None,
         },
     )
     .unwrap()

@@ -1,5 +1,6 @@
 import { useEffect, useId, useRef, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
+import { useFootLine } from '../hooks/useFootLine'
 import { useReturnFocus } from '../hooks/useReturnFocus'
 import { useT } from '../i18n/context'
 import Button from './ui/Button'
@@ -41,6 +42,7 @@ export default function Modal({
 
   // before the effect below: the dialog takes the focus there
   useReturnFocus()
+  useFootLine(ref)
 
   useEffect(() => {
     const dialog = ref.current

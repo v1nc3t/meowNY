@@ -7,7 +7,7 @@ use skrifa::instance::{LocationRef, Size};
 use skrifa::metrics::GlyphMetrics;
 use skrifa::{FontRef, MetadataProvider};
 
-use super::{ReportData, ReportLabels, ReportOptions};
+use super::{AccountsPart, ReportData, ReportLabels, ReportOptions};
 use crate::categories::CategoryType;
 use crate::debts::summary::Labels as DebtsLabels;
 use crate::display::DisplayFormat;
@@ -503,6 +503,54 @@ impl Builder<'_> {
         }
     }
 
+    /// The accounts: what each held on the last day and what it changed over the months, and under them the net worth.
+    fn accounts(&mut self, part: &AccountsPart) {
+        let title = self.labels.accounts.clone();
+        self.y += 12.0;
+        self.section_title(&title, 20.0 + 17.0 * 2.0);
+        let row = 17.0;
+        let balance_right = self.right;
+        let change_right = self.right - 100.0;
+        let base = Self::baseline(self.y, 16.0, 8.5);
+        let (name, change, balance) = (self.labels.name.clone(), self.labels.change.clone(), self.labels.balance.clone());
+        self.text(self.left, base, 8.5, true, MUTED, &name);
+        self.text_right(change_right, base, 8.5, true, MUTED, &change);
+        self.text_right(balance_right, base, 8.5, true, MUTED, &balance);
+        self.line(self.left, self.y + 17.0, self.right, self.y + 17.0, 0.8, GRID);
+        self.y += 20.0;
+        for (name, balance, change, counts, currency) in &part.accounts {
+            self.ensure(row);
+            let base = Self::baseline(self.y, row, 9.5);
+            // an account in a currency of its own: the code in front of the numbers, which are in that currency and carry no symbol of the app's
+            let (signed, held) = match currency {
+                None => (if *change >= 0 { format!("+{}", self.fmt.money(*change)) } else { self.fmt.money(*change) }, self.fmt.money(*balance)),
+                Some(code) => (format!("{code} {}{}", if *change >= 0 { "+" } else { "" }, self.fmt.number(*change)), format!("{code} {}", self.fmt.number(*balance))),
+            };
+            let room = change_right - self.left - 90.0;
+            if *counts {
+                self.text_fit(self.left, base, 9.5, false, INK, name, room);
+            } else {
+                // the mark tells why this balance is not in the net worth, so the name is cut before it is; a very long mark is cut too
+                let mark = self.m.fit(&self.labels.not_in_net_worth, 8.0, false, room * 0.6);
+                let shown = self.m.fit(name, 9.5, false, room - self.m.width(&mark, 8.0, false) - 5.0);
+                let after_name = self.left + self.m.width(&shown, 9.5, false) + 5.0;
+                self.text(self.left, base, 9.5, false, INK, &shown);
+                self.text(after_name, base, 8.0, false, MUTED, &mark);
+            }
+            self.text_right(change_right, base, 9.5, false, if *change < 0 { OVER_TEXT } else { INCOME }, &signed);
+            self.text_right(balance_right, base, 9.5, false, if *balance < 0 { OVER_TEXT } else { INK }, &held);
+            self.line(self.left, self.y + row, self.right, self.y + row, 0.3, GRID);
+            self.y += row;
+        }
+        self.ensure(row + 6.0);
+        self.y += 6.0;
+        let base = Self::baseline(self.y, row, 9.5);
+        let label = self.labels.net_worth.clone();
+        self.text(self.left, base, 9.5, true, MUTED, &label);
+        self.text_right(balance_right, base, 9.5, true, if part.net_worth < 0 { OVER_TEXT } else { INK }, &self.fmt.money(part.net_worth));
+        self.y += row + 14.0;
+    }
+
     /// Who owed what on the last day: a line for each friend, and under them what is owed to you, what you owe, and the net.
     fn debts(&mut self, friends: &[(String, i64)], words: &DebtsLabels) {
         let title = words.summary_title.clone();
@@ -695,7 +743,7 @@ pub fn build(data: &ReportData, options: &ReportOptions) -> Result<Doc, AppError
     b.header(data);
     b.tiles(data);
     let no_money = data.income == 0 && data.expense == 0 && data.budget_lines.is_empty() && data.transactions.is_empty();
-    if no_money && data.debts.is_none() {
+    if no_money && data.debts.is_none() && data.accounts.is_none() {
         let none = b.labels.no_data.clone();
         b.text(b.left, b.y + 10.0, 10.0, false, MUTED, &none);
     } else {
@@ -703,9 +751,12 @@ pub fn build(data: &ReportData, options: &ReportOptions) -> Result<Doc, AppError
             b.month_chart(data);
             b.donut(data);
             b.budget_section(data);
-            if options.include_transactions && !data.transactions.is_empty() {
-                b.transactions(data, options.show_descriptions);
-            }
+        }
+        if let Some(part) = &data.accounts {
+            b.accounts(part);
+        }
+        if !no_money && options.include_transactions && !data.transactions.is_empty() {
+            b.transactions(data, options.show_descriptions);
         }
         if let (Some(part), Some(words)) = (&data.debts, &options.debts_labels) {
             if let Some(friends) = &part.friends {

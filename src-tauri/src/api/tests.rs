@@ -910,6 +910,9 @@ fn sample_args(name: &str, category: &str) -> String {
         "debts.reminders" => r#"{"everyDays":7}"#.into(),
         "documents.show" => r#"{"id":"1"}"#.into(),
         "people.show" => r#"{"id":"1"}"#.into(),
+        "accounts.show" => r#"{"id":"1"}"#.into(),
+        "accounts.history" => r#"{"id":"1","year":"2026"}"#.into(),
+        "accounts.breakdown" => r#"{"id":"1","from":"2026-09-01","to":"2026-09-30"}"#.into(),
         "splits.preview" => r#"{"amount":"100.00","mode":"EQUAL","people":["1"],"guests":"Bob"}"#.into(),
         _ => "{}".into(),
     }
@@ -958,7 +961,7 @@ fn a_read_token_uses_every_read_route_over_http_and_gets_what_the_screens_get() 
     assert_eq!(described, routes::ALL.iter().map(|r| r.name).collect::<Vec<_>>());
     let transactions = schema["routes"].as_array().unwrap().iter().find(|r| r["name"] == "transactions.list").unwrap();
     let params: Vec<(&str, &str)> = transactions["params"].as_array().unwrap().iter().map(|p| (p["name"].as_str().unwrap(), p["type"].as_str().unwrap())).collect();
-    assert_eq!(params, [("from", "date"), ("to", "date"), ("categoryId", "id"), ("q", "string"), ("limit", "integer"), ("offset", "integer")]);
+    assert_eq!(params, [("from", "date"), ("to", "date"), ("categoryId", "id"), ("accountId", "id"), ("kind", "string"), ("q", "string"), ("limit", "integer"), ("offset", "integer")]);
 }
 
 #[test]

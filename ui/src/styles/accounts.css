@@ -1,0 +1,469 @@
+/* Accounts: the list, the archived ones, an account's page, and the places of other pages that name an account. Everything else on
+   these screens is the lists, cards and charts of the other pages (primitives.css, dashboard.css, debts-docs.css). */
+
+/* What all accounts hold together, at the right over the list. */
+.acct-total {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: flex-end;
+  gap: 0.25rem 0.5rem;
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.acct-total b {
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: var(--foreground);
+}
+
+/* The accounts as a table: name, type, number, last activity, this month, balance, then two buttons of 2rem. The type is one of four
+   short words in small print (the longest, "carte de crédit", is 15 characters of 0.875rem), a date has 10 of them, and an amount with
+   its sign has 16 characters of room, as in the transactions. The name and the number share the rest. A row can be held and dragged,
+   like a category: no text selection or touch menu when it is held, and every row equally tall (see the categories, money.css). */
+.card-list.acct-list {
+  --cols: minmax(8rem, 1.4fr) 14ch minmax(6rem, 1fr) 12ch 16ch 16ch 4.25rem;
+  --grip-room: calc(12px + 0.5rem);
+}
+
+ul.card-list.acct-list > li.card-item {
+  cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+
+.acct-list .row-grip {
+  width: 12px;
+  height: 12px;
+  flex: none;
+  margin-left: -0.625rem;
+  margin-right: 0.625rem;
+  color: var(--muted-foreground);
+  cursor: grab;
+}
+
+ul.card-list.acct-list > li.list-head > :first-child {
+  padding-left: var(--grip-room);
+}
+
+/* This month in small print on the phone, coloured like the amounts. */
+.acct-month-sub.is-income {
+  color: var(--success);
+}
+
+.acct-month-sub.is-expense {
+  color: var(--destructive);
+}
+
+/* With less room the columns go in this order: the number, then the last activity; at 48em a row is two lines, the name and the balance,
+   the type and this month (the change). The name and the balance stay at every width. Each width is what the columns of its row add up
+   to (the widest 7 columns with a number of 6rem, 6 columns 54.6em, 5 columns 46.4em) and a little more, so no row is wider than its list
+   at any width, and the units are the list's own, so they follow the text size. */
+@container (max-width: 64em) {
+  ul.card-list.acct-list > li.card-item,
+  ul.card-list.acct-list > li.list-head {
+    grid-template-columns: minmax(8rem, 1fr) 14ch 12ch 16ch 16ch 4.25rem;
+  }
+
+  ul.card-list.acct-list .acct-number {
+    display: none;
+  }
+}
+
+@container (max-width: 56em) {
+  ul.card-list.acct-list > li.card-item,
+  ul.card-list.acct-list > li.list-head {
+    grid-template-columns: minmax(8rem, 1fr) 14ch 16ch 16ch 4.25rem;
+  }
+
+  ul.card-list.acct-list .acct-last {
+    display: none;
+  }
+}
+
+@container (max-width: 48em) {
+  ul.card-list:is(.acct-list, .acct-archived) > li.list-head {
+    display: none;
+  }
+
+  ul.card-list:is(.acct-list, .acct-archived) > li.list-head + li {
+    border-top: 0;
+  }
+
+  ul.card-list:is(.acct-list, .acct-archived) > li.card-item {
+    grid-template-columns: minmax(4rem, 1fr) auto auto;
+    grid-template-areas:
+      'name amount actions'
+      'sub month actions';
+    row-gap: 0;
+  }
+
+  ul.card-list:is(.acct-list, .acct-archived) .cell-name {
+    grid-area: name;
+  }
+
+  ul.card-list:is(.acct-list, .acct-archived) .cell-sub {
+    grid-area: sub;
+  }
+
+  ul.card-list:is(.acct-list, .acct-archived) .cell-amount {
+    grid-area: amount;
+  }
+
+  ul.card-list:is(.acct-list, .acct-archived) .cell-actions {
+    grid-area: actions;
+  }
+
+  ul.card-list.acct-list .acct-month {
+    grid-area: month;
+    font-size: 0.875rem;
+    font-weight: 400;
+  }
+}
+
+/* The archived accounts: name, type, balance, then restore (the longest, "wiederherstellen", has 16 characters of 0.875rem and its
+   padding) and the place of delete. Under 48em two lines, as the list above (all of it adds up to 36.5em and the name's 8rem). */
+.card-list.acct-archived {
+  --cols: minmax(8rem, 1fr) 14ch 16ch calc(15ch + 4rem);
+}
+
+ul.card-list.acct-archived > li.card-item {
+  cursor: pointer;
+}
+
+.acct-archived .row-primary {
+  max-width: none;
+  padding-inline: 0.5rem;
+  white-space: nowrap;
+}
+
+/* An account's page. The chart sits in a card, like the year on the dashboard. */
+.acct-chart {
+  container-type: inline-size;
+}
+
+.line-balance {
+  stroke: var(--c-savings);
+}
+
+.dot-balance {
+  fill: var(--c-savings);
+}
+
+/* What moved the account in a month: the day, what it was, the category (or the other account, or the friend), what it did to the
+   balance and the balance after it, then up to two buttons of 2rem. Narrower than 52em (the six columns add up to 45.3em, and the
+   category should have a little room) a row is two lines: what it was and the amount, the day and the balance. */
+.card-list.acct-lines {
+  --cols: 12ch minmax(8rem, 1.4fr) minmax(0, 1fr) 16ch 14.5ch 4.25rem;
+}
+
+.acct-lines .cell-sub-end {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.acct-lines .cell-actions {
+  min-width: 4.25rem;
+}
+
+/* A line with nothing in the column of the other side (a transfer has no category) lets what it was take that column too, so a long
+   name is not cut with the room next to it empty. */
+@container (width > 52em) {
+  ul.card-list.acct-lines > li.card-item > .cell-name:has(+ .line-other:empty) {
+    grid-column: span 2;
+  }
+
+  ul.card-list.acct-lines > li.card-item > .line-other:empty {
+    display: none;
+  }
+}
+
+@container (max-width: 52em) {
+  ul.card-list.acct-lines > li.list-head {
+    display: none;
+  }
+
+  ul.card-list.acct-lines > li.list-head + li {
+    border-top: 0;
+  }
+
+  ul.card-list.acct-lines > li.card-item {
+    grid-template-columns: minmax(2rem, 1fr) auto auto;
+    grid-template-areas:
+      'name amount actions'
+      'sub sub-end actions';
+    row-gap: 0;
+  }
+
+  ul.card-list.acct-lines .cell-name {
+    grid-area: name;
+  }
+
+  ul.card-list.acct-lines .cell-amount {
+    grid-area: amount;
+  }
+
+  ul.card-list.acct-lines .line-date {
+    grid-area: sub;
+  }
+
+  ul.card-list.acct-lines .line-other {
+    display: none;
+  }
+
+  ul.card-list.acct-lines .cell-sub-end {
+    grid-area: sub-end;
+  }
+
+  ul.card-list.acct-lines .cell-actions {
+    grid-area: actions;
+  }
+}
+
+/* The transactions, with more than one account: one more column, the account, after the category. It goes when the rows become two
+   lines, where the category has the place. */
+.card-list.tx-list.has-account {
+  --cols: minmax(0, 2.2fr) 16ch 12ch minmax(0, 1.2fr) minmax(0, 1fr) 2ch 6.5rem;
+}
+
+@container (max-width: 40em) {
+  ul.card-list.tx-list.has-account .cell-account {
+    display: none;
+  }
+}
+
+/* The groups of the list: a small heading over each run of accounts (the ones with no group come last). Each run is a list of its own
+   with the same columns, so the amounts line up from one to the next. A long name ends in an ellipsis; the whole of it is the title. */
+.acct-group {
+  margin: 1.25rem 0 0;
+  overflow: hidden;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  line-height: 1.4;
+  color: var(--muted-foreground);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.accounts-page .pane-stack > .acct-group:first-child {
+  margin-top: 0;
+}
+
+.accounts-page .pane-stack > .acct-group + .card-list {
+  margin-top: 0.5rem;
+}
+
+/* What is available, under the balance (an account with a virtual balance), and what an account in another currency is worth in the app's
+   (the same small quiet line): at the right like the amount. */
+.acct-available {
+  display: block;
+  font-size: 0.75rem;
+  font-weight: 400;
+  white-space: normal;
+  color: var(--muted-foreground);
+}
+
+/* An amount in another currency is longer than one in the app's by its code ("RON 9,999,999,999.99"): in a column as wide as 16 characters it
+   breaks after the code, onto a second line at the right, rather than reaching the buttons (the text has an ordinary space there: lib/money.ts,
+   `breakable`). On a phone the amount's own column is as wide as it needs, so it is held to the width of those 16 characters. */
+.cell-amount.is-wrap {
+  min-width: 0;
+  max-width: 10rem;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.cell-sub-end.is-wrap {
+  overflow: visible;
+  text-overflow: clip;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+/* "not in net worth" under the name of a desktop row: the name keeps its ellipsis on its own line, and the words are not cut (a name
+   would have too little room beside them). On a phone it is under the name as well. */
+.acct-name {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.acct-name > .card-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.acct-name > .row-mark {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.card-name > .row-mark {
+  display: block;
+  white-space: nowrap;
+}
+
+/* The balance of a row with two lines is at the top of its row on a phone, as the name is. */
+.row-toggle > .cell-amount .acct-available {
+  margin-top: 0.125rem;
+}
+
+/* The title row of an account's page: add an expense, an income, a transfer. Two by two on a phone (the debts' grid); the third, alone in
+   its row, takes both columns. */
+html.is-phone .tx-actions.acct-actions > :last-child:nth-child(odd) {
+  grid-column: 1 / -1;
+}
+
+/* An account's page: what is available, and the notes (plain text; line breaks stay, a long word wraps). */
+.acct-available-line {
+  margin: 0;
+}
+
+.acct-available-line b {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--foreground);
+}
+
+.acct-notes {
+  margin: 0;
+  font-size: 0.875rem;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  color: var(--foreground);
+}
+
+/* What the account spent and took in, by category: two cards of equal width side by side, one under the other when there is no room
+   for two of 18rem (a phone). */
+.acct-breakdown {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 18rem), 1fr));
+  align-items: start;
+  gap: 1rem;
+}
+
+.acct-share-total {
+  font-size: 1rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.acct-share .hint {
+  margin: 0;
+}
+
+.acct-share-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  width: 100%;
+}
+
+.acct-share-list > li {
+  align-items: stretch;
+  gap: 0.375rem;
+  padding: 0.375rem 0;
+  border-top: 0;
+}
+
+.acct-share-text {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  font-size: 0.8125rem;
+}
+
+.acct-share-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.acct-share-amount {
+  flex: none;
+  font-variant-numeric: tabular-nums;
+}
+
+.acct-share.is-expense .bar-fill {
+  --fill: var(--c-expense);
+}
+
+/* The account dialog: "more" opens a part of its own under the fields that are always there. */
+.acct-more {
+  align-self: flex-start;
+}
+
+.acct-more-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 0.875rem;
+}
+
+/* The month's picker on an account's page wraps rather than leaving the window (a phone keeps its one line, which fits). */
+.accounts-page .month-nav {
+  flex-wrap: wrap;
+}
+
+/* Net worth on the dashboard: the number, and under it what it is made of. */
+.dash-worth {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+/* The phone's top bar has one more icon: on a narrow phone the icons give way rather than push the bar wider than the screen. */
+.phone-actions {
+  min-width: 0;
+}
+
+/* "1 EUR = [ 5.00 ] RON" in the account dialog: the rate typed between the words it says. The words keep together; the field has the room
+   that is left, and goes to a line of its own when that is too little (a narrow dialog). */
+.rate-sentence {
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.375rem 0.5rem;
+  font-size: 0.875rem;
+}
+
+.rate-sentence > span {
+  flex: none;
+  white-space: nowrap;
+}
+
+.rate-sentence > input {
+  flex: 1 1 6rem;
+  width: auto;
+  min-width: 0;
+}
+
+/* What a transaction was in its account's own currency, small and quiet under the amount in the app's (a row of the transactions). It is
+   cut with an ellipsis rather than being wider than the amount's column, which is as wide as 16 characters of the row's size. */
+.cell-native {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 0.75rem;
+  font-weight: 400;
+  color: var(--muted-foreground);
+}
+
+/* A transfer between two currencies in one cell: "what left \2192 what arrived". On a line when there is room; the arrival under the amount
+   on a phone and where a row is two lines, so the names keep their room. */
+html.is-phone .cell-amount.is-pair > .pair-to {
+  display: block;
+}
+
+@container (max-width: 40em) {
+  ul.card-list.tx-transfers .cell-amount.is-pair > .pair-to {
+    display: block;
+  }
+}

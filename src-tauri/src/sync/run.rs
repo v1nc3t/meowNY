@@ -27,6 +27,12 @@ pub struct Outcome {
     pub transcript: Vec<u8>,
 }
 
+#[cfg(test)]
+thread_local! {
+    /// Tests: after this many messages the conversation is cut, as a lost connection cuts it (`sync_cut_after`).
+    static CUT_AFTER: std::cell::Cell<Option<usize>> = const { std::cell::Cell::new(None) };
+}
+
 struct Wire {
     messages: usize,
     bytes: usize,
@@ -37,6 +43,10 @@ struct Wire {
 impl Wire {
     /// Sends a message through its bytes and reads it back, as the other device would.
     fn carry(&mut self, message: &Message) -> Result<Message, SyncError> {
+        #[cfg(test)]
+        if CUT_AFTER.get().is_some_and(|cut| self.messages >= cut) {
+            return Err(SyncError::Internal);
+        }
         let bytes = message.to_bytes()?;
         self.messages += 1;
         self.bytes += bytes.len();
@@ -71,6 +81,15 @@ fn rows_of(wire: &mut Wire, messages: Vec<Message>, tables: &[Table]) -> Result<
 /// Syncs `a` with `b`; both read the same wall clock, `now_ms`. See `sync_with_clocks`.
 pub fn sync(a: &mut Connection, b: &mut Connection, today: &str, now_ms: u64, since_ms: Option<u64>) -> Result<Outcome, SyncError> {
     sync_with_clocks(a, b, today, now_ms, now_ms, since_ms)
+}
+
+/// A sync that is cut after `messages` messages: the error of the message that did not get through, or the outcome if there were fewer.
+#[cfg(test)]
+pub fn sync_cut_after(a: &mut Connection, b: &mut Connection, today: &str, now_ms: u64, messages: usize) -> Result<Outcome, SyncError> {
+    CUT_AFTER.set(Some(messages));
+    let result = sync(a, b, today, now_ms, None);
+    CUT_AFTER.set(None);
+    result
 }
 
 /// Syncs `a` (the computer) with `b` (the phone). `today` is the date for the history entries of a currency change, `a_wall_ms` and

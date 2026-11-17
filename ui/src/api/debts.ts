@@ -44,8 +44,13 @@ export const Entry = z.object({
   date,
   note: z.string().nullable(),
   transactionId: id.nullable(),
+  /** The account the money left or reached. */
+  accountId: id,
 })
 export type Entry = z.infer<typeof Entry>
+
+/** An entry as the edit dialog takes it from a line of a friend's statement: with its account only when the line says it. */
+export type EntryOfLine = Omit<Entry, 'accountId'> & { accountId?: string }
 
 export type NewEntry = {
   personId: string
@@ -54,6 +59,8 @@ export type NewEntry = {
   date: string
   note?: string | null
   transactionId?: string | null
+  /** Left out, a new entry is in the main account. */
+  accountId?: string
 }
 
 /** Fields left out stay as they are; `note: null` and `transactionId: null` clear them. */
@@ -77,6 +84,8 @@ export const Line = z.object({
   transactionId: id.nullable(),
   /** The payment date of that transaction, which for an entry is not the day of the line. Set whenever `transactionId` is. */
   transactionDate: date.nullable(),
+  /** The account of an entry, when the statement says it; without it the edit dialog leaves the account as it is. */
+  accountId: id.nullable().optional(),
 })
 export type Line = z.infer<typeof Line>
 
@@ -139,6 +148,8 @@ export type BillAccept = {
   categoryId?: string
   rate?: string
   amount?: string
+  /** The account of the expense and of the entry; the main account when left out. */
+  accountId?: string
 }
 
 export const Reminders = z.object({
@@ -288,13 +299,15 @@ export const debts = {
    * "Mark as paid". No amount means the whole balance; one above the debt is accepted and the answer says how much was over.
    * `transactionId` is the transaction the payment was for: only a reference, no amount changes.
    */
-  settle: (id: string, options: { amount?: string; date?: string; note?: string; transactionId?: string } = {}) =>
+  settle: (id: string, options: { amount?: string; date?: string; note?: string; transactionId?: string; accountId?: string } = {}) =>
     call('settle_person', Settled, {
       id,
       amount: options.amount ?? null,
       date: options.date ?? null,
       note: options.note ?? null,
       transactionId: options.transactionId ?? null,
+      // only when one was chosen: the main account otherwise
+      ...(options.accountId ? { accountId: options.accountId } : {}),
     }),
   preview: (amount: string, input: SplitInput) => call('split_preview', SplitPreview, { amount, input }),
   split: (transactionId: string, input: SplitInput) => call('set_transaction_split', Transaction, { id: transactionId, input }),

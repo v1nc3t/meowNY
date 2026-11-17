@@ -30,7 +30,7 @@ const HOME: &str = "/home/you";
 /// Outputs that legitimately differ from run to run (the clock, file sizes, timestamps inside files). They are
 /// compared by exit code, by the shape of their JSON and by the frame of their plain output, not word for word.
 /// "export preview" counts the payments that are due, and more fall due as the days go by, as with "debts due".
-const MOVES: &[&str] = &["today", "recurring dues", "debts due", "debts history", "debts reminders", "budgets history", "recurring end", "documents add", "documents list", "documents show", "documents update", "export debts", "export preview", "export json", "export csv", "export xlsx", "export pdf", "backup create", "schema"];
+const MOVES: &[&str] = &["today", "recurring dues", "debts due", "debts history", "debts reminders", "budgets history", "accounts list", "accounts summary", "recurring end", "documents add", "documents list", "documents show", "documents update", "export debts", "export preview", "export json", "export csv", "export xlsx", "export pdf", "backup create", "schema"];
 
 #[derive(Clone, Copy)]
 enum Who {
@@ -133,7 +133,7 @@ fn tour(app: &App) -> (Map<String, Value>, Vec<Value>) {
     t.example("today", read, "meowny today", &["today"], true, true, None);
     t.example("settings get", read, "meowny settings get", &["settings", "get"], true, true, None);
     t.example("categories list", read, "meowny categories list --type expense", &["categories", "list", "--type", "expense"], true, true, None);
-    t.example("transactions list", read, "meowny transactions list --limit 4", &["transactions", "list", "--limit", "4"], true, true, None);
+    t.example("transactions list", read, "meowny transactions list --kind income --limit 4", &["transactions", "list", "--kind", "income", "--limit", "4"], true, true, None);
     t.example("budgets overview", read, "meowny budgets overview --month 2026-09", &["budgets", "overview", "--month", "2026-09"], true, true, None);
     t.example("budgets history", read, "meowny budgets history", &["budgets", "history"], true, true, None);
     t.example("recurring list", read, "meowny recurring list", &["recurring", "list"], true, true, None);
@@ -146,24 +146,96 @@ fn tour(app: &App) -> (Map<String, Value>, Vec<Value>) {
     t.example("stats planned", read, "meowny stats planned --month 2026-09", &["stats", "planned", "--month", "2026-09"], true, true, None);
     t.example("export preview", read, "meowny export preview --from 2026-01-01 --to 2026-09-30", &["export", "preview", "--from", "2026-01-01", "--to", "2026-09-30"], true, true, None);
     t.example("backup schedule", read, "meowny backup schedule", &["backup", "schedule"], true, true, None);
+    // The demo accounts. What they hold today and what changed this month follow the clock, so those two are compared by shape.
+    t.example("accounts list", read, "meowny accounts list", &["accounts", "list"], true, true, None);
+    t.example("accounts summary", read, "meowny accounts summary", &["accounts", "summary"], true, true, None);
+    t.example("accounts history", read, "meowny accounts history 2 --year 2025", &["accounts", "history", "2", "--year", "2025"], true, true, None);
+    // What the cash account paid and took in over a month that is over, by category: the days are given, so it does not move with the clock.
+    t.example("accounts breakdown", read, "meowny accounts breakdown 3 --from 2026-09-01 --to 2026-09-30", &["accounts", "breakdown", "3", "--from", "2026-09-01", "--to", "2026-09-30"], true, true, None);
+    t.example("transfers list", read, "meowny transfers list --account-id 2 --limit 3", &["transfers", "list", "--account-id", "2", "--limit", "3"], true, true, None);
 
     // Changing: a category, a transaction, a budget.
     t.example("settings set", write, "meowny settings set --language ro", &["settings", "set", "--language", "ro"], false, true, None);
     t.capture(write, &Tour::strings(&["settings", "set", "--language", "en"]), None, &[]); // and back, for what follows
     let pets = Tour::id(&t.example("categories create", write, "meowny categories create --name Pets --type expense", &["categories", "create", "--name", "Pets", "--type", "expense"], false, true, None));
     t.example("categories rename", write, &format!("meowny categories rename {pets} --name Animals"), &["categories", "rename", &pets, "--name", "Animals"], false, true, None);
-    let bread = Tour::id(&t.example(
-        "transactions create",
+    // A card in lei, five to the euro, in the red with a limit of 500.00 lei (its virtual balance, so 380.00 lei are available): a negative opening
+    // balance is written with an equals sign. The days are far enough back that what it holds and what changed this month stay the same as the months go by.
+    let card = Tour::id(&t.example(
+        "accounts create",
         write,
-        &format!("meowny transactions create --name Bread --amount 2.40 --payment-date 2026-10-14 --category-id {pets} --client-uuid {UUID}"),
-        &["transactions", "create", "--name", "Bread", "--amount", "2.40", "--payment-date", "2026-10-14", "--category-id", &pets, "--client-uuid", UUID],
+        "meowny accounts create --name \"Shop card\" --kind credit_card --opening-balance=-120.00 --opening-date 2026-01-01 --bic BNPAFRPP --group Cards --virtual-balance 500.00 --notes \"Limit 500.00\" --currency RON --rate 5.00",
+        &[
+            "accounts", "create", "--name", "Shop card", "--kind", "credit_card", "--opening-balance=-120.00", "--opening-date", "2026-01-01", "--bic", "BNPAFRPP", "--group", "Cards", "--virtual-balance", "500.00",
+            "--notes", "Limit 500.00", "--currency", "RON", "--rate", "5.00",
+        ],
         false,
         true,
         None,
     ));
-    t.example("transactions update", write, &format!("meowny transactions update {bread} --amount 2.95 --description Sourdough"), &["transactions", "update", &bread, "--amount", "2.95", "--description", "Sourdough"], false, true, None);
+    // In an account in lei the amount is in euro, which budgets and statistics count, and the native amount is what the account paid, in lei.
+    let bread = Tour::id(&t.example(
+        "transactions create",
+        write,
+        &format!("meowny transactions create --name Bread --amount 2.40 --payment-date 2026-10-14 --category-id {pets} --client-uuid {UUID} --account-id {card} --native-amount 12.00"),
+        &["transactions", "create", "--name", "Bread", "--amount", "2.40", "--payment-date", "2026-10-14", "--category-id", &pets, "--client-uuid", UUID, "--account-id", &card, "--native-amount", "12.00"],
+        false,
+        true,
+        None,
+    ));
+    t.example(
+        "transactions update",
+        write,
+        &format!("meowny transactions update {bread} --amount 2.95 --native-amount 14.75 --description Sourdough"),
+        &["transactions", "update", &bread, "--amount", "2.95", "--native-amount", "14.75", "--description", "Sourdough"],
+        false,
+        true,
+        None,
+    );
     t.example("budgets set", write, &format!("meowny budgets set --type expense --month 2026-12 --amount-limit 100.00 --category-id {pets}"), &["budgets", "set", "--type", "expense", "--month", "2026-12", "--amount-limit", "100.00", "--category-id", &pets], false, true, None);
     t.example("budgets remove", write, &format!("meowny budgets remove --type expense --month 2027-01 --category-id {pets} --yes"), &["budgets", "remove", "--type", "expense", "--month", "2027-01", "--category-id", &pets, "--yes"], false, true, None);
+
+    // Accounts and transfers: money moved between your own accounts is never income or an expense.
+    // A yes or no flag is on when it is given; to turn it off it takes an equals sign. A new rate changes what the card is worth in euro and no
+    // amount that is stored; the balance is what it holds today, in lei, and a negative one takes an equals sign too.
+    t.example(
+        "accounts update",
+        write,
+        &format!("meowny accounts update {card} --name \"Store card\" --number 4242 --include-in-net-worth=false --rate 4.97 --balance=-130.00"),
+        &["accounts", "update", &card, "--name", "Store card", "--number", "4242", "--include-in-net-worth=false", "--rate", "4.97", "--balance=-130.00"],
+        false,
+        true,
+        None,
+    );
+    t.example(
+        "accounts show",
+        read,
+        &format!("meowny accounts show {card} --from 2026-10-01 --to 2026-10-31"),
+        &["accounts", "show", &card, "--from", "2026-10-01", "--to", "2026-10-31"],
+        true,
+        true,
+        None,
+    );
+    // Between euro and lei a transfer has two amounts: what leaves the first account, in its currency, and what arrives in the second, in its own.
+    // It is dated in October, like the rest of what is in the card, so that what changed this month stays the same as the months go by.
+    let moved = Tour::id(&t.example(
+        "transfers create",
+        write,
+        &format!("meowny transfers create --from-account-id 1 --to-account-id {card} --amount 40.00 --to-amount 200.00 --date 2026-10-20"),
+        &["transfers", "create", "--from-account-id", "1", "--to-account-id", &card, "--amount", "40.00", "--to-amount", "200.00", "--date", "2026-10-20"],
+        false,
+        true,
+        None,
+    ));
+    t.example(
+        "transfers update",
+        write,
+        &format!("meowny transfers update {moved} --amount 50.00 --to-amount 250.00 --note \"Rainy day\""),
+        &["transfers", "update", &moved, "--amount", "50.00", "--to-amount", "250.00", "--note", "Rainy day"],
+        false,
+        true,
+        None,
+    );
 
     // Friends, shared bills and the ledger: money that is owed, in both directions. A loan is never income or an expense.
     let json_id = |got: Value| serde_json::from_str::<Value>(got["stdout"].as_str().unwrap()).unwrap()["id"].as_str().unwrap().to_string();
@@ -322,6 +394,14 @@ fn tour(app: &App) -> (Map<String, Value>, Vec<Value>) {
     let listed: Value = serde_json::from_str(listed["stdout"].as_str().unwrap()).unwrap();
     let order: Vec<&str> = listed.as_array().unwrap().iter().map(|c| c["id"].as_str().unwrap()).filter(|id| *id != pets).collect();
     let ids = format!("{pets},{}", order.join(","));
+    // Accounts: bring the card to the top of the list, put it away and back, and delete an account that has nothing in it.
+    let account_ids = format!("{card},1,2,3,4,6"); // the demo data's five accounts that are not archived (the sixth is)
+    t.example("accounts reorder", write, &format!("meowny accounts reorder --ids {account_ids}"), &["accounts", "reorder", "--ids", &account_ids], false, true, None);
+    t.example("accounts archive", write, &format!("meowny accounts archive {card}"), &["accounts", "archive", &card], false, true, None);
+    t.example("accounts unarchive", write, &format!("meowny accounts unarchive {card}"), &["accounts", "unarchive", &card], false, true, None);
+    let spare = json_id(t.capture(write, &Tour::strings(&["accounts", "create", "--name", "Spare", "--kind", "cash", "--opening-date", "2026-01-01", "--json"]), None, &[]));
+    t.example("transfers delete", write, &format!("meowny transfers delete {moved} --yes"), &["transfers", "delete", &moved, "--yes"], true, false, None);
+    t.example("accounts delete", write, &format!("meowny accounts delete {spare} --yes"), &["accounts", "delete", &spare, "--yes"], true, false, None);
     t.example("categories reorder", write, &format!("meowny categories reorder --ids {ids}"), &["categories", "reorder", "--ids", &ids], false, true, None);
     t.example("categories delete", write, &format!("meowny categories delete {pets} --yes"), &["categories", "delete", &pets, "--yes"], true, false, None);
 
@@ -345,6 +425,14 @@ fn tour(app: &App) -> (Map<String, Value>, Vec<Value>) {
     let lease = document(app, "Lease.pdf", b"%PDF-1.4 the lease", None);
     t.error("A name for a copy that a system could run", &format!("meowny documents get {lease} --out /home/you/copy.sh"), write, &["documents", "get", &lease, "--out", &path("copy.sh")], &[]);
     t.error("A name that is taken", "meowny categories create --name Groceries --type expense", write, &["categories", "create", "--name", "Groceries", "--type", "expense"], &[]);
+    t.error("The main account cannot be archived", "meowny accounts archive 1", write, &["accounts", "archive", "1"], &[]);
+    t.error(
+        "An account in lei needs what it really paid",
+        "meowny transactions create --name Bread --amount 2.40 --payment-date 2026-10-14 --category-id 5 --account-id 6",
+        write,
+        &["transactions", "create", "--name", "Bread", "--amount", "2.40", "--payment-date", "2026-10-14", "--category-id", "5", "--account-id", "6"],
+        &[],
+    );
     t.error("A command that does not exist", "meowny backup restore", write, &["backup", "restore"], &[]);
     app.vault.lock();
     t.error("The app is locked", "meowny categories list", read, &["categories", "list"], &[]);

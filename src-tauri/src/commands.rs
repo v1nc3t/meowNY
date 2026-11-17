@@ -5,6 +5,8 @@ use std::sync::Arc;
 
 use tauri::State;
 
+use crate::accounts::transfers::{self, NewTransfer, Transfer, TransferPatch};
+use crate::accounts::{self, Account, AccountPatch, HistoryPoint, NewAccount};
 use crate::api::{Host, HostStatus};
 use crate::backup;
 use crate::categories::{self, Category, CategoryInMonth, CategoryType};
@@ -221,6 +223,22 @@ pub const COMMANDS: &[&str] = &[
     "bill_preview",
     "bill_accept",
     "debts_reminders",
+    "list_accounts",
+    "create_account",
+    "update_account",
+    "archive_account",
+    "unarchive_account",
+    "delete_account",
+    "reorder_accounts",
+    "account_statement",
+    "account_history",
+    "account_breakdown",
+    "accounts_summary",
+    "create_transfer",
+    "get_transfer",
+    "update_transfer",
+    "delete_transfer",
+    "list_transfers",
 ];
 
 #[tauri::command]
@@ -1100,7 +1118,8 @@ pub fn delete_ledger_entry(vault: Shared, id: String) -> Result<(), AppError> {
 }
 
 /// "Mark as paid": a payment between the person and a friend. No amount means the whole balance; one larger than the debt is accepted and
-/// turns the balance around (the answer says how much was over). `transaction_id` links the payment to the transaction it was for.
+/// turns the balance around (the answer says how much was over). `transaction_id` links the payment to the transaction it was for, and
+/// `account_id` is the account the money reached or left (none: the main account).
 #[tauri::command]
 pub fn settle_person(
     vault: Shared,
@@ -1109,10 +1128,11 @@ pub fn settle_person(
     date: Option<String>,
     note: Option<String>,
     transaction_id: Option<String>,
+    account_id: Option<String>,
 ) -> Result<Settled, AppError> {
     let id = categories::parse_id(&id)?;
     let today = today_text(&vault)?;
-    vault.with_conn(|c| ledger::settle(c, id, amount.as_deref(), date.as_deref(), note.as_deref(), transaction_id.as_deref(), &today))
+    vault.with_conn(|c| ledger::settle(c, id, amount.as_deref(), date.as_deref(), note.as_deref(), transaction_id.as_deref(), account_id.as_deref(), &today))
 }
 
 /// What a split would give each person for a bill of `amount`, for the dialog, on every change. Writes nothing. The rule is here and
@@ -1195,6 +1215,115 @@ pub fn bill_accept(vault: Shared, input: Accept) -> Result<Entry, AppError> {
 pub fn debts_reminders(vault: Shared, every_days: u32) -> Result<Reminders, AppError> {
     let today = today_text(&vault)?;
     vault.with_conn(|c| reminders::reminders(c, &today, every_days))
+}
+
+// ---- accounts and transfers (docs/accounts-design.md, section 6) ----------------------------------------------------------
+
+/// The accounts with what each holds today, in the person's order, the archived ones last.
+#[tauri::command]
+pub fn list_accounts(vault: Shared) -> Result<Vec<Account>, AppError> {
+    let today = today_text(&vault)?;
+    vault.with_conn(|c| accounts::list(c, &today))
+}
+
+#[tauri::command]
+pub fn create_account(vault: Shared, input: NewAccount) -> Result<Account, AppError> {
+    let today = today_text(&vault)?;
+    vault.with_conn(|c| accounts::create(c, &input, &today))
+}
+
+#[tauri::command]
+pub fn update_account(vault: Shared, id: String, patch: AccountPatch) -> Result<Account, AppError> {
+    let id = categories::parse_id(&id)?;
+    let today = today_text(&vault)?;
+    vault.with_conn(|c| accounts::update(c, id, &patch, &today))
+}
+
+#[tauri::command]
+pub fn archive_account(vault: Shared, id: String) -> Result<Account, AppError> {
+    let id = categories::parse_id(&id)?;
+    let today = today_text(&vault)?;
+    vault.with_conn(|c| accounts::archive(c, id, &today))
+}
+
+#[tauri::command]
+pub fn unarchive_account(vault: Shared, id: String) -> Result<Account, AppError> {
+    let id = categories::parse_id(&id)?;
+    let today = today_text(&vault)?;
+    vault.with_conn(|c| accounts::restore(c, id, &today))
+}
+
+/// Only an account that nothing points at, and never the main account.
+#[tauri::command]
+pub fn delete_account(vault: Shared, id: String) -> Result<(), AppError> {
+    let id = categories::parse_id(&id)?;
+    vault.with_conn(|c| accounts::delete(c, id))
+}
+
+/// `ids` are all the accounts that are not archived, in the new order.
+#[tauri::command]
+pub fn reorder_accounts(vault: Shared, ids: Vec<String>) -> Result<(), AppError> {
+    let ids = ids.iter().map(|id| categories::parse_id(id)).collect::<Result<Vec<_>, _>>()?;
+    vault.with_conn(|c| accounts::reorder(c, &ids))
+}
+
+/// What moved an account from `from` to `to` (both days included), oldest first, with the balance after each line.
+#[tauri::command]
+pub fn account_statement(vault: Shared, id: String, from: String, to: String) -> Result<accounts::Statement, AppError> {
+    let id = categories::parse_id(&id)?;
+    let today = today_text(&vault)?;
+    vault.with_conn(|c| accounts::statement(c, id, &from, &to, &today))
+}
+
+/// The balance of an account at the end of each month of a year ("YYYY"), up to today.
+#[tauri::command]
+pub fn account_history(vault: Shared, id: String, year: String) -> Result<Vec<HistoryPoint>, AppError> {
+    let id = categories::parse_id(&id)?;
+    let today = today_text(&vault)?;
+    vault.with_conn(|c| accounts::history(c, id, &year, &today))
+}
+
+/// What an account paid and took in from `from` to `to` (both days included), by category.
+#[tauri::command]
+pub fn account_breakdown(vault: Shared, id: String, from: String, to: String) -> Result<accounts::Breakdown, AppError> {
+    let id = categories::parse_id(&id)?;
+    vault.with_conn(|c| accounts::breakdown(c, id, &from, &to))
+}
+
+/// Net worth: what the accounts that count hold today plus what friends owe.
+#[tauri::command]
+pub fn accounts_summary(vault: Shared) -> Result<accounts::Summary, AppError> {
+    let today = today_text(&vault)?;
+    vault.with_conn(|c| accounts::summary(c, &today))
+}
+
+#[tauri::command]
+pub fn create_transfer(vault: Shared, input: NewTransfer) -> Result<Transfer, AppError> {
+    vault.with_conn(|c| transfers::create(c, &input))
+}
+
+/// Newest first, with the filters of the transfers tab.
+#[tauri::command]
+pub fn list_transfers(vault: Shared, filter: transfers::Filter) -> Result<transfers::Page, AppError> {
+    vault.with_conn(|c| transfers::list(c, &filter))
+}
+
+#[tauri::command]
+pub fn get_transfer(vault: Shared, id: String) -> Result<Transfer, AppError> {
+    let id = categories::parse_id(&id)?;
+    vault.with_conn(|c| transfers::get(c, id))
+}
+
+#[tauri::command]
+pub fn update_transfer(vault: Shared, id: String, patch: TransferPatch) -> Result<Transfer, AppError> {
+    let id = categories::parse_id(&id)?;
+    vault.with_conn(|c| transfers::update(c, id, &patch))
+}
+
+#[tauri::command]
+pub fn delete_transfer(vault: Shared, id: String) -> Result<(), AppError> {
+    let id = categories::parse_id(&id)?;
+    vault.with_conn(|c| transfers::delete(c, id))
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Deserialize)]

@@ -5,6 +5,7 @@ import { Recurring } from './recurring.ts'
 const row = {
   id: '3',
   categoryId: '2',
+  accountId: '1',
   name: 'Rent',
   description: null,
   amount: '900.00',

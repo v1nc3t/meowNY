@@ -41,7 +41,7 @@ fn the_next_days_of_a_reminder_start_today_and_a_once_only_one_has_at_most_one()
 }
 
 fn lend_on(conn: &rusqlite::Connection, person: i64, kind: Kind, amount: &str, date: &str) {
-    ledger::add(conn, &NewEntry { person_id: person.to_string(), kind, amount: amount.into(), date: date.into(), note: None, transaction_id: None }).unwrap();
+    ledger::add(conn, &NewEntry { person_id: person.to_string(), kind, amount: amount.into(), date: date.into(), note: None, transaction_id: None, account_id: None }).unwrap();
 }
 
 #[test]

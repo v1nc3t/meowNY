@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { EXPORT_SECTIONS } from '../api/dataExport.ts'
-import { amountText, bounds, defaultChoice, isLimited, fitFormat, MAX_REPORT_MONTHS, modesFor, monthEnd, problemWith, sectionsFor, selectionFor, withMode, type Choice } from './exportPlan.ts'
+import { amountText, bounds, defaultChoice, isLimited, fitFormat, MAX_REPORT_MONTHS, modesFor, monthEnd, problemWith, sectionsFor, selectionFor, WHOLE_ONLY, withMode, type Choice } from './exportPlan.ts'
 
 const all: Choice = { ...defaultChoice({ date: '2026-10-16', month: '2026-10' }), mode: 'date', from: '2026-01-01', to: '2026-12-31' }
 const days = (from: string, to: string): Choice => ({ ...all, limitDates: true, mode: 'date', from, to })
@@ -83,9 +83,17 @@ test('the parts of a file are sent only when some are left out, and the history 
   assert.equal('sections' in selectionFor('json', all), false)
   assert.equal('sections' in selectionFor('xlsx', all), false)
   assert.deepEqual(selectionFor('json', { ...all, sections: ['transactions', 'budgets'] }).sections, ['transactions', 'budgets'])
-  // a limit leaves the history out of a JSON file, which is every part but that one
+  // a limit leaves the history and the transfers out of a JSON file, which is every part but those
   const limited: Choice = { ...all, kind: 'INCOME' }
-  assert.deepEqual(sectionsFor('json', limited), EXPORT_SECTIONS.filter((section) => section !== 'history'))
+  assert.deepEqual(WHOLE_ONLY, ['history', 'transfers'])
+  assert.deepEqual(sectionsFor('json', limited), EXPORT_SECTIONS.filter((section) => section !== 'history' && section !== 'transfers'))
+  assert.deepEqual(sectionsFor('xlsx', limited), EXPORT_SECTIONS.filter((section) => section !== 'history' && section !== 'transfers'))
+  assert.equal('sections' in selectionFor('xlsx', limited), false, 'and so for an Excel file')
+  assert.deepEqual(selectionFor('json', { ...limited, sections: ['transfers', 'accounts'] }).sections, ['accounts'], 'the accounts stay, as names only')
+  assert.equal(problemWith('xlsx', { ...limited, sections: ['transfers'] }, 1), 'sections')
+  // the accounts and the transfers are parts like the others
+  assert.ok(sectionsFor('json', all).includes('accounts') && sectionsFor('xlsx', all).includes('transfers'))
+  assert.deepEqual(selectionFor('xlsx', { ...all, sections: ['accounts', 'transfers'] }).sections, ['accounts', 'transfers'])
   assert.equal('sections' in selectionFor('json', limited), false, 'what is left is every part there can be')
   assert.deepEqual(selectionFor('json', { ...limited, sections: ['history', 'budgets'] }).sections, ['budgets'])
   // an Excel file has no sheet for the history

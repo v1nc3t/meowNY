@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { test } from 'node:test'
 import { allChosen, choicesInOrder, cleanDigits, clockGapText, FIELDS, locksAfterBackground, PHONE_PASSPHRASE_GOOD, phoneClockGap, REASON_KEYS, reasonNeedsUpdate, shouldWarn, Status, TABLES, wantsLongerPassphrase } from './sync.ts'
+import { en } from '../i18n/en.ts'
 import { Today } from './today.ts'
 
 // What the Rust side sends, as its own tests show it (sync/service.rs, sync/peers.rs, vault.rs).
@@ -140,9 +141,31 @@ test('every conflict needs an answer, and the answers go out in the order of the
 test('the tables and fields are the ones the Rust side sends', () => {
   const wire = readFileSync(new URL('../../../src-tauri/src/sync/wire.rs', import.meta.url), 'utf8')
   const names = [...(/pub fn name\(self\)[\s\S]*?\n    \}/.exec(wire)?.[0] ?? '').matchAll(/=> "(\w+)"/g)].map((m) => m[1])
-  assert.deepEqual([...TABLES].sort(), names.sort())
+  // Accounts and transfers come with protocol 9 (docs/accounts-design.md, section 7). Until wire.rs names them the screen is one step
+  // ahead by exactly those two; from then on the lists are equal again, and this needs no change.
+  const ahead = names.includes('accounts') ? [] : ['accounts', 'transfers']
+  assert.deepEqual([...TABLES].filter((table) => !ahead.includes(table)).sort(), names.sort())
   const engine = readFileSync(new URL('../../../src-tauri/src/sync/engine.rs', import.meta.url), 'utf8')
   const facts = /fn facts\(conn[\s\S]*?\n\}\n/.exec(engine)?.[0] ?? ''
   const sent = new Set([...facts.matchAll(/\("(\w+)", /g)].map((m) => m[1]))
   for (const field of sent) assert.ok((FIELDS as readonly string[]).includes(field ?? ''), `${field} is not a known field`)
+})
+
+test('every field a conflict can name has its words, the five of an account too', () => {
+  for (const field of FIELDS) assert.ok(`sync.field.${field}` in en, `sync.field.${field}`)
+  for (const field of ['bic', 'notes', 'group', 'includeNetWorth', 'virtualBalance']) assert.ok((FIELDS as readonly string[]).includes(field), field)
+})
+
+test('the screen knows the four facts of a currency per account before the engine sends them', () => {
+  // docs/accounts-design.md, section 21.6: `currency` and `rate` of an account, `nativeAmount` of a transaction, `toAmount` of a transfer. The engine's list
+  // is checked one way only (what it sends must be known here), so the screen can be ahead of it and the check needs no change when the engine catches up.
+  const engine = readFileSync(new URL('../../../src-tauri/src/sync/engine.rs', import.meta.url), 'utf8')
+  const facts = /fn facts\(conn[\s\S]*?\n\}\n/.exec(engine)?.[0] ?? ''
+  const sent = new Set([...facts.matchAll(/\("(\w+)", /g)].map((m) => m[1]))
+  for (const field of ['currency', 'rate', 'nativeAmount', 'toAmount']) {
+    assert.ok((FIELDS as readonly string[]).includes(field), `${field} is a known field`)
+    assert.ok(`sync.field.${field}` in en, `${field} has its words`)
+  }
+  // and whatever the engine does send, today or later, is known
+  for (const sentField of sent) assert.ok((FIELDS as readonly string[]).includes(sentField), `${sentField} is not a known field`)
 })

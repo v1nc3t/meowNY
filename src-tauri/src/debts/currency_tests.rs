@@ -32,12 +32,13 @@ fn lived_in() -> (Connection, i64, i64) {
             interval_count: 1,
             end_date: None,
             description: None,
+            account_id: None,
         },
     )
     .unwrap();
     set_template(&conn, item.id, &input(Mode::Shares, Some("2"), vec![with(who(anna), "1")])).unwrap();
     for (person, kind, amount) in [(anna, Kind::Lent, "20.00"), (bob, Kind::Borrowed, "0.01"), (anna, Kind::RepaidToMe, "5.55")] {
-        ledger::add(&conn, &NewEntry { person_id: person.to_string(), kind, amount: amount.into(), date: "2026-01-05".into(), note: None, transaction_id: None }).unwrap();
+        ledger::add(&conn, &NewEntry { person_id: person.to_string(), kind, amount: amount.into(), date: "2026-01-05".into(), note: None, transaction_id: None, account_id: None }).unwrap();
     }
     (conn, anna, bob)
 }

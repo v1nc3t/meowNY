@@ -34,7 +34,7 @@ pub(super) const SPLIT: Param = Param::new("split", Kind::String, "Only the bill
 pub(super) const SECTIONS: Param = Param::new(
     "sections",
     Kind::String,
-    "The parts of the file, separated by commas, from: transactions, categories, budgets, recurring, documents, people (the friends and what they owe), due (the overdue recurring payments), ledger (the history of debts) and history (the change history, only in a file with no limits). Leave out for all of them.",
+    "The parts of the file, separated by commas, from: transactions, categories, budgets, recurring, accounts (with limits, only the name and type of those the file speaks of), transfers (between accounts, only in a file with no limits), documents, people (the friends and what they owe), due (the overdue recurring payments), ledger (the history of debts) and history (the change history, only in a file with no limits). Leave out for all of them.",
 );
 
 /// What an export covers, from the arguments: the parts come as one text separated by commas and are read as a list.
@@ -94,11 +94,13 @@ fn categories_list(ctx: &Ctx, args: Map<String, Value>) -> Result<Value, ApiErro
 pub const TRANSACTIONS_LIST: Route = Route {
     name: "transactions.list",
     scope: Scope::Read,
-    summary: "Transactions, newest first, with the total that match. Up to 100 a page, 50 unless limit says otherwise.",
+    summary: "Transactions, newest first, with the total that match. Up to 100 a page, 50 unless limit says otherwise. amount is in the app's currency; for a row in an account in another currency nativeAmount is what moved that account, in its currency.",
     params: &[
         Param::new("from", Kind::Date, "Only on or after this date."),
         Param::new("to", Kind::Date, "Only on or before this date."),
         Param::new("categoryId", Kind::Id, "Only this category."),
+        Param::new("accountId", Kind::Id, "Only this account."),
+        KIND,
         Param::new("q", Kind::String, "Only transactions whose name or description contains this text."),
         Param::new("limit", Kind::Integer, "How many to return, 1 to 100. Default 50."),
         Param::new("offset", Kind::Integer, "How many to skip, for the next page. Default 0."),

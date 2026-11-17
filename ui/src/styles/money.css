@@ -39,6 +39,103 @@
   }
 }
 
+/* The transfers as a table: the day, from, to, the amount (as wide as in the transactions, and as neutral: no sign, no colour), the note, then
+   edit and delete (two buttons of 2rem and the gap). Narrower than 40em the head goes and a row is two lines: from and to (side by side, with an
+   arrow between them, each as wide as its name) and the amount, the day and the note under them (the note has the room that the day leaves).
+   Narrower than 30em the buttons go to the line of the note, and the amount to the line of the day, so that from and to have the whole width
+   of the first. */
+.card-list.tx-transfers {
+  --cols: 12ch minmax(0, 1fr) minmax(0, 1fr) 16ch minmax(0, 2fr) 4.25rem;
+}
+
+.tx-transfers .xfer-route {
+  display: contents;
+}
+
+/* Where subgrid is known the rows share the list's columns, and the columns are as wide as what is in them: the day and the amount by
+   their content, from and to by the longest name (up to 12rem), and the note has all that is left, so it is cut only when the list is
+   really narrow (the 40em rules below take over there). Without subgrid each row has the fixed columns above. */
+@supports (grid-template-columns: subgrid) {
+  .card-list.tx-transfers {
+    display: grid;
+    grid-template-columns: max-content fit-content(12rem) fit-content(12rem) max-content minmax(10rem, 1fr) 4.25rem;
+  }
+
+  ul.card-list.tx-transfers > li.card-item,
+  ul.card-list.tx-transfers > li.list-head {
+    grid-column: 1 / -1;
+    grid-template-columns: subgrid;
+  }
+}
+
+@container (max-width: 40em) {
+  ul.card-list.is-table.tx-transfers > li.card-item {
+    grid-template-columns: auto minmax(0, 1fr) auto auto;
+    grid-template-areas:
+      'route route amount actions'
+      'date note note actions';
+  }
+
+  ul.card-list.is-table.tx-transfers .xfer-route {
+    display: flex;
+    grid-area: route;
+    gap: 0.5rem;
+    min-width: 0;
+  }
+
+  ul.card-list.is-table.tx-transfers .xfer-route > .cell-name {
+    flex: 0 1 auto;
+  }
+
+  ul.card-list.is-table.tx-transfers .xfer-to::before {
+    content: '\2192';
+    flex: none;
+    color: var(--muted-foreground);
+  }
+
+  ul.card-list.is-table.tx-transfers .cell-amount {
+    grid-area: amount;
+  }
+
+  ul.card-list.is-table.tx-transfers .xfer-date {
+    grid-area: date;
+  }
+
+  ul.card-list.is-table.tx-transfers .xfer-note {
+    grid-area: note;
+    text-align: right;
+  }
+}
+
+@container (max-width: 30em) {
+  ul.card-list.is-table.tx-transfers > li.card-item {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      'route route'
+      'date amount'
+      'note actions';
+  }
+
+  ul.card-list.is-table.tx-transfers .xfer-note {
+    text-align: left;
+  }
+}
+
+/* Narrower than 30em the buttons of a transaction (edit, delete, the chevron) take a line of their own, so that the name keeps its room. */
+@container (max-width: 30em) {
+  ul.card-list.tx-list > li.card-item {
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    grid-template-areas:
+      'name name amount'
+      'sub mark sub-end'
+      'actions actions actions';
+  }
+
+  ul.card-list.tx-list .cell-actions {
+    justify-content: flex-start;
+  }
+}
+
 /* An open transaction: the split and the description side by side where there is room, one under the other where there is not. */
 .tx-detail {
   display: flex;
@@ -198,6 +295,13 @@ html.is-phone .split-table td {
   .budget-split {
     grid-template-columns: minmax(0, 1fr);
   }
+}
+
+/* The half is a container (its dialogs are drawn into the body, so it holds nothing fixed): narrower than 28em, which is what the columns
+   of a row add up to, a row is laid out as on a phone (below), whatever the device is. */
+.budget-half {
+  container-type: inline-size;
+  container-name: budget-half;
 }
 
 /* A side, and the history: a title over its boxes. */
@@ -368,6 +472,53 @@ html.is-phone .sum-list .cell-name > .card-name,
 html.is-phone .cat-list .cell-name > .card-name {
   white-space: normal;
   overflow-wrap: anywhere;
+}
+
+/* The phone's rows for a half that is narrow (a small window), with the rows' own sizes: no head, what a category adds up to a line under
+   its name, the budget and the buttons at the right. The phone's own rules (above) are more specific and win where they apply. */
+@container budget-half (max-width: 28em) {
+  .card-list.sum-list,
+  .card-list.cat-list {
+    --cols: minmax(0, 1fr) auto 4.25rem;
+  }
+
+  ul.card-list.cat-list > li.list-head {
+    display: none;
+  }
+
+  ul.card-list.cat-list > li.card-item {
+    align-content: center;
+  }
+
+  ul.card-list.cat-list > li.card-item > .cell-spent {
+    grid-column: 1 / 3;
+    grid-row: 2;
+    padding-left: var(--grip-room);
+    font-size: 0.875rem;
+    text-align: left;
+    white-space: normal;
+  }
+
+  ul.card-list.cat-list > li.card-item > .cell-amount:not(.cell-spent) {
+    grid-column: 2;
+    grid-row: 1;
+  }
+
+  ul.card-list.cat-list > li.card-item > .cell-actions {
+    grid-column: 3;
+    grid-row: 1 / span 2;
+  }
+
+  .cat-list .spent-label.sr-only {
+    position: static;
+    width: auto;
+    height: auto;
+    margin: 0;
+    overflow: visible;
+    clip-path: none;
+    font-weight: 400;
+    color: var(--muted-foreground);
+  }
 }
 
 /* The form of the budget is the row itself, so its parts sit on the columns of the list. Changing the amount takes the whole row: the
@@ -655,9 +806,64 @@ ul.card-list.rec-table .cell-actions {
   }
 }
 
+/* Under 34em the buttons of a row (mark as paid, edit, delete, the chevron) no longer fit beside the name and the amount: they take a line of their
+   own under the date and the small print. */
+@container (max-width: 34em) {
+  ul.card-list.rec-table > li.card-item {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      'name amount'
+      'sub sub-end'
+      'actions actions';
+  }
+
+  ul.card-list.rec-table .cell-actions {
+    min-width: 0;
+    flex-wrap: wrap;
+    justify-content: flex-start;
+    padding-top: 0.25rem;
+  }
+}
+
 /* The payments paid late, under the due ones: name, the day it fell due, the day it was paid, the amount (15 characters, with no sign). */
 .card-list.late-table {
   --cols: minmax(0, 1fr) 12ch 12ch 15ch;
+}
+
+/* A list of the recurring page (expenses, then income): its title, how many it holds and what they come to a month, and at the right the button that
+   adds one to it. The button drops under the words when there is no room. */
+.tx-pane.pane-stack > .rec-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem 0.75rem;
+  margin: 1.5rem 0 0;
+}
+
+.tx-pane.pane-stack > .rec-head:first-child {
+  margin-top: 0;
+}
+
+.tx-pane.pane-stack > .rec-head + * {
+  margin-top: 0.5rem;
+}
+
+.rec-title {
+  margin: 0;
+  font-family: var(--font);
+  font-size: 1.0625rem;
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+.rec-count {
+  min-width: 0;
+  font-size: 0.875rem;
+  color: var(--muted-foreground);
+}
+
+.rec-head > .ui-btn {
+  margin-left: auto;
 }
 
 /* The pane of due payments starts with a heading: no room above it, as the heading of the second list has. */

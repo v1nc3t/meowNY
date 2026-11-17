@@ -15,10 +15,11 @@ use sha2::{Digest as _, Sha256};
 
 use super::stamp::{self, Stamp};
 use super::wire::{
-    self, BudgetRow, CategoryRow, DigestMessage, DocumentLinkRow, DocumentRow, Entries, LedgerRow, Marker, Message, PersonRow, RecurringRow, Row,
-    RowsMessage, SplitPartRow, Table, TemplatePartRow, TemplateRow, TransactionRow, WireError, MAX_ENTRIES_PER_MESSAGE, MAX_ROWS_PER_MESSAGE,
-    MAX_ROWS_PER_TABLE, SOFT_MESSAGE_BYTES,
+    self, AccountRow, BudgetRow, CategoryRow, DigestMessage, DocumentLinkRow, DocumentRow, Entries, LedgerRow, Marker, Message, PersonRow, RecurringRow,
+    Row, RowsMessage, SplitPartRow, Table, TemplatePartRow, TemplateRow, TransactionRow, TransferRow, WireError, MAX_ENTRIES_PER_MESSAGE,
+    MAX_ROWS_PER_MESSAGE, MAX_ROWS_PER_TABLE, SOFT_MESSAGE_BYTES,
 };
+use crate::accounts::{self, MAIN_ID, MAIN_SYNC_ID};
 use crate::debts::splits::{self, Who};
 use crate::recurring;
 
@@ -101,12 +102,14 @@ impl From<crate::vault::AppError> for SyncError {
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct Digest(pub BTreeMap<Table, Entries>);
 
-const LISTED: [Table; 8] = [
+const LISTED: [Table; 10] = [
     Table::Categories,
     Table::People,
+    Table::Accounts,
     Table::RecurringTransactions,
     Table::Budgets,
     Table::Transactions,
+    Table::Transfers,
     Table::LedgerEntries,
     Table::Documents,
     Table::DocumentLinks,
@@ -317,16 +320,77 @@ fn load_rows(conn: &Connection, table: Table, wanted: &HashSet<&String>) -> Resu
                 }
             }
         }
+        Table::Accounts => {
+            let mut stmt = conn.prepare(
+                "SELECT sync_id, stamp, name, kind, number, opening_balance_minor, opening_date, archived, position, bic, notes, group_name, include_net_worth,
+                        virtual_balance_minor, currency, rate, created_at, updated_at
+                 FROM accounts ORDER BY sync_id",
+            )?;
+            for r in stmt.query_map([], |r| {
+                Ok(AccountRow {
+                    sync_id: r.get(0)?,
+                    stamp: r.get(1)?,
+                    name: r.get(2)?,
+                    kind: r.get(3)?,
+                    number: r.get(4)?,
+                    opening_balance_minor: r.get(5)?,
+                    opening_date: r.get(6)?,
+                    archived: r.get(7)?,
+                    position: r.get(8)?,
+                    bic: r.get(9)?,
+                    notes: r.get(10)?,
+                    group: r.get(11)?,
+                    include_net_worth: r.get(12)?,
+                    virtual_balance_minor: r.get(13)?,
+                    currency: r.get(14)?,
+                    rate: r.get(15)?,
+                    created_at: r.get(16)?,
+                    updated_at: r.get(17)?,
+                })
+            })? {
+                let r = r?;
+                if wanted.contains(&r.sync_id) {
+                    rows.push(Row::Account(r));
+                }
+            }
+        }
+        Table::Transfers => {
+            let mut stmt = conn.prepare(
+                "SELECT x.sync_id, x.stamp, f.sync_id, t.sync_id, x.amount_minor, x.transfer_date, x.note, x.created_at, x.updated_at, x.to_amount_minor
+                 FROM transfers x JOIN accounts f ON f.id = x.from_account_id JOIN accounts t ON t.id = x.to_account_id ORDER BY x.sync_id",
+            )?;
+            for r in stmt.query_map([], |r| {
+                Ok(TransferRow {
+                    sync_id: r.get(0)?,
+                    stamp: r.get(1)?,
+                    from: r.get(2)?,
+                    to: r.get(3)?,
+                    amount_minor: r.get(4)?,
+                    to_amount_minor: r.get(9)?,
+                    transfer_date: r.get(5)?,
+                    note: r.get(6)?,
+                    created_at: r.get(7)?,
+                    updated_at: r.get(8)?,
+                })
+            })? {
+                let r = r?;
+                if wanted.contains(&r.sync_id) {
+                    rows.push(Row::Transfer(r));
+                }
+            }
+        }
         Table::LedgerEntries => {
             let mut stmt = conn.prepare(
-                "SELECT e.sync_id, e.stamp, p.sync_id, e.kind, e.amount_minor, e.entry_date, e.note, t.sync_id, e.origin_id, e.created_at, e.updated_at
-                 FROM ledger_entries e JOIN people p ON p.id = e.person_id LEFT JOIN transactions t ON t.id = e.transaction_id ORDER BY e.sync_id",
+                "SELECT e.sync_id, e.stamp, p.sync_id, e.kind, e.amount_minor, e.entry_date, e.note, t.sync_id, e.origin_id, e.created_at, e.updated_at, a.sync_id
+                 FROM ledger_entries e JOIN people p ON p.id = e.person_id JOIN accounts a ON a.id = e.account_id
+                 LEFT JOIN transactions t ON t.id = e.transaction_id ORDER BY e.sync_id",
             )?;
             for r in stmt.query_map([], |r| {
                 Ok(LedgerRow {
                     sync_id: r.get(0)?,
                     stamp: r.get(1)?,
                     person: r.get(2)?,
+                    account: r.get(11)?,
                     kind: r.get(3)?,
                     amount_minor: r.get(4)?,
                     entry_date: r.get(5)?,
@@ -347,14 +411,15 @@ fn load_rows(conn: &Connection, table: Table, wanted: &HashSet<&String>) -> Resu
             let mut templates = templates_by_item(conn)?;
             let mut stmt = conn.prepare(
                 "SELECT x.sync_id, x.stamp, c.sync_id, x.name, x.description, x.amount_minor, x.start_date, x.interval_unit, x.interval_count,
-                        x.next_due_date, x.end_date, x.is_active, x.created_at, x.updated_at, x.skipped_dates
-                 FROM recurring_transactions x JOIN categories c ON c.id = x.category_id ORDER BY x.sync_id",
+                        x.next_due_date, x.end_date, x.is_active, x.created_at, x.updated_at, x.skipped_dates, a.sync_id
+                 FROM recurring_transactions x JOIN categories c ON c.id = x.category_id JOIN accounts a ON a.id = x.account_id ORDER BY x.sync_id",
             )?;
             for r in stmt.query_map([], |r| {
                 Ok(RecurringRow {
                     sync_id: r.get(0)?,
                     stamp: r.get(1)?,
                     category: r.get(2)?,
+                    account: r.get(15)?,
                     name: r.get(3)?,
                     description: r.get(4)?,
                     amount_minor: r.get(5)?,
@@ -405,8 +470,8 @@ fn load_rows(conn: &Connection, table: Table, wanted: &HashSet<&String>) -> Resu
             let mut parts = parts_by_bill(conn)?;
             let mut stmt = conn.prepare(
                 "SELECT t.sync_id, t.stamp, c.sync_id, r.sync_id, t.recurring_due_date, t.client_uuid, t.name, t.amount_minor,
-                        t.planned_amount_minor, t.payment_date, t.description, t.created_at, t.updated_at, p.sync_id
-                 FROM transactions t JOIN categories c ON c.id = t.category_id
+                        t.planned_amount_minor, t.payment_date, t.description, t.created_at, t.updated_at, p.sync_id, a.sync_id, t.native_amount_minor
+                 FROM transactions t JOIN categories c ON c.id = t.category_id JOIN accounts a ON a.id = t.account_id
                  LEFT JOIN recurring_transactions r ON r.id = t.recurring_transaction_id
                  LEFT JOIN people p ON p.id = t.paid_by ORDER BY t.sync_id",
             )?;
@@ -415,11 +480,13 @@ fn load_rows(conn: &Connection, table: Table, wanted: &HashSet<&String>) -> Resu
                     sync_id: r.get(0)?,
                     stamp: r.get(1)?,
                     category: r.get(2)?,
+                    account: r.get(14)?,
                     recurring: r.get(3)?,
                     recurring_due_date: r.get(4)?,
                     client_uuid: r.get(5)?,
                     name: r.get(6)?,
                     amount_minor: r.get(7)?,
+                    native_amount_minor: r.get(15)?,
                     planned_amount_minor: r.get(8)?,
                     payment_date: r.get(9)?,
                     description: r.get(10)?,
@@ -711,6 +778,14 @@ fn moved_by_merge(derived: &str, original: &str) -> bool {
     derived != original && derived.ends_with("-ffffffff")
 }
 
+/// The stamp of a row whose account was deleted at `deleted_at` (if it was): the later of the two.
+fn later(stamp: String, deleted_at: Option<String>) -> String {
+    match deleted_at {
+        Some(deleted_at) if deleted_at > stamp => deleted_at,
+        _ => stamp,
+    }
+}
+
 fn parse(text: &str) -> Result<Stamp, SyncError> {
     Stamp::parse(text).ok_or(SyncError::Invalid("stamp"))
 }
@@ -840,6 +915,20 @@ impl<'a> Applier<'a> {
             }
         }
         Err(SyncError::Invalid("reference"))
+    }
+
+    /// The local id of the account of an incoming row. An account that was deleted here (it has a marker) is the main account, and the
+    /// answer carries the stamp of that deletion: the row moves there and takes the later of its own stamp and that one, as its copy on
+    /// the other device does when the deletion arrives there (`empty_account`). An account nobody heard of is a broken reference
+    /// (`docs/accounts-design.md`, sections 7.3 and 7.4).
+    fn account(&self, sync_id: &str) -> Result<(i64, Option<String>), SyncError> {
+        match self.find(Table::Accounts, sync_id)? {
+            Some((id, _)) => Ok((id, None)),
+            None => match self.marker(sync_id)? {
+                Some(deleted_at) => Ok((MAIN_ID, Some(deleted_at))),
+                None => Err(SyncError::Invalid("reference")),
+            },
+        }
     }
 
     /// The parts of an incoming bill (or the weights of a template) with the friends turned into local ids. Two entries that end up
@@ -1306,6 +1395,178 @@ impl<'a> Applier<'a> {
         Ok(())
     }
 
+    // --- accounts ---------------------------------------------------------------------------------------------
+    //
+    // Rows of the ordinary kind: the newer whole row wins, and a deletion leaves a marker. Accounts are never merged by name: two with
+    // one name can be two real accounts, and one account out of two would add their balances. The main account has the same `sync_id`
+    // on every device, so it is one row with no merge; it is never archived and never deleted (`docs/accounts-design.md`, section 7.3).
+
+    fn accounts(&mut self, rows: &[Row]) -> Result<(), SyncError> {
+        let mut list: Vec<&AccountRow> = rows
+            .iter()
+            .map(|r| match r {
+                Row::Account(c) => Ok(c),
+                _ => Err(SyncError::Invalid("row")),
+            })
+            .collect::<Result<_, _>>()?;
+        list.sort_by(|a, b| a.sync_id.cmp(&b.sync_id));
+        for r in list {
+            // the main account is never archived and always in the app's currency, and an account has a rate exactly when it has a currency
+            if (r.sync_id == MAIN_SYNC_ID && (r.archived != 0 || r.currency.is_some())) || r.currency.is_some() != r.rate.is_some() {
+                return Err(SyncError::Invalid("account"));
+            }
+            if let Some(marker) = self.marker(&r.sync_id)? {
+                if marker >= r.stamp {
+                    self.summary.kept_yours += 1;
+                    continue;
+                }
+                self.remove_marker(&r.sync_id)?;
+            }
+            match self.find(Table::Accounts, &r.sync_id)? {
+                Some((id, local)) => {
+                    if r.stamp <= local {
+                        if r.stamp < local {
+                            self.summary.kept_yours += 1;
+                        }
+                        continue;
+                    }
+                    self.note_overwrite(&local);
+                    self.run(
+                        "UPDATE accounts SET stamp = ?2, name = ?3, kind = ?4, number = ?5, opening_balance_minor = ?6, opening_date = ?7, archived = ?8,
+                         position = ?9, bic = ?10, notes = ?11, group_name = ?12, include_net_worth = ?13, virtual_balance_minor = ?14, currency = ?15, rate = ?16,
+                         created_at = ?17 WHERE id = ?1",
+                        params![
+                            id, r.stamp, r.name, r.kind, r.number, r.opening_balance_minor, r.opening_date, r.archived, r.position, r.bic, r.notes, r.group, r.include_net_worth,
+                            r.virtual_balance_minor, r.currency, r.rate, r.created_at
+                        ],
+                    )?;
+                    self.set_updated_at(Table::Accounts, id, &r.updated_at)?;
+                    self.summary.updated += 1;
+                }
+                None => {
+                    self.run(
+                        "INSERT INTO accounts (sync_id, stamp, name, kind, number, opening_balance_minor, opening_date, archived, position, bic, notes, group_name,
+                                               include_net_worth, virtual_balance_minor, currency, rate, created_at, updated_at)
+                         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18)",
+                        params![
+                            r.sync_id, r.stamp, r.name, r.kind, r.number, r.opening_balance_minor, r.opening_date, r.archived, r.position, r.bic, r.notes, r.group,
+                            r.include_net_worth, r.virtual_balance_minor, r.currency, r.rate, r.created_at, r.updated_at
+                        ],
+                    )?;
+                    self.summary.added += 1;
+                }
+            }
+        }
+        Ok(())
+    }
+
+    /// Everything that points at an account the other device deleted moves to the main account and takes the later of its own stamp and
+    /// the deletion's, so both devices work out the same stamp (the device that deleted it does the same from its end, `account`). A
+    /// transfer between that account and the main account would have the main account on both sides: it goes, and leaves the marker
+    /// both devices work out (`docs/accounts-design.md`, section 7.4). A transaction keeps its native amount, which the view ignores in an
+    /// account of the app's currency. A transfer whose two sides are then both in the app's currency loses its second amount, for the view
+    /// would count it into the main account; the other device does the same (`transfers`), and the person corrects the amounts, which may
+    /// still be in the foreign account's currency (section 21.6).
+    fn empty_account(&mut self, id: i64, deleted_at: &str) -> Result<(), SyncError> {
+        for table in ["transactions", "recurring_transactions", "ledger_entries"] {
+            self.run(&format!("UPDATE {table} SET account_id = ?3, stamp = max(stamp, ?1) WHERE account_id = ?2"), params![deleted_at, id, MAIN_ID])?;
+        }
+        self.run(
+            "UPDATE transfers SET from_account_id = ?3, stamp = max(stamp, ?1),
+             to_amount_minor = CASE WHEN (SELECT currency FROM accounts WHERE id = to_account_id) IS NULL THEN NULL ELSE to_amount_minor END
+             WHERE from_account_id = ?2 AND to_account_id <> ?3",
+            params![deleted_at, id, MAIN_ID],
+        )?;
+        self.run(
+            "UPDATE transfers SET to_account_id = ?3, stamp = max(stamp, ?1),
+             to_amount_minor = CASE WHEN (SELECT currency FROM accounts WHERE id = from_account_id) IS NULL THEN NULL ELSE to_amount_minor END
+             WHERE to_account_id = ?2 AND from_account_id <> ?3",
+            params![deleted_at, id, MAIN_ID],
+        )?;
+        let left: Vec<(i64, String, String)> = self
+            .tx
+            .prepare_cached("SELECT id, sync_id, stamp FROM transfers WHERE from_account_id = ?1 OR to_account_id = ?1")?
+            .query_map([id], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))?
+            .collect::<Result<_, _>>()?;
+        for (transfer, sync_id, stamp) in left {
+            let marker = after(&parse(&later(stamp, Some(deleted_at.to_string())))?).format();
+            self.run("DELETE FROM transfers WHERE id = ?1", [transfer])?;
+            self.put_marker(Table::Transfers, &sync_id, &marker)?;
+            self.summary.dropped += 1;
+        }
+        Ok(())
+    }
+
+    // --- transfers --------------------------------------------------------------------------------------------
+    //
+    // Rows of the ordinary kind. A side whose account was deleted here becomes the main account (`account`); a transfer that would then
+    // have the main account on both sides is not kept, and leaves the marker both devices work out.
+
+    fn transfers(&mut self, rows: &[Row]) -> Result<(), SyncError> {
+        let mut list: Vec<&TransferRow> = rows
+            .iter()
+            .map(|r| match r {
+                Row::Transfer(c) => Ok(c),
+                _ => Err(SyncError::Invalid("row")),
+            })
+            .collect::<Result<_, _>>()?;
+        list.sort_by(|a, b| a.sync_id.cmp(&b.sync_id));
+        for r in list {
+            let (from, from_deleted) = self.account(&r.from)?;
+            let (to, to_deleted) = self.account(&r.to)?;
+            if let Some(marker) = self.marker(&r.sync_id)? {
+                if marker >= r.stamp {
+                    self.summary.kept_yours += 1;
+                    continue;
+                }
+                self.remove_marker(&r.sync_id)?;
+            }
+            let existing = self.find(Table::Transfers, &r.sync_id)?;
+            if let Some((_, local)) = &existing {
+                if r.stamp <= *local {
+                    if r.stamp < *local {
+                        self.summary.kept_yours += 1;
+                    }
+                    continue;
+                }
+            }
+            let rescued = from_deleted.is_some() || to_deleted.is_some();
+            let stamp = later(later(r.stamp.clone(), from_deleted), to_deleted);
+            if from == to {
+                if let Some((id, _)) = &existing {
+                    self.run("DELETE FROM transfers WHERE id = ?1", [id])?;
+                }
+                self.put_marker(Table::Transfers, &r.sync_id, &after(&parse(&stamp)?).format())?;
+                self.summary.dropped += 1;
+                continue;
+            }
+            // a side whose account was deleted here is the main account now; with the other side in the app's currency too, the second amount has
+            // no place and is dropped, as `empty_account` drops it on the device that deleted the account
+            let to_amount = if rescued && !accounts::currencies_differ(self.tx, from, to)? { None } else { r.to_amount_minor };
+            match &existing {
+                Some((id, local)) => {
+                    self.note_overwrite(local);
+                    self.run(
+                        "UPDATE transfers SET stamp = ?2, from_account_id = ?3, to_account_id = ?4, amount_minor = ?5, transfer_date = ?6, note = ?7, created_at = ?8,
+                         to_amount_minor = ?9 WHERE id = ?1",
+                        params![id, stamp, from, to, r.amount_minor, r.transfer_date, r.note, r.created_at, to_amount],
+                    )?;
+                    self.set_updated_at(Table::Transfers, *id, &r.updated_at)?;
+                    self.summary.updated += 1;
+                }
+                None => {
+                    self.run(
+                        "INSERT INTO transfers (sync_id, stamp, from_account_id, to_account_id, amount_minor, transfer_date, note, created_at, updated_at, to_amount_minor)
+                         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+                        params![r.sync_id, stamp, from, to, r.amount_minor, r.transfer_date, r.note, r.created_at, r.updated_at, to_amount],
+                    )?;
+                    self.summary.added += 1;
+                }
+            }
+        }
+        Ok(())
+    }
+
     // --- recurring items ------------------------------------------------------------------------------------
 
     fn recurring(&mut self, rows: &[Row]) -> Result<(), SyncError> {
@@ -1323,6 +1584,7 @@ impl<'a> Applier<'a> {
             if moved_category {
                 stamp = moved(&parse(&stamp)?).format();
             }
+            let (account, account_deleted) = self.account(&r.account)?;
             let (template, paid_by, moved_person) = match &r.split {
                 Some(t) => {
                     let (lines, moved_parts) = self.local_parts(t.parts.iter().map(|p| (&p.person, &p.guest, p.weight)))?;
@@ -1354,14 +1616,16 @@ impl<'a> Applier<'a> {
                 return Err(SyncError::Invalid("split"));
             }
             let when = if stamp == r.stamp { r.updated_at.clone() } else { iso(parse(&stamp)?.ms) };
+            // an item of an account that was deleted here is in the main account and takes the later stamp; updated_at stays as sent
+            let stamp = later(stamp, account_deleted);
             let item_id = match &existing {
                 Some((id, local)) => {
                     self.note_overwrite(local);
                     self.run(
                         "UPDATE recurring_transactions SET stamp = ?2, category_id = ?3, name = ?4, description = ?5, amount_minor = ?6, start_date = ?7,
                          interval_unit = ?8, interval_count = ?9, next_due_date = ?10, end_date = ?11, is_active = ?12, created_at = ?13, skipped_dates = ?14,
-                         split_paid_by = ?15 WHERE id = ?1",
-                        params![id, stamp, category, r.name, r.description, r.amount_minor, r.start_date, r.interval_unit, r.interval_count, r.next_due_date, r.end_date, r.is_active, r.created_at, r.skipped_dates, paid_by],
+                         split_paid_by = ?15, account_id = ?16 WHERE id = ?1",
+                        params![id, stamp, category, r.name, r.description, r.amount_minor, r.start_date, r.interval_unit, r.interval_count, r.next_due_date, r.end_date, r.is_active, r.created_at, r.skipped_dates, paid_by, account],
                     )?;
                     self.set_updated_at(Table::RecurringTransactions, *id, &when)?;
                     self.summary.updated += 1;
@@ -1370,9 +1634,9 @@ impl<'a> Applier<'a> {
                 None => {
                     self.run(
                         "INSERT INTO recurring_transactions (sync_id, stamp, category_id, name, description, amount_minor, start_date, interval_unit,
-                         interval_count, next_due_date, end_date, is_active, created_at, updated_at, skipped_dates, split_paid_by)
-                         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)",
-                        params![r.sync_id, stamp, category, r.name, r.description, r.amount_minor, r.start_date, r.interval_unit, r.interval_count, r.next_due_date, r.end_date, r.is_active, r.created_at, when, r.skipped_dates, paid_by],
+                         interval_count, next_due_date, end_date, is_active, created_at, updated_at, skipped_dates, split_paid_by, account_id)
+                         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17)",
+                        params![r.sync_id, stamp, category, r.name, r.description, r.amount_minor, r.start_date, r.interval_unit, r.interval_count, r.next_due_date, r.end_date, r.is_active, r.created_at, when, r.skipped_dates, paid_by, account],
                     )?;
                     self.summary.added += 1;
                     self.tx.last_insert_rowid()
@@ -1497,6 +1761,7 @@ impl<'a> Applier<'a> {
             if moved_category {
                 stamp = moved(&parse(&stamp)?).format();
             }
+            let (account, account_deleted) = self.account(&r.account)?;
             let (parts, moved_parts) = self.local_parts(r.split.iter().map(|p| (&p.person, &p.guest, p.amount_minor)))?;
             let (paid_by, moved_payer) = self.local_payer(r.paid_by.as_deref())?;
             if moved_parts || moved_payer {
@@ -1579,13 +1844,17 @@ impl<'a> Applier<'a> {
             if (!parts.is_empty() || paid_by.is_some()) && self.is_income(category)? {
                 return Err(SyncError::Invalid("split"));
             }
+            // a payment of an account that was deleted here is in the main account and takes the later stamp. Only now: which of two
+            // rows that say the same thing stays was settled above from the stamps both devices see
+            let stamp = later(stamp, account_deleted);
             let bill = match &existing {
                 Some((id, local)) => {
                     self.note_overwrite(local);
                     self.run(
                         "UPDATE transactions SET stamp = ?2, category_id = ?3, recurring_transaction_id = ?4, recurring_due_date = ?5, client_uuid = ?6,
-                         name = ?7, amount_minor = ?8, planned_amount_minor = ?9, payment_date = ?10, description = ?11, created_at = ?12, paid_by = ?13 WHERE id = ?1",
-                        params![id, stamp, category, recurring, r.recurring_due_date, r.client_uuid, r.name, r.amount_minor, r.planned_amount_minor, r.payment_date, r.description, r.created_at, paid_by],
+                         name = ?7, amount_minor = ?8, planned_amount_minor = ?9, payment_date = ?10, description = ?11, created_at = ?12, paid_by = ?13,
+                         account_id = ?14, native_amount_minor = ?15 WHERE id = ?1",
+                        params![id, stamp, category, recurring, r.recurring_due_date, r.client_uuid, r.name, r.amount_minor, r.planned_amount_minor, r.payment_date, r.description, r.created_at, paid_by, account, r.native_amount_minor],
                     )?;
                     self.set_updated_at(Table::Transactions, *id, &when)?;
                     self.summary.updated += 1;
@@ -1594,9 +1863,9 @@ impl<'a> Applier<'a> {
                 None => {
                     self.run(
                         "INSERT INTO transactions (sync_id, stamp, category_id, recurring_transaction_id, recurring_due_date, client_uuid, name,
-                         amount_minor, planned_amount_minor, payment_date, description, created_at, updated_at, paid_by)
-                         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)",
-                        params![r.sync_id, stamp, category, recurring, r.recurring_due_date, r.client_uuid, r.name, r.amount_minor, r.planned_amount_minor, r.payment_date, r.description, r.created_at, when, paid_by],
+                         amount_minor, planned_amount_minor, payment_date, description, created_at, updated_at, paid_by, account_id, native_amount_minor)
+                         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)",
+                        params![r.sync_id, stamp, category, recurring, r.recurring_due_date, r.client_uuid, r.name, r.amount_minor, r.planned_amount_minor, r.payment_date, r.description, r.created_at, when, paid_by, account, r.native_amount_minor],
                     )?;
                     self.summary.added += 1;
                     self.tx.last_insert_rowid()
@@ -1630,6 +1899,7 @@ impl<'a> Applier<'a> {
             if moved_person {
                 stamp = moved(&parse(&stamp)?).format();
             }
+            let (account, account_deleted) = self.account(&r.account)?;
             if let Some(marker) = self.marker(&r.sync_id)? {
                 if marker >= stamp {
                     self.summary.kept_yours += 1;
@@ -1694,22 +1964,24 @@ impl<'a> Applier<'a> {
             }
             // updated_at follows the stamp only when the stamp was derived from a merge (a friend moved); a stamp raised to a deletion's keeps it
             let when = if moved_by_merge(&stamp, &r.stamp) { iso(parse(&stamp)?.ms) } else { r.updated_at.clone() };
+            // an entry of an account that was deleted here is in the main account and takes the later stamp, as a payment does
+            let stamp = later(stamp, account_deleted);
             match &existing {
                 Some((id, local)) => {
                     self.note_overwrite(local);
                     self.run(
                         "UPDATE ledger_entries SET stamp = ?2, person_id = ?3, kind = ?4, amount_minor = ?5, entry_date = ?6, note = ?7, transaction_id = ?8,
-                         origin_id = ?9, created_at = ?10 WHERE id = ?1",
-                        params![id, stamp, person, r.kind, r.amount_minor, r.entry_date, r.note, transaction, r.origin_id, r.created_at],
+                         origin_id = ?9, created_at = ?10, account_id = ?11 WHERE id = ?1",
+                        params![id, stamp, person, r.kind, r.amount_minor, r.entry_date, r.note, transaction, r.origin_id, r.created_at, account],
                     )?;
                     self.set_updated_at(Table::LedgerEntries, *id, &when)?;
                     self.summary.updated += 1;
                 }
                 None => {
                     self.run(
-                        "INSERT INTO ledger_entries (sync_id, stamp, person_id, kind, amount_minor, entry_date, note, transaction_id, origin_id, created_at, updated_at)
-                         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
-                        params![r.sync_id, stamp, person, r.kind, r.amount_minor, r.entry_date, r.note, transaction, r.origin_id, r.created_at, when],
+                        "INSERT INTO ledger_entries (sync_id, stamp, person_id, kind, amount_minor, entry_date, note, transaction_id, origin_id, created_at, updated_at, account_id)
+                         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
+                        params![r.sync_id, stamp, person, r.kind, r.amount_minor, r.entry_date, r.note, transaction, r.origin_id, r.created_at, when, account],
                     )?;
                     self.summary.added += 1;
                 }
@@ -1883,9 +2155,17 @@ impl<'a> Applier<'a> {
         let mut list: Vec<&Marker> = markers.iter().collect();
         list.sort_by(|a, b| a.sync_id.cmp(&b.sync_id));
         for m in list {
+            if table == Table::Accounts && m.sync_id == MAIN_SYNC_ID {
+                // the main account is never deleted, whatever the stamps say
+                return Err(SyncError::Invalid("account"));
+            }
             match self.find(table, &m.sync_id)? {
                 Some((id, stamp)) => {
                     if m.stamp > stamp {
+                        if table == Table::Accounts {
+                            // what it held moves to the main account first, as on the device that deleted it
+                            self.empty_account(id, &m.stamp)?;
+                        }
                         if table == Table::RecurringTransactions {
                             // the payments lose their link to the item and take the stamp of the deletion, as on the device that deleted it
                             self.run("UPDATE transactions SET stamp = ?1 WHERE recurring_transaction_id = ?2 AND stamp < ?1", params![m.stamp, id])?;
@@ -2006,9 +2286,11 @@ pub fn apply(conn: &mut Connection, incoming: &Incoming, now_ms: u64, since_ms: 
     applier.settings(incoming.rows.get(&Table::Settings).unwrap_or(&empty))?;
     applier.categories(incoming.rows.get(&Table::Categories).unwrap_or(&empty))?;
     applier.people(incoming.rows.get(&Table::People).unwrap_or(&empty))?;
+    applier.accounts(incoming.rows.get(&Table::Accounts).unwrap_or(&empty))?;
     applier.recurring(incoming.rows.get(&Table::RecurringTransactions).unwrap_or(&empty))?;
     applier.budgets(incoming.rows.get(&Table::Budgets).unwrap_or(&empty))?;
     applier.transactions(incoming.rows.get(&Table::Transactions).unwrap_or(&empty))?;
+    applier.transfers(incoming.rows.get(&Table::Transfers).unwrap_or(&empty))?;
     applier.ledger(incoming.rows.get(&Table::LedgerEntries).unwrap_or(&empty))?;
     applier.documents(incoming.rows.get(&Table::Documents).unwrap_or(&empty))?;
     applier.links(incoming.rows.get(&Table::DocumentLinks).unwrap_or(&empty))?;
@@ -2018,7 +2300,18 @@ pub fn apply(conn: &mut Connection, incoming: &Incoming, now_ms: u64, since_ms: 
     // (a deleted ledger entry takes its links with it, silently, and a deleted expense clears the link of its entries and gives them the
     // stamp of its deletion, which must not happen to an entry that was deleted on the other device and is in this same batch: so the
     // entries go first, as the payments go before their recurring item)
-    for table in [Table::LedgerEntries, Table::Transactions, Table::Budgets, Table::RecurringTransactions, Table::DocumentLinks, Table::Documents] {
+    // (the accounts go last: deleting one moves what it still holds to the main account and gives it the later stamp, which must not
+    // happen to a row that was deleted on the other device and is in this same batch)
+    for table in [
+        Table::LedgerEntries,
+        Table::Transactions,
+        Table::Transfers,
+        Table::Budgets,
+        Table::RecurringTransactions,
+        Table::DocumentLinks,
+        Table::Documents,
+        Table::Accounts,
+    ] {
         applier.markers(table, incoming.markers.get(&table).map(Vec::as_slice).unwrap_or(&[]))?;
     }
     applier.settle_budgets()?;
@@ -2028,6 +2321,10 @@ pub fn apply(conn: &mut Connection, incoming: &Incoming, now_ms: u64, since_ms: 
     // still follow the rules (no more than the bill, no more than 30, only an expense, a template that gives someone a weight)
     if !splits::check(&tx).map_err(|_| SyncError::Internal)? {
         return Err(SyncError::Invalid("split"));
+    }
+    // the main account is still there, as itself and not archived (`docs/accounts-design.md`, section 7.3)
+    if !accounts::check(&tx).map_err(|_| SyncError::Internal)? {
+        return Err(SyncError::Invalid("account"));
     }
 
     let broken: i64 = tx.query_row("SELECT count(*) FROM pragma_foreign_key_check", [], |r| r.get(0))?;
@@ -2042,13 +2339,15 @@ pub fn apply(conn: &mut Connection, incoming: &Incoming, now_ms: u64, since_ms: 
 
 /// Whether this device holds no budget data yet, so it can be paired and given a full copy (docs/sync-design.md, section 5).
 pub fn is_empty(conn: &Connection) -> Result<bool, SyncError> {
-    for table in ["categories", "people", "ledger_entries", "budgets", "recurring_transactions", "transactions", "documents", "sync_deleted", "currency_changes"] {
+    for table in ["categories", "people", "ledger_entries", "budgets", "recurring_transactions", "transactions", "transfers", "documents", "sync_deleted", "currency_changes"] {
         let count: i64 = conn.query_row(&format!("SELECT count(*) FROM {table}"), [], |r| r.get(0))?;
         if count != 0 {
             return Ok(false);
         }
     }
-    Ok(true)
+    // every device has the main account, made by the migration; one that nobody touched is not data
+    let accounts: i64 = conn.query_row("SELECT count(*) FROM accounts WHERE sync_id <> ?1 OR stamp <> ?2", [MAIN_SYNC_ID, UNSET_STAMP], |r| r.get(0))?;
+    Ok(accounts == 0)
 }
 
 /// The stamp of settings that have never been changed by a person: older than any real one, so the other device's win.
@@ -2302,6 +2601,11 @@ fn category_name(conn: &Connection, sync_id: &str) -> String {
     conn.query_row("SELECT name FROM categories WHERE sync_id = ?1", [sync_id], |r| r.get::<_, String>(0)).unwrap_or_default()
 }
 
+/// The name the account has on this device; nothing when it is not here.
+fn account_name(conn: &Connection, sync_id: &str) -> String {
+    name_of(conn, "SELECT name FROM accounts WHERE sync_id = ?1", sync_id)
+}
+
 fn name_of(conn: &Connection, sql: &str, sync_id: &str) -> String {
     conn.query_row(sql, [sync_id], |r| r.get::<_, String>(0)).unwrap_or_default()
 }
@@ -2356,10 +2660,35 @@ fn facts(conn: &Connection, row: &Row) -> Vec<(&'static str, String)> {
         Row::Transaction(r) => vec![
             ("name", r.name.clone()),
             ("amount", money_text(Some(r.amount_minor))),
+            ("nativeAmount", money_text(r.native_amount_minor)),
             ("date", r.payment_date.clone()),
             ("category", category_name(conn, &r.category)),
             ("description", some(&r.description)),
             ("split", split_text(conn, &r.split, &r.paid_by)),
+            ("account", account_name(conn, &r.account)),
+        ],
+        Row::Account(r) => vec![
+            ("name", r.name.clone()),
+            ("type", r.kind.clone()),
+            ("number", some(&r.number)),
+            ("openingBalance", crate::money::format_amount(r.opening_balance_minor)),
+            ("openingDate", r.opening_date.clone()),
+            ("archived", if r.archived == 1 { "yes" } else { "no" }.to_string()),
+            ("bic", some(&r.bic)),
+            ("notes", some(&r.notes)),
+            ("group", some(&r.group)),
+            ("includeNetWorth", if r.include_net_worth == 1 { "yes" } else { "no" }.to_string()),
+            ("virtualBalance", crate::money::format_amount(r.virtual_balance_minor)),
+            ("currency", some(&r.currency)),
+            ("rate", some(&r.rate)),
+        ],
+        Row::Transfer(r) => vec![
+            ("from", account_name(conn, &r.from)),
+            ("to", account_name(conn, &r.to)),
+            ("amount", money_text(Some(r.amount_minor))),
+            ("toAmount", money_text(r.to_amount_minor)),
+            ("date", r.transfer_date.clone()),
+            ("note", some(&r.note)),
         ],
         Row::Person(r) => vec![
             ("name", r.name.clone()),
@@ -2376,6 +2705,7 @@ fn facts(conn: &Connection, row: &Row) -> Vec<(&'static str, String)> {
             ("amount", money_text(Some(r.amount_minor))),
             ("date", r.entry_date.clone()),
             ("note", some(&r.note)),
+            ("account", account_name(conn, &r.account)),
         ],
         Row::Budget(r) => vec![("amount", money_text(r.amount_limit_minor)), ("month", r.effective_from.clone()), ("type", r.kind.clone())],
         Row::Recurring(r) => vec![
@@ -2388,6 +2718,7 @@ fn facts(conn: &Connection, row: &Row) -> Vec<(&'static str, String)> {
             ("category", category_name(conn, &r.category)),
             ("description", some(&r.description)),
             ("split", template_text(conn, &r.split)),
+            ("account", account_name(conn, &r.account)),
         ],
         Row::Document(r) => vec![
             ("name", r.name.clone()),

@@ -17,10 +17,14 @@ export type Payer = z.infer<typeof Payer>
 export const Transaction = z.object({
   id: z.string().regex(/^[1-9]\d*$/),
   categoryId: z.string().regex(/^[1-9]\d*$/),
+  /** The account the money left or reached. A bill a friend paid has one too, and moves nothing in it. */
+  accountId: z.string().regex(/^[1-9]\d*$/),
   clientUuid: z.string().nullable(),
   name: z.string(),
   /** What was paid. Decimal string such as "12.50". Never converted to a number for storage or sums. */
   amount: z.string().regex(/^\d+\.\d{2}$/),
+  /** What really left or reached the account, in the account's own currency: only for a transaction in an account in another currency (docs/accounts-design.md, section 21). */
+  nativeAmount: z.string().regex(/^\d+\.\d{2}$/).nullable(),
   /** What it costs the person: the amount minus the parts of the others. The same as `amount` for a bill that is not shared. */
   myShare: z.string().regex(/^\d+\.\d{2}$/),
   /** The parts of the others, when the bill is shared; empty otherwise. */
@@ -46,6 +50,13 @@ export type NewTransaction = {
   paymentDate: string
   categoryId: string
   description?: string | null
+  /** Left out, a new transaction goes to the main account. It must be an account that is not archived. */
+  accountId?: string
+  /**
+   * What it was in the account's own currency: required for an account in another currency, left out for one in the app's currency (moving a
+   * transaction there clears it). `amount` is then what it was in the app's currency.
+   */
+  nativeAmount?: string
   /** Makes create safe to retry: the same value never creates a second transaction. */
   clientUuid?: string
 }
@@ -57,6 +68,9 @@ export type TransactionFilter = {
   from?: string
   to?: string
   categoryId?: string
+  accountId?: string
+  /** Only transactions whose category has this type; left out, both. */
+  kind?: 'INCOME' | 'EXPENSE'
   q?: string
   limit?: number
   offset?: number

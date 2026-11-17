@@ -1387,6 +1387,7 @@ mod tests {
                     interval_count: 1,
                     end_date: None,
                     description: None,
+                    account_id: None,
                 },
             )?;
             recurring::pay(c, plan.id, None, Some("2026-01-01"), "2026-01-01", None, None)?;
@@ -1400,6 +1401,8 @@ mod tests {
                         category_id: category.to_string(),
                         description: Some("Café \"quoted\"".into()),
                         client_uuid: None,
+                        account_id: None,
+                        native_amount: None,
                     },
                 )?;
             }

@@ -8,7 +8,7 @@ use crate::vault::AppError;
 const TODAY: &str = "2026-03-15";
 
 fn entry(conn: &rusqlite::Connection, person: i64, kind: Kind, amount: &str, date: &str) {
-    ledger::add(conn, &NewEntry { person_id: person.to_string(), kind, amount: amount.into(), date: date.into(), note: None, transaction_id: None }).unwrap();
+    ledger::add(conn, &NewEntry { person_id: person.to_string(), kind, amount: amount.into(), date: date.into(), note: None, transaction_id: None, account_id: None }).unwrap();
 }
 
 fn item(conn: &rusqlite::Connection, name: &str, category: i64, start: &str, end: &str) -> i64 {
@@ -23,6 +23,7 @@ fn item(conn: &rusqlite::Connection, name: &str, category: i64, start: &str, end
             interval_count: 1,
             end_date: Some(end.into()),
             description: None,
+            account_id: None,
         },
     )
     .unwrap()

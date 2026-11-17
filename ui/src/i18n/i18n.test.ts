@@ -36,6 +36,16 @@ const SAME_AS_ENGLISH = new Set([
   'fr sync.table.documents', 'fr sync.field.document', 'ro sync.table.documents', 'ro sync.field.document',
   'fr debts.note', 'fr sync.field.note', 'de debts.colStatus', 'ro debts.net', 'de common.details', 'de common.optional', 'fr docs.typeImage',
   'de code.show', 'fr code.show',
+  'de accounts.bic', 'es accounts.bic', 'fr accounts.bic', 'it accounts.bic', 'pt accounts.bic', 'ro accounts.bic',
+  'de sync.field.bic', 'es sync.field.bic', 'fr sync.field.bic', 'it sync.field.bic', 'pt sync.field.bic', 'ro sync.field.bic',
+  'fr accounts.notes', 'fr sync.field.notes',
+  'ro entry.tabTransfer',
+  // a sentence made only of placeholders and symbols reads the same everywhere (docs/accounts-design.md, section 21)
+  'de accounts.rateOf', 'es accounts.rateOf', 'fr accounts.rateOf', 'it accounts.rateOf', 'pt accounts.rateOf', 'ro accounts.rateOf',
+  'de accounts.inMain', 'es accounts.inMain', 'fr accounts.inMain', 'it accounts.inMain', 'pt accounts.inMain', 'ro accounts.inMain',
+  'de accounts.rateLine', 'es accounts.rateLine', 'fr accounts.rateLine', 'it accounts.rateLine', 'pt accounts.rateLine', 'ro accounts.rateLine',
+  'de accounts.labelIn', 'es accounts.labelIn', 'fr accounts.labelIn', 'it accounts.labelIn', 'pt accounts.labelIn', 'ro accounts.labelIn',
+  'de entry.inMain', 'it entry.inMain',
 ])
 
 test('no translation is empty or an untranslated copy of the English text', () => {

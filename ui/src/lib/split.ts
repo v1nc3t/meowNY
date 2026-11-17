@@ -1,5 +1,5 @@
 import type { PartInput, SplitInput, SplitMode } from '../api/debts'
-import type { PartOut, Payer } from '../api/transactions'
+import type { PartOut, Payer, Transaction } from '../api/transactions'
 import type { Template } from '../api/recurring'
 import { amountString } from './money'
 
@@ -136,5 +136,8 @@ export function reducedWeights(weights: number[]): number[] {
   const divisor = weights.reduce((common, weight) => gcd(common, weight), 0)
   return divisor > 1 ? weights.map((weight) => weight / divisor) : weights
 }
+
+/** A bill with parts of others, or a friend who paid it. */
+export const isShared = (transaction: Pick<Transaction, 'split' | 'paidBy'>): boolean => transaction.split.length > 0 || transaction.paidBy !== null
 
 export const NOT_SPLIT: SplitState = { on: false, draft: equalDraft(), ready: false, touched: false }

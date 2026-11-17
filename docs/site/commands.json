@@ -110,6 +110,29 @@
           "values": []
         },
         {
+          "flag": "--account-id",
+          "nullable": false,
+          "param": "accountId",
+          "required": false,
+          "summary": "Only this account.",
+          "type": "id",
+          "value": "id",
+          "values": []
+        },
+        {
+          "flag": "--kind",
+          "nullable": false,
+          "param": "kind",
+          "required": false,
+          "summary": "Only INCOME or only EXPENSE. Leave out for both.",
+          "type": "string",
+          "value": "INCOME|EXPENSE",
+          "values": [
+            "INCOME",
+            "EXPENSE"
+          ]
+        },
+        {
           "flag": "--q",
           "nullable": false,
           "param": "q",
@@ -143,8 +166,8 @@
       "positional": null,
       "route": "transactions.list",
       "scope": "read",
-      "summary": "Transactions, newest first, with the total that match. Up to 100 a page, 50 unless limit says otherwise.",
-      "usage": "meowny transactions list [--from <date>] [--to <date>] [--category-id <id>] [--q <text>] [--limit <number>] [--offset <number>]"
+      "summary": "Transactions, newest first, with the total that match. Up to 100 a page, 50 unless limit says otherwise. amount is in the app's currency; for a row in an account in another currency nativeAmount is what moved that account, in its currency.",
+      "usage": "meowny transactions list [--from <date>] [--to <date>] [--category-id <id>] [--account-id <id>] [--kind <INCOME|EXPENSE>] [--q <text>] [--limit <number>] [--offset <number>]"
     },
     {
       "command": "budgets overview",
@@ -415,7 +438,7 @@
       "positional": null,
       "route": "settings.set",
       "scope": "write",
-      "summary": "Changes the number and date format, the time zone or the language. Give at least one. The currency is changed in the app.",
+      "summary": "Changes the number and date format, the time zone or the language. Give at least one. The currency is changed in the app, and not while an account is in another currency.",
       "usage": "meowny settings set [--locale <text>] [--timezone <text>] [--language <text>]"
     },
     {
@@ -573,7 +596,7 @@
           "nullable": false,
           "param": "amount",
           "required": true,
-          "summary": "More than zero, like 12.50.",
+          "summary": "More than zero, like 12.50. Always in the app's currency, which budgets and statistics count.",
           "type": "money",
           "value": "amount",
           "values": []
@@ -617,13 +640,33 @@
           "type": "uuid",
           "value": "uuid",
           "values": []
+        },
+        {
+          "flag": "--account-id",
+          "nullable": false,
+          "param": "accountId",
+          "required": false,
+          "summary": "The account it is in: where the money left or came in. The main account if left out. Not an archived one.",
+          "type": "id",
+          "value": "id",
+          "values": []
+        },
+        {
+          "flag": "--native-amount",
+          "nullable": false,
+          "param": "nativeAmount",
+          "required": false,
+          "summary": "What really left or reached the account, in the account's currency, more than zero, like 20.00. Required when the account is in another currency than the app's, refused when it is not.",
+          "type": "money",
+          "value": "amount",
+          "values": []
         }
       ],
       "positional": null,
       "route": "transactions.create",
       "scope": "write",
       "summary": "Records a transaction. With a clientUuid, sending the same request again gives back the first transaction instead of making another.",
-      "usage": "meowny transactions create --name <text> --amount <amount> --payment-date <date> --category-id <id> [--description <text>] [--client-uuid <uuid>]"
+      "usage": "meowny transactions create --name <text> --amount <amount> --payment-date <date> --category-id <id> [--description <text>] [--client-uuid <uuid>] [--account-id <id>] [--native-amount <amount>]"
     },
     {
       "command": "transactions update",
@@ -655,7 +698,7 @@
           "nullable": false,
           "param": "amount",
           "required": false,
-          "summary": "The new amount, more than zero.",
+          "summary": "The new amount, more than zero, in the app's currency.",
           "type": "money",
           "value": "amount",
           "values": []
@@ -694,13 +737,33 @@
           "clears": "description",
           "flag": "--clear-description",
           "summary": "Clears description."
+        },
+        {
+          "flag": "--account-id",
+          "nullable": false,
+          "param": "accountId",
+          "required": false,
+          "summary": "Moves it to this account, which must not be archived.",
+          "type": "id",
+          "value": "id",
+          "values": []
+        },
+        {
+          "flag": "--native-amount",
+          "nullable": false,
+          "param": "nativeAmount",
+          "required": false,
+          "summary": "The new amount in the account's currency, more than zero. Needed when it moves into an account in another currency than the app's; kept when it moves between such accounts and this is left out; refused for a row in an account in the app's currency, where moving it clears it.",
+          "type": "money",
+          "value": "amount",
+          "values": []
         }
       ],
       "positional": "id",
       "route": "transactions.update",
       "scope": "write",
       "summary": "Changes a transaction. Fields left out stay as they are; a null description clears it.",
-      "usage": "meowny transactions update <id> [--name <text>] [--amount <amount>] [--payment-date <date>] [--category-id <id>] [--description <text>]"
+      "usage": "meowny transactions update <id> [--name <text>] [--amount <amount>] [--payment-date <date>] [--category-id <id>] [--description <text>] [--account-id <id>] [--native-amount <amount>]"
     },
     {
       "command": "transactions delete",
@@ -941,13 +1004,23 @@
           "type": "string",
           "value": "text",
           "values": []
+        },
+        {
+          "flag": "--account-id",
+          "nullable": false,
+          "param": "accountId",
+          "required": false,
+          "summary": "The account its payments are made in. The main account if left out. Not an archived one, and not one in another currency than the app's.",
+          "type": "id",
+          "value": "id",
+          "values": []
         }
       ],
       "positional": null,
       "route": "recurring.create",
       "scope": "write",
       "summary": "Adds a recurring item: a bill or an income that comes back every so many days, weeks, months or years.",
-      "usage": "meowny recurring create --name <text> [--amount <amount>] --category-id <id> --start-date <date> --interval-unit <DAY|WEEK|MONTH|YEAR> --interval-count <number> [--end-date <date>] [--description <text>]"
+      "usage": "meowny recurring create --name <text> [--amount <amount>] --category-id <id> --start-date <date> --interval-unit <DAY|WEEK|MONTH|YEAR> --interval-count <number> [--end-date <date>] [--description <text>] [--account-id <id>]"
     },
     {
       "command": "recurring update",
@@ -1063,13 +1136,23 @@
           "clears": "description",
           "flag": "--clear-description",
           "summary": "Clears description."
+        },
+        {
+          "flag": "--account-id",
+          "nullable": false,
+          "param": "accountId",
+          "required": false,
+          "summary": "Moves its payments to this account, which must not be archived or in another currency than the app's.",
+          "type": "id",
+          "value": "id",
+          "values": []
         }
       ],
       "positional": "id",
       "route": "recurring.update",
       "scope": "write",
       "summary": "Changes a recurring item. Fields left out stay as they are; null clears the end date or the description, and a null amount makes it a bill with no fixed amount.",
-      "usage": "meowny recurring update <id> [--name <text>] [--amount <amount>] [--category-id <id>] [--start-date <date>] [--interval-unit <DAY|WEEK|MONTH|YEAR>] [--interval-count <number>] [--end-date <date>] [--description <text>]"
+      "usage": "meowny recurring update <id> [--name <text>] [--amount <amount>] [--category-id <id>] [--start-date <date>] [--interval-unit <DAY|WEEK|MONTH|YEAR>] [--interval-count <number>] [--end-date <date>] [--description <text>] [--account-id <id>]"
     },
     {
       "command": "recurring delete",
@@ -1359,7 +1442,7 @@
           "nullable": false,
           "param": "sections",
           "required": false,
-          "summary": "The parts of the file, separated by commas, from: transactions, categories, budgets, recurring, documents, people (the friends and what they owe), due (the overdue recurring payments), ledger (the history of debts) and history (the change history, only in a file with no limits). Leave out for all of them.",
+          "summary": "The parts of the file, separated by commas, from: transactions, categories, budgets, recurring, accounts (with limits, only the name and type of those the file speaks of), transfers (between accounts, only in a file with no limits), documents, people (the friends and what they owe), due (the overdue recurring payments), ledger (the history of debts) and history (the change history, only in a file with no limits). Leave out for all of them.",
           "type": "string",
           "value": "text",
           "values": []
@@ -1498,7 +1581,7 @@
           "nullable": false,
           "param": "sections",
           "required": false,
-          "summary": "The parts of the file, separated by commas, from: transactions, categories, budgets, recurring, documents, people (the friends and what they owe), due (the overdue recurring payments), ledger (the history of debts) and history (the change history, only in a file with no limits). Leave out for all of them.",
+          "summary": "The parts of the file, separated by commas, from: transactions, categories, budgets, recurring, accounts (with limits, only the name and type of those the file speaks of), transfers (between accounts, only in a file with no limits), documents, people (the friends and what they owe), due (the overdue recurring payments), ledger (the history of debts) and history (the change history, only in a file with no limits). Leave out for all of them.",
           "type": "string",
           "value": "text",
           "values": []
@@ -1734,7 +1817,7 @@
           "nullable": false,
           "param": "sections",
           "required": false,
-          "summary": "The parts of the file, separated by commas, from: transactions, categories, budgets, recurring, documents, people (the friends and what they owe), due (the overdue recurring payments), ledger (the history of debts) and history (the change history, only in a file with no limits). Leave out for all of them.",
+          "summary": "The parts of the file, separated by commas, from: transactions, categories, budgets, recurring, accounts (with limits, only the name and type of those the file speaks of), transfers (between accounts, only in a file with no limits), documents, people (the friends and what they owe), due (the overdue recurring payments), ledger (the history of debts) and history (the change history, only in a file with no limits). Leave out for all of them.",
           "type": "string",
           "value": "text",
           "values": []
@@ -2735,13 +2818,23 @@
           "type": "id",
           "value": "id",
           "values": []
+        },
+        {
+          "flag": "--account-id",
+          "nullable": false,
+          "param": "accountId",
+          "required": false,
+          "summary": "The account the money reached or left. The main account if left out. Not an archived one, and not one in another currency than the app's.",
+          "type": "id",
+          "value": "id",
+          "values": []
         }
       ],
       "positional": "id",
       "route": "people.settle",
       "scope": "write",
       "summary": "Marks a payment between you and a friend: they paid you back if they owe you, you paid them back if you owe them. With no amount it is the whole balance. An amount larger than the debt is accepted: the balance turns around and the answer says how much was over.",
-      "usage": "meowny people settle <id> [--amount <amount>] [--date <date>] [--note <text>] [--transaction-id <id>]"
+      "usage": "meowny people settle <id> [--amount <amount>] [--date <date>] [--note <text>] [--transaction-id <id>] [--account-id <id>]"
     },
     {
       "command": "ledger add",
@@ -2832,13 +2925,23 @@
           "type": "id",
           "value": "id",
           "values": []
+        },
+        {
+          "flag": "--account-id",
+          "nullable": false,
+          "param": "accountId",
+          "required": false,
+          "summary": "The account the money reached or left (for a borrowing with an expense, the expense too is in it). The main account if left out. Not an archived one, and not one in another currency than the app's.",
+          "type": "id",
+          "value": "id",
+          "values": []
         }
       ],
       "positional": null,
       "route": "ledger.add",
       "scope": "write",
       "summary": "Records money lent, borrowed or paid back with a friend. It is never income or expense. For a borrowing, give expenseName and expenseCategoryId to add your share to your expenses in the same step, with the entry linked to it.",
-      "usage": "meowny ledger add --person-id <id> --kind <LENT|BORROWED|REPAID_TO_ME|REPAID_BY_ME> --amount <amount> --date <date> [--note <text>] [--transaction-id <id>] [--expense-name <text>] [--expense-category-id <id>]"
+      "usage": "meowny ledger add --person-id <id> --kind <LENT|BORROWED|REPAID_TO_ME|REPAID_BY_ME> --amount <amount> --date <date> [--note <text>] [--transaction-id <id>] [--expense-name <text>] [--expense-category-id <id>] [--account-id <id>]"
     },
     {
       "command": "ledger update",
@@ -2929,13 +3032,23 @@
           "clears": "transactionId",
           "flag": "--clear-transaction-id",
           "summary": "Clears transactionId."
+        },
+        {
+          "flag": "--account-id",
+          "nullable": false,
+          "param": "accountId",
+          "required": false,
+          "summary": "Moves it to this account, which must not be archived or in another currency than the app's.",
+          "type": "id",
+          "value": "id",
+          "values": []
         }
       ],
       "positional": "id",
       "route": "ledger.update",
       "scope": "write",
       "summary": "Changes an entry of the ledger. Fields left out stay as they are; a null note or transactionId clears it. The expense it came with is not changed.",
-      "usage": "meowny ledger update <id> [--person-id <id>] [--kind <LENT|BORROWED|REPAID_TO_ME|REPAID_BY_ME>] [--amount <amount>] [--date <date>] [--note <text>] [--transaction-id <id>]"
+      "usage": "meowny ledger update <id> [--person-id <id>] [--kind <LENT|BORROWED|REPAID_TO_ME|REPAID_BY_ME>] [--amount <amount>] [--date <date>] [--note <text>] [--transaction-id <id>] [--account-id <id>]"
     },
     {
       "command": "ledger delete",
@@ -3236,6 +3349,789 @@
       "scope": "read",
       "summary": "Writes who owes what to a text, CSV or PDF file, in English, after the person allows it in the app: the SUMMARY of all friends, the STATEMENT of one friend (personId), or the LEDGER of every entry as CSV. An existing file is never replaced.",
       "usage": "meowny export debts --out <path> [--what <SUMMARY|STATEMENT|LEDGER>] [--format <TEXT|CSV|PDF>] [--person-id <id>]"
+    },
+    {
+      "command": "accounts list",
+      "confirm": false,
+      "destructive": false,
+      "flags": [],
+      "positional": null,
+      "route": "accounts.list",
+      "scope": "read",
+      "summary": "The accounts in the person's order, the archived ones last, each with what it holds today (balance), what changed this month, its last activity and how many rows (entries) are in it, and its details: BIC, notes, group, whether net worth counts it, and the virtual balance with what is available (balance plus virtual balance). An account in another currency (foreign true) has its figures in that currency, with the rate typed for it and balanceInMain, its balance in the app's currency. The main account has isMain true.",
+      "usage": "meowny accounts list"
+    },
+    {
+      "command": "accounts show",
+      "confirm": false,
+      "destructive": false,
+      "flags": [
+        {
+          "flag": "--id",
+          "nullable": false,
+          "param": "id",
+          "required": true,
+          "summary": "The account.",
+          "type": "id",
+          "value": "id",
+          "values": []
+        },
+        {
+          "flag": "--from",
+          "nullable": false,
+          "param": "from",
+          "required": false,
+          "summary": "The first day. The first of this month if left out.",
+          "type": "date",
+          "value": "date",
+          "values": []
+        },
+        {
+          "flag": "--to",
+          "nullable": false,
+          "param": "to",
+          "required": false,
+          "summary": "The last day. The last of this month if left out.",
+          "type": "date",
+          "value": "date",
+          "values": []
+        }
+      ],
+      "positional": "id",
+      "route": "accounts.show",
+      "scope": "read",
+      "summary": "One account and what moved it from one day to another, both included, oldest first: each line with what it did to the account (negative: money left) and the balance after it, and the balance before the first day and after the last. All in the account's currency (currency). This month if the days are left out.",
+      "usage": "meowny accounts show <id> [--from <date>] [--to <date>]"
+    },
+    {
+      "command": "accounts history",
+      "confirm": false,
+      "destructive": false,
+      "flags": [
+        {
+          "flag": "--id",
+          "nullable": false,
+          "param": "id",
+          "required": true,
+          "summary": "The account.",
+          "type": "id",
+          "value": "id",
+          "values": []
+        },
+        {
+          "flag": "--year",
+          "nullable": false,
+          "param": "year",
+          "required": true,
+          "summary": "The year, like 2026.",
+          "type": "year",
+          "value": "year",
+          "values": []
+        }
+      ],
+      "positional": "id",
+      "route": "accounts.history",
+      "scope": "read",
+      "summary": "What an account held at the end of each month of a year, for a chart, in the account's currency: on the last day of a month that is over, today for this month, and no point for a month that has not begun.",
+      "usage": "meowny accounts history <id> --year <year>"
+    },
+    {
+      "command": "accounts breakdown",
+      "confirm": false,
+      "destructive": false,
+      "flags": [
+        {
+          "flag": "--id",
+          "nullable": false,
+          "param": "id",
+          "required": true,
+          "summary": "The account.",
+          "type": "id",
+          "value": "id",
+          "values": []
+        },
+        {
+          "flag": "--from",
+          "nullable": false,
+          "param": "from",
+          "required": false,
+          "summary": "The first day. The first of this month if left out.",
+          "type": "date",
+          "value": "date",
+          "values": []
+        },
+        {
+          "flag": "--to",
+          "nullable": false,
+          "param": "to",
+          "required": false,
+          "summary": "The last day. The last of this month if left out.",
+          "type": "date",
+          "value": "date",
+          "values": []
+        }
+      ],
+      "positional": "id",
+      "route": "accounts.breakdown",
+      "scope": "read",
+      "summary": "What an account paid out and took in from one day to another, both included, by category: for expenses and for income the categories with their amounts, the largest first, and the total of each, in the account's currency (currency). Transfers, ledger entries and a bill a friend paid are not in it. This month if the days are left out.",
+      "usage": "meowny accounts breakdown <id> [--from <date>] [--to <date>]"
+    },
+    {
+      "command": "accounts summary",
+      "confirm": false,
+      "destructive": false,
+      "flags": [],
+      "positional": null,
+      "route": "accounts.summary",
+      "scope": "read",
+      "summary": "Net worth, in the app's currency: what the accounts that count in it hold in all (the archived ones too, an account in another currency turned into the app's currency at its rate), what friends owe you (negative: you owe them) and the two added. An account can be left out of net worth, and a virtual balance is never in it. Also how many accounts there are, those left out too, and whether accounts are in use: there is more than the main account, or it has an opening balance.",
+      "usage": "meowny accounts summary"
+    },
+    {
+      "command": "transfers list",
+      "confirm": false,
+      "destructive": false,
+      "flags": [
+        {
+          "flag": "--account-id",
+          "nullable": false,
+          "param": "accountId",
+          "required": false,
+          "summary": "Only the transfers that leave or reach this account.",
+          "type": "id",
+          "value": "id",
+          "values": []
+        },
+        {
+          "flag": "--from",
+          "nullable": false,
+          "param": "from",
+          "required": false,
+          "summary": "Only on or after this date.",
+          "type": "date",
+          "value": "date",
+          "values": []
+        },
+        {
+          "flag": "--to",
+          "nullable": false,
+          "param": "to",
+          "required": false,
+          "summary": "Only on or before this date.",
+          "type": "date",
+          "value": "date",
+          "values": []
+        },
+        {
+          "flag": "--limit",
+          "nullable": false,
+          "param": "limit",
+          "required": false,
+          "summary": "How many to return, 1 to 100. Default 50.",
+          "type": "integer",
+          "value": "number",
+          "values": []
+        },
+        {
+          "flag": "--offset",
+          "nullable": false,
+          "param": "offset",
+          "required": false,
+          "summary": "How many to skip, for the next page. Default 0.",
+          "type": "integer",
+          "value": "number",
+          "values": []
+        }
+      ],
+      "positional": null,
+      "route": "transfers.list",
+      "scope": "read",
+      "summary": "Transfers between your accounts, newest first, with the total that match. Up to 100 a page, 50 unless limit says otherwise. A transfer is never income or expense. Between accounts in different currencies, amount is what left the first, in its currency, and toAmount what reached the second, in its currency.",
+      "usage": "meowny transfers list [--account-id <id>] [--from <date>] [--to <date>] [--limit <number>] [--offset <number>]"
+    },
+    {
+      "command": "accounts create",
+      "confirm": false,
+      "destructive": false,
+      "flags": [
+        {
+          "flag": "--name",
+          "nullable": false,
+          "param": "name",
+          "required": true,
+          "summary": "The name.",
+          "type": "string",
+          "value": "text",
+          "values": []
+        },
+        {
+          "flag": "--kind",
+          "nullable": false,
+          "param": "kind",
+          "required": true,
+          "summary": "CHECKING (a bank account), SAVINGS, CASH or CREDIT_CARD.",
+          "type": "string",
+          "value": "CHECKING|SAVINGS|CASH|CREDIT_CARD",
+          "values": [
+            "CHECKING",
+            "SAVINGS",
+            "CASH",
+            "CREDIT_CARD"
+          ]
+        },
+        {
+          "flag": "--number",
+          "nullable": false,
+          "param": "number",
+          "required": false,
+          "summary": "An IBAN or anything that tells it apart, up to 50 characters.",
+          "type": "string",
+          "value": "text",
+          "values": []
+        },
+        {
+          "flag": "--opening-balance",
+          "nullable": false,
+          "param": "openingBalance",
+          "required": false,
+          "summary": "What it held on the opening date, which may be negative, like -120.00. 0.00 if left out.",
+          "type": "string",
+          "value": "text",
+          "values": []
+        },
+        {
+          "flag": "--opening-date",
+          "nullable": false,
+          "param": "openingDate",
+          "required": false,
+          "summary": "The day it held that. Today if left out.",
+          "type": "date",
+          "value": "date",
+          "values": []
+        },
+        {
+          "flag": "--bic",
+          "nullable": false,
+          "param": "bic",
+          "required": false,
+          "summary": "The bank's BIC, up to 20 characters.",
+          "type": "string",
+          "value": "text",
+          "values": []
+        },
+        {
+          "flag": "--notes",
+          "nullable": false,
+          "param": "notes",
+          "required": false,
+          "summary": "Notes, up to 1000 characters. Line breaks are kept.",
+          "type": "string",
+          "value": "text",
+          "values": []
+        },
+        {
+          "flag": "--group",
+          "nullable": false,
+          "param": "group",
+          "required": false,
+          "summary": "The group it is listed under, like Bank, up to 50 characters.",
+          "type": "string",
+          "value": "text",
+          "values": []
+        },
+        {
+          "flag": "--include-in-net-worth",
+          "nullable": false,
+          "param": "includeInNetWorth",
+          "required": false,
+          "summary": "Whether net worth counts it. True if left out.",
+          "type": "boolean",
+          "value": "boolean",
+          "values": []
+        },
+        {
+          "flag": "--virtual-balance",
+          "nullable": false,
+          "param": "virtualBalance",
+          "required": false,
+          "summary": "An amount added to the balance to show what is available, like the limit of a credit card, which may be negative, like -50.00. It is never in the balance or in net worth. 0.00 if left out.",
+          "type": "string",
+          "value": "text",
+          "values": []
+        },
+        {
+          "flag": "--currency",
+          "nullable": false,
+          "param": "currency",
+          "required": false,
+          "summary": "The currency of the account, three letters like RON, in any case. Left out, or the app's own currency, makes an account in the app's currency, which takes no rate. Another code needs a rate.",
+          "type": "string",
+          "value": "text",
+          "values": []
+        },
+        {
+          "flag": "--rate",
+          "nullable": false,
+          "param": "rate",
+          "required": false,
+          "summary": "How many units of its currency one unit of the app's currency buys, like 5.00 for 1 EUR = 5.00 RON: more than zero, up to 8 decimals. Required with another currency, refused without one. You type it; nothing is fetched.",
+          "type": "string",
+          "value": "text",
+          "values": []
+        }
+      ],
+      "positional": null,
+      "route": "accounts.create",
+      "scope": "write",
+      "summary": "Adds an account at the end of the list. Its name is 1 to 50 characters and unique among the accounts that are not archived, whatever the case.",
+      "usage": "meowny accounts create --name <text> --kind <CHECKING|SAVINGS|CASH|CREDIT_CARD> [--number <text>] [--opening-balance <text>] [--opening-date <date>] [--bic <text>] [--notes <text>] [--group <text>] [--include-in-net-worth <boolean>] [--virtual-balance <text>] [--currency <text>] [--rate <text>]"
+    },
+    {
+      "command": "accounts update",
+      "confirm": false,
+      "destructive": false,
+      "flags": [
+        {
+          "flag": "--id",
+          "nullable": false,
+          "param": "id",
+          "required": true,
+          "summary": "The account.",
+          "type": "id",
+          "value": "id",
+          "values": []
+        },
+        {
+          "flag": "--name",
+          "nullable": false,
+          "param": "name",
+          "required": false,
+          "summary": "The new name.",
+          "type": "string",
+          "value": "text",
+          "values": []
+        },
+        {
+          "flag": "--kind",
+          "nullable": false,
+          "param": "kind",
+          "required": false,
+          "summary": "CHECKING, SAVINGS, CASH or CREDIT_CARD.",
+          "type": "string",
+          "value": "CHECKING|SAVINGS|CASH|CREDIT_CARD",
+          "values": [
+            "CHECKING",
+            "SAVINGS",
+            "CASH",
+            "CREDIT_CARD"
+          ]
+        },
+        {
+          "flag": "--number",
+          "nullable": true,
+          "param": "number",
+          "required": false,
+          "summary": "The new number, or null to clear it.",
+          "type": "string",
+          "value": "text",
+          "values": []
+        },
+        {
+          "clears": "number",
+          "flag": "--clear-number",
+          "summary": "Clears number."
+        },
+        {
+          "flag": "--opening-balance",
+          "nullable": false,
+          "param": "openingBalance",
+          "required": false,
+          "summary": "What it held on the opening date, which may be negative, like -120.00.",
+          "type": "string",
+          "value": "text",
+          "values": []
+        },
+        {
+          "flag": "--opening-date",
+          "nullable": false,
+          "param": "openingDate",
+          "required": false,
+          "summary": "The day it held that.",
+          "type": "date",
+          "value": "date",
+          "values": []
+        },
+        {
+          "flag": "--bic",
+          "nullable": true,
+          "param": "bic",
+          "required": false,
+          "summary": "The new BIC, or null to clear it.",
+          "type": "string",
+          "value": "text",
+          "values": []
+        },
+        {
+          "clears": "bic",
+          "flag": "--clear-bic",
+          "summary": "Clears bic."
+        },
+        {
+          "flag": "--notes",
+          "nullable": true,
+          "param": "notes",
+          "required": false,
+          "summary": "The new notes, or null to clear them.",
+          "type": "string",
+          "value": "text",
+          "values": []
+        },
+        {
+          "clears": "notes",
+          "flag": "--clear-notes",
+          "summary": "Clears notes."
+        },
+        {
+          "flag": "--group",
+          "nullable": true,
+          "param": "group",
+          "required": false,
+          "summary": "The new group, or null to clear it.",
+          "type": "string",
+          "value": "text",
+          "values": []
+        },
+        {
+          "clears": "group",
+          "flag": "--clear-group",
+          "summary": "Clears group."
+        },
+        {
+          "flag": "--include-in-net-worth",
+          "nullable": false,
+          "param": "includeInNetWorth",
+          "required": false,
+          "summary": "Whether net worth counts it.",
+          "type": "boolean",
+          "value": "boolean",
+          "values": []
+        },
+        {
+          "flag": "--virtual-balance",
+          "nullable": false,
+          "param": "virtualBalance",
+          "required": false,
+          "summary": "The new virtual balance, which may be negative, like -50.00.",
+          "type": "string",
+          "value": "text",
+          "values": []
+        },
+        {
+          "flag": "--currency",
+          "nullable": false,
+          "param": "currency",
+          "required": false,
+          "summary": "The new currency, three letters like RON, in any case. Only while nothing is in the account (entries is 0), and never for the main account. Another code than the app's needs a rate, here or already there; the app's own currency clears the rate.",
+          "type": "string",
+          "value": "text",
+          "values": []
+        },
+        {
+          "flag": "--rate",
+          "nullable": false,
+          "param": "rate",
+          "required": false,
+          "summary": "The new rate, like 5.00 for 1 EUR = 5.00 RON: more than zero, up to 8 decimals. Changes balanceInMain and net worth, and no amount that is stored. Refused for the main account and for an account in the app's currency, unless currency in the same request makes it another.",
+          "type": "string",
+          "value": "text",
+          "values": []
+        },
+        {
+          "flag": "--balance",
+          "nullable": false,
+          "param": "balance",
+          "required": false,
+          "summary": "What the account holds today, in its own currency, which may be negative, like -50.00: its opening balance moves by the difference. Not together with openingBalance, and refused when the opening date is after today.",
+          "type": "string",
+          "value": "text",
+          "values": []
+        }
+      ],
+      "positional": "id",
+      "route": "accounts.update",
+      "scope": "write",
+      "summary": "Changes an account that is not archived (bring it back first). Fields left out stay as they are; a null number, BIC, notes or group clears it.",
+      "usage": "meowny accounts update <id> [--name <text>] [--kind <CHECKING|SAVINGS|CASH|CREDIT_CARD>] [--number <text>] [--opening-balance <text>] [--opening-date <date>] [--bic <text>] [--notes <text>] [--group <text>] [--include-in-net-worth <boolean>] [--virtual-balance <text>] [--currency <text>] [--rate <text>] [--balance <text>]"
+    },
+    {
+      "command": "accounts archive",
+      "confirm": false,
+      "destructive": false,
+      "flags": [
+        {
+          "flag": "--id",
+          "nullable": false,
+          "param": "id",
+          "required": true,
+          "summary": "The account.",
+          "type": "id",
+          "value": "id",
+          "values": []
+        }
+      ],
+      "positional": "id",
+      "route": "accounts.archive",
+      "scope": "write",
+      "summary": "Takes an account out of the lists and pickers. Its rows, history and balance stay, and it still counts in the net worth. The main account cannot be archived; archiving an archived account changes nothing.",
+      "usage": "meowny accounts archive <id>"
+    },
+    {
+      "command": "accounts unarchive",
+      "confirm": false,
+      "destructive": false,
+      "flags": [
+        {
+          "flag": "--id",
+          "nullable": false,
+          "param": "id",
+          "required": true,
+          "summary": "The account.",
+          "type": "id",
+          "value": "id",
+          "values": []
+        }
+      ],
+      "positional": "id",
+      "route": "accounts.unarchive",
+      "scope": "write",
+      "summary": "Brings back an archived account, if no other account has taken its name. An account that is not archived is answered as it is.",
+      "usage": "meowny accounts unarchive <id>"
+    },
+    {
+      "command": "accounts delete",
+      "confirm": false,
+      "destructive": true,
+      "flags": [
+        {
+          "flag": "--id",
+          "nullable": false,
+          "param": "id",
+          "required": true,
+          "summary": "The account.",
+          "type": "id",
+          "value": "id",
+          "values": []
+        }
+      ],
+      "positional": "id",
+      "route": "accounts.delete",
+      "scope": "write",
+      "summary": "Deletes an account that nothing is in: no transaction, recurring item, ledger entry or transfer. The main account is never deleted, and an account with rows is archived instead.",
+      "usage": "meowny accounts delete <id>"
+    },
+    {
+      "command": "accounts reorder",
+      "confirm": false,
+      "destructive": false,
+      "flags": [
+        {
+          "flag": "--ids",
+          "nullable": false,
+          "param": "ids",
+          "required": true,
+          "summary": "Every account that is not archived, in the new order.",
+          "type": "ids",
+          "value": "id,id,...",
+          "values": []
+        }
+      ],
+      "positional": null,
+      "route": "accounts.reorder",
+      "scope": "write",
+      "summary": "Puts the accounts in a new order; give every account that is not archived, each once.",
+      "usage": "meowny accounts reorder --ids <id,id,...>"
+    },
+    {
+      "command": "transfers create",
+      "confirm": false,
+      "destructive": false,
+      "flags": [
+        {
+          "flag": "--from-account-id",
+          "nullable": false,
+          "param": "fromAccountId",
+          "required": true,
+          "summary": "The account the money leaves.",
+          "type": "id",
+          "value": "id",
+          "values": []
+        },
+        {
+          "flag": "--to-account-id",
+          "nullable": false,
+          "param": "toAccountId",
+          "required": true,
+          "summary": "The account the money reaches.",
+          "type": "id",
+          "value": "id",
+          "values": []
+        },
+        {
+          "flag": "--amount",
+          "nullable": false,
+          "param": "amount",
+          "required": true,
+          "summary": "More than zero, like 200.00, in the currency of the account it leaves.",
+          "type": "money",
+          "value": "amount",
+          "values": []
+        },
+        {
+          "flag": "--date",
+          "nullable": false,
+          "param": "date",
+          "required": true,
+          "summary": "The day it moved.",
+          "type": "date",
+          "value": "date",
+          "values": []
+        },
+        {
+          "flag": "--note",
+          "nullable": false,
+          "param": "note",
+          "required": false,
+          "summary": "A note, up to 200 characters.",
+          "type": "string",
+          "value": "text",
+          "values": []
+        },
+        {
+          "flag": "--to-amount",
+          "nullable": false,
+          "param": "toAmount",
+          "required": false,
+          "summary": "What reaches the second account, in its currency, more than zero, like 200.00. Required when the two accounts are in different currencies, refused when they are in the same.",
+          "type": "money",
+          "value": "amount",
+          "values": []
+        }
+      ],
+      "positional": null,
+      "route": "transfers.create",
+      "scope": "write",
+      "summary": "Moves money between two of your accounts. It is never income or expense and is in no budget or statistic: only the two balances change. The accounts must differ and neither may be archived. Between accounts in different currencies it needs toAmount.",
+      "usage": "meowny transfers create --from-account-id <id> --to-account-id <id> --amount <amount> --date <date> [--note <text>] [--to-amount <amount>]"
+    },
+    {
+      "command": "transfers update",
+      "confirm": false,
+      "destructive": false,
+      "flags": [
+        {
+          "flag": "--id",
+          "nullable": false,
+          "param": "id",
+          "required": true,
+          "summary": "The transfer.",
+          "type": "id",
+          "value": "id",
+          "values": []
+        },
+        {
+          "flag": "--from-account-id",
+          "nullable": false,
+          "param": "fromAccountId",
+          "required": false,
+          "summary": "The account the money leaves.",
+          "type": "id",
+          "value": "id",
+          "values": []
+        },
+        {
+          "flag": "--to-account-id",
+          "nullable": false,
+          "param": "toAccountId",
+          "required": false,
+          "summary": "The account the money reaches.",
+          "type": "id",
+          "value": "id",
+          "values": []
+        },
+        {
+          "flag": "--amount",
+          "nullable": false,
+          "param": "amount",
+          "required": false,
+          "summary": "More than zero, like 200.00, in the currency of the account it leaves.",
+          "type": "money",
+          "value": "amount",
+          "values": []
+        },
+        {
+          "flag": "--date",
+          "nullable": false,
+          "param": "date",
+          "required": false,
+          "summary": "The day it moved.",
+          "type": "date",
+          "value": "date",
+          "values": []
+        },
+        {
+          "flag": "--note",
+          "nullable": true,
+          "param": "note",
+          "required": false,
+          "summary": "The new note, or null to clear it.",
+          "type": "string",
+          "value": "text",
+          "values": []
+        },
+        {
+          "clears": "note",
+          "flag": "--clear-note",
+          "summary": "Clears note."
+        },
+        {
+          "flag": "--to-amount",
+          "nullable": false,
+          "param": "toAmount",
+          "required": false,
+          "summary": "What reaches the second account, in its currency, more than zero. Needed when the two accounts, as they are after this change, are in different currencies and the transfer has none yet; refused when they are in the same currency (a stored one is then cleared).",
+          "type": "money",
+          "value": "amount",
+          "values": []
+        }
+      ],
+      "positional": "id",
+      "route": "transfers.update",
+      "scope": "write",
+      "summary": "Changes a transfer. Fields left out stay as they are; a null note clears it. A side that does not change may be an archived account; a side that changes may not.",
+      "usage": "meowny transfers update <id> [--from-account-id <id>] [--to-account-id <id>] [--amount <amount>] [--date <date>] [--note <text>] [--to-amount <amount>]"
+    },
+    {
+      "command": "transfers delete",
+      "confirm": false,
+      "destructive": true,
+      "flags": [
+        {
+          "flag": "--id",
+          "nullable": false,
+          "param": "id",
+          "required": true,
+          "summary": "The transfer.",
+          "type": "id",
+          "value": "id",
+          "values": []
+        }
+      ],
+      "positional": "id",
+      "route": "transfers.delete",
+      "scope": "write",
+      "summary": "Deletes a transfer. The balances of both accounts change by that much. The change history keeps what it said.",
+      "usage": "meowny transfers delete <id>"
     },
     {
       "command": "login",

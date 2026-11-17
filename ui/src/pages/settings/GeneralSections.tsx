@@ -24,12 +24,15 @@ export function RegionSection({
   phone,
   onSaved,
   onChangeCurrency,
+  currencyLocked,
   say,
 }: {
   settings: Settings
   phone: boolean
   onSaved: (next: Settings) => void
   onChangeCurrency: () => void
+  /** An account in another currency exists (archived too): the app's currency cannot be changed, and the button says why. */
+  currencyLocked: boolean
   say: Say
 }) {
   const { t, setLanguage } = useI18n()
@@ -62,10 +65,10 @@ export function RegionSection({
         <Field>
           <Dropdown label={t('settings.timezone')} value={timezone} options={zoneOptions(timezone)} onChange={setTimezone} />
         </Field>
-        <Row label={t('settings.currency')} hint={phone ? t('settings.currencyOnDesktop') : undefined}>
+        <Row label={t('settings.currency')} hint={phone ? t('settings.currencyOnDesktop') : currencyLocked ? t('settings.currencyLocked') : undefined}>
           <span className="settings-value">{currencyLabel(settings.currency)}</span>
           {phone ? null : (
-            <Button variant="outline" size="sm" onClick={onChangeCurrency}>
+            <Button variant="outline" size="sm" disabled={currencyLocked} onClick={onChangeCurrency}>
               {t('common.change')}
             </Button>
           )}

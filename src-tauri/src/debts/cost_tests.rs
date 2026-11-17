@@ -285,7 +285,8 @@ fn every_module_counts_your_part_of_a_shared_bill() {
         let from_json: i64 = json["transactions"].as_array().unwrap().iter().map(|t| minor(t["myShare"].as_str().unwrap())).sum();
         assert_eq!(from_json, by_hand, "json seed {seed}");
         let csv = export::csv(conn, &all).unwrap();
-        let from_csv: i64 = csv.lines().skip(1).map(|l| minor(l.trim_end().rsplit(',').next().unwrap())).sum();
+        // `my_share` is the fourth column from the end: the account, what it really paid and the code of its currency come after it
+        let from_csv: i64 = csv.lines().skip(1).map(|l| minor(l.trim_end().rsplit(',').nth(3).unwrap())).sum();
         assert_eq!(from_csv, by_hand, "csv seed {seed}");
     }
 }
@@ -326,6 +327,7 @@ fn what_a_recurring_item_costs_in_an_average_month_is_your_part() {
             interval_count: 1,
             end_date: None,
             description: None,
+            account_id: None,
         },
     )
     .unwrap();
@@ -352,6 +354,7 @@ fn planned_against_paid_stays_whole_because_a_split_does_not_move_the_price() {
             interval_count: 1,
             end_date: None,
             description: None,
+            account_id: None,
         },
     )
     .unwrap();

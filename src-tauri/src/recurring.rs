@@ -6,6 +6,7 @@ use chrono::{Days, Months, NaiveDate};
 use rusqlite::{params, Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
 
+use crate::accounts;
 use crate::categories::{parse_id, present_or_null, serialize_id};
 use crate::db::is_unique_violation;
 use crate::debts::splits::{self, Template};
@@ -52,6 +53,9 @@ pub struct Recurring {
     pub id: i64,
     #[serde(serialize_with = "serialize_id")]
     pub category_id: i64,
+    /// The account its payments are made in (`docs/accounts-design.md`).
+    #[serde(serialize_with = "serialize_id")]
+    pub account_id: i64,
     pub name: String,
     pub description: Option<String>,
     /// Decimal string, e.g. "12.50". Null for a bill with no fixed amount: each payment says what was paid.
@@ -81,6 +85,9 @@ pub struct NewRecurring {
     pub end_date: Option<String>,
     #[serde(default)]
     pub description: Option<String>,
+    /// Left out means the main account.
+    #[serde(default)]
+    pub account_id: Option<String>,
 }
 
 /// Fields left out stay as they are. `description: null` and `endDate: null` clear them, and `amount: null`
@@ -104,6 +111,9 @@ pub struct RecurringPatch {
     pub end_date: Option<Option<String>>,
     #[serde(default, deserialize_with = "present_or_null")]
     pub description: Option<Option<String>>,
+    /// Moves the item to another account, which must not be archived. Payments already made stay where they are.
+    #[serde(default)]
+    pub account_id: Option<String>,
 }
 
 fn parse_date(text: &str) -> Result<NaiveDate, AppError> {
@@ -134,7 +144,7 @@ pub fn next_after(start: NaiveDate, unit: Unit, count: u32, date: NaiveDate) -> 
 }
 
 const COLUMNS: &str = "id, category_id, name, description, amount_minor, start_date, interval_unit, \
-                       interval_count, next_due_date, end_date, is_active";
+                       interval_count, next_due_date, end_date, is_active, account_id";
 
 fn from_row(row: &rusqlite::Row) -> rusqlite::Result<Recurring> {
     let unit: String = row.get(6)?;
@@ -150,6 +160,7 @@ fn from_row(row: &rusqlite::Row) -> rusqlite::Result<Recurring> {
         next_due_date: row.get(8)?,
         end_date: row.get(9)?,
         is_active: row.get::<_, i64>(10)? == 1,
+        account_id: row.get(11)?,
         split: None,
     })
 }
@@ -219,12 +230,14 @@ pub fn create(conn: &Connection, input: &NewRecurring) -> Result<Recurring, AppE
     if !category_is_active(conn, category_id)? {
         return Err(AppError::InvalidInput);
     }
+    let account_id = accounts::for_new_row(conn, input.account_id.as_deref())?;
+    accounts::require_main_currency(conn, account_id)?;
 
     conn.execute(
         "INSERT INTO recurring_transactions
-           (category_id, name, description, amount_minor, start_date, interval_unit, interval_count, next_due_date, end_date)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?5, ?8)",
-        params![category_id, name, description, minor, input.start_date, input.interval_unit.as_str(), count, end],
+           (category_id, name, description, amount_minor, start_date, interval_unit, interval_count, next_due_date, end_date, account_id)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?5, ?8, ?9)",
+        params![category_id, name, description, minor, input.start_date, input.interval_unit.as_str(), count, end, account_id],
     )?;
     get(conn, conn.last_insert_rowid())
 }
@@ -258,6 +271,8 @@ pub fn update(conn: &Connection, id: i64, patch: &RecurringPatch) -> Result<Recu
         Some(description) => clean_description(description.as_deref())?,
         None => current.description.clone(),
     };
+    let account_id = accounts::for_moved_row(conn, current.account_id, patch.account_id.as_deref())?;
+    accounts::require_main_currency(conn, account_id)?;
     // A split item stays an expense: take the split off first to move it to an income category.
     if current.split.is_some() && category_id != current.category_id && !category_is_expense(conn, category_id)? {
         return Err(AppError::InvalidInput);
@@ -284,10 +299,10 @@ pub fn update(conn: &Connection, id: i64, patch: &RecurringPatch) -> Result<Recu
     conn.execute(
         "UPDATE recurring_transactions
          SET name = ?1, description = ?2, amount_minor = ?3, category_id = ?4, start_date = ?5,
-             interval_unit = ?6, interval_count = ?7, next_due_date = ?8, end_date = ?9,
+             interval_unit = ?6, interval_count = ?7, next_due_date = ?8, end_date = ?9, account_id = ?12,
              skipped_dates = CASE WHEN ?11 THEN '[]' ELSE skipped_dates END
          WHERE id = ?10",
-        params![name, description, minor, category_id, start_text, unit.as_str(), count, next_due, end, id, schedule_changed],
+        params![name, description, minor, category_id, start_text, unit.as_str(), count, next_due, end, id, schedule_changed, account_id],
     )?;
     get(conn, id)
 }
@@ -430,7 +445,8 @@ fn later_occurrence(conn: &Connection, item: &Recurring, due_date: Option<&str>)
 /// and the item moves on to the one after; with the date of a later occurrence only that one is paid and the item stays where it
 /// is. `amount` defaults to the planned amount and `paid_on` to `today`; the planned amount is kept on the transaction. The
 /// transaction takes the item's description unless `description` is given, cleaned like a transaction's (empty means none). An
-/// occurrence that already has a transaction is refused.
+/// occurrence that already has a transaction is refused. The payment is made in the item's account, or in the main account when that one
+/// is archived by now; the item is not changed (`docs/accounts-design.md`, section 5.2).
 pub fn pay(
     conn: &Connection,
     id: i64,
@@ -452,12 +468,13 @@ pub fn pay(
     let planned = optional_amount(item.amount.as_deref())?;
     let paid = actual.or(planned).ok_or(AppError::InvalidInput)?;
     let occurrence = later.as_deref().unwrap_or(&item.next_due_date);
+    let account_id = if accounts::is_active(&tx, item.account_id)? { item.account_id } else { accounts::MAIN_ID };
     let inserted = tx.execute(
         "INSERT INTO transactions
            (category_id, recurring_transaction_id, recurring_due_date, name, amount_minor,
-            planned_amount_minor, payment_date, description)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
-        params![item.category_id, id, occurrence, item.name, paid, planned, paid_on, description],
+            planned_amount_minor, payment_date, description, account_id)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+        params![item.category_id, id, occurrence, item.name, paid, planned, paid_on, description, account_id],
     );
     match inserted {
         Ok(_) => {}
@@ -596,6 +613,7 @@ mod tests {
             interval_count: 1,
             end_date: None,
             description: None,
+            account_id: None,
         }
     }
 

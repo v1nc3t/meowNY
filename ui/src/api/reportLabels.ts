@@ -20,6 +20,13 @@ export type ReportLabels = {
   amount: string
   page: string
   noData: string
+  /** The table of accounts in a report of every category: its title, its two columns of numbers and its last line. */
+  accounts: string
+  balance: string
+  change: string
+  netWorth: string
+  /** The mark beside an account that net worth leaves out. */
+  notInNetWorth: string
 }
 
 export const capital = (text: string) => text.charAt(0).toLocaleUpperCase(activeLanguage()) + text.slice(1)
@@ -60,5 +67,10 @@ export function reportLabels(period: string): ReportLabels {
     amount: capital(t('tx.amount')),
     page: capital(t('report.page')),
     noData: capital(t('report.noData')),
+    accounts: capital(t('report.accounts')),
+    balance: capital(t('report.balance')),
+    change: capital(t('report.change')),
+    netWorth: capital(t('report.netWorth')),
+    notInNetWorth: `(${t('accounts.notInNetWorth')})`,
   }
 }

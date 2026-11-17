@@ -535,6 +535,8 @@ mod tests {
                 category_id: category.to_string(),
                 description: None,
                 client_uuid: None,
+                account_id: None,
+                native_amount: None,
             },
         )
         .unwrap();

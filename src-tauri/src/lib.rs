@@ -1,3 +1,4 @@
+pub mod accounts;
 pub mod api;
 pub mod backup;
 pub mod budgets;
@@ -351,6 +352,22 @@ pub fn run() {
             commands::bill_preview,
             commands::bill_accept,
             commands::debts_reminders,
+            commands::list_accounts,
+            commands::create_account,
+            commands::update_account,
+            commands::archive_account,
+            commands::unarchive_account,
+            commands::delete_account,
+            commands::reorder_accounts,
+            commands::account_statement,
+            commands::account_history,
+            commands::account_breakdown,
+            commands::accounts_summary,
+            commands::create_transfer,
+            commands::get_transfer,
+            commands::update_transfer,
+            commands::delete_transfer,
+            commands::list_transfers,
         ])
         .build(tauri::generate_context!())
         .expect("error while building meowNY")

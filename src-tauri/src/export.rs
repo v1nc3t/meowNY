@@ -10,6 +10,12 @@
 //! each only the attachments that are in it, so the name of a document attached to something left out is not revealed.
 //! Debts are listed too: the friends, the ledger of money lent and borrowed, and the parts of every shared bill; each transaction has what was
 //! paid (`amount`) and what it costs you (`my_share`). A limited export keeps to what it contains (see `debts.rs`).
+//! Accounts are listed too, and each transaction, recurring item and ledger entry says which one it is in. With no limit the file has every
+//! account with its balance and its details (BIC, notes, group, whether net worth counts it, virtual balance) and every transfer; with a
+//! limit it names the accounts its rows are in and nothing more about them (but its currency), and has no transfers (`docs/accounts-design.md`,
+//! sections 10 and 20.5). An account may be in a currency of its own: the file says so (`currency`, and `rate` and `balanceInMain` with no
+//! limit), a transaction in it has what the account really paid (`nativeAmount`, `native_amount`) beside its amount in the app's currency, and a
+//! transfer between two currencies has what arrives (`toAmount`; section 21.6).
 //! The device-specific scheduled-backup setup, which holds a passphrase, and the access tokens of the
 //! command-line client are never exported.
 
@@ -18,6 +24,7 @@ pub(crate) mod debts;
 mod xlsx;
 
 use std::borrow::Cow;
+use std::collections::{BTreeSet, HashMap};
 
 use chrono::{DateTime, SecondsFormat, Utc};
 use rusqlite::Connection;
@@ -26,6 +33,7 @@ use rusqlite::params;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
+use crate::accounts;
 use crate::categories::parse_id;
 use crate::money::format_amount;
 use crate::recurring;
@@ -108,6 +116,10 @@ pub enum Section {
     Categories,
     Budgets,
     Recurring,
+    /// The accounts. With a limit only the name and the kind of those the file speaks of.
+    Accounts,
+    /// The transfers between accounts. Only in a file with no limit.
+    Transfers,
     Documents,
     /// The friends and what each owes or is owed.
     People,
@@ -126,6 +138,8 @@ impl Section {
             Section::Categories => "categories",
             Section::Budgets => "budgets",
             Section::Recurring => "recurring",
+            Section::Accounts => "accounts",
+            Section::Transfers => "transfers",
             Section::Documents => "documents",
             Section::People => "people",
             Section::Due => "due",
@@ -177,6 +191,12 @@ impl Parsed {
     /// Whether a part of the file is asked for. (The history is also left out of any file that has a limit.)
     pub(crate) fn wants(&self, section: Section) -> bool {
         self.sections.as_ref().is_none_or(|list| list.contains(&section))
+    }
+
+    /// Whether the transfers go into the file: they are asked for and nothing limits it. A transfer is between two accounts, and a limited file
+    /// names only the accounts its rows are in.
+    pub(crate) fn with_transfers(&self) -> bool {
+        self.everything() && self.wants(Section::Transfers)
     }
 
     /// The seven values `transaction_filter` names, in order: first day, last day, kind, least and most it cost, text pattern, shared or not.
@@ -360,17 +380,23 @@ pub(crate) fn csv_field(cell: &str) -> String {
 
 /// Transactions as CSV: a header row, then one row per transaction, oldest first. Amounts are
 /// positive; `type` says whether it was income or an expense. `documents` names the documents attached to the transaction and `my_share` is
-/// what it costs you (the same as `amount` unless the bill is shared). The file starts with a byte order
-/// mark so Excel reads the UTF-8 text correctly, and rows end with CRLF as the format says.
+/// what it costs you (the same as `amount` unless the bill is shared). `account` is the name of the account it is in, and the last two columns
+/// are what the account really paid (`native_amount`, empty unless the account has a currency of its own) and the code of the account's
+/// currency, so the others keep their place. The file starts with a byte order mark so Excel reads the UTF-8 text correctly, and rows end with
+/// CRLF as the format says.
 pub fn csv(conn: &Connection, selection: &Selection) -> Result<String, AppError> {
     let sel = parse(selection)?;
     let tx = conn.unchecked_transaction()?;
     let currency = currency(&tx)?;
     let attached = document_names_by_transaction(&tx)?;
-    let mut out = String::from("\u{feff}date,type,category,name,amount,currency,description,documents,my_share\r\n");
+    let accounts = account_of_rows(&tx, "transactions")?;
+    let natives = native_of_transactions(&tx)?;
+    let mut out = String::from("\u{feff}date,type,category,name,amount,currency,description,documents,my_share,account,native_amount,account_currency\r\n");
     for t in transactions(&tx, &sel)? {
         let documents = attached.get(&t.id).map(|names| join_names(names)).unwrap_or_default();
         let share = format_amount(t.my_share);
+        let account = accounts.get(&t.id).map(|(_, name)| name.as_str()).unwrap_or_default();
+        let (native, account_currency) = natives.get(&t.id).map(|(native, code)| (native.map(format_amount).unwrap_or_default(), code.as_str())).unwrap_or_default();
         let cells = [
             t.date.as_str(),
             t.kind.as_str(),
@@ -381,6 +407,9 @@ pub fn csv(conn: &Connection, selection: &Selection) -> Result<String, AppError>
             t.description.as_deref().unwrap_or(""),
             documents.as_str(),
             share.as_str(),
+            account,
+            native.as_str(),
+            account_currency,
         ];
         let row: Vec<String> = cells.iter().map(|c| csv_field(c)).collect();
         out.push_str(&row.join(","));
@@ -523,9 +552,15 @@ fn budgets_json(conn: &Connection, sel: &Parsed) -> Result<Vec<Value>, AppError>
 }
 
 fn recurring_json(conn: &Connection, sel: &Parsed) -> Result<Vec<Value>, AppError> {
+    let accounts = account_of_rows(conn, "recurring_transactions")?;
     recurring_rows(conn, sel)?
         .into_iter()
-        .map(|item| serde_json::to_value(item).map_err(|_| AppError::Internal))
+        .map(|item| {
+            let account = accounts.get(&item.id).map(|(_, name)| name.clone());
+            let mut value = serde_json::to_value(item).map_err(|_| AppError::Internal)?;
+            value["account"] = json!(account);
+            Ok(value)
+        })
         .collect()
 }
 
@@ -681,6 +716,138 @@ fn documents_json(conn: &Connection, sel: &Parsed) -> Result<Vec<Value>, AppErro
         .collect())
 }
 
+/// The account of each row of `table` ("transactions", "recurring_transactions" or "ledger_entries"), by the id of the row: the id of the account and
+/// its name.
+pub(crate) fn account_of_rows(conn: &Connection, table: &str) -> Result<HashMap<i64, (i64, String)>, AppError> {
+    let mut statement = conn.prepare(&format!("SELECT r.id, a.id, a.name FROM {table} r JOIN accounts a ON a.id = r.account_id"))?;
+    let rows = statement.query_map([], |r| Ok((r.get::<_, i64>(0)?, (r.get::<_, i64>(1)?, r.get::<_, String>(2)?))))?;
+    Ok(rows.collect::<Result<_, _>>()?)
+}
+
+/// What each transaction really moved its account by, and the code of the account's currency (the app's own for an account in it), by the id of
+/// the row. The amount is there only when the account has a currency of its own: in an account in the app's currency a value left from a sync
+/// is not looked at, as `account_movements` does not (`docs/accounts-design.md`, section 21.2).
+pub(crate) fn native_of_transactions(conn: &Connection) -> Result<HashMap<i64, (Option<i64>, String)>, AppError> {
+    let mut statement = conn.prepare(
+        "SELECT t.id, CASE WHEN a.currency IS NOT NULL THEN t.native_amount_minor END, COALESCE(a.currency, (SELECT currency FROM settings WHERE id = 1))
+         FROM transactions t JOIN accounts a ON a.id = t.account_id",
+    )?;
+    let rows = statement.query_map([], |r| Ok((r.get::<_, i64>(0)?, (r.get::<_, Option<i64>>(1)?, r.get::<_, String>(2)?))))?;
+    Ok(rows.collect::<Result<_, _>>()?)
+}
+
+/// The accounts that the rows of an export are in: those of its transactions, recurring items and ledger entries, for the parts that are asked for.
+fn named_accounts(conn: &Connection, sel: &Parsed) -> Result<BTreeSet<i64>, AppError> {
+    let mut named = BTreeSet::new();
+    if sel.wants(Section::Transactions) {
+        let of = account_of_rows(conn, "transactions")?;
+        named.extend(transactions(conn, sel)?.iter().filter_map(|t| of.get(&t.id)).map(|(account, _)| *account));
+    }
+    if sel.wants(Section::Recurring) {
+        named.extend(recurring_rows(conn, sel)?.iter().map(|item| item.account_id));
+    }
+    if sel.wants(Section::Ledger) {
+        let of = account_of_rows(conn, "ledger_entries")?;
+        named.extend(debts::entries(conn, sel)?.iter().filter_map(|e| of.get(&e.id)).map(|(account, _)| *account));
+    }
+    Ok(named)
+}
+
+/// The accounts an export lists, in the person's order: every one, archived too, when nothing limits it, otherwise only those its rows are in.
+/// The caller shows no more than the name and the kind of those: a number or a balance would tell about what the file leaves out.
+pub(crate) fn account_rows(conn: &Connection, sel: &Parsed, today: &str) -> Result<Vec<accounts::Account>, AppError> {
+    let all = accounts::list(conn, today)?;
+    if sel.everything() {
+        return Ok(all);
+    }
+    let named = named_accounts(conn, sel)?;
+    Ok(all.into_iter().filter(|a| named.contains(&a.id)).collect())
+}
+
+/// A transfer as an export lists it.
+pub(crate) struct TransferRow {
+    pub(crate) id: i64,
+    pub(crate) date: String,
+    pub(crate) from_id: i64,
+    pub(crate) from: String,
+    pub(crate) to_id: i64,
+    pub(crate) to: String,
+    /// What left the first account, in its currency.
+    pub(crate) amount: i64,
+    /// What arrived in the second, in its currency, when the two were in different currencies.
+    pub(crate) to_amount: Option<i64>,
+    /// Whether each account has a currency of its own: the amounts are in it, and not in the app's.
+    pub(crate) from_foreign: bool,
+    pub(crate) to_foreign: bool,
+    pub(crate) note: Option<String>,
+}
+
+/// The transfers an export contains, oldest first: all of them with no limit, and none with one (`Parsed::with_transfers`).
+pub(crate) fn transfer_rows(conn: &Connection, sel: &Parsed) -> Result<Vec<TransferRow>, AppError> {
+    if !sel.with_transfers() {
+        return Ok(Vec::new());
+    }
+    let mut statement = conn.prepare(
+        "SELECT x.id, x.transfer_date, x.from_account_id, f.name, x.to_account_id, t.name, x.amount_minor, x.note, x.to_amount_minor,
+                f.currency IS NOT NULL, t.currency IS NOT NULL
+         FROM transfers x JOIN accounts f ON f.id = x.from_account_id JOIN accounts t ON t.id = x.to_account_id
+         ORDER BY x.transfer_date, x.id",
+    )?;
+    let rows = statement.query_map([], |r| {
+        Ok(TransferRow {
+            id: r.get(0)?,
+            date: r.get(1)?,
+            from_id: r.get(2)?,
+            from: r.get(3)?,
+            to_id: r.get(4)?,
+            to: r.get(5)?,
+            amount: r.get(6)?,
+            to_amount: r.get(8)?,
+            from_foreign: r.get(9)?,
+            to_foreign: r.get(10)?,
+            note: r.get(7)?,
+        })
+    })?;
+    Ok(rows.collect::<Result<_, _>>()?)
+}
+
+fn accounts_json(conn: &Connection, sel: &Parsed, today: &str) -> Result<Vec<Value>, AppError> {
+    account_rows(conn, sel, today)?
+        .into_iter()
+        .map(|a| {
+            if !sel.everything() {
+                return Ok(json!({ "id": a.id.to_string(), "name": a.name, "kind": a.kind, "currency": a.currency }));
+            }
+            let mut whole = serde_json::to_value(a).map_err(|_| AppError::Internal)?;
+            if let Some(fields) = whole.as_object_mut() {
+                fields.remove("entries");
+                // worked out from the balance and the virtual balance, both of which are in the file
+                fields.remove("available");
+            }
+            Ok(whole)
+        })
+        .collect()
+}
+
+fn transfers_json(conn: &Connection, sel: &Parsed) -> Result<Vec<Value>, AppError> {
+    Ok(transfer_rows(conn, sel)?
+        .into_iter()
+        .map(|x| {
+            json!({
+                "id": x.id.to_string(),
+                "date": x.date,
+                "fromAccountId": x.from_id.to_string(),
+                "from": x.from,
+                "toAccountId": x.to_id.to_string(),
+                "to": x.to,
+                "amount": format_amount(x.amount),
+                "toAmount": x.to_amount.map(format_amount),
+                "note": x.note,
+            })
+        })
+        .collect())
+}
+
 /// What an export with this selection would contain, so the screen can say so before anything is saved.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -695,6 +862,9 @@ pub struct Preview {
     pub categories: u32,
     pub budgets: u32,
     pub recurring: u32,
+    /// Accounts listed, and transfers between them (those only in an export with no limit).
+    pub accounts: u32,
+    pub transfers: u32,
     /// Documents listed by name (never their files).
     pub documents: u32,
     /// Friends, ledger entries and shared bills (with their parts) in the export.
@@ -749,6 +919,8 @@ pub fn preview(conn: &Connection, selection: &Selection) -> Result<Preview, AppE
         categories: count(sel.wants(Section::Categories), category_rows(&tx, &sel)?.len()),
         budgets: count(sel.wants(Section::Budgets), budget_rows(&tx, &sel)?.len()),
         recurring: count(sel.wants(Section::Recurring), recurring_rows(&tx, &sel)?.len()),
+        accounts: count(sel.wants(Section::Accounts), account_rows(&tx, &sel, &today)?.len()),
+        transfers: transfer_rows(&tx, &sel)?.len() as u32,
         documents: count(sel.wants(Section::Documents), documents(&tx, &sel)?.len()),
         history,
     })
@@ -770,9 +942,13 @@ pub fn json(conn: &Connection, selection: &Selection, now: DateTime<Utc>) -> Res
     let ledger = if sel.wants(Section::Ledger) { debts::entries(&tx, &sel)? } else { Vec::new() };
     let friends = if sel.wants(Section::People) { debts::people(&tx, &sel, &bill_lines, &ledger)? } else { Vec::new() };
     let mut parts = debts::lines_by_transaction(bill_lines);
+    let account_of_transactions = account_of_rows(&tx, "transactions")?;
+    let natives = native_of_transactions(&tx)?;
     let transactions: Vec<Value> = transactions(&tx, &sel)?
         .into_iter()
         .map(|t| {
+            let (account_id, account) = account_of_transactions.get(&t.id).cloned().unwrap_or_default();
+            let native = natives.get(&t.id).and_then(|(native, _)| *native);
             let split: Vec<Value> = parts
                 .remove(&t.id)
                 .unwrap_or_default()
@@ -787,11 +963,14 @@ pub fn json(conn: &Connection, selection: &Selection, now: DateTime<Utc>) -> Res
                 "category": t.category,
                 "name": t.name,
                 "amount": format_amount(t.amount),
+                "nativeAmount": native.map(format_amount),
                 "myShare": format_amount(t.my_share),
                 "split": split,
                 "plannedAmount": t.planned.map(format_amount),
                 "description": t.description,
                 "recurringId": t.recurring_id.map(|id| id.to_string()),
+                "accountId": account_id.to_string(),
+                "account": account,
             })
         })
         .collect();
@@ -808,9 +987,11 @@ pub fn json(conn: &Connection, selection: &Selection, now: DateTime<Utc>) -> Res
             })
         })
         .collect();
+    let account_of_entries = account_of_rows(&tx, "ledger_entries")?;
     let ledger: Vec<Value> = ledger
         .into_iter()
         .map(|e| {
+            let (account_id, account) = account_of_entries.get(&e.id).cloned().unwrap_or_default();
             json!({
                 "id": e.id.to_string(),
                 "date": e.date,
@@ -820,6 +1001,8 @@ pub fn json(conn: &Connection, selection: &Selection, now: DateTime<Utc>) -> Res
                 "amount": format_amount(e.amount),
                 "note": e.note,
                 "transactionId": e.transaction_id.map(|id| id.to_string()),
+                "accountId": account_id.to_string(),
+                "account": account,
             })
         })
         .collect();
@@ -851,13 +1034,19 @@ pub fn json(conn: &Connection, selection: &Selection, now: DateTime<Utc>) -> Res
     if sel.wants(Section::Recurring) {
         file["recurring"] = Value::Array(recurring_json(&tx, &sel)?);
     }
+    let today = today_of(&tx, now)?;
+    if sel.wants(Section::Accounts) {
+        file["accounts"] = Value::Array(accounts_json(&tx, &sel, &today)?);
+    }
+    if sel.with_transfers() {
+        file["transfers"] = Value::Array(transfers_json(&tx, &sel)?);
+    }
     if sel.wants(Section::Transactions) {
         file["transactions"] = Value::Array(transactions);
     }
     if sel.wants(Section::People) {
         file["people"] = Value::Array(people);
     }
-    let today = today_of(&tx, now)?;
     if sel.wants(Section::Due) {
         // the payments that have come due are owed too
         let due = due_payments(&tx, &sel, &today)?;
@@ -948,6 +1137,8 @@ mod documents_tests;
 pub(crate) mod filters_tests;
 #[cfg(test)]
 mod debts_tests;
+#[cfg(test)]
+mod accounts_tests;
 
 #[cfg(test)]
 mod tests {
@@ -978,6 +1169,8 @@ mod tests {
                 category_id: category.to_string(),
                 description: description.map(str::to_string),
                 client_uuid: None,
+                account_id: None,
+                native_amount: None,
             },
         )
         .unwrap();
@@ -1020,6 +1213,7 @@ mod tests {
                     interval_count: 1,
                     end_date: None,
                     description: None,
+                    account_id: None,
                 },
             )
             .unwrap();
@@ -1219,6 +1413,7 @@ mod tests {
                 interval_count: 1,
                 end_date: None,
                 description: None,
+                account_id: None,
             },
         )
         .unwrap();

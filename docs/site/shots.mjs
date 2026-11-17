@@ -1,6 +1,8 @@
-// The screenshots of the site. Each one is two files in docs/site/images/, `<name>-light.png` and `<name>-dark.png`, taken
-// from the real app with its demo data (src-tauri/seeds); the page shows the one that matches the reader's theme. A shot
-// whose files are not there yet is an empty frame on the landing page and left out of the guide.
+// The screenshots of the site. Each one is two files in docs/site/images/, `<name>-light.png` and `<name>-dark.png`: the app's own
+// UI (ui/) running in a browser against a fake backend with made-up data (ui/harness.html, a local test file kept out of git), at
+// 1280 x 800 for the computer and 400 x 860 (`?profile=phone`) for the phone, once with a light and once with a dark system theme.
+// The page shows the one that matches the reader's theme. A shot whose files are not there yet is an empty frame on the landing
+// page and left out of the guide. Retake them whenever a screen changes.
 
 import { escapeHtml } from './render.mjs'
 
@@ -8,29 +10,33 @@ const DESKTOP = { width: 1280, height: 800 }
 const PHONE = { width: 400, height: 860, phone: true }
 
 export const SHOTS = {
-  dashboard: { ...DESKTOP, alt: 'The dashboard: income, expenses and savings of the month, a year of trends and the budgets', caption: 'the dashboard' },
-  transactions: { ...DESKTOP, alt: 'The transactions of September with filters by month, text and category', caption: 'transactions' },
-  split: { ...DESKTOP, alt: 'A taxi bill split equally between you and two friends; the odd cent goes to you', caption: 'splitting a bill' },
-  'bill-code': { ...DESKTOP, alt: "A QR code with Marta's part of a shared bill, for her to scan", caption: 'a bill code for a friend' },
-  categories: { ...DESKTOP, alt: 'Budgets of expenses and income side by side, with the budget history', caption: 'categories and budgets' },
-  recurring: { ...DESKTOP, alt: 'Recurring items with mark as paid, skip and pause; an overdue one is marked', caption: 'recurring items' },
-  debts: { ...DESKTOP, alt: 'Friends with what each one owes, and the reminders that have come', caption: 'debts' },
-  'debt-history': { ...DESKTOP, alt: 'The history of debts: shared bills, repayments and an overdue payment, with balances', caption: 'history of debts' },
-  friend: { ...DESKTOP, alt: "Marta's page: what she owes and every line of her ledger", caption: "a friend's ledger" },
-  documents: { ...DESKTOP, alt: 'The documents page with a PDF receipt, a CSV and a text file', caption: 'documents' },
-  'preview-pdf': { ...DESKTOP, alt: 'A PDF receipt previewed inside the app', caption: 'a receipt, previewed' },
-  'preview-csv': { ...DESKTOP, alt: 'A CSV of electricity bills previewed as a sheet', caption: 'a spreadsheet, previewed' },
+  dashboard: { ...DESKTOP, alt: 'The dashboard: income, expenses and savings of the month, a year of trends, the budgets and net worth', caption: 'the dashboard' },
+  transactions: { ...DESKTOP, alt: 'The transactions of a month with the tabs all, expenses, income and transfers, and filters by text, category and account', caption: 'transactions' },
+  'transactions-transfers': { ...DESKTOP, alt: 'The transfers tab: each transfer with its date, the account it came from, the account it went to, the amount and a note', caption: 'the transfers tab' },
+  'add-income': { ...DESKTOP, alt: 'The add dialog on the income tab: a name, an amount, an income category and the account the money comes into', caption: 'adding an income' },
+  split: { ...DESKTOP, alt: 'The add dialog on the expense tab: a taxi bill split equally between you and two friends; the odd cent goes to you', caption: 'splitting a bill' },
+  'bill-code': { ...DESKTOP, alt: "A QR code with Anna's part of a shared bill, for her to scan", caption: 'a bill code for a friend' },
+  accounts: { ...DESKTOP, alt: 'The accounts under the headings of their groups, with the type, last activity, change this month and balance of each, and the total in accounts', caption: 'accounts' },
+  account: { ...DESKTOP, alt: 'One account: its balance over the year as a chart, what it spent and what came in by category for a month, and the lines of the month', caption: 'one account' },
+  categories: { ...DESKTOP, alt: 'The categories page: the expense categories of a month with what was spent and the budget of each; the income categories and the budget history follow under them', caption: 'categories and budgets' },
+  recurring: { ...DESKTOP, alt: 'Recurring expenses and recurring income, each in a list of its own with mark as paid, skip and pause; an overdue one is marked', caption: 'recurring items' },
+  debts: { ...DESKTOP, alt: 'The friends with what each one owes, and the history of every change of every debt', caption: 'debts' },
+  friend: { ...DESKTOP, alt: "Anna's page: what she owes and every line of her ledger", caption: "a friend's ledger" },
+  documents: { ...DESKTOP, alt: 'The documents page with receipts, PDFs, a CSV and a text file, and the ones that are kept on the phone', caption: 'documents' },
+  'preview-pdf': { ...DESKTOP, alt: 'A PDF previewed inside the app, page by page', caption: 'a receipt, previewed' },
+  'preview-csv': { ...DESKTOP, alt: 'A CSV file previewed as a sheet', caption: 'a spreadsheet, previewed' },
   export: { ...DESKTOP, alt: 'The export page: format, period and filters on the left, a preview of the file on the right', caption: 'export' },
-  settings: { ...DESKTOP, alt: 'Settings: pairing a phone, with the direction of the sync', caption: 'settings' },
+  settings: { ...DESKTOP, alt: 'Settings, the phone part: the phones that are paired, and the direction of the sync', caption: 'settings' },
   lock: { ...DESKTOP, alt: 'The lock screen asking for the passphrase', caption: 'the lock screen' },
   'phone-dashboard': { ...PHONE, alt: 'The dashboard on the phone', caption: 'dashboard' },
-  'phone-transactions': { ...PHONE, alt: 'Transactions on the phone', caption: 'transactions' },
-  'phone-recurring': { ...PHONE, alt: 'Recurring items on the phone', caption: 'recurring' },
+  'phone-transactions': { ...PHONE, alt: 'Transactions on the phone, with the tabs all, expenses, income and transfers', caption: 'transactions' },
+  'phone-recurring': { ...PHONE, alt: 'Recurring expenses and recurring income on the phone', caption: 'recurring' },
   'phone-debts': { ...PHONE, alt: 'Debts on the phone, with scan for a bill code', caption: 'debts' },
-  'phone-categories': { ...PHONE, alt: 'Categories and budgets on the phone', caption: 'budgets' },
+  'phone-accounts': { ...PHONE, alt: 'Accounts on the phone under the headings of their groups, each with its balance', caption: 'accounts' },
+  'phone-categories': { ...PHONE, alt: 'Expense categories and budgets on the phone, with the tabs expenses, income and budget history', caption: 'budgets' },
   'phone-quick-add': { ...PHONE, alt: 'The add button on the phone: a transaction, a category, a friend or a scanned bill', caption: 'quick add' },
+  'phone-entry': { ...PHONE, alt: 'The add dialog on the phone, with the tabs expense, income and transfer', caption: 'add an entry' },
   'phone-sync': { ...PHONE, alt: 'The phone asking to scan the code the computer shows', caption: 'sync with your computer' },
-  'phone-settings': { ...PHONE, alt: 'Settings on the phone', caption: 'settings' },
   'phone-lock': { ...PHONE, alt: 'The lock screen on the phone', caption: 'locked' },
 }
 

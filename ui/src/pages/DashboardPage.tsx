@@ -1,10 +1,10 @@
-import { useEffect, useRef, useState, type KeyboardEvent } from 'react'
+import { useEffect, useState, type KeyboardEvent } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { debts, type Summary } from '../api/debts'
 import { errorText } from '../api/invoke'
-import { monthNames, parseYear, shiftMonth, withYear, yearChoices } from '../api/months'
-import Dropdown from '../components/Dropdown'
-import Button from '../components/ui/Button'
+import { monthNames, shiftMonth } from '../api/months'
+import { accounts as accountsApi, type AccountsSummary } from '../api/accounts'
+import YearNav from '../components/YearNav'
 import { Card, CardAction, CardContent, CardHeader, CardTitle } from '../components/ui/Card'
 import { EmptyState, Illustration, type PictureName } from '../components/ui/Pixel'
 import RecurringDashboard, { SOON_DAYS } from '../components/RecurringDashboard'
@@ -12,6 +12,7 @@ import { recurring, type Dues, type Recurring } from '../api/recurring'
 import { stats, type BudgetVsActual, type Commitments, type PlannedVsPaid, type TopCategory, type YearPoint } from '../api/stats'
 import { useToday, type Today } from '../api/today'
 import { transactions } from '../api/transactions'
+import { compact, PAD, useWidth } from '../lib/chart'
 import { formatMoney, formatPercent, toMinor } from '../lib/money'
 import { useSticky } from '../lib/sticky'
 import { useMoneySettings, type MoneySettings } from '../hooks/useMoneySettings'
@@ -46,6 +47,8 @@ function DashboardView({ settings, now }: { settings: MoneySettings; now: Today 
   const [data, setData] = useState<MonthData | null>(null)
   // who owes what, over all time: it does not follow the month
   const [owed, setOwed] = useState<Summary | null>(null)
+  // what the accounts hold and net worth, today: they do not follow the month either
+  const [worth, setWorth] = useState<AccountsSummary | null>(null)
   // the recurring items that are overdue or due soon, and all of them (for those that are split): they do not follow the month either
   const [recurringNow, setRecurringNow] = useState<{ dues: Dues; items: Recurring[] } | null>(null)
   // Whether nothing at all has been recorded yet (no transaction in any month): then the first steps show. Unknown at first.
@@ -71,6 +74,19 @@ function DashboardView({ settings, now }: { settings: MoneySettings; now: Today 
     void debts.summary().then(
       (summary) => {
         if (!cancelled) setOwed(summary)
+      },
+      () => undefined,
+    )
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  useEffect(() => {
+    let cancelled = false
+    void accountsApi.summary().then(
+      (summary) => {
+        if (!cancelled) setWorth(summary)
       },
       () => undefined,
     )
@@ -153,6 +169,31 @@ function DashboardView({ settings, now }: { settings: MoneySettings; now: Today 
           </Card>
           <div className="dash-grid">
             <div className="dash-col">
+              {/* Only once accounts are in use: someone with the one account and no opening balance sees nothing new. */}
+              {worth?.inUse ? (
+                <Card>
+                  <CardHeader>
+                    <CardTitle>
+                      <Link to="/app/accounts">{t('accounts.netWorth')}</Link>
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="dash-worth">
+                    <span className="dash-stat-value">{formatMoney(worth.netWorth, settings.currency, settings.locale)}</span>
+                    <div className="dash-rec-sum">
+                      <span>
+                        <span className="dash-stat-label">{t('accounts.inAccounts')}</span>
+                        <b>{formatMoney(worth.inAccounts, settings.currency, settings.locale)}</b>
+                      </span>
+                      {toMinor(worth.friends) ? (
+                        <span>
+                          <span className="dash-stat-label">{t('accounts.friends')}</span>
+                          <b>{formatMoney(worth.friends, settings.currency, settings.locale)}</b>
+                        </span>
+                      ) : null}
+                    </div>
+                  </CardContent>
+                </Card>
+              ) : null}
               <Card>
                 <CardHeader>
                   <CardTitle>
@@ -295,33 +336,6 @@ function Stat({
   )
 }
 
-/** Previous and next year around a year picker, and a button back to this year. Keeps the month, so March 2026 becomes March 2025. */
-function YearNav({ month, thisMonth, onChange }: { month: string; thisMonth: string; onChange: (month: string) => void }) {
-  const t = useT()
-  const year = Number(month.slice(0, 4))
-  return (
-    <div className="month-nav dash-year-nav">
-      <Button variant="ghost" size="icon" aria-label={t('dashboard.prevYear')} onClick={() => onChange(withYear(month, year - 1))}>
-        &lsaquo;
-      </Button>
-      <Dropdown
-        compact
-        label={t('common.year')}
-        value={String(year)}
-        options={yearChoices(month, Number(thisMonth.slice(0, 4))).map((y) => ({ value: String(y), label: String(y) }))}
-        parse={(text) => parseYear(text)?.toString() ?? null}
-        onChange={(value) => onChange(withYear(month, Number(value)))}
-      />
-      <Button variant="ghost" size="icon" aria-label={t('dashboard.nextYear')} onClick={() => onChange(withYear(month, year + 1))}>
-        &rsaquo;
-      </Button>
-      <Button variant="outline" disabled={month.slice(0, 4) === thisMonth.slice(0, 4)} onClick={() => onChange(thisMonth)}>
-        {t('common.current')}
-      </Button>
-    </div>
-  )
-}
-
 /** A plain bar: `percent` of the track is filled, with the number beside it when `label` is given. `near` turns it gold, `over` red. */
 function Bar({ percent, over, near, label }: { percent: number; over?: boolean; near?: boolean; label?: string }) {
   return (
@@ -333,31 +347,6 @@ function Bar({ percent, over, near, label }: { percent: number; over?: boolean; 
     </span>
   )
 }
-
-/** The width of an element in pixels, kept up to date as it resizes. */
-function useWidth() {
-  const ref = useRef<HTMLDivElement>(null)
-  const [width, setWidth] = useState(0)
-  useEffect(() => {
-    const element = ref.current
-    if (!element) return
-    const observer = new ResizeObserver(([entry]) => setWidth(Math.floor(entry.contentRect.width)))
-    observer.observe(element)
-    return () => observer.disconnect()
-  }, [])
-  return [ref, width] as const
-}
-
-/** A short number such as 12K, for the axis. */
-function compact(value: number, locale: string): string {
-  try {
-    return new Intl.NumberFormat(locale, { notation: 'compact', maximumFractionDigits: 1 }).format(value)
-  } catch {
-    return String(Math.round(value))
-  }
-}
-
-const PAD = { left: 40, right: 8, top: 10, bottom: 22 }
 
 /**
  * The year so far: income and expenses as lines, savings as bars underneath. Both are drawn at
@@ -605,7 +594,10 @@ function BudgetBars({ bva, settings }: { bva: BudgetVsActual; settings: MoneySet
     <div className="dash-budgets">
       {groups.map((group) => (
         <section key={group.type} className={group.type === 'EXPENSE' ? 'dash-budget-group is-expense' : 'dash-budget-group is-income'}>
-          <h3 className="dash-group-title">{t(group.type === 'EXPENSE' ? 'budgets.expenses' : 'budgets.income')}</h3>
+          <h3 className="dash-group-title">
+            {/* the income's budgets are on the categories page, the income side */}
+            {group.type === 'INCOME' ? <Link to="/app/categories?tab=income">{t('budgets.income')}</Link> : t('budgets.expenses')}
+          </h3>
           <ul className="dash-bars">
             {group.rows.map((r) => {
               const over = group.type === 'EXPENSE' && r.pct !== null && r.pct > 100

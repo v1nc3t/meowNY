@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { debts, type Entry, type Line, type Person, type Statement } from '../api/debts'
+import { debts, type EntryOfLine, type Line, type Person, type Statement } from '../api/debts'
 import { ApiError, errorText } from '../api/invoke'
 import type { Today } from '../api/today'
 import { useClipCounts } from '../hooks/useClipCounts'
@@ -24,9 +24,9 @@ import Button from './ui/Button'
 import { buttonClass } from './ui/cn'
 
 type Dialog =
-  | { kind: 'entry'; entry: Entry }
+  | { kind: 'entry'; entry: EntryOfLine }
   | { kind: 'settle' }
-  | { kind: 'delete'; entry: Entry }
+  | { kind: 'delete'; entry: EntryOfLine }
   | { kind: 'code'; transactionId: string; amount: string }
   | null
 

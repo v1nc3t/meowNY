@@ -56,6 +56,9 @@ fn counts(p: &Preview, with_other_records: bool) -> Vec<String> {
     let mut lines = vec![format!("Transactions: {}{span}", p.transactions), format!("Income {} and expenses {} in them", p.income, p.expense)];
     if with_other_records {
         lines.push(format!("Also {} categories, {} budget entries and {} recurring items", p.categories, p.budgets, p.recurring));
+        if p.accounts > 0 || p.transfers > 0 {
+            lines.push(format!("And {} accounts by name, type, number, balance and details (BIC, group, notes, virtual balance, net worth, currency and rate), and {} transfers between them", p.accounts, p.transfers));
+        }
         if p.documents > 0 {
             lines.push(format!("And {} documents, by name, date, type, size and what they are attached to. Never the files themselves", p.documents));
         }

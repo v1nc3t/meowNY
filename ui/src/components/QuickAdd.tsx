@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { useT } from '../i18n/context'
 import Icon from './NavIcon'
 import Modal from './Modal'
@@ -11,6 +11,7 @@ import Modal from './Modal'
 export default function QuickAdd() {
   const t = useT()
   const navigate = useNavigate()
+  const location = useLocation()
   const [open, setOpen] = useState(false)
   const go = (path: string, state: object) => {
     setOpen(false)
@@ -25,10 +26,12 @@ export default function QuickAdd() {
       {open ? (
         <Modal title={t('quick.title')} onClose={() => setOpen(false)} readOnly>
           <div className="quick-menu">
-            <button type="button" onClick={() => go('/app/transactions', { add: true })}>
+            {/* on the transactions page the tab stays: the dialog opens on the tab that matches the list */}
+            <button type="button" onClick={() => go(location.pathname === '/app/transactions' ? `${location.pathname}${location.search}` : '/app/transactions', { add: true })}>
               {t('tx.add')}
             </button>
-            <button type="button" onClick={() => go('/app/categories', { add: true })}>
+            {/* on the categories page the tab stays: the form opens for the side that is shown */}
+            <button type="button" onClick={() => go(location.pathname === '/app/categories' ? `${location.pathname}${location.search}` : '/app/categories', { add: true })}>
               {t('categories.add')}
             </button>
             <button type="button" onClick={() => go('/app/debts', { addFriend: true })}>

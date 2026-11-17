@@ -30,9 +30,10 @@ export type ExportSelection = {
 /**
  * The parts of a JSON or Excel file that can be left out: `people` are the friends and what they owe, `ledger` the history of debts (money
  * lent, borrowed and paid back, the parts of shared bills, and the recurring payments paid or due), `due` the recurring payments that have come
- * due. The change history is only ever in a file with no limits.
+ * due. The change history is only ever in a file with no limits, and so are the transfers; with a limit `accounts` are only the names of the
+ * accounts the file speaks of (docs/accounts-design.md, section 10).
  */
-export const EXPORT_SECTIONS = ['transactions', 'categories', 'budgets', 'recurring', 'documents', 'people', 'due', 'ledger', 'history'] as const
+export const EXPORT_SECTIONS = ['transactions', 'categories', 'budgets', 'recurring', 'accounts', 'transfers', 'documents', 'people', 'due', 'ledger', 'history'] as const
 export type ExportSection = (typeof EXPORT_SECTIONS)[number]
 
 const date = z.string().regex(/^\d{4}-\d{2}-\d{2}$/)
@@ -62,6 +63,9 @@ export const Preview = z.object({
   duePayments: count,
   /** Lines of the history of debts: those of the friends and the recurring payments paid or due. */
   debtHistory: count,
+  /** Accounts and transfers in the file. Left out by an app from before it had accounts. */
+  accounts: count.optional(),
+  transfers: count.optional(),
 })
 export type Preview = z.infer<typeof Preview>
 

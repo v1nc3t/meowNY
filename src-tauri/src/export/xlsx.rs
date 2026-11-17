@@ -1,10 +1,12 @@
 //! The Excel export: one workbook with a sheet each for transactions, categories, budgets,
-//! recurring items, a monthly summary, the documents (listed, never the files), the friends, the ledger of money
-//! lent and borrowed, and the parts of the bills that are shared.
+//! recurring items, the accounts and the transfers between them, a monthly summary, the documents (listed, never the files), the friends, the
+//! ledger of money lent and borrowed, and the parts of the bills that are shared.
 //!
 //! Dates are real dates and money is real numbers with a currency number format, so the sheets sort,
 //! filter and sum in Excel. Amounts are stored as whole minor units and divided by 100 only when a cell
-//! is written. Text cells go through `neutralise`, as in the CSV, and no cell holds a formula.
+//! is written. Text cells go through `neutralise`, as in the CSV, and no cell holds a formula. An amount in the currency of an account of its own
+//! (what it really paid, what a transfer brings, the amounts on the accounts sheet) is a number with no symbol of the app's; its currency is in
+//! a cell of its own or is the one of the account named beside it.
 //!
 //! The person's number and date format (`DisplayFormat`) decide how the cells look: the order and
 //! separator of dates, and where the currency symbol goes. Excel and LibreOffice choose the digit
@@ -18,9 +20,11 @@ use rust_xlsxwriter::{ExcelDateTime, Format, Workbook, Worksheet, XlsxError};
 
 use super::debts::{self, EntryRow, LineRow, PersonRow};
 use super::{
-    budget_rows, category_rows, currency, document_names_by_transaction, documents, due_payments, join_names, monthly_sums, neutralise, parse,
-    recurring_rows, today_of, transactions, BudgetRow, CategoryRow, DocRow, Parsed, Section, Selection, Tx,
+    account_of_rows, account_rows, budget_rows, category_rows, currency, document_names_by_transaction, documents, due_payments, join_names, monthly_sums,
+    native_of_transactions, neutralise, parse, recurring_rows, today_of, transactions, transfer_rows, BudgetRow, CategoryRow, DocRow, Parsed, Section, Selection,
+    Tx, TransferRow,
 };
+use crate::accounts::Account;
 use crate::display::{DateOrder, DateSeparator, DisplayFormat};
 use crate::recurring::Recurring;
 use crate::vault::AppError;
@@ -69,6 +73,16 @@ struct Data {
     categories: Vec<CategoryRow>,
     budgets: Vec<BudgetRow>,
     recurring: Vec<Recurring>,
+    /// The accounts, and the transfers (only in a file with no limit). With a limit an account is its name and its type: `whole` says it is not one.
+    accounts: Vec<Account>,
+    transfers: Option<Vec<TransferRow>>,
+    whole: bool,
+    /// The account of each transaction, recurring item and ledger entry, by the id of the row: its id and its name.
+    transaction_accounts: HashMap<i64, (i64, String)>,
+    recurring_accounts: HashMap<i64, (i64, String)>,
+    entry_accounts: HashMap<i64, (i64, String)>,
+    /// What each transaction really moved its account by (when the account has a currency of its own) and the code of that account's currency.
+    natives: HashMap<i64, (Option<i64>, String)>,
     /// Name and type of every category, for rows that point at one.
     names: HashMap<i64, (String, String)>,
     /// (month "YYYY-MM", income, expense) in minor units, every month from the first to the last.
@@ -92,12 +106,14 @@ impl Data {
     }
 }
 
-/// The parts that have sheets. The change history has none, so a workbook of nothing else would have no sheet at all.
-const SHEETED: [Section; 8] = [
+/// The parts that have sheets. The change history has none, so a workbook of nothing else would have no sheet at all. (The transfers have one only
+/// in a file with no limit: `Parsed::with_transfers`.)
+const SHEETED: [Section; 9] = [
     Section::Transactions,
     Section::Categories,
     Section::Budgets,
     Section::Recurring,
+    Section::Accounts,
     Section::Documents,
     Section::People,
     Section::Due,
@@ -151,6 +167,13 @@ fn load(conn: &Connection, sel: &Parsed) -> Result<Data, AppError> {
         categories: if wants(Section::Categories) { category_rows(conn, sel)? } else { Vec::new() },
         budgets: if wants(Section::Budgets) { budget_rows(conn, sel)? } else { Vec::new() },
         recurring: if wants(Section::Recurring) { recurring_rows(conn, sel)? } else { Vec::new() },
+        accounts: if wants(Section::Accounts) { account_rows(conn, sel, &today)? } else { Vec::new() },
+        transfers: if sel.with_transfers() { Some(transfer_rows(conn, sel)?) } else { None },
+        whole: sel.everything(),
+        transaction_accounts: account_of_rows(conn, "transactions")?,
+        recurring_accounts: account_of_rows(conn, "recurring_transactions")?,
+        entry_accounts: account_of_rows(conn, "ledger_entries")?,
+        natives: native_of_transactions(conn)?,
         names: category_rows(conn, &everything)?.into_iter().map(|c| (c.id, (c.name, c.kind))).collect(),
         summary: if wants(Section::Transactions) { summary(conn, sel)? } else { Vec::new() },
         documents: if wants(Section::Documents) { documents(conn, sel)? } else { Vec::new() },
@@ -171,7 +194,7 @@ fn load(conn: &Connection, sel: &Parsed) -> Result<Data, AppError> {
 /// The workbook as the bytes of an .xlsx file.
 pub fn workbook(conn: &Connection, selection: &Selection, format: &DisplayFormat) -> Result<Vec<u8>, AppError> {
     let sel = parse(selection)?;
-    if !SHEETED.iter().any(|section| sel.wants(*section)) {
+    if !SHEETED.iter().any(|section| sel.wants(*section)) && !sel.with_transfers() {
         return Err(AppError::InvalidInput);
     }
     let codes = format.codes()?;
@@ -225,6 +248,9 @@ fn write(data: &Data, codes: &Codes) -> Result<Vec<u8>, XlsxError> {
     let day = Format::new().set_num_format(&codes.date);
     let month = Format::new().set_num_format(&codes.month);
     let cash = Format::new().set_num_format(&codes.money);
+    // An amount in the currency of an account of its own has no symbol of the app's: the code of its currency is in a cell of its own
+    // (the `Currency` column of the transactions and of the accounts), or is the currency of the account named beside it.
+    let plain = Format::new().set_num_format("#,##0.00");
     let percent = Format::new().set_num_format("0.0%");
     let amount = format!("Amount ({})", data.currency);
     // What the transaction costs you; the same as the amount unless the bill is shared.
@@ -237,7 +263,7 @@ fn write(data: &Data, codes: &Codes) -> Result<Vec<u8>, XlsxError> {
             "Transactions",
             &[
                 ("Date", 12.0), ("Type", 10.0), ("Category", 22.0), ("Name", 30.0), (&amount, 14.0), ("Description", 44.0), ("Documents", 40.0),
-                (&share, 16.0),
+                (&share, 16.0), ("Account", 24.0), ("Native amount", 16.0), ("Currency", 10.0),
             ],
         )?;
         for (i, t) in data.transactions.iter().enumerate() {
@@ -252,6 +278,14 @@ fn write(data: &Data, codes: &Codes) -> Result<Vec<u8>, XlsxError> {
                 text(s, row, 6, &join_names(names))?;
             }
             money(s, row, 7, t.my_share, &cash)?;
+            text(s, row, 8, data.transaction_accounts.get(&t.id).map_or("", |(_, name)| name))?;
+            // what the account really paid, in its own currency: the cell is empty for an account in the app's currency
+            if let Some((native, code)) = data.natives.get(&t.id) {
+                if let Some(minor) = native {
+                    money(s, row, 9, *minor, &plain)?;
+                }
+                text(s, row, 10, code)?;
+            }
         }
     }
 
@@ -293,7 +327,7 @@ fn write(data: &Data, codes: &Codes) -> Result<Vec<u8>, XlsxError> {
             "Recurring",
             &[
                 ("Name", 26.0), ("Category", 22.0), ("Type", 10.0), (&amount, 14.0), ("Every", 8.0), ("Unit", 8.0),
-                ("Start", 12.0), ("Next due", 12.0), ("End", 12.0), ("Active", 8.0), ("Description", 40.0),
+                ("Start", 12.0), ("Next due", 12.0), ("End", 12.0), ("Active", 8.0), ("Description", 40.0), ("Account", 24.0),
             ],
         )?;
         for (i, r) in data.recurring.iter().enumerate() {
@@ -315,6 +349,85 @@ fn write(data: &Data, codes: &Codes) -> Result<Vec<u8>, XlsxError> {
             }
             s.write_boolean(row, 9, r.is_active)?;
             text(s, row, 10, r.description.as_deref().unwrap_or(""))?;
+            text(s, row, 11, data.recurring_accounts.get(&r.id).map_or("", |(_, name)| name))?;
+        }
+    }
+
+    if data.wants(Section::Accounts) {
+        // The accounts, with what each holds today. With a limit only the name and the type of those the file speaks of: the rest would tell about
+        // what the file leaves out.
+        let (opening, balance, held) = (format!("Opening balance ({})", data.currency), format!("Balance ({})", data.currency), format!("Virtual balance ({})", data.currency));
+        let s = sheet(
+            &mut book,
+            "Accounts",
+            &[
+                ("Name", 30.0),
+                ("Type", 14.0),
+                ("Number", 28.0),
+                (&opening, 20.0),
+                ("Opening date", 14.0),
+                ("Archived", 10.0),
+                (&balance, 16.0),
+                ("BIC", 16.0),
+                ("Group", 20.0),
+                (&held, 20.0),
+                ("In net worth", 12.0),
+                ("Notes", 44.0),
+                ("Currency", 10.0),
+                ("Rate", 14.0),
+            ],
+        )?;
+        for (i, a) in data.accounts.iter().enumerate() {
+            let row = i as u32 + 1;
+            text(s, row, 0, &a.name)?;
+            text(s, row, 1, a.kind.as_sql())?;
+            // the three amounts of an account are in its own currency: with the app's symbol only when that is the app's currency
+            let held = if a.foreign { &plain } else { &cash };
+            if data.whole {
+                text(s, row, 2, a.number.as_deref().unwrap_or(""))?;
+                if let Ok(minor) = crate::money::parse_signed_amount(&a.opening_balance) {
+                    money(s, row, 3, minor, held)?;
+                }
+                date(s, row, 4, &a.opening_date, &day)?;
+                s.write_boolean(row, 5, a.archived)?;
+                if let Ok(minor) = crate::money::parse_signed_amount(&a.balance) {
+                    money(s, row, 6, minor, held)?;
+                }
+                text(s, row, 7, a.bic.as_deref().unwrap_or(""))?;
+                text(s, row, 8, a.group.as_deref().unwrap_or(""))?;
+                if let Ok(minor) = crate::money::parse_signed_amount(&a.virtual_balance) {
+                    money(s, row, 9, minor, held)?;
+                }
+                s.write_boolean(row, 10, a.include_in_net_worth)?;
+                text(s, row, 11, a.notes.as_deref().unwrap_or(""))?;
+            }
+            // the code is named with the account even under a limit; the rate is the person's number and only goes into a file with no limit
+            text(s, row, 12, &a.currency)?;
+            if let (true, Some(rate)) = (data.whole, &a.rate) {
+                match rate.parse::<f64>() {
+                    Ok(number) => {
+                        s.write_number(row, 13, number)?;
+                    }
+                    Err(_) => text(s, row, 13, rate)?,
+                }
+            }
+        }
+    }
+
+    if let Some(transfers) = &data.transfers {
+        // Money moved between two accounts. Never income or expense.
+        let s = sheet(&mut book, "Transfers", &[("Date", 12.0), ("From", 30.0), ("To", 30.0), (&amount, 14.0), ("Note", 44.0), ("Arrives", 14.0)])?;
+        for (i, x) in transfers.iter().enumerate() {
+            let row = i as u32 + 1;
+            date(s, row, 0, &x.date, &day)?;
+            text(s, row, 1, &x.from)?;
+            text(s, row, 2, &x.to)?;
+            // what leaves is in the currency of the first account and what arrives in that of the second: the app's symbol only on the app's currency
+            money(s, row, 3, x.amount, if x.from_foreign { &plain } else { &cash })?;
+            text(s, row, 4, x.note.as_deref().unwrap_or(""))?;
+            if let Some(minor) = x.to_amount {
+                money(s, row, 5, minor, if x.to_foreign { &plain } else { &cash })?;
+            }
         }
     }
 
@@ -403,7 +516,7 @@ fn write(data: &Data, codes: &Codes) -> Result<Vec<u8>, XlsxError> {
 
     if data.wants(Section::Ledger) {
         // Money lent, borrowed and paid back. Never income or expense.
-        let s = sheet(&mut book, "Ledger", &[("Date", 12.0), ("Friend", 30.0), ("Kind", 16.0), (&amount, 14.0), ("Note", 44.0)])?;
+        let s = sheet(&mut book, "Ledger", &[("Date", 12.0), ("Friend", 30.0), ("Kind", 16.0), (&amount, 14.0), ("Note", 44.0), ("Account", 24.0)])?;
         for (i, e) in data.ledger.iter().enumerate() {
             let row = i as u32 + 1;
             date(s, row, 0, &e.date, &day)?;
@@ -411,6 +524,7 @@ fn write(data: &Data, codes: &Codes) -> Result<Vec<u8>, XlsxError> {
             text(s, row, 2, &e.kind)?;
             money(s, row, 3, e.amount, &cash)?;
             text(s, row, 4, e.note.as_deref().unwrap_or(""))?;
+            text(s, row, 5, data.entry_accounts.get(&e.id).map_or("", |(_, name)| name))?;
         }
 
         // The same story as the debts screen tells: the lines of the friends, and the recurring payments that were paid or are due.
@@ -596,6 +710,28 @@ mod tests {
                 .collect()
         }
 
+        /// The number format code of the cell `reference` ("D3") of a sheet, as written in the file.
+        fn format_code(&self, sheet: &str, reference: &str) -> String {
+            let index = self.sheet_names().iter().position(|n| n == sheet).unwrap_or_else(|| panic!("no sheet {sheet}"));
+            let xml = self.part(&format!("xl/worksheets/sheet{}.xml", index + 1));
+            let start = xml.find(&format!("<c r=\"{reference}\"")).unwrap_or_else(|| panic!("no cell {reference}"));
+            let tag = &xml[start..start + xml[start..].find('>').unwrap()];
+            let style: usize = attribute(tag, "s").map_or(0, |s| s.parse().unwrap());
+            let styles = self.part("xl/styles.xml");
+            let formats: HashMap<usize, String> = styles
+                .split("<numFmt ")
+                .skip(1)
+                .map(|tag| {
+                    let tag = format!(" {tag}");
+                    (attribute(&tag, "numFmtId").unwrap().parse().unwrap(), unescape(attribute(&tag, "formatCode").unwrap()))
+                })
+                .collect();
+            let xfs = styles.split("<cellXfs").nth(1).unwrap().split("</cellXfs>").next().unwrap();
+            let id: usize = attribute(&format!(" {}", xfs.split("<xf ").nth(style + 1).unwrap()), "numFmtId").unwrap().parse().unwrap();
+            // the format of two decimals with a separator is built in and has no entry of its own
+            formats.get(&id).cloned().unwrap_or_else(|| if id == 4 { "#,##0.00".to_string() } else { format!("built-in {id}") })
+        }
+
         fn shared_strings(&self) -> Vec<String> {
             match self.parts.get("xl/sharedStrings.xml") {
                 Some(_) => self.part("xl/sharedStrings.xml").split("<si>").skip(1).map(|si| texts_in(si.split("</si>").next().unwrap())).collect(),
@@ -687,7 +823,7 @@ mod tests {
         spend(&conn, rent, "@SUM(1)", "2.00", "2026-04-02", Some("-5% promo"));
         let bytes = build(&conn, &Selection::default(), &DisplayFormat::default());
         let mut book = open(&bytes);
-        for name in ["Transactions", "Categories", "Budgets", "Recurring", "Monthly summary", "Documents", "People", "Ledger", "Split bills"] {
+        for name in ["Transactions", "Categories", "Budgets", "Recurring", "Accounts", "Transfers", "Monthly summary", "Documents", "People", "Ledger", "Split bills"] {
             for cell in strings(&rows(&mut book, name)) {
                 assert!(!cell.starts_with(['=', '+', '-', '@', '\t', '\r']), "{name}: {cell:?}");
             }
@@ -697,7 +833,7 @@ mod tests {
         assert_eq!((&evil[3], &evil[5]), (&Cell::Text("'=cmd|' /C calc'!A0".into()), &Cell::Text("'+1+1".into())));
         // No cell is a formula: the file has no <f> elements at all.
         let sheets: Vec<String> = Book::open(&bytes).parts.keys().filter(|n| n.starts_with("xl/worksheets/sheet")).cloned().collect();
-        assert_eq!(sheets.len(), 11);
+        assert_eq!(sheets.len(), 13);
         for name in sheets {
             let part = Book::open(&bytes).part(&name);
             assert!(!part.contains("<f>") && !part.contains("<f "), "{name} has a formula");
@@ -768,6 +904,7 @@ mod tests {
                 interval_count: 1,
                 end_date: None,
                 description: None,
+                account_id: None,
             },
         )
         .unwrap();
@@ -903,5 +1040,389 @@ mod tests {
             checked += 1;
         }
         assert!(checked > 80, "most of the choices have a workbook to look at: {checked}");
+    }
+
+    // ---- accounts and transfers (docs/accounts-design.md, section 10) ----
+
+    fn text_cell(text: &str) -> Cell {
+        Cell::Text(text.into())
+    }
+
+    /// A cell with nothing in it, or with an empty text.
+    fn blank(cell: &Cell) -> bool {
+        matches!(cell, Cell::Empty) || *cell == text_cell("")
+    }
+
+    #[test]
+    fn the_accounts_and_the_transfers_have_a_sheet_each_and_three_sheets_say_which_account_a_row_is_in() {
+        use super::super::accounts_tests::case;
+        let c = case();
+        let mut book = open(&build(&c.conn, &Selection::default(), &DisplayFormat::default()));
+        let names = book.sheet_names();
+        assert!(names.contains(&"Accounts".to_string()) && names.contains(&"Transfers".to_string()), "{names:?}");
+
+        let accounts = rows(&mut book, "Accounts");
+        assert_eq!(accounts.len(), 1 + 5);
+        assert_eq!(
+            strings(&accounts[..1]),
+            ["Name", "Type", "Number", "Opening balance (EUR)", "Opening date", "Archived", "Balance (EUR)", "BIC", "Group", "Virtual balance (EUR)", "In net worth", "Notes", "Currency", "Rate"],
+            "the columns of before keep their place and the details and the currency are at the end"
+        );
+        let card = accounts.iter().find(|r| r[0] == text_cell("Credit card")).unwrap();
+        assert_eq!(card[1..7], [text_cell("CREDIT_CARD"), text_cell("4242"), Cell::Number(-240.0), Cell::Date(serial(2025, 12, 1)), Cell::Bool(false), Cell::Number(-945.5)]);
+        assert!(blank(&card[7]) && blank(&card[8]) && blank(&card[11]), "no BIC, no group and no notes: no text");
+        assert_eq!((&card[9], &card[10]), (&Cell::Number(0.0), &Cell::Bool(true)), "no virtual balance, and it counts in net worth");
+        let old = accounts.iter().find(|r| r[0] == text_cell("Old savings")).unwrap();
+        assert_eq!((&old[5], &old[6]), (&Cell::Bool(true), &Cell::Number(200.0)), "an archived account is in, with what it holds");
+        let main = &accounts[1];
+        assert_eq!((&main[0], &main[3], &main[6]), (&text_cell("Main account"), &Cell::Number(0.0), &Cell::Number(1800.0)), "the main account comes first");
+        assert!(matches!(&main[2], Cell::Empty) || main[2] == text_cell(""), "no number, no text");
+
+        let transfers = rows(&mut book, "Transfers");
+        assert_eq!(strings(&transfers[..1]), ["Date", "From", "To", "Amount (EUR)", "Note", "Arrives"]);
+        assert_eq!(transfers.len(), 1 + 3);
+        assert_eq!(transfers[1], [Cell::Date(serial(2026, 2, 2)), text_cell("Main account"), text_cell("Savings"), Cell::Number(300.0), text_cell("monthly saving"), Cell::Empty], "no second amount between two euro accounts");
+        assert_eq!((&transfers[2][2], &transfers[2][3]), (&text_cell("Old savings"), &Cell::Number(100.0)));
+        assert!(matches!(&transfers[2][4], Cell::Empty) || transfers[2][4] == text_cell(""), "no note, no text");
+
+        let account_of = |sheet: &[Vec<Cell>], column: usize, key: (usize, &str)| sheet.iter().find(|r| r[key.0] == text_cell(key.1)).map(|r| r[column].clone());
+        let transactions = rows(&mut book, "Transactions");
+        assert_eq!(strings(&transactions[..1])[8..], ["Account", "Native amount", "Currency"], "the account, then what it really paid and its currency");
+        assert_eq!(account_of(&transactions, 8, (3, "Pay")), Some(text_cell("Main account")));
+        assert_eq!(account_of(&transactions, 8, (3, "Session")), Some(text_cell("Cash")));
+        let recurring = rows(&mut book, "Recurring");
+        assert_eq!(account_of(&recurring, 11, (0, "Therapy plan")), Some(text_cell("Credit card")));
+        assert_eq!(account_of(&recurring, 11, (0, "Rent")), Some(text_cell("Main account")));
+        let ledger = rows(&mut book, "Ledger");
+        assert_eq!(account_of(&ledger, 5, (4, "taxi")), Some(text_cell("Cash")));
+        assert_eq!(strings(&ledger[..1]).last().map(String::as_str), Some("Account"));
+    }
+
+    #[test]
+    fn a_limit_leaves_the_accounts_sheet_with_names_and_types_and_the_transfers_sheet_out() {
+        use super::super::accounts_tests::case;
+        let c = case();
+        let selection = Selection { category_ids: Some(vec![c.secret.to_string()]), ..Default::default() };
+        let mut book = open(&build(&c.conn, &selection, &DisplayFormat::default()));
+        assert!(!book.sheet_names().contains(&"Transfers".to_string()), "a transfer is between two accounts, and the file does not speak of the rest");
+        let accounts = rows(&mut book, "Accounts");
+        assert_eq!(accounts.len(), 1 + 2, "the session was in cash and the plan is on the card");
+        assert_eq!((&accounts[1][..2], &accounts[2][..2]), (&[text_cell("Cash"), text_cell("CASH")][..], &[text_cell("Credit card"), text_cell("CREDIT_CARD")][..]));
+        for row in &accounts[1..] {
+            assert!(row[2..12].iter().all(|cell| matches!(cell, Cell::Empty)), "no number, no balance, no opening, not even the mark: {row:?}");
+            assert_eq!((&row[12], &row[13]), (&text_cell("EUR"), &Cell::Empty), "the currency is named with the account, the rate is not: {row:?}");
+        }
+        for name in book.sheet_names() {
+            let all = strings(&rows(&mut book, &name));
+            for hidden in ["Old savings", "IE29", "4242", "monthly saving", "pay the card"] {
+                assert!(!all.iter().any(|cell| cell.contains(hidden)), "{name} leaked {hidden:?}");
+            }
+        }
+        assert!(!strings(&accounts).contains(&"Savings".to_string()), "an account that holds none of the rows of the file is not in it");
+        // the transfers alone make no workbook under a limit, and the accounts alone make one with no row
+        let only = |sections: &[Section], selection: Selection| Selection { sections: Some(sections.to_vec()), ..selection };
+        assert_eq!(workbook(&c.conn, &only(&[Section::Transfers], selection.clone()), &DisplayFormat::default()), Err(AppError::InvalidInput));
+        assert_eq!(workbook(&c.conn, &only(&[Section::Transfers, Section::History], Selection { from: Some("2026-01-01".into()), ..Default::default() }), &DisplayFormat::default()), Err(AppError::InvalidInput));
+        let mut alone = open(&build(&c.conn, &only(&[Section::Accounts], selection), &DisplayFormat::default()));
+        assert_eq!((alone.sheet_names(), rows(&mut alone, "Accounts").len()), (vec!["Accounts".to_string()], 1), "only the heading: nothing in it names an account");
+        // with no limit the same parts make a workbook, with the sheet each
+        let mut transfers = open(&build(&c.conn, &only(&[Section::Transfers], Selection::default()), &DisplayFormat::default()));
+        assert_eq!((transfers.sheet_names(), rows(&mut transfers, "Transfers").len()), (vec!["Transfers".to_string()], 1 + 3));
+    }
+
+    #[test]
+    fn with_only_the_main_account_the_workbook_has_it_and_a_transfers_sheet_with_a_heading() {
+        let (conn, ..) = lived_in();
+        let mut book = open(&build(&conn, &Selection::default(), &DisplayFormat::default()));
+        let accounts = rows(&mut book, "Accounts");
+        assert_eq!(accounts.len(), 2);
+        assert_eq!((&accounts[1][0], &accounts[1][1], &accounts[1][6]), (&text_cell("Main account"), &text_cell("CHECKING"), &Cell::Number(1314.5)));
+        assert_eq!(rows(&mut book, "Transfers").len(), 1);
+        assert!(rows(&mut book, "Transactions")[1..].iter().all(|r| r[8] == text_cell("Main account")));
+        // and an empty database has the main account too
+        let mut empty = open(&build(&db(), &Selection::default(), &DisplayFormat::default()));
+        assert_eq!(rows(&mut empty, "Accounts").len(), 2);
+    }
+
+    #[test]
+    fn names_and_notes_that_look_like_formulas_are_text_in_the_workbook() {
+        use super::super::accounts_tests::{awkward, case, AWKWARD};
+        let c = case();
+        awkward(&c);
+        let bytes = build(&c.conn, &Selection::default(), &DisplayFormat::default());
+        let mut book = open(&bytes);
+        for name in ["Accounts", "Transfers", "Transactions", "Recurring", "Ledger"] {
+            for cell in strings(&rows(&mut book, name)) {
+                assert!(!cell.starts_with(['=', '+', '-', '@', '\t', '\r']), "{name}: {cell:?}");
+            }
+        }
+        let accounts = strings(&rows(&mut book, "Accounts"));
+        for name in AWKWARD {
+            // the writer escapes a carriage return as `_x000D_`, which a spreadsheet reads back as one
+            let cell = neutralise(name).replace('\r', "_x000D_");
+            assert!(accounts.contains(&cell) || accounts.contains(&neutralise(name).into_owned()), "{name:?}");
+        }
+        assert!(accounts.contains(&"Rent, \"joint\"".to_string()), "a comma and a quote are no reason for an apostrophe");
+        let transfers = rows(&mut book, "Transfers");
+        let to_formula = transfers.iter().find(|r| r[2] == text_cell("'=SUM(1+1)")).unwrap();
+        assert_eq!(to_formula[4], text_cell("'=note 1\nsecond, \"line\""));
+        for name in Book::open(&bytes).parts.keys().filter(|n| n.starts_with("xl/worksheets/sheet")) {
+            let part = Book::open(&bytes).part(name);
+            assert!(!part.contains("<f>") && !part.contains("<f "), "{name} has a formula");
+        }
+    }
+
+    #[test]
+    fn building_the_workbook_of_accounts_changes_nothing() {
+        use super::super::accounts_tests::case;
+        let c = case();
+        let before = crate::accounts::fixtures::snapshot(&c.conn);
+        build(&c.conn, &Selection::default(), &DisplayFormat::default());
+        build(&c.conn, &Selection { category_ids: Some(vec![c.rent.to_string()]), ..Default::default() }, &DisplayFormat::default());
+        assert_eq!(crate::accounts::fixtures::snapshot(&c.conn), before);
+    }
+
+    #[test]
+    fn the_accounts_sheet_ends_with_the_bic_the_group_the_virtual_balance_the_net_worth_choice_and_the_notes() {
+        use super::super::accounts_tests::{detailed, AWKWARD_NOTES};
+        let c = detailed();
+        let bytes = build(&c.conn, &Selection::default(), &DisplayFormat::default());
+        let mut book = open(&bytes);
+        let accounts = rows(&mut book, "Accounts");
+        assert_eq!(accounts.len(), 1 + 5);
+        assert!(accounts.iter().all(|r| r.len() == 14), "fourteen columns in every row");
+        let by = |name: &str| accounts.iter().find(|r| r[0] == text_cell(name)).unwrap();
+        let cash = by("Cash");
+        assert_eq!(cash[1], text_cell("CASH"));
+        assert_eq!(cash[3..7], [Cell::Number(250.0), Cell::Date(serial(2025, 12, 1)), Cell::Bool(false), Cell::Number(150.0)], "what was there is where it was");
+        assert_eq!(
+            cash[7..12],
+            [text_cell("COBADEFFXXX"), text_cell("Everyday"), Cell::Number(0.0), Cell::Bool(false), text_cell(&neutralise(AWKWARD_NOTES))],
+            "the notes start with `=`, so they are text with an apostrophe, and keep their line break, comma and quotes"
+        );
+        assert_eq!(cash[11], text_cell("'=1+1 first line\nsecond, \"quoted\" line"));
+        let card = by("Credit card");
+        assert_eq!(card[7..11], [text_cell("DEUTDEFF500"), text_cell("Cards"), Cell::Number(1000.0), Cell::Bool(true)], "a virtual balance is a number");
+        assert!(blank(&card[11]));
+        assert_eq!(card[6], Cell::Number(-945.5), "and it is in no balance");
+        let savings = by("Savings");
+        assert_eq!(savings[7..12], [text_cell("'@BIC"), text_cell("'=Savings"), Cell::Number(-25.5), Cell::Bool(true), text_cell("'-minus note")], "a BIC, a group and notes that look like formulas are text");
+        let old = by("Old savings");
+        assert_eq!((&old[5], &old[10], &old[11], &old[8]), (&Cell::Bool(true), &Cell::Bool(false), &text_cell("closed 2025"), &text_cell("Old")), "an archived account left out of net worth");
+        let main = by("Main account");
+        assert!(blank(&main[7]) && blank(&main[8]) && blank(&main[11]));
+        assert_eq!((&main[9], &main[10]), (&Cell::Number(0.0), &Cell::Bool(true)));
+        // no cell of the sheet starts like a formula, and no part of the file holds a formula
+        for cell in strings(&accounts) {
+            assert!(!cell.starts_with(['=', '+', '-', '@', '\t', '\r']), "{cell:?}");
+        }
+        for name in Book::open(&bytes).parts.keys().filter(|n| n.starts_with("xl/worksheets/sheet")) {
+            let part = Book::open(&bytes).part(name);
+            assert!(!part.contains("<f>") && !part.contains("<f "), "{name} has a formula");
+        }
+    }
+
+    #[test]
+    fn a_limit_leaves_every_detail_out_of_the_workbook() {
+        use super::super::accounts_tests::detailed;
+        let c = detailed();
+        let secrets = ["COBADEFFXXX", "DEUTDEFF500", "@BIC", "Everyday", "Cards", "=Savings", "first line", "quoted", "minus note", "closed 2025", "Group", "BIC", "Notes", "In net worth", "Virtual balance"];
+        for selection in [
+            Selection { category_ids: Some(vec![c.secret.to_string()]), ..Default::default() },
+            Selection { from: Some("2026-02-10".into()), to: Some("2026-02-12".into()), ..Default::default() },
+        ] {
+            let mut book = open(&build(&c.conn, &selection, &DisplayFormat::default()));
+            let accounts = rows(&mut book, "Accounts");
+            assert!(accounts.len() > 1, "{selection:?}");
+            assert_eq!(accounts[0].len(), 14, "the sheet has its columns");
+            for row in &accounts[1..] {
+                assert!(row[2..12].iter().all(|cell| matches!(cell, Cell::Empty)), "no number, no balance and none of the details, not even the mark or a zero: {row:?}");
+                assert_eq!((&row[12], &row[13]), (&text_cell("EUR"), &Cell::Empty), "only the currency is named with the account: {row:?}");
+            }
+            for name in book.sheet_names() {
+                let all = strings(&rows(&mut book, &name));
+                for hidden in secrets {
+                    // (the headings of the sheet of accounts are the one place these words are)
+                    if name == "Accounts" && ["Group", "BIC", "Notes", "In net worth", "Virtual balance"].contains(&hidden) {
+                        continue;
+                    }
+                    assert!(!all.iter().any(|cell| cell.contains(hidden)), "{name} leaked {hidden:?}");
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn building_the_workbook_of_accounts_with_details_changes_nothing() {
+        use super::super::accounts_tests::detailed;
+        let c = detailed();
+        let before = crate::accounts::fixtures::snapshot(&c.conn);
+        build(&c.conn, &Selection::default(), &DisplayFormat::default());
+        build(&c.conn, &Selection { category_ids: Some(vec![c.rent.to_string()]), ..Default::default() }, &DisplayFormat::default());
+        assert_eq!(crate::accounts::fixtures::snapshot(&c.conn), before, "the details, the stamps and the history are as they were");
+    }
+
+    #[test]
+    fn every_choice_gives_the_accounts_sheet_the_accounts_of_the_rows_in_the_other_sheets() {
+        use super::super::accounts_tests::spread;
+        use super::super::filters_tests::{limited, random_selections, world};
+        let world = world();
+        let spread = spread(&world);
+        let category_names = ["Salary", "Freelance", "Rent", "Food", "Fun", "Old"];
+        let mut checked = 0;
+        for selection in random_selections(&world, 80, 0xacc0_ce11) {
+            let wants = |section| selection.sections.as_ref().is_none_or(|list| list.contains(&section));
+            let label = format!("{selection:?}");
+            let with_transfers = !limited(&selection) && wants(Section::Transfers);
+            if !SHEETED.iter().any(|section| wants(*section)) && !with_transfers {
+                assert_eq!(workbook(&world.conn, &selection, &DisplayFormat::default()), Err(AppError::InvalidInput), "{label}");
+                continue;
+            }
+            let mut book = open(&build(&world.conn, &selection, &DisplayFormat::default()));
+            let names = book.sheet_names();
+            assert_eq!(names.iter().any(|n| n == "Transfers"), with_transfers, "{label}");
+            assert_eq!(names.iter().any(|n| n == "Accounts"), wants(Section::Accounts), "{label}");
+            // what the sheets of rows say, and what the account of each is
+            let mut held = std::collections::BTreeSet::new();
+            let mut take = |sheet: &str, account: usize, of: &dyn Fn(&[Cell]) -> usize| {
+                for row in &rows(&mut book, sheet)[1..] {
+                    let at = of(row);
+                    assert_eq!(row[account], text_cell(spread.names[at]), "{sheet}, {label}");
+                    held.insert(at);
+                }
+            };
+            if wants(Section::Transactions) {
+                take("Transactions", 8, &|row| spread.of_category[category_names.iter().position(|n| row[2] == text_cell(n)).unwrap()]);
+            }
+            if wants(Section::Recurring) {
+                take("Recurring", 11, &|row| spread.of_item(&strings(&[row[..1].to_vec()])[0]));
+            }
+            if wants(Section::Ledger) {
+                take("Ledger", 5, &|row| spread.of_friend(&strings(&[row[1..2].to_vec()])[0]));
+            }
+            if wants(Section::Accounts) {
+                let want: Vec<&str> = if limited(&selection) { held.iter().map(|at| spread.names[*at]).collect() } else { spread.names.to_vec() };
+                let listed: Vec<String> = rows(&mut book, "Accounts")[1..].iter().map(|r| strings(&[r[..1].to_vec()])[0].clone()).collect();
+                assert_eq!(listed, want, "{label}");
+            }
+            if with_transfers {
+                assert_eq!(rows(&mut book, "Transfers").len(), 1 + 3, "{label}");
+            }
+            checked += 1;
+        }
+        assert!(checked > 40, "most of the choices have a workbook to look at: {checked}");
+    }
+
+    // ---- a currency per account (docs/accounts-design.md, section 21.6) ----
+
+    /// Euros after the number, as a person in Ireland or France would set them.
+    fn euro_format() -> DisplayFormat {
+        DisplayFormat { currency_symbol: "€".into(), symbol_before: false, symbol_space: true, ..Default::default() }
+    }
+
+    /// The number format of an amount in the app's currency with `euro_format`.
+    const EURO: &str = "#,##0.00\" €\"";
+
+    #[test]
+    fn the_transactions_sheet_ends_with_what_each_payment_really_paid_and_the_currency_of_its_account() {
+        use super::super::accounts_tests::foreign_case;
+        let (c, _) = foreign_case();
+        let mut book = open(&build(&c.conn, &Selection::default(), &euro_format()));
+        let sheet = rows(&mut book, "Transactions");
+        assert_eq!(strings(&sheet[..1])[7..], ["My share (EUR)", "Account", "Native amount", "Currency"], "the columns of before keep their place");
+        assert!(sheet.iter().all(|r| r.len() == 11), "eleven columns in every row");
+        let lunch = sheet.iter().find(|r| r[3] == text_cell("Lei lunch")).unwrap();
+        assert_eq!((&lunch[4], &lunch[7], &lunch[8], &lunch[9], &lunch[10]), (&Cell::Number(4.0), &Cell::Number(4.0), &text_cell("Lei account"), &Cell::Number(20.0), &text_cell("RON")));
+        // the amount in the app's currency has the app's format, and what the lei account paid has none: its currency is in the cell beside it
+        let at = sheet.iter().position(|r| r[3] == text_cell("Lei lunch")).unwrap() + 1;
+        assert_eq!(book.format_code("Transactions", &format!("E{at}")), EURO);
+        assert_eq!(book.format_code("Transactions", &format!("J{at}")), "#,##0.00", "no symbol of the app's on an amount in lei");
+        // an account in the app's currency: no native amount (an empty cell, not 0), and its currency is the app's
+        for r in sheet[1..].iter().filter(|r| r[3] != text_cell("Lei lunch")) {
+            assert_eq!((&r[9], &r[10]), (&Cell::Empty, &text_cell("EUR")), "{r:?}");
+        }
+    }
+
+    #[test]
+    fn the_accounts_sheet_names_the_currency_and_the_rate_and_writes_the_amounts_of_a_foreign_account_with_no_symbol_of_the_apps() {
+        use super::super::accounts_tests::foreign_case;
+        let (c, _) = foreign_case();
+        let mut book = open(&build(&c.conn, &Selection::default(), &euro_format()));
+        let accounts = rows(&mut book, "Accounts");
+        assert_eq!(accounts.len(), 1 + 6);
+        assert!(accounts.iter().all(|r| r.len() == 14));
+        let at = |name: &str| accounts.iter().position(|r| r[0] == text_cell(name)).unwrap() + 1;
+        let lei = &accounts[at("Lei account") - 1];
+        // opening balance, balance and virtual balance are in lei: numbers, with the currency in its own column and the rate beside it
+        assert_eq!((&lei[3], &lei[6], &lei[9], &lei[12], &lei[13]), (&Cell::Number(100.0), &Cell::Number(30.5), &Cell::Number(0.0), &text_cell("RON"), &Cell::Number(5.0)));
+        for column in ["D", "G", "J"] {
+            assert_eq!(book.format_code("Accounts", &format!("{column}{}", at("Lei account"))), "#,##0.00", "{column}: no symbol of the app's on an amount in lei");
+            assert_eq!(book.format_code("Accounts", &format!("{column}{}", at("Savings"))), EURO, "{column}: an account in the app's currency keeps the format of before");
+        }
+        let savings = &accounts[at("Savings") - 1];
+        assert_eq!((&savings[12], &savings[13]), (&text_cell("EUR"), &Cell::Empty), "the app's code, and no rate");
+        // a rate with decimals is the number as typed
+        c.conn.execute("UPDATE accounts SET rate = '4.9712' WHERE name = 'Lei account'", []).unwrap();
+        let mut again = open(&build(&c.conn, &Selection::default(), &euro_format()));
+        assert_eq!(rows(&mut again, "Accounts")[at("Lei account") - 1][13], Cell::Number(4.9712));
+    }
+
+    #[test]
+    fn the_transfers_sheet_has_what_arrives_when_the_currencies_differ_and_each_amount_is_in_the_format_of_its_own_currency() {
+        use super::super::accounts_tests::foreign_case;
+        let (c, _) = foreign_case();
+        let mut book = open(&build(&c.conn, &Selection::default(), &euro_format()));
+        let transfers = rows(&mut book, "Transfers");
+        assert_eq!(strings(&transfers[..1]), ["Date", "From", "To", "Amount (EUR)", "Note", "Arrives"]);
+        let at = |note: &str| transfers.iter().position(|r| r[4] == text_cell(note)).unwrap();
+        let cash_to_lei = &transfers[at("cash to lei")];
+        assert_eq!((&cash_to_lei[1], &cash_to_lei[2], &cash_to_lei[3], &cash_to_lei[5]), (&text_cell("Cash"), &text_cell("Lei account"), &Cell::Number(10.0), &Cell::Number(50.5)));
+        let lei_to_savings = &transfers[at("lei to savings")];
+        assert_eq!((&lei_to_savings[3], &lei_to_savings[5]), (&Cell::Number(100.0), &Cell::Number(19.0)));
+        assert_eq!(transfers[at("monthly saving")][5], Cell::Empty, "no second amount between two euro accounts: an empty cell");
+        // what leaves Cash is euro and arrives in lei; what leaves the lei account is lei and arrives in euro
+        let (n, m) = (at("cash to lei") + 1, at("lei to savings") + 1);
+        assert_eq!((book.format_code("Transfers", &format!("D{n}")), book.format_code("Transfers", &format!("F{n}"))), (EURO.to_string(), "#,##0.00".to_string()));
+        assert_eq!((book.format_code("Transfers", &format!("D{m}")), book.format_code("Transfers", &format!("F{m}"))), ("#,##0.00".to_string(), EURO.to_string()));
+    }
+
+    #[test]
+    fn a_limit_names_the_currency_of_an_account_in_the_workbook_and_leaves_out_its_rate_and_the_second_amounts() {
+        use super::super::accounts_tests::foreign_case;
+        let (c, _) = foreign_case();
+        let selection = Selection { category_ids: Some(vec![c.rent.to_string()]), ..Default::default() };
+        let mut book = open(&build(&c.conn, &selection, &DisplayFormat::default()));
+        assert!(!book.sheet_names().contains(&"Transfers".to_string()));
+        let accounts = rows(&mut book, "Accounts");
+        let lei = accounts.iter().find(|r| r[0] == text_cell("Lei account")).unwrap();
+        assert!(lei[2..12].iter().all(|cell| matches!(cell, Cell::Empty)), "{lei:?}");
+        assert_eq!((&lei[12], &lei[13]), (&text_cell("RON"), &Cell::Empty), "its currency, and not its rate");
+        let all = strings(&accounts).join("|");
+        for hidden in ["30.5", "Savings", "cash to lei"] {
+            assert!(!all.contains(hidden), "{hidden:?}");
+        }
+        // a row of the file in it still says what it really paid
+        let transactions = rows(&mut book, "Transactions");
+        let lunch = transactions.iter().find(|r| r[3] == text_cell("Lei lunch")).unwrap();
+        assert_eq!((&lunch[9], &lunch[10]), (&Cell::Number(20.0), &text_cell("RON")));
+    }
+
+    #[test]
+    fn a_foreign_account_with_a_name_that_looks_like_a_formula_is_text_in_the_workbook_and_no_part_holds_a_formula() {
+        use super::super::accounts_tests::foreign_case;
+        let (c, lei) = foreign_case();
+        c.conn.execute("UPDATE accounts SET name = '=SUM(1+1)' WHERE id = ?1", [lei]).unwrap();
+        let bytes = build(&c.conn, &Selection::default(), &DisplayFormat::default());
+        let mut book = open(&bytes);
+        for name in ["Accounts", "Transfers", "Transactions"] {
+            for cell in strings(&rows(&mut book, name)) {
+                assert!(!cell.starts_with(['=', '+', '-', '@', '\t', '\r']), "{name}: {cell:?}");
+            }
+        }
+        assert!(strings(&rows(&mut book, "Accounts")).contains(&"'=SUM(1+1)".to_string()));
+        for name in Book::open(&bytes).parts.keys().filter(|n| n.starts_with("xl/worksheets/sheet")) {
+            let part = Book::open(&bytes).part(name);
+            assert!(!part.contains("<f>") && !part.contains("<f "), "{name} has a formula");
+        }
     }
 }

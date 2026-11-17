@@ -36,6 +36,8 @@ pub(crate) fn bill(conn: &Connection, category: i64, name: &str, amount: &str, d
             category_id: category.to_string(),
             description: None,
             client_uuid: None,
+            account_id: None,
+            native_amount: None,
         },
     )
     .unwrap()

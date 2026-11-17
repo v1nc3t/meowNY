@@ -160,7 +160,7 @@ pub(crate) fn world() -> World {
         let (person, name_of) = if at % 3 == 0 { (bob, "Bob") } else { (anna, "Anna") };
         let date = dates[random.below(dates.len())].clone();
         let kind = [EntryKind::Lent, EntryKind::Borrowed, EntryKind::RepaidToMe, EntryKind::RepaidByMe][random.below(4)];
-        ledger_entries::add(&conn, &NewEntry { person_id: person.to_string(), kind, amount: cents(100 + random.below(5_000) as i64), date: date.clone(), note: None, transaction_id: None }).unwrap();
+        ledger_entries::add(&conn, &NewEntry { person_id: person.to_string(), kind, amount: cents(100 + random.below(5_000) as i64), date: date.clone(), note: None, transaction_id: None, account_id: None }).unwrap();
         entries.push((date, name_of));
     }
     // budgets that stay as they are until a later row changes them, which `set` does not write (it pins the next month): two rows of
@@ -201,6 +201,7 @@ pub(crate) fn world() -> World {
                 interval_count: 1,
                 end_date: end.map(String::from),
                 description: None,
+                account_id: None,
             },
         )
         .unwrap();
@@ -1009,6 +1010,7 @@ fn the_history_of_debts_in_a_file_has_the_friends_and_the_recurring_payments_pai
             interval_count: 1,
             end_date: Some("2026-02-15".into()),
             description: None,
+            account_id: None,
         },
     )
     .unwrap()

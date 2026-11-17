@@ -3,7 +3,7 @@ import { preloadPage, type PageName } from '../pages'
 import { useT } from '../i18n/context'
 import Icon from './NavIcon'
 
-// The pages used most are tabs. Documents, sync, settings and lock are in the bar at the top. Export is not on a phone: the data lives
+// The pages used most are tabs. Accounts, documents, sync, settings and lock are in the bar at the top. Export is not on a phone: the data lives
 // on the desktop too, and a file cannot be saved from the app on Android yet.
 export const PHONE_TABS = [
   { to: '/app/dashboard', label: 'nav.dashboard', icon: 'dashboard', page: 'dashboard' },

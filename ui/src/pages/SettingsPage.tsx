@@ -8,6 +8,7 @@ import CommandApiBlock from '../components/CommandApiBlock'
 import PhoneSyncBlock from '../components/PhoneSyncBlock'
 import { cn } from '../components/ui/cn'
 import type { Settings } from '../vault/rules'
+import { useAccounts } from '../hooks/useAccounts'
 import { useToast } from '../hooks/toast'
 import { useProfile } from '../hooks/profile'
 import { syncApi } from '../api/sync'
@@ -42,6 +43,8 @@ export default function SettingsPage() {
   const [notifyDue, setNotifyDue] = useState<boolean | null>(null)
   const say = useToast()
   const [changingCurrency, setChangingCurrency] = useState(false)
+  // every account, archived ones too: one in another currency keeps the app's currency from being changed (docs/accounts-design.md, section 21.3)
+  const accountList = useAccounts()
   const paneRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -78,7 +81,14 @@ export default function SettingsPage() {
       case 'region':
         return (
           settings && (
-            <RegionSection settings={settings} phone={phone} onSaved={setSettings} onChangeCurrency={() => setChangingCurrency(true)} say={say} />
+            <RegionSection
+              settings={settings}
+              phone={phone}
+              onSaved={setSettings}
+              onChangeCurrency={() => setChangingCurrency(true)}
+              currencyLocked={(accountList ?? []).some((account) => account.foreign)}
+              say={say}
+            />
           )
         )
       case 'appearance':

@@ -261,6 +261,7 @@ pub const PEOPLE_SETTLE: Route = Route {
         Param::new("date", Kind::Date, "The day it was paid. Today if left out."),
         Param::new("note", Kind::String, "A note, up to 200 characters."),
         Param::new("transactionId", Kind::Id, "A transaction the payment was for, such as a bill you paid for them. Only a reference: no amount changes."),
+        Param::new("accountId", Kind::Id, "The account the money reached or left. The main account if left out. Not an archived one, and not one in another currency than the app's."),
     ],
     confirm: None,
     run: |ctx, mut args| {
@@ -272,10 +273,13 @@ pub const PEOPLE_SETTLE: Route = Route {
             date: Option<String>,
             note: Option<String>,
             transaction_id: Option<String>,
+            account_id: Option<String>,
         }
         let a: Args = parse(args)?;
         let today = today(ctx)?;
-        reply(ctx.vault.with_conn(|c| ledger::settle(c, id, a.amount.as_deref(), a.date.as_deref(), a.note.as_deref(), a.transaction_id.as_deref(), &today))?)
+        reply(ctx.vault.with_conn(|c| {
+            ledger::settle(c, id, a.amount.as_deref(), a.date.as_deref(), a.note.as_deref(), a.transaction_id.as_deref(), a.account_id.as_deref(), &today)
+        })?)
     },
 };
 
@@ -294,6 +298,7 @@ pub const LEDGER_ADD: Route = Route {
         Param::new("transactionId", Kind::Id, "A transaction this belongs to."),
         Param::new("expenseName", Kind::String, "BORROWED only: the name of the expense that is made for your share (1 to 50 characters). Needs expenseCategoryId."),
         Param::new("expenseCategoryId", Kind::Id, "BORROWED only: the expense category for your share. Needs expenseName."),
+        Param::new("accountId", Kind::Id, "The account the money reached or left (for a borrowing with an expense, the expense too is in it). The main account if left out. Not an archived one, and not one in another currency than the app's."),
     ],
     confirm: None,
     run: |ctx, args| {
@@ -308,9 +313,10 @@ pub const LEDGER_ADD: Route = Route {
             transaction_id: Option<String>,
             expense_name: Option<String>,
             expense_category_id: Option<String>,
+            account_id: Option<String>,
         }
         let a: Args = parse(args)?;
-        let entry = NewEntry { person_id: a.person_id, kind: a.kind, amount: a.amount, date: a.date, note: a.note, transaction_id: a.transaction_id };
+        let entry = NewEntry { person_id: a.person_id, kind: a.kind, amount: a.amount, date: a.date, note: a.note, transaction_id: a.transaction_id, account_id: a.account_id };
         match (a.expense_name, a.expense_category_id) {
             (None, None) => reply(ctx.vault.with_conn(|c| ledger::add(c, &entry))?),
             (Some(name), Some(category_id)) => {
@@ -336,6 +342,7 @@ pub const LEDGER_UPDATE: Route = Route {
         Param::new("date", Kind::Date, "The day it happened."),
         Param::new("note", Kind::String, "The new note, or null to clear it.").nullable(),
         Param::new("transactionId", Kind::Id, "The transaction it belongs to, or null for none.").nullable(),
+        Param::new("accountId", Kind::Id, "Moves it to this account, which must not be archived or in another currency than the app's."),
     ],
     confirm: None,
     run: |ctx, mut args| {

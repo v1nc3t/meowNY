@@ -324,6 +324,7 @@ fn rent_item(conn: &rusqlite::Connection, category: i64, amount: Option<&str>) -
             interval_count: 1,
             end_date: None,
             description: None,
+            account_id: None,
         },
     )
     .unwrap()

@@ -231,7 +231,7 @@ mod tests {
     fn lend(conn: &rusqlite::Connection, person: i64, kind: Kind, amount: &str, note: Option<&str>) {
         ledger::add(
             conn,
-            &NewEntry { person_id: person.to_string(), kind, amount: amount.into(), date: "2026-03-05".into(), note: note.map(str::to_string), transaction_id: None },
+            &NewEntry { person_id: person.to_string(), kind, amount: amount.into(), date: "2026-03-05".into(), note: note.map(str::to_string), transaction_id: None, account_id: None },
         )
         .unwrap();
     }

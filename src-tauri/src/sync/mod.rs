@@ -25,6 +25,8 @@ pub mod stamp;
 pub mod wire;
 
 #[cfg(test)]
+mod accounts_tests;
+#[cfg(test)]
 mod engine_tests;
 #[cfg(test)]
 mod files_tests;

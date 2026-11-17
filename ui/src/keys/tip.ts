@@ -28,6 +28,10 @@ export function showShortcutHints(on: boolean): void {
 export function tip(id: ShortcutId, _name?: string): { 'aria-keyshortcuts'?: string } {
   if (!hintsOn) return {}
   return {
-    'aria-keyshortcuts': SHORTCUTS[id].mod ? `${mac ? 'Meta' : 'Control'}+${SHORTCUTS[id].keys[0].toUpperCase()}` : SHORTCUTS[id].keys.join(' '),
+    'aria-keyshortcuts': SHORTCUTS[id].mod
+      ? `${mac ? 'Meta' : 'Control'}+${SHORTCUTS[id].keys[0].toUpperCase()}`
+      : SHORTCUTS[id].alt
+        ? `Alt+${SHORTCUTS[id].keys[0]}`
+        : SHORTCUTS[id].keys.join(' '),
   }
 }

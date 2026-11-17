@@ -10,6 +10,11 @@
 //!
 //! Budget against actual for a range compares each category over the months in which it had a budget;
 //! for a single month that is exactly what the budget screen shows.
+//!
+//! A report of every category also has a short table of the accounts, once accounts are in use: what each held on the last day, what it
+//! changed over the months, and the net worth on that day. An account that net worth leaves out is listed and marked, and is not in the
+//! net worth (`docs/accounts-design.md`, sections 10 and 20.3). An account in a currency of its own is listed in that currency, with its code
+//! in front of the numbers, and is turned into the app's currency at its rate for the net worth, which is the only total (section 21.6).
 
 // What a report reads is only used by the PDF, which the phone's build leaves out.
 #![cfg_attr(mobile, allow(dead_code))]
@@ -28,6 +33,7 @@ use chrono::Duration;
 use rusqlite::Connection;
 use serde::Deserialize;
 
+use crate::accounts;
 use crate::budgets::{month_start, next_month};
 use crate::categories::CategoryType;
 use crate::display::DisplayFormat;
@@ -83,6 +89,42 @@ pub struct ReportLabels {
     pub amount: String,
     pub page: String,
     pub no_data: String,
+    /// The table of accounts: its title, its two columns of numbers and its last line. A caller from before accounts may leave them out, and
+    /// they are then in English, as the command line writes them.
+    #[serde(default = "words::accounts")]
+    pub accounts: String,
+    #[serde(default = "words::balance")]
+    pub balance: String,
+    #[serde(default = "words::change")]
+    pub change: String,
+    #[serde(default = "words::net_worth")]
+    pub net_worth: String,
+    /// The mark of an account that net worth leaves out. A caller from before the account details may leave it out too.
+    #[serde(default = "words::not_in_net_worth")]
+    pub not_in_net_worth: String,
+}
+
+/// The English words of the table of accounts.
+mod words {
+    pub(super) fn accounts() -> String {
+        "Accounts".to_string()
+    }
+
+    pub(super) fn balance() -> String {
+        "Balance".to_string()
+    }
+
+    pub(super) fn change() -> String {
+        "Change".to_string()
+    }
+
+    pub(super) fn net_worth() -> String {
+        "Net worth".to_string()
+    }
+
+    pub(super) fn not_in_net_worth() -> String {
+        "(not in net worth)".to_string()
+    }
 }
 
 const MONTH_NAMES: [&str; 12] =
@@ -123,14 +165,20 @@ impl ReportLabels {
             amount: s("Amount"),
             page: s("Page"),
             no_data: s("No transactions in this period."),
+            accounts: words::accounts(),
+            balance: words::balance(),
+            change: words::change(),
+            net_worth: words::net_worth(),
+            not_in_net_worth: words::not_in_net_worth(),
         })
     }
 
-    fn all(&self) -> [&String; 18] {
+    fn all(&self) -> [&String; 23] {
         [
             &self.title, &self.period, &self.income, &self.expenses, &self.savings, &self.savings_rate, &self.by_month,
             &self.spending, &self.other, &self.budget_vs_actual, &self.no_budget, &self.transactions, &self.date,
-            &self.category, &self.name, &self.amount, &self.page, &self.no_data,
+            &self.category, &self.name, &self.amount, &self.page, &self.no_data, &self.accounts, &self.balance, &self.change, &self.net_worth,
+            &self.not_in_net_worth,
         ]
     }
 }
@@ -205,6 +253,18 @@ pub(crate) struct ReportData {
     pub transactions: Vec<Tx>,
     /// Debts and their history, when the report was asked for them.
     pub debts: Option<export::debts::DebtsPart>,
+    /// The accounts, in a report of every category once accounts are in use.
+    pub accounts: Option<AccountsPart>,
+}
+
+/// What a report says about accounts, as of the last day of its months.
+pub(crate) struct AccountsPart {
+    /// Each account, the archived ones last: its name, what it held on the last day, what it changed over the months, whether net worth counts
+    /// it, and the code of its currency when it has one of its own (the two numbers are then in that currency). An account that net worth leaves
+    /// out is listed all the same, with its balance.
+    pub accounts: Vec<(String, i64, i64, bool, Option<String>)>,
+    /// What every account that counts held on the last day plus what friends owed you then, as the dashboard counts it (`accounts::summary`).
+    pub net_worth: i64,
 }
 
 fn months_between(from: &str, to: &str) -> Result<Vec<String>, AppError> {
@@ -223,7 +283,7 @@ fn months_between(from: &str, to: &str) -> Result<Vec<String>, AppError> {
     Ok(months)
 }
 
-fn load(conn: &Connection, options: &ReportOptions, now: chrono::DateTime<chrono::Utc>) -> Result<ReportData, AppError> {
+fn load(conn: &Connection, options: &ReportOptions, now: chrono::DateTime<chrono::Utc>, accounts_in_use: bool) -> Result<ReportData, AppError> {
     let months = months_between(&options.from_month, &options.to_month)?;
     let first_day = month_start(&options.from_month)?;
     let last_day = next_month(month_start(&options.to_month)?)? - Duration::days(1);
@@ -331,6 +391,9 @@ fn load(conn: &Connection, options: &ReportOptions, now: chrono::DateTime<chrono
         None
     };
 
+    // the accounts belong to a report of everything: a limit to some categories would leave out what moved them
+    let accounts = if accounts_in_use && sel.categories.is_none() { Some(accounts_part(conn, &first_day.to_string(), &last_day.to_string())?) } else { None };
+
     Ok(ReportData {
         currency: export::currency(conn)?,
         months: figures,
@@ -342,7 +405,45 @@ fn load(conn: &Connection, options: &ReportOptions, now: chrono::DateTime<chrono
         global_budgets,
         transactions,
         debts,
+        accounts,
     })
+}
+
+/// The accounts of a report: what each held on `last_day`, what it changed from `first_day` to `last_day` (both included), and the net worth on
+/// `last_day`, which has the accounts that count in it and not the others (`docs/accounts-design.md`, sections 3 and 20.3). The numbers are
+/// sums of the movements of the accounts, as the account screens have them; what friends owed you is read from their statements, as in the
+/// debts of a report. A virtual balance is in none of it. The numbers of an account in a currency of its own are in that currency: the net
+/// worth turns each balance into the app's currency at the account's rate, one account at a time, as `accounts::summary` does, and adds up
+/// nothing in two currencies.
+fn accounts_part(conn: &Connection, first_day: &str, last_day: &str) -> Result<AccountsPart, AppError> {
+    let mut statement = conn.prepare(
+        "SELECT a.name,
+                COALESCE((SELECT SUM(m.delta_minor) FROM account_movements m WHERE m.account_id = a.id AND m.day <= ?1), 0),
+                COALESCE((SELECT SUM(m.delta_minor) FROM account_movements m WHERE m.account_id = a.id AND m.day < ?2), 0),
+                a.include_net_worth, a.currency, a.rate
+         FROM accounts a ORDER BY a.archived, a.position, a.id",
+    )?;
+    // (name, held on the last day, held before the first, counts in net worth, currency of its own, rate)
+    type Read = (String, i64, i64, bool, Option<String>, Option<String>);
+    let rows: Vec<Read> = statement
+        .query_map([last_day, first_day], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get::<_, i64>(3)? == 1, r.get(4)?, r.get(5)?)))?
+        .collect::<Result<_, _>>()?;
+    // what the accounts that count hold, in the app's currency; one that does not fit shows the bound it passed
+    let in_accounts: i64 = rows
+        .iter()
+        .filter(|row| row.3)
+        .map(|(_, after, _, _, _, rate)| match rate {
+            None => *after,
+            Some(rate) => crate::accounts::to_main(*after, rate).unwrap_or(crate::money::MAX_MINOR * after.signum()),
+        })
+        .sum();
+    let accounts: Vec<(String, i64, i64, bool, Option<String>)> = rows.into_iter().map(|(name, after, before, counts, currency, _)| (name, after, after - before, counts, currency)).collect();
+    let mut friends = 0;
+    for person in crate::debts::people::list(conn, true)? {
+        let statement = crate::debts::ledger::statement_in(conn, person.id)?;
+        friends += statement.lines.iter().rev().find(|l| l.date.as_str() <= last_day).map_or(0, |l| l.balance_minor);
+    }
+    Ok(AccountsPart { net_worth: in_accounts + friends, accounts })
 }
 
 /// The numbers of a report, read from the database. Laying out and writing the PDF (`Report::pdf`)
@@ -367,8 +468,10 @@ pub(crate) fn read_at(conn: &Connection, options: &ReportOptions, now: chrono::D
     if (options.include_debts || options.include_due_payments || options.include_debt_history) && options.debts_labels.is_none() {
         return Err(AppError::InvalidInput);
     }
+    // whether accounts are in use is asked first: `summary` has a transaction of its own, which cannot start inside the one below
+    let accounts_in_use = accounts::summary(conn, &export::today_of(conn, now)?)?.in_use;
     let tx = conn.unchecked_transaction()?;
-    Ok(Report(load(&tx, options, now)?))
+    Ok(Report(load(&tx, options, now, accounts_in_use)?))
 }
 
 /// The summary of who owes what as a PDF, with the words in the person's language. The phone's build has no PDF writer.
@@ -469,6 +572,11 @@ mod tests {
             amount: s("Amount"),
             page: s("Page"),
             no_data: s("No transactions in this period."),
+            accounts: s("Accounts"),
+            balance: s("Balance"),
+            change: s("Change"),
+            net_worth: s("Net worth"),
+            not_in_net_worth: s("(not in net worth)"),
         }
     }
 
@@ -511,6 +619,8 @@ mod tests {
                 category_id: category.to_string(),
                 description: description.map(str::to_string),
                 client_uuid: None,
+                account_id: None,
+                native_amount: None,
             },
         )
         .unwrap();
@@ -1012,7 +1122,7 @@ mod tests {
         for (person, kind, amount, date) in
             [(anna, Kind::Lent, "25.00", "2026-01-02"), (anna, Kind::RepaidToMe, "10.00", "2026-01-28"), (bob, Kind::Borrowed, "7.50", "2026-02-02"), (anna, Kind::Lent, "5.00", "2026-04-03")]
         {
-            ledger::add(&w.conn, &NewEntry { person_id: person.to_string(), kind, amount: amount.into(), date: date.into(), note: None, transaction_id: None }).unwrap();
+            ledger::add(&w.conn, &NewEntry { person_id: person.to_string(), kind, amount: amount.into(), date: date.into(), note: None, transaction_id: None, account_id: None }).unwrap();
         }
         w
     }
@@ -1055,7 +1165,7 @@ mod tests {
         // a friend who is owed (a loan from the friend) says so the other way round
         let w2 = indebted();
         let (cara,) = (friend(&w2.conn, "Cara"),);
-        ledger::add(&w2.conn, &NewEntry { person_id: cara.to_string(), kind: Kind::Borrowed, amount: "12.00".into(), date: "2026-01-09".into(), note: None, transaction_id: None }).unwrap();
+        ledger::add(&w2.conn, &NewEntry { person_id: cara.to_string(), kind: Kind::Borrowed, amount: "12.00".into(), date: "2026-01-09".into(), note: None, transaction_id: None, account_id: None }).unwrap();
         let owed = texts(&with_debts("2026-01", "2026-01", true, false), &w2);
         assert!(owed.iter().any(|t| t.contains("you owe 12.00")), "{owed:?}");
     }
@@ -1133,7 +1243,7 @@ mod tests {
         let anna: i64 = w.conn.query_row("SELECT id FROM people WHERE name = 'Anna'", [], |r| r.get(0)).unwrap();
         for day in 1..=28 {
             for _ in 0..4 {
-                ledger::add(&w.conn, &NewEntry { person_id: anna.to_string(), kind: Kind::Lent, amount: "1.00".into(), date: format!("2026-03-{day:02}"), note: Some("a note".into()), transaction_id: None }).unwrap();
+                ledger::add(&w.conn, &NewEntry { person_id: anna.to_string(), kind: Kind::Lent, amount: "1.00".into(), date: format!("2026-03-{day:02}"), note: Some("a note".into()), transaction_id: None, account_id: None }).unwrap();
             }
         }
         let o = with_debts("2026-03", "2026-03", false, true);
@@ -1162,6 +1272,7 @@ mod tests {
                     interval_count: 1,
                     end_date: None,
                     description: None,
+                    account_id: None,
                 },
             )
             .unwrap()
@@ -1233,6 +1344,7 @@ mod tests {
                 interval_count: 1,
                 end_date: Some("2026-02-15".into()),
                 description: None,
+                account_id: None,
             },
         )
         .unwrap();
@@ -1247,5 +1359,671 @@ mod tests {
         assert!(has("2026-01-04") && text.iter().filter(|t| *t == "900.00").count() == 2, "{text:?}");
         // a friend's lines still have the balance, and the payments do not
         assert!(has("Balance") && has("65.00"), "{text:?}");
+    }
+
+    // ---- accounts in the report (docs/accounts-design.md, section 10) -------------------------------------------------
+
+    use crate::accounts::fixtures::{new_account, transfer};
+    use crate::accounts::{Kind as AccountKind, NewAccount, MAIN_ID};
+
+    fn at(text: &str) -> chrono::DateTime<chrono::Utc> {
+        text.parse().unwrap()
+    }
+
+    fn open_account(conn: &Connection, name: &str, kind: AccountKind, opening: &str, date: &str) -> i64 {
+        accounts::create(conn, &NewAccount { kind, opening_balance: Some(opening.into()), opening_date: Some(date.into()), ..new_account(name) }, "2026-04-15").unwrap().id
+    }
+
+    /// The world (the main account holds 5,713.80 on the last day of March: 9,600 of pay, 2,700 of rent, 886.20 of other things, and the 300 that
+    /// left it in two transfers) with three accounts more. Savings opened with 1,000 and took 200 on the 2nd of February, 50 from the old account
+    /// on the 10th of January and 50 on the 1st of April, after the months below. The credit card opened with -240 and took 100 in March. The
+    /// old account opened with 50, gave it all to Savings and is archived.
+    fn with_accounts() -> World {
+        let w = world();
+        let savings = open_account(&w.conn, "Savings", AccountKind::Savings, "1000.00", "2025-12-01");
+        let card = open_account(&w.conn, "Credit card", AccountKind::CreditCard, "-240.00", "2025-12-01");
+        let old = open_account(&w.conn, "Old", AccountKind::Savings, "50.00", "2025-12-01");
+        transfer(&w.conn, MAIN_ID, savings, "200.00", "2026-02-02");
+        transfer(&w.conn, MAIN_ID, card, "100.00", "2026-03-15");
+        transfer(&w.conn, MAIN_ID, savings, "50.00", "2026-04-01");
+        transfer(&w.conn, old, savings, "50.00", "2026-01-10");
+        accounts::archive(&w.conn, old, "2026-04-15").unwrap();
+        w
+    }
+
+    const APRIL: &str = "2026-04-15T12:00:00Z";
+
+    fn accounts_of(o: &ReportOptions, w: &World, now: &str) -> Option<AccountsPart> {
+        read_at(&w.conn, o, at(now)).unwrap().0.accounts
+    }
+
+    #[test]
+    fn the_accounts_table_has_what_each_held_on_the_last_day_what_it_changed_and_the_net_worth() {
+        let w = with_accounts();
+        let o = options("2026-01", "2026-03");
+        let part = accounts_of(&o, &w, APRIL).expect("accounts are in use");
+        assert_eq!(
+            part.accounts,
+            [("Main account".to_string(), 571_380, 571_380, true, None), ("Savings".into(), 125_000, 25_000, true, None), ("Credit card".into(), -14_000, 10_000, true, None), ("Old".into(), 0, -5_000, true, None)],
+            "the person's order, the archived one last; the change leaves out what the account held before the first day"
+        );
+        assert_eq!(part.net_worth, 571_380 + 125_000 - 14_000);
+        // the same numbers as the account screens and the dashboard: the transfers add up to nothing, so the 50 of April changes no sum
+        let summary = accounts::summary(&w.conn, "2026-04-15").unwrap();
+        assert_eq!(part.accounts.iter().map(|a| a.1).sum::<i64>().to_string(), summary.in_accounts.replace('.', ""));
+        assert_eq!(part.net_worth.to_string(), summary.net_worth.replace('.', ""));
+        for (name, balance, _, _, _) in &part.accounts {
+            let id: i64 = w.conn.query_row("SELECT id FROM accounts WHERE name = ?1", [name], |r| r.get(0)).unwrap();
+            let held = accounts::history(&w.conn, id, "2026", "2026-04-15").unwrap();
+            assert_eq!(format!("{}.{:02}", balance / 100, (balance % 100).abs()), held[2].balance, "{name}: the chart has the balance of the end of March");
+        }
+        // one month: the change is that of the month, and the rest is what was held before it. Main account: two pays, two rents, 356.20 of food
+        // in January, 450.00 and 80.00 in February and the 200.00 to Savings; and of those, in February: one pay, one rent, 450.00, 80.00 and 200.00
+        let february = accounts_of(&options("2026-02", "2026-02"), &w, APRIL).unwrap();
+        assert_eq!(february.accounts[0], ("Main account".to_string(), 351_380, 157_000, true, None));
+        assert_eq!(february.accounts[1], ("Savings".to_string(), 125_000, 20_000, true, None), "1,000.00 and 50.00 from the old account, and the 200.00 of the month");
+    }
+
+    #[test]
+    fn the_accounts_table_is_on_the_page_with_the_words_of_the_labels_and_the_net_worth_last() {
+        let w = with_accounts();
+        let o = options("2026-01", "2026-03");
+        let page = texts(&o, &w);
+        let place = |needle: &str| page.iter().position(|t| t == needle).unwrap_or_else(|| panic!("{needle:?} is not on the page: {page:?}"));
+        for word in ["Accounts", "Name", "Change", "Balance", "Net worth", "Main account", "Savings", "Credit card", "Old"] {
+            place(word);
+        }
+        assert!(page.iter().any(|t| t == "5,713.80") && page.iter().any(|t| t == "+5,713.80"), "{page:?}");
+        assert!(page.iter().any(|t| t == "-140.00") && page.iter().any(|t| t == "+100.00") && page.iter().any(|t| t == "-50.00"), "a negative balance and a change are signed: {page:?}");
+        assert!(page.iter().any(|t| t == "6,823.80"), "the net worth: {page:?}");
+        // (the first "Savings" is a tile of the page: the account is after the title of the table)
+        let in_table = |needle: &str| place("Accounts") + page[place("Accounts")..].iter().position(|t| t == needle).unwrap();
+        assert!(place("Accounts") < in_table("Main account") && in_table("Main account") < in_table("Savings") && in_table("Savings") < in_table("Credit card"));
+        assert!(in_table("Credit card") < in_table("Old") && in_table("Old") < place("Net worth"));
+        assert!(place("Where the money went") < place("Accounts"), "after the budgets, before the list of transactions");
+        let mut listed = options("2026-01", "2026-03");
+        listed.include_transactions = true;
+        let with_list = texts(&listed, &w);
+        assert!(with_list.iter().position(|t| t == "Net worth") < with_list.iter().position(|t| t == "Transactions"), "the table comes before the long list");
+        // the words are the labels'
+        let mut french = options("2026-01", "2026-03");
+        french.labels.accounts = "Comptes".into();
+        french.labels.balance = "Solde".into();
+        french.labels.change = "Variation".into();
+        french.labels.net_worth = "Patrimoine".into();
+        let page = texts(&french, &w);
+        assert!(["Comptes", "Solde", "Variation", "Patrimoine"].iter().all(|word| page.iter().any(|t| t == word)));
+        assert!(!page.iter().any(|t| t == "Net worth"));
+        // and it is in the file
+        let bytes = read(&w.conn, &o).unwrap().pdf(&o).unwrap();
+        assert!(bytes.starts_with(b"%PDF"));
+    }
+
+    #[test]
+    fn the_accounts_table_is_absent_with_one_account_and_with_a_limit_to_categories() {
+        // nobody who has not chosen to use accounts is shown any
+        let w = world();
+        assert!(accounts_of(&options("2026-01", "2026-03"), &w, APRIL).is_none());
+        let page = texts(&options("2026-01", "2026-03"), &w);
+        for absent in ["Accounts", "Net worth", "Balance", "Change"] {
+            assert!(!page.iter().any(|t| t == absent), "{absent} is in a report of someone with one account");
+        }
+        // an opening balance on the main account is using accounts
+        accounts::update(&w.conn, MAIN_ID, &accounts::AccountPatch { opening_balance: Some("100.00".into()), opening_date: Some("2025-12-01".into()), ..Default::default() }, "2026-04-15").unwrap();
+        let part = accounts_of(&options("2026-01", "2026-03"), &w, APRIL).unwrap();
+        assert_eq!(part.accounts.len(), 1);
+        assert_eq!((part.accounts[0].1, part.net_worth), (571_380 + 10_000 + 30_000, 571_380 + 10_000 + 30_000), "the opening 100.00 and the 300.00 that never left, as there is no other account");
+        // more than one account, but a limit to categories: what moved an account is not all in it
+        let w = with_accounts();
+        let mut limited = options("2026-01", "2026-03");
+        limited.category_ids = Some(vec![w.food.to_string()]);
+        assert!(accounts_of(&limited, &w, APRIL).is_none());
+        let page = texts(&limited, &w);
+        assert!(!page.iter().any(|t| t == "Accounts" || t == "Net worth" || t == "Credit card"), "{page:?}");
+        // every category named is still a limit
+        let mut every: ReportOptions = options("2026-01", "2026-03");
+        every.category_ids = Some(w.conn.prepare("SELECT id FROM categories").unwrap().query_map([], |r| Ok(r.get::<_, i64>(0)?.to_string())).unwrap().map(Result::unwrap).collect());
+        assert!(accounts_of(&every, &w, APRIL).is_none());
+    }
+
+    #[test]
+    fn the_net_worth_has_what_friends_owed_you_on_the_last_day() {
+        let w = with_accounts();
+        let anna = friend(&w.conn, "Anna");
+        for (kind, amount, date) in [(Kind::Lent, "25.00", "2026-01-02"), (Kind::RepaidToMe, "10.00", "2026-01-28"), (Kind::Lent, "5.00", "2026-04-03")] {
+            ledger::add(&w.conn, &NewEntry { person_id: anna.to_string(), kind, amount: amount.into(), date: date.into(), note: None, transaction_id: None, account_id: None }).unwrap();
+        }
+        // on the 31st of January: Anna owes 15.00, and the loan and the repayment are in the main account
+        let january = accounts_of(&options("2026-01", "2026-01"), &w, APRIL).unwrap();
+        let in_accounts: i64 = january.accounts.iter().map(|a| a.1).sum();
+        assert_eq!(january.net_worth, in_accounts + 1_500);
+        // on the 31st of March the same 15.00 (the loan of April is after it); the dashboard of today counts all 20.00
+        let march = accounts_of(&options("2026-01", "2026-03"), &w, APRIL).unwrap();
+        assert_eq!(march.net_worth, march.accounts.iter().map(|a| a.1).sum::<i64>() + 1_500);
+        let summary = accounts::summary(&w.conn, "2026-04-15").unwrap();
+        assert_eq!(summary.friends, "20.00");
+        let to_april = accounts_of(&options("2026-01", "2026-04"), &w, APRIL).unwrap();
+        assert_eq!(to_april.net_worth.to_string(), summary.net_worth.replace('.', ""), "to the end of April it is the dashboard's number");
+    }
+
+    #[test]
+    fn a_month_with_nothing_but_accounts_shows_them_and_not_the_empty_message() {
+        let w = with_accounts();
+        let o = options("2026-06", "2026-06");
+        let page = texts(&o, &w);
+        assert!(!page.iter().any(|t| t == "No transactions in this period."), "{page:?}");
+        assert!(page.iter().any(|t| t == "Accounts") && page.iter().any(|t| t == "5,663.80"), "the main account, after the 50.00 of April: {page:?}");
+        let part = accounts_of(&o, &w, APRIL).unwrap();
+        assert!(part.accounts.iter().all(|a| a.2 == 0), "nothing changed in June: {:?}", part.accounts);
+        // an account that opens after the last day holds nothing on it, and has not changed
+        open_account(&w.conn, "Later", AccountKind::Cash, "70.00", "2026-09-01");
+        let part = accounts_of(&o, &w, APRIL).unwrap();
+        assert_eq!(part.accounts.iter().find(|a| a.0 == "Later").map(|a| (a.1, a.2)), Some((0, 0)));
+        assert_eq!(part.net_worth, part.accounts.iter().map(|a| a.1).sum::<i64>());
+    }
+
+    #[test]
+    fn a_long_odd_name_is_cut_to_fit_and_a_long_table_runs_onto_more_pages() {
+        let w = with_accounts();
+        open_account(&w.conn, &"W".repeat(48), AccountKind::Cash, "1.00", "2026-01-01");
+        open_account(&w.conn, "寿司 account", AccountKind::Cash, "2.00", "2026-01-01");
+        for i in 0..70 {
+            open_account(&w.conn, &format!("Pot {i}"), AccountKind::Savings, "1.00", "2026-01-01");
+        }
+        let o = options("2026-01", "2026-03");
+        let doc = layout::build(&read_at(&w.conn, &o, at(APRIL)).unwrap().0, &o).unwrap();
+        assert!(doc.pages.len() >= 2, "{} pages", doc.pages.len());
+        let metrics = Metrics::new().unwrap();
+        for op in doc.pages.iter().flatten() {
+            if let Op::Text { x, y, size, bold, text, .. } = op {
+                assert!(x + metrics.width(text, *size, *bold) <= doc.width - 44.0 + 0.5, "{text:?} runs past the margin");
+                assert!(*y < doc.height - 30.0 || *y > doc.height - 40.0, "text over the footer area: {y}");
+            }
+        }
+        let texts = doc.texts();
+        assert!(texts.iter().any(|t| t.starts_with("WWW") && t.ends_with('\u{2026}')), "the name is cut with an ellipsis");
+        assert!(texts.iter().any(|t| t.starts_with("?? account")), "what the font lacks is a question mark, as everywhere else");
+        assert_eq!(texts.iter().filter(|t| **t == "Net worth").count(), 1);
+        let last = doc.pages.last().unwrap();
+        assert!(last.iter().any(|op| matches!(op, Op::Text { text, .. } if text == "Net worth")), "the net worth ends the table");
+        assert!(read(&w.conn, &o).unwrap().pdf(&o).unwrap().starts_with(b"%PDF"));
+    }
+
+    #[test]
+    fn the_words_of_the_table_default_to_english_and_are_checked_like_the_others() {
+        // a caller from before accounts (the command line builds its own labels) leaves them out
+        let mut sent = serde_json::json!({
+            "title": "t", "period": "p", "income": "i", "expenses": "e", "savings": "s", "savingsRate": "sr", "byMonth": "b", "spending": "w", "other": "o",
+            "budgetVsActual": "v", "noBudget": "n", "transactions": "x", "date": "d", "category": "c", "name": "m", "amount": "a", "page": "g", "noData": "z",
+        });
+        let old: ReportLabels = serde_json::from_value(sent.clone()).unwrap();
+        assert_eq!((old.accounts.as_str(), old.balance.as_str(), old.change.as_str(), old.net_worth.as_str()), ("Accounts", "Balance", "Change", "Net worth"));
+        let english = ReportLabels::english("2026-01", "2026-01").unwrap();
+        assert_eq!((english.accounts, english.balance, english.change, english.net_worth), (old.accounts, old.balance, old.change, old.net_worth));
+        // sent, they are used; an unknown one is still refused
+        sent["accounts"] = "Comptes".into();
+        sent["netWorth"] = "Patrimoine".into();
+        let french: ReportLabels = serde_json::from_value(sent.clone()).unwrap();
+        assert_eq!((french.accounts.as_str(), french.balance.as_str(), french.net_worth.as_str()), ("Comptes", "Balance", "Patrimoine"));
+        sent["colour"] = "red".into();
+        assert!(serde_json::from_value::<ReportLabels>(sent).is_err());
+        // and they are held to the limits of the rest
+        let w = world();
+        for set in [
+            (|l: &mut ReportLabels| l.accounts = "x".repeat(LABEL_MAX_CHARS + 1)) as fn(&mut ReportLabels),
+            |l| l.balance = "a\nb".into(),
+            |l| l.change = "x".repeat(LABEL_MAX_CHARS + 1),
+            |l| l.net_worth = "\u{7}".into(),
+        ] {
+            let mut o = options("2026-01", "2026-01");
+            set(&mut o.labels);
+            assert_eq!(read(&w.conn, &o).err(), Some(AppError::InvalidInput));
+        }
+    }
+
+    #[test]
+    fn reading_the_report_with_accounts_changes_nothing() {
+        let w = with_accounts();
+        let before = crate::accounts::fixtures::snapshot(&w.conn);
+        let o = options("2026-01", "2026-03");
+        read_at(&w.conn, &o, at(APRIL)).unwrap().pdf(&o).unwrap();
+        assert_eq!(crate::accounts::fixtures::snapshot(&w.conn), before);
+    }
+
+    // ---- an account that net worth leaves out (docs/accounts-design.md, section 20.3) ----------------------------------
+
+    const NOT_COUNTED: &str = "(not in net worth)";
+
+    /// Leaves these accounts out of net worth, by SQL so that the archived one can be among them.
+    fn leave_out(conn: &Connection, names: &[&str]) {
+        for name in names {
+            assert_eq!(conn.execute("UPDATE accounts SET include_net_worth = 0 WHERE name = ?1", [name]).unwrap(), 1, "{name}");
+        }
+    }
+
+    /// Anna owes 15.00 on the 31st of January and 20.00 from the 3rd of April (as in `the_net_worth_has_what_friends_owed_you_on_the_last_day`).
+    fn lend_to_anna(w: &World) {
+        let anna = friend(&w.conn, "Anna");
+        for (kind, amount, date) in [(Kind::Lent, "25.00", "2026-01-02"), (Kind::RepaidToMe, "10.00", "2026-01-28"), (Kind::Lent, "5.00", "2026-04-03")] {
+            ledger::add(&w.conn, &NewEntry { person_id: anna.to_string(), kind, amount: amount.into(), date: date.into(), note: None, transaction_id: None, account_id: None }).unwrap();
+        }
+    }
+
+    /// The text of the page and where each piece is: (x, y, text), in drawing order.
+    fn placed(o: &ReportOptions, w: &World) -> Vec<(f32, f32, String)> {
+        let doc = layout::build(&read(&w.conn, o).unwrap().0, o).unwrap();
+        doc.pages.iter().flatten().filter_map(|op| if let Op::Text { x, y, text, .. } = op { Some((*x, *y, text.clone())) } else { None }).collect()
+    }
+
+    #[test]
+    fn an_account_left_out_of_net_worth_is_listed_with_its_balance_marked_and_not_in_the_net_worth_line() {
+        let w = with_accounts();
+        leave_out(&w.conn, &["Savings"]);
+        let o = options("2026-01", "2026-03");
+        let part = accounts_of(&o, &w, APRIL).unwrap();
+        assert_eq!(
+            part.accounts.iter().map(|a| (a.0.as_str(), a.1, a.3)).collect::<Vec<_>>(),
+            [("Main account", 571_380, true), ("Savings", 125_000, false), ("Credit card", -14_000, true), ("Old", 0, true)],
+            "every account is listed, with its balance, and says whether net worth counts it"
+        );
+        assert_eq!(part.net_worth, 571_380 - 14_000, "the 1,250.00 of Savings is not in it");
+        let page = texts(&o, &w);
+        assert_eq!(page.iter().filter(|t| *t == NOT_COUNTED).count(), 1, "one account is marked: {page:?}");
+        let place = |needle: &str| page.iter().position(|t| t == needle).unwrap_or_else(|| panic!("{needle:?} is not on the page: {page:?}"));
+        let in_table = |needle: &str| place("Accounts") + page[place("Accounts")..].iter().position(|t| t == needle).unwrap();
+        assert!(in_table("Savings") < place(NOT_COUNTED) && place(NOT_COUNTED) < in_table("Credit card"), "the mark is on the row of the account that is left out");
+        assert!(page.iter().any(|t| t == "1,250.00"), "its balance is listed all the same: {page:?}");
+        assert!(page.iter().any(|t| t == "5,573.80"), "the net worth leaves it out: {page:?}");
+        assert!(!page.iter().any(|t| t == "6,823.80"), "and is not the number with it");
+        // the mark is drawn after the name, on its row
+        let ops = placed(&o, &w);
+        let savings = ops.iter().rev().find(|t| t.2 == "Savings").unwrap();
+        let mark = ops.iter().find(|t| t.2 == NOT_COUNTED).unwrap();
+        assert!(mark.0 > savings.0 && (mark.1 - savings.1).abs() < 0.01, "{savings:?} {mark:?}");
+        // and the same thing is what the dashboard counts
+        let to_april = accounts_of(&options("2026-01", "2026-04"), &w, APRIL).unwrap();
+        assert_eq!(to_april.net_worth, crate::money::parse_signed_amount(&accounts::summary(&w.conn, "2026-04-15").unwrap().net_worth).unwrap());
+    }
+
+    #[test]
+    fn with_every_account_left_out_all_are_listed_marked_and_the_net_worth_is_what_friends_owed() {
+        let w = with_accounts();
+        lend_to_anna(&w);
+        leave_out(&w.conn, &["Main account", "Savings", "Credit card", "Old"]);
+        let january = options("2026-01", "2026-01");
+        let part = accounts_of(&january, &w, APRIL).unwrap();
+        assert_eq!(part.accounts.len(), 4);
+        assert!(part.accounts.iter().all(|a| !a.3));
+        assert_eq!(part.net_worth, 1_500, "nothing of the accounts, and the 15.00 that Anna owed on the 31st");
+        let page = texts(&january, &w);
+        assert_eq!(page.iter().filter(|t| *t == NOT_COUNTED).count(), 4, "{page:?}");
+        let net_worth = page.iter().position(|t| t == "Net worth").unwrap();
+        assert_eq!(page[net_worth + 1], "15.00", "the line of the net worth is the friends' part alone");
+        // to the end of April it is the number of the dashboard, which also counts nothing of the accounts
+        let summary = accounts::summary(&w.conn, "2026-04-15").unwrap();
+        assert_eq!((summary.in_accounts.as_str(), summary.accounts, summary.in_use), ("0.00", 4, true), "every account is still counted as an account, and accounts are in use");
+        let to_april = accounts_of(&options("2026-01", "2026-04"), &w, APRIL).unwrap();
+        assert_eq!(to_april.net_worth, 2_000);
+        assert_eq!(to_april.net_worth, crate::money::parse_signed_amount(&summary.net_worth).unwrap());
+        // with no friend either, it is nothing
+        let w = with_accounts();
+        leave_out(&w.conn, &["Main account", "Savings", "Credit card", "Old"]);
+        assert_eq!(accounts_of(&january, &w, APRIL).unwrap().net_worth, 0);
+        let page = texts(&january, &w);
+        let net_worth = page.iter().position(|t| t == "Net worth").unwrap();
+        assert_eq!(page[net_worth + 1], "0.00");
+    }
+
+    #[test]
+    fn with_no_account_left_out_the_page_has_no_mark_and_the_words_of_it_change_nothing() {
+        let w = with_accounts();
+        let o = options("2026-01", "2026-03");
+        let part = accounts_of(&o, &w, APRIL).unwrap();
+        assert!(part.accounts.iter().all(|a| a.3), "the archived account counts too");
+        assert_eq!(part.net_worth, part.accounts.iter().map(|a| a.1).sum::<i64>());
+        let page = texts(&o, &w);
+        assert!(!page.iter().any(|t| t == NOT_COUNTED));
+        // a different mark is never drawn, and the page is the same down to the last piece
+        let mut other = options("2026-01", "2026-03");
+        other.labels.not_in_net_worth = "NOT COUNTED".into();
+        assert!(!texts(&other, &w).iter().any(|t| t == "NOT COUNTED"));
+        let (a, b) = (layout::build(&read(&w.conn, &o).unwrap().0, &o).unwrap(), layout::build(&read(&w.conn, &other).unwrap().0, &other).unwrap());
+        assert_eq!(format!("{:?}", a.pages), format!("{:?}", b.pages));
+    }
+
+    #[test]
+    fn the_net_worth_line_is_the_accounts_that_count_plus_friends_whichever_accounts_are_left_out() {
+        let names = ["Main account", "Savings", "Credit card", "Old"];
+        for subset in 0..16u32 {
+            let w = with_accounts();
+            lend_to_anna(&w);
+            let out: Vec<&str> = names.iter().enumerate().filter(|(i, _)| subset >> i & 1 == 1).map(|(_, n)| *n).collect();
+            leave_out(&w.conn, &out);
+            // to the end of April: the dashboard's day, so the report and `summary` must say the same
+            let part = accounts_of(&options("2026-01", "2026-04"), &w, APRIL).unwrap();
+            let counted: i64 = part.accounts.iter().filter(|a| a.3).map(|a| a.1).sum();
+            assert_eq!(part.net_worth, counted + 2_000, "without {out:?}");
+            assert_eq!(part.accounts.iter().filter(|a| !a.3).map(|a| a.0.as_str()).collect::<Vec<_>>(), out, "the ones that are marked");
+            let summary = accounts::summary(&w.conn, "2026-04-15").unwrap();
+            assert_eq!(part.net_worth, crate::money::parse_signed_amount(&summary.net_worth).unwrap(), "without {out:?}");
+            assert_eq!(counted, crate::money::parse_signed_amount(&summary.in_accounts).unwrap(), "without {out:?}");
+            // the page says the same number, and the marks are on the accounts that are left out
+            let o = options("2026-01", "2026-04");
+            let page = texts(&o, &w);
+            assert_eq!(page.iter().filter(|t| *t == NOT_COUNTED).count(), out.len(), "without {out:?}");
+            let net_worth = page.iter().position(|t| t == "Net worth").unwrap();
+            assert_eq!(page[net_worth + 1], layout_money(part.net_worth), "without {out:?}");
+        }
+    }
+
+    /// An amount as the page writes it in the default format.
+    fn layout_money(minor: i64) -> String {
+        let (sign, size) = (if minor < 0 { "-" } else { "" }, minor.abs());
+        let whole = (size / 100).to_string();
+        let grouped: Vec<String> = whole.as_bytes().rchunks(3).rev().map(|c| String::from_utf8_lossy(c).to_string()).collect();
+        format!("{sign}{}.{:02}", grouped.join(","), size % 100)
+    }
+
+    #[test]
+    fn a_long_name_is_cut_before_the_mark_and_a_very_long_mark_is_cut_too() {
+        let w = with_accounts();
+        open_account(&w.conn, &"W".repeat(48), AccountKind::Cash, "1.00", "2026-01-01");
+        open_account(&w.conn, "寿司 account", AccountKind::Cash, "2.00", "2026-01-01");
+        leave_out(&w.conn, &[&"W".repeat(48), "寿司 account", "Savings"]);
+        let long_mark = "not counted in the net worth because ".repeat(3);
+        for mark in [NOT_COUNTED.to_string(), long_mark.chars().take(LABEL_MAX_CHARS).collect::<String>()] {
+            let mut o = options("2026-01", "2026-03");
+            o.labels.not_in_net_worth = mark.clone();
+            let doc = layout::build(&read(&w.conn, &o).unwrap().0, &o).unwrap();
+            let metrics = Metrics::new().unwrap();
+            for op in doc.pages.iter().flatten() {
+                if let Op::Text { x, size, bold, text, .. } = op {
+                    assert!(x + metrics.width(text, *size, *bold) <= doc.width - 44.0 + 0.5, "{text:?} runs past the margin with the mark {mark:?}");
+                }
+            }
+            let texts = doc.texts();
+            assert!(texts.iter().any(|t| t.starts_with("WWW") && t.ends_with('\u{2026}')), "the name is cut with an ellipsis: {texts:?}");
+            if mark == NOT_COUNTED {
+                assert_eq!(texts.iter().filter(|t| **t == NOT_COUNTED).count(), 3, "the mark is whole, on each of the three rows");
+            } else {
+                assert_eq!(texts.iter().filter(|t| t.starts_with("not counted")).count(), 3, "a long mark is cut, not left out");
+            }
+            // the marked names and the balances do not touch: the change column starts after the name and its mark
+            let ops = placed(&o, &w);
+            let row_of = |name: &str| ops.iter().rev().find(|t| t.2.starts_with(name)).unwrap().clone();
+            let wide = row_of("WWW");
+            let mark_at = ops.iter().find(|t| (t.1 - wide.1).abs() < 0.01 && t.0 > wide.0 && t.2.starts_with(if mark == NOT_COUNTED { "(not" } else { "not counted" })).unwrap();
+            let change_at = ops.iter().find(|t| (t.1 - wide.1).abs() < 0.01 && t.2.starts_with(['+', '-']) && t.0 > mark_at.0).map(|t| t.0);
+            let end_of_mark = mark_at.0 + metrics.width(&mark_at.2, 8.0, false);
+            assert!(change_at.is_none_or(|x| end_of_mark <= x + 0.5), "the mark runs into the change: {mark_at:?} ends at {end_of_mark}, the change starts at {change_at:?}");
+        }
+        assert!(read(&w.conn, &options("2026-01", "2026-03")).unwrap().pdf(&options("2026-01", "2026-03")).unwrap().starts_with(b"%PDF"));
+    }
+
+    #[test]
+    fn the_mark_defaults_to_english_is_used_when_sent_and_is_checked_like_the_others() {
+        // a caller from before the details (the app does not send it yet, and the command line builds its own labels) leaves it out
+        let mut sent = serde_json::json!({
+            "title": "t", "period": "p", "income": "i", "expenses": "e", "savings": "s", "savingsRate": "sr", "byMonth": "b", "spending": "w", "other": "o",
+            "budgetVsActual": "v", "noBudget": "n", "transactions": "x", "date": "d", "category": "c", "name": "m", "amount": "a", "page": "g", "noData": "z",
+        });
+        let old: ReportLabels = serde_json::from_value(sent.clone()).unwrap();
+        assert_eq!(old.not_in_net_worth, NOT_COUNTED);
+        let four_of_round_one: ReportLabels = {
+            let mut with_four = sent.clone();
+            for (key, word) in [("accounts", "A"), ("balance", "B"), ("change", "C"), ("netWorth", "N")] {
+                with_four[key] = word.into();
+            }
+            serde_json::from_value(with_four).unwrap()
+        };
+        assert_eq!(four_of_round_one.not_in_net_worth, NOT_COUNTED, "a caller that sends the four of round one gets the English mark");
+        let english = ReportLabels::english("2026-01", "2026-01").unwrap();
+        assert_eq!(english.not_in_net_worth, old.not_in_net_worth, "the command line writes it as the default does");
+        // sent, it is used, and an unknown label is still refused
+        sent["notInNetWorth"] = "hors patrimoine".into();
+        let french: ReportLabels = serde_json::from_value(sent.clone()).unwrap();
+        assert_eq!(french.not_in_net_worth, "hors patrimoine");
+        sent["colour"] = "red".into();
+        assert!(serde_json::from_value::<ReportLabels>(sent).is_err());
+        // it is held to the limits of the rest: a report with a bad one is refused and reads nothing
+        let w = with_accounts();
+        for bad in ["x".repeat(LABEL_MAX_CHARS + 1), "a\nb".to_string(), "\u{7}".to_string()] {
+            let mut o = options("2026-01", "2026-03");
+            o.labels.not_in_net_worth = bad;
+            let before = crate::accounts::fixtures::snapshot(&w.conn);
+            assert_eq!(read(&w.conn, &o).err(), Some(AppError::InvalidInput));
+            assert_eq!(crate::accounts::fixtures::snapshot(&w.conn), before);
+        }
+        let mut longest = options("2026-01", "2026-03");
+        longest.labels.not_in_net_worth = "x".repeat(LABEL_MAX_CHARS);
+        assert!(read(&w.conn, &longest).is_ok(), "the limit itself is allowed");
+    }
+
+    #[test]
+    fn a_virtual_balance_is_nowhere_in_the_report() {
+        let w = with_accounts();
+        let o = options("2026-01", "2026-03");
+        let before = texts(&o, &w);
+        let card: i64 = w.conn.query_row("SELECT id FROM accounts WHERE name = 'Credit card'", [], |r| r.get(0)).unwrap();
+        accounts::update(&w.conn, card, &accounts::AccountPatch { virtual_balance: Some("1000.00".into()), bic: Some(Some("DEUTDEFF".into())), notes: Some(Some("PRIVATE-NOTE".into())), group: Some(Some("Cards".into())), ..Default::default() }, "2026-04-15").unwrap();
+        let after = texts(&o, &w);
+        assert_eq!(after, before, "the page is the same, down to the net worth: no virtual balance, BIC, note or group");
+        let part = accounts_of(&o, &w, APRIL).unwrap();
+        assert_eq!(part.accounts[2], ("Credit card".to_string(), -14_000, 10_000, true, None));
+        assert!(!after.iter().any(|t| t.contains("PRIVATE-NOTE") || t.contains("DEUTDEFF") || t.contains("1,000.00") || t == "Cards"));
+    }
+
+    // ---- accounts in a currency of their own (docs/accounts-design.md, section 21.6) ------------------------------------
+
+    /// An account in another currency, at `rate` of its units to the euro, opened on the first of December 2025.
+    fn open_foreign(conn: &Connection, name: &str, code: &str, rate: &str, opening: &str) -> i64 {
+        accounts::create(
+            conn,
+            &NewAccount { opening_balance: Some(opening.into()), opening_date: Some("2025-12-01".into()), currency: Some(code.into()), rate: Some(rate.into()), ..new_account(name) },
+            "2026-04-15",
+        )
+        .unwrap()
+        .id
+    }
+
+    /// A transfer between two currencies: `amount` leaves the first in its currency and `arrives` reaches the second in its own.
+    fn move_between(conn: &Connection, from: i64, to: i64, amount: &str, arrives: &str, date: &str) {
+        let new = crate::accounts::transfers::NewTransfer { to_amount: Some(arrives.into()), ..crate::accounts::fixtures::new_transfer(from, to, amount, date) };
+        crate::accounts::transfers::create(conn, &new).unwrap();
+    }
+
+    /// `with_accounts()` and an account in lei at 5.00 to the euro: 1,000.00 lei on the first of December, 100.00 lei that came from the main
+    /// account (20.00 euro) on the 10th of February, and 50.00 lei that went to Savings (10.00 euro) on the 20th of March. By the end of March it
+    /// holds 1,050.00 lei, which is 210.00 euro, and it changed by +50.00 lei over the months; the main account holds 5,693.80, Savings 1,260.00.
+    fn with_lei() -> (World, i64) {
+        let w = with_accounts();
+        let lei = open_foreign(&w.conn, "Lei account", "RON", "5.00", "1000.00");
+        let id = |name: &str| -> i64 { w.conn.query_row("SELECT id FROM accounts WHERE name = ?1", [name], |r| r.get(0)).unwrap() };
+        move_between(&w.conn, MAIN_ID, lei, "20.00", "100.00", "2026-02-10");
+        move_between(&w.conn, lei, id("Savings"), "50.00", "10.00", "2026-03-20");
+        (w, lei)
+    }
+
+    /// The net worth of the dashboard on the last day of the months of the report.
+    fn dashboard_net_worth(w: &World, day: &str) -> i64 {
+        // (a rate of 0.00000001 shows the bound a balance passed, so the sum may be larger than an amount a screen takes)
+        accounts::summary(&w.conn, day).unwrap().net_worth.replace('.', "").parse().unwrap()
+    }
+
+    #[test]
+    fn a_foreign_account_is_listed_in_its_own_currency_with_its_code_and_is_turned_into_the_apps_in_the_net_worth() {
+        let (w, _) = with_lei();
+        let o = options("2026-01", "2026-03");
+        let part = accounts_of(&o, &w, APRIL).unwrap();
+        assert_eq!(
+            part.accounts.iter().map(|a| (a.0.as_str(), a.1, a.2, a.4.as_deref())).collect::<Vec<_>>(),
+            [("Main account", 569_380, 569_380, None), ("Savings", 126_000, 26_000, None), ("Credit card", -14_000, 10_000, None), ("Lei account", 105_000, 5_000, Some("RON")), ("Old", 0, -5_000, None)],
+            "the balance and the change are in lei, the archived account is last"
+        );
+        // 5,693.80 + 1,260.00 - 140.00 + 0.00 and the lei account at its rate: 1,050.00 / 5.00 = 210.00
+        assert_eq!(part.net_worth, 569_380 + 126_000 - 14_000 + 21_000);
+        assert_ne!(part.net_worth, part.accounts.iter().map(|a| a.1).sum::<i64>(), "the lei are not added as if they were euro");
+        assert_eq!(part.net_worth, dashboard_net_worth(&w, "2026-03-31"), "the dashboard's number for the last day");
+        let page = texts(&o, &w);
+        assert!(page.iter().any(|t| t == "RON 1,050.00"), "the balance, with the code in front and the digits as the report writes them: {page:?}");
+        assert!(page.iter().any(|t| t == "RON +50.00"), "and the change");
+        assert!(!page.iter().any(|t| t == "1,050.00" || t == "+50.00"), "never as if it were the app's currency");
+        let net_worth = page.iter().position(|t| t == "Net worth").unwrap();
+        assert_eq!(page[net_worth + 1], "7,023.80");
+        // the accounts in the app's currency are written as before, with no code
+        for shown in ["5,693.80", "1,260.00", "-140.00"] {
+            assert!(page.iter().any(|t| t == shown), "{shown}: {page:?}");
+        }
+        assert_eq!(page.iter().filter(|t| t.starts_with("RON ")).count(), 2, "only the balance and the change of the one account in lei: {page:?}");
+        // the code is drawn on its row, in the columns of the numbers
+        let ops = placed(&o, &w);
+        let row_of = |name: &str| ops.iter().rev().find(|t| t.2 == name).unwrap().clone();
+        let (name, balance, change) = (row_of("Lei account"), ops.iter().find(|t| t.2 == "RON 1,050.00").unwrap(), ops.iter().find(|t| t.2 == "RON +50.00").unwrap());
+        assert!((name.1 - balance.1).abs() < 0.01 && (name.1 - change.1).abs() < 0.01, "{name:?} {balance:?} {change:?}");
+        // a report of one month is in lei too: 100.00 came in on the 10th of February
+        let february = accounts_of(&options("2026-02", "2026-02"), &w, APRIL).unwrap();
+        assert_eq!(february.accounts.iter().find(|a| a.0 == "Lei account").map(|a| (a.1, a.2)), Some((110_000, 10_000)));
+        assert_eq!(february.net_worth, dashboard_net_worth(&w, "2026-02-28"));
+    }
+
+    #[test]
+    fn a_foreign_account_has_the_code_where_the_person_puts_the_symbol_and_the_digits_in_the_persons_format() {
+        let (w, _) = with_lei();
+        let mut o = options("2026-01", "2026-03");
+        o.format = DisplayFormat { currency_symbol: "€".into(), symbol_before: false, symbol_space: false, decimal_mark: ",".into(), group_separator: ".".into(), ..Default::default() };
+        let page = texts(&o, &w);
+        assert!(page.iter().any(|t| t == "RON 1.050,00") && page.iter().any(|t| t == "RON +50,00"), "{page:?}");
+        assert!(page.iter().any(|t| t == "5.693,80€"), "the others have the symbol of the app's currency: {page:?}");
+        assert!(!page.iter().any(|t| t.starts_with("RON") && t.contains('€')), "no symbol of the app's on an amount in lei");
+        o.format = DisplayFormat { currency_symbol: "$".into(), symbol_before: true, symbol_space: true, ..Default::default() };
+        let page = texts(&o, &w);
+        assert!(page.iter().any(|t| t == "RON 1,050.00"), "{page:?}");
+        let net_worth = page.iter().position(|t| t == "Net worth").unwrap();
+        assert_eq!(page[net_worth + 1], "$\u{a0}7,023.80", "the net worth is in the app's currency, with its symbol");
+    }
+
+    #[test]
+    fn a_foreign_account_left_out_of_net_worth_is_listed_in_its_currency_marked_and_not_in_the_net_worth() {
+        let (w, _) = with_lei();
+        w.conn.execute("UPDATE accounts SET include_net_worth = 0 WHERE name = 'Lei account'", []).unwrap();
+        let o = options("2026-01", "2026-03");
+        let part = accounts_of(&o, &w, APRIL).unwrap();
+        assert_eq!(part.net_worth, 569_380 + 126_000 - 14_000, "the 210.00 of the lei account are not in it");
+        assert_eq!(part.net_worth, dashboard_net_worth(&w, "2026-03-31"));
+        let page = texts(&o, &w);
+        assert_eq!(page.iter().filter(|t| *t == NOT_COUNTED).count(), 1, "{page:?}");
+        assert!(page.iter().any(|t| t == "RON 1,050.00"), "it is listed all the same");
+        let net_worth = page.iter().position(|t| t == "Net worth").unwrap();
+        assert_eq!(page[net_worth + 1], "6,813.80");
+        let place = |needle: &str| page.iter().position(|t| t == needle).unwrap();
+        assert!(place("Lei account") < place(NOT_COUNTED) && place(NOT_COUNTED) < place("RON +50.00"), "the mark is on its row: {page:?}");
+    }
+
+    #[test]
+    fn a_negative_foreign_balance_is_written_with_its_sign_and_turned_into_the_apps_currency_half_away_from_zero() {
+        let w = with_accounts();
+        open_foreign(&w.conn, "Lei card", "RON", "3.00", "-200.00");
+        let o = options("2026-01", "2026-03");
+        let part = accounts_of(&o, &w, APRIL).unwrap();
+        let card = part.accounts.iter().find(|a| a.0 == "Lei card").unwrap();
+        assert_eq!((card.1, card.2, card.4.as_deref()), (-20_000, 0, Some("RON")));
+        // -200.00 lei at 3.00 is -66.666... euro, which is -66.67
+        assert_eq!(part.net_worth, 571_380 + 125_000 - 14_000 - 6_667);
+        assert_eq!(part.net_worth, dashboard_net_worth(&w, "2026-03-31"));
+        let page = texts(&o, &w);
+        assert!(page.iter().any(|t| t == "RON -200.00") && page.iter().any(|t| t == "RON +0.00"), "{page:?}");
+        let net_worth = page.iter().position(|t| t == "Net worth").unwrap();
+        assert_eq!(page[net_worth + 1], "6,757.13");
+        // and in red, as a negative balance of the app's currency is
+        let ops = layout::build(&read(&w.conn, &o).unwrap().0, &o).unwrap();
+        let colour_of = |text: &str| ops.pages.iter().flatten().find_map(|op| if let Op::Text { text: t, color, .. } = op { (t == text).then_some(*color) } else { None }).unwrap();
+        assert_eq!(colour_of("RON -200.00"), colour_of("-140.00"));
+        assert_ne!(colour_of("RON -200.00"), colour_of("5,713.80"));
+    }
+
+    #[test]
+    fn two_foreign_currencies_are_each_listed_in_their_own_and_added_up_only_in_the_apps() {
+        let (w, _) = with_lei();
+        open_foreign(&w.conn, "Dollars", "USD", "1.10", "220.00");
+        let o = options("2026-01", "2026-03");
+        let part = accounts_of(&o, &w, APRIL).unwrap();
+        assert_eq!(part.accounts.iter().filter_map(|a| a.4.as_deref()).collect::<Vec<_>>(), ["RON", "USD"], "in the person's order, the archived one last");
+        // 220.00 dollars at 1.10 are 200.00 euro
+        assert_eq!(part.net_worth, 569_380 + 126_000 - 14_000 + 21_000 + 20_000);
+        assert_eq!(part.net_worth, dashboard_net_worth(&w, "2026-03-31"));
+        let page = texts(&o, &w);
+        assert!(page.iter().any(|t| t == "RON 1,050.00") && page.iter().any(|t| t == "USD 220.00") && page.iter().any(|t| t == "USD +0.00"), "{page:?}");
+        let net_worth = page.iter().position(|t| t == "Net worth").unwrap();
+        assert_eq!(page[net_worth + 1], "7,223.80");
+        // there is no row that adds the balances up: the only total is the net worth
+        assert_eq!(page.iter().filter(|t| *t == "Net worth").count(), 1);
+    }
+
+    #[test]
+    fn the_net_worth_of_the_report_is_the_dashboards_for_any_rate_inclusion_and_archiving_of_a_foreign_account() {
+        for rate in ["5.00", "0.5", "160", "1", "0.00000001", "999999999.99999999", "3.33333333"] {
+            for (counts, archived) in [(true, false), (false, false), (true, true), (false, true)] {
+                let w = with_accounts();
+                let lei = open_foreign(&w.conn, "Lei account", "RON", rate, "1234.56");
+                move_between(&w.conn, MAIN_ID, lei, "20.00", "99.99", "2026-02-10");
+                w.conn.execute("UPDATE accounts SET include_net_worth = ?2, archived = ?3 WHERE id = ?1", rusqlite::params![lei, counts, archived]).unwrap();
+                for (from, to, last) in [("2026-01", "2026-01", "2026-01-31"), ("2026-01", "2026-03", "2026-03-31"), ("2026-03", "2026-03", "2026-03-31")] {
+                    let part = accounts_of(&options(from, to), &w, APRIL).unwrap();
+                    assert_eq!(part.net_worth, dashboard_net_worth(&w, last), "rate {rate}, counts {counts}, archived {archived}, {from} to {to}");
+                    let page = texts(&options(from, to), &w);
+                    let net_worth = page.iter().position(|t| t == "Net worth").unwrap();
+                    assert_eq!(page[net_worth + 1], layout_money(part.net_worth), "rate {rate}");
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn with_no_foreign_account_the_page_has_no_code_and_is_what_it_was() {
+        let w = with_accounts();
+        let o = options("2026-01", "2026-03");
+        let part = accounts_of(&o, &w, APRIL).unwrap();
+        assert!(part.accounts.iter().all(|a| a.4.is_none()));
+        let page = texts(&o, &w);
+        for shown in ["5,713.80", "1,250.00", "-140.00", "0.00", "+5,713.80", "+250.00", "+100.00", "-50.00"] {
+            assert!(page.iter().any(|t| t == shown), "{shown}: {page:?}");
+        }
+        assert!(!page.iter().any(|t| t.len() > 4 && t.chars().take(3).all(|c| c.is_ascii_uppercase()) && t.chars().nth(3) == Some(' ')), "no text starts with a code: {page:?}");
+        // an account that was foreign and is deleted leaves the page as it was
+        let (with, lei) = with_lei();
+        let before = texts(&o, &with);
+        assert!(before.iter().any(|t| t.starts_with("RON ")));
+        with.conn.execute("DELETE FROM transfers", []).unwrap();
+        with.conn.execute("DELETE FROM accounts WHERE id = ?1", [lei]).unwrap();
+        let after = texts(&o, &with);
+        assert!(!after.iter().any(|t| t.starts_with("RON ")));
+        assert_eq!(accounts_of(&o, &with, APRIL).unwrap().net_worth, 571_380 + 125_000 - 14_000, "a world with transfers gone: the three accounts as they are");
+    }
+
+    #[test]
+    fn a_long_name_next_to_a_code_and_a_big_foreign_number_stays_inside_the_margins() {
+        let (w, lei) = with_lei();
+        w.conn.execute("UPDATE accounts SET name = ?2, opening_balance_minor = 99999999999 WHERE id = ?1", rusqlite::params![lei, "W".repeat(48)]).unwrap();
+        w.conn.execute("UPDATE accounts SET include_net_worth = 0 WHERE id = ?1", [lei]).unwrap();
+        let o = options("2026-01", "2026-03");
+        let doc = layout::build(&read(&w.conn, &o).unwrap().0, &o).unwrap();
+        let metrics = Metrics::new().unwrap();
+        for op in doc.pages.iter().flatten() {
+            if let Op::Text { x, size, bold, text, .. } = op {
+                assert!(x + metrics.width(text, *size, *bold) <= doc.width - 44.0 + 0.5, "{text:?} runs past the margin");
+            }
+        }
+        let texts = doc.texts();
+        assert!(texts.iter().any(|t| t.starts_with("RON ") && t.contains("1,000,000,049.99")), "{texts:?}");
+        assert!(read(&w.conn, &o).unwrap().pdf(&o).unwrap().starts_with(b"%PDF"));
+    }
+
+    #[test]
+    fn reading_a_report_with_foreign_accounts_changes_nothing() {
+        let (w, _) = with_lei();
+        let before = crate::accounts::fixtures::snapshot(&w.conn);
+        let o = options("2026-01", "2026-03");
+        read_at(&w.conn, &o, at(APRIL)).unwrap().pdf(&o).unwrap();
+        assert_eq!(crate::accounts::fixtures::snapshot(&w.conn), before);
     }
 }
