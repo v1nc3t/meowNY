@@ -13,8 +13,9 @@ User side: the [guide](https://v1nc3t.github.io/meowNY/guide.html#accounts). Sta
 - A person who never wants accounts is not bothered: there is always one account (the main account), everything goes into it,
   and with one account no form shows an account field.
 - Everything follows sync, currency changes, backups, exports, the demo data and the CLI. No network. No new dependency.
-- Not goals: expense and revenue (counterparty) accounts, liabilities (the debts feature covers them), piggy banks, rules,
-  reconciliation, bank import, a currency per account, an export limited to one account, splitting one transaction over accounts.
+- Not goals: expense and revenue (counterparty) accounts, liabilities (the debts feature covers them), piggy banks (money set aside
+  for a goal is built as stashes, `stash-design.md`), rules, reconciliation, bank import, a currency per account, an export limited
+  to one account, splitting one transaction over accounts.
 
 ## 2. The pieces
 
@@ -862,8 +863,8 @@ section wins. Migration `0019_account_details.sql`. Sync protocol **10**.
    page what was spent and what came in by category for the period shown, a month to month navigation, and "add" buttons that
    open the dialog of point 1 with this account already chosen.
 
-Not built, with the reason: a currency per account, liabilities and piggy banks (not goals, section 1); expense and revenue
-counterparty accounts (categories do that job here); reconciliation (it needs a fourth kind of movement; correct the opening
+Not built, with the reason: a currency per account, liabilities and piggy banks (not goals, section 1; money set aside for a goal is
+built as stashes, `stash-design.md`); expense and revenue counterparty accounts (categories do that job here); reconciliation (it needs a fourth kind of movement; correct the opening
 balance instead); attachments on an account (the document links table would have to be rebuilt); the "shared" role and a
 credit card's payment day (the kind `CHECK` of 0018 cannot be widened without rebuilding a table four others point at);
 recurring transfers; rules.

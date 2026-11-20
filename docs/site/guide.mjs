@@ -1,6 +1,6 @@
 // The guide: what each part of meowNY does, and what it keeps where. Every how-to is a numbered list of steps; what a thing
 // is, and what it stores, is a short paragraph or list. This page is the user documentation; there is no Markdown copy of it.
-// How sync, documents, debts and accounts are built is in the design notes in docs/.
+// How sync, documents, debts, accounts and stashes are built is in the design notes in docs/.
 
 import { REPO, SPONSOR } from './render.mjs'
 import { gallery } from './shots.mjs'
@@ -13,9 +13,10 @@ const PICTURES = {
   start: ['lock', 'phone-lock'],
   budgeting: ['dashboard', 'transactions', 'add-income', 'transactions-transfers', 'categories', 'recurring'],
   accounts: ['accounts', 'account'],
+  stashes: ['stashes', 'stash'],
   documents: ['documents', 'preview-pdf', 'preview-csv'],
   debts: ['debts', 'friend', 'split', 'bill-code'],
-  phone: ['phone-sync', 'phone-dashboard', 'phone-transactions', 'phone-quick-add', 'phone-entry', 'phone-recurring', 'phone-debts', 'phone-categories', 'phone-accounts'],
+  phone: ['phone-sync', 'phone-dashboard', 'phone-transactions', 'phone-quick-add', 'phone-entry', 'phone-recurring', 'phone-debts', 'phone-categories', 'phone-accounts', 'phone-stashes'],
   backup: ['export'],
   privacy: ['settings'],
 }
@@ -114,7 +115,7 @@ const SECTIONS = [
     id: 'budgeting',
     title: 'Budgeting',
     blocks: [
-      { t: 'p', text: 'The pages you use most: **dashboard**, **transactions**, **categories** (your budgets are there) and **recurring**. **accounts** shows where your money is: [accounts](#accounts). On the phone the first four are tabs at the bottom, and the round **add** button replaces **add transaction** and **add category**.' },
+      { t: 'p', text: 'The pages you use most: **dashboard**, **transactions**, **categories** (your budgets are there) and **recurring**. **accounts** shows where your money is: [accounts](#accounts). **stashes** sets some of it aside for a goal: [stashes](#stashes). On the phone the first four are tabs at the bottom, and the round **add** button replaces **add transaction** and **add category**.' },
       { t: 'h3', id: 'dashboard', text: 'Dashboard' },
       {
         t: 'ul',
@@ -122,6 +123,7 @@ const SECTIONS = [
           'Income, expenses, savings and the savings rate of a month, with how much each changed from the month before. Click a month on the year chart to look at it; the arrows change the year, and arrow keys move along the chart.',
           'Spending by category, your budgets against what you spent, what friends owe you and what you owe, and the recurring items that are overdue, due soon or split with friends.',
           'Once you use accounts (you have more than one, or the main account has an opening balance): **net worth** ([net worth](#net-worth)). Click it to open **accounts**.',
+          'Once you have a stash: **stashes**, with the total saved and the first three. Click it to open **stashes** ([stashes](#stashes)).',
           'A new, empty dashboard shows **first steps**: add a transaction, set a budget, add a friend, pair your phone.',
         ],
       },
@@ -268,7 +270,7 @@ const SECTIONS = [
     title: 'Accounts',
     blocks: [
       { t: 'p', text: 'An account is a place your money is: a bank account, savings, cash, a credit card. Every transaction, recurring item and debt entry is in one account. You start with one, the **main account**, and everything goes into it. While you have only one account, only an income asks for one, and you can leave this page alone.' },
-      { t: 'p', text: 'The **accounts** page is the list below. An account can be in another currency than yours ([an account in another currency](#account-currency)). **Not in meowNY:** reconciliation (correct the opening balance instead), recurring transfers, rules, liabilities, piggy banks and files attached to an account.' },
+      { t: 'p', text: 'The **accounts** page is the list below. An account can be in another currency than yours ([an account in another currency](#account-currency)). **Not in meowNY:** reconciliation (correct the opening balance instead), recurring transfers, rules, liabilities and files attached to an account. Money you set aside for a goal is a [stash](#stashes).' },
       { t: 'h3', id: 'add-account', text: 'Add an account' },
       {
         t: 'ol',
@@ -368,7 +370,7 @@ const SECTIONS = [
         items: [
           'For an account you no longer use, press **archive** on its row and confirm. It leaves the lists and the forms; its history and balance stay. If it still holds money, the question says how much: move it out with a transfer first if the account is closed.',
           'Tick **archived**, under the list, to see the archived accounts. **restore** brings one back.',
-          'An account with nothing in it has the bin in place of **archive**: **delete** removes it for good.',
+          'An account with nothing in it has the bin in place of **archive**: **delete** removes it for good. A stash counts as something: [an account with a stash](#stash-archive) cannot be deleted.',
           'The **main account** always stays. You can rename and edit it, but not archive or delete it. New entries go there when no account is chosen.',
         ],
       },
@@ -398,6 +400,100 @@ const SECTIONS = [
       { t: 'p', text: 'You find your transfers on the **transfers** tab of **transactions**, and as lines in the statement of each of the two accounts. To change or delete one, press the pencil or the bin on its line there (on the phone, tap the line first).' },
       { t: 'h3', id: 'net-worth', text: 'Net worth' },
       { t: 'p', text: 'On the dashboard, **net worth** is what is **in accounts** plus what **friends** owe you, minus what you owe them. **in accounts** adds up only the accounts that **count in net worth**, archived ones too, each in your currency: an account in another currency counts at its rate. The virtual balance never counts.' },
+    ],
+  },
+  {
+    id: 'stashes',
+    title: 'Stashes',
+    blocks: [
+      { t: 'p', text: 'A stash is money you set aside for something you save for: a holiday, a new laptop, a rainy-day fund. It lives in one account, and **the money stays in that account**. A stash only marks part of the balance as set aside, so it changes no balance, no net worth, no budget and no statistic.' },
+      { t: 'p', text: 'Open **stashes** (or press `g` then `h`). **Not in meowNY:** a stash over several accounts, adds that happen by themselves, and a stash in another currency than its account.' },
+      { t: 'h3', id: 'add-stash', text: 'Make a stash' },
+      {
+        t: 'ol',
+        items: [
+          'Open **stashes** and press **new stash** (or press `n`).',
+          'Type a name, up to 50 characters. Two stashes that are not archived cannot share a name.',
+          'Choose the **account** the stash lives in. It is always asked, also with one account. A stash opened from an account\'s page starts with that account.',
+          'Optional: type a **target**, how much you want to save. Empty means no target. For an account in another currency, the target is in that currency.',
+          'Optional: press **choose a date** for a **target date**. The cross beside it takes the date away again.',
+          'Add **notes** if you like, up to 1000 characters.',
+          'Press **done**.',
+        ],
+      },
+      { t: 'p', text: 'To change a stash, open it and press **edit**. Its account can change only to an account in the same currency that has enough free money for what the stash holds ([what is free](#stash-free)). The target cannot go below what is saved.' },
+      { t: 'h3', id: 'look-stash', text: 'Look at your stashes' },
+      {
+        t: 'ul',
+        items: [
+          'The list shows a card for each stash, with its name, its account, a bar, what is saved of the target and what comes next. Above it is **total saved**, in your currency. With more than one account, **account** shows the stashes of one account only.',
+          'A card has **+ add** and **− take out**. Click anywhere else on it to open the stash; on the phone, tap it.',
+          'A stash with no target has no bar, only its amount. One that has reached its target has a full green bar.',
+          'On the computer, hold a card and drag it to change the order, or focus it and press `Alt` with an arrow key. This works while no account is chosen. The order goes to your phone with the next sync. It cannot be changed on the phone.',
+          'The page of one stash has the name and account on top, then how far it is, the notes, a chart of what it held at the end of each month (the arrows change the year; a dashed line marks the target), and its **history**.',
+          'The history lists every add and take, newest first: the date, a plus or a minus, the note, the account it came from or went to, the amount, and what the stash held **after** it.',
+          'Under the history, the account\'s line says what it holds, how much of it is set aside and how much is **free**.',
+        ],
+      },
+      { t: 'p', text: 'The **accounts** list shows **set aside** under the balance of an account that has stashes. On an account\'s page, **stashes** lists them as small cards, with **new stash** for that account. The dashboard has a **stashes** card once you have one.' },
+      { t: 'h3', id: 'stash-money', text: 'Add money, take it out' },
+      {
+        t: 'ol',
+        items: [
+          'Press **+ add** or **− take out** on a card. On a stash\'s page, press **add money** (or `n`) or **take out**. The dialog has two tabs, **add** and **take out**, and `Alt+1` and `Alt+2` choose one. Changing tab keeps the amount, the date and the note.',
+          'Type the **amount**, or press a chip under it: **the rest** (what is left to the target), **a month** (what the target date asks of this month), **all free** (everything that is free) for an add; **all** or **half** of what is saved for a take. Only the chips that make sense for the stash are shown.',
+          'Look at the bar under the chips. The solid part is what the stash holds now, the striped part what this adds or takes, and the line says what it would hold: **after this: 550.00 of 1200.00 · 45%**. If the amount breaks a limit ([what is free](#stash-free)), the line says why in red and **done** stays off.',
+          'Check the date. It starts at today and cannot be after today. Add a **note** if you like, up to 200 characters.',
+          'Optional: tick **bring it from another account** (for an add) or **send it to another account** (for a take out) and choose the account. A real transfer is made too, and the line under it says which. It is shown when you have another account in the same currency. The money that is brought counts as free for the add.',
+          'Press **done**.',
+        ],
+      },
+      { t: 'p', text: 'meowNY says so when an add brings a stash to its target. Without the tick, no money moves: it was in the account already, and the stash only marks it.' },
+      { t: 'h3', id: 'stash-entry', text: 'Change or delete an entry' },
+      {
+        t: 'ol',
+        items: [
+          'Open the stash and click the line in its **history** (on the phone, tap it, then **edit entry**).',
+          'Change the amount, the date or the note. An add stays an add, and a take stays a take: to turn one into the other, delete it and make the other.',
+          'Press **done**. To remove the entry, press **delete** (at the left of the buttons) and confirm.',
+        ],
+      },
+      { t: 'p', text: 'An entry that came with a transfer says so, and **the transfer is not changed**: it is a transfer of its own, which you edit on the **transfers** tab or in the statement of its accounts ([transfers](#transfers)). The line in the history opens it. When you delete such an entry, the question has **delete the transfer too**. Tick it to remove the transfer as well; without it, the transfer stays and only the entry goes. Deleting a transfer on its own never deletes the entry.' },
+      { t: 'h3', id: 'stash-free', text: 'What is free' },
+      { t: 'p', text: 'The **free** money of an account is its balance minus what its stashes hold. Archived stashes count too. An account with 1000.00 and two stashes that hold 300.00 and 200.00 has 500.00 free. Three limits keep the stashes honest:' },
+      {
+        t: 'ul',
+        items: [
+          'An add must fit in what is free. A second stash cannot set aside what the first one holds.',
+          'An add must not take the stash past its target. A stash with no target is limited by what is free alone.',
+          'A take cannot take out more than is saved.',
+        ],
+      },
+      { t: 'p', text: 'The same limits apply when you change an entry or delete one. Deleting an add whose money was taken out since is not possible, because the stash would hold less than nothing. A stash cannot lower its target below what is saved.' },
+      { t: 'p', text: 'You can still spend money that was set aside: the balance falls, and free can go below 0. The account says **the stashes hold more than the account has**. Nothing is taken from the stashes, but an add needs free money again, or a transfer that brings it.' },
+      { t: 'h3', id: 'stash-target', text: 'The target' },
+      {
+        t: 'ul',
+        items: [
+          'A card shows **450.00 of 1200.00 · 37%**, and **750.00 left**.',
+          'With a target date, it also shows how much to save **a month**: what is left, spread over the months from now to the target date, rounded up to the cent. **107.15 a month until june 2027** reaches the target in time. In the month of the target date, it asks for all that is left.',
+          'A stash whose target date has passed, and has not reached its target, says **overdue since** that date, in red, and has no amount a month.',
+          'At or above its target a stash says **reached**. It is never overdue.',
+        ],
+      },
+      { t: 'h3', id: 'stash-archive', text: 'Archive, restore, delete' },
+      {
+        t: 'ul',
+        items: [
+          'For a stash you no longer add to, press **archive** on its page and confirm. It leaves the list. **What it still holds stays set aside**, and you can still take money out of it, so you can empty it. Nothing can be added until you **restore** it.',
+          'Tick **archived**, under the list, to see the archived stashes. **restore** brings one back, unless another stash has taken its name.',
+          'Press **delete**, on a stash\'s page or on an archived card, to remove it with its history. The question says what happens: the money stays in the account, what the stash held is free again, and **transfers that came with entries stay**.',
+          'When the account of a stash is archived, money can only be taken out of the stash. To add again, move the stash to an account that is not archived with **edit**.',
+        ],
+      },
+      { t: 'p', text: '**An account with a stash cannot be deleted.** It shows **archive** instead of the bin. To delete the account, move its stashes to another account first (**edit**, then **account**) or delete them.' },
+      { t: 'h3', id: 'stash-sync', text: 'Two devices' },
+      { t: 'p', text: 'The limits are checked on the device where you make the entry. After a sync, the two devices may together go past one: both added what was free, or both brought the stash to its target. Nothing is lost. The screens show it as it is: a stash can hold more than its target, and an account can have free money below 0.' },
     ],
   },
   {
@@ -590,7 +686,7 @@ const SECTIONS = [
       {
         t: 'ul',
         items: [
-          'Dashboard, transactions, categories, recurring and debts are tabs at the bottom. Accounts, documents, sync, settings and lock are the icons in the top bar.',
+          'Dashboard, transactions, categories, recurring and debts are tabs at the bottom. Accounts, stashes, documents, sync, settings and lock are the icons in the top bar.',
           'The round **add** button adds a transaction, a category or a friend, or scans a bill code.',
           'Tap a row to open it. Documents: **take photo**, and **keep on phone** for a file that is on the computer.',
           'Export, backups, the recovery key, pairing and the command line are on the computer only.',
@@ -655,6 +751,15 @@ const SECTIONS = [
           'Backups hold accounts and transfers like everything else.',
         ],
       },
+      { t: 'p', text: 'Stashes are in the files too:' },
+      {
+        t: 'ul',
+        items: [
+          'A JSON or Excel export with no limit lists the stashes with their account, target, target date, notes, whether they are archived, what each holds and every entry. Excel has two sheets for them, **Stashes** and **Stash entries**; JSON also says how much each account has set aside.',
+          'A limited export has no stashes, and no set aside amounts. The PDF report of every category adds a short table of the stashes, with what each held on the last day of the period.',
+          'Backups hold stashes like everything else.',
+        ],
+      },
       { t: 'p', text: '**Delete all my data** (settings › your data) wipes the database, documents, keys and settings on this device. You type DELETE to confirm.' },
     ],
   },
@@ -677,11 +782,11 @@ const SECTIONS = [
         t: 'table',
         head: ['What', 'Where', 'Protection'],
         rows: [
-          ['Categories, budgets, accounts (names, numbers, BIC, groups, notes, opening and virtual balances, currencies and rates, whether net worth counts them), transfers, transactions (with the amount in the account\'s currency), recurring items, debts, the change history', '`meowny.db`', 'Encrypted'],
+          ['Categories, budgets, accounts (names, numbers, BIC, groups, notes, opening and virtual balances, currencies and rates, whether net worth counts them), transfers, stashes (names, targets, target dates, notes) and their entries (amounts, dates, notes), transactions (with the amount in the account\'s currency), recurring items, debts, the change history', '`meowny.db`', 'Encrypted'],
           ['Documents', '`documents/`, one sealed file each with a random name', 'Encrypted, per-file key'],
           ['Lock settings, the wrapped keys', '`vault.json`', 'No financial data'],
           ['Language, theme, text size, sidebar, this device\'s name, the name on bill codes, the time and how often of debt reminders', 'The window\'s local storage', 'No financial data, not encrypted'],
-          ['The filters you chose (kind of period, category, rows per page, document type, removed friends), the account filter, whether archived accounts are shown; the last account used (a number); the last category used for a bill code; the day a notice or reminder was shown; the reminders you cleared (friend numbers and days)', 'The window\'s local storage', 'Numbers, days and choices only: no amounts, descriptions or names. The filters are forgotten when all data is erased or restored'],
+          ['The filters you chose (kind of period, category, rows per page, document type, removed friends), the account filter, whether archived accounts or stashes are shown; the last account used (a number); the last category used for a bill code; the day a notice or reminder was shown; the reminders you cleared (friend numbers and days)', 'The window\'s local storage', 'Numbers, days and choices only: no amounts, descriptions or names. The filters are forgotten when all data is erased or restored'],
           ['A document open in another program', '`open/`, only while open', '**Not encrypted**, removed on lock and close'],
           ['Command line tokens', '`meowny.db` (only a hash); the token file of `meowny login`', 'Read-only by default, expire, revocable'],
         ],
@@ -702,7 +807,7 @@ const SECTIONS = [
       },
       { t: 'p', text: 'There are no other network calls. CI lists every place in the code that could open a connection and fails on a new one. The command line API listens on `127.0.0.1` only, is off until you turn it on, and needs a token; exports, backups and copies of documents through it need your yes in the app each time.' },
       { t: 'p', text: '**Delete all my data** removes the database, `documents/`, `open/`, `vault.json` and the keychain entry. It leaves backups and exports you saved elsewhere, and the token file of `meowny login` (which stops working).' },
-      { t: 'p', text: `How it is built: [sync](${doc('sync-design.md')}), [documents](${doc('documents-design.md')}), [debts](${doc('debts-design.md')}), [accounts](${doc('accounts-design.md')}).` },
+      { t: 'p', text: `How it is built: [sync](${doc('sync-design.md')}), [documents](${doc('documents-design.md')}), [debts](${doc('debts-design.md')}), [accounts](${doc('accounts-design.md')}), [stashes](${doc('stash-design.md')}).` },
     ],
   },
   {
@@ -715,15 +820,15 @@ const SECTIONS = [
         head: ['Keys', 'Does'],
         rows: [
           ['`g` then `d` `t` `a` `c` `r`', 'dashboard, transactions, accounts, categories, recurring'],
-          ['`g` then `f` `o` `e` `s`', 'debts, documents, export, settings'],
+          ['`g` then `f` `o` `e` `s` `h`', 'debts, documents, export, settings, stashes'],
           ['`n`', 'new'],
           ['`/`', 'search'],
           ['`[` `]`', 'previous, next month (or year)'],
           ['`t`', 'this month (or year)'],
           ['arrow keys', 'the next button, row or field that way; in a text field, left and right move the cursor first'],
           ['`j` `k`', 'next, previous row'],
-          ['`Alt` + up or down arrow', 'move a category or an account one place'],
-          ['`Alt+1` `Alt+2` `Alt+3`', 'in the add dialog: the expense, income, transfer tab (`Option` on a Mac; the recurring dialog has the first two)'],
+          ['`Alt` + up or down arrow', 'move a category, an account or a stash one place'],
+          ['`Alt+1` `Alt+2` `Alt+3`', 'in the add dialog: the expense, income, transfer tab (`Option` on a Mac; the recurring dialog has the first two; the stash dialog has add and take out)'],
           ['`Esc`', 'close a row, a list or a dialog'],
           ['`Ctrl/Cmd+L`', 'lock'],
           ['`Ctrl/Cmd+B`', 'sidebar'],

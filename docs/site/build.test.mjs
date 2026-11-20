@@ -174,7 +174,7 @@ test('the places that the app, the README and the design notes link to are still
   const { pages } = build()
   const ids = [...pages['guide.html'].matchAll(/\sid="([^"]+)"/g)].map((m) => m[1])
   // guide.html#... in README.md, SECURITY.md and docs/*.md; the sections and parts the new guide added come with them
-  for (const id of ['install', 'accounts', 'transfers', 'documents', 'debts', 'phone', 'privacy', 'add-entry', 'account-details', 'net-worth', 'income']) assert.ok(ids.includes(id), id)
+  for (const id of ['install', 'accounts', 'stashes', 'transfers', 'documents', 'debts', 'phone', 'privacy', 'add-entry', 'account-details', 'net-worth', 'income']) assert.ok(ids.includes(id), id)
 })
 
 test('every page has the same plain header, and a long page its contents twice: beside the text, and folded above it', () => {

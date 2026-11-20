@@ -1,7 +1,7 @@
 # Stashes design
 
 How stashes work: money set aside inside an account for something you save for. Section numbers are cited in the code; keep them.
-User side: the [guide](https://v1nc3t.github.io/meowNY/guide.html#stashes). Status: being built (migration `0021`, sync protocol 12).
+User side: the [guide](https://v1nc3t.github.io/meowNY/guide.html#stashes). Status: built (migration `0021`, sync protocol 12).
 
 ## 1. What it has to do
 
@@ -633,6 +633,21 @@ it. The i18n test (every key in seven files, same placeholders) must pass.
 9. **A stash's account changes only within one currency.** Amounts are in the account's currency; converting them on a move would need
    a rate history the app does not keep.
 10. **No new error code.** `InvalidInput`, `NotFound`, `NameExists` cover every refusal; the screens explain before they would fail.
+
+### As built
+
+Where the build settled what this file left open, or went a little further than it says:
+
+- A stash that holds 0 always moves to an active account of its currency, even when that account's free is below 0 (`held <= free(B)`
+  is not asked of a stash that holds nothing; it would make the move impossible for no reason).
+- **overdue** is never true for a reached stash: one that reached its target is done, not late, whatever its date (it shows
+  "reached").
+- The seed's credit card account has free below 0 by design: it is in the red and no stash is in it, so its free is its balance. The
+  seed test's `free >= 0` (section 11) holds for every other account.
+- A currency change writes history rows for the converted stashes and entries, as the other conversions do.
+- Under a limit, the accounts in the JSON file have no `setAside` either, as the file has no `stashes` key (section 10).
+- In a sync, an entry's marker is dropped when its stash's marker wins: the stash's marker covers its entries, and the other device
+  removes them with the stash and leaves no marker for them (section 7.4).
 
 ## 17. Open points
 
