@@ -25,6 +25,7 @@ const MIGRATIONS: &[&str] = &[
     include_str!("../migrations/0018_accounts.sql"),
     include_str!("../migrations/0019_account_details.sql"),
     include_str!("../migrations/0020_account_currency.sql"),
+    include_str!("../migrations/0021_stashes.sql"),
 ];
 
 #[derive(Debug)]

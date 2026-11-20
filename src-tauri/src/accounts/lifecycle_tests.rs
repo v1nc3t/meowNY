@@ -79,6 +79,8 @@ fn a_new_account_goes_to_the_end_of_the_list_with_what_was_given_and_the_default
             foreign: false,
             rate: None,
             balance_in_main: "0.00".into(),
+            set_aside: "0.00".into(),
+            free: "0.00".into(),
         }
     );
     let card = create(

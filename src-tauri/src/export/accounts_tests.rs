@@ -96,7 +96,7 @@ fn the_json_has_every_account_with_what_it_holds_and_every_transfer_and_the_acco
         json!({ "id": c.cash.to_string(), "name": "Cash", "kind": "CASH", "number": null, "openingBalance": "250.00", "openingDate": "2025-12-01", "archived": false,
                 "isMain": false, "balance": "150.00", "changeThisMonth": "0.00", "lastActivity": "2026-02-15",
                 "bic": null, "notes": null, "group": null, "includeInNetWorth": true, "virtualBalance": "0.00",
-                "currency": "EUR", "foreign": false, "rate": null, "balanceInMain": "150.00" })
+                "currency": "EUR", "foreign": false, "rate": null, "balanceInMain": "150.00", "setAside": "0.00", "free": "150.00" })
     );
     assert_eq!(file["accounts"][3]["openingBalance"], "-240.00");
     assert_eq!((file["accounts"][1]["number"].as_str(), file["accounts"][4]["archived"].as_bool(), file["accounts"][0]["isMain"].as_bool()), (Some("IE29 AIBK 9311 5212 3456 78"), Some(true), Some(true)));
@@ -371,7 +371,7 @@ fn the_json_has_the_five_details_of_every_account_and_not_the_amount_worked_out_
         &json!({ "id": c.cash.to_string(), "name": "Cash", "kind": "CASH", "number": null, "openingBalance": "250.00", "openingDate": "2025-12-01", "archived": false,
                  "isMain": false, "balance": "150.00", "changeThisMonth": "0.00", "lastActivity": "2026-02-15",
                  "bic": "COBADEFFXXX", "notes": AWKWARD_NOTES, "group": "Everyday", "includeInNetWorth": false, "virtualBalance": "0.00",
-                 "currency": "EUR", "foreign": false, "rate": null, "balanceInMain": "150.00" }),
+                 "currency": "EUR", "foreign": false, "rate": null, "balanceInMain": "150.00", "setAside": "0.00", "free": "150.00" }),
         "the JSON holds the text as it is: the line break, the comma, the quotes and the `=` are not touched"
     );
     let card = account_named(&file, "Credit card");
@@ -387,7 +387,7 @@ fn the_json_has_the_five_details_of_every_account_and_not_the_amount_worked_out_
     let keys = |a: &Value| -> BTreeSet<String> { a.as_object().unwrap().keys().cloned().collect() };
     let expected: BTreeSet<String> = [
         "id", "name", "kind", "number", "openingBalance", "openingDate", "archived", "isMain", "balance", "changeThisMonth", "lastActivity", "bic", "notes", "group", "includeInNetWorth", "virtualBalance", "currency",
-        "foreign", "rate", "balanceInMain",
+        "foreign", "rate", "balanceInMain", "setAside", "free",
     ]
     .map(String::from)
     .into();
@@ -629,7 +629,7 @@ fn the_json_says_the_currency_rate_and_worth_of_each_account_and_what_each_row_r
         &json!({ "id": lei.to_string(), "name": "Lei account", "kind": "CHECKING", "number": null, "openingBalance": "100.00", "openingDate": "2025-12-01", "archived": false,
                  "isMain": false, "balance": "30.50", "changeThisMonth": "0.00", "lastActivity": "2026-03-04",
                  "bic": null, "notes": null, "group": null, "includeInNetWorth": true, "virtualBalance": "0.00",
-                 "currency": "RON", "foreign": true, "rate": "5.00", "balanceInMain": "6.10" }),
+                 "currency": "RON", "foreign": true, "rate": "5.00", "balanceInMain": "6.10", "setAside": "0.00", "free": "30.50" }),
         "every amount of it is in lei, and what it is worth in the app's currency is beside them"
     );
     // an account in the app's currency says so: its code, no rate, and its worth is its balance

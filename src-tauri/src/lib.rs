@@ -22,6 +22,7 @@ pub mod schedule;
 pub mod seed;
 pub mod sync;
 pub mod stats;
+pub mod stashes;
 pub mod tokens;
 pub mod transactions;
 pub mod vault;
@@ -368,6 +369,20 @@ pub fn run() {
             commands::update_transfer,
             commands::delete_transfer,
             commands::list_transfers,
+            commands::list_stashes,
+            commands::get_stash,
+            commands::create_stash,
+            commands::update_stash,
+            commands::archive_stash,
+            commands::unarchive_stash,
+            commands::delete_stash,
+            commands::reorder_stashes,
+            commands::stash_history,
+            commands::stashes_summary,
+            commands::add_to_stash,
+            commands::take_from_stash,
+            commands::update_stash_entry,
+            commands::delete_stash_entry,
         ])
         .build(tauri::generate_context!())
         .expect("error while building meowNY")

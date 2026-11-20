@@ -113,7 +113,7 @@ fn accounts_are_made_changed_ordered_archived_restored_and_deleted_through_the_c
             "id": "1", "name": "Main account", "kind": "CHECKING", "number": null, "openingBalance": "0.00", "openingDate": "1970-01-01", "archived": false,
             "isMain": true, "balance": "0.00", "changeThisMonth": "0.00", "lastActivity": null, "entries": 0,
             "bic": null, "notes": null, "group": null, "includeInNetWorth": true, "virtualBalance": "0.00", "available": "0.00",
-            "currency": "EUR", "foreign": false, "rate": null, "balanceInMain": "0.00"
+            "currency": "EUR", "foreign": false, "rate": null, "balanceInMain": "0.00", "setAside": "0.00", "free": "0.00"
         }])
     );
     let card = h.ok("create_account", json!({ "input": { "name": "Card", "kind": "CREDIT_CARD", "number": "1234", "openingBalance": "-120.00", "openingDate": "2026-01-01" } }));
@@ -123,7 +123,7 @@ fn accounts_are_made_changed_ordered_archived_restored_and_deleted_through_the_c
             "id": "2", "name": "Card", "kind": "CREDIT_CARD", "number": "1234", "openingBalance": "-120.00", "openingDate": "2026-01-01", "archived": false,
             "isMain": false, "balance": "-120.00", "changeThisMonth": "0.00", "lastActivity": null, "entries": 0,
             "bic": null, "notes": null, "group": null, "includeInNetWorth": true, "virtualBalance": "0.00", "available": "-120.00",
-            "currency": "EUR", "foreign": false, "rate": null, "balanceInMain": "-120.00"
+            "currency": "EUR", "foreign": false, "rate": null, "balanceInMain": "-120.00", "setAside": "0.00", "free": "-120.00"
         })
     );
     // only the name and the kind are needed: the balance is 0.00 and the date is today
@@ -283,7 +283,7 @@ fn the_details_of_an_account_go_through_the_commands_with_the_names_of_section_2
             "id": "2", "name": "Card", "kind": "CREDIT_CARD", "number": null, "openingBalance": "-240.00", "openingDate": "2026-01-01", "archived": false,
             "isMain": false, "balance": "-240.00", "changeThisMonth": "0.00", "lastActivity": null, "entries": 0,
             "bic": "DEUTDEFF", "notes": "limit 1000\nrenews in May", "group": "Bank A", "includeInNetWorth": false, "virtualBalance": "1000.00", "available": "760.00",
-            "currency": "EUR", "foreign": false, "rate": null, "balanceInMain": "-240.00"
+            "currency": "EUR", "foreign": false, "rate": null, "balanceInMain": "-240.00", "setAside": "0.00", "free": "-240.00"
         })
     );
     // a patch: `null` clears the three texts, the flag and the money change, and what is left out stays
@@ -417,7 +417,7 @@ fn a_currency_of_its_own_goes_through_the_commands_with_the_names_of_section_21_
             "id": "2", "name": "Lei", "kind": "CASH", "number": null, "openingBalance": "100.00", "openingDate": "2026-01-01", "archived": false,
             "isMain": false, "balance": "100.00", "changeThisMonth": "0.00", "lastActivity": null, "entries": 0,
             "bic": null, "notes": null, "group": null, "includeInNetWorth": true, "virtualBalance": "0.00", "available": "100.00",
-            "currency": "RON", "foreign": true, "rate": "5.00", "balanceInMain": "20.00"
+            "currency": "RON", "foreign": true, "rate": "5.00", "balanceInMain": "20.00", "setAside": "0.00", "free": "100.00"
         })
     );
     let lei_id = lei["id"].as_str().unwrap().to_string();

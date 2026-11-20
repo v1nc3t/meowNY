@@ -140,6 +140,20 @@ const COMMANDS: &[&str] = &[
     "update_transfer",
     "delete_transfer",
     "list_transfers",
+    "list_stashes",
+    "get_stash",
+    "create_stash",
+    "update_stash",
+    "archive_stash",
+    "unarchive_stash",
+    "delete_stash",
+    "reorder_stashes",
+    "stash_history",
+    "stashes_summary",
+    "add_to_stash",
+    "take_from_stash",
+    "update_stash_entry",
+    "delete_stash_entry",
 ];
 
 fn main() {

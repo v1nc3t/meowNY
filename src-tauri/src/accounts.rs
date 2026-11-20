@@ -7,6 +7,9 @@
 //! * An account with rows is archived, not deleted: its history and its balance stay.
 //! * An account may be in a currency of its own (section 21): its numbers are in that currency, and only `balance_in_main` and net worth are in
 //!   the app's. Budgets, statistics and the like never see a foreign amount.
+//! * Stashes (`stashes`, `docs/stash-design.md`) set money aside inside an account. They move no balance: `Account.set_aside` is what they
+//!   hold and `Account.free` is the balance minus it, both worked out in the same query as the balance (stash design, section 4.5).
+//!   An account with a stash is not deleted: the stashes count in `entries`.
 
 use rusqlite::{params, Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
@@ -15,6 +18,7 @@ use crate::budgets;
 use crate::categories::{clean_name, parse_id, present_or_null, serialize_id};
 use crate::currency;
 use crate::money::{format_amount, parse_signed_amount, MAX_MINOR};
+use crate::stashes;
 use crate::transactions::{clean_date, clean_lines};
 use crate::vault::AppError;
 
@@ -94,7 +98,7 @@ pub struct Account {
     pub change_this_month: String,
     /// The latest day up to today on which something other than the opening balance moved it.
     pub last_activity: Option<String>,
-    /// How many transactions, recurring items, ledger entries and transfers point at it. An account with none can be deleted.
+    /// How many transactions, recurring items, ledger entries, transfers and stashes point at it. An account with none can be deleted.
     pub entries: u32,
     /// The bank's identifier code.
     pub bic: Option<String>,
@@ -117,6 +121,10 @@ pub struct Account {
     pub rate: Option<String>,
     /// `balance` in the app's currency: at `rate` for a foreign account, the same as `balance` for the others.
     pub balance_in_main: String,
+    /// What the stashes in the account hold, the archived ones too, in the account's currency. Never below 0 (stash design, section 3).
+    pub set_aside: String,
+    /// What no stash has set aside: `balance` minus `set_aside`, signed. It is below 0 when the stashes hold more than the account has.
+    pub free: String,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -198,7 +206,7 @@ fn clean_short(text: Option<&str>, max: usize) -> Result<Option<String>, AppErro
 }
 
 /// Notes may hold line breaks and no other control character, as a description does. Empty means "no notes".
-fn clean_notes(text: Option<&str>) -> Result<Option<String>, AppError> {
+pub(crate) fn clean_notes(text: Option<&str>) -> Result<Option<String>, AppError> {
     let Some(text) = text.map(str::trim).filter(|t| !t.is_empty()) else { return Ok(None) };
     let text = clean_lines(text).ok_or(AppError::InvalidInput)?;
     if text.chars().count() > NOTES_MAX_CHARS {
@@ -289,7 +297,7 @@ pub fn to_main(minor: i64, rate: &str) -> Result<i64, AppError> {
 
 /// What `minor` is worth in the app's currency for an account with this `rate` (none: an account in the main currency). An amount that does
 /// not fit shows the bound it passed, so one odd rate never makes the whole list of accounts unreadable.
-fn in_main(minor: i64, rate: Option<&str>) -> i64 {
+pub(crate) fn in_main(minor: i64, rate: Option<&str>) -> i64 {
     match rate {
         None => minor,
         Some(rate) => to_main(minor, rate).unwrap_or(MAX_MINOR * minor.signum()),
@@ -348,16 +356,23 @@ const SELECT: &str = "SELECT a.id, a.name, a.kind, a.number, a.opening_balance_m
        COALESCE((SELECT SUM(m.delta_minor) FROM account_movements m WHERE m.account_id = a.id AND m.day <= ?1 AND m.day >= substr(?1, 1, 8) || '01'), 0),
        (SELECT MAX(m.day) FROM account_movements m WHERE m.account_id = a.id AND m.day <= ?1 AND m.source <> 'OPENING'),
        (SELECT count(*) FROM transactions WHERE account_id = a.id) + (SELECT count(*) FROM recurring_transactions WHERE account_id = a.id)
-       + (SELECT count(*) FROM ledger_entries WHERE account_id = a.id) + (SELECT count(*) FROM transfers WHERE from_account_id = a.id OR to_account_id = a.id),
+       + (SELECT count(*) FROM ledger_entries WHERE account_id = a.id) + (SELECT count(*) FROM transfers WHERE from_account_id = a.id OR to_account_id = a.id)
+       + (SELECT count(*) FROM stashes WHERE account_id = a.id),
        a.bic, a.notes, a.group_name, a.include_net_worth, a.virtual_balance_minor,
-       COALESCE(a.currency, (SELECT currency FROM settings WHERE id = 1)), a.currency IS NOT NULL, a.rate
+       COALESCE(a.currency, (SELECT currency FROM settings WHERE id = 1)), a.currency IS NOT NULL, a.rate,
+       @SET_ASIDE
      FROM accounts a";
+
+fn select() -> String {
+    SELECT.replace("@SET_ASIDE", stashes::SET_ASIDE)
+}
 
 fn from_row(row: &rusqlite::Row) -> rusqlite::Result<Account> {
     let kind: String = row.get(2)?;
     let id: i64 = row.get(0)?;
     let (balance, virtual_balance): (i64, i64) = (row.get(7)?, row.get(15)?);
     let rate: Option<String> = row.get(18)?;
+    let set_aside: i64 = row.get(19)?;
     Ok(Account {
         id,
         name: row.get(1)?,
@@ -381,20 +396,22 @@ fn from_row(row: &rusqlite::Row) -> rusqlite::Result<Account> {
         foreign: row.get::<_, i64>(17)? == 1,
         balance_in_main: format_amount(in_main(balance, rate.as_deref())),
         rate,
+        set_aside: format_amount(set_aside),
+        free: format_amount(balance - set_aside),
     })
 }
 
 /// The accounts in the person's order, the archived ones after the others.
 pub fn list(conn: &Connection, today: &str) -> Result<Vec<Account>, AppError> {
     let today = clean_date(today)?;
-    let mut statement = conn.prepare_cached(&format!("{SELECT} ORDER BY a.archived, a.position, a.id"))?;
+    let mut statement = conn.prepare_cached(&format!("{} ORDER BY a.archived, a.position, a.id", select()))?;
     let rows = statement.query_map([&today], from_row)?;
     Ok(rows.collect::<Result<_, _>>()?)
 }
 
 pub fn get(conn: &Connection, id: i64, today: &str) -> Result<Account, AppError> {
     let today = clean_date(today)?;
-    conn.query_row(&format!("{SELECT} WHERE a.id = ?2"), params![today, id], from_row).optional()?.ok_or(AppError::NotFound)
+    conn.query_row(&format!("{} WHERE a.id = ?2", select()), params![today, id], from_row).optional()?.ok_or(AppError::NotFound)
 }
 
 /// A name is checked on this device only, among the accounts that are not archived, ignoring case (SQLite folds ASCII letters only). There
@@ -549,7 +566,7 @@ pub fn restore(conn: &Connection, id: i64, today: &str) -> Result<Account, AppEr
     Ok(account)
 }
 
-/// Deletes an account that nothing points at, archived or not. The main account and an account with rows are refused; the trigger
+/// Deletes an account that nothing points at, archived or not. The main account and an account with rows or stashes are refused; the trigger
 /// `trg_accounts_keep_main` and the foreign keys are the net under this.
 pub fn delete(conn: &Connection, id: i64) -> Result<(), AppError> {
     let tx = conn.unchecked_transaction()?;
@@ -557,6 +574,7 @@ pub fn delete(conn: &Connection, id: i64) -> Result<(), AppError> {
         .query_row(
             "SELECT (SELECT count(*) FROM transactions WHERE account_id = a.id) + (SELECT count(*) FROM recurring_transactions WHERE account_id = a.id)
                   + (SELECT count(*) FROM ledger_entries WHERE account_id = a.id) + (SELECT count(*) FROM transfers WHERE from_account_id = a.id OR to_account_id = a.id)
+                  + (SELECT count(*) FROM stashes WHERE account_id = a.id)
              FROM accounts a WHERE a.id = ?1",
             [id],
             |r| r.get(0),

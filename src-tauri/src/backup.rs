@@ -79,6 +79,8 @@ const TABLES: &[&str] = &[
     "people",
     "accounts",
     "transfers",
+    "stashes",
+    "stash_entries",
     "recurring_transactions",
     "recurring_split_lines",
     "transactions",
@@ -940,6 +942,19 @@ mod tests {
         crate::accounts::transfers::create(
             &conn,
             &crate::accounts::transfers::NewTransfer { from_account_id: "1".into(), to_account_id: lei.id.to_string(), amount: "10.00".into(), date: "2026-02-04".into(), note: None, to_amount: Some("49.77".into()) },
+        )
+        .unwrap();
+        // a stash in Savings with an add that came with the first transfer: both stash tables have a row
+        let holiday = crate::stashes::create(
+            &conn,
+            &crate::stashes::NewStash { name: "Holiday".into(), account_id: savings.id.to_string(), target: Some("100.00".into()), target_date: Some("2026-12-31".into()), notes: Some("two\nlines".into()) },
+            "2026-02-04",
+        )
+        .unwrap();
+        // written straight into the table: Savings holds less than 10.00 free by now, and the link to the first transfer is the point
+        conn.execute(
+            "INSERT INTO stash_entries (stash_id, amount_minor, entry_date, note, transfer_id) VALUES (?1, 1000, '2026-02-01', 'first', 1)",
+            [holiday.id],
         )
         .unwrap();
         conn

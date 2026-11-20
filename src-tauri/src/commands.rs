@@ -27,6 +27,7 @@ use crate::report::{self, ReportOptions};
 use crate::recurring::{self, Dues, NewRecurring, Recurring, RecurringPatch};
 use crate::schedule::{self, Schedule};
 use crate::tokens::{self, CreatedToken, NewToken, TokenInfo};
+use crate::stashes::{self, entries as stash_entries};
 use crate::stats::{self, BudgetVsActual, CategoryTrend, Commitments, PlannedVsPaid, TopCategory, YearPoint};
 use crate::transactions::{self, Filter, NewTransaction, Page, Transaction, TransactionPatch};
 use crate::sync::engine::SyncError;
@@ -239,6 +240,20 @@ pub const COMMANDS: &[&str] = &[
     "update_transfer",
     "delete_transfer",
     "list_transfers",
+    "list_stashes",
+    "get_stash",
+    "create_stash",
+    "update_stash",
+    "archive_stash",
+    "unarchive_stash",
+    "delete_stash",
+    "reorder_stashes",
+    "stash_history",
+    "stashes_summary",
+    "add_to_stash",
+    "take_from_stash",
+    "update_stash_entry",
+    "delete_stash_entry",
 ];
 
 #[tauri::command]
@@ -1324,6 +1339,113 @@ pub fn update_transfer(vault: Shared, id: String, patch: TransferPatch) -> Resul
 pub fn delete_transfer(vault: Shared, id: String) -> Result<(), AppError> {
     let id = categories::parse_id(&id)?;
     vault.with_conn(|c| transfers::delete(c, id))
+}
+
+// ---- stashes (docs/stash-design.md, section 6) ------------------------------------------------------------------------------
+
+/// The stashes in the person's order, the archived ones last; with `account_id`, only those of that account.
+#[tauri::command]
+pub fn list_stashes(vault: Shared, account_id: Option<String>) -> Result<Vec<stashes::Stash>, AppError> {
+    let account_id = account_id.as_deref().map(categories::parse_id).transpose()?;
+    let today = today_text(&vault)?;
+    vault.with_conn(|c| stashes::list(c, account_id, &today))
+}
+
+/// One stash with its entries, newest first.
+#[tauri::command]
+pub fn get_stash(vault: Shared, id: String) -> Result<stashes::Detail, AppError> {
+    let id = categories::parse_id(&id)?;
+    let today = today_text(&vault)?;
+    vault.with_conn(|c| stashes::get(c, id, &today))
+}
+
+#[tauri::command]
+pub fn create_stash(vault: Shared, input: stashes::NewStash) -> Result<stashes::Stash, AppError> {
+    let today = today_text(&vault)?;
+    vault.with_conn(|c| stashes::create(c, &input, &today))
+}
+
+/// Changes a stash, or moves it to another account of the same currency.
+#[tauri::command]
+pub fn update_stash(vault: Shared, id: String, patch: stashes::StashPatch) -> Result<stashes::Stash, AppError> {
+    let id = categories::parse_id(&id)?;
+    let today = today_text(&vault)?;
+    vault.with_conn(|c| stashes::update(c, id, &patch, &today))
+}
+
+#[tauri::command]
+pub fn archive_stash(vault: Shared, id: String) -> Result<stashes::Stash, AppError> {
+    let id = categories::parse_id(&id)?;
+    let today = today_text(&vault)?;
+    vault.with_conn(|c| stashes::archive(c, id, &today))
+}
+
+#[tauri::command]
+pub fn unarchive_stash(vault: Shared, id: String) -> Result<stashes::Stash, AppError> {
+    let id = categories::parse_id(&id)?;
+    let today = today_text(&vault)?;
+    vault.with_conn(|c| stashes::restore(c, id, &today))
+}
+
+/// The stash and its entries go; the transfers that came with entries stay.
+#[tauri::command]
+pub fn delete_stash(vault: Shared, id: String) -> Result<(), AppError> {
+    let id = categories::parse_id(&id)?;
+    vault.with_conn(|c| stashes::delete(c, id))
+}
+
+/// `ids` are all the stashes that are not archived, in the new order.
+#[tauri::command]
+pub fn reorder_stashes(vault: Shared, ids: Vec<String>) -> Result<(), AppError> {
+    let ids = ids.iter().map(|id| categories::parse_id(id)).collect::<Result<Vec<_>, _>>()?;
+    vault.with_conn(|c| stashes::reorder(c, &ids))
+}
+
+/// What a stash held at the end of each month of a year ("YYYY"), up to today.
+#[tauri::command]
+pub fn stash_history(vault: Shared, id: String, year: String) -> Result<Vec<stashes::HistoryPoint>, AppError> {
+    let id = categories::parse_id(&id)?;
+    let today = today_text(&vault)?;
+    vault.with_conn(|c| stashes::history(c, id, &year, &today))
+}
+
+/// How many stashes there are, what they hold and what they aim at, in the app's currency.
+#[tauri::command]
+pub fn stashes_summary(vault: Shared) -> Result<stashes::Summary, AppError> {
+    let today = today_text(&vault)?;
+    vault.with_conn(|c| stashes::summary(c, &today))
+}
+
+/// Adds money to a stash; with `from_account_id`, a transfer into its account is made with it.
+#[tauri::command]
+pub fn add_to_stash(vault: Shared, id: String, input: stash_entries::NewEntry) -> Result<stashes::Detail, AppError> {
+    let id = categories::parse_id(&id)?;
+    let today = today_text(&vault)?;
+    vault.with_conn(|c| stash_entries::add(c, id, &input, &today))
+}
+
+/// Takes money out of a stash; with `to_account_id`, a transfer out of its account is made with it.
+#[tauri::command]
+pub fn take_from_stash(vault: Shared, id: String, input: stash_entries::NewTake) -> Result<stashes::Detail, AppError> {
+    let id = categories::parse_id(&id)?;
+    let today = today_text(&vault)?;
+    vault.with_conn(|c| stash_entries::take(c, id, &input, &today))
+}
+
+/// `id` is the entry's. The answer is the whole stash.
+#[tauri::command]
+pub fn update_stash_entry(vault: Shared, id: String, patch: stash_entries::EntryPatch) -> Result<stashes::Detail, AppError> {
+    let id = categories::parse_id(&id)?;
+    let today = today_text(&vault)?;
+    vault.with_conn(|c| stash_entries::update(c, id, &patch, &today))
+}
+
+/// `id` is the entry's. With `delete_transfer` the transfer that came with it is deleted too; left out means it stays.
+#[tauri::command]
+pub fn delete_stash_entry(vault: Shared, id: String, delete_transfer: Option<bool>) -> Result<stashes::Detail, AppError> {
+    let id = categories::parse_id(&id)?;
+    let today = today_text(&vault)?;
+    vault.with_conn(|c| stash_entries::delete(c, id, delete_transfer.unwrap_or(false), &today))
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Deserialize)]
