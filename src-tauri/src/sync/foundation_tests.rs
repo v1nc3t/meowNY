@@ -112,7 +112,7 @@ fn a_new_row_gets_a_sync_id_and_a_stamp_in_every_shared_table() {
     assert_eq!(text(&conn, "SELECT sync_id FROM accounts WHERE id = ?1", 1), "00000000000000000000000000000001");
     assert_eq!(text(&conn, "SELECT stamp FROM accounts WHERE id = ?1", 1), "0000000000000-0000-00000000");
     // and every table that carries a stamp is one the sync pulls back and the clock catches up with
-    for table in ["accounts", "transfers"] {
+    for table in ["accounts", "transfers", "stashes", "stash_entries"] {
         assert!(stamp::STAMPED_TABLES.contains(&table), "{table}");
     }
 }

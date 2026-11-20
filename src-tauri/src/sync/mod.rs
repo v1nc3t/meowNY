@@ -34,3 +34,5 @@ mod files_tests;
 mod flow_tests;
 #[cfg(test)]
 mod foundation_tests;
+#[cfg(test)]
+mod stashes_tests;

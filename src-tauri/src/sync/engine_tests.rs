@@ -502,10 +502,10 @@ fn hellos_are_checked_for_version_clock_and_identity() {
     assert!(matches!(engine::check_hello(&mine, &changed(&|h| h.schema += 1), now()), Err(SyncError::SchemaMismatch { newer_here: false })));
     assert!(matches!(engine::check_hello(&mine, &changed(&|h| h.schema -= 1), now()), Err(SyncError::SchemaMismatch { newer_here: true })));
     assert!(matches!(engine::check_hello(&mine, &changed(&|h| h.protocol += 1), now()), Err(SyncError::ProtocolMismatch)));
-    // a device of the version before accounts and transfers (protocol 8), one before the details of an account (protocol 9) and one before a
-    // currency per account (protocol 10) are told to update, whichever of the two they are
-    assert_eq!(wire::PROTOCOL, 11);
-    for old_protocol in [8, 9, 10] {
+    // a device of the version before accounts and transfers (protocol 8), one before the details of an account (protocol 9), one before a
+    // currency per account (protocol 10) and one before stashes (protocol 11) are told to update, whichever of the two they are
+    assert_eq!(wire::PROTOCOL, 12);
+    for old_protocol in [8, 9, 10, 11] {
         assert!(matches!(engine::check_hello(&mine, &changed(&|h| h.protocol = old_protocol), now()), Err(SyncError::ProtocolMismatch)), "protocol {old_protocol}");
         let mut old = mine.clone();
         old.protocol = old_protocol;
@@ -669,12 +669,16 @@ fn following_the_computer_pulls_back_every_stamp_that_is_ahead_and_nothing_else(
         )
         .unwrap();
         crate::accounts::update(&phone, crate::accounts::MAIN_ID, &crate::accounts::AccountPatch { name: Some("Main, ahead".into()), ..Default::default() }, TODAY).unwrap();
+        // a stash in that account with money in it, which the transfer above made free
+        let stash = crate::stashes::create(&phone, &crate::stashes::NewStash { name: "Stash, ahead".into(), account_id: cash.to_string(), target: None, target_date: None, notes: None }, TODAY).unwrap().id;
+        crate::stashes::entries::add(&phone, stash, &crate::stashes::entries::NewEntry { amount: "0.50".into(), date: Some("2026-03-02".into()), note: None, from_account_id: None }, TODAY).unwrap();
     });
     // the record of currency changes carries a stamp too
     phone.execute("UPDATE currency_changes SET stamp = ?1", [Stamp::new(now() + 3 * DAY, 9, "abcdef01").format()]).unwrap();
     let ahead = engine::digest(&phone).unwrap();
     let h = now();
-    assert!(ahead.0.values().flatten().filter(|(_, (s, _))| Stamp::parse(s).unwrap().ms > h).count() >= 8, "the edits above are ahead");
+    assert!(ahead.0.values().flatten().filter(|(_, (s, _))| Stamp::parse(s).unwrap().ms > h).count() >= 10, "the edits above are ahead");
+    assert!(ahead.0[&Table::Stashes].values().chain(ahead.0[&Table::StashEntries].values()).all(|(s, _)| Stamp::parse(s).unwrap().ms > h), "the stash and its entry are among them");
 
     let hello = engine::hello(&desktop, "desktop", "0.1.0", h).unwrap();
     engine::follow_desktop_clock(&mut phone, &hello, h + 3 * DAY).unwrap();
@@ -960,22 +964,32 @@ const NAMES: &[&str] = &["Food", "Rent", "Gym", "Fun", "Pets", "Cars", "Books"];
 const MONTHS: &[&str] = &["2026-03", "2026-04", "2026-05"];
 const UUIDS: &[&str] = &["11111111-1111-4111-8111-111111111111", "22222222-2222-4222-8222-222222222222"];
 
-fn ids(conn: &Connection, sql: &str) -> Vec<i64> {
+pub(super) fn ids(conn: &Connection, sql: &str) -> Vec<i64> {
     conn.prepare(sql).unwrap().query_map([], |r| r.get(0)).unwrap().map(Result::unwrap).collect()
 }
 
 /// One thing a person might do on a screen, chosen at random. Refusals (a name taken, a bill with no amount) are part of life.
 fn edit(conn: &mut Connection, rng: &mut Rng) {
+    edit_with(conn, rng, true);
+}
+
+/// The same without stashes: a change of the currency does not convert them yet, so the test of the change leaves them out.
+fn edit_without_stashes(conn: &mut Connection, rng: &mut Rng) {
+    edit_with(conn, rng, false);
+}
+
+fn edit_with(conn: &mut Connection, rng: &mut Rng, with_stashes: bool) {
     let kind = if rng.below(4) == 0 { CategoryType::Income } else { CategoryType::Expense };
     let categories_now = ids(conn, "SELECT id FROM categories WHERE deleted_at IS NULL AND type = 'EXPENSE'");
     let any_category = ids(conn, "SELECT id FROM categories WHERE deleted_at IS NULL");
-    match rng.below(37) {
+    match rng.below(if with_stashes { 43 } else { 37 }) {
         0 => {
             let _ = categories::create(conn, rng.pick(NAMES), kind);
         }
         14..=20 => edit_documents(conn, rng),
         21..=30 => edit_debts(conn, rng),
         31..=36 => edit_accounts(conn, rng),
+        37..=42 => edit_stashes(conn, rng),
         1 if !any_category.is_empty() => {
             if rng.below(4) == 0 {
                 let mut order = categories_now.clone();
@@ -1278,7 +1292,7 @@ const ACCOUNT_NAMES: &[&str] = &["Savings", "Cash", "Card", "Wallet"];
 /// Some accounts are in a currency of their own at a rate typed by hand (the rate changes, and the currency of an empty account does):
 /// what is paid in one carries the amount it really paid, and a transfer between two currencies carries what arrives, all within the
 /// rules of the screens (a recurring item and an entry of the ledger stay out of such an account).
-fn edit_accounts(conn: &mut Connection, rng: &mut Rng) {
+pub(super) fn edit_accounts(conn: &mut Connection, rng: &mut Rng) {
     use crate::accounts::transfers::{self, NewTransfer, TransferPatch};
     use crate::accounts::{self, AccountPatch, Kind, NewAccount};
     let all = ids(conn, "SELECT id FROM accounts");
@@ -1288,7 +1302,7 @@ fn edit_accounts(conn: &mut Connection, rng: &mut Rng) {
         conn,
         "SELECT id FROM accounts a WHERE id <> 1 AND NOT EXISTS (SELECT 1 FROM transactions WHERE account_id = a.id)
          AND NOT EXISTS (SELECT 1 FROM recurring_transactions WHERE account_id = a.id) AND NOT EXISTS (SELECT 1 FROM ledger_entries WHERE account_id = a.id)
-         AND NOT EXISTS (SELECT 1 FROM transfers WHERE from_account_id = a.id OR to_account_id = a.id)",
+         AND NOT EXISTS (SELECT 1 FROM transfers WHERE from_account_id = a.id OR to_account_id = a.id) AND NOT EXISTS (SELECT 1 FROM stashes WHERE account_id = a.id)",
     );
     let transfers_now = ids(conn, "SELECT id FROM transfers");
     let expenses = ids(conn, "SELECT id FROM categories WHERE deleted_at IS NULL AND type = 'EXPENSE'");
@@ -1490,13 +1504,117 @@ fn edit_accounts(conn: &mut Connection, rng: &mut Rng) {
     }
 }
 
+pub(super) const STASH_NAMES: &[&str] = &["Holiday", "Laptop", "Rainy day", "Gift"];
+
+/// Something a person might do with stashes and their entries, through the core's own functions and so within its rules (a refusal is part of
+/// life). Few names, so the two devices often make a stash of one name (which stay two stashes); money is added and taken out of stashes, with
+/// a transfer from or to another account half of the time, entries are edited and deleted (with their transfer now and then), stashes are
+/// edited, moved, archived, restored, reordered and deleted. An account with a stash is never deleted (the core refuses), but its stashes are
+/// what a deletion of the account on the other device finds. Each device checks its own writes, so two of them together may go beyond what
+/// either could (a stash above its target, below 0, an account with less than nothing free), and the sync must not mind.
+pub(super) fn edit_stashes(conn: &mut Connection, rng: &mut Rng) {
+    use crate::stashes::entries::{self, EntryPatch, NewEntry, NewTake};
+    use crate::stashes::{self, NewStash, StashPatch};
+    let all = ids(conn, "SELECT id FROM stashes");
+    let active = ids(conn, "SELECT id FROM stashes WHERE archived = 0 ORDER BY position, id");
+    let archived = ids(conn, "SELECT id FROM stashes WHERE archived = 1");
+    let entries_now = ids(conn, "SELECT id FROM stash_entries");
+    let accounts_now = ids(conn, "SELECT id FROM accounts WHERE archived = 0 ORDER BY position, id");
+    let account = |rng: &mut Rng| (!accounts_now.is_empty()).then(|| rng.pick(&accounts_now).to_string());
+    // the other side of the transfer that comes with an add or a take, half of the time
+    let other = |rng: &mut Rng| if rng.below(2) == 0 { account(rng) } else { None };
+    let amount = |rng: &mut Rng| format!("{}.{:02}", 1 + rng.below(40), rng.below(100));
+    // never after the day the tests call today
+    let date = |rng: &mut Rng| format!("2026-03-{:02}", 1 + rng.below(15));
+    let note = |rng: &mut Rng| (rng.below(2) == 0).then(|| format!("note {}", rng.below(4)));
+    let target = |rng: &mut Rng| (rng.below(2) == 0).then(|| format!("{}.00", 60 + rng.below(600)));
+    let target_date = |rng: &mut Rng| (rng.below(2) == 0).then(|| rng.pick(&["2026-02-01", "2026-12-31", "2027-06-30"]).to_string());
+    let notes = |rng: &mut Rng| (rng.below(2) == 0).then(|| format!("line {}\nline {}", rng.below(3), rng.below(3)));
+    match rng.below(26) {
+        0..=2 => {
+            if let Some(account_id) = account(rng) {
+                let _ = stashes::create(conn, &NewStash { name: rng.pick(STASH_NAMES).to_string(), account_id, target: target(rng), target_date: target_date(rng), notes: notes(rng) }, TODAY);
+            }
+        }
+        3 if !all.is_empty() => {
+            let patch = StashPatch { name: Some(rng.pick(STASH_NAMES).to_string()), ..Default::default() };
+            let _ = stashes::update(conn, *rng.pick(&all), &patch, TODAY);
+        }
+        4 if !all.is_empty() => {
+            // a target, a date and notes set, changed and cleared one at a time or all at once
+            let mut patch = StashPatch::default();
+            match rng.below(4) {
+                0 => patch.target = Some(target(rng)),
+                1 => patch.target_date = Some(target_date(rng)),
+                2 => patch.notes = Some(notes(rng)),
+                _ => {
+                    patch.target = Some(target(rng));
+                    patch.target_date = Some(target_date(rng));
+                    patch.notes = Some(notes(rng));
+                }
+            }
+            let _ = stashes::update(conn, *rng.pick(&all), &patch, TODAY);
+        }
+        5 if !all.is_empty() => {
+            let patch = StashPatch { account_id: account(rng), ..Default::default() };
+            let _ = stashes::update(conn, *rng.pick(&all), &patch, TODAY);
+        }
+        6 if !active.is_empty() => {
+            let _ = stashes::archive(conn, *rng.pick(&active), TODAY);
+        }
+        7 if !archived.is_empty() => {
+            let _ = stashes::restore(conn, *rng.pick(&archived), TODAY);
+        }
+        8 if active.len() > 1 => {
+            let mut order = active.clone();
+            if rng.below(2) == 0 {
+                order.reverse();
+            } else {
+                order.rotate_left(1);
+            }
+            stashes::reorder(conn, &order).unwrap();
+        }
+        9 if !all.is_empty() => {
+            stashes::delete(conn, *rng.pick(&all)).unwrap();
+        }
+        10..=14 if !all.is_empty() => {
+            let _ = entries::add(conn, *rng.pick(&all), &NewEntry { amount: amount(rng), date: Some(date(rng)), note: note(rng), from_account_id: other(rng) }, TODAY);
+        }
+        15..=17 if !all.is_empty() => {
+            let _ = entries::take(conn, *rng.pick(&all), &NewTake { amount: amount(rng), date: Some(date(rng)), note: note(rng), to_account_id: other(rng) }, TODAY);
+        }
+        18..=21 if !entries_now.is_empty() => {
+            let patch = match rng.below(3) {
+                0 => EntryPatch { amount: Some(amount(rng)), ..Default::default() },
+                1 => EntryPatch { date: Some(date(rng)), ..Default::default() },
+                _ => EntryPatch { note: Some(note(rng)), ..Default::default() },
+            };
+            let _ = entries::update(conn, *rng.pick(&entries_now), &patch, TODAY);
+        }
+        22 | 23 if !entries_now.is_empty() => {
+            let _ = entries::delete(conn, *rng.pick(&entries_now), rng.below(3) == 0, TODAY);
+        }
+        24 => {
+            // money that a stash can be set aside from: an income in an account, so that the stashes have something to hold
+            let incomes = ids(conn, "SELECT id FROM categories WHERE deleted_at IS NULL AND type = 'INCOME'");
+            if let (Some(category_id), Some(account_id)) = (incomes.first(), account(rng)) {
+                let _ = transactions::create(
+                    conn,
+                    &NewTransaction { name: "pay".into(), amount: format!("{}.00", 50 + rng.below(300)), payment_date: "2026-03-01".into(), category_id: category_id.to_string(), description: None, client_uuid: None, account_id: Some(account_id), native_amount: None },
+                );
+            }
+        }
+        _ => {}
+    }
+}
+
 /// How many random cases to run. `MEOWNY_SYNC_SEEDS=2000 cargo test sync::engine_tests::random` hunts for rare ones.
-fn seeds(default: u64) -> u64 {
+pub(super) fn seeds(default: u64) -> u64 {
     std::env::var("MEOWNY_SYNC_SEEDS").ok().and_then(|v| v.parse().ok()).unwrap_or(default)
 }
 
 /// The first seed to run. `MEOWNY_SYNC_FROM=1774 MEOWNY_SYNC_SEEDS=1` runs the one seed that a hunt reported.
-fn first_seed(default: u64) -> u64 {
+pub(super) fn first_seed(default: u64) -> u64 {
     std::env::var("MEOWNY_SYNC_FROM").ok().and_then(|v| v.parse().ok()).unwrap_or(default)
 }
 
@@ -1600,16 +1718,16 @@ fn random_edits_with_a_currency_change_in_between_still_converge() {
         let mut desktop = device("EUR");
         let mut phone = device("EUR");
         for _ in 0..20 {
-            edit(&mut desktop, &mut rng);
+            edit_without_stashes(&mut desktop, &mut rng);
         }
         sync_ok(&mut desktop, &mut phone);
         pause();
         for _ in 0..10 {
-            edit(&mut phone, &mut rng);
+            edit_without_stashes(&mut phone, &mut rng);
         }
         currency::change(&mut desktop, "USD", Some("1.07"), TODAY).unwrap();
         for _ in 0..10 {
-            edit(&mut desktop, &mut rng);
+            edit_without_stashes(&mut desktop, &mut rng);
         }
         let outcome = sync(&mut desktop, &mut phone, TODAY, now(), None);
         match outcome {
@@ -1629,7 +1747,7 @@ fn random_edits_with_a_currency_change_in_between_still_converge() {
 ///
 /// Phase 10 (debts): `people` and `ledger_entries` are shared like the rest; the two tables of parts belong to their transaction and to
 /// their recurring item and travel inside their rows.
-const SHARED_TABLES: [&str; 15] = [
+const SHARED_TABLES: [&str; 17] = [
     "settings",
     "categories",
     "budgets",
@@ -1646,6 +1764,9 @@ const SHARED_TABLES: [&str; 15] = [
     // shared from protocol 9 on (`docs/accounts-design.md`, section 7)
     "accounts",
     "transfers",
+    // shared from protocol 12 on (`docs/stash-design.md`, section 7)
+    "stashes",
+    "stash_entries",
 ];
 const LOCAL_TABLES: [&str; 5] = ["audit_log", "api_tokens", "backup_schedule", "sync_clock", "sync_peers"];
 
@@ -1664,9 +1785,9 @@ fn every_table_is_either_shared_or_stays_on_its_device() {
     for listed in SHARED_TABLES.iter().chain(LOCAL_TABLES.iter()) {
         assert!(names.iter().any(|n| n == listed), "{listed} is listed but there is no such table");
     }
-    // The sync can only name eleven tables of rows (the parts of bills and the weights of templates go inside two of them), so nothing
+    // The sync can only name thirteen tables of rows (the parts of bills and the weights of templates go inside two of them), so nothing
     // else can be asked for or sent.
-    assert_eq!(wire::Table::ALL.len(), 11);
+    assert_eq!(wire::Table::ALL.len(), 13);
 }
 
 #[test]
@@ -1710,6 +1831,15 @@ fn nothing_that_stays_on_a_device_is_ever_sent() {
             &crate::accounts::transfers::NewTransfer { from_account_id: crate::accounts::MAIN_ID.to_string(), to_account_id: account.to_string(), amount: "6.00".into(), date: "2026-03-05".into(), note: Some(format!("Transfer of the {tag}")), to_amount: None },
         )
         .unwrap();
+        // and a stash in it with an add: the money of the transfer is set aside
+        let stash = crate::stashes::create(
+            conn,
+            &crate::stashes::NewStash { name: format!("Stash of the {tag}"), account_id: account.to_string(), target: Some("50.00".into()), target_date: Some("2027-01-01".into()), notes: Some(format!("Notes of the stash of the {tag}")) },
+            TODAY,
+        )
+        .unwrap()
+        .id;
+        crate::stashes::entries::add(conn, stash, &crate::stashes::entries::NewEntry { amount: "4.00".into(), date: Some("2026-03-06".into()), note: Some(format!("Entry of the {tag}")), from_account_id: None }, TODAY).unwrap();
     }
 
     let outcome = sync(&mut desktop, &mut phone, TODAY, now(), None).unwrap();
@@ -1717,6 +1847,7 @@ fn nothing_that_stays_on_a_device_is_ever_sent() {
     let said = String::from_utf8_lossy(&outcome.transcript).to_string();
     assert!(said.contains("From the desktop") && said.contains("From the phone"), "the transcript has nothing in it: {} bytes", outcome.transcript.len());
     assert!(said.contains("Account of the desktop") && said.contains("Transfer of the phone"), "the accounts and transfers are sent");
+    assert!(said.contains("Stash of the desktop") && said.contains("Notes of the stash of the phone") && said.contains("Entry of the phone"), "the stashes and their entries are sent");
     for sent in ["BIC-desktop", "Notes of the phone", "Group of the desktop", "\"includeNetWorth\":0", "\"virtualBalanceMinor\":1200"] {
         assert!(said.contains(sent), "the details of an account are sent: {sent}");
     }
@@ -1731,6 +1862,9 @@ fn nothing_that_stays_on_a_device_is_ever_sent() {
     // the history the triggers of accounts and transfers write (each device keeps its own, in the names of the columns) is not on the wire
     assert!(!said.contains("entity_type") && !said.contains("opening_balance_minor") && !said.contains("from_account_id"), "a row of the history of accounts or transfers was sent");
     assert!(!said.contains("group_name") && !said.contains("include_net_worth") && !said.contains("virtual_balance_minor"), "the history of the details of an account was sent");
+    // nor the history of a stash or an entry, and nothing that is worked out from them (what a stash holds, what an account has free)
+    assert!(!said.contains("stash_id") && !said.contains("target_minor") && !said.contains("entry_date") && !said.contains("transfer_id"), "a row of the history of a stash or an entry was sent");
+    assert!(!said.contains("\"saved\"") && !said.contains("\"free\"") && !said.contains("setAside"), "what a stash holds is worked out and never sent");
     assert_eq!(count(&desktop, "SELECT count(*) FROM api_tokens WHERE name LIKE '%PHONE%'"), 0);
     assert_eq!(count(&phone, "SELECT count(*) FROM api_tokens WHERE name LIKE '%DESKTOP%'"), 0);
     assert_eq!(text(&desktop, "SELECT language FROM settings"), "de");

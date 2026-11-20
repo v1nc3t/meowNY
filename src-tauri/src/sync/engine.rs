@@ -16,8 +16,8 @@ use sha2::{Digest as _, Sha256};
 use super::stamp::{self, Stamp};
 use super::wire::{
     self, AccountRow, BudgetRow, CategoryRow, DigestMessage, DocumentLinkRow, DocumentRow, Entries, LedgerRow, Marker, Message, PersonRow, RecurringRow,
-    Row, RowsMessage, SplitPartRow, Table, TemplatePartRow, TemplateRow, TransactionRow, TransferRow, WireError, MAX_ENTRIES_PER_MESSAGE,
-    MAX_ROWS_PER_MESSAGE, MAX_ROWS_PER_TABLE, SOFT_MESSAGE_BYTES,
+    Row, RowsMessage, SplitPartRow, StashEntryRow, StashRow, Table, TemplatePartRow, TemplateRow, TransactionRow, TransferRow, WireError,
+    MAX_ENTRIES_PER_MESSAGE, MAX_ROWS_PER_MESSAGE, MAX_ROWS_PER_TABLE, SOFT_MESSAGE_BYTES,
 };
 use crate::accounts::{self, MAIN_ID, MAIN_SYNC_ID};
 use crate::debts::splits::{self, Who};
@@ -102,7 +102,7 @@ impl From<crate::vault::AppError> for SyncError {
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct Digest(pub BTreeMap<Table, Entries>);
 
-const LISTED: [Table; 10] = [
+const LISTED: [Table; 12] = [
     Table::Categories,
     Table::People,
     Table::Accounts,
@@ -110,6 +110,8 @@ const LISTED: [Table; 10] = [
     Table::Budgets,
     Table::Transactions,
     Table::Transfers,
+    Table::Stashes,
+    Table::StashEntries,
     Table::LedgerEntries,
     Table::Documents,
     Table::DocumentLinks,
@@ -376,6 +378,56 @@ fn load_rows(conn: &Connection, table: Table, wanted: &HashSet<&String>) -> Resu
                 let r = r?;
                 if wanted.contains(&r.sync_id) {
                     rows.push(Row::Transfer(r));
+                }
+            }
+        }
+        Table::Stashes => {
+            let mut stmt = conn.prepare(
+                "SELECT s.sync_id, s.stamp, s.name, a.sync_id, s.target_minor, s.target_date, s.notes, s.archived, s.position, s.created_at, s.updated_at
+                 FROM stashes s JOIN accounts a ON a.id = s.account_id ORDER BY s.sync_id",
+            )?;
+            for r in stmt.query_map([], |r| {
+                Ok(StashRow {
+                    sync_id: r.get(0)?,
+                    stamp: r.get(1)?,
+                    name: r.get(2)?,
+                    account: r.get(3)?,
+                    target_minor: r.get(4)?,
+                    target_date: r.get(5)?,
+                    notes: r.get(6)?,
+                    archived: r.get(7)?,
+                    position: r.get(8)?,
+                    created_at: r.get(9)?,
+                    updated_at: r.get(10)?,
+                })
+            })? {
+                let r = r?;
+                if wanted.contains(&r.sync_id) {
+                    rows.push(Row::Stash(r));
+                }
+            }
+        }
+        Table::StashEntries => {
+            let mut stmt = conn.prepare(
+                "SELECT e.sync_id, e.stamp, s.sync_id, e.amount_minor, e.entry_date, e.note, t.sync_id, e.created_at, e.updated_at
+                 FROM stash_entries e JOIN stashes s ON s.id = e.stash_id LEFT JOIN transfers t ON t.id = e.transfer_id ORDER BY e.sync_id",
+            )?;
+            for r in stmt.query_map([], |r| {
+                Ok(StashEntryRow {
+                    sync_id: r.get(0)?,
+                    stamp: r.get(1)?,
+                    stash: r.get(2)?,
+                    amount_minor: r.get(3)?,
+                    entry_date: r.get(4)?,
+                    note: r.get(5)?,
+                    transfer: r.get(6)?,
+                    created_at: r.get(7)?,
+                    updated_at: r.get(8)?,
+                })
+            })? {
+                let r = r?;
+                if wanted.contains(&r.sync_id) {
+                    rows.push(Row::StashEntry(r));
                 }
             }
         }
@@ -838,6 +890,15 @@ impl<'a> Applier<'a> {
     /// payments of a recurring item do (migration 0013): if the expense comes back on the other device with a newer edit, they are sent again.
     fn unlink_entries(&self, transaction_id: i64, deleted_at: &str) -> Result<(), SyncError> {
         self.run("UPDATE ledger_entries SET stamp = ?1 WHERE transaction_id = ?2 AND stamp < ?1", params![deleted_at, transaction_id])?;
+        Ok(())
+    }
+
+    /// The entries of a stash that came with this transfer lose the link when it is deleted, and take the stamp of the deletion, as the entries of
+    /// the ledger do with their expense. The device that deleted the transfer gave them the same stamp (`trg_transfers_sync_unlink`, migration 0021)
+    /// and the marker of the transfer is made with it, so both devices end with one stamp (`docs/stash-design.md`, section 7.4). The clearing of the
+    /// link itself is the foreign key's (`ON DELETE SET NULL`), which moves neither the stamp nor `updated_at`.
+    fn unlink_stash_entries(&self, transfer_id: i64, deleted_at: &str) -> Result<(), SyncError> {
+        self.run("UPDATE stash_entries SET stamp = ?1 WHERE transfer_id = ?2 AND stamp < ?1", params![deleted_at, transfer_id])?;
         Ok(())
     }
 
@@ -1468,7 +1529,9 @@ impl<'a> Applier<'a> {
     /// would count it into the main account; the other device does the same (`transfers`), and the person corrects the amounts, which may
     /// still be in the foreign account's currency (section 21.6).
     fn empty_account(&mut self, id: i64, deleted_at: &str) -> Result<(), SyncError> {
-        for table in ["transactions", "recurring_transactions", "ledger_entries"] {
+        // the stashes of the account move with the rest, amounts as they are: a stash of a foreign account is then in the app's currency with the
+        // numbers of the other one, as a transfer that was rescued is, and the person corrects them (`docs/stash-design.md`, section 7.4)
+        for table in ["transactions", "recurring_transactions", "ledger_entries", "stashes"] {
             self.run(&format!("UPDATE {table} SET account_id = ?3, stamp = max(stamp, ?1) WHERE account_id = ?2"), params![deleted_at, id, MAIN_ID])?;
         }
         self.run(
@@ -1490,6 +1553,7 @@ impl<'a> Applier<'a> {
             .collect::<Result<_, _>>()?;
         for (transfer, sync_id, stamp) in left {
             let marker = after(&parse(&later(stamp, Some(deleted_at.to_string())))?).format();
+            self.unlink_stash_entries(transfer, &marker)?;
             self.run("DELETE FROM transfers WHERE id = ?1", [transfer])?;
             self.put_marker(Table::Transfers, &sync_id, &marker)?;
             self.summary.dropped += 1;
@@ -1533,10 +1597,12 @@ impl<'a> Applier<'a> {
             let rescued = from_deleted.is_some() || to_deleted.is_some();
             let stamp = later(later(r.stamp.clone(), from_deleted), to_deleted);
             if from == to {
+                let marker = after(&parse(&stamp)?).format();
                 if let Some((id, _)) = &existing {
+                    self.unlink_stash_entries(*id, &marker)?;
                     self.run("DELETE FROM transfers WHERE id = ?1", [id])?;
                 }
-                self.put_marker(Table::Transfers, &r.sync_id, &after(&parse(&stamp)?).format())?;
+                self.put_marker(Table::Transfers, &r.sync_id, &marker)?;
                 self.summary.dropped += 1;
                 continue;
             }
@@ -1559,6 +1625,155 @@ impl<'a> Applier<'a> {
                         "INSERT INTO transfers (sync_id, stamp, from_account_id, to_account_id, amount_minor, transfer_date, note, created_at, updated_at, to_amount_minor)
                          VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
                         params![r.sync_id, stamp, from, to, r.amount_minor, r.transfer_date, r.note, r.created_at, r.updated_at, to_amount],
+                    )?;
+                    self.summary.added += 1;
+                }
+            }
+        }
+        Ok(())
+    }
+
+    // --- stashes ----------------------------------------------------------------------------------------------
+    //
+    // Rows of the ordinary kind: the newer whole row wins, and a deletion leaves a marker. Stashes are never merged by name: two devices that
+    // each make "Holiday" keep two stashes, as two accounts of one name stay two accounts. A stash whose account was deleted here is in the main
+    // account and takes the later stamp, as a payment does (`account`). What a stash holds is the sum of its entries and the rules of the delta
+    // are the core's, so nothing here looks at them: a stash may end above its target or below 0 (`docs/stash-design.md`, sections 7.3 and 7.6).
+
+    fn stashes(&mut self, rows: &[Row]) -> Result<(), SyncError> {
+        let mut list: Vec<&StashRow> = rows
+            .iter()
+            .map(|r| match r {
+                Row::Stash(c) => Ok(c),
+                _ => Err(SyncError::Invalid("row")),
+            })
+            .collect::<Result<_, _>>()?;
+        list.sort_by(|a, b| a.sync_id.cmp(&b.sync_id));
+        for r in list {
+            let (account, account_deleted) = self.account(&r.account)?;
+            if let Some(marker) = self.marker(&r.sync_id)? {
+                if marker >= r.stamp {
+                    self.summary.kept_yours += 1;
+                    continue;
+                }
+                self.remove_marker(&r.sync_id)?;
+            }
+            let existing = self.find(Table::Stashes, &r.sync_id)?;
+            if let Some((_, local)) = &existing {
+                if r.stamp <= *local {
+                    if r.stamp < *local {
+                        self.summary.kept_yours += 1;
+                    }
+                    continue;
+                }
+            }
+            // a stash of an account that was deleted here is in the main account now and takes the later stamp, as its copy on the other device
+            // does when the deletion arrives there (`empty_account`); `updated_at` is the one the row was written with
+            let stamp = later(r.stamp.clone(), account_deleted);
+            match &existing {
+                Some((id, local)) => {
+                    self.note_overwrite(local);
+                    self.run(
+                        "UPDATE stashes SET stamp = ?2, name = ?3, account_id = ?4, target_minor = ?5, target_date = ?6, notes = ?7, archived = ?8, position = ?9,
+                         created_at = ?10 WHERE id = ?1",
+                        params![id, stamp, r.name, account, r.target_minor, r.target_date, r.notes, r.archived, r.position, r.created_at],
+                    )?;
+                    self.set_updated_at(Table::Stashes, *id, &r.updated_at)?;
+                    self.summary.updated += 1;
+                }
+                None => {
+                    self.run(
+                        "INSERT INTO stashes (sync_id, stamp, name, account_id, target_minor, target_date, notes, archived, position, created_at, updated_at)
+                         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+                        params![r.sync_id, stamp, r.name, account, r.target_minor, r.target_date, r.notes, r.archived, r.position, r.created_at, r.updated_at],
+                    )?;
+                    self.summary.added += 1;
+                }
+            }
+        }
+        Ok(())
+    }
+
+    // --- the entries of the stashes ---------------------------------------------------------------------------
+    //
+    // Rows of the ordinary kind. An entry whose stash was deleted here is not taken: the stash's marker covers it, as the other device's
+    // cascade does (a link to a deleted document is dropped the same way). The link to the transfer that came with it is cleared by the foreign
+    // key when the transfer is deleted, with no stamp of its own, so an entry that arrives linked to a transfer this device knows as deleted is
+    // taken with no link and the later of its stamp and the deletion's (`unlink_stash_entries`).
+
+    fn stash_entries(&mut self, rows: &[Row]) -> Result<(), SyncError> {
+        let mut list: Vec<&StashEntryRow> = rows
+            .iter()
+            .map(|r| match r {
+                Row::StashEntry(c) => Ok(c),
+                _ => Err(SyncError::Invalid("row")),
+            })
+            .collect::<Result<_, _>>()?;
+        list.sort_by(|a, b| a.sync_id.cmp(&b.sync_id));
+        for r in list {
+            let mut stamp = r.stamp.clone();
+            // its stash: here, or deleted here (then the entry is not taken), or unknown (a broken row, and the sync stops)
+            let stash = match self.find(Table::Stashes, &r.stash)? {
+                Some((id, _)) => id,
+                None if self.marker(&r.stash)?.is_some() => {
+                    // The other device drops this entry with its stash and leaves no marker for it (the cascade). A marker made here when the entry was
+                    // deleted on its own, before its stash, would be the one thing the two devices differ in once they have met: it is dropped when a
+                    // newer copy of the entry shows up (an older copy is never sent, for the marker is newer than it), so both end with none.
+                    if self.marker(&r.sync_id)?.is_some_and(|marker| marker < r.stamp) {
+                        self.remove_marker(&r.sync_id)?;
+                    }
+                    self.summary.kept_yours += 1;
+                    continue;
+                }
+                None => return Err(SyncError::Invalid("reference")),
+            };
+            if let Some(marker) = self.marker(&r.sync_id)? {
+                if marker >= stamp {
+                    self.summary.kept_yours += 1;
+                    continue;
+                }
+                self.remove_marker(&r.sync_id)?;
+            }
+            // an entry linked to a transfer that was deleted here arrives with no link, and takes the stamp of the deletion unless it is newer
+            let transfer = match &r.transfer {
+                Some(sync_id) => match self.find(Table::Transfers, sync_id)? {
+                    Some((id, _)) => Some(id),
+                    None => match self.marker(sync_id)? {
+                        Some(deleted_at) => {
+                            if deleted_at > stamp {
+                                stamp = deleted_at;
+                            }
+                            None
+                        }
+                        None => return Err(SyncError::Invalid("reference")),
+                    },
+                },
+                None => None,
+            };
+            let existing = self.find(Table::StashEntries, &r.sync_id)?;
+            if let Some((_, local)) = &existing {
+                if stamp <= *local {
+                    if stamp < *local {
+                        self.summary.kept_yours += 1;
+                    }
+                    continue;
+                }
+            }
+            match &existing {
+                Some((id, local)) => {
+                    self.note_overwrite(local);
+                    self.run(
+                        "UPDATE stash_entries SET stamp = ?2, stash_id = ?3, amount_minor = ?4, entry_date = ?5, note = ?6, transfer_id = ?7, created_at = ?8 WHERE id = ?1",
+                        params![id, stamp, stash, r.amount_minor, r.entry_date, r.note, transfer, r.created_at],
+                    )?;
+                    self.set_updated_at(Table::StashEntries, *id, &r.updated_at)?;
+                    self.summary.updated += 1;
+                }
+                None => {
+                    self.run(
+                        "INSERT INTO stash_entries (sync_id, stamp, stash_id, amount_minor, entry_date, note, transfer_id, created_at, updated_at)
+                         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+                        params![r.sync_id, stamp, stash, r.amount_minor, r.entry_date, r.note, transfer, r.created_at, r.updated_at],
                     )?;
                     self.summary.added += 1;
                 }
@@ -2146,7 +2361,8 @@ impl<'a> Applier<'a> {
     // --- deletions --------------------------------------------------------------------------------------------
 
     fn delete_row(&mut self, table: Table, id: i64) -> Result<(), SyncError> {
-        // deleting a recurring item clears the link of its payments by itself (ON DELETE SET NULL), as on the device that deleted it
+        // deleting a recurring item clears the link of its payments by itself (ON DELETE SET NULL), as on the device that deleted it, and deleting
+        // a stash takes its entries with it (ON DELETE CASCADE) and leaves no marker for them, as there; the triggers stand aside while applying
         self.run(&format!("DELETE FROM {} WHERE id = ?1", table.name()), [id])?;
         Ok(())
     }
@@ -2173,6 +2389,10 @@ impl<'a> Applier<'a> {
                         if table == Table::Transactions {
                             // and so do the entries of the ledger that were linked to the expense
                             self.unlink_entries(id, &m.stamp)?;
+                        }
+                        if table == Table::Transfers {
+                            // and the entries of stashes that came with the transfer, so both devices end with the stamp of the deletion on them
+                            self.unlink_stash_entries(id, &m.stamp)?;
                         }
                         self.delete_row(table, id)?;
                         self.put_marker(table, &m.sync_id, &m.stamp)?;
@@ -2291,6 +2511,8 @@ pub fn apply(conn: &mut Connection, incoming: &Incoming, now_ms: u64, since_ms: 
     applier.budgets(incoming.rows.get(&Table::Budgets).unwrap_or(&empty))?;
     applier.transactions(incoming.rows.get(&Table::Transactions).unwrap_or(&empty))?;
     applier.transfers(incoming.rows.get(&Table::Transfers).unwrap_or(&empty))?;
+    applier.stashes(incoming.rows.get(&Table::Stashes).unwrap_or(&empty))?;
+    applier.stash_entries(incoming.rows.get(&Table::StashEntries).unwrap_or(&empty))?;
     applier.ledger(incoming.rows.get(&Table::LedgerEntries).unwrap_or(&empty))?;
     applier.documents(incoming.rows.get(&Table::Documents).unwrap_or(&empty))?;
     applier.links(incoming.rows.get(&Table::DocumentLinks).unwrap_or(&empty))?;
@@ -2300,16 +2522,20 @@ pub fn apply(conn: &mut Connection, incoming: &Incoming, now_ms: u64, since_ms: 
     // (a deleted ledger entry takes its links with it, silently, and a deleted expense clears the link of its entries and gives them the
     // stamp of its deletion, which must not happen to an entry that was deleted on the other device and is in this same batch: so the
     // entries go first, as the payments go before their recurring item)
-    // (the accounts go last: deleting one moves what it still holds to the main account and gives it the later stamp, which must not
-    // happen to a row that was deleted on the other device and is in this same batch)
+    // (a deleted transfer clears the link of the entries of stashes that came with it and gives them the stamp of its deletion, which must not
+    // happen to an entry that was deleted on the other device and is in this same batch: so the entries of stashes go before the transfers)
+    // (the accounts go last: deleting one moves what it still holds, stashes included, to the main account and gives it the later stamp, which
+    // must not happen to a row that was deleted on the other device and is in this same batch: so the stashes go just before them)
     for table in [
         Table::LedgerEntries,
         Table::Transactions,
+        Table::StashEntries,
         Table::Transfers,
         Table::Budgets,
         Table::RecurringTransactions,
         Table::DocumentLinks,
         Table::Documents,
+        Table::Stashes,
         Table::Accounts,
     ] {
         applier.markers(table, incoming.markers.get(&table).map(Vec::as_slice).unwrap_or(&[]))?;
@@ -2339,7 +2565,7 @@ pub fn apply(conn: &mut Connection, incoming: &Incoming, now_ms: u64, since_ms: 
 
 /// Whether this device holds no budget data yet, so it can be paired and given a full copy (docs/sync-design.md, section 5).
 pub fn is_empty(conn: &Connection) -> Result<bool, SyncError> {
-    for table in ["categories", "people", "ledger_entries", "budgets", "recurring_transactions", "transactions", "transfers", "documents", "sync_deleted", "currency_changes"] {
+    for table in ["categories", "people", "ledger_entries", "budgets", "recurring_transactions", "transactions", "transfers", "stashes", "stash_entries", "documents", "sync_deleted", "currency_changes"] {
         let count: i64 = conn.query_row(&format!("SELECT count(*) FROM {table}"), [], |r| r.get(0))?;
         if count != 0 {
             return Ok(false);
@@ -2690,6 +2916,22 @@ fn facts(conn: &Connection, row: &Row) -> Vec<(&'static str, String)> {
             ("date", r.transfer_date.clone()),
             ("note", some(&r.note)),
         ],
+        Row::Stash(r) => vec![
+            ("name", r.name.clone()),
+            ("account", account_name(conn, &r.account)),
+            ("target", money_text(r.target_minor)),
+            ("targetDate", some(&r.target_date)),
+            ("notes", some(&r.notes)),
+            ("archived", if r.archived == 1 { "yes" } else { "no" }.to_string()),
+        ],
+        Row::StashEntry(r) => vec![
+            ("stash", name_of(conn, "SELECT name FROM stashes WHERE sync_id = ?1", &r.stash)),
+            // the sign says what an entry is; the amount is shown as a size, as the screens show it
+            ("kind", if r.amount_minor > 0 { "ADD" } else { "TAKE" }.to_string()),
+            ("amount", crate::money::format_amount(r.amount_minor.abs())),
+            ("date", r.entry_date.clone()),
+            ("note", some(&r.note)),
+        ],
         Row::Person(r) => vec![
             ("name", r.name.clone()),
             ("archived", if r.archived == 1 { "yes" } else { "no" }.to_string()),
@@ -2777,6 +3019,8 @@ pub fn describe(conn: &Connection, conflicts: &[Conflict], theirs: &Incoming) ->
             .map(|(_, v)| v.clone())
             .or_else(|| mine_facts.iter().chain(their_facts.iter()).find(|(f, v)| *f == "month" && !v.is_empty()).map(|(_, v)| v.clone()))
             .or_else(|| mine_facts.iter().chain(their_facts.iter()).find(|(f, v)| *f == "friend" && !v.is_empty()).map(|(_, v)| v.clone()))
+            // an entry of a stash is named by its stash
+            .or_else(|| mine_facts.iter().chain(their_facts.iter()).find(|(f, v)| *f == "stash" && !v.is_empty()).map(|(_, v)| v.clone()))
             .unwrap_or_default();
         out.push(ConflictView { table: c.table, id: c.id.clone(), title, mine_deleted: c.mine_deleted, theirs_deleted: c.theirs_deleted, fields });
     }

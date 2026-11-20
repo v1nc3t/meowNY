@@ -82,7 +82,7 @@ There is no Diffie-Hellman step, so that last case is the honest limit. Secrets 
 
 JSON messages with a `t` field, one per frame, long lists split. Money in minor units.
 
-1. `hello`: id, name, versions (schema must match; protocol 11: a currency per account), wall clock (a gap
+1. `hello`: id, name, versions (schema must match; protocol 12: stashes), wall clock (a gap
    above a minute is told to the person, never stops the sync; section 10), currency generation, `since`, and the direction the
    desktop chose (both ways, to the computer, to the phone). Right after it the phone takes the computer's clock as the reference
    (section 10).
@@ -98,8 +98,8 @@ States are compared, not change logs, so a broken or half sync is repaired by th
 
 ## 9. Database changes
 
-Migrations `0008`, `0009`, `0012`, `0013`, `0014`, `0015`, `0016`, `0017`, `0018`, `0019`, `0020`: a random `sync_id` and a `stamp` on every shared row (`categories`,
-`budgets`, `recurring_transactions`, `transactions`, `people`, `ledger_entries`, `accounts`, `transfers`, `documents`, `document_links`, the
+Migrations `0008`, `0009`, `0012`, `0013`, `0014`, `0015`, `0016`, `0017`, `0018`, `0019`, `0020`, `0021`: a random `sync_id` and a `stamp` on every shared row (`categories`,
+`budgets`, `recurring_transactions`, `transactions`, `people`, `ledger_entries`, `accounts`, `transfers`, `stashes`, `stash_entries`, `documents`, `document_links`, the
 shared part of `settings`); `sync_deleted` markers made by delete triggers; `categories.merged_into`; `categories.position` (the order the person chose, per type; a move gives the row a new stamp,
 so it travels in the category row, and ties are settled by id); `recurring_transactions.skipped_dates` (a JSON array of the later
 occurrences skipped one by one, sorted, at most 100; part of protocol 5, checked when a row arrives); `sync_clock`;
@@ -107,7 +107,7 @@ occurrences skipped one by one, sorted, at most 100; part of protocol 5, checked
 bill, sent as that person's `sync_id`; part of protocol 8); `accounts` (the main account has the same `sync_id` and the oldest stamp on every
 device, so it is one account without a merge; `accounts.position` travels in the row) and `transfers`; `account_id` of `transactions`,
 `recurring_transactions` and `ledger_entries`, sent as the account's `sync_id`; part of protocol 9; the five columns of `accounts` that `0019` adds, `bic`, `notes`,
-`group_name` (sent as `group`), `include_net_worth` and `virtual_balance_minor`, which travel in the account's row like the others; part of protocol 10; the four columns that `0020` adds, `accounts.currency` and `accounts.rate` (sent as `currency` and `rate`), `transactions.native_amount_minor` (`nativeAmountMinor`) and `transfers.to_amount_minor` (`toAmountMinor`), which travel in their rows, all optional on the wire; part of protocol 11. Stamps come from triggers, which stand aside while
+`group_name` (sent as `group`), `include_net_worth` and `virtual_balance_minor`, which travel in the account's row like the others; part of protocol 10; the four columns that `0020` adds, `accounts.currency` and `accounts.rate` (sent as `currency` and `rate`), `transactions.native_amount_minor` (`nativeAmountMinor`) and `transfers.to_amount_minor` (`toAmountMinor`), which travel in their rows, all optional on the wire; part of protocol 11; `stashes` (money set aside in an account for a goal; the row names its account by the account's `sync_id`, and `position` travels in it) and `stash_entries` (the row names its stash and the transfer that came with it, if there is one, by their `sync_id`s; the sign of `amountMinor` says an add from a take), whose deletion triggers and the one that gives the entries of a deleted transfer a stamp are in `0021`; part of protocol 12. What a stash holds is the sum of its entries and is never sent. Stamps come from triggers, which stand aside while
 `sync_clock.applying` is on (`0016` adds `sync_clock.offset_ms` to the clock they read, section 10). A
 bill's parts and a recurring item's template travel inside their parent's row. Never synced: `audit_log`,
 `backup_schedule`, `api_tokens`, `sync_peers`, `sync_clock`, the language, lock settings.
@@ -150,13 +150,17 @@ make are derived from the stamps involved (`derive`, `moved`), never the clock, 
 Rows of an account deleted on the other device move to the main account and take the later of their stamp and the deletion's; a transfer
 left with the main account on both sides becomes a marker. A transfer that is then between two accounts in the app's currency loses its second amount (`toAmountMinor`), on both devices, and a transaction keeps its native amount, which counts for nothing in an account in the app's currency: the amounts of such a transfer may still be in the foreign account's currency, and the person corrects them. `accounts-design.md`, sections 7 and 21.6. Only the desktop
 changes the currency; the lower generation converts all its rows first, and an out-of-range result stops the sync.
+Stashes are never merged by name. A stash of an account deleted on the other device moves to the main account; entries of a stash deleted on the other device are not taken; an entry whose transfer was deleted loses the link and takes the later stamp. `stash-design.md`, section 7. A marker for an entry that was deleted on its own before its stash goes when a newer copy of the entry meets the stash's marker, for the other device drops that copy with the stash and leaves no marker, and both must end with the same list.
 Documents: `documents-design.md`, section 10.
 
 ## 12. Applying changes safely
 
 Rows from the other device are untrusted. Only synced tables and known fields; the same checks as the screens and the
 API; bound parameters only; a fixed order (settings, categories, friends, accounts, recurring, budgets, transactions,
-transfers, ledger, documents, links, markers); unknown references stop the sync; `foreign_key_check` and `integrity_check` before commit.
+transfers, stashes, stash entries, ledger, documents, links, markers); unknown references stop the sync; `foreign_key_check` and `integrity_check` before commit. The markers are applied in the order ledger entries, transactions, stash entries, transfers, budgets,
+recurring items, links, documents, stashes, accounts, so that a row deleted in the same batch is gone before the deletion of its parent would give it a newer stamp. The rules
+of the delta of a stash (what a local write may put in or take out) are checked on the device that writes, never by a sync: two devices may each stay within them and
+together go beyond (a stash above its target or below 0, an account with less than nothing free), and nothing is refused or repaired (`stash-design.md`, section 7.6).
 Nothing from a sync is logged.
 
 ## 13. The phone

@@ -21,7 +21,7 @@ use crate::transactions::{self, NewTransaction, TransactionPatch};
 // --- a world to work in ------------------------------------------------------------------------------------------------
 
 /// `sync_ok`, and on both devices the main account is as it must be and every reference holds.
-fn settle(a: &mut Connection, b: &mut Connection) -> Outcome {
+pub(super) fn settle(a: &mut Connection, b: &mut Connection) -> Outcome {
     let outcome = sync_ok(a, b);
     for conn in [&*a, &*b] {
         assert!(accounts::check(conn).unwrap(), "the main account is not as it must be");
@@ -33,7 +33,7 @@ fn settle(a: &mut Connection, b: &mut Connection) -> Outcome {
 }
 
 /// An account with nothing in it and an opening date of its own. Returns its local id.
-fn open(conn: &Connection, name: &str) -> i64 {
+pub(super) fn open(conn: &Connection, name: &str) -> i64 {
     accounts::create(conn, &NewAccount { name: name.into(), kind: Kind::Checking, number: None, opening_balance: None, opening_date: Some("2026-01-01".into()), bic: None, notes: None, group: None, include_in_net_worth: None, virtual_balance: None, currency: None, rate: None }, TODAY).unwrap().id
 }
 
@@ -41,15 +41,15 @@ fn rename(conn: &Connection, id: i64, name: &str) {
     accounts::update(conn, id, &AccountPatch { name: Some(name.into()), ..Default::default() }, TODAY).unwrap();
 }
 
-fn account_id(conn: &Connection, name: &str) -> i64 {
+pub(super) fn account_id(conn: &Connection, name: &str) -> i64 {
     id_of(conn, "accounts", name)
 }
 
-fn transfer_named(conn: &Connection, note: &str) -> i64 {
+pub(super) fn transfer_named(conn: &Connection, note: &str) -> i64 {
     conn.query_row("SELECT id FROM transfers WHERE note = ?1", [note], |r| r.get(0)).unwrap()
 }
 
-fn account_sync_id(conn: &Connection, name: &str) -> String {
+pub(super) fn account_sync_id(conn: &Connection, name: &str) -> String {
     text(conn, &format!("SELECT sync_id FROM accounts WHERE name = '{name}'"))
 }
 
@@ -120,7 +120,7 @@ fn stamp_and_updated_at(conn: &Connection, table: &str, column: &str, value: &st
     conn.query_row(&format!("SELECT stamp, updated_at FROM {table} WHERE {column} = ?1"), [value], |r| Ok((r.get(0)?, r.get(1)?))).unwrap()
 }
 
-fn marker_of(conn: &Connection, sync_id: &str) -> Option<String> {
+pub(super) fn marker_of(conn: &Connection, sync_id: &str) -> Option<String> {
     conn.query_row("SELECT stamp FROM sync_deleted WHERE sync_id = ?1", [sync_id], |r| r.get(0)).ok()
 }
 
@@ -130,11 +130,11 @@ fn accounts_shown(conn: &Connection) -> Vec<(String, String, String, bool)> {
 }
 
 /// The version of Stamp's order the sync works by.
-fn later_of(a: &str, b: &str) -> String {
+pub(super) fn later_of(a: &str, b: &str) -> String {
     std::cmp::max(Stamp::parse(a).unwrap(), Stamp::parse(b).unwrap()).format()
 }
 
-fn after(stamp: &str) -> String {
+pub(super) fn after(stamp: &str) -> String {
     engine::after(&Stamp::parse(stamp).unwrap()).format()
 }
 
@@ -240,7 +240,7 @@ fn both_devices_renaming_the_main_account_differently_is_an_ordinary_conflict_wi
 }
 
 /// What a sync would put in front of the person at `desktop`: the conflicts since they met, and what differs in each.
-fn conflicts_between(desktop: &Connection, phone: &Connection, met: u64) -> (Vec<engine::Conflict>, Vec<engine::ConflictView>) {
+pub(super) fn conflicts_between(desktop: &Connection, phone: &Connection, met: u64) -> (Vec<engine::Conflict>, Vec<engine::ConflictView>) {
     let (mine, theirs) = (engine::digest(desktop).unwrap(), engine::digest(phone).unwrap());
     let (conflicts, more) = engine::conflicts(&mine, &theirs, &Table::ALL, Some(met));
     assert_eq!(more, 0);
@@ -254,11 +254,11 @@ fn conflicts_between(desktop: &Connection, phone: &Connection, met: u64) -> (Vec
     (conflicts, views)
 }
 
-fn fields(views: &[engine::ConflictView], table: Table) -> Vec<(String, String, String)> {
+pub(super) fn fields(views: &[engine::ConflictView], table: Table) -> Vec<(String, String, String)> {
     views.iter().find(|v| v.table == table).unwrap().fields.iter().map(|f| (f.field.to_string(), f.mine.clone(), f.theirs.clone())).collect()
 }
 
-fn texts(list: &[(&str, &str, &str)]) -> Vec<(String, String, String)> {
+pub(super) fn texts(list: &[(&str, &str, &str)]) -> Vec<(String, String, String)> {
     list.iter().map(|(a, b, c)| (a.to_string(), b.to_string(), c.to_string())).collect()
 }
 
@@ -452,13 +452,13 @@ fn rows_naming_an_account_the_phone_lacks() -> (Connection, Connection) {
     (desktop, phone)
 }
 
-fn only(mut incoming: Incoming, tables: &[Table]) -> Incoming {
+pub(super) fn only(mut incoming: Incoming, tables: &[Table]) -> Incoming {
     incoming.rows.retain(|table, _| tables.contains(table));
     incoming.markers.clear();
     incoming
 }
 
-fn refused_with_a_broken_reference(phone: &mut Connection, incoming: &Incoming, what: &str) {
+pub(super) fn refused_with_a_broken_reference(phone: &mut Connection, incoming: &Incoming, what: &str) {
     let before = snapshot(phone).unwrap();
     let result = engine::apply(phone, incoming, now(), None);
     assert!(matches!(result, Err(SyncError::Invalid("reference"))), "{what}: {result:?}");
@@ -1663,7 +1663,7 @@ fn a_device_that_speaks_protocol_9_is_told_to_update_whichever_of_the_two_it_is(
     let (a, b) = (device("EUR"), device("EUR"));
     let new = engine::hello(&a, "desktop", "0.1.0", now()).unwrap();
     let mut old = engine::hello(&b, "phone", "0.1.0", now()).unwrap();
-    assert_eq!(new.protocol, 11);
+    assert_eq!(new.protocol, 12);
     old.protocol = 9;
     assert!(matches!(engine::check_hello(&new, &old, now()), Err(SyncError::ProtocolMismatch)));
     assert!(matches!(engine::check_hello(&old, &new, now()), Err(SyncError::ProtocolMismatch)));
@@ -2481,7 +2481,7 @@ fn a_device_that_speaks_protocol_10_is_told_to_update_whichever_of_the_two_it_is
     let (a, b) = (device("EUR"), device("EUR"));
     let new = engine::hello(&a, "desktop", "0.1.0", now()).unwrap();
     let mut old = engine::hello(&b, "phone", "0.1.0", now()).unwrap();
-    assert_eq!(new.protocol, 11);
+    assert_eq!(new.protocol, 12);
     old.protocol = 10;
     assert!(matches!(engine::check_hello(&new, &old, now()), Err(SyncError::ProtocolMismatch)));
     assert!(matches!(engine::check_hello(&old, &new, now()), Err(SyncError::ProtocolMismatch)));
