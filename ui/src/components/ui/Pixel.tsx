@@ -50,7 +50,7 @@ function paths(rows: readonly string[]) {
 const CAT_PATHS = paths(DOZING_CAT)
 
 /** A list with nothing in it: the dozing cat over the hint, and a button for the first thing to do when there is one. */
-export function EmptyState({ text, action }: { text: string; action?: { label: string; onClick: () => void } }) {
+export function EmptyState({ title, text, action }: { title?: string; text: string; action?: { label: string; onClick: () => void } }) {
   const w = DOZING_CAT[0].length
   const h = DOZING_CAT.length
   return (
@@ -58,6 +58,7 @@ export function EmptyState({ text, action }: { text: string; action?: { label: s
       <svg viewBox={`0 0 ${w} ${h}`} width={w * 4} height={h * 4} shapeRendering="crispEdges" aria-hidden="true">
         {CAT_PATHS}
       </svg>
+      {title ? <h2 className="empty-title">{title}</h2> : null}
       <p className="hint">{text}</p>
       {action ? <Button onClick={action.onClick}>{action.label}</Button> : null}
     </div>

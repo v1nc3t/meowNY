@@ -29,6 +29,24 @@ export function targetIndex(mids: readonly number[], from: number, y: number): n
   return mids.filter((mid, at) => at !== from && mid < y).length
 }
 
+/**
+ * Where a dragged card lands in a grid (cards side by side and under each other), from the middle of each movable card as it was before the drag
+ * (`centers`, in reading order, the dragged one included) and where the dragged card's middle is now: the card it is nearest to. A grid has no
+ * single line to pass, as a list has (`targetIndex`).
+ */
+export function nearestIndex(centers: readonly { x: number; y: number }[], x: number, y: number): number {
+  let best = 0
+  let least = Infinity
+  centers.forEach((center, at) => {
+    const away = (center.x - x) ** 2 + (center.y - y) ** 2
+    if (away < least) {
+      least = away
+      best = at
+    }
+  })
+  return best
+}
+
 /** Puts the rows named by `ids` into the places those rows took, in the new order. Rows that are not named stay where they are. */
 export function applyOrder<T extends { id: string }>(rows: readonly T[], ids: readonly string[]): T[] {
   const named = new Set(ids)

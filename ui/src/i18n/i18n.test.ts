@@ -46,6 +46,10 @@ const SAME_AS_ENGLISH = new Set([
   'de accounts.rateLine', 'es accounts.rateLine', 'fr accounts.rateLine', 'it accounts.rateLine', 'pt accounts.rateLine', 'ro accounts.rateLine',
   'de accounts.labelIn', 'es accounts.labelIn', 'fr accounts.labelIn', 'it accounts.labelIn', 'pt accounts.labelIn', 'ro accounts.labelIn',
   'de entry.inMain', 'it entry.inMain',
+  // the stashes: a percent and a count of characters read the same in most languages, and "notes" is French as well (docs/stash-design.md, section 14)
+  'de stashes.percent', 'es stashes.percent', 'it stashes.percent', 'pt stashes.percent', 'ro stashes.percent',
+  'de stashes.noteCount', 'es stashes.noteCount', 'fr stashes.noteCount', 'it stashes.noteCount', 'pt stashes.noteCount', 'ro stashes.noteCount',
+  'fr stashes.notes',
 ])
 
 test('no translation is empty or an untranslated copy of the English text', () => {

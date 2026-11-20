@@ -41,11 +41,13 @@ export default function ChangeCurrencyModal({
     setPending(true)
     try {
       const done = await vault.changeCurrency(next, labelOnly ? null : rate.trim())
+      // the stashes that were converted are listed after the others, only when there were some
+      const stashes = done.stashes > 0 || done.stash_entries > 0 ? ` ${t('currency.convertedStashes', { stashes: done.stashes, entries: done.stash_entries })}` : ''
       onChanged(
         next,
         labelOnly
           ? t('currency.relabelled', { to: next })
-          : t('currency.converted', { to: next, transactions: done.transactions, recurring: done.recurring, budgets: done.budgets }),
+          : `${t('currency.converted', { to: next, transactions: done.transactions, recurring: done.recurring, budgets: done.budgets })}${stashes}`,
       )
     } catch (error) {
       say(errorText(error), 'error')

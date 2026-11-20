@@ -4,6 +4,8 @@ import { debts, type Summary } from '../api/debts'
 import { errorText } from '../api/invoke'
 import { monthNames, shiftMonth } from '../api/months'
 import { accounts as accountsApi, type AccountsSummary } from '../api/accounts'
+import { stashes as stashesApi, type Stash, type Summary as StashSummary } from '../api/stashes'
+import { StashMini } from '../components/StashParts'
 import YearNav from '../components/YearNav'
 import { Card, CardAction, CardContent, CardHeader, CardTitle } from '../components/ui/Card'
 import { EmptyState, Illustration, type PictureName } from '../components/ui/Pixel'
@@ -21,6 +23,7 @@ import { useProfile } from '../hooks/profile'
 import { useI18n, useT } from '../i18n/context'
 import type { MessageKey } from '../i18n/en'
 import { useShortcut } from '../keys/registry'
+import { activeStashes } from '../lib/stashView'
 import { changePercent, niceCeil, savingsRateText, slicePath, usedPercent } from './dashboardMath'
 
 const TOP_CATEGORIES = 7
@@ -49,6 +52,8 @@ function DashboardView({ settings, now }: { settings: MoneySettings; now: Today 
   const [owed, setOwed] = useState<Summary | null>(null)
   // what the accounts hold and net worth, today: they do not follow the month either
   const [worth, setWorth] = useState<AccountsSummary | null>(null)
+  // the stashes: how many, what they hold, and the first three; only asked for the list once there are some. They do not follow the month either
+  const [stashed, setStashed] = useState<{ summary: StashSummary; first: Stash[] } | null>(null)
   // the recurring items that are overdue or due soon, and all of them (for those that are split): they do not follow the month either
   const [recurringNow, setRecurringNow] = useState<{ dues: Dues; items: Recurring[] } | null>(null)
   // Whether nothing at all has been recorded yet (no transaction in any month): then the first steps show. Unknown at first.
@@ -87,6 +92,20 @@ function DashboardView({ settings, now }: { settings: MoneySettings; now: Today 
     void accountsApi.summary().then(
       (summary) => {
         if (!cancelled) setWorth(summary)
+      },
+      () => undefined,
+    )
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  useEffect(() => {
+    let cancelled = false
+    void stashesApi.summary().then(
+      async (summary) => {
+        const first = summary.stashes > 0 ? activeStashes(await stashesApi.list()).slice(0, 3) : []
+        if (!cancelled) setStashed({ summary, first })
       },
       () => undefined,
     )
@@ -191,6 +210,25 @@ function DashboardView({ settings, now }: { settings: MoneySettings; now: Today 
                         </span>
                       ) : null}
                     </div>
+                  </CardContent>
+                </Card>
+              ) : null}
+              {/* Only once there is a stash: the total set aside, and the first three with a small bar each. */}
+              {stashed && stashed.summary.stashes > 0 ? (
+                <Card>
+                  <CardHeader>
+                    <CardTitle>
+                      <Link to="/app/stashes">{t('nav.stashes')}</Link>
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="dash-stashes">
+                    <span className="dash-stat-value">{formatMoney(stashed.summary.saved, settings.currency, settings.locale)}</span>
+                    <span className="dash-stat-label">
+                      {t('stashes.total')} · {t('stashes.dashboard', { reached: stashed.summary.reached, count: stashed.summary.stashes })}
+                    </span>
+                    {stashed.first.map((stash) => (
+                      <StashMini key={stash.id} stash={stash} locale={settings.locale} />
+                    ))}
                   </CardContent>
                 </Card>
               ) : null}

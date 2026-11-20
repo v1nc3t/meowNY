@@ -4,6 +4,7 @@ import { accounts as accountsApi, type Account, type AccountLine, type AccountSt
 import { debts } from '../api/debts'
 import { ApiError, errorText } from '../api/invoke'
 import { shiftMonth } from '../api/months'
+import { stashes as stashesApi, type Stash } from '../api/stashes'
 import { useToday, type Today } from '../api/today'
 import { transfers as transfersApi, type Transfer } from '../api/transfers'
 import AccountModal from '../components/AccountModal'
@@ -14,6 +15,8 @@ import MonthNav from '../components/MonthNav'
 import Icon from '../components/NavIcon'
 import { DayGroups, IconAction, Row, Table, TapRow } from '../components/RowParts'
 import ShareList from '../components/ShareList'
+import StashModal from '../components/StashModal'
+import { StashMini } from '../components/StashParts'
 import TransferModal from '../components/TransferModal'
 import YearNav from '../components/YearNav'
 import Button from '../components/ui/Button'
@@ -35,6 +38,7 @@ import { breakable, formatDate, formatMoney, moneyIn } from '../lib/money'
 import { lastDay } from '../lib/range'
 import { applyOrder } from '../lib/reorder'
 import { saveChoice, storedChoice } from '../lib/sticky'
+import { activeStashes, isSome, overBooked } from '../lib/stashView'
 
 /** The dialog that is open. A transfer being changed is read first, so the dialog opens with its row. */
 type Dialog =
@@ -42,6 +46,7 @@ type Dialog =
   | { kind: 'edit'; account: Account }
   | { kind: 'transfer'; transfer: Transfer | null; fromId?: string }
   | { kind: 'entry'; tab: EntryTab; accountId: string }
+  | { kind: 'stash'; accountId: string }
   | { kind: 'archive'; account: Account }
   | { kind: 'delete'; account: Account }
   | { kind: 'deleteTransfer'; id: string; name: string }
@@ -193,6 +198,7 @@ function AccountsView({ settings, now }: { settings: MoneySettings; now: Today }
       <span className={`${className}${wrap(account)}`}>
         {cellMoney(account)(account.balance)}
         {showAvailable(account) ? <span className="acct-available">{`${t('accounts.available')} ${moneyOf(account)(account.available)}`}</span> : null}
+        {isSome(account.setAside) ? <span className="acct-available">{t('stashes.setAside', { amount: moneyOf(account)(account.setAside) })}</span> : null}
         {account.foreign ? (
           <span className="acct-available acct-in-main" title={about}>
             <span aria-hidden="true">{t('accounts.inMain', { amount: money(account.balanceInMain) })}</span>
@@ -448,6 +454,20 @@ function AccountsView({ settings, now }: { settings: MoneySettings; now: Today }
           onSaved={refresh}
         />
       ) : null}
+      {dialog?.kind === 'stash' && accounts ? (
+        <StashModal
+          key={`stash:new:${dialog.accountId}`}
+          stash={null}
+          accounts={accounts}
+          accountId={dialog.accountId}
+          today={now.date}
+          onClose={() => setDialog(null)}
+          onSaved={() => {
+            setDialog((current) => (current === dialog ? null : current))
+            refresh()
+          }}
+        />
+      ) : null}
       {dialog?.kind === 'archive' ? (
         <ConfirmModal
           title={t('rec.confirmTitle', { action: t('accounts.archive'), name: nameOf(dialog.account) })}
@@ -496,6 +516,7 @@ function AccountsView({ settings, now }: { settings: MoneySettings; now: Today }
                 onRestore={() => void run(() => accountsApi.unarchive(chosen.id))}
                 onEditTransfer={(id) => void editTransfer(id)}
                 onDeleteTransfer={(id, name) => setDialog({ kind: 'deleteTransfer', id, name })}
+                onNewStash={() => setDialog({ kind: 'stash', accountId: chosen.id })}
               />
             ) : (
               <>
@@ -611,6 +632,7 @@ function AccountPage({
   onRestore,
   onEditTransfer,
   onDeleteTransfer,
+  onNewStash,
 }: {
   account: Account
   settings: MoneySettings
@@ -621,6 +643,8 @@ function AccountPage({
   onRestore: () => void
   onEditTransfer: (id: string) => void
   onDeleteTransfer: (id: string, name: string) => void
+  /** Opens the dialog that makes a stash, in this account. */
+  onNewStash: () => void
 }) {
   const t = useT()
   const phone = useProfile() === 'phone'
@@ -631,6 +655,8 @@ function AccountPage({
   const [month, setMonth] = useState(now.month)
   const [statement, setStatement] = useState<AccountStatement | null>(null)
   const [breakdown, setBreakdown] = useState<Breakdown | null>(null)
+  // the stashes in this account, and read again with the rest
+  const [stashList, setStashList] = useState<Stash[] | null>(null)
   // The page of an account is in the account's currency: its title, balance and what is available, the statement (its lines and the balance after
   // each) and the two lists by category. The value in the app's currency is the one thing in the app's own.
   const appMoney = (amount: string) => formatMoney(amount, settings.currency, settings.locale)
@@ -668,6 +694,21 @@ function AccountPage({
       cancelled = true
     }
   }, [account.id, month, reload, say])
+
+  useEffect(() => {
+    let cancelled = false
+    void stashesApi.list(account.id).then(
+      (loaded) => {
+        if (!cancelled) setStashList(loaded)
+      },
+      (failure) => {
+        if (!cancelled) say(errorText(failure), 'error')
+      },
+    )
+    return () => {
+      cancelled = true
+    }
+  }, [account.id, reload, say])
 
   // Keyboard: [ and ] step through months, t jumps to this month.
   useShortcut('prev', () => setMonth((current) => shiftMonth(current, -1)))
@@ -849,6 +890,39 @@ function AccountPage({
           <ShareList title={t('accounts.spentByCategory')} shares={shown.expenses} total={shown.expenseTotal} tone="expense" money={statementMoney(shown)} />
           <ShareList title={t('accounts.cameInByCategory')} shares={shown.income} total={shown.incomeTotal} tone="income" money={statementMoney(shown)} />
         </div>
+      ) : null}
+      {/* What is set aside in this account: its stashes as small cards that open them, what is set aside and what is free, and a new stash. */}
+      {stashList && (stashList.length > 0 || !account.archived) ? (
+        <section className="acct-stashes" aria-label={t('nav.stashes')}>
+          <h2 className="debts-heading">
+            <Link to="/app/stashes">{t('nav.stashes')}</Link>
+          </h2>
+          {stashList.length > 0 ? (
+            <div className="stash-mini-list">
+              {activeStashes(stashList).map((stash) => (
+                <StashMini key={stash.id} stash={stash} locale={settings.locale} />
+              ))}
+            </div>
+          ) : (
+            <p className="hint">{t('stashes.noStashes')}</p>
+          )}
+          <div className="stash-part-foot">
+            {stashList.length > 0 || isSome(account.setAside) ? (
+              <p className="hint stash-free-line">
+                {t('stashes.setAside', { amount: money(account.setAside) })} ·{' '}
+                <span className={overBooked(account.free) ? 'stash-free is-over' : 'stash-free'}>{t('stashes.free', { amount: money(account.free) })}</span>
+                {overBooked(account.free) ? <span className="stash-warn"> {t('stashes.overBooked')}</span> : null}
+              </p>
+            ) : (
+              <span />
+            )}
+            {account.archived ? null : (
+              <Button variant="outline" size="sm" onClick={onNewStash}>
+                {t('stashes.add')}
+              </Button>
+            )}
+          </div>
+        </section>
       ) : null}
       {lines && lines.length === 0 ? <p className="hint">{t('accounts.empty')}</p> : null}
       {lines && lines.length > 0 && phone ? (

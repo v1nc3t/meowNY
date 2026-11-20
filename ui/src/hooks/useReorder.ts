@@ -2,7 +2,7 @@ import { useEffect, useId, useRef, useState } from 'react'
 import { useProfile } from './profile'
 import { useT } from '../i18n/context'
 import type { MessageKey } from '../i18n/en'
-import { activeIds, HOLD_MS, HOLD_SLOP, moveItem, scrollStep, shifts, targetIndex } from '../lib/reorder'
+import { activeIds, HOLD_MS, HOLD_SLOP, moveItem, nearestIndex, scrollStep, shifts, targetIndex } from '../lib/reorder'
 
 type Item = { id: string; name: string; deleted: boolean }
 
@@ -21,8 +21,12 @@ type Drag = {
   /** How far the dragged row may go up and down. */
   lowest: number
   highest: number
+  startX: number
   startY: number
+  lastX: number
   lastY: number
+  /** For a grid: the middle of each movable row before the drag. */
+  centers: { x: number; y: number }[]
   scroller: HTMLElement | null
   scrollStart: number
   frame: number
@@ -41,17 +45,18 @@ function scrollParent(from: HTMLElement): HTMLElement | null {
  * Reordering of a list of rows (`data-reorder-id` on each, inside the element given to `listRef`): hold a row and drag it, or
  * Alt+arrow up and down on a focused row. `items` are the rows in order; read-only (deleted) ones stay where they are and are
  * left out of the ids that `onReorder` gets. Pointer events, because the app blocks native dragging. `movedText` is what a screen reader
- * hears after a move, with {name}, {position} and {count}.
+ * hears after a move, with {name}, {position} and {count}. With `grid` the rows are cards side by side (the stashes): the held card follows the
+ * pointer both ways, the others stay where they are, and the one it is nearest to is marked (`is-drop-target`) and is where it lands.
  */
-export function useReorder(items: Item[] | null, onReorder: (ids: string[]) => void, movedText: MessageKey = 'categories.reordered') {
+export function useReorder(items: Item[] | null, onReorder: (ids: string[]) => void, movedText: MessageKey = 'categories.reordered', grid = false) {
   const t = useT()
   const phone = useProfile() === 'phone'
   const [list, setList] = useState<HTMLElement | null>(null)
   const [live, setLive] = useState('')
   const hintId = useId()
-  const latest = useRef({ items, onReorder, t, phone, movedText })
+  const latest = useRef({ items, onReorder, t, phone, movedText, grid })
   useEffect(() => {
-    latest.current = { items, onReorder, t, phone, movedText }
+    latest.current = { items, onReorder, t, phone, movedText, grid }
   })
 
   useEffect(() => {
@@ -86,7 +91,7 @@ export function useReorder(items: Item[] | null, onReorder: (ids: string[]) => v
 
     function begin() {
       if (!press) return
-      const { row, pointerId, y } = press
+      const { row, pointerId, x, y } = press
       press = null
       const rows = Array.from(list!.querySelectorAll<HTMLElement>(':scope > [data-reorder-id]'))
       const deleted = new Set((latest.current.items ?? []).filter((item) => item.deleted).map((item) => item.id))
@@ -106,8 +111,11 @@ export function useReorder(items: Item[] | null, onReorder: (ids: string[]) => v
         order: rows.map((_, i) => i),
         lowest: boxes[0].top - boxes[at].top,
         highest: boxes[rows.length - 1].bottom - boxes[at].bottom,
+        startX: x,
         startY: y,
+        lastX: x,
         lastY: y,
+        centers: slots.map((slot) => ({ x: boxes[slot].left + boxes[slot].width / 2, y: boxes[slot].top + boxes[slot].height / 2 })),
         scroller,
         scrollStart: scroller?.scrollTop ?? 0,
         frame: requestAnimationFrame(tick),
@@ -130,6 +138,23 @@ export function useReorder(items: Item[] | null, onReorder: (ids: string[]) => v
       const d = drag
       if (!d) return
       const scrolled = d.scroller ? d.scroller.scrollTop - d.scrollStart : 0
+      if (latest.current.grid) {
+        // a grid: the card goes where the pointer goes, and lands on the card it is nearest to
+        const dx = d.lastX - d.startX
+        const dragged = d.lastY - d.startY + scrolled
+        const here = d.centers[d.from]
+        d.to = nearestIndex(d.centers, here.x + dx, here.y + dragged)
+        const placed = moveItem(d.slots, d.from, d.to)
+        d.order = d.rows.map((_, i) => i)
+        d.slots.forEach((slot, k) => {
+          d.order[slot] = placed[k]
+        })
+        d.rows.forEach((el, i) => {
+          el.style.transform = el === d.row ? `translate(${dx}px, ${dragged}px)` : ''
+          el.classList.toggle('is-drop-target', i === d.slots[d.to] && d.to !== d.from)
+        })
+        return
+      }
       const dy = Math.min(d.highest, Math.max(d.lowest, d.lastY - d.startY + scrolled))
       d.to = targetIndex(d.mids, d.from, d.mids[d.from] + dy)
       const placed = moveItem(d.slots, d.from, d.to)
@@ -173,7 +198,7 @@ export function useReorder(items: Item[] | null, onReorder: (ids: string[]) => v
       }
       list!.classList.remove('is-reordering')
       d.rows.forEach((el) => {
-        el.classList.remove('is-lifted')
+        el.classList.remove('is-lifted', 'is-drop-target')
         el.style.transform = ''
       })
       if (!save || d.to === d.from) return
@@ -194,6 +219,7 @@ export function useReorder(items: Item[] | null, onReorder: (ids: string[]) => v
     function onMove(event: PointerEvent) {
       if (press && event.pointerId === press.pointerId && Math.hypot(event.clientX - press.x, event.clientY - press.y) > HOLD_SLOP) stopPress()
       if (drag && event.pointerId === drag.pointerId) {
+        drag.lastX = event.clientX
         drag.lastY = event.clientY
         update()
       }

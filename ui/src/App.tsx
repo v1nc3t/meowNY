@@ -9,6 +9,7 @@ import { useProfile } from './hooks/profile'
 const DashboardPage = lazy(pageLoaders.dashboard)
 const TransactionsPage = lazy(pageLoaders.transactions)
 const AccountsPage = lazy(pageLoaders.accounts)
+const StashesPage = lazy(pageLoaders.stashes)
 const CategoriesPage = lazy(pageLoaders.categories)
 const RecurringPage = lazy(pageLoaders.recurring)
 const DocumentsPage = lazy(pageLoaders.documents)
@@ -47,6 +48,8 @@ const router = createBrowserRouter([
       { path: 'transactions', element: <TransactionsPage /> },
       // an account in the address is the one whose page is shown
       { path: 'accounts/:accountId?', element: <AccountsPage /> },
+      // a stash in the address is the one whose page is shown
+      { path: 'stashes/:stashId?', element: <StashesPage /> },
       { path: 'categories', element: <CategoriesPage /> },
       { path: 'recurring', element: <RecurringPage /> },
       { path: 'documents', element: <DocumentsPage /> },

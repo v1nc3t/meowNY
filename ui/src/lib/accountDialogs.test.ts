@@ -64,6 +64,8 @@ const account = (id: string, name: string, more: Partial<Account> = {}): Account
   foreign: false,
   rate: null,
   balanceInMain: '0.00',
+  setAside: '0.00',
+  free: '0.00',
   ...more,
 })
 const main = account('1', 'Main account')

@@ -27,6 +27,10 @@ export type ReportLabels = {
   netWorth: string
   /** The mark beside an account that net worth leaves out. */
   notInNetWorth: string
+  /** The table of stashes after the accounts: its title and the two columns of numbers (docs/stash-design.md, section 10). */
+  stashes: string
+  saved: string
+  target: string
 }
 
 export const capital = (text: string) => text.charAt(0).toLocaleUpperCase(activeLanguage()) + text.slice(1)
@@ -72,5 +76,8 @@ export function reportLabels(period: string): ReportLabels {
     change: capital(t('report.change')),
     netWorth: capital(t('report.netWorth')),
     notInNetWorth: `(${t('accounts.notInNetWorth')})`,
+    stashes: capital(t('report.stashes')),
+    saved: capital(t('report.saved')),
+    target: capital(t('report.target')),
   }
 }

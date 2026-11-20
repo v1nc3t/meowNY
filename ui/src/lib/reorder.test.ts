@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { activeIds, applyOrder, moveItem, scrollStep, SCROLL_EDGE, SCROLL_MAX, shifts, targetIndex } from './reorder.ts'
+import { activeIds, applyOrder, moveItem, nearestIndex, scrollStep, SCROLL_EDGE, SCROLL_MAX, shifts, targetIndex } from './reorder.ts'
 
 test('moving an item takes it out and puts it back, and leaves the input alone', () => {
   const items = ['a', 'b', 'c', 'd']
@@ -49,4 +49,20 @@ test('the list scrolls near its edges only, faster the closer the pointer is', (
   assert.equal(scrollStep(500, 100, 500), SCROLL_MAX)
   assert.ok(scrollStep(100 + SCROLL_EDGE / 2, 100, 500) < 0)
   assert.ok(Math.abs(scrollStep(100 + SCROLL_EDGE / 2, 100, 500)) < SCROLL_MAX)
+})
+
+test('a dragged card in a grid lands on the card it is nearest to', () => {
+  // two columns of two: reading order a b / c d, each 100 wide and 80 tall
+  const centers = [
+    { x: 50, y: 40 },
+    { x: 160, y: 40 },
+    { x: 50, y: 130 },
+    { x: 160, y: 130 },
+  ]
+  assert.equal(nearestIndex(centers, 50, 40), 0, 'where it started')
+  assert.equal(nearestIndex(centers, 140, 50), 1, 'to the right')
+  assert.equal(nearestIndex(centers, 60, 120), 2, 'down')
+  assert.equal(nearestIndex(centers, 400, 400), 3, 'far past the end: the last')
+  assert.equal(nearestIndex(centers, -300, -300), 0, 'far before the start: the first')
+  assert.equal(nearestIndex([], 5, 5), 0, 'nothing to land on')
 })

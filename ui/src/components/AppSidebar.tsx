@@ -14,6 +14,7 @@ const items = [
   { to: '/app/dashboard', label: 'nav.dashboard', icon: 'dashboard', page: 'dashboard', shortcut: 'goDashboard' },
   { to: '/app/transactions', label: 'nav.transactions', icon: 'transactions', page: 'transactions', shortcut: 'goTransactions' },
   { to: '/app/accounts', label: 'nav.accounts', icon: 'accounts', page: 'accounts', shortcut: 'goAccounts' },
+  { to: '/app/stashes', label: 'nav.stashes', icon: 'stash', page: 'stashes', shortcut: 'goStashes' },
   { to: '/app/categories', label: 'nav.categories', icon: 'categories', page: 'categories', shortcut: 'goCategories' },
   { to: '/app/recurring', label: 'nav.recurring', icon: 'recurring', page: 'recurring', shortcut: 'goRecurring' },
   { to: '/app/debts', label: 'nav.debts', icon: 'debts', page: 'debts', shortcut: 'goDebts' },
@@ -33,7 +34,7 @@ export default function AppSidebar({
   const phone = useProfile() === 'phone'
   const lock = () => void vault.lock().then(() => window.location.reload(), () => undefined)
   if (phone) {
-    // A phone has a bar at the top: the name on the left, and accounts, documents, sync, settings and lock on the right (the other pages are tabs).
+    // A phone has a bar at the top: the name on the left, and accounts, stashes, documents, sync, settings and lock on the right (the other pages are tabs).
     return (
       <header className="phone-header">
         {/* the name has a label of its own: the word goes when the bar is too narrow for it (phone.css) */}
@@ -49,6 +50,14 @@ export default function AppSidebar({
             className={({ isActive }) => (isActive ? 'phone-action active' : 'phone-action')}
           >
             <Icon name="accounts" className="tab-icon" />
+          </NavLink>
+          <NavLink
+            to="/app/stashes"
+            aria-label={t('nav.stashes')}
+            onPointerDown={() => preloadPage('stashes')}
+            className={({ isActive }) => (isActive ? 'phone-action active' : 'phone-action')}
+          >
+            <Icon name="stash" className="tab-icon" />
           </NavLink>
           <NavLink
             to="/app/documents"

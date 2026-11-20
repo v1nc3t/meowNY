@@ -136,14 +136,22 @@ html.is-phone .app-footer > p a {
   container-name: phone-bar;
 }
 
-/* The bar holds the cat and the name at the left and five icons of 44px at the right. The name goes, and the cat stays, in a bar too narrow
-   for all of it. The width asked about is the bar inside its padding: the cat (32px), the name (84px) and the icons (5 x 44px) are 336px,
-   and the gap between the logo and the icons (1rem), the gap in the logo (0.5rem) and the gaps between the icons (4 x 0.25rem) are 2.5rem.
-   The icons keep their size, and the name is back as soon as it fits. The link has a label of its own (components/AppSidebar.tsx), so it
-   keeps its name. */
-@container phone-bar (max-width: calc(336px + 2.5rem)) {
+/* The bar holds the cat and the name at the left and six icons of 44px at the right (accounts, stashes, documents, sync, settings, lock).
+   The name goes, and the cat stays, in a bar too narrow for all of it. The width asked about is the bar inside its padding: the cat (32px),
+   the name (84px) and the icons (6 x 44px) are 380px, and the gap between the logo and the icons (1rem), the gap in the logo (0.5rem) and
+   the gaps between the icons (5 x 0.25rem) are 2.75rem. The icons keep their size, and the name is back as soon as it fits. The link has a
+   label of its own (components/AppSidebar.tsx), so it keeps its name. */
+@container phone-bar (max-width: calc(380px + 2.75rem)) {
   .app-logo-word {
     display: none;
+  }
+}
+
+/* On the narrowest phones the cat and the six icons leave only a few pixels over at 360px: the gaps between the icons shrink first (the lock
+   is never hidden). */
+@container phone-bar (max-width: 340px) {
+  .phone-actions {
+    gap: 0;
   }
 }
 

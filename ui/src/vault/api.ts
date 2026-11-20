@@ -15,6 +15,10 @@ const Conversion = z.object({
   transactions: z.number().int().nonnegative(),
   recurring: z.number().int().nonnegative(),
   budgets: z.number().int().nonnegative(),
+  // stashes with a target or an entry that were converted, and their entries (docs/stash-design.md, section 8). The keys are as the Rust struct
+  // names them; an app from before stashes leaves them out.
+  stashes: z.number().int().nonnegative().default(0),
+  stash_entries: z.number().int().nonnegative().default(0),
 })
 const RecoveryKey = z.string().regex(/^([0-9A-Z]{4}-){7}[0-9A-Z]{4}$/)
 const Status = z.enum(['not_set_up', 'locked', 'unlocked'])

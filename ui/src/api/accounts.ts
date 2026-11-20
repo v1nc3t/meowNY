@@ -32,7 +32,7 @@ export const Account = z.object({
   changeThisMonth: signed,
   /** The latest day something moved it, the opening balance aside; null when nothing has. */
   lastActivity: date.nullable(),
-  /** How many rows point at it. An account with none (that is not the main one) can be deleted. */
+  /** How many rows point at it, its stashes too. An account with none (that is not the main one) can be deleted. */
   entries: z.number().int().nonnegative(),
   /** The bank's BIC; null when there is none. */
   bic: z.string().nullable(),
@@ -57,6 +57,10 @@ export const Account = z.object({
   rate: rate.nullable(),
   /** The balance in the app's currency, at the rate: the same as `balance` for an account in the app's currency. */
   balanceInMain: signed,
+  /** What the stashes in it hold, the archived ones too, in the account's currency; never below 0 (docs/stash-design.md, section 3). */
+  setAside: unsigned,
+  /** What no stash has set aside: the balance minus `setAside`. Below 0 when the stashes hold more than the account has. */
+  free: signed,
 })
 export type Account = z.infer<typeof Account>
 

@@ -18,6 +18,7 @@ export default function Modal({
   wide = false,
   readOnly = false,
   danger = false,
+  leading,
   children,
 }: {
   title: string
@@ -34,6 +35,8 @@ export default function Modal({
   readOnly?: boolean
   /** The submit button is red: the dialog is about something that is hard to take back. */
   danger?: boolean
+  /** A button at the left of the row of buttons, away from the two answers (delete, in a dialog that changes something). */
+  leading?: ReactNode
   children: ReactNode
 }) {
   const t = useT()
@@ -80,6 +83,7 @@ export default function Modal({
         </div>
         {children}
         <div className="modal-actions">
+          {leading ? <div className="modal-lead">{leading}</div> : null}
           <Button variant="outline" onClick={onClose}>
             {cancelLabel ?? t('common.cancel')}
           </Button>

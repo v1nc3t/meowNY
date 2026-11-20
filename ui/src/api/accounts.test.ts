@@ -33,9 +33,12 @@ const account = {
   foreign: false,
   rate: null,
   balanceInMain: '1520.35',
+  // what the stashes in it hold, and what is left of the balance (docs/stash-design.md, section 4.5)
+  setAside: '0.00',
+  free: '1520.35',
 }
 // an account in lei, at 1 EUR = 5.00 RON: its amounts are in lei, and `balanceInMain` is what it is worth in the app's currency
-const lei = { ...account, id: '3', name: 'Lei account', currency: 'RON', foreign: true, rate: '5.00', balance: '120.00', balanceInMain: '24.00', virtualBalance: '0.00', available: '120.00' }
+const lei = { ...account, id: '3', name: 'Lei account', currency: 'RON', foreign: true, rate: '5.00', balance: '120.00', balanceInMain: '24.00', virtualBalance: '0.00', available: '120.00', free: '120.00' }
 const line = { date: '2026-11-02', source: 'TRANSACTION', id: '9', what: 'Lidl', other: 'Groceries', amount: '-12.50', balance: '887.50' }
 const ok = (schema: { safeParse: (value: unknown) => { success: boolean } }, value: unknown) => schema.safeParse(value).success
 
@@ -84,7 +87,7 @@ test('an account with a wrong shape is refused', () => {
   ]
   for (const [why, value] of bad) assert.equal(ok(Account, value), false, why)
   // the backend always sends the six new fields, so an account without one is refused
-  for (const field of ['bic', 'notes', 'group', 'includeInNetWorth', 'virtualBalance', 'available', 'currency', 'foreign', 'rate', 'balanceInMain']) {
+  for (const field of ['bic', 'notes', 'group', 'includeInNetWorth', 'virtualBalance', 'available', 'currency', 'foreign', 'rate', 'balanceInMain', 'setAside', 'free']) {
     assert.equal(ok(Account, Object.fromEntries(Object.entries(account).filter(([key]) => key !== field))), false, `${field} left out`)
   }
 })
