@@ -1,6 +1,7 @@
 //! The Excel export: one workbook with a sheet each for transactions, categories, budgets,
-//! recurring items, the accounts and the transfers between them, a monthly summary, the documents (listed, never the files), the friends, the
-//! ledger of money lent and borrowed, and the parts of the bills that are shared.
+//! recurring items, the accounts and the transfers between them, the stashes and their entries (the transfers and the stashes only in a file with
+//! no limit), a monthly summary, the documents (listed, never the files), the friends, the ledger of money lent and borrowed, and the parts of
+//! the bills that are shared.
 //!
 //! Dates are real dates and money is real numbers with a currency number format, so the sheets sort,
 //! filter and sum in Excel. Amounts are stored as whole minor units and divided by 100 only when a cell
@@ -21,8 +22,8 @@ use rust_xlsxwriter::{ExcelDateTime, Format, Workbook, Worksheet, XlsxError};
 use super::debts::{self, EntryRow, LineRow, PersonRow};
 use super::{
     account_of_rows, account_rows, budget_rows, category_rows, currency, document_names_by_transaction, documents, due_payments, join_names, monthly_sums,
-    native_of_transactions, neutralise, parse, recurring_rows, today_of, transactions, transfer_rows, BudgetRow, CategoryRow, DocRow, Parsed, Section, Selection,
-    Tx, TransferRow,
+    native_of_transactions, neutralise, parse, recurring_rows, stash_rows, today_of, transactions, transfer_rows, BudgetRow, CategoryRow, DocRow, Parsed, Section,
+    Selection, StashRow, Tx, TransferRow,
 };
 use crate::accounts::Account;
 use crate::display::{DateOrder, DateSeparator, DisplayFormat};
@@ -76,6 +77,8 @@ struct Data {
     /// The accounts, and the transfers (only in a file with no limit). With a limit an account is its name and its type: `whole` says it is not one.
     accounts: Vec<Account>,
     transfers: Option<Vec<TransferRow>>,
+    /// The stashes with their entries, only in a file with no limit (`Parsed::with_stashes`).
+    stashes: Option<Vec<StashRow>>,
     whole: bool,
     /// The account of each transaction, recurring item and ledger entry, by the id of the row: its id and its name.
     transaction_accounts: HashMap<i64, (i64, String)>,
@@ -106,8 +109,8 @@ impl Data {
     }
 }
 
-/// The parts that have sheets. The change history has none, so a workbook of nothing else would have no sheet at all. (The transfers have one only
-/// in a file with no limit: `Parsed::with_transfers`.)
+/// The parts that have sheets. The change history has none, so a workbook of nothing else would have no sheet at all. (The transfers and the stashes
+/// have sheets only in a file with no limit: `Parsed::with_transfers`, `Parsed::with_stashes`.)
 const SHEETED: [Section; 9] = [
     Section::Transactions,
     Section::Categories,
@@ -169,6 +172,7 @@ fn load(conn: &Connection, sel: &Parsed) -> Result<Data, AppError> {
         recurring: if wants(Section::Recurring) { recurring_rows(conn, sel)? } else { Vec::new() },
         accounts: if wants(Section::Accounts) { account_rows(conn, sel, &today)? } else { Vec::new() },
         transfers: if sel.with_transfers() { Some(transfer_rows(conn, sel)?) } else { None },
+        stashes: if sel.with_stashes() { Some(stash_rows(conn, sel)?) } else { None },
         whole: sel.everything(),
         transaction_accounts: account_of_rows(conn, "transactions")?,
         recurring_accounts: account_of_rows(conn, "recurring_transactions")?,
@@ -194,7 +198,7 @@ fn load(conn: &Connection, sel: &Parsed) -> Result<Data, AppError> {
 /// The workbook as the bytes of an .xlsx file.
 pub fn workbook(conn: &Connection, selection: &Selection, format: &DisplayFormat) -> Result<Vec<u8>, AppError> {
     let sel = parse(selection)?;
-    if !SHEETED.iter().any(|section| sel.wants(*section)) && !sel.with_transfers() {
+    if !SHEETED.iter().any(|section| sel.wants(*section)) && !sel.with_transfers() && !sel.with_stashes() {
         return Err(AppError::InvalidInput);
     }
     let codes = format.codes()?;
@@ -427,6 +431,50 @@ fn write(data: &Data, codes: &Codes) -> Result<Vec<u8>, XlsxError> {
             text(s, row, 4, x.note.as_deref().unwrap_or(""))?;
             if let Some(minor) = x.to_amount {
                 money(s, row, 5, minor, if x.to_foreign { &plain } else { &cash })?;
+            }
+        }
+    }
+
+    if let Some(stashes) = &data.stashes {
+        // Money set aside in an account for a goal. Every amount of a stash is in the currency of its account: the app's symbol only when that is the
+        // app's currency, and the `Currency` cell says which it is.
+        let s = sheet(
+            &mut book,
+            "Stashes",
+            &[("Name", 30.0), ("Account", 30.0), ("Currency", 10.0), ("Target", 14.0), ("Target date", 12.0), ("Saved", 14.0), ("Archived", 10.0), ("Notes", 44.0)],
+        )?;
+        for (i, t) in stashes.iter().enumerate() {
+            let row = i as u32 + 1;
+            let held = if t.foreign { &plain } else { &cash };
+            text(s, row, 0, &t.name)?;
+            text(s, row, 1, &t.account)?;
+            text(s, row, 2, &t.currency)?;
+            // a stash with no target leaves the cell empty
+            if let Some(minor) = t.target {
+                money(s, row, 3, minor, held)?;
+            }
+            if let Some(target_date) = &t.target_date {
+                date(s, row, 4, target_date, &day)?;
+            }
+            money(s, row, 5, t.saved, held)?;
+            s.write_boolean(row, 6, t.archived)?;
+            text(s, row, 7, t.notes.as_deref().unwrap_or(""))?;
+        }
+
+        // The history of every stash, oldest first: the amount is signed (an add above 0, a take below 0), and the transfer is the other account of
+        // the one that came with the entry.
+        let s = sheet(&mut book, "Stash entries", &[("Date", 12.0), ("Stash", 30.0), ("Kind", 10.0), ("Amount", 14.0), ("Note", 44.0), ("Transfer", 30.0)])?;
+        let mut row = 0;
+        for t in stashes {
+            let held = if t.foreign { &plain } else { &cash };
+            for e in &t.entries {
+                row += 1;
+                date(s, row, 0, &e.date, &day)?;
+                text(s, row, 1, &t.name)?;
+                text(s, row, 2, if e.minor > 0 { "ADD" } else { "TAKE" })?;
+                money(s, row, 3, e.minor, held)?;
+                text(s, row, 4, e.note.as_deref().unwrap_or(""))?;
+                text(s, row, 5, e.other_account.as_deref().unwrap_or(""))?;
             }
         }
     }
@@ -833,7 +881,7 @@ mod tests {
         assert_eq!((&evil[3], &evil[5]), (&Cell::Text("'=cmd|' /C calc'!A0".into()), &Cell::Text("'+1+1".into())));
         // No cell is a formula: the file has no <f> elements at all.
         let sheets: Vec<String> = Book::open(&bytes).parts.keys().filter(|n| n.starts_with("xl/worksheets/sheet")).cloned().collect();
-        assert_eq!(sheets.len(), 13);
+        assert_eq!(sheets.len(), 15);
         for name in sheets {
             let part = Book::open(&bytes).part(&name);
             assert!(!part.contains("<f>") && !part.contains("<f "), "{name} has a formula");
@@ -1420,6 +1468,174 @@ mod tests {
             }
         }
         assert!(strings(&rows(&mut book, "Accounts")).contains(&"'=SUM(1+1)".to_string()));
+        for name in Book::open(&bytes).parts.keys().filter(|n| n.starts_with("xl/worksheets/sheet")) {
+            let part = Book::open(&bytes).part(name);
+            assert!(!part.contains("<f>") && !part.contains("<f "), "{name} has a formula");
+        }
+    }
+
+    // ---- stashes (docs/stash-design.md, section 10) ----
+
+    #[test]
+    fn the_stashes_and_their_entries_have_a_sheet_each_right_after_the_transfers() {
+        use super::super::stashes_tests::{stashed, NOTES};
+        let s = stashed();
+        let mut book = open(&build(&s.c.conn, &Selection::default(), &euro_format()));
+        let names = book.sheet_names();
+        let at = names.iter().position(|n| n == "Transfers").unwrap();
+        assert_eq!(names[at..at + 4], ["Transfers", "Stashes", "Stash entries", "Monthly summary"], "{names:?}");
+
+        let stashes = rows(&mut book, "Stashes");
+        assert_eq!(strings(&stashes[..1]), ["Name", "Account", "Currency", "Target", "Target date", "Saved", "Archived", "Notes"]);
+        assert!(stashes.iter().all(|r| r.len() == 8));
+        assert_eq!(stashes.len(), 1 + 4, "the archived one too, last");
+        assert_eq!(
+            stashes[1..].iter().map(|r| strings(&[r[..2].to_vec()])).collect::<Vec<_>>(),
+            [["New laptop", "Main account"], ["Holiday in Lisbon", "Savings"], ["Rainy day", "Savings"], ["Bike", "Savings"]],
+            "in the person's order"
+        );
+        let notes = format!("'{NOTES}");
+        assert_eq!(
+            stashes[2],
+            [text_cell("Holiday in Lisbon"), text_cell("Savings"), text_cell("EUR"), Cell::Number(1200.0), Cell::Date(serial(2027, 6, 30)), Cell::Number(120.0), Cell::Bool(false), text_cell(&notes)],
+            "a target, a date, what it holds, not archived, and notes that begin with `=` written as text"
+        );
+        assert_eq!(stashes[1][3..7], [Cell::Number(900.0), Cell::Empty, Cell::Number(900.0), Cell::Bool(false)], "reached, with no date");
+        assert!(blank(&stashes[1][7]), "and no notes: no text");
+        assert_eq!((&stashes[3][3], &stashes[3][4], &stashes[3][5]), (&Cell::Empty, &Cell::Empty, &Cell::Number(200.0)), "no target: an empty cell, not 0");
+        assert_eq!((&stashes[4][0], &stashes[4][5], &stashes[4][6]), (&text_cell("Bike"), &Cell::Number(0.0), &Cell::Bool(true)), "archived, and spent");
+        // the account's currency is the app's: the app's format on both amounts, and the date is a date
+        for (cell, row) in [("D", 2), ("F", 2), ("D", 3), ("F", 5)] {
+            assert_eq!(book.format_code("Stashes", &format!("{cell}{row}")), EURO, "{cell}{row}");
+        }
+
+        let entries = rows(&mut book, "Stash entries");
+        assert_eq!(strings(&entries[..1]), ["Date", "Stash", "Kind", "Amount", "Note", "Transfer"]);
+        assert!(entries.iter().all(|r| r.len() == 6));
+        assert_eq!(entries.len(), 1 + 7);
+        let day = |y, m, d| Cell::Date(serial(y, m, d));
+        let (add, takes) = ("ADD", "TAKE");
+        let expected = [
+            [day(2026, 5, 1), text_cell("New laptop"), text_cell(add), Cell::Number(900.0), Cell::Empty, Cell::Empty],
+            [day(2026, 3, 1), text_cell("Holiday in Lisbon"), text_cell(add), Cell::Number(100.0), text_cell("start"), text_cell("Main account")],
+            [day(2026, 3, 1), text_cell("Holiday in Lisbon"), text_cell(add), Cell::Number(50.0), Cell::Empty, Cell::Empty],
+            [day(2026, 4, 1), text_cell("Holiday in Lisbon"), text_cell(takes), Cell::Number(-30.0), text_cell("deposit for the flat"), text_cell("Cash")],
+            [day(2026, 2, 20), text_cell("Rainy day"), text_cell(add), Cell::Number(200.0), Cell::Empty, Cell::Empty],
+            [day(2026, 1, 15), text_cell("Bike"), text_cell(add), Cell::Number(450.0), Cell::Empty, Cell::Empty],
+            [day(2026, 2, 10), text_cell("Bike"), text_cell(takes), Cell::Number(-450.0), text_cell("bought it"), Cell::Empty],
+        ];
+        for (got, want) in entries[1..].iter().zip(&expected) {
+            // an empty note and an empty transfer are cells with nothing in them or with an empty text
+            assert!(got.iter().zip(want).all(|(g, w)| g == w || (blank(g) && blank(w))), "{got:?} is not {want:?}");
+        }
+        assert_eq!(entries.len() - 1, expected.len());
+        // the transfer is the other account of the one that came with it: where the money came from for an add, where it went for a take; the amount is signed
+        assert_eq!(book.format_code("Stash entries", "D4"), EURO);
+    }
+
+    #[test]
+    fn a_stash_in_an_account_of_another_currency_has_plain_numbers_and_the_code_beside_them() {
+        use super::super::accounts_tests::foreign_case;
+        use super::super::stashes_tests::{add, make, take};
+        let (c, lei) = foreign_case();
+        let wedding = make(&c.conn, "Wedding gift", lei, Some("1000.00"), Some("2027-01-31"), None);
+        add(&c.conn, wedding, "20.00", "2026-03-10", Some("first"), None);
+        take(&c.conn, wedding, "5.00", "2026-03-11", None, None);
+        let holiday = make(&c.conn, "Holiday", c.savings, Some("1200.00"), None, None);
+        add(&c.conn, holiday, "100.00", "2026-03-10", None, None);
+        let mut book = open(&build(&c.conn, &Selection::default(), &euro_format()));
+        let stashes = rows(&mut book, "Stashes");
+        let at = |name: &str| stashes.iter().position(|r| r[0] == text_cell(name)).unwrap();
+        let w = &stashes[at("Wedding gift")];
+        assert_eq!((&w[1], &w[2], &w[3], &w[4], &w[5]), (&text_cell("Lei account"), &text_cell("RON"), &Cell::Number(1000.0), &Cell::Date(serial(2027, 1, 31)), &Cell::Number(15.0)));
+        let (n, m) = (at("Wedding gift") + 1, at("Holiday") + 1);
+        for column in ["D", "F"] {
+            assert_eq!(book.format_code("Stashes", &format!("{column}{n}")), "#,##0.00", "{column}: no symbol of the app's on an amount in lei");
+            assert_eq!(book.format_code("Stashes", &format!("{column}{m}")), EURO, "{column}: an account in the app's currency keeps the format of the app");
+        }
+        assert_eq!(stashes[m - 1][2], text_cell("EUR"));
+        let entries = rows(&mut book, "Stash entries");
+        let first = entries.iter().position(|r| r[1] == text_cell("Wedding gift")).unwrap();
+        assert_eq!((&entries[first][3], &entries[first + 1][3]), (&Cell::Number(20.0), &Cell::Number(-5.0)));
+        let other = entries.iter().position(|r| r[1] == text_cell("Holiday")).unwrap();
+        for (row, kind) in [(first + 1, "#,##0.00"), (first + 2, "#,##0.00"), (other + 1, EURO)] {
+            assert_eq!(book.format_code("Stash entries", &format!("D{row}")), kind, "D{row}");
+        }
+    }
+
+    #[test]
+    fn a_limit_leaves_the_stash_sheets_out_and_a_workbook_of_the_stashes_alone_is_refused_under_one() {
+        use super::super::stashes_tests::stashed;
+        let s = stashed();
+        let limit = Selection { category_ids: Some(vec![s.c.rent.to_string()]), ..Default::default() };
+        let mut book = open(&build(&s.c.conn, &limit, &DisplayFormat::default()));
+        let names = book.sheet_names();
+        assert!(!names.contains(&"Stashes".to_string()) && !names.contains(&"Stash entries".to_string()), "{names:?}");
+        for name in names {
+            let all = strings(&rows(&mut book, &name)).join("|");
+            for hidden in ["Holiday in Lisbon", "Rainy day", "New laptop", "Bike", "deposit for the flat", "bought it"] {
+                assert!(!all.contains(hidden), "{name} leaked {hidden:?}");
+            }
+        }
+        let only = |sections: &[Section], selection: Selection| Selection { sections: Some(sections.to_vec()), ..selection };
+        let dated = Selection { from: Some("2026-01-01".into()), ..Default::default() };
+        assert_eq!(workbook(&s.c.conn, &only(&[Section::Stashes], limit.clone()), &DisplayFormat::default()), Err(AppError::InvalidInput));
+        assert_eq!(workbook(&s.c.conn, &only(&[Section::Stashes], dated.clone()), &DisplayFormat::default()), Err(AppError::InvalidInput));
+        assert_eq!(workbook(&s.c.conn, &only(&[Section::Stashes, Section::History], dated), &DisplayFormat::default()), Err(AppError::InvalidInput));
+        assert_eq!(workbook(&s.c.conn, &only(&[Section::Stashes, Section::Transfers], limit), &DisplayFormat::default()), Err(AppError::InvalidInput), "the two parts that are never in a limited file");
+        // with no limit the stashes alone make a workbook with the two sheets
+        let mut alone = open(&build(&s.c.conn, &only(&[Section::Stashes], Selection::default()), &DisplayFormat::default()));
+        assert_eq!(alone.sheet_names(), ["Stashes", "Stash entries"]);
+        assert_eq!((rows(&mut alone, "Stashes").len(), rows(&mut alone, "Stash entries").len()), (1 + 4, 1 + 7));
+        // and a part that is left out has no sheet
+        for left_out in [&[Section::Accounts][..], &[Section::Transfers, Section::Transactions], &[Section::Categories]] {
+            let book = open(&build(&s.c.conn, &only(left_out, Selection::default()), &DisplayFormat::default()));
+            assert!(!book.sheet_names().iter().any(|n| n.starts_with("Stash")), "{left_out:?}");
+        }
+    }
+
+    #[test]
+    fn with_no_stash_the_workbook_has_the_two_sheets_with_a_heading() {
+        let (conn, ..) = lived_in();
+        let mut book = open(&build(&conn, &Selection::default(), &DisplayFormat::default()));
+        assert_eq!((rows(&mut book, "Stashes").len(), rows(&mut book, "Stash entries").len()), (1, 1));
+        let mut empty = open(&build(&db(), &Selection::default(), &DisplayFormat::default()));
+        assert_eq!((rows(&mut empty, "Stashes").len(), rows(&mut empty, "Stash entries").len()), (1, 1));
+    }
+
+    #[test]
+    fn names_and_notes_of_stashes_that_look_like_formulas_are_text_in_the_workbook_and_no_part_holds_a_formula() {
+        use super::super::accounts_tests::{awkward, case};
+        use super::super::stashes_tests::{add, make, take};
+        let c = case();
+        let ids = awkward(&c);
+        // ids: 0 `Rent, "joint"`, 1 `=SUM(1+1)`, 2 `+cash`, 3 `-5% fund`, 4 `@home`
+        make(&c.conn, "=SUM(1+1)", ids[1], Some("5.00"), None, Some("=note\nsecond, \"line\""));
+        let second = make(&c.conn, "+cash", crate::accounts::MAIN_ID, None, None, Some("@here"));
+        add(&c.conn, second, "10.00", "2026-04-11", Some("-5% off"), Some(ids[1]));
+        add(&c.conn, second, "2.00", "2026-04-11", Some("+1+1"), None);
+        take(&c.conn, second, "4.00", "2026-04-12", Some("=x"), Some(ids[2]));
+        make(&c.conn, "-5% fund", ids[3], None, None, None);
+        make(&c.conn, "Rent, \"joint\"", ids[0], None, None, None);
+        let bytes = build(&c.conn, &Selection::default(), &DisplayFormat::default());
+        let mut book = open(&bytes);
+        for name in ["Stashes", "Stash entries"] {
+            for cell in strings(&rows(&mut book, name)) {
+                assert!(!cell.starts_with(['=', '+', '-', '@', '\t', '\r']), "{name}: {cell:?}");
+            }
+        }
+        let stashes = rows(&mut book, "Stashes");
+        let row = |name: &str| stashes.iter().find(|r| r[0] == text_cell(name)).unwrap_or_else(|| panic!("no {name}"));
+        assert_eq!((&row("'=SUM(1+1)")[1], &row("'=SUM(1+1)")[7]), (&text_cell("'=SUM(1+1)"), &text_cell("'=note\nsecond, \"line\"")), "the name, the account and the notes");
+        assert_eq!((&row("'+cash")[1], &row("'+cash")[7]), (&text_cell("Main account"), &text_cell("'@here")));
+        assert_eq!(row("'-5% fund")[1], text_cell("'-5% fund"));
+        assert_eq!(row("Rent, \"joint\"")[1], text_cell("Rent, \"joint\""), "a comma and a quote are no reason for an apostrophe");
+        let entries = rows(&mut book, "Stash entries");
+        let of = |note: &str| entries.iter().find(|r| r[4] == text_cell(note)).unwrap_or_else(|| panic!("no entry {note}"));
+        assert_eq!((&of("'-5% off")[1], &of("'-5% off")[5]), (&text_cell("'+cash"), &text_cell("'=SUM(1+1)")), "the money for an add came from an account whose name is text too");
+        assert_eq!((&of("'+1+1")[1], &of("'+1+1")[2]), (&text_cell("'+cash"), &text_cell("ADD")));
+        assert!(blank(&of("'+1+1")[5]), "no transfer: no text");
+        assert_eq!((&of("'=x")[2], &of("'=x")[3], &of("'=x")[5]), (&text_cell("TAKE"), &Cell::Number(-4.0), &text_cell("'+cash")), "and so did the money of a take");
         for name in Book::open(&bytes).parts.keys().filter(|n| n.starts_with("xl/worksheets/sheet")) {
             let part = Book::open(&bytes).part(name);
             assert!(!part.contains("<f>") && !part.contains("<f "), "{name} has a formula");

@@ -26,6 +26,10 @@ pub struct Conversion {
     /// transfers between them (`docs/accounts-design.md`, sections 8 and 20.3).
     pub accounts: u32,
     pub transfers: u32,
+    /// Stashes in an account of the app's currency that had a target or at least one entry converted (a stash with neither is not counted), and
+    /// the entries converted in them (`docs/stash-design.md`, section 8). A stash in an account with a currency of its own is left as it is.
+    pub stashes: u32,
+    pub stash_entries: u32,
 }
 
 /// An exchange rate as an exact fraction, so no floating point touches money.
@@ -106,6 +110,7 @@ pub fn change(conn: &mut Connection, new_currency: &str, rate: Option<&str>, tod
         done.ledger = convert_ledger(&tx, rate)?;
         done.accounts = convert_accounts(&tx, rate)?;
         done.transfers = convert_transfers(&tx, rate)?;
+        (done.stashes, done.stash_entries) = convert_stashes(&tx, rate)?;
     }
     // The parts of the shared bills were written while the checks stood aside: they must add up to no more than their bills.
     if !splits::check(&tx)? {
@@ -146,7 +151,8 @@ pub(crate) struct Recorded<'a> {
 /// It is not refused when this device has a foreign account: the other device has already changed its currency, and refusing would stop the
 /// sync for good. What is in a foreign account's own currency is left as it is: its opening balance and virtual balance, every native
 /// amount of a transaction, the amount of a transfer that leaves it, and the amount that arrives in it. What is in the app's currency is
-/// converted, a transfer's second amount too when it arrives in an account of the app's currency (section 21.6).
+/// converted, a transfer's second amount too when it arrives in an account of the app's currency (section 21.6), and so are the target and the
+/// entries of a stash in an account of the app's currency (`docs/stash-design.md`, section 8); a stash in a foreign account is in its currency.
 pub(crate) fn apply_recorded(tx: &rusqlite::Transaction, change: &Recorded, today: &str) -> Result<Conversion, AppError> {
     let (current, generation): (String, i64) =
         tx.query_row("SELECT currency, currency_generation FROM settings WHERE id = 1", [], |r| Ok((r.get(0)?, r.get(1)?)))?;
@@ -162,6 +168,7 @@ pub(crate) fn apply_recorded(tx: &rusqlite::Transaction, change: &Recorded, toda
         done.ledger = convert_ledger(tx, rate)?;
         done.accounts = convert_accounts(tx, rate)?;
         done.transfers = convert_transfers(tx, rate)?;
+        (done.stashes, done.stash_entries) = convert_stashes(tx, rate)?;
     }
     if !splits::check(tx)? {
         return Err(AppError::Internal);
@@ -265,6 +272,39 @@ fn convert_transfers(tx: &rusqlite::Transaction, rate: Rate) -> Result<u32, AppE
         converted += 1;
     }
     Ok(converted)
+}
+
+/// The target and every entry of each stash that lives in an account of the app's currency. A stash is in its account's currency, so one in an
+/// account with a currency of its own is left as it is (a conversion that arrives by sync can meet one: `apply_recorded`). The target is at
+/// least one cent, as the check of the column asks. An entry keeps its sign and is at least one cent in size, so an add never becomes a take
+/// and an entry never becomes the 0 that the check of the column refuses. What a stash holds is then a sum of converted pieces and may be a cent
+/// above its target: it is reached all the same, so nothing is repaired (section 8). Counts the stashes that had a target or an entry converted,
+/// and the entries.
+fn convert_stashes(tx: &rusqlite::Transaction, rate: Rate) -> Result<(u32, u32), AppError> {
+    let stashes: Vec<(i64, Option<i64>)> = tx
+        .prepare("SELECT s.id, s.target_minor FROM stashes s JOIN accounts a ON a.id = s.account_id WHERE a.currency IS NULL")?
+        .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?
+        .collect::<Result<_, _>>()?;
+    let mut entries = tx.prepare("SELECT id, amount_minor FROM stash_entries WHERE stash_id = ?1")?;
+    let mut update_target = tx.prepare("UPDATE stashes SET target_minor = ?1 WHERE id = ?2")?;
+    let mut update_entry = tx.prepare("UPDATE stash_entries SET amount_minor = ?1 WHERE id = ?2")?;
+    let (mut converted_stashes, mut converted_entries) = (0, 0);
+    for (id, target) in stashes {
+        let rows: Vec<(i64, i64)> = entries.query_map([id], |r| Ok((r.get(0)?, r.get(1)?)))?.collect::<Result<_, _>>()?;
+        if target.is_none() && rows.is_empty() {
+            continue;
+        }
+        if let Some(minor) = target {
+            update_target.execute(params![at_least_one(convert(minor, rate)?), id])?;
+        }
+        for (entry, minor) in &rows {
+            let size = convert_signed(*minor, rate)?.abs().max(1);
+            update_entry.execute(params![size * minor.signum(), entry])?;
+        }
+        converted_stashes += 1;
+        converted_entries += rows.len() as u32;
+    }
+    Ok((converted_stashes, converted_entries))
 }
 
 fn convert_recurring(tx: &rusqlite::Transaction, rate: Rate) -> Result<u32, AppError> {
@@ -1153,5 +1193,319 @@ mod tests {
         accounts::transfers::create(&phone, &NewTransfer { to_amount: Some("0.01".into()), ..new_transfer(MAIN_ID, lei, "0.01", "2026-02-02") }).unwrap();
         apply_change_of(&desktop, &mut phone).unwrap();
         assert_eq!(transfer_amounts(&phone), [(1, 1_000, Some(1)), (2, 1, Some(1))], "one cent converted at 0.001 is a cent, not nothing; what is in lei is not touched");
+    }
+
+    // ---- stashes (docs/stash-design.md, section 8) ----
+
+    use crate::stashes::fixtures as st;
+
+    /// The target of every stash and the amount of every entry (signed), in the order they were made: (stash id, target, [entry amounts]).
+    fn stash_numbers(conn: &Connection) -> Vec<(i64, Option<i64>, Vec<i64>)> {
+        let ids: Vec<(i64, Option<i64>)> =
+            conn.prepare("SELECT id, target_minor FROM stashes ORDER BY id").unwrap().query_map([], |r| Ok((r.get(0)?, r.get(1)?))).unwrap().map(Result::unwrap).collect();
+        ids.into_iter()
+            .map(|(id, target)| {
+                let entries = conn
+                    .prepare("SELECT amount_minor FROM stash_entries WHERE stash_id = ?1 ORDER BY id")
+                    .unwrap()
+                    .query_map([id], |r| r.get(0))
+                    .unwrap()
+                    .map(Result::unwrap)
+                    .collect();
+                (id, target, entries)
+            })
+            .collect()
+    }
+
+    /// The stamp and `updated_at` of every stash and entry: what a conversion must not move.
+    fn stash_stamps(conn: &Connection) -> Vec<String> {
+        conn.prepare("SELECT stamp || updated_at FROM stashes UNION ALL SELECT stamp || updated_at FROM stash_entries")
+            .unwrap()
+            .query_map([], |r| r.get(0))
+            .unwrap()
+            .map(Result::unwrap)
+            .collect()
+    }
+
+    /// Stashes in the main currency: Holiday (a target, two adds and a take), Rainy day (no target, one add), a stash with a target and no
+    /// entry, one with neither (nothing to convert), and an archived one that was spent. Savings is archived last, so it is in an archived account.
+    fn with_stashes() -> Connection {
+        let (conn, _) = db();
+        let savings = st::funded(&conn, "Savings", "5000.00");
+        let everyday = st::funded(&conn, "Everyday", "900.00");
+        let holiday = st::aimed(&conn, "Holiday", savings, "1200.00");
+        st::put_on(&conn, holiday, "100.00", "2026-05-01");
+        st::put_on(&conn, holiday, "250.50", "2026-06-01");
+        st::pull(&conn, holiday, "40.00");
+        let rainy = st::stash(&conn, "Rainy day", everyday);
+        st::put(&conn, rainy, "75.25");
+        st::aimed(&conn, "Empty goal", everyday, "300.00");
+        st::stash(&conn, "Bare", everyday);
+        let bike = st::aimed(&conn, "Bike", everyday, "450.00");
+        st::put(&conn, bike, "450.00");
+        st::pull(&conn, bike, "450.00");
+        crate::stashes::archive(&conn, bike, TODAY).unwrap();
+        accounts::archive(&conn, savings, TODAY).unwrap();
+        conn
+    }
+
+    #[test]
+    fn the_target_and_every_entry_of_a_stash_are_converted_and_counted_and_a_take_keeps_its_sign() {
+        let mut conn = with_stashes();
+        let before = stash_numbers(&conn);
+        assert_eq!(before, [(1, Some(120_000), vec![10_000, 25_050, -4_000]), (2, None, vec![7_525]), (3, Some(30_000), vec![]), (4, None, vec![]), (5, Some(45_000), vec![45_000, -45_000])]);
+
+        let done = change(&mut conn, "USD", Some("1.08"), "2026-10-13").unwrap();
+
+        assert_eq!((done.stashes, done.stash_entries), (4, 6), "the stash with neither a target nor an entry is not counted; the archived stash and the archived account are");
+        assert_eq!(
+            stash_numbers(&conn),
+            [(1, Some(129_600), vec![10_800, 27_054, -4_320]), (2, None, vec![8_127]), (3, Some(32_400), vec![]), (4, None, vec![]), (5, Some(48_600), vec![48_600, -48_600])],
+            "a target and an add are converted, a take is converted and stays below 0"
+        );
+        // what a stash holds is the sum of its converted pieces; the money in the accounts did not move by this, so only the numbers were scaled
+        let holiday = st::shown(&conn, 1);
+        assert_eq!((holiday.saved.as_str(), holiday.target.as_deref(), holiday.left.as_deref()), ("335.34", Some("1296.00"), Some("960.66")));
+        assert_eq!(st::shown(&conn, 5).saved, "0.00", "the bike was taken out in full, and still is");
+        assert_eq!(accounts::get(&conn, 2, st::TODAY).unwrap().set_aside, "335.34", "the account that holds the savings says what its stash holds, in the new numbers");
+        // the generation moved, and the whole change is recorded as any other
+        assert_eq!((currency(&conn).as_str(), generation(&conn)), ("USD", 1));
+        for table in ["stashes", "stash_entries"] {
+            let broken: i64 = conn.query_row(&format!("SELECT count(*) FROM pragma_foreign_key_check('{table}')"), [], |r| r.get(0)).unwrap();
+            assert_eq!(broken, 0, "{table}");
+        }
+    }
+
+    #[test]
+    fn a_conversion_moves_no_stamp_and_no_updated_at_of_a_stash_or_an_entry_and_a_change_of_the_label_alone_touches_nothing() {
+        let mut conn = with_stashes();
+        let (stamps, numbers) = (stash_stamps(&conn), stash_numbers(&conn));
+        // everything of the two tables but the amounts: the sync id, the stamp, the name, the account, the dates, the note, the link and the times
+        let others = |conn: &Connection| -> Vec<String> {
+            conn.prepare(
+                "SELECT sync_id || '|' || stamp || '|' || name || '|' || account_id || '|' || COALESCE(target_date, '') || '|' || COALESCE(notes, '') || '|' || archived || '|' || position
+                        || '|' || created_at || '|' || updated_at FROM stashes
+                 UNION ALL
+                 SELECT sync_id || '|' || stamp || '|' || stash_id || '|' || entry_date || '|' || COALESCE(note, '') || '|' || COALESCE(transfer_id, '') || '|' || created_at || '|' || updated_at FROM stash_entries",
+            )
+            .unwrap()
+            .query_map([], |r| r.get(0))
+            .unwrap()
+            .map(Result::unwrap)
+            .collect()
+        };
+        let rows = others(&conn);
+
+        let done = change(&mut conn, "USD", None, "2026-10-13").unwrap();
+        assert_eq!((done.stashes, done.stash_entries), (0, 0));
+        assert_eq!(stash_numbers(&conn), numbers, "the label is all that changed");
+        assert_eq!(others(&conn), rows);
+
+        let done = change(&mut conn, "EUR", Some("2.5"), "2026-10-14").unwrap();
+        assert_eq!((done.stashes, done.stash_entries), (4, 6));
+        assert_ne!(stash_numbers(&conn), numbers);
+        assert_eq!(stash_stamps(&conn), stamps, "converting is not an edit: no stamp and no `updated_at` of a stash or an entry moved");
+        assert_eq!(others(&conn), rows, "nor does anything else but the amounts change");
+    }
+
+    #[test]
+    fn targets_and_entries_at_the_bounds_are_converted_and_one_that_leaves_the_range_refuses_the_whole_change() {
+        for (sign_of_last, label) in [(1i64, "an add"), (-1, "a take")] {
+            let (mut conn, food) = db();
+            let small = spend(&conn, food, "10.00");
+            let big = st::funded(&conn, "Big", "9999999999.99");
+            let edge = st::aimed(&conn, "Edge", big, "9999999999.99");
+            st::put_on(&conn, edge, "9999999999.99", "2026-05-01");
+            if sign_of_last < 0 {
+                st::pull(&conn, edge, "9999999999.98");
+            }
+            let tiny = st::aimed(&conn, "Tiny", big, "5.00");
+            let before = snapshot(&conn);
+            for rate in ["1.00000001", "2", "999999999"] {
+                assert_eq!(change(&mut conn, "USD", Some(rate), "2026-10-13"), Err(AppError::InvalidInput), "{label} at {rate}");
+                assert_eq!(snapshot(&conn), before, "{label} at {rate}: no row, stamp or history line changed");
+                assert_eq!(currency(&conn), "EUR");
+            }
+            assert_eq!((amount_of(&conn, small), stash_numbers(&conn)[1].clone()), (1_000, (tiny, Some(500), vec![])), "{label}: even the small ones are untouched");
+
+            // at a rate that keeps it in the range it is converted, the bound itself included
+            let last = if sign_of_last < 0 { -999_999_999_998 } else { 0 };
+            change(&mut conn, "USD", Some("1"), "2026-10-13").unwrap();
+            let numbers = stash_numbers(&conn);
+            assert_eq!(numbers[0].1, Some(MAX_MINOR), "{label} at 1");
+            assert_eq!(numbers[0].2[0], MAX_MINOR, "{label} at 1");
+            assert_eq!(numbers[0].2.get(1).copied().unwrap_or(0), last, "{label} at 1");
+            change(&mut conn, "GBP", Some("0.5"), "2026-10-14").unwrap();
+            let numbers = stash_numbers(&conn);
+            assert_eq!(numbers[0].1, Some(500_000_000_000), "{label} at 0.5: half a cent rounds up");
+            assert_eq!(numbers[0].2[0], 500_000_000_000, "{label} at 0.5");
+            assert_eq!(numbers[0].2.get(1).copied().unwrap_or(0), if sign_of_last < 0 { -499_999_999_999 } else { 0 }, "{label} at 0.5: the size is rounded and the sign put back");
+            change(&mut conn, "CHF", Some("1.99999999"), "2026-10-15").unwrap();
+            let rate = parse_rate("1.99999999").unwrap();
+            let numbers = stash_numbers(&conn);
+            assert_eq!(numbers[0].1, Some(convert(500_000_000_000, rate).unwrap()), "{label}: just inside the range");
+            assert_eq!(numbers[0].2[0], convert(500_000_000_000, rate).unwrap(), "{label}");
+            assert!(numbers[0].2.iter().all(|n| n.abs() <= MAX_MINOR && *n != 0), "{label}: every entry is in the range the table allows and is not 0");
+        }
+    }
+
+    #[test]
+    fn a_tiny_rate_keeps_a_target_and_every_entry_at_one_cent_and_keeps_the_sign() {
+        let (mut conn, _) = db();
+        let cash = st::funded(&conn, "Cash", "100.00");
+        let cent = st::aimed(&conn, "Cent", cash, "0.01");
+        st::put_on(&conn, cent, "0.01", "2026-05-01");
+        let mixed = st::aimed(&conn, "Mixed", cash, "0.50");
+        st::put_on(&conn, mixed, "0.40", "2026-05-01");
+        st::put_on(&conn, mixed, "0.03", "2026-05-02");
+        st::pull(&conn, mixed, "0.02");
+        st::pull(&conn, mixed, "0.01");
+        let done = change(&mut conn, "USD", Some("0.001"), "2026-10-13").unwrap();
+        assert_eq!((done.stashes, done.stash_entries), (2, 5));
+        assert_eq!(
+            stash_numbers(&conn),
+            [(1, Some(1), vec![1]), (2, Some(1), vec![1, 1, -1, -1])],
+            "a target of half a cent is one cent, an add of 0.4 cent is one cent and a take of 0.02 is a take of one cent: none is 0"
+        );
+        let zero: i64 = conn.query_row("SELECT count(*) FROM stash_entries WHERE amount_minor = 0", [], |r| r.get(0)).unwrap();
+        assert_eq!(zero, 0);
+        // and it goes on at a rate that makes everything big again
+        change(&mut conn, "EUR", Some("1000"), "2026-10-14").unwrap();
+        assert_eq!(stash_numbers(&conn), [(1, Some(1_000), vec![1_000]), (2, Some(1_000), vec![1_000, 1_000, -1_000, -1_000])]);
+    }
+
+    #[test]
+    fn random_stashes_and_rates_keep_the_sign_the_range_and_at_least_a_cent_in_every_target_and_entry() {
+        let mut random = Rng(0x057A_54E5);
+        for round in 0..40 {
+            let (mut conn, _) = db();
+            let rate_text = ["0.0001", "0.37", "1.08", "3.333", "160", "999.99"][round % 6];
+            let rate = parse_rate(rate_text).unwrap();
+            let account = st::funded(&conn, "Pot", "1000000.00");
+            for i in 0..4 {
+                let target = (random.between(0, 1) == 1).then(|| random.between(1, 900_000));
+                let stash = match target {
+                    Some(t) => st::aimed(&conn, &format!("S{i}"), account, &crate::money::format_amount(t as i64)),
+                    None => st::stash(&conn, &format!("S{i}"), account),
+                };
+                for _ in 0..random.between(0, 4) {
+                    st::raw(&conn, stash, if random.between(0, 2) == 0 { -(random.between(1, 90_000) as i64) } else { random.between(1, 90_000) as i64 }, "2026-05-01");
+                }
+            }
+            let before = stash_numbers(&conn);
+            let done = change(&mut conn, "USD", Some(rate_text), "2026-10-13").unwrap_or_else(|e| panic!("rate {rate_text}: {e}"));
+            let after = stash_numbers(&conn);
+            let mut entries = 0;
+            for ((_, old_target, old_entries), (_, new_target, new_entries)) in before.iter().zip(&after) {
+                assert_eq!(*new_target, old_target.map(|t| convert(t, rate).unwrap().max(1)), "target {old_target:?} at {rate_text}");
+                assert_eq!(old_entries.len(), new_entries.len());
+                for (old, new) in old_entries.iter().zip(new_entries) {
+                    assert_eq!(*new, convert(old.abs(), rate).unwrap().max(1) * old.signum(), "entry {old} at {rate_text}");
+                    assert!(new.abs() <= MAX_MINOR && new.signum() == old.signum(), "{old} became {new} at {rate_text}");
+                }
+                entries += old_entries.len() as u32;
+            }
+            assert_eq!(done.stash_entries, entries, "round {round}");
+            assert_eq!(done.stashes as usize, before.iter().filter(|(_, target, entries)| target.is_some() || !entries.is_empty()).count(), "round {round}");
+        }
+    }
+
+    /// The same stashes on any device: Holiday (a target, an add and a take) and Rainy day in the main account, and a Wedding gift in an account in lei.
+    fn with_stashes_and_a_foreign_one() -> Connection {
+        let (conn, _) = db();
+        let savings = st::funded(&conn, "Savings", "5000.00");
+        let lei = st::foreign(&conn, "Lei", "RON", "2000.00");
+        let holiday = st::aimed(&conn, "Holiday", savings, "1200.00");
+        st::put_on(&conn, holiday, "333.33", "2026-05-01");
+        st::pull(&conn, holiday, "0.01");
+        let rainy = st::stash(&conn, "Rainy day", savings);
+        st::put(&conn, rainy, "20.00");
+        let wedding = st::aimed(&conn, "Wedding gift", lei, "1000.00");
+        st::put_on(&conn, wedding, "300.00", "2026-05-01");
+        st::pull(&conn, wedding, "50.00");
+        conn
+    }
+
+    #[test]
+    fn the_same_conversion_arriving_by_sync_leaves_both_devices_with_the_same_stashes_and_a_stash_in_a_foreign_account_is_left_alone() {
+        for rate in ["1.08", "0.0063", "160", "0.5", "2.5", "1.00000001", "0.001"] {
+            // the desktop never had the account in lei: only the phone has it, with the stash that is in it
+            let desktop_has = |conn: &Connection| {
+                conn.execute_batch("DELETE FROM stash_entries WHERE stash_id = 3; DELETE FROM stashes WHERE id = 3; DELETE FROM accounts WHERE currency IS NOT NULL;").unwrap();
+            };
+            let (mut desktop, mut phone) = (with_stashes_and_a_foreign_one(), with_stashes_and_a_foreign_one());
+            desktop_has(&desktop);
+            let (stamps, wedding) = (stash_stamps(&phone), stash_numbers(&phone)[2].clone());
+            assert_eq!(wedding, (3, Some(100_000), vec![30_000, -5_000]));
+            let made = change(&mut desktop, "USD", Some(rate), "2026-10-13").unwrap();
+            let applied = apply_change_of(&desktop, &mut phone).unwrap();
+
+            assert_eq!((applied.stashes, applied.stash_entries), (made.stashes, made.stash_entries), "rate {rate}");
+            assert_eq!((made.stashes, made.stash_entries), (2, 3), "rate {rate}: the two stashes of the main currency, with their entries");
+            let (on_desktop, on_phone) = (stash_numbers(&desktop), stash_numbers(&phone));
+            assert_eq!(on_phone[..2], on_desktop[..], "rate {rate}: the stashes of the main currency are equal on both devices");
+            assert_eq!(on_phone[2], wedding, "rate {rate}: the stash in lei is in lei still");
+            assert_eq!(stash_stamps(&phone), stamps, "rate {rate}: no stamp moved on the phone");
+            assert_eq!((currency(&phone).as_str(), generation(&phone)), ("USD", 1));
+            // what the account in lei has set aside is what it was
+            assert_eq!(accounts::get(&phone, 3, st::TODAY).unwrap().set_aside, "250.00", "rate {rate}");
+        }
+    }
+
+    #[test]
+    fn a_conversion_arriving_by_sync_gives_a_database_equal_to_the_one_that_made_it_in_every_table_of_the_stashes() {
+        for rate in ["1.08", "0.0063", "160", "0.5", "2.5", "0.001", "999.99"] {
+            let (mut desktop, mut phone) = (with_stashes(), with_stashes());
+            let made = change(&mut desktop, "USD", Some(rate), "2026-10-13").unwrap();
+            let applied = apply_change_of(&desktop, &mut phone).unwrap();
+            assert_eq!((applied.stashes, applied.stash_entries), (made.stashes, made.stash_entries), "rate {rate}");
+            assert_eq!(stash_numbers(&phone), stash_numbers(&desktop), "rate {rate}");
+            let rows = |conn: &Connection| -> Vec<String> {
+                conn.prepare(
+                    "SELECT 'S' || id || '|' || name || '|' || account_id || '|' || COALESCE(target_minor, '') || '|' || COALESCE(target_date, '') || '|' || archived || '|' || position
+                     FROM stashes UNION ALL
+                     SELECT 'E' || id || '|' || stash_id || '|' || amount_minor || '|' || entry_date || '|' || COALESCE(note, '') || '|' || COALESCE(transfer_id, '') FROM stash_entries",
+                )
+                .unwrap()
+                .query_map([], |r| r.get(0))
+                .unwrap()
+                .map(Result::unwrap)
+                .collect()
+            };
+            assert_eq!(rows(&phone), rows(&desktop), "rate {rate}: the same rows");
+            for conn in [&desktop, &phone] {
+                assert_eq!(accounts::list(conn, st::TODAY).unwrap(), accounts::list(&desktop, st::TODAY).unwrap(), "rate {rate}: the same set aside and free");
+                assert!(accounts::check(conn).unwrap());
+            }
+        }
+    }
+
+    #[test]
+    fn a_conversion_arriving_by_sync_that_takes_a_stash_out_of_the_range_is_refused_and_the_phone_keeps_its_numbers() {
+        let (mut desktop, mut phone) = (with_stashes(), with_stashes());
+        // only the phone has the stash that cannot be converted
+        let edge = st::funded(&phone, "Edge", "9999999999.99");
+        st::aimed(&phone, "Edge goal", edge, "9999999999.99");
+        let before = snapshot(&phone);
+        change(&mut desktop, "USD", Some("3"), "2026-10-13").unwrap();
+        assert_eq!(apply_change_of(&desktop, &mut phone).err(), Some(AppError::InvalidInput));
+        assert_eq!(snapshot(&phone), before, "the transaction was dropped: nothing changed");
+        assert_eq!(currency(&phone), "EUR");
+    }
+
+    #[test]
+    fn the_history_of_a_conversion_has_a_line_for_each_stash_target_and_entry_it_changed_as_it_has_for_a_transfer() {
+        // the triggers of the history do not stand aside while a conversion applies (only the stamps and `updated_at` do), so the history has a line
+        // for each row whose amount changed: what the stashes do here is what the transfers, the accounts and the transactions do
+        let mut conn = with_stashes();
+        transfer(&conn, MAIN_ID, 3, "5.00", "2026-02-01");
+        let lines = |conn: &Connection, table: &str| -> i64 { conn.query_row("SELECT count(*) FROM audit_log WHERE entity_type = ?1 AND action = 'UPDATE'", [table], |r| r.get(0)).unwrap() };
+        // (archiving the bike made one line before, and the entries and the transfer were only added)
+        let before = (lines(&conn, "stashes"), lines(&conn, "stash_entries"), lines(&conn, "transfers"));
+        assert_eq!(before, (1, 0, 0));
+        let done = change(&mut conn, "USD", Some("2"), "2026-10-13").unwrap();
+        assert_eq!((done.stashes, done.stash_entries, done.transfers), (4, 6, 1));
+        // three of the four stashes have a target, so three rows changed; the rainy day has none, and its row is not written
+        assert_eq!((lines(&conn, "stashes") - before.0, lines(&conn, "stash_entries") - before.1, lines(&conn, "transfers") - before.2), (3, 6, 1));
     }
 }

@@ -32,7 +32,7 @@ impl From<rusqlite::Error> for SeedError {
     }
 }
 
-/// Loads the demo categories, budgets, recurring items, transactions, friends and accounts into a migrated database that has
+/// Loads the demo categories, budgets, recurring items, transactions, friends, accounts and stashes into a migrated database that has
 /// none yet, with sixteen months of history ending today. An existing settings row is left as it is.
 pub fn run(conn: &mut Connection) -> Result<(), SeedError> {
     run_for(conn, &chrono::Local::now().date_naive().to_string())
@@ -343,6 +343,115 @@ mod tests {
             assert_eq!(crate::currency::change(&mut conn, "USD", Some("1.10"), today), Err(crate::vault::AppError::InvalidInput), "{today}");
             assert_eq!(crate::currency::change(&mut conn, "USD", None, today), Err(crate::vault::AppError::InvalidInput), "{today}");
             assert_eq!(crate::accounts::fixtures::snapshot(&conn), before, "{today}");
+        }
+    }
+
+    #[test]
+    fn the_stashes_of_the_seed_show_every_state_and_no_account_is_over_booked_on_any_day() {
+        use crate::accounts::{self, Kind};
+        for today in DAYS {
+            let conn = seeded(today);
+            assert_eq!(count(&conn, "stashes"), 5, "{today}");
+            assert!(count(&conn, "stash_entries") >= 15, "{today}: {} entries", count(&conn, "stash_entries"));
+            // none of them is over-booked: what the stashes of an account hold fits in what it has. (The credit card is in the red by design, so its
+            // free money is below 0 as its balance is; no stash is in it.)
+            for a in accounts::list(&conn, today).unwrap() {
+                if a.kind == Kind::CreditCard {
+                    assert!(money(&a.free) < 0 && a.free == a.balance && money(&a.set_aside) == 0, "{today}: {a:?}");
+                } else {
+                    assert!(money(&a.free) >= 0, "{today}: {} has {} free", a.name, a.free);
+                }
+                assert_eq!(money(&a.free), money(&a.balance) - money(&a.set_aside), "{today}: {}", a.name);
+            }
+            // each stash holds what the comment of the seed says, in its account's currency, and is within 0..=target (the rainy day has none)
+            let stashes = crate::stashes::list(&conn, None, today).unwrap();
+            type Shown<'a> = (&'a str, &'a str, &'a str, bool, &'a str, Option<&'a str>);
+            let shown: Vec<Shown> =
+                stashes.iter().map(|s| (s.name.as_str(), s.account.as_str(), s.currency.as_str(), s.archived, s.saved.as_str(), s.target.as_deref())).collect();
+            assert_eq!(
+                shown,
+                [
+                    ("Holiday in Lisbon", "Savings", "EUR", false, "560.00", Some("1200.00")),
+                    ("New laptop", "Current account", "EUR", false, "900.00", Some("900.00")),
+                    ("Rainy day", "Savings", "EUR", false, "500.00", None),
+                    ("Wedding gift", "Lei account", "RON", false, "550.00", Some("1000.00")),
+                    ("Bike", "Savings", "EUR", true, "0.00", Some("450.00")),
+                ],
+                "{today}: the active ones by position, then the archived one"
+            );
+            for s in &stashes {
+                let (saved, target) = (money(&s.saved), s.target.as_deref().map(money));
+                assert!(saved >= 0 && target.is_none_or(|t| saved <= t), "{today}: {} holds {} of {:?}", s.name, s.saved, s.target);
+            }
+            let by_name = |name: &str| stashes.iter().find(|s| s.name == name).unwrap();
+            assert!(by_name("New laptop").reached && by_name("New laptop").percent == Some(100), "{today}: reached");
+            let bike = by_name("Bike");
+            assert!(bike.archived && bike.saved == "0.00" && bike.entries == 4 && !bike.reached, "{today}: reached once, then spent: {bike:?}");
+            assert!(by_name("Rainy day").percent.is_none() && by_name("Rainy day").left.is_none(), "{today}: no target");
+            let holiday = by_name("Holiday in Lisbon");
+            assert_eq!((holiday.entries, holiday.left.as_deref(), holiday.percent, holiday.overdue), (7, Some("640.00"), Some(46), false), "{today}");
+            assert!(holiday.per_month.is_some(), "{today}: a date seven months ahead, so a sum to save each month");
+            // the stashes are numbered from 0, as the lists sort them
+            let positions: Vec<i64> = conn.prepare("SELECT position FROM stashes ORDER BY id").unwrap().query_map([], |r| r.get(0)).unwrap().map(Result::unwrap).collect();
+            assert_eq!(positions, [0, 1, 2, 3, 4], "{today}");
+            let days_ahead: i64 = conn.query_row("SELECT CAST(julianday(target_date) - julianday(?1) AS INTEGER) FROM stashes WHERE id = 1", [today], |r| r.get(0)).unwrap();
+            assert!((190..=240).contains(&days_ahead), "{today}: the holiday is {days_ahead} days ahead");
+            let dated: i64 = conn.query_row("SELECT count(*) FROM stashes WHERE target_date IS NOT NULL", [], |r| r.get(0)).unwrap();
+            assert_eq!(dated, 1, "{today}: only the holiday has a date");
+
+            // what each account sets aside is the sum of its stashes
+            let set_aside = |id: i64| accounts::get(&conn, id, today).unwrap().set_aside;
+            assert_eq!([1, 2, 3, 4, 6].map(set_aside), ["900.00", "1060.00", "0.00", "0.00", "550.00"], "{today}: the archived bike holds nothing");
+
+            // the entries: notes on some, the one take of the holiday and the one that spent the bike, and none is dated after today
+            let note_of = |stash: i64, minor: i64| -> Option<String> {
+                conn.query_row("SELECT note FROM stash_entries WHERE stash_id = ?1 AND amount_minor = ?2", [stash, minor], |r| r.get(0)).unwrap()
+            };
+            assert_eq!(note_of(1, -4_000).as_deref(), Some("deposit for the flat"), "{today}");
+            assert_eq!(note_of(4, -45_000).as_deref(), Some("bought it"), "{today}");
+            let (noted, plain): (i64, i64) = conn.query_row("SELECT count(note), count(*) - count(note) FROM stash_entries", [], |r| Ok((r.get(0)?, r.get(1)?))).unwrap();
+            assert!(noted >= 8 && plain >= 5, "{today}: {noted} entries with a note and {plain} without");
+            let takes: i64 = conn.query_row("SELECT count(*) FROM stash_entries WHERE amount_minor < 0", [], |r| r.get(0)).unwrap();
+            assert_eq!(takes, 2, "{today}");
+            let future: i64 = conn.query_row("SELECT count(*) FROM stash_entries WHERE entry_date > ?1", [today], |r| r.get(0)).unwrap();
+            assert_eq!(future, 0, "{today}: none is in the future");
+
+            // five adds of the holiday came with a transfer of the same amount and day from the current account to the savings, and the sixth did not
+            let linked: Vec<(i64, i64, i64, i64, String)> = conn
+                .prepare(
+                    "SELECT e.amount_minor, x.amount_minor, x.from_account_id, x.to_account_id, x.note
+                     FROM stash_entries e JOIN transfers x ON x.id = e.transfer_id WHERE e.entry_date = x.transfer_date ORDER BY e.entry_date",
+                )
+                .unwrap()
+                .query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?)))
+                .unwrap()
+                .map(Result::unwrap)
+                .collect();
+            assert_eq!(linked, vec![(10_000, 10_000, 1, 2, "Holiday in Lisbon".to_string()); 5], "{today}");
+            let unlinked: i64 = conn.query_row("SELECT count(*) FROM stash_entries WHERE stash_id = 1 AND amount_minor > 0 AND transfer_id IS NULL", [], |r| r.get(0)).unwrap();
+            assert_eq!(unlinked, 1, "{today}");
+            let others: i64 = conn.query_row("SELECT count(*) FROM stash_entries WHERE stash_id <> 1 AND transfer_id IS NOT NULL", [], |r| r.get(0)).unwrap();
+            assert_eq!(others, 0, "{today}");
+
+            // the rules held on every day an entry was made, not only today: the account had the room for what was set aside by then
+            let over: i64 = conn
+                .query_row(
+                    "SELECT count(*) FROM (SELECT DISTINCT t.account_id, e.entry_date FROM stash_entries e JOIN stashes t ON t.id = e.stash_id) d
+                      WHERE (SELECT COALESCE(SUM(m.delta_minor), 0) FROM account_movements m WHERE m.account_id = d.account_id AND m.day <= d.entry_date)
+                          < (SELECT COALESCE(SUM(MAX(held.saved, 0)), 0)
+                               FROM (SELECT (SELECT COALESCE(SUM(x.amount_minor), 0) FROM stash_entries x WHERE x.stash_id = s.id AND x.entry_date <= d.entry_date) AS saved
+                                       FROM stashes s WHERE s.account_id = d.account_id) held)",
+                    [],
+                    |r| r.get(0),
+                )
+                .unwrap();
+            assert_eq!(over, 0, "{today}: no account was over-booked on the day of an entry");
+
+            // the demo rows are written through the triggers: stamped, and no history
+            let unstamped: i64 = conn.query_row("SELECT (SELECT count(*) FROM stashes WHERE stamp IS NULL) + (SELECT count(*) FROM stash_entries WHERE stamp IS NULL)", [], |r| r.get(0)).unwrap();
+            assert_eq!(unstamped, 0, "{today}");
+            assert_eq!(count(&conn, "audit_log"), 0, "{today}");
+            assert!(accounts::check(&conn).unwrap(), "{today}");
         }
     }
 

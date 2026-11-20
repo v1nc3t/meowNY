@@ -43,6 +43,8 @@ mod documents_tests;
 mod debts_tests;
 #[cfg(test)]
 mod accounts_tests;
+#[cfg(test)]
+mod stashes_tests;
 
 use std::collections::{BTreeMap, HashSet};
 use std::fs;

@@ -20,6 +20,8 @@
 --     the card, and a friend who paid back in cash
 --   * a currency per account: the Lei account (RON at 5.00 lei to the euro) with ten expenses and two incomes that each carry what the
 --     account really paid and the amount in euro that the budgets count, and a transfer in each direction between it and the current account
+--   * stashes: money set aside in an account for a goal, with adds that came with a transfer from the current account, one take with a note,
+--     one that has reached its target, one with no target, an archived one that was spent, and one in the lei account in lei
 -- Amounts and days come from simple arithmetic on the row numbers, so the data is the same every run.
 
 INSERT OR IGNORE INTO settings (id, currency, locale, timezone, language) VALUES (1, 'EUR', 'en-IE', 'Europe/Dublin', 'en');
@@ -458,3 +460,48 @@ INSERT INTO transactions (category_id, name, amount_minor, native_amount_minor, 
 INSERT INTO transfers (from_account_id, to_account_id, amount_minor, to_amount_minor, transfer_date, note) VALUES
   (1, 6, 20000, 100000, date(@today, 'start of month', '-7 months', '+10 days'), 'Lei for the trip'),
   (6, 1, 50000, 10000,  date(@today, 'start of month', '-3 months', '+12 days'), 'Lei back to the current account');
+
+
+-- ---- stashes ----------------------------------------------------------------------------------------------------------------------
+-- Money set aside inside an account for a goal; it never leaves the account, so no balance above moves (docs/stash-design.md). Five of them, each
+-- entry dated well inside the history and none on a day that could be after today, so every number below is the same on any day:
+--   1 Holiday in Lisbon, in the savings: a target and a date seven months ahead, a monthly add of 100.00 (the first five with a transfer from the
+--     current account, which is how the savings came to hold it) and one take of 40.00; 560.00 of 1200.00
+--   2 New laptop, in the current account: no date, reached over three adds; 900.00 of 900.00
+--   3 Rainy day, in the savings: no target, four adds; 500.00
+--   4 Bike, archived: reached, and then taken out in full when the bike was bought; 0.00 of 450.00
+--   5 Wedding gift, in the lei account: its amounts are in lei, two adds; 550.00 of 1000.00 lei
+-- Together they hold far less than their accounts have free, so no account is over-booked on any day.
+INSERT INTO stashes (id, name, account_id, target_minor, target_date, notes, archived, position) VALUES
+  (1, 'Holiday in Lisbon', 2, 120000, date(@today, 'start of month', '+7 months', '+14 days'), 'The next trip: a week, with the hotel still to pay', 0, 0),
+  (2, 'New laptop',        1, 90000,  NULL, 'A personal one: the work machine is paid for',                                              0, 1),
+  (3, 'Rainy day',         2, NULL,   NULL, NULL,                                                                                         0, 2),
+  (4, 'Bike',              2, 45000,  NULL, 'Second-hand, for the commute',                                                               1, 3),
+  (5, 'Wedding gift',      6, 100000, NULL, NULL,                                                                                         0, 4);
+
+-- The adds of the holiday that came with money from the current account: a transfer each, which the entry remembers.
+WITH RECURSIVE m(i) AS (SELECT 2 UNION ALL SELECT i + 1 FROM m WHERE i < 6)
+INSERT INTO transfers (from_account_id, to_account_id, amount_minor, transfer_date, note)
+SELECT 1, 2, 10000, date(@today, 'start of month', '-' || i || ' months', '+4 days'), 'Holiday in Lisbon' FROM m;
+
+INSERT INTO stash_entries (stash_id, amount_minor, entry_date, note, transfer_id)
+SELECT 1, 10000, x.transfer_date, CASE WHEN x.transfer_date = date(@today, 'start of month', '-6 months', '+4 days') THEN 'start of the plan' END, x.id
+FROM transfers x WHERE x.note = 'Holiday in Lisbon' ORDER BY x.transfer_date;
+
+INSERT INTO stash_entries (stash_id, amount_minor, entry_date, note) VALUES
+  -- the last add was set aside from what the savings already held
+  (1, 10000,  date(@today, 'start of month', '-1 months', '+4 days'),  'out of the freelance money'),
+  (1, -4000,  date(@today, 'start of month', '-3 months', '+19 days'), 'deposit for the flat'),
+  (2, 30000,  date(@today, 'start of month', '-5 months', '+9 days'),  'first third'),
+  (2, 30000,  date(@today, 'start of month', '-4 months', '+9 days'),  NULL),
+  (2, 30000,  date(@today, 'start of month', '-3 months', '+9 days'),  'there, with the pay of that month'),
+  (3, 15000,  date(@today, 'start of month', '-8 months', '+12 days'), 'after the tax refund'),
+  (3, 10000,  date(@today, 'start of month', '-6 months', '+12 days'), NULL),
+  (3, 5000,   date(@today, 'start of month', '-4 months', '+12 days'), NULL),
+  (3, 20000,  date(@today, 'start of month', '-2 months', '+12 days'), 'part of a consulting invoice'),
+  (4, 15000,  date(@today, 'start of month', '-14 months', '+14 days'), 'birthday money'),
+  (4, 15000,  date(@today, 'start of month', '-13 months', '+14 days'), NULL),
+  (4, 15000,  date(@today, 'start of month', '-12 months', '+14 days'), 'last instalment'),
+  (4, -45000, date(@today, 'start of month', '-11 months', '+5 days'),  'bought it'),
+  (5, 30000,  date(@today, 'start of month', '-5 months', '+12 days'),  'for the wedding in Cluj'),
+  (5, 25000,  date(@today, 'start of month', '-2 months', '+12 days'),  NULL);

@@ -16,6 +16,9 @@
 //! sections 10 and 20.5). An account may be in a currency of its own: the file says so (`currency`, and `rate` and `balanceInMain` with no
 //! limit), a transaction in it has what the account really paid (`nativeAmount`, `native_amount`) beside its amount in the app's currency, and a
 //! transfer between two currencies has what arrives (`toAmount`; section 21.6).
+//! Stashes (`docs/stash-design.md`, section 10) are in a file with no limit only, as the transfers are: each with its account, its target, what it holds
+//! and its entries, oldest first, and every account says what the stashes in it hold (`setAside`; its `free` is worked out from that and the
+//! balance, so it is not written). A limited file has no `stashes` at all: it would tell about what the file leaves out.
 //! The device-specific scheduled-backup setup, which holds a passphrase, and the access tokens of the
 //! command-line client are never exported.
 
@@ -120,6 +123,8 @@ pub enum Section {
     Accounts,
     /// The transfers between accounts. Only in a file with no limit.
     Transfers,
+    /// The stashes, money set aside in an account for a goal, with their entries. Only in a file with no limit.
+    Stashes,
     Documents,
     /// The friends and what each owes or is owed.
     People,
@@ -140,6 +145,7 @@ impl Section {
             Section::Recurring => "recurring",
             Section::Accounts => "accounts",
             Section::Transfers => "transfers",
+            Section::Stashes => "stashes",
             Section::Documents => "documents",
             Section::People => "people",
             Section::Due => "due",
@@ -197,6 +203,12 @@ impl Parsed {
     /// names only the accounts its rows are in.
     pub(crate) fn with_transfers(&self) -> bool {
         self.everything() && self.wants(Section::Transfers)
+    }
+
+    /// Whether the stashes go into the file: they are asked for and nothing limits it. A stash is in one account and has its own amounts, so a
+    /// limited file, which names only the accounts its rows are in, has none.
+    pub(crate) fn with_stashes(&self) -> bool {
+        self.everything() && self.wants(Section::Stashes)
     }
 
     /// The seven values `transaction_filter` names, in order: first day, last day, kind, least and most it cost, text pattern, shared or not.
@@ -811,6 +823,88 @@ pub(crate) fn transfer_rows(conn: &Connection, sel: &Parsed) -> Result<Vec<Trans
     Ok(rows.collect::<Result<_, _>>()?)
 }
 
+/// One entry of a stash as an export lists it.
+pub(crate) struct StashEntryRow {
+    pub(crate) id: i64,
+    /// Signed, in the currency of the stash: above 0 an add, below 0 a take.
+    pub(crate) minor: i64,
+    pub(crate) date: String,
+    pub(crate) note: Option<String>,
+    pub(crate) transfer_id: Option<i64>,
+    /// The other account of the transfer that came with the entry: where the money came from for an add, where it went to for a take. None
+    /// without a transfer, and when it was deleted (the link is then cleared).
+    pub(crate) other_account: Option<String>,
+}
+
+/// A stash as an export lists it, with its entries oldest first (by date, then id).
+pub(crate) struct StashRow {
+    pub(crate) id: i64,
+    pub(crate) name: String,
+    pub(crate) account_id: i64,
+    pub(crate) account: String,
+    /// The currency of every amount of the stash: its account's, or the app's for an account in the app's currency.
+    pub(crate) currency: String,
+    /// Whether the account has a currency of its own: the amounts are in it, and not in the app's.
+    pub(crate) foreign: bool,
+    pub(crate) target: Option<i64>,
+    pub(crate) target_date: Option<String>,
+    pub(crate) notes: Option<String>,
+    pub(crate) archived: bool,
+    /// What the entries add up to, signed (it can be below 0 after a sync; `docs/stash-design.md`, section 7.6).
+    pub(crate) saved: i64,
+    pub(crate) entries: Vec<StashEntryRow>,
+}
+
+/// The stashes an export contains, in the person's order (those that are not archived by position, then the archived ones, as the screens
+/// list them): all of them with no limit, and none with one (`Parsed::with_stashes`).
+pub(crate) fn stash_rows(conn: &Connection, sel: &Parsed) -> Result<Vec<StashRow>, AppError> {
+    if !sel.with_stashes() {
+        return Ok(Vec::new());
+    }
+    let mut by_stash: HashMap<i64, Vec<StashEntryRow>> = HashMap::new();
+    let mut statement = conn.prepare(
+        "SELECT e.stash_id, e.id, e.amount_minor, e.entry_date, e.note, e.transfer_id, o.name
+         FROM stash_entries e
+         LEFT JOIN transfers x ON x.id = e.transfer_id
+         LEFT JOIN accounts o ON o.id = CASE WHEN e.amount_minor > 0 THEN x.from_account_id ELSE x.to_account_id END
+         ORDER BY e.entry_date, e.id",
+    )?;
+    let entries = statement.query_map([], |r| {
+        Ok((r.get::<_, i64>(0)?, StashEntryRow { id: r.get(1)?, minor: r.get(2)?, date: r.get(3)?, note: r.get(4)?, transfer_id: r.get(5)?, other_account: r.get(6)? }))
+    })?;
+    for entry in entries {
+        let (stash, entry) = entry?;
+        by_stash.entry(stash).or_default().push(entry);
+    }
+    let mut statement = conn.prepare(
+        "SELECT s.id, s.name, s.account_id, a.name, COALESCE(a.currency, (SELECT currency FROM settings WHERE id = 1)), a.currency IS NOT NULL,
+                s.target_minor, s.target_date, s.notes, s.archived, COALESCE((SELECT SUM(e.amount_minor) FROM stash_entries e WHERE e.stash_id = s.id), 0)
+         FROM stashes s JOIN accounts a ON a.id = s.account_id
+         ORDER BY s.archived, s.position, s.id",
+    )?;
+    let rows = statement.query_map([], |r| {
+        Ok(StashRow {
+            id: r.get(0)?,
+            name: r.get(1)?,
+            account_id: r.get(2)?,
+            account: r.get(3)?,
+            currency: r.get(4)?,
+            foreign: r.get(5)?,
+            target: r.get(6)?,
+            target_date: r.get(7)?,
+            notes: r.get(8)?,
+            archived: r.get::<_, i64>(9)? == 1,
+            saved: r.get(10)?,
+            entries: Vec::new(),
+        })
+    })?;
+    let mut stashes: Vec<StashRow> = rows.collect::<Result<_, _>>()?;
+    for stash in &mut stashes {
+        stash.entries = by_stash.remove(&stash.id).unwrap_or_default();
+    }
+    Ok(stashes)
+}
+
 fn accounts_json(conn: &Connection, sel: &Parsed, today: &str) -> Result<Vec<Value>, AppError> {
     account_rows(conn, sel, today)?
         .into_iter()
@@ -823,6 +917,8 @@ fn accounts_json(conn: &Connection, sel: &Parsed, today: &str) -> Result<Vec<Val
                 fields.remove("entries");
                 // worked out from the balance and the virtual balance, both of which are in the file
                 fields.remove("available");
+                // worked out from the balance and `setAside`, both of which are in the file (`docs/stash-design.md`, section 10)
+                fields.remove("free");
             }
             Ok(whole)
         })
@@ -848,6 +944,43 @@ fn transfers_json(conn: &Connection, sel: &Parsed) -> Result<Vec<Value>, AppErro
         .collect())
 }
 
+/// The stashes of a file with no limit: the money in each is a decimal string in its currency, and its entries run oldest first with an
+/// amount above 0 and a kind that says which way the money went.
+fn stashes_json(conn: &Connection, sel: &Parsed) -> Result<Vec<Value>, AppError> {
+    Ok(stash_rows(conn, sel)?
+        .into_iter()
+        .map(|s| {
+            let entries: Vec<Value> = s
+                .entries
+                .iter()
+                .map(|e| {
+                    json!({
+                        "id": e.id.to_string(),
+                        "kind": if e.minor > 0 { "ADD" } else { "TAKE" },
+                        "amount": format_amount(e.minor.abs()),
+                        "date": e.date,
+                        "note": e.note,
+                        "transferId": e.transfer_id.map(|id| id.to_string()),
+                    })
+                })
+                .collect();
+            json!({
+                "id": s.id.to_string(),
+                "name": s.name,
+                "accountId": s.account_id.to_string(),
+                "account": s.account,
+                "currency": s.currency,
+                "target": s.target.map(format_amount),
+                "targetDate": s.target_date,
+                "notes": s.notes,
+                "archived": s.archived,
+                "saved": format_amount(s.saved),
+                "entries": entries,
+            })
+        })
+        .collect())
+}
+
 /// What an export with this selection would contain, so the screen can say so before anything is saved.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -865,6 +998,9 @@ pub struct Preview {
     /// Accounts listed, and transfers between them (those only in an export with no limit).
     pub accounts: u32,
     pub transfers: u32,
+    /// Stashes listed, and their entries (those only in an export with no limit).
+    pub stashes: u32,
+    pub stash_entries: u32,
     /// Documents listed by name (never their files).
     pub documents: u32,
     /// Friends, ledger entries and shared bills (with their parts) in the export.
@@ -905,6 +1041,7 @@ pub fn preview(conn: &Connection, selection: &Selection) -> Result<Preview, AppE
     // what a file would hold: a part that is left out counts for nothing
     let count = |wanted: bool, n: usize| if wanted { n as u32 } else { 0 };
     let with_transactions = sel.wants(Section::Transactions);
+    let stashes = stash_rows(&tx, &sel)?;
     Ok(Preview {
         people: friends.len() as u32,
         due_payments: due as u32,
@@ -921,6 +1058,8 @@ pub fn preview(conn: &Connection, selection: &Selection) -> Result<Preview, AppE
         recurring: count(sel.wants(Section::Recurring), recurring_rows(&tx, &sel)?.len()),
         accounts: count(sel.wants(Section::Accounts), account_rows(&tx, &sel, &today)?.len()),
         transfers: transfer_rows(&tx, &sel)?.len() as u32,
+        stashes: stashes.len() as u32,
+        stash_entries: stashes.iter().map(|s| s.entries.len() as u32).sum(),
         documents: count(sel.wants(Section::Documents), documents(&tx, &sel)?.len()),
         history,
     })
@@ -1041,6 +1180,9 @@ pub fn json(conn: &Connection, selection: &Selection, now: DateTime<Utc>) -> Res
     if sel.with_transfers() {
         file["transfers"] = Value::Array(transfers_json(&tx, &sel)?);
     }
+    if sel.with_stashes() {
+        file["stashes"] = Value::Array(stashes_json(&tx, &sel)?);
+    }
     if sel.wants(Section::Transactions) {
         file["transactions"] = Value::Array(transactions);
     }
@@ -1139,6 +1281,8 @@ pub(crate) mod filters_tests;
 mod debts_tests;
 #[cfg(test)]
 mod accounts_tests;
+#[cfg(test)]
+mod stashes_tests;
 
 #[cfg(test)]
 mod tests {
