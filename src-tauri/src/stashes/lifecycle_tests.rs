@@ -286,6 +286,13 @@ fn item_09_a_stash_moves_to_an_active_account_of_its_currency_where_what_it_hold
     let gap = stash(&w.conn, "Gap", a);
     raw(&w.conn, gap, -700, "2026-01-01");
     assert_eq!(update(&w.conn, gap, &move_to(poor), TODAY).unwrap().account_id, poor);
+    // and one that holds 0 moves even into an account whose stashes hold more than it has (free below 0 after a sync)
+    let over = funded(&w.conn, "Over", "100.00");
+    let full = stash(&w.conn, "Full", over);
+    raw(&w.conn, full, 20_000, "2026-01-01");
+    assert_eq!(free_of(&w.conn, over), -10_000);
+    assert_eq!(update(&w.conn, empty, &move_to(over), TODAY).unwrap().account_id, over);
+    assert_refused(&w.conn, INVALID, "a stash that holds money does not fit below 0", || update(&w.conn, x, &move_to(over), TODAY));
     // the account it has: not a move, allowed (also in the same patch as another change)
     assert_nothing_written(&w.conn, "the account it has", || update(&w.conn, y, &move_to(a), TODAY));
     // an archived stash is not moved at all (restore it first)

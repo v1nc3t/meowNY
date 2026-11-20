@@ -315,7 +315,7 @@ pub fn create(conn: &Connection, input: &NewStash, today: &str) -> Result<Stash,
 
 /// Changes a stash that is not archived (restore it first). The stamp moves only when something changed. A new target must be at least what
 /// is saved. A new account moves the stash (section 5.1): the account must be active and in the same currency, and what the stash holds must
-/// fit in what is free there. Naming the account it has is not a move.
+/// fit in what is free there; one that holds nothing always fits (section 5.4). Naming the account it has is not a move.
 pub fn update(conn: &Connection, id: i64, patch: &StashPatch, today: &str) -> Result<Stash, AppError> {
     let today = clean_date(today)?;
     let tx = conn.unchecked_transaction()?;
@@ -345,7 +345,7 @@ pub fn update(conn: &Connection, id: i64, patch: &StashPatch, today: &str) -> Re
     };
     let account = match patch.account_id.as_deref().map(parse_id).transpose()? {
         Some(account) if account != current.account_id => {
-            if !accounts::is_active(&tx, account)? || accounts::currencies_differ(&tx, current.account_id, account)? || current.held() > free(&tx, account, &today)? {
+            if !accounts::is_active(&tx, account)? || accounts::currencies_differ(&tx, current.account_id, account)? || (current.held() > 0 && current.held() > free(&tx, account, &today)?) {
                 return Err(AppError::InvalidInput);
             }
             account
