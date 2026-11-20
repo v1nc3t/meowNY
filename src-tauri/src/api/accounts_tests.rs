@@ -300,7 +300,7 @@ fn the_new_routes_have_the_scopes_and_arguments_of_the_design_note() {
     }
     let with: Vec<&str> = routes::ALL
         .iter()
-        .filter(|r| r.params.iter().any(|p| p.name == "accountId") && !r.name.starts_with("accounts.") && !r.name.starts_with("transfers."))
+        .filter(|r| r.params.iter().any(|p| p.name == "accountId") && !r.name.starts_with("accounts.") && !r.name.starts_with("transfers.") && !r.name.starts_with("stashes."))
         .map(|r| r.name)
         .collect();
     assert_eq!(with, ["transactions.list", "transactions.create", "transactions.update", "recurring.create", "recurring.update", "people.settle", "ledger.add", "ledger.update"]);

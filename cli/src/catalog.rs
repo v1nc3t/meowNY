@@ -13,6 +13,10 @@ const EMBEDDED: &str = include_str!("../schema.json");
 /// The API version this CLI was built for.
 pub const API_VERSION: u64 = 1;
 
+/// The last word of a command that deletes or ends something, so it needs `--yes`: `transactions delete`, `budgets remove`, `recurring end`,
+/// and `stashes erase`, which deletes an entry of a stash.
+pub const CONFIRMING_VERBS: &[&str] = &["delete", "remove", "end", "erase"];
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Param {
     /// As in the request body, camelCase.
@@ -63,9 +67,9 @@ impl Command {
         self.words.last().map(String::as_str).unwrap_or("")
     }
 
-    /// Commands that delete or end something ask for `--yes`, so a script cannot do it by accident.
+    /// Commands that delete or end something ask for `--yes`, so a script cannot do it by accident. The verbs that do are in `CONFIRMING_VERBS`.
     pub fn destructive(&self) -> bool {
-        self.route.is_some() && matches!(self.verb(), "delete" | "remove" | "end")
+        self.route.is_some() && CONFIRMING_VERBS.contains(&self.verb())
     }
 
     /// The `id` argument, or for a command that sends a file the file, which may be given without a flag.
@@ -201,8 +205,16 @@ mod tests {
         let destructive: Vec<String> = catalog.commands.iter().filter(|c| c.destructive()).map(Command::name).collect();
         assert_eq!(
             destructive,
-            ["categories delete", "transactions delete", "budgets remove", "recurring delete", "recurring end", "documents delete", "ledger delete", "accounts delete", "transfers delete"]
+            ["categories delete", "transactions delete", "budgets remove", "recurring delete", "recurring end", "documents delete", "ledger delete", "accounts delete", "transfers delete", "stashes delete", "stashes erase"]
         );
+        // each of them is a confirming verb and no other verb is: changing, archiving, adding, taking and amending are not deleting
+        for c in &catalog.commands {
+            assert_eq!(c.destructive(), CONFIRMING_VERBS.contains(&c.verb()) && c.route.is_some(), "{}", c.name());
+        }
+        for name in ["stashes archive", "stashes unarchive", "stashes update", "stashes add", "stashes take", "stashes amend", "stashes reorder", "stashes create"] {
+            let words: Vec<&str> = name.split(' ').collect();
+            assert!(!catalog.find(&words).unwrap().destructive(), "{name}");
+        }
         assert!(!catalog.find(&["login"]).unwrap().destructive());
         assert!(!catalog.find(&["logout"]).unwrap().destructive());
     }

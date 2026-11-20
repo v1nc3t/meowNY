@@ -46,6 +46,10 @@ const READ_ROUTES: &[&str] = &[
     "accounts.breakdown",
     "accounts.summary",
     "transfers.list",
+    "stashes.list",
+    "stashes.show",
+    "stashes.history",
+    "stashes.summary",
 ];
 
 pub(super) fn at(text: &str) -> DateTime<Utc> {
@@ -252,6 +256,8 @@ fn a_locked_app_gives_no_data_from_any_read_route() {
         "accounts.show" => json!({ "id": "1" }),
         "accounts.history" => json!({ "id": "1", "year": "2026" }),
         "accounts.breakdown" => json!({ "id": "1" }),
+        "stashes.show" => json!({ "id": "1" }),
+        "stashes.history" => json!({ "id": "1", "year": "2026" }),
         _ => json!({}),
     };
     for name in READ_ROUTES {
@@ -277,6 +283,8 @@ fn money_and_ids_are_strings_and_the_only_numbers_are_counts_and_percentages() {
         "accounts.show" => json!({ "id": "1", "from": "2025-06-01", "to": "2026-10-31" }),
         "accounts.history" => json!({ "id": "1", "year": "2026" }),
         "accounts.breakdown" => json!({ "id": "1", "from": "2025-06-01", "to": "2026-10-31" }),
+        "stashes.show" => json!({ "id": "1" }),
+        "stashes.history" => json!({ "id": "1", "year": "2026" }),
         _ => json!({}),
     };
     // a friend, a shared bill, a loan and a split template, so that their answers are walked too
@@ -314,9 +322,9 @@ fn money_and_ids_are_strings_and_the_only_numbers_are_counts_and_percentages() {
         walk(&ok(&vault, name, args(name)), name, &mut numbers);
     }
     // Counts: `limit`, `offset`, `total` (a page), `intervalCount` (every 2 weeks), `paidCount`, and what an export
-    // would contain (`transactions`, `categories`, `budgets`, `recurring`, `accounts`, `transfers`, `stashes`, `stashEntries`, `documents`, `people`, `ledger`, `splitBills`, `duePayments`, `debtHistory`, `history`), how many rows an account holds (`entries`), the weights of a split template (`mine`, `weight`: proportions, not money), the size of a file in bytes and the number of things it is attached to (`sizeBytes`, `linkCount`), `everyDays` (a backup schedule). Percentages: `pctUsed`,
-    // `share`, `savingsRate`. Everything else, money above all, is a string.
-    let allowed: BTreeSet<String> = ["intervalCount", "limit", "offset", "paidCount", "pctUsed", "savingsRate", "share", "total", "transactions", "categories", "budgets", "recurring", "accounts", "transfers", "stashes", "stashEntries", "entries", "documents", "people", "ledger", "splitBills", "duePayments", "debtHistory", "history", "everyDays", "sizeBytes", "linkCount", "mine", "weight"]
+    // would contain (`transactions`, `categories`, `budgets`, `recurring`, `accounts`, `transfers`, `stashes`, `stashEntries`, `documents`, `people`, `ledger`, `splitBills`, `duePayments`, `debtHistory`, `history`), how many rows an account or a stash holds (`entries`), how many stashes have reached their target (`reached`), the weights of a split template (`mine`, `weight`: proportions, not money), the size of a file in bytes and the number of things it is attached to (`sizeBytes`, `linkCount`), `everyDays` (a backup schedule). Percentages: `pctUsed`,
+    // `share`, `savingsRate`, and the `percent` of a stash. Everything else, money above all, is a string.
+    let allowed: BTreeSet<String> = ["intervalCount", "limit", "offset", "paidCount", "pctUsed", "savingsRate", "share", "total", "transactions", "categories", "budgets", "recurring", "accounts", "transfers", "stashes", "stashEntries", "entries", "percent", "reached", "documents", "people", "ledger", "splitBills", "duePayments", "debtHistory", "history", "everyDays", "sizeBytes", "linkCount", "mine", "weight"]
         .into_iter()
         .map(String::from)
         .collect();

@@ -1442,7 +1442,7 @@
           "nullable": false,
           "param": "sections",
           "required": false,
-          "summary": "The parts of the file, separated by commas, from: transactions, categories, budgets, recurring, accounts (with limits, only the name and type of those the file speaks of), transfers (between accounts, only in a file with no limits), documents, people (the friends and what they owe), due (the overdue recurring payments), ledger (the history of debts) and history (the change history, only in a file with no limits). Leave out for all of them.",
+          "summary": "The parts of the file, separated by commas, from: transactions, categories, budgets, recurring, accounts (with limits, only the name and type of those the file speaks of), transfers (between accounts, only in a file with no limits), stashes (money set aside in an account for a goal, with their entries, only in a file with no limits), documents, people (the friends and what they owe), due (the overdue recurring payments), ledger (the history of debts) and history (the change history, only in a file with no limits). Leave out for all of them.",
           "type": "string",
           "value": "text",
           "values": []
@@ -1581,7 +1581,7 @@
           "nullable": false,
           "param": "sections",
           "required": false,
-          "summary": "The parts of the file, separated by commas, from: transactions, categories, budgets, recurring, accounts (with limits, only the name and type of those the file speaks of), transfers (between accounts, only in a file with no limits), documents, people (the friends and what they owe), due (the overdue recurring payments), ledger (the history of debts) and history (the change history, only in a file with no limits). Leave out for all of them.",
+          "summary": "The parts of the file, separated by commas, from: transactions, categories, budgets, recurring, accounts (with limits, only the name and type of those the file speaks of), transfers (between accounts, only in a file with no limits), stashes (money set aside in an account for a goal, with their entries, only in a file with no limits), documents, people (the friends and what they owe), due (the overdue recurring payments), ledger (the history of debts) and history (the change history, only in a file with no limits). Leave out for all of them.",
           "type": "string",
           "value": "text",
           "values": []
@@ -1817,7 +1817,7 @@
           "nullable": false,
           "param": "sections",
           "required": false,
-          "summary": "The parts of the file, separated by commas, from: transactions, categories, budgets, recurring, accounts (with limits, only the name and type of those the file speaks of), transfers (between accounts, only in a file with no limits), documents, people (the friends and what they owe), due (the overdue recurring payments), ledger (the history of debts) and history (the change history, only in a file with no limits). Leave out for all of them.",
+          "summary": "The parts of the file, separated by commas, from: transactions, categories, budgets, recurring, accounts (with limits, only the name and type of those the file speaks of), transfers (between accounts, only in a file with no limits), stashes (money set aside in an account for a goal, with their entries, only in a file with no limits), documents, people (the friends and what they owe), due (the overdue recurring payments), ledger (the history of debts) and history (the change history, only in a file with no limits). Leave out for all of them.",
           "type": "string",
           "value": "text",
           "values": []
@@ -4134,6 +4134,543 @@
       "usage": "meowny transfers delete <id>"
     },
     {
+      "command": "stashes list",
+      "confirm": false,
+      "destructive": false,
+      "flags": [
+        {
+          "flag": "--account-id",
+          "nullable": false,
+          "param": "accountId",
+          "required": false,
+          "summary": "Only the stashes in this account.",
+          "type": "id",
+          "value": "id",
+          "values": []
+        }
+      ],
+      "positional": null,
+      "route": "stashes.list",
+      "scope": "read",
+      "summary": "The stashes in the person's order, the archived ones last, each with the account it lives in, what it holds (saved), its target and how far it is (left, percent, reached), what to save each month to reach the target date (perMonth, and overdue when the date has passed), how many entries it has (entries) and the day of the last one (lastEntry). All amounts are in the account's currency (currency). Money in a stash stays in its account: a stash only says that part of the balance is set aside, so no balance, statement, net worth or budget changes when money goes into or out of one. Also free is what the account holds that none of its stashes has set aside: the balance minus what its stashes hold, and it can be below zero if money was spent after it was set aside. Only the stashes of one account if accountId is given.",
+      "usage": "meowny stashes list [--account-id <id>]"
+    },
+    {
+      "command": "stashes show",
+      "confirm": false,
+      "destructive": false,
+      "flags": [
+        {
+          "flag": "--id",
+          "nullable": false,
+          "param": "id",
+          "required": true,
+          "summary": "The stash.",
+          "type": "id",
+          "value": "id",
+          "values": []
+        }
+      ],
+      "positional": "id",
+      "route": "stashes.show",
+      "scope": "read",
+      "summary": "One stash with its entries, newest first. Each entry is an add or a take (kind) of an amount above zero, with its date, its note, the transfer that came with it (transferId) and the account on the other side of that transfer, and what the stash held after it (savedAfter). Money in a stash stays in its account: a stash only says that part of the balance is set aside, so no balance, statement, net worth or budget changes when money goes into or out of one. Also free is what the account holds that none of its stashes has set aside: the balance minus what its stashes hold, and it can be below zero if money was spent after it was set aside.",
+      "usage": "meowny stashes show <id>"
+    },
+    {
+      "command": "stashes history",
+      "confirm": false,
+      "destructive": false,
+      "flags": [
+        {
+          "flag": "--id",
+          "nullable": false,
+          "param": "id",
+          "required": true,
+          "summary": "The stash.",
+          "type": "id",
+          "value": "id",
+          "values": []
+        },
+        {
+          "flag": "--year",
+          "nullable": false,
+          "param": "year",
+          "required": true,
+          "summary": "The year, like 2026.",
+          "type": "year",
+          "value": "year",
+          "values": []
+        }
+      ],
+      "positional": "id",
+      "route": "stashes.history",
+      "scope": "read",
+      "summary": "What a stash held at the end of each month of a year, for a chart, in its account's currency: on the last day of a month that is over, today for this month, and no point for a month that has not begun.",
+      "usage": "meowny stashes history <id> --year <year>"
+    },
+    {
+      "command": "stashes summary",
+      "confirm": false,
+      "destructive": false,
+      "flags": [],
+      "positional": null,
+      "route": "stashes.summary",
+      "scope": "read",
+      "summary": "How many stashes are not archived (stashes), what they hold in all (saved), the targets of those that have one added up (target) and how many have reached theirs (reached), in the app's currency: a stash in an account in another currency is turned into it at the account's rate. The archived ones are left out, though what an archived stash holds stays set aside in its account. Money in a stash stays in its account, so none of this is money that left it.",
+      "usage": "meowny stashes summary"
+    },
+    {
+      "command": "stashes create",
+      "confirm": false,
+      "destructive": false,
+      "flags": [
+        {
+          "flag": "--name",
+          "nullable": false,
+          "param": "name",
+          "required": true,
+          "summary": "The name.",
+          "type": "string",
+          "value": "text",
+          "values": []
+        },
+        {
+          "flag": "--account-id",
+          "nullable": false,
+          "param": "accountId",
+          "required": true,
+          "summary": "The account the money is set aside in.",
+          "type": "id",
+          "value": "id",
+          "values": []
+        },
+        {
+          "flag": "--target",
+          "nullable": false,
+          "param": "target",
+          "required": false,
+          "summary": "What you want to save, like 1200.00, in the account's currency.",
+          "type": "money",
+          "value": "amount",
+          "values": []
+        },
+        {
+          "flag": "--target-date",
+          "nullable": false,
+          "param": "targetDate",
+          "required": false,
+          "summary": "The day you want to have it by.",
+          "type": "date",
+          "value": "date",
+          "values": []
+        },
+        {
+          "flag": "--notes",
+          "nullable": false,
+          "param": "notes",
+          "required": false,
+          "summary": "Notes, up to 1000 characters. Line breaks are kept.",
+          "type": "string",
+          "value": "text",
+          "values": []
+        }
+      ],
+      "positional": null,
+      "route": "stashes.create",
+      "scope": "write",
+      "summary": "Makes a stash at the end of the list, empty: put money in it with stashes add. Money in a stash stays in its account: a stash only says that part of the balance is set aside, so no balance, statement, net worth or budget changes when money goes into or out of one. The name is 1 to 50 characters and unique among the stashes that are not archived, whatever the case (a taken one is refused as name_exists). The account is required, must exist and must not be archived, and the stash lives in it for good unless you move it with stashes update. The target is an amount of 0.01 or more; the target date may be in the past, and the stash is then overdue. Notes are up to 1000 characters, line breaks are kept.",
+      "usage": "meowny stashes create --name <text> --account-id <id> [--target <amount>] [--target-date <date>] [--notes <text>]"
+    },
+    {
+      "command": "stashes update",
+      "confirm": false,
+      "destructive": false,
+      "flags": [
+        {
+          "flag": "--id",
+          "nullable": false,
+          "param": "id",
+          "required": true,
+          "summary": "The stash.",
+          "type": "id",
+          "value": "id",
+          "values": []
+        },
+        {
+          "flag": "--name",
+          "nullable": false,
+          "param": "name",
+          "required": false,
+          "summary": "The new name.",
+          "type": "string",
+          "value": "text",
+          "values": []
+        },
+        {
+          "flag": "--account-id",
+          "nullable": false,
+          "param": "accountId",
+          "required": false,
+          "summary": "The account to move it to.",
+          "type": "id",
+          "value": "id",
+          "values": []
+        },
+        {
+          "flag": "--target",
+          "nullable": true,
+          "param": "target",
+          "required": false,
+          "summary": "The new target, like 1500.00, or null to clear it.",
+          "type": "money",
+          "value": "amount",
+          "values": []
+        },
+        {
+          "clears": "target",
+          "flag": "--clear-target",
+          "summary": "Clears target."
+        },
+        {
+          "flag": "--target-date",
+          "nullable": true,
+          "param": "targetDate",
+          "required": false,
+          "summary": "The new target date, or null to clear it.",
+          "type": "date",
+          "value": "date",
+          "values": []
+        },
+        {
+          "clears": "targetDate",
+          "flag": "--clear-target-date",
+          "summary": "Clears targetDate."
+        },
+        {
+          "flag": "--notes",
+          "nullable": true,
+          "param": "notes",
+          "required": false,
+          "summary": "The new notes, or null to clear them.",
+          "type": "string",
+          "value": "text",
+          "values": []
+        },
+        {
+          "clears": "notes",
+          "flag": "--clear-notes",
+          "summary": "Clears notes."
+        }
+      ],
+      "positional": "id",
+      "route": "stashes.update",
+      "scope": "write",
+      "summary": "Changes a stash that is not archived (bring it back first). Fields left out stay as they are; a null target, targetDate or notes clears it. A new name must not be taken by another stash that is not archived. A new target may not be below what the stash holds already. A new accountId moves the stash, and what it holds with it: that account must not be archived, must be in the same currency and must have at least that much free (a stash that holds nothing moves to any account of its currency); naming the account the stash is in is not a move and changes nothing. Money in a stash stays in its account: a stash only says that part of the balance is set aside, so no balance, statement, net worth or budget changes when money goes into or out of one. Also free is what the account holds that none of its stashes has set aside: the balance minus what its stashes hold, and it can be below zero if money was spent after it was set aside.",
+      "usage": "meowny stashes update <id> [--name <text>] [--account-id <id>] [--target <amount>] [--target-date <date>] [--notes <text>]"
+    },
+    {
+      "command": "stashes archive",
+      "confirm": false,
+      "destructive": false,
+      "flags": [
+        {
+          "flag": "--id",
+          "nullable": false,
+          "param": "id",
+          "required": true,
+          "summary": "The stash.",
+          "type": "id",
+          "value": "id",
+          "values": []
+        }
+      ],
+      "positional": "id",
+      "route": "stashes.archive",
+      "scope": "write",
+      "summary": "Takes a stash out of the lists. Its entries stay and what it holds stays set aside in its account, so free does not change. An archived stash takes no more money (an add is refused), but money can still be taken out of it. Archiving an archived stash changes nothing.",
+      "usage": "meowny stashes archive <id>"
+    },
+    {
+      "command": "stashes unarchive",
+      "confirm": false,
+      "destructive": false,
+      "flags": [
+        {
+          "flag": "--id",
+          "nullable": false,
+          "param": "id",
+          "required": true,
+          "summary": "The stash.",
+          "type": "id",
+          "value": "id",
+          "values": []
+        }
+      ],
+      "positional": "id",
+      "route": "stashes.unarchive",
+      "scope": "write",
+      "summary": "Brings back an archived stash, if no other stash has taken its name (refused as name_exists). A stash that is not archived is answered as it is.",
+      "usage": "meowny stashes unarchive <id>"
+    },
+    {
+      "command": "stashes delete",
+      "confirm": false,
+      "destructive": true,
+      "flags": [
+        {
+          "flag": "--id",
+          "nullable": false,
+          "param": "id",
+          "required": true,
+          "summary": "The stash.",
+          "type": "id",
+          "value": "id",
+          "values": []
+        }
+      ],
+      "positional": "id",
+      "route": "stashes.delete",
+      "scope": "write",
+      "summary": "Deletes a stash, archived or not, with all its entries. What it held is free again in its account, where the money stayed all along. The transfers that came with its entries stay. Money in a stash is never out of its account, so no balance changes.",
+      "usage": "meowny stashes delete <id>"
+    },
+    {
+      "command": "stashes reorder",
+      "confirm": false,
+      "destructive": false,
+      "flags": [
+        {
+          "flag": "--ids",
+          "nullable": false,
+          "param": "ids",
+          "required": true,
+          "summary": "Every stash that is not archived, in the new order.",
+          "type": "ids",
+          "value": "id,id,...",
+          "values": []
+        }
+      ],
+      "positional": null,
+      "route": "stashes.reorder",
+      "scope": "write",
+      "summary": "Puts the stashes in a new order; give every stash that is not archived, each once.",
+      "usage": "meowny stashes reorder --ids <id,id,...>"
+    },
+    {
+      "command": "stashes add",
+      "confirm": false,
+      "destructive": false,
+      "flags": [
+        {
+          "flag": "--id",
+          "nullable": false,
+          "param": "id",
+          "required": true,
+          "summary": "The stash.",
+          "type": "id",
+          "value": "id",
+          "values": []
+        },
+        {
+          "flag": "--amount",
+          "nullable": false,
+          "param": "amount",
+          "required": true,
+          "summary": "More than zero, like 100.00, in the account's currency.",
+          "type": "money",
+          "value": "amount",
+          "values": []
+        },
+        {
+          "flag": "--date",
+          "nullable": false,
+          "param": "date",
+          "required": false,
+          "summary": "The day it was set aside, not after today. Today if left out.",
+          "type": "date",
+          "value": "date",
+          "values": []
+        },
+        {
+          "flag": "--note",
+          "nullable": false,
+          "param": "note",
+          "required": false,
+          "summary": "A note, up to 200 characters.",
+          "type": "string",
+          "value": "text",
+          "values": []
+        },
+        {
+          "flag": "--from-account-id",
+          "nullable": false,
+          "param": "fromAccountId",
+          "required": false,
+          "summary": "Bring the money from this account: a transfer from it into the stash's account is made together with the entry. It must differ from the stash's account, not be archived and be in the same currency.",
+          "type": "id",
+          "value": "id",
+          "values": []
+        }
+      ],
+      "positional": "id",
+      "route": "stashes.add",
+      "scope": "write",
+      "summary": "Sets money aside in a stash and answers the stash with its entries. Money in a stash stays in its account: a stash only says that part of the balance is set aside, so no balance, statement, net worth or budget changes when money goes into or out of one. The amount has to fit in what is free in the account and in what is left to the target; free is what the account holds that none of its stashes has set aside: the balance minus what its stashes hold, and it can be below zero if money was spent after it was set aside. With fromAccountId the money is brought from another account in the same step: a transfer from that account into the stash's account is made with the entry, with its amount, date and note, and counts as free before the amount is checked; the entry remembers it, and the transfer is its own row after that. Refused as invalid_input, with nothing written and no transfer made: an amount above what is free or above what is left to the target, a date after today, a stash that is archived, an account that is archived, and a fromAccountId that is the stash's own account, is archived or is in another currency.",
+      "usage": "meowny stashes add <id> --amount <amount> [--date <date>] [--note <text>] [--from-account-id <id>]"
+    },
+    {
+      "command": "stashes take",
+      "confirm": false,
+      "destructive": false,
+      "flags": [
+        {
+          "flag": "--id",
+          "nullable": false,
+          "param": "id",
+          "required": true,
+          "summary": "The stash.",
+          "type": "id",
+          "value": "id",
+          "values": []
+        },
+        {
+          "flag": "--amount",
+          "nullable": false,
+          "param": "amount",
+          "required": true,
+          "summary": "More than zero, like 40.00, in the account's currency.",
+          "type": "money",
+          "value": "amount",
+          "values": []
+        },
+        {
+          "flag": "--date",
+          "nullable": false,
+          "param": "date",
+          "required": false,
+          "summary": "The day it was taken out, not after today. Today if left out.",
+          "type": "date",
+          "value": "date",
+          "values": []
+        },
+        {
+          "flag": "--note",
+          "nullable": false,
+          "param": "note",
+          "required": false,
+          "summary": "A note, up to 200 characters.",
+          "type": "string",
+          "value": "text",
+          "values": []
+        },
+        {
+          "flag": "--to-account-id",
+          "nullable": false,
+          "param": "toAccountId",
+          "required": false,
+          "summary": "Send the money on to this account: a transfer from the stash's account to it is made together with the entry. It must differ from the stash's account, not be archived and be in the same currency.",
+          "type": "id",
+          "value": "id",
+          "values": []
+        }
+      ],
+      "positional": "id",
+      "route": "stashes.take",
+      "scope": "write",
+      "summary": "Takes money out of a stash, so it is free again in the account, and answers the stash with its entries. Money in a stash stays in its account: a stash only says that part of the balance is set aside, so no balance, statement, net worth or budget changes when money goes into or out of one. It works on an archived stash and in an archived account, so a stash can be emptied. With toAccountId the money is also sent on in the same step: a transfer from the stash's account to that account is made with the entry, with its amount, date and note; the entry remembers it, and the transfer is its own row after that. Refused as invalid_input, with nothing written and no transfer made: an amount above what the stash holds (saved), a date after today, and a toAccountId that is the stash's own account, is archived or is in another currency.",
+      "usage": "meowny stashes take <id> --amount <amount> [--date <date>] [--note <text>] [--to-account-id <id>]"
+    },
+    {
+      "command": "stashes amend",
+      "confirm": false,
+      "destructive": false,
+      "flags": [
+        {
+          "flag": "--id",
+          "nullable": false,
+          "param": "id",
+          "required": true,
+          "summary": "The entry, as the entries of stashes show give it.",
+          "type": "id",
+          "value": "id",
+          "values": []
+        },
+        {
+          "flag": "--amount",
+          "nullable": false,
+          "param": "amount",
+          "required": false,
+          "summary": "The new amount, more than zero, like 60.00. It is a size: an add stays an add and a take stays a take.",
+          "type": "money",
+          "value": "amount",
+          "values": []
+        },
+        {
+          "flag": "--date",
+          "nullable": false,
+          "param": "date",
+          "required": false,
+          "summary": "The new date, not after today.",
+          "type": "date",
+          "value": "date",
+          "values": []
+        },
+        {
+          "flag": "--note",
+          "nullable": true,
+          "param": "note",
+          "required": false,
+          "summary": "The new note, up to 200 characters, or null to clear it.",
+          "type": "string",
+          "value": "text",
+          "values": []
+        },
+        {
+          "clears": "note",
+          "flag": "--clear-note",
+          "summary": "Clears note."
+        }
+      ],
+      "positional": "id",
+      "route": "stashes.amend",
+      "scope": "write",
+      "summary": "Changes the amount, the date or the note of an entry and answers its stash with its entries. Fields left out stay as they are; a null note clears it. The kind of an entry never changes: an add stays an add and a take stays a take, and the amount is its size, above zero. The transfer that came with the entry is not changed; it is its own row. Money in a stash stays in its account: a stash only says that part of the balance is set aside, so no balance, statement, net worth or budget changes when money goes into or out of one. Refused as invalid_input, with nothing written: a change that would put more in the stash than is free in the account or than is left to the target, one that would leave less than zero in it, a date after today, and more money going into a stash that is archived or in an account that is archived. Changing only the note is always allowed.",
+      "usage": "meowny stashes amend <id> [--amount <amount>] [--date <date>] [--note <text>]"
+    },
+    {
+      "command": "stashes erase",
+      "confirm": false,
+      "destructive": true,
+      "flags": [
+        {
+          "flag": "--id",
+          "nullable": false,
+          "param": "id",
+          "required": true,
+          "summary": "The entry, as the entries of stashes show give it.",
+          "type": "id",
+          "value": "id",
+          "values": []
+        },
+        {
+          "flag": "--delete-transfer",
+          "nullable": false,
+          "param": "deleteTransfer",
+          "required": false,
+          "summary": "Also delete the transfer that came with the entry, if there is one. False if left out: the transfer stays.",
+          "type": "boolean",
+          "value": "boolean",
+          "values": []
+        }
+      ],
+      "positional": "id",
+      "route": "stashes.erase",
+      "scope": "write",
+      "summary": "Deletes an entry and answers its stash with its entries. The transfer that came with the entry stays, unless deleteTransfer is true: then it is deleted in the same step. Refused as invalid_input, with nothing deleted: an add whose money was taken out since (the stash would hold less than zero), and a take that would put more in the stash than is free in the account or than is left to the target. Money in a stash stays in its account: a stash only says that part of the balance is set aside, so no balance, statement, net worth or budget changes when money goes into or out of one.",
+      "usage": "meowny stashes erase <id> [--delete-transfer <boolean>]"
+    },
+    {
       "command": "login",
       "confirm": false,
       "destructive": false,
@@ -4211,7 +4748,7 @@
     },
     {
       "flag": "--yes",
-      "summary": "Go ahead with a command that deletes or ends something."
+      "summary": "Go ahead with a command that deletes, erases or ends something."
     },
     {
       "flag": "--token-file <path>",

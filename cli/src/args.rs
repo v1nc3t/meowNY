@@ -479,7 +479,7 @@ mod tests {
 
     #[test]
     fn deleting_and_ending_need_yes() {
-        for line in ["transactions delete 5", "categories delete 5", "recurring delete 5", "recurring end 5", "budgets remove --type EXPENSE --month 2026-10", "accounts delete 5", "transfers delete 5"] {
+        for line in ["transactions delete 5", "categories delete 5", "recurring delete 5", "recurring end 5", "budgets remove --type EXPENSE --month 2026-10", "accounts delete 5", "transfers delete 5", "stashes delete 5", "stashes erase 5", "stashes erase 5 --delete-transfer"] {
             assert!(usage(line).contains("cannot be undone; add --yes"), "{line}");
             let with = format!("{line} --yes");
             assert!(run(&with).globals.yes, "{with}");
@@ -489,6 +489,9 @@ mod tests {
         run("recurring pause 5");
         run("accounts archive 5");
         run("accounts update 5 --name X");
+        run("stashes archive 5");
+        run("stashes add 5 --amount 10.00");
+        run("stashes amend 5 --note X");
     }
 
     #[test]

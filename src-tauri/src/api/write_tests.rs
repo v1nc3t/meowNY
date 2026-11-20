@@ -55,6 +55,16 @@ const WRITE_ROUTES: &[&str] = &[
     "transfers.create",
     "transfers.update",
     "transfers.delete",
+    "stashes.create",
+    "stashes.update",
+    "stashes.archive",
+    "stashes.unarchive",
+    "stashes.delete",
+    "stashes.reorder",
+    "stashes.add",
+    "stashes.take",
+    "stashes.amend",
+    "stashes.erase",
 ];
 
 const UUID: &str = "123e4567-e89b-12d3-a456-426614174000";
@@ -472,6 +482,16 @@ fn a_locked_app_refuses_every_write_and_nothing_changes() {
         ("transfers.create", json!({ "fromAccountId": "1", "toAccountId": "2", "amount": "1.00", "toAmount": "5.00", "date": "2026-10-14" })),
         ("transfers.update", json!({ "id": "1", "amount": "2.00", "toAmount": "5.00" })),
         ("transfers.delete", json!({ "id": "1" })),
+        ("stashes.create", json!({ "name": "Holiday", "accountId": "2", "target": "1200.00", "targetDate": "2027-06-30", "notes": "a week" })),
+        ("stashes.update", json!({ "id": "1", "name": "Trip", "target": null })),
+        ("stashes.archive", json!({ "id": "1" })),
+        ("stashes.unarchive", json!({ "id": "1" })),
+        ("stashes.delete", json!({ "id": "1" })),
+        ("stashes.reorder", json!({ "ids": ["1", "2"] })),
+        ("stashes.add", json!({ "id": "1", "amount": "10.00", "date": "2026-10-14", "note": "n", "fromAccountId": "1" })),
+        ("stashes.take", json!({ "id": "1", "amount": "10.00", "date": "2026-10-14", "note": "n", "toAccountId": "1" })),
+        ("stashes.amend", json!({ "id": "1", "amount": "5.00", "date": "2026-10-13", "note": null })),
+        ("stashes.erase", json!({ "id": "1", "deleteTransfer": true })),
     ];
     let mut covered: Vec<&str> = cases.iter().map(|(name, _)| *name).collect();
     covered.sort_unstable();
