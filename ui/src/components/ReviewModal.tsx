@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from 'react'
+import { ACCOUNT_KINDS, type AccountKind } from '../api/accounts'
 import { allChosen, choicesInOrder, parseEvery, type Choice, type Conflict } from '../api/sync'
 import { useAccounts } from '../hooks/useAccounts'
 import { useMoneySettings } from '../hooks/useMoneySettings'
@@ -66,8 +67,8 @@ export default function ReviewModal({
     // what a transaction or a transfer was in its account's currency, and a rate, are numbers: the conflict does not say which currency (an account's amounts are written in its own)
     // the same for a stash's target
     if ((field === 'amount' || field === 'openingBalance' || field === 'virtualBalance' || (field === 'target' && table === 'stashes')) && settings && currency) return formatMoney(value, currency, settings.locale)
-    // the type of an account is one of its four kinds; of a category, income or expense
-    if (field === 'type' && (value === 'CHECKING' || value === 'SAVINGS' || value === 'CASH' || value === 'CREDIT_CARD')) return t(`accounts.kind.${value}`)
+    // the type of an account is one of its kinds; of a category, income or expense
+    if (field === 'type' && (ACCOUNT_KINDS as readonly string[]).includes(value)) return t(`accounts.kind.${value as AccountKind}`)
     if (field === 'type') return t(value === 'INCOME' ? 'common.income' : 'common.expense')
     if (field === 'active' || field === 'keepOnPhone' || field === 'archived' || field === 'includeNetWorth') return t(value === 'yes' ? 'common.yes' : 'common.no')
     if (field === 'kind' && table === 'stash_entries') return value.toUpperCase() === 'TAKE' ? t('stashes.kind.TAKE') : t('stashes.kind.ADD')

@@ -203,6 +203,12 @@ function DashboardView({ settings, now }: { settings: MoneySettings; now: Today 
                         <span className="dash-stat-label">{t('accounts.inAccounts')}</span>
                         <b>{formatMoney(worth.inAccounts, settings.currency, settings.locale)}</b>
                       </span>
+                      {toMinor(worth.debts) ? (
+                        <span>
+                          <span className="dash-stat-label">{t('loans.title')}</span>
+                          <b>{formatMoney(worth.debts, settings.currency, settings.locale)}</b>
+                        </span>
+                      ) : null}
                       {toMinor(worth.friends) ? (
                         <span>
                           <span className="dash-stat-label">{t('accounts.friends')}</span>

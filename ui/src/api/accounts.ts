@@ -1,5 +1,7 @@
 import { z } from 'zod'
 import { call } from './invoke'
+import { Transaction } from './transactions'
+import { Transfer } from './transfers'
 
 // Accounts, their balances and what moved them (docs/accounts-design.md, section 6.2). The app adds up; the screen only shows.
 const id = z.string().regex(/^[1-9]\d*$/)
@@ -13,9 +15,48 @@ const currency = z.string().regex(/^[A-Za-z]{3}$/)
 /** A typed exchange rate as the app keeps it: "5.00", "0.0063". */
 const rate = z.string().regex(/^\d+(?:\.\d+)?$/)
 
-export const ACCOUNT_KINDS = ['CHECKING', 'SAVINGS', 'CASH', 'CREDIT_CARD'] as const
+/** A percent as the app writes it, 0 to 100 with at most 3 decimals and no trailing zeros: "3.25", "4", "0.5". */
+const percent = z.string().regex(/^(?:100|\d{1,2}(?:\.\d{1,3})?)$/)
+/** A month ("YYYY-MM"). */
+const month = z.string().regex(/^\d{4}-(?:0[1-9]|1[0-2])$/)
+
+/** The kinds that hold money, and the kinds you owe on (docs/loans-deposits-design.md, section 2): a liability's balance is what is owed, below 0. */
+export const ASSET_KINDS = ['CHECKING', 'SAVINGS', 'CASH', 'CREDIT_CARD'] as const
+export const LIABILITY_KINDS = ['CREDIT', 'LOAN', 'MORTGAGE'] as const
+export const ACCOUNT_KINDS = [...ASSET_KINDS, ...LIABILITY_KINDS] as const
 export const AccountKind = z.enum(ACCOUNT_KINDS)
 export type AccountKind = z.infer<typeof AccountKind>
+
+/** Whether an account of this kind is one you owe on (a credit, a loan, a mortgage). The others are assets. */
+export function isLiability(kind: AccountKind): kind is (typeof LIABILITY_KINDS)[number] {
+  return (LIABILITY_KINDS as readonly string[]).includes(kind)
+}
+
+/** What a rate is a percent of. */
+export const INTEREST_PERIODS = ['MONTHLY', 'YEARLY'] as const
+export const InterestPeriod = z.enum(INTEREST_PERIODS)
+export type InterestPeriod = z.infer<typeof InterestPeriod>
+
+/**
+ * When a liability is paid off at its installment: `{ never: true }` when the installment does not beat a month's interest (or it would take over a
+ * hundred years), else the payments still to make, the interest that adds up over them and the month of the last one.
+ */
+export const Payoff = z.union([z.object({ never: z.literal(true) }), z.object({ months: z.number().int().nonnegative(), interestLeft: unsigned, month })])
+export type Payoff = z.infer<typeof Payoff>
+
+export const LIABILITY_STATES = ['OWING', 'PAID_OFF', 'OVERPAID'] as const
+
+/** What a liability owes today, worked out by the app from its balance, in the account's currency. */
+export const Liability = z.object({
+  /** The balance turned positive; 0 when it is 0 or above. */
+  owed: unsigned,
+  state: z.enum(LIABILITY_STATES),
+  /** A month of interest on what is owed; null without a rate. */
+  interestPerMonth: unsigned.nullable(),
+  /** Null without an installment, and when nothing is owed. */
+  payoff: Payoff.nullable(),
+})
+export type Liability = z.infer<typeof Liability>
 
 export const Account = z.object({
   id,
@@ -61,6 +102,15 @@ export const Account = z.object({
   setAside: unsigned,
   /** What no stash has set aside: the balance minus `setAside`. Below 0 when the stashes hold more than the account has. */
   free: signed,
+  /** The percent the account earns or costs ("3.25"), and whether it is per month or per year; both null without a rate. Not the exchange `rate`. */
+  interestRate: percent.nullable(),
+  interestPeriod: InterestPeriod.nullable(),
+  /** What a liability is paid each month ("950.00"); null for an asset and for a liability without one. */
+  installment: unsigned.nullable(),
+  /** What a liability owes; null for an asset. */
+  liability: Liability.nullable(),
+  /** What an asset with a rate returns in a month on what it holds; null without a rate and for a liability. */
+  returnPerMonth: unsigned.nullable(),
 })
 export type Account = z.infer<typeof Account>
 
@@ -82,9 +132,14 @@ export type NewAccount = {
   /** Left out, or the app's currency (any case): the account is in the app's currency and `rate` must be left out. Another code needs a `rate`. */
   currency?: string
   rate?: string
+  /** A percent from "0" to "100" with at most 3 decimals; sent together with `interestPeriod`. */
+  interestRate?: string
+  interestPeriod?: InterestPeriod
+  /** "0.01" and up, for a liability only. */
+  installment?: string
 }
 
-/** Fields left out stay as they are; `null` clears `number`, `bic`, `notes` and `group`. */
+/** Fields left out stay as they are; `null` clears `number`, `bic`, `notes` and `group`, and `interestRate` (with its period) and `installment`. */
 export type AccountPatch = {
   name?: string
   kind?: AccountKind
@@ -102,11 +157,18 @@ export type AccountPatch = {
   rate?: string
   /** What the account holds today, in its currency: the app sets the opening balance to make it so. Not together with `openingBalance`. */
   balance?: string
+  /** A new rate needs a period, in this patch or already there; `null` clears the rate and its period. */
+  interestRate?: string | null
+  interestPeriod?: InterestPeriod
+  /** For a liability only; `null` clears it. */
+  installment?: string | null
 }
 
 export const AccountsSummary = z.object({
-  /** The balances of all accounts together, archived ones too, in the app's currency (an account in another one at its rate). */
+  /** The balances of the asset accounts together, archived ones too, in the app's currency (an account in another one at its rate). */
   inAccounts: signed,
+  /** The balances of the liabilities that count in net worth, in the app's currency: below 0 while something is owed. */
+  debts: signed,
   /** What friends owe you minus what you owe them. */
   friends: signed,
   netWorth: signed,
@@ -168,6 +230,25 @@ export const Breakdown = z.object({
 })
 export type Breakdown = z.infer<typeof Breakdown>
 
+/** One payment of a liability, split in two (docs/loans-deposits-design.md, section 5.4): the interest is an expense, the rest a transfer. */
+export type Payment = {
+  liabilityId: string
+  fromAccountId: string
+  /** The whole payment, interest included. */
+  amount: string
+  /** The part of `amount` that is interest, "0.00" when left out. */
+  interest?: string
+  /** An expense category; needed when the interest is above 0. */
+  categoryId?: string
+  /** Today when left out. */
+  date?: string
+  note?: string
+}
+
+/** What a payment made: the principal as a transfer (null when it was all interest) and the interest as an expense (null when there was none). */
+export const Paid = z.object({ transfer: Transfer.nullable(), transaction: Transaction.nullable() })
+export type Paid = z.infer<typeof Paid>
+
 export const accounts = {
   /** The accounts in the person's order, then the archived ones. */
   list: () => call('list_accounts', z.array(Account)),
@@ -183,6 +264,8 @@ export const accounts = {
   /** The months of a year ("YYYY") up to today, at most 12. */
   history: (id: string, year: string) => call('account_history', z.array(HistoryPoint), { id, year }),
   summary: () => call('accounts_summary', AccountsSummary),
+  /** Pays a liability: an expense for the interest and a transfer for the rest, in one step. */
+  pay: (input: Payment) => call('accounts_pay', Paid, { input }),
   /** What the account spent and took in from `from` to `to`, both days included, by category. */
   breakdown: (id: string, from: string, to: string) => call('account_breakdown', Breakdown, { id, from, to }),
 }

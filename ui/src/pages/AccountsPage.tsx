@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useMemo, useRef, useState, type MouseEvent, type ReactNode } from 'react'
 import { Link, Navigate, useLocation, useNavigate, useParams } from 'react-router-dom'
-import { accounts as accountsApi, type Account, type AccountLine, type AccountStatement, type AccountsSummary, type Breakdown } from '../api/accounts'
+import { accounts as accountsApi, isLiability, type Account, type AccountLine, type AccountStatement, type AccountsSummary, type Breakdown } from '../api/accounts'
 import { debts } from '../api/debts'
 import { ApiError, errorText } from '../api/invoke'
 import { shiftMonth } from '../api/months'
@@ -11,6 +11,8 @@ import AccountModal from '../components/AccountModal'
 import BalanceChart from '../components/BalanceChart'
 import ConfirmModal from '../components/ConfirmModal'
 import EntryDialog from '../components/EntryDialog'
+import LoanFacts from '../components/LoanFacts'
+import LoanPayModal from '../components/LoanPayModal'
 import MonthNav from '../components/MonthNav'
 import Icon from '../components/NavIcon'
 import { DayGroups, IconAction, Row, Table, TapRow } from '../components/RowParts'
@@ -38,6 +40,7 @@ import { breakable, formatDate, formatMoney, moneyIn } from '../lib/money'
 import { lastDay } from '../lib/range'
 import { applyOrder } from '../lib/reorder'
 import { saveChoice, storedChoice } from '../lib/sticky'
+import { rateWords } from '../lib/loansView'
 import { activeStashes, isSome, overBooked } from '../lib/stashView'
 
 /** The dialog that is open. A transfer being changed is read first, so the dialog opens with its row. */
@@ -45,7 +48,8 @@ type Dialog =
   | { kind: 'add' }
   | { kind: 'edit'; account: Account }
   | { kind: 'transfer'; transfer: Transfer | null; fromId?: string }
-  | { kind: 'entry'; tab: EntryTab; accountId: string }
+  | { kind: 'entry'; tab: EntryTab; accountId: string; amount?: string; name?: string }
+  | { kind: 'pay'; liability: Account }
   | { kind: 'stash'; accountId: string }
   | { kind: 'archive'; account: Account }
   | { kind: 'delete'; account: Account }
@@ -109,13 +113,15 @@ function AccountsView({ settings, now }: { settings: MoneySettings; now: Today }
     }
   }, [reload, say])
 
-  const active = useMemo(() => activeAccounts(accounts ?? []), [accounts])
+  // the list holds the assets: the credits, loans and mortgages are on the debts page
+  const assets = useMemo(() => (accounts ?? []).filter((account) => !isLiability(account.kind)), [accounts])
+  const active = useMemo(() => activeAccounts(assets), [assets])
   // the list as it is shown: one run of accounts, or one for each group (the groups in use are what the group field offers)
-  const groups = useMemo(() => groupAccounts(accounts ?? []), [accounts])
+  const groups = useMemo(() => groupAccounts(assets), [assets])
   const grouped = groups.some((group) => group.name !== null)
-  const archived = useMemo(() => (accounts ?? []).filter((account) => account.archived), [accounts])
-  // a transfer needs two accounts to choose from
-  const canTransfer = active.length >= 2
+  const archived = useMemo(() => assets.filter((account) => account.archived), [assets])
+  // a transfer needs two accounts to choose from, a loan being one of them
+  const canTransfer = activeAccounts(accounts ?? []).length >= 2
   const nameOf = (account: Account) => accountName(account, t)
 
   // The new order shows at once; if it cannot be saved, the saved one comes back.
@@ -164,9 +170,11 @@ function AccountsView({ settings, now }: { settings: MoneySettings; now: Today }
   const chosen = accountId ? (accounts?.find((account) => account.id === accountId) ?? null) : null
   /** The one place that adds an entry for an account: the add dialog of the transactions page, on the tab asked for and with this account chosen. */
   const addEntry = (tab: EntryTab, account: Account) => setDialog({ kind: 'entry', tab, accountId: account.id })
+  /** Book interest: an income in the account, filled in with what it returns in a month. */
+  const bookInterest = (account: Account) => setDialog({ kind: 'entry', tab: 'INCOME', accountId: account.id, amount: account.returnPerMonth ?? undefined, name: t('accounts.interestNote') })
 
-  // Keyboard: n adds an account (an expense, on an account's page), j and k move between rows.
-  useShortcut('new', () => (chosen && !chosen.archived ? addEntry('EXPENSE', chosen) : setDialog({ kind: 'add' })))
+  // Keyboard: n adds an account (an expense, on an account's page; a payment on the page of a debt), j and k move between rows.
+  useShortcut('new', () => (chosen && !chosen.archived ? (isLiability(chosen.kind) ? setDialog({ kind: 'pay', liability: chosen }) : addEntry('EXPENSE', chosen)) : setDialog({ kind: 'add' })))
   useRowNavigation()
 
   const link = (account: Account) => `/app/accounts/${account.id}`
@@ -199,6 +207,7 @@ function AccountsView({ settings, now }: { settings: MoneySettings; now: Today }
         {cellMoney(account)(account.balance)}
         {showAvailable(account) ? <span className="acct-available">{`${t('accounts.available')} ${moneyOf(account)(account.available)}`}</span> : null}
         {isSome(account.setAside) ? <span className="acct-available">{t('stashes.setAside', { amount: moneyOf(account)(account.setAside) })}</span> : null}
+        {account.returnPerMonth !== null && isSome(account.returnPerMonth) ? <span className="acct-available">{t('accounts.returnPerMonth', { amount: moneyOf(account)(account.returnPerMonth) })}</span> : null}
         {account.foreign ? (
           <span className="acct-available acct-in-main" title={about}>
             <span aria-hidden="true">{t('accounts.inMain', { amount: money(account.balanceInMain) })}</span>
@@ -387,19 +396,32 @@ function AccountsView({ settings, now }: { settings: MoneySettings; now: Today }
         {accountId ? (
           // an account's page: what can be added to it (an archived account takes nothing); two by two on a phone, like the debts
           chosen && !chosen.archived ? (
-            <div className="tx-actions debts-actions acct-actions">
-              <Button onClick={() => addEntry('EXPENSE', chosen)} {...tip('new', t('accounts.addExpense'))}>
-                {t('accounts.addExpense')}
-              </Button>
-              <Button variant="outline" onClick={() => addEntry('INCOME', chosen)}>
-                {t('accounts.addIncome')}
-              </Button>
-              {canTransfer ? (
-                <Button variant="outline" onClick={() => addEntry('TRANSFER', chosen)}>
-                  {t('transfers.add')}
+            isLiability(chosen.kind) ? (
+              <div className="tx-actions debts-actions acct-actions">
+                <Button onClick={() => setDialog({ kind: 'pay', liability: chosen })} {...tip('new', t('loans.pay'))}>
+                  {t('loans.pay')}
                 </Button>
-              ) : null}
-            </div>
+              </div>
+            ) : (
+              <div className="tx-actions debts-actions acct-actions">
+                <Button onClick={() => addEntry('EXPENSE', chosen)} {...tip('new', t('accounts.addExpense'))}>
+                  {t('accounts.addExpense')}
+                </Button>
+                <Button variant="outline" onClick={() => addEntry('INCOME', chosen)}>
+                  {t('accounts.addIncome')}
+                </Button>
+                {canTransfer ? (
+                  <Button variant="outline" onClick={() => addEntry('TRANSFER', chosen)}>
+                    {t('transfers.add')}
+                  </Button>
+                ) : null}
+                {chosen.returnPerMonth !== null && isSome(chosen.returnPerMonth) ? (
+                  <Button variant="outline" onClick={() => bookInterest(chosen)}>
+                    {t('accounts.bookInterest')}
+                  </Button>
+                ) : null}
+              </div>
+            )
           ) : null
         ) : (
           <div className="tx-actions">
@@ -448,10 +470,24 @@ function AccountsView({ settings, now }: { settings: MoneySettings; now: Today }
       {dialog?.kind === 'entry' ? (
         <EntryDialog
           key={`entry:${dialog.tab}:${dialog.accountId}`}
-          initial={{ tab: dialog.tab, accountId: dialog.accountId }}
+          initial={{ tab: dialog.tab, accountId: dialog.accountId, amount: dialog.amount, name: dialog.name }}
           today={now.date}
           onClose={() => setDialog(null)}
           onSaved={refresh}
+        />
+      ) : null}
+      {dialog?.kind === 'pay' && accounts ? (
+        <LoanPayModal
+          key={`pay:${dialog.liability.id}`}
+          liability={dialog.liability}
+          accounts={accounts}
+          locale={settings.locale}
+          today={now.date}
+          onClose={() => setDialog(null)}
+          onSaved={() => {
+            setDialog((current) => (current === dialog ? null : current))
+            refresh()
+          }}
         />
       ) : null}
       {dialog?.kind === 'stash' && accounts ? (
@@ -837,12 +873,15 @@ function AccountPage({
     )
   }
 
+  const owing = account.liability !== null
   const details = [
     t(`accounts.kind.${account.kind}`),
     account.number,
     account.bic && `${t('accounts.bic')} ${account.bic}`,
     account.group,
     account.foreign && account.rate !== null && t('accounts.rateLine', { main: settings.currency.toUpperCase(), rate: account.rate, code: account.currency.toUpperCase() }),
+    // a debt's rate is in its facts; an asset's is here, with what it returns
+    !owing && rateWords(account, t),
     !account.includeInNetWorth && t('accounts.notInNetWorth'),
   ]
     .filter(Boolean)
@@ -850,7 +889,7 @@ function AccountPage({
   return (
     <>
       <div className="debts-name">
-        <Link to="/app/accounts" className={buttonClass('outline', 'sm')}>
+        <Link to={owing ? '/app/debts?tab=debts' : '/app/accounts'} className={buttonClass('outline', 'sm')}>
           {t('common.back')}
         </Link>
         {account.archived ? (
@@ -865,7 +904,12 @@ function AccountPage({
       </div>
       {/* The title of the page is the account and what it holds. */}
       <h2 className="debts-heading debts-balance">
-        {accountLabel(account, t)}: <span className={account.balance.startsWith('-') ? 'debt-owe' : undefined}>{money(account.balance)}</span>
+        {accountLabel(account, t)}:{' '}
+        {account.liability ? (
+          <span className={account.liability.state === 'OWING' ? 'debt-owe' : undefined}>{money(account.liability.owed)}</span>
+        ) : (
+          <span className={account.balance.startsWith('-') ? 'debt-owe' : undefined}>{money(account.balance)}</span>
+        )}
       </h2>
       {account.foreign ? <p className="hint acct-available-line">{t('accounts.inMain', { amount: appMoney(account.balanceInMain) })}</p> : null}
       {showAvailable(account) ? (
@@ -874,6 +918,12 @@ function AccountPage({
         </p>
       ) : null}
       <p className="hint">{details}</p>
+      {account.returnPerMonth !== null && isSome(account.returnPerMonth) ? (
+        <p className="hint acct-available-line">
+          <b>{t('accounts.returnPerMonth', { amount: money(account.returnPerMonth) })}</b>
+        </p>
+      ) : null}
+      {owing ? <LoanFacts account={account} money={money} locale={settings.locale} /> : null}
       {account.notes ? <p className="acct-notes">{account.notes}</p> : null}
       {account.isMain ? <p className="hint">{t('accounts.mainHint')}</p> : null}
       <Card className="acct-chart">
@@ -885,14 +935,14 @@ function AccountPage({
         <BalanceChart accountId={account.id} currency={account.foreign ? account.currency : settings.currency} month={month} reload={reload} onPick={setMonth} settings={settings} />
       </Card>
       <MonthNav month={month} thisMonth={now.month} onChange={setMonth} />
-      {shown ? (
+      {shown && !owing ? (
         <div className="acct-breakdown">
           <ShareList title={t('accounts.spentByCategory')} shares={shown.expenses} total={shown.expenseTotal} tone="expense" money={statementMoney(shown)} />
           <ShareList title={t('accounts.cameInByCategory')} shares={shown.income} total={shown.incomeTotal} tone="income" money={statementMoney(shown)} />
         </div>
       ) : null}
       {/* What is set aside in this account: its stashes as small cards that open them, what is set aside and what is free, and a new stash. */}
-      {stashList && (stashList.length > 0 || !account.archived) ? (
+      {stashList && !owing && (stashList.length > 0 || !account.archived) ? (
         <section className="acct-stashes" aria-label={t('nav.stashes')}>
           <h2 className="debts-heading">
             <Link to="/app/stashes">{t('nav.stashes')}</Link>

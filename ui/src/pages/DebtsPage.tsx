@@ -1,5 +1,5 @@
-import { useEffect, useState, type MouseEvent } from 'react'
-import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
+import { useEffect, useState, type MouseEvent, type ReactNode } from 'react'
+import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { debts, type EntryKind, type History, type Person, type Reminders } from '../api/debts'
 import { errorText } from '../api/invoke'
 import { scanQr, stopScan } from '../api/scanner'
@@ -8,12 +8,14 @@ import BillAcceptModal from '../components/BillAcceptModal'
 import ConfirmModal from '../components/ConfirmModal'
 import DebtNotificationsModal from '../components/DebtNotificationsModal'
 import DebtsFiles from '../components/DebtsFiles'
+import DebtsLoans from '../components/DebtsLoans'
 import DebtsHistory from '../components/DebtsHistory'
 import EntryModal from '../components/EntryModal'
 import FriendLedger from '../components/FriendLedger'
 import FriendNameModal from '../components/FriendNameModal'
 import Icon from '../components/NavIcon'
 import { IconAction, Row, Table, TapRow } from '../components/RowParts'
+import SectionTabs from '../components/SectionTabs'
 import SettleModal from '../components/SettleModal'
 import Button from '../components/ui/Button'
 import { buttonClass } from '../components/ui/cn'
@@ -27,19 +29,45 @@ import { useShortcut } from '../keys/registry'
 import { tip } from '../keys/tip'
 import { useRowNavigation } from '../keys/useRowNavigation'
 import { balanceView } from '../lib/balance'
+import { debtsTabOf, debtsTabQuery, type DebtsTab } from '../lib/loansView'
 import { formatDate, formatMoney } from '../lib/money'
 import { dismissedAfter, dismissedDays, notDismissed, reminderEvery, remindersChanged, saveDismissedDays } from '../lib/reminders'
 import { saveChoice, storedChoice } from '../lib/sticky'
+import { tabPanelProps } from '../lib/tabs'
 
+/**
+ * The debts page has two tabs, in the address as `?tab=debts` (docs/loans-deposits-design.md, section 10): the friends, which is the page as it was,
+ * and the debts, the accounts you owe on (`DebtsLoans`). A friend's page (`/app/debts/:personId`) is on the friends tab.
+ */
 export default function DebtsPage() {
   const { settings, error } = useMoneySettings()
   const now = useToday()
+  const navigate = useNavigate()
+  const { personId } = useParams()
+  const [params] = useSearchParams()
+  const phone = useProfile() === 'phone'
+  const t = useT()
   if (error) return <p className="notice">{error}</p>
   if (!settings || !now) return null
-  return <DebtsView settings={settings} now={now} />
+  const tab = personId ? 'friends' : debtsTabOf(params)
+  const choose = (next: DebtsTab) => navigate({ pathname: '/app/debts', search: new URLSearchParams(debtsTabQuery(next)).toString() }, { replace: true })
+  // a friend's page on a phone is a page of its own, with its way back
+  const tabs =
+    phone && personId ? null : (
+      <SectionTabs
+        label={t('debts.title')}
+        value={tab}
+        onChange={choose}
+        tabs={[
+          { id: 'friends', label: t('debts.tabFriends') },
+          { id: 'debts', label: t('debts.tabDebts') },
+        ]}
+      />
+    )
+  return tab === 'debts' ? <DebtsLoans settings={settings} now={now} tabs={tabs} /> : <DebtsView settings={settings} now={now} tabs={tabs} />
 }
 
-function DebtsView({ settings, now }: { settings: MoneySettings; now: Today }) {
+function DebtsView({ settings, now, tabs }: { settings: MoneySettings; now: Today; tabs: ReactNode }) {
   const t = useT()
   const phone = useProfile() === 'phone'
   const navigate = useNavigate()
@@ -318,6 +346,7 @@ function DebtsView({ settings, now }: { settings: MoneySettings; now: Today }) {
           </Button>
         </div>
       </div>
+      {tabs}
       {scanning ? (
         <div className="scan-overlay" role="dialog" aria-label={t('code.scan')}>
           <Button variant="outline" onClick={() => void stopScan()}>
@@ -407,7 +436,7 @@ function DebtsView({ settings, now }: { settings: MoneySettings; now: Today }) {
       ) : null}
       {people ? (
         <>
-          <div className="tx-pane wide debts-view">
+          <div className="tx-pane wide debts-view" {...tabPanelProps('friends')}>
             <div className="debts-split">
               {/* The phone shows a friend's history on its own, with a way back. */}
               {phone && personId ? null : (

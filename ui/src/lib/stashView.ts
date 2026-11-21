@@ -1,4 +1,4 @@
-import type { Account } from '../api/accounts'
+import { isLiability, type Account } from '../api/accounts'
 import type { Entry, EntryKind, EntryPatch, NewEntry, NewTake, Stash } from '../api/stashes'
 import type { MessageKey } from '../i18n/en'
 import type { DialogState } from './accountDialogs'
@@ -321,25 +321,25 @@ export function nextText(line: NextLine, money: (amount: string) => string, t: T
 // -- the accounts a stash may use ---------------------------------------------------------------------------------------------------------
 
 /**
- * The accounts money can come from or go to with an entry of this stash: the other accounts that are not archived and have the stash's currency
+ * The accounts money can come from or go to with an entry of this stash: the other assets that are not archived and have the stash's currency
  * (an account compares by `currencyKey`: the app's own currency, or a code). None when the stash's account is unknown.
  */
 export function otherAccounts(accounts: readonly Account[], stash: Pick<Stash, 'accountId'>): Account[] {
   const own = accounts.find((account) => account.id === stash.accountId)
   if (!own) return []
-  return accounts.filter((account) => !account.archived && account.id !== own.id && currencyKey(account) === currencyKey(own))
+  return accounts.filter((account) => !account.archived && !isLiability(account.kind) && account.id !== own.id && currencyKey(account) === currencyKey(own))
 }
 
 /**
- * The accounts a stash may live in: those that are not archived. Moving a stash keeps its currency, so for a stash that is made already only the
+ * The accounts a stash may live in: the assets that are not archived (a credit, a loan or a mortgage holds no stash). Moving a stash keeps its currency, so for a stash that is made already only the
  * accounts in the currency of its own are offered, and its own account stays in the list even when it is archived. `hidden` says that some account
  * was left out for its currency (the line "only accounts in ...").
  */
 export function homeAccounts(accounts: readonly Account[], stash: Pick<Stash, 'accountId'> | null): { choices: Account[]; hidden: boolean } {
-  const active = accounts.filter((account) => !account.archived)
+  const active = accounts.filter((account) => !account.archived && !isLiability(account.kind))
   const own = stash ? accounts.find((account) => account.id === stash.accountId) : undefined
   if (!stash || !own) return { choices: active, hidden: false }
-  const choices = accounts.filter((account) => account.id === own.id || (!account.archived && currencyKey(account) === currencyKey(own)))
+  const choices = accounts.filter((account) => account.id === own.id || (!account.archived && !isLiability(account.kind) && currencyKey(account) === currencyKey(own)))
   return { choices, hidden: active.some((account) => !choices.includes(account)) }
 }
 

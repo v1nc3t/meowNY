@@ -10,6 +10,7 @@ import {
   accountName,
   accountOptions,
   activeAccounts,
+  assetAccounts,
   barWidth,
   currencyKey,
   defaultAccountId,
@@ -19,6 +20,7 @@ import {
   listable,
   MAIN_NAME,
   mainCurrency,
+  manyAccounts,
   nameMark,
   oldIncomeAddress,
   rateOf,
@@ -27,6 +29,7 @@ import {
   several,
   showAvailable,
   signedView,
+  transferOptions,
 } from './accountsView.ts'
 
 // A stand-in for the browser's storage; `broken` makes every use throw, as storage does when it is blocked.
@@ -80,6 +83,11 @@ const account = (id: string, name: string, more: Partial<Account> = {}): Account
   balanceInMain: '0.00',
   setAside: '0.00',
   free: '0.00',
+  interestRate: null,
+  interestPeriod: null,
+  installment: null,
+  liability: null,
+  returnPerMonth: null,
   ...more,
 })
 const main = account('1', MAIN_NAME)
@@ -389,4 +397,21 @@ test('the currency of an account: the app\'s is the main account\'s, accounts co
   assert.equal(accountById([main, lei], '10'), lei)
   assert.equal(accountById([main, lei], '99'), null)
   assert.equal(accountById(null, '1'), null)
+})
+
+// -- a liability is no choice for a row (docs/loans-deposits-design.md, section 10) ------------------------------------------------
+
+test('a credit, a loan or a mortgage is listed by no field of a row, but is a side of a transfer', () => {
+  const flat = account('20', 'Flat', { kind: 'MORTGAGE', balance: '-180000.00' })
+  const car = account('21', 'Car', { kind: 'LOAN', archived: true })
+  assert.deepEqual(assetAccounts([main, flat, car]).map((each) => each.id), ['1'])
+  assert.deepEqual(accountOptions([main, savings, flat], t).map((option) => option.value), ['1', '2'])
+  assert.deepEqual(accountOptions([main, savings, flat], t, ['20']).map((option) => option.value), ['20', '1', '2'], 'a row that is in one keeps it')
+  assert.deepEqual(transferOptions([main, flat, car], t).map((option) => option.value), ['1', '20'], 'a transfer lists every account that is not archived')
+  assert.equal(several([main, flat]), false, 'one asset and a loan: the account field stays hidden')
+  assert.equal(several([main, savings, flat]), true)
+  assert.equal(manyAccounts([main, flat]), true, 'but there is something to transfer between')
+  assert.equal(manyAccounts([main, car]), false)
+  assert.equal(defaultAccountId([flat, main]), '1')
+  assert.equal(defaultAccountId([flat]), '', 'a liability is never the account a row starts in')
 })

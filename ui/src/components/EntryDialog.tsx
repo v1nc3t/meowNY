@@ -10,7 +10,7 @@ import { useAttachments } from '../hooks/useAttachments'
 import { useToast } from '../hooks/toast'
 import { useT } from '../i18n/context'
 import { arrivalText, chooseSide, dialogNext, transferCurrencies, transferSubmit, withArrival, type DialogState } from '../lib/accountDialogs'
-import { accountOptions, rememberAccount } from '../lib/accountsView'
+import { rememberAccount, transferOptions } from '../lib/accountsView'
 import {
   accountField,
   categoryChoices,
@@ -47,6 +47,10 @@ export type EntryInitial = {
   tab?: EntryTab
   /** The account the entry starts in (the account of an expense or an income, the "from" of a transfer). An archived or unknown one is not used. */
   accountId?: string
+  /** What the amount field starts with, as typed ("12.50"): the interest of an account that earns some (docs/loans-deposits-design.md, section 5.6). */
+  amount?: string
+  /** What the name starts with ("interest"). */
+  name?: string
   /** Opens the expense with the bill dialog on, and `friend` already on it (the debts pages). */
   split?: boolean
   friend?: { id: string; name: string }
@@ -126,7 +130,7 @@ function EntryForm({
   const context: EntryContext = { accounts, tabs, today, accountId: initial?.accountId }
   const [entry, setEntry] = useState<EntryState>(() => {
     if (transaction) return entryOf(transaction, loaded, accounts)
-    const start = entryStart(context, initial?.tab)
+    const start = { ...entryStart(context, initial?.tab), ...(initial?.amount ? { amount: initial.amount } : {}), ...(initial?.name ? { name: initial.name } : {}) }
     if (!initial?.split || start.tab !== 'EXPENSE') return start
     const friends = initial.friend ? [{ personId: initial.friend.id, name: initial.friend.name }] : []
     return { ...start, split: { on: true, draft: equalDraft(friends), ready: false, touched: false } }
@@ -249,7 +253,7 @@ function EntryForm({
                 amount={entry.amount}
                 date={entry.date}
                 note={entry.text}
-                options={accountOptions(accounts, t)}
+                options={transferOptions(accounts, t)}
                 today={today}
                 amountCode={currencies.amount}
                 arrives={currencies.arrives ? { code: currencies.arrives, value: arrivalText(accounts, entry) } : null}

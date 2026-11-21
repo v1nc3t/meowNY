@@ -26,7 +26,7 @@ import { useI18n } from '../i18n/context'
 import { useShortcut } from '../keys/registry'
 import { tip } from '../keys/tip'
 import { useRowNavigation } from '../keys/useRowNavigation'
-import { accountById, accountLabel, activeAccounts, several } from '../lib/accountsView'
+import { accountById, accountLabel, assetAccounts, several } from '../lib/accountsView'
 import { formatMoney, fromMinor } from '../lib/money'
 import { applyOrder } from '../lib/reorder'
 import { saveChoice, storedChoice, storedId } from '../lib/sticky'
@@ -351,7 +351,7 @@ function StashList({
   const multi = several(accounts)
 
   // a remembered account that is gone, archived or the only one left is no longer a filter
-  const known = accountId === '' || (multi && activeAccounts(accounts).some((account) => account.id === accountId))
+  const known = accountId === '' || (multi && assetAccounts(accounts).some((account) => account.id === accountId))
   if (!known) setAccountId('')
   useEffect(() => {
     if (!known) saveChoice('stashes.account', '')
@@ -554,7 +554,7 @@ function StashList({
             <PickOption selected={filter === ''} onClick={() => pick('')}>
               {t('accounts.allAccounts')}
             </PickOption>
-            {activeAccounts(accounts).map((account) => (
+            {assetAccounts(accounts).map((account) => (
               <PickOption key={account.id} selected={filter === account.id} onClick={() => pick(account.id)}>
                 {accountLabel(account, t)}
               </PickOption>

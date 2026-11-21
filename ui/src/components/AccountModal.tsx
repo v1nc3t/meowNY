@@ -1,5 +1,5 @@
 import { useId, useState, type FormEvent } from 'react'
-import { accounts as accountsApi, ACCOUNT_KINDS, type Account, type AccountKind } from '../api/accounts'
+import { accounts as accountsApi, ASSET_KINDS, INTEREST_PERIODS, LIABILITY_KINDS, type Account, type AccountKind, type InterestPeriod } from '../api/accounts'
 import { errorText } from '../api/invoke'
 import { useToast } from '../hooks/toast'
 import { useT } from '../i18n/context'
@@ -12,11 +12,14 @@ import {
   dialogNext,
   foreignCode,
   GROUP_MAX,
+  groupOf,
   hasDetails,
   NOTES_MAX,
+  owedText,
   rateRow,
   withBalanceToday,
   type AccountFields,
+  type AccountGroupKind,
   type DialogState,
 } from '../lib/accountDialogs'
 import { accountName } from '../lib/accountsView'
@@ -32,9 +35,14 @@ import Button from './ui/Button'
  * a change "balance today" sets it from what the account holds now). Behind "more": a BIC, a group, a virtual balance, whether the net worth counts
  * it, notes. An edit sends only what changed, and one that changed nothing just closes. The states are those of docs/accounts-design.md, section 5.4
  * and section 21.8: a wrong field or a failed save is a toast, and the fields stay as typed.
+ *
+ * Every kind has an interest rate (a percent, per month or per year: the period shows once a rate is typed). A new account is of the `group` it is
+ * asked for: the asset kinds, or the liability kinds (a credit, a loan, a mortgage), where the opening balance and "balance today" are what is owed,
+ * typed positive, and there is an installment. One being changed keeps its own group (docs/loans-deposits-design.md, section 5.6).
  */
 export default function AccountModal({
   account,
+  group = 'asset',
   today,
   mainCurrency,
   groups,
@@ -43,6 +51,8 @@ export default function AccountModal({
 }: {
   /** The account to change; none for a new one. */
   account: Account | null
+  /** The kinds a new account can be: the assets or the liabilities. An account being changed is in its own group, whatever this says. */
+  group?: AccountGroupKind
   today: string
   /** The app's currency: a new account starts in it, and the rate says how many units of another currency one of it buys. */
   mainCurrency: string
@@ -54,7 +64,8 @@ export default function AccountModal({
 }) {
   const t = useT()
   const say = useToast()
-  const [start] = useState<AccountFields>(() => accountFields(account, account ? accountName(account, t) : '', today, mainCurrency))
+  const owing = groupOf(account, group) === 'liability'
+  const [start] = useState<AccountFields>(() => accountFields(account, account ? accountName(account, t) : '', today, mainCurrency, group))
   const [fields, setFields] = useState(start)
   const [state, setState] = useState<DialogState>('EDITING')
   // shut for a new account, and for one with nothing behind it
@@ -86,12 +97,13 @@ export default function AccountModal({
 
   // the code of an amount's label once the currency is another than the app's, and the rate row with the code it names
   const code = foreignCode(fields, mainCurrency)
-  const labelIn = (key: 'accounts.openingBalance' | 'accounts.virtualBalance' | 'accounts.balanceToday') => (code ? t('accounts.labelIn', { label: t(key), code }) : t(key))
+  const labelIn = (key: 'accounts.openingBalance' | 'accounts.virtualBalance' | 'accounts.balanceToday' | 'accounts.owed' | 'accounts.owedToday' | 'accounts.installment') =>
+    code ? t('accounts.labelIn', { label: t(key), code }) : t(key)
   const rate = rateRow(account, fields, mainCurrency)
   const lock = currencyLock(account)
 
   return (
-    <Modal title={account ? t('accounts.editTitle') : t('accounts.addTitle')} pending={state === 'SAVING'} onClose={onClose}>
+    <Modal title={account ? t('accounts.editTitle') : t(owing ? 'loans.new' : 'accounts.addTitle')} pending={state === 'SAVING'} onClose={onClose}>
       <form id={modalFormId} onSubmit={(event) => void onSubmit(event)}>
         <label>
           {t('common.name')}
@@ -101,7 +113,7 @@ export default function AccountModal({
         <Dropdown
           label={t('common.type')}
           value={fields.kind}
-          options={ACCOUNT_KINDS.map((kind) => ({ value: kind, label: t(`accounts.kind.${kind}`) }))}
+          options={(owing ? LIABILITY_KINDS : ASSET_KINDS).map((kind) => ({ value: kind, label: t(`accounts.kind.${kind}`) }))}
           onChange={(kind) => set({ kind: kind as AccountKind })}
         />
         <label>
@@ -139,7 +151,7 @@ export default function AccountModal({
         </label>
         <p className="hint">{t('accounts.numberHint')}</p>
         <label>
-          {labelIn('accounts.openingBalance')}
+          {labelIn(owing ? 'accounts.owed' : 'accounts.openingBalance')}
           {/* no decimal keypad: on some phones it has no minus, and a credit card starts below 0. Shut while "balance today" is filled: they cannot be sent together. */}
           <input name="balance" autoComplete="off" placeholder="0.00" disabled={balanceTodayFilled(fields)} value={fields.balance} onChange={(event) => set({ balance: event.target.value })} />
         </label>
@@ -150,20 +162,41 @@ export default function AccountModal({
         {account ? (
           <>
             <label>
-              {labelIn('accounts.balanceToday')}
+              {labelIn(owing ? 'accounts.owedToday' : 'accounts.balanceToday')}
               <input
                 name="balanceToday"
                 autoComplete="off"
-                placeholder={account.balance}
-                aria-describedby={todayHintId}
+                placeholder={owing ? owedText(account.balance) : account.balance}
+                aria-describedby={owing ? undefined : todayHintId}
                 value={fields.balanceToday}
                 onChange={(event) => setFields((current) => withBalanceToday(current, start, event.target.value))}
               />
             </label>
-            <p className="hint" id={todayHintId}>
-              {t('accounts.balanceTodayHint')}
-            </p>
+            {owing ? null : (
+              <p className="hint" id={todayHintId}>
+                {t('accounts.balanceTodayHint')}
+              </p>
+            )}
           </>
+        ) : null}
+        {owing ? (
+          <label>
+            {labelIn('accounts.installment')}
+            <input name="installment" inputMode="decimal" autoComplete="off" placeholder={t('common.optional')} value={fields.installment} onChange={(event) => set({ installment: event.target.value })} />
+          </label>
+        ) : null}
+        <label className="rate-sentence">
+          <span>{t('accounts.rate')}</span>
+          <input name="interestRate" inputMode="decimal" autoComplete="off" placeholder={t('common.optional')} value={fields.interestRate} onChange={(event) => set({ interestRate: event.target.value })} />
+          <span>%</span>
+        </label>
+        {fields.interestRate.trim() !== '' ? (
+          <Dropdown
+            label={t('accounts.ratePeriod')}
+            value={fields.interestPeriod}
+            options={INTEREST_PERIODS.map((period) => ({ value: period, label: t(`accounts.period.${period}`) }))}
+            onChange={(period) => set({ interestPeriod: period as InterestPeriod })}
+          />
         ) : null}
         <Button variant="outline" className="acct-more" aria-expanded={more} aria-controls={more ? moreId : undefined} onClick={() => setMore((open) => !open)}>
           {t('accounts.more')}

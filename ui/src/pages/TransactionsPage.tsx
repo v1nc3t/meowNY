@@ -19,7 +19,7 @@ import { shiftMonth } from '../api/months'
 import { useToday, type Today } from '../api/today'
 import { transactions as transactionsApi, type Transaction, type TransactionPage } from '../api/transactions'
 import { transfers as transfersApi, type Transfer, type TransferPage } from '../api/transfers'
-import { accountById, accountLabel, activeAccounts, currencyKey, several } from '../lib/accountsView'
+import { accountById, accountLabel, activeAccounts, currencyKey, manyAccounts } from '../lib/accountsView'
 import { formatDate, formatMoney, moneyIn } from '../lib/money'
 import { apiBound, presentRange, shiftBound, type RangeMode } from '../lib/range'
 import { recall, saveChoice, storedChoice, storedId, useRemember } from '../lib/sticky'
@@ -69,7 +69,7 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
   // The accounts are only spoken of with more than one that is not archived: then the list can be limited to one, each row names its own, and the
   // transfers have a tab.
   const accounts = useAccounts(reload)
-  const multi = several(accounts)
+  const multi = manyAccounts(accounts)
   // the tab is in the address (`?tab=income`), so back, forward and a reload keep it
   const [params, setParams] = useSearchParams()
   const tab = txTabOf(params, multi)

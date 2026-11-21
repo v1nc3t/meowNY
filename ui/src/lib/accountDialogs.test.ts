@@ -9,6 +9,7 @@ import {
   balanceTodayFilled,
   chooseSide,
   cleanCurrency,
+  cleanPercent,
   currencyLock,
   dialogNext,
   foreignCode,
@@ -66,6 +67,11 @@ const account = (id: string, name: string, more: Partial<Account> = {}): Account
   balanceInMain: '0.00',
   setAside: '0.00',
   free: '0.00',
+  interestRate: null,
+  interestPeriod: null,
+  installment: null,
+  liability: null,
+  returnPerMonth: null,
   ...more,
 })
 const main = account('1', 'Main account')
@@ -138,6 +144,9 @@ test('a new account opens empty, as checking, dated today', () => {
     currency: 'EUR',
     rate: '',
     balanceToday: '',
+    interestRate: '',
+    interestPeriod: 'YEARLY',
+    installment: '',
   })
 })
 
@@ -156,6 +165,9 @@ test('an account opens with its row; no opening balance is an empty field dated 
     currency: 'EUR',
     rate: '',
     balanceToday: '',
+    interestRate: '',
+    interestPeriod: 'YEARLY',
+    installment: '',
   })
   assert.deepEqual(accountFields(main, 'hauptkonto', TODAY), { ...accountFields(null, '', TODAY), name: 'hauptkonto' })
   // what is behind "more" comes from the row; a virtual balance of 0.00 is an empty field
@@ -173,6 +185,9 @@ test('an account opens with its row; no opening balance is an empty field dated 
     currency: 'EUR',
     rate: '',
     balanceToday: '',
+    interestRate: '',
+    interestPeriod: 'YEARLY',
+    installment: '',
   })
 })
 
@@ -827,4 +842,49 @@ test('a transfer between the same currency edited so they differ is sent with th
   assert.deepEqual(transferSubmit('EDITING', same, { ...asSame, from: '10', to: '12', amount: '100' }), { do: 'send', request: { patch: { fromAccountId: '10', toAccountId: '12', amount: '100.00', toAmount: '21.60' } } })
   assert.deepEqual(transferSubmit('EDITING', same, { ...asSame, to: '10', amount: '0.01' }), { do: 'send', request: { patch: { toAccountId: '10', amount: '0.01', toAmount: '0.05' } } })
   assert.deepEqual(transferSubmit('EDITING', { ...same, fromAccountId: '10', toAccountId: '1', amount: '0.02' }, { ...asSame, from: '10', to: '1', amount: '0.02', date: '2026-11-03' }), { do: 'refuse', error: 'transfers.errorArrives' }, 'a row of lei to euros that was never given its second amount: it has to be typed')
+})
+
+// -- the rate and the installment (docs/loans-deposits-design.md, section 5.6) -----------------------------------------------------
+
+test('a typed percent is read as the core reads it: 0 to 100, three decimals, no trailing zero', () => {
+  for (const [typed, sent] of [['3.25', '3.25'], ['4,5', '4.5'], ['4.50', '4.5'], ['4.000', '4'], ['0', '0'], ['100', '100'], ['100.000', '100'], [' 0.125 ', '0.125']]) assert.equal(cleanPercent(typed), sent, typed)
+  for (const typed of ['', '-1', '100.001', '101', '3.1415', '3.', '.5', 'abc', '007', '1e2']) assert.equal(cleanPercent(typed), null, typed)
+})
+
+test('a rate is sent with its period, changed alone, or cleared with null', () => {
+  const create = (more: Partial<AccountFields>) => accountSubmit('EDITING', null, null, { ...accountFields(null, '', TODAY), name: 'Savings', ...more })
+  assert.deepEqual(create({ interestRate: '2,5' }), { do: 'send', request: { create: { name: 'Savings', kind: 'CHECKING', interestRate: '2.5', interestPeriod: 'YEARLY' } } })
+  assert.deepEqual(create({ interestRate: '' , interestPeriod: 'MONTHLY' }), { do: 'send', request: { create: { name: 'Savings', kind: 'CHECKING' } } }, 'a period alone says nothing')
+  assert.deepEqual(create({ interestRate: '101' }), { do: 'refuse', error: 'accounts.interestError' })
+  const earning = account('6', 'Savings', { kind: 'SAVINGS', interestRate: '2.5', interestPeriod: 'YEARLY' })
+  const start = accountFields(earning, 'Savings', TODAY)
+  const patch = (more: Partial<AccountFields>) => accountSubmit('EDITING', earning, start, { ...start, ...more })
+  assert.deepEqual(patch({}), { do: 'close' })
+  assert.deepEqual(patch({ interestRate: '2.50' }), { do: 'close' }, 'the same number written another way')
+  assert.deepEqual(patch({ interestRate: '3' }), { do: 'send', request: { patch: { interestRate: '3' } } })
+  assert.deepEqual(patch({ interestPeriod: 'MONTHLY' }), { do: 'send', request: { patch: { interestPeriod: 'MONTHLY' } } })
+  assert.deepEqual(patch({ interestRate: '' }), { do: 'send', request: { patch: { interestRate: null } } }, 'the core clears the period with it')
+  assert.deepEqual(accountSubmit('EDITING', cash, accountFields(cash, 'Cash', TODAY), { ...accountFields(cash, 'Cash', TODAY), interestRate: '1' }), { do: 'send', request: { patch: { interestRate: '1', interestPeriod: 'YEARLY' } } }, 'a new rate on an account with none sends both')
+})
+
+test('a liability is typed as what is owed, sent below 0, with an installment; an asset sends none', () => {
+  const loan = account('7', 'Car', { kind: 'LOAN', openingBalance: '-9000.00', openingDate: '2025-11-01', installment: '300.00', interestRate: '6.5', interestPeriod: 'YEARLY' })
+  const fresh = fieldsOf(null, '', TODAY, MAIN, 'liability')
+  assert.equal(fresh.kind, 'LOAN')
+  assert.deepEqual(accountSubmit('EDITING', null, null, { ...fresh, name: 'Flat', kind: 'MORTGAGE', balance: '180000', installment: '950', interestRate: '3.9' }), {
+    do: 'send',
+    request: { create: { name: 'Flat', kind: 'MORTGAGE', openingBalance: '-180000.00', openingDate: TODAY, interestRate: '3.9', interestPeriod: 'YEARLY', installment: '950.00' } },
+  })
+  assert.deepEqual(accountSubmit('EDITING', null, null, { ...fresh, name: 'Flat', balance: '-5' }), { do: 'refuse', error: 'accounts.owedError' }, 'owed has no minus')
+  assert.deepEqual(accountSubmit('EDITING', null, null, { ...fresh, name: 'Flat', installment: '0' }), { do: 'refuse', error: 'accounts.installmentError' })
+  const start = accountFields(loan, 'Car', TODAY)
+  assert.equal(start.balance, '9000.00', 'an account being changed shows what is owed')
+  const patch = (more: Partial<AccountFields>) => accountSubmit('EDITING', loan, start, { ...start, ...more })
+  assert.deepEqual(patch({}), { do: 'close' })
+  assert.deepEqual(patch({ balance: '8500' }), { do: 'send', request: { patch: { openingBalance: '-8500.00' } } })
+  assert.deepEqual(patch({ balanceToday: '7000' }), { do: 'send', request: { patch: { balance: '-7000.00' } } })
+  assert.deepEqual(patch({ installment: '' }), { do: 'send', request: { patch: { installment: null } } })
+  assert.deepEqual(patch({ installment: '320' }), { do: 'send', request: { patch: { installment: '320.00' } } })
+  // an asset never sends an installment, whatever is left in the field
+  assert.deepEqual(accountSubmit('EDITING', null, null, { ...accountFields(null, '', TODAY), name: 'Cash', installment: '5' }), { do: 'send', request: { create: { name: 'Cash', kind: 'CHECKING' } } })
 })

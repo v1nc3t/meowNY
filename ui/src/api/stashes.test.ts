@@ -142,6 +142,7 @@ test('an account carries what is set aside and what is free', () => {
     id: '3', name: 'Savings', kind: 'SAVINGS', number: null, openingBalance: '4000.00', openingDate: '2026-08-01', archived: false, isMain: false,
     balance: '4000.00', changeThisMonth: '0.00', lastActivity: null, entries: 1, bic: null, notes: null, group: null, includeInNetWorth: true,
     virtualBalance: '0.00', available: '4000.00', currency: 'EUR', foreign: false, rate: null, balanceInMain: '4000.00', setAside: '450.00', free: '3550.00',
+    interestRate: null, interestPeriod: null, installment: null, liability: null, returnPerMonth: null,
   }
   assert.deepEqual(Account.parse(account), account)
   assert.ok(ok(Account, { ...account, setAside: '0.00', free: '4000.00' }), 'nothing set aside')

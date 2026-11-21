@@ -80,6 +80,11 @@ html.is-phone .debts-bar > label {
   grid-column: 1 / -1;
 }
 
+/* A title row with one button (a new debt, pay) is that button across both columns. */
+html.is-phone .tx-actions.debts-actions > :only-child {
+  grid-column: 1 / -1;
+}
+
 /* A friend's page: the title sits the page's usual 1rem under the row of back and mark as paid, not the 0.5rem of a heading and its text. */
 html.is-phone .debts-name + .debts-heading {
   margin-top: 1rem;

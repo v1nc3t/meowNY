@@ -222,6 +222,88 @@ ul.card-list.acct-archived > li.card-item {
   }
 }
 
+/* The debts (a credit, a loan, a mortgage) on the debts page: the name with its kind under it, owed, rate, installment, payoff, then the button
+   that pays (the longest word, "plătește", has 8 characters). With less room the installment goes (under 56em), and under 44em a row is two
+   lines, the name and what is owed, and the kind, rate, installment and payoff in one small line under them (`loan-line`). An archived debt is
+   dimmed. */
+.card-list.loans-table {
+  --cols: minmax(8rem, 1fr) 14ch 14ch 12ch 14ch calc(8ch + 1.5rem);
+}
+
+ul.card-list.loans-table > li.card-item {
+  cursor: pointer;
+}
+
+.loans-table .loan-line {
+  display: none;
+}
+
+.loans-table .cell-sub-end {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.loans-table .row-primary {
+  max-width: none;
+  padding-inline: 0.5rem;
+  white-space: nowrap;
+}
+
+ul.card-list.loans-table > li.card-item[data-archived] {
+  opacity: 0.65;
+}
+
+@container (max-width: 56em) {
+  ul.card-list.loans-table > li.card-item,
+  ul.card-list.loans-table > li.list-head {
+    grid-template-columns: minmax(8rem, 1fr) 14ch 14ch 14ch calc(8ch + 1.5rem);
+  }
+
+  ul.card-list.loans-table .is-installment,
+  ul.card-list.loans-table > li.list-head > :nth-child(4) {
+    display: none;
+  }
+}
+
+@container (max-width: 44em) {
+  ul.card-list.loans-table > li.list-head {
+    display: none;
+  }
+
+  ul.card-list.loans-table > li.list-head + li {
+    border-top: 0;
+  }
+
+  ul.card-list.loans-table > li.card-item {
+    grid-template-columns: minmax(4rem, 1fr) auto auto;
+    grid-template-areas:
+      'name amount actions'
+      'sub sub actions';
+    row-gap: 0;
+  }
+
+  ul.card-list.loans-table .cell-name {
+    grid-area: name;
+  }
+
+  ul.card-list.loans-table .cell-amount {
+    grid-area: amount;
+  }
+
+  ul.card-list.loans-table :is(.loan-col, .loan-kind) {
+    display: none;
+  }
+
+  ul.card-list.loans-table .loan-line {
+    display: block;
+    grid-area: sub;
+  }
+
+  ul.card-list.loans-table .cell-actions {
+    grid-area: actions;
+  }
+}
+
 /* The transactions, with more than one account: one more column, the account, after the category. It goes when the rows become two
    lines, where the category has the place. */
 .card-list.tx-list.has-account {
