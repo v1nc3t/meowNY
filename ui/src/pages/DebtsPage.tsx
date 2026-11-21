@@ -237,15 +237,14 @@ function DebtsView({ settings, now, tabs }: { settings: MoneySettings; now: Toda
         onClick={(event) => choose(event, person)}
         actions={
           <>
+            {/* the one thing to do with a friend, as an icon button: mark the debt as paid, or bring back one that was removed */}
             {person.archived ? (
-              <Button variant="outline" size="sm" className="row-primary" onClick={() => void bringBack(person)}>
-                {t('debts.unarchive')}
-              </Button>
+              <IconAction icon="archive" label={`${t('debts.unarchive')}: ${person.name}`} onClick={() => void bringBack(person)} />
             ) : tone !== 'even' ? (
-              <Button variant="outline" size="sm" className="row-primary" onClick={() => setSettling(person)}>
-                {t('debts.settle')}
-              </Button>
-            ) : null}
+              <IconAction icon="check" label={`${t('debts.settle')}: ${person.name}`} className="icon-btn debt-pay" onClick={() => setSettling(person)} />
+            ) : (
+              <span className="icon-slot" />
+            )}
             <IconAction icon="pencil" label={t('common.rename')} onClick={() => setEditing(person)} />
             {person.archived ? <span className="icon-slot" /> : <IconAction icon="trash" label={t('debts.archive')} danger onClick={() => setDeleting(person)} />}
           </>

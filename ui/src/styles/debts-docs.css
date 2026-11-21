@@ -17,9 +17,8 @@
   margin-top: 0.5rem;
 }
 
-/* The debts page, like the budgets (money.css): the friends on the left, and on the right the debts of all friends or the history of the
-   one chosen, in halves of the same width; with no room for two, one under the other. A half needs about 23rem, for a friend's name of
-   10rem beside the amount of its two-line row. The phone never has two. */
+/* The debts page: the friends, then under them the debts of all friends or the history of the one chosen, each the whole width of the page,
+   so each table has the room for its columns. */
 .debts-view {
   container-type: inline-size;
   container-name: debts;
@@ -27,19 +26,9 @@
 
 .debts-split {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr);
   align-items: start;
   gap: 1.5rem;
-}
-
-@container debts (max-width: 46rem) {
-  .debts-split {
-    grid-template-columns: minmax(0, 1fr);
-  }
-}
-
-html.is-phone .debts-split {
-  grid-template-columns: minmax(0, 1fr);
 }
 
 .debts-half {
@@ -169,26 +158,11 @@ html.is-phone .debts-name + .debts-heading {
 }
 
 /* The statement of the friend chosen, under the history and at the window's bottom as the pager of the transactions is: the history
-   scrolls above it. Its list opens upwards, since there is no room under it. It is outside the pane that holds the two halves, so the
-   page is a container for it to see when they are side by side: that is when the pane (the page less the room of the scroll bar,
-   0.875rem) is wider than 46rem, as in the rule of `.debts-split` above. Then the foot is under the right half, as wide as it, with the
-   same gap (1.5rem) to the left half; otherwise it has the whole width. */
-.debts-page {
-  container-type: inline-size;
-  container-name: debts-page;
-}
-
+   scrolls above it. Its list opens upwards, since there is no room under it. It has the whole width, as the history above it. */
 .debts-foot {
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
-}
-
-@container debts-page (not (max-width: 46.875rem)) {
-  .app-main main > section > .debts-foot {
-    width: calc((100% - var(--room) - 1.5rem) / 2);
-    margin-left: calc((100% - var(--room) - 1.5rem) / 2 + 1.5rem);
-  }
 }
 
 .debts-foot > .debts-heading {
@@ -200,17 +174,14 @@ html.is-phone .debts-name + .debts-heading {
   bottom: calc(100% + 0.25rem);
 }
 
-/* The friends: name, who owes whom (and the reminder), what is owed, then mark as paid (or bring back), rename and remove (a friend who
-   is removed already has an empty place for it, so the icons line up). A click anywhere else on a row chooses the friend. Who owes whom
-   is as wide as the longest of the three ("alles beglichen", 15 characters of 0.875rem), the amount has 15 characters. The button is on
-   one line in every language: the longest word, "als bezahlt markieren", has 21 characters of 0.875rem (a column in ch is the width of
-   a character of 1rem), and the button has its padding, 0.5rem of room and two icon buttons of 2rem. The reminder wraps rather than
-   being cut: its column holds 16 characters of small print, which is two lines for a reminder with a date of 10 characters in every
-   language. With these and the gaps the columns take 49.1rem, which leaves the name 10rem from 60em. Below that a row is lines of
-   its own: the name and the amount; who owes whom, with the buttons on the right of it when they fit and on a line of their own, at the
-   right, when they do not; the reminder. So the name has the width of the row less the amount, whatever the buttons are called. */
+/* The friends: name, who owes whom (and the reminder), what is owed, then three icon buttons: mark as paid (or bring back one who was removed),
+   rename and remove (an empty place where one is not offered, so the icons line up). A click anywhere else on a row chooses the friend. Who
+   owes whom is as wide as the longest of the three ("alles beglichen", 15 characters of 0.875rem), the amount has 15 characters, and the
+   reminder wraps rather than being cut: its column holds 16 characters of small print, two lines for a reminder with its date in every
+   language. With the gaps the columns take about 33rem, which leaves the name 7rem from 40em. Below that a row is lines of its own: the
+   name and the amount; who owes whom, with the buttons on the right of it; the reminder. */
 .card-list.friends-table {
-  --cols: minmax(0, 1fr) 13.5ch 14ch 15ch calc(18.4ch + 5.9rem);
+  --cols: minmax(0, 1fr) 13.5ch 14ch 15ch calc(3 * var(--control-sm) + 0.25rem);
 }
 
 ul.card-list.friends-table > li.card-item {
@@ -227,7 +198,7 @@ ul.card-list.friends-table > li.card-item {
   white-space: nowrap;
 }
 
-@container (max-width: 60em) {
+@container (max-width: 40em) {
   ul.card-list.friends-table > li.list-head {
     display: none;
   }
@@ -381,13 +352,13 @@ ul.card-list > li.list-head > .span-2 {
 }
 
 /* The history of all debts: who, what kind of change, the day, the change (with a sign, 16 characters), the balance after it (small
-   print, with a sign), then go to the transaction and the chevron of a note: two buttons of 2rem, 4.25rem. The kind of change is words
+   print, with a sign), then go to the transaction and the chevron of a note: two buttons of --control-sm. The kind of change is words
    that can be long ("wiederkehrende zahlung verspätet bezahlt"), so it wraps. With the gaps and the padding the day, the change, the
-   balance and the buttons take 37.25rem, which leaves 10rem each to the friend and to the kind of change from 58em. Below that the rows
+   balance and the buttons take about 36rem, which leaves 10rem each to the friend and to the kind of change from 55em. Below that the rows
    have two lines (the friend and the change, then the kind and the day, the balance and the buttons beside both), and under 40em four
    (the balance under the day, the buttons under the balance). */
 .card-list.history-table {
-  --cols: minmax(10rem, 1fr) minmax(10rem, 1.4fr) 12ch 16ch 14.5ch 4.25rem;
+  --cols: minmax(10rem, 1fr) minmax(10rem, 1.4fr) 12ch 16ch 14.5ch calc(2 * var(--control-sm) + 0.25rem);
 }
 
 .history-table .cell-sub {
@@ -397,7 +368,7 @@ ul.card-list > li.list-head > .span-2 {
 
 /* The same room for the buttons in every row, so the amounts line up when the head is gone (a narrow window). */
 .history-table .cell-actions {
-  min-width: 4.25rem;
+  min-width: calc(2 * var(--control-sm) + 0.25rem);
 }
 
 .cell-bal {
@@ -409,7 +380,7 @@ ul.card-list > li.list-head > .span-2 {
   font-variant-numeric: tabular-nums;
 }
 
-@container (max-width: 58em) {
+@container (max-width: 55em) {
   ul.card-list.history-table > li.list-head {
     display: none;
   }
