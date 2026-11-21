@@ -96,6 +96,7 @@ export const it: Messages = {
   'tx.deletedCategory': 'categoria eliminata',
   'tx.empty': 'nessuna transazione.',
   'tx.amount': 'importo',
+  'tx.totalRow': '{count} movimenti',
   'tx.paymentDate': 'data di pagamento',
   'tx.chooseCategory': 'scegli una categoria',
   'tx.errorRequired': 'nome, categoria e data di pagamento sono obbligatori.',

@@ -38,6 +38,7 @@ import { useDebounced } from '../hooks/useDebounced'
 import { useShortcut } from '../keys/registry'
 import { tip } from '../keys/tip'
 import { useRowNavigation } from '../keys/useRowNavigation'
+import { txTotals } from '../lib/txTotals'
 
 type MenuName = 'range' | 'show' | 'category' | 'account'
 const MODES = ['year', 'month', 'date'] as const
@@ -114,6 +115,8 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
   const searchText = useDebounced(filters.q, 200)
   const categoryNames = useMemo(() => new Map(categories.map((category) => [category.id, category.name])), [categories])
   const incomeCategories = useMemo(() => new Set(categories.filter((category) => category.type === 'INCOME').map((category) => category.id)), [categories])
+  // the totals of the list, under it: only when the page holds the whole of it
+  const totals = page ? txTotals(page.transactions, page.total, incomeCategories) : null
   // a remembered category that has been deleted since is no longer a filter, and the list is not asked for it before that is known
   const categoryKnown = filters.categoryId === '' || categoryNames.has(filters.categoryId)
   useEffect(() => {
@@ -610,7 +613,8 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
     )
   }
 
-  // A desktop row: name, amount, date, category, an icon if it is shared, then edit, delete and (when there is more to show) the chevron.
+  // A desktop row, a ledger: name, category, account (with more than one), date, then the amount at the right, an icon if it is shared, then edit,
+  // delete and (when there is more to show) the chevron. Narrower than 40em the category and the date go under the name and the amount (primitives.css).
   function tableRow(transaction: Transaction) {
     const count = clips[transaction.id] ?? 0
     const more = isShared(transaction) || Boolean(transaction.description?.trim()) || count > 0
@@ -633,14 +637,16 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
             {transaction.name}
           </span>
         </div>
-        {amount(transaction)}
-        <span className="cell-sub-end">{formatDate(transaction.paymentDate, settings.locale)}</span>
-        <span className="cell-sub">{categoryName(transaction)}</span>
+        <span className="cell-sub" title={categoryName(transaction)}>
+          {categoryName(transaction)}
+        </span>
         {multi ? (
           <span className="cell-sub cell-account" title={accountNames.get(transaction.accountId)}>
             {accountNames.get(transaction.accountId) ?? ''}
           </span>
         ) : null}
+        <span className="cell-sub-end tx-date">{formatDate(transaction.paymentDate, settings.locale)}</span>
+        {amount(transaction)}
         <span className="cell-mark">
           {isShared(transaction) ? (
             <span className="row-mark-icon" title={t('tx.shared')}>
@@ -925,16 +931,29 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
                 className={multi ? 'tx-list has-account' : 'tx-list'}
                 heads={[
                   t('common.name'),
-                  { label: t('tx.amount'), className: 'is-end' },
-                  t('sync.field.date'),
                   t('common.category'),
                   ...(multi ? [{ label: t('accounts.account'), className: 'cell-account' }] : []),
+                  t('sync.field.date'),
+                  { label: t('tx.amount'), className: 'is-end' },
                   '',
                   '',
                 ]}
                 opens
               >
                 {page.transactions.map(tableRow)}
+                {totals ? (
+                  <li className="card-item tx-total">
+                    <span className="cell-name">{t('tx.totalRow', { count: totals.count })}</span>
+                    <span className="tx-total-figures">
+                      <span className="is-income">+{formatMoney(totals.income, settings.currency, settings.locale)}</span>
+                      <span className="is-expense">-{formatMoney(totals.expense, settings.currency, settings.locale)}</span>
+                      <b className={totals.net.startsWith('-') ? 'is-expense' : 'is-income'}>
+                        {totals.net.startsWith('-') ? '-' : '+'}
+                        {formatMoney(totals.net.replace('-', ''), settings.currency, settings.locale)}
+                      </b>
+                    </span>
+                  </li>
+                ) : null}
               </Table>
             )}
             {phone ? foot : null}

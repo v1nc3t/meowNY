@@ -11,12 +11,69 @@
   max-width: 100%;
 }
 
-/* The transactions as a table: name, amount, date, category, the icon of a shared one, then the buttons (edit, delete, the chevron: three
-   of 2rem). The columns of amounts and dates are as wide as the longest the formats write, in characters of the monospace font: 16 for
-   "-CHF 999,999.99" or a longer way of writing it, and 13 for a date (small print, 0.875rem, so 12 of the row's). The icon is 12px, so
-   2 characters hold it with room to spare. The name and the category share the rest. */
+/* The transactions as a table, a ledger: name, category (and the account, accounts.css), date, then the amount at the right, the icon of a shared
+   one, then the buttons (edit, delete, the chevron: three of --control-sm). The columns of amounts and dates are as wide as the longest the
+   formats write, in characters of the monospace font: 15 for "-CHF 999,999.99" (bold, 1rem), and 11 for a date (small print, 0.875rem). The icon is 12px, so 2 characters hold it with room to spare. The name and the category share the rest, the name the most. */
 .card-list.tx-list {
-  --cols: minmax(0, 2.2fr) 16ch 12ch minmax(0, 1.2fr) 2ch 6.5rem;
+  --act: calc(3 * var(--control-sm) + 0.25rem);
+  --cols: minmax(8rem, 2fr) minmax(6rem, 1fr) 11ch 15ch 2ch var(--act);
+}
+
+/* The total under the rows: how many, what came in and went out, and the net in bold, ending where the amounts end; set off by a solid line,
+   and not a row to open. */
+ul.card-list.tx-list > li.card-item.tx-total {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem 1.25rem;
+  flex-wrap: wrap;
+  min-height: 2.25rem;
+  cursor: default;
+  border-top: var(--border-width) solid var(--border);
+}
+
+@media (hover: hover) {
+  ul.card-list.tx-list > li.card-item.tx-total:hover {
+    background: transparent;
+  }
+}
+
+.tx-total > .cell-name {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--muted-foreground);
+}
+
+.tx-total-figures {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: flex-end;
+  gap: 0.25rem 1.25rem;
+  margin-right: calc(var(--act) + 2ch + 2rem);
+  font-size: 0.875rem;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.tx-total-figures > b {
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.tx-total-figures > .is-income {
+  color: var(--success);
+}
+
+.tx-total-figures > .is-expense {
+  color: var(--destructive);
+}
+
+@container (max-width: 40em) {
+  .tx-total-figures {
+    margin-right: var(--act);
+  }
 }
 
 .tx-list .cell-mark {

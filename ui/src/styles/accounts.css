@@ -307,7 +307,7 @@ ul.card-list.loans-table > li.card-item[data-archived] {
 /* The transactions, with more than one account: one more column, the account, after the category. It goes when the rows become two
    lines, where the category has the place. */
 .card-list.tx-list.has-account {
-  --cols: minmax(0, 2.2fr) 16ch 12ch minmax(0, 1.2fr) minmax(0, 1fr) 2ch 6.5rem;
+  --cols: minmax(8rem, 1.5fr) minmax(6rem, 1fr) minmax(7rem, 1.1fr) 11ch 15ch 2ch var(--act);
 }
 
 @container (max-width: 40em) {

@@ -105,6 +105,7 @@ export const en = {
   'tx.deletedCategory': 'deleted category',
   'tx.empty': 'no transactions.',
   'tx.amount': 'amount',
+  'tx.totalRow': '{count} transactions',
   'tx.paymentDate': 'payment date',
   'tx.chooseCategory': 'choose a category',
   'tx.errorRequired': 'name, category, and payment date are required.',

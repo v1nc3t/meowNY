@@ -95,6 +95,7 @@ export const ro: Messages = {
   'tx.deletedCategory': 'categorie ștearsă',
   'tx.empty': 'nicio tranzacție.',
   'tx.amount': 'sumă',
+  'tx.totalRow': '{count} tranzacții',
   'tx.paymentDate': 'data plății',
   'tx.chooseCategory': 'alege o categorie',
   'tx.errorRequired': 'numele, categoria și data plății sunt obligatorii.',

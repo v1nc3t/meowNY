@@ -97,6 +97,7 @@ export const de: Messages = {
   'tx.deletedCategory': 'gelöschte kategorie',
   'tx.empty': 'keine buchungen.',
   'tx.amount': 'betrag',
+  'tx.totalRow': '{count} buchungen',
   'tx.paymentDate': 'zahlungsdatum',
   'tx.chooseCategory': 'kategorie wählen',
   'tx.errorRequired': 'name, kategorie und zahlungsdatum sind erforderlich.',
