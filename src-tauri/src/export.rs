@@ -919,6 +919,9 @@ fn accounts_json(conn: &Connection, sel: &Parsed, today: &str) -> Result<Vec<Val
                 fields.remove("available");
                 // worked out from the balance and `setAside`, both of which are in the file (`docs/stash-design.md`, section 10)
                 fields.remove("free");
+                // worked out from the balance, the rate and the installment, all of which are in the file (`docs/loans-deposits-design.md`, section 8)
+                fields.remove("liability");
+                fields.remove("returnPerMonth");
             }
             Ok(whole)
         })

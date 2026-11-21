@@ -235,6 +235,7 @@ pub const COMMANDS: &[&str] = &[
     "account_history",
     "account_breakdown",
     "accounts_summary",
+    "accounts_pay",
     "create_transfer",
     "get_transfer",
     "update_transfer",
@@ -1305,11 +1306,18 @@ pub fn account_breakdown(vault: Shared, id: String, from: String, to: String) ->
     vault.with_conn(|c| accounts::breakdown(c, id, &from, &to))
 }
 
-/// Net worth: what the accounts that count hold today plus what friends owe.
+/// Net worth: what the assets that count hold today, what the liabilities owe, plus what friends owe.
 #[tauri::command]
 pub fn accounts_summary(vault: Shared) -> Result<accounts::Summary, AppError> {
     let today = today_text(&vault)?;
     vault.with_conn(|c| accounts::summary(c, &today))
+}
+
+/// Pays a liability in one step: the interest part is an expense from the paying account, the rest a transfer that lowers the debt.
+#[tauri::command]
+pub fn accounts_pay(vault: Shared, input: accounts::pay::Payment) -> Result<accounts::pay::Paid, AppError> {
+    let today = today_text(&vault)?;
+    vault.with_conn(|c| accounts::pay::pay(c, &input, &today))
 }
 
 #[tauri::command]

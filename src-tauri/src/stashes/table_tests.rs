@@ -85,8 +85,8 @@ fn a_new_database_has_both_tables_every_index_every_trigger_and_no_row() {
     assert_eq!(one(&w.conn, "SELECT count(*) FROM sqlite_master WHERE name = 'sync_deleted_new'"), 0);
     assert_eq!(one(&w.conn, "SELECT count(*) FROM stashes"), 0);
     assert_eq!(one(&w.conn, "SELECT count(*) FROM stash_entries"), 0);
-    assert_eq!(one(&w.conn, "PRAGMA user_version"), 21);
-    assert_eq!(i64::from(crate::migrate::latest_version()), 21);
+    assert_eq!(one(&w.conn, "PRAGMA user_version"), 22);
+    assert_eq!(i64::from(crate::migrate::latest_version()), 22);
     assert_eq!(one(&w.conn, "SELECT count(*) FROM audit_log WHERE entity_type IN ('stashes', 'stash_entries')"), 0);
     // the name has no unique index (the code checks it on this device only), and the index that looks entries up by transfer holds only links
     assert_eq!(one(&w.conn, "SELECT count(*) FROM sqlite_master WHERE type = 'index' AND tbl_name = 'stashes' AND sql LIKE '%name%'"), 0);
@@ -109,7 +109,8 @@ fn the_triggers_that_write_markers_at_version_20_are_the_eight_of_the_design_and
         "section 4.1 lists every one of them"
     );
 
-    crate::migrate::run(&mut conn).unwrap();
+    // this is the migration of 0021: the ones after it are tested where they are (`accounts::table_tests`, below)
+    crate::migrate::run_up_to(&mut conn, 21).unwrap();
 
     let after = triggers(&conn);
     for (name, sql) in &before {
@@ -166,7 +167,8 @@ fn the_migration_on_a_database_with_rows_moves_nothing_and_every_marker_trigger_
     let before = state(&conn);
     assert_eq!(one(&conn, "SELECT count(*) FROM sync_deleted"), 5, "a marker of each kind that existed, and some rows left: {before:?}");
 
-    crate::migrate::run(&mut conn).unwrap();
+    // this is the migration of 0021: the ones after it are tested where they are (`accounts::table_tests`, below)
+    crate::migrate::run_up_to(&mut conn, 21).unwrap();
 
     assert_eq!(state(&conn), before, "no stamp, no updated_at, no marker and no history row moved");
     assert!(conn.query_row("PRAGMA foreign_keys", [], |r| r.get::<_, bool>(0)).unwrap(), "foreign keys are back on");
@@ -580,4 +582,109 @@ fn a_link_that_is_cleared_by_hand_is_history_but_not_an_edit_as_for_the_ledger()
     // but a write that also changes something they watch stamps the whole change, the link too
     exec(&w.conn, &format!("UPDATE stash_entries SET transfer_id = {transfer}, note = 'again' WHERE id = {entry}")).unwrap();
     assert!(stamp_of(&w.conn, "stash_entries", entry) > before.0);
+}
+
+// ---- migration 0022: the columns of a term deposit (`docs/loans-deposits-design.md`, section 4.2) ----
+
+#[test]
+fn stashes_made_before_the_deposit_columns_stay_goals_and_nothing_of_them_moves() {
+    let mut conn = Connection::open_in_memory().unwrap();
+    conn.execute_batch("PRAGMA foreign_keys = ON;").unwrap();
+    crate::migrate::run_up_to(&mut conn, 21).unwrap();
+    conn.execute_batch(
+        "INSERT INTO accounts (name, kind, opening_date) VALUES ('Cash', 'CASH', '2026-01-01');
+         INSERT INTO stashes (name, account_id, target_minor, target_date, notes) VALUES ('Holiday', 1, 100000, '2027-06-30', 'sun'), ('Rainy', 2, NULL, NULL, NULL);
+         UPDATE stashes SET archived = 1 WHERE name = 'Rainy';
+         INSERT INTO stash_entries (stash_id, amount_minor, entry_date, note) VALUES (1, 20000, '2026-05-08', 'first'), (1, -5000, '2026-05-09', NULL), (2, 1000, '2026-05-10', NULL);",
+    )
+    .unwrap();
+    let state = |conn: &Connection| -> Vec<String> {
+        let mut all = Vec::new();
+        for sql in [
+            "SELECT id || ' ' || sync_id || ' ' || stamp || ' ' || created_at || ' ' || updated_at || ' ' || name || ' ' || account_id || ' ' || archived || ' ' || position || ' ' || COALESCE(target_minor, 'none') || ' ' || COALESCE(target_date, 'none') || ' ' || COALESCE(notes, 'none') FROM stashes ORDER BY id",
+            "SELECT id || ' ' || sync_id || ' ' || stamp || ' ' || updated_at || ' ' || stash_id || ' ' || amount_minor FROM stash_entries ORDER BY id",
+            "SELECT id || ' ' || entity_type || ' ' || action || ' ' || COALESCE(new_values, '') FROM audit_log ORDER BY id",
+            "SELECT last_ms || ' ' || last_counter FROM sync_clock",
+        ] {
+            all.extend(conn.prepare(sql).unwrap().query_map([], |r| r.get::<_, String>(0)).unwrap().map(Result::unwrap));
+        }
+        all
+    };
+    let before = state(&conn);
+
+    crate::migrate::run(&mut conn).unwrap();
+
+    assert_eq!(state(&conn), before, "no stamp, no date, no history row and no tick of the clock moved");
+    assert_eq!(one(&conn, "SELECT count(*) FROM stashes WHERE kind = 'GOAL' AND rate_milli IS NULL AND rate_period IS NULL AND start_date IS NULL AND broken_on IS NULL AND returned_on IS NULL"), 2);
+    assert_eq!(one(&conn, "SELECT count(*) FROM pragma_foreign_key_check"), 0);
+}
+
+#[test]
+fn the_deposit_columns_refuse_their_bad_values_and_a_change_of_each_is_a_change_of_the_row() {
+    let w = world();
+    let insert = |columns: &str, values: &str| exec(&w.conn, &format!("INSERT INTO stashes (name, account_id, {columns}) VALUES ('D', 1, {values})"));
+    let goal = raw_stash(&w.conn, "Goal");
+    assert_eq!(text(&w.conn, &format!("SELECT kind FROM stashes WHERE id = {goal}")), "GOAL", "a stash is a goal when it says nothing");
+    // a deposit has a rate, a period, a start date and (in the core) a maturity; a goal has none of them
+    for ok in [
+        "'DEPOSIT', 3100, 'YEARLY', '2026-01-01'",
+        "'DEPOSIT', 0, 'MONTHLY', '2026-01-01'",
+        "'DEPOSIT', 100000, 'YEARLY', '2020-02-29'",
+    ] {
+        assert!(insert("kind, rate_milli, rate_period, start_date", ok).is_ok(), "{ok}");
+    }
+    for bad in [
+        "'LOAN', NULL, NULL, NULL",
+        "'goal', NULL, NULL, NULL",
+        "'DEPOSIT', NULL, NULL, '2026-01-01'",
+        "'DEPOSIT', 3100, 'YEARLY', NULL",
+        "'DEPOSIT', 3100, NULL, '2026-01-01'",
+        "'DEPOSIT', 100001, 'YEARLY', '2026-01-01'",
+        "'DEPOSIT', -1, 'YEARLY', '2026-01-01'",
+        "'DEPOSIT', 3100, 'DAILY', '2026-01-01'",
+        "'DEPOSIT', 3100, 'YEARLY', '2026-02-30'",
+        "'DEPOSIT', 3100, 'YEARLY', '2026-1-1'",
+        "'GOAL', 3100, 'YEARLY', NULL",
+        "'GOAL', NULL, 'YEARLY', NULL",
+        "'GOAL', NULL, NULL, '2026-01-01'",
+    ] {
+        assert!(insert("kind, rate_milli, rate_period, start_date", bad).is_err(), "{bad}");
+    }
+    // when it broke and when its return was booked: dates, and only for a deposit
+    let deposit = |extra: &str| {
+        insert("kind, rate_milli, rate_period, start_date, broken_on, returned_on", &format!("'DEPOSIT', 3100, 'YEARLY', '2026-01-01', {extra}")).map(|_| w.conn.last_insert_rowid())
+    };
+    assert!(deposit("'2026-06-01', NULL").is_ok() && deposit("NULL, '2027-01-02'").is_ok() && deposit("NULL, NULL").is_ok());
+    for bad in ["'2026-02-30', NULL", "NULL, 'soon'", "'', NULL", "NULL, '2026-1-1'"] {
+        assert!(deposit(bad).is_err(), "{bad}");
+    }
+    assert!(exec(&w.conn, &format!("UPDATE stashes SET broken_on = '2026-06-01' WHERE id = {goal}")).is_err(), "a goal does not break");
+    assert!(exec(&w.conn, &format!("UPDATE stashes SET returned_on = '2026-06-01' WHERE id = {goal}")).is_err(), "a goal has no return to book");
+    assert!(exec(&w.conn, &format!("UPDATE stashes SET kind = 'DEPOSIT' WHERE id = {goal}")).is_err(), "and does not become a deposit by its kind alone");
+
+    // the triggers that were made again: each of the six is a change by itself, with a stamp, a date and a line of history that names it
+    let columns = ["kind", "rate_milli", "rate_period", "start_date", "broken_on", "returned_on"];
+    let history = text(&w.conn, "SELECT sql FROM sqlite_master WHERE name = 'trg_stashes_audit_update'");
+    for column in columns {
+        assert!(history.contains(&format!("OLD.{column} IS NOT NEW.{column}")) && history.contains(&format!("'{column}', NEW.{column}")), "{column}");
+    }
+    for (change, key) in [
+        ("rate_milli = 4000", "rate_milli"),
+        ("rate_period = 'MONTHLY'", "rate_period"),
+        ("start_date = '2026-02-01'", "start_date"),
+        ("broken_on = '2026-06-01'", "broken_on"),
+        ("returned_on = '2027-01-02'", "returned_on"),
+    ] {
+        let id = deposit("NULL, NULL").unwrap();
+        age(&w.conn, "stashes", id);
+        let (stamp, lines) = (stamp_of(&w.conn, "stashes", id), audit(&w.conn, "stashes", "UPDATE"));
+        exec(&w.conn, &format!("UPDATE stashes SET {change} WHERE id = {id}")).unwrap();
+        assert!(stamp_of(&w.conn, "stashes", id) > stamp, "{change}: a new stamp");
+        assert_ne!(updated_at_of(&w.conn, "stashes", id), OLD, "{change}: `updated_at` moved");
+        assert_eq!(audit(&w.conn, "stashes", "UPDATE"), lines + 1, "{change}: a line of history");
+        let new = text(&w.conn, "SELECT new_values FROM audit_log WHERE entity_type = 'stashes' AND action = 'UPDATE' ORDER BY id DESC LIMIT 1");
+        let new: serde_json::Value = serde_json::from_str(&new).unwrap();
+        assert!(columns.iter().all(|c| new.get(c).is_some()), "{change}: the line has the six columns: {new}");
+        assert!(!new[key].is_null(), "{change}: and says what it became");
+    }
 }

@@ -289,7 +289,8 @@ fn name_is_taken(conn: &Connection, name: &str, except: Option<i64>) -> Result<b
         .is_some())
 }
 
-/// A new stash goes to the end of the list, in an account that exists and is not archived.
+/// A new stash goes to the end of the list, in an account that exists and is not archived and is not a liability: there is no money in a debt
+/// to set aside (`docs/loans-deposits-design.md`, section 5.2).
 pub fn create(conn: &Connection, input: &NewStash, today: &str) -> Result<Stash, AppError> {
     let name = clean_name(&input.name)?;
     let account = parse_id(&input.account_id)?;
@@ -297,7 +298,7 @@ pub fn create(conn: &Connection, input: &NewStash, today: &str) -> Result<Stash,
     let target_date = input.target_date.as_deref().map(clean_date).transpose()?;
     let notes = accounts::clean_notes(input.notes.as_deref())?;
     let tx = conn.unchecked_transaction()?;
-    if !accounts::is_active(&tx, account)? {
+    if !accounts::is_active(&tx, account)? || accounts::is_liability(&tx, account)? {
         return Err(AppError::InvalidInput);
     }
     if name_is_taken(&tx, &name, None)? {
@@ -314,8 +315,8 @@ pub fn create(conn: &Connection, input: &NewStash, today: &str) -> Result<Stash,
 }
 
 /// Changes a stash that is not archived (restore it first). The stamp moves only when something changed. A new target must be at least what
-/// is saved. A new account moves the stash (section 5.1): the account must be active and in the same currency, and what the stash holds must
-/// fit in what is free there; one that holds nothing always fits (section 5.4). Naming the account it has is not a move.
+/// is saved. A new account moves the stash (section 5.1): the account must be active, not a liability, and in the same currency, and what the
+/// stash holds must fit in what is free there; one that holds nothing always fits (section 5.4). Naming the account it has is not a move.
 pub fn update(conn: &Connection, id: i64, patch: &StashPatch, today: &str) -> Result<Stash, AppError> {
     let today = clean_date(today)?;
     let tx = conn.unchecked_transaction()?;
@@ -345,7 +346,11 @@ pub fn update(conn: &Connection, id: i64, patch: &StashPatch, today: &str) -> Re
     };
     let account = match patch.account_id.as_deref().map(parse_id).transpose()? {
         Some(account) if account != current.account_id => {
-            if !accounts::is_active(&tx, account)? || accounts::currencies_differ(&tx, current.account_id, account)? || (current.held() > 0 && current.held() > free(&tx, account, &today)?) {
+            if !accounts::is_active(&tx, account)?
+                || accounts::is_liability(&tx, account)?
+                || accounts::currencies_differ(&tx, current.account_id, account)?
+                || (current.held() > 0 && current.held() > free(&tx, account, &today)?)
+            {
                 return Err(AppError::InvalidInput);
             }
             account

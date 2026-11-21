@@ -15,7 +15,7 @@ pub(crate) const TODAY: &str = "2026-11-13";
 pub(crate) const INVALID: AppError = AppError::InvalidInput;
 
 pub(crate) fn new_account(name: &str) -> NewAccount {
-    NewAccount { name: name.into(), kind: Kind::Checking, number: None, opening_balance: None, opening_date: None, bic: None, notes: None, group: None, include_in_net_worth: None, virtual_balance: None, currency: None, rate: None }
+    NewAccount { name: name.into(), kind: Kind::Checking, number: None, opening_balance: None, opening_date: None, bic: None, notes: None, group: None, include_in_net_worth: None, virtual_balance: None, currency: None, rate: None, interest_rate: None, interest_period: None, installment: None }
 }
 
 /// A checking account with nothing in it. Returns its id.

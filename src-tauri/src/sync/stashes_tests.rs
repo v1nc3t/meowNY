@@ -22,7 +22,7 @@ use crate::vault::AppError;
 fn funded(conn: &Connection, name: &str, opening: &str) -> i64 {
     accounts::create(
         conn,
-        &NewAccount { name: name.into(), kind: Kind::Checking, number: None, opening_balance: Some(opening.into()), opening_date: Some("2026-01-01".into()), bic: None, notes: None, group: None, include_in_net_worth: None, virtual_balance: None, currency: None, rate: None },
+        &NewAccount { name: name.into(), kind: Kind::Checking, number: None, opening_balance: Some(opening.into()), opening_date: Some("2026-01-01".into()), bic: None, notes: None, group: None, include_in_net_worth: None, virtual_balance: None, currency: None, rate: None, interest_rate: None, interest_period: None, installment: None },
         TODAY,
     )
     .unwrap()
@@ -33,7 +33,7 @@ fn funded(conn: &Connection, name: &str, opening: &str) -> i64 {
 fn funded_in(conn: &Connection, name: &str, code: &str, opening: &str) -> i64 {
     accounts::create(
         conn,
-        &NewAccount { name: name.into(), kind: Kind::Checking, number: None, opening_balance: Some(opening.into()), opening_date: Some("2026-01-01".into()), bic: None, notes: None, group: None, include_in_net_worth: None, virtual_balance: None, currency: Some(code.into()), rate: Some("5.00".into()) },
+        &NewAccount { name: name.into(), kind: Kind::Checking, number: None, opening_balance: Some(opening.into()), opening_date: Some("2026-01-01".into()), bic: None, notes: None, group: None, include_in_net_worth: None, virtual_balance: None, currency: Some(code.into()), rate: Some("5.00".into()), interest_rate: None, interest_period: None, installment: None },
         TODAY,
     )
     .unwrap()

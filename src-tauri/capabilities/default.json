@@ -137,6 +137,7 @@
     "allow-account-history",
     "allow-account-breakdown",
     "allow-accounts-summary",
+    "allow-accounts-pay",
     "allow-create-transfer",
     "allow-get-transfer",
     "allow-update-transfer",

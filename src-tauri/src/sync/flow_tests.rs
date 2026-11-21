@@ -294,7 +294,7 @@ fn a_phone_whose_main_account_was_edited_or_that_has_a_second_account_is_not_pai
             crate::accounts::update(c, crate::accounts::MAIN_ID, &crate::accounts::AccountPatch { name: Some("Wallet".into()), ..Default::default() }, "2026-03-15").unwrap();
         }),
         ("a second account", |c| {
-            crate::accounts::create(c, &crate::accounts::NewAccount { name: "Cash".into(), kind: crate::accounts::Kind::Cash, number: None, opening_balance: None, opening_date: None, bic: None, notes: None, group: None, include_in_net_worth: None, virtual_balance: None, currency: None, rate: None }, "2026-03-15").unwrap();
+            crate::accounts::create(c, &crate::accounts::NewAccount { name: "Cash".into(), kind: crate::accounts::Kind::Cash, number: None, opening_balance: None, opening_date: None, bic: None, notes: None, group: None, include_in_net_worth: None, virtual_balance: None, currency: None, rate: None, interest_rate: None, interest_period: None, installment: None }, "2026-03-15").unwrap();
         }),
     ];
     for (what, edit) in edits {
@@ -317,7 +317,7 @@ fn a_new_phone_gets_the_accounts_the_transfers_and_the_account_of_every_row_in_i
     let desktop = desktop_with_data();
     {
         let conn = desktop.conn.lock().unwrap();
-        let savings = crate::accounts::create(&conn, &crate::accounts::NewAccount { name: "Savings".into(), kind: crate::accounts::Kind::Savings, number: Some("IE29".into()), opening_balance: Some("500.00".into()), opening_date: Some("2026-01-01".into()), bic: None, notes: None, group: None, include_in_net_worth: None, virtual_balance: None, currency: None, rate: None }, "2026-03-15").unwrap().id;
+        let savings = crate::accounts::create(&conn, &crate::accounts::NewAccount { name: "Savings".into(), kind: crate::accounts::Kind::Savings, number: Some("IE29".into()), opening_balance: Some("500.00".into()), opening_date: Some("2026-01-01".into()), bic: None, notes: None, group: None, include_in_net_worth: None, virtual_balance: None, currency: None, rate: None, interest_rate: None, interest_period: None, installment: None }, "2026-03-15").unwrap().id;
         crate::accounts::transfers::create(
             &conn,
             &crate::accounts::transfers::NewTransfer { from_account_id: crate::accounts::MAIN_ID.to_string(), to_account_id: savings.to_string(), amount: "100.00".into(), date: "2026-03-05".into(), note: Some("saving".into()), to_amount: None },
@@ -365,6 +365,7 @@ fn a_new_phone_gets_the_details_of_the_accounts_in_its_first_copy() {
             include_in_net_worth: None,
             virtual_balance: Some("1000.00".into()),
             currency: None, rate: None,
+            interest_rate: None, interest_period: None, installment: None,
         };
         accounts::create(&conn, &card, "2026-03-15").unwrap();
     }

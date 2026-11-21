@@ -34,7 +34,7 @@ pub(super) fn settle(a: &mut Connection, b: &mut Connection) -> Outcome {
 
 /// An account with nothing in it and an opening date of its own. Returns its local id.
 pub(super) fn open(conn: &Connection, name: &str) -> i64 {
-    accounts::create(conn, &NewAccount { name: name.into(), kind: Kind::Checking, number: None, opening_balance: None, opening_date: Some("2026-01-01".into()), bic: None, notes: None, group: None, include_in_net_worth: None, virtual_balance: None, currency: None, rate: None }, TODAY).unwrap().id
+    accounts::create(conn, &NewAccount { name: name.into(), kind: Kind::Checking, number: None, opening_balance: None, opening_date: Some("2026-01-01".into()), bic: None, notes: None, group: None, include_in_net_worth: None, virtual_balance: None, currency: None, rate: None, interest_rate: None, interest_period: None, installment: None }, TODAY).unwrap().id
 }
 
 fn rename(conn: &Connection, id: i64, name: &str) {
@@ -149,12 +149,12 @@ fn a_device_with_accounts_transfers_and_rows_in_several_accounts_gives_a_new_pho
     rename(&desktop, MAIN_ID, "Current");
     let savings = accounts::create(
         &desktop,
-        &NewAccount { name: "Savings".into(), kind: Kind::Savings, number: Some("IE29 AIBK 9311 5212 3456 78".into()), opening_balance: Some("1000.00".into()), opening_date: Some("2026-01-01".into()), bic: None, notes: None, group: None, include_in_net_worth: None, virtual_balance: None, currency: None, rate: None },
+        &NewAccount { name: "Savings".into(), kind: Kind::Savings, number: Some("IE29 AIBK 9311 5212 3456 78".into()), opening_balance: Some("1000.00".into()), opening_date: Some("2026-01-01".into()), bic: None, notes: None, group: None, include_in_net_worth: None, virtual_balance: None, currency: None, rate: None, interest_rate: None, interest_period: None, installment: None },
         TODAY,
     )
     .unwrap()
     .id;
-    let card = accounts::create(&desktop, &NewAccount { name: "Card".into(), kind: Kind::CreditCard, number: None, opening_balance: Some("-250.00".into()), opening_date: Some("2026-02-01".into()), bic: None, notes: None, group: None, include_in_net_worth: None, virtual_balance: None, currency: None, rate: None }, TODAY).unwrap().id;
+    let card = accounts::create(&desktop, &NewAccount { name: "Card".into(), kind: Kind::CreditCard, number: None, opening_balance: Some("-250.00".into()), opening_date: Some("2026-02-01".into()), bic: None, notes: None, group: None, include_in_net_worth: None, virtual_balance: None, currency: None, rate: None, interest_rate: None, interest_period: None, installment: None }, TODAY).unwrap().id;
     let old = open(&desktop, "Old");
     spend_in(&desktop, "On the card", card);
     spend_in(&desktop, "Long ago", old);
@@ -819,7 +819,7 @@ fn two_devices_that_rename_different_accounts_to_one_name_keep_both_and_merge_no
 fn two_devices_that_make_an_account_of_one_name_keep_both_and_do_not_add_up_their_balances() {
     let (mut desktop, mut phone) = met_with_accounts();
     for (conn, opening) in [(&desktop, "100.00"), (&phone, "40.00")] {
-        accounts::create(conn, &NewAccount { name: "Rainy day".into(), kind: Kind::Savings, number: None, opening_balance: Some(opening.into()), opening_date: Some("2026-01-01".into()), bic: None, notes: None, group: None, include_in_net_worth: None, virtual_balance: None, currency: None, rate: None }, TODAY).unwrap();
+        accounts::create(conn, &NewAccount { name: "Rainy day".into(), kind: Kind::Savings, number: None, opening_balance: Some(opening.into()), opening_date: Some("2026-01-01".into()), bic: None, notes: None, group: None, include_in_net_worth: None, virtual_balance: None, currency: None, rate: None, interest_rate: None, interest_period: None, installment: None }, TODAY).unwrap();
     }
     let outcome = settle(&mut desktop, &mut phone);
     assert_eq!((outcome.first.merged, outcome.second.merged, outcome.first.dropped, outcome.second.dropped), (0, 0, 0, 0));
@@ -832,7 +832,7 @@ fn two_devices_that_make_an_account_of_one_name_keep_both_and_do_not_add_up_thei
     // and a second round of the same changes keeps on being two
     pause();
     for conn in [&desktop, &phone] {
-        accounts::create(conn, &NewAccount { name: "Rainy day 2".into(), kind: Kind::Cash, number: None, opening_balance: None, opening_date: Some("2026-01-01".into()), bic: None, notes: None, group: None, include_in_net_worth: None, virtual_balance: None, currency: None, rate: None }, TODAY).unwrap();
+        accounts::create(conn, &NewAccount { name: "Rainy day 2".into(), kind: Kind::Cash, number: None, opening_balance: None, opening_date: Some("2026-01-01".into()), bic: None, notes: None, group: None, include_in_net_worth: None, virtual_balance: None, currency: None, rate: None, interest_rate: None, interest_period: None, installment: None }, TODAY).unwrap();
     }
     settle(&mut desktop, &mut phone);
     assert_eq!(count(&desktop, "SELECT count(*) FROM accounts WHERE name = 'Rainy day 2'"), 2);
@@ -1320,6 +1320,7 @@ fn an_account_made_with_every_detail_comes_to_a_new_phone_whole_even_at_the_boun
             include_in_net_worth: Some(false),
             virtual_balance: Some(virtual_balance.into()),
             currency: None, rate: None,
+            interest_rate: None, interest_period: None, installment: None,
         };
         let made = accounts::create(&desktop, &new, TODAY).unwrap();
         assert_eq!(made.notes.as_deref(), Some(notes.trim()));
@@ -1606,7 +1607,7 @@ fn what_the_screens_accept_as_a_detail_is_what_the_wire_accepts_and_the_other_wa
     for candidate in &candidates {
         for field in ["bic", "notes", "group"] {
             let device = device("EUR");
-            let mut new = NewAccount { name: "A".into(), kind: Kind::Cash, number: None, opening_balance: None, opening_date: Some("2026-01-01".into()), bic: None, notes: None, group: None, include_in_net_worth: None, virtual_balance: None, currency: None, rate: None };
+            let mut new = NewAccount { name: "A".into(), kind: Kind::Cash, number: None, opening_balance: None, opening_date: Some("2026-01-01".into()), bic: None, notes: None, group: None, include_in_net_worth: None, virtual_balance: None, currency: None, rate: None, interest_rate: None, interest_period: None, installment: None };
             match field {
                 "bic" => new.bic = Some(candidate.clone()),
                 "notes" => new.notes = Some(candidate.clone()),
@@ -1728,6 +1729,7 @@ fn open_foreign(conn: &Connection, name: &str, code: &str, rate: &str, opening: 
             virtual_balance: None,
             currency: Some(code.into()),
             rate: Some(rate.into()),
+            interest_rate: None, interest_period: None, installment: None,
         },
         TODAY,
     )
@@ -2389,7 +2391,7 @@ fn what_the_screens_accept_as_a_currency_and_a_rate_is_what_the_wire_accepts_and
     };
     let make = |currency: &str, rate: Option<&str>| {
         let device = device("EUR");
-        let new = NewAccount { name: "A".into(), kind: Kind::Cash, number: None, opening_balance: None, opening_date: Some("2026-01-01".into()), bic: None, notes: None, group: None, include_in_net_worth: None, virtual_balance: None, currency: Some(currency.into()), rate: rate.map(str::to_string) };
+        let new = NewAccount { name: "A".into(), kind: Kind::Cash, number: None, opening_balance: None, opening_date: Some("2026-01-01".into()), bic: None, notes: None, group: None, include_in_net_worth: None, virtual_balance: None, currency: Some(currency.into()), rate: rate.map(str::to_string), interest_rate: None, interest_period: None, installment: None };
         let made = accounts::create(&device, &new, TODAY);
         (device, made)
     };

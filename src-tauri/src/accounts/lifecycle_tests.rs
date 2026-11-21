@@ -4,6 +4,7 @@
 use super::fixtures::*;
 use super::transfers;
 use super::{archive, create, delete, get, list, reorder, restore, update, Account, AccountPatch, Kind, NewAccount, MAIN_ID, MAIN_NAME};
+use crate::rates::Period;
 use crate::debts::ledger::{self, NewEntry};
 use crate::recurring::{self, NewRecurring, Unit};
 use crate::transactions::{self, TransactionPatch};
@@ -81,6 +82,11 @@ fn a_new_account_goes_to_the_end_of_the_list_with_what_was_given_and_the_default
             balance_in_main: "0.00".into(),
             set_aside: "0.00".into(),
             free: "0.00".into(),
+            interest_rate: None,
+            interest_period: None,
+            installment: None,
+            liability: None,
+            return_per_month: None,
         }
     );
     let card = create(
@@ -119,11 +125,11 @@ fn an_account_with_a_bad_name_kind_number_balance_or_date_is_not_made() {
     assert_refused(&w.conn, INVALID, "a today that is not a date", || create(&w.conn, &new_account("A"), "today"));
     assert_eq!(names(&w.conn), [MAIN_NAME]);
     assert!(create(&w.conn, &new_account(&"x".repeat(50)), TODAY).is_ok());
-    // the kind is one of four: anything else does not even reach the code
-    for kind in ["\"CHECKING\"", "\"SAVINGS\"", "\"CASH\"", "\"CREDIT_CARD\""] {
+    // the kind is one of seven: anything else does not even reach the code
+    for kind in ["\"CHECKING\"", "\"SAVINGS\"", "\"CASH\"", "\"CREDIT_CARD\"", "\"CREDIT\"", "\"LOAN\"", "\"MORTGAGE\""] {
         assert!(serde_json::from_str::<Kind>(kind).is_ok(), "{kind}");
     }
-    for kind in ["\"checking\"", "\"LOAN\"", "\"CreditCard\"", "\"\"", "null", "1"] {
+    for kind in ["\"checking\"", "\"DEPOSIT\"", "\"CreditCard\"", "\"\"", "null", "1"] {
         assert!(serde_json::from_str::<Kind>(kind).is_err(), "{kind}");
     }
     assert!(serde_json::from_str::<NewAccount>(r#"{"name":"A","kind":"CASH","color":"red"}"#).is_err(), "an unknown field is refused");
@@ -1171,4 +1177,154 @@ fn the_check_fails_for_a_main_account_with_a_currency_and_for_a_currency_without
         assert!(super::check(&w.conn).unwrap(), "{what}: repaired");
     }
     assert_eq!(stored(&w.conn, lei), (Some("RON".into()), Some("5.00".into())));
+}
+
+// ---- liabilities, a rate and an installment (`docs/loans-deposits-design.md`, section 5.1) ------------------------------------
+
+const ASSETS: [Kind; 4] = [Kind::Checking, Kind::Savings, Kind::Cash, Kind::CreditCard];
+const LIABILITIES: [Kind; 3] = [Kind::Credit, Kind::Loan, Kind::Mortgage];
+
+/// A liability that was owed 9000.00 at the start of the year. Returns its id.
+fn debt(conn: &rusqlite::Connection, name: &str, kind: Kind) -> i64 {
+    create(conn, &NewAccount { kind, opening_balance: Some("-9000.00".into()), opening_date: Some("2026-01-01".into()), ..new_account(name) }, TODAY).unwrap().id
+}
+
+fn patch(json: serde_json::Value) -> AccountPatch {
+    serde_json::from_value(json).unwrap()
+}
+
+#[test]
+fn a_kind_changes_inside_its_group_and_never_across_the_groups() {
+    let w = world();
+    let savings = create(&w.conn, &NewAccount { kind: Kind::Savings, ..new_account("Savings") }, TODAY).unwrap().id;
+    let car = create(&w.conn, &NewAccount { kind: Kind::Loan, installment: Some("300.00".into()), ..new_account("Car") }, TODAY).unwrap().id;
+    // inside a group, every way
+    for kind in ASSETS {
+        assert_eq!(update(&w.conn, savings, &AccountPatch { kind: Some(kind), ..Default::default() }, TODAY).unwrap().kind, kind);
+    }
+    for kind in [Kind::Mortgage, Kind::Credit, Kind::Loan] {
+        let changed = update(&w.conn, car, &AccountPatch { kind: Some(kind), ..Default::default() }, TODAY).unwrap();
+        assert_eq!((changed.kind, changed.installment.as_deref()), (kind, Some("300.00")), "a liability keeps its installment when it becomes another one");
+    }
+    // across the groups, every way, a refusal changes nothing
+    for kind in LIABILITIES {
+        assert_refused(&w.conn, INVALID, &format!("an asset to {kind:?}"), || update(&w.conn, savings, &AccountPatch { kind: Some(kind), ..Default::default() }, TODAY));
+    }
+    for kind in ASSETS {
+        assert_refused(&w.conn, INVALID, &format!("a liability to {kind:?}"), || update(&w.conn, car, &AccountPatch { kind: Some(kind), ..Default::default() }, TODAY));
+    }
+    // the main account is an asset for good, and a kind of its own group is still allowed
+    assert_refused(&w.conn, INVALID, "the main account to a mortgage", || update(&w.conn, MAIN_ID, &AccountPatch { kind: Some(Kind::Mortgage), ..Default::default() }, TODAY));
+    assert_eq!(update(&w.conn, MAIN_ID, &AccountPatch { kind: Some(Kind::Cash), ..Default::default() }, TODAY).unwrap().kind, Kind::Cash);
+    // naming the kind it has is no change
+    assert_nothing_written(&w.conn, "the same kind", || update(&w.conn, car, &AccountPatch { kind: Some(Kind::Loan), ..Default::default() }, TODAY));
+}
+
+#[test]
+fn an_installment_is_for_a_liability_and_is_an_amount_from_one_cent_to_the_largest() {
+    let w = world();
+    for (n, kind) in ASSETS.into_iter().enumerate() {
+        assert_refused(&w.conn, INVALID, &format!("{kind:?} made with an installment"), || {
+            create(&w.conn, &NewAccount { kind, installment: Some("100.00".into()), ..new_account(&format!("Asset {n}")) }, TODAY)
+        });
+        let asset = create(&w.conn, &NewAccount { kind, ..new_account(&format!("Plain {n}")) }, TODAY).unwrap().id;
+        for given in [serde_json::json!("100.00"), serde_json::Value::Null] {
+            assert_refused(&w.conn, INVALID, &format!("{kind:?} given {given}"), || update(&w.conn, asset, &patch(serde_json::json!({ "installment": given })), TODAY));
+        }
+    }
+    for (n, kind) in LIABILITIES.into_iter().enumerate() {
+        for ok in ["0.01", "9999999999.99", "950.00"] {
+            let made = create(&w.conn, &NewAccount { kind, installment: Some(ok.into()), ..new_account(&format!("{kind:?} {ok}")) }, TODAY).unwrap();
+            assert_eq!(made.installment.as_deref(), Some(ok));
+        }
+        for bad in ["0.00", "-1.00", "10000000000.00", "9999999999.999", "12", "1,00", " 1.00", ""] {
+            assert_refused(&w.conn, INVALID, &format!("{kind:?} with {bad:?}"), || create(&w.conn, &NewAccount { kind, installment: Some(bad.into()), ..new_account(&format!("Bad {n}")) }, TODAY));
+        }
+    }
+    // a liability's installment is set, changed, kept when left out, and cleared with null
+    let flat = debt(&w.conn, "Flat", Kind::Mortgage);
+    assert_eq!(get(&w.conn, flat, TODAY).unwrap().installment, None);
+    assert_eq!(update(&w.conn, flat, &patch(serde_json::json!({ "installment": "950.00" })), TODAY).unwrap().installment.as_deref(), Some("950.00"));
+    assert_eq!(update(&w.conn, flat, &patch(serde_json::json!({ "installment": "1000.50" })), TODAY).unwrap().installment.as_deref(), Some("1000.50"));
+    assert_eq!(update(&w.conn, flat, &rename("Flat 2"), TODAY).unwrap().installment.as_deref(), Some("1000.50"), "left out stays");
+    assert_nothing_written(&w.conn, "the installment it has", || update(&w.conn, flat, &patch(serde_json::json!({ "installment": "1000.50" })), TODAY));
+    for bad in ["0.00", "-5.00", "10000000000.00", "x"] {
+        assert_refused(&w.conn, INVALID, &format!("an installment of {bad:?}"), || update(&w.conn, flat, &patch(serde_json::json!({ "installment": bad })), TODAY));
+    }
+    let cleared = update(&w.conn, flat, &patch(serde_json::json!({ "installment": null })), TODAY).unwrap();
+    assert_eq!((cleared.installment, cleared.liability.unwrap().payoff), (None, None), "no installment, no payoff");
+}
+
+#[test]
+fn a_rate_and_its_period_are_both_there_or_both_absent_when_made_and_at_every_change() {
+    let w = world();
+    // made: both or neither, a rate from 0 to 100 with at most 3 decimals
+    let rated = |name: &str, kind: Kind, rate: Option<&str>, period: Option<Period>| {
+        create(&w.conn, &NewAccount { kind, interest_rate: rate.map(Into::into), interest_period: period, ..new_account(name) }, TODAY)
+    };
+    for kind in [Kind::Savings, Kind::Mortgage] {
+        assert_refused(&w.conn, INVALID, "a rate without a period", || rated("A", kind, Some("3.25"), None));
+        assert_refused(&w.conn, INVALID, "a period without a rate", || rated("A", kind, None, Some(Period::Yearly)));
+    }
+    for bad in ["100.001", "3.1415", "-1", "", "abc", "3.", ".5", " 3", "3,5", "1e1"] {
+        assert_refused(&w.conn, INVALID, &format!("a rate of {bad:?}"), || rated("A", Kind::Savings, Some(bad), Some(Period::Monthly)));
+    }
+    for (rate, shown) in [("0", "0"), ("100", "100"), ("3.250", "3.25"), ("4.125", "4.125"), ("0.5", "0.5")] {
+        let made = rated(&format!("Rate {rate}"), Kind::Cash, Some(rate), Some(Period::Monthly)).unwrap();
+        assert_eq!((made.interest_rate.as_deref(), made.interest_period), (Some(shown), Some(Period::Monthly)), "{rate}");
+    }
+    assert_eq!(rated("None", Kind::Cash, None, None).map(|a| (a.interest_rate, a.interest_period)), Ok((None, None)));
+
+    // changed: an account with no rate needs both, one with a rate may change either alone
+    let plain = account(&w.conn, "Plain");
+    let rate_of = |id: i64| {
+        let a = get(&w.conn, id, TODAY).unwrap();
+        (a.interest_rate, a.interest_period)
+    };
+    assert_refused(&w.conn, INVALID, "a new rate with no period given or stored", || update(&w.conn, plain, &patch(serde_json::json!({ "interestRate": "3.25" })), TODAY));
+    assert_refused(&w.conn, INVALID, "a period with no rate given or stored", || update(&w.conn, plain, &patch(serde_json::json!({ "interestPeriod": "YEARLY" })), TODAY));
+    assert_refused(&w.conn, INVALID, "null with a period", || update(&w.conn, plain, &patch(serde_json::json!({ "interestRate": null, "interestPeriod": "YEARLY" })), TODAY));
+    assert_eq!(rate_of(plain), (None, None));
+    update(&w.conn, plain, &patch(serde_json::json!({ "interestRate": "3.25", "interestPeriod": "YEARLY" })), TODAY).unwrap();
+    assert_eq!(rate_of(plain), (Some("3.25".into()), Some(Period::Yearly)));
+    update(&w.conn, plain, &patch(serde_json::json!({ "interestRate": "4" })), TODAY).unwrap();
+    assert_eq!(rate_of(plain), (Some("4".into()), Some(Period::Yearly)), "a new rate takes the period it has");
+    update(&w.conn, plain, &patch(serde_json::json!({ "interestPeriod": "MONTHLY" })), TODAY).unwrap();
+    assert_eq!(rate_of(plain), (Some("4".into()), Some(Period::Monthly)), "a new period takes the rate it has");
+    assert_nothing_written(&w.conn, "the rate and period it has, written another way", || update(&w.conn, plain, &patch(serde_json::json!({ "interestRate": "4.000", "interestPeriod": "MONTHLY" })), TODAY));
+    for bad in ["100.001", "3.1415", "-1", "", "3."] {
+        assert_refused(&w.conn, INVALID, &format!("a new rate of {bad:?}"), || update(&w.conn, plain, &patch(serde_json::json!({ "interestRate": bad })), TODAY));
+    }
+    // null clears the rate and takes its period with it
+    update(&w.conn, plain, &patch(serde_json::json!({ "interestRate": null })), TODAY).unwrap();
+    assert_eq!(rate_of(plain), (None, None));
+    assert_refused(&w.conn, INVALID, "a period once the rate is cleared", || update(&w.conn, plain, &patch(serde_json::json!({ "interestPeriod": "MONTHLY" })), TODAY));
+    assert_nothing_written(&w.conn, "clearing a rate that is not there", || update(&w.conn, plain, &patch(serde_json::json!({ "interestRate": null })), TODAY));
+    // a rate on the main account and on a liability are like any other; an archived account takes none
+    update(&w.conn, MAIN_ID, &patch(serde_json::json!({ "interestRate": "0", "interestPeriod": "YEARLY" })), TODAY).unwrap();
+    assert_eq!(rate_of(MAIN_ID), (Some("0".into()), Some(Period::Yearly)));
+    let car = debt(&w.conn, "Car", Kind::Loan);
+    update(&w.conn, car, &patch(serde_json::json!({ "interestRate": "6.5", "interestPeriod": "YEARLY" })), TODAY).unwrap();
+    assert_eq!(rate_of(car), (Some("6.5".into()), Some(Period::Yearly)));
+    archive(&w.conn, car, TODAY).unwrap();
+    assert_refused(&w.conn, INVALID, "a new rate on an archived account", || update(&w.conn, car, &patch(serde_json::json!({ "interestRate": "7" })), TODAY));
+    assert_refused(&w.conn, INVALID, "clearing the rate of an archived account", || update(&w.conn, car, &patch(serde_json::json!({ "interestRate": null })), TODAY));
+    // what crosses: the names of the three fields, and `null` is not the same as left out
+    let cleared: AccountPatch = serde_json::from_str(r#"{"interestRate":null,"installment":null}"#).unwrap();
+    assert!(matches!((&cleared.interest_rate, &cleared.installment, &cleared.interest_period), (Some(None), Some(None), None)));
+    assert!(serde_json::from_str::<AccountPatch>(r#"{"interest":"3"}"#).is_err());
+    assert!(serde_json::from_value::<NewAccount>(serde_json::json!({ "name": "x", "kind": "LOAN", "interestRate": "3", "interestPeriod": "WEEKLY" })).is_err());
+}
+
+#[test]
+fn a_liability_is_made_with_what_it_owed_stored_negative_and_no_sign_of_an_opening_balance_is_refused() {
+    let w = world();
+    let flat = debt(&w.conn, "Flat", Kind::Mortgage);
+    let made = get(&w.conn, flat, TODAY).unwrap();
+    assert_eq!((made.opening_balance.as_str(), made.balance.as_str(), made.archived), ("-9000.00", "-9000.00", false));
+    // a liability with nothing owed (0.00) and one that was overpaid (above 0) are made like any other: no sign is refused
+    for (name, opening) in [("Paid", "0.00"), ("Over", "25.00"), ("Max", "-9999999999.99")] {
+        let made = create(&w.conn, &NewAccount { kind: Kind::Credit, opening_balance: Some(opening.into()), ..new_account(name) }, TODAY).unwrap();
+        assert_eq!(made.opening_balance, opening, "{name}");
+    }
 }

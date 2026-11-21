@@ -13,6 +13,7 @@ pub mod documents;
 pub mod export;
 pub mod keys;
 pub mod migrate;
+pub mod rates;
 pub mod recovery_file;
 pub mod recurring;
 pub mod report;
@@ -364,6 +365,7 @@ pub fn run() {
             commands::account_history,
             commands::account_breakdown,
             commands::accounts_summary,
+            commands::accounts_pay,
             commands::create_transfer,
             commands::get_transfer,
             commands::update_transfer,

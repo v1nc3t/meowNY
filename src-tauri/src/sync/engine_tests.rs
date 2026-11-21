@@ -662,7 +662,7 @@ fn following_the_computer_pulls_back_every_stamp_that_is_ahead_and_nothing_else(
         spend(&phone, food, "New, ahead", "1.00");
         transactions::delete(&phone, tea).unwrap();
         // an account, a transfer, and the main account (which until now had the oldest stamp there is)
-        let cash = crate::accounts::create(&phone, &crate::accounts::NewAccount { name: "Cash, ahead".into(), kind: crate::accounts::Kind::Cash, number: None, opening_balance: None, opening_date: Some("2026-01-01".into()), bic: None, notes: None, group: None, include_in_net_worth: None, virtual_balance: None, currency: None, rate: None }, TODAY).unwrap().id;
+        let cash = crate::accounts::create(&phone, &crate::accounts::NewAccount { name: "Cash, ahead".into(), kind: crate::accounts::Kind::Cash, number: None, opening_balance: None, opening_date: Some("2026-01-01".into()), bic: None, notes: None, group: None, include_in_net_worth: None, virtual_balance: None, currency: None, rate: None, interest_rate: None, interest_period: None, installment: None }, TODAY).unwrap().id;
         crate::accounts::transfers::create(
             &phone,
             &crate::accounts::transfers::NewTransfer { from_account_id: crate::accounts::MAIN_ID.to_string(), to_account_id: cash.to_string(), amount: "1.00".into(), date: "2026-03-01".into(), note: None, to_amount: None },
@@ -1346,6 +1346,7 @@ pub(super) fn edit_accounts(conn: &mut Connection, rng: &mut Rng) {
                 virtual_balance: (rng.below(2) == 0).then(|| virtual_balance(rng)),
                 currency: own.map(str::to_string),
                 rate: own.filter(|c| *c != "EUR").map(|_| rate(rng)),
+                interest_rate: None, interest_period: None, installment: None,
             };
             let _ = accounts::create(conn, &new, TODAY);
         }
@@ -1824,6 +1825,7 @@ fn nothing_that_stays_on_a_device_is_ever_sent() {
             include_in_net_worth: Some(false),
             virtual_balance: Some("12.00".into()),
             currency: None, rate: None,
+            interest_rate: None, interest_period: None, installment: None,
         };
         let account = crate::accounts::create(conn, &new, TODAY).unwrap().id;
         crate::accounts::transfers::create(

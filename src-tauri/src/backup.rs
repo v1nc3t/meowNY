@@ -890,6 +890,7 @@ mod tests {
                 include_in_net_worth: Some(false),
                 virtual_balance: Some("-1000.00".into()),
                 currency: None, rate: None,
+                interest_rate: None, interest_period: None, installment: None,
             },
             "2026-02-04",
         )
@@ -923,6 +924,7 @@ mod tests {
                 virtual_balance: None,
                 currency: Some("RON".into()),
                 rate: Some("4.9769".into()),
+                interest_rate: None, interest_period: None, installment: None,
             },
             "2026-02-04",
         )

@@ -6,13 +6,14 @@ use rusqlite::Connection;
 
 use super::fixtures::*;
 use super::transfers;
-use super::{breakdown, create, get, history, list, statement, summary, to_main, update, AccountPatch, Breakdown, HistoryPoint, Kind, Line, NewAccount, Share, MAIN_ID, MAIN_NAME};
+use super::{breakdown, create, get, history, list, statement, summary, to_main, update, AccountPatch, Breakdown, HistoryPoint, Kind, LiabilityState, Line, NewAccount, Share, MAIN_ID, MAIN_NAME};
 use crate::categories::{self, CategoryType};
 use crate::debts::fixtures::{equal, who};
 use crate::debts::ledger::{self, Expense, NewEntry};
 use crate::debts::people;
 use crate::debts::splits::{set_split, SplitInput};
 use crate::money::{format_amount, MAX_MINOR};
+use crate::rates::{Payoff, Period};
 use crate::transactions::{self, NewTransaction};
 use crate::vault::AppError;
 
@@ -424,7 +425,7 @@ fn net_worth_is_every_account_today_plus_what_friends_owe_and_accounts_are_in_us
     let anna = friend(&w.conn, "Anna");
     let s = summary(&w.conn, TODAY).unwrap();
     assert_eq!((s.in_accounts.as_str(), s.friends.as_str(), s.net_worth.as_str(), s.accounts, s.in_use), ("0.00", "0.00", "0.00", 1, false));
-    assert_eq!(serde_json::to_value(&s).unwrap(), serde_json::json!({ "inAccounts": "0.00", "friends": "0.00", "netWorth": "0.00", "accounts": 1, "inUse": false }));
+    assert_eq!(serde_json::to_value(&s).unwrap(), serde_json::json!({ "inAccounts": "0.00", "debts": "0.00", "friends": "0.00", "netWorth": "0.00", "accounts": 1, "inUse": false }));
 
     // a person who never looks at accounts: everything is in the main account, and accounts are still not "in use"
     on(&w.conn, MAIN_ID, w.salary, "Pay", "1000.00", "2026-11-01");
@@ -603,7 +604,7 @@ fn net_worth_adds_only_the_accounts_that_count_and_what_friends_owe_is_always_in
     count_in_net_worth(&w.conn, savings, false);
     count_in_net_worth(&w.conn, cash, false);
     assert_eq!(figures(), expect("0.00", "40.00"), "no account counts: 0.00 in accounts, what friends owe is net worth");
-    assert_eq!(serde_json::to_value(summary(&w.conn, TODAY).unwrap()).unwrap(), serde_json::json!({ "inAccounts": "0.00", "friends": "40.00", "netWorth": "40.00", "accounts": 4, "inUse": true }));
+    assert_eq!(serde_json::to_value(summary(&w.conn, TODAY).unwrap()).unwrap(), serde_json::json!({ "inAccounts": "0.00", "debts": "0.00", "friends": "40.00", "netWorth": "40.00", "accounts": 4, "inUse": true }));
     // the balances themselves did not change, whatever counts
     assert_eq!([MAIN_ID, savings, cash, card].map(|id| get(&w.conn, id, TODAY).unwrap().balance), ["960.00", "5000.00", "200.00", "-300.00"].map(String::from));
     // switching it back brings the number back
@@ -1395,4 +1396,128 @@ fn the_balance_of_a_foreign_account_is_set_in_its_own_currency_and_its_value_fol
     assert_eq!((both.currency.as_str(), both.balance.as_str(), both.balance_in_main.as_str()), ("USD", "330.00", "300.00"));
     // and net worth sees it in the main currency
     assert_eq!(summary(&w.conn, TODAY).unwrap().in_accounts, "632.58");
+}
+
+// ---- liabilities, rates and the debts of the summary (`docs/loans-deposits-design.md`, sections 3.1, 3.2 and 6) ------------------------------
+
+fn flat(conn: &Connection) -> i64 {
+    create(
+        conn,
+        &NewAccount {
+            kind: Kind::Mortgage,
+            opening_balance: Some("-180000.00".into()),
+            opening_date: Some("2026-01-01".into()),
+            interest_rate: Some("3.9".into()),
+            interest_period: Some(Period::Yearly),
+            installment: Some("950.00".into()),
+            ..new_account("Flat")
+        },
+        TODAY,
+    )
+    .unwrap()
+    .id
+}
+
+#[test]
+fn a_liability_shows_what_is_owed_its_state_a_months_interest_and_when_it_is_paid_off() {
+    let w = world();
+    let flat = flat(&w.conn);
+    let account = get(&w.conn, flat, TODAY).unwrap();
+    let owed = account.liability.clone().unwrap();
+    assert_eq!((owed.owed.as_str(), owed.state, owed.interest_per_month.as_deref()), ("180000.00", LiabilityState::Owing, Some("585.00")));
+    assert_eq!(owed.payoff, Some(Payoff::Months { months: 295, interest_left: 10_006_549, month: "2051-06".into() }), "from the month of today, November 2026");
+    assert_eq!((account.return_per_month, account.interest_rate.as_deref(), account.interest_period, account.installment.as_deref()), (None, Some("3.9"), Some(Period::Yearly), Some("950.00")));
+    // what the page reads
+    assert_eq!(
+        serde_json::to_value(&owed).unwrap(),
+        serde_json::json!({ "owed": "180000.00", "state": "OWING", "interestPerMonth": "585.00", "payoff": { "months": 295, "interestLeft": "100065.49", "month": "2051-06" } })
+    );
+    // an installment below the interest: never, as `{"never":true}`; none without an installment; none for an asset
+    update(&w.conn, flat, &AccountPatch { installment: Some(Some("500.00".into())), ..Default::default() }, TODAY).unwrap();
+    assert_eq!(serde_json::to_value(get(&w.conn, flat, TODAY).unwrap().liability).unwrap()["payoff"], serde_json::json!({ "never": true }));
+    update(&w.conn, flat, &AccountPatch { installment: Some(None), interest_rate: Some(None), ..Default::default() }, TODAY).unwrap();
+    let bare = get(&w.conn, flat, TODAY).unwrap().liability.unwrap();
+    assert_eq!((bare.interest_per_month.clone(), bare.payoff.clone()), (None, None), "no rate and no installment");
+    assert_eq!(serde_json::to_value(&bare).unwrap()["interestPerMonth"], serde_json::Value::Null);
+    assert_eq!(get(&w.conn, MAIN_ID, TODAY).unwrap().liability, None);
+
+    // the state is the sign of the balance: paid off at 0, overpaid above it, and nothing is owed from then on
+    let current = opened(&w.conn, "Current", "400000.00", "2026-01-01");
+    transfer(&w.conn, current, flat, "179999.99", "2026-11-01");
+    let almost = get(&w.conn, flat, TODAY).unwrap().liability.unwrap();
+    assert_eq!((almost.owed.as_str(), almost.state), ("0.01", LiabilityState::Owing));
+    transfer(&w.conn, current, flat, "0.01", "2026-11-02");
+    let paid = get(&w.conn, flat, TODAY).unwrap();
+    assert_eq!((paid.balance.as_str(), paid.liability.as_ref().map(|l| (l.owed.as_str(), l.state))), ("0.00", Some(("0.00", LiabilityState::PaidOff))));
+    transfer(&w.conn, current, flat, "5.00", "2026-11-03");
+    let over = get(&w.conn, flat, TODAY).unwrap();
+    assert_eq!((over.balance.as_str(), over.liability.as_ref().map(|l| (l.owed.as_str(), l.state))), ("5.00", Some(("0.00", LiabilityState::Overpaid))));
+    // a payment dated after today is not in today's balance, so it is not in what is owed
+    transfer(&w.conn, current, flat, "100.00", "2026-12-01");
+    assert_eq!(get(&w.conn, flat, TODAY).unwrap().balance, "5.00");
+}
+
+#[test]
+fn an_asset_with_a_rate_shows_what_it_returns_in_a_month_on_what_it_holds_and_nothing_when_it_holds_nothing() {
+    let w = world();
+    let rated = |name: &str, kind: Kind, opening: &str, rate: &str, period: Period| {
+        create(&w.conn, &NewAccount { kind, opening_balance: Some(opening.into()), opening_date: Some("2026-01-01".into()), interest_rate: Some(rate.into()), interest_period: Some(period), ..new_account(name) }, TODAY).unwrap().id
+    };
+    let shown = |id: i64| get(&w.conn, id, TODAY).unwrap().return_per_month;
+    let savings = rated("Savings", Kind::Savings, "1200.00", "2.5", Period::Yearly);
+    assert_eq!(shown(savings).as_deref(), Some("2.50"), "1200.00 at 2.5 % a year is 2.50 a month");
+    assert_eq!(shown(rated("Monthly", Kind::Cash, "1200.00", "0.5", Period::Monthly)).as_deref(), Some("6.00"));
+    assert_eq!(shown(rated("Zero", Kind::Savings, "1200.00", "0", Period::Yearly)).as_deref(), Some("0.00"), "a rate of 0 is a rate: it returns nothing");
+    assert_eq!(shown(rated("Card", Kind::CreditCard, "-240.00", "20", Period::Yearly)).as_deref(), Some("0.00"), "an account below 0 returns nothing, not a negative number");
+    assert_eq!(shown(opened(&w.conn, "Plain", "1200.00", "2026-01-01")), None, "no rate, no return");
+    assert_eq!(get(&w.conn, savings, TODAY).unwrap().liability, None, "an asset has no debt");
+    // what it holds today: a later payment moves nothing yet
+    on(&w.conn, savings, w.salary, "Pay", "1200.00", "2026-12-01");
+    assert_eq!(shown(savings).as_deref(), Some("2.50"));
+    assert_eq!(serde_json::to_value(get(&w.conn, savings, TODAY).unwrap()).unwrap()["returnPerMonth"], "2.50");
+}
+
+#[test]
+fn a_mortgage_lowers_net_worth_through_debts_and_not_through_in_accounts_and_a_liability_left_out_counts_nowhere() {
+    let w = world();
+    let savings = opened(&w.conn, "Savings", "1000.00", "2026-01-01");
+    let mortgage = create(&w.conn, &NewAccount { kind: Kind::Mortgage, opening_balance: Some("-500.00".into()), opening_date: Some("2026-01-01".into()), ..new_account("Flat") }, TODAY).unwrap().id;
+    let figures = || {
+        let s = summary(&w.conn, TODAY).unwrap();
+        (s.in_accounts, s.debts, s.friends, s.net_worth, s.accounts)
+    };
+    let expect = |in_accounts: &str, debts: &str, net_worth: &str, accounts: u32| (in_accounts.to_string(), debts.to_string(), "0.00".to_string(), net_worth.to_string(), accounts);
+    assert_eq!(figures(), expect("1000.00", "-500.00", "500.00", 3), "the assets are what they hold; the debt is its own figure; net worth is both");
+    assert_eq!(serde_json::to_value(summary(&w.conn, TODAY).unwrap()).unwrap(), serde_json::json!({ "inAccounts": "1000.00", "debts": "-500.00", "friends": "0.00", "netWorth": "500.00", "accounts": 3, "inUse": true }));
+
+    // archived, a liability still counts, as an archived asset does
+    let old = create(&w.conn, &NewAccount { kind: Kind::Credit, opening_balance: Some("-50.00".into()), opening_date: Some("2026-01-01".into()), ..new_account("Old card") }, TODAY).unwrap().id;
+    super::archive(&w.conn, old, TODAY).unwrap();
+    assert_eq!(figures(), expect("1000.00", "-550.00", "450.00", 4));
+    // left out of net worth it counts nowhere: not in debts, not in the net worth; the number of accounts is the number there are
+    count_in_net_worth(&w.conn, mortgage, false);
+    assert_eq!(figures(), expect("1000.00", "-50.00", "950.00", 4));
+    super::restore(&w.conn, old, TODAY).unwrap();
+    count_in_net_worth(&w.conn, old, false);
+    assert_eq!(figures(), expect("1000.00", "0.00", "1000.00", 4), "every liability left out");
+    assert_eq!(get(&w.conn, mortgage, TODAY).unwrap().balance, "-500.00", "the balance itself is what it was");
+    count_in_net_worth(&w.conn, mortgage, true);
+    count_in_net_worth(&w.conn, old, true);
+
+    // a payment moves money from an asset to a debt: net worth does not change, and the two figures move by the same amount the other way
+    transfer(&w.conn, savings, mortgage, "200.00", "2026-11-01");
+    assert_eq!(figures(), expect("800.00", "-350.00", "450.00", 4));
+    // overpaid, a liability's balance is above 0 and counts as it is: +100.00 on the mortgage and -50.00 on the old card
+    transfer(&w.conn, savings, mortgage, "400.00", "2026-11-02");
+    assert_eq!(figures(), expect("400.00", "50.00", "450.00", 4));
+}
+
+#[test]
+fn a_liability_in_another_currency_counts_in_debts_at_the_rate_of_the_account_and_a_foreign_asset_in_the_assets() {
+    let w = world();
+    let loan = create(&w.conn, &NewAccount { kind: Kind::Loan, currency: Some("RON".into()), rate: Some("5.00".into()), opening_balance: Some("-500.00".into()), opening_date: Some("2026-01-01".into()), ..new_account("Lei loan") }, TODAY).unwrap().id;
+    let lei = create(&w.conn, &NewAccount { currency: Some("RON".into()), rate: Some("5.00".into()), opening_balance: Some("250.00".into()), opening_date: Some("2026-01-01".into()), ..new_account("Lei") }, TODAY).unwrap().id;
+    let s = summary(&w.conn, TODAY).unwrap();
+    assert_eq!((s.in_accounts.as_str(), s.debts.as_str(), s.net_worth.as_str()), ("50.00", "-100.00", "-50.00"), "500.00 owed in lei is 100.00, and the 250.00 lei held are 50.00");
+    assert_eq!((get(&w.conn, loan, TODAY).unwrap().liability.unwrap().owed, get(&w.conn, lei, TODAY).unwrap().balance), ("500.00".to_string(), "250.00".to_string()), "each in its own currency");
 }

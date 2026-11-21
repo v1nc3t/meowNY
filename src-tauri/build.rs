@@ -135,6 +135,7 @@ const COMMANDS: &[&str] = &[
     "account_history",
     "account_breakdown",
     "accounts_summary",
+    "accounts_pay",
     "create_transfer",
     "get_transfer",
     "update_transfer",

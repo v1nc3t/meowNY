@@ -550,3 +550,40 @@ fn the_list_is_in_the_persons_order_the_archived_last_and_can_be_cut_to_one_acco
     accounts::update(&w.conn, a, &AccountPatch { name: Some("Renamed".into()), ..Default::default() }, TODAY).unwrap();
     assert_eq!(shown(&w.conn, x).account, "Renamed");
 }
+
+// ---- no stash in a debt (`docs/loans-deposits-design.md`, section 5.2) ---------------------------------------------------------
+
+#[test]
+fn a_stash_is_never_made_in_a_liability_and_never_moved_into_one_even_when_the_money_would_fit() {
+    let w = world();
+    let savings = funded(&w.conn, "Savings", "1000.00");
+    for kind in [accounts::Kind::Credit, accounts::Kind::Loan, accounts::Kind::Mortgage] {
+        // overpaid, so that there is money in it and the delta rule alone would let a stash in: only the kind is in the way
+        let debt = accounts::create(
+            &w.conn,
+            &accounts::NewAccount { kind, opening_balance: Some("500.00".into()), opening_date: Some("2026-01-01".into()), ..new_account(&format!("{kind:?}")) },
+            TODAY,
+        )
+        .unwrap()
+        .id;
+        assert_refused(&w.conn, INVALID, &format!("a stash made in a {kind:?}"), || create(&w.conn, &new_stash(&format!("In {kind:?}"), debt), TODAY));
+        assert_refused(&w.conn, INVALID, &format!("a stash made in a {kind:?} with a target"), || {
+            create(&w.conn, &NewStash { target: Some("100.00".into()), ..new_stash(&format!("Aimed {kind:?}"), debt) }, TODAY)
+        });
+        let holding = stash(&w.conn, &format!("Holds {kind:?}"), savings);
+        put(&w.conn, holding, "100.00");
+        let empty = stash(&w.conn, &format!("Empty {kind:?}"), savings);
+        assert_refused(&w.conn, INVALID, &format!("a stash that holds money moved to a {kind:?}"), || update(&w.conn, holding, &move_to(debt), TODAY));
+        assert_refused(&w.conn, INVALID, &format!("a stash that holds nothing moved to a {kind:?}"), || update(&w.conn, empty, &move_to(debt), TODAY));
+        assert_refused(&w.conn, INVALID, &format!("a move to a {kind:?} in the same patch as a rename"), || {
+            update(&w.conn, empty, &StashPatch { name: Some("Renamed".into()), ..move_to(debt) }, TODAY)
+        });
+    }
+    // what the refusals left: no stash in a debt, and every stash where it was
+    assert_eq!(one(&w.conn, "SELECT count(*) FROM stashes s JOIN accounts a ON a.id = s.account_id WHERE a.kind IN ('CREDIT', 'LOAN', 'MORTGAGE')"), 0);
+    assert_eq!(one(&w.conn, &format!("SELECT count(*) FROM stashes WHERE account_id = {savings}")), 6);
+    // an asset is as it was: a stash is made in it and moved into it
+    let other = funded(&w.conn, "Other", "300.00");
+    let x = stash(&w.conn, "Fine", savings);
+    assert_eq!(update(&w.conn, x, &move_to(other), TODAY).unwrap().account_id, other);
+}

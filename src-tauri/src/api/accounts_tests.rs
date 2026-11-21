@@ -19,9 +19,9 @@ const INVALID: (u16, &str) = (400, "invalid_input");
 const NOT_FOUND: (u16, &str) = (404, "not_found");
 const NAME_EXISTS: (u16, &str) = (409, "name_exists");
 
-const ACCOUNT_KEYS: [&str; 24] = [
-    "archived", "available", "balance", "balanceInMain", "bic", "changeThisMonth", "currency", "entries", "foreign", "free", "group", "id", "includeInNetWorth", "isMain", "kind", "lastActivity", "name", "notes",
-    "number", "openingBalance", "openingDate", "rate", "setAside", "virtualBalance",
+const ACCOUNT_KEYS: [&str; 29] = [
+    "archived", "available", "balance", "balanceInMain", "bic", "changeThisMonth", "currency", "entries", "foreign", "free", "group", "id", "includeInNetWorth", "installment", "interestPeriod", "interestRate",
+    "isMain", "kind", "lastActivity", "liability", "name", "notes", "number", "openingBalance", "openingDate", "rate", "returnPerMonth", "setAside", "virtualBalance",
 ];
 const TRANSFER_KEYS: [&str; 7] = ["amount", "date", "fromAccountId", "id", "note", "toAccountId", "toAmount"];
 
@@ -368,7 +368,7 @@ fn every_account_answer_has_the_fields_of_the_design_note_with_ids_and_money_as_
 
     // net worth
     let summary = ok(&vault, "accounts.summary", json!({}));
-    assert_eq!(keys(&summary), ["accounts", "friends", "inAccounts", "inUse", "netWorth"]);
+    assert_eq!(keys(&summary), ["accounts", "debts", "friends", "inAccounts", "inUse", "netWorth"]);
     assert_eq!((summary["accounts"].as_u64(), summary["inUse"].as_bool()), (Some(6), Some(true)));
     for money in ["friends", "inAccounts", "netWorth"] {
         assert!(is_money(summary[money].as_str().unwrap()), "{money}");
@@ -1432,10 +1432,10 @@ fn the_history_has_a_point_for_each_month_up_to_today() {
 #[test]
 fn the_summary_adds_what_friends_owe_to_what_the_accounts_hold() {
     let (_dir, vault) = fresh();
-    assert_eq!(ok(&vault, "accounts.summary", json!({})), json!({ "accounts": 1, "friends": "0.00", "inAccounts": "0.00", "inUse": false, "netWorth": "0.00" }));
+    assert_eq!(ok(&vault, "accounts.summary", json!({})), json!({ "accounts": 1, "debts": "0.00", "friends": "0.00", "inAccounts": "0.00", "inUse": false, "netWorth": "0.00" }));
     // one account with an opening balance is already in use
     ok(&vault, "accounts.update", json!({ "id": "1", "openingBalance": "5.00", "openingDate": "2026-01-01" }));
-    assert_eq!(ok(&vault, "accounts.summary", json!({})), json!({ "accounts": 1, "friends": "0.00", "inAccounts": "5.00", "inUse": true, "netWorth": "5.00" }));
+    assert_eq!(ok(&vault, "accounts.summary", json!({})), json!({ "accounts": 1, "debts": "0.00", "friends": "0.00", "inAccounts": "5.00", "inUse": true, "netWorth": "5.00" }));
     ok(&vault, "accounts.update", json!({ "id": "1", "openingBalance": "0.00" }));
     assert_eq!(ok(&vault, "accounts.summary", json!({}))["inUse"], false, "and not any more when it is back to nothing");
     // a card in the red, an archived account, and money lent to a friend: it is still yours
@@ -1446,7 +1446,7 @@ fn the_summary_adds_what_friends_owe_to_what_the_accounts_hold() {
     ok(&vault, "ledger.add", json!({ "personId": anna, "kind": "LENT", "amount": "20.00", "date": "2026-10-01" }));
     assert_eq!(
         ok(&vault, "accounts.summary", json!({})),
-        json!({ "accounts": 3, "friends": "20.00", "inAccounts": "-40.00", "inUse": true, "netWorth": "-20.00" }),
+        json!({ "accounts": 3, "debts": "0.00", "friends": "20.00", "inAccounts": "-40.00", "inUse": true, "netWorth": "-20.00" }),
         "-20 left the main account, -50 on the card, +30 in the archived one; the friend owes 20"
     );
 }
