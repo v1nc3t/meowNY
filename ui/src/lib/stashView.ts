@@ -356,15 +356,87 @@ export function targetLine(stash: Pick<Stash, 'target' | 'targetDate'>, money: (
   return parts.filter((part) => part !== null).join(' · ') || '—'
 }
 
+// -- a row of the list (docs/loans-deposits-design.md, section 10) ---------------------------------------------------------------------
+
+/** How a word of a row reads: plain, quiet (nothing to do), good news (reached, matured) or a warning (overdue, broken). */
+export type Tone = 'plain' | 'quiet' | 'good' | 'late'
+
+/** The progress column of a row, and the bar line of a phone row: how full the bar is, whether it is full in the success colour, and the short figure beside it. */
+export type RowMeter = { fill: number; reached: boolean; label: string }
+
+const dayNumber = (isoDate: string): number | null => {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(isoDate)
+  return match ? Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3])) / 86_400_000 : null
+}
+
 /**
- * A row's target for a deposit, in one line: where it stands first, so it shows when the cell is cut short: "running · 12/03/2027" with its maturity while it
- * runs, the state word alone once it has matured, or been booked or broken (section 10), then the target amount when it has one. A goal is `targetLine`. `money` writes an amount in the stash's currency.
+ * The bar of a row. A goal with a target: what is saved of it, and its percent. A deposit that runs: how far through its term it is (start to
+ * maturity), and the days left; one that matured: full, with no figure (its state says it). None for a goal without a target, or a deposit booked or broken.
  */
-export function targetCell(stash: Pick<Stash, 'target' | 'targetDate' | 'deposit'>, money: (amount: string) => string, t: Translate, locale: string): string {
-  if (!stash.deposit) return targetLine(stash, money, locale)
-  const word = t(`stashes.state.${stash.deposit.state}`)
-  const state = stash.deposit.state === 'RUNNING' && stash.targetDate !== null ? `${word} · ${formatDate(stash.targetDate, locale)}` : word
-  return [state, stash.target === null ? null : money(stash.target)].filter((part) => part !== null).join(' · ')
+export function rowMeter(stash: Pick<Stash, 'saved' | 'target' | 'targetDate' | 'deposit'>, t: Translate): RowMeter | null {
+  const deposit = stash.deposit
+  if (deposit) {
+    if (deposit.state === 'MATURED') return { fill: 1, reached: true, label: '' }
+    if (deposit.state !== 'RUNNING') return null
+    const start = dayNumber(deposit.startDate)
+    const end = stash.targetDate === null ? null : dayNumber(stash.targetDate)
+    const term = start === null || end === null ? 0 : end - start
+    const fill = term > 0 ? Math.min(1, Math.max(0, (term - deposit.daysLeft) / term)) : 1
+    return { fill, reached: false, label: t('stashes.daysShort', { days: deposit.daysLeft }) }
+  }
+  if (stash.target === null) return null
+  const shown = progress(stash.saved, stash.target)
+  return { fill: shown.fill, reached: shown.reached, label: t('stashes.percent', { percent: shown.percent ?? 0 }) }
+}
+
+/** What a row says of where a stash stands, with its tone. */
+export type RowStatus = { text: string; tone: Tone }
+
+/**
+ * The status column of a row. A deposit: its state (matured is good news, broken a warning, booked quiet). A goal: reached, overdue, what to save each month
+ * until its date, what is left without a date, or "—" when it has no target. `money` writes an amount in the stash's currency.
+ */
+export function rowStatus(stash: Pick<Stash, 'target' | 'left' | 'reached' | 'overdue' | 'perMonth' | 'deposit'>, money: (amount: string) => string, t: Translate): RowStatus {
+  if (stash.deposit) {
+    const state = stash.deposit.state
+    return { text: t(`stashes.state.${state}`), tone: state === 'MATURED' ? 'good' : state === 'BROKEN' ? 'late' : state === 'BOOKED' ? 'quiet' : 'plain' }
+  }
+  if (stash.target === null) return { text: '—', tone: 'quiet' }
+  if (stash.reached) return { text: t('stashes.reached'), tone: 'good' }
+  if (stash.overdue) return { text: t('stashes.overdueWord'), tone: 'late' }
+  if (stash.perMonth !== null) return { text: t('stashes.monthly', { amount: money(stash.perMonth) }), tone: 'plain' }
+  if (stash.left !== null && minor(stash.left) > 0n) return { text: t('stashes.left', { amount: money(stash.left) }), tone: 'plain' }
+  return { text: '—', tone: 'quiet' }
+}
+
+/** The kinds the list can be narrowed to: '' is all of them. */
+export const KIND_FILTERS = ['', 'GOAL', 'DEPOSIT'] as const
+export type KindFilter = (typeof KIND_FILTERS)[number]
+
+/**
+ * The total row under the table: what the shown stashes hold, and the targets of those that have one. Only for two or more, all in one currency (a sum of
+ * amounts in different currencies means nothing); the total saved over the list is the one in the app's currency.
+ */
+export function listTotal(list: readonly Pick<Stash, 'saved' | 'target' | 'currency'>[]): { saved: string; target: string | null; currency: Stash['currency'] } | null {
+  if (list.length < 2) return null
+  const currency = list[0].currency
+  if (list.some((stash) => stash.currency !== currency)) return null
+  const targets = list.filter((stash) => stash.target !== null)
+  return {
+    saved: fromMinor(list.reduce((sum, stash) => sum + minor(stash.saved), 0n)),
+    target: targets.length === 0 ? null : fromMinor(targets.reduce((sum, stash) => sum + minor(stash.target), 0n)),
+    currency,
+  }
+}
+
+/**
+ * The one word or figure beside the bar of a phone row, which has no status column: a word that matters (reached, overdue, matured, broken) comes before the
+ * figure of the bar; a deposit with no bar says its state (booked); a goal with neither says nothing.
+ */
+export function rowFlag(meter: RowMeter | null, status: RowStatus, deposit: boolean): RowStatus | null {
+  if (status.tone === 'good' || status.tone === 'late') return status
+  if (meter && meter.label !== '') return { text: meter.label, tone: 'plain' }
+  return deposit ? status : null
 }
 
 /** The words of `nextLine`: "750.00 left · 107.15 a month until june 2027", "750.00 left", "reached", "overdue since 30 june 2026" (a warning). */

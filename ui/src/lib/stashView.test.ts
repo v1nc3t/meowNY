@@ -40,7 +40,10 @@ import {
   returnSubmit,
   savedAfter,
   signedAmount,
-  targetCell,
+  listTotal,
+  rowFlag,
+  rowMeter,
+  rowStatus,
   targetLine,
 } from './stashView.ts'
 
@@ -629,14 +632,47 @@ test('the take tab of a deposit that runs holds all that is saved, and the add t
   assert.deepEqual(moneyTab(typed, 'TAKE', '1000.00'), { kind: 'TAKE', amount: '1000.00', date: '2026-11-10', note: 'n', transfer: false, account: '' })
 })
 
-test('the target of a deposit row says where it stands: the maturity while it runs, only the word after', () => {
+test('the bar of a row: a goal fills to its target, a deposit that runs through its term, one that matured is full', () => {
+  const say = (key: string, vars?: Record<string, string | number>) => (vars ? `${key} ${Object.values(vars).join(' ')}` : key)
+  assert.deepEqual(rowMeter(stash({ saved: '300.00' }), say as never), { fill: 0.25, reached: false, label: 'stashes.percent 25' })
+  assert.deepEqual(rowMeter(stash({ saved: '1200.00' }), say as never), { fill: 1, reached: true, label: 'stashes.percent 100' })
+  assert.deepEqual(rowMeter(stash({ saved: '-5.00' }), say as never), { fill: 0, reached: false, label: 'stashes.percent 0' }, 'below 0 is empty')
+  assert.equal(rowMeter(stash({ target: null }), say as never), null, 'no target, no bar')
+  // a term of 365 days, from 12/03/2026 to 12/03/2027, with 114 days left: 251 of 365 have gone by
+  const running = rowMeter(term('RUNNING'), say as never)
+  assert.equal(running?.label, 'stashes.daysShort 114')
+  assert.ok(running && Math.abs(running.fill - 251 / 365) < 1e-9)
+  assert.equal(rowMeter(term('RUNNING', { deposit: { ...info, daysLeft: 400 } }), say as never)?.fill, 0, 'never below empty')
+  assert.equal(rowMeter(term('RUNNING', { targetDate: '2026-03-12' }), say as never)?.fill, 1, 'a term of no days is full')
+  assert.deepEqual(rowMeter(term('MATURED'), say as never), { fill: 1, reached: true, label: '' })
+  assert.equal(rowMeter(term('BOOKED'), say as never), null)
+  assert.equal(rowMeter(term('BROKEN'), say as never), null)
+})
+
+test('the status of a row: the state of a deposit, and for a goal reached, overdue, its monthly amount or what is left', () => {
   const plain = (amount: string) => amount
-  const words = (key: string) => key
-  assert.equal(targetCell(term('RUNNING'), plain, words as never, 'en-GB'), 'stashes.state.RUNNING · 12/03/2027')
-  assert.equal(targetCell(term('RUNNING', { target: '1500.00' }), plain, words as never, 'en-GB'), 'stashes.state.RUNNING · 12/03/2027 · 1500.00', 'with a target amount')
-  for (const state of ['MATURED', 'BOOKED', 'BROKEN'] as const) assert.equal(targetCell(term(state), plain, words as never, 'en-GB'), `stashes.state.${state}`, state)
-  assert.equal(targetCell(term('MATURED', { target: '1500.00' }), plain, words as never, 'en-GB'), 'stashes.state.MATURED · 1500.00')
-  assert.equal(targetCell(stash(), plain, words as never, 'en-GB'), '1200.00 · 30/06/2027', 'a goal is the line it was')
+  const say = (key: string, vars?: Record<string, string | number>) => (vars ? `${key} ${Object.values(vars).join(' ')}` : key)
+  assert.deepEqual(rowStatus(stash({ perMonth: '107.15' }), plain, say as never), { text: 'stashes.monthly 107.15', tone: 'plain' })
+  assert.deepEqual(rowStatus(stash({ perMonth: null, left: '750.00' }), plain, say as never), { text: 'stashes.left 750.00', tone: 'plain' })
+  assert.deepEqual(rowStatus(stash({ reached: true, perMonth: null }), plain, say as never), { text: 'stashes.reached', tone: 'good' })
+  assert.deepEqual(rowStatus(stash({ overdue: true, perMonth: null }), plain, say as never), { text: 'stashes.overdueWord', tone: 'late' })
+  assert.deepEqual(rowStatus(stash({ target: null }), plain, say as never), { text: '—', tone: 'quiet' })
+  const tones = STATES.map((state) => rowStatus(term(state), plain, say as never))
+  assert.deepEqual(tones, [
+    { text: 'stashes.state.RUNNING', tone: 'plain' },
+    { text: 'stashes.state.MATURED', tone: 'good' },
+    { text: 'stashes.state.BOOKED', tone: 'quiet' },
+    { text: 'stashes.state.BROKEN', tone: 'late' },
+  ])
+})
+
+test('the word by the bar of a phone row: a word that matters before the figure, the state of a deposit with no bar, nothing for a goal with neither', () => {
+  const meter = { fill: 0.5, reached: false, label: '50%' }
+  assert.deepEqual(rowFlag(meter, { text: 'overdue', tone: 'late' }, false), { text: 'overdue', tone: 'late' })
+  assert.deepEqual(rowFlag(meter, { text: 'a month', tone: 'plain' }, false), { text: '50%', tone: 'plain' })
+  assert.deepEqual(rowFlag({ fill: 1, reached: true, label: '' }, { text: 'matured', tone: 'good' }, true), { text: 'matured', tone: 'good' })
+  assert.deepEqual(rowFlag(null, { text: 'booked', tone: 'quiet' }, true), { text: 'booked', tone: 'quiet' })
+  assert.equal(rowFlag(null, { text: '—', tone: 'quiet' }, false), null)
 })
 
 test('the return opens with what the deposit expects, nothing when that is nothing, and the last category while it is an income one', () => {
@@ -683,4 +719,16 @@ test('a return is sent with what was typed, a trimmed note only when there is on
   assert.deepEqual(returnSubmit('EDITING', { targetDate: '2027-03-12' }, { ...fields, category: '' }, today), { do: 'refuse', error: 'tx.chooseCategory' })
   assert.deepEqual(returnSubmit('EDITING', { targetDate: '2027-03-12' }, { ...fields, date: '2027-03-01' }, today), { do: 'refuse', error: 'stashes.returnDateError' })
   assert.deepEqual(returnSubmit('EDITING', { targetDate: '2027-03-12' }, { ...fields, note: 'x'.repeat(201) }, today), { do: 'refuse', error: 'stashes.noteError' })
+})
+
+test('the total row adds up what two or more stashes of one currency hold, and the targets of those that have one', () => {
+  assert.deepEqual(listTotal([stash({ saved: '410.00' }), stash({ saved: '-10.50', target: null }), stash({ saved: '0.01', target: '99.99' })]), {
+    saved: '399.51',
+    target: '1299.99',
+    currency: 'EUR',
+  })
+  assert.deepEqual(listTotal([stash({ target: null }), stash({ target: null })]), { saved: '900.00', target: null, currency: 'EUR' }, 'no targets: none')
+  assert.equal(listTotal([stash()]), null, 'one stash is its own total')
+  assert.equal(listTotal([]), null)
+  assert.equal(listTotal([stash(), stash({ currency: 'USD' })]), null, 'amounts in two currencies are not added')
 })

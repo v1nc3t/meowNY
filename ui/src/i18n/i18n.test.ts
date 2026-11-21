@@ -50,6 +50,8 @@ const SAME_AS_ENGLISH = new Set([
   'de stashes.percent', 'es stashes.percent', 'it stashes.percent', 'pt stashes.percent', 'ro stashes.percent',
   'de stashes.noteCount', 'es stashes.noteCount', 'fr stashes.noteCount', 'it stashes.noteCount', 'pt stashes.noteCount', 'ro stashes.noteCount',
   'fr stashes.notes',
+  // the columns of the list: "date" is French as well, and "d" is the short day in Spanish and Portuguese too
+  'fr stashes.dateHead', 'es stashes.daysShort', 'pt stashes.daysShort',
   // "3.9 % per year": the rate and its words are placeholders (docs/loans-deposits-design.md, section 11)
   'de accounts.rateShown', 'es accounts.rateShown', 'fr accounts.rateShown', 'it accounts.rateShown', 'pt accounts.rateShown', 'ro accounts.rateShown',
 ])
