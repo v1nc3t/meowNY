@@ -684,25 +684,27 @@ ul.card-list.hist-list > li.card-item {
   }
 }
 
-/* Recurring: name, amount, next due date, category, how often, ongoing / paused / ended, an icon if it is shared, then mark as paid, edit,
-   delete and the chevron. Eight columns are a lot for a list, so the padding is a little narrower and the columns are as wide as their
-   words: an amount of 16 characters, a date of 13, "how often" of 11 on a line (a longer one takes a second line, "toutes les 12 /
-   semaines"), the state of 10 ("terminado", in 9.5ch of small print) and the icon. The buttons are 19rem: "als bezahlt markieren"
-   (21 characters of 0.875rem), the padding, the edit, delete and chevron buttons. All that leaves a name of 7rem and a category of 4rem
-   at 72em, where the wide layout starts (a window of about 1540px, or 1380px with the sidebar closed); the name is longer than that
-   when there is more room, and one that is longer than its room wraps. Narrower, a row is two lines (below), and the category, how
-   often, the state and the icon are one line of small print (the wrapper is the cell) under the name. */
+/* Recurring: a ledger of one column for each thing: the name (and its documents), the category, how often, the next due date, where it stands, the
+   amount, an icon if it is shared, then four icon buttons (mark as paid or resume, edit, delete, the chevron). Each cell has its place by name, so a
+   narrower list stacks the category under the name and how often under the date, and the narrowest is three lines; the head names only the columns
+   there are. The widths: how often of 11 characters on a line ("toutes les 12 semaines" takes two), a date of 10, the state of 10 ("terminado"), an
+   amount of 12 ("+€3,200.00"). --act is the room of the buttons: four of --control-sm. */
 .card-list.rec-table {
-  --cols: minmax(0, 1.8fr) 16ch 12ch minmax(0, 1fr) 11ch 9.5ch 1.5rem calc(18.5ch + 8rem);
+  --act: calc(4 * var(--control-sm) + 0.375rem);
 }
 
-ul.card-list.rec-table > li.card-item,
-ul.card-list.rec-table > li.list-head {
-  column-gap: 1.25rem;
+ul.card-list.rec-table > :is(li.card-item, li.list-head) {
+  grid-template-columns: minmax(8rem, 1.6fr) minmax(6rem, 1fr) 11ch 10ch 10ch 12ch 1.5rem var(--act);
+  column-gap: 1rem;
   padding-inline: 1rem;
 }
 
-.rec-table .cell-name {
+ul.card-list.rec-table > li.card-item {
+  grid-template-areas: 'name cat often next state amount mark actions';
+}
+
+ul.card-list.rec-table .cell-name {
+  grid-area: name;
   flex-wrap: wrap;
   row-gap: 0.125rem;
 }
@@ -712,43 +714,82 @@ ul.card-list.rec-table > li.list-head {
   overflow-wrap: anywhere;
 }
 
-.rec-table .row-primary {
-  padding-inline: 0.5rem;
+ul.card-list.rec-table .rec-cat {
+  grid-area: cat;
 }
 
-/* The same room for the buttons in every row (an item that is paused or ended has no "mark as paid"), so the amounts line up when the
-   head is gone. */
-ul.card-list.rec-table .cell-actions {
-  min-width: calc(18.5ch + 8rem);
-}
-
-.rec-table .rec-sub {
-  display: contents;
-}
-
-/* "How often" may take two lines in its column, and what is under the date ("overdue", "due today") too. */
-.rec-table .rec-often,
-.rec-table .cell-fine {
+ul.card-list.rec-table .rec-often {
+  grid-area: often;
   white-space: normal;
 }
 
-/* Overdue is red, the date and the word under it. */
-.rec-table .cell-sub-end.is-overdue,
-.rec-table .cell-sub-end.is-overdue .cell-fine {
-  color: var(--destructive);
+ul.card-list.rec-table .rec-next {
+  grid-area: next;
+  font-variant-numeric: tabular-nums;
 }
 
-/* The icon of a shared item is in the middle of its column. */
-.rec-table .cell-mark {
+ul.card-list.rec-table .rec-state {
+  grid-area: state;
+}
+
+ul.card-list.rec-table .cell-amount {
+  grid-area: amount;
+}
+
+ul.card-list.rec-table .cell-mark {
+  grid-area: mark;
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
-/* Under 72em a row is two lines: the name, the amount and the buttons, then the date and one line of small print on the left: the
-   category, how often, the state and the icon. The category gives way (it is the person's own word), the others keep their line, a second
-   one only when the cell is narrower than the words; and when they do not all fit they go on to another line. */
-@container (max-width: 72em) {
+ul.card-list.rec-table .cell-actions {
+  grid-area: actions;
+}
+
+/* Overdue is red, the date and the word; due today is plain and bold, something to do now; ongoing, paused and ended are quiet. */
+.rec-table .rec-next.is-overdue,
+.rec-table .rec-state.is-overdue {
+  color: var(--destructive);
+}
+
+.rec-table .rec-state.is-today {
+  font-weight: 600;
+  color: var(--foreground);
+}
+
+/* Mark as paid is the one thing to do in a row: it is green on hover, as its answer is. */
+@media (hover: hover) {
+  .rec-table .rec-pay:hover:not(:disabled) {
+    color: var(--success);
+  }
+}
+
+/* Less room (under about 1000px): the category under the name and how often under the date; two lines a row. */
+@container (max-width: 62em) {
+  ul.card-list.rec-table > :is(li.card-item, li.list-head) {
+    grid-template-columns: minmax(8rem, 1fr) 11ch 10ch 12ch 1.5rem var(--act);
+  }
+
+  ul.card-list.rec-table > li.card-item {
+    grid-template-areas:
+      'name next state amount mark actions'
+      'cat often state amount mark actions';
+    row-gap: 0;
+  }
+
+  ul.card-list.rec-table > li.list-head > :is(.head-cat, .head-often) {
+    display: none;
+  }
+
+  ul.card-list.rec-table :is(.rec-cat, .rec-often) {
+    font-size: 0.8125rem;
+  }
+}
+
+/* Little room (a narrow window): no head, three lines: the name and the amount, the category and the date, how often and where it stands; the
+   buttons beside them all. */
+@container (max-width: 40em) {
   ul.card-list.rec-table > li.list-head {
     display: none;
   }
@@ -758,71 +799,43 @@ ul.card-list.rec-table .cell-actions {
   }
 
   ul.card-list.rec-table > li.card-item {
-    grid-template-columns: minmax(0, 1fr) auto auto;
+    grid-template-columns: minmax(0, 1fr) auto var(--act);
     grid-template-areas:
       'name amount actions'
-      'sub sub-end actions';
-    row-gap: 0;
+      'cat next actions'
+      'often state actions';
+    row-gap: 0.125rem;
+    padding-block: 0.5rem;
   }
 
-  ul.card-list.rec-table .cell-name {
-    grid-area: name;
-  }
-
-  ul.card-list.rec-table .cell-amount {
-    grid-area: amount;
-  }
-
-  ul.card-list.rec-table .cell-sub-end {
-    grid-area: sub-end;
+  ul.card-list.rec-table :is(.rec-next, .rec-state) {
     text-align: right;
   }
 
-  ul.card-list.rec-table .cell-actions {
-    grid-area: actions;
-  }
-
-  ul.card-list.rec-table .rec-sub {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    grid-area: sub;
-    gap: 0.125rem 1rem;
-    min-width: 0;
-  }
-
-  ul.card-list.rec-table .rec-sub > .cell-sub:first-child {
-    flex: 1 1 0;
-    min-width: 4rem;
-  }
-
-  ul.card-list.rec-table .rec-sub > :not(:first-child) {
-    flex: none;
-    max-width: 100%;
-  }
-
-  ul.card-list.rec-table .rec-sub > .cell-mark:empty {
+  ul.card-list.rec-table .cell-mark {
     display: none;
   }
 }
 
-/* Under 34em the buttons of a row (mark as paid, edit, delete, the chevron) no longer fit beside the name and the amount: they take a line of their
-   own under the date and the small print. */
-@container (max-width: 34em) {
-  ul.card-list.rec-table > li.card-item {
-    grid-template-columns: minmax(0, 1fr) auto;
-    grid-template-areas:
-      'name amount'
-      'sub sub-end'
-      'actions actions';
-  }
+/* The phone: the amount and, under it, when it is next due (red when overdue, quiet when paused or ended), so the right of a row reads as one column. */
+.rec-phone-figures {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  align-self: start;
+  gap: 0.125rem;
+}
 
-  ul.card-list.rec-table .cell-actions {
-    min-width: 0;
-    flex-wrap: wrap;
-    justify-content: flex-start;
-    padding-top: 0.25rem;
-  }
+/* (the red of an overdue one is the due lists' own; its size is this one) */
+.row-toggle .rec-phone-figures > .rec-phone-when {
+  font-size: 0.75rem;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted-foreground);
+}
+
+.rec-phone-when.is-quiet {
+  opacity: 0.8;
 }
 
 /* The payments paid late, under the due ones: name, the day it fell due, the day it was paid, the amount (15 characters, with no sign). */
