@@ -59,6 +59,12 @@
   --grip-room: calc(12px + 0.5rem);
 }
 
+/* A deposit that matured has a "return" button where the + would be, a word wide (the longest, "rendimiento", has 11 characters): the last column
+   makes room for it in every row, and the - stays in line. */
+.card-list.stash-list.has-return {
+  --cols: minmax(8rem, 1.4fr) minmax(6rem, 1fr) 16ch minmax(20ch, 1.2fr) calc(11ch + 4.25rem);
+}
+
 ul.card-list.stash-list > li.card-item {
   cursor: pointer;
   user-select: none;
@@ -110,6 +116,10 @@ ul.card-list.stash-list.can-reorder > li.list-head > :first-child {
   padding: 0;
   font-size: 1.125rem;
   line-height: 1;
+}
+
+.stash-return {
+  flex: none;
 }
 
 /* The archived ones: restore (the longest, "wiederherstellen", has 16 characters of 0.875rem and its padding) and the place of delete. */
@@ -194,6 +204,10 @@ html.is-phone .stash-steps > :is(.stash-step, .icon-slot) {
   width: 2.75rem;
   min-width: 2.75rem;
   height: 2.75rem;
+}
+
+html.is-phone .stash-steps > .stash-return {
+  min-height: 2.75rem;
 }
 
 /* The name is a link on the phone, and plain text beside the amount: no line under it. */

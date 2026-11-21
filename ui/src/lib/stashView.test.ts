@@ -1,19 +1,24 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import type { Account } from '../api/accounts.ts'
-import type { Entry, Stash } from '../api/stashes.ts'
+import type { Deposit, Entry, Stash } from '../api/stashes.ts'
 import {
   activeStashes,
   archivedStashes,
   canAdd,
+  canBookReturn,
+  canClose,
   canTake,
   checkEntry,
+  checkRemoval,
   chips,
   dayWords,
   deltaCheck,
+  depositRule,
   figures,
   fitsIn,
   homeAccounts,
+  isBreak,
   kindForKey,
   monthWords,
   moneyOfEntry,
@@ -29,8 +34,13 @@ import {
   previewBar,
   progress,
   reachedNow,
+  returnDate,
+  returnStart,
+  returnStop,
+  returnSubmit,
   savedAfter,
   signedAmount,
+  targetCell,
   targetLine,
 } from './stashView.ts'
 
@@ -221,6 +231,8 @@ const stash = (more: Partial<Stash> = {}): Stash => ({
   currency: 'EUR',
   archived: false,
   accountArchived: false,
+  kind: 'GOAL',
+  deposit: null,
   target: '1200.00',
   targetDate: '2027-06-30',
   notes: null,
@@ -517,4 +529,158 @@ test('the target of a row in one line: the amount and the date, each alone when 
   assert.equal(targetLine({ target: '1200.00', targetDate: null }, plain, 'en-GB'), '1200.00')
   assert.equal(targetLine({ target: null, targetDate: '2027-06-30' }, plain, 'en-GB'), '30/06/2027')
   assert.equal(targetLine({ target: null, targetDate: null }, plain, 'en-GB'), '—')
+})
+
+// -- deposits (docs/loans-deposits-design.md, sections 5.3 and 5.5) ---------------------------------------------------------------------------------
+
+const STATES = ['RUNNING', 'MATURED', 'BOOKED', 'BROKEN'] as const
+const info: Deposit = { interestRate: '3.1', interestPeriod: 'YEARLY', startDate: '2026-03-12', brokenOn: null, returnedOn: null, state: 'RUNNING', expectedReturn: '31.00', valueAtMaturity: '1031.00', daysLeft: 114 }
+const term = (state: Deposit['state'] = 'RUNNING', more: Partial<Stash> = {}): Stash =>
+  stash({ kind: 'DEPOSIT', deposit: { ...info, state }, target: null, targetDate: '2027-03-12', left: null, percent: null, perMonth: null, saved: '1000.00', ...more })
+
+test('money goes into a deposit only while it runs, and never into one that is archived or whose account is', () => {
+  assert.deepEqual(STATES.map((state) => canAdd(term(state))), [true, false, false, false])
+  assert.equal(canAdd(term('RUNNING', { archived: true })), false)
+  assert.equal(canAdd(term('RUNNING', { accountArchived: true })), false)
+})
+
+test('money comes out of a deposit in every state while it holds something, and the take of one that runs is a break', () => {
+  assert.deepEqual(STATES.map((state) => canTake(term(state))), [true, true, true, true])
+  assert.deepEqual(STATES.map((state) => canTake(term(state, { saved: '0.00' }))), [false, false, false, false], 'nothing in it')
+  assert.deepEqual(STATES.map((state) => isBreak(term(state))), [true, false, false, false])
+  assert.equal(isBreak(stash()), false, 'a goal has nothing to break')
+  assert.equal(isBreak(term('RUNNING', { archived: true })), true, 'an archived deposit that runs is broken by emptying it as well')
+})
+
+test('the return is booked for a deposit that matured, is not archived and has an account that is not', () => {
+  assert.deepEqual(STATES.map((state) => canBookReturn(term(state))), [false, true, false, false])
+  assert.equal(canBookReturn(term('MATURED', { archived: true })), false)
+  assert.equal(canBookReturn(term('MATURED', { accountArchived: true })), false)
+  assert.equal(canBookReturn(stash()), false)
+  assert.equal(canBookReturn(term('MATURED', { saved: '0.00' })), true, 'the return is its own money in: it needs nothing in it')
+})
+
+test('a deposit that is booked or broken and empty is offered a close; nothing else is', () => {
+  assert.deepEqual(STATES.map((state) => canClose(term(state, { saved: '0.00' }))), [false, false, true, true])
+  assert.deepEqual(STATES.map((state) => canClose(term(state))), [false, false, false, false], 'still holds money')
+  assert.equal(canClose(term('BROKEN', { saved: '0.00', archived: true })), false, 'already closed')
+  assert.equal(canClose(stash({ saved: '0.00' })), false, 'a goal')
+})
+
+test('a deposit lets money in only while it runs, takes in every state, and does not let an entry be changed once broken', () => {
+  const ok = { ok: true }
+  // new entries: an add needs it to run; a take is the break while it runs and is fine in the others
+  assert.deepEqual([depositRule('RUNNING', 1n, false), depositRule('MATURED', 1n, false), depositRule('BOOKED', 1n, false), depositRule('BROKEN', 1n, false)], [ok, { ok: false, reason: 'notRunning' }, { ok: false, reason: 'notRunning' }, { ok: false, reason: 'notRunning' }])
+  assert.deepEqual(STATES.map((state) => depositRule(state, -1n, false)), [ok, ok, ok, ok])
+  // an edit or a delete: not out of one that runs, not in to one that matured, nothing at all when broken
+  assert.deepEqual(STATES.map((state) => depositRule(state, -1n, true)), [{ ok: false, reason: 'running' }, ok, ok, { ok: false, reason: 'broken' }])
+  assert.deepEqual(STATES.map((state) => depositRule(state, 1n, true)), [ok, { ok: false, reason: 'notRunning' }, { ok: false, reason: 'notRunning' }, { ok: false, reason: 'broken' }])
+  // no change, or a goal: always fine, a note of a broken deposit included
+  assert.deepEqual(STATES.map((state) => depositRule(state, 0n, true)), [ok, ok, ok, ok])
+  assert.deepEqual([depositRule(null, 5n, true), depositRule(null, -5n, true)], [ok, ok])
+})
+
+test('the money dialog asks the deposit before the delta rule, for an entry being changed too', () => {
+  const base = { kind: 'ADD', saved: '1000.00', free: '5000.00', target: null } as const
+  assert.deepEqual(checkEntry({ ...base, amount: '10.00', deposit: 'RUNNING' }), OK)
+  assert.deepEqual(checkEntry({ ...base, amount: '10.00', deposit: 'MATURED' }), { ok: false, reason: 'notRunning' })
+  assert.deepEqual(checkEntry({ ...base, amount: '10.00', deposit: 'MATURED', closed: true }), { ok: false, reason: 'closed' }, 'the dialog says it is closed first')
+  // an add of 100 made smaller: money out of a deposit that runs is refused, of one that matured it is fine
+  assert.deepEqual(checkEntry({ ...base, amount: '60.00', old: '100.00', deposit: 'RUNNING' }), { ok: false, reason: 'running' })
+  assert.deepEqual(checkEntry({ ...base, amount: '60.00', old: '100.00', deposit: 'MATURED' }), OK)
+  // a take of 100 made bigger takes more out; made smaller puts money back, which only a deposit that runs allows
+  assert.deepEqual(checkEntry({ ...base, kind: 'TAKE', amount: '150.00', old: '100.00', deposit: 'RUNNING' }), { ok: false, reason: 'running' })
+  assert.deepEqual(checkEntry({ ...base, kind: 'TAKE', amount: '50.00', old: '100.00', deposit: 'MATURED' }), { ok: false, reason: 'notRunning' })
+  // a broken deposit: the same amount (its note changes) is fine, another is refused
+  assert.deepEqual(checkEntry({ ...base, amount: '100.00', old: '100.00', deposit: 'BROKEN' }), OK)
+  assert.deepEqual(checkEntry({ ...base, amount: '99.99', old: '100.00', deposit: 'BROKEN' }), { ok: false, reason: 'broken' })
+  // the delta rule still follows: a deposit that runs still cannot take in more than the account has free
+  assert.deepEqual(checkEntry({ ...base, amount: '5000.01', deposit: 'RUNNING' }), { ok: false, reason: 'overFree', free: '5000.00' })
+  assert.deepEqual(checkEntry({ ...base, amount: '10.00', deposit: null }), OK, 'a goal')
+})
+
+test('the break takes all that is saved: it is allowed, and one cent more is not', () => {
+  const base = { kind: 'TAKE', saved: '1000.00', free: '0.00', target: null, deposit: 'RUNNING' } as const
+  assert.deepEqual(checkEntry({ ...base, amount: '1000.00' }), OK)
+  assert.deepEqual(checkEntry({ ...base, amount: '1000.01' }), { ok: false, reason: 'overSaved', saved: '1000.00' })
+})
+
+test('deleting an entry of a deposit follows its state: an add stays while it runs, a take stays once it matured, nothing goes when broken', () => {
+  const add = { kind: 'ADD', amount: '100.00' } as const
+  const take = { kind: 'TAKE', amount: '40.00' } as const
+  assert.deepEqual(checkRemoval(term('RUNNING'), add), { ok: false, reason: 'running' })
+  assert.deepEqual(checkRemoval(term('RUNNING', { free: '0.00' }), take), { ok: false, reason: 'overFree', free: '0.00' }, 'the take put money back in: the delta rule asks for room')
+  assert.deepEqual(checkRemoval(term('MATURED'), add), OK)
+  assert.deepEqual(checkRemoval(term('MATURED'), take), { ok: false, reason: 'notRunning' })
+  assert.deepEqual(checkRemoval(term('BOOKED'), take), { ok: false, reason: 'notRunning' })
+  assert.deepEqual(checkRemoval(term('BROKEN'), add), { ok: false, reason: 'broken' })
+  assert.deepEqual(checkRemoval(term('BROKEN'), take), { ok: false, reason: 'broken' })
+  assert.deepEqual(checkRemoval(stash(), add), OK, 'a goal: the delta rule only')
+  assert.deepEqual(checkRemoval(stash({ saved: '50.00' }), add), { ok: false, reason: 'overSaved', saved: '50.00' })
+})
+
+test('the take tab of a deposit that runs holds all that is saved, and the add tab gives it back empty', () => {
+  const typed = { kind: 'ADD', amount: '12,5', date: '2026-11-10', note: 'n', transfer: true, account: '1' } as const
+  assert.equal(moneyTab(typed, 'TAKE', '1000.00').amount, '1000.00')
+  const broken = moneyTab(typed, 'TAKE', '1000.00')
+  assert.equal(moneyTab(broken, 'ADD', '1000.00').amount, '', 'not left in the add tab')
+  assert.deepEqual(moneyTab(broken, 'TAKE', '1000.00'), broken, 'the same tab changes nothing')
+  assert.equal(moneyTab(typed, 'TAKE').amount, '12,5', 'a goal keeps what was typed')
+  assert.deepEqual(moneyTab(typed, 'TAKE', '1000.00'), { kind: 'TAKE', amount: '1000.00', date: '2026-11-10', note: 'n', transfer: false, account: '' })
+})
+
+test('the target of a deposit row says where it stands: the maturity while it runs, only the word after', () => {
+  const plain = (amount: string) => amount
+  const words = (key: string) => key
+  assert.equal(targetCell(term('RUNNING'), plain, words as never, 'en-GB'), 'stashes.state.RUNNING · 12/03/2027')
+  assert.equal(targetCell(term('RUNNING', { target: '1500.00' }), plain, words as never, 'en-GB'), 'stashes.state.RUNNING · 12/03/2027 · 1500.00', 'with a target amount')
+  for (const state of ['MATURED', 'BOOKED', 'BROKEN'] as const) assert.equal(targetCell(term(state), plain, words as never, 'en-GB'), `stashes.state.${state}`, state)
+  assert.equal(targetCell(term('MATURED', { target: '1500.00' }), plain, words as never, 'en-GB'), 'stashes.state.MATURED · 1500.00')
+  assert.equal(targetCell(stash(), plain, words as never, 'en-GB'), '1200.00 · 30/06/2027', 'a goal is the line it was')
+})
+
+test('the return opens with what the deposit expects, nothing when that is nothing, and the last category while it is an income one', () => {
+  const categories = [{ id: '9', type: 'INCOME' }, { id: '4', type: 'EXPENSE' }] as const
+  assert.deepEqual(returnStart(term('MATURED'), categories, '9', TODAY), { amount: '31.00', category: '9', date: TODAY, note: '' })
+  assert.equal(returnStart(term('MATURED'), categories, '4', TODAY).category, '', 'an expense category is not one for an income')
+  assert.equal(returnStart(term('MATURED'), categories, '77', TODAY).category, '', 'one that is gone')
+  assert.equal(returnStart(term('MATURED'), categories, '', TODAY).category, '')
+  assert.equal(returnStart(term('MATURED', { deposit: { ...info, state: 'MATURED', expectedReturn: '0.00' } }), categories, '9', TODAY).amount, '', 'a return of nothing is typed')
+})
+
+test('the date of a return is held between the maturity and today', () => {
+  assert.equal(returnDate('2027-03-20', '2027-03-12', '2027-03-25'), '2027-03-20')
+  assert.equal(returnDate('2027-03-12', '2027-03-12', '2027-03-25'), '2027-03-12', 'the maturity itself')
+  assert.equal(returnDate('2027-03-11', '2027-03-12', '2027-03-25'), '2027-03-12')
+  assert.equal(returnDate('2027-03-26', '2027-03-12', '2027-03-25'), '2027-03-25')
+  assert.equal(returnDate('2027-03-25', '2027-03-25', '2027-03-25'), '2027-03-25', 'matured today')
+})
+
+test('a return is stopped by its amount, category, date or note, in that order', () => {
+  const fields = { amount: '31.00', category: '9', date: '2027-03-20', note: '' }
+  const today = '2027-03-25'
+  assert.equal(returnStop(fields, '2027-03-12', today), null)
+  assert.equal(returnStop({ ...fields, amount: '' }, '2027-03-12', today), 'amount')
+  assert.equal(returnStop({ ...fields, amount: '0.00' }, '2027-03-12', today), 'amount')
+  assert.equal(returnStop({ ...fields, amount: '1.234' }, '2027-03-12', today), 'amount')
+  assert.equal(returnStop({ ...fields, amount: '', category: '' }, '2027-03-12', today), 'amount', 'the first that is wrong')
+  assert.equal(returnStop({ ...fields, category: '' }, '2027-03-12', today), 'category')
+  assert.equal(returnStop({ ...fields, date: '2027-03-26' }, '2027-03-12', today), 'date', 'after today')
+  assert.equal(returnStop({ ...fields, date: '2027-03-11' }, '2027-03-12', today), 'date', 'before the maturity')
+  assert.equal(returnStop({ ...fields, date: '2027-03-12' }, '2027-03-12', today), null)
+  assert.equal(returnStop({ ...fields, note: 'x'.repeat(201) }, '2027-03-12', today), 'note')
+  assert.equal(returnStop({ ...fields, note: ' ' + 'x'.repeat(200) + ' ' }, '2027-03-12', today), null, 'the spaces around the note are not counted')
+})
+
+test('a return is sent with what was typed, a trimmed note only when there is one, and refused or ignored as the other dialogs do', () => {
+  const fields = { amount: '31,5', category: '9', date: '2027-03-20', note: '  interest  ' }
+  const today = '2027-03-25'
+  assert.deepEqual(returnSubmit('EDITING', { targetDate: '2027-03-12' }, fields, today), { do: 'send', request: { amount: '31.50', categoryId: '9', date: '2027-03-20', note: 'interest' } })
+  assert.deepEqual(returnSubmit('EDITING', { targetDate: '2027-03-12' }, { ...fields, note: ' ' }, today), { do: 'send', request: { amount: '31.50', categoryId: '9', date: '2027-03-20' } })
+  assert.deepEqual(returnSubmit('SAVING', { targetDate: '2027-03-12' }, fields, today), { do: 'ignore' }, 'a second submit while saving')
+  assert.deepEqual(returnSubmit('CLOSED', { targetDate: '2027-03-12' }, fields, today), { do: 'ignore' })
+  assert.deepEqual(returnSubmit('EDITING', { targetDate: '2027-03-12' }, { ...fields, amount: 'x' }, today), { do: 'refuse', error: 'tx.errorAmount' })
+  assert.deepEqual(returnSubmit('EDITING', { targetDate: '2027-03-12' }, { ...fields, category: '' }, today), { do: 'refuse', error: 'tx.chooseCategory' })
+  assert.deepEqual(returnSubmit('EDITING', { targetDate: '2027-03-12' }, { ...fields, date: '2027-03-01' }, today), { do: 'refuse', error: 'stashes.returnDateError' })
+  assert.deepEqual(returnSubmit('EDITING', { targetDate: '2027-03-12' }, { ...fields, note: 'x'.repeat(201) }, today), { do: 'refuse', error: 'stashes.noteError' })
 })

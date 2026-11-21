@@ -3,7 +3,7 @@ import { test } from 'node:test'
 import { Account } from './accounts.ts'
 import { Preview } from './dataExport.ts'
 import { Conflict } from './sync.ts'
-import { Detail, Entry, HistoryPoint, Stash, Summary } from './stashes.ts'
+import { Deposit, Detail, Entry, HistoryPoint, Stash, Summary } from './stashes.ts'
 
 // The shapes of docs/stash-design.md, section 6.1, as the app sends them.
 const stash = {
@@ -14,6 +14,8 @@ const stash = {
   currency: 'EUR',
   archived: false,
   accountArchived: false,
+  kind: 'GOAL',
+  deposit: null,
   target: '1200.00',
   targetDate: '2027-06-30',
   notes: 'Flights in March.\nHotel later.',
@@ -49,6 +51,53 @@ test('a stash as the app sends it is accepted, with and without a target', () =>
   assert.ok(ok(Stash, { ...stash, archived: true, accountArchived: true }))
   assert.ok(ok(Stash, { ...stash, currency: 'RON' }), 'a stash of an account in lei')
   assert.ok(ok(Stash, { ...stash, overdue: true, perMonth: null, targetDate: '2026-06-30' }), 'a past date makes it overdue')
+})
+
+// A term deposit as the app sends it (docs/loans-deposits-design.md, section 5.3): its maturity is the stash's target date, and a deposit has no per month.
+const deposit = {
+  interestRate: '3.1',
+  interestPeriod: 'YEARLY',
+  startDate: '2026-03-12',
+  brokenOn: null,
+  returnedOn: null,
+  state: 'RUNNING',
+  expectedReturn: '31.00',
+  valueAtMaturity: '1031.00',
+  daysLeft: 114,
+}
+const term = { ...stash, id: '6', name: 'Term deposit', kind: 'DEPOSIT', deposit, target: null, targetDate: '2027-03-12', left: null, percent: null, perMonth: null, saved: '1000.00' }
+
+test('a deposit is accepted in each state, and a goal has none', () => {
+  assert.deepEqual(Stash.parse(term), term)
+  assert.equal(Stash.parse(stash).deposit, null)
+  for (const state of ['RUNNING', 'MATURED', 'BOOKED', 'BROKEN']) assert.ok(ok(Stash, { ...term, deposit: { ...deposit, state } }), state)
+  assert.ok(ok(Stash, { ...term, deposit: { ...deposit, state: 'BROKEN', brokenOn: '2026-09-01' } }))
+  assert.ok(ok(Stash, { ...term, deposit: { ...deposit, state: 'BOOKED', returnedOn: '2027-03-13', daysLeft: 0 } }))
+  assert.ok(ok(Stash, { ...term, deposit: { ...deposit, interestPeriod: 'MONTHLY', interestRate: '0.25' } }))
+  assert.ok(ok(Stash, { ...term, deposit: { ...deposit, interestRate: '0', expectedReturn: '0.00', valueAtMaturity: '1000.00' } }), 'a rate of nothing')
+})
+
+test('a deposit with a wrong shape is refused', () => {
+  const bad: [string, unknown][] = [
+    ['a rate with four decimals', { ...deposit, interestRate: '3.1415' }],
+    ['a rate above 100', { ...deposit, interestRate: '100.5' }],
+    ['a rate as a number', { ...deposit, interestRate: 3.1 }],
+    ['a rate with a trailing comma', { ...deposit, interestRate: '3,1' }],
+    ['an unknown period', { ...deposit, interestPeriod: 'WEEKLY' }],
+    ['a state in small letters', { ...deposit, state: 'running' }],
+    ['an unknown state', { ...deposit, state: 'CLOSED' }],
+    ['days left below 0', { ...deposit, daysLeft: -1 }],
+    ['days left as text', { ...deposit, daysLeft: '114' }],
+    ['an expected return below 0', { ...deposit, expectedReturn: '-1.00' }],
+    ['a value with one decimal', { ...deposit, valueAtMaturity: '1031.0' }],
+    ['a start with a time', { ...deposit, startDate: '2026-03-12T00:00:00Z' }],
+    ['no broken day field', (({ brokenOn: _brokenOn, ...rest }) => rest)(deposit)],
+    ['no returned day field', (({ returnedOn: _returnedOn, ...rest }) => rest)(deposit)],
+  ]
+  for (const [why, value] of bad) assert.equal(ok(Deposit, value), false, why)
+  assert.equal(ok(Stash, { ...term, kind: 'LOAN' }), false, 'an unknown kind')
+  assert.equal(ok(Stash, (({ kind: _kind, ...rest }) => rest)(term)), false, 'the app always says the kind')
+  assert.equal(ok(Stash, (({ deposit: _deposit, ...rest }) => rest)(term)), false, 'and always the deposit, null for a goal')
 })
 
 test('what a sync may leave is accepted: saved below 0, above the target, free below 0', () => {
@@ -167,8 +216,10 @@ test('the export preview counts stashes and their entries, and an older app leav
 
 test('a conflict of a stash or of one of its entries is read', () => {
   const conflict = { table: 'stashes', id: '2', title: 'Holiday', mineDeleted: false, theirsDeleted: false, fields: [] as { field: string; mine: string; theirs: string }[] }
-  for (const field of ['name', 'account', 'target', 'targetDate', 'notes', 'archived']) conflict.fields.push({ field, mine: 'a', theirs: 'b' })
+  for (const field of ['name', 'account', 'target', 'targetDate', 'notes', 'archived', 'kind', 'interestRate', 'interestPeriod', 'startDate', 'brokenOn', 'returnedOn']) conflict.fields.push({ field, mine: 'a', theirs: 'b' })
   assert.ok(ok(Conflict, conflict))
+  const accountConflict = { ...conflict, table: 'accounts', fields: ['interestRate', 'interestPeriod', 'installment'].map((field) => ({ field, mine: 'a', theirs: 'b' })) }
+  assert.ok(ok(Conflict, accountConflict), 'the rate and the installment of an account')
   const entryConflict = { ...conflict, table: 'stash_entries', fields: ['stash', 'kind', 'amount', 'date', 'note'].map((field) => ({ field, mine: 'a', theirs: 'b' })) }
   assert.ok(ok(Conflict, entryConflict))
   assert.equal(ok(Conflict, { ...conflict, table: 'piggy_banks' }), false)

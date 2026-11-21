@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type MouseEvent } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { ApiError, errorText } from '../api/invoke'
-import { stashes as stashesApi, type Detail, type Entry, type EntryKind, type Stash, type Summary } from '../api/stashes'
+import { stashes as stashesApi, type Detail, type Entry, type Stash, type Summary } from '../api/stashes'
 import { useToday, type Today } from '../api/today'
 import { transfers as transfersApi, type Transfer } from '../api/transfers'
 import ConfirmModal from '../components/ConfirmModal'
@@ -30,13 +30,13 @@ import { accountById, accountLabel, assetAccounts, several } from '../lib/accoun
 import { formatMoney, fromMinor } from '../lib/money'
 import { applyOrder } from '../lib/reorder'
 import { saveChoice, storedChoice, storedId } from '../lib/sticky'
-import { activeStashes, archivedStashes, canAdd, canTake, held, stashMoney, targetLine } from '../lib/stashView'
+import { activeStashes, archivedStashes, canAdd, canBookReturn, canClose, canTake, held, isBreak, stashMoney, targetCell, type MoneyMode } from '../lib/stashView'
 
 /** The dialog that is open. A transfer being looked at is read first, so the dialog opens with its row. */
 type Dialog =
   | { kind: 'new'; accountId?: string }
   | { kind: 'edit'; stash: Stash }
-  | { kind: 'money'; stash: Stash; tab: EntryKind }
+  | { kind: 'money'; stash: Stash; tab: MoneyMode }
   | { kind: 'entry'; stash: Stash; entry: Entry }
   | { kind: 'transfer'; transfer: Transfer }
   | { kind: 'archive'; stash: Stash }
@@ -179,7 +179,7 @@ function StashesView({ settings, now }: { settings: MoneySettings; now: Today })
           onClose={() => setDialog(null)}
           onSaved={(answer) => {
             // the answer is the whole stash: the page shows it at once, and the lists are read again
-            if (answer.stash.id === stashId) setDetail(answer)
+            if (answer && answer.stash.id === stashId) setDetail(answer)
             saved(dialog)
           }}
         />
@@ -230,22 +230,23 @@ function StashesView({ settings, now }: { settings: MoneySettings; now: Today })
       <div className="tx-title one-line">
         <h1>{t('stashes.title')}</h1>
         {stashId ? (
-          shown && canAdd(shown.stash) ? (
+          shown && (canAdd(shown.stash) || canBookReturn(shown.stash) || canTake(shown.stash) || canClose(shown.stash)) ? (
             <div className="tx-actions">
-              <Button onClick={() => setDialog({ kind: 'money', stash: shown.stash, tab: 'ADD' })} {...tip('new', t('stashes.addMoney'))}>
-                {t('stashes.addMoney')}
-              </Button>
-              {canTake(shown.stash) ? (
-                <Button variant="outline" onClick={() => setDialog({ kind: 'money', stash: shown.stash, tab: 'TAKE' })}>
-                  {t('stashes.takeOut')}
+              {canAdd(shown.stash) ? (
+                <Button onClick={() => setDialog({ kind: 'money', stash: shown.stash, tab: 'ADD' })} {...tip('new', t('stashes.addMoney'))}>
+                  {t('stashes.addMoney')}
                 </Button>
               ) : null}
-            </div>
-          ) : shown && canTake(shown.stash) ? (
-            <div className="tx-actions">
-              <Button variant="outline" onClick={() => setDialog({ kind: 'money', stash: shown.stash, tab: 'TAKE' })}>
-                {t('stashes.takeOut')}
-              </Button>
+              {canBookReturn(shown.stash) ? (
+                <Button onClick={() => setDialog({ kind: 'money', stash: shown.stash, tab: 'RETURN' })}>{t('stashes.bookReturn')}</Button>
+              ) : null}
+              {canTake(shown.stash) ? (
+                <Button variant="outline" onClick={() => setDialog({ kind: 'money', stash: shown.stash, tab: 'TAKE' })}>
+                  {t(isBreak(shown.stash) ? 'stashes.breakDeposit' : 'stashes.takeOut')}
+                </Button>
+              ) : null}
+              {/* a deposit that is booked or broken and empty has nothing left to do: closing it is archiving it */}
+              {canClose(shown.stash) ? <Button onClick={() => setDialog({ kind: 'archive', stash: shown.stash })}>{t('stashes.archive')}</Button> : null}
             </div>
           ) : null
         ) : (
@@ -330,7 +331,7 @@ function StashList({
   accounts: NonNullable<ReturnType<typeof useAccounts>>
   settings: MoneySettings
   onNew: () => void
-  onMoney: (stash: Stash, tab: EntryKind) => void
+  onMoney: (stash: Stash, tab: MoneyMode) => void
   onRestore: (stash: Stash) => void
   onDelete: (stash: Stash) => void
   /** The list in the new order, shown at once. */
@@ -400,7 +401,7 @@ function StashList({
     const account = accountById(accounts, stash.accountId)
     return account ? accountLabel(account, t) : stash.account
   }
-  const targetOf = (stash: Stash) => targetLine(stash, stashMoney(stash, settings.locale), settings.locale)
+  const targetOf = (stash: Stash) => targetCell(stash, stashMoney(stash, settings.locale), t, settings.locale)
 
   /** What a stash holds, with a thin bar under it (the room of the bar is kept when there is no target, so the rows are as tall as each other). */
   const savedCell = (stash: Stash, className: string) => (
@@ -412,15 +413,22 @@ function StashList({
     </span>
   )
 
-  /** The + and the - of a stash: each where it is allowed, an empty place where it is not, so the buttons of all rows line up. A click on one does not open the row. */
+  /**
+   * The + and the - of a stash: each where it is allowed, an empty place where it is not, so the buttons of all rows line up. A deposit that matured has
+   * a "return" button where the + would be, and the - of one that runs is its break. A click on one does not open the row.
+   */
   const steps = (stash: Stash) => {
-    const press = (tab: EntryKind) => (event: MouseEvent<HTMLElement>) => {
+    const press = (tab: MoneyMode) => (event: MouseEvent<HTMLElement>) => {
       event.stopPropagation()
       onMoney(stash, tab)
     }
     return (
       <>
-        {canAdd(stash) ? (
+        {canBookReturn(stash) ? (
+          <Button size="sm" className="stash-return" aria-label={`${t('stashes.bookReturn')}: ${stash.name}`} onClick={press('RETURN')}>
+            {t('stashes.returnButton')}
+          </Button>
+        ) : canAdd(stash) ? (
           <Button size="sm" className="stash-step" aria-label={`${t('stashes.addMoney')}: ${stash.name}`} onClick={press('ADD')}>
             +
           </Button>
@@ -428,7 +436,7 @@ function StashList({
           <span className="icon-slot" />
         )}
         {canTake(stash) ? (
-          <Button variant="outline" size="sm" className="stash-step" aria-label={`${t('stashes.takeOut')}: ${stash.name}`} onClick={press('TAKE')}>
+          <Button variant="outline" size="sm" className="stash-step" aria-label={`${t(isBreak(stash) ? 'stashes.breakDeposit' : 'stashes.takeOut')}: ${stash.name}`} onClick={press('TAKE')}>
             &minus;
           </Button>
         ) : (
@@ -483,7 +491,7 @@ function StashList({
     const sub = (
       <>
         <span>{accountOf(stash)}</span>
-        {stash.target !== null || stash.targetDate !== null ? <span className={cn('stash-target', stash.overdue && 'is-late')}>{targetOf(stash)}</span> : null}
+        {stash.deposit || stash.target !== null || stash.targetDate !== null ? <span className={cn('stash-target', stash.overdue && 'is-late')}>{targetOf(stash)}</span> : null}
       </>
     )
     if (stash.archived) {
@@ -564,7 +572,7 @@ function StashList({
       ) : null}
       {shownActive.length > 0 && phone ? <ul className="card-list stash-phone">{shownActive.map(tapRow)}</ul> : null}
       {shownActive.length > 0 && !phone ? (
-        <Table className={cn('stash-list', reorderable && 'can-reorder')} heads={heads} listRef={listRef}>
+        <Table className={cn('stash-list', reorderable && 'can-reorder', shownActive.some(canBookReturn) && 'has-return')} heads={heads} listRef={listRef}>
           {shownActive.map((stash) => tableRow(stash, reorderable ? hintId : undefined))}
         </Table>
       ) : null}

@@ -60,7 +60,7 @@ export const TABLES = [
   'documents',
   'document_links',
 ] as const
-export const FIELDS = ['name', 'amount', 'date', 'category', 'description', 'type', 'month', 'every', 'nextDue', 'endDate', 'active', 'locale', 'timezone', 'keepOnPhone', 'document', 'target', 'archived', 'reminder', 'friend', 'kind', 'note', 'split', 'account', 'number', 'openingBalance', 'openingDate', 'from', 'to', 'bic', 'notes', 'group', 'includeNetWorth', 'virtualBalance', 'currency', 'rate', 'nativeAmount', 'toAmount', 'targetDate', 'stash'] as const
+export const FIELDS = ['name', 'amount', 'date', 'category', 'description', 'type', 'month', 'every', 'nextDue', 'endDate', 'active', 'locale', 'timezone', 'keepOnPhone', 'document', 'target', 'archived', 'reminder', 'friend', 'kind', 'note', 'split', 'account', 'number', 'openingBalance', 'openingDate', 'from', 'to', 'bic', 'notes', 'group', 'includeNetWorth', 'virtualBalance', 'currency', 'rate', 'nativeAmount', 'toAmount', 'targetDate', 'stash', 'interestRate', 'interestPeriod', 'installment', 'startDate', 'brokenOn', 'returnedOn'] as const
 
 /** One thing that was changed on both devices since they last met: how its two versions differ. */
 export const Conflict = z.object({

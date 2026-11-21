@@ -179,3 +179,14 @@ test('the screen knows the four facts of a currency per account before the engin
   // and whatever the engine does send, today or later, is known
   for (const sentField of sent) assert.ok((FIELDS as readonly string[]).includes(sentField), `${sentField} is not a known field`)
 })
+
+test('the screen knows the six facts of a rate, an installment and a deposit, with their words', () => {
+  // docs/loans-deposits-design.md, section 7: the account row gains the rate, its period and the installment, the stash row the start day and the two days
+  const fields = ['interestRate', 'interestPeriod', 'installment', 'startDate', 'brokenOn', 'returnedOn']
+  for (const field of fields) {
+    assert.ok((FIELDS as readonly string[]).includes(field), `${field} is a known field`)
+    assert.ok(`sync.field.${field}` in en, `${field} has its words`)
+  }
+  // a stash's kind has the words of both of its values, and a period of both of its
+  for (const key of ['stashes.kind.GOAL', 'stashes.kind.DEPOSIT', 'accounts.period.MONTHLY', 'accounts.period.YEARLY']) assert.ok(key in en, key)
+})

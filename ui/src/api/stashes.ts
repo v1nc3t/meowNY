@@ -1,7 +1,9 @@
 import { z } from 'zod'
+import { InterestPeriod } from './accounts'
 import { call } from './invoke'
 
-// Stashes: money set aside inside one account for a goal (docs/stash-design.md, sections 6 and 13.7). The app adds up; the screen only shows.
+// Stashes: money set aside inside one account for a goal, or a term deposit (docs/stash-design.md, sections 6 and 13.7; docs/loans-deposits-design.md,
+// sections 3.3 and 5.3). The app adds up; the screen only shows.
 // Every amount of a stash is in its account's currency. `saved` and `free` may be below 0 (a sync can leave them so, section 7.6); the rest never is.
 const id = z.string().regex(/^[1-9]\d*$/)
 const date = z.string().regex(/^\d{4}-\d{2}-\d{2}$/)
@@ -11,6 +13,37 @@ const money = z.string().regex(/^\d+\.\d{2}$/)
 const signed = z.string().regex(/^-?\d+\.\d{2}$/)
 const currency = z.string().regex(/^[A-Za-z]{3}$/)
 const count = z.number().int().nonnegative()
+/** A percent as the app writes it, 0 to 100 with at most 3 decimals and no trailing zeros: "3.1", "4", "0.5". */
+const percent = z.string().regex(/^(?:100|\d{1,2}(?:\.\d{1,3})?)$/)
+
+/** What a stash is for, fixed when it is made: a goal to save towards, or a term deposit. */
+export const STASH_KINDS = ['GOAL', 'DEPOSIT'] as const
+export const StashKind = z.enum(STASH_KINDS)
+export type StashKind = z.infer<typeof StashKind>
+
+/** Where a deposit stands, worked out by the app from its dates and today (section 5.3): money goes in while it runs, its return is booked once it matured. */
+export const DEPOSIT_STATES = ['RUNNING', 'MATURED', 'BOOKED', 'BROKEN'] as const
+export const DepositState = z.enum(DEPOSIT_STATES)
+export type DepositState = z.infer<typeof DepositState>
+
+/** The rate, dates, state and numbers of a term deposit. Its maturity is the stash's `targetDate`. */
+export const Deposit = z.object({
+  interestRate: percent,
+  interestPeriod: InterestPeriod,
+  startDate: date,
+  /** The day it was emptied before its maturity; null unless it is broken. */
+  brokenOn: date.nullable(),
+  /** The day its return was booked; null until then, and again after a roll over. */
+  returnedOn: date.nullable(),
+  state: DepositState,
+  /** What the whole term returns on what it holds now (simple interest). */
+  expectedReturn: money,
+  /** What it holds now plus `expectedReturn`. */
+  valueAtMaturity: money,
+  /** The days from today to the maturity; 0 once it is today or past. */
+  daysLeft: count,
+})
+export type Deposit = z.infer<typeof Deposit>
 
 export const Stash = z.object({
   id,
@@ -22,8 +55,13 @@ export const Stash = z.object({
   currency,
   archived: z.boolean(),
   accountArchived: z.boolean(),
+  /** A goal or a term deposit; fixed when the stash is made. */
+  kind: StashKind,
+  /** The rate, dates, state and numbers of a deposit; null for a goal. */
+  deposit: Deposit.nullable(),
   /** What it aims at; null when it has no target. */
   target: money.nullable(),
+  /** The day a goal is to be reached by; for a deposit, its maturity. */
   targetDate: date.nullable(),
   /** Free text, line breaks allowed; null when there is none. */
   notes: z.string().nullable(),
@@ -86,11 +124,39 @@ export const Summary = z.object({
 })
 export type Summary = z.infer<typeof Summary>
 
-/** `accountId` is required: a stash lives in one account. */
-export type NewStash = { name: string; accountId: string; target?: string; targetDate?: string; notes?: string }
+/**
+ * `accountId` is required: a stash lives in one account. A deposit (`kind: 'DEPOSIT'`) needs `interestRate`, `interestPeriod` and `targetDate` (its
+ * maturity, after `startDate`); `startDate` is today when left out. A goal takes none of the three deposit fields.
+ */
+export type NewStash = {
+  name: string
+  accountId: string
+  kind?: StashKind
+  target?: string
+  targetDate?: string
+  notes?: string
+  interestRate?: string
+  interestPeriod?: InterestPeriod
+  startDate?: string
+}
 
-/** Fields left out stay as they are; `null` clears `target`, `targetDate` and `notes`. A new `accountId` moves the stash (same currency, enough free there). */
-export type StashPatch = { name?: string; accountId?: string; target?: string | null; targetDate?: string | null; notes?: string | null }
+/**
+ * Fields left out stay as they are; `null` clears `target`, `targetDate` and `notes` (not a deposit's maturity). A new `accountId` moves the stash (same
+ * currency, enough free there). The rate, period and start date are a deposit's, refused once it is broken; the kind is never sent (it is fixed).
+ */
+export type StashPatch = {
+  name?: string
+  accountId?: string
+  target?: string | null
+  targetDate?: string | null
+  notes?: string | null
+  interestRate?: string
+  interestPeriod?: InterestPeriod
+  startDate?: string
+}
+
+/** The return of a matured deposit: an income in its account and an add of the same amount, in one step. `date` is today when left out (not before the maturity). */
+export type ReturnInput = { amount: string; categoryId: string; date?: string; note?: string }
 
 /** Adds money; with `fromAccountId` a transfer from that account into the stash's account is made with it. `date` is today when left out. */
 export type NewEntry = { amount: string; date?: string; note?: string; fromAccountId?: string }
@@ -122,4 +188,6 @@ export const stashes = {
   amend: (id: string, patch: EntryPatch) => call('update_stash_entry', Detail, { id, patch }),
   /** `id` is the entry's. With `deleteTransfer` the transfer that came with it is deleted too. */
   erase: (id: string, deleteTransfer = false) => call('delete_stash_entry', Detail, { id, deleteTransfer }),
+  /** Books the return of a matured deposit; answers the stash, which is then booked. */
+  bookReturn: (id: string, input: ReturnInput) => call('stashes_book_return', Stash, { id, input }),
 }

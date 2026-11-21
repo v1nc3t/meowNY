@@ -1,19 +1,21 @@
 import { useId, useMemo, useState, type FormEvent } from 'react'
-import type { Account } from '../api/accounts'
+import { INTEREST_PERIODS, type Account, type InterestPeriod } from '../api/accounts'
 import { ApiError, errorText } from '../api/invoke'
-import { stashes as stashesApi, type Stash } from '../api/stashes'
+import { stashes as stashesApi, STASH_KINDS, type Stash } from '../api/stashes'
 import { useToast } from '../hooks/toast'
 import { useI18n } from '../i18n/context'
 import { NAME_MAX } from '../api/categories'
 import { dialogNext, type DialogState } from '../lib/accountDialogs'
 import { accountById, accountLabel, accountName } from '../lib/accountsView'
-import { aMonthOn, stashBlock, stashFields, stashSubmit, type StashFields } from '../lib/stashDialogs'
-import { homeAccounts, STASH_NOTES_MAX } from '../lib/stashView'
+import { aMonthOn, stashBlock, stashFields, stashSubmit, termIsFixed, withKind, type StashFields } from '../lib/stashDialogs'
+import { dayWords, homeAccounts, STASH_NOTES_MAX } from '../lib/stashView'
 import { moneyIn, formatMoney } from '../lib/money'
+import { tabId } from '../lib/tabs'
 import DatePicker from './DatePicker'
 import Dropdown from './Dropdown'
 import Icon from './NavIcon'
 import Modal, { modalFormId } from './Modal'
+import SectionTabs from './SectionTabs'
 import Button from './ui/Button'
 
 /**
@@ -21,7 +23,10 @@ import Button from './ui/Button'
  * moves to an account in its own currency), an optional target and target date, and notes. An edit sends only what changed, and one that changed
  * nothing just closes. The states are those of docs/stash-design.md, section 5.3: a wrong field is a toast and the fields stay as typed; a name
  * that is taken, or a refusal of the core, is said in place; what the core would refuse for the numbers (a target below what is saved, a move to an
- * account without room for what the stash holds) is said before and stops the button.
+ * account without room for what the stash holds) is said before and stops the button. A new stash is a goal or a term deposit (two tabs; docs/loans-
+ * deposits-design.md, section 5.6): a deposit has a rate with its period, a start date (today) and a maturity after it, which stand where a goal's
+ * target date does, and its target stays optional. A stash that is made has no tabs, and a deposit that is broken shows its rate, start and maturity
+ * as words: it keeps them.
  */
 export default function StashModal({
   stash,
@@ -44,7 +49,7 @@ export default function StashModal({
 }) {
   const { t, language } = useI18n()
   const say = useToast()
-  const [start] = useState<StashFields>(() => stashFields(stash, accounts, accountId))
+  const [start] = useState<StashFields>(() => stashFields(stash, accounts, accountId, today))
   const [fields, setFields] = useState(start)
   const [state, setState] = useState<DialogState>('EDITING')
   // what the core said about a field: shown in place until the field is changed
@@ -57,6 +62,9 @@ export default function StashModal({
   }
   const hintId = useId()
   const errorId = useId()
+  const deposit = fields.kind === 'DEPOSIT'
+  // a deposit that is broken keeps its rate, start and maturity: they are shown, not typed
+  const fixed = termIsFixed(stash)
 
   const home = useMemo(() => homeAccounts(accounts, stash), [accounts, stash])
   const chosen = accountById(accounts, fields.account)
@@ -96,7 +104,18 @@ export default function StashModal({
   const label = (key: 'stashes.target') => (currency ? t('accounts.labelIn', { label: t(key), code: currency.toUpperCase() }) : t(key))
   return (
     <Modal title={stash ? t('stashes.editTitle') : t('stashes.addTitle')} pending={state === 'SAVING' || block !== null} onClose={onClose}>
-      <form id={modalFormId} onSubmit={(event) => void onSubmit(event)}>
+      {!stash ? (
+        <SectionTabs
+          label={t('stashes.kindTabs')}
+          value={fields.kind}
+          onChange={(kind) => {
+            setRefused(false)
+            setFields((current) => withKind(current, kind))
+          }}
+          tabs={STASH_KINDS.map((id) => ({ id, label: t(`stashes.kind.${id}`) }))}
+        />
+      ) : null}
+      <form id={modalFormId} role={!stash ? 'tabpanel' : undefined} aria-labelledby={!stash ? tabId(fields.kind) : undefined} onSubmit={(event) => void onSubmit(event)}>
         <label>
           {t('common.name')}
           <input
@@ -122,6 +141,21 @@ export default function StashModal({
           onChange={(account) => set({ account })}
         />
         {home.hidden && stash ? <p className="hint">{t('stashes.sameCurrencyOnly', { currency: stash.currency.toUpperCase() })}</p> : null}
+        {deposit && !fixed ? (
+          <>
+            <label className="rate-sentence">
+              <span>{t('accounts.rate')}</span>
+              <input name="interestRate" required inputMode="decimal" autoComplete="off" placeholder="3.10" value={fields.rate} onChange={(event) => set({ rate: event.target.value })} />
+              <span>%</span>
+            </label>
+            <Dropdown
+              label={t('accounts.ratePeriod')}
+              value={fields.period}
+              options={INTEREST_PERIODS.map((period) => ({ value: period, label: t(`accounts.period.${period}`) }))}
+              onChange={(period) => set({ period: period as InterestPeriod })}
+            />
+          </>
+        ) : null}
         <label>
           {label('stashes.target')}
           <input
@@ -135,21 +169,44 @@ export default function StashModal({
             onChange={(event) => set({ target: event.target.value })}
           />
         </label>
-        <div className="tx-date-group">
-          <span>{t('stashes.targetDate')}</span>
-          {fields.targetDate === '' ? (
-            <Button variant="outline" className="stash-date-choose" onClick={() => set({ targetDate: aMonthOn(today) })}>
-              {t('stashes.chooseDate')}
-            </Button>
-          ) : (
-            <div className="stash-date">
-              <DatePicker kind="date" value={fields.targetDate} label={t('stashes.targetDate')} today={today} onChange={(targetDate) => set({ targetDate })} />
-              <Button variant="ghost" size="icon" className="icon-btn" aria-label={t('stashes.clearDate')} title={t('stashes.clearDate')} onClick={() => set({ targetDate: '' })}>
-                <Icon name="x" className="btn-icon" />
-              </Button>
+        {deposit && !fixed ? (
+          <>
+            <div className="tx-date-group">
+              <span>{t('stashes.startDate')}</span>
+              <DatePicker kind="date" value={fields.startDate} label={t('stashes.startDate')} today={today} onChange={(startDate) => set({ startDate })} />
             </div>
-          )}
-        </div>
+            <div className="tx-date-group">
+              <span>{t('stashes.maturity')}</span>
+              <DatePicker kind="date" value={fields.targetDate} label={t('stashes.maturity')} today={today} onChange={(targetDate) => set({ targetDate })} />
+            </div>
+          </>
+        ) : null}
+        {deposit && fixed && stash?.deposit && stash.targetDate ? (
+          <p className="hint">
+            {[
+              t('accounts.rateShown', { rate: stash.deposit.interestRate, period: t(`accounts.period.${stash.deposit.interestPeriod}`) }),
+              `${t('stashes.startDate')} ${dayWords(stash.deposit.startDate, language)}`,
+              `${t('stashes.maturity')} ${dayWords(stash.targetDate, language)}`,
+            ].join(' · ')}
+          </p>
+        ) : null}
+        {deposit ? null : (
+          <div className="tx-date-group">
+            <span>{t('stashes.targetDate')}</span>
+            {fields.targetDate === '' ? (
+              <Button variant="outline" className="stash-date-choose" onClick={() => set({ targetDate: aMonthOn(today) })}>
+                {t('stashes.chooseDate')}
+              </Button>
+            ) : (
+              <div className="stash-date">
+                <DatePicker kind="date" value={fields.targetDate} label={t('stashes.targetDate')} today={today} onChange={(targetDate) => set({ targetDate })} />
+                <Button variant="ghost" size="icon" className="icon-btn" aria-label={t('stashes.clearDate')} title={t('stashes.clearDate')} onClick={() => set({ targetDate: '' })}>
+                  <Icon name="x" className="btn-icon" />
+                </Button>
+              </div>
+            )}
+          </div>
+        )}
         {block ? (
           <p className="field-error" id={hintId} role="alert">
             {blockText}

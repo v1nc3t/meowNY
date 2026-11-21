@@ -13,7 +13,7 @@ import { canAdd, dayWords, nextLine, nextText, overBooked, progress, stashMoney 
 import BalanceChart from './BalanceChart'
 import Icon from './NavIcon'
 import { DayGroups, IconAction, Row, Table, TapRow } from './RowParts'
-import { StashBar } from './StashParts'
+import { DepositFacts, StashBar } from './StashParts'
 import YearNav from './YearNav'
 import Button from './ui/Button'
 import { Card, CardAction, CardHeader } from './ui/Card'
@@ -203,9 +203,10 @@ export default function StashDetail({
           ) : null}
         </div>
         <StashBar saved={stash.saved} target={stash.target} large />
+        {stash.deposit ? <DepositFacts stash={stash} locale={settings.locale} /> : null}
         <div className="stash-block-facts">
           {words ? <span className={cn('stash-next', words.warning && 'is-late', shown.reached && 'is-reached')}>{words.text}</span> : null}
-          {stash.targetDate ? (
+          {stash.targetDate && !stash.deposit ? (
             <span className="stash-next">
               {t('stashes.targetDate')} {dayWords(stash.targetDate, settings.locale)}
             </span>

@@ -72,6 +72,9 @@ export default function ReviewModal({
     if (field === 'type') return t(value === 'INCOME' ? 'common.income' : 'common.expense')
     if (field === 'active' || field === 'keepOnPhone' || field === 'archived' || field === 'includeNetWorth') return t(value === 'yes' ? 'common.yes' : 'common.no')
     if (field === 'kind' && table === 'stash_entries') return value.toUpperCase() === 'TAKE' ? t('stashes.kind.TAKE') : t('stashes.kind.ADD')
+    // a stash is a goal or a deposit; a rate is per month or per year
+    if (field === 'kind' && table === 'stashes' && (value === 'GOAL' || value === 'DEPOSIT')) return t(`stashes.kind.${value}`)
+    if (field === 'interestPeriod' && (value === 'MONTHLY' || value === 'YEARLY')) return t(`accounts.period.${value}`)
     if (field === 'kind' && (value === 'LENT' || value === 'BORROWED' || value === 'REPAID_TO_ME' || value === 'REPAID_BY_ME')) return t(`debts.kind.${value}`)
     if (field === 'every') {
       const every = parseEvery(value)

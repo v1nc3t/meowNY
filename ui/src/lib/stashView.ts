@@ -1,5 +1,6 @@
 import { isLiability, type Account } from '../api/accounts'
-import type { Entry, EntryKind, EntryPatch, NewEntry, NewTake, Stash } from '../api/stashes'
+import type { Category } from '../api/categories'
+import type { DepositState, Entry, EntryKind, EntryPatch, NewEntry, NewTake, ReturnInput, Stash } from '../api/stashes'
 import type { MessageKey } from '../i18n/en'
 import type { DialogState } from './accountDialogs'
 import { currencyKey } from './accountsView'
@@ -33,8 +34,14 @@ export type DeltaCheck =
   | { ok: false; reason: 'overTarget'; over: string }
   /** Money out is more than is in the stash. `saved` is what there is, never below 0. */
   | { ok: false; reason: 'overSaved'; saved: string }
-  /** The stash takes no money in: it is archived, or so is its account (section 5.1). Only `checkEntry` says this one. */
+  /** The stash takes no money in: it is archived, or so is its account (section 5.1), or it is a deposit that does not run. Only `checkEntry` says this one. */
   | { ok: false; reason: 'closed' }
+  /** A deposit takes money in only while it runs (section 5.3). */
+  | { ok: false; reason: 'notRunning' }
+  /** A deposit that runs is emptied by breaking it, not by changing an entry (section 5.3). */
+  | { ok: false; reason: 'running' }
+  /** A deposit that is broken keeps its entries as they are; only a note changes (section 5.3). */
+  | { ok: false; reason: 'broken' }
 
 /**
  * The delta rule of section 3.1. `before` is what the stash holds, `change` what the write does to it (above 0 money goes in, below 0 it comes out),
@@ -77,6 +84,8 @@ export type EntryCheck = {
   bring?: boolean
   /** The stash takes no money in (`canAdd` is false): an entry that would put more in is refused; one that takes out, or changes nothing, is not. */
   closed?: boolean
+  /** The state of a deposit, left out for a goal: its own rules for money come before the delta rule (`depositRule`). */
+  deposit?: DepositState | null
 }
 
 /** What an entry does to what the stash holds, signed: an add puts its amount in, a take takes it out. */
@@ -93,9 +102,34 @@ export function signedAmount(kind: EntryKind, amount: string): bigint {
 export function checkEntry(input: EntryCheck): DeltaCheck {
   const by = signedAmount(input.kind, input.amount) - (input.old === undefined ? 0n : signedAmount(input.kind, input.old))
   if (input.closed && by > 0n) return { ok: false, reason: 'closed' }
+  const deposit = depositRule(input.deposit ?? null, by, input.old !== undefined)
+  if (!deposit.ok) return deposit
   const room = minor(input.free)
   const free = input.bring && input.kind === 'ADD' && input.old === undefined && room >= 0n ? room + minor(input.amount) : room
   return deltaCheck(input.saved, fromMinor(by), fromMinor(free), input.target)
+}
+
+/**
+ * What a deposit lets happen to what it holds (section 5.3), before the delta rule: `by` is the change (above 0 money in, below 0 out), `editing` says
+ * it comes from changing or deleting an entry, not from a new one. Money goes in only while it runs. A new take is allowed in every state (while it
+ * runs it is the break, and the dialog fixes its amount to what is saved); an edit or a delete may not take money out of one that runs, and none
+ * changes one that is broken. A goal (`state` null) and no change are always fine.
+ */
+export function depositRule(state: DepositState | null, by: bigint, editing: boolean): DeltaCheck {
+  if (state === null || by === 0n) return { ok: true }
+  if (state === 'BROKEN' && editing) return { ok: false, reason: 'broken' }
+  if (by > 0n) return state === 'RUNNING' ? { ok: true } : { ok: false, reason: 'notRunning' }
+  return editing && state === 'RUNNING' ? { ok: false, reason: 'running' } : { ok: true }
+}
+
+/**
+ * Whether an entry can be deleted: deleting takes back what it did, so it is a change of minus its signed amount, checked by the rules of a deposit and
+ * then by the delta rule (an add whose money was taken out since cannot go, a take only within what is free and under the target).
+ */
+export function checkRemoval(stash: Pick<Stash, 'saved' | 'free' | 'target' | 'deposit'>, entry: Pick<Entry, 'kind' | 'amount'>): DeltaCheck {
+  const undone = -signedAmount(entry.kind, entry.amount)
+  const own = depositRule(stash.deposit?.state ?? null, undone, true)
+  return own.ok ? deltaCheck(stash.saved, fromMinor(undone), stash.free, stash.target) : own
 }
 
 /** What the stash would hold after the change, as an amount (it may be below 0 for a stash that already was). */
@@ -199,14 +233,29 @@ export function chips(stash: Pick<Stash, 'saved' | 'left' | 'perMonth' | 'free'>
 
 // -- what a stash can do ----------------------------------------------------------------------------------------------------------------
 
-/** Whether money can be put in: not into an archived stash, nor one whose account is archived (section 5.1). */
-export function canAdd(stash: Pick<Stash, 'archived' | 'accountArchived'>): boolean {
-  return !stash.archived && !stash.accountArchived
+/** Whether money can be put in: not into an archived stash, nor one whose account is archived (section 5.1), and into a deposit only while it runs (5.3). */
+export function canAdd(stash: Pick<Stash, 'archived' | 'accountArchived' | 'deposit'>): boolean {
+  return !stash.archived && !stash.accountArchived && (!stash.deposit || stash.deposit.state === 'RUNNING')
 }
 
-/** Whether money can be taken out: only when something is in it (a stash below 0 offers only an add). */
+/** Whether money can be taken out: only when something is in it (a stash below 0 offers only an add), whatever the state of a deposit. */
 export function canTake(stash: Pick<Stash, 'saved'>): boolean {
   return minor(stash.saved) > 0n
+}
+
+/** Whether taking money out of the stash breaks it: a deposit that runs (section 5.3). The take is then the whole of what it holds. */
+export function isBreak(stash: Pick<Stash, 'deposit'>): boolean {
+  return stash.deposit?.state === 'RUNNING'
+}
+
+/** Whether the return of a deposit can be booked: it has matured, its return is not booked, and neither it nor its account is archived (section 5.5). */
+export function canBookReturn(stash: Pick<Stash, 'archived' | 'accountArchived' | 'deposit'>): boolean {
+  return stash.deposit?.state === 'MATURED' && !stash.archived && !stash.accountArchived
+}
+
+/** A deposit that is booked or broken and holds nothing: there is nothing left to do with it but close it, which is archiving. */
+export function canClose(stash: Pick<Stash, 'archived' | 'saved' | 'deposit'>): boolean {
+  return !stash.archived && (stash.deposit?.state === 'BOOKED' || stash.deposit?.state === 'BROKEN') && minor(stash.saved) === 0n
 }
 
 /** What the stash takes away from its account: what it holds, never below 0 (section 3). */
@@ -307,6 +356,17 @@ export function targetLine(stash: Pick<Stash, 'target' | 'targetDate'>, money: (
   return parts.filter((part) => part !== null).join(' · ') || '—'
 }
 
+/**
+ * A row's target for a deposit, in one line: where it stands first, so it shows when the cell is cut short: "running · 12/03/2027" with its maturity while it
+ * runs, the state word alone once it has matured, or been booked or broken (section 10), then the target amount when it has one. A goal is `targetLine`. `money` writes an amount in the stash's currency.
+ */
+export function targetCell(stash: Pick<Stash, 'target' | 'targetDate' | 'deposit'>, money: (amount: string) => string, t: Translate, locale: string): string {
+  if (!stash.deposit) return targetLine(stash, money, locale)
+  const word = t(`stashes.state.${stash.deposit.state}`)
+  const state = stash.deposit.state === 'RUNNING' && stash.targetDate !== null ? `${word} · ${formatDate(stash.targetDate, locale)}` : word
+  return [state, stash.target === null ? null : money(stash.target)].filter((part) => part !== null).join(' · ')
+}
+
 /** The words of `nextLine`: "750.00 left · 107.15 a month until june 2027", "750.00 left", "reached", "overdue since 30 june 2026" (a warning). */
 export function nextText(line: NextLine, money: (amount: string) => string, t: Translate, locale: string): { text: string; warning: boolean } {
   if (line.kind === 'reached') return { text: t('stashes.reached'), warning: false }
@@ -372,10 +432,13 @@ export function moneyOfEntry(entry: Entry): MoneyFields {
 
 /**
  * Another tab: the amount, the date and the note stay, the transfer choice goes (section 5.3). The account is kept to start the next choice from,
- * but off.
+ * but off. For a deposit that runs (`whole` is what it holds) the take tab is the break, whose amount is the whole of it: it is put there on
+ * the way in and taken out again on the way back.
  */
-export function moneyTab(fields: MoneyFields, kind: EntryKind): MoneyFields {
-  return { ...fields, kind, transfer: false, account: '' }
+export function moneyTab(fields: MoneyFields, kind: EntryKind, whole?: string): MoneyFields {
+  const next: MoneyFields = { ...fields, kind, transfer: false, account: '' }
+  if (whole === undefined || kind === fields.kind) return next
+  return kind === 'TAKE' ? { ...next, amount: whole } : { ...next, amount: '' }
 }
 
 /** The date asked for, but never after today (nothing is put in or taken out in the future, section 16 choice 7). */
@@ -421,6 +484,56 @@ export function moneySubmit(
   return fields.kind === 'ADD'
     ? { do: 'send', request: { add: { amount, date: fields.date, ...(note ? { note } : {}), ...(other ? { fromAccountId: other } : {}) } } }
     : { do: 'send', request: { take: { amount, date: fields.date, ...(note ? { note } : {}), ...(other ? { toAccountId: other } : {}) } } }
+}
+
+// -- the return of a deposit (section 5.5) ---------------------------------------------------------------------------------------------------
+
+/** The money dialog's three modes: an add, a take, and the return of a deposit that matured. */
+export type MoneyMode = EntryKind | 'RETURN'
+
+/** The fields of the return mode. `category` is an income category ('' for none yet). */
+export type ReturnFields = { amount: string; category: string; date: string; note: string }
+
+/**
+ * The return dialog as it opens: the amount the deposit expects to return (empty when that is nothing), the category used last time while it is still an
+ * income category, today, no note.
+ */
+export function returnStart(stash: Pick<Stash, 'deposit'>, categories: readonly Pick<Category, 'id' | 'type'>[], last: string, today: string): ReturnFields {
+  const expected = stash.deposit?.expectedReturn ?? ''
+  return {
+    amount: minor(expected) > 0n ? expected : '',
+    category: categories.find((category) => category.id === last && category.type === 'INCOME')?.id ?? '',
+    date: today,
+    note: '',
+  }
+}
+
+/** The date of the return held between the maturity and today: the core takes no other (an income is not made in the future, nor before the term ended). */
+export function returnDate(date: string, maturity: string, today: string): string {
+  return date > today ? today : date < maturity ? maturity : date
+}
+
+/** What stops the return from being booked, in the order the fields come; null when nothing does. Done is off while this is not null. */
+export function returnStop(fields: ReturnFields, maturity: string | null, today: string): 'amount' | 'category' | 'date' | 'note' | null {
+  if (amountString(fields.amount, false) === null) return 'amount'
+  if (fields.category === '') return 'category'
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(fields.date) || fields.date > today || (maturity !== null && fields.date < maturity)) return 'date'
+  if ([...fields.note.trim()].length > ENTRY_NOTE_MAX) return 'note'
+  return null
+}
+
+const RETURN_REFUSAL = { amount: 'tx.errorAmount', category: 'tx.chooseCategory', date: 'stashes.returnDateError', note: 'stashes.noteError' } as const
+
+/** What the submit of the return does: nothing while a request is out, an error toast with nothing sent, or the return as the core takes it. */
+export type ReturnStep = { do: 'ignore' } | { do: 'refuse'; error: MessageKey } | { do: 'send'; request: ReturnInput }
+
+export function returnSubmit(state: DialogState, stash: Pick<Stash, 'targetDate'>, fields: ReturnFields, today: string): ReturnStep {
+  if (state !== 'EDITING') return { do: 'ignore' }
+  const stop = returnStop(fields, stash.targetDate, today)
+  const amount = amountString(fields.amount, false)
+  if (stop !== null || amount === null) return { do: 'refuse', error: RETURN_REFUSAL[stop ?? 'amount'] }
+  const note = fields.note.trim()
+  return { do: 'send', request: { amount, categoryId: fields.category, date: fields.date, ...(note ? { note } : {}) } }
 }
 
 /** The tab an `Alt` + digit key press chooses in the money dialog: 1 is add, 2 is take out. The key's code is used (a Mac's `Option+1` types another character). */
