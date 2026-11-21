@@ -211,7 +211,7 @@ mod tests {
         for c in &catalog.commands {
             assert_eq!(c.destructive(), CONFIRMING_VERBS.contains(&c.verb()) && c.route.is_some(), "{}", c.name());
         }
-        for name in ["stashes archive", "stashes unarchive", "stashes update", "stashes add", "stashes take", "stashes amend", "stashes reorder", "stashes create"] {
+        for name in ["stashes archive", "stashes unarchive", "stashes update", "stashes add", "stashes take", "stashes amend", "stashes reorder", "stashes create", "stashes return", "accounts pay"] {
             let words: Vec<&str> = name.split(' ').collect();
             assert!(!catalog.find(&words).unwrap().destructive(), "{name}");
         }

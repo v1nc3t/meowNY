@@ -25,7 +25,7 @@ const STASH_KEYS: [&str; 21] = [
 const ENTRY_KEYS: [&str; 10] = ["amount", "date", "id", "kind", "note", "otherAccount", "otherAccountId", "savedAfter", "stashId", "transferId"];
 
 const READ_ROUTES: [&str; 4] = ["stashes.list", "stashes.show", "stashes.history", "stashes.summary"];
-const WRITE_ROUTES: [&str; 10] = [
+const WRITE_ROUTES: [&str; 11] = [
     "stashes.create",
     "stashes.update",
     "stashes.archive",
@@ -36,6 +36,7 @@ const WRITE_ROUTES: [&str; 10] = [
     "stashes.take",
     "stashes.amend",
     "stashes.erase",
+    "stashes.return",
 ];
 
 // ---- helpers ----------------------------------------------------------------------------------
@@ -174,8 +175,14 @@ fn requests(w: &World) -> Vec<(&'static str, Value)> {
         ("stashes.show", json!({ "id": w.holiday })),
         ("stashes.history", json!({ "id": w.holiday, "year": "2026" })),
         ("stashes.summary", json!({})),
-        ("stashes.create", json!({ "name": "New", "accountId": w.alpha, "target": "10.00", "targetDate": "2027-01-01", "notes": "n" })),
-        ("stashes.update", json!({ "id": w.holiday, "name": "Trip", "accountId": w.beta, "target": "1300.00", "targetDate": "2027-07-01", "notes": "m" })),
+        (
+            "stashes.create",
+            json!({ "name": "New", "accountId": w.alpha, "kind": "DEPOSIT", "target": "10.00", "targetDate": "2027-01-01", "notes": "n", "interestRate": "3.1", "interestPeriod": "YEARLY", "startDate": "2026-10-01" }),
+        ),
+        (
+            "stashes.update",
+            json!({ "id": w.holiday, "name": "Trip", "accountId": w.beta, "target": "1300.00", "targetDate": "2027-07-01", "notes": "m", "kind": "GOAL", "interestRate": "3.1", "interestPeriod": "MONTHLY", "startDate": "2026-10-01" }),
+        ),
         ("stashes.archive", json!({ "id": w.holiday })),
         ("stashes.unarchive", json!({ "id": w.holiday })),
         ("stashes.delete", json!({ "id": w.holiday })),
@@ -184,6 +191,7 @@ fn requests(w: &World) -> Vec<(&'static str, Value)> {
         ("stashes.take", json!({ "id": w.holiday, "amount": "1.00", "date": "2026-10-02", "note": "n", "toAccountId": w.beta })),
         ("stashes.amend", json!({ "id": w.first, "amount": "2.00", "date": "2026-10-02", "note": "n" })),
         ("stashes.erase", json!({ "id": w.first, "deleteTransfer": false })),
+        ("stashes.return", json!({ "id": w.holiday, "amount": "31.00", "categoryId": "1", "date": "2026-10-02", "note": "n" })),
     ]
 }
 
@@ -203,14 +211,24 @@ fn the_routes_have_the_scopes_and_arguments_of_the_design_note() {
         assert!(route(name).confirm.is_none(), "{name}: the screens do not ask for these, and nothing leaves the app");
     }
     // (name, kind, required, nullable) of each argument, in order
-    let table: [(&str, &[Arg]); 14] = [
+    let table: [(&str, &[Arg]); 15] = [
         ("stashes.list", &[("accountId", Kind::Id, false, false)]),
         ("stashes.show", &[("id", Kind::Id, true, false)]),
         ("stashes.history", &[("id", Kind::Id, true, false), ("year", Kind::Year, true, false)]),
         ("stashes.summary", &[]),
         (
             "stashes.create",
-            &[("name", Kind::String, true, false), ("accountId", Kind::Id, true, false), ("target", Kind::Money, false, false), ("targetDate", Kind::Date, false, false), ("notes", Kind::String, false, false)],
+            &[
+                ("name", Kind::String, true, false),
+                ("accountId", Kind::Id, true, false),
+                ("kind", Kind::String, false, false),
+                ("target", Kind::Money, false, false),
+                ("targetDate", Kind::Date, false, false),
+                ("notes", Kind::String, false, false),
+                ("interestRate", Kind::String, false, false),
+                ("interestPeriod", Kind::String, false, false),
+                ("startDate", Kind::Date, false, false),
+            ],
         ),
         (
             "stashes.update",
@@ -218,9 +236,13 @@ fn the_routes_have_the_scopes_and_arguments_of_the_design_note() {
                 ("id", Kind::Id, true, false),
                 ("name", Kind::String, false, false),
                 ("accountId", Kind::Id, false, false),
+                ("kind", Kind::String, false, false),
                 ("target", Kind::Money, false, true),
                 ("targetDate", Kind::Date, false, true),
                 ("notes", Kind::String, false, true),
+                ("interestRate", Kind::String, false, false),
+                ("interestPeriod", Kind::String, false, false),
+                ("startDate", Kind::Date, false, false),
             ],
         ),
         ("stashes.archive", &[("id", Kind::Id, true, false)]),
@@ -237,6 +259,10 @@ fn the_routes_have_the_scopes_and_arguments_of_the_design_note() {
         ),
         ("stashes.amend", &[("id", Kind::Id, true, false), ("amount", Kind::Money, false, false), ("date", Kind::Date, false, false), ("note", Kind::String, false, true)]),
         ("stashes.erase", &[("id", Kind::Id, true, false), ("deleteTransfer", Kind::Boolean, false, false)]),
+        (
+            "stashes.return",
+            &[("id", Kind::Id, true, false), ("amount", Kind::Money, true, false), ("categoryId", Kind::Id, true, false), ("date", Kind::Date, false, false), ("note", Kind::String, false, false)],
+        ),
     ];
     for (name, expected) in table {
         let got: Vec<Arg> = route(name).params.iter().map(|p| (p.name, p.kind, p.required, p.nullable)).collect();
@@ -245,7 +271,7 @@ fn the_routes_have_the_scopes_and_arguments_of_the_design_note() {
     // the routes are in the table of the server, once each, and the table is exactly these
     let ours: Vec<&str> = routes::ALL.iter().filter(|r| r.name.starts_with("stashes.")).map(|r| r.name).collect();
     let expected: Vec<&str> = READ_ROUTES.iter().chain(WRITE_ROUTES.iter()).copied().collect();
-    assert_eq!(ours.len(), 14);
+    assert_eq!(ours.len(), 15);
     for name in &expected {
         assert!(ours.contains(name), "{name}");
     }
@@ -939,7 +965,7 @@ fn an_argument_of_the_wrong_kind_or_name_is_refused_by_name() {
     assert_eq!(msg("stashes.reorder", json!({})), "missing argument `ids`");
     assert_eq!(msg("stashes.erase", json!({})), "missing argument `id`");
     // the names of the arguments are exact, and an argument of another route is not one of this
-    for wrong in ["target_date", "TargetDate", "account", "stashId", "kind", "amountMinor", "fromAccountId", "toAccountId", "deleteTransfer", "saved", "free"] {
+    for wrong in ["target_date", "TargetDate", "account", "stashId", "Kind", "amountMinor", "fromAccountId", "toAccountId", "deleteTransfer", "saved", "free"] {
         assert_eq!(msg("stashes.create", json!({ "name": "N", "accountId": w.alpha, wrong: "x" })), format!("unknown argument `{wrong}`"));
     }
     assert_eq!(msg("stashes.add", json!({ "id": w.holiday, "amount": "1.00", "toAccountId": w.beta })), "unknown argument `toAccountId`", "an add brings money in, a take sends it on");
@@ -1005,7 +1031,7 @@ fn a_read_token_reads_stashes_and_cannot_write_any_of_them() {
         assert_eq!((reached.status, reached.code().as_str()), (400, "invalid_input"), "{name}: {}", reached.body);
         tried += 1;
     }
-    assert_eq!(tried, 10);
+    assert_eq!(tried, 11);
     assert_eq!(dump(&h.vault), before, "a read token changed something");
     // and without any token, or with a wrong one, nothing is told
     for name in READ_ROUTES.iter().chain(WRITE_ROUTES.iter()) {
@@ -1066,4 +1092,37 @@ fn a_locked_app_gives_nothing_from_any_stash_route() {
         let e = run(&vault, name, body).unwrap_err();
         assert_eq!((e.status, e.code), (423, "locked"), "{name}");
     }
+}
+
+// ---- term deposits ----------------------------------------------------------------------------
+
+#[test]
+fn the_return_of_a_matured_deposit_is_an_income_and_an_add_and_one_that_is_not_due_changes_nothing() {
+    let (_dir, vault) = fresh();
+    let bank = account(&vault, "Bank", "1000.00");
+    let interest = ok(&vault, "categories.create", json!({ "name": "Interest", "type": "INCOME" }))["id"].as_str().unwrap().to_string();
+    // made and filled in June, while it runs: it matures on 2026-09-01, so on the 14th of October (the clock of the routes) it has
+    let june = at("2026-06-01T12:00:00Z");
+    let made = run_at(&vault, "stashes.create", json!({ "name": "Term deposit", "accountId": bank, "kind": "DEPOSIT", "interestRate": "3.1", "interestPeriod": "YEARLY", "startDate": "2026-06-01", "targetDate": "2026-09-01" }), june).unwrap();
+    assert_eq!(keys(&made), STASH_KEYS);
+    let id = id_of(&made);
+    run_at(&vault, "stashes.add", json!({ "id": id, "amount": "1000.00", "date": "2026-06-01" }), june).unwrap();
+    let due = find(&vault, &id);
+    assert_eq!((due["kind"].as_str(), due["deposit"]["state"].as_str(), due["deposit"]["interestRate"].as_str(), due["deposit"]["interestPeriod"].as_str(), due["deposit"]["startDate"].as_str()), (Some("DEPOSIT"), Some("MATURED"), Some("3.1"), Some("YEARLY"), Some("2026-06-01")));
+    assert_eq!((due["deposit"]["expectedReturn"].as_str(), due["deposit"]["valueAtMaturity"].as_str(), due["deposit"]["returnedOn"].clone()), (Some("7.81"), Some("1007.81"), Value::Null));
+
+    // not an income category, and a date before the maturity: refused, nothing written
+    let rent = ok(&vault, "categories.create", json!({ "name": "Rent", "type": "EXPENSE" }))["id"].as_str().unwrap().to_string();
+    refuse(&vault, "stashes.return", json!({ "id": id, "amount": "7.81", "categoryId": rent }), INVALID);
+    refuse(&vault, "stashes.return", json!({ "id": id, "amount": "7.81", "categoryId": interest, "date": "2026-08-31" }), INVALID);
+
+    let booked = ok(&vault, "stashes.return", json!({ "id": id, "amount": "7.81", "categoryId": interest, "date": "2026-09-02", "note": "interest" }));
+    assert_eq!(keys(&booked), STASH_KEYS);
+    assert_eq!((booked["deposit"]["state"].as_str(), booked["deposit"]["returnedOn"].as_str(), booked["saved"].as_str(), booked["entries"].as_u64()), (Some("BOOKED"), Some("2026-09-02"), Some("1007.81"), Some(2)));
+    // the income is in the account and the add in the deposit
+    assert_eq!(balance(&vault, &bank), "1007.81");
+    let income = ok(&vault, "transactions.list", json!({ "q": "Term deposit" }));
+    assert_eq!((income["total"].as_u64(), income["transactions"][0]["amount"].as_str(), income["transactions"][0]["categoryId"].as_str()), (Some(1), Some("7.81"), Some(interest.as_str())));
+    // and it cannot be booked twice
+    refuse(&vault, "stashes.return", json!({ "id": id, "amount": "7.81", "categoryId": interest }), INVALID);
 }

@@ -1,10 +1,13 @@
-//! The routes for stashes (`docs/stash-design.md`, sections 6 and 12): money set aside inside one account for a goal.
+//! The routes for stashes (`docs/stash-design.md`, sections 6 and 12, and `docs/loans-deposits-design.md`, section 12): money set aside inside one
+//! account for a goal, or as a term deposit that runs to a maturity at a rate.
 //!
 //! A `read` token can list the stashes, read one with its entries, read what it held month by month, and read the totals.
 //! A `write` token can make, change, archive, bring back, delete and order the stashes, add money to one, take money out of one, change an entry
 //! and delete an entry, with the rules the screens follow: the money stays in its account and a stash only sets part of it aside, so no more can
 //! be set aside than the account has free or than the target says, no more can be taken out than is saved, an entry is never dated after today,
 //! an archived stash takes no more money, and a stash moves only to an account of the same currency that has the room.
+//! A deposit (kind DEPOSIT) has a rate, a start date and a maturity (the target date); when it has matured `stashes.return` books its return as an
+//! income and an add in one step.
 //!
 //! `stashes.delete` and `stashes.erase` ask for `--yes` on the command line like every other delete (`cli/src/catalog.rs`).
 
@@ -13,9 +16,13 @@ use serde_json::Value;
 
 use super::routes::{parse, reply, take_id, today, Kind, Param, Route};
 use crate::categories::parse_id;
+use crate::stashes::deposits::{self, ReturnInput};
 use crate::stashes::entries::{self, EntryPatch, NewEntry, NewTake};
 use crate::stashes::{self, NewStash, StashPatch};
 use crate::tokens::Scope;
+
+const KINDS: &[&str] = &["GOAL", "DEPOSIT"];
+const PERIODS: &[&str] = &["MONTHLY", "YEARLY"];
 
 const STASH: Param = Param::new("id", Kind::Id, "The stash.");
 const ENTRY: Param = Param::new("id", Kind::Id, "The entry, as the entries of stashes show give it.");
@@ -40,7 +47,7 @@ pub const STASHES_LIST: Route = Route {
     name: "stashes.list",
     scope: Scope::Read,
     summary: concat!(
-        "The stashes in the person's order, the archived ones last, each with the account it lives in, what it holds (saved), its target and how far it is (left, percent, reached), what to save each month to reach the target date (perMonth, and overdue when the date has passed), how many entries it has (entries) and the day of the last one (lastEntry). All amounts are in the account's currency (currency). ",
+        "The stashes in the person's order, the archived ones last, each with the account it lives in, what it holds (saved), its target and how far it is (left, percent, reached), what to save each month to reach the target date (perMonth, and overdue when the date has passed), how many entries it has (entries) and the day of the last one (lastEntry). A stash is a goal (kind GOAL) or a term deposit (kind DEPOSIT); a deposit has deposit, with its interestRate and interestPeriod, startDate, state (RUNNING, MATURED, BOOKED or BROKEN), brokenOn, returnedOn, expectedReturn (simple interest over the whole term on what it holds now), valueAtMaturity (what it holds plus that) and daysLeft to the maturity, which is its targetDate; deposit is null for a goal, and a deposit has no perMonth. All amounts are in the account's currency (currency). ",
         stays!(),
         " Also ",
         free!(),
@@ -117,14 +124,18 @@ pub const STASHES_CREATE: Route = Route {
     summary: concat!(
         "Makes a stash at the end of the list, empty: put money in it with stashes add. ",
         stays!(),
-        " The name is 1 to 50 characters and unique among the stashes that are not archived, whatever the case (a taken one is refused as name_exists). The account is required, must exist and must not be archived, and the stash lives in it for good unless you move it with stashes update. The target is an amount of 0.01 or more; the target date may be in the past, and the stash is then overdue. Notes are up to 1000 characters, line breaks are kept."
+        " The name is 1 to 50 characters and unique among the stashes that are not archived, whatever the case (a taken one is refused as name_exists). The account is required, must exist and must not be archived, and the stash lives in it for good unless you move it with stashes update. The target is an amount of 0.01 or more; the target date may be in the past, and the stash is then overdue. Notes are up to 1000 characters, line breaks are kept. The account must not be a credit, a loan or a mortgage. With kind DEPOSIT (a goal if left out) it is a term deposit: interestRate and interestPeriod are required, targetDate is its maturity and is required and must be after startDate, which is today if left out; a goal takes none of interestRate, interestPeriod and startDate. Everything else is refused as invalid_input."
     ),
     params: &[
         Param::new("name", Kind::String, "The name.").required(),
         Param::new("accountId", Kind::Id, "The account the money is set aside in.").required(),
+        Param::new("kind", Kind::String, "GOAL, to save towards a target (the default), or DEPOSIT, a term deposit with a rate and a maturity. Fixed once the stash is made.").one_of(KINDS),
         Param::new("target", Kind::Money, "What you want to save, like 1200.00, in the account's currency."),
-        Param::new("targetDate", Kind::Date, "The day you want to have it by."),
+        Param::new("targetDate", Kind::Date, "The day you want to have it by. For a deposit, its maturity: required, and after startDate."),
         Param::new("notes", Kind::String, "Notes, up to 1000 characters. Line breaks are kept."),
+        Param::new("interestRate", Kind::String, "A deposit's rate as a percent from 0 to 100 with at most 3 decimals, like 3.1. Needs interestPeriod. Deposits only."),
+        Param::new("interestPeriod", Kind::String, "What interestRate is a percent of: MONTHLY or YEARLY. Deposits only.").one_of(PERIODS),
+        Param::new("startDate", Kind::Date, "The day a deposit's term begins. Today if left out. Deposits only."),
     ],
     confirm: None,
     run: |ctx, args| {
@@ -138,7 +149,7 @@ pub const STASHES_UPDATE: Route = Route {
     name: "stashes.update",
     scope: Scope::Write,
     summary: concat!(
-        "Changes a stash that is not archived (bring it back first). Fields left out stay as they are; a null target, targetDate or notes clears it. A new name must not be taken by another stash that is not archived. A new target may not be below what the stash holds already. A new accountId moves the stash, and what it holds with it: that account must not be archived, must be in the same currency and must have at least that much free (a stash that holds nothing moves to any account of its currency); naming the account the stash is in is not a move and changes nothing. ",
+        "Changes a stash that is not archived (bring it back first). Fields left out stay as they are; a null target, targetDate or notes clears it. A new name must not be taken by another stash that is not archived. A new target may not be below what the stash holds already. A new accountId moves the stash, and what it holds with it: that account must not be archived, must be in the same currency and must have at least that much free (a stash that holds nothing moves to any account of its currency); naming the account the stash is in is not a move and changes nothing. The kind of a stash is fixed when it is made: sending kind is refused as invalid_input, and so are interestRate, interestPeriod and startDate for a goal. For a deposit that has not been broken, interestRate, interestPeriod, startDate and targetDate (the maturity, which must stay after the start date and cannot be cleared) change its terms; from a matured or booked deposit, a new maturity after today starts the next term (returnedOn is cleared and, without a startDate, the start moves to the old maturity). A broken deposit takes no change of terms, only its name, notes, target and account. ",
         stays!(),
         " Also ",
         free!()
@@ -147,9 +158,13 @@ pub const STASHES_UPDATE: Route = Route {
         STASH.required(),
         Param::new("name", Kind::String, "The new name."),
         Param::new("accountId", Kind::Id, "The account to move it to."),
+        Param::new("kind", Kind::String, "Refused whatever it says: the kind is fixed when the stash is made.").one_of(KINDS),
         Param::new("target", Kind::Money, "The new target, like 1500.00, or null to clear it.").nullable(),
-        Param::new("targetDate", Kind::Date, "The new target date, or null to clear it.").nullable(),
+        Param::new("targetDate", Kind::Date, "The new target date, or null to clear it. For a deposit, its maturity: it can be moved and not cleared.").nullable(),
         Param::new("notes", Kind::String, "The new notes, or null to clear them.").nullable(),
+        Param::new("interestRate", Kind::String, "A deposit's new rate as a percent from 0 to 100 with at most 3 decimals, like 3.1. Deposits only."),
+        Param::new("interestPeriod", Kind::String, "A deposit's new period: MONTHLY or YEARLY. Deposits only.").one_of(PERIODS),
+        Param::new("startDate", Kind::Date, "A deposit's new start date. Deposits only."),
     ],
     confirm: None,
     run: |ctx, mut args| {
@@ -314,5 +329,27 @@ pub const STASHES_ERASE: Route = Route {
         let Args { delete_transfer } = parse(args)?;
         let today = today(ctx)?;
         reply(ctx.vault.with_conn(|c| entries::delete(c, id, delete_transfer.unwrap_or(false), &today))?)
+    },
+};
+
+// ---- deposits ---------------------------------------------------------------------------------
+
+pub const STASHES_RETURN: Route = Route {
+    name: "stashes.return",
+    scope: Scope::Write,
+    summary: "Books the return of a term deposit that has matured, and answers the stash. In one step an income of amount is made in the deposit's account (named as the deposit, in the category given, on the date) and the same amount is added to the deposit, so what the bank paid stays in the deposit until you take it out; then the return counts as booked (state BOOKED, returnedOn is the date). The income and the add are ordinary rows afterwards. Refused as invalid_input, with nothing written: a stash that is a goal or is not matured (RUNNING, already BOOKED or BROKEN), a stash that is archived or in an account that is archived, an amount outside 0.01 to 9999999999.99, a categoryId that is not an income category, and a date after today or before the maturity.",
+    params: &[
+        STASH.required(),
+        Param::new("amount", Kind::Money, "What the bank paid, more than zero, like 31.00, in the account's currency.").required(),
+        Param::new("categoryId", Kind::Id, "The income category the return is booked in.").required(),
+        Param::new("date", Kind::Date, "The day it was paid: not after today and not before the maturity. Today if left out."),
+        Param::new("note", Kind::String, "A note, up to 200 characters. It goes on both rows."),
+    ],
+    confirm: None,
+    run: |ctx, mut args| {
+        let id = take_id(&mut args, "id")?;
+        let input: ReturnInput = parse(args)?;
+        let today = today(ctx)?;
+        reply(ctx.vault.with_conn(|c| deposits::book_return(c, id, &input, &today))?)
     },
 };

@@ -52,6 +52,7 @@ const WRITE_ROUTES: &[&str] = &[
     "accounts.unarchive",
     "accounts.delete",
     "accounts.reorder",
+    "accounts.pay",
     "transfers.create",
     "transfers.update",
     "transfers.delete",
@@ -65,6 +66,7 @@ const WRITE_ROUTES: &[&str] = &[
     "stashes.take",
     "stashes.amend",
     "stashes.erase",
+    "stashes.return",
 ];
 
 const UUID: &str = "123e4567-e89b-12d3-a456-426614174000";
@@ -479,6 +481,7 @@ fn a_locked_app_refuses_every_write_and_nothing_changes() {
         ("accounts.unarchive", json!({ "id": "2" })),
         ("accounts.delete", json!({ "id": "2" })),
         ("accounts.reorder", json!({ "ids": ["1", "2"] })),
+        ("accounts.pay", json!({ "id": "2", "fromAccountId": "1", "amount": "950.00", "interest": "585.00", "categoryId": food, "date": "2026-10-14", "note": "n" })),
         ("transfers.create", json!({ "fromAccountId": "1", "toAccountId": "2", "amount": "1.00", "toAmount": "5.00", "date": "2026-10-14" })),
         ("transfers.update", json!({ "id": "1", "amount": "2.00", "toAmount": "5.00" })),
         ("transfers.delete", json!({ "id": "1" })),
@@ -492,6 +495,7 @@ fn a_locked_app_refuses_every_write_and_nothing_changes() {
         ("stashes.take", json!({ "id": "1", "amount": "10.00", "date": "2026-10-14", "note": "n", "toAccountId": "1" })),
         ("stashes.amend", json!({ "id": "1", "amount": "5.00", "date": "2026-10-13", "note": null })),
         ("stashes.erase", json!({ "id": "1", "deleteTransfer": true })),
+        ("stashes.return", json!({ "id": "1", "amount": "31.00", "categoryId": food, "date": "2026-10-14", "note": "n" })),
     ];
     let mut covered: Vec<&str> = cases.iter().map(|(name, _)| *name).collect();
     covered.sort_unstable();

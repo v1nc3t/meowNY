@@ -330,6 +330,41 @@ fn tour(app: &App) -> (Map<String, Value>, Vec<Value>) {
     );
     t.example("stashes delete", write, &format!("meowny stashes delete {coat} --yes"), &["stashes", "delete", &coat, "--yes"], true, false, None);
 
+    // A loan and a term deposit, both far enough back that nothing in them moves with the clock. The loan is made with its rate (a percent a year) and its
+    // installment, the debt is a negative opening balance, and a payment of 950.00 is split: 48.75 of it is interest, an expense of the Savings that paid,
+    // and the rest is a transfer into the loan. The deposit's maturity is its target date, and it matured in July (money goes in while it runs, then its maturity is moved back), so its return can be booked.
+    let interest_expense = Tour::id(&t.data(write, &["categories", "create", "--name", "Loan interest", "--type", "expense"]));
+    let interest_income = Tour::id(&t.data(write, &["categories", "create", "--name", "Deposit interest", "--type", "income"]));
+    let car = Tour::id(&t.data(
+        write,
+        &["accounts", "create", "--name", "Car loan", "--kind", "loan", "--opening-balance=-9000.00", "--opening-date", "2026-01-01", "--interest-rate", "6.5", "--interest-period", "yearly", "--installment", "950.00"],
+    ));
+    t.example(
+        "accounts pay",
+        write,
+        &format!("meowny accounts pay {car} --from-account-id 2 --amount 950.00 --interest 48.75 --category-id {interest_expense} --date 2026-10-05 --note \"October\""),
+        &["accounts", "pay", &car, "--from-account-id", "2", "--amount", "950.00", "--interest", "48.75", "--category-id", &interest_expense, "--date", "2026-10-05", "--note", "October"],
+        false,
+        true,
+        None,
+    );
+    let term = Tour::id(&t.data(
+        write,
+        &["stashes", "create", "--name", "Term deposit", "--account-id", "2", "--kind", "deposit", "--interest-rate", "3.1", "--interest-period", "yearly", "--start-date", "2026-01-05", "--target-date", "2027-01-05"],
+    ));
+    t.data(write, &["stashes", "add", &term, "--amount", "1000.00", "--date", "2026-01-05"]);
+    // a deposit takes no more money once it has matured, so its maturity is moved back to July after the money is in
+    t.data(write, &["stashes", "update", &term, "--target-date", "2026-07-05"]);
+    t.example(
+        "stashes return",
+        write,
+        &format!("meowny stashes return {term} --amount 15.37 --category-id {interest_income} --date 2026-07-06 --note \"Interest from the bank\""),
+        &["stashes", "return", &term, "--amount", "15.37", "--category-id", &interest_income, "--date", "2026-07-06", "--note", "Interest from the bank"],
+        false,
+        true,
+        None,
+    );
+
     // Friends, shared bills and the ledger: money that is owed, in both directions. A loan is never income or an expense.
     let json_id = |got: Value| serde_json::from_str::<Value>(got["stdout"].as_str().unwrap()).unwrap()["id"].as_str().unwrap().to_string();
     let dinner = json_id(t.capture(write, &Tour::strings(&["transactions", "create", "--name", "Dinner", "--amount", "90.00", "--payment-date", "2026-10-12", "--category-id", &pets, "--client-uuid", DINNER_UUID, "--json"]), None, &[]));
@@ -488,7 +523,7 @@ fn tour(app: &App) -> (Map<String, Value>, Vec<Value>) {
     let order: Vec<&str> = listed.as_array().unwrap().iter().map(|c| c["id"].as_str().unwrap()).filter(|id| *id != pets).collect();
     let ids = format!("{pets},{}", order.join(","));
     // Accounts: bring the card to the top of the list, put it away and back, and delete an account that has nothing in it.
-    let account_ids = format!("{card},1,2,3,4,6"); // the demo data's five accounts that are not archived (the sixth is)
+    let account_ids = format!("{card},1,2,3,4,6,{car}"); // the demo data's five accounts that are not archived (the sixth is), and the car loan
     t.example("accounts reorder", write, &format!("meowny accounts reorder --ids {account_ids}"), &["accounts", "reorder", "--ids", &account_ids], false, true, None);
     t.example("accounts archive", write, &format!("meowny accounts archive {card}"), &["accounts", "archive", &card], false, true, None);
     t.example("accounts unarchive", write, &format!("meowny accounts unarchive {card}"), &["accounts", "unarchive", &card], false, true, None);

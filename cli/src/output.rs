@@ -67,6 +67,44 @@ fn columns(rows: &[Value]) -> Vec<String> {
     keys
 }
 
+/// The records an account (`liability`) or a stash (`deposit`) can carry, and the fields of each that a table shows as columns of their own, like
+/// `liability.owed` and `deposit.expectedReturn`: a cell cannot hold a record. `--json` has all of it.
+const NESTED: &[(&str, &[&str])] = &[("liability", &["owed", "state", "payoff"]), ("deposit", &["state", "interestRate", "interestPeriod", "expectedReturn"])];
+
+/// What is left to pay of a liability as one short text: `never`, or the payments to make and the month of the last, like `12 payments to 2027-11`.
+fn payoff(value: &Value) -> Value {
+    match (value.get("never").and_then(Value::as_bool), value.get("months").and_then(Value::as_u64), value.get("month").and_then(Value::as_str)) {
+        (Some(true), _, _) => "never".into(),
+        (_, Some(months), Some(month)) => format!("{months} payments to {month}").into(),
+        _ => Value::Null,
+    }
+}
+
+/// A row with each record of `NESTED` spread over columns. An account that is not a liability and a stash that is not a deposit have a null there,
+/// so they add no column and show a dash under the ones the others add.
+fn spread(row: &Value) -> Value {
+    let Value::Object(map) = row else { return row.clone() };
+    let mut out = serde_json::Map::new();
+    for (key, value) in map {
+        match (NESTED.iter().find(|(name, _)| name == key), value) {
+            (Some((_, fields)), Value::Object(inner)) => {
+                for field in *fields {
+                    let shown = match (*field, inner.get(*field)) {
+                        ("payoff", Some(v)) => payoff(v),
+                        (_, v) => v.cloned().unwrap_or(Value::Null),
+                    };
+                    out.insert(format!("{key}.{field}"), shown);
+                }
+            }
+            (Some(_), _) => {}
+            (None, _) => {
+                out.insert(key.clone(), value.clone());
+            }
+        }
+    }
+    Value::Object(out)
+}
+
 /// Rows as aligned columns. Numbers (and amounts) are right-aligned, text left-aligned.
 fn table(rows: &[Value]) -> String {
     if rows.is_empty() {
@@ -75,6 +113,8 @@ fn table(rows: &[Value]) -> String {
     if rows.iter().any(|r| !r.is_object()) {
         return rows.iter().map(|r| format!("{}\n", cell(r))).collect();
     }
+    let rows: Vec<Value> = rows.iter().map(spread).collect();
+    let rows = rows.as_slice();
     let keys: Vec<String> = columns(rows);
     let body: Vec<Vec<String>> = rows.iter().map(|row| keys.iter().map(|k| cell(row.get(k).unwrap_or(&Value::Null))).collect()).collect();
     let widths: Vec<usize> = keys
@@ -177,5 +217,29 @@ mod tests {
         }
         let text = human(&json!([{ "a": "1.00" }, { "a": "-20.50" }]));
         assert_eq!(text.lines().collect::<Vec<_>>(), ["     a", "  1.00", "-20.50"]);
+    }
+
+    #[test]
+    fn what_a_liability_owes_and_what_a_deposit_returns_are_columns_and_a_row_without_them_shows_a_dash() {
+        let loan = json!({ "id": "7", "name": "Car", "kind": "LOAN", "interestRate": "6.5", "liability": { "owed": "8635.00", "state": "OWING", "interestPerMonth": "46.78", "payoff": { "months": 12, "interestLeft": "123.45", "month": "2027-11" } } });
+        let card = json!({ "id": "8", "name": "Card", "kind": "CHECKING", "interestRate": null, "liability": null });
+        let text = human(&json!([loan, card]));
+        let lines: Vec<&str> = text.lines().collect();
+        assert_eq!(lines.len(), 3);
+        for head in ["liability.owed", "liability.state", "liability.payoff"] {
+            assert!(lines[0].contains(head), "{head}: {text}");
+        }
+        assert!(!lines[0].split_whitespace().any(|c| c == "liability") && !lines[0].contains("interestPerMonth"), "{text}");
+        assert!(lines[1].contains("8635.00") && lines[1].contains("OWING") && lines[1].contains("12 payments to 2027-11"), "{text}");
+        assert!(lines[2].split_whitespace().rev().take(3).all(|c| c == "-"), "the three columns of the liability, the last in order: {text}");
+        // an installment that does not beat the interest is never paid off
+        let never = human(&json!([{ "id": "1", "liability": { "owed": "100.00", "state": "OWING", "interestPerMonth": "9.00", "payoff": { "never": true } } }]));
+        assert!(never.contains("never"), "{never}");
+        // a list with no liability and no deposit has none of the columns
+        let plain = human(&json!([{ "id": "1", "liability": null, "deposit": null, "name": "A" }]));
+        assert_eq!(plain.lines().next().unwrap().split_whitespace().collect::<Vec<_>>(), ["id", "name"]);
+        let deposit = human(&json!([{ "id": "3", "deposit": { "state": "MATURED", "interestRate": "3.1", "interestPeriod": "YEARLY", "startDate": "2026-01-05", "expectedReturn": "31.00", "daysLeft": 0 } }]));
+        assert_eq!(deposit.lines().next().unwrap().split_whitespace().collect::<Vec<_>>(), ["id", "deposit.expectedReturn", "deposit.interestPeriod", "deposit.interestRate", "deposit.state"]);
+        assert!(deposit.contains("MATURED") && deposit.contains("31.00") && !deposit.contains("2026-01-05"), "{deposit}");
     }
 }

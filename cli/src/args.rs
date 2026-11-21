@@ -391,7 +391,7 @@ mod tests {
             let body = run(&format!("accounts create --name X --kind {kind}")).body;
             assert_eq!(body["kind"], kind.to_uppercase().as_str());
         }
-        assert!(usage("accounts create --name X --kind bank").contains("--kind must be one of: CHECKING, SAVINGS, CASH, CREDIT_CARD"));
+        assert!(usage("accounts create --name X --kind bank").contains("--kind must be one of: CHECKING, SAVINGS, CASH, CREDIT_CARD, CREDIT, LOAN, MORTGAGE"));
         // the ids come as plain words and the lists as they do for a category
         assert_eq!(Value::Object(run("accounts show 2 --from 2026-11-01 --to 2026-11-30").body), json!({ "id": "2", "from": "2026-11-01", "to": "2026-11-30" }));
         assert_eq!(Value::Object(run("accounts reorder --ids 1,3,2").body), json!({ "ids": ["1", "3", "2"] }));
@@ -430,6 +430,47 @@ mod tests {
         }
         assert_eq!(Value::Object(run("transactions list --kind=Expense --limit 3").body), json!({ "kind": "EXPENSE", "limit": 3 }));
         assert!(usage("transactions list --kind nonsense").contains("--kind must be one of: INCOME, EXPENSE"));
+    }
+
+    #[test]
+    fn the_rate_the_installment_a_payment_and_a_deposit_become_what_the_app_takes() {
+        // a loan: the kind is matched without regard to case, the rate and the period are words, the debt is a negative opening balance
+        assert_eq!(
+            Value::Object(run("accounts create --name Car --kind loan --opening-balance=-9000.00 --interest-rate 6.5 --interest-period yearly --installment 950.00").body),
+            json!({ "name": "Car", "kind": "LOAN", "openingBalance": "-9000.00", "interestRate": "6.5", "interestPeriod": "YEARLY", "installment": "950.00" })
+        );
+        for kind in ["credit", "Mortgage", "LOAN"] {
+            assert_eq!(run(&format!("accounts create --name X --kind {kind}")).body["kind"], kind.to_uppercase().as_str(), "{kind}");
+        }
+        assert!(usage("accounts create --name X --kind loan --interest-period weekly").contains("--interest-period must be one of: MONTHLY, YEARLY"));
+        // the rate and the installment clear with `--clear-`, on update only; the period has no flag of its own to clear, it goes with the rate
+        assert_eq!(Value::Object(run("accounts update 4 --clear-interest-rate --clear-installment").body), json!({ "id": "4", "interestRate": null, "installment": null }));
+        assert_eq!(Value::Object(run("accounts update 4 --interest-rate 3.25 --interest-period monthly").body), json!({ "id": "4", "interestRate": "3.25", "interestPeriod": "MONTHLY" }));
+        assert!(usage("accounts update 4 --clear-interest-period").contains("no flag --clear-interest-period"));
+        assert!(usage("accounts create --name X --kind loan --clear-installment").contains("no flag --clear-installment"));
+        assert!(usage("accounts update 4 --interest-rate 3 --clear-interest-rate").contains("--interest-rate was given more than once"));
+        // a payment: the loan is the id, the account it comes from and the category of the interest are ids, the amounts are text
+        assert_eq!(
+            Value::Object(run("accounts pay 4 --from-account-id 1 --amount 950.00 --interest 585.00 --category-id 9 --date 2026-11-20 --note November").body),
+            json!({ "id": "4", "fromAccountId": "1", "amount": "950.00", "interest": "585.00", "categoryId": "9", "date": "2026-11-20", "note": "November" })
+        );
+        assert_eq!(Value::Object(run("accounts pay 4 --from-account-id 1 --amount 100.00").body), json!({ "id": "4", "fromAccountId": "1", "amount": "100.00" }));
+        assert!(usage("accounts pay 4 --amount 100.00").contains("missing --from-account-id"));
+        assert!(usage("accounts pay --from-account-id 1 --amount 100.00").contains("give the id: meowny accounts pay <id>"));
+        // a deposit is a stash of the kind DEPOSIT; its maturity is the target date; the kind is fixed, so it has no flag to clear
+        assert_eq!(
+            Value::Object(run("stashes create --name Term --account-id 1 --kind deposit --interest-rate 3.1 --interest-period yearly --start-date 2026-01-05 --target-date 2026-07-05").body),
+            json!({ "name": "Term", "accountId": "1", "kind": "DEPOSIT", "interestRate": "3.1", "interestPeriod": "YEARLY", "startDate": "2026-01-05", "targetDate": "2026-07-05" })
+        );
+        assert_eq!(Value::Object(run("stashes update 6 --interest-rate 3.4 --start-date 2026-02-01").body), json!({ "id": "6", "interestRate": "3.4", "startDate": "2026-02-01" }));
+        assert!(usage("stashes create --name Term --account-id 1 --kind fixed").contains("--kind must be one of: GOAL, DEPOSIT"));
+        assert!(usage("stashes update 6 --clear-interest-rate").contains("no flag --clear-interest-rate"));
+        // the return of a matured deposit
+        assert_eq!(
+            Value::Object(run("stashes return 6 --amount 31.00 --category-id 12 --date 2026-07-06 --note interest").body),
+            json!({ "id": "6", "amount": "31.00", "categoryId": "12", "date": "2026-07-06", "note": "interest" })
+        );
+        assert!(usage("stashes return 6 --amount 31.00").contains("missing --category-id"));
     }
 
     #[test]
@@ -492,6 +533,8 @@ mod tests {
         run("stashes archive 5");
         run("stashes add 5 --amount 10.00");
         run("stashes amend 5 --note X");
+        run("accounts pay 5 --from-account-id 1 --amount 10.00");
+        run("stashes return 5 --amount 10.00 --category-id 3");
     }
 
     #[test]

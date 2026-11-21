@@ -372,6 +372,7 @@ pub static ALL: &[Route] = &[
     accounts::ACCOUNTS_UNARCHIVE,
     accounts::ACCOUNTS_DELETE,
     accounts::ACCOUNTS_REORDER,
+    accounts::ACCOUNTS_PAY,
     accounts::TRANSFERS_CREATE,
     accounts::TRANSFERS_UPDATE,
     accounts::TRANSFERS_DELETE,
@@ -389,6 +390,7 @@ pub static ALL: &[Route] = &[
     stashes::STASHES_TAKE,
     stashes::STASHES_AMEND,
     stashes::STASHES_ERASE,
+    stashes::STASHES_RETURN,
 ];
 
 #[cfg(test)]

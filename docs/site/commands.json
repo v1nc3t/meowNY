@@ -3358,7 +3358,7 @@
       "positional": null,
       "route": "accounts.list",
       "scope": "read",
-      "summary": "The accounts in the person's order, the archived ones last, each with what it holds today (balance), what changed this month, its last activity and how many rows (entries) are in it, and its details: BIC, notes, group, whether net worth counts it, and the virtual balance with what is available (balance plus virtual balance). An account in another currency (foreign true) has its figures in that currency, with the rate typed for it and balanceInMain, its balance in the app's currency. The main account has isMain true.",
+      "summary": "The accounts in the person's order, the archived ones last, each with what it holds today (balance), what changed this month, its last activity and how many rows (entries) are in it, and its details: BIC, notes, group, whether net worth counts it, and the virtual balance with what is available (balance plus virtual balance). An account in another currency (foreign true) has its figures in that currency, with the rate typed for it and balanceInMain, its balance in the app's currency. The main account has isMain true. An account can have an interest rate (interestRate, a percent like 3.25, per interestPeriod MONTHLY or YEARLY): an asset then has returnPerMonth, what it returns in a month on what it holds (simple interest, an estimate). A credit, a loan or a mortgage (kind CREDIT, LOAN, MORTGAGE) is a liability: its balance is below zero while you owe, and it has installment (what is paid each month, if set) and liability, with owed (what you owe), state (OWING, PAID_OFF or OVERPAID), interestPerMonth (null without a rate) and payoff: null without an installment or when nothing is owed, {never: true} when the installment does not beat a month's interest, otherwise months (payments still to make), interestLeft (the interest over them) and month (when the last is due, as 2027-11). Assets have no liability and no installment, and liabilities have no returnPerMonth.",
       "usage": "meowny accounts list"
     },
     {
@@ -3485,7 +3485,7 @@
       "positional": null,
       "route": "accounts.summary",
       "scope": "read",
-      "summary": "Net worth, in the app's currency: what the accounts that count in it hold in all (the archived ones too, an account in another currency turned into the app's currency at its rate), what friends owe you (negative: you owe them) and the two added. An account can be left out of net worth, and a virtual balance is never in it. Also how many accounts there are, those left out too, and whether accounts are in use: there is more than the main account, or it has an opening balance.",
+      "summary": "Net worth, in the app's currency: what the accounts that count in it hold in all (the archived ones too, an account in another currency turned into the app's currency at its rate), what friends owe you (negative: you owe them) and the two added. An account can be left out of net worth, and a virtual balance is never in it. Also how many accounts there are, those left out too, and whether accounts are in use: there is more than the main account, or it has an opening balance. inAccounts counts the assets only; debts is what the credits, loans and mortgages that count in net worth hold, below zero while something is owed, and it is in the net worth too.",
       "usage": "meowny accounts summary"
     },
     {
@@ -3570,14 +3570,17 @@
           "nullable": false,
           "param": "kind",
           "required": true,
-          "summary": "CHECKING (a bank account), SAVINGS, CASH or CREDIT_CARD.",
+          "summary": "CHECKING (a bank account), SAVINGS, CASH, CREDIT_CARD, or a liability: CREDIT, LOAN or MORTGAGE.",
           "type": "string",
-          "value": "CHECKING|SAVINGS|CASH|CREDIT_CARD",
+          "value": "CHECKING|SAVINGS|CASH|CREDIT_CARD|CREDIT|LOAN|MORTGAGE",
           "values": [
             "CHECKING",
             "SAVINGS",
             "CASH",
-            "CREDIT_CARD"
+            "CREDIT_CARD",
+            "CREDIT",
+            "LOAN",
+            "MORTGAGE"
           ]
         },
         {
@@ -3679,13 +3682,46 @@
           "type": "string",
           "value": "text",
           "values": []
+        },
+        {
+          "flag": "--interest-rate",
+          "nullable": false,
+          "param": "interestRate",
+          "required": false,
+          "summary": "What the account earns, or for a liability what it costs, as a percent from 0 to 100 with at most 3 decimals, like 3.25. Needs interestPeriod. It is not the currency rate (rate). Nothing is booked by itself: the figures are estimates, simple interest.",
+          "type": "string",
+          "value": "text",
+          "values": []
+        },
+        {
+          "flag": "--interest-period",
+          "nullable": false,
+          "param": "interestPeriod",
+          "required": false,
+          "summary": "What interestRate is a percent of: MONTHLY or YEARLY. Needs interestRate.",
+          "type": "string",
+          "value": "MONTHLY|YEARLY",
+          "values": [
+            "MONTHLY",
+            "YEARLY"
+          ]
+        },
+        {
+          "flag": "--installment",
+          "nullable": false,
+          "param": "installment",
+          "required": false,
+          "summary": "What a liability is paid each month, like 950.00, 0.01 or more, in the account's currency. Refused for an asset (any other kind). The payoff date follows from it.",
+          "type": "money",
+          "value": "amount",
+          "values": []
         }
       ],
       "positional": null,
       "route": "accounts.create",
       "scope": "write",
-      "summary": "Adds an account at the end of the list. Its name is 1 to 50 characters and unique among the accounts that are not archived, whatever the case.",
-      "usage": "meowny accounts create --name <text> --kind <CHECKING|SAVINGS|CASH|CREDIT_CARD> [--number <text>] [--opening-balance <text>] [--opening-date <date>] [--bic <text>] [--notes <text>] [--group <text>] [--include-in-net-worth <boolean>] [--virtual-balance <text>] [--currency <text>] [--rate <text>]"
+      "summary": "Adds an account at the end of the list. Its name is 1 to 50 characters and unique among the accounts that are not archived, whatever the case. A kind CREDIT, LOAN or MORTGAGE is a liability, an account you owe on: put what you owe in openingBalance as a negative amount, like -9000.00, and pay it with accounts.pay. interestRate and interestPeriod go together or not at all; installment is for a liability only.",
+      "usage": "meowny accounts create --name <text> --kind <CHECKING|SAVINGS|CASH|CREDIT_CARD|CREDIT|LOAN|MORTGAGE> [--number <text>] [--opening-balance <text>] [--opening-date <date>] [--bic <text>] [--notes <text>] [--group <text>] [--include-in-net-worth <boolean>] [--virtual-balance <text>] [--currency <text>] [--rate <text>] [--interest-rate <text>] [--interest-period <MONTHLY|YEARLY>] [--installment <amount>]"
     },
     {
       "command": "accounts update",
@@ -3717,14 +3753,17 @@
           "nullable": false,
           "param": "kind",
           "required": false,
-          "summary": "CHECKING, SAVINGS, CASH or CREDIT_CARD.",
+          "summary": "CHECKING, SAVINGS, CASH, CREDIT_CARD, CREDIT, LOAN or MORTGAGE: a new kind of the same group, an asset for an asset or a liability for a liability.",
           "type": "string",
-          "value": "CHECKING|SAVINGS|CASH|CREDIT_CARD",
+          "value": "CHECKING|SAVINGS|CASH|CREDIT_CARD|CREDIT|LOAN|MORTGAGE",
           "values": [
             "CHECKING",
             "SAVINGS",
             "CASH",
-            "CREDIT_CARD"
+            "CREDIT_CARD",
+            "CREDIT",
+            "LOAN",
+            "MORTGAGE"
           ]
         },
         {
@@ -3856,13 +3895,56 @@
           "type": "string",
           "value": "text",
           "values": []
+        },
+        {
+          "flag": "--interest-rate",
+          "nullable": true,
+          "param": "interestRate",
+          "required": false,
+          "summary": "The new interest rate as a percent from 0 to 100 with at most 3 decimals, like 3.25, or null to clear it and its period.",
+          "type": "string",
+          "value": "text",
+          "values": []
+        },
+        {
+          "clears": "interestRate",
+          "flag": "--clear-interest-rate",
+          "summary": "Clears interestRate."
+        },
+        {
+          "flag": "--interest-period",
+          "nullable": false,
+          "param": "interestPeriod",
+          "required": false,
+          "summary": "The new period of the rate: MONTHLY or YEARLY.",
+          "type": "string",
+          "value": "MONTHLY|YEARLY",
+          "values": [
+            "MONTHLY",
+            "YEARLY"
+          ]
+        },
+        {
+          "flag": "--installment",
+          "nullable": true,
+          "param": "installment",
+          "required": false,
+          "summary": "The new installment of a liability, like 950.00, or null to clear it. Refused for an asset.",
+          "type": "money",
+          "value": "amount",
+          "values": []
+        },
+        {
+          "clears": "installment",
+          "flag": "--clear-installment",
+          "summary": "Clears installment."
         }
       ],
       "positional": "id",
       "route": "accounts.update",
       "scope": "write",
-      "summary": "Changes an account that is not archived (bring it back first). Fields left out stay as they are; a null number, BIC, notes or group clears it.",
-      "usage": "meowny accounts update <id> [--name <text>] [--kind <CHECKING|SAVINGS|CASH|CREDIT_CARD>] [--number <text>] [--opening-balance <text>] [--opening-date <date>] [--bic <text>] [--notes <text>] [--group <text>] [--include-in-net-worth <boolean>] [--virtual-balance <text>] [--currency <text>] [--rate <text>] [--balance <text>]"
+      "summary": "Changes an account that is not archived (bring it back first). Fields left out stay as they are; a null number, BIC, notes, group, interestRate or installment clears it. The kind may change inside its group (CHECKING, SAVINGS, CASH and CREDIT_CARD among themselves; CREDIT, LOAN and MORTGAGE among themselves) and never across: the main account is never a liability. A null interestRate clears the period too; a new interestRate needs an interestPeriod, in the request or already there; an interestPeriod needs a rate. installment is for a liability only.",
+      "usage": "meowny accounts update <id> [--name <text>] [--kind <CHECKING|SAVINGS|CASH|CREDIT_CARD|CREDIT|LOAN|MORTGAGE>] [--number <text>] [--opening-balance <text>] [--opening-date <date>] [--bic <text>] [--notes <text>] [--group <text>] [--include-in-net-worth <boolean>] [--virtual-balance <text>] [--currency <text>] [--rate <text>] [--balance <text>] [--interest-rate <text>] [--interest-period <MONTHLY|YEARLY>] [--installment <amount>]"
     },
     {
       "command": "accounts archive",
@@ -3951,6 +4033,88 @@
       "scope": "write",
       "summary": "Puts the accounts in a new order; give every account that is not archived, each once.",
       "usage": "meowny accounts reorder --ids <id,id,...>"
+    },
+    {
+      "command": "accounts pay",
+      "confirm": false,
+      "destructive": false,
+      "flags": [
+        {
+          "flag": "--id",
+          "nullable": false,
+          "param": "id",
+          "required": true,
+          "summary": "The liability being paid: an account of kind CREDIT, LOAN or MORTGAGE that is not archived.",
+          "type": "id",
+          "value": "id",
+          "values": []
+        },
+        {
+          "flag": "--from-account-id",
+          "nullable": false,
+          "param": "fromAccountId",
+          "required": true,
+          "summary": "The account the money comes from. It must not be archived, must differ from the liability and be in the same currency.",
+          "type": "id",
+          "value": "id",
+          "values": []
+        },
+        {
+          "flag": "--amount",
+          "nullable": false,
+          "param": "amount",
+          "required": true,
+          "summary": "The whole payment, interest included, more than zero, like 950.00, in the currency of the liability.",
+          "type": "money",
+          "value": "amount",
+          "values": []
+        },
+        {
+          "flag": "--interest",
+          "nullable": false,
+          "param": "interest",
+          "required": false,
+          "summary": "The part of amount that is interest, like 585.00, from 0.00 to amount. 0.00 if left out.",
+          "type": "money",
+          "value": "amount",
+          "values": []
+        },
+        {
+          "flag": "--category-id",
+          "nullable": false,
+          "param": "categoryId",
+          "required": false,
+          "summary": "The expense category of the interest. Required when interest is above 0.00.",
+          "type": "id",
+          "value": "id",
+          "values": []
+        },
+        {
+          "flag": "--date",
+          "nullable": false,
+          "param": "date",
+          "required": false,
+          "summary": "The day it was paid, not after today. Today if left out.",
+          "type": "date",
+          "value": "date",
+          "values": []
+        },
+        {
+          "flag": "--note",
+          "nullable": false,
+          "param": "note",
+          "required": false,
+          "summary": "A note, up to 200 characters. It goes on both rows.",
+          "type": "string",
+          "value": "text",
+          "values": []
+        }
+      ],
+      "positional": "id",
+      "route": "accounts.pay",
+      "scope": "write",
+      "summary": "Pays a credit, a loan or a mortgage (a liability) from another account, in one step, split in two: the interest part is an expense of the paying account (named as the liability, in the category given) and the rest, the principal, is a transfer from the paying account into the liability that lowers what you owe. Both are ordinary rows afterwards: changing or deleting one does not touch the other. amount is the whole payment, interest included; interest is the part of it that is interest, 0.00 up to amount (0.00 if left out), and above 0.00 it needs categoryId, an expense category. When the whole payment is interest there is no transfer, and when interest is 0.00 there is no expense. Answers {transfer, transaction}, each null when it was not made. Refused as invalid_input, with nothing written: a liability that is archived or is not one (not_found when there is no such account), a fromAccountId that is archived, is the liability itself or is in another currency, an amount outside 0.01 to 9999999999.99, an interest above the amount, interest without an expense category, and a date after today. Paying more than is owed is allowed: the liability is then OVERPAID.",
+      "usage": "meowny accounts pay <id> --from-account-id <id> --amount <amount> [--interest <amount>] [--category-id <id>] [--date <date>] [--note <text>]"
     },
     {
       "command": "transfers create",
@@ -4152,7 +4316,7 @@
       "positional": null,
       "route": "stashes.list",
       "scope": "read",
-      "summary": "The stashes in the person's order, the archived ones last, each with the account it lives in, what it holds (saved), its target and how far it is (left, percent, reached), what to save each month to reach the target date (perMonth, and overdue when the date has passed), how many entries it has (entries) and the day of the last one (lastEntry). All amounts are in the account's currency (currency). Money in a stash stays in its account: a stash only says that part of the balance is set aside, so no balance, statement, net worth or budget changes when money goes into or out of one. Also free is what the account holds that none of its stashes has set aside: the balance minus what its stashes hold, and it can be below zero if money was spent after it was set aside. Only the stashes of one account if accountId is given.",
+      "summary": "The stashes in the person's order, the archived ones last, each with the account it lives in, what it holds (saved), its target and how far it is (left, percent, reached), what to save each month to reach the target date (perMonth, and overdue when the date has passed), how many entries it has (entries) and the day of the last one (lastEntry). A stash is a goal (kind GOAL) or a term deposit (kind DEPOSIT); a deposit has deposit, with its interestRate and interestPeriod, startDate, state (RUNNING, MATURED, BOOKED or BROKEN), brokenOn, returnedOn, expectedReturn (simple interest over the whole term on what it holds now), valueAtMaturity (what it holds plus that) and daysLeft to the maturity, which is its targetDate; deposit is null for a goal, and a deposit has no perMonth. All amounts are in the account's currency (currency). Money in a stash stays in its account: a stash only says that part of the balance is set aside, so no balance, statement, net worth or budget changes when money goes into or out of one. Also free is what the account holds that none of its stashes has set aside: the balance minus what its stashes hold, and it can be below zero if money was spent after it was set aside. Only the stashes of one account if accountId is given.",
       "usage": "meowny stashes list [--account-id <id>]"
     },
     {
@@ -4246,6 +4410,19 @@
           "values": []
         },
         {
+          "flag": "--kind",
+          "nullable": false,
+          "param": "kind",
+          "required": false,
+          "summary": "GOAL, to save towards a target (the default), or DEPOSIT, a term deposit with a rate and a maturity. Fixed once the stash is made.",
+          "type": "string",
+          "value": "GOAL|DEPOSIT",
+          "values": [
+            "GOAL",
+            "DEPOSIT"
+          ]
+        },
+        {
           "flag": "--target",
           "nullable": false,
           "param": "target",
@@ -4260,7 +4437,7 @@
           "nullable": false,
           "param": "targetDate",
           "required": false,
-          "summary": "The day you want to have it by.",
+          "summary": "The day you want to have it by. For a deposit, its maturity: required, and after startDate.",
           "type": "date",
           "value": "date",
           "values": []
@@ -4274,13 +4451,46 @@
           "type": "string",
           "value": "text",
           "values": []
+        },
+        {
+          "flag": "--interest-rate",
+          "nullable": false,
+          "param": "interestRate",
+          "required": false,
+          "summary": "A deposit's rate as a percent from 0 to 100 with at most 3 decimals, like 3.1. Needs interestPeriod. Deposits only.",
+          "type": "string",
+          "value": "text",
+          "values": []
+        },
+        {
+          "flag": "--interest-period",
+          "nullable": false,
+          "param": "interestPeriod",
+          "required": false,
+          "summary": "What interestRate is a percent of: MONTHLY or YEARLY. Deposits only.",
+          "type": "string",
+          "value": "MONTHLY|YEARLY",
+          "values": [
+            "MONTHLY",
+            "YEARLY"
+          ]
+        },
+        {
+          "flag": "--start-date",
+          "nullable": false,
+          "param": "startDate",
+          "required": false,
+          "summary": "The day a deposit's term begins. Today if left out. Deposits only.",
+          "type": "date",
+          "value": "date",
+          "values": []
         }
       ],
       "positional": null,
       "route": "stashes.create",
       "scope": "write",
-      "summary": "Makes a stash at the end of the list, empty: put money in it with stashes add. Money in a stash stays in its account: a stash only says that part of the balance is set aside, so no balance, statement, net worth or budget changes when money goes into or out of one. The name is 1 to 50 characters and unique among the stashes that are not archived, whatever the case (a taken one is refused as name_exists). The account is required, must exist and must not be archived, and the stash lives in it for good unless you move it with stashes update. The target is an amount of 0.01 or more; the target date may be in the past, and the stash is then overdue. Notes are up to 1000 characters, line breaks are kept.",
-      "usage": "meowny stashes create --name <text> --account-id <id> [--target <amount>] [--target-date <date>] [--notes <text>]"
+      "summary": "Makes a stash at the end of the list, empty: put money in it with stashes add. Money in a stash stays in its account: a stash only says that part of the balance is set aside, so no balance, statement, net worth or budget changes when money goes into or out of one. The name is 1 to 50 characters and unique among the stashes that are not archived, whatever the case (a taken one is refused as name_exists). The account is required, must exist and must not be archived, and the stash lives in it for good unless you move it with stashes update. The target is an amount of 0.01 or more; the target date may be in the past, and the stash is then overdue. Notes are up to 1000 characters, line breaks are kept. The account must not be a credit, a loan or a mortgage. With kind DEPOSIT (a goal if left out) it is a term deposit: interestRate and interestPeriod are required, targetDate is its maturity and is required and must be after startDate, which is today if left out; a goal takes none of interestRate, interestPeriod and startDate. Everything else is refused as invalid_input.",
+      "usage": "meowny stashes create --name <text> --account-id <id> [--kind <GOAL|DEPOSIT>] [--target <amount>] [--target-date <date>] [--notes <text>] [--interest-rate <text>] [--interest-period <MONTHLY|YEARLY>] [--start-date <date>]"
     },
     {
       "command": "stashes update",
@@ -4318,6 +4528,19 @@
           "values": []
         },
         {
+          "flag": "--kind",
+          "nullable": false,
+          "param": "kind",
+          "required": false,
+          "summary": "Refused whatever it says: the kind is fixed when the stash is made.",
+          "type": "string",
+          "value": "GOAL|DEPOSIT",
+          "values": [
+            "GOAL",
+            "DEPOSIT"
+          ]
+        },
+        {
           "flag": "--target",
           "nullable": true,
           "param": "target",
@@ -4337,7 +4560,7 @@
           "nullable": true,
           "param": "targetDate",
           "required": false,
-          "summary": "The new target date, or null to clear it.",
+          "summary": "The new target date, or null to clear it. For a deposit, its maturity: it can be moved and not cleared.",
           "type": "date",
           "value": "date",
           "values": []
@@ -4361,13 +4584,46 @@
           "clears": "notes",
           "flag": "--clear-notes",
           "summary": "Clears notes."
+        },
+        {
+          "flag": "--interest-rate",
+          "nullable": false,
+          "param": "interestRate",
+          "required": false,
+          "summary": "A deposit's new rate as a percent from 0 to 100 with at most 3 decimals, like 3.1. Deposits only.",
+          "type": "string",
+          "value": "text",
+          "values": []
+        },
+        {
+          "flag": "--interest-period",
+          "nullable": false,
+          "param": "interestPeriod",
+          "required": false,
+          "summary": "A deposit's new period: MONTHLY or YEARLY. Deposits only.",
+          "type": "string",
+          "value": "MONTHLY|YEARLY",
+          "values": [
+            "MONTHLY",
+            "YEARLY"
+          ]
+        },
+        {
+          "flag": "--start-date",
+          "nullable": false,
+          "param": "startDate",
+          "required": false,
+          "summary": "A deposit's new start date. Deposits only.",
+          "type": "date",
+          "value": "date",
+          "values": []
         }
       ],
       "positional": "id",
       "route": "stashes.update",
       "scope": "write",
-      "summary": "Changes a stash that is not archived (bring it back first). Fields left out stay as they are; a null target, targetDate or notes clears it. A new name must not be taken by another stash that is not archived. A new target may not be below what the stash holds already. A new accountId moves the stash, and what it holds with it: that account must not be archived, must be in the same currency and must have at least that much free (a stash that holds nothing moves to any account of its currency); naming the account the stash is in is not a move and changes nothing. Money in a stash stays in its account: a stash only says that part of the balance is set aside, so no balance, statement, net worth or budget changes when money goes into or out of one. Also free is what the account holds that none of its stashes has set aside: the balance minus what its stashes hold, and it can be below zero if money was spent after it was set aside.",
-      "usage": "meowny stashes update <id> [--name <text>] [--account-id <id>] [--target <amount>] [--target-date <date>] [--notes <text>]"
+      "summary": "Changes a stash that is not archived (bring it back first). Fields left out stay as they are; a null target, targetDate or notes clears it. A new name must not be taken by another stash that is not archived. A new target may not be below what the stash holds already. A new accountId moves the stash, and what it holds with it: that account must not be archived, must be in the same currency and must have at least that much free (a stash that holds nothing moves to any account of its currency); naming the account the stash is in is not a move and changes nothing. The kind of a stash is fixed when it is made: sending kind is refused as invalid_input, and so are interestRate, interestPeriod and startDate for a goal. For a deposit that has not been broken, interestRate, interestPeriod, startDate and targetDate (the maturity, which must stay after the start date and cannot be cleared) change its terms; from a matured or booked deposit, a new maturity after today starts the next term (returnedOn is cleared and, without a startDate, the start moves to the old maturity). A broken deposit takes no change of terms, only its name, notes, target and account. Money in a stash stays in its account: a stash only says that part of the balance is set aside, so no balance, statement, net worth or budget changes when money goes into or out of one. Also free is what the account holds that none of its stashes has set aside: the balance minus what its stashes hold, and it can be below zero if money was spent after it was set aside.",
+      "usage": "meowny stashes update <id> [--name <text>] [--account-id <id>] [--kind <GOAL|DEPOSIT>] [--target <amount>] [--target-date <date>] [--notes <text>] [--interest-rate <text>] [--interest-period <MONTHLY|YEARLY>] [--start-date <date>]"
     },
     {
       "command": "stashes archive",
@@ -4669,6 +4925,68 @@
       "scope": "write",
       "summary": "Deletes an entry and answers its stash with its entries. The transfer that came with the entry stays, unless deleteTransfer is true: then it is deleted in the same step. Refused as invalid_input, with nothing deleted: an add whose money was taken out since (the stash would hold less than zero), and a take that would put more in the stash than is free in the account or than is left to the target. Money in a stash stays in its account: a stash only says that part of the balance is set aside, so no balance, statement, net worth or budget changes when money goes into or out of one.",
       "usage": "meowny stashes erase <id> [--delete-transfer <boolean>]"
+    },
+    {
+      "command": "stashes return",
+      "confirm": false,
+      "destructive": false,
+      "flags": [
+        {
+          "flag": "--id",
+          "nullable": false,
+          "param": "id",
+          "required": true,
+          "summary": "The stash.",
+          "type": "id",
+          "value": "id",
+          "values": []
+        },
+        {
+          "flag": "--amount",
+          "nullable": false,
+          "param": "amount",
+          "required": true,
+          "summary": "What the bank paid, more than zero, like 31.00, in the account's currency.",
+          "type": "money",
+          "value": "amount",
+          "values": []
+        },
+        {
+          "flag": "--category-id",
+          "nullable": false,
+          "param": "categoryId",
+          "required": true,
+          "summary": "The income category the return is booked in.",
+          "type": "id",
+          "value": "id",
+          "values": []
+        },
+        {
+          "flag": "--date",
+          "nullable": false,
+          "param": "date",
+          "required": false,
+          "summary": "The day it was paid: not after today and not before the maturity. Today if left out.",
+          "type": "date",
+          "value": "date",
+          "values": []
+        },
+        {
+          "flag": "--note",
+          "nullable": false,
+          "param": "note",
+          "required": false,
+          "summary": "A note, up to 200 characters. It goes on both rows.",
+          "type": "string",
+          "value": "text",
+          "values": []
+        }
+      ],
+      "positional": "id",
+      "route": "stashes.return",
+      "scope": "write",
+      "summary": "Books the return of a term deposit that has matured, and answers the stash. In one step an income of amount is made in the deposit's account (named as the deposit, in the category given, on the date) and the same amount is added to the deposit, so what the bank paid stays in the deposit until you take it out; then the return counts as booked (state BOOKED, returnedOn is the date). The income and the add are ordinary rows afterwards. Refused as invalid_input, with nothing written: a stash that is a goal or is not matured (RUNNING, already BOOKED or BROKEN), a stash that is archived or in an account that is archived, an amount outside 0.01 to 9999999999.99, a categoryId that is not an income category, and a date after today or before the maturity.",
+      "usage": "meowny stashes return <id> --amount <amount> --category-id <id> [--date <date>] [--note <text>]"
     },
     {
       "command": "login",

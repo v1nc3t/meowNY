@@ -26,13 +26,14 @@ const ACCOUNT_KEYS: [&str; 29] = [
 const TRANSFER_KEYS: [&str; 7] = ["amount", "date", "fromAccountId", "id", "note", "toAccountId", "toAmount"];
 
 const READ_ROUTES: [&str; 6] = ["accounts.list", "accounts.show", "accounts.history", "accounts.breakdown", "accounts.summary", "transfers.list"];
-const WRITE_ROUTES: [&str; 9] = [
+const WRITE_ROUTES: [&str; 10] = [
     "accounts.create",
     "accounts.update",
     "accounts.archive",
     "accounts.unarchive",
     "accounts.delete",
     "accounts.reorder",
+    "accounts.pay",
     "transfers.create",
     "transfers.update",
     "transfers.delete",
@@ -175,16 +176,17 @@ fn requests(w: &World) -> Vec<(&'static str, Value)> {
         ("transfers.list", json!({ "accountId": w.a, "from": "2026-10-01", "to": "2026-10-31", "limit": 10, "offset": 0 })),
         (
             "accounts.create",
-            json!({ "name": "New", "kind": "CASH", "number": "N1", "openingBalance": "1.00", "openingDate": "2026-10-01", "bic": "BIC1", "notes": "n", "group": "G", "includeInNetWorth": false, "virtualBalance": "-5.00", "currency": "RON", "rate": "5.00" }),
+            json!({ "name": "New", "kind": "CASH", "number": "N1", "openingBalance": "1.00", "openingDate": "2026-10-01", "bic": "BIC1", "notes": "n", "group": "G", "includeInNetWorth": false, "virtualBalance": "-5.00", "currency": "RON", "rate": "5.00", "interestRate": "3.25", "interestPeriod": "YEARLY", "installment": "950.00" }),
         ),
         (
             "accounts.update",
-            json!({ "id": w.a, "name": "Renamed", "kind": "SAVINGS", "number": "N2", "openingBalance": "2.00", "openingDate": "2026-10-02", "bic": "BIC2", "notes": "m", "group": "H", "includeInNetWorth": false, "virtualBalance": "5.00", "currency": "EUR" }),
+            json!({ "id": w.a, "name": "Renamed", "kind": "SAVINGS", "number": "N2", "openingBalance": "2.00", "openingDate": "2026-10-02", "bic": "BIC2", "notes": "m", "group": "H", "includeInNetWorth": false, "virtualBalance": "5.00", "currency": "EUR", "interestRate": "3.25", "interestPeriod": "MONTHLY", "installment": "950.00" }),
         ),
         ("accounts.archive", json!({ "id": w.a })),
         ("accounts.unarchive", json!({ "id": w.archived })),
         ("accounts.delete", json!({ "id": w.empty })),
         ("accounts.reorder", json!({ "ids": w.active })),
+        ("accounts.pay", json!({ "id": w.a, "fromAccountId": w.b, "amount": "950.00", "interest": "585.00", "categoryId": "1", "date": "2026-10-01", "note": "n" })),
         ("transfers.create", json!({ "fromAccountId": w.a, "toAccountId": w.b, "amount": "1.00", "date": "2026-10-01", "note": "n" })),
         ("transfers.update", json!({ "id": w.transfer, "fromAccountId": w.a, "toAccountId": w.b, "amount": "3.00", "date": "2026-10-02", "note": "x" })),
         ("transfers.delete", json!({ "id": w.transfer })),
@@ -207,7 +209,7 @@ fn the_new_routes_have_the_scopes_and_arguments_of_the_design_note() {
         assert!(route(name).confirm.is_none(), "{name}: the screens do not ask for these, and nothing leaves the app");
     }
     // (name, kind, required, nullable) of each argument, in order
-    let table: [(&str, &[Arg]); 15] = [
+    let table: [(&str, &[Arg]); 16] = [
         ("accounts.list", &[]),
         ("accounts.show", &[("id", Kind::Id, true, false), ("from", Kind::Date, false, false), ("to", Kind::Date, false, false)]),
         ("accounts.history", &[("id", Kind::Id, true, false), ("year", Kind::Year, true, false)]),
@@ -232,6 +234,9 @@ fn the_new_routes_have_the_scopes_and_arguments_of_the_design_note() {
                 ("virtualBalance", Kind::String, false, false),
                 ("currency", Kind::String, false, false),
                 ("rate", Kind::String, false, false),
+                ("interestRate", Kind::String, false, false),
+                ("interestPeriod", Kind::String, false, false),
+                ("installment", Kind::Money, false, false),
             ],
         ),
         (
@@ -251,12 +256,27 @@ fn the_new_routes_have_the_scopes_and_arguments_of_the_design_note() {
                 ("currency", Kind::String, false, false),
                 ("rate", Kind::String, false, false),
                 ("balance", Kind::String, false, false),
+                ("interestRate", Kind::String, false, true),
+                ("interestPeriod", Kind::String, false, false),
+                ("installment", Kind::Money, false, true),
             ],
         ),
         ("accounts.archive", &[("id", Kind::Id, true, false)]),
         ("accounts.unarchive", &[("id", Kind::Id, true, false)]),
         ("accounts.delete", &[("id", Kind::Id, true, false)]),
         ("accounts.reorder", &[("ids", Kind::Ids, true, false)]),
+        (
+            "accounts.pay",
+            &[
+                ("id", Kind::Id, true, false),
+                ("fromAccountId", Kind::Id, true, false),
+                ("amount", Kind::Money, true, false),
+                ("interest", Kind::Money, false, false),
+                ("categoryId", Kind::Id, false, false),
+                ("date", Kind::Date, false, false),
+                ("note", Kind::String, false, false),
+            ],
+        ),
         (
             "transfers.create",
             &[
@@ -286,9 +306,17 @@ fn the_new_routes_have_the_scopes_and_arguments_of_the_design_note() {
         let got: Vec<Arg> = route(name).params.iter().map(|p| (p.name, p.kind, p.required, p.nullable)).collect();
         assert_eq!(got, expected, "{name}");
     }
-    // The kind is the four words of the core, and the opening balance, the balance and the virtual balance are text because money has no sign.
+    // The kind is the seven words of the core, and the opening balance, the balance and the virtual balance are text because money has no sign.
     // The currency is text, as the rate is: the core says what it takes. The two other amounts are money as `amount` is, so they take what it takes.
-    let kinds = [crate::accounts::Kind::Checking, crate::accounts::Kind::Savings, crate::accounts::Kind::Cash, crate::accounts::Kind::CreditCard];
+    let kinds = [
+        crate::accounts::Kind::Checking,
+        crate::accounts::Kind::Savings,
+        crate::accounts::Kind::Cash,
+        crate::accounts::Kind::CreditCard,
+        crate::accounts::Kind::Credit,
+        crate::accounts::Kind::Loan,
+        crate::accounts::Kind::Mortgage,
+    ];
     for name in ["accounts.create", "accounts.update"] {
         let words: Vec<&str> = route(name).params.iter().find(|p| p.name == "kind").unwrap().values.to_vec();
         assert_eq!(words, kinds.map(crate::accounts::Kind::as_sql), "{name}");
@@ -470,16 +498,16 @@ fn an_account_is_made_changed_and_its_number_cleared() {
 }
 
 #[test]
-fn the_kind_of_an_account_is_one_of_four_words_exactly() {
+fn the_kind_of_an_account_is_one_of_seven_words_exactly() {
     let (_dir, vault) = fresh();
     // The route lists the words, as `categories.create` lists INCOME and EXPENSE; the command line matches them without regard to case.
-    for kind in ["CHECKING", "SAVINGS", "CASH", "CREDIT_CARD"] {
+    for kind in ["CHECKING", "SAVINGS", "CASH", "CREDIT_CARD", "CREDIT", "LOAN", "MORTGAGE"] {
         assert_eq!(ok(&vault, "accounts.create", json!({ "name": kind, "kind": kind }))["kind"], kind);
     }
     let accounts = listed(&vault);
     let id = id_of(&accounts[1]);
     for kind in ["savings", "Credit_Card", "credit card", "BANK", "", "CREDIT-CARD", "CHECKING "] {
-        assert_eq!(refuse(&vault, "accounts.create", json!({ "name": "New", "kind": kind }), INVALID), "`kind` must be one of: CHECKING, SAVINGS, CASH, CREDIT_CARD", "{kind:?}");
+        assert_eq!(refuse(&vault, "accounts.create", json!({ "name": "New", "kind": kind }), INVALID), "`kind` must be one of: CHECKING, SAVINGS, CASH, CREDIT_CARD, CREDIT, LOAN, MORTGAGE", "{kind:?}");
         refuse(&vault, "accounts.update", json!({ "id": id, "kind": kind }), INVALID);
     }
     for value in [json!(1), json!(true), json!(null), json!(["CASH"])] {
@@ -1924,7 +1952,8 @@ fn an_unknown_argument_is_refused_by_every_new_route_and_a_name_in_the_wrong_cas
     let (_dir, vault) = fresh();
     let w = world(&vault);
     for (name, body) in requests(&w) {
-        for extra in ["extra", "accountID", "account-id", "Id", "kind ", "categoryId"] {
+        // `categoryId` is not an argument of the routes of accounts, except of the payment of a liability, which books its interest in one
+        for extra in ["extra", "accountID", "account-id", "Id", "kind ", "categoryId"].into_iter().filter(|extra| !route(name).params.iter().any(|p| p.name == *extra)) {
             let mut with = body.clone();
             with[extra] = json!("1");
             assert_eq!(refuse(&vault, name, with, INVALID), format!("unknown argument `{extra}`"), "{name}");
@@ -1968,7 +1997,7 @@ fn a_missing_argument_is_refused_by_name() {
             assert!(refuse(&vault, name, json!({}), INVALID).starts_with("missing argument `"), "{name}");
         }
     }
-    assert_eq!(tried, 17, "every required argument of every route");
+    assert_eq!(tried, 20, "every required argument of every route");
     // the old routes have not started to need the account
     for name in WITH_ACCOUNT {
         assert!(!route(name).params.iter().any(|p| p.name == "accountId" && p.required), "{name}");
@@ -2186,7 +2215,7 @@ fn a_read_token_reads_accounts_and_transfers_and_cannot_write_any_of_them() {
         assert_eq!((reached.status, reached.code().as_str()), (400, "invalid_input"), "{name}: {}", reached.body);
         tried += 1;
     }
-    assert_eq!(tried, 9);
+    assert_eq!(tried, 10);
     // the old routes with the new argument are refused to it as well
     let food = ok(&h.vault, "categories.list", json!({ "type": "EXPENSE" }))[0]["id"].as_str().unwrap().to_string();
     let request = json!({ "name": "Bread", "amount": "2.40", "paymentDate": "2026-10-14", "categoryId": food, "accountId": "3" }).to_string();
@@ -3293,4 +3322,46 @@ fn over_http_a_write_token_makes_accounts_and_rows_in_another_currency_and_a_rea
     assert_eq!(dump(&h.vault), before, "a refused request changed something");
     assert_eq!(call(port, Some(&h.read), "status", "").status, 200);
     assert_eq!(h.server.panics(), 0);
+}
+
+// ---- loans: the rate, the installment and the payment -----------------------------------------
+
+#[test]
+fn a_payment_of_a_loan_is_a_transfer_and_an_expense_and_a_wrong_one_changes_nothing() {
+    let (_dir, vault) = fresh();
+    let interest = ok(&vault, "categories.create", json!({ "name": "Interest", "type": "EXPENSE" }))["id"].as_str().unwrap().to_string();
+    let loan = id_of(&ok(
+        &vault,
+        "accounts.create",
+        json!({ "name": "Car loan", "kind": "LOAN", "openingBalance": "-9000.00", "openingDate": "2026-01-01", "interestRate": "6.5", "interestPeriod": "YEARLY", "installment": "950.00" }),
+    ));
+    let before = find(&vault, &loan);
+    assert_eq!(keys(&before), ACCOUNT_KEYS);
+    assert_eq!((before["interestRate"].as_str(), before["interestPeriod"].as_str(), before["installment"].as_str(), before["returnPerMonth"].clone()), (Some("6.5"), Some("YEARLY"), Some("950.00"), Value::Null));
+    assert_eq!((before["liability"]["owed"].as_str(), before["liability"]["state"].as_str(), before["liability"]["interestPerMonth"].as_str()), (Some("9000.00"), Some("OWING"), Some("48.75")));
+    assert!(before["liability"]["payoff"]["months"].as_u64().is_some() && before["liability"]["payoff"]["month"].as_str().is_some(), "{before}");
+
+    // 950.00 paid from the main account, 585.00 of it interest: the rest lowers the debt, the interest is an expense
+    let paid = ok(&vault, "accounts.pay", json!({ "id": loan, "fromAccountId": "1", "amount": "950.00", "interest": "585.00", "categoryId": interest, "date": "2026-10-05", "note": "October" }));
+    assert_eq!(keys(&paid), ["transaction", "transfer"]);
+    assert_eq!(keys(&paid["transfer"]), TRANSFER_KEYS);
+    assert_eq!(
+        (paid["transfer"]["fromAccountId"].as_str(), paid["transfer"]["toAccountId"].as_str(), paid["transfer"]["amount"].as_str(), paid["transfer"]["date"].as_str(), paid["transfer"]["note"].as_str()),
+        (Some("1"), Some(loan.as_str()), Some("365.00"), Some("2026-10-05"), Some("October"))
+    );
+    assert_eq!(
+        (paid["transaction"]["name"].as_str(), paid["transaction"]["amount"].as_str(), paid["transaction"]["categoryId"].as_str(), paid["transaction"]["accountId"].as_str()),
+        (Some("Car loan"), Some("585.00"), Some(interest.as_str()), Some("1"))
+    );
+    assert_eq!((find(&vault, &loan)["liability"]["owed"].as_str(), held(&vault, "1").as_str()), (Some("8635.00"), "-950.00"));
+
+    // a payment that is all principal makes no expense, and one that is all interest no transfer
+    let plain = ok(&vault, "accounts.pay", json!({ "id": loan, "fromAccountId": "1", "amount": "100.00" }));
+    assert_eq!((plain["transaction"].clone(), plain["transfer"]["amount"].as_str()), (Value::Null, Some("100.00")));
+    let only = ok(&vault, "accounts.pay", json!({ "id": loan, "fromAccountId": "1", "amount": "20.00", "interest": "20.00", "categoryId": interest }));
+    assert_eq!((only["transfer"].clone(), only["transaction"]["amount"].as_str()), (Value::Null, Some("20.00")));
+
+    // refused as invalid_input, nothing written: an account that is not a liability, and interest above the payment
+    refuse(&vault, "accounts.pay", json!({ "id": "1", "fromAccountId": &loan, "amount": "10.00" }), INVALID);
+    refuse(&vault, "accounts.pay", json!({ "id": loan, "fromAccountId": "1", "amount": "10.00", "interest": "10.01", "categoryId": interest }), INVALID);
 }
