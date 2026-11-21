@@ -31,6 +31,7 @@ import {
   reachedNow,
   savedAfter,
   signedAmount,
+  targetLine,
 } from './stashView.ts'
 
 // docs/stash-design.md, section 3.1: the delta rule, and what the money dialog shows of it. Money is whole cents; nothing here uses floating point.
@@ -508,4 +509,12 @@ test('the words of a card: saved of target with the percent, or saved alone; wha
   assert.deepEqual(nextText({ kind: 'left', left: '750.00', perMonth: null, until: null }, plain, say as never, 'en-GB'), { text: 'stashes.left amount=750.00', warning: false })
   assert.deepEqual(nextText({ kind: 'reached' }, plain, say as never, 'en-GB'), { text: 'stashes.reached', warning: false })
   assert.deepEqual(nextText({ kind: 'overdue', since: '2026-06-30' }, plain, say as never, 'en-GB'), { text: 'stashes.overdue date=30 june 2026', warning: true })
+})
+
+test('the target of a row in one line: the amount and the date, each alone when the other is missing, a dash for none', () => {
+  const plain = (amount: string) => amount
+  assert.equal(targetLine({ target: '1200.00', targetDate: '2027-06-30' }, plain, 'en-GB'), '1200.00 · 30/06/2027')
+  assert.equal(targetLine({ target: '1200.00', targetDate: null }, plain, 'en-GB'), '1200.00')
+  assert.equal(targetLine({ target: null, targetDate: '2027-06-30' }, plain, 'en-GB'), '30/06/2027')
+  assert.equal(targetLine({ target: null, targetDate: null }, plain, 'en-GB'), '—')
 })

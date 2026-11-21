@@ -1,4 +1,4 @@
-import type { ComponentProps, ReactNode } from 'react'
+import type { ComponentProps, ReactNode, Ref } from 'react'
 import { closeOnEscape, type OpenRows } from '../hooks/useOpenRow'
 import { useT } from '../i18n/context'
 import { byDay, dayHeading } from '../lib/dayHeading'
@@ -16,16 +16,19 @@ export function Table({
   className,
   heads,
   opens = false,
+  listRef,
   children,
 }: {
   /** What names this list in the styles (`tx-list`): the columns are its `--cols`. */
   className: string
   heads: (string | { label: string; className: string })[]
   opens?: boolean
+  /** The list's own element, for what listens on it (the `listRef` of `useReorder`). */
+  listRef?: Ref<HTMLUListElement>
   children: ReactNode
 }) {
   return (
-    <ul className={`card-list is-table ${className}`} onClick={opens ? toggleRow : undefined}>
+    <ul ref={listRef} className={`card-list is-table ${className}`} onClick={opens ? toggleRow : undefined}>
       <li className="list-head" aria-hidden="true">
         {heads.map((head, column) =>
           typeof head === 'string' ? (
@@ -180,6 +183,7 @@ export function TapRow({
   amount,
   action,
   sub,
+  className,
   children,
   ...rest
 }: {
@@ -208,7 +212,7 @@ export function TapRow({
   )
   return (
     <li
-      className={open ? 'card-item tap-row is-open' : 'card-item tap-row'}
+      className={cn('card-item tap-row', open && 'is-open', className)}
       data-item={item}
       onKeyDown={onToggle ? (event) => closeOnEscape(event, open, onToggle) : undefined}
       {...rest}

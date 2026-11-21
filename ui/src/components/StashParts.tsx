@@ -1,7 +1,7 @@
 import { Link } from 'react-router-dom'
 import type { Stash } from '../api/stashes'
 import { useT } from '../i18n/context'
-import { figures, nextLine, nextText, progress, stashMoney } from '../lib/stashView'
+import { figures, progress, stashMoney } from '../lib/stashView'
 import { cn } from './ui/cn'
 
 /**
@@ -15,23 +15,6 @@ export function StashBar({ saved, target, large = false }: { saved: string; targ
     <span className={cn('stash-bar', large && 'is-large', shown.reached && 'is-reached', shown.below && 'is-below')} aria-hidden="true">
       <span className="stash-fill" style={{ width: `${shown.fill * 100}%` }} />
     </span>
-  )
-}
-
-/**
- * The words of a stash under its bar: "450.00 of 1200.00 · 37%" (or "450.00 saved"), in red when it is below 0, and one line of what is next.
- * The same on a card, on a small card of an account's page and on the dashboard.
- */
-export function StashLines({ stash, locale, next = true }: { stash: Stash; /** The number and date format of the data (the settings'). */ locale: string; next?: boolean }) {
-  const t = useT()
-  const money = stashMoney(stash, locale)
-  const line = nextLine(stash)
-  const words = line ? nextText(line, money, t, locale) : null
-  return (
-    <>
-      <p className={cn('stash-figures', stash.target === null && 'is-big', stash.saved.startsWith('-') && 'is-below')}>{figures(stash, money, t)}</p>
-      {next && words ? <p className={cn('stash-next', words.warning && 'is-late')}>{words.text}</p> : null}
-    </>
   )
 }
 

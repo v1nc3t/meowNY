@@ -4,7 +4,7 @@ import type { MessageKey } from '../i18n/en'
 import type { DialogState } from './accountDialogs'
 import { currencyKey } from './accountsView'
 import { memoByKey } from './cache'
-import { amountString, fromMinor, moneyIn, toMinor } from './money'
+import { amountString, formatDate, fromMinor, moneyIn, toMinor } from './money'
 
 // What the screens of the stashes decide, apart from drawing (docs/stash-design.md, sections 3, 5.3 and 13). The core checks every rule again;
 // everything here only lets the dialogs say it before a request goes out. Money is whole minor units (bigint): no floating point touches it.
@@ -296,6 +296,15 @@ export function figures(stash: Pick<Stash, 'saved' | 'target' | 'percent'>, mone
   if (stash.target === null) return t('stashes.saved', { amount: money(stash.saved) })
   const of = t('stashes.of', { saved: money(stash.saved), target: money(stash.target) })
   return stash.percent === null ? of : `${of} · ${t('stashes.percent', { percent: stash.percent })}`
+}
+
+/**
+ * A row's target in one line: "1200.00 · 30/06/2027". Only the part there is when the stash has a target without a date or a date without a target;
+ * "—" when it has neither. `money` writes an amount in the stash's currency.
+ */
+export function targetLine(stash: Pick<Stash, 'target' | 'targetDate'>, money: (amount: string) => string, locale: string): string {
+  const parts = [stash.target === null ? null : money(stash.target), stash.targetDate === null ? null : formatDate(stash.targetDate, locale)]
+  return parts.filter((part) => part !== null).join(' · ') || '—'
 }
 
 /** The words of `nextLine`: "750.00 left · 107.15 a month until june 2027", "750.00 left", "reached", "overdue since 30 june 2026" (a warning). */
