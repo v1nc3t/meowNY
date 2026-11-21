@@ -155,6 +155,7 @@ const COMMANDS: &[&str] = &[
     "take_from_stash",
     "update_stash_entry",
     "delete_stash_entry",
+    "stashes_book_return",
 ];
 
 fn main() {

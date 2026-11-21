@@ -27,7 +27,7 @@ use crate::report::{self, ReportOptions};
 use crate::recurring::{self, Dues, NewRecurring, Recurring, RecurringPatch};
 use crate::schedule::{self, Schedule};
 use crate::tokens::{self, CreatedToken, NewToken, TokenInfo};
-use crate::stashes::{self, entries as stash_entries};
+use crate::stashes::{self, deposits as stash_deposits, entries as stash_entries};
 use crate::stats::{self, BudgetVsActual, CategoryTrend, Commitments, PlannedVsPaid, TopCategory, YearPoint};
 use crate::transactions::{self, Filter, NewTransaction, Page, Transaction, TransactionPatch};
 use crate::sync::engine::SyncError;
@@ -255,6 +255,7 @@ pub const COMMANDS: &[&str] = &[
     "take_from_stash",
     "update_stash_entry",
     "delete_stash_entry",
+    "stashes_book_return",
 ];
 
 #[tauri::command]
@@ -1454,6 +1455,15 @@ pub fn delete_stash_entry(vault: Shared, id: String, delete_transfer: Option<boo
     let id = categories::parse_id(&id)?;
     let today = today_text(&vault)?;
     vault.with_conn(|c| stash_entries::delete(c, id, delete_transfer.unwrap_or(false), &today))
+}
+
+/// Books the return of a matured deposit in one step: an income in its account, an add of the same amount, and the day it was booked. `id` is
+/// the stash's; the answer is the stash.
+#[tauri::command]
+pub fn stashes_book_return(vault: Shared, id: String, input: stash_deposits::ReturnInput) -> Result<stashes::Stash, AppError> {
+    let id = categories::parse_id(&id)?;
+    let today = today_text(&vault)?;
+    vault.with_conn(|c| stash_deposits::book_return(c, id, &input, &today))
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Deserialize)]

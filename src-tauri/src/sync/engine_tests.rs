@@ -670,7 +670,7 @@ fn following_the_computer_pulls_back_every_stamp_that_is_ahead_and_nothing_else(
         .unwrap();
         crate::accounts::update(&phone, crate::accounts::MAIN_ID, &crate::accounts::AccountPatch { name: Some("Main, ahead".into()), ..Default::default() }, TODAY).unwrap();
         // a stash in that account with money in it, which the transfer above made free
-        let stash = crate::stashes::create(&phone, &crate::stashes::NewStash { name: "Stash, ahead".into(), account_id: cash.to_string(), target: None, target_date: None, notes: None }, TODAY).unwrap().id;
+        let stash = crate::stashes::create(&phone, &crate::stashes::NewStash { kind: None, interest_rate: None, interest_period: None, start_date: None, name: "Stash, ahead".into(), account_id: cash.to_string(), target: None, target_date: None, notes: None }, TODAY).unwrap().id;
         crate::stashes::entries::add(&phone, stash, &crate::stashes::entries::NewEntry { amount: "0.50".into(), date: Some("2026-03-02".into()), note: None, from_account_id: None }, TODAY).unwrap();
     });
     // the record of currency changes carries a stamp too
@@ -1534,7 +1534,7 @@ pub(super) fn edit_stashes(conn: &mut Connection, rng: &mut Rng) {
     match rng.below(26) {
         0..=2 => {
             if let Some(account_id) = account(rng) {
-                let _ = stashes::create(conn, &NewStash { name: rng.pick(STASH_NAMES).to_string(), account_id, target: target(rng), target_date: target_date(rng), notes: notes(rng) }, TODAY);
+                let _ = stashes::create(conn, &NewStash { kind: None, interest_rate: None, interest_period: None, start_date: None, name: rng.pick(STASH_NAMES).to_string(), account_id, target: target(rng), target_date: target_date(rng), notes: notes(rng) }, TODAY);
             }
         }
         3 if !all.is_empty() => {
@@ -1836,7 +1836,7 @@ fn nothing_that_stays_on_a_device_is_ever_sent() {
         // and a stash in it with an add: the money of the transfer is set aside
         let stash = crate::stashes::create(
             conn,
-            &crate::stashes::NewStash { name: format!("Stash of the {tag}"), account_id: account.to_string(), target: Some("50.00".into()), target_date: Some("2027-01-01".into()), notes: Some(format!("Notes of the stash of the {tag}")) },
+            &crate::stashes::NewStash { kind: None, interest_rate: None, interest_period: None, start_date: None, name: format!("Stash of the {tag}"), account_id: account.to_string(), target: Some("50.00".into()), target_date: Some("2027-01-01".into()), notes: Some(format!("Notes of the stash of the {tag}")) },
             TODAY,
         )
         .unwrap()

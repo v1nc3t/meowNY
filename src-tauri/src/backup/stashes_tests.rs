@@ -28,7 +28,7 @@ fn count(conn: &Connection, sql: &str) -> i64 {
 fn with_stashes() -> Connection {
     let conn = lived_in();
     let make = |name: &str, account: i64, target: Option<&str>, notes: Option<&str>| {
-        stashes::create(&conn, &NewStash { name: name.into(), account_id: account.to_string(), target: target.map(str::to_string), target_date: None, notes: notes.map(str::to_string) }, "2026-02-04").unwrap().id
+        stashes::create(&conn, &NewStash { kind: None, interest_rate: None, interest_period: None, start_date: None, name: name.into(), account_id: account.to_string(), target: target.map(str::to_string), target_date: None, notes: notes.map(str::to_string) }, "2026-02-04").unwrap().id
     };
     let bike = make("Bike", 2, Some("450.00"), None);
     let wedding = make("Wedding gift", 3, Some("1000.00"), Some("for the wedding\nin Cluj, \"June\""));
@@ -70,7 +70,7 @@ fn stashes_and_their_entries_come_back_exactly() {
 
     // a row made after the restore carries on from the ids of the file
     let next = account(&target, "Cash");
-    let made = stashes::create(&target, &NewStash { name: "After".into(), account_id: next.to_string(), target: None, target_date: None, notes: None }, TODAY).unwrap();
+    let made = stashes::create(&target, &NewStash { kind: None, interest_rate: None, interest_period: None, start_date: None, name: "After".into(), account_id: next.to_string(), target: None, target_date: None, notes: None }, TODAY).unwrap();
     assert_eq!(made.id, 5);
     target.execute("INSERT INTO stash_entries (stash_id, amount_minor, entry_date) VALUES (5, 100, '2026-03-01')", []).unwrap();
     assert_eq!(count(&target, "SELECT MAX(id) FROM stash_entries"), 7);
@@ -89,7 +89,7 @@ fn a_restore_replaces_the_stashes_that_were_there_and_a_file_with_none_leaves_no
     // the target has stashes and entries that the file knows nothing about
     let mut target = with_stashes();
     let cash = account(&target, "Only here");
-    let only_here = stashes::create(&target, &NewStash { name: "Only here".into(), account_id: cash.to_string(), target: None, target_date: None, notes: None }, TODAY).unwrap().id;
+    let only_here = stashes::create(&target, &NewStash { kind: None, interest_rate: None, interest_period: None, start_date: None, name: "Only here".into(), account_id: cash.to_string(), target: None, target_date: None, notes: None }, TODAY).unwrap().id;
     target.execute("INSERT INTO stash_entries (stash_id, amount_minor, entry_date) VALUES (?1, 700, '2026-02-02')", [only_here]).unwrap();
     transfer(&target, MAIN_ID, cash, "9.00", "2026-02-03");
 
@@ -108,7 +108,7 @@ fn a_restore_replaces_the_stashes_that_were_there_and_a_file_with_none_leaves_no
     // the ids start over (the file had no settings, which a new account needs for its currency)
     target.execute("INSERT INTO settings (id, currency) VALUES (1, 'EUR')", []).unwrap();
     let account = account(&target, "Cash");
-    assert_eq!(stashes::create(&target, &NewStash { name: "First".into(), account_id: account.to_string(), target: None, target_date: None, notes: None }, TODAY).unwrap().id, 1);
+    assert_eq!(stashes::create(&target, &NewStash { kind: None, interest_rate: None, interest_period: None, start_date: None, name: "First".into(), account_id: account.to_string(), target: None, target_date: None, notes: None }, TODAY).unwrap().id, 1);
 }
 
 fn table<'a>(snapshot: &'a mut Snapshot, name: &str) -> &'a mut Vec<Row> {
@@ -299,7 +299,7 @@ fn a_backup_made_before_stashes_restores_and_is_migrated_with_no_stashes() {
         }
         let main = accounts::get(&target, MAIN_ID, TODAY).unwrap();
         assert_eq!((main.set_aside.as_str(), main.free.as_str()), ("0.00", main.balance.as_str()), "version {version}: nothing is set aside");
-        let made = stashes::create(&target, &NewStash { name: "New".into(), account_id: MAIN_ID.to_string(), target: None, target_date: None, notes: None }, TODAY).unwrap();
+        let made = stashes::create(&target, &NewStash { kind: None, interest_rate: None, interest_period: None, start_date: None, name: "New".into(), account_id: MAIN_ID.to_string(), target: None, target_date: None, notes: None }, TODAY).unwrap();
         assert_eq!(made.id, 1, "version {version}");
         target.execute("INSERT INTO stash_entries (stash_id, amount_minor, entry_date) VALUES (1, 100, '2026-03-01')", []).unwrap();
         assert!(stashes::list(&target, None, TODAY).unwrap().iter().all(|s| s.saved == "1.00"));
@@ -331,9 +331,9 @@ fn fill(v: &Vault) {
     v.with_conn(|conn| {
         let savings = account(conn, "Savings");
         transfer(conn, MAIN_ID, savings, "50.00", "2026-02-02");
-        let holiday = stashes::create(conn, &NewStash { name: "Holiday".into(), account_id: savings.to_string(), target: Some("200.00".into()), target_date: None, notes: Some("two\nlines".into()) }, TODAY)?.id;
+        let holiday = stashes::create(conn, &NewStash { kind: None, interest_rate: None, interest_period: None, start_date: None, name: "Holiday".into(), account_id: savings.to_string(), target: Some("200.00".into()), target_date: None, notes: Some("two\nlines".into()) }, TODAY)?.id;
         conn.execute("INSERT INTO stash_entries (stash_id, amount_minor, entry_date, note, transfer_id) VALUES (?1, 2000, '2026-02-02', 'first', 1)", [holiday])?;
-        let bike = stashes::create(conn, &NewStash { name: "Bike".into(), account_id: savings.to_string(), target: None, target_date: None, notes: None }, TODAY)?.id;
+        let bike = stashes::create(conn, &NewStash { kind: None, interest_rate: None, interest_period: None, start_date: None, name: "Bike".into(), account_id: savings.to_string(), target: None, target_date: None, notes: None }, TODAY)?.id;
         stashes::archive(conn, bike, TODAY)?;
         Ok(())
     })
@@ -361,7 +361,7 @@ fn delete_all_my_data_takes_the_stashes_and_their_entries_with_it() {
     assert_eq!(now.rows("accounts"), dump(&db()).unwrap().rows("accounts"), "the main account of the migration, and no other");
     v.with_conn(|c| {
         // and the next stash made is the first, as in any new database
-        let first = stashes::create(c, &NewStash { name: "First".into(), account_id: MAIN_ID.to_string(), target: None, target_date: None, notes: None }, TODAY)?;
+        let first = stashes::create(c, &NewStash { kind: None, interest_rate: None, interest_period: None, start_date: None, name: "First".into(), account_id: MAIN_ID.to_string(), target: None, target_date: None, notes: None }, TODAY)?;
         assert_eq!(first.id, 1);
         Ok(())
     })

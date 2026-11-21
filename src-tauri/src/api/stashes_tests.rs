@@ -19,8 +19,8 @@ const INVALID: (u16, &str) = (400, "invalid_input");
 const NOT_FOUND: (u16, &str) = (404, "not_found");
 const NAME_EXISTS: (u16, &str) = (409, "name_exists");
 
-const STASH_KEYS: [&str; 19] = [
-    "account", "accountArchived", "accountId", "archived", "currency", "entries", "free", "id", "lastEntry", "left", "name", "notes", "overdue", "perMonth", "percent", "reached", "saved", "target", "targetDate",
+const STASH_KEYS: [&str; 21] = [
+    "account", "accountArchived", "accountId", "archived", "currency", "deposit", "entries", "free", "id", "kind", "lastEntry", "left", "name", "notes", "overdue", "perMonth", "percent", "reached", "saved", "target", "targetDate",
 ];
 const ENTRY_KEYS: [&str; 10] = ["amount", "date", "id", "kind", "note", "otherAccount", "otherAccountId", "savedAfter", "stashId", "transferId"];
 

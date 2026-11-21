@@ -240,6 +240,13 @@ pub(crate) fn category_is_expense(conn: &Connection, id: i64) -> Result<bool, Ap
         .is_some())
 }
 
+pub(crate) fn category_is_income(conn: &Connection, id: i64) -> Result<bool, AppError> {
+    Ok(conn
+        .query_row("SELECT 1 FROM categories WHERE id = ?1 AND type = 'INCOME'", [id], |_| Ok(()))
+        .optional()?
+        .is_some())
+}
+
 /// Creates a transaction, or returns the one already created with the same `client_uuid`.
 pub fn create(conn: &Connection, input: &NewTransaction) -> Result<Transaction, AppError> {
     let name = clean_name(&input.name)?;

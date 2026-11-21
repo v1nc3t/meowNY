@@ -5,7 +5,7 @@
 use serde_json::json;
 
 use super::fixtures::*;
-use super::{archive, create, delete, get, history, list, reorder, restore, update, NewStash, Stash, StashPatch};
+use super::{archive, create, delete, get, history, list, reorder, restore, update, NewStash, Stash, StashKind, StashPatch};
 use crate::accounts::{self, AccountPatch};
 use crate::debts::fixtures::{one, text};
 
@@ -38,6 +38,8 @@ fn a_new_stash_goes_to_the_end_of_the_list_with_what_was_given_and_the_defaults_
             currency: "EUR".into(),
             archived: false,
             account_archived: false,
+            kind: StashKind::Goal,
+            deposit: None,
             target: None,
             target_date: None,
             notes: None,

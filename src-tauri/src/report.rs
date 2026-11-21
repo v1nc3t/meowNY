@@ -2100,7 +2100,7 @@ mod tests {
     use crate::stashes::{self, NewStash};
 
     fn make_stash(conn: &Connection, name: &str, account: i64, target: Option<&str>) -> i64 {
-        stashes::create(conn, &NewStash { name: name.into(), account_id: account.to_string(), target: target.map(str::to_string), target_date: None, notes: None }, "2026-04-15").unwrap().id
+        stashes::create(conn, &NewStash { name: name.into(), account_id: account.to_string(), target: target.map(str::to_string), target_date: None, notes: None, kind: None, interest_rate: None, interest_period: None, start_date: None }, "2026-04-15").unwrap().id
     }
 
     fn put_in(conn: &Connection, stash: i64, amount: &str, date: &str) {

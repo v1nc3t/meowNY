@@ -49,6 +49,17 @@ pub struct Paid {
     pub transaction: Option<Transaction>,
 }
 
+/// The `amount` and `native_amount` that `transactions::create` is given for `minor`, an amount in the currency of `account`. An account in another
+/// currency has its rows in that currency: the entry has what moved it as `nativeAmount`, and as `amount` what that is worth in the app's currency at
+/// the account's rate, which is what the entry dialog suggests (never below a cent). An account in the app's currency has no native amount.
+pub(crate) fn entry_amounts(conn: &Connection, account: i64, minor: i64) -> Result<(String, Option<String>), AppError> {
+    let rate: Option<String> = conn.query_row("SELECT rate FROM accounts WHERE id = ?1", [account], |r| r.get(0))?;
+    Ok(match rate {
+        Some(rate) => (format_amount(to_main(minor, &rate)?.max(1)), Some(format_amount(minor))),
+        None => (format_amount(minor), None),
+    })
+}
+
 /// Makes the payment. A liability that does not exist is `NotFound`; every other refusal is `InvalidInput` and leaves nothing written.
 pub fn pay(conn: &Connection, input: &Payment, today: &str) -> Result<Paid, AppError> {
     let today = clean_date(today)?;
@@ -103,16 +114,10 @@ pub fn pay(conn: &Connection, input: &Payment, today: &str) -> Result<Paid, AppE
     };
     let transaction = match category {
         Some(category) => {
-            // An account in another currency is paid in that currency: the entry has what left it as `nativeAmount`, and as `amount` what that is
-            // worth in the app's currency at the account's rate, which is what the entry dialog suggests (never below a cent).
-            let rate: Option<String> = tx.query_row("SELECT rate FROM accounts WHERE id = ?1", [from], |r| r.get(0))?;
-            let (counted, native_amount) = match rate {
-                Some(rate) => (to_main(interest, &rate)?.max(1), Some(format_amount(interest))),
-                None => (interest, None),
-            };
+            let (amount, native_amount) = entry_amounts(&tx, from, interest)?;
             let input = NewTransaction {
                 name,
-                amount: format_amount(counted),
+                amount,
                 payment_date: date,
                 category_id: category.to_string(),
                 description: note,

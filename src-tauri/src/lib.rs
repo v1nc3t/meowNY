@@ -385,6 +385,7 @@ pub fn run() {
             commands::take_from_stash,
             commands::update_stash_entry,
             commands::delete_stash_entry,
+            commands::stashes_book_return,
         ])
         .build(tauri::generate_context!())
         .expect("error while building meowNY")

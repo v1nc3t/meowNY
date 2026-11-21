@@ -17,7 +17,7 @@ use crate::stashes::{self, NewStash};
 pub(super) const NOTES: &str = "=1+1 flights\nand a hotel, \"small\"";
 
 pub(super) fn make(conn: &Connection, name: &str, account: i64, target: Option<&str>, date: Option<&str>, notes: Option<&str>) -> i64 {
-    let input = NewStash { name: name.into(), account_id: account.to_string(), target: target.map(str::to_string), target_date: date.map(str::to_string), notes: notes.map(str::to_string) };
+    let input = NewStash { kind: None, interest_rate: None, interest_period: None, start_date: None, name: name.into(), account_id: account.to_string(), target: target.map(str::to_string), target_date: date.map(str::to_string), notes: notes.map(str::to_string) };
     stashes::create(conn, &input, TODAY).unwrap().id
 }
 

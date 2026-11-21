@@ -157,6 +157,7 @@
     "allow-take-from-stash",
     "allow-update-stash-entry",
     "allow-delete-stash-entry",
+    "allow-stashes-book-return",
     "core:event:allow-listen",
     "core:event:allow-unlisten",
     {

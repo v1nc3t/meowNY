@@ -1,11 +1,16 @@
 //! The entries of a stash: money put in (an add, above 0) and taken out (a take, below 0) (`docs/stash-design.md`, section 5.2). What a stash
 //! holds is the sum of its entries. Every local write that changes it is checked by the delta rule (section 3.1), in the one database
 //! transaction that makes it, so a refusal after a partial write (the transfer that came with an add) leaves nothing.
+//!
+//! A deposit has more to say about money (`docs/loans-deposits-design.md`, section 5.3), on top of the delta rule: money goes in only while it runs; while it
+//! runs it is emptied whole by a take, which breaks it; once it is broken only the notes of its entries change.
+
+use std::cmp::Ordering;
 
 use rusqlite::{params, Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
 
-use super::{delta_allowed, facts, free, Detail, Facts};
+use super::{delta_allowed, facts, free, DepositState, Detail, Facts};
 use crate::accounts::transfers::{self, NewTransfer};
 use crate::categories::{parse_id, present_or_null, serialize_id};
 use crate::debts::ledger::clean_note;
@@ -154,6 +159,17 @@ fn entry_date(date: Option<&str>, today: &str) -> Result<String, AppError> {
     Ok(date)
 }
 
+/// What a deposit lets happen to what it holds (section 5.3): money goes in only while it runs, and an edit or a delete takes money out of it only
+/// when it does not run (while it runs, money comes out by a take of everything, which `take` checks itself). A goal is not asked, and a write
+/// that changes nothing is always fine.
+fn deposit_allows(stash: &Facts, after: i64, today: &str) -> bool {
+    match (stash.state(today), after.cmp(&stash.saved)) {
+        (None, _) | (_, Ordering::Equal) => true,
+        (Some(state), Ordering::Greater) => state == DepositState::Running,
+        (Some(state), Ordering::Less) => state != DepositState::Running,
+    }
+}
+
 /// The delta rule (section 3.1) for a write that takes the stash from what it holds now to `after`. The free money of its account is read now,
 /// so an add that comes with a transfer is checked after the transfer is made.
 fn check_delta(conn: &Connection, stash: &Facts, after: i64, today: &str) -> Result<(), AppError> {
@@ -174,16 +190,26 @@ fn insert(conn: &Connection, stash_id: i64, minor: i64, date: &str, note: Option
 }
 
 /// Adds money to a stash that is not archived, in an account that is not. With `from_account_id`, a transfer from that account into the stash's
-/// is made first, in the same transaction, and the entry remembers it; the free money is then counted with the transfer in it.
+/// is made first, in the same transaction, and the entry remembers it; the free money is then counted with the transfer in it. A deposit takes
+/// money only while it runs.
 pub fn add(conn: &Connection, stash_id: i64, input: &NewEntry, today: &str) -> Result<Detail, AppError> {
+    let tx = conn.unchecked_transaction()?;
+    add_in(&tx, stash_id, input, today, false)?;
+    let detail = super::get(&tx, stash_id, today)?;
+    tx.commit()?;
+    Ok(detail)
+}
+
+/// `add` inside a database transaction that the caller owns. `returning` skips the one rule that a deposit takes money only while it runs: the
+/// return of a matured deposit is put in it (`deposits::book_return`); every other rule is asked.
+pub(super) fn add_in(tx: &Connection, stash_id: i64, input: &NewEntry, today: &str, returning: bool) -> Result<(), AppError> {
     let minor = parse_positive_amount(&input.amount)?;
     let today = clean_date(today)?;
     let date = entry_date(input.date.as_deref(), &today)?;
     let note = clean_note(input.note.as_deref())?;
     let from = input.from_account_id.as_deref().map(parse_id).transpose()?;
-    let tx = conn.unchecked_transaction()?;
-    let stash = facts(&tx, stash_id)?;
-    if stash.archived || stash.account_archived {
+    let stash = facts(tx, stash_id)?;
+    if stash.archived || stash.account_archived || !(returning || deposit_allows(&stash, stash.saved + minor, &today)) {
         return Err(AppError::InvalidInput);
     }
     let transfer_id = match from {
@@ -196,19 +222,17 @@ pub fn add(conn: &Connection, stash_id: i64, input: &NewEntry, today: &str) -> R
                 note: note.clone(),
                 to_amount: None,
             };
-            Some(transfers::create(&tx, &input)?.id)
+            Some(transfers::create(tx, &input)?.id)
         }
         None => None,
     };
-    check_delta(&tx, &stash, stash.saved + minor, &today)?;
-    insert(&tx, stash_id, minor, &date, note.as_deref(), transfer_id)?;
-    let detail = super::get(&tx, stash_id, &today)?;
-    tx.commit()?;
-    Ok(detail)
+    check_delta(tx, &stash, stash.saved + minor, &today)?;
+    insert(tx, stash_id, minor, &date, note.as_deref(), transfer_id)
 }
 
 /// Takes money out of a stash, archived or not, in an account that may be archived: no more than it holds. With `to_account_id`, a transfer
-/// from the stash's account to that one is made with it, in the same transaction.
+/// from the stash's account to that one is made with it, in the same transaction. A deposit that runs is emptied whole or not at all, and that
+/// breaks it: `broken_on` is the day of the entry.
 pub fn take(conn: &Connection, stash_id: i64, input: &NewTake, today: &str) -> Result<Detail, AppError> {
     let minor = parse_positive_amount(&input.amount)?;
     let today = clean_date(today)?;
@@ -217,6 +241,10 @@ pub fn take(conn: &Connection, stash_id: i64, input: &NewTake, today: &str) -> R
     let to = input.to_account_id.as_deref().map(parse_id).transpose()?;
     let tx = conn.unchecked_transaction()?;
     let stash = facts(&tx, stash_id)?;
+    let breaking = stash.state(&today) == Some(DepositState::Running);
+    if breaking && minor != stash.saved {
+        return Err(AppError::InvalidInput);
+    }
     check_delta(&tx, &stash, stash.saved - minor, &today)?;
     let transfer_id = match to {
         Some(to) => {
@@ -234,6 +262,9 @@ pub fn take(conn: &Connection, stash_id: i64, input: &NewTake, today: &str) -> R
         None => None,
     };
     insert(&tx, stash_id, -minor, &date, note.as_deref(), transfer_id)?;
+    if breaking {
+        tx.execute("UPDATE stashes SET broken_on = ?1 WHERE id = ?2", params![date, stash_id])?;
+    }
     let detail = super::get(&tx, stash_id, &today)?;
     tx.commit()?;
     Ok(detail)
@@ -241,7 +272,8 @@ pub fn take(conn: &Connection, stash_id: i64, input: &NewTake, today: &str) -> R
 
 /// Changes the amount, the date or the note of an entry. The amount is a size: the kind never changes. The stamp moves only when something
 /// changed. The transfer that came with the entry is not changed. Money going in (`after > before`) is refused for a stash that is archived
-/// and for one whose account is.
+/// and for one whose account is. Of a deposit that is broken only the note changes; while it runs an edit may not take money out, and once it
+/// has matured it may not put money in.
 pub fn update(conn: &Connection, entry_id: i64, patch: &EntryPatch, today: &str) -> Result<Detail, AppError> {
     let today = clean_date(today)?;
     let tx = conn.unchecked_transaction()?;
@@ -264,6 +296,10 @@ pub fn update(conn: &Connection, entry_id: i64, patch: &EntryPatch, today: &str)
     if after > stash.saved && (stash.archived || stash.account_archived) {
         return Err(AppError::InvalidInput);
     }
+    let broken = stash.state(&today) == Some(DepositState::Broken);
+    if (broken && (size != current.minor.abs() || date != current.date)) || !deposit_allows(&stash, after, &today) {
+        return Err(AppError::InvalidInput);
+    }
     check_delta(&tx, &stash, after, &today)?;
     tx.execute("UPDATE stash_entries SET amount_minor = ?1, entry_date = ?2, note = ?3 WHERE id = ?4", params![new, date, note, entry_id])?;
     let detail = super::get(&tx, current.stash_id, &today)?;
@@ -272,12 +308,16 @@ pub fn update(conn: &Connection, entry_id: i64, patch: &EntryPatch, today: &str)
 }
 
 /// Deletes an entry. With `delete_transfer` and a transfer that came with it, that transfer is deleted too, in the same transaction (it leaves
-/// its own marker); without, it stays. Allowed for a stash that is archived or in an archived account, within the delta rule.
+/// its own marker); without, it stays. Allowed for a stash that is archived or in an archived account, within the delta rule. Refused for a
+/// deposit that is broken; for one that runs when it takes money out (an add), and for one that has matured when it puts money in (a take).
 pub fn delete(conn: &Connection, entry_id: i64, delete_transfer: bool, today: &str) -> Result<Detail, AppError> {
     let today = clean_date(today)?;
     let tx = conn.unchecked_transaction()?;
     let current = stored(&tx, entry_id)?;
     let stash = facts(&tx, current.stash_id)?;
+    if stash.state(&today) == Some(DepositState::Broken) || !deposit_allows(&stash, stash.saved - current.minor, &today) {
+        return Err(AppError::InvalidInput);
+    }
     check_delta(&tx, &stash, stash.saved - current.minor, &today)?;
     tx.execute("DELETE FROM stash_entries WHERE id = ?1", [entry_id])?;
     if let (true, Some(transfer_id)) = (delete_transfer, current.transfer_id) {

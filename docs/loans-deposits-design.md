@@ -164,7 +164,7 @@ States, worked out from the row and today: `RUNNING` (`broken_on` null, today < 
 | `BROKEN` | take | the stash rules | `BROKEN` | entry (a sync may have left money in it) |
 | `MATURED` | book return (5.5) | | `BOOKED` | income + add + `returned_on` |
 | `RUNNING`, `BOOKED`, `BROKEN` | book return | | | `InvalidInput` |
-| `RUNNING`, `MATURED`, `BOOKED` | update rate, period, start date, maturity | maturity `> start`; rate valid | by today | written. **Roll over**: from `MATURED` or `BOOKED`, a new maturity after today without a `startDate` in the patch sets `start_date` = the old maturity and `returned_on` = null, so the next term starts where the last one ended (`RUNNING`) |
+| `RUNNING`, `MATURED`, `BOOKED` | update rate, period, start date, maturity | maturity `> start`; rate valid | by today | written. **Roll over**: from `MATURED` or `BOOKED`, a new maturity after today sets `returned_on` = null and, without a `startDate` in the patch, `start_date` = the old maturity, so the next term starts where the last one ended (`RUNNING`). A deposit is never `overdue` |
 | `BROKEN` | update rate, period, start date, maturity | | | `InvalidInput`. Name, notes, target: allowed |
 | `RUNNING`, `MATURED`, `BOOKED` | edit an entry's amount or date, delete an entry | the stash rules, and the add/take rules of this table for what the edit does (an edit that puts money in when not `RUNNING` is refused; an edit that takes money out while `RUNNING` must leave `saved = 0`, then `BROKEN`) | | |
 | `BROKEN` | edit an entry's amount or date, delete an entry | | | `InvalidInput`; only the note of an entry can change. To undo a break, delete the stash |

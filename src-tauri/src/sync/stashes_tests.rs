@@ -42,7 +42,7 @@ fn funded_in(conn: &Connection, name: &str, code: &str, opening: &str) -> i64 {
 
 /// A stash, with a target like "500.00" or none. Returns its local id.
 fn make(conn: &Connection, name: &str, account: i64, target: Option<&str>) -> i64 {
-    stashes::create(conn, &NewStash { name: name.into(), account_id: account.to_string(), target: target.map(str::to_string), target_date: None, notes: None }, TODAY).unwrap().id
+    stashes::create(conn, &NewStash { kind: None, interest_rate: None, interest_period: None, start_date: None, name: name.into(), account_id: account.to_string(), target: target.map(str::to_string), target_date: None, notes: None }, TODAY).unwrap().id
 }
 
 /// An add; `note` is its name. Returns its local id.
@@ -152,7 +152,7 @@ fn met_with_a_stash() -> (Connection, Connection) {
     let cash = account_id(&desktop, "Cash");
     stashes::create(
         &desktop,
-        &NewStash { name: "Holiday".into(), account_id: cash.to_string(), target: Some("500.00".into()), target_date: Some("2027-06-30".into()), notes: Some("Lisbon".into()) },
+        &NewStash { kind: None, interest_rate: None, interest_period: None, start_date: None, name: "Holiday".into(), account_id: cash.to_string(), target: Some("500.00".into()), target_date: Some("2027-06-30".into()), notes: Some("Lisbon".into()) },
         TODAY,
     )
     .unwrap();
@@ -191,7 +191,7 @@ fn a_device_with_stashes_and_their_entries_gives_a_new_phone_a_full_copy() {
     let mut phone = new_phone(&desktop);
     let cash = funded(&desktop, "Cash", "1000.00");
     let savings = funded(&desktop, "Savings", "200.00");
-    stashes::create(&desktop, &NewStash { name: "Holiday".into(), account_id: cash.to_string(), target: Some("500.00".into()), target_date: Some("2027-06-30".into()), notes: Some("Lisbon\nin June".into()) }, TODAY).unwrap();
+    stashes::create(&desktop, &NewStash { kind: None, interest_rate: None, interest_period: None, start_date: None, name: "Holiday".into(), account_id: cash.to_string(), target: Some("500.00".into()), target_date: Some("2027-06-30".into()), notes: Some("Lisbon\nin June".into()) }, TODAY).unwrap();
     let holiday = stash_id(&desktop, "Holiday");
     let laptop = make(&desktop, "Laptop", savings, None);
     let old = make(&desktop, "Old car", cash, Some("9999999999.99"));
@@ -979,7 +979,7 @@ fn a_conflict_over_a_stash_and_an_entry_lists_what_differs() {
     stashes::update(
         &desktop,
         stash_id(&desktop, "Holiday"),
-        &StashPatch { name: Some("Trip".into()), account_id: Some(savings.to_string()), target: Some(Some("600.00".into())), target_date: Some(Some("2027-07-01".into())), notes: Some(Some("from the desktop".into())) },
+        &StashPatch { kind: None, interest_rate: None, interest_period: None, start_date: None, name: Some("Trip".into()), account_id: Some(savings.to_string()), target: Some(Some("600.00".into())), target_date: Some(Some("2027-07-01".into())), notes: Some(Some("from the desktop".into())) },
         TODAY,
     )
     .unwrap();
@@ -1144,7 +1144,7 @@ fn what_a_device_changed_in_stashes_counts_as_waiting_for_the_next_sync() {
     let conn = device("EUR");
     let savings = funded(&conn, "Savings", "1000.00");
     let before = super::peers::changes_since(&conn, 0).unwrap();
-    let holiday = stashes::create(&conn, &NewStash { name: "Holiday".into(), account_id: savings.to_string(), target: None, target_date: None, notes: None }, TODAY).unwrap().id;
+    let holiday = stashes::create(&conn, &NewStash { kind: None, interest_rate: None, interest_period: None, start_date: None, name: "Holiday".into(), account_id: savings.to_string(), target: None, target_date: None, notes: None }, TODAY).unwrap().id;
     entries::add(&conn, holiday, &NewEntry { amount: "10.00".into(), date: None, note: None, from_account_id: None }, TODAY).unwrap();
     assert_eq!(super::peers::changes_since(&conn, 0).unwrap(), before + 2, "a stash and an entry");
     stashes::delete(&conn, holiday).unwrap();

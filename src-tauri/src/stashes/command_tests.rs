@@ -50,6 +50,7 @@ fn harness() -> Harness {
             commands::take_from_stash,
             commands::update_stash_entry,
             commands::delete_stash_entry,
+            commands::stashes_book_return,
         ])
         .build(mock_context(noop_assets()))
         .unwrap();
@@ -113,7 +114,7 @@ fn stashes_are_made_changed_moved_ordered_archived_restored_and_deleted_through_
         holiday,
         json!({
             "id": "1", "name": "Holiday", "accountId": savings, "account": "Savings", "currency": "EUR", "archived": false, "accountArchived": false,
-            "target": "1200.00", "targetDate": "2099-12-31", "notes": "two\nlines", "saved": "0.00", "left": "1200.00", "percent": 0, "reached": false,
+            "kind": "GOAL", "deposit": null, "target": "1200.00", "targetDate": "2099-12-31", "notes": "two\nlines", "saved": "0.00", "left": "1200.00", "percent": 0, "reached": false,
             "perMonth": per_month, "overdue": false, "free": "1000.00", "entries": 0, "lastEntry": null
         })
     );
@@ -281,4 +282,61 @@ fn the_history_and_the_summary_go_through_the_commands() {
     assert_eq!((account["setAside"].as_str(), account["free"].as_str(), account["balance"].as_str(), account["entries"].clone()), (Some("150.00"), Some("850.00"), Some("1000.00"), json!(2)));
     // an account with a stash is not deleted, and the code says so
     assert_eq!(h.code("delete_account", json!({ "id": savings })), "invalid_input");
+}
+
+#[test]
+fn a_deposit_goes_through_the_commands_with_its_rate_and_numbers_and_its_return_is_booked_in_one_step() {
+    let h = harness();
+    let savings = h.account("Savings", "1000.00");
+    let interest = h.id_of("create_category", json!({ "name": "Interest", "kind": "INCOME" }));
+    let food = h.id_of("create_category", json!({ "name": "Food", "kind": "EXPENSE" }));
+    // a deposit as the page makes it, and as it answers: the rate as typed (no trailing zeros), its period, the dates, the state and the numbers
+    let made = h.ok(
+        "create_stash",
+        json!({ "input": { "name": "Term", "kind": "DEPOSIT", "accountId": savings, "interestRate": "3.650", "interestPeriod": "YEARLY", "startDate": "2099-01-01", "targetDate": "2099-12-31" } }),
+    );
+    let days_left = made["deposit"]["daysLeft"].as_i64().unwrap();
+    assert!(days_left > 0, "a maturity far ahead");
+    assert_eq!(
+        made,
+        json!({
+            "id": "1", "name": "Term", "accountId": savings, "account": "Savings", "currency": "EUR", "archived": false, "accountArchived": false,
+            "kind": "DEPOSIT",
+            "deposit": {
+                "interestRate": "3.65", "interestPeriod": "YEARLY", "startDate": "2099-01-01", "brokenOn": null, "returnedOn": null, "state": "RUNNING",
+                "expectedReturn": "0.00", "valueAtMaturity": "0.00", "daysLeft": days_left
+            },
+            "target": null, "targetDate": "2099-12-31", "notes": null, "saved": "0.00", "left": null, "percent": null, "reached": false,
+            "perMonth": null, "overdue": false, "free": "1000.00", "entries": 0, "lastEntry": null
+        })
+    );
+    // it holds money, so the return of the whole term (364 days at 3.65 %) is worked out on it
+    let held = h.ok("add_to_stash", json!({ "id": "1", "input": { "amount": "1000.00" } }));
+    assert_eq!((held["stash"]["deposit"]["expectedReturn"].as_str(), held["stash"]["deposit"]["valueAtMaturity"].as_str()), (Some("36.40"), Some("1036.40")));
+    assert_eq!(h.ok("list_stashes", json!({}))[0]["deposit"], held["stash"]["deposit"], "the list says the same");
+    // a deposit and a goal are told apart by their kind, and the kind does not change
+    assert_eq!(h.code("update_stash", json!({ "id": "1", "patch": { "kind": "GOAL" } })), "invalid_input");
+    assert_eq!(h.code("create_stash", json!({ "input": { "name": "Goal", "accountId": savings, "interestRate": "3" } })), "invalid_input", "a goal with a rate");
+    assert_eq!(h.code("create_stash", json!({ "input": { "name": "No end", "kind": "DEPOSIT", "accountId": savings, "interestRate": "3", "interestPeriod": "YEARLY" } })), "invalid_input");
+    assert!(h.call("create_stash", json!({ "input": { "name": "X", "kind": "LOAN", "accountId": savings } })).is_err(), "a kind there is not");
+    assert_eq!(h.code("update_stash", json!({ "id": "1", "patch": { "targetDate": null } })), "invalid_input", "a deposit always has a maturity");
+    let moved = h.ok("update_stash", json!({ "id": "1", "patch": { "interestRate": "4", "interestPeriod": "MONTHLY" } }));
+    assert_eq!((moved["deposit"]["interestRate"].as_str(), moved["deposit"]["interestPeriod"].as_str()), (Some("4"), Some("MONTHLY")));
+
+    // it matures (the term moved into the past, as the stash had been made early), and its return is booked: the income and the add are one step
+    assert_eq!(h.code("stashes_book_return", json!({ "id": "1", "input": { "amount": "12.00", "categoryId": interest } })), "invalid_input", "it is still running");
+    let matured = h.ok("update_stash", json!({ "id": "1", "patch": { "startDate": "2020-01-01", "targetDate": "2020-06-01" } }));
+    assert_eq!((matured["deposit"]["state"].as_str(), matured["deposit"]["daysLeft"].clone()), (Some("MATURED"), json!(0)));
+    assert_eq!(h.code("stashes_book_return", json!({ "id": "1", "input": { "amount": "12.00", "categoryId": food } })), "invalid_input", "an expense category");
+    assert_eq!(h.code("stashes_book_return", json!({ "id": "99", "input": { "amount": "12.00", "categoryId": interest } })), "not_found");
+    assert_eq!(h.code("stashes_book_return", json!({ "id": "x", "input": { "amount": "12.00", "categoryId": interest } })), "invalid_input");
+    for bad in [json!({ "amount": "12.00" }), json!({ "categoryId": interest }), json!({ "amount": 12, "categoryId": interest }), json!({ "amount": "12.00", "categoryId": interest, "stashId": "1" })] {
+        assert!(h.call("stashes_book_return", json!({ "id": "1", "input": bad })).is_err(), "{bad}");
+    }
+    let booked = h.ok("stashes_book_return", json!({ "id": "1", "input": { "amount": "12.00", "categoryId": interest, "date": "2020-06-02", "note": "interest" } }));
+    assert_eq!(booked["deposit"]["state"], "BOOKED");
+    assert_eq!((booked["deposit"]["returnedOn"].as_str(), booked["saved"].as_str(), booked["entries"].clone(), booked["free"].as_str()), (Some("2020-06-02"), Some("1012.00"), json!(2), Some("0.00")), "the income of 12.00 is in the account and in the deposit");
+    let account = h.ok("list_accounts", json!({}));
+    assert_eq!(account.as_array().unwrap().iter().find(|a| a["id"] == json!(savings)).unwrap()["balance"], "1012.00");
+    assert_eq!(h.code("stashes_book_return", json!({ "id": "1", "input": { "amount": "1.00", "categoryId": interest } })), "invalid_input", "booked once");
 }

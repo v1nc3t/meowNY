@@ -951,7 +951,7 @@ mod tests {
         // a stash in Savings with an add that came with the first transfer: both stash tables have a row
         let holiday = crate::stashes::create(
             &conn,
-            &crate::stashes::NewStash { name: "Holiday".into(), account_id: savings.id.to_string(), target: Some("100.00".into()), target_date: Some("2026-12-31".into()), notes: Some("two\nlines".into()) },
+            &crate::stashes::NewStash { name: "Holiday".into(), account_id: savings.id.to_string(), target: Some("100.00".into()), target_date: Some("2026-12-31".into()), notes: Some("two\nlines".into()), kind: None, interest_rate: None, interest_period: None, start_date: None },
             "2026-02-04",
         )
         .unwrap();

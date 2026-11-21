@@ -29,7 +29,7 @@ pub(crate) fn foreign(conn: &Connection, name: &str, code: &str, opening: &str) 
 }
 
 pub(crate) fn new_stash(name: &str, account: i64) -> NewStash {
-    NewStash { name: name.into(), account_id: account.to_string(), target: None, target_date: None, notes: None }
+    NewStash { name: name.into(), account_id: account.to_string(), kind: None, target: None, target_date: None, notes: None, interest_rate: None, interest_period: None, start_date: None }
 }
 
 /// A stash with no target. Returns its id.
