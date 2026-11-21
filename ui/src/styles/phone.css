@@ -3,14 +3,14 @@
 html.is-phone button,
 html.is-phone a.ui-btn,
 html.is-phone .pick-button {
-  min-height: 44px;
+  min-height: var(--control-phone);
 }
 
-/* min-height beats the heights that base.css and primitives.css give, so a tap target stays 44px or more. */
+/* min-height beats the heights that base.css and primitives.css give, so a tap target stays --control-phone (40px) or more. */
 html.is-phone input:not([type='checkbox'], [type='radio']),
 html.is-phone select,
 html.is-phone textarea {
-  min-height: 44px;
+  min-height: var(--control-phone);
   font-size: max(16px, 1rem);
 }
 
@@ -26,9 +26,9 @@ html.is-phone input[type='range'] {
   margin-inline: 0;
 }
 
-/* An icon button is as wide as it is tall, so it is also 44px wide. */
+/* An icon button is as wide as it is tall, so it is also --control-phone wide. */
 html.is-phone .ui-btn-icon {
-  min-width: 44px;
+  min-width: var(--control-phone);
 }
 
 /* A page reaches 4px into the padding on both sides (shell.css), so that its scroll area has room for a focus ring. Its cap of 100%
@@ -368,7 +368,7 @@ html.is-phone .filter-bar > .grow {
 }
 
 html.is-phone .filter-toggle {
-  height: 44px;
+  height: var(--control-phone);
 }
 
 html.is-phone .list-foot {

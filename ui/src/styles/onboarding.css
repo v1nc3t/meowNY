@@ -157,7 +157,7 @@
 
 .onboard-nav > .ui-btn {
   height: auto;
-  min-height: 2.25rem;
+  min-height: var(--control);
   padding-block: 0.5rem;
   white-space: normal;
 }

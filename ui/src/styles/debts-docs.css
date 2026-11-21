@@ -1150,7 +1150,7 @@ ul.card-list > li.list-head > .span-2 {
 .link-list .ui-btn {
   width: 100%;
   height: auto;
-  min-height: 2.25rem;
+  min-height: var(--control);
   justify-content: flex-start;
   padding: 0.5rem 0.75rem;
   text-align: left;

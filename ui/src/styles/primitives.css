@@ -12,7 +12,7 @@
   justify-content: center;
   gap: 0.5rem;
   flex: 0 0 auto;
-  height: 2.25rem;
+  height: var(--control);
   min-width: 0;
   padding: 0 1rem;
   border: var(--border-width) solid var(--btn-edge);
@@ -119,18 +119,18 @@
 }
 
 .ui-btn-sm {
-  height: 2rem;
+  height: var(--control-sm);
   padding: 0 0.75rem;
 }
 
 .ui-btn-lg {
-  height: 2.5rem;
+  height: 2.25rem;
   padding: 0 1.5rem;
 }
 
 .ui-btn-icon {
-  width: 2.25rem;
-  min-width: 2.25rem;
+  width: var(--control);
+  min-width: var(--control);
   padding: 0;
 }
 
@@ -283,7 +283,7 @@
   align-items: stretch;
   width: fit-content;
   max-width: 100%;
-  height: 2.25rem;
+  height: var(--control);
   padding: 3px;
   color: var(--muted-foreground);
   background: var(--muted);
@@ -428,9 +428,9 @@ ul.card-list.is-table > li.list-head {
   gap: 0.25rem 1rem;
 }
 
-/* Table rows are low, so their icon buttons are 2rem (below): at the usual 2.25rem they would keep the rows tall. */
+/* Table rows are low, so their icon buttons are --control-sm (below): at the usual --control they would keep the rows tall. */
 ul.card-list.is-table > li.card-item {
-  min-height: 2.5rem;
+  min-height: 2.25rem;
   padding-block: 0.25rem;
 }
 
@@ -542,19 +542,19 @@ ul.card-list > li.list-head > .is-end {
 
 /* Where a row has no chevron, the same room is kept, so the buttons of all rows line up. */
 .cell-actions > .icon-slot {
-  width: 2.25rem;
+  width: var(--control);
   flex: none;
 }
 
 /* The low rows of the tables and the budgets have smaller icon buttons. A phone shows no tables, and its budgets keep 44px buttons
    (money.css). */
 :is(.is-table, .sum-list, .cat-list) .cell-actions > :is(.icon-btn, .icon-slot) {
-  width: 2rem;
-  min-width: 2rem;
+  width: var(--control-sm);
+  min-width: var(--control-sm);
 }
 
 :is(.is-table, .sum-list, .cat-list) .cell-actions > .icon-btn {
-  height: 2rem;
+  height: var(--control-sm);
 }
 
 /* Small grey words after a name (removed, income, deleted later), and the icon of a shared item in a desktop row. */

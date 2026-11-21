@@ -182,7 +182,7 @@ p:empty {
   width: 100%;
   min-width: 0;
   max-width: 100%;
-  height: 2.25rem;
+  height: var(--control);
   color: var(--foreground);
   background: transparent;
   border: var(--border-width) solid var(--input);

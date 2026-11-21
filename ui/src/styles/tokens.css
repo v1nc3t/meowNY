@@ -12,6 +12,12 @@
 }
 
 :root {
+  /* The heights of the controls: buttons, fields and dropdowns are --control tall, so a toolbar lines up; the small buttons and those in the
+     row of a table are --control-sm, so a row stays low; on the phone every control is --control-phone, still an easy tap. */
+  --control: 2rem;
+  --control-sm: 1.75rem;
+  --control-phone: 40px;
+
   /* One font for text, buttons, fields, labels and section titles; the pixel font (above) only for the brand and the page titles, at 22px and more. */
   --font: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
   --font-pixel: 'Departure Mono', var(--font);

@@ -11,7 +11,7 @@
 
 .page-numbers button {
   min-width: 2.25rem;
-  min-height: 2.25rem;
+  min-height: var(--control);
   padding: 0 0.5rem;
   font-size: 0.875rem;
   color: var(--foreground);

@@ -420,7 +420,7 @@ html.is-phone ul.card-list.cat-list > li.card-item {
 
 html.is-phone .sum-list .ui-btn,
 html.is-phone .cat-list .ui-btn {
-  min-height: 44px;
+  min-height: var(--control-phone);
 }
 
 html.is-phone .sum-list .ui-btn-icon,
