@@ -101,6 +101,14 @@ fn the_json_has_every_account_with_what_it_holds_and_every_transfer_and_the_acco
     assert_eq!(file["accounts"][3]["openingBalance"], "-240.00");
     assert_eq!((file["accounts"][1]["number"].as_str(), file["accounts"][4]["archived"].as_bool(), file["accounts"][0]["isMain"].as_bool()), (Some("IE29 AIBK 9311 5212 3456 78"), Some(true), Some(true)));
     assert!(file["accounts"].as_array().unwrap().iter().all(|a| a.get("entries").is_none() && a.get("available").is_none() && a.get("free").is_none() && a.get("liability").is_none() && a.get("returnPerMonth").is_none()));
+    // the rate and the installment are facts of an account, written as the screens write them (a debt is made by hand here: the core has no way from a card)
+    accounts::update(&c.conn, c.savings, &accounts::AccountPatch { interest_rate: Some(Some("2.5".into())), interest_period: Some(crate::rates::Period::Yearly), ..Default::default() }, TODAY).unwrap();
+    c.conn.execute("UPDATE accounts SET kind = 'LOAN', rate_milli = 500, rate_period = 'MONTHLY', installment_minor = 30000 WHERE id = ?1", [c.card]).unwrap();
+    let file = self::file(&c.conn, &Selection::default());
+    let (savings, card) = (account_named(&file, "Savings"), account_named(&file, "Credit card"));
+    assert_eq!((&savings["interestRate"], &savings["interestPeriod"], &savings["installment"]), (&json!("2.5"), &json!("YEARLY"), &Value::Null));
+    assert_eq!((&card["kind"], &card["interestRate"], &card["interestPeriod"], &card["installment"]), (&json!("LOAN"), &json!("0.5"), &json!("MONTHLY"), &json!("300.00")));
+    assert!(file["accounts"].as_array().unwrap().iter().all(|a| a.get("liability").is_none() && a.get("returnPerMonth").is_none()), "what is worked out from them is not in the file");
 
     let transfers = file["transfers"].as_array().unwrap();
     assert_eq!(transfers.len(), 3);

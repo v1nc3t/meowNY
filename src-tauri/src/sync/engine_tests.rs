@@ -503,9 +503,10 @@ fn hellos_are_checked_for_version_clock_and_identity() {
     assert!(matches!(engine::check_hello(&mine, &changed(&|h| h.schema -= 1), now()), Err(SyncError::SchemaMismatch { newer_here: true })));
     assert!(matches!(engine::check_hello(&mine, &changed(&|h| h.protocol += 1), now()), Err(SyncError::ProtocolMismatch)));
     // a device of the version before accounts and transfers (protocol 8), one before the details of an account (protocol 9), one before a
-    // currency per account (protocol 10) and one before stashes (protocol 11) are told to update, whichever of the two they are
-    assert_eq!(wire::PROTOCOL, 12);
-    for old_protocol in [8, 9, 10, 11] {
+    // currency per account (protocol 10), one before stashes (protocol 11) and one before loans and deposits (protocol 12) are told to update,
+    // whichever of the two they are
+    assert_eq!(wire::PROTOCOL, 13);
+    for old_protocol in [8, 9, 10, 11, 12] {
         assert!(matches!(engine::check_hello(&mine, &changed(&|h| h.protocol = old_protocol), now()), Err(SyncError::ProtocolMismatch)), "protocol {old_protocol}");
         let mut old = mine.clone();
         old.protocol = old_protocol;

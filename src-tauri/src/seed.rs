@@ -1,7 +1,12 @@
 //! Development demo data. Not used by the app itself; see `examples/dev_vault.rs` and `examples/seed.rs`.
 
-use chrono::NaiveDate;
+use chrono::{Datelike, Days, Months, NaiveDate};
 use rusqlite::Connection;
+
+use crate::accounts::pay::{self, Payment};
+use crate::money::format_amount;
+use crate::rates::{self, Period};
+use crate::vault::AppError;
 
 const DEV_SEED: &str = include_str!("../seeds/dev.sql");
 
@@ -12,6 +17,8 @@ pub enum SeedError {
     /// The date for "today" is not a date.
     BadDate,
     Sqlite(rusqlite::Error),
+    /// The core refused one of the payments of the debts.
+    Core(AppError),
 }
 
 impl std::fmt::Display for SeedError {
@@ -20,6 +27,7 @@ impl std::fmt::Display for SeedError {
             SeedError::NotEmpty => write!(f, "database already has data; seed a fresh database"),
             SeedError::BadDate => write!(f, "today must be a date such as 2026-10-14"),
             SeedError::Sqlite(e) => write!(f, "seed failed: {e}"),
+            SeedError::Core(e) => write!(f, "seed failed: {e:?}"),
         }
     }
 }
@@ -32,7 +40,13 @@ impl From<rusqlite::Error> for SeedError {
     }
 }
 
-/// Loads the demo categories, budgets, recurring items, transactions, friends, accounts and stashes into a migrated database that has
+impl From<AppError> for SeedError {
+    fn from(e: AppError) -> Self {
+        SeedError::Core(e)
+    }
+}
+
+/// Loads the demo categories, budgets, recurring items, transactions, friends, accounts, stashes and debts into a migrated database that has
 /// none yet, with sixteen months of history ending today. An existing settings row is left as it is.
 pub fn run(conn: &mut Connection) -> Result<(), SeedError> {
     run_for(conn, &chrono::Local::now().date_naive().to_string())
@@ -47,9 +61,45 @@ pub fn run_for(conn: &mut Connection, today: &str) -> Result<(), SeedError> {
         return Err(SeedError::NotEmpty);
     }
     tx.execute_batch(&DEV_SEED.replace("@today", &format!("'{date}'")))?;
-    // Demo rows are not user history.
-    tx.execute("DELETE FROM audit_log", [])?;
     tx.commit()?;
+    // The payments of the debts are the core's to make (`accounts::pay::pay` has a transaction of its own, so it runs after the file is in).
+    pay_debts(conn, date)?;
+    // Demo rows are not user history.
+    conn.execute("DELETE FROM audit_log", [])?;
+    Ok(())
+}
+
+/// The accounts the seed owes on, with what each is paid with: the mortgage (7) and the loan (8), each paid from the current account.
+const DEBTS: [(i64, &str); 2] = [(7, "Mortgage payment"), (8, "Loan payment")];
+
+/// The payments of the last three months of each debt, oldest first, on the 10th of the month: the installment, of which the interest is
+/// what `rates::month_interest` says for what was owed that day, in the expense category "Interest" (the seed makes it), and the rest lowers
+/// the debt. The 10th of a month before this one is in the past on any day.
+fn pay_debts(conn: &Connection, today: NaiveDate) -> Result<(), SeedError> {
+    let category: i64 = conn.query_row("SELECT id FROM categories WHERE type = 'EXPENSE' AND name = 'Interest' AND deleted_at IS NULL", [], |r| r.get(0))?;
+    let this_month = today.with_day(1).ok_or(SeedError::BadDate)?;
+    for (liability, note) in DEBTS {
+        let (milli, period, installment): (i64, String, i64) =
+            conn.query_row("SELECT rate_milli, rate_period, installment_minor FROM accounts WHERE id = ?1", [liability], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))?;
+        let period = Period::from_sql(&period)?;
+        for back in (1..=3).rev() {
+            let date = this_month.checked_sub_months(Months::new(back)).and_then(|first| first.checked_add_days(Days::new(9))).ok_or(SeedError::BadDate)?;
+            // what was owed on that day, from the movements of the account
+            let held: i64 =
+                conn.query_row("SELECT COALESCE(SUM(delta_minor), 0) FROM account_movements WHERE account_id = ?1 AND day <= ?2", rusqlite::params![liability, date.to_string()], |r| r.get(0))?;
+            let interest = rates::month_interest((-held).max(0), milli, period);
+            let payment = Payment {
+                liability_id: liability.to_string(),
+                from_account_id: "1".into(),
+                amount: format_amount(installment),
+                interest: Some(format_amount(interest)),
+                category_id: Some(category.to_string()),
+                date: Some(date.to_string()),
+                note: Some(note.into()),
+            };
+            pay::pay(conn, &payment, &today.to_string())?;
+        }
+    }
     Ok(())
 }
 
@@ -84,13 +134,13 @@ mod tests {
         for today in DAYS {
             let conn = seeded(today);
             assert_eq!(count(&conn, "settings"), 1, "{today}");
-            assert_eq!(count(&conn, "categories"), 15, "{today}");
+            assert_eq!(count(&conn, "categories"), 16, "{today}");
             assert!(count(&conn, "budgets") >= 12, "{today}");
             assert_eq!(count(&conn, "recurring_transactions"), 12, "{today}");
             assert_eq!(count(&conn, "people"), 4, "{today}");
             assert!(count(&conn, "ledger_entries") >= 9 && count(&conn, "transaction_split_lines") >= 16, "{today}: debts");
             assert!(count(&conn, "transactions") > 250, "{today}: {} transactions", count(&conn, "transactions"));
-            assert_eq!(count(&conn, "accounts"), 6, "{today}");
+            assert_eq!(count(&conn, "accounts"), 8, "{today}");
             assert!(count(&conn, "transfers") >= 18, "{today}: {} transfers", count(&conn, "transfers"));
             assert!(crate::accounts::check(&conn).unwrap(), "{today}: the main account is as it must be");
             assert_eq!(count(&conn, "audit_log"), 0, "{today}: demo rows are not user history");
@@ -132,10 +182,10 @@ mod tests {
             let conn = seeded(today);
             let list = accounts::list(&conn, today).unwrap();
             let names: Vec<&str> = list.iter().map(|a| a.name.as_str()).collect();
-            assert_eq!(names, ["Current account", "Savings", "Cash", "Credit card", "Lei account", "Old savings"], "{today}: the person's order, the archived one last");
+            assert_eq!(names, ["Current account", "Savings", "Cash", "Credit card", "Lei account", "Flat", "Car", "Old savings"], "{today}: the person's order, the archived one last");
             let kinds: Vec<Kind> = list.iter().map(|a| a.kind).collect();
-            assert_eq!(kinds, [Kind::Checking, Kind::Savings, Kind::Cash, Kind::CreditCard, Kind::Checking, Kind::Savings], "{today}");
-            let (current, savings, cash, card, lei, old) = (&list[0], &list[1], &list[2], &list[3], &list[4], &list[5]);
+            assert_eq!(kinds, [Kind::Checking, Kind::Savings, Kind::Cash, Kind::CreditCard, Kind::Checking, Kind::Mortgage, Kind::Loan, Kind::Savings], "{today}");
+            let (current, savings, cash, card, lei, flat, car, old) = (&list[0], &list[1], &list[2], &list[3], &list[4], &list[5], &list[6], &list[7]);
             // the main account is the current account: an IBAN and an opening balance sixteen months back
             assert!(current.is_main && !current.archived && current.number.as_deref().is_some_and(|n| n.starts_with("IE")), "{today}");
             assert!(money(&current.opening_balance) > 0, "{today}");
@@ -143,17 +193,20 @@ mod tests {
             // one that is archived, with history, and that holds nothing: what was left went to the savings
             assert!(old.archived && old.entries > 1 && money(&old.balance) == 0, "{today}: {old:?}");
             assert_eq!(list.iter().filter(|a| a.archived).count(), 1, "{today}");
-            // the card is in the red, and the others are not
+            // the card is in the red, and so are the two debts (still owing after three payments), and the others are not
             assert!(money(&card.balance) < 0 && money(&card.opening_balance) < 0, "{today}: {card:?}");
+            for debt in [flat, car] {
+                assert!(money(&debt.balance) < 0 && money(&debt.opening_balance) < 0, "{today}: {debt:?}");
+            }
             for held in [current, savings, cash, lei] {
                 assert!(money(&held.balance) > 0, "{today}: {} holds {}", held.name, held.balance);
             }
-            // and none of them was below zero at the end of a month since they opened (the card never above)
+            // and none of them was below zero at the end of a month since they opened (the card and the debts never above)
             let year = &today[..4];
             for year in [year.parse::<i32>().unwrap() - 1, year.parse().unwrap()] {
                 for account in &list {
                     for point in accounts::history(&conn, account.id, &year.to_string(), today).unwrap().iter().filter(|p| p.month[..] >= account.opening_date[..7]) {
-                        let (held, in_the_red) = (money(&point.balance), account.kind == Kind::CreditCard);
+                        let (held, in_the_red) = (money(&point.balance), account.kind == Kind::CreditCard || account.kind.is_liability());
                         assert!(in_the_red && held < 0 || !in_the_red && held >= 0, "{today}: {} on {}: {}", account.name, point.month, point.balance);
                     }
                 }
@@ -173,7 +226,7 @@ mod tests {
         for today in DAYS {
             let conn = seeded(today);
             let list = accounts::list(&conn, today).unwrap();
-            let [current, savings, cash, card, lei, old] = &list[..] else { panic!("{today}: {} accounts", list.len()) };
+            let [current, savings, cash, card, lei, flat, car, old] = &list[..] else { panic!("{today}: {} accounts", list.len()) };
             let details = |a: &Account| (a.bic.clone(), a.notes.clone(), a.group.clone(), a.include_in_net_worth, a.virtual_balance.clone());
             // the credit card has a limit of 1000.00 as its virtual balance, and a BIC: what it can still pay is its balance and the limit
             assert_eq!(details(card), (Some("COBADEFFXXX".into()), None, None, true, "1000.00".into()), "{today}");
@@ -187,21 +240,22 @@ mod tests {
             assert_eq!(details(cash), (None, None, None, true, "0.00".into()), "{today}");
             assert_eq!(details(old), (None, None, None, false, "0.00".into()), "{today}");
             assert_eq!(details(lei), (None, None, Some("Everyday".into()), true, "0.00".into()), "{today}");
+            assert_eq!((details(flat), details(car)), ((None, None, None, true, "0.00".into()), (None, None, None, true, "0.00".into())), "{today}");
             assert!(old.archived && list.iter().filter(|a| !a.include_in_net_worth).count() == 1, "{today}: only the archived one");
-            for a in [current, savings, cash, lei, old] {
+            for a in [current, savings, cash, lei, flat, car, old] {
                 assert_eq!(a.available, a.balance, "{today}: {} has no virtual balance, so what is available is what it holds", a.name);
             }
             assert!(accounts::check(&conn).unwrap(), "{today}");
-            // net worth counts the others and not it, and `accounts` still counts all five
+            // net worth counts the others and not it, the assets apart from the two debts, and `accounts` still counts all eight
             let summary = accounts::summary(&conn, today).unwrap();
-            let counted: i64 = list.iter().filter(|a| a.include_in_net_worth).map(|a| money(&a.balance_in_main)).sum();
-            assert_eq!((money(&summary.in_accounts), summary.accounts, summary.in_use), (counted, 6, true), "{today}");
+            let counted = |debt: bool| -> i64 { list.iter().filter(|a| a.include_in_net_worth && a.kind.is_liability() == debt).map(|a| money(&a.balance_in_main)).sum() };
+            assert_eq!((money(&summary.in_accounts), money(&summary.debts), summary.accounts, summary.in_use), (counted(false), counted(true), 8, true), "{today}");
             // it holds nothing, so prove it by putting something in it: net worth does not move, until the account is counted
             conn.execute("INSERT INTO transactions (category_id, name, amount_minor, payment_date, account_id) VALUES (1, 'Found money', 10000, ?1, 5)", [today]).unwrap();
             assert_eq!(accounts::get(&conn, 5, today).unwrap().balance, "100.00", "{today}");
             assert_eq!(accounts::summary(&conn, today).unwrap(), summary, "{today}: the archived account is not in net worth");
             conn.execute("UPDATE accounts SET include_net_worth = 1 WHERE id = 5", []).unwrap();
-            assert_eq!(money(&accounts::summary(&conn, today).unwrap().in_accounts), counted + 10_000, "{today}: and when it is counted it is");
+            assert_eq!(money(&accounts::summary(&conn, today).unwrap().in_accounts), counted(false) + 10_000, "{today}: and when it is counted it is");
         }
     }
 
@@ -243,7 +297,8 @@ mod tests {
                 )
                 .unwrap();
             let summary = accounts::summary(&conn, today).unwrap();
-            assert_eq!(money(&summary.in_accounts), by_hand, "{today}");
+            // (the two debts are in the sums as what they owe, below 0: the rest of the accounts and the debts make what the person has)
+            assert_eq!(money(&summary.in_accounts) + money(&summary.debts), by_hand, "{today}");
             let list = accounts::list(&conn, today).unwrap();
             assert_eq!(list.iter().map(|a| money(&a.balance_in_main)).sum::<i64>(), by_hand, "{today}: the accounts add up to what is in them, the lei at their rate");
             // what left one account reached another: in one currency to the cent, and between the euro and the lei at 5.00 lei to the euro
@@ -273,8 +328,8 @@ mod tests {
                 assert_eq!((statement.balance_before.as_str(), statement.balance_after.as_str()), ("0.00", account.balance.as_str()), "{today}: {}", account.name);
             }
             // and it is what the dashboard would say
-            assert_eq!(money(&summary.net_worth), money(&summary.in_accounts) + money(&summary.friends), "{today}");
-            assert!(summary.in_use && summary.accounts == 6, "{today}");
+            assert_eq!(money(&summary.net_worth), money(&summary.in_accounts) + money(&summary.debts) + money(&summary.friends), "{today}");
+            assert!(summary.in_use && summary.accounts == 8, "{today}");
         }
     }
 
@@ -333,7 +388,8 @@ mod tests {
             // the dashboard counts it in euro: the sum of what each account that counts is worth in the app's currency
             let list = accounts::list(&conn, today).unwrap();
             let worth: i64 = list.iter().filter(|a| a.include_in_net_worth).map(|a| money(&a.balance_in_main)).sum();
-            assert_eq!(money(&accounts::summary(&conn, today).unwrap().in_accounts), worth, "{today}");
+            let summary = accounts::summary(&conn, today).unwrap();
+            assert_eq!(money(&summary.in_accounts) + money(&summary.debts), worth, "{today}");
             // no recurring item and no entry of the ledger is in it
             for table in ["recurring_transactions", "ledger_entries"] {
                 assert_eq!(conn.query_row(&format!("SELECT count(*) FROM {table} WHERE account_id = 6"), [], |r| r.get::<_, i64>(0)).unwrap(), 0, "{today}: {table}");
@@ -351,12 +407,12 @@ mod tests {
         use crate::accounts::{self, Kind};
         for today in DAYS {
             let conn = seeded(today);
-            assert_eq!(count(&conn, "stashes"), 5, "{today}");
+            assert_eq!(count(&conn, "stashes"), 6, "{today}");
             assert!(count(&conn, "stash_entries") >= 15, "{today}: {} entries", count(&conn, "stash_entries"));
-            // none of them is over-booked: what the stashes of an account hold fits in what it has. (The credit card is in the red by design, so its
-            // free money is below 0 as its balance is; no stash is in it.)
+            // none of them is over-booked: what the stashes of an account hold fits in what it has. (The credit card and the two debts are in the red
+            // by design, so their free money is below 0 as their balance is; no stash is in them.)
             for a in accounts::list(&conn, today).unwrap() {
-                if a.kind == Kind::CreditCard {
+                if a.kind == Kind::CreditCard || a.kind.is_liability() {
                     assert!(money(&a.free) < 0 && a.free == a.balance && money(&a.set_aside) == 0, "{today}: {a:?}");
                 } else {
                     assert!(money(&a.free) >= 0, "{today}: {} has {} free", a.name, a.free);
@@ -375,6 +431,7 @@ mod tests {
                     ("New laptop", "Current account", "EUR", false, "900.00", Some("900.00")),
                     ("Rainy day", "Savings", "EUR", false, "500.00", None),
                     ("Wedding gift", "Lei account", "RON", false, "550.00", Some("1000.00")),
+                    ("Term deposit", "Savings", "EUR", false, "5000.00", None),
                     ("Bike", "Savings", "EUR", true, "0.00", Some("450.00")),
                 ],
                 "{today}: the active ones by position, then the archived one"
@@ -393,15 +450,15 @@ mod tests {
             assert!(holiday.per_month.is_some(), "{today}: a date seven months ahead, so a sum to save each month");
             // the stashes are numbered from 0, as the lists sort them
             let positions: Vec<i64> = conn.prepare("SELECT position FROM stashes ORDER BY id").unwrap().query_map([], |r| r.get(0)).unwrap().map(Result::unwrap).collect();
-            assert_eq!(positions, [0, 1, 2, 3, 4], "{today}");
+            assert_eq!(positions, [0, 1, 2, 3, 4, 5], "{today}");
             let days_ahead: i64 = conn.query_row("SELECT CAST(julianday(target_date) - julianday(?1) AS INTEGER) FROM stashes WHERE id = 1", [today], |r| r.get(0)).unwrap();
             assert!((190..=240).contains(&days_ahead), "{today}: the holiday is {days_ahead} days ahead");
             let dated: i64 = conn.query_row("SELECT count(*) FROM stashes WHERE target_date IS NOT NULL", [], |r| r.get(0)).unwrap();
-            assert_eq!(dated, 1, "{today}: only the holiday has a date");
+            assert_eq!(dated, 2, "{today}: only the holiday and the deposit (its maturity) have a date");
 
             // what each account sets aside is the sum of its stashes
             let set_aside = |id: i64| accounts::get(&conn, id, today).unwrap().set_aside;
-            assert_eq!([1, 2, 3, 4, 6].map(set_aside), ["900.00", "1060.00", "0.00", "0.00", "550.00"], "{today}: the archived bike holds nothing");
+            assert_eq!([1, 2, 3, 4, 6].map(set_aside), ["900.00", "6060.00", "0.00", "0.00", "550.00"], "{today}: the archived bike holds nothing, the deposit holds 5000.00");
 
             // the entries: notes on some, the one take of the holiday and the one that spent the bike, and none is dated after today
             let note_of = |stash: i64, minor: i64| -> Option<String> {
@@ -456,10 +513,73 @@ mod tests {
     }
 
     #[test]
+    fn the_savings_have_a_rate_the_two_debts_are_paid_in_split_payments_and_the_term_deposit_is_running_on_any_day() {
+        use crate::accounts::{self, LiabilityState};
+        use crate::rates::Period;
+        use crate::stashes::{self, DepositState, StashKind};
+        for today in DAYS {
+            let conn = seeded(today);
+            let list = accounts::list(&conn, today).unwrap();
+            let named = |name: &str| list.iter().find(|a| a.name == name).unwrap();
+            // the savings earn 2.5 % a year, so they show a return a month; the main account has no rate
+            let savings = named("Savings");
+            assert_eq!((savings.interest_rate.as_deref(), savings.interest_period, savings.installment.as_deref()), (Some("2.5"), Some(Period::Yearly), None), "{today}");
+            assert!(savings.return_per_month.as_deref().is_some_and(|r| money(r) > 0), "{today}: {savings:?}");
+            assert!(named("Current account").interest_rate.is_none(), "{today}");
+            // the category of the interest is an expense next to the income one of the same name
+            let kinds: Vec<String> = conn.prepare("SELECT type FROM categories WHERE name = 'Interest' ORDER BY id").unwrap().query_map([], |r| r.get(0)).unwrap().map(Result::unwrap).collect();
+            assert_eq!(kinds, ["INCOME", "EXPENSE"], "{today}");
+            // the mortgage and the loan: owed since years ago, three payments each in the months before this one, each a transfer of the principal from
+            // the current account and an expense of the interest that is the interest of that month on what was owed, and the two add up to the installment
+            for (name, owed, rate, installment, first_interest, note) in
+                [("Flat", 18_000_000, "3.9", "950.00", 58_500, "Mortgage payment"), ("Car", 900_000, "6.5", "300.00", 4_875, "Loan payment")]
+            {
+                let debt = named(name);
+                let terms = (debt.interest_rate.as_deref(), debt.interest_period, debt.installment.as_deref(), money(&debt.opening_balance));
+                assert_eq!(terms, (Some(rate), Some(Period::Yearly), Some(installment), -owed), "{today}: {name}");
+                let principals: Vec<(i64, i64, String)> = conn
+                    .prepare("SELECT amount_minor, from_account_id, transfer_date FROM transfers WHERE to_account_id = ?1 ORDER BY transfer_date")
+                    .unwrap()
+                    .query_map([debt.id], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))
+                    .unwrap()
+                    .map(Result::unwrap)
+                    .collect();
+                let interests: Vec<(i64, String)> = conn
+                    .prepare("SELECT amount_minor, payment_date FROM transactions WHERE account_id = 1 AND name = ?1 AND category_id = 16 AND description = ?2 ORDER BY payment_date")
+                    .unwrap()
+                    .query_map([name, note], |r| Ok((r.get(0)?, r.get(1)?)))
+                    .unwrap()
+                    .map(Result::unwrap)
+                    .collect();
+                assert_eq!((principals.len(), interests.len()), (3, 3), "{today}: {name}");
+                for ((principal, from, day), (interest, interest_day)) in principals.iter().zip(&interests) {
+                    assert_eq!((principal + interest, *from, day == interest_day, day.ends_with("-10") && day.as_str() < today), (money(installment), 1, true, true), "{today}: {name} on {day}");
+                }
+                assert_eq!(interests[0].0, first_interest, "{today}: {name}: the first month's interest on what was owed");
+                assert!(interests[0].0 > interests[1].0 && interests[1].0 > interests[2].0, "{today}: {name}: the debt falls, so the interest does");
+                let liability = debt.liability.as_ref().unwrap();
+                assert_eq!(liability.state, LiabilityState::Owing, "{today}: {name}");
+                assert_eq!(money(&liability.owed), owed - principals.iter().map(|p| p.0).sum::<i64>(), "{today}: {name}: what is owed is what was owed less the principal paid");
+                assert!(liability.payoff.is_some(), "{today}: {name}: an installment and a rate give a payoff");
+            }
+            // the term deposit: running, with the add and the rate, maturing ten months ahead
+            let list = stashes::list(&conn, None, today).unwrap();
+            let deposit = list.iter().find(|s| s.name == "Term deposit").unwrap();
+            assert_eq!((deposit.kind, deposit.account.as_str(), deposit.saved.as_str(), deposit.entries, deposit.target.as_deref()), (StashKind::Deposit, "Savings", "5000.00", 1, None), "{today}");
+            let facts = deposit.deposit.as_ref().unwrap();
+            assert_eq!((facts.interest_rate.as_str(), facts.interest_period, facts.state), ("3.1", Period::Yearly, DepositState::Running), "{today}");
+            let (start, maturity): (String, String) = conn.query_row("SELECT date(?1, '-2 months'), date(?1, '+10 months')", [today], |r| Ok((r.get(0)?, r.get(1)?))).unwrap();
+            assert_eq!((facts.start_date.as_str(), deposit.target_date.as_deref(), facts.broken_on.as_deref(), facts.returned_on.as_deref()), (start.as_str(), Some(maturity.as_str()), None, None), "{today}");
+            assert!(facts.days_left > 280 && money(&facts.expected_return) > 0, "{today}: {facts:?}");
+            assert_eq!(count(&conn, "audit_log"), 0, "{today}");
+        }
+    }
+
+    #[test]
     fn seeding_twice_is_refused_and_changes_nothing() {
         let mut conn = seeded("2026-10-14");
         assert!(matches!(run_for(&mut conn, "2026-10-14"), Err(SeedError::NotEmpty)));
-        assert_eq!(count(&conn, "categories"), 15);
+        assert_eq!(count(&conn, "categories"), 16);
         assert!(matches!(run_for(&mut db(), "tomorrow"), Err(SeedError::BadDate)));
     }
 }

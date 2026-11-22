@@ -31,6 +31,11 @@ export type ReportLabels = {
   stashes: string
   saved: string
   target: string
+  /** The kind beside a credit, a loan or a mortgage in the table of accounts, and the line of debts over net worth when one counts in it (docs/loans-deposits-design.md). */
+  kindCredit: string
+  kindLoan: string
+  kindMortgage: string
+  debts: string
 }
 
 export const capital = (text: string) => text.charAt(0).toLocaleUpperCase(activeLanguage()) + text.slice(1)
@@ -79,5 +84,9 @@ export function reportLabels(period: string): ReportLabels {
     stashes: capital(t('report.stashes')),
     saved: capital(t('report.saved')),
     target: capital(t('report.target')),
+    kindCredit: capital(t('accounts.kind.CREDIT')),
+    kindLoan: capital(t('accounts.kind.LOAN')),
+    kindMortgage: capital(t('accounts.kind.MORTGAGE')),
+    debts: capital(t('debts.tabDebts')),
   }
 }

@@ -315,8 +315,11 @@ fn tour(app: &App) -> (Map<String, Value>, Vec<Value>) {
     );
     t.example("stashes archive", write, &format!("meowny stashes archive {coat}"), &["stashes", "archive", &coat], false, true, None);
     t.example("stashes unarchive", write, &format!("meowny stashes unarchive {coat}"), &["stashes", "unarchive", &coat], false, true, None);
-    // Every stash that is not archived, the new one first: the demo data's holiday, laptop, rainy day and wedding gift (the bike is archived).
-    let stash_ids = format!("{coat},1,2,3,5");
+    // Every stash that is not archived, the new one first, then the others in their order (the demo data's holiday, laptop, rainy day, wedding gift and
+    // term deposit; the bike is archived).
+    let stashes = t.data(read, &["stashes", "list"]);
+    let others: Vec<&str> = stashes.as_array().unwrap().iter().filter(|s| s["archived"] == false).map(|s| s["id"].as_str().unwrap()).filter(|id| *id != coat).collect();
+    let stash_ids = format!("{coat},{}", others.join(","));
     t.example("stashes reorder", write, &format!("meowny stashes reorder --ids {stash_ids}"), &["stashes", "reorder", "--ids", &stash_ids], false, true, None);
     // Erasing an entry gives its money back to what is free; the transfer that came with it stays, unless it is asked to go too.
     t.example(
@@ -350,7 +353,7 @@ fn tour(app: &App) -> (Map<String, Value>, Vec<Value>) {
     );
     let term = Tour::id(&t.data(
         write,
-        &["stashes", "create", "--name", "Term deposit", "--account-id", "2", "--kind", "deposit", "--interest-rate", "3.1", "--interest-period", "yearly", "--start-date", "2026-01-05", "--target-date", "2027-01-05"],
+        &["stashes", "create", "--name", "Fixed deposit", "--account-id", "2", "--kind", "deposit", "--interest-rate", "3.1", "--interest-period", "yearly", "--start-date", "2026-01-05", "--target-date", "2027-01-05"],
     ));
     t.data(write, &["stashes", "add", &term, "--amount", "1000.00", "--date", "2026-01-05"]);
     // a deposit takes no more money once it has matured, so its maturity is moved back to July after the money is in
@@ -523,7 +526,10 @@ fn tour(app: &App) -> (Map<String, Value>, Vec<Value>) {
     let order: Vec<&str> = listed.as_array().unwrap().iter().map(|c| c["id"].as_str().unwrap()).filter(|id| *id != pets).collect();
     let ids = format!("{pets},{}", order.join(","));
     // Accounts: bring the card to the top of the list, put it away and back, and delete an account that has nothing in it.
-    let account_ids = format!("{card},1,2,3,4,6,{car}"); // the demo data's five accounts that are not archived (the sixth is), and the car loan
+    // every account that is not archived, the card first, then the others in their order (the demo data's and the car loan the tour made)
+    let accounts = t.data(read, &["accounts", "list"]);
+    let others: Vec<&str> = accounts.as_array().unwrap().iter().filter(|a| a["archived"] == false).map(|a| a["id"].as_str().unwrap()).filter(|id| *id != card).collect();
+    let account_ids = format!("{card},{}", others.join(","));
     t.example("accounts reorder", write, &format!("meowny accounts reorder --ids {account_ids}"), &["accounts", "reorder", "--ids", &account_ids], false, true, None);
     t.example("accounts archive", write, &format!("meowny accounts archive {card}"), &["accounts", "archive", &card], false, true, None);
     t.example("accounts unarchive", write, &format!("meowny accounts unarchive {card}"), &["accounts", "unarchive", &card], false, true, None);

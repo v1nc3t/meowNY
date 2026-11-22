@@ -518,7 +518,7 @@ impl Builder<'_> {
         self.text_right(balance_right, base, 8.5, true, MUTED, &balance);
         self.line(self.left, self.y + 17.0, self.right, self.y + 17.0, 0.8, GRID);
         self.y += 20.0;
-        for (name, balance, change, counts, currency) in &part.accounts {
+        for (name, balance, change, counts, currency, liability) in &part.accounts {
             self.ensure(row);
             let base = Self::baseline(self.y, row, 9.5);
             // an account in a currency of its own: the code in front of the numbers, which are in that currency and carry no symbol of the app's
@@ -527,11 +527,14 @@ impl Builder<'_> {
                 Some(code) => (format!("{code} {}{}", if *change >= 0 { "+" } else { "" }, self.fmt.number(*change)), format!("{code} {}", self.fmt.number(*balance))),
             };
             let room = change_right - self.left - 90.0;
-            if *counts {
+            // what is said beside the name: the kind of an account you owe on, and why a balance is not in the net worth
+            let kind = liability.and_then(|kind| self.labels.liability_word(kind)).map(str::to_string);
+            let marks: Vec<String> = kind.into_iter().chain((!*counts).then(|| self.labels.not_in_net_worth.clone())).collect();
+            if marks.is_empty() {
                 self.text_fit(self.left, base, 9.5, false, INK, name, room);
             } else {
-                // the mark tells why this balance is not in the net worth, so the name is cut before it is; a very long mark is cut too
-                let mark = self.m.fit(&self.labels.not_in_net_worth, 8.0, false, room * 0.6);
+                // the marks tell what the account is and why its balance is not in the net worth, so the name is cut before them; very long ones are cut too
+                let mark = self.m.fit(&marks.join(" "), 8.0, false, room * 0.6);
                 let shown = self.m.fit(name, 9.5, false, room - self.m.width(&mark, 8.0, false) - 5.0);
                 let after_name = self.left + self.m.width(&shown, 9.5, false) + 5.0;
                 self.text(self.left, base, 9.5, false, INK, &shown);
@@ -544,6 +547,15 @@ impl Builder<'_> {
         }
         self.ensure(row + 6.0);
         self.y += 6.0;
+        // what the accounts you owe on add up to, when there are any in the net worth: it is in the net worth below, and in the balances above
+        if let Some(debts) = part.debts {
+            self.ensure(row);
+            let base = Self::baseline(self.y, row, 9.5);
+            let label = self.labels.debts.clone();
+            self.text(self.left, base, 9.5, false, MUTED, &label);
+            self.text_right(balance_right, base, 9.5, false, if debts < 0 { OVER_TEXT } else { INK }, &self.fmt.money(debts));
+            self.y += row;
+        }
         let base = Self::baseline(self.y, row, 9.5);
         let label = self.labels.net_worth.clone();
         self.text(self.left, base, 9.5, true, MUTED, &label);

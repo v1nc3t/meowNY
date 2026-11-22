@@ -316,7 +316,7 @@ fn the_summaries_say_what_a_person_has_to_know_before_calling() {
 fn every_answer_has_the_fields_of_the_design_note_with_ids_and_money_as_text() {
     let (_dir, vault) = seeded();
     let list = listed(&vault);
-    assert_eq!(names(&vault), ["Holiday in Lisbon", "New laptop", "Rainy day", "Wedding gift", "Bike"], "the person's order, the archived one last");
+    assert_eq!(names(&vault), ["Holiday in Lisbon", "New laptop", "Rainy day", "Wedding gift", "Term deposit", "Bike"], "the person's order, the archived one last");
     for s in &list {
         assert_eq!(keys(s), STASH_KEYS, "{s}");
         assert!(is_id(s["id"].as_str().unwrap()) && is_id(s["accountId"].as_str().unwrap()), "{s}");
@@ -384,8 +384,8 @@ fn every_answer_has_the_fields_of_the_design_note_with_ids_and_money_as_text() {
     // the totals, in the app's currency: the stash in lei at five to the euro, the archived one left out
     let summary = ok(&vault, "stashes.summary", json!({}));
     assert_eq!(keys(&summary), ["reached", "saved", "stashes", "target"]);
-    assert_eq!((summary["stashes"].as_u64(), summary["reached"].as_u64()), (Some(4), Some(1)));
-    assert_eq!((summary["saved"].as_str(), summary["target"].as_str()), (Some("2070.00"), Some("2300.00")), "560 + 900 + 500 + 550 lei / 5; 1200 + 900 + 1000 lei / 5");
+    assert_eq!((summary["stashes"].as_u64(), summary["reached"].as_u64()), (Some(5), Some(1)));
+    assert_eq!((summary["saved"].as_str(), summary["target"].as_str()), (Some("7070.00"), Some("2300.00")), "560 + 900 + 500 + 5000 (the term deposit) + 550 lei / 5; 1200 + 900 + 1000 lei / 5 (the deposit has no target)");
     assert_eq!(summary, expect(&vault, |c| stashes::summary(c, TODAY)));
 }
 
@@ -394,16 +394,16 @@ fn the_list_can_be_limited_to_an_account_and_a_stash_does_not_move_the_account()
     let (_dir, vault) = seeded();
     let of = |account: &str| -> Vec<String> { ok(&vault, "stashes.list", json!({ "accountId": account })).as_array().unwrap().iter().map(|s| s["name"].as_str().unwrap().to_string()).collect() };
     assert_eq!(of("1"), ["New laptop"]);
-    assert_eq!(of("2"), ["Holiday in Lisbon", "Rainy day", "Bike"], "the savings: in the person's order, the archived one last");
+    assert_eq!(of("2"), ["Holiday in Lisbon", "Rainy day", "Term deposit", "Bike"], "the savings: in the person's order, the archived one last");
     assert_eq!(of("6"), ["Wedding gift"]);
     assert!(of("3").is_empty() && of("999999").is_empty(), "an account with none, and one that is not there");
     // the accounts say what is set aside in them; the balance is what it was
     let accounts = ok(&vault, "accounts.list", json!({}));
     let savings = accounts.as_array().unwrap().iter().find(|a| a["id"] == "2").unwrap();
-    assert_eq!(savings["setAside"], "1060.00");
+    assert_eq!(savings["setAside"], "6060.00", "560 + 500 + the term deposit's 5000, and the archived Bike's 0");
     let (balance, free) = (savings["balance"].as_str().unwrap(), savings["free"].as_str().unwrap());
     let cents = |t: &str| t.replace('.', "").parse::<i64>().unwrap();
-    assert_eq!(cents(free), cents(balance) - 106_000);
+    assert_eq!(cents(free), cents(balance) - 606_000);
     // every stash of the list says the free money of its account
     for s in ok(&vault, "stashes.list", json!({ "accountId": "2" })).as_array().unwrap() {
         assert_eq!(s["free"], savings["free"]);
@@ -1014,8 +1014,8 @@ fn a_read_token_reads_stashes_and_cannot_write_any_of_them() {
         assert_eq!(reply.json()["ok"], true, "{name}");
         assert!(!reply.body.contains(&h.read) && !reply.body.contains(&h.write), "{name}");
     }
-    assert_eq!(call(port, Some(&h.read), "stashes.list", "{}").data().as_array().unwrap().len(), 5);
-    assert_eq!(call(port, Some(&h.write), "stashes.list", "{}").data().as_array().unwrap().len(), 5, "a write token reads too");
+    assert_eq!(call(port, Some(&h.read), "stashes.list", "{}").data().as_array().unwrap().len(), 6);
+    assert_eq!(call(port, Some(&h.write), "stashes.list", "{}").data().as_array().unwrap().len(), 6, "a write token reads too");
 
     // every write route: a read token is refused before anything else is looked at, with a valid request and with none
     let world = World { alpha: "2".into(), beta: "1".into(), poor: "3".into(), lei: "6".into(), gone: "5".into(), holiday: "1".into(), first: "1".into() };

@@ -694,22 +694,22 @@ fn an_account_is_read_and_ordered_from_the_command_line_and_a_taken_name_is_exit
     // a read token reads everything about accounts
     let list = ok(&app, &app.read, &["accounts", "list"]);
     let names: Vec<&str> = list.as_array().unwrap().iter().map(|a| a["name"].as_str().unwrap()).collect();
-    assert_eq!(names, ["Current account", "Savings", "Cash", "Credit card", "Lei account", "Old savings"]);
+    assert_eq!(names, ["Current account", "Savings", "Cash", "Credit card", "Lei account", "Flat", "Car", "Old savings"]);
     let shown = ok(&app, &app.read, &["accounts", "show", "2", "--from", "2026-09-01", "--to", "2026-09-30"]);
     assert_eq!((shown["account"]["name"].clone(), shown["from"].clone(), shown["to"].clone()), (json!("Savings"), json!("2026-09-01"), json!("2026-09-30")));
     assert!(!shown["lines"].as_array().unwrap().is_empty());
     assert_eq!(ok(&app, &app.read, &["accounts", "history", "2", "--year", "2025"]).as_array().unwrap().len(), 12);
-    assert_eq!(ok(&app, &app.read, &["accounts", "summary"])["accounts"], 6);
+    assert_eq!(ok(&app, &app.read, &["accounts", "summary"])["accounts"], 8);
     assert!(ok(&app, &app.read, &["transfers", "list", "--account-id", "2", "--limit", "3"])["transfers"].as_array().unwrap().len() == 3);
     assert_eq!(failed(&app, &app.read, &["accounts", "show"]), (2, "usage".into()), "the id is needed");
     assert_eq!(failed(&app, &app.read, &["accounts", "show", "999999"]), (4, "not_found".into()));
     assert_eq!(failed(&app, &app.read, &["accounts", "show", "1", "--from", "2026-10-31", "--to", "2026-10-01"]), (2, "invalid_input".into()));
     // the order: every account that is not archived, as a list of ids
-    assert_eq!(ok(&app, &app.write, &["accounts", "reorder", "--ids", "2,1,4,3,6"]), Value::Null);
+    assert_eq!(ok(&app, &app.write, &["accounts", "reorder", "--ids", "2,1,4,3,6,7,8"]), Value::Null);
     let names: Vec<String> = ok(&app, &app.read, &["accounts", "list"]).as_array().unwrap().iter().map(|a| a["name"].as_str().unwrap().to_string()).collect();
-    assert_eq!(names, ["Savings", "Current account", "Credit card", "Cash", "Lei account", "Old savings"]);
+    assert_eq!(names, ["Savings", "Current account", "Credit card", "Cash", "Lei account", "Flat", "Car", "Old savings"]);
     assert_eq!(failed(&app, &app.write, &["accounts", "reorder", "--ids", "2,1,4"]), (2, "invalid_input".into()));
-    assert_eq!(failed(&app, &app.write, &["accounts", "reorder", "--ids", "2,1,4,3"]), (2, "invalid_input".into()), "the account in lei is one of those not archived");
+    assert_eq!(failed(&app, &app.write, &["accounts", "reorder", "--ids", "2,1,4,3,7,8"]), (2, "invalid_input".into()), "the account in lei is one of those not archived");
     assert_eq!(failed(&app, &app.write, &["accounts", "reorder", "--ids", "2,1,4,5"]), (2, "invalid_input".into()), "an archived one is not in the order");
     // a name that is taken, in any case, is exit 1 `name_exists`; an archived one frees its name
     assert_eq!(failed(&app, &app.write, &["accounts", "create", "--name", "SAVINGS", "--kind", "cash"]), (1, "name_exists".into()));

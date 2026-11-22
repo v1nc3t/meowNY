@@ -22,8 +22,8 @@ pub struct Conversion {
     pub budgets: u32,
     /// Entries of the ledger of money lent and borrowed.
     pub ledger: u32,
-    /// Accounts with an opening balance or a virtual balance that is not 0 (one row counts once, whichever of the two it has or both), and
-    /// transfers between them (`docs/accounts-design.md`, sections 8 and 20.3).
+    /// Accounts with an opening balance or a virtual balance that is not 0 or an installment (one row counts once, whichever of the three it has,
+    /// or several), and transfers between them (`docs/accounts-design.md`, sections 8 and 20.3; `docs/loans-deposits-design.md`, section 8).
     pub accounts: u32,
     pub transfers: u32,
     /// Stashes in an account of the app's currency that had a target or at least one entry converted (a stash with neither is not counted), and
@@ -229,17 +229,23 @@ fn convert_signed(minor: i64, rate: Rate) -> Result<i64, AppError> {
     Ok(convert(minor.abs(), rate)? * minor.signum())
 }
 
-/// The opening balance and the virtual balance of each account that has one, the archived ones too. Both may be negative, so both are
-/// converted by `convert_signed`. The balance of an account is a sum of converted pieces, so it can differ from the converted old balance
-/// by a few cents, as a friend's does. An account with a currency of its own is left out: both are in that currency.
+/// The opening balance, the virtual balance and the installment of each account that has one, the archived ones too. The first two may be
+/// negative, so they are converted by `convert_signed`; an installment is a plain amount that must stay at least one cent (the table refuses 0),
+/// so it is converted like a payment and never becomes nothing. The balance of an account is a sum of converted pieces, so it can differ from the
+/// converted old balance by a few cents, as a friend's does. An account with a currency of its own is left out: all three are in that currency.
+/// The rate of an account is a percent and is not touched (`docs/loans-deposits-design.md`, sections 5.1 and 8).
 fn convert_accounts(tx: &rusqlite::Transaction, rate: Rate) -> Result<u32, AppError> {
-    let rows: Vec<(i64, i64, i64)> = tx
-        .prepare("SELECT id, opening_balance_minor, virtual_balance_minor FROM accounts WHERE (opening_balance_minor <> 0 OR virtual_balance_minor <> 0) AND currency IS NULL")?
-        .query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))?
+    let rows: Vec<(i64, i64, i64, Option<i64>)> = tx
+        .prepare(
+            "SELECT id, opening_balance_minor, virtual_balance_minor, installment_minor FROM accounts
+             WHERE (opening_balance_minor <> 0 OR virtual_balance_minor <> 0 OR installment_minor IS NOT NULL) AND currency IS NULL",
+        )?
+        .query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)))?
         .collect::<Result<_, _>>()?;
-    let mut update = tx.prepare("UPDATE accounts SET opening_balance_minor = ?1, virtual_balance_minor = ?2 WHERE id = ?3")?;
-    for (id, opening, virtual_balance) in &rows {
-        update.execute(params![convert_signed(*opening, rate)?, convert_signed(*virtual_balance, rate)?, id])?;
+    let mut update = tx.prepare("UPDATE accounts SET opening_balance_minor = ?1, virtual_balance_minor = ?2, installment_minor = ?3 WHERE id = ?4")?;
+    for (id, opening, virtual_balance, installment) in &rows {
+        let installment = installment.map(|i| convert(i, rate).map(at_least_one)).transpose()?;
+        update.execute(params![convert_signed(*opening, rate)?, convert_signed(*virtual_balance, rate)?, installment, id])?;
     }
     Ok(rows.len() as u32)
 }
@@ -337,7 +343,8 @@ mod tests {
     use super::*;
     use crate::accounts::fixtures::{archived_account, balance, new_account, new_transfer, snapshot, transfer, Rng, TODAY};
     use crate::accounts::transfers::NewTransfer;
-    use crate::accounts::{self, AccountPatch, NewAccount, MAIN_ID};
+    use crate::accounts::{self, AccountPatch, Kind, NewAccount, MAIN_ID};
+    use crate::rates::Period;
     use crate::budgets::{self, Scope, SetBudget};
     use crate::categories::{self, CategoryType};
     use crate::transactions::{self, NewTransaction};
@@ -553,6 +560,47 @@ mod tests {
         let again = change(&mut conn, "EUR", Some("1000"), "2026-10-14").unwrap();
         assert_eq!((again.accounts, again.transfers), (0, 1));
         assert_eq!(moved_by(&conn, moved), 1_000);
+    }
+
+    /// A liability that owed `owed` ("120.00", stored below 0) at the start of 2026, paid with `installment`, at 3.9 % a year.
+    fn debt(conn: &Connection, name: &str, owed: &str, installment: &str) -> i64 {
+        let new = NewAccount {
+            kind: Kind::Loan,
+            opening_balance: (owed != "0.00").then(|| format!("-{owed}")),
+            opening_date: Some("2026-01-01".into()),
+            interest_rate: Some("3.9".into()),
+            interest_period: Some(Period::Yearly),
+            installment: Some(installment.into()),
+            ..new_account(name)
+        };
+        accounts::create(conn, &new, TODAY).unwrap().id
+    }
+
+    /// The installment and the rate (milli) of an account, as stored.
+    fn installment_and_rate(conn: &Connection, id: i64) -> (Option<i64>, Option<i64>) {
+        conn.query_row("SELECT installment_minor, rate_milli FROM accounts WHERE id = ?1", [id], |r| Ok((r.get(0)?, r.get(1)?))).unwrap()
+    }
+
+    #[test]
+    fn an_installment_converts_and_rounds_like_the_opening_balance_but_never_to_nothing_and_counts_its_account_once() {
+        let (mut conn, _) = db();
+        let flat = debt(&conn, "Flat", "180000.00", "950.00");
+        let odd = debt(&conn, "Odd", "0.05", "0.05");
+        let fresh = debt(&conn, "Fresh", "0.00", "10.00");
+        let savings = accounts::create(&conn, &NewAccount { interest_rate: Some("2.5".into()), interest_period: Some(Period::Yearly), ..new_account("Savings") }, TODAY).unwrap().id;
+        let done = change(&mut conn, "USD", Some("0.5"), "2026-10-13").unwrap();
+        assert_eq!(done.accounts, 3, "a debt with an opening balance and an installment counts once, one with only an installment counts, a rate alone does not");
+        assert_eq!((opening_of(&conn, flat), installment_and_rate(&conn, flat)), (-9_000_000, (Some(47_500), Some(3_900))), "the rate is a percent and stays");
+        assert_eq!((opening_of(&conn, odd), installment_and_rate(&conn, odd).0), (-3, Some(3)), "2.5 cents rounds away from zero in both");
+        assert_eq!(installment_and_rate(&conn, fresh), (Some(500), Some(3_900)));
+        assert_eq!(installment_and_rate(&conn, savings), (None, Some(2_500)), "an asset has no installment to give one");
+        // at a rate that would make it nothing, an installment stays one cent (the table refuses 0), where an opening balance becomes 0
+        let done = change(&mut conn, "EUR", Some("0.001"), "2026-10-14").unwrap();
+        assert_eq!(done.accounts, 3);
+        assert_eq!((opening_of(&conn, odd), installment_and_rate(&conn, odd).0), (0, Some(1)));
+        assert_eq!(installment_and_rate(&conn, flat).0, Some(48), "47.5 cents rounds up");
+        assert_eq!(installment_and_rate(&conn, fresh).0, Some(1));
+        assert!(accounts::check(&conn).unwrap());
     }
 
     #[test]

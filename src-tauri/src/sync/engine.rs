@@ -325,7 +325,7 @@ fn load_rows(conn: &Connection, table: Table, wanted: &HashSet<&String>) -> Resu
         Table::Accounts => {
             let mut stmt = conn.prepare(
                 "SELECT sync_id, stamp, name, kind, number, opening_balance_minor, opening_date, archived, position, bic, notes, group_name, include_net_worth,
-                        virtual_balance_minor, currency, rate, created_at, updated_at
+                        virtual_balance_minor, currency, rate, rate_milli, rate_period, installment_minor, created_at, updated_at
                  FROM accounts ORDER BY sync_id",
             )?;
             for r in stmt.query_map([], |r| {
@@ -346,8 +346,11 @@ fn load_rows(conn: &Connection, table: Table, wanted: &HashSet<&String>) -> Resu
                     virtual_balance_minor: r.get(13)?,
                     currency: r.get(14)?,
                     rate: r.get(15)?,
-                    created_at: r.get(16)?,
-                    updated_at: r.get(17)?,
+                    interest_rate: r.get(16)?,
+                    interest_period: r.get(17)?,
+                    installment: r.get(18)?,
+                    created_at: r.get(19)?,
+                    updated_at: r.get(20)?,
                 })
             })? {
                 let r = r?;
@@ -383,7 +386,8 @@ fn load_rows(conn: &Connection, table: Table, wanted: &HashSet<&String>) -> Resu
         }
         Table::Stashes => {
             let mut stmt = conn.prepare(
-                "SELECT s.sync_id, s.stamp, s.name, a.sync_id, s.target_minor, s.target_date, s.notes, s.archived, s.position, s.created_at, s.updated_at
+                "SELECT s.sync_id, s.stamp, s.name, a.sync_id, s.target_minor, s.target_date, s.notes, s.archived, s.position, s.created_at, s.updated_at,
+                        s.kind, s.rate_milli, s.rate_period, s.start_date, s.broken_on, s.returned_on
                  FROM stashes s JOIN accounts a ON a.id = s.account_id ORDER BY s.sync_id",
             )?;
             for r in stmt.query_map([], |r| {
@@ -397,6 +401,12 @@ fn load_rows(conn: &Connection, table: Table, wanted: &HashSet<&String>) -> Resu
                     notes: r.get(6)?,
                     archived: r.get(7)?,
                     position: r.get(8)?,
+                    kind: r.get(11)?,
+                    interest_rate: r.get(12)?,
+                    interest_period: r.get(13)?,
+                    start_date: r.get(14)?,
+                    broken_on: r.get(15)?,
+                    returned_on: r.get(16)?,
                     created_at: r.get(9)?,
                     updated_at: r.get(10)?,
                 })
@@ -1495,10 +1505,10 @@ impl<'a> Applier<'a> {
                     self.run(
                         "UPDATE accounts SET stamp = ?2, name = ?3, kind = ?4, number = ?5, opening_balance_minor = ?6, opening_date = ?7, archived = ?8,
                          position = ?9, bic = ?10, notes = ?11, group_name = ?12, include_net_worth = ?13, virtual_balance_minor = ?14, currency = ?15, rate = ?16,
-                         created_at = ?17 WHERE id = ?1",
+                         rate_milli = ?17, rate_period = ?18, installment_minor = ?19, created_at = ?20 WHERE id = ?1",
                         params![
                             id, r.stamp, r.name, r.kind, r.number, r.opening_balance_minor, r.opening_date, r.archived, r.position, r.bic, r.notes, r.group, r.include_net_worth,
-                            r.virtual_balance_minor, r.currency, r.rate, r.created_at
+                            r.virtual_balance_minor, r.currency, r.rate, r.interest_rate, r.interest_period, r.installment, r.created_at
                         ],
                     )?;
                     self.set_updated_at(Table::Accounts, id, &r.updated_at)?;
@@ -1507,11 +1517,11 @@ impl<'a> Applier<'a> {
                 None => {
                     self.run(
                         "INSERT INTO accounts (sync_id, stamp, name, kind, number, opening_balance_minor, opening_date, archived, position, bic, notes, group_name,
-                                               include_net_worth, virtual_balance_minor, currency, rate, created_at, updated_at)
-                         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18)",
+                                               include_net_worth, virtual_balance_minor, currency, rate, rate_milli, rate_period, installment_minor, created_at, updated_at)
+                         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21)",
                         params![
                             r.sync_id, r.stamp, r.name, r.kind, r.number, r.opening_balance_minor, r.opening_date, r.archived, r.position, r.bic, r.notes, r.group,
-                            r.include_net_worth, r.virtual_balance_minor, r.currency, r.rate, r.created_at, r.updated_at
+                            r.include_net_worth, r.virtual_balance_minor, r.currency, r.rate, r.interest_rate, r.interest_period, r.installment, r.created_at, r.updated_at
                         ],
                     )?;
                     self.summary.added += 1;
@@ -1675,17 +1685,24 @@ impl<'a> Applier<'a> {
                     self.note_overwrite(local);
                     self.run(
                         "UPDATE stashes SET stamp = ?2, name = ?3, account_id = ?4, target_minor = ?5, target_date = ?6, notes = ?7, archived = ?8, position = ?9,
-                         created_at = ?10 WHERE id = ?1",
-                        params![id, stamp, r.name, account, r.target_minor, r.target_date, r.notes, r.archived, r.position, r.created_at],
+                         kind = ?10, rate_milli = ?11, rate_period = ?12, start_date = ?13, broken_on = ?14, returned_on = ?15, created_at = ?16 WHERE id = ?1",
+                        params![
+                            id, stamp, r.name, account, r.target_minor, r.target_date, r.notes, r.archived, r.position, r.kind, r.interest_rate, r.interest_period, r.start_date,
+                            r.broken_on, r.returned_on, r.created_at
+                        ],
                     )?;
                     self.set_updated_at(Table::Stashes, *id, &r.updated_at)?;
                     self.summary.updated += 1;
                 }
                 None => {
                     self.run(
-                        "INSERT INTO stashes (sync_id, stamp, name, account_id, target_minor, target_date, notes, archived, position, created_at, updated_at)
-                         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
-                        params![r.sync_id, stamp, r.name, account, r.target_minor, r.target_date, r.notes, r.archived, r.position, r.created_at, r.updated_at],
+                        "INSERT INTO stashes (sync_id, stamp, name, account_id, target_minor, target_date, notes, archived, position, kind, rate_milli, rate_period,
+                                              start_date, broken_on, returned_on, created_at, updated_at)
+                         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17)",
+                        params![
+                            r.sync_id, stamp, r.name, account, r.target_minor, r.target_date, r.notes, r.archived, r.position, r.kind, r.interest_rate, r.interest_period,
+                            r.start_date, r.broken_on, r.returned_on, r.created_at, r.updated_at
+                        ],
                     )?;
                     self.summary.added += 1;
                 }
@@ -2907,6 +2924,9 @@ fn facts(conn: &Connection, row: &Row) -> Vec<(&'static str, String)> {
             ("virtualBalance", crate::money::format_amount(r.virtual_balance_minor)),
             ("currency", some(&r.currency)),
             ("rate", some(&r.rate)),
+            ("interestRate", r.interest_rate.map(crate::rates::format_rate).unwrap_or_default()),
+            ("interestPeriod", some(&r.interest_period)),
+            ("installment", money_text(r.installment)),
         ],
         Row::Transfer(r) => vec![
             ("from", account_name(conn, &r.from)),
@@ -2923,6 +2943,12 @@ fn facts(conn: &Connection, row: &Row) -> Vec<(&'static str, String)> {
             ("targetDate", some(&r.target_date)),
             ("notes", some(&r.notes)),
             ("archived", if r.archived == 1 { "yes" } else { "no" }.to_string()),
+            ("kind", r.kind.clone()),
+            ("interestRate", r.interest_rate.map(crate::rates::format_rate).unwrap_or_default()),
+            ("interestPeriod", some(&r.interest_period)),
+            ("startDate", some(&r.start_date)),
+            ("brokenOn", some(&r.broken_on)),
+            ("returnedOn", some(&r.returned_on)),
         ],
         Row::StashEntry(r) => vec![
             ("stash", name_of(conn, "SELECT name FROM stashes WHERE sync_id = ?1", &r.stash)),

@@ -93,6 +93,7 @@ fn the_json_has_every_stash_with_its_account_target_and_what_it_holds_and_its_en
         json!({
             "id": s.holiday.to_string(), "name": "Holiday in Lisbon", "accountId": s.c.savings.to_string(), "account": "Savings", "currency": "EUR",
             "target": "1200.00", "targetDate": "2027-06-30", "notes": NOTES, "archived": false, "saved": "120.00",
+            "kind": "GOAL", "interestRate": null, "interestPeriod": null, "startDate": null, "brokenOn": null, "returnedOn": null,
             "entries": [
                 { "id": s.holiday_entries[0].to_string(), "kind": "ADD", "amount": "100.00", "date": "2026-03-01", "note": "start", "transferId": transfer_of(&s.c.conn, s.holiday_entries[0]) },
                 { "id": s.holiday_entries[1].to_string(), "kind": "ADD", "amount": "50.00", "date": "2026-03-01", "note": null, "transferId": null },
@@ -113,7 +114,8 @@ fn the_json_has_every_stash_with_its_account_target_and_what_it_holds_and_its_en
         bike["entries"].as_array().unwrap().iter().map(|e| (e["kind"].as_str().unwrap(), e["amount"].as_str().unwrap(), e["date"].as_str().unwrap(), e["note"].as_str())).collect();
     assert_eq!(moves, [("ADD", "450.00", "2026-01-15", None), ("TAKE", "450.00", "2026-02-10", Some("bought it"))]);
     // the shape of every item: ids are strings, money is a decimal string above 0 in an entry, and nothing else is in it
-    let stash_keys: BTreeSet<&str> = ["id", "name", "accountId", "account", "currency", "target", "targetDate", "notes", "archived", "saved", "entries"].into();
+    let stash_keys: BTreeSet<&str> =
+        ["id", "name", "accountId", "account", "currency", "target", "targetDate", "notes", "archived", "saved", "kind", "interestRate", "interestPeriod", "startDate", "brokenOn", "returnedOn", "entries"].into();
     let entry_keys: BTreeSet<&str> = ["id", "kind", "amount", "date", "note", "transferId"].into();
     for stash in list.as_array().unwrap() {
         assert_eq!(keys(stash), stash_keys, "{}", stash["name"]);
@@ -130,6 +132,15 @@ fn the_json_has_every_stash_with_its_account_target_and_what_it_holds_and_its_en
         let sum: i64 = stash["entries"].as_array().unwrap().iter().map(|e| crate::money::parse_amount(e["amount"].as_str().unwrap()).unwrap() * if e["kind"] == "ADD" { 1 } else { -1 }).sum();
         assert_eq!((stash["saved"].as_str().unwrap(), format_amount(sum), stash["name"].as_str().unwrap()), (shown.saved.as_str(), shown.saved.clone(), shown.name.as_str()));
     }
+    // a deposit's facts are in the file, the rate as the percent and the days as they are stored; the state and the return worked out from them are not
+    s.c.conn.execute("UPDATE stashes SET kind = 'DEPOSIT', rate_milli = 3100, rate_period = 'YEARLY', start_date = '2026-01-01', broken_on = '2026-02-21' WHERE id = ?1", [s.rainy]).unwrap();
+    let file = super::accounts_tests::file(&s.c.conn, &Selection::default());
+    let rainy = &file["stashes"][2];
+    assert_eq!(
+        (&rainy["kind"], &rainy["interestRate"], &rainy["interestPeriod"], &rainy["startDate"], &rainy["brokenOn"], &rainy["returnedOn"]),
+        (&json!("DEPOSIT"), &json!("3.1"), &json!("YEARLY"), &json!("2026-01-01"), &json!("2026-02-21"), &Value::Null)
+    );
+    assert_eq!(keys(rainy), stash_keys, "and nothing worked out: no deposit part, no state");
 }
 
 #[test]

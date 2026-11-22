@@ -361,6 +361,7 @@ fn write(data: &Data, codes: &Codes) -> Result<Vec<u8>, XlsxError> {
         // The accounts, with what each holds today. With a limit only the name and the type of those the file speaks of: the rest would tell about
         // what the file leaves out.
         let (opening, balance, held) = (format!("Opening balance ({})", data.currency), format!("Balance ({})", data.currency), format!("Virtual balance ({})", data.currency));
+        let installment = format!("Installment ({})", data.currency);
         let s = sheet(
             &mut book,
             "Accounts",
@@ -379,6 +380,9 @@ fn write(data: &Data, codes: &Codes) -> Result<Vec<u8>, XlsxError> {
                 ("Notes", 44.0),
                 ("Currency", 10.0),
                 ("Rate", 14.0),
+                ("Interest rate (%)", 16.0),
+                ("Interest period", 16.0),
+                (&installment, 18.0),
             ],
         )?;
         for (i, a) in data.accounts.iter().enumerate() {
@@ -415,6 +419,19 @@ fn write(data: &Data, codes: &Codes) -> Result<Vec<u8>, XlsxError> {
                     Err(_) => text(s, row, 13, rate)?,
                 }
             }
+            // what the account earns or costs, as stored (`docs/loans-deposits-design.md`, section 8): the percent as a number, what it is a percent of,
+            // and what a debt is paid with every month, in the account's own currency like the other amounts; only in a file with no limit
+            if data.whole {
+                if let Some(percent) = a.interest_rate.as_deref().and_then(|p| p.parse::<f64>().ok()) {
+                    s.write_number(row, 14, percent)?;
+                }
+                if let Some(period) = a.interest_period {
+                    text(s, row, 15, period.as_sql())?;
+                }
+                if let Some(minor) = a.installment.as_deref().and_then(|i| crate::money::parse_signed_amount(i).ok()) {
+                    money(s, row, 16, minor, held)?;
+                }
+            }
         }
     }
 
@@ -441,7 +458,22 @@ fn write(data: &Data, codes: &Codes) -> Result<Vec<u8>, XlsxError> {
         let s = sheet(
             &mut book,
             "Stashes",
-            &[("Name", 30.0), ("Account", 30.0), ("Currency", 10.0), ("Target", 14.0), ("Target date", 12.0), ("Saved", 14.0), ("Archived", 10.0), ("Notes", 44.0)],
+            &[
+                ("Name", 30.0),
+                ("Account", 30.0),
+                ("Currency", 10.0),
+                ("Target", 14.0),
+                ("Target date", 12.0),
+                ("Saved", 14.0),
+                ("Archived", 10.0),
+                ("Notes", 44.0),
+                ("Kind", 10.0),
+                ("Interest rate (%)", 16.0),
+                ("Interest period", 16.0),
+                ("Start date", 12.0),
+                ("Broken on", 12.0),
+                ("Returned on", 12.0),
+            ],
         )?;
         for (i, t) in stashes.iter().enumerate() {
             let row = i as u32 + 1;
@@ -459,6 +491,19 @@ fn write(data: &Data, codes: &Codes) -> Result<Vec<u8>, XlsxError> {
             money(s, row, 5, t.saved, held)?;
             s.write_boolean(row, 6, t.archived)?;
             text(s, row, 7, t.notes.as_deref().unwrap_or(""))?;
+            // a deposit's facts: its kind is a word like an account's type, its maturity is the target date, and a goal leaves the five cells empty
+            text(s, row, 8, &t.kind)?;
+            if let Some(milli) = t.interest_rate {
+                s.write_number(row, 9, milli as f64 / 1000.0)?;
+            }
+            if let Some(period) = &t.interest_period {
+                text(s, row, 10, period)?;
+            }
+            for (column, day_text) in [(11, &t.start_date), (12, &t.broken_on), (13, &t.returned_on)] {
+                if let Some(day_text) = day_text {
+                    date(s, row, column, day_text, &day)?;
+                }
+            }
         }
 
         // The history of every stash, oldest first: the amount is signed (an add above 0, a take below 0), and the transfer is the other account of
@@ -1113,12 +1158,16 @@ mod tests {
         assert_eq!(accounts.len(), 1 + 5);
         assert_eq!(
             strings(&accounts[..1]),
-            ["Name", "Type", "Number", "Opening balance (EUR)", "Opening date", "Archived", "Balance (EUR)", "BIC", "Group", "Virtual balance (EUR)", "In net worth", "Notes", "Currency", "Rate"],
-            "the columns of before keep their place and the details and the currency are at the end"
+            [
+                "Name", "Type", "Number", "Opening balance (EUR)", "Opening date", "Archived", "Balance (EUR)", "BIC", "Group", "Virtual balance (EUR)", "In net worth", "Notes", "Currency", "Rate",
+                "Interest rate (%)", "Interest period", "Installment (EUR)"
+            ],
+            "the columns of before keep their place and the details and the currency are at the end, the rate and the installment after them"
         );
         let card = accounts.iter().find(|r| r[0] == text_cell("Credit card")).unwrap();
         assert_eq!(card[1..7], [text_cell("CREDIT_CARD"), text_cell("4242"), Cell::Number(-240.0), Cell::Date(serial(2025, 12, 1)), Cell::Bool(false), Cell::Number(-945.5)]);
         assert!(blank(&card[7]) && blank(&card[8]) && blank(&card[11]), "no BIC, no group and no notes: no text");
+        assert!(card[14..17].iter().all(|cell| matches!(cell, Cell::Empty)), "a card with no rate and no installment: empty cells, not 0");
         assert_eq!((&card[9], &card[10]), (&Cell::Number(0.0), &Cell::Bool(true)), "no virtual balance, and it counts in net worth");
         let old = accounts.iter().find(|r| r[0] == text_cell("Old savings")).unwrap();
         assert_eq!((&old[5], &old[6]), (&Cell::Bool(true), &Cell::Number(200.0)), "an archived account is in, with what it holds");
@@ -1144,6 +1193,12 @@ mod tests {
         let ledger = rows(&mut book, "Ledger");
         assert_eq!(account_of(&ledger, 5, (4, "taxi")), Some(text_cell("Cash")));
         assert_eq!(strings(&ledger[..1]).last().map(String::as_str), Some("Account"));
+        // a debt has its kind as the word the others have, and its rate, period and installment in the three columns after the rate of the currency
+        c.conn.execute("UPDATE accounts SET kind = 'MORTGAGE', rate_milli = 3900, rate_period = 'YEARLY', installment_minor = 95000 WHERE id = ?1", [c.card]).unwrap();
+        let mut book = open(&build(&c.conn, &Selection::default(), &DisplayFormat::default()));
+        let accounts = rows(&mut book, "Accounts");
+        let flat = accounts.iter().find(|r| r[0] == text_cell("Credit card")).unwrap();
+        assert_eq!((&flat[1], &flat[14], &flat[15], &flat[16]), (&text_cell("MORTGAGE"), &Cell::Number(3.9), &text_cell("YEARLY"), &Cell::Number(950.0)));
     }
 
     #[test]
@@ -1238,7 +1293,7 @@ mod tests {
         let mut book = open(&bytes);
         let accounts = rows(&mut book, "Accounts");
         assert_eq!(accounts.len(), 1 + 5);
-        assert!(accounts.iter().all(|r| r.len() == 14), "fourteen columns in every row");
+        assert!(accounts.iter().all(|r| r.len() == 17), "seventeen columns in every row");
         let by = |name: &str| accounts.iter().find(|r| r[0] == text_cell(name)).unwrap();
         let cash = by("Cash");
         assert_eq!(cash[1], text_cell("CASH"));
@@ -1282,10 +1337,11 @@ mod tests {
             let mut book = open(&build(&c.conn, &selection, &DisplayFormat::default()));
             let accounts = rows(&mut book, "Accounts");
             assert!(accounts.len() > 1, "{selection:?}");
-            assert_eq!(accounts[0].len(), 14, "the sheet has its columns");
+            assert_eq!(accounts[0].len(), 17, "the sheet has its columns");
             for row in &accounts[1..] {
                 assert!(row[2..12].iter().all(|cell| matches!(cell, Cell::Empty)), "no number, no balance and none of the details, not even the mark or a zero: {row:?}");
                 assert_eq!((&row[12], &row[13]), (&text_cell("EUR"), &Cell::Empty), "only the currency is named with the account: {row:?}");
+                assert!(row[14..17].iter().all(|cell| matches!(cell, Cell::Empty)), "nor the rate and the installment: {row:?}");
             }
             for name in book.sheet_names() {
                 let all = strings(&rows(&mut book, &name));
@@ -1398,7 +1454,7 @@ mod tests {
         let mut book = open(&build(&c.conn, &Selection::default(), &euro_format()));
         let accounts = rows(&mut book, "Accounts");
         assert_eq!(accounts.len(), 1 + 6);
-        assert!(accounts.iter().all(|r| r.len() == 14));
+        assert!(accounts.iter().all(|r| r.len() == 17));
         let at = |name: &str| accounts.iter().position(|r| r[0] == text_cell(name)).unwrap() + 1;
         let lei = &accounts[at("Lei account") - 1];
         // opening balance, balance and virtual balance are in lei: numbers, with the currency in its own column and the rate beside it
@@ -1486,8 +1542,11 @@ mod tests {
         assert_eq!(names[at..at + 4], ["Transfers", "Stashes", "Stash entries", "Monthly summary"], "{names:?}");
 
         let stashes = rows(&mut book, "Stashes");
-        assert_eq!(strings(&stashes[..1]), ["Name", "Account", "Currency", "Target", "Target date", "Saved", "Archived", "Notes"]);
-        assert!(stashes.iter().all(|r| r.len() == 8));
+        assert_eq!(
+            strings(&stashes[..1]),
+            ["Name", "Account", "Currency", "Target", "Target date", "Saved", "Archived", "Notes", "Kind", "Interest rate (%)", "Interest period", "Start date", "Broken on", "Returned on"]
+        );
+        assert!(stashes.iter().all(|r| r.len() == 14));
         assert_eq!(stashes.len(), 1 + 4, "the archived one too, last");
         assert_eq!(
             stashes[1..].iter().map(|r| strings(&[r[..2].to_vec()])).collect::<Vec<_>>(),
@@ -1497,8 +1556,11 @@ mod tests {
         let notes = format!("'{NOTES}");
         assert_eq!(
             stashes[2],
-            [text_cell("Holiday in Lisbon"), text_cell("Savings"), text_cell("EUR"), Cell::Number(1200.0), Cell::Date(serial(2027, 6, 30)), Cell::Number(120.0), Cell::Bool(false), text_cell(&notes)],
-            "a target, a date, what it holds, not archived, and notes that begin with `=` written as text"
+            [
+                text_cell("Holiday in Lisbon"), text_cell("Savings"), text_cell("EUR"), Cell::Number(1200.0), Cell::Date(serial(2027, 6, 30)), Cell::Number(120.0), Cell::Bool(false), text_cell(&notes),
+                text_cell("GOAL"), Cell::Empty, Cell::Empty, Cell::Empty, Cell::Empty, Cell::Empty
+            ],
+            "a target, a date, what it holds, not archived, and notes that begin with `=` written as text; a goal, with no rate and no days"
         );
         assert_eq!(stashes[1][3..7], [Cell::Number(900.0), Cell::Empty, Cell::Number(900.0), Cell::Bool(false)], "reached, with no date");
         assert!(blank(&stashes[1][7]), "and no notes: no text");
@@ -1531,6 +1593,14 @@ mod tests {
         assert_eq!(entries.len() - 1, expected.len());
         // the transfer is the other account of the one that came with it: where the money came from for an add, where it went for a take; the amount is signed
         assert_eq!(book.format_code("Stash entries", "D4"), EURO);
+        // a deposit has its rate, its period and its days in the same sheet: the rate as a number, the days as dates, a day that has not come as an empty cell
+        s.c.conn.execute("UPDATE stashes SET kind = 'DEPOSIT', rate_milli = 3100, rate_period = 'YEARLY', start_date = '2026-01-01', broken_on = '2026-02-21' WHERE id = ?1", [s.rainy]).unwrap();
+        let mut book = open(&build(&s.c.conn, &Selection::default(), &euro_format()));
+        let stashes = rows(&mut book, "Stashes");
+        assert_eq!(
+            (&stashes[3][0], &stashes[3][8..14]),
+            (&text_cell("Rainy day"), &[text_cell("DEPOSIT"), Cell::Number(3.1), text_cell("YEARLY"), Cell::Date(serial(2026, 1, 1)), Cell::Date(serial(2026, 2, 21)), Cell::Empty][..])
+        );
     }
 
     #[test]

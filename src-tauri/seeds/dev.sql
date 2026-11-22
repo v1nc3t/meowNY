@@ -22,6 +22,9 @@
 --     account really paid and the amount in euro that the budgets count, and a transfer in each direction between it and the current account
 --   * stashes: money set aside in an account for a goal, with adds that came with a transfer from the current account, one take with a note,
 --     one that has reached its target, one with no target, an archived one that was spent, and one in the lei account in lei
+--   * rates and debts: the savings earn 2.5 % a year, a mortgage (the Flat) and a loan (the Car) are owed with a rate and an installment, each
+--     paid for the last three months with a payment split into interest and principal (made by seed.rs, through the core), and a term deposit
+--     that is running in the savings (docs/loans-deposits-design.md, section 8)
 -- Amounts and days come from simple arithmetic on the row numbers, so the data is the same every run.
 
 INSERT OR IGNORE INTO settings (id, currency, locale, timezone, language) VALUES (1, 'EUR', 'en-IE', 'Europe/Dublin', 'en');
@@ -44,6 +47,9 @@ INSERT INTO categories (id, type, name) VALUES
 
 -- Soft-deleted category: its name is free to reuse, its history stays.
 INSERT INTO categories (id, type, name, deleted_at) VALUES (15, 'EXPENSE', 'Gym', strftime('%Y-%m-%dT%H:%M:%fZ', @today, '-30 days'));
+
+-- The interest of a loan payment is an expense, so it has a category of its own next to the income one of the same name (a name is free per type).
+INSERT INTO categories (id, type, name) VALUES (16, 'EXPENSE', 'Interest');
 
 -- Budgets. A change is a new row with a later effective_from; a NULL limit removes the budget from then on.
 -- Health, Travel and Gifts never get one.
@@ -396,6 +402,9 @@ INSERT INTO accounts (id, name, kind, number, opening_balance_minor, opening_dat
   (5, 'Old savings', 'SAVINGS',     NULL,                  120000, date(@today, 'start of month', '-16 months'), 1, 4,
       NULL, NULL, NULL, 0, 0);
 
+-- The savings earn 2.5 % a year (the interest in it below is booked by hand, as the app has it).
+UPDATE accounts SET rate_milli = 2500, rate_period = 'YEARLY' WHERE id = 2;
+
 -- Cash: taxis, coffee and the lunch that was paid in cash. The card: the streaming plan (the recurring item and so its payments), the
 -- trips, the laptop and the concert tickets. The interest goes to the savings. A friend paid back her half of the breakfast in cash.
 UPDATE transactions SET account_id = 3 WHERE name IN ('Taxi', 'Coffee', 'Corner shop', 'Bus ticket', 'Coffee and cake', 'Lunch, "team" day');
@@ -462,15 +471,26 @@ INSERT INTO transfers (from_account_id, to_account_id, amount_minor, to_amount_m
   (6, 1, 50000, 10000,  date(@today, 'start of month', '-3 months', '+12 days'), 'Lei back to the current account');
 
 
+-- ---- debts ------------------------------------------------------------------------------------------------------------------------
+-- A mortgage and a loan, which are accounts you owe on: the opening balance is what was owed, below 0. Each has a rate and an installment.
+-- Their payments (a transfer of the principal and an expense of the interest, three months of each) are made by `seed.rs` through
+-- `accounts::pay::pay` after this file, because a payment is the core's to make.
+INSERT INTO accounts (id, name, kind, number, opening_balance_minor, opening_date, archived, position, bic, notes, group_name, include_net_worth, virtual_balance_minor, rate_milli, rate_period, installment_minor) VALUES
+  (7, 'Flat', 'MORTGAGE', NULL, -18000000, date(@today, '-2 years'), 0, 6, NULL, NULL, NULL, 1, 0, 3900, 'YEARLY', 95000),
+  (8, 'Car',  'LOAN',     NULL, -900000,   date(@today, '-1 years'), 0, 7, NULL, NULL, NULL, 1, 0, 6500, 'YEARLY', 30000);
+
+
 -- ---- stashes ----------------------------------------------------------------------------------------------------------------------
--- Money set aside inside an account for a goal; it never leaves the account, so no balance above moves (docs/stash-design.md). Five of them, each
--- entry dated well inside the history and none on a day that could be after today, so every number below is the same on any day:
+-- Money set aside inside an account for a goal; it never leaves the account, so no balance above moves (docs/stash-design.md). Five goals and a
+-- deposit, each entry dated well inside the history and none on a day that could be after today, so every number below is the same on any day:
 --   1 Holiday in Lisbon, in the savings: a target and a date seven months ahead, a monthly add of 100.00 (the first five with a transfer from the
 --     current account, which is how the savings came to hold it) and one take of 40.00; 560.00 of 1200.00
 --   2 New laptop, in the current account: no date, reached over three adds; 900.00 of 900.00
 --   3 Rainy day, in the savings: no target, four adds; 500.00
 --   4 Bike, archived: reached, and then taken out in full when the bike was bought; 0.00 of 450.00
 --   5 Wedding gift, in the lei account: its amounts are in lei, two adds; 550.00 of 1000.00 lei
+--   6 Term deposit, in the savings: a deposit at 3.1 % a year that started two months ago and matures ten months ahead (a term of a year), so it
+--     is running on any day, with one add of 5000.00
 -- Together they hold far less than their accounts have free, so no account is over-booked on any day.
 INSERT INTO stashes (id, name, account_id, target_minor, target_date, notes, archived, position) VALUES
   (1, 'Holiday in Lisbon', 2, 120000, date(@today, 'start of month', '+7 months', '+14 days'), 'The next trip: a week, with the hotel still to pay', 0, 0),
@@ -505,3 +525,9 @@ INSERT INTO stash_entries (stash_id, amount_minor, entry_date, note) VALUES
   (4, -45000, date(@today, 'start of month', '-11 months', '+5 days'),  'bought it'),
   (5, 30000,  date(@today, 'start of month', '-5 months', '+12 days'),  'for the wedding in Cluj'),
   (5, 25000,  date(@today, 'start of month', '-2 months', '+12 days'),  NULL);
+
+-- The term deposit: a deposit has its rate, its period and its start, and its maturity is the target date (docs/loans-deposits-design.md, section 4.2).
+INSERT INTO stashes (id, name, account_id, target_minor, target_date, notes, archived, position, kind, rate_milli, rate_period, start_date) VALUES
+  (6, 'Term deposit', 2, NULL, date(@today, '+10 months'), NULL, 0, 5, 'DEPOSIT', 3100, 'YEARLY', date(@today, '-2 months'));
+INSERT INTO stash_entries (stash_id, amount_minor, entry_date, note) VALUES
+  (6, 500000, date(@today, '-2 months'), 'put on the term deposit');

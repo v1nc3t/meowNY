@@ -5,10 +5,12 @@ use serde_json::{json, Value};
 
 use super::tests::{db, db_at, forged, lived_in, main_account};
 use super::*;
-use crate::accounts::fixtures::{account, snapshot, transfer, TODAY};
-use crate::accounts::{self, MAIN_ID};
+use crate::accounts::fixtures::{account, new_account, snapshot, transfer, TODAY};
+use crate::accounts::{self, AccountPatch, Kind, NewAccount, MAIN_ID};
 use crate::keys::memory::MemoryStore;
-use crate::stashes::{self, NewStash};
+use crate::rates::Period;
+use crate::stashes::entries::{self, NewEntry, NewTake};
+use crate::stashes::{self, NewStash, StashKind};
 use crate::vault::{Settings, Vault};
 
 const PASSPHRASE: &str = "correct horse";
@@ -82,6 +84,79 @@ fn stashes_and_their_entries_come_back_exactly() {
     assert_ne!(stamp(&target), was);
     // an account with a stash is not deleted, as before
     assert_eq!(accounts::delete(&target, 2), Err(AppError::InvalidInput));
+}
+
+/// `lived_in()` with a mortgage and a loan (a rate and an installment each), a rate on Savings, and two deposits in Savings, one running and one
+/// broken on 2026-02-10 (an add of 5.00 and the take of all of it): every new column of `accounts` and `stashes` has a value in the file.
+fn with_loans_and_deposits() -> Connection {
+    let conn = lived_in();
+    let debt = |name: &str, kind: Kind, owed: &str, rate: &str, period: Period, installment: &str| {
+        let new = NewAccount {
+            kind,
+            opening_balance: Some(format!("-{owed}")),
+            opening_date: Some("2026-01-01".into()),
+            interest_rate: Some(rate.into()),
+            interest_period: Some(period),
+            installment: Some(installment.into()),
+            ..new_account(name)
+        };
+        accounts::create(&conn, &new, "2026-02-04").unwrap().id
+    };
+    debt("Flat", Kind::Mortgage, "180000.00", "3.9", Period::Yearly, "950.00");
+    debt("Car", Kind::Loan, "9000.00", "0.5", Period::Monthly, "300.00");
+    accounts::update(&conn, 2, &AccountPatch { interest_rate: Some(Some("2.5".into())), interest_period: Some(Period::Yearly), ..Default::default() }, "2026-02-04").unwrap();
+    // Savings holds less than nothing in this world, so it is given what the two deposits are made of
+    transfer(&conn, MAIN_ID, 2, "10000.00", "2026-02-02");
+    let deposit = |name: &str, rate: &str| {
+        let new = NewStash {
+            kind: Some(StashKind::Deposit),
+            interest_rate: Some(rate.into()),
+            interest_period: Some(Period::Yearly),
+            start_date: Some("2026-01-01".into()),
+            target_date: Some("2027-01-01".into()),
+            ..NewStash { kind: None, interest_rate: None, interest_period: None, start_date: None, name: name.into(), account_id: "2".into(), target: None, target_date: None, notes: Some("two\nlines".into()) }
+        };
+        let id = stashes::create(&conn, &new, "2026-02-04").unwrap().id;
+        entries::add(&conn, id, &NewEntry { amount: "5.00".into(), date: Some("2026-02-01".into()), note: Some("in".into()), from_account_id: None }, "2026-02-04").unwrap();
+        id
+    };
+    deposit("Running", "3.1");
+    let broken = deposit("Broken", "4.125");
+    entries::take(&conn, broken, &NewTake { amount: "5.00".into(), date: Some("2026-02-10".into()), note: Some("out".into()), to_account_id: None }, "2026-02-10").unwrap();
+    conn
+}
+
+#[test]
+fn a_mortgage_with_its_rate_and_installment_and_a_broken_deposit_come_back_with_every_field() {
+    let source = with_loans_and_deposits();
+    let before = dump(&source).unwrap();
+    let row = |snapshot: &Snapshot, table: &str, name: &str| snapshot.rows(table).iter().find(|r| r["name"] == json!(name)).unwrap().clone();
+    let flat = row(&before, "accounts", "Flat");
+    assert_eq!((&flat["kind"], &flat["rate_milli"], &flat["rate_period"], &flat["installment_minor"]), (&json!("MORTGAGE"), &json!(3900), &json!("YEARLY"), &json!(95_000)));
+    let broken = row(&before, "stashes", "Broken");
+    assert_eq!((&broken["kind"], &broken["rate_milli"], &broken["start_date"], &broken["broken_on"], &broken["returned_on"]), (&json!("DEPOSIT"), &json!(4125), &json!("2026-01-01"), &json!("2026-02-10"), &Value::Null));
+
+    let file = seal(&before, PASSPHRASE).unwrap();
+    let mut target = db();
+    restore(&mut target, &file).unwrap();
+
+    assert_eq!(dump(&target).unwrap(), before, "every column of every row, the new ones too");
+    let after = dump(&target).unwrap();
+    assert_eq!(row(&after, "accounts", "Car")["installment_minor"], json!(30_000));
+    assert_eq!(row(&after, "accounts", "Savings")["rate_milli"], json!(2500));
+    assert_eq!((row(&after, "stashes", "Running")["broken_on"].clone(), row(&after, "stashes", "Running")["rate_period"].clone()), (Value::Null, json!("YEARLY")));
+    // and they are alive: the same lists, with what is worked out from the columns, and the main account is as the rules want it
+    assert_eq!(accounts::list(&target, TODAY).unwrap(), accounts::list(&source, TODAY).unwrap());
+    assert_eq!(stashes::list(&target, None, TODAY).unwrap(), stashes::list(&source, None, TODAY).unwrap());
+    let list = stashes::list(&target, None, TODAY).unwrap();
+    let broken = list.iter().find(|s| s.name == "Broken").and_then(|s| s.deposit.clone()).unwrap();
+    assert_eq!((broken.state, broken.broken_on.as_deref(), broken.interest_rate.as_str()), (crate::stashes::DepositState::Broken, Some("2026-02-10"), "4.125"));
+    let flat = accounts::list(&target, TODAY).unwrap().into_iter().find(|a| a.name == "Flat").unwrap();
+    assert_eq!((flat.interest_rate.as_deref(), flat.installment.as_deref(), flat.balance.as_str()), (Some("3.9"), Some("950.00"), "-180000.00"));
+    assert!(accounts::check(&target).unwrap());
+    assert_eq!(count(&target, "SELECT applying FROM sync_clock"), 0);
+    // the rules of the columns still hold in the restored database: a goal cannot be given a rate by hand
+    assert!(target.execute("UPDATE stashes SET rate_milli = 100 WHERE name = 'Holiday'", []).is_err());
 }
 
 #[test]

@@ -19,7 +19,7 @@ use crate::documents::names::{is_clean_name, MediaType};
 use crate::documents::seal::CHUNK_SIZE;
 use crate::documents::MAX_DOCUMENT_BYTES;
 use crate::money::MAX_MINOR;
-use crate::{categories, currency, transactions, vault};
+use crate::{categories, currency, rates, transactions, vault};
 
 /// The version of this protocol, in `hello`.
 /// Protocol 3 adds the tables `documents` and `document_links`; protocol 4 adds `people` and `ledger_entries`, the parts of a shared
@@ -31,8 +31,10 @@ use crate::{categories, currency, transactions, vault};
 /// account of a transaction, a recurring item and a ledger entry (`account`); protocol 10 adds the details of an account (`bic`, `notes`,
 /// `group`, `includeNetWorth`, `virtualBalanceMinor`); protocol 11 adds a currency per account (`currency` and `rate` of an account, `nativeAmountMinor`
 /// of a transaction, `toAmountMinor` of a transfer); protocol 12 adds the tables `stashes` and `stash_entries` (money set aside in an account for
-/// a goal). A device that speaks an older protocol is told to update.
-pub const PROTOCOL: u32 = 12;
+/// a goal); protocol 13 adds the rate and the installment of an account (`interestRate`, `interestPeriod`, `installment`), the three kinds of account
+/// you owe on, and the term deposit of a stash (`kind`, `interestRate`, `interestPeriod`, `startDate`, `brokenOn`, `returnedOn`). A device that speaks an
+/// older protocol is told to update.
+pub const PROTOCOL: u32 = 13;
 /// Digest entries in one message, and rows in one message. Messages are also cut by size (`SOFT_MESSAGE_BYTES`).
 pub const MAX_ENTRIES_PER_MESSAGE: usize = 400;
 pub const MAX_ROWS_PER_MESSAGE: usize = 200;
@@ -543,6 +545,11 @@ fn rate_ok(text: &str) -> bool {
     (1..=20).contains(&text.chars().count()) && currency::parse_rate(text).is_ok()
 }
 
+/// The period of a rate (`rates::Period`).
+fn period_ok(text: &str) -> bool {
+    rates::Period::from_sql(text).is_ok()
+}
+
 /// Who a part belongs to: exactly one of a friend (a `sync_id`) and a guest (a plain name).
 fn who_ok(person: &Option<String>, guest: &Option<String>) -> bool {
     match (person, guest) {
@@ -745,6 +752,13 @@ pub struct AccountRow {
     pub currency: Option<String>,
     /// How many units of the account's currency one unit of the app's currency buys, as typed: there exactly when `currency` is.
     pub rate: Option<String>,
+    /// The rate of the account, a percent times 1000 (3.25 % is 3250): the return of savings, the interest of a debt. There exactly when
+    /// `interest_period` is (`docs/loans-deposits-design.md`, section 7).
+    pub interest_rate: Option<i64>,
+    /// `MONTHLY` or `YEARLY`.
+    pub interest_period: Option<String>,
+    /// What a debt is paid off with every month, in minor units; only for a credit, a loan or a mortgage.
+    pub installment: Option<i64>,
     pub created_at: String,
     pub updated_at: String,
 }
@@ -785,6 +799,15 @@ pub struct StashRow {
     pub archived: i64,
     /// Place in the list of stashes, from 0.
     pub position: i64,
+    /// `GOAL` or `DEPOSIT`. The next five are there only for a deposit (`docs/loans-deposits-design.md`, sections 4.2 and 7); its maturity is `target_date`.
+    pub kind: String,
+    /// A percent times 1000, with `interest_period`; both there exactly for a deposit.
+    pub interest_rate: Option<i64>,
+    pub interest_period: Option<String>,
+    pub start_date: Option<String>,
+    /// The day a running deposit was broken, and the day its return was booked.
+    pub broken_on: Option<String>,
+    pub returned_on: Option<String>,
     pub created_at: String,
     pub updated_at: String,
 }
@@ -1013,9 +1036,11 @@ pub fn parse_row(table: Table, value: &Value) -> Result<Row, WireError> {
                 && timestamp_ok(&r.updated_at)
         }
         Row::Account(r) => {
+            let kind = crate::accounts::Kind::from_sql(&r.kind).ok();
+            let liability = kind.is_some_and(crate::accounts::Kind::is_liability);
             sync_id_ok(&r.sync_id)
                 && category_name_ok(&r.name)
-                && ["CHECKING", "SAVINGS", "CASH", "CREDIT_CARD"].contains(&r.kind.as_str())
+                && kind.is_some()
                 && r.number.as_deref().is_none_or(|n| short_ok(n, 50))
                 && (-MAX_MINOR..=MAX_MINOR).contains(&r.opening_balance_minor)
                 && date_ok(&r.opening_date)
@@ -1033,6 +1058,12 @@ pub fn parse_row(table: Table, value: &Value) -> Result<Row, WireError> {
                 // a rate exactly when there is a currency, and the main account is always in the app's currency
                 && r.currency.is_some() == r.rate.is_some()
                 && (r.sync_id != MAIN_SYNC_ID || r.currency.is_none())
+                // a rate and its period both there or both absent; an installment is for a debt only; the main account is never one
+                && r.interest_rate.is_none_or(|m| (0..=rates::MAX_MILLI).contains(&m))
+                && r.interest_period.as_deref().is_none_or(period_ok)
+                && r.interest_rate.is_some() == r.interest_period.is_some()
+                && r.installment.is_none_or(|i| money_ok(i, 1) && liability)
+                && (r.sync_id != MAIN_SYNC_ID || !liability)
                 && timestamp_ok(&r.created_at)
                 && timestamp_ok(&r.updated_at)
         }
@@ -1049,6 +1080,8 @@ pub fn parse_row(table: Table, value: &Value) -> Result<Row, WireError> {
                 && timestamp_ok(&r.updated_at)
         }
         Row::Stash(r) => {
+            // the checks of the columns (migration 0022): a deposit has a rate with its period and a start date, a goal has none of the five
+            let deposit = r.kind == "DEPOSIT";
             sync_id_ok(&r.sync_id)
                 && category_name_ok(&r.name)
                 && sync_id_ok(&r.account)
@@ -1057,6 +1090,16 @@ pub fn parse_row(table: Table, value: &Value) -> Result<Row, WireError> {
                 && r.notes.as_deref().is_none_or(notes_ok)
                 && [0, 1].contains(&r.archived)
                 && (0..=MAX_POSITION).contains(&r.position)
+                && (deposit || r.kind == "GOAL")
+                && r.interest_rate.is_some() == deposit
+                && r.interest_rate.is_none_or(|m| (0..=rates::MAX_MILLI).contains(&m))
+                && r.interest_period.is_some() == deposit
+                && r.interest_period.as_deref().is_none_or(period_ok)
+                && r.start_date.is_some() == deposit
+                && option_date(&r.start_date)
+                && (deposit || (r.broken_on.is_none() && r.returned_on.is_none()))
+                && option_date(&r.broken_on)
+                && option_date(&r.returned_on)
                 && timestamp_ok(&r.created_at)
                 && timestamp_ok(&r.updated_at)
         }
@@ -1226,13 +1269,15 @@ mod tests {
     fn account() -> Value {
         json!({"syncId": ID_A, "stamp": STAMP, "name": "Savings", "kind": "SAVINGS", "number": "IE29 AIBK 9311 5212 3456 78", "openingBalanceMinor": -12000,
                "openingDate": "2026-01-01", "archived": 0, "position": 2, "bic": "DEUTDEFF500", "notes": "joint account\nsince 2020", "group": "Everyday",
-               "includeNetWorth": 1, "virtualBalanceMinor": 100000, "currency": null, "rate": null, "createdAt": TS, "updatedAt": TS})
+               "includeNetWorth": 1, "virtualBalanceMinor": 100000, "currency": null, "rate": null, "interestRate": null, "interestPeriod": null, "installment": null,
+               "createdAt": TS, "updatedAt": TS})
     }
 
     fn main_account() -> Value {
         json!({"syncId": MAIN_SYNC_ID, "stamp": "0000000000000-0000-00000000", "name": "Main account", "kind": "CHECKING", "number": null, "openingBalanceMinor": 0,
                "openingDate": "1970-01-01", "archived": 0, "position": 0, "bic": null, "notes": null, "group": null, "includeNetWorth": 1, "virtualBalanceMinor": 0,
-               "currency": null, "rate": null, "createdAt": "1970-01-01T00:00:00.000Z", "updatedAt": "1970-01-01T00:00:00.000Z"})
+               "currency": null, "rate": null, "interestRate": null, "interestPeriod": null, "installment": null, "createdAt": "1970-01-01T00:00:00.000Z",
+               "updatedAt": "1970-01-01T00:00:00.000Z"})
     }
 
     /// The same account in Romanian lei, at 5.00 lei to the euro.
@@ -1247,7 +1292,8 @@ mod tests {
 
     fn stash() -> Value {
         json!({"syncId": ID_B, "stamp": STAMP, "name": "Holiday", "account": MAIN_SYNC_ID, "targetMinor": 120000, "targetDate": "2027-06-30", "notes": "Lisbon\nin June",
-               "archived": 0, "position": 2, "createdAt": TS, "updatedAt": TS})
+               "archived": 0, "position": 2, "kind": "GOAL", "interestRate": null, "interestPeriod": null, "startDate": null, "brokenOn": null, "returnedOn": null,
+               "createdAt": TS, "updatedAt": TS})
     }
 
     fn stash_entry() -> Value {
@@ -1391,7 +1437,7 @@ mod tests {
 
     #[test]
     fn there_is_a_table_for_every_kind_of_row_and_the_protocol_knows_it() {
-        assert_eq!(PROTOCOL, 12);
+        assert_eq!(PROTOCOL, 13);
         let names: Vec<&str> = Table::ALL.iter().map(|t| t.name()).collect();
         assert_eq!(
             names,

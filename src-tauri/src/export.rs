@@ -852,6 +852,15 @@ pub(crate) struct StashRow {
     pub(crate) archived: bool,
     /// What the entries add up to, signed (it can be below 0 after a sync; `docs/stash-design.md`, section 7.6).
     pub(crate) saved: i64,
+    /// `GOAL` or `DEPOSIT`. The next five are the facts a deposit stores (`docs/loans-deposits-design.md`, section 4.2; its maturity is `target_date`) and
+    /// none for a goal. What is worked out from them (the state, the expected return) is in no file.
+    pub(crate) kind: String,
+    /// A percent times 1000, as stored; written as the percent (`rates::format_rate`).
+    pub(crate) interest_rate: Option<i64>,
+    pub(crate) interest_period: Option<String>,
+    pub(crate) start_date: Option<String>,
+    pub(crate) broken_on: Option<String>,
+    pub(crate) returned_on: Option<String>,
     pub(crate) entries: Vec<StashEntryRow>,
 }
 
@@ -878,7 +887,8 @@ pub(crate) fn stash_rows(conn: &Connection, sel: &Parsed) -> Result<Vec<StashRow
     }
     let mut statement = conn.prepare(
         "SELECT s.id, s.name, s.account_id, a.name, COALESCE(a.currency, (SELECT currency FROM settings WHERE id = 1)), a.currency IS NOT NULL,
-                s.target_minor, s.target_date, s.notes, s.archived, COALESCE((SELECT SUM(e.amount_minor) FROM stash_entries e WHERE e.stash_id = s.id), 0)
+                s.target_minor, s.target_date, s.notes, s.archived, COALESCE((SELECT SUM(e.amount_minor) FROM stash_entries e WHERE e.stash_id = s.id), 0),
+                s.kind, s.rate_milli, s.rate_period, s.start_date, s.broken_on, s.returned_on
          FROM stashes s JOIN accounts a ON a.id = s.account_id
          ORDER BY s.archived, s.position, s.id",
     )?;
@@ -895,6 +905,12 @@ pub(crate) fn stash_rows(conn: &Connection, sel: &Parsed) -> Result<Vec<StashRow
             notes: r.get(8)?,
             archived: r.get::<_, i64>(9)? == 1,
             saved: r.get(10)?,
+            kind: r.get(11)?,
+            interest_rate: r.get(12)?,
+            interest_period: r.get(13)?,
+            start_date: r.get(14)?,
+            broken_on: r.get(15)?,
+            returned_on: r.get(16)?,
             entries: Vec::new(),
         })
     })?;
@@ -948,7 +964,8 @@ fn transfers_json(conn: &Connection, sel: &Parsed) -> Result<Vec<Value>, AppErro
 }
 
 /// The stashes of a file with no limit: the money in each is a decimal string in its currency, and its entries run oldest first with an
-/// amount above 0 and a kind that says which way the money went.
+/// amount above 0 and a kind that says which way the money went. A deposit's facts (`kind`, `interestRate` as a percent, `interestPeriod`,
+/// `startDate`, `brokenOn`, `returnedOn`; its maturity is `targetDate`) are in it, and what is worked out from them is not.
 fn stashes_json(conn: &Connection, sel: &Parsed) -> Result<Vec<Value>, AppError> {
     Ok(stash_rows(conn, sel)?
         .into_iter()
@@ -978,6 +995,12 @@ fn stashes_json(conn: &Connection, sel: &Parsed) -> Result<Vec<Value>, AppError>
                 "notes": s.notes,
                 "archived": s.archived,
                 "saved": format_amount(s.saved),
+                "kind": s.kind,
+                "interestRate": s.interest_rate.map(crate::rates::format_rate),
+                "interestPeriod": s.interest_period,
+                "startDate": s.start_date,
+                "brokenOn": s.broken_on,
+                "returnedOn": s.returned_on,
                 "entries": entries,
             })
         })

@@ -797,7 +797,7 @@ fn a_phone_of_an_older_protocol_is_told_to_update(protocol: u32) {
     };
     let mut channel = net::connect(&payload, Ikm::for_sync(&paired[0].1, &payload.secret), limits(), None).unwrap();
     let mut hello = phone.with(|c| engine::hello(c, "Phone", "0.9.0", super::stamp::now_ms())).unwrap();
-    assert_eq!(hello.protocol, 12);
+    assert_eq!(hello.protocol, 13);
     hello.protocol = protocol;
     channel.send(&Message::Hello(hello)).unwrap();
     let _desktops_hello = channel.receive();

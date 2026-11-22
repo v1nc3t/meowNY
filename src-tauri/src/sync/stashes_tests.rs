@@ -12,8 +12,10 @@ use super::wire::{Marker, Table};
 use crate::accounts::transfers;
 use crate::accounts::{self, AccountPatch, Kind, NewAccount, MAIN_ID};
 use crate::categories::CategoryType;
+use crate::rates::Period;
+use crate::stashes::deposits::{self, ReturnInput};
 use crate::stashes::entries::{self, EntryPatch, NewEntry, NewTake};
-use crate::stashes::{self, NewStash, StashPatch};
+use crate::stashes::{self, DepositState, NewStash, StashKind, StashPatch};
 use crate::vault::AppError;
 
 // --- a world to work in ------------------------------------------------------------------------------------------------
@@ -1048,7 +1050,7 @@ fn a_device_that_speaks_protocol_11_is_told_to_update_whichever_of_the_two_it_is
     let (a, b) = (device("EUR"), device("EUR"));
     let new = engine::hello(&a, "desktop", "0.1.0", now()).unwrap();
     let mut old = engine::hello(&b, "phone", "0.1.0", now()).unwrap();
-    assert_eq!(new.protocol, 12);
+    assert_eq!(new.protocol, 13);
     old.protocol = 11;
     assert!(matches!(engine::check_hello(&new, &old, now()), Err(SyncError::ProtocolMismatch)));
     assert!(matches!(engine::check_hello(&old, &new, now()), Err(SyncError::ProtocolMismatch)));
@@ -1149,4 +1151,169 @@ fn what_a_device_changed_in_stashes_counts_as_waiting_for_the_next_sync() {
     assert_eq!(super::peers::changes_since(&conn, 0).unwrap(), before + 2, "a stash and an entry");
     stashes::delete(&conn, holiday).unwrap();
     assert_eq!(super::peers::changes_since(&conn, 0).unwrap(), before + 1, "both are gone: the stash's marker is the one change in their place");
+}
+
+// --- term deposits: the kind, the rate and the days of a stash (`docs/loans-deposits-design.md`, section 7) --------------------
+
+/// A deposit at `rate` a year in `account`, from 2026-01-01 to 2027-01-01 (running on 2026-03-15), holding `held` put in on 2026-02-01. Returns its id.
+fn deposit(conn: &Connection, name: &str, account: i64, rate: &str, held: &str) -> i64 {
+    let id = stashes::create(
+        conn,
+        &NewStash {
+            kind: Some(StashKind::Deposit),
+            interest_rate: Some(rate.into()),
+            interest_period: Some(Period::Yearly),
+            start_date: Some("2026-01-01".into()),
+            name: name.into(),
+            account_id: account.to_string(),
+            target: None,
+            target_date: Some("2027-01-01".into()),
+            notes: None,
+        },
+        TODAY,
+    )
+    .unwrap()
+    .id;
+    entries::add(conn, id, &NewEntry { amount: held.into(), date: Some("2026-02-01".into()), note: Some(format!("{name} in")), from_account_id: None }, TODAY).unwrap();
+    id
+}
+
+/// What a device holds of a stash's deposit, as the columns have them: kind, rate (milli), period, start, maturity, broken on, returned on.
+#[allow(clippy::type_complexity)]
+fn deposit_columns(conn: &Connection, name: &str) -> (String, Option<i64>, Option<String>, Option<String>, Option<String>, Option<String>, Option<String>) {
+    conn.query_row(
+        "SELECT kind, rate_milli, rate_period, start_date, target_date, broken_on, returned_on FROM stashes WHERE name = ?1",
+        [name],
+        |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?, r.get(5)?, r.get(6)?)),
+    )
+    .unwrap()
+}
+
+fn state_of(conn: &Connection, name: &str) -> DepositState {
+    stashes::get(conn, stash_id(conn, name), TODAY).unwrap().stash.deposit.unwrap().state
+}
+
+#[test]
+fn a_deposit_that_was_broken_and_one_whose_return_was_booked_travel_both_ways_with_their_days_intact() {
+    let (mut desktop, mut phone) = met_with_accounts();
+    category(&desktop, "Interest", CategoryType::Income);
+    settle(&mut desktop, &mut phone);
+    pause();
+    // the desktop breaks one: emptied before its maturity, on 2026-03-10
+    let broken = deposit(&desktop, "Broken", account_id(&desktop, "Savings"), "3.1", "50.00");
+    entries::take(&desktop, broken, &NewTake { amount: "50.00".into(), date: Some("2026-03-10".into()), note: Some("out".into()), to_account_id: None }, TODAY).unwrap();
+    // the phone lets one mature (its maturity moved to 2026-03-01, as the core allows) and books its return on 2026-03-10
+    let booked = deposit(&phone, "Booked", account_id(&phone, "Cash"), "4.125", "1000.00");
+    stashes::update(&phone, booked, &StashPatch { target_date: Some(Some("2026-03-01".into())), ..Default::default() }, TODAY).unwrap();
+    let interest = id_of(&phone, "categories", "Interest");
+    deposits::book_return(&phone, booked, &ReturnInput { amount: "31.00".into(), category_id: interest.to_string(), date: Some("2026-03-10".into()), note: Some("interest".into()) }, TODAY).unwrap();
+    // a third one is still running
+    deposit(&desktop, "Running", account_id(&desktop, "Cash"), "0.5", "10.00");
+    assert_eq!((state_of(&desktop, "Broken"), state_of(&phone, "Booked"), state_of(&desktop, "Running")), (DepositState::Broken, DepositState::Booked, DepositState::Running));
+
+    let outcome = settle(&mut desktop, &mut phone);
+    assert!(!outcome.first.is_empty() && !outcome.second.is_empty(), "both sides had something to send: {outcome:?}");
+    for conn in [&desktop, &phone] {
+        let dated = |name: &str| (name.to_string(), deposit_columns(conn, name));
+        assert_eq!(dated("Broken").1, ("DEPOSIT".into(), Some(3100), Some("YEARLY".into()), Some("2026-01-01".into()), Some("2027-01-01".into()), Some("2026-03-10".into()), None));
+        assert_eq!(dated("Booked").1, ("DEPOSIT".into(), Some(4125), Some("YEARLY".into()), Some("2026-01-01".into()), Some("2026-03-01".into()), None, Some("2026-03-10".into())));
+        assert_eq!(dated("Running").1, ("DEPOSIT".into(), Some(500), Some("YEARLY".into()), Some("2026-01-01".into()), Some("2027-01-01".into()), None, None));
+        // what the screens make of the rows is the same on both: the state is worked out from the days, and the money from the entries
+        assert_eq!((state_of(conn, "Broken"), state_of(conn, "Booked"), state_of(conn, "Running")), (DepositState::Broken, DepositState::Booked, DepositState::Running));
+        assert_eq!((saved(conn, "Broken"), saved(conn, "Booked"), saved(conn, "Running")), ("0.00".to_string(), "1031.00".to_string(), "10.00".to_string()));
+        let booked = stashes::get(conn, stash_id(conn, "Booked"), TODAY).unwrap().stash.deposit.unwrap();
+        assert_eq!((booked.interest_rate.as_str(), booked.interest_period, booked.returned_on.as_deref()), ("4.125", Period::Yearly, Some("2026-03-10")));
+    }
+    // a goal next to them is a goal still, with none of the five
+    let cash = account_id(&desktop, "Cash");
+    make(&desktop, "Plain", cash, Some("100.00"));
+    settle(&mut desktop, &mut phone);
+    assert_eq!(deposit_columns(&phone, "Plain"), ("GOAL".into(), None, None, None, None, None, None));
+}
+
+#[test]
+fn a_conflict_over_the_rate_of_a_deposit_lists_the_rate_and_the_period() {
+    let (mut desktop, mut phone) = met_with_accounts();
+    deposit(&desktop, "Term", account_id(&desktop, "Savings"), "3.1", "100.00");
+    settle(&mut desktop, &mut phone);
+    let met = now();
+    pause();
+    stashes::update(&desktop, stash_id(&desktop, "Term"), &StashPatch { interest_rate: Some("3.5".into()), ..Default::default() }, TODAY).unwrap();
+    stashes::update(&phone, stash_id(&phone, "Term"), &StashPatch { interest_rate: Some("0.4".into()), interest_period: Some(Period::Monthly), ..Default::default() }, TODAY).unwrap();
+    let (conflicts, views) = conflicts_between(&desktop, &phone, met);
+    assert_eq!(conflicts.iter().map(|c| c.table).collect::<Vec<_>>(), [Table::Stashes]);
+    // the kind and the days are the same on both, so only what differs is listed, the rate as the screens write it
+    assert_eq!(fields(&views, Table::Stashes), texts(&[("interestRate", "3.5", "0.4"), ("interestPeriod", "YEARLY", "MONTHLY")]));
+    engine::decide(&mut desktop, &conflicts, &[engine::Choice::Theirs]).unwrap();
+    settle(&mut desktop, &mut phone);
+    for conn in [&desktop, &phone] {
+        assert_eq!(deposit_columns(conn, "Term").1, Some(400));
+        assert_eq!(deposit_columns(conn, "Term").2.as_deref(), Some("MONTHLY"));
+    }
+    // a conflict over the days lists them by their names
+    let met = now();
+    pause();
+    let (term_desktop, term_phone) = (stash_id(&desktop, "Term"), stash_id(&phone, "Term"));
+    stashes::update(&desktop, term_desktop, &StashPatch { start_date: Some("2026-02-01".into()), ..Default::default() }, TODAY).unwrap();
+    stashes::update(&phone, term_phone, &StashPatch { target_date: Some(Some("2027-06-01".into())), ..Default::default() }, TODAY).unwrap();
+    let (_, views) = conflicts_between(&desktop, &phone, met);
+    assert_eq!(fields(&views, Table::Stashes), texts(&[("targetDate", "2027-01-01", "2027-06-01"), ("startDate", "2026-02-01", "2026-01-01")]));
+}
+
+#[test]
+fn a_stash_row_with_a_kind_a_rate_or_days_the_checks_refuse_is_refused_like_any_bad_row_and_nothing_is_applied() {
+    use super::engine::RowsCollector;
+    use super::wire;
+    let (desktop, mut phone) = met_with_accounts();
+    deposit(&desktop, "Term", account_id(&desktop, "Savings"), "3.1", "100.00");
+    let before = snapshot(&phone).unwrap();
+    let mut term = {
+        let id = stash_sync_id(&desktop, "Term");
+        let line = snapshot(&desktop).unwrap().into_iter().find(|l| l.starts_with("stashes:") && l.contains(&id)).unwrap();
+        serde_json::from_str::<serde_json::Value>(line.trim_start_matches("stashes:")).unwrap()
+    };
+    term["stamp"] = serde_json::json!(newer_than_everything());
+    assert!(wire::parse_row(Table::Stashes, &term).is_ok(), "the deposit as it stands is a good row");
+    let with = |changes: &[(&str, serde_json::Value)]| {
+        let mut row = term.clone();
+        for (key, value) in changes {
+            row[*key] = value.clone();
+        }
+        row
+    };
+    let null = serde_json::Value::Null;
+    let bad = [
+        ("an unknown kind", with(&[("kind", serde_json::json!("BOND"))])),
+        ("a goal with a rate", with(&[("kind", serde_json::json!("GOAL"))])),
+        ("a deposit with no rate", with(&[("interestRate", null.clone()), ("interestPeriod", null.clone())])),
+        ("a rate above 100 %", with(&[("interestRate", serde_json::json!(100_001))])),
+        ("a rate with no period", with(&[("interestPeriod", null.clone())])),
+        ("a period that is no period", with(&[("interestPeriod", serde_json::json!("DAILY"))])),
+        ("a deposit with no start", with(&[("startDate", null.clone())])),
+        ("a start that is no day", with(&[("startDate", serde_json::json!("2026-02-30"))])),
+        ("a broken day that is no day", with(&[("brokenOn", serde_json::json!("soon"))])),
+        ("a returned day that is no day", with(&[("returnedOn", serde_json::json!("2026-13-01"))])),
+        ("a goal that was broken", with(&[("kind", serde_json::json!("GOAL")), ("interestRate", null.clone()), ("interestPeriod", null.clone()), ("startDate", null.clone()), ("brokenOn", serde_json::json!("2026-03-10"))])),
+    ];
+    for (what, row) in &bad {
+        let message = wire::RowsMessage { table: Table::Stashes, rows: vec![row.clone()], deleted: vec![], last: true };
+        assert!(RowsCollector::new(vec![Table::Stashes]).push(message).is_err(), "{what}");
+    }
+    // what the wire would refuse but a row put in by hand gets past it is stopped by the table, with the rest of its batch
+    let mut other = term.clone();
+    other["syncId"] = serde_json::json!("cd".repeat(16));
+    other["name"] = serde_json::json!("Other");
+    for (what, row) in [("a goal with a rate", with(&[("kind", serde_json::json!("GOAL"))])), ("a deposit with no start", with(&[("startDate", null)]))] {
+        let rows = [other.clone(), row].into_iter().map(|v| wire::Row::Stash(serde_json::from_value(v).unwrap())).collect();
+        let mut incoming = Incoming::default();
+        incoming.rows.insert(Table::Stashes, rows);
+        let result = engine::apply(&mut phone, &incoming, now(), None);
+        assert!(matches!(result, Err(SyncError::Invalid("row"))), "{what}: {result:?}");
+        assert_eq!(snapshot(&phone).unwrap(), before, "{what}: nothing at all was applied, the good stash neither");
+    }
+    // the good deposit goes in with every field as sent
+    let mut incoming = Incoming::default();
+    incoming.rows.insert(Table::Stashes, vec![wire::Row::Stash(serde_json::from_value(term).unwrap())]);
+    engine::apply(&mut phone, &incoming, now(), None).unwrap();
+    assert_eq!(deposit_columns(&phone, "Term"), ("DEPOSIT".into(), Some(3100), Some("YEARLY".into()), Some("2026-01-01".into()), Some("2027-01-01".into()), None, None));
 }
