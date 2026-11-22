@@ -28,6 +28,10 @@
   --fill: var(--success);
 }
 
+.stash-bar.is-over {
+  --fill: var(--destructive);
+}
+
 /* -- the words under a bar ----------------------------------------------------------------------------------------------------------------- */
 .stash-saved.is-below,
 .stash-big.is-below,

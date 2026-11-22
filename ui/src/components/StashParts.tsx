@@ -20,10 +20,13 @@ export function StashBar({ saved, target, large = false }: { saved: string; targ
   )
 }
 
-/** The bar of a row of the list (`rowMeter`): a goal's progress to its target, or a deposit's way through its term. Only a picture: its figure is beside it. */
-export function MeterBar({ fill, reached }: { fill: number; reached: boolean }) {
+/**
+ * The bar of a row of a list: a goal's progress to its target, or a deposit's way through its term (`rowMeter`), or how much of a category's budget is
+ * used (red when an expense went over it). Only a picture: its figure is beside it.
+ */
+export function MeterBar({ fill, reached, over = false }: { fill: number; reached: boolean; over?: boolean }) {
   return (
-    <span className={cn('stash-bar', reached && 'is-reached')} aria-hidden="true">
+    <span className={cn('stash-bar', reached && 'is-reached', over && 'is-over')} aria-hidden="true">
       <span className="stash-fill" style={{ width: `${fill * 100}%` }} />
     </span>
   )

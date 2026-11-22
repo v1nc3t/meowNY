@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import type { Overview } from '../api/budgets.ts'
-import { amountsFor, categoryTabs, earnedClass, shownTab, spentClass, spentFor, tabOfSearch, tabQuery } from './categoriesView.ts'
+import { amountsFor, budgetGap, categoryTabs, earnedClass, shownTab, spentClass, spentFor, tabOfSearch, tabQuery } from './categoriesView.ts'
 
 test('on a phone the categories page has the tabs expenses and income, and the history once there is some', () => {
   assert.deepEqual(categoryTabs(false), ['EXPENSE', 'INCOME'])
@@ -70,4 +70,16 @@ test('spending is red above its budget and green within it, earning green above 
   assert.equal(earnedClass('10.00', null), 'cell-amount')
   assert.equal(earnedClass('10.00', '10.00'), 'cell-amount')
   assert.equal(earnedClass('10.01', '10.00'), 'cell-amount is-income')
+})
+
+test('what is left of a budget and how much of it is used: an expense can go over, income reaches its budget', () => {
+  assert.deepEqual(budgetGap('137.00', '350.00', 'EXPENSE'), { left: '213.00', percent: 39, fill: 0.39, tone: 'plain' })
+  assert.deepEqual(budgetGap('950.00', '950.00', 'EXPENSE'), { left: '0.00', percent: 100, fill: 1, tone: 'plain' }, 'at the budget is not over it')
+  assert.deepEqual(budgetGap('60.01', '60.00', 'EXPENSE'), { left: '-0.01', percent: 100, fill: 1, tone: 'over' })
+  assert.deepEqual(budgetGap('130.00', '60.00', 'EXPENSE'), { left: '-70.00', percent: 216, fill: 1, tone: 'over' }, 'the bar stops full, the percent does not')
+  assert.deepEqual(budgetGap('1200.00', '3200.00', 'INCOME'), { left: '2000.00', percent: 37, fill: 0.37, tone: 'plain' })
+  assert.deepEqual(budgetGap('3300.00', '3200.00', 'INCOME'), { left: '0.00', percent: 103, fill: 1, tone: 'good' }, 'income past its budget has nothing to go')
+  assert.equal(budgetGap('10.00', null, 'EXPENSE'), null, 'no budget')
+  assert.equal(budgetGap('10.00', '0.00', 'EXPENSE'), null, 'a budget of 0 has nothing to measure against')
+  assert.deepEqual(budgetGap('0.00', '80.00', 'EXPENSE'), { left: '80.00', percent: 0, fill: 0, tone: 'plain' })
 })

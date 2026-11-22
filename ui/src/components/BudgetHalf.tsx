@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import type { Overview } from '../api/budgets'
 import type { Category, CategoryInMonth } from '../api/categories'
-import { amountsFor, earnedClass, spentClass, spentFor, type Side } from '../lib/categoriesView'
+import { amountsFor, budgetGap, earnedClass, spentClass, spentFor, type Side } from '../lib/categoriesView'
+import { cn } from './ui/cn'
 import Icon from './NavIcon'
+import { MeterBar } from './StashParts'
 import { IconAction, Row } from './RowParts'
 import Button from './ui/Button'
 import { CardTitle } from './ui/Card'
@@ -65,6 +67,7 @@ export default function BudgetHalf({
               <span className="cell-sub">{t(type === 'EXPENSE' ? 'budgets.colSpent' : 'budgets.colEarned')}</span>
             </span>
             <span className={type === 'EXPENSE' ? spentClass(side.used, side.budgeted) : earnedClass(side.used, side.budgeted)}>{money(side.used)}</span>
+            {gapCells(side.used, side.budgeted || null, type, money)}
           </li>
         ) : null}
       </ul>
@@ -74,6 +77,8 @@ export default function BudgetHalf({
             <span>{t('common.category')}</span>
             <span className="is-end">{t(type === 'EXPENSE' ? 'budgets.colSpent' : 'budgets.colEarned')}</span>
             <span className="is-end">{t('budgets.budget')}</span>
+            <span className="is-end cat-gap">{t(type === 'EXPENSE' ? 'budgets.colLeft' : 'budgets.colToGo')}</span>
+            <span className="cat-used">{t('budgets.colUsed')}</span>
             <span />
           </li>
           {categories.map((category) => (
@@ -190,6 +195,35 @@ function BudgetRow({
 }
 
 /**
+ * The two columns after the budget: what is left of it (red when an expense went over it), and a bar of how much is used with its percent; quiet
+ * dashes without a budget.
+ */
+function gapCells(used: string, budget: string | null, type: Side, money: (amount: string) => string) {
+  const gap = budgetGap(used, budget, type)
+  if (!gap) {
+    return (
+      <>
+        <span className="cell-sub-end cat-gap">
+          <span className="cell-none">—</span>
+        </span>
+        <span className="cell-sub cat-used">
+          <span className="cell-none">—</span>
+        </span>
+      </>
+    )
+  }
+  return (
+    <>
+      <span className={cn('cell-sub-end cat-gap', gap.tone === 'over' && 'is-over', gap.tone === 'good' && 'is-good')}>{money(gap.left)}</span>
+      <span className="cell-sub cat-used">
+        <MeterBar fill={gap.fill} reached={gap.tone === 'good'} over={gap.tone === 'over'} />
+        <span className="cat-used-figure">{gap.percent}%</span>
+      </span>
+    </>
+  )
+}
+
+/**
  * A category with what it adds up to in the month and its budget, and what can be done with it: edit (name and budget, in a dialog) and
  * delete. The grip at its start tells that the row can be moved.
  */
@@ -249,6 +283,7 @@ function CategoryRow({
       </div>
       {spentCell}
       {amount}
+      {gapCells(spent, budget, type, money)}
     </Row>
   )
 }

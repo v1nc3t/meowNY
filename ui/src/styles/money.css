@@ -379,13 +379,99 @@ html.is-phone .split-table td {
    columns, so the amounts line up: an amount has 15 characters of room (an amount with no sign, "CHF 999,999.99" and a little more),
    the buttons two of 2rem. A category row can be held and dragged: no text selection or touch menu when it is held. */
 .card-list.sum-list,
+/* A category: its name, what it adds up to this month, its budget, what is left of it (or still to come, for income), a bar of how much of it is
+   used with its percent, then edit and delete. Amounts have 15 characters, the bar and its figure 14. */
 .card-list.cat-list {
-  --cols: minmax(0, 1fr) 15ch 15ch 4.25rem;
+  --cols: minmax(0, 1fr) 15ch 15ch 15ch 14ch calc(2 * var(--control-sm) + 0.25rem);
 }
 
-/* A total has no column of what it adds up to: its amount is in the column of the budgets, the second from the end (on the phone too). */
-ul.card-list.sum-list > li.card-item:not(.is-editing) .cell-amount {
+.cat-list .cat-gap {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+:is(.cat-list, .sum-list) .cat-gap.is-over {
+  color: var(--destructive);
+}
+
+:is(.cat-list, .sum-list) .cat-gap.is-good {
+  color: var(--success);
+}
+
+:is(.cat-list, .sum-list) .cat-used {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.cat-used > .stash-bar {
+  flex: 1 1 auto;
+  width: auto;
+  min-width: 2rem;
+  height: 6px;
+}
+
+.cat-used-figure {
+  flex: none;
+  width: 4ch;
+  font-size: 0.75rem;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted-foreground);
+}
+
+/* Less room: what is left and the bar go, the name keeps its room beside the two amounts. */
+@container (max-width: 44em) {
+  html:not(.is-phone) ul.card-list.cat-list > :is(li.card-item, li.list-head) {
+    grid-template-columns: minmax(0, 1fr) 15ch 15ch calc(2 * var(--control-sm) + 0.25rem);
+  }
+
+  ul.card-list.cat-list :is(.cat-gap, .cat-used) {
+    display: none;
+  }
+}
+
+/* The totals of a side have the columns of its categories under them, so the amounts line up: the budget and what was spent (or earned) are in
+   the column of the budgets, and the spent row has what is left of the whole budget and its bar in their columns. On the phone (and where the
+   categories lose those columns) the amount is the second from the end. */
+.card-list.sum-list {
+  --cols: minmax(0, 1fr) 15ch 15ch 15ch 14ch calc(2 * var(--control-sm) + 0.25rem);
+}
+
+html:not(.is-phone) ul.card-list.sum-list > li.card-item:not(.is-editing) .cell-amount {
+  grid-column: 3 / 4;
+}
+
+html:not(.is-phone) ul.card-list.sum-list > li.card-item:not(.is-editing) .cell-actions {
+  grid-column: -2 / -1;
+}
+
+ul.card-list.sum-list .cat-gap {
+  grid-column: 4 / 5;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+ul.card-list.sum-list .cat-used {
+  grid-column: 5 / 6;
+}
+
+@container (max-width: 44em) {
+  html:not(.is-phone) ul.card-list.sum-list > li.card-item {
+    grid-template-columns: minmax(0, 1fr) 15ch 15ch calc(2 * var(--control-sm) + 0.25rem);
+  }
+
+  ul.card-list.sum-list :is(.cat-gap, .cat-used) {
+    display: none;
+  }
+}
+
+html.is-phone ul.card-list.sum-list > li.card-item:not(.is-editing) .cell-amount {
   grid-column: -3 / -2;
+}
+
+html.is-phone ul.card-list.sum-list :is(.cat-gap, .cat-used) {
+  display: none;
 }
 
 /* The grip at the start of a category says that the row can be held and dragged. It is only a picture (the hint is read out to screen
@@ -486,6 +572,11 @@ html.is-phone .cat-list .ui-btn-icon {
 }
 
 html.is-phone ul.card-list.cat-list > li.list-head {
+  display: none;
+}
+
+/* The phone keeps a category to its name, what it adds up to and its budget: what is left and the bar are on the computer. */
+html.is-phone ul.card-list.cat-list :is(.cat-gap, .cat-used) {
   display: none;
 }
 
