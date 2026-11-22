@@ -668,8 +668,24 @@ ul.card-list > li.list-head > .span-2 {
    With these the columns take 32.7rem, the gaps 5rem and the padding 2.5rem, which leaves the name 8rem from 48.2em (a window of about
    1080px; the app opens at 1100px). The name is cut with an ellipsis, and the whole name is its title. Narrower, a row is two lines (see
    below). */
+/* A document: its name, its type ("pdf file", "text file": 11 characters of small print), the day, the size (at the right, as amounts are), the
+   box that keeps it on the phone, how many things it is attached to, then four icon buttons and the chevron. */
 .card-list.doc-table {
-  --cols: minmax(8rem, 1fr) 12ch 6rem 7.5ch 7.5ch 10.5rem;
+  --cols: minmax(8rem, 1fr) 10ch 10ch 6rem 7ch 6ch calc(5 * var(--control-sm) + 0.5rem);
+}
+
+.doc-table .doc-type {
+  min-width: 0;
+  overflow: hidden;
+  font-size: 0.875rem;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--muted-foreground);
+}
+
+ul.card-list.doc-table .doc-size {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
 }
 
 /* The box is at the left of its column, under the word of the head, and so is the paper clip (its padding goes to the left). The word
@@ -690,9 +706,14 @@ ul.card-list > li.list-head > .span-2 {
   margin-left: -0.375rem;
 }
 
-/* Under 48.2em a row is two lines: the name, how many things it is attached to and the buttons, then the day, the size and the box with
-   its word. The buttons are beside both lines, and the paper clip and the box share a column, so they line up. */
-@container (max-width: 48.2em) {
+/* Under 55em a row is two lines: the name, how many things it is attached to and the buttons, then the day, the size and the box with
+   its word. The buttons are beside both lines, and the paper clip and the box share a column, so they line up. The type is in the filter
+   above the list, so it goes. */
+@container (max-width: 55em) {
+  ul.card-list.doc-table .doc-type {
+    display: none;
+  }
+
   ul.card-list.doc-table > li.list-head {
     display: none;
   }

@@ -21,7 +21,7 @@ import { useDebounced } from '../hooks/useDebounced'
 import { dismissToast, toast, useToast } from '../hooks/toast'
 import { useT } from '../i18n/context'
 import { formatSize } from '../lib/bytes'
-import { canKeepToPreview, canPreview, dropNotice, fileState, fileStateText, KIND_CHOICES, reportLines, type KindChoice } from '../lib/documents'
+import { canKeepToPreview, canPreview, dropNotice, fileState, fileStateText, KIND_CHOICES, reportLines, typeText, type KindChoice } from '../lib/documents'
 import { formatDate } from '../lib/money'
 import { saveChoice, storedChoice } from '../lib/sticky'
 import { useShortcut } from '../keys/registry'
@@ -255,8 +255,9 @@ function DocumentsView({ settings }: { settings: MoneySettings }) {
             {doc.name}
           </span>
         </div>
+        <span className="doc-type">{t(typeText(doc.mediaType))}</span>
         <span className="cell-sub">{formatDate(doc.documentDate, locale)}</span>
-        <span className="cell-sub-end">{formatSize(doc.sizeBytes, locale)}</span>
+        <span className="cell-sub-end doc-size">{formatSize(doc.sizeBytes, locale)}</span>
         {/* The head names this column; the word beside the box shows only in a narrow list, which has no head. */}
         <label className="cell-keep" title={t('docs.keepOnPhone')}>
           <input type="checkbox" aria-label={`${doc.name} ${t('docs.keepOnPhone')}`} {...keepProps(doc)} />
@@ -409,7 +410,7 @@ function DocumentsView({ settings }: { settings: MoneySettings }) {
               <Table
                 className="doc-table"
                 // A short head for the links, so it fits the column on one line in every language.
-                heads={[t('common.name'), t('sync.field.date'), t('docs.size'), t('docs.colPhone'), t('docs.colLinks'), '']}
+                heads={[t('common.name'), t('common.type'), t('sync.field.date'), { label: t('docs.size'), className: 'is-end' }, t('docs.colPhone'), t('docs.colLinks'), '']}
                 opens
               >
                 {page.documents.map(tableRow)}
