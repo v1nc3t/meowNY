@@ -26,9 +26,9 @@
 
 meowNY tracks income and expenses against monthly budgets. It is a [Tauri](https://tauri.app) app: a Rust core and a React UI, with all data in one encrypted SQLite file on your machine. A phone app (Android; iPhone later) keeps a full offline copy and syncs with the computer over your home wifi. A command line program, `meowny`, lets scripts and AI agents use the running app.
 
-- **Budgeting:** categories, transactions (expense, income and transfer in one add dialog), monthly budgets, recurring items, statistics. Accounts (bank, savings, cash, credit card) with groups, a balance each, an account in another currency if you have one, transfers between them, and net worth. Stashes: money set aside inside an account for a goal, with a target, a date and a history. Seven languages, light and dark themes, keyboard shortcuts.
+- **Budgeting:** categories, transactions (expense, income and transfer in one add dialog), monthly budgets, recurring items, statistics. Accounts (bank, savings, cash, credit card) with groups, a balance each, an account in another currency if you have one, a return rate, transfers between them, and net worth. Stashes: money set aside inside an account for a goal, with a target, a date and a history, or as a term deposit at a rate that runs, matures and has its return booked. Seven languages, light and dark themes, keyboard shortcuts.
 - **Documents:** receipts and invoices attached to transactions, encrypted, previewed inside the app.
-- **Debts and shared bills:** a ledger per friend, split bills (budgets count only your part), QR bill codes, reminders.
+- **Debts and shared bills:** a ledger per friend, split bills (budgets count only your part), QR bill codes, reminders. Credits, loans and mortgages as accounts you owe on, each payment split into interest and principal, with the payoff month.
 - **Phone:** a full offline copy that syncs straight to the computer, with no server.
 - **Backup and export:** encrypted backups, on a schedule if you like; exports to JSON, CSV, Excel and PDF.
 
@@ -51,7 +51,7 @@ To report a security problem, see [SECURITY.md](SECURITY.md). To help: [CONTRIBU
 | Where | What |
 |---|---|
 | [Website](https://v1nc3t.github.io/meowNY/) | The guide, the command line reference (also as [Markdown](https://v1nc3t.github.io/meowNY/CLI.md)) and the develop page |
-| [docs/sync-design.md](docs/sync-design.md), [docs/documents-design.md](docs/documents-design.md), [docs/debts-design.md](docs/debts-design.md), [docs/accounts-design.md](docs/accounts-design.md), [docs/stash-design.md](docs/stash-design.md) | How sync, documents, debts, accounts and stashes are built |
+| [docs/sync-design.md](docs/sync-design.md), [docs/documents-design.md](docs/documents-design.md), [docs/debts-design.md](docs/debts-design.md), [docs/accounts-design.md](docs/accounts-design.md), [docs/stash-design.md](docs/stash-design.md), [docs/loans-deposits-design.md](docs/loans-deposits-design.md) | How sync, documents, debts, accounts, stashes, loans and deposits are built |
 
 ## Support
 

@@ -2,7 +2,7 @@
 
 Credits, loans and mortgages as accounts you owe on; term deposits as stashes with a return rate; a return rate on savings accounts.
 Section numbers are cited in the code; keep them. Builds on `accounts-design.md` and `stash-design.md`; where this file disagrees with
-them, this file wins. Migration `0022_loans_deposits.sql`. Sync protocol **13**. Status: being built.
+them, this file wins. Migration `0022_loans_deposits.sql`. Sync protocol **13**. Status: built.
 
 ## 1. What it has to do
 
@@ -289,11 +289,16 @@ No test that repeats what an existing test proves for goal stashes or plain acco
 
 ## 10. Screens
 
-- **Stashes list** (`/app/stashes`): `Table` with columns name (link to the stash page), account, saved (with a thin `StashBar`),
-  target or maturity, and an actions cell with **+** and **−** (`Button` size `sm`, text "+" and "−", `aria-label` "add money to X" /
-  "take money from X"). For a deposit the row shows its state word (running, matured, booked, broken) and, when `MATURED`, a
+- **Stashes list** (`/app/stashes`): `Table` with columns name (link to the stash page), account (only while more than one account is
+  shown), saved, target, progress (a bar and its figure: the percent of a goal, the days left of a running deposit), date (target date
+  or maturity), status (what to save a month, what is left, reached, overdue, or a deposit's state with its rate), and an actions cell
+  with **+** and **−** (`Button` size `sm`, text "+" and "−", `aria-label` "add money to X" / "take money from X"). A total row under
+  the rows when they share one currency; a **kind of stash** filter beside the account filter when there are goals and deposits both.
+  A narrower list stacks the account under the name and the target under what is saved (`lib/stashView.ts`: `rowMeter`, `rowStatus`,
+  `rowFlag`, `listTotal`). For a deposit the row shows its state word (running, matured, booked, broken) and, when `MATURED`, a
   **return** button in place of +. + is hidden when an add is not allowed (`canAdd`), − when a take is not (`canTake`). Reorder by drag
-  keeps working on the rows. The archived list under the toggle uses the same table. The phone uses `TapRow` as the other lists do.
+  keeps working on the rows. The archived list under the toggle uses the same table. The phone shows each stash as a card of three lines (name and saved; account and
+  date with the target or the rate; the bar, its figure and the buttons); an archived one is a `TapRow`.
 - **Stash page**: a deposit shows rate, start, maturity, days left, expected return, value at maturity, state; its buttons follow 5.3.
 - **Debts page**: `SectionTabs` **friends | debts** at the top, kept in the address as `?tab=debts`. The friends tab is today's page.
   The debts tab: total owed, a **new** button (`AccountModal` with liability kinds), and a `Table` of the liabilities (archived ones

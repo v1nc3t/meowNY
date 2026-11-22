@@ -1,6 +1,6 @@
 // The guide: what each part of meowNY does, and what it keeps where. Every how-to is a numbered list of steps; what a thing
 // is, and what it stores, is a short paragraph or list. This page is the user documentation; there is no Markdown copy of it.
-// How sync, documents, debts, accounts and stashes are built is in the design notes in docs/.
+// How sync, documents, debts, accounts, stashes, loans and deposits are built is in the design notes in docs/.
 
 import { REPO, SPONSOR } from './render.mjs'
 import { gallery } from './shots.mjs'
@@ -13,9 +13,9 @@ const PICTURES = {
   start: ['lock', 'phone-lock'],
   budgeting: ['dashboard', 'transactions', 'add-income', 'transactions-transfers', 'categories', 'recurring'],
   accounts: ['accounts', 'account'],
-  stashes: ['stashes', 'stash'],
+  stashes: ['stashes', 'stash', 'deposit'],
   documents: ['documents', 'preview-pdf', 'preview-csv'],
-  debts: ['debts', 'friend', 'split', 'bill-code'],
+  debts: ['debts', 'friend', 'loans', 'split', 'bill-code'],
   phone: ['phone-sync', 'phone-dashboard', 'phone-transactions', 'phone-quick-add', 'phone-entry', 'phone-recurring', 'phone-debts', 'phone-categories', 'phone-accounts', 'phone-stashes'],
   backup: ['export'],
   privacy: ['settings'],
@@ -137,6 +137,7 @@ const SECTIONS = [
           '**transfers**: money you moved between your own accounts ([transfers](#transfers)). Transfers are in no other tab. With only one account, this tab is not there.',
         ],
       },
+      { t: 'p', text: 'Each row has a column for the **name**, the **category**, the **account** (with more than one) and the **date**, and the **amount** at the right. When every transaction of the period fits on the page, a last row adds them up: how many there are, what came in, what went out, and in bold what is left of the two. On the phone the rows are grouped by day.' },
       { t: 'p', text: 'Click a row (tap it on the phone) to open its details: how a bill is split, the description and the documents. The pencil edits a transaction and the bin deletes it. An edit has no tabs: a transaction keeps its kind, so to turn an expense into an income, delete it and add the other.' },
       { t: 'h3', id: 'add-entry', text: 'Add an expense, an income or a transfer' },
       { t: 'p', text: 'One dialog adds all three. It has three tabs, and `Alt+1`, `Alt+2` and `Alt+3` choose one from anywhere in it. It opens on the tab that fits the list you are on: **income** on the income tab, **transfer** on the transfers tab, **expense** anywhere else.' },
@@ -188,7 +189,7 @@ const SECTIONS = [
       { t: 'p', text: 'meowNY remembers the kind of period, the category, the account and the number of rows the next time. The dates are remembered only until you close the app. On the phone, the period, the category and the account are behind the **filters** button.' },
       { t: 'p', text: 'The **transfers** tab lists each transfer with its **date**, **from**, **to**, **amount** and **note**. Only the period and the account apply there (an account matches either side of a transfer); the category and the search are hidden. The pencil edits a transfer and the bin deletes it (on the phone, tap the row first).' },
       { t: 'h3', id: 'categories', text: 'Categories' },
-      { t: 'p', text: 'Categories sort what you spend and what comes in. **categories** shows expenses and income side by side for one month (change it with the arrows or `[` and `]`), with the **budget history** under them. In a narrow window the two sit one under the other. Each category shows what you spent or earned that month next to its budget. Spent is green within the budget and red above it; earned is green above its budget. On the phone the page has three tabs: **expenses**, **income** and **budget history** (the history is there once you have some). More on [income categories](#income).' },
+      { t: 'p', text: 'Categories sort what you spend and what comes in. **categories** shows expenses and income side by side for one month (change it with the arrows or `[` and `]`), with the **budget history** under them. In a narrow window the two sit one under the other. Each category row has what you spent or earned that month, its **budget**, what is **left** of it (**to go**, for income), and a bar of how much of it is **used**, with its percent. The **monthly budget** box above the categories has the same columns for the whole side. Spent is green within the budget and red above it, and an expense that went over has what is left in red and a red bar; earned is green above its budget, and its bar turns green. On the phone the page has three tabs: **expenses**, **income** and **budget history** (the history is there once you have some). More on [income categories](#income).' },
       {
         t: 'ol',
         items: [
@@ -242,16 +243,17 @@ const SECTIONS = [
         ],
       },
       { t: 'p', text: 'Each payment is made in the item\'s account. If that account is archived by then, the payment goes to the main account. An edit has no tabs: an item keeps its kind.' },
+      { t: 'p', text: 'Each row has a column for the **category**, how often it **repeats**, the **next due** date and its **status**, with the amount at the right. The status is **overdue** in red, **due today** in bold, or **ongoing**, **paused** or **ended**. In a narrower window the category goes under the name and how often under the date. On the phone, the next due date is under the amount.' },
       { t: 'p', text: '**Pay one:**' },
       {
         t: 'ol',
         items: [
-          'When an item is due, press **mark as paid** on its row.',
+          'When an item is due, press the check (**mark as paid**) on its row. On the phone, tap the row, then **mark as paid**.',
           'Check the **amount paid** (type it for one that varies) and the date it was **paid on**.',
           'Press **done**. meowNY makes a transaction and moves the item to its next date.',
         ],
       },
-      { t: 'p', text: 'Open a row (click it, or tap it) for more: **skip** passes over the next payment without a transaction, **pause** stops it coming due until you **resume** it, and **end** stops it for good. A split item has a **code** for each friend\'s next payment.' },
+      { t: 'p', text: 'Open a row (click it, or tap it) for more: **skip** passes over the next payment without a transaction, **pause** stops it coming due until you **resume** it (a paused item has a play button in the place of the check), and **end** stops it for good. A split item has a **code** for each friend\'s next payment.' },
       { t: 'h3', id: 'due', text: 'Due payments' },
       { t: 'p', text: 'A payment that is past its day, and was neither paid nor skipped, is a due payment. One that falls due today is not listed until tomorrow.' },
       {
@@ -270,7 +272,7 @@ const SECTIONS = [
     title: 'Accounts',
     blocks: [
       { t: 'p', text: 'An account is a place your money is: a bank account, savings, cash, a credit card. Every transaction, recurring item and debt entry is in one account. You start with one, the **main account**, and everything goes into it. While you have only one account, only an income asks for one, and you can leave this page alone.' },
-      { t: 'p', text: 'The **accounts** page is the list below. An account can be in another currency than yours ([an account in another currency](#account-currency)). **Not in meowNY:** reconciliation (correct the opening balance instead), recurring transfers, rules, liabilities and files attached to an account. Money you set aside for a goal is a [stash](#stashes).' },
+      { t: 'p', text: 'The **accounts** page is the list below. An account can be in another currency than yours ([an account in another currency](#account-currency)). **Not in meowNY:** reconciliation (correct the opening balance instead), recurring transfers, rules and files attached to an account. Money you set aside for a goal is a [stash](#stashes). A credit, a loan or a mortgage is an account you owe on, on the **debts** tab of **debts** ([loans and mortgages](#loans)).' },
       { t: 'h3', id: 'add-account', text: 'Add an account' },
       {
         t: 'ol',
@@ -284,7 +286,7 @@ const SECTIONS = [
           'Press **done**.',
         ],
       },
-      { t: 'p', text: 'The list shows each account with its type, **last activity**, what **this month** did to it and its **balance**; a wide window shows the **account number** too. An account in another currency shows its balance in that currency and, small under it, **≈** its value in yours. An account with a virtual balance shows **available** under its balance, and one that net worth leaves out says **not in net worth**. **in accounts**, above the list, is the total of the accounts that count in net worth, archived ones too. The pencil edits an account.' },
+      { t: 'p', text: 'The list shows each account with its type, **last activity**, what **this month** did to it, what its stashes hold (**set aside**, a dash for none) and its **balance**; a wide window shows the **account number** too, and a narrower one leaves out the last activity, then set aside. An account in another currency shows its balance in that currency and, small under it, **≈** its value in yours. An account with a virtual balance shows **available** under its balance, one with a [rate](#account-rate) what it earns a month (**≈ 10.01 / month**), and one that net worth leaves out says **not in net worth**. With groups, each group of more than one account ends in a **total** row, in your currency. **in accounts**, above the list, is the total of the accounts that count in net worth, archived ones too. The pencil edits an account. On the phone, set aside is under the balance.' },
       { t: 'h3', id: 'look-account', text: 'Look at one account' },
       {
         t: 'ol',
@@ -316,6 +318,17 @@ const SECTIONS = [
         ],
       },
       { t: 'p', text: 'When any account has a group, the list has a heading for each group, and the accounts without one come last, under **no group**. To move an account to another group, change its **group**.' },
+      { t: 'h3', id: 'account-rate', text: 'A rate on an account' },
+      { t: 'p', text: 'An account can have an **interest rate**: what a savings account earns, or what a loan costs ([loans and mortgages](#loans)). meowNY shows estimates from it and books nothing by itself.' },
+      {
+        t: 'ol',
+        items: [
+          'Open the account dialog (**add account**, or the pencil on a row).',
+          'Type the **interest rate** as a percent, such as 2.5 (up to three decimals, 0 to 100), and choose the **period**: **per month** or **per year**. Leave it empty for no rate.',
+          'Press **done**.',
+        ],
+      },
+      { t: 'p', text: 'The row then shows **≈** what the account earns a month on what it holds today: the balance times the rate, a twelfth of it for a yearly rate, simple interest, rounded to the cent. When the bank pays it, open the account and press **book interest**: the add dialog opens on the income tab with this account and that amount filled in. Check it against your statement, change it if it differs, and press **done**.' },
       { t: 'h3', id: 'balance-today', text: 'Set what it holds today' },
       {
         t: 'ol',
@@ -399,7 +412,7 @@ const SECTIONS = [
       },
       { t: 'p', text: 'You find your transfers on the **transfers** tab of **transactions**, and as lines in the statement of each of the two accounts. To change or delete one, press the pencil or the bin on its line there (on the phone, tap the line first).' },
       { t: 'h3', id: 'net-worth', text: 'Net worth' },
-      { t: 'p', text: 'On the dashboard, **net worth** is what is **in accounts** plus what **friends** owe you, minus what you owe them. **in accounts** adds up only the accounts that **count in net worth**, archived ones too, each in your currency: an account in another currency counts at its rate. The virtual balance never counts.' },
+      { t: 'p', text: 'On the dashboard, **net worth** is what is **in accounts**, minus your **debts** (what you owe on loans, credits and mortgages, [loans and mortgages](#loans)), plus what **friends** owe you, minus what you owe them. **in accounts** adds up only the accounts that **count in net worth**, archived ones too, each in your currency: an account in another currency counts at its rate. The virtual balance never counts.' },
     ],
   },
   {
@@ -407,12 +420,12 @@ const SECTIONS = [
     title: 'Stashes',
     blocks: [
       { t: 'p', text: 'A stash is money you set aside for something you save for: a holiday, a new laptop, a rainy-day fund. It lives in one account, and **the money stays in that account**. A stash only marks part of the balance as set aside, so it changes no balance, no net worth, no budget and no statistic.' },
-      { t: 'p', text: 'Open **stashes** (or press `g` then `h`). **Not in meowNY:** a stash over several accounts, adds that happen by themselves, and a stash in another currency than its account.' },
+      { t: 'p', text: 'Open **stashes** (or press `g` then `h`). A stash is a **goal** (save up to a target) or a **deposit**: money fixed for a term at a rate ([term deposits](#deposit)). **Not in meowNY:** a stash over several accounts, adds that happen by themselves, and a stash in another currency than its account.' },
       { t: 'h3', id: 'add-stash', text: 'Make a stash' },
       {
         t: 'ol',
         items: [
-          'Open **stashes** and press **new stash** (or press `n`).',
+          'Open **stashes** and press **new stash** (or press `n`). Leave the switch on **goal**; for a deposit, see [term deposits](#deposit).',
           'Type a name, up to 50 characters. Two stashes that are not archived cannot share a name.',
           'Choose the **account** the stash lives in. It is always asked, also with one account. A stash opened from an account\'s page starts with that account.',
           'Optional: type a **target**, how much you want to save. Empty means no target. For an account in another currency, the target is in that currency.',
@@ -426,21 +439,22 @@ const SECTIONS = [
       {
         t: 'ul',
         items: [
-          'The list shows a card for each stash, with its name, its account, a bar, what is saved of the target and what comes next. Above it is **total saved**, in your currency. With more than one account, **account** shows the stashes of one account only.',
-          'A card has **+ add** and **− take out**. Click anywhere else on it to open the stash; on the phone, tap it.',
-          'A stash with no target has no bar, only its amount. One that has reached its target has a full green bar.',
-          'On the computer, hold a card and drag it to change the order, or focus it and press `Alt` with an arrow key. This works while no account is chosen. The order goes to your phone with the next sync. It cannot be changed on the phone.',
+          'The list has a row for each stash, with a column for the **name**, the **account**, what is **saved**, the **target**, the **progress** (a bar and its percent; for a running deposit, how far through its term it is and the days left), the **date** (a goal\'s target date, a deposit\'s maturity) and the **status**: what to save **a month**, what is **left**, **reached** in green, **overdue** in red, or a deposit\'s state with its rate. The last row adds up what they hold and their targets, when they are all in one currency. Above the list is **total saved**, in your currency.',
+          'With more than one account, **account** shows the stashes of one account only, and the account column goes. With goals and deposits both, **kind of stash** shows one kind only. In a narrower window the account goes under the name and the target under what is saved.',
+          'A row has **+** (add) and **−** (take out). Click anywhere else on it to open the stash.',
+          'On the phone each stash is a small card of three lines: the name and what is saved; the account and the date, with the target or a deposit\'s rate at the right; then the bar with its figure, and **+** and **−**.',
+          'On the computer, hold a row and drag it to change the order, or focus it and press `Alt` with an arrow key. This works while no account and no kind is chosen. The order goes to your phone with the next sync. It cannot be changed on the phone.',
           'The page of one stash has the name and account on top, then how far it is, the notes, a chart of what it held at the end of each month (the arrows change the year; a dashed line marks the target), and its **history**.',
           'The history lists every add and take, newest first: the date, a plus or a minus, the note, the account it came from or went to, the amount, and what the stash held **after** it.',
           'Under the history, the account\'s line says what it holds, how much of it is set aside and how much is **free**.',
         ],
       },
-      { t: 'p', text: 'The **accounts** list shows **set aside** under the balance of an account that has stashes. On an account\'s page, **stashes** lists them as small cards, with **new stash** for that account. The dashboard has a **stashes** card once you have one.' },
+      { t: 'p', text: 'The **accounts** list shows what is **set aside** in each account in a column of its own. On an account\'s page, **stashes** lists them as small cards, with **new stash** for that account. The dashboard has a **stashes** card once you have one.' },
       { t: 'h3', id: 'stash-money', text: 'Add money, take it out' },
       {
         t: 'ol',
         items: [
-          'Press **+ add** or **− take out** on a card. On a stash\'s page, press **add money** (or `n`) or **take out**. The dialog has two tabs, **add** and **take out**, and `Alt+1` and `Alt+2` choose one. Changing tab keeps the amount, the date and the note.',
+          'Press **+** or **−** on a row. On a stash\'s page, press **add money** (or `n`) or **take out**. The dialog has two tabs, **add** and **take out**, and `Alt+1` and `Alt+2` choose one. Changing tab keeps the amount, the date and the note.',
           'Type the **amount**, or press a chip under it: **the rest** (what is left to the target), **a month** (what the target date asks of this month), **all free** (everything that is free) for an add; **all** or **half** of what is saved for a take. Only the chips that make sense for the stash are shown.',
           'Look at the bar under the chips. The solid part is what the stash holds now, the striped part what this adds or takes, and the line says what it would hold: **after this: 550.00 of 1200.00 · 45%**. If the amount breaks a limit ([what is free](#stash-free)), the line says why in red and **done** stays off.',
           'Check the date. It starts at today and cannot be after today. Add a **note** if you like, up to 200 characters.',
@@ -475,7 +489,7 @@ const SECTIONS = [
       {
         t: 'ul',
         items: [
-          'A card shows **450.00 of 1200.00 · 37%**, and **750.00 left**.',
+          'A stash\'s page shows **450.00 of 1200.00 · 37%**, and **750.00 left**; its row shows the bar with **37%** and the target in its own column.',
           'With a target date, it also shows how much to save **a month**: what is left, spread over the months from now to the target date, rounded up to the cent. **107.15 a month until june 2027** reaches the target in time. In the month of the target date, it asks for all that is left.',
           'A stash whose target date has passed, and has not reached its target, says **overdue since** that date, in red, and has no amount a month.',
           'At or above its target a stash says **reached**. It is never overdue.',
@@ -487,11 +501,33 @@ const SECTIONS = [
         items: [
           'For a stash you no longer add to, press **archive** on its page and confirm. It leaves the list. **What it still holds stays set aside**, and you can still take money out of it, so you can empty it. Nothing can be added until you **restore** it.',
           'Tick **archived**, under the list, to see the archived stashes. **restore** brings one back, unless another stash has taken its name.',
-          'Press **delete**, on a stash\'s page or on an archived card, to remove it with its history. The question says what happens: the money stays in the account, what the stash held is free again, and **transfers that came with entries stay**.',
+          'Press **delete**, on a stash\'s page or on an archived row, to remove it with its history. The question says what happens: the money stays in the account, what the stash held is free again, and **transfers that came with entries stay**.',
           'When the account of a stash is archived, money can only be taken out of the stash. To add again, move the stash to an account that is not archived with **edit**.',
         ],
       },
       { t: 'p', text: '**An account with a stash cannot be deleted.** It shows **archive** instead of the bin. To delete the account, move its stashes to another account first (**edit**, then **account**) or delete them.' },
+      { t: 'h3', id: 'deposit', text: 'Term deposits' },
+      { t: 'p', text: 'A deposit is money you fix at the bank for a term, at a rate: it **runs** until its **maturity**, then has **matured**. When the bank pays the return you **book** it, and the deposit is **booked**. Taking the money out before the maturity **breaks** it, for good. The money stays in its account, as with any stash.' },
+      {
+        t: 'ol',
+        items: [
+          'Open **stashes**, press **new stash** and switch to **deposit**.',
+          'Type a name and choose the account. Type the **interest rate** and its **period** (per month or per year).',
+          'Check the **start date** (today) and the **maturity** (a year later). The maturity must be after the start. A target is optional.',
+          'Press **done**, then **+** on its row to put the money in. A deposit takes money only while it runs.',
+        ],
+      },
+      { t: 'p', text: 'Its page shows the rate, the start, the maturity, the **days left**, the **expected return** and the **value at maturity** (simple interest on what it holds, for the whole term) and its **state**.' },
+      {
+        t: 'ul',
+        items: [
+          '**Book the return:** at maturity the row has **return** in the place of **+**. Press it, check the amount (the expected return to start with), choose the **income category** and the day the bank paid it, and press **book return**. meowNY makes the income in the account and adds it to the deposit in one step.',
+          '**Break it:** while it runs, **−** is **break deposit**. The amount is all it holds and cannot be changed: this ends the deposit for good. It then takes no more money, and its rate and dates can no longer change; only a note can.',
+          '**Roll it over:** for a deposit that matured or was booked, press **edit** and give it a new maturity after today. It runs again from the old maturity.',
+          '**Close it:** once it is booked or broken and empty, **archive** on its page puts it away.',
+        ],
+      },
+      { t: 'p', text: 'A deposit is never **overdue**. Nothing is booked by itself: meowNY only works out what to expect.' },
       { t: 'h3', id: 'stash-sync', text: 'Two devices' },
       { t: 'p', text: 'The limits are checked on the device where you make the entry. After a sync, the two devices may together go past one: both added what was free, or both brought the stash to its target. Nothing is lost. The screens show it as it is: a stash can hold more than its target, and an account can have free money below 0.' },
     ],
@@ -560,10 +596,10 @@ const SECTIONS = [
     blocks: [
       { t: 'h3', id: 'friends', text: 'Friends and the history' },
       { t: 'p', text: 'A friend is just a name: no phone, email or contacts. A ledger per friend, outside your budget. Green means the friend owes you, red means you owe them.' },
-      { t: 'p', text: '**debts** shows your friends on the left. On the right is the **history**: every change of every friend\'s debt, newest first, a page at a time (**older**, **newer**). Click a friend to see only their lines, with their name and balance on top. Click them again, or press **back**, to see everyone\'s. On the phone, tap a friend, then **history**.' },
+      { t: 'p', text: '**debts** has two tabs: **friends**, described here, and **debts**, for what you owe a bank ([loans and mortgages](#loans)). The friends tab shows your friends, each with who owes whom, a reminder when there is one and the **balance**. Under them is the **history**: every change of every friend\'s debt, newest first, with the friend, what it was, the **date**, the **change** and the **balance** after it, a page at a time (**older**, **newer**). Click a friend to see only their lines, with their name and balance on top. Click them again, or press **back**, to see everyone\'s. On the phone, tap a friend, then **history**.' },
       { t: 'p', text: '**Add a friend:**' },
       { t: 'ol', items: ['Open **debts** and press **add friend**.', 'Type a name.', 'Press **done**.'] },
-      { t: 'p', text: 'The pencil on a friend\'s row renames them. The bin **remove**s them from the list: their balance and history stay, and **show removed friends** lets you **bring back** one.' },
+      { t: 'p', text: 'The pencil on a friend\'s row renames them. The bin **remove**s them from the list: their balance and history stay, and **show removed friends** lets you **bring back** one (the button in the place of the check).' },
       { t: 'p', text: '**Lend or borrow:**' },
       {
         t: 'ol',
@@ -578,7 +614,7 @@ const SECTIONS = [
       {
         t: 'ol',
         items: [
-          'Press **mark as paid** on the friend\'s row, or on their page. It is there while the balance is not zero.',
+          'Press the check (**mark as paid**) on the friend\'s row, or **mark as paid** on their page. It is there while the balance is not zero.',
           'Check the amount. It starts as the whole balance; type less for a part payment.',
           'Set the date, and add a note if you like. With more than one account, choose the **account** the money went to or came from.',
           'Optional: choose **link a transaction**, search, and pick the one this payment was for (a bill you paid for them, say). It is only a reference: no amount changes. The history line gets a **go to the transaction** button.',
@@ -586,6 +622,30 @@ const SECTIONS = [
         ],
       },
       { t: 'p', text: 'If you type more than the debt, the dialog says so first: the rest counts as a debt the other way round. Tick **no need to pay back** the difference to drop it, and the whole balance is recorded.' },
+      { t: 'h3', id: 'loans', text: 'Loans and mortgages' },
+      { t: 'p', text: 'A **credit**, a **loan** or a **mortgage** is an account you owe on: its balance is what you owe, below 0. You pay it from one of your accounts, and part of each payment is interest. They are on the **debts** tab of **debts**, not on **accounts**, with **total owed** above them.' },
+      {
+        t: 'ol',
+        items: [
+          'Open **debts**, choose the **debts** tab and press **new debt**.',
+          'Type a name, and choose **credit**, **loan** or **mortgage**.',
+          'Type what is **owed** (without a minus) and since when.',
+          'Optional: type the **interest rate** and its **period**, and the **installment** you pay each time.',
+          'Press **done**.',
+        ],
+      },
+      { t: 'p', text: 'Each debt shows what is **owed**, the **interest rate**, the **installment** and the **payoff**: the month it is paid off if you keep paying the installment, or **never** when the installment does not even cover the interest. The estimate is simple interest, a month at a time.' },
+      { t: 'p', text: '**Pay one:**' },
+      {
+        t: 'ol',
+        items: [
+          'Press **pay** on its row, or on its page.',
+          'Choose the account to **pay from**. The amount starts as the installment, and the **interest** as the interest of a month on what is owed.',
+          'Check both against your bank. With interest, choose the **interest category** (an expense category). The dialog shows the **principal** (the payment minus the interest) and what is **owed after**.',
+          'Press **done**. meowNY makes a transfer of the principal into the debt, and an expense of the interest in the account you paid from.',
+        ],
+      },
+      { t: 'p', text: 'The two are ordinary rows afterwards: you find the transfer on the **transfers** tab and the interest among your expenses. A debt that is paid off says **paid off**; one you paid too much on, **overpaid**. Its page is an account\'s page ([look at one account](#look-account)), with owed, rate, installment and payoff, and **pay**. A debt holds no stash.' },
       { t: 'h3', id: 'split', text: 'Split a bill' },
       {
         t: 'ol',
