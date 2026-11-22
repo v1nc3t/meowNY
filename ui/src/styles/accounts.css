@@ -18,13 +18,45 @@
   color: var(--foreground);
 }
 
-/* The accounts as a table: name, type, number, last activity, this month, balance, then two buttons of 2rem. The type is one of four
-   short words in small print (the longest, "carte de crédit", is 15 characters of 0.875rem), a date has 10 of them, and an amount with
-   its sign has 16 characters of room, as in the transactions. The name and the number share the rest. A row can be held and dragged,
-   like a category: no text selection or touch menu when it is held, and every row equally tall (see the categories, money.css). */
+/* The accounts as a table: name, type, number, last activity, this month, set aside (what its stashes hold), balance, then two buttons of
+   --control-sm. The type is one of four short words in small print (the longest, "carte de crédit", is 15 characters of 0.875rem, 13 of the
+   row's), a date has 10 of them, and an amount with its sign has 15 characters of room, as in the transactions (set aside, in small print,
+   13). The name and the number share the rest. A row can be held and dragged, like a category: no text selection or touch menu when it is
+   held, and every row equally tall (see the categories, money.css). */
 .card-list.acct-list {
-  --cols: minmax(8rem, 1.4fr) 14ch minmax(6rem, 1fr) 12ch 16ch 16ch 4.25rem;
+  --act: calc(2 * var(--control-sm) + 0.25rem);
+  --cols: minmax(8rem, 1.4fr) 13ch minmax(6rem, 1fr) 11ch 15ch 13ch 15ch var(--act);
   --grip-room: calc(12px + 0.5rem);
+}
+
+ul.card-list.acct-list .acct-aside {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+/* The total of a group, under its accounts: in the balance column, set off by a solid line; not a row to open or to drag. */
+ul.card-list.acct-list > li.card-item.acct-subtotal {
+  min-height: 2.25rem;
+  cursor: default;
+  border-top: var(--border-width) solid var(--border);
+}
+
+@media (hover: hover) {
+  ul.card-list.acct-list > li.card-item.acct-subtotal:hover {
+    background: transparent;
+  }
+}
+
+ul.card-list.acct-list > li.acct-subtotal > .cell-name {
+  grid-column: 1;
+  padding-left: var(--grip-room);
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--muted-foreground);
+}
+
+ul.card-list.acct-list > li.acct-subtotal > .cell-amount {
+  grid-column: -3 / -2;
 }
 
 ul.card-list.acct-list > li.card-item {
@@ -57,14 +89,13 @@ ul.card-list.acct-list > li.list-head > :first-child {
   color: var(--destructive);
 }
 
-/* With less room the columns go in this order: the number, then the last activity; at 48em a row is two lines, the name and the balance,
-   the type and this month (the change). The name and the balance stay at every width. Each width is what the columns of its row add up
-   to (the widest 7 columns with a number of 6rem, 6 columns 54.6em, 5 columns 46.4em) and a little more, so no row is wider than its list
-   at any width, and the units are the list's own, so they follow the text size. */
-@container (max-width: 64em) {
+/* With less room the columns go in this order: the number, then the last activity, then set aside; at 48em a row is two lines, the name and
+   the balance, the type and this month (the change). The name and the balance stay at every width. Each width is what the columns of its row
+   add up to and a little more, so no row is wider than its list at any width, and the units are the list's own, so they follow the text size. */
+@container (max-width: 70em) {
   ul.card-list.acct-list > li.card-item,
   ul.card-list.acct-list > li.list-head {
-    grid-template-columns: minmax(8rem, 1fr) 14ch 12ch 16ch 16ch 4.25rem;
+    grid-template-columns: minmax(8rem, 1fr) 13ch 11ch 15ch 13ch 15ch var(--act);
   }
 
   ul.card-list.acct-list .acct-number {
@@ -72,13 +103,24 @@ ul.card-list.acct-list > li.list-head > :first-child {
   }
 }
 
-@container (max-width: 56em) {
+@container (max-width: 60em) {
   ul.card-list.acct-list > li.card-item,
   ul.card-list.acct-list > li.list-head {
-    grid-template-columns: minmax(8rem, 1fr) 14ch 16ch 16ch 4.25rem;
+    grid-template-columns: minmax(8rem, 1fr) 13ch 15ch 13ch 15ch var(--act);
   }
 
   ul.card-list.acct-list .acct-last {
+    display: none;
+  }
+}
+
+@container (max-width: 52em) {
+  ul.card-list.acct-list > li.card-item,
+  ul.card-list.acct-list > li.list-head {
+    grid-template-columns: minmax(8rem, 1fr) 13ch 15ch 15ch var(--act);
+  }
+
+  ul.card-list.acct-list .acct-aside {
     display: none;
   }
 }
@@ -120,6 +162,10 @@ ul.card-list.acct-list > li.list-head > :first-child {
     grid-area: month;
     font-size: 0.875rem;
     font-weight: 400;
+  }
+
+  ul.card-list.acct-list > li.acct-subtotal > .cell-name {
+    padding-left: 0;
   }
 }
 

@@ -150,6 +150,11 @@ const percentFormatter = memoByKey(
   },
 )
 
+/** The sum of signed two-decimal amounts, as one ("-12.50", "8823.83"). A text that is not an amount counts as 0. */
+export function sumAmounts(amounts: readonly string[]): string {
+  return fromMinor(amounts.reduce((sum, amount) => sum + (toMinor(amount) ?? 0n), 0n))
+}
+
 /** 89.1 as "89.1%" in the person's number format. */
 export function formatPercent(value: number, locale: string): string {
   return `${percentFormatter(locale)?.format(value) ?? String(value)}%`

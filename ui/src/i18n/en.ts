@@ -858,6 +858,8 @@ export const en = {
   'accounts.openingBalance': 'opening balance',
   'accounts.openingDate': 'on',
   'accounts.balance': 'balance',
+  'accounts.setAsideHead': 'set aside',
+  'accounts.groupTotal': 'total',
   'accounts.lastActivity': 'last activity',
   'accounts.noActivity': 'nothing yet',
   'accounts.thisMonth': 'this month',

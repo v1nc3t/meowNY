@@ -479,6 +479,12 @@ ul.card-list > li.list-head > .is-end {
   outline-offset: -2px;
 }
 
+/* A cell with nothing to say: a quiet dash, so the eye can skip it. */
+.cell-none {
+  color: var(--muted-foreground);
+  opacity: 0.6;
+}
+
 .cell-sub,
 .cell-sub-end {
   min-width: 0;

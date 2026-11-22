@@ -36,7 +36,7 @@ import { tip } from '../keys/tip'
 import { useRowNavigation } from '../keys/useRowNavigation'
 import { accountLabel, accountName, activeAccounts, groupAccounts, lineWords, nameMark, oldIncomeAddress, reorderWithinGroup, showAvailable, signedView, type AccountGroup } from '../lib/accountsView'
 import type { EntryTab } from '../lib/entryDialog'
-import { breakable, formatDate, formatMoney, moneyIn } from '../lib/money'
+import { breakable, formatDate, formatMoney, moneyIn, sumAmounts } from '../lib/money'
 import { lastDay } from '../lib/range'
 import { applyOrder } from '../lib/reorder'
 import { saveChoice, storedChoice } from '../lib/sticky'
@@ -199,14 +199,15 @@ function AccountsView({ settings, now }: { settings: MoneySettings; now: Today }
     )
   }
   /** The balance in the account's currency, and under it what is available when the account has a virtual balance, and what it is worth in the app's currency when it is in another. */
-  const balanceCell = (account: Account, className: string) => {
+  const balanceCell = (account: Account, className: string, withAside = false) => {
     // "≈" alone says little to a screen reader: it hears the words, the title shows them
     const about = t('accounts.inMainAbout', { amount: money(account.balanceInMain), code: settings.currency.toUpperCase() })
     return (
       <span className={`${className}${wrap(account)}`}>
         {cellMoney(account)(account.balance)}
         {showAvailable(account) ? <span className="acct-available">{`${t('accounts.available')} ${moneyOf(account)(account.available)}`}</span> : null}
-        {isSome(account.setAside) ? <span className="acct-available">{t('stashes.setAside', { amount: moneyOf(account)(account.setAside) })}</span> : null}
+        {/* the desktop has a column for it; the phone shows it here */}
+        {withAside && isSome(account.setAside) ? <span className="acct-available">{t('stashes.setAside', { amount: moneyOf(account)(account.setAside) })}</span> : null}
         {account.returnPerMonth !== null && isSome(account.returnPerMonth) ? <span className="acct-available">{t('accounts.returnPerMonth', { amount: moneyOf(account)(account.returnPerMonth) })}</span> : null}
         {account.foreign ? (
           <span className="acct-available acct-in-main" title={about}>
@@ -229,7 +230,12 @@ function AccountsView({ settings, now }: { settings: MoneySettings; now: Today }
   /** Delete for an account with nothing in it, archive for one with rows; the main account has neither. */
   const removal = (account: Account): 'delete' | 'archive' | null => (account.isMain ? null : account.entries === 0 ? 'delete' : 'archive')
 
-  // A desktop row: name, type, number, last activity, this month, balance, then edit and archive (or delete, for an empty one). The grip
+  /** What the stashes in an account hold, its own column: a quiet dash when they hold nothing. */
+  const asideCell = (account: Account) => (
+    <span className="cell-sub-end acct-aside">{isSome(account.setAside) ? moneyOf(account)(account.setAside) : <span className="cell-none">—</span>}</span>
+  )
+
+  // A desktop row: name, type, number, last activity, this month, set aside, balance, then edit and archive (or delete, for an empty one). The grip
   // at its start says that the row can be held and dragged. The name is the link for the keyboard (j and k stop on it).
   function tableRow(account: Account, hintId: string) {
     const way = removal(account)
@@ -266,6 +272,7 @@ function AccountsView({ settings, now }: { settings: MoneySettings; now: Today }
         </span>
         <span className="cell-sub acct-last">{lastText(account)}</span>
         {monthCell(account, 'cell-amount acct-month')}
+        {asideCell(account)}
         {balanceCell(account, 'cell-amount acct-balance')}
       </Row>
     )
@@ -288,7 +295,7 @@ function AccountsView({ settings, now }: { settings: MoneySettings; now: Today }
             {marks(account)}
           </>
         }
-        amount={balanceCell(account, 'cell-amount')}
+        amount={balanceCell(account, 'cell-amount', true)}
         sub={
           <>
             <span>{kindText(account)}</span>
@@ -368,11 +375,18 @@ function AccountsView({ settings, now }: { settings: MoneySettings; now: Today }
           </span>
         </div>
         <span className="cell-sub">{kindText(account)}</span>
-        {balanceCell(account, 'cell-amount')}
+        {balanceCell(account, 'cell-amount', true)}
       </Row>
     )
   }
 
+  /** The row under a group's accounts: what they hold together, in the app's currency (each at its rate). */
+  const groupTotal = (group: AccountGroup): ReactNode => (
+    <li className="card-item acct-subtotal">
+      <span className="cell-name">{t('accounts.groupTotal')}</span>
+      <span className="cell-amount">{money(sumAmounts(group.accounts.map((account) => account.balanceInMain)))}</span>
+    </li>
+  )
   /** The heading of a group, when there are groups: the accounts that have none come last, under "no group". */
   const groupTitle = (group: AccountGroup): ReactNode => (grouped ? <h2 className="acct-group" title={group.name ?? t('accounts.noGroup')}>{group.name ?? t('accounts.noGroup')}</h2> : null)
   const listHead = (
@@ -382,6 +396,7 @@ function AccountsView({ settings, now }: { settings: MoneySettings; now: Today }
       <span className="acct-number">{t('accounts.number')}</span>
       <span className="acct-last">{t('accounts.lastActivity')}</span>
       <span className="is-end">{t('accounts.thisMonth')}</span>
+      <span className="is-end acct-aside">{t('accounts.setAsideHead')}</span>
       <span className="is-end">{t('accounts.balance')}</span>
       <span />
     </li>
@@ -582,7 +597,14 @@ function AccountsView({ settings, now }: { settings: MoneySettings; now: Today }
               {active.length > 0 && !phone
                 ? // Written out, not a `Table`: each list is what its reordering listens on, so each group has its own, and the head is over the first only.
                   groups.map((group, at) => (
-                    <GroupList key={group.name ?? ''} group={group} title={groupTitle(group)} head={at === 0 ? listHead : null} onReorder={onReorderGroup}>
+                    <GroupList
+                      key={group.name ?? ''}
+                      group={group}
+                      title={groupTitle(group)}
+                      head={at === 0 ? listHead : null}
+                      total={grouped && group.accounts.length > 1 ? groupTotal(group) : null}
+                      onReorder={onReorderGroup}
+                    >
                       {tableRow}
                     </GroupList>
                   ))
@@ -624,6 +646,7 @@ function GroupList({
   group,
   title,
   head,
+  total,
   onReorder,
   children,
 }: {
@@ -631,6 +654,8 @@ function GroupList({
   title: ReactNode
   /** The row of column names, over the first list only. */
   head: ReactNode
+  /** The row of what the group holds together, under its accounts; none for a group of one. */
+  total: ReactNode
   onReorder: (group: string | null, ids: string[]) => void
   /** Draws a row; `hintId` names the text that tells how to reorder. */
   children: (account: Account, hintId: string) => ReactNode
@@ -644,6 +669,7 @@ function GroupList({
       <ul className="card-list is-table acct-list" ref={listRef}>
         {head}
         {group.accounts.map((account) => children(account, hintId))}
+        {total}
       </ul>
       <span id={hintId} className="sr-only">
         {t('accounts.reorderHint')}

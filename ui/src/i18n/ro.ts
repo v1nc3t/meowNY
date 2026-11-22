@@ -843,6 +843,8 @@ export const ro: Messages = {
   'accounts.openingBalance': 'sold inițial',
   'accounts.openingDate': 'la data',
   'accounts.balance': 'sold',
+  'accounts.setAsideHead': 'pus deoparte',
+  'accounts.groupTotal': 'în total',
   'accounts.lastActivity': 'ultima mișcare',
   'accounts.noActivity': 'nimic încă',
   'accounts.thisMonth': 'luna aceasta',

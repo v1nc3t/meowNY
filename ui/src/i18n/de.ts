@@ -846,6 +846,8 @@ export const de: Messages = {
   'accounts.openingBalance': 'anfangssaldo',
   'accounts.openingDate': 'am',
   'accounts.balance': 'saldo',
+  'accounts.setAsideHead': 'zurückgelegt',
+  'accounts.groupTotal': 'summe',
   'accounts.lastActivity': 'letzte bewegung',
   'accounts.noActivity': 'noch nichts',
   'accounts.thisMonth': 'dieser monat',

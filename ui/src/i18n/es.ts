@@ -845,6 +845,8 @@ export const es: Messages = {
   'accounts.openingBalance': 'saldo inicial',
   'accounts.openingDate': 'el',
   'accounts.balance': 'saldo',
+  'accounts.setAsideHead': 'reservado',
+  'accounts.groupTotal': 'en total',
   'accounts.lastActivity': 'último movimiento',
   'accounts.noActivity': 'nada aún',
   'accounts.thisMonth': 'este mes',
