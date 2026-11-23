@@ -10,6 +10,7 @@ import { accountChoice, rememberAccount } from '../lib/accountsView'
 import { amountString, convertAmount, formatDate, formatMoney, parseRate } from '../lib/money'
 import AccountField from './AccountField'
 import Dropdown from './Dropdown'
+import Facts from './Facts'
 import Modal, { modalFormId } from './Modal'
 
 const NEW = '__new'
@@ -144,20 +145,14 @@ export default function BillAcceptModal({
         ) : (
           <>
             {preview.alreadyAdded ? <p className="warning">{t('code.already')}</p> : null}
-            <dl className="code-details">
-              <dt>{t('code.from')}</dt>
-              <dd>{preview.from}</dd>
-              {preview.paidBy ? (
-                <>
-                  <dt>{t('split.paidBy')}</dt>
-                  <dd>{preview.paidBy}</dd>
-                </>
-              ) : null}
-              <dt>{t('code.what')}</dt>
-              <dd>{preview.what}</dd>
-              <dt>{t('report.date')}</dt>
-              <dd>{settings ? formatDate(preview.date, settings.locale) : preview.date}</dd>
-            </dl>
+            <Facts
+              items={[
+                { label: t('code.from'), value: preview.from },
+                { label: t('split.paidBy'), value: preview.paidBy },
+                { label: t('code.what'), value: preview.what },
+                { label: t('report.date'), value: settings ? formatDate(preview.date, settings.locale) : preview.date },
+              ]}
+            />
             <p>{t('split.yourPartOf', { mine: money(preview.amount, preview.currency), amount: money(preview.total, preview.currency) })}</p>
             <Dropdown label={t(preview.paidBy ? 'debts.labelYouOwe' : 'debts.friend')} value={friendChoice} options={friendOptions} onChange={setFriendChoice} />
             {friendChoice === NEW ? (
@@ -168,7 +163,6 @@ export default function BillAcceptModal({
             ) : null}
             {needsRate ? (
               <>
-                {parsedRate === null || typedAmount === null ? <p className="hint">{t('code.needRate')}</p> : null}
                 <label>
                   {t('code.rate', { currency: preview.currency, own: preview.ownCurrency })}
                   <input name="rate" value={rate} onChange={(event) => setRate(event.target.value)} inputMode="decimal" autoComplete="off" />

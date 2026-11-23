@@ -3,11 +3,12 @@ import { Link } from 'react-router-dom'
 import { debts, type History, type HistoryLine } from '../api/debts'
 import { errorText } from '../api/invoke'
 import { useProfile } from '../hooks/profile'
+import { useOpenRow } from '../hooks/useOpenRow'
 import { useToast } from '../hooks/toast'
 import { useT } from '../i18n/context'
 import { formatDate, formatMoney } from '../lib/money'
 import Pager from './Pager'
-import { Table, TapRow } from './RowParts'
+import { ListGroup, Table, TapRow } from './RowParts'
 
 /**
  * The recurring payments that were paid after their day, newest first, a page at a time: the day each fell due and the day it was paid.
@@ -20,6 +21,7 @@ export default function PaidLatePayments({ currency, locale, reload }: { currenc
   const say = useToast()
   const [history, setHistory] = useState<History | null>(null)
   const [offset, setOffset] = useState(0)
+  const rows = useOpenRow()
   const money = (amount: string) => formatMoney(amount, currency, locale)
   const keyOf = (line: HistoryLine) => line.transactionId ?? `${line.recurringId}-${line.date}`
 
@@ -52,20 +54,19 @@ export default function PaidLatePayments({ currency, locale, reload }: { currenc
       </Link>
     )
 
-  // a paid line has nothing to open: the phone's row is plain, so its `id` is never shown
+  // A phone row: the name and the amount, the day it was paid under the name; it opens to the day it fell due.
   function tapRow(line: HistoryLine) {
+    const key = keyOf(line)
     return (
       <TapRow
-        key={keyOf(line)}
-        id={keyOf(line)}
+        key={key}
+        id={rows.panelId(key)}
+        open={rows.isOpen(key)}
+        onToggle={() => rows.toggle(key)}
         name={line.what}
         amount={<span className="cell-amount">{money(line.amount)}</span>}
-        sub={
-          <>
-            {line.dueDate ? <span>{t('debts.dueOn', { date: formatDate(line.dueDate, locale) })}</span> : null}
-            <span>{`${t('rec.paidOn')} ${formatDate(line.date, locale)}`}</span>
-          </>
-        }
+        meta={`${t('rec.paidOn')} ${formatDate(line.date, locale)}`}
+        facts={[{ label: t('debts.colDue'), value: line.dueDate ? formatDate(line.dueDate, locale) : null }]}
       />
     )
   }
@@ -84,13 +85,13 @@ export default function PaidLatePayments({ currency, locale, reload }: { currenc
 
   return (
     <>
-      <h2 className="debts-heading">{t('rec.paidLateTitle')}</h2>
+      {phone && lines.length > 0 ? null : <h2 className="debts-heading">{t('rec.paidLateTitle')}</h2>}
       {lines.length === 0 ? <p className="hint">{t('debts.noLines')}</p> : null}
       {lines.length > 0 ? (
         phone ? (
-          <ul className="card-list">{lines.map(tapRow)}</ul>
+          <ListGroup heading={t('rec.paidLateTitle')}>{lines.map(tapRow)}</ListGroup>
         ) : (
-          <Table className="late-table" heads={[t('common.name'), t('debts.colDue'), t('rec.paidOn'), { label: t('tx.amount'), className: 'is-end' }]}>
+          <Table className="late-table" tidy heads={[t('common.name'), t('debts.colDue'), t('rec.paidOn'), { label: t('tx.amount'), className: 'is-end' }]}>
             {lines.map(tableRow)}
           </Table>
         )

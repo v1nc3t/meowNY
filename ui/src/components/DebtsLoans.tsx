@@ -11,15 +11,15 @@ import { useT } from '../i18n/context'
 import { useShortcut } from '../keys/registry'
 import { useRowNavigation } from '../keys/useRowNavigation'
 import { accountName } from '../lib/accountsView'
-import { liabilities, payoffWords, rateWords, totalOwed } from '../lib/loansView'
+import { liabilities, loanFacts, payoffWords, totalOwed } from '../lib/loansView'
 import { formatMoney, moneyIn } from '../lib/money'
 import { tabPanelProps } from '../lib/tabs'
 import PageHeader from './PageHeader'
 import AccountModal from './AccountModal'
 import LoanPayModal from './LoanPayModal'
-import { Row, Table, TapRow } from './RowParts'
-import Button from './ui/Button'
-import { buttonClass } from './ui/cn'
+import Facts from './Facts'
+import { IconAction, ListGroup, NameMark, PanelActions, Row, Table, TapRow } from './RowParts'
+import Badge from './ui/Badge'
 
 /** The dialog that is open: a new debt, or the payment of one. */
 type Dialog = { kind: 'new' } | { kind: 'pay'; liability: Account } | null
@@ -74,46 +74,39 @@ export default function DebtsLoans({ settings, now, tabs }: { settings: MoneySet
     navigate(link(account))
   }
 
-  const payButton = (account: Account) =>
-    account.archived ? null : (
-      <Button variant="outline" size="sm" className="row-primary" onClick={() => setDialog({ kind: 'pay', liability: account })}>
-        {t('loans.pay')}
-      </Button>
-    )
+  /** What a debt owes and costs, one to a line, in its own currency. */
+  const factsOf = (account: Account) => loanFacts(account, moneyIn(account.currency, settings.locale), settings.locale, t)
 
-  // A desktop row: the name with its kind under it, what is owed, the rate, the installment, the payoff, then pay. Under 44em the columns after the
-  // amount are one line under the name (`loan-line`), as the accounts do. The name is the link for the keyboard (j and k stop on it).
+  // A desktop row: the name (a debt that was archived says so), its kind, what is owed, the installment, the payoff, then pay as an icon button
+  // and the chevron that opens the rest (the rate, a month of interest). The name is the link for the keyboard (j and k stop on it).
   function tableRow(account: Account) {
-    const small = [
-      kindText(account),
-      account.archived ? t('accounts.archived') : '',
-      rateWords(account, t),
-      account.installment === null ? '' : `${t('accounts.installment')} ${installmentOf(account)}`,
-      payoffOf(account) === '' ? '' : `${t('loans.payoff')} ${payoffOf(account)}`,
-    ]
     return (
-      <Row key={account.id} data-archived={account.archived || undefined} onClick={(event) => open(event, account)} actions={payButton(account)}>
+      <Row
+        key={account.id}
+        rows={rows}
+        id={account.id}
+        data-archived={account.archived || undefined}
+        onClick={(event) => open(event, account)}
+        actions={account.archived ? <span className="icon-slot" /> : <IconAction icon="check" label={`${t('loans.pay')}: ${accountName(account, t)}`} className="icon-btn rec-pay" onClick={() => setDialog({ kind: 'pay', liability: account })} />}
+        panel={<Facts items={factsOf(account)} className="acct-facts" />}
+      >
         <div className="cell-name">
-          <span className="acct-name">
-            <Link className="card-name" to={link(account)} title={accountName(account, t)} data-row-focus>
-              {accountName(account, t)}
-            </Link>
-            <span className="row-mark loan-kind">{account.archived ? `${kindText(account)} · ${t('accounts.archived')}` : kindText(account)}</span>
-          </span>
+          <Link className="card-name" to={link(account)} title={accountName(account, t)} data-row-focus>
+            {accountName(account, t)}
+          </Link>
+          {account.archived ? <span className="row-mark">{t('accounts.archived')}</span> : null}
         </div>
+        <span className="cell-sub loan-kind">{kindText(account)}</span>
         <span className="cell-amount">{owedOf(account)}</span>
-        <span className="cell-sub loan-col">{rateWords(account, t)}</span>
         <span className="cell-sub-end loan-col is-installment">{installmentOf(account)}</span>
-        <span className="cell-sub loan-col">{payoffOf(account)}</span>
-        <span className="cell-sub loan-line">{small.filter(Boolean).join(' · ')}</span>
+        <span className="cell-sub-end loan-col">{payoffOf(account)}</span>
       </Row>
     )
   }
 
-  // A phone row: the name and what is owed, the kind and the rate under them. It opens to the installment and the payoff, and a labelled button for
-  // everything that can be done.
+  // A phone row: the name (an archived debt says so) and what is owed, the kind under the name. It opens to the rest, and a button for everything
+  // that can be done.
   function tapRow(account: Account) {
-    const more = [account.installment === null ? '' : `${t('accounts.installment')} ${installmentOf(account)}`, payoffOf(account) === '' ? '' : `${t('loans.payoff')} ${payoffOf(account)}`].filter(Boolean)
     return (
       <TapRow
         key={account.id}
@@ -121,38 +114,34 @@ export default function DebtsLoans({ settings, now, tabs }: { settings: MoneySet
         data-archived={account.archived || undefined}
         open={rows.isOpen(account.id)}
         onToggle={() => rows.toggle(account.id)}
-        name={
-          <>
-            {accountName(account, t)}
-            {account.archived ? <span className="row-mark">{t('accounts.archived')}</span> : null}
-          </>
-        }
+        name={<NameMark mark={account.archived ? <Badge variant="secondary">{t('accounts.archived')}</Badge> : null}>{accountName(account, t)}</NameMark>}
         amount={<span className="cell-amount">{owedOf(account)}</span>}
-        sub={
-          <>
-            <span>{kindText(account)}</span>
-            {rateWords(account, t) ? <span>{rateWords(account, t)}</span> : null}
-          </>
-        }
+        meta={kindText(account)}
+        facts={factsOf(account)}
       >
-        {more.length > 0 ? <p className="hint">{more.join(' · ')}</p> : null}
-        <div className="row-panel-actions">
-          {account.archived ? null : (
-            <Button variant="outline" onClick={() => setDialog({ kind: 'pay', liability: account })}>
-              {t('loans.pay')}
-            </Button>
-          )}
-          <Link to={link(account)} className={buttonClass('outline')}>
-            {t('accounts.open')}
-          </Link>
-        </div>
+        <PanelActions
+          actions={[
+            !account.archived && { label: t('loans.pay'), icon: 'check', onClick: () => setDialog({ kind: 'pay', liability: account }) },
+            { label: t('accounts.open'), icon: 'play', to: link(account) },
+          ]}
+        />
       </TapRow>
     )
   }
 
   return (
     <section className="tx-page debts-page">
-      <PageHeader title={t('debts.title')} actions={[{ label: t('loans.new'), icon: 'add', primary: true, shortcut: 'new', onClick: () => setDialog({ kind: 'new' }) }]} />
+      <PageHeader
+        title={t('debts.title')}
+        actions={[{ label: t('loans.new'), icon: 'add', primary: true, shortcut: 'new', onClick: () => setDialog({ kind: 'new' }) }]}
+        aside={
+          accounts && list.length > 0 ? (
+            <>
+              {t('loans.totalOwed')} <b>{money(totalOwed(accounts))}</b>
+            </>
+          ) : null
+        }
+      />
       {tabs}
       {dialog?.kind === 'new' ? (
         <AccountModal
@@ -186,21 +175,17 @@ export default function DebtsLoans({ settings, now, tabs }: { settings: MoneySet
       {accounts ? (
         <div className="tx-pane wide pane-stack" {...tabPanelProps('debts')}>
           {list.length === 0 ? <p className="hint">{t('loans.none')}</p> : null}
-          {list.length > 0 ? (
-            <p className="acct-total">
-              <span className="dash-stat-label">{t('loans.totalOwed')}</span> <b>{money(totalOwed(accounts))}</b>
-            </p>
-          ) : null}
-          {list.length > 0 && phone ? <ul className="card-list">{list.map(tapRow)}</ul> : null}
+          {list.length > 0 && phone ? <ListGroup>{list.map(tapRow)}</ListGroup> : null}
           {list.length > 0 && !phone ? (
             <Table
               className="loans-table"
+              tidy
               heads={[
                 t('common.name'),
+                { label: t('common.type'), className: 'head-kind' },
                 { label: t('accounts.owed'), className: 'is-end' },
-                t('accounts.rate'),
-                { label: t('accounts.installment'), className: 'is-end' },
-                t('loans.payoff'),
+                { label: t('accounts.installment'), className: 'is-end head-installment' },
+                { label: t('loans.payoff'), className: 'is-end' },
                 '',
               ]}
             >

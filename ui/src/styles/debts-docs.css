@@ -164,83 +164,51 @@ html.is-phone .debts-name + .debts-heading {
   bottom: calc(100% + 0.25rem);
 }
 
-/* The friends: name, who owes whom (and the reminder), what is owed, then three icon buttons: mark as paid (or bring back one who was removed),
-   rename and remove (an empty place where one is not offered, so the icons line up). A click anywhere else on a row chooses the friend. Who
-   owes whom is as wide as the longest of the three ("alles beglichen", 15 characters of 0.875rem), the amount has 15 characters, and the
-   reminder wraps rather than being cut: its column holds 16 characters of small print, two lines for a reminder with its date in every
-   language. With the gaps the columns take about 33rem, which leaves the name 7rem from 40em. Below that a row is lines of its own: the
-   name and the amount; who owes whom, with the buttons on the right of it; the reminder. */
+/* The friends, a tidy table (docs/ui-design.md, rule 2): name, who owes whom, the day of the reminder, what is owed, then three icon buttons: mark as
+   paid (or bring back one who was removed), rename and remove (an empty place where one is not offered, so the icons line up). A click anywhere else on
+   a row chooses the friend. Who owes whom is as wide as the longest of the three ("alles beglichen", 15 characters of 0.875rem), the amount has 15
+   characters, the day 10. Every cell is one line. With less room a column goes: the reminder (under 44em), then who owes whom (under 34em; the colour of
+   the amount says it as well). */
 .card-list.friends-table {
-  --cols: minmax(0, 1fr) 13.5ch 14ch 15ch calc(3 * var(--control-sm) + 0.25rem);
+  --cols: minmax(0, 1fr) 13.5ch 12ch 15ch calc(3 * var(--control-sm) + 0.25rem);
 }
 
 ul.card-list.friends-table > li.card-item {
   cursor: pointer;
 }
 
-.friends-table .cell-sub-end {
-  white-space: normal;
-}
-
-.friends-table .row-primary {
-  max-width: none;
-  padding-inline: 0.5rem;
+/* A column head is one line, cut with an ellipsis. */
+ul.card-list:is(.friends-table, .ledger-table, .history-table) > li.list-head > * {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-@container (max-width: 40em) {
+.friends-table .friend-reminder {
+  font-variant-numeric: tabular-nums;
+}
+
+@container (max-width: 44em) {
+  ul.card-list.friends-table > li.card-item,
   ul.card-list.friends-table > li.list-head {
+    grid-template-columns: minmax(0, 1fr) 13.5ch 15ch calc(3 * var(--control-sm) + 0.25rem);
+  }
+
+  ul.card-list.friends-table .friend-reminder,
+  ul.card-list.friends-table > li.list-head > .head-reminder {
     display: none;
   }
+}
 
-  ul.card-list.friends-table > li.list-head + li {
-    border-top: 0;
+@container (max-width: 34em) {
+  ul.card-list.friends-table > li.card-item,
+  ul.card-list.friends-table > li.list-head {
+    grid-template-columns: minmax(0, 1fr) 15ch calc(3 * var(--control-sm) + 0.25rem);
   }
 
-  ul.card-list.friends-table > li.card-item {
-    display: flex;
-    flex-direction: row;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 0.125rem 1rem;
-  }
-
-  /* The line break after the name and the amount. */
-  ul.card-list.friends-table > li.card-item::after {
-    content: '';
-    order: 2;
-    flex: 0 0 100%;
-    height: 0;
-  }
-
-  ul.card-list.friends-table .cell-name {
-    order: 0;
-    flex: 1 1 0;
-  }
-
-  ul.card-list.friends-table .cell-amount {
-    order: 1;
-    flex: none;
-  }
-
-  ul.card-list.friends-table .cell-sub {
-    order: 3;
-    flex: 0 1 auto;
-  }
-
-  ul.card-list.friends-table .cell-actions {
-    order: 4;
-    flex: none;
-    margin-left: auto;
-  }
-
-  ul.card-list.friends-table .cell-sub-end {
-    order: 5;
-    flex: 0 0 100%;
-    text-align: left;
-  }
-
-  ul.card-list.friends-table :is(.cell-amount, .cell-sub-end):empty {
+  ul.card-list.friends-table .friend-status,
+  ul.card-list.friends-table > li.list-head > .head-status {
     display: none;
   }
 }
@@ -265,22 +233,12 @@ ul.card-list > li.list-head > .span-2 {
   }
 }
 
-/* One friend's history: what it was, the day, how much it changed (with a sign, 16 characters), the balance after it (small print, with
-   a sign), then the buttons: go to the transaction, show code (a bill) or edit and delete (an entry; a bill has an empty place where
-   an entry has delete), and the chevron of a note. That is four of 2rem and three gaps of 0.125rem, 8.5rem. The columns take 34rem
-   (the characters, 42.5 of them, 25.5rem, and the buttons), the gaps 4rem and the padding 2.5rem, which leaves what it was 10rem from
-   51em; below that the rows have two lines (what it was and the change, then the day and the balance, the buttons beside both), and
-   from 33em down three, the buttons on a line of their own at the right: beside the two lines they would leave what it was less than
-   10rem. What it was starts with the kind in words (and a bill's name), and the day sits under it in a narrow half: both wrap rather
-   than being cut. */
+/* One friend's history, a tidy table: the kind of line (and its documents), a bill's name, the day, how much it changed (with a sign, 13 characters), the
+   balance after it (small print, with a sign), then the buttons: go to the transaction, show code (a bill) or edit and delete (an entry; a bill has an empty
+   place where an entry has delete), and the chevron of a note. That is four of 2rem and three gaps of 0.125rem, 8.5rem. Every cell is one line. With less
+   room a column goes: the bill's name (under 50em), the balance (under 42em), the day (under 34em). */
 .card-list.ledger-table {
-  --cols: minmax(10rem, 1fr) 12ch 16ch 14.5ch 8.5rem;
-}
-
-.ledger-table .cell-name > .card-name,
-.ledger-table .cell-sub {
-  white-space: normal;
-  overflow-wrap: anywhere;
+  --cols: minmax(7rem, 1.5fr) minmax(7rem, 1fr) 11ch 13ch 12ch 8.5rem;
 }
 
 .ledger-table .cell-sub-end {
@@ -288,81 +246,68 @@ ul.card-list > li.list-head > .span-2 {
   font-variant-numeric: tabular-nums;
 }
 
-/* The same room for the buttons in every row, so the amounts line up when the head is gone (a narrow window). */
+/* The same room for the buttons in every row, so the amounts line up. */
 .ledger-table .cell-actions {
   min-width: 8.5rem;
 }
 
-@container (max-width: 51em) {
+@container (max-width: 50em) {
+  ul.card-list.ledger-table > li.card-item,
   ul.card-list.ledger-table > li.list-head {
+    grid-template-columns: minmax(7rem, 1fr) 11ch 13ch 12ch 8.5rem;
+  }
+
+  ul.card-list.ledger-table .ledger-bill,
+  ul.card-list.ledger-table > li.list-head > .head-bill {
     display: none;
   }
+}
 
-  ul.card-list.ledger-table > li.list-head + li {
-    border-top: 0;
+@container (max-width: 42em) {
+  ul.card-list.ledger-table > li.card-item,
+  ul.card-list.ledger-table > li.list-head {
+    grid-template-columns: minmax(6rem, 1fr) 11ch 13ch 8.5rem;
   }
 
-  ul.card-list.ledger-table > li.card-item {
-    grid-template-columns: minmax(0, 1fr) auto auto;
-    grid-template-areas:
-      'name amount actions'
-      'sub sub-end actions';
-    row-gap: 0;
-  }
-
-  ul.card-list.ledger-table .cell-name {
-    grid-area: name;
-  }
-
-  ul.card-list.ledger-table .cell-amount {
-    grid-area: amount;
-  }
-
-  ul.card-list.ledger-table .cell-sub {
-    grid-area: sub;
-  }
-
-  ul.card-list.ledger-table .cell-sub-end {
-    grid-area: sub-end;
-  }
-
-  ul.card-list.ledger-table .cell-actions {
-    grid-area: actions;
+  ul.card-list.ledger-table .cell-sub-end,
+  ul.card-list.ledger-table > li.list-head > :nth-child(5) {
+    display: none;
   }
 }
 
-@container (max-width: 33em) {
-  ul.card-list.ledger-table > li.card-item {
-    grid-template-columns: minmax(0, 1fr) auto;
-    grid-template-areas:
-      'name amount'
-      'sub sub-end'
-      'actions actions';
+@container (max-width: 34em) {
+  ul.card-list.ledger-table > li.card-item,
+  ul.card-list.ledger-table > li.list-head {
+    grid-template-columns: minmax(5rem, 1fr) 13ch 8.5rem;
+  }
+
+  ul.card-list.ledger-table > li.card-item > .cell-sub:nth-child(3),
+  ul.card-list.ledger-table > li.list-head > :nth-child(3) {
+    display: none;
   }
 }
 
-/* The history of all debts: who, what kind of change, the day, the change (with a sign, 16 characters), the balance after it (small
-   print, with a sign), then go to the transaction and the chevron of a note: two buttons of --control-sm. The kind of change is words
-   that can be long ("wiederkehrende zahlung verspätet bezahlt"), so it wraps. With the gaps and the padding the day, the change, the
-   balance and the buttons take about 36rem, which leaves 10rem each to the friend and to the kind of change from 55em. Below that the rows
-   have two lines (the friend and the change, then the kind and the day, the balance and the buttons beside both), and under 40em four
-   (the balance under the day, the buttons under the balance). */
+/* The history of all debts, a tidy table: who (or what, for a recurring payment), what kind of change, the day, the change (with a sign, 14
+   characters), the balance after it (small print, with a sign), then go to the transaction and the chevron of a bill's name or a note: two buttons of
+   --control-sm. Every cell is one line; the kind can be long ("wiederkehrende zahlung verspätet bezahlt"), and is cut. With less room a column goes: the
+   balance (under 44em), then the day (under 36em). */
 .card-list.history-table {
-  --cols: minmax(10rem, 1fr) minmax(10rem, 1.4fr) 12ch 16ch 14.5ch calc(2 * var(--control-sm) + 0.25rem);
+  --cols: minmax(8rem, 1.2fr) minmax(9rem, 1.4fr) 11ch 14ch 13ch calc(2 * var(--control-sm) + 0.25rem);
 }
 
-.history-table .cell-sub {
-  white-space: normal;
-  overflow-wrap: anywhere;
-}
-
-/* The same room for the buttons in every row, so the amounts line up when the head is gone (a narrow window). */
+/* The same room for the buttons in every row, so the amounts line up. */
 .history-table .cell-actions {
   min-width: calc(2 * var(--control-sm) + 0.25rem);
 }
 
+.history-table .cell-sub-end {
+  font-variant-numeric: tabular-nums;
+}
+
 .cell-bal {
-  min-width: 16.5ch;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
   font-size: 0.875rem;
   text-align: right;
   white-space: nowrap;
@@ -370,106 +315,60 @@ ul.card-list > li.list-head > .span-2 {
   font-variant-numeric: tabular-nums;
 }
 
-@container (max-width: 55em) {
+@container (max-width: 44em) {
+  ul.card-list.history-table > li.card-item,
   ul.card-list.history-table > li.list-head {
+    grid-template-columns: minmax(8rem, 1.2fr) minmax(7rem, 1.4fr) 11ch 14ch calc(2 * var(--control-sm) + 0.25rem);
+  }
+
+  ul.card-list.history-table .cell-bal,
+  ul.card-list.history-table > li.list-head > :nth-child(5) {
     display: none;
   }
+}
 
-  ul.card-list.history-table > li.list-head + li {
-    border-top: 0;
+@container (max-width: 36em) {
+  ul.card-list.history-table > li.card-item,
+  ul.card-list.history-table > li.list-head {
+    grid-template-columns: minmax(5rem, 1fr) minmax(5rem, 1fr) 14ch calc(2 * var(--control-sm) + 0.25rem);
   }
 
-  ul.card-list.history-table > li.card-item {
-    grid-template-columns: minmax(0, 1fr) auto auto auto;
-    grid-template-areas:
-      'name amount bal actions'
-      'sub sub-end bal actions';
-    row-gap: 0;
-  }
-
-  ul.card-list.history-table .cell-name {
-    grid-area: name;
-  }
-
-  ul.card-list.history-table .cell-amount {
-    grid-area: amount;
-  }
-
-  ul.card-list.history-table .cell-sub {
-    grid-area: sub;
-  }
-
-  ul.card-list.history-table .cell-sub-end {
-    grid-area: sub-end;
-    text-align: right;
-  }
-
-  ul.card-list.history-table .cell-bal {
-    grid-area: bal;
-  }
-
-  ul.card-list.history-table .cell-actions {
-    grid-area: actions;
+  ul.card-list.history-table .cell-sub-end,
+  ul.card-list.history-table > li.list-head > :nth-child(3) {
+    display: none;
   }
 }
 
-/* In half a page the balance is under the day, in the column of the amount, and the buttons under it, so the friend's name keeps its
-   room. */
-@container (max-width: 40em) {
-  ul.card-list.history-table > li.card-item {
-    grid-template-columns: minmax(0, 1fr) auto;
-    grid-template-areas:
-      'name amount'
-      'sub sub-end'
-      'sub bal'
-      'actions actions';
-  }
-}
-
-/* The payments that are late: how late, under the day. */
-.due-table .due-late,
-.row-toggle .due-late {
+/* The payments that are late: how late, in red, in a column of its own beside the day (and under the name of a phone row). */
+.due-late {
   color: var(--destructive);
 }
 
-.due-late {
-  display: block;
-  font-size: 0.8125rem;
-  white-space: normal;
-}
-
-.row-toggle .due-late {
-  font-size: inherit;
-}
-
-/* What is due: name, category, the day with how late it is under it (that wraps, on 14 characters), the amount (an income has a plus
-   sign: 16), then skip and mark as paid, each on one line: together 33 characters of 0.875rem in German ("überspringen", "als
-   bezahlt markieren"), and the padding of the two buttons. */
+/* What is due: name, category, the day, how late it is, the amount (an income has a plus sign: 16), then two icon buttons (skip and mark as paid).
+   Every cell is one line. With less room a column goes: first the category, then the day. */
 .card-list.due-table {
-  --cols: minmax(0, 1.6fr) minmax(0, 1fr) 14ch 16ch calc(29ch + 3.5rem);
+  --cols: minmax(0, 1.6fr) minmax(0, 1fr) 11ch 17ch 14ch calc(2 * var(--control-sm) + 0.25rem);
 }
 
-/* A bill code that was read: who it is from, what, and when. */
-.code-details {
-  display: grid;
-  grid-template-columns: max-content 1fr;
-  gap: 0.25rem 1rem;
-  margin: 0;
-  padding: 0.75rem 1rem;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  background: var(--muted);
-  font-size: 0.8125rem;
+@container (max-width: 48em) {
+  ul.card-list.due-table > :is(li.card-item, li.list-head) {
+    grid-template-columns: minmax(0, 1fr) 11ch 17ch 14ch calc(2 * var(--control-sm) + 0.25rem);
+  }
+
+  ul.card-list.due-table :is(.due-cat, .head-cat) {
+    display: none;
+  }
 }
 
-.code-details dt {
-  color: var(--muted-foreground);
-}
+@container (max-width: 38em) {
+  ul.card-list.due-table > :is(li.card-item, li.list-head) {
+    grid-template-columns: minmax(0, 1fr) 17ch 14ch calc(2 * var(--control-sm) + 0.25rem);
+  }
 
-.code-details dd {
-  margin: 0;
-  overflow-wrap: anywhere;
-  color: var(--foreground);
+  ul.card-list.due-table .due-date,
+  ul.card-list.due-table > li.list-head > :nth-child(3) {
+    display: none;
+  }
 }
 
 /* Documents (phase 9). */

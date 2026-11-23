@@ -92,7 +92,7 @@ export default function BillCodeModal({
   }
 
   return (
-    <Modal title={t('code.title', { name: person.name })} onClose={onClose}>
+    <Modal title={t('code.title', { name: person.name })} onClose={onClose} help={paidBy ? <p>{t('code.paidBy', { payer: paidBy, name: person.name })}</p> : undefined}>
       <form id={modalFormId} onSubmit={onSubmit}>
         {asking ? (
           <label>
@@ -103,7 +103,6 @@ export default function BillCodeModal({
           <>
             {target.kind === 'recurring' && target.date && settings ? <p>{t('code.next', { date: formatDate(target.date, settings.locale) })}</p> : null}
             {held ? <p>{held.total ? t('code.part', { name: person.name, amount: money(held.part), total: money(held.total) }) : `${person.name}: ${money(held.part)}`}</p> : null}
-            {paidBy ? <p className="hint">{t('code.paidBy', { payer: paidBy, name: person.name })}</p> : null}
             {code ? <QrCode text={code} label={t('code.title', { name: person.name })} level="L" onTooLong={onTooLong} /> : null}
             {tooLong ? <p className="warning">{t('code.tooLong')}</p> : null}
             <div className="card-actions">

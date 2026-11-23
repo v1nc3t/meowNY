@@ -211,31 +211,28 @@ ul.card-list.acct-list.is-archived > li.card-item > .cell-name {
   }
 }
 
-/* The debts (a credit, a loan, a mortgage) on the debts page: the name with its kind under it, owed, rate, installment, payoff, then the button
-   that pays (the longest word, "plătește", has 8 characters). With less room the installment goes (under 56em), and under 44em a row is two
-   lines, the name and what is owed, and the kind, rate, installment and payoff in one small line under them (`loan-line`). An archived debt is
-   dimmed. */
+/* The debts (a credit, a loan, a mortgage) on the debts page, a tidy table (docs/ui-design.md, rule 2): the name (an archived debt says so after it),
+   its kind, owed, installment, payoff, then pay as an icon button and the chevron that opens the rest (the rate, a month of interest). Every cell is one
+   line. With less room a column goes, never a line is added: the installment (under 56em), then the kind (under 46em), then the payoff (under 38em).
+   An archived debt is dimmed. */
 .card-list.loans-table {
-  --cols: minmax(8rem, 1fr) 14ch 14ch 12ch 14ch calc(8ch + 1.5rem);
+  --cols: minmax(8rem, 1.4fr) minmax(6rem, 1fr) 14ch 14ch 14ch calc(2 * var(--control-sm) + 0.25rem);
 }
 
 ul.card-list.loans-table > li.card-item {
   cursor: pointer;
 }
 
-.loans-table .loan-line {
-  display: none;
+ul.card-list.loans-table > li.list-head > * {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.loans-table .cell-sub-end {
+.loans-table :is(.cell-sub-end) {
   text-align: right;
   font-variant-numeric: tabular-nums;
-}
-
-.loans-table .row-primary {
-  max-width: none;
-  padding-inline: 0.5rem;
-  white-space: nowrap;
 }
 
 ul.card-list.loans-table > li.card-item[data-archived] {
@@ -245,51 +242,36 @@ ul.card-list.loans-table > li.card-item[data-archived] {
 @container (max-width: 56em) {
   ul.card-list.loans-table > li.card-item,
   ul.card-list.loans-table > li.list-head {
-    grid-template-columns: minmax(8rem, 1fr) 14ch 14ch 14ch calc(8ch + 1.5rem);
+    grid-template-columns: minmax(8rem, 1.4fr) minmax(6rem, 1fr) 14ch 14ch calc(2 * var(--control-sm) + 0.25rem);
   }
 
   ul.card-list.loans-table .is-installment,
-  ul.card-list.loans-table > li.list-head > :nth-child(4) {
+  ul.card-list.loans-table > li.list-head > .head-installment {
     display: none;
   }
 }
 
-@container (max-width: 44em) {
+@container (max-width: 46em) {
+  ul.card-list.loans-table > li.card-item,
   ul.card-list.loans-table > li.list-head {
+    grid-template-columns: minmax(6rem, 1fr) 14ch 14ch calc(2 * var(--control-sm) + 0.25rem);
+  }
+
+  ul.card-list.loans-table .loan-kind,
+  ul.card-list.loans-table > li.list-head > .head-kind {
     display: none;
   }
+}
 
-  ul.card-list.loans-table > li.list-head + li {
-    border-top: 0;
+@container (max-width: 38em) {
+  ul.card-list.loans-table > li.card-item,
+  ul.card-list.loans-table > li.list-head {
+    grid-template-columns: minmax(5rem, 1fr) 14ch calc(2 * var(--control-sm) + 0.25rem);
   }
 
-  ul.card-list.loans-table > li.card-item {
-    grid-template-columns: minmax(4rem, 1fr) auto auto;
-    grid-template-areas:
-      'name amount actions'
-      'sub sub actions';
-    row-gap: 0;
-  }
-
-  ul.card-list.loans-table .cell-name {
-    grid-area: name;
-  }
-
-  ul.card-list.loans-table .cell-amount {
-    grid-area: amount;
-  }
-
-  ul.card-list.loans-table :is(.loan-col, .loan-kind) {
+  ul.card-list.loans-table .loan-col,
+  ul.card-list.loans-table > li.list-head > :nth-child(5) {
     display: none;
-  }
-
-  ul.card-list.loans-table .loan-line {
-    display: block;
-    grid-area: sub;
-  }
-
-  ul.card-list.loans-table .cell-actions {
-    grid-area: actions;
   }
 }
 

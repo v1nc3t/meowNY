@@ -17,8 +17,7 @@ import BillCodeModal from './BillCodeModal'
 import ClipPreview from './ClipPreview'
 import ConfirmModal from './ConfirmModal'
 import EntryModal from './EntryModal'
-import Icon from './NavIcon'
-import { DayGroups, IconAction, NoteSection, Row, Table, TapRow } from './RowParts'
+import { DayGroups, IconAction, NoteSection, PanelActions, Row, Table, TapRow, type PanelAction } from './RowParts'
 import SettleModal from './SettleModal'
 import Button from './ui/Button'
 import { buttonClass } from './ui/cn'
@@ -129,8 +128,10 @@ export default function FriendLedger({
   // Beside the name, so the short words of the list of friends: "you owe €0.35", "owes you €0.35".
   const summaryText = tone === 'even' ? t('debts.settledUp') : `${t(tone === 'owed' ? 'debts.labelOwesYou' : 'debts.labelYouOwe')} ${money(abs)}`
   const kindOf = (line: Line) => t(`debts.kind.${line.kind}`)
-  // A bill's name is in its label; an entry's note is not, it is in the panel of its row.
+  // A bill's name is in its label (the dialogs name a line so); an entry's note is not, it is in the panel of its row.
   const lineLabel = (line: Line) => (line.what && !noteOf(line) ? `${kindOf(line)}: ${line.what}` : kindOf(line))
+  /** The name of a bill, in a column of its own; an entry has none (its note is in its panel). */
+  const billOf = (line: Line) => (noteOf(line) === '' ? line.what : '')
   const effectText = (line: Line) => `${line.effect.startsWith('-') ? '-' : '+'}${money(line.effect.replace('-', ''))}`
   const lineKey = (line: Line, at: number) => `${line.entryId ?? 'bill'}-${line.transactionId ?? ''}-${at}`
   const lineItem = (line: Line) => (line.entryId ? `ledger_entry:${line.entryId}` : undefined)
@@ -140,7 +141,7 @@ export default function FriendLedger({
   const hasCode = (line: Line) => line.kind === 'BILL' && line.transactionId !== null && !line.effect.startsWith('-')
   const showCode = (line: Line) => setDialog({ kind: 'code', transactionId: line.transactionId ?? '', amount: line.amount })
 
-  // A desktop row: what it was, when, how much it changed, the balance after it, then its buttons (go to the transaction; show code for a
+  // A desktop row: what kind of line it was, the bill's name, when, how much it changed, the balance after it, then its buttons (go to the transaction; show code for a
   // bill; edit and delete for an entry of the person's own) and the chevron of a note, which opens under the row.
   function tableRow(line: Line, at: number) {
     const entry = entryOfLine(line, person.id)
@@ -176,11 +177,14 @@ export default function FriendLedger({
         panel={note ? <NoteSection note={note} /> : null}
       >
         <div className="cell-name">
-          <span className="card-name" title={lineLabel(line)}>
-            {lineLabel(line)}
+          <span className="card-name" title={kindOf(line)}>
+            {kindOf(line)}
           </span>
           {count && line.entryId ? <ClipPreview inline target={{ kind: 'ledger_entry', id: line.entryId }} name={lineLabel(line)} count={count} /> : null}
         </div>
+        <span className="cell-sub ledger-bill" title={billOf(line)}>
+          {billOf(line)}
+        </span>
         <span className="cell-sub">{formatDate(line.date, settings.locale)}</span>
         {change(line)}
         <span className="cell-sub-end">{money(line.balance)}</span>
@@ -188,14 +192,19 @@ export default function FriendLedger({
     )
   }
 
-  // A phone row: what kind of line it was and how much it changed, a bill's name and the balance under them. It opens to its note, its
-  // documents and a labelled button for each thing that can be done; a line with none of them is plain.
+  // A phone row: what kind of line it was and how much it changed, a bill's name under them. It opens to its day and the balance after it, its
+  // note, its documents and a button for each thing that can be done.
   function tapRow(line: Line) {
     const entry = entryOfLine(line, person.id)
     const count = line.entryId ? (clips[line.entryId] ?? 0) : 0
     const note = noteOf(line)
-    const bill = hasCode(line)
     const key = lineKey(line, lines.indexOf(line))
+    const actions: (PanelAction | false)[] = [
+      !!line.transactionId && { label: t('debts.goToTransaction'), icon: 'transactions', onClick: () => goToTransaction(line) },
+      hasCode(line) && { label: t('code.show'), icon: 'qr', onClick: () => showCode(line) },
+      !!entry && { label: t('common.edit'), icon: 'pencil', onClick: () => setDialog({ kind: 'entry', entry }) },
+      !!entry && { label: t('common.delete'), icon: 'trash', danger: true, onClick: () => setDialog({ kind: 'delete', entry }) },
+    ]
     return (
       <TapRow
         key={key}
@@ -205,70 +214,45 @@ export default function FriendLedger({
         onToggle={() => rows.toggle(key)}
         name={kindOf(line)}
         amount={change(line)}
-        sub={
-          <>
-            {line.what && !note ? <span>{line.what}</span> : null}
-            <span>{`${t('debts.balance')} ${money(line.balance)}`}</span>
-          </>
-        }
+        meta={billOf(line)}
+        facts={[
+          { label: t('sync.field.date'), value: formatDate(line.date, settings.locale) },
+          { label: t('debts.balance'), value: money(line.balance) },
+        ]}
       >
-        {line.transactionId || entry || count || note ? (
-          <>
-            {note ? <NoteSection note={note} /> : null}
-            {count && line.entryId ? (
-              <section className="detail-section">
-                <p className="detail-title">{t('docs.title')}</p>
-                <ClipPreview target={{ kind: 'ledger_entry', id: line.entryId }} name={lineLabel(line)} count={count} />
-              </section>
-            ) : null}
-            <div className="row-panel-actions">
-              {line.transactionId ? (
-                <Button variant="outline" onClick={() => goToTransaction(line)}>
-                  <Icon name="transactions" className="btn-icon" />
-                  {t('debts.goToTransaction')}
-                </Button>
-              ) : null}
-              {bill ? (
-                <Button variant="outline" onClick={() => showCode(line)}>
-                  <Icon name="qr" className="btn-icon" />
-                  {t('code.show')}
-                </Button>
-              ) : null}
-              {entry ? (
-                <>
-                  <Button variant="outline" onClick={() => setDialog({ kind: 'entry', entry })}>
-                    <Icon name="pencil" className="btn-icon" />
-                    {t('common.edit')}
-                  </Button>
-                  <Button variant="outline" className="row-danger" onClick={() => setDialog({ kind: 'delete', entry })}>
-                    <Icon name="trash" className="btn-icon" />
-                    {t('common.delete')}
-                  </Button>
-                </>
-              ) : null}
-            </div>
-          </>
+        {note ? <NoteSection note={note} /> : null}
+        {count && line.entryId ? (
+          <section className="detail-section">
+            <p className="detail-title">{t('docs.title')}</p>
+            <ClipPreview target={{ kind: 'ledger_entry', id: line.entryId }} name={lineLabel(line)} count={count} />
+          </section>
         ) : null}
+        <PanelActions actions={actions} />
       </TapRow>
     )
   }
 
   return (
     <div className="debts-half">
-      <div className="debts-heading debts-name">
-        <Link to="/app/debts" className={buttonClass('outline', 'sm')}>
-          {t('common.back')}
-        </Link>
-        {tone !== 'even' ? (
-          <Button variant="outline" size="sm" onClick={() => setDialog({ kind: 'settle' })}>
-            {t('debts.settle')}
-          </Button>
-        ) : null}
-      </div>
-      {/* The title of the ledger is who it is with and where it stands. */}
-      <h2 className="debts-heading debts-balance">
-        {person.name}: <span className={`debt-${tone}`}>{summaryText}</span>
-      </h2>
+      {/* On a phone the friend's page has its back button, name, where it stands and mark as paid in the page's header. */}
+      {phone ? null : (
+        <>
+          <div className="debts-heading debts-name">
+            <Link to="/app/debts" className={buttonClass('outline', 'sm')}>
+              {t('common.back')}
+            </Link>
+            {tone !== 'even' ? (
+              <Button variant="outline" size="sm" onClick={() => setDialog({ kind: 'settle' })}>
+                {t('debts.settle')}
+              </Button>
+            ) : null}
+          </div>
+          {/* The title of the ledger is who it is with and where it stands. */}
+          <h2 className="debts-heading debts-balance">
+            {person.name}: <span className={`debt-${tone}`}>{summaryText}</span>
+          </h2>
+        </>
+      )}
       {lines.length === 0 ? <p className="hint">{t('debts.noLines')}</p> : null}
       {lines.length > 0 && phone ? (
         <DayGroups rows={lines} dateOf={(line) => line.date} locale={settings.locale} today={now.date}>
@@ -278,7 +262,8 @@ export default function FriendLedger({
       {lines.length > 0 && !phone ? (
         <Table
           className="ledger-table"
-          heads={[t('debts.what'), t('sync.field.date'), { label: t('debts.change'), className: 'is-end' }, { label: t('debts.balance'), className: 'is-end' }, '']}
+          tidy
+          heads={[t('debts.kind'), { label: t('code.what'), className: 'head-bill' }, t('sync.field.date'), { label: t('debts.change'), className: 'is-end' }, { label: t('debts.balance'), className: 'is-end' }, '']}
           opens
         >
           {lines.map(tableRow)}

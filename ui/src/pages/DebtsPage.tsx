@@ -14,12 +14,12 @@ import DebtsHistory from '../components/DebtsHistory'
 import EntryModal from '../components/EntryModal'
 import FriendLedger from '../components/FriendLedger'
 import FriendNameModal from '../components/FriendNameModal'
-import Icon from '../components/NavIcon'
-import { IconAction, Row, Table, TapRow } from '../components/RowParts'
+import { type FactItem } from '../components/Facts'
+import { IconAction, ListGroup, NameMark, PanelActions, Row, Table, TapRow, type PanelAction } from '../components/RowParts'
 import SectionTabs from '../components/SectionTabs'
 import SettleModal from '../components/SettleModal'
+import Badge from '../components/ui/Badge'
 import Button from '../components/ui/Button'
-import { buttonClass } from '../components/ui/cn'
 import { EmptyState } from '../components/ui/Pixel'
 import { useMoneySettings, type MoneySettings } from '../hooks/useMoneySettings'
 import { useOpenRow } from '../hooks/useOpenRow'
@@ -222,12 +222,14 @@ function DebtsView({ settings, now, tabs }: { settings: MoneySettings; now: Toda
     navigate(rowLink(person))
   }
 
-  // A desktop row: name, who owes whom, the reminder, the amount, then what can be done: mark as paid (or bring back), rename, and take off
-  // the list (not for one that is removed already, whose place stays empty so the icons line up). The friend whose history is on the
+  /** The day the reminder of a friend came, when it did and was not cleared; none for a friend who owes nothing. */
+  const reminderOf = (person: Person, tone: 'owed' | 'owe' | 'even') => (dueIds.has(person.id) && tone !== 'even' ? formatDate(dueOn.get(person.id) ?? '', settings.locale) : '')
+
+  // A desktop row: name, who owes whom, the day of the reminder, the amount, then what can be done: mark as paid (or bring back), rename, and take
+  // off the list (not for one that is removed already, whose place stays empty so the icons line up). The friend whose history is on the
   // right is marked. The name is the link for the keyboard (j and k stop on it).
   function tableRow(person: Person) {
     const { tone, abs } = balanceView(person.balance)
-    const reminded = dueIds.has(person.id) && tone !== 'even'
     const chosen = person.id === personId
     return (
       <Row
@@ -256,17 +258,30 @@ function DebtsView({ settings, now, tabs }: { settings: MoneySettings; now: Toda
           </Link>
           {person.archived ? <span className="row-mark">{t('debts.removed')}</span> : null}
         </div>
-        <span className={`cell-sub debt-${tone}`}>{statusText(tone)}</span>
-        <span className="cell-sub-end">{reminded ? t('debts.dueBadge', { date: formatDate(dueOn.get(person.id) ?? '', settings.locale) }) : ''}</span>
+        <span className={`cell-sub friend-status debt-${tone}`}>{statusText(tone)}</span>
+        <span className="cell-sub-end friend-reminder">{reminderOf(person, tone)}</span>
         <span className={`cell-amount debt-${tone}`}>{tone === 'even' ? '' : money(abs)}</span>
       </Row>
     )
   }
 
-  // A phone row: the name and what is owed, who owes whom under them. It opens to a labelled button for everything that can be done.
+  // A phone row: the name (a removed friend says so) and what is owed; who owes whom, in its colour, under the name. It opens to the facts and
+  // a button for everything that can be done.
   function tapRow(person: Person) {
     const { tone, abs } = balanceView(person.balance)
-    const reminded = dueIds.has(person.id) && tone !== 'even'
+    const reminder = reminderOf(person, tone)
+    const factTone = tone === 'owed' ? 'positive' : tone === 'owe' ? 'negative' : undefined
+    const facts: FactItem[] = [
+      { label: t('debts.colStatus'), value: statusText(tone), tone: factTone },
+      { label: t('debts.balance'), value: money(abs), tone: factTone },
+      { label: t('sync.field.reminder'), value: reminder },
+    ]
+    const actions: (PanelAction | false)[] = [
+      person.archived ? { label: t('debts.unarchive'), icon: 'archive', onClick: () => void bringBack(person) } : tone !== 'even' && { label: t('debts.settle'), icon: 'check', onClick: () => setSettling(person) },
+      { label: t('debts.ledger'), icon: 'play', to: friendLink(person) },
+      { label: t('common.rename'), icon: 'pencil', onClick: () => setEditing(person) },
+      !person.archived && { label: t('debts.archive'), icon: 'trash', danger: true, onClick: () => setDeleting(person) },
+    ]
     return (
       <TapRow
         key={person.id}
@@ -274,62 +289,60 @@ function DebtsView({ settings, now, tabs }: { settings: MoneySettings; now: Toda
         data-archived={person.archived || undefined}
         open={rows.isOpen(person.id)}
         onToggle={() => rows.toggle(person.id)}
-        name={
-          <>
-            {person.name}
-            {person.archived ? <span className="row-mark">{t('debts.removed')}</span> : null}
-          </>
-        }
+        name={<NameMark mark={person.archived ? <Badge variant="secondary">{t('debts.removed')}</Badge> : null}>{person.name}</NameMark>}
         amount={<span className={`cell-amount debt-${tone}`}>{tone === 'even' ? '' : money(abs)}</span>}
-        sub={
-          <span>
-            <span className={`debt-${tone}`}>{statusText(tone)}</span>
-            {reminded ? <span>{t('debts.dueBadge', { date: formatDate(dueOn.get(person.id) ?? '', settings.locale) })}</span> : null}
-          </span>
-        }
+        meta={<span className={`debt-${tone}`}>{statusText(tone)}</span>}
+        facts={facts}
       >
-        <div className="row-panel-actions">
-          {person.archived ? (
-            <Button variant="outline" onClick={() => void bringBack(person)}>
-              {t('debts.unarchive')}
-            </Button>
-          ) : tone !== 'even' ? (
-            <Button variant="outline" onClick={() => setSettling(person)}>
-              {t('debts.settle')}
-            </Button>
-          ) : null}
-          <Link to={friendLink(person)} className={buttonClass('outline')}>
-            {t('debts.ledger')}
-          </Link>
-          <Button variant="outline" onClick={() => setEditing(person)}>
-            <Icon name="pencil" className="btn-icon" />
-            {t('common.rename')}
-          </Button>
-          {person.archived ? null : (
-            <Button variant="outline" className="row-danger" onClick={() => setDeleting(person)}>
-              <Icon name="trash" className="btn-icon" />
-              {t('debts.archive')}
-            </Button>
-          )}
-        </div>
+        <PanelActions actions={actions} />
       </TapRow>
     )
   }
 
+  // What the top of the page says. A friend's page on a phone is a page of its own: the friend's name, where it stands, and a way back.
+  const friendPage = phone && personId !== undefined
+  const standing = friend ? balanceView(friend.balance) : null
+  const header = {
+    title: friendPage && friend ? friend.name : t('debts.title'),
+    back: friendPage ? '/app/debts' : undefined,
+    aside:
+      friendPage && standing ? (
+        standing.tone === 'even' ? (
+          <b>{t('debts.settledUp')}</b>
+        ) : (
+          <>
+            {statusText(standing.tone)} <b>{money(standing.abs)}</b>
+          </>
+        )
+      ) : undefined,
+    actions: [
+      { label: t('debts.lent'), icon: 'add', primary: true, shortcut: 'new' as const, onClick: () => setEntryKind('LENT') },
+      { label: t('debts.borrowed'), icon: 'download', onClick: () => setEntryKind('BORROWED') },
+    ],
+    more: [
+      // on a friend's page the one thing to do with the friend, as the list has it on their row
+      friendPage && friend && !friend.archived && standing?.tone !== 'even' && { label: t('debts.settle'), icon: 'check', onSelect: () => setSettling(friend) },
+      // A bill is split from a new expense: the phone scans a code, the desktop starts the split.
+      !phone && { label: t('split.add'), icon: 'transactions', onSelect: () => navigate('/app/transactions', { state: { split: true, ...(friend ? { friendId: friend.id, friendName: friend.name } : {}) } }) },
+      phone && { label: t('code.scanShort'), icon: 'qr', disabled: scanning, onSelect: () => void onScan() },
+      { label: t('code.paste'), icon: 'qr', onSelect: () => setTaking('') },
+      !friendPage && { label: t('debts.addFriend'), icon: 'account', onSelect: () => setAddingFriend(true) },
+      !friendPage && { label: due.length > 0 ? `${t('debts.notifications')} (${due.length})` : t('debts.notifications'), icon: 'bell', onSelect: () => setNotifying(true) },
+      !friendPage && {
+        kind: 'toggle' as const,
+        label: t('debts.showRemoved'),
+        checked: showRemoved,
+        onChange: (checked: boolean) => {
+          saveChoice('debts.removed', checked)
+          setShowRemoved(checked)
+        },
+      },
+    ],
+  }
+
   return (
     <section className="tx-page debts-page">
-      <PageHeader
-        title={t('debts.title')}
-        actions={[
-          { label: t('debts.lent'), icon: 'add', primary: true, shortcut: 'new', onClick: () => setEntryKind('LENT') },
-          { label: t('debts.borrowed'), onClick: () => setEntryKind('BORROWED') },
-          // The phone has scan in its place: four buttons on both. A bill is still split from a new expense.
-          phone
-            ? { label: t('code.scanShort'), icon: 'qr', disabled: scanning, onClick: () => void onScan() }
-            : { label: t('split.add'), onClick: () => navigate('/app/transactions', { state: { split: true, ...(friend ? { friendId: friend.id, friendName: friend.name } : {}) } }) },
-          { label: t('code.paste'), onClick: () => setTaking('') },
-        ]}
-      />
+      <PageHeader {...header} />
       {tabs}
       {scanning ? (
         <div className="scan-overlay" role="dialog" aria-label={t('code.scan')}>
@@ -425,30 +438,20 @@ function DebtsView({ settings, now, tabs }: { settings: MoneySettings; now: Toda
               {/* The phone shows a friend's history on its own, with a way back. */}
               {phone && personId ? null : (
                 <div className="debts-half">
-                  <div className="debts-bar">
-                    <Button variant="outline" onClick={() => setAddingFriend(true)}>
-                      {t('debts.addFriend')}
-                    </Button>
-                    <Button variant="outline" onClick={() => setNotifying(true)}>
-                      <Icon name="bell" className="btn-icon" />
-                      {due.length > 0 ? `${t('debts.notifications')} (${due.length})` : t('debts.notifications')}
-                    </Button>
-                    <label>
-                      <input
-                        type="checkbox"
-                        checked={showRemoved}
-                        onChange={(event) => {
-                          saveChoice('debts.removed', event.target.checked)
-                          setShowRemoved(event.target.checked)
-                        }}
-                      />
-                      {t('debts.showRemoved')}
-                    </label>
-                  </div>
                   {people.length === 0 ? <EmptyState text={t('debts.empty')} action={{ label: t('debts.addFriend'), onClick: () => setAddingFriend(true) }} /> : null}
-                  {people.length > 0 && phone ? <ul className="card-list">{people.map(tapRow)}</ul> : null}
+                  {people.length > 0 && phone ? <ListGroup>{people.map(tapRow)}</ListGroup> : null}
                   {people.length > 0 && !phone ? (
-                    <Table className="friends-table" heads={[t('common.name'), { label: t('debts.colStatus'), className: 'span-2' }, { label: t('debts.balance'), className: 'is-end' }, '']}>
+                    <Table
+                      className="friends-table"
+                      tidy
+                      heads={[
+                        t('common.name'),
+                        { label: t('debts.colStatus'), className: 'head-status' },
+                        { label: t('sync.field.reminder'), className: 'head-reminder' },
+                        { label: t('debts.balance'), className: 'is-end' },
+                        '',
+                      ]}
+                    >
                       {people.map(tableRow)}
                     </Table>
                   ) : null}
