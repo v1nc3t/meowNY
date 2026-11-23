@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { usePhoneMenu } from '../hooks/phoneMenu'
+import { usePageAdd } from '../hooks/quickAdd'
 import { useProfile } from '../hooks/profile'
 import { useT } from '../i18n/context'
 import type { ShortcutId } from '../keys/shortcuts'
@@ -75,7 +76,21 @@ export default function PageHeader({
   const actions = given.filter((action) => !!action)
   const more = moreGiven.filter((item) => !!item)
   const main = actions.find((action) => action.primary) ?? actions[0]
-  const shown = phone ? (main ? [main] : []) : actions
+  // Where a phone has the round add button, the main action is its first line instead of a second "+" up here.
+  const adds = usePageAdd()
+  const toFab = phone && adds.fab && main && !main.disabled ? main : null
+  const mainClick = useRef(main?.onClick)
+  useEffect(() => {
+    mainClick.current = main?.onClick
+  })
+  const fabLabel = toFab?.label
+  const setAdd = adds.set
+  useEffect(() => {
+    if (!fabLabel) return
+    setAdd({ label: fabLabel, onClick: () => mainClick.current?.() })
+    return () => setAdd(null)
+  }, [fabLabel, setAdd])
+  const shown = phone ? (main && !toFab ? [main] : []) : actions
   const folded: MoreItem[] = phone ? actions.filter((action) => action !== main).map((action) => ({ label: action.label, icon: action.icon, onSelect: action.onClick, disabled: action.disabled })) : []
   const items = [...folded, ...more]
 

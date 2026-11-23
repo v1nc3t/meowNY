@@ -7,6 +7,7 @@ import Toaster from '../components/Toaster'
 import { preloadAllWhenIdle } from '../pages'
 import { blocksSwipe, SwipeContext, type SwipeHandler } from '../hooks/swipe'
 import { PhoneMenuContext } from '../hooks/phoneMenu'
+import { PageAddContext, type PageAdd } from '../hooks/quickAdd'
 import { useDebtReminders } from '../hooks/useDebtReminders'
 import { useDueNotifications } from '../hooks/useDueNotifications'
 import { useProfile } from '../hooks/profile'
@@ -30,6 +31,10 @@ export default function AppLayout() {
   const menuId = useId()
   const menu = useMemo(() => ({ open: () => setMenuOpen(true), isOpen: menuOpen, id: menuId }), [menuOpen, menuId])
   const closeMenu = useCallback(() => setMenuOpen(false), [])
+  // The round add button, and the main action of the page shown, which it offers first (so a phone has one "+", not two).
+  const fab = phone && !NO_ADD.includes(pathname)
+  const [pageAdd, setPageAdd] = useState<PageAdd | null>(null)
+  const adds = useMemo(() => ({ fab, set: setPageAdd }), [fab])
 
   useEffect(() => {
     preloadAllWhenIdle()
@@ -76,6 +81,7 @@ export default function AppLayout() {
   return (
     <SwipeContext.Provider value={swipes}>
       <PhoneMenuContext.Provider value={menu}>
+        <PageAddContext.Provider value={adds}>
         <ShortcutsProvider onToggleSidebar={toggleSidebar} enabled={!phone}>
           <div className={shell}>
             <AppSidebar collapsed={collapsed} onToggle={toggleSidebar} />
@@ -86,11 +92,12 @@ export default function AppLayout() {
                 </Suspense>
               </main>
             </div>
-            {phone && !NO_ADD.includes(pathname) ? <QuickAdd /> : null}
+            {fab ? <QuickAdd pageAdd={pageAdd} /> : null}
           </div>
           {phone && menuOpen ? <PhoneMenu id={menuId} onClose={closeMenu} /> : null}
           <Toaster />
         </ShortcutsProvider>
+        </PageAddContext.Provider>
       </PhoneMenuContext.Provider>
     </SwipeContext.Provider>
   )
