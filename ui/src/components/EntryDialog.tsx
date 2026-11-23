@@ -326,7 +326,7 @@ function EntryForm({
               </>
             )}
           </form>
-          {entry.tab !== 'TRANSFER' && showDocuments ? <AttachArea attachments={attachments} /> : null}
+          {entry.tab !== 'TRANSFER' && showDocuments ? <AttachArea bare attachments={attachments} /> : null}
         </EntryTabs>
       </Modal>
       {addingCategory ? (

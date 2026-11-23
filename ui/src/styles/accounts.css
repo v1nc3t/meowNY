@@ -275,18 +275,6 @@ ul.card-list.loans-table > li.card-item[data-archived] {
   }
 }
 
-/* The transactions, with more than one account: one more column, the account, after the category. It goes when the rows become two
-   lines, where the category has the place. */
-.card-list.tx-list.has-account {
-  --cols: minmax(8rem, 1.5fr) minmax(6rem, 1fr) minmax(7rem, 1.1fr) 11ch 15ch 2ch var(--act);
-}
-
-@container (max-width: 40em) {
-  ul.card-list.tx-list.has-account .cell-account {
-    display: none;
-  }
-}
-
 /* The groups of the list: a small heading over each run of accounts (the ones with no group come last). Each run is a list of its own
    with the same columns, so the amounts line up from one to the next. A long name ends in an ellipsis; the whole of it is the title. */
 .acct-group {
@@ -421,13 +409,6 @@ ul.card-list.loans-table > li.card-item[data-archived] {
   flex-wrap: wrap;
 }
 
-/* Net worth on the dashboard: the number, and under it what it is made of. */
-.dash-worth {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-}
-
 /* "1 EUR = [ 5.00 ] RON" in the account dialog: the rate typed between the words it says. The words keep together; the field has the room
    that is left, and goes to a line of its own when that is too little (a narrow dialog). */
 .rate-sentence {
@@ -447,27 +428,4 @@ ul.card-list.loans-table > li.card-item[data-archived] {
   flex: 1 1 6rem;
   width: auto;
   min-width: 0;
-}
-
-/* What a transaction was in its account's own currency, small and quiet under the amount in the app's (a row of the transactions). It is
-   cut with an ellipsis rather than being wider than the amount's column, which is as wide as 16 characters of the row's size. */
-.cell-native {
-  display: block;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  font-size: 0.75rem;
-  font-weight: 400;
-  color: var(--muted-foreground);
-}
-
-/* A transfer between two currencies in one cell: "what left \2192 what arrived". On a line when there is room; the arrival under the amount
-   on a phone and where a row is two lines, so the names keep their room. */
-html.is-phone .cell-amount.is-pair > .pair-to {
-  display: block;
-}
-
-@container (max-width: 40em) {
-  ul.card-list.tx-transfers .cell-amount.is-pair > .pair-to {
-    display: block;
-  }
 }

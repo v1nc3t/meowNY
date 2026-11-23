@@ -5,10 +5,12 @@ import BillCodeModal from '../components/BillCodeModal'
 import ClipPreview from '../components/ClipPreview'
 import ConfirmModal from '../components/ConfirmModal'
 import EntryDialog, { type EntryInitial } from '../components/EntryDialog'
+import Facts, { type FactItem } from '../components/Facts'
 import Icon from '../components/NavIcon'
 import Pager from '../components/Pager'
+import PeriodNav from '../components/PeriodNav'
 import Pick, { PickOption } from '../components/Pick'
-import { DayGroups, IconAction, Row, Table, TapRow } from '../components/RowParts'
+import { DayGroups, IconAction, NameMark, PanelActions, Row, Table, TapRow } from '../components/RowParts'
 import SectionTabs from '../components/SectionTabs'
 import TransferModal from '../components/TransferModal'
 import Button from '../components/ui/Button'
@@ -358,91 +360,67 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
   const pageCount = listing && listing.limit > 0 ? Math.max(1, Math.ceil(listing.total / listing.limit)) : 0
   const currentPage = listing && listing.limit > 0 ? Math.floor(listing.offset / listing.limit) + 1 : 1
 
-  const atCurrentMonth = filters.mode === 'month' && filters.from === now.month && filters.to === now.month
-  // the button for the current period is off when the year or the month shown is that one (and there is none for a range of dates)
+  // the period that "current" goes back to: this year when a year is shown, this month otherwise
   const currentPeriod = filters.mode === 'year' ? now.date.slice(0, 4) : now.month
-  const atCurrentPeriod = filters.from === currentPeriod && filters.to === currentPeriod
-  // how many filters are not as they start (this month, every category): the phone's filters button counts them
-  const activeFilters = (atCurrentMonth ? 0 : 1) + (filters.categoryId && tab !== 'transfers' ? 1 : 0) + (filters.accountId ? 1 : 0)
+  // how many filters are on: a kind of period other than the month, a category, an account (the month shown is in the header)
+  const activeFilters = (filters.mode === 'month' ? 0 : 1) + (filters.categoryId && tab !== 'transfers' ? 1 : 0) + (filters.accountId ? 1 : 0)
   const categoryName = (transaction: Transaction) => categoryNames.get(transaction.categoryId) ?? (categoriesReady ? t('tx.deletedCategory') : '')
 
-  // The period: a year, a month of a year, or exact dates (from one day to another, the end never before the start).
-  const rangeControls = (
-    <div className="tx-range">
-      <Pick
-        label={t('tx.period')}
-        className="mode"
-        text={modeLabel(filters.mode)}
-        open={menu === 'range'}
-        onToggle={() => setMenu((current) => (current === 'range' ? null : 'range'))}
-        onClose={() => setMenu(null)}
-      >
-        {MODES.map((mode) => (
-          <PickOption
-            key={mode}
-            selected={filters.mode === mode}
-            onClick={() => {
-              onMode(mode)
-              setMenu(null)
-            }}
-          >
-            {modeLabel(mode)}
-          </PickOption>
-        ))}
-      </Pick>
-      {filters.mode === 'date' ? (
-        <>
-          <div className="tx-date-group">
-            <span>{t('tx.from')}</span>
-            <DatePicker
-              kind="date"
-              value={filters.from}
-              label={t('tx.from')}
-              today={now.date}
-              onChange={(from) => patchFilters(from > filters.to ? { from, to: from } : { from })}
-            />
-          </div>
-          <div className="tx-date-group">
-            <span>{t('tx.to')}</span>
-            <DatePicker
-              kind="date"
-              value={filters.to}
-              label={t('tx.to')}
-              today={now.date}
-              onChange={(to) => patchFilters(to < filters.from ? { from: to, to } : { to })}
-            />
-          </div>
-        </>
-      ) : (
-        <div className="month-nav">
-          <Button
-            variant="ghost"
-            size="icon"
-            aria-label={t(filters.mode === 'month' ? 'budgets.prevMonth' : 'dashboard.prevYear')}
-            {...tip('prev')}
-            onClick={() => stepPeriod(-1)}
-          >
-            &lsaquo;
-          </Button>
-          <DatePicker kind={filters.mode} value={filters.from} label={t('tx.period')} today={now.date} onChange={(value) => patchFilters({ from: value, to: value })} />
-          <Button
-            variant="ghost"
-            size="icon"
-            aria-label={t(filters.mode === 'month' ? 'budgets.nextMonth' : 'dashboard.nextYear')}
-            {...tip('next')}
-            onClick={() => stepPeriod(1)}
-          >
-            &rsaquo;
-          </Button>
-        </div>
-      )}
-      {filters.mode === 'date' ? null : (
-        <Button variant="outline" disabled={atCurrentPeriod} onClick={goCurrent} {...tip('today')}>
-          {t('common.current')}
-        </Button>
-      )}
-    </div>
+  // The period in the header: a month or a year to step through, or, for a range of dates, the dates (a button that opens the filters, where they are set).
+  const periodNav =
+    filters.mode === 'date' ? (
+      <Button variant="outline" className="tx-range-button" aria-expanded={filtersOpen} aria-controls={filtersOpen ? filtersId : undefined} onClick={() => setFiltersOpen((open) => !open)}>
+        {formatDate(filters.from, settings.locale)} – {formatDate(filters.to, settings.locale)}
+      </Button>
+    ) : (
+      <PeriodNav
+        keys
+        kind={filters.mode}
+        value={filters.from}
+        current={currentPeriod}
+        onChange={(value) => patchFilters({ from: value, to: value })}
+        prevLabel={t(filters.mode === 'month' ? 'budgets.prevMonth' : 'dashboard.prevYear')}
+        nextLabel={t(filters.mode === 'month' ? 'budgets.nextMonth' : 'dashboard.nextYear')}
+      />
+    )
+
+  // The kind of period: a year, a month of a year, or exact dates (from one day to another, the end never before the start).
+  const modePick = (
+    <Pick
+      label={t('tx.period')}
+      className="mode"
+      text={modeLabel(filters.mode)}
+      open={menu === 'range'}
+      onToggle={() => setMenu((current) => (current === 'range' ? null : 'range'))}
+      onClose={() => setMenu(null)}
+    >
+      {MODES.map((mode) => (
+        <PickOption
+          key={mode}
+          selected={filters.mode === mode}
+          onClick={() => {
+            onMode(mode)
+            setMenu(null)
+          }}
+        >
+          {modeLabel(mode)}
+        </PickOption>
+      ))}
+    </Pick>
   )
+  const rangeDates =
+    filters.mode === 'date' ? (
+      <>
+        <div className="tx-date-group">
+          <span>{t('tx.from')}</span>
+          <DatePicker kind="date" value={filters.from} label={t('tx.from')} today={now.date} onChange={(from) => patchFilters(from > filters.to ? { from, to: from } : { from })} />
+        </div>
+        <div className="tx-date-group">
+          <span>{t('tx.to')}</span>
+          <DatePicker kind="date" value={filters.to} label={t('tx.to')} today={now.date} onChange={(to) => patchFilters(to < filters.from ? { from: to, to } : { to })} />
+        </div>
+      </>
+    ) : null
 
   const categoryPick = (
     <Pick
@@ -524,51 +502,74 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
     ) : null
 
   /**
-   * What a transaction was in the account's own currency, when its account is in another one (the app's amount is the one in the row): small and quiet,
-   * under the amount on the computer and in the small print of the row on the phone. Null for a transaction in an account in the app's currency; a native
-   * amount that stayed on a row that moved there means nothing and is not shown.
+   * What a transaction was in the account's own currency, when its account is in another one (the app's amount is the one in the row): the code of that
+   * currency and the amount, for the details. Null for a transaction in an account in the app's currency; a native amount that stayed on a row that moved
+   * there means nothing and is not shown.
    */
-  function nativeText(transaction: Transaction): string | null {
+  function nativeOf(transaction: Transaction): { code: string; text: string } | null {
     const account = transaction.nativeAmount === null ? null : accountById(accounts, transaction.accountId)
-    return transaction.nativeAmount !== null && account?.foreign ? moneyIn(account.currency, settings.locale)(transaction.nativeAmount) : null
+    return transaction.nativeAmount !== null && account?.foreign ? { code: account.currency.toUpperCase(), text: moneyIn(account.currency, settings.locale)(transaction.nativeAmount) } : null
   }
 
-  /** What the person's share was: income in green with a plus, spending in red with a minus, and nothing at all plain. `withNative` adds what it was in the account's currency. */
-  function amount(transaction: Transaction, withNative = true) {
+  /** What the person's share was: income in green with a plus, spending in red with a minus, and nothing at all plain. */
+  function amount(transaction: Transaction) {
     const text = formatMoney(transaction.myShare, settings.currency, settings.locale)
-    const native = withNative ? nativeText(transaction) : null
-    const small = native ? <span className="cell-native">{native}</span> : null
-    if (Number(transaction.myShare) === 0) {
-      return (
-        <span className="cell-amount">
-          {text}
-          {small}
-        </span>
-      )
-    }
+    if (Number(transaction.myShare) === 0) return <span className="cell-amount">{text}</span>
     const income = incomeCategories.has(transaction.categoryId)
+    return <span className={income ? 'cell-amount is-income' : 'cell-amount is-expense'}>{income ? `+${text}` : `-${text}`}</span>
+  }
+
+  /** The small icons after a name: a bill that is shared, documents attached. Marks are no buttons, so they may have a title. */
+  function marks(transaction: Transaction, count: number): ReactNode {
+    const shared = isShared(transaction)
+    if (!shared && count === 0) return null
     return (
-      <span className={income ? 'cell-amount is-income' : 'cell-amount is-expense'}>
-        {income ? `+${text}` : `-${text}`}
-        {small}
+      <span className="row-mark-icon tx-marks">
+        {shared ? (
+          <span role="img" aria-label={t('tx.shared')} title={t('tx.shared')}>
+            <Icon name="qr" className="mark-icon" />
+          </span>
+        ) : null}
+        {count > 0 ? (
+          <span role="img" aria-label={t('docs.clip', { count })} title={t('docs.clip', { count })}>
+            <Icon name="clip" className="mark-icon" />
+          </span>
+        ) : null}
       </span>
     )
   }
 
-  /** What a row opens to: the split, with a code for each friend on it (not for the one who paid), the description and the documents (`count` of them). */
-  function details(transaction: Transaction, count: number): ReactNode {
+  /**
+   * The label and value pairs of a transaction's details. `all` (the phone) has the ones that a desktop row shows in its columns too: the account (with
+   * more than one), the category and the date.
+   */
+  function factsOf(transaction: Transaction, all: boolean): FactItem[] {
+    const native = nativeOf(transaction)
+    const shared = isShared(transaction)
+    const facts: (FactItem | false)[] = [
+      all && multi && { label: t('accounts.account'), value: accountNames.get(transaction.accountId) ?? '' },
+      all && { label: t('common.category'), value: categoryName(transaction) },
+      all && { label: t('report.date'), value: formatDate(transaction.paymentDate, settings.locale) },
+      native !== null && { label: t('entry.amountIn', { code: native.code }), value: native.text },
+      shared && { label: t('split.paidBy'), value: transaction.paidBy?.name ?? t('split.you') },
+      shared && { label: t('tx.billTotal'), value: formatMoney(transaction.amount, settings.currency, settings.locale) },
+    ]
+    return facts.filter((fact) => fact !== false)
+  }
+
+  /** What a row opens to besides its facts: the description, the split with a code for each friend on it (not for the one who paid), the documents (`count` of them). */
+  function sections(transaction: Transaction, count: number): ReactNode {
     return (
       <>
+        {transaction.description?.trim() ? (
+          <section className="detail-section">
+            <p className="detail-title">{t('common.description')}</p>
+            <p className="detail-text">{transaction.description}</p>
+          </section>
+        ) : null}
         {isShared(transaction) ? (
           <section className="detail-section">
-            <div className="split-head">
-              <p className="detail-title">{t('split.section')}</p>
-              <p className="split-paid">
-                {transaction.paidBy
-                  ? t('split.paidByFriend', { name: transaction.paidBy.name, amount: formatMoney(transaction.amount, settings.currency, settings.locale) })
-                  : t('split.paid', { amount: formatMoney(transaction.amount, settings.currency, settings.locale) })}
-              </p>
-            </div>
+            <p className="detail-title">{t('split.section')}</p>
             <table className="split-table">
               <tbody>
                 <tr className="is-you">
@@ -598,12 +599,6 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
             </table>
           </section>
         ) : null}
-        {transaction.description?.trim() ? (
-          <section className="detail-section">
-            <p className="detail-title">{t('common.description')}</p>
-            <p className="detail-text">{transaction.description}</p>
-          </section>
-        ) : null}
         {count > 0 ? (
           <section className="detail-section">
             <p className="detail-title">{t('docs.title')}</p>
@@ -614,11 +609,12 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
     )
   }
 
-  // A desktop row, a ledger: name, category, account (with more than one), date, then the amount at the right, an icon if it is shared, then edit,
-  // delete and (when there is more to show) the chevron. Narrower than 40em the category and the date go under the name and the amount (primitives.css).
+  // A desktop row, a ledger: name (with its marks), category, account (with more than one), date, then the amount at the right, then edit, delete and
+  // (when there is more to show) the chevron. Every cell is one line; with less room the account, then the date, then the category go (money.css).
   function tableRow(transaction: Transaction) {
     const count = clips[transaction.id] ?? 0
-    const more = isShared(transaction) || Boolean(transaction.description?.trim()) || count > 0
+    const facts = factsOf(transaction, false)
+    const more = facts.length > 0 || Boolean(transaction.description?.trim()) || count > 0
     return (
       <Row
         key={transaction.id}
@@ -631,14 +627,22 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
             <IconAction icon="trash" label={t('common.delete')} danger onClick={() => setDeleting(transaction)} />
           </>
         }
-        panel={more ? details(transaction, count) : null}
+        panel={
+          more ? (
+            <>
+              <Facts items={facts} className="tx-facts" />
+              {sections(transaction, count)}
+            </>
+          ) : null
+        }
       >
         <div className="cell-name">
           <span className="card-name" title={transaction.name}>
             {transaction.name}
           </span>
+          {marks(transaction, count)}
         </div>
-        <span className="cell-sub" title={categoryName(transaction)}>
+        <span className="cell-sub tx-cat" title={categoryName(transaction)}>
           {categoryName(transaction)}
         </span>
         {multi ? (
@@ -648,20 +652,12 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
         ) : null}
         <span className="cell-sub-end tx-date">{formatDate(transaction.paymentDate, settings.locale)}</span>
         {amount(transaction)}
-        <span className="cell-mark">
-          {isShared(transaction) ? (
-            <span className="row-mark-icon" title={t('tx.shared')}>
-              <Icon name="qr" className="mark-icon" />
-              <span className="sr-only">{t('tx.shared')}</span>
-            </span>
-          ) : null}
-        </span>
       </Row>
     )
   }
 
-  // A phone row: one button with the name and amount, the category (and "shared") under them. It opens to the details, the description
-  // and the documents, and to labelled buttons for everything that can be done with the transaction.
+  // A phone row: the name (with its marks) and the amount, the category under the name. It opens to the facts, the description, the split and the
+  // documents, and to buttons for everything that can be done with the transaction.
   function tapRow(transaction: Transaction) {
     const count = clips[transaction.id] ?? 0
     return (
@@ -671,55 +667,42 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
         item={`transaction:${transaction.id}`}
         open={rows.isOpen(transaction.id)}
         onToggle={() => rows.toggle(transaction.id)}
-        name={transaction.name}
-        amount={amount(transaction, false)}
-        sub={
-          <>
-            <span>{categoryName(transaction)}</span>
-            {multi ? <span>{accountNames.get(transaction.accountId) ?? ''}</span> : null}
-            {nativeText(transaction) ? <span>{nativeText(transaction)}</span> : null}
-            {isShared(transaction) ? <span>{t('tx.shared')}</span> : null}
-          </>
-        }
+        name={<NameMark mark={marks(transaction, count)}>{transaction.name}</NameMark>}
+        amount={amount(transaction)}
+        meta={categoryName(transaction)}
+        facts={factsOf(transaction, true)}
       >
-        {details(transaction, count)}
-        <div className="row-panel-actions">
-          <Button variant="outline" onClick={() => openEdit(transaction)}>
-            <Icon name="pencil" className="btn-icon" />
-            {t('common.edit')}
-          </Button>
-          <Button variant="outline" className="row-danger" onClick={() => setDeleting(transaction)}>
-            <Icon name="trash" className="btn-icon" />
-            {t('common.delete')}
-          </Button>
-        </div>
+        {sections(transaction, count)}
+        <PanelActions
+          actions={[
+            { label: t('common.edit'), icon: 'pencil', onClick: () => openEdit(transaction) },
+            { label: t('common.delete'), icon: 'trash', danger: true, onClick: () => setDeleting(transaction) },
+          ]}
+        />
       </TapRow>
     )
   }
 
+  /** The name of a transfer, "from → to". */
   const transferName = (transfer: Transfer) => `${accountNames.get(transfer.fromAccountId) ?? ''} → ${accountNames.get(transfer.toAccountId) ?? ''}`
   /**
    * What was moved: neutral, it is neither income nor spending. Each side in its own account's currency (the app's for an account in the app's
-   * currency): one amount, or "what left → what arrived" when the two sides are in different currencies.
+   * currency): what left, and, when the two sides are in different currencies, what arrived (`arrived`, with the code of that currency).
    */
-  const transferAmount = (transfer: Transfer) => {
+  function transferSides(transfer: Transfer): { sent: string; arrived: { code: string; text: string } | null } {
     const from = accountById(accounts, transfer.fromAccountId)
     const to = accountById(accounts, transfer.toAccountId)
     const side = (account: typeof from, value: string) => (account?.foreign ? moneyIn(account.currency, settings.locale)(value) : formatMoney(value, settings.currency, settings.locale))
-    if (transfer.toAmount === null || from === null || to === null || currencyKey(from) === currencyKey(to)) {
-      return <span className="cell-amount">{side(from, transfer.amount)}</span>
-    }
-    return (
-      <span className="cell-amount is-pair">
-        <span>{side(from, transfer.amount)}</span> <span className="pair-to">{`→ ${side(to, transfer.toAmount)}`}</span>
-      </span>
-    )
+    const sent = side(from, transfer.amount)
+    if (transfer.toAmount === null || from === null || to === null || currencyKey(from) === currencyKey(to)) return { sent, arrived: null }
+    return { sent, arrived: { code: to.currency.toUpperCase(), text: side(to, transfer.toAmount) } }
   }
 
-  // A desktop row of the transfers: the day, from, to, the amount, the note, then edit and delete.
+  // A desktop row of the transfers: the day, from, to, the amount ("what left → what arrived" between two currencies), the note, then edit and delete.
   function transferRow(transfer: Transfer) {
     const from = accountNames.get(transfer.fromAccountId) ?? ''
     const to = accountNames.get(transfer.toAccountId) ?? ''
+    const { sent, arrived } = transferSides(transfer)
     return (
       <Row
         key={transfer.id}
@@ -732,19 +715,17 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
         }
       >
         <span className="cell-sub xfer-date">{formatDate(transfer.date, settings.locale)}</span>
-        <div className="xfer-route">
-          <div className="cell-name xfer-from">
-            <span className="card-name" title={from}>
-              {from}
-            </span>
-          </div>
-          <div className="cell-name xfer-to">
-            <span className="card-name" title={to}>
-              {to}
-            </span>
-          </div>
+        <div className="cell-name xfer-from">
+          <span className="card-name" title={from}>
+            {from}
+          </span>
         </div>
-        {transferAmount(transfer)}
+        <div className="cell-name xfer-to">
+          <span className="card-name" title={to}>
+            {to}
+          </span>
+        </div>
+        <span className="cell-amount">{arrived ? `${sent} → ${arrived.text}` : sent}</span>
         <span className="cell-sub xfer-note" title={transfer.note ?? undefined}>
           {transfer.note ?? ''}
         </span>
@@ -752,9 +733,17 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
     )
   }
 
-  // A phone row of the transfers: "from → to" and the amount, the day and the note under them. It opens to edit and delete.
+  // A phone row of the transfers: "from → to" and the amount that left, the note under the name (the day is the heading). It opens to the two
+  // accounts, what arrived, the day, and edit and delete.
   function transferTapRow(transfer: Transfer) {
     const key = `transfer-${transfer.id}`
+    const { sent, arrived } = transferSides(transfer)
+    const facts: (FactItem | false)[] = [
+      { label: t('transfers.from'), value: accountNames.get(transfer.fromAccountId) ?? '' },
+      { label: t('transfers.to'), value: accountNames.get(transfer.toAccountId) ?? '' },
+      arrived !== null && { label: t('transfers.arrives', { code: arrived.code }), value: arrived.text },
+      { label: t('report.date'), value: formatDate(transfer.date, settings.locale) },
+    ]
     return (
       <TapRow
         key={key}
@@ -763,24 +752,16 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
         open={rows.isOpen(key)}
         onToggle={() => rows.toggle(key)}
         name={transferName(transfer)}
-        amount={transferAmount(transfer)}
-        sub={
-          <>
-            <span>{formatDate(transfer.date, settings.locale)}</span>
-            {transfer.note ? <span>{transfer.note}</span> : null}
-          </>
-        }
+        amount={<span className="cell-amount">{sent}</span>}
+        meta={transfer.note || undefined}
+        facts={facts.filter((fact) => fact !== false)}
       >
-        <div className="row-panel-actions">
-          <Button variant="outline" onClick={() => setEditingTransfer(transfer)}>
-            <Icon name="pencil" className="btn-icon" />
-            {t('common.edit')}
-          </Button>
-          <Button variant="outline" className="row-danger" onClick={() => setDeletingTransfer(transfer)}>
-            <Icon name="trash" className="btn-icon" />
-            {t('common.delete')}
-          </Button>
-        </div>
+        <PanelActions
+          actions={[
+            { label: t('common.edit'), icon: 'pencil', onClick: () => setEditingTransfer(transfer) },
+            { label: t('common.delete'), icon: 'trash', danger: true, onClick: () => setDeletingTransfer(transfer) },
+          ]}
+        />
       </TapRow>
     )
   }
@@ -788,20 +769,45 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
   const emptyText = tab === 'expenses' ? t('tx.emptyExpenses') : tab === 'income' ? t('tx.emptyIncome') : t('tx.empty')
   const showTransfers = tab === 'transfers'
 
+  /** What came in, what went out and what is left of the two, each with its word: a row of columns under the table, a strip over the list on a phone. */
+  const sums = totals ? (
+    <span className="tx-sums">
+      <span className="tx-sum">
+        <span className="tx-sum-label">{t('common.income')}</span>
+        <span className="is-income">+{formatMoney(totals.income, settings.currency, settings.locale)}</span>
+      </span>
+      <span className="tx-sum">
+        <span className="tx-sum-label">{t('common.expense')}</span>
+        <span className="is-expense">-{formatMoney(totals.expense, settings.currency, settings.locale)}</span>
+      </span>
+      <span className="tx-sum">
+        <span className="tx-sum-label">{t('tx.net')}</span>
+        <b className={totals.net.startsWith('-') ? 'is-expense' : 'is-income'}>
+          {totals.net.startsWith('-') ? '-' : '+'}
+          {formatMoney(totals.net.replace('-', ''), settings.currency, settings.locale)}
+        </b>
+      </span>
+    </span>
+  ) : null
+
   return (
     <section className="tx-page">
       <PageHeader
         title={t('tx.title')}
         // The phone has the round add button for this.
         actions={[!phone && { label: t('tx.add'), icon: 'add', primary: true, shortcut: 'new', onClick: () => openAdd() }]}
-      />
+      >
+        {periodNav}
+      </PageHeader>
       <SectionTabs label={t('tx.title')} value={tab} onChange={onTab} tabs={txTabs(multi).map((id) => ({ id, label: t(TX_TAB_LABEL[id]) }))} />
-      <div className="toolbar wide tx-bar filter-bar">
+      <div className="tx-top wide">
         {showTransfers ? null : (
-          <label className="grow" {...tip('search')}>
-            {t('common.search')}
+          <label className="tx-search" {...tip('search')}>
+            <span className="sr-only">{t('common.search')}</span>
+            <Icon name="search" className="btn-icon tx-search-icon" />
             <input
               ref={searchRef}
+              placeholder={t('common.search')}
               onKeyDown={(event) => {
                 if (event.key === 'Escape') event.currentTarget.blur()
               }}
@@ -812,39 +818,31 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
             />
           </label>
         )}
-        {phone ? (
-          <>
-            <Button
-              variant="outline"
-              className="filter-toggle"
-              aria-expanded={filtersOpen}
-              aria-controls={filtersOpen ? filtersId : undefined}
-              aria-label={activeFilters > 0 ? t('tx.filtersCount', { count: activeFilters }) : undefined}
-              onClick={() => setFiltersOpen((open) => !open)}
-            >
-              <Icon name="filter" className="btn-icon" />
-              {t('tx.filters')}
-              {activeFilters > 0 ? (
-                <span className="count-badge" aria-hidden="true">
-                  {activeFilters}
-                </span>
-              ) : null}
-            </Button>
-            {filtersOpen ? (
-              <div className="filter-panel" id={filtersId}>
-                {showTransfers ? null : categoryPick}
-                {accountPick}
-                {rangeControls}
-              </div>
-            ) : null}
-          </>
-        ) : (
-          <>
+        <Button
+          variant="outline"
+          size="icon"
+          className="tx-filter-button"
+          title={t('tx.filters')}
+          aria-expanded={filtersOpen}
+          aria-controls={filtersOpen ? filtersId : undefined}
+          aria-label={activeFilters > 0 ? t('tx.filtersCount', { count: activeFilters }) : t('tx.filters')}
+          onClick={() => setFiltersOpen((open) => !open)}
+        >
+          <Icon name="filter" className="btn-icon" />
+          {activeFilters > 0 ? (
+            <span className="count-badge" aria-hidden="true">
+              {activeFilters}
+            </span>
+          ) : null}
+        </Button>
+        {filtersOpen ? (
+          <div className="tx-filters" id={filtersId}>
             {showTransfers ? null : categoryPick}
             {accountPick}
-            {rangeControls}
-          </>
-        )}
+            {modePick}
+            {rangeDates}
+          </div>
+        ) : null}
       </div>
       {adding || editing ? (
         <EntryDialog
@@ -900,11 +898,21 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
             {transferPage.transfers.length === 0 ? (
               <EmptyState text={t('tx.emptyTransfers')} />
             ) : phone ? (
-              <ul className="card-list">{transferPage.transfers.map(transferTapRow)}</ul>
+              <DayGroups rows={transferPage.transfers} dateOf={(transfer) => transfer.date} locale={settings.locale} today={now.date}>
+                {transferTapRow}
+              </DayGroups>
             ) : (
               <Table
-                className="tx-transfers"
-                heads={[t('sync.field.date'), t('transfers.from'), t('transfers.to'), { label: t('tx.amount'), className: 'is-end' }, t('debts.note'), '']}
+                tidy
+                className="xfer-list"
+                heads={[
+                  { label: t('sync.field.date'), className: 'xfer-date' },
+                  t('transfers.from'),
+                  t('transfers.to'),
+                  { label: t('tx.amount'), className: 'is-end' },
+                  { label: t('debts.note'), className: 'xfer-note' },
+                  '',
+                ]}
               >
                 {transferPage.transfers.map(transferRow)}
               </Table>
@@ -920,19 +928,22 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
             {page.transactions.length === 0 ? (
               <EmptyState text={emptyText} />
             ) : phone ? (
-              <DayGroups rows={page.transactions} dateOf={(transaction) => transaction.paymentDate} locale={settings.locale} today={now.date} className="tx-list">
-                {tapRow}
-              </DayGroups>
+              <>
+                {sums ? <div className="tx-total is-strip">{sums}</div> : null}
+                <DayGroups rows={page.transactions} dateOf={(transaction) => transaction.paymentDate} locale={settings.locale} today={now.date}>
+                  {tapRow}
+                </DayGroups>
+              </>
             ) : (
               <Table
+                tidy
                 className={multi ? 'tx-list has-account' : 'tx-list'}
                 heads={[
                   t('common.name'),
-                  t('common.category'),
+                  { label: t('common.category'), className: 'tx-cat' },
                   ...(multi ? [{ label: t('accounts.account'), className: 'cell-account' }] : []),
-                  t('sync.field.date'),
+                  { label: t('sync.field.date'), className: 'tx-date' },
                   { label: t('tx.amount'), className: 'is-end' },
-                  '',
                   '',
                 ]}
                 opens
@@ -941,14 +952,7 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
                 {totals ? (
                   <li className="card-item tx-total">
                     <span className="cell-name">{t('tx.totalRow', { count: totals.count })}</span>
-                    <span className="tx-total-figures">
-                      <span className="is-income">+{formatMoney(totals.income, settings.currency, settings.locale)}</span>
-                      <span className="is-expense">-{formatMoney(totals.expense, settings.currency, settings.locale)}</span>
-                      <b className={totals.net.startsWith('-') ? 'is-expense' : 'is-income'}>
-                        {totals.net.startsWith('-') ? '-' : '+'}
-                        {formatMoney(totals.net.replace('-', ''), settings.currency, settings.locale)}
-                      </b>
-                    </span>
+                    {sums}
                   </li>
                 ) : null}
               </Table>

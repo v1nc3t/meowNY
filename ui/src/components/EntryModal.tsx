@@ -175,7 +175,7 @@ export default function EntryModal({
             </>
           ) : null}
         </form>
-        <AttachArea attachments={attachments} />
+        <AttachArea bare attachments={attachments} />
       </Modal>
       {addingFriend ? (
         <FriendNameModal

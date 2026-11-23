@@ -5,6 +5,7 @@ import { errorText } from '../api/invoke'
 import { monthNames, shiftMonth } from '../api/months'
 import { accounts as accountsApi, type AccountsSummary } from '../api/accounts'
 import { stashes as stashesApi, type Stash, type Summary as StashSummary } from '../api/stashes'
+import Facts from '../components/Facts'
 import PageHeader from '../components/PageHeader'
 import { StashMini } from '../components/StashParts'
 import YearNav from '../components/YearNav'
@@ -179,7 +180,9 @@ function DashboardView({ settings, now }: { settings: MoneySettings; now: Today 
               <Stat label={t('dashboard.savings')} value={point.savings} before={previous?.savings} good="up" settings={settings} />
               <div className="dash-stat">
                 <span className="dash-stat-label">{t('dashboard.savingsRate')}</span>
-                <span className="dash-stat-value">{savingsRateText(point.savingsRate, settings.locale)}</span>
+                <span className="dash-stat-line">
+                  <span className="dash-stat-value">{savingsRateText(point.savingsRate, settings.locale)}</span>
+                </span>
                 <Bar percent={point.savingsRate ?? 0} />
               </div>
             </div>
@@ -195,26 +198,16 @@ function DashboardView({ settings, now }: { settings: MoneySettings; now: Today 
                       <Link to="/app/accounts">{t('accounts.netWorth')}</Link>
                     </CardTitle>
                   </CardHeader>
-                  <CardContent className="dash-worth">
-                    <span className="dash-stat-value">{formatMoney(worth.netWorth, settings.currency, settings.locale)}</span>
-                    <div className="dash-rec-sum">
-                      <span>
-                        <span className="dash-stat-label">{t('accounts.inAccounts')}</span>
-                        <b>{formatMoney(worth.inAccounts, settings.currency, settings.locale)}</b>
-                      </span>
-                      {toMinor(worth.debts) ? (
-                        <span>
-                          <span className="dash-stat-label">{t('loans.title')}</span>
-                          <b>{formatMoney(worth.debts, settings.currency, settings.locale)}</b>
-                        </span>
-                      ) : null}
-                      {toMinor(worth.friends) ? (
-                        <span>
-                          <span className="dash-stat-label">{t('accounts.friends')}</span>
-                          <b>{formatMoney(worth.friends, settings.currency, settings.locale)}</b>
-                        </span>
-                      ) : null}
-                    </div>
+                  <CardContent>
+                    <Facts
+                      className="dash-facts is-sum"
+                      items={[
+                        { label: t('accounts.inAccounts'), value: formatMoney(worth.inAccounts, settings.currency, settings.locale) },
+                        toMinor(worth.debts) ? { label: t('loans.title'), value: formatMoney(worth.debts, settings.currency, settings.locale) } : null,
+                        toMinor(worth.friends) ? { label: t('accounts.friends'), value: formatMoney(worth.friends, settings.currency, settings.locale) } : null,
+                        { label: t('accounts.netWorth'), value: <b>{formatMoney(worth.netWorth, settings.currency, settings.locale)}</b> },
+                      ]}
+                    />
                   </CardContent>
                 </Card>
               ) : null}
@@ -227,10 +220,13 @@ function DashboardView({ settings, now }: { settings: MoneySettings; now: Today 
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="dash-stashes">
-                    <span className="dash-stat-value">{formatMoney(stashed.summary.saved, settings.currency, settings.locale)}</span>
-                    <span className="dash-stat-label">
-                      {t('stashes.total')} · {t('stashes.dashboard', { reached: stashed.summary.reached, count: stashed.summary.stashes })}
-                    </span>
+                    <Facts
+                      className="dash-facts"
+                      items={[
+                        { label: t('stashes.total'), value: <b>{formatMoney(stashed.summary.saved, settings.currency, settings.locale)}</b> },
+                        { label: t('stashes.reached'), value: `${stashed.summary.reached} / ${stashed.summary.stashes}` },
+                      ]}
+                    />
                     {stashed.first.map((stash) => (
                       <StashMini key={stash.id} stash={stash} locale={settings.locale} />
                     ))}
@@ -257,9 +253,6 @@ function DashboardView({ settings, now }: { settings: MoneySettings; now: Today 
                   <CardTitle>
                     <Link to="/app/recurring">{t('nav.recurring')}</Link>
                   </CardTitle>
-                  <CardAction>
-                    <span className="dash-stat-label">{t('dashboard.perMonth')}</span>
-                  </CardAction>
                 </CardHeader>
                 <CardContent>
                   <RecurringTable commitments={data.commitments} paid={data.paid} income={point.income} settings={settings} />
@@ -279,11 +272,15 @@ function DashboardView({ settings, now }: { settings: MoneySettings; now: Today 
                       <div className="dash-stats">
                         <div className="dash-stat">
                           <span className="dash-stat-label">{t('debts.owedToYou')}</span>
-                          <span className="dash-stat-value">{formatMoney(owed.owedToYou, settings.currency, settings.locale)}</span>
+                          <span className="dash-stat-line">
+                            <span className="dash-stat-value">{formatMoney(owed.owedToYou, settings.currency, settings.locale)}</span>
+                          </span>
                         </div>
                         <div className="dash-stat">
                           <span className="dash-stat-label">{t('debts.youOwe')}</span>
-                          <span className="dash-stat-value">{formatMoney(owed.youOwe, settings.currency, settings.locale)}</span>
+                          <span className="dash-stat-line">
+                            <span className="dash-stat-value">{formatMoney(owed.youOwe, settings.currency, settings.locale)}</span>
+                          </span>
                         </div>
                       </div>
                     )}
@@ -311,18 +308,17 @@ function DashboardView({ settings, now }: { settings: MoneySettings; now: Today 
   )
 }
 
-type FirstStep = { picture: PictureName; title: MessageKey; text: MessageKey; to: string; state?: object; desktopOnly?: boolean }
+type FirstStep = { picture: PictureName; title: MessageKey; to: string; state?: object; desktopOnly?: boolean }
 
 /**
  * The ways to start, each a picture and a link to the page that does it. The transaction form (and on a phone the friend form) opens
  * at once.
  */
 const FIRST_STEPS: FirstStep[] = [
-  { picture: 'spend', title: 'dashboard.firstAdd', text: 'dashboard.firstAddText', to: '/app/transactions', state: { add: true } },
-  { picture: 'budget', title: 'dashboard.firstBudget', text: 'dashboard.firstBudgetText', to: '/app/categories' },
-  { picture: 'share', title: 'dashboard.firstFriend', text: 'dashboard.firstFriendText', to: '/app/debts', state: { addFriend: true } },
-  { picture: 'sync', title: 'dashboard.firstPhone', text: 'dashboard.firstPhoneText', to: '/app/settings?section=phone',
-    desktopOnly: true },
+  { picture: 'spend', title: 'dashboard.firstAdd', to: '/app/transactions', state: { add: true } },
+  { picture: 'budget', title: 'dashboard.firstBudget', to: '/app/categories' },
+  { picture: 'share', title: 'dashboard.firstFriend', to: '/app/debts', state: { addFriend: true } },
+  { picture: 'sync', title: 'dashboard.firstPhone', to: '/app/settings?section=phone', desktopOnly: true },
 ]
 
 /** For someone who has recorded nothing yet: what to do first. It goes once there is a transaction. */
@@ -340,7 +336,6 @@ function FirstSteps() {
               <Illustration name={step.picture} scale={3} />
               <span className="first-step-text">
                 <b>{t(step.title)}</b>
-                <span>{t(step.text)}</span>
               </span>
             </Link>
           </li>
@@ -369,12 +364,14 @@ function Stat({
   return (
     <div className="dash-stat">
       <span className="dash-stat-label">{label}</span>
-      <span className="dash-stat-value">{formatMoney(value, settings.currency, settings.locale)}</span>
-      {change === null ? null : (
-        <span className={`dash-delta${tone}`}>
-          {change > 0 ? '▲' : change < 0 ? '▼' : ''} {formatPercent(Math.abs(Math.round(change * 10) / 10), settings.locale)}
-        </span>
-      )}
+      <span className="dash-stat-line">
+        <span className="dash-stat-value">{formatMoney(value, settings.currency, settings.locale)}</span>
+        {change === null ? null : (
+          <span className={`dash-delta${tone}`}>
+            {change > 0 ? '▲' : change < 0 ? '▼' : ''} {formatPercent(Math.abs(Math.round(change * 10) / 10), settings.locale)}
+          </span>
+        )}
+      </span>
     </div>
   )
 }
@@ -475,15 +472,21 @@ function YearCharts({ year, month, onPick, settings }: { year: YearPoint[]; mont
     <div className="dash-year" ref={ref} {...slider}>
       {blank ? <p className="dash-empty">{t('dashboard.emptyYear')}</p> : null}
       <div className={blank ? 'year-readout is-blank' : 'year-readout'}>
-        <span className="year-month">{p ? names[shown] : ''}</span>
+        <span className="year-month">
+          <span className="year-label">{month.slice(0, 4)}</span>
+          <b>{p ? names[shown] : ''}</b>
+        </span>
         <span className="year-key key-income">
-          {t('common.income')} <b>{p ? money(p.income) : '-'}</b>
+          <span className="year-label">{t('common.income')}</span>
+          <b>{p ? money(p.income) : '-'}</b>
         </span>
         <span className="year-key key-expense">
-          {t('common.expense')} <b>{p ? money(p.expense) : '-'}</b>
+          <span className="year-label">{t('common.expense')}</span>
+          <b>{p ? money(p.expense) : '-'}</b>
         </span>
         <span className="year-key key-savings">
-          {t('dashboard.savings')} <b>{p ? money(p.savings) : '-'}</b>
+          <span className="year-label">{t('dashboard.savings')}</span>
+          <b>{p ? money(p.savings) : '-'}</b>
         </span>
       </div>
       {width > 0 && !blank ? (
@@ -625,7 +628,7 @@ function BudgetBars({ bva, settings }: { bva: BudgetVsActual; settings: MoneySet
       rows: [
         ...bva.totals
           .filter((o) => o.type === type && o.budgeted !== null)
-          .map((o) => ({ key: `total-${type}`, name: t('budgets.budget'), budgeted: o.budgeted, actual: o.actual, pct: usedPercent(o.actual, o.budgeted), total: true })),
+          .map((o) => ({ key: `total-${type}`, name: t('budgets.total'), budgeted: o.budgeted, actual: o.actual, pct: usedPercent(o.actual, o.budgeted), total: true })),
         ...bva.categories
           .filter((c) => c.type === type && (c.budgeted !== null || toMinor(c.actual) !== 0n))
           .map((c) => ({ key: String(c.categoryId), name: c.name, budgeted: c.budgeted, actual: c.actual, pct: c.pctUsed, total: false })),
@@ -642,23 +645,26 @@ function BudgetBars({ bva, settings }: { bva: BudgetVsActual; settings: MoneySet
             {group.type === 'INCOME' ? <Link to="/app/categories?tab=income">{t('budgets.income')}</Link> : t('budgets.expenses')}
           </h3>
           <ul className="dash-bars">
+            <li className="dash-bars-head" aria-hidden="true">
+              <span />
+              <span>{t(group.type === 'EXPENSE' ? 'budgets.colSpent' : 'budgets.colEarned')}</span>
+              <span className="dash-bar-budget">{t('budgets.colBudget')}</span>
+              <span>{t('budgets.colUsed')}</span>
+            </li>
             {group.rows.map((r) => {
               const over = group.type === 'EXPENSE' && r.pct !== null && r.pct > 100
               // Nearly used up: 90 % of an expense budget or more, but not over it.
               const near = group.type === 'EXPENSE' && r.pct !== null && r.pct >= 90 && !over
-              const actual = t(group.type === 'EXPENSE' ? 'dashboard.spent' : 'dashboard.earned', { amount: money(r.actual) })
               return (
                 <li key={r.key} className={r.total ? 'dash-total' : undefined}>
-                  <span className="dash-bar-text">
-                    <span className="legend-name">{r.name}</span>
-                    <span className="legend-amount">
-                      {actual}
-                      <span className="muted">{r.budgeted === null ? `, ${t('dashboard.noBudget')}` : ` ${t('dashboard.ofBudget', { amount: money(r.budgeted) })}`}</span>
-                    </span>
+                  <span className="legend-name" title={r.name}>
+                    {r.name}
                   </span>
-                  {r.budgeted === null ? null : (
-                    <Bar percent={r.pct ?? 0} over={over} near={near} label={r.pct === null ? '-' : formatPercent(r.pct, settings.locale)} />
-                  )}
+                  <span className="legend-amount">{money(r.actual)}</span>
+                  <span className="legend-amount dash-bar-budget muted">{r.budgeted === null ? '-' : money(r.budgeted)}</span>
+                  <span className="dash-bar-meter">
+                    {r.budgeted === null ? null : <Bar percent={r.pct ?? 0} over={over} near={near} label={r.pct === null ? '-' : formatPercent(r.pct, settings.locale)} />}
+                  </span>
                 </li>
               )
             })}
@@ -694,29 +700,26 @@ function RecurringTable({
     const paidRow = byId.get(item.id)
     const diff = paidRow?.difference ?? null
     const more = diff !== null && (toMinor(diff) ?? 0n) > 0n
-    const difference = diff !== null && diff !== '0.00' ? `(${diff.startsWith('-') ? '' : '+'}${money(diff)})` : ''
+    const difference = diff !== null && diff !== '0.00' ? `${diff.startsWith('-') ? '' : '+'}${money(diff)}` : ''
     return { item, paid: paidRow, more, difference }
   })
+  const anyDiff = rows.some((row) => row.difference !== '')
   return (
     <div className="dash-rec">
-      <div className="dash-rec-sum">
-        <span>
-          <span className="dash-stat-label">{t('common.expense')}</span>
-          <b>{money(commitments.expense)}</b>
-        </span>
-        {toMinor(commitments.income) ? (
-          <span>
-            <span className="dash-stat-label">{t('common.income')}</span>
-            <b>{money(commitments.income)}</b>
-          </span>
-        ) : null}
-      </div>
+      <Facts
+        className="dash-facts"
+        items={[
+          { label: t('common.expense'), value: <b>{money(commitments.expense)}</b> },
+          toMinor(commitments.income) ? { label: t('common.income'), value: <b>{money(commitments.income)}</b> } : null,
+        ]}
+      />
       {share === null ? null : <Bar percent={share} over={share > 100} label={formatPercent(share, settings.locale)} />}
-      <ul className="dash-rec-rows">
+      <ul className={anyDiff ? 'dash-rec-rows has-diff' : 'dash-rec-rows'}>
         <li className="dash-rec-head" aria-hidden="true">
           <span />
           <span>{t('dashboard.perMonth')}</span>
           <span>{t('dashboard.paid')}</span>
+          {anyDiff ? <span /> : null}
         </li>
         {rows.map(({ item, paid: p, more, difference }) => (
           <li key={item.id}>
@@ -724,11 +727,9 @@ function RecurringTable({
               <span className={`swatch ${item.type === 'INCOME' ? 'swatch-income' : 'swatch-expense'}`} aria-hidden="true" /> {item.name}
             </span>
             <span className="legend-amount">{item.perMonth === null ? t('rec.varies') : money(item.perMonth)}</span>
-            {/* The difference sits under the amount, so the amounts stay in one line down the column. */}
-            <span className={`legend-amount rec-paid-cell${p ? (more ? ' rec-over' : ' rec-paid') : ' muted'}`}>
-              <span>{p ? money(p.paid) : '-'}</span>
-              {difference ? <span className="rec-diff">{difference}</span> : null}
-            </span>
+            <span className={`legend-amount${p ? (more ? ' rec-over' : ' rec-paid') : ' muted'}`}>{p ? money(p.paid) : '-'}</span>
+            {/* the difference from the plan has a column of its own, so the amounts stay in one line down their columns */}
+            {anyDiff ? <span className={`legend-amount rec-diff${more ? ' rec-over' : ' rec-paid'}`}>{difference}</span> : null}
           </li>
         ))}
       </ul>

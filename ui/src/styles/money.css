@@ -1,33 +1,203 @@
 /* Transactions, recurring items and categories: budgets, history, cards and the split editor. */
 
-/* Transactions: the period in the filter bar (a year, a month, or from and to). */
-.tx-range {
+/* Transactions: the top (search, the filters button, the filters), the table (a tidy ledger), the totals, the transfers, and what a row opens to. */
+
+/* The line under the tabs: the search field, with its icon inside it, and the filters button at its right; the filters (category, account, the
+   kind of period and its dates) open under it, in a row that wraps. */
+.tx-top {
+  position: relative;
+  z-index: 2;
   display: flex;
-  flex: 0 0 auto;
   flex-wrap: wrap;
-  align-items: flex-end;
-  gap: 0.75rem 0.5rem;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+  width: 100%;
   min-width: 0;
-  max-width: 100%;
 }
 
-/* The transactions as a table, a ledger: name, category (and the account, accounts.css), date, then the amount at the right, the icon of a shared
-   one, then the buttons (edit, delete, the chevron: three of --control-sm). The columns of amounts and dates are as wide as the longest the
-   formats write, in characters of the monospace font: 15 for "-CHF 999,999.99" (bold, 1rem), and 11 for a date (small print, 0.875rem). The icon is 12px, so 2 characters hold it with room to spare. The name and the category share the rest, the name the most. */
+.tx-search {
+  position: relative;
+  flex: 1 1 8rem;
+  width: auto;
+  max-width: 28rem;
+}
+
+.tx-search > input {
+  width: 100%;
+  padding-left: 2.25rem;
+}
+
+.tx-search-icon {
+  position: absolute;
+  left: 0.875rem;
+  top: 50%;
+  z-index: 1;
+  margin-top: -6px;
+  color: var(--muted-foreground);
+  pointer-events: none;
+}
+
+/* The filters button is as tall as the field; a number in a corner says how many filters are on. */
+.tx-filter-button {
+  position: relative;
+  flex: none;
+  margin-left: auto;
+}
+
+.tx-search + .tx-filter-button {
+  margin-left: 0;
+}
+
+.tx-filter-button[aria-expanded='true'] {
+  --btn-fill: var(--accent);
+}
+
+.tx-filter-button > .count-badge {
+  position: absolute;
+  top: -0.5rem;
+  right: -0.5rem;
+}
+
+.tx-filters {
+  display: flex;
+  flex: 1 1 100%;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 1rem;
+  min-width: 0;
+  padding: 1rem;
+  background: var(--card);
+  border: var(--border-width) solid var(--border);
+  animation: panel-in var(--t-med) var(--ease-step);
+}
+
+.tx-filters > .pick.scope {
+  flex: 0 1 14rem;
+  min-width: 10rem;
+}
+
+.tx-filters .pick.scope .pick-button {
+  width: 100%;
+  min-width: 0;
+}
+
+.tx-filters .pick.scope .pick-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tx-filters .pick.scope .pick-list {
+  width: 100%;
+}
+
+.tx-filters .pick.scope .pick-list button {
+  width: 100%;
+  min-width: 0;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+/* A phone has no tooltip: in the box the whole name of a category shows, on as many lines as it needs. */
+html.is-phone .tx-filters {
+  flex-direction: column;
+  align-items: stretch;
+}
+
+html.is-phone .tx-filters > .pick.scope {
+  flex: none;
+}
+
+html.is-phone .tx-filters .pick.scope .pick-button {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+html.is-phone .tx-filters .tx-date-group,
+html.is-phone .tx-filters .date-picker {
+  width: 100%;
+}
+
+html.is-phone .tx-filters .date-picker .pick.field {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+html.is-phone .tx-filters .date-picker .pick-input {
+  width: 100%;
+}
+
+/* The dates of a range, in the header where the month would be: a button that opens the filters. */
+.tx-range-button {
+  max-width: 100%;
+  font-variant-numeric: tabular-nums;
+}
+
+/* The transactions as a tidy table, a ledger: name (with the marks of a shared bill and of documents), category (and the account, with more
+   than one), date, then the amount at the right, then the buttons (edit, delete, the chevron: three of --control-sm). Every cell is one line.
+   The columns of amounts and dates are as wide as the longest the formats write, in characters of the monospace font: 15 for "-CHF 999,999.99"
+   (bold, 1rem), and 11 for a date (small print, 0.875rem). The name and the category share the rest, the name the most. With less room a
+   column goes, never a line is added: the account first, then the date, then the category; the name and the amount stay at every width. */
 .card-list.tx-list {
   --act: calc(3 * var(--control-sm) + 0.25rem);
-  --cols: minmax(8rem, 2fr) minmax(6rem, 1fr) 11ch 15ch 2ch var(--act);
+  --cols: minmax(8rem, 2fr) minmax(6rem, 1fr) 11ch 15ch var(--act);
 }
 
-/* The total under the rows: how many, what came in and went out, and the net in bold, ending where the amounts end; set off by a solid line,
-   and not a row to open. */
+.card-list.tx-list.has-account {
+  --cols: minmax(8rem, 2fr) minmax(6rem, 1fr) minmax(7rem, 1fr) 11ch 15ch var(--act);
+}
+
+.tx-list .cell-name > .row-mark-icon {
+  flex: none;
+}
+
+.tx-marks {
+  gap: 0.375rem;
+}
+
+.tx-marks > span {
+  display: inline-flex;
+}
+
+@container (max-width: 50em) {
+  ul.card-list.tx-list.has-account > :is(li.card-item, li.list-head) {
+    grid-template-columns: minmax(8rem, 2fr) minmax(6rem, 1fr) 11ch 15ch var(--act);
+  }
+
+  ul.card-list.tx-list.has-account .cell-account {
+    display: none;
+  }
+}
+
+/* (the list's own classes first: these must beat the rule for the account's column above) */
+@container (max-width: 42em) {
+  ul.card-list.is-table.is-tidy.tx-list > :is(li.card-item, li.list-head) {
+    grid-template-columns: minmax(8rem, 2fr) minmax(6rem, 1fr) 15ch var(--act);
+  }
+
+  ul.card-list.tx-list .tx-date {
+    display: none;
+  }
+}
+
+@container (max-width: 34em) {
+  ul.card-list.is-table.is-tidy.tx-list > :is(li.card-item, li.list-head) {
+    grid-template-columns: minmax(6rem, 1fr) 15ch var(--act);
+  }
+
+  ul.card-list.tx-list .tx-cat {
+    display: none;
+  }
+}
+
+/* The totals under the rows: how many, then what came in, what went out and the net, each with its word, the figures ending where the amounts
+   end; set off by a solid line, and not a row to open. On a phone the three are a strip over the list, three columns, each word over its figure. */
 ul.card-list.tx-list > li.card-item.tx-total {
   display: flex;
   flex-direction: row;
   align-items: center;
   justify-content: space-between;
   gap: 0.5rem 1.25rem;
-  flex-wrap: wrap;
   min-height: 2.25rem;
   cursor: default;
   border-top: var(--border-width) solid var(--border);
@@ -40,156 +210,111 @@ ul.card-list.tx-list > li.card-item.tx-total {
 }
 
 .tx-total > .cell-name {
+  flex: 1 1 auto;
   font-size: 0.875rem;
   font-weight: 500;
   color: var(--muted-foreground);
 }
 
-.tx-total-figures {
+.tx-sums {
   display: flex;
-  flex-wrap: wrap;
+  flex: none;
   align-items: baseline;
   justify-content: flex-end;
-  gap: 0.25rem 1.25rem;
-  margin-right: calc(var(--act) + 2ch + 2rem);
+  gap: 0.25rem 1.5rem;
+  margin-right: calc(var(--act) + 1rem);
   font-size: 0.875rem;
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
 }
 
-.tx-total-figures > b {
+.tx-sum {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.5rem;
+}
+
+.tx-sum-label {
+  font-size: 0.8125rem;
+  color: var(--muted-foreground);
+}
+
+.tx-sum > b {
   font-size: 1rem;
   font-weight: 600;
 }
 
-.tx-total-figures > .is-income {
+.tx-sum > .is-income {
   color: var(--success);
 }
 
-.tx-total-figures > .is-expense {
+.tx-sum > .is-expense {
   color: var(--destructive);
 }
 
-@container (max-width: 40em) {
-  .tx-total-figures {
-    margin-right: var(--act);
+@container (max-width: 42em) {
+  .tx-total > .cell-name {
+    display: none;
+  }
+
+  ul.card-list.tx-list > li.card-item.tx-total {
+    justify-content: flex-end;
   }
 }
 
-.tx-list .cell-mark {
-  display: flex;
+.tx-total.is-strip {
+  margin-bottom: 0.75rem;
+  padding: 0.5rem 0;
+  border-block: var(--border-width) solid var(--border);
+}
+
+.is-strip > .tx-sums {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0 0.75rem;
+  margin-right: 0;
+}
+
+.is-strip .tx-sum {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.125rem;
+  min-width: 0;
+}
+
+.is-strip .tx-sum:nth-child(2) {
   align-items: center;
 }
 
-/* Narrower than 40em, the icon of a shared one is on the second line, between the category and the date. The name takes the room over
-   it, so the first line is as wide as it was. */
-@container (max-width: 40em) {
-  ul.card-list.tx-list > li.card-item {
-    grid-template-columns: minmax(0, 1fr) auto auto auto;
-    grid-template-areas:
-      'name name amount actions'
-      'sub mark sub-end actions';
-  }
-
-  ul.card-list.tx-list .cell-mark {
-    grid-area: mark;
-  }
+.is-strip .tx-sum:last-child {
+  align-items: flex-end;
 }
 
-/* The transfers as a table: the day, from, to, the amount (as wide as in the transactions, and as neutral: no sign, no colour), the note, then
-   edit and delete (two buttons of 2rem and the gap). Narrower than 40em the head goes and a row is two lines: from and to (side by side, with an
-   arrow between them, each as wide as its name) and the amount, the day and the note under them (the note has the room that the day leaves).
-   Narrower than 30em the buttons go to the line of the note, and the amount to the line of the day, so that from and to have the whole width
-   of the first. */
-.card-list.tx-transfers {
-  --cols: 12ch minmax(0, 1fr) minmax(0, 1fr) 16ch minmax(0, 2fr) 4.25rem;
+/* The transfers as a tidy table: the day, from, to, the amount (as wide as in the transactions, and as neutral: no sign, no colour; between two
+   currencies "what left → what arrived", a little wider), the note, then edit and delete (two buttons of --control-sm and the gap). With less room
+   the note goes, then the day; from, to and the amount stay at every width. */
+.card-list.xfer-list {
+  --act: calc(2 * var(--control-sm) + 0.25rem);
+  --cols: 12ch minmax(6rem, 1fr) minmax(6rem, 1fr) minmax(16ch, 26ch) minmax(0, 1.2fr) var(--act);
 }
 
-.tx-transfers .xfer-route {
-  display: contents;
-}
-
-/* Where subgrid is known the rows share the list's columns, and the columns are as wide as what is in them: the day and the amount by
-   their content, from and to by the longest name (up to 12rem), and the note has all that is left, so it is cut only when the list is
-   really narrow (the 40em rules below take over there). Without subgrid each row has the fixed columns above. */
-@supports (grid-template-columns: subgrid) {
-  .card-list.tx-transfers {
-    display: grid;
-    grid-template-columns: max-content fit-content(12rem) fit-content(12rem) max-content minmax(10rem, 1fr) 4.25rem;
+@container (max-width: 52em) {
+  ul.card-list.xfer-list > :is(li.card-item, li.list-head) {
+    grid-template-columns: 12ch minmax(6rem, 1fr) minmax(6rem, 1fr) minmax(16ch, 26ch) var(--act);
   }
 
-  ul.card-list.tx-transfers > li.card-item,
-  ul.card-list.tx-transfers > li.list-head {
-    grid-column: 1 / -1;
-    grid-template-columns: subgrid;
+  ul.card-list.xfer-list .xfer-note {
+    display: none;
   }
 }
 
 @container (max-width: 40em) {
-  ul.card-list.is-table.tx-transfers > li.card-item {
-    grid-template-columns: auto minmax(0, 1fr) auto auto;
-    grid-template-areas:
-      'route route amount actions'
-      'date note note actions';
+  ul.card-list.xfer-list > :is(li.card-item, li.list-head) {
+    grid-template-columns: minmax(5rem, 1fr) minmax(5rem, 1fr) minmax(16ch, 26ch) var(--act);
   }
 
-  ul.card-list.is-table.tx-transfers .xfer-route {
-    display: flex;
-    grid-area: route;
-    gap: 0.5rem;
-    min-width: 0;
-  }
-
-  ul.card-list.is-table.tx-transfers .xfer-route > .cell-name {
-    flex: 0 1 auto;
-  }
-
-  ul.card-list.is-table.tx-transfers .xfer-to::before {
-    content: '\2192';
-    flex: none;
-    color: var(--muted-foreground);
-  }
-
-  ul.card-list.is-table.tx-transfers .cell-amount {
-    grid-area: amount;
-  }
-
-  ul.card-list.is-table.tx-transfers .xfer-date {
-    grid-area: date;
-  }
-
-  ul.card-list.is-table.tx-transfers .xfer-note {
-    grid-area: note;
-    text-align: right;
-  }
-}
-
-@container (max-width: 30em) {
-  ul.card-list.is-table.tx-transfers > li.card-item {
-    grid-template-columns: minmax(0, 1fr) auto;
-    grid-template-areas:
-      'route route'
-      'date amount'
-      'note actions';
-  }
-
-  ul.card-list.is-table.tx-transfers .xfer-note {
-    text-align: left;
-  }
-}
-
-/* Narrower than 30em the buttons of a transaction (edit, delete, the chevron) take a line of their own, so that the name keeps its room. */
-@container (max-width: 30em) {
-  ul.card-list.tx-list > li.card-item {
-    grid-template-columns: minmax(0, 1fr) auto auto;
-    grid-template-areas:
-      'name name amount'
-      'sub mark sub-end'
-      'actions actions actions';
-  }
-
-  ul.card-list.tx-list .cell-actions {
-    justify-content: flex-start;
+  ul.card-list.xfer-list .xfer-date {
+    display: none;
   }
 }
 
@@ -241,8 +366,14 @@ ul.card-list.tx-list > li.card-item.tx-total {
   border-color: var(--input);
 }
 
-/* What a shared bill opens to on the list: the title with what was paid, then a small table of who has which part, a code for
-   each friend. */
+/* The label and value pairs of an open transaction on the desktop sit beside the description and the split, as another part of the panel. */
+.tx-detail > .tx-facts {
+  flex: 1 1 18rem;
+  max-width: 24rem;
+}
+
+/* What a shared bill opens to on the list: a small table of who has which part, a code for each friend. (The title with what was paid, the
+   head, is the recurring page's: the transactions page has those in its facts.) */
 .split-head {
   display: flex;
   align-items: baseline;
@@ -305,15 +436,10 @@ html.is-phone .split-table td {
 }
 
 /* The categories page: the budgets of expenses and income side by side, then the history, all in the pane under the title, which
-   scrolls as the pane of the other pages does. */
+   scrolls as the pane of the other pages does. On a phone each is a tab. */
 .budget-page {
   container-type: inline-size;
   container-name: budget;
-}
-
-/* The picker is wider than a phone: "current" goes under it rather than past the edge. */
-.page-header .month-nav {
-  flex-wrap: wrap;
 }
 
 .budget-view > * + * {
@@ -327,22 +453,21 @@ html.is-phone .split-table td {
   gap: 1.5rem;
 }
 
-/* No room for two sides: one under the other. A side needs about 37.5rem for a category name of 8rem (after its grip) beside what it
-   adds up to, its budget and the buttons; two of them, the gap between and the room at the edge of the pane make 77rem. */
+/* No room for two sides: one under the other. A side needs about 37.5rem for a category name of 8rem (after its grip) beside its budget, what
+   it adds up to and the buttons; two of them, the gap between and the room at the edge of the pane make 77rem. */
 @container budget (max-width: 77rem) {
   .budget-split {
     grid-template-columns: minmax(0, 1fr);
   }
 }
 
-/* The half is a container (its dialogs are drawn into the body, so it holds nothing fixed): narrower than 28em, which is what the columns
-   of a row add up to, a row is laid out as on a phone (below), whatever the device is. */
+/* The half is a container (its dialogs are drawn into the body, so it holds nothing fixed): its columns go as it gets narrow. */
 .budget-half {
   container-type: inline-size;
   container-name: budget-half;
 }
 
-/* A side, and the history: a title over its boxes. */
+/* A side, and the history: a title over its box. */
 .budget-half,
 .budget-history {
   display: flex;
@@ -356,14 +481,13 @@ html.is-phone .split-table td {
   margin: 0;
 }
 
-/* The totals of a side (the budget, what was spent) and its categories (name, what they add up to, budget, edit and delete) share their
-   columns, so the amounts line up: an amount has 15 characters of room (an amount with no sign, "CHF 999,999.99" and a little more),
-   the buttons two of 2rem. A category row can be held and dragged: no text selection or touch menu when it is held. */
-.card-list.sum-list,
-/* A category: its name, what it adds up to this month, its budget, what is left of it (or still to come, for income), a bar of how much of it is
-   used with its percent, then edit and delete. Amounts have 15 characters, the bar and its figure 14. */
+/* The categories of a side, with the side as a whole as the first row (`cat-sum`): name, budget, what was spent (or earned), what is left of the
+   budget (or still to come, for income), a bar of how much is used with its percent, then edit and delete. Amounts have 12 characters (an amount
+   with no sign, "CHF 99,999.99"), the bar and its figure 10, the buttons two of --control-sm. Every cell is one line. A row can be held and
+   dragged: no text selection or touch menu when it is held. With less room the bar goes, then the budget, then what is left; the name and what
+   was spent stay. */
 .card-list.cat-list {
-  --cols: minmax(0, 1fr) 15ch 15ch 15ch 14ch calc(2 * var(--control-sm) + 0.25rem);
+  --cols: minmax(0, 1fr) 12ch 12ch 12ch 10ch calc(2 * var(--control-sm) + 0.25rem);
 }
 
 .cat-list .cat-gap {
@@ -371,15 +495,15 @@ html.is-phone .split-table td {
   font-variant-numeric: tabular-nums;
 }
 
-:is(.cat-list, .sum-list) .cat-gap.is-over {
+:is(.cat-list) .cat-gap.is-over {
   color: var(--destructive);
 }
 
-:is(.cat-list, .sum-list) .cat-gap.is-good {
+.cat-list .cat-gap.is-good {
   color: var(--success);
 }
 
-:is(.cat-list, .sum-list) .cat-used {
+.cat-list .cat-used {
   display: flex;
   align-items: center;
   gap: 0.5rem;
@@ -401,58 +525,47 @@ html.is-phone .split-table td {
   color: var(--muted-foreground);
 }
 
-/* Less room: what is left and the bar go, the name keeps its room beside the two amounts. */
-@container (max-width: 44em) {
-  html:not(.is-phone) ul.card-list.cat-list > :is(li.card-item, li.list-head) {
-    grid-template-columns: minmax(0, 1fr) 15ch 15ch calc(2 * var(--control-sm) + 0.25rem);
+@container (max-width: 46em) {
+  ul.card-list.cat-list > :is(li.card-item, li.list-head) {
+    grid-template-columns: minmax(0, 1fr) 12ch 12ch 12ch calc(2 * var(--control-sm) + 0.25rem);
   }
 
-  ul.card-list.cat-list :is(.cat-gap, .cat-used) {
+  ul.card-list.cat-list .cat-used {
     display: none;
   }
 }
 
-/* The totals of a side have the columns of its categories under them, so the amounts line up: the budget and what was spent (or earned) are in
-   the column of the budgets, and the spent row has what is left of the whole budget and its bar in their columns. On the phone (and where the
-   categories lose those columns) the amount is the second from the end. */
-.card-list.sum-list {
-  --cols: minmax(0, 1fr) 15ch 15ch 15ch 14ch calc(2 * var(--control-sm) + 0.25rem);
-}
-
-html:not(.is-phone) ul.card-list.sum-list > li.card-item:not(.is-editing) .cell-amount {
-  grid-column: 3 / 4;
-}
-
-html:not(.is-phone) ul.card-list.sum-list > li.card-item:not(.is-editing) .cell-actions {
-  grid-column: -2 / -1;
-}
-
-ul.card-list.sum-list .cat-gap {
-  grid-column: 4 / 5;
-  text-align: right;
-  font-variant-numeric: tabular-nums;
-}
-
-ul.card-list.sum-list .cat-used {
-  grid-column: 5 / 6;
-}
-
-@container (max-width: 44em) {
-  html:not(.is-phone) ul.card-list.sum-list > li.card-item {
-    grid-template-columns: minmax(0, 1fr) 15ch 15ch calc(2 * var(--control-sm) + 0.25rem);
+@container (max-width: 38em) {
+  ul.card-list.cat-list > :is(li.card-item, li.list-head) {
+    grid-template-columns: minmax(0, 1fr) 12ch 12ch calc(2 * var(--control-sm) + 0.25rem);
   }
 
-  ul.card-list.sum-list :is(.cat-gap, .cat-used) {
+  ul.card-list.cat-list .cat-budget {
     display: none;
   }
 }
 
-html.is-phone ul.card-list.sum-list > li.card-item:not(.is-editing) .cell-amount {
-  grid-column: -3 / -2;
+@container (max-width: 30em) {
+  ul.card-list.cat-list > :is(li.card-item, li.list-head) {
+    grid-template-columns: minmax(0, 1fr) 12ch calc(2 * var(--control-sm) + 0.25rem);
+  }
+
+  ul.card-list.cat-list .cat-gap {
+    display: none;
+  }
 }
 
-html.is-phone ul.card-list.sum-list :is(.cat-gap, .cat-used) {
-  display: none;
+/* The side as a whole, the first row: set off from its categories by a solid line, and not a row to drag. */
+ul.card-list.cat-list > li.card-item.cat-sum {
+  border-bottom: var(--border-width) solid var(--border);
+}
+
+.cat-sum > .budget-form > .cell-name {
+  padding-left: var(--grip-room);
+}
+
+.cat-sum > .budget-form > .cell-name > .card-name {
+  font-weight: 600;
 }
 
 /* The grip at the start of a category says that the row can be held and dragged. It is only a picture (the hint is read out to screen
@@ -480,12 +593,6 @@ ul.card-list.cat-list > li.list-head > :first-child {
   padding-left: var(--grip-room);
 }
 
-/* The words of the total ("monthly budget") may take two lines in a narrow side, rather than being cut. */
-.sum-list .cell-name > .card-name {
-  white-space: normal;
-}
-
-ul.card-list.sum-list > li.card-item,
 ul.card-list.cat-list > li.card-item,
 ul.card-list.cat-list > li.list-head {
   gap: 0.25rem 1rem;
@@ -494,7 +601,6 @@ ul.card-list.cat-list > li.list-head {
 /* Every row is as tall as the least height says (the first one too, which has no line over it): a dragged row is put in the first and the
    last place by the middle of that place, which only works when the rows are equally tall. A row with its 2rem buttons (primitives.css),
    padding and line stays under that height. */
-ul.card-list.sum-list > li.card-item,
 ul.card-list.cat-list > li.card-item {
   min-height: 2.5rem;
   padding-block: 0.125rem;
@@ -526,128 +632,105 @@ ul.card-list > li.card-item.is-lifted svg.row-grip {
 
 /* A category that is deleted from a later month on is quiet. */
 .card-item.is-quiet .card-name,
+.card-item.is-quiet .name-text,
 .card-item.is-quiet .cell-amount {
   color: var(--muted-foreground);
 }
 
-/* The phone: no head, higher rows, buttons of 44px, a long name wraps rather than being cut. */
-html.is-phone .card-list.sum-list,
-html.is-phone .card-list.cat-list {
-  --cols: minmax(0, 1fr) auto 92px;
+/* The phone's list: the grips only show, and a row can only be held, while "reorder" is on in the "more" menu; the row is then plain, a grip
+   before its name. */
+.cat-flat .row-grip {
+  width: 12px;
+  height: 12px;
+  flex: none;
+  color: var(--muted-foreground);
+  cursor: grab;
 }
 
-html.is-phone ul.card-list.sum-list > li.card-item,
-html.is-phone ul.card-list.cat-list > li.card-item {
-  min-height: 4.5rem;
-  padding-inline: 1rem;
+.cat-flat > li.card-item[data-reorder-id] {
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
 }
 
-html.is-phone .sum-list .ui-btn,
-html.is-phone .cat-list .ui-btn {
-  min-height: var(--control-phone);
+/* The thin bar under a name is the row's one grey value. */
+.cat-flat .cell-meta > .stash-bar {
+  height: 6px;
+  margin-block: 0.375rem 0.125rem;
 }
 
-html.is-phone .sum-list .ui-btn-icon,
-html.is-phone .cat-list .ui-btn-icon {
-  min-width: 44px;
+.cat-flat .cell-amount.is-good {
+  color: var(--success);
 }
 
-html.is-phone ul.card-list.cat-list > li.list-head {
-  display: none;
+/* The side as a whole on a phone: a strip of three values, the budget (with the pencil that changes it), what was spent and what is left, each
+   word over its figure, and the bar of how much is used under them; set off by hairlines. Changing the budget takes the strip: the field, then
+   the buttons. */
+.cat-strip {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.5rem 0 0.625rem;
+  border-block: var(--border-width) solid var(--border);
 }
 
-/* The phone keeps a category to its name, what it adds up to and its budget: what is left and the bar are on the computer. */
-html.is-phone ul.card-list.cat-list :is(.cat-gap, .cat-used) {
-  display: none;
-}
-
-/* What a category adds up to is a line under its name, with its word in front, since there is no head. It runs under the budget too,
-   where a long amount needs the room, and starts where the name does; the buttons are beside both lines. */
-html.is-phone ul.card-list.cat-list > li.card-item {
-  align-content: center;
-}
-
-html.is-phone ul.card-list.cat-list > li.card-item > .cell-spent {
-  grid-column: 1 / 3;
-  grid-row: 2;
-  padding-left: var(--grip-room);
-  font-size: 0.875rem;
-  text-align: left;
-  white-space: normal;
-}
-
-html.is-phone ul.card-list.cat-list > li.card-item > .cell-amount:not(.cell-spent) {
-  grid-column: 2;
-  grid-row: 1;
-}
-
-html.is-phone ul.card-list.cat-list > li.card-item > .cell-actions {
-  grid-column: 3;
-  grid-row: 1 / span 2;
-}
-
-html.is-phone .cat-list .spent-label.sr-only {
-  position: static;
-  width: auto;
-  height: auto;
+.cat-strip > dl {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr)) auto;
+  align-items: center;
+  gap: 0 0.5rem;
   margin: 0;
-  overflow: visible;
-  clip-path: none;
-  font-weight: 400;
+}
+
+.cat-strip dt {
+  overflow: hidden;
+  font-size: 0.75rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   color: var(--muted-foreground);
 }
 
-html.is-phone .sum-list .cell-name > .card-name,
-html.is-phone .cat-list .cell-name > .card-name {
-  white-space: normal;
-  overflow-wrap: anywhere;
+.cat-strip dd {
+  margin: 0.125rem 0 0;
+  min-width: 0;
 }
 
-/* The phone's rows for a half that is narrow (a small window), with the rows' own sizes: no head, what a category adds up to a line under
-   its name, the budget and the buttons at the right. The phone's own rules (above) are more specific and win where they apply. */
-@container budget-half (max-width: 28em) {
-  .card-list.sum-list,
-  .card-list.cat-list {
-    --cols: minmax(0, 1fr) auto 4.25rem;
-  }
+.cat-strip dd > .cell-amount {
+  display: block;
+  overflow: hidden;
+  font-size: 0.9375rem;
+  text-align: left;
+  text-overflow: ellipsis;
+}
 
-  ul.card-list.cat-list > li.list-head {
-    display: none;
-  }
+.cat-strip > dl > button {
+  grid-row: 1 / span 2;
+  grid-column: 4;
+}
 
-  ul.card-list.cat-list > li.card-item {
-    align-content: center;
-  }
+.cat-strip .cell-amount.is-good {
+  color: var(--success);
+}
 
-  ul.card-list.cat-list > li.card-item > .cell-spent {
-    grid-column: 1 / 3;
-    grid-row: 2;
-    padding-left: var(--grip-room);
-    font-size: 0.875rem;
-    text-align: left;
-    white-space: normal;
-  }
+.cat-strip .stash-bar {
+  height: 6px;
+}
 
-  ul.card-list.cat-list > li.card-item > .cell-amount:not(.cell-spent) {
-    grid-column: 2;
-    grid-row: 1;
-  }
+.cat-strip.is-editing > label {
+  font-size: 0.75rem;
+  color: var(--muted-foreground);
+}
 
-  ul.card-list.cat-list > li.card-item > .cell-actions {
-    grid-column: 3;
-    grid-row: 1 / span 2;
-  }
+.cat-strip.is-editing input {
+  text-align: right;
+  color: var(--foreground);
+}
 
-  .cat-list .spent-label.sr-only {
-    position: static;
-    width: auto;
-    height: auto;
-    margin: 0;
-    overflow: visible;
-    clip-path: none;
-    font-weight: 400;
-    color: var(--muted-foreground);
-  }
+.cat-strip-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.5rem;
 }
 
 /* The form of the budget is the row itself, so its parts sit on the columns of the list. Changing the amount takes the whole row: the
@@ -656,20 +739,20 @@ html.is-phone .cat-list .cell-name > .card-name {
   display: contents;
 }
 
-ul.card-list.sum-list > li.card-item.is-editing {
+ul.card-list.cat-list > li.card-item.cat-sum.is-editing {
   grid-template-columns: minmax(0, 1fr) 9rem;
 }
 
-.sum-list input {
+.cat-sum input {
   text-align: right;
 }
 
 /* The pencil is over the pencils of the categories. */
-.sum-list .cell-actions {
+.cat-sum .cell-actions {
   justify-content: flex-start;
 }
 
-.sum-list .is-editing .cell-actions {
+.cat-sum.is-editing .cell-actions {
   grid-column: 1 / -1;
   flex-wrap: wrap;
   justify-content: flex-end;
@@ -678,9 +761,8 @@ ul.card-list.sum-list > li.card-item.is-editing {
 
 /* The history: the month, then what was spent and its budget, what was earned and its budget. The button with the month is stretched
    over the row, so a click anywhere on it shows that month above. Each column is at least as wide as the longest it holds (the month
-   with "septiembre de 2026", an amount of 15 characters, small print of 0.875rem for the budgets) and shares what is left. Narrower than
-   53em, which is what they add up to: no head, and three lines a row (the month, what was spent, what was earned), the words of the
-   head in front of the amounts. */
+   with "septiembre de 2026", an amount of 15 characters, small print of 0.875rem for the budgets). Narrower than 40em the two budgets go.
+   (A phone has a row for each month, `TapRow`.) */
 .card-list.hist-list {
   --cols: minmax(18.5ch, 1.4fr) minmax(15ch, 1fr) minmax(13.5ch, 1fr) minmax(15ch, 1fr) minmax(13.5ch, 1fr);
   container-type: inline-size;
@@ -698,7 +780,8 @@ ul.card-list.hist-list > li.card-item {
   cursor: pointer;
 }
 
-.hist-list .cell-name > .card-name {
+.hist-list .cell-name > .card-name,
+.hist-month {
   text-transform: lowercase;
 }
 
@@ -713,41 +796,13 @@ ul.card-list.hist-list > li.card-item {
   font-variant-numeric: tabular-nums;
 }
 
-@container (max-width: 53em) {
-  ul.card-list.hist-list > li.list-head {
-    display: none;
-  }
-
-  ul.card-list.hist-list > li.list-head + li {
-    border-top: 0;
-  }
-
-  ul.card-list.hist-list > li.card-item {
-    grid-template-columns: max-content max-content minmax(0, 1fr);
-    gap: 0 0.75rem;
-  }
-
-  .hist-list .cell-name {
-    grid-column: 1 / -1;
-  }
-
-  .hist-list .hist-label.sr-only {
-    position: static;
-    width: auto;
-    height: auto;
-    margin: 0;
-    overflow: visible;
-    clip-path: none;
-    font-size: 0.875rem;
-    color: var(--muted-foreground);
+@container (max-width: 40em) {
+  ul.card-list.hist-list > :is(li.card-item, li.list-head) {
+    grid-template-columns: minmax(12ch, 1fr) 15ch 15ch;
   }
 
   .hist-list .hist-budget {
-    text-align: left;
-  }
-
-  .hist-list .hist-budget::before {
-    content: '/ ';
+    display: none;
   }
 }
 
@@ -947,44 +1002,6 @@ ul.card-list.rec-table .cell-mark {
   color: var(--muted-foreground);
 }
 
-/* The phone: the period fills the filter box. A month or a year, with its arrows, sits beside the choice of period when there is room and under it
-   when there is not; from and to take a line each. */
-html.is-phone .tx-range {
-  width: 100%;
-}
-
-html.is-phone .tx-range > .month-nav {
-  flex: 1 1 18rem;
-  min-width: 0;
-}
-
-html.is-phone .tx-range .month-nav > .date-picker {
-  flex: 1 1 0;
-  min-width: 0;
-}
-
-html.is-phone .tx-range .tx-date-group {
-  flex: 1 1 100%;
-}
-
-html.is-phone .tx-range .date-picker {
-  width: 100%;
-}
-
-html.is-phone .tx-range .date-picker .pick.field {
-  flex: 1 1 0;
-  min-width: 0;
-}
-
-/* The field is as wide as its box: without this it keeps the width of its text and its arrow lies outside it (controls.css, the toolbar). */
-html.is-phone .tx-range .date-picker .pick-input {
-  width: 100%;
-}
-
-html.is-phone .tx-range > .ui-btn {
-  flex: 1 1 100%;
-}
-
 /* The bill dialog: the person first, then friends and guests, each with what was typed and what it comes to. */
 .split-editor {
   display: flex;
@@ -1042,11 +1059,15 @@ html.is-phone .tx-range > .ui-btn {
 
 .split-remove,
 .split-spacer {
-  flex: 0 0 5.5rem;
+  flex: 0 0 var(--control);
+}
+
+html.is-phone .split-remove,
+html.is-phone .split-spacer {
+  flex-basis: var(--control-phone);
 }
 
 .split-remove {
-  padding-inline: 0.25rem;
   color: var(--muted-foreground);
 }
 

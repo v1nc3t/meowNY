@@ -85,7 +85,20 @@ export default function TransferModal({
   }
 
   return (
-    <Modal title={transfer ? t('transfers.editTitle') : t('transfers.addTitle')} pending={state === 'SAVING'} onClose={onClose}>
+    <Modal
+      title={transfer ? t('transfers.editTitle') : t('transfers.addTitle')}
+      pending={state === 'SAVING'}
+      onClose={onClose}
+      // delete is at the left of the row of buttons, away from the two answers
+      leading={
+        transfer && onDelete ? (
+          <Button variant="outline" className="row-danger" onClick={onDelete}>
+            <Icon name="trash" className="btn-icon" />
+            {t('common.delete')}
+          </Button>
+        ) : undefined
+      }
+    >
       <form id={modalFormId} onSubmit={(event) => void onSubmit(event)}>
         <TransferInputs
           from={fields.from}
@@ -100,12 +113,6 @@ export default function TransferModal({
           onChoose={choose}
           onChange={set}
         />
-        {transfer && onDelete ? (
-          <Button variant="outline" size="sm" className="row-danger" onClick={onDelete}>
-            <Icon name="trash" className="btn-icon" />
-            {t('common.delete')}
-          </Button>
-        ) : null}
       </form>
     </Modal>
   )

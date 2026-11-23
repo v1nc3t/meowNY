@@ -82,10 +82,8 @@ export default function RecurringDashboard({ dues, items, today, currency, local
                 const names = t('dashboard.recWith', { names: sharedWith(item).join(', ') })
                 return (
                   <li key={item.id} title={`${item.name}: ${names}`}>
-                    <span className="legend-name">
-                      {link(item)}
-                      <span className="muted">{` ${names}`}</span>
-                    </span>
+                    <span className="legend-name">{link(item)}</span>
+                    <span className="legend-with">{names}</span>
                     <span className="legend-amount">{money(item)}</span>
                   </li>
                 )

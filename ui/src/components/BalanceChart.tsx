@@ -122,9 +122,13 @@ export default function BalanceChart({
     <div className="dash-year" ref={ref} {...slider}>
       {blank && loaded?.year === year ? <p className="dash-empty">{t('dashboard.emptyYear')}</p> : null}
       <div className={blank ? 'year-readout is-blank' : 'year-readout'}>
-        <span className="year-month">{point ? names[at(point)] : ''}</span>
+        <span className="year-month">
+          <span className="year-label">{year}</span>
+          <b>{point ? names[at(point)] : ''}</b>
+        </span>
         <span className="year-key key-savings">
-          {label ?? t('accounts.balance')} <b>{point ? money(point.balance) : '-'}</b>
+          <span className="year-label">{label ?? t('accounts.balance')}</span>
+          <b>{point ? money(point.balance) : '-'}</b>
         </span>
       </div>
       {width > 0 && !blank ? (
