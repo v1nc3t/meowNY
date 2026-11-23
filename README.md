@@ -51,7 +51,7 @@ To report a security problem, see [SECURITY.md](SECURITY.md). To help: [CONTRIBU
 | Where | What |
 |---|---|
 | [Website](https://v1nc3t.github.io/meowNY/) | The guide, the command line reference (also as [Markdown](https://v1nc3t.github.io/meowNY/CLI.md)) and the develop page |
-| [docs/sync-design.md](docs/sync-design.md), [docs/documents-design.md](docs/documents-design.md), [docs/debts-design.md](docs/debts-design.md), [docs/accounts-design.md](docs/accounts-design.md), [docs/stash-design.md](docs/stash-design.md), [docs/loans-deposits-design.md](docs/loans-deposits-design.md) | How sync, documents, debts, accounts, stashes, loans and deposits are built |
+| [docs/sync-design.md](docs/sync-design.md), [docs/documents-design.md](docs/documents-design.md), [docs/debts-design.md](docs/debts-design.md), [docs/accounts-design.md](docs/accounts-design.md), [docs/stash-design.md](docs/stash-design.md), [docs/loans-deposits-design.md](docs/loans-deposits-design.md), [docs/ui-design.md](docs/ui-design.md) | How sync, documents, debts, accounts, stashes, loans and deposits are built, and how the screens are laid out |
 
 ## Support
 

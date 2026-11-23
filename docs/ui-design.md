@@ -1,6 +1,6 @@
 # A tidy UI: columns, no loose text, a menu behind the logo on the phone
 
-Status: being built on branch `feat/tidy-ui`.
+Status: built on branch `feat/tidy-ui`. Where the build differs from the first plan, the text below says what was built.
 
 ## 1. The problem
 
@@ -22,7 +22,8 @@ character stays: the pixel logo and titles, the mono font, the green accent, lig
    scanning for, a small mark (an icon or a short badge of one or two words, the `Badge` component) when it is a state, or goes to
    the row's details (rule 4).
 2. **Columns line up.** Amounts are right aligned with tabular figures in a column of the same width on every row; names are at the
-   left and cut with an ellipsis, never wrapped. Rows have one height in a list.
+   left and cut with an ellipsis, never wrapped. Rows have one height in a list. A narrower list has fewer columns, not rows of two
+   lines: each list's styles say which column goes first (the least needed), and the name and the amount stay at every width.
 3. **No loose sentences.** No paragraph that explains a page or a field. An explanation that is worth keeping goes behind a help
    button (`HelpButton`: a small "?" icon button that opens a popover with the text). Fields keep their label and show a line under
    them only for an error. Empty states keep their one short line and their button.
@@ -31,8 +32,10 @@ character stays: the pixel logo and titles, the mono font, the green accent, lig
    Details are a list of label → value pairs (`Facts`), then the row's buttons. Never a run of words joined by dots.
 5. **A quiet top of the page.** A page starts with `PageHeader`: its title, at most two buttons (the main action filled, one more
    plain), and a "more" button (`MoreMenu`, the "⋯" icon) that holds the rest: second actions (scan, paste a code, add friend,
-   notifications), and switches such as "show removed friends" or "show archived". Filters and search stay where the list needs them,
-   in one line: a search field and a filter button that opens the filters.
+   notifications), and switches such as "show removed friends" or "show archived". On the phone only the main action is a button in
+   the header (an icon button); the other one goes into the "⋯" menu, in front of the page's own items. Filters and search stay where
+   the list needs them, in one line: a search field and a filter button that opens the filters. The month or year a page shows is one
+   compact control in the header (`PeriodNav`).
 6. **Fewer words on buttons.** A button whose icon says it all is an icon button with an `aria-label` (edit, delete, archive, restore,
    mark as paid). Buttons with words have one or two words.
 7. **Dialogs too.** Dialogs follow rules 3 and 6: no explaining paragraphs (a `HelpButton` beside the title when needed), one short line
@@ -41,7 +44,7 @@ character stays: the pixel logo and titles, the mono font, the green accent, lig
 
 ## 4. The phone shell
 
-- **No bar at the bottom and no bar of icons at the top.** `PhoneTabs` and the icon row of the phone header go away.
+- **No bar at the bottom and no bar of icons at the top.** `PhoneTabs` and the icon row of the phone header are gone.
 - **The logo is the menu button.** Each page's `PageHeader` starts, on a phone, with the logo as a button (`aria-label` "menu",
   `aria-expanded`, `aria-controls` the drawer) at the left of the title. The header row is sticky at the top of the page, on the page's
   background, with a hairline under it once the page has scrolled.
@@ -51,31 +54,37 @@ character stays: the pixel logo and titles, the mono font, the green accent, lig
   marked as in the desktop sidebar, and lock at the bottom. It is a modal `<dialog>`: the focus stays inside, Escape, a tap on the
   backdrop, a swipe to the left, or choosing a page closes it, and the focus goes back to the logo. It slides in 200 ms and does not
   move with `prefers-reduced-motion`.
-- **Swipes.** A swipe to the right that starts at the left edge of the screen (the first 24 px) opens the drawer. The swipe from page to
-  page (it followed the bottom tabs) goes; the pages' own swipes (the budget halves) stay.
-- The round add button (`QuickAdd`) stays, as it is.
+- **Swipes.** A swipe to the right that starts at the left edge of the screen (the first 24 px) opens the drawer (`AppLayout`,
+  `opensMenu` in `lib/swipe.ts`), and a swipe to the left inside it closes it (`PhoneMenu`, `closesMenu`). The swipe from page to page
+  (it followed the bottom tabs) is gone; the pages' own swipes (the budget tabs) stay.
+- The round add button (`QuickAdd`) stays, as it is. Transactions and categories, which it adds to, have no main button of their own
+  on the phone; the other pages keep theirs.
 
 ## 5. The phone rows (`TapRow`)
 
 - **The closed row** has at most three parts on one line, in columns: the name (with at most one mark, e.g. an "overdue" badge or the
-  "shared" icon), the amount at the right, and the chevron. Under the name there may be **one** short grey value — the one fact you
-  scan for in that list (a transaction's category, a recurring item's next due date, an account's type) — never two joined by dots,
-  and never under the amount. The `sub` prop with its dot-joined parts goes; `TapRow` gets `meta` (one value) instead.
-- **The open row** shows `Facts` (label at the left in grey, value at the right) and then its buttons, as icons with words in one row
-  (or a row of icon buttons when there are more than three).
-- Lists on the phone are flat: no box around each group, a hairline between rows, the group's name as a small heading with its total
-  at the right of the heading line.
+  "shared" icon: `NameMark`), the amount at the right, and the chevron. Under the name there may be **one** short grey value — the one
+  fact you scan for in that list (a transaction's category, a recurring item's next due date, an account's type) — never two joined by
+  dots, and never under the amount. The `sub` prop with its dot-joined parts was removed from `TapRow`; it has `meta` (one value)
+  instead. A list whose fact is how far something is (stashes, budget categories) has a thin bar there. A row with nothing to open
+  is plain, with no chevron (its one button, if it has one, is `action`).
+- **The open row** shows `Facts` (label at the left in grey, value at the right) and then its buttons (`PanelActions`), as icons with
+  words in one row, or a row of icon buttons (each with its label for screen readers) when there are more than three.
+- Lists on the phone are flat (`ListGroup`): no box around each group, a hairline between rows, the group's name as a small heading
+  with its total at the right of the heading line. A list by day (`DayGroups`) has the day as the heading.
 
 ## 6. Shared pieces (in `ui/src/components/`)
 
 | Piece | What |
 |---|---|
-| `PageHeader` | `title`, `actions` (≤ 2), `more` (items for `MoreMenu`), optional `aside` (a total such as "in accounts €13,308.93"); renders the logo menu button on a phone; sticky on a phone |
+| `PageHeader` | `title`, `actions` (≤ 2; on a phone only the main one shows, the other goes into the menu), `more` (items for `MoreMenu`), optional `aside` (a total such as "in accounts €13,308.93"), `help` (a `HelpButton` beside the title), `back` (a button to the list a page came from) and `children` (the period control); renders the logo menu button on a phone; sticky on a phone |
 | `MoreMenu` | the "⋯" icon button and its menu: `role="menu"`, items are buttons or switches (`role="menuitemcheckbox"`), arrow keys move, Escape closes and gives the focus back, a click outside closes |
-| `HelpButton` | "?" icon button with `aria-label` "help", opens a popover (on a phone: a small dialog) with a title and a few lines |
+| `HelpButton` | "?" icon button with `aria-label` "help", opens a popover (on a phone: a small dialog) with a title and a few lines; a dialog (`Modal`) has it through its `help` prop |
+| `PeriodNav` | "‹ nov 2026 ›": a month or a year with arrows, a popover to choose one, and "current" while another one is shown; `MonthNav` and `YearNav` are it with a kind |
 | `Facts` | a `<dl>` of label → value pairs in two columns, values right aligned, amounts with tabular figures |
 | `PhoneMenu` | the drawer of section 4 |
-| `TapRow` | as in section 5 |
+| `TapRow` | as in section 5; with `PanelActions`, `ListGroup`, `DayGroups` and `NameMark` |
+| `Table`, `Row` | the desktop list: a `Table` (`tidy`: one line to a cell) of `Row`s with their icon buttons and the chevron that opens the row's panel |
 
 ## 7. Not in this work
 

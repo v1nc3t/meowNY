@@ -16,7 +16,7 @@ const PICTURES = {
   stashes: ['stashes', 'stash', 'deposit'],
   documents: ['documents', 'preview-pdf', 'preview-csv'],
   debts: ['debts', 'friend', 'loans', 'split', 'bill-code'],
-  phone: ['phone-sync', 'phone-dashboard', 'phone-transactions', 'phone-quick-add', 'phone-entry', 'phone-recurring', 'phone-debts', 'phone-categories', 'phone-accounts', 'phone-stashes'],
+  phone: ['phone-sync', 'phone-menu', 'phone-dashboard', 'phone-transactions', 'phone-quick-add', 'phone-entry', 'phone-recurring', 'phone-debts', 'phone-categories', 'phone-accounts', 'phone-stashes'],
   backup: ['export'],
   privacy: ['settings'],
 }
@@ -115,15 +115,15 @@ const SECTIONS = [
     id: 'budgeting',
     title: 'Budgeting',
     blocks: [
-      { t: 'p', text: 'The pages you use most: **dashboard**, **transactions**, **categories** (your budgets are there) and **recurring**. **accounts** shows where your money is: [accounts](#accounts). **stashes** sets some of it aside for a goal: [stashes](#stashes). On the phone the first four are tabs at the bottom, and the round **add** button replaces **add transaction** and **add category**.' },
+      { t: 'p', text: 'The pages you use most: **dashboard**, **transactions**, **categories** (your budgets are there) and **recurring**. **accounts** shows where your money is: [accounts](#accounts). **stashes** sets some of it aside for a goal: [stashes](#stashes). On the phone the pages are in the menu behind the logo ([on the phone](#on-phone)), and the round **add** button replaces **add transaction** and **add category**.' },
       { t: 'h3', id: 'dashboard', text: 'Dashboard' },
       {
         t: 'ul',
         items: [
           'Income, expenses, savings and the savings rate of a month, with how much each changed from the month before. Click a month on the year chart to look at it; the arrows change the year, and arrow keys move along the chart.',
           'Spending by category, your budgets against what you spent, what friends owe you and what you owe, and the recurring items that are overdue, due soon or split with friends.',
-          'Once you use accounts (you have more than one, or the main account has an opening balance): **net worth** ([net worth](#net-worth)). Click it to open **accounts**.',
-          'Once you have a stash: **stashes**, with the total saved and the first three. Click it to open **stashes** ([stashes](#stashes)).',
+          'Once you use accounts (you have more than one, or the main account has an opening balance): **net worth** ([net worth](#net-worth)). Click its title to open **accounts**.',
+          'Once you have a stash: **stashes**, with the total saved and the first three. Click its title to open **stashes** ([stashes](#stashes)).',
           'A new, empty dashboard shows **first steps**: add a transaction, set a budget, add a friend, pair your phone.',
         ],
       },
@@ -137,8 +137,8 @@ const SECTIONS = [
           '**transfers**: money you moved between your own accounts ([transfers](#transfers)). Transfers are in no other tab. With only one account, this tab is not there.',
         ],
       },
-      { t: 'p', text: 'Each row has a column for the **name**, the **category**, the **account** (with more than one) and the **date**, and the **amount** at the right. When every transaction of the period fits on the page, a last row adds them up: how many there are, what came in, what went out, and in bold what is left of the two. On the phone the rows are grouped by day.' },
-      { t: 'p', text: 'Click a row (tap it on the phone) to open its details: how a bill is split, the description and the documents. The pencil edits a transaction and the bin deletes it. An edit has no tabs: a transaction keeps its kind, so to turn an expense into an income, delete it and add the other.' },
+      { t: 'p', text: 'Each row has a column for the **name**, the **category**, the **account** (with more than one) and the **date**, and the **amount** at the right. A narrower window leaves out the account, then the date, then the category. When every transaction of the period fits on the page, a last row adds them up: how many there are, what came in, what went out, and in bold what is left of the two. On the phone the rows are grouped by day, with the category in grey under the name, and the sums are a strip over the list.' },
+      { t: 'p', text: 'Click a row (tap it on the phone) to open its details: how a bill is split, the description and the documents (the phone adds the account, the category and the date). The pencil edits a transaction and the bin deletes it; on the phone they are the buttons of the open row. An edit has no tabs: a transaction keeps its kind, so to turn an expense into an income, delete it and add the other.' },
       { t: 'h3', id: 'add-entry', text: 'Add an expense, an income or a transfer' },
       { t: 'p', text: 'One dialog adds all three. It has three tabs, and `Alt+1`, `Alt+2` and `Alt+3` choose one from anywhere in it. It opens on the tab that fits the list you are on: **income** on the income tab, **transfer** on the transfers tab, **expense** anywhere else.' },
       {
@@ -179,17 +179,17 @@ const SECTIONS = [
       {
         t: 'ol',
         items: [
-          'Open **transactions**. Under **period** choose **month**, **year** or **range**.',
-          'For a month or a year, step with the arrows (or `[` and `]`). **current** brings you back to this month or year. For a **range**, choose the **from** and **to** days.',
-          'Choose a **category**, or type in **search** (press `/`) part of a name or description.',
-          'With more than one account, choose an **account** to see only its transactions. **all accounts** shows everything again. Each row names its account.',
+          'Open **transactions**. The top of the page shows the month. To look at a **year** or a **range** of days, press **filters** (the funnel beside **search**) and choose it under **period**.',
+          'For a month or a year, step with the arrows at the top (or `[` and `]`), or press its name to choose one. **current** brings you back to this month or year. For a **range**, choose the **from** and **to** days under **filters**.',
+          'Type in **search** (press `/`) part of a name or description, or choose a **category** under **filters**.',
+          'With more than one account, choose an **account** under **filters** to see only its transactions. **all accounts** shows everything again. Each row names its account.',
           'Under the list, choose how many **rows** a page shows (10, 50 or 100) and use the page buttons.',
         ],
       },
-      { t: 'p', text: 'meowNY remembers the kind of period, the category, the account and the number of rows the next time. The dates are remembered only until you close the app. On the phone, the period, the category and the account are behind the **filters** button.' },
+      { t: 'p', text: 'meowNY remembers the kind of period, the category, the account and the number of rows the next time. The dates are remembered only until you close the app. A number on the **filters** button says how many filters are on.' },
       { t: 'p', text: 'The **transfers** tab lists each transfer with its **date**, **from**, **to**, **amount** and **note**. Only the period and the account apply there (an account matches either side of a transfer); the category and the search are hidden. The pencil edits a transfer and the bin deletes it (on the phone, tap the row first).' },
       { t: 'h3', id: 'categories', text: 'Categories' },
-      { t: 'p', text: 'Categories sort what you spend and what comes in. **categories** shows expenses and income side by side for one month (change it with the arrows or `[` and `]`), with the **budget history** under them. In a narrow window the two sit one under the other. Each category row has what you spent or earned that month, its **budget**, what is **left** of it (**to go**, for income), and a bar of how much of it is **used**, with its percent. The **monthly budget** box above the categories has the same columns for the whole side. Spent is green within the budget and red above it, and an expense that went over has what is left in red and a red bar; earned is green above its budget, and its bar turns green. On the phone the page has three tabs: **expenses**, **income** and **budget history** (the history is there once you have some). More on [income categories](#income).' },
+      { t: 'p', text: 'Categories sort what you spend and what comes in. **categories** shows expenses and income side by side for one month (change it with the arrows at the top or `[` and `]`), with the **budget history** under them. In a narrow window the two sit one under the other. Each category row has its **budget**, what you spent or earned that month, what is **left** of the budget (**to go**, for income), and a bar of how much of it is **used**, with its percent. The first row, **total**, has the same columns for the whole side: its budget is the **monthly budget**. Spent is green within the budget and red above it, and an expense that went over has what is left in red and a red bar; earned is green above its budget, and its bar turns green. On the phone the page has three tabs: **expenses**, **income** and **budget history** (the history is there once you have some). A strip over the list has the **monthly budget**, what was spent and what is left. A category row has its name, what is left and a thin bar; tap it for its numbers and its buttons. More on [income categories](#income).' },
       {
         t: 'ol',
         items: [
@@ -202,7 +202,7 @@ const SECTIONS = [
       { t: 'p', text: '**Change the order:**' },
       {
         t: 'ol',
-        items: ['Find the grip at the start of a category row.', 'Hold it and drag the row up or down. With the keyboard, focus the row and press `Alt` with the up or down arrow.'],
+        items: ['Find the grip at the start of a category row. On the phone, first switch on **reorder categories** in the **⋯** menu: the grips show, and the rows do not open while it is on.', 'Hold it and drag the row up or down. With the keyboard, focus the row and press `Alt` with the up or down arrow.'],
       },
       { t: 'p', text: 'The order is kept for expenses and for income apart, and goes to your phone with the next sync. **Delete** asks for which months: only this month (the category stays), this month and later, or all months.' },
       { t: 'h3', id: 'budget', text: 'Budgets' },
@@ -211,12 +211,12 @@ const SECTIONS = [
         t: 'ol',
         items: [
           'Open **categories** and choose the month.',
-          'On the expenses or the income side, press the pencil on **monthly budget**.',
+          'On the expenses or the income side, press the pencil on the **total** row (on the phone, the pencil beside the **monthly budget**).',
           'Type the amount and press **save**. To remove the budget, press **clear**.',
-          'For one category, press the pencil on its row instead, type the amount under **budget from … on**, and press **done**. You can rename it there too.',
+          'For one category, press the pencil on its row instead (on the phone, tap the row first), type the amount under **budget from … on**, and press **done**. You can rename it there too.',
         ],
       },
-      { t: 'p', text: 'Change a budget of a past month and meowNY asks how far the change reaches: only that month, that month and later, or every month. Category budgets cannot add up to more than the monthly budget. On **categories**, the list of months under the budgets shows each month\'s spending and earnings against their budgets; click one to look at it.' },
+      { t: 'p', text: 'Change a budget of a past month and meowNY asks how far the change reaches: only that month, that month and later, or every month. Category budgets cannot add up to more than the monthly budget. On **categories**, the list of months under the budgets shows each month\'s spending and earnings against their budgets; click one to look at it (on the phone, tap a month and press **show this month**).' },
       { t: 'h3', id: 'income', text: 'Income categories' },
       { t: 'p', text: 'The income side of **categories** holds your income categories, their budgets and what came in this month. It works as the expenses side does. Earned is green above its budget. On the phone it is the **income** tab.' },
       {
@@ -224,16 +224,16 @@ const SECTIONS = [
         items: [
           'Open **categories**. On the phone, choose the **income** tab.',
           'Press **add category** (or press `n`). Type a name, choose **income** as the type (on the phone\'s **income** tab it is chosen already), type a budget if you want one, and press **done**.',
-          'Choose the month with the arrows (or `[` and `]`). For the budget of all income, press the pencil on **monthly budget**; for one category, press the pencil on its row ([budgets](#budget)).',
-          'To change the order, hold the grip at the start of a row and drag, or use `Alt` with the up or down arrow.',
+          'Choose the month with the arrows (or `[` and `]`). For the budget of all income, press the pencil on the **total** row; for one category, press the pencil on its row ([budgets](#budget)).',
+          'To change the order, hold the grip at the start of a row and drag, or use `Alt` with the up or down arrow (on the phone, switch on **reorder categories** in the **⋯** menu first).',
         ],
       },
       { t: 'h3', id: 'recurring', text: 'Recurring items' },
-      { t: 'p', text: 'Rent, salary, subscriptions: what comes back. The page has two lists, **recurring expenses** and **recurring income**. Each title shows how many items the list holds and what the running ones with a fixed amount come to **per month**. In a list, active items come first, then paused and ended ones, each group by category.' },
+      { t: 'p', text: 'Rent, salary, subscriptions: what comes back. The page has two lists, **recurring expenses** and **recurring income**. Each heading shows what the running ones with a fixed amount come to **per month**. In a list, active items come first, then paused and ended ones, each group by category.' },
       {
         t: 'ol',
         items: [
-          'Open **recurring** and press **add recurring transaction** (or press `n`). The **add** button of a list opens the dialog on that list\'s tab.',
+          'Open **recurring** and press **add recurring transaction** (or press `n`; on the phone, the **+** at the top).',
           'Choose the **expense** or the **income** tab (or press `Alt+1` or `Alt+2`).',
           'Type a name and choose a category; the list holds the categories of that kind. Type an amount, or leave it empty for a bill with no fixed amount: it shows **varies** and asks for the amount when you pay it.',
           'Choose the account. An expense asks for it with more than one account; an income always asks, under **into account**. The list holds the accounts in your currency only.',
@@ -243,7 +243,7 @@ const SECTIONS = [
         ],
       },
       { t: 'p', text: 'Each payment is made in the item\'s account. If that account is archived by then, the payment goes to the main account. An edit has no tabs: an item keeps its kind.' },
-      { t: 'p', text: 'Each row has a column for the **category**, how often it **repeats**, the **next due** date and its **status**, with the amount at the right. The status is **overdue** in red, **due today** in bold, or **ongoing**, **paused** or **ended**. In a narrower window the category goes under the name and how often under the date. On the phone, the next due date is under the amount.' },
+      { t: 'p', text: 'Each row has a column for the **category**, how often it **repeats**, the **next due** date and its **status**, with the amount at the right. The status is **overdue** in red, **due today** in bold, or **ongoing**, **paused** or **ended**. A narrower window leaves out columns, how often first, then the category. On the phone a row shows the name (with **overdue**, **paused** or **ended** after it when that is so), the next due date in grey under it, and the amount; tap it for the rest.' },
       { t: 'p', text: '**Pay one:**' },
       {
         t: 'ol',
@@ -286,18 +286,18 @@ const SECTIONS = [
           'Press **done**.',
         ],
       },
-      { t: 'p', text: 'The list shows each account with its type, **last activity**, what **this month** did to it, what its stashes hold (**set aside**, a dash for none) and its **balance**; a wide window shows the **account number** too, and a narrower one leaves out the last activity, then set aside. An account in another currency shows its balance in that currency and, small under it, **≈** its value in yours. An account with a virtual balance shows **available** under its balance, one with a [rate](#account-rate) what it earns a month (**≈ 10.01 / month**), and one that net worth leaves out says **not in net worth**. With groups, each group of more than one account ends in a **total** row, in your currency. **in accounts**, above the list, is the total of the accounts that count in net worth, archived ones too. The pencil edits an account. On the phone, set aside is under the balance.' },
+      { t: 'p', text: 'The list shows each account with its **type**, what **this month** did to it, what its stashes hold (**set aside**, a dash for none), what is **free** (the balance less what is set aside; with a virtual balance, what is **available**) and its **balance**. A narrower window leaves out columns: set aside first, then the type and this month. An account in another currency shows its amounts in that currency. One that net worth leaves out has a crossed eye after its name. With groups, each group of more than one account ends in a **total** row, in your currency. **in accounts**, at the top, is the total of the accounts that count in net worth, archived ones too. The pencil edits an account. On the phone a row shows the name, its type in grey and the balance; tap it for the rest, one fact to a line (the account number, what this month did, set aside, free, the last activity, its [rate](#account-rate) and what it earns a month, what it is worth in your currency) and its buttons.' },
       { t: 'h3', id: 'look-account', text: 'Look at one account' },
       {
         t: 'ol',
         items: [
           'Click its row. On the phone, tap it and press **open**.',
-          'The top shows its name and balance, with **available** under it when it has a virtual balance, then its type, number, BIC, group and notes.',
+          'The top shows its name and balance, then its facts, one to a line: the type, number, BIC, group, rate, what it earns a month, what is set aside and **free**, the last activity and, with a virtual balance, what is **available**. Its notes come after them.',
           'The chart shows its balance over the year, month by month. The arrows change the year; click a month to look at it.',
           'Under it, step through the months (the arrows, or `[` and `]`; `t` is this month). The month you choose sets everything below.',
           'Two lists show where the month went: **spent by category** and **came in by category**, each with its total and a bar for every category. They sit side by side, and one over the other on the phone. Transfers, and a split bill a friend paid, are not in them.',
           'Then the statement. Each line is something that moved the account, the newest first, with the **balance after** it. A transaction\'s line leads to the transaction, a friend\'s line to their history. A transfer\'s line has the pencil and the bin.',
-          'The buttons in the title row add to this account: **add expense**, **add income** and **transfer** (with two accounts or more). Each opens the add dialog on its tab with this account already chosen. An archived account has none: you can only look at it, and **restore** it.',
+          'The title row has **add expense** and **add income**. **transfer** (with two accounts or more), **edit** and **book interest** are in the **⋯** menu. The add buttons and **transfer** open the add dialog on their tab with this account already chosen. An archived account has none: you can only look at it, and **restore** it. On the phone only **add expense** is in the title row, and the rest is in the **⋯** menu.',
           'Press **back** to return to the list.',
         ],
       },
@@ -312,9 +312,9 @@ const SECTIONS = [
         items: [
           '**BIC**: the bank\'s code, up to 20 characters.',
           '**group**: a name that puts accounts under a heading in the list. The field offers the groups you use already.',
-          '**virtual balance**: an amount added to the balance to show what is **available**, such as a credit card limit. A card with a balance of −240.00 and a virtual balance of 1000.00 shows 760.00 available. The virtual balance is never part of the balance, the statement, the chart or net worth.',
-          '**count in net worth**: on at first. Switch it off for an account that net worth should leave out. It keeps its balance and its place in the list, and is marked **not in net worth**.',
-          '**notes**: up to 1000 characters, shown under the account\'s name on its page.',
+          '**virtual balance**: an amount added to the balance to show what is **available**, such as a credit card limit. A card with a balance of −240.00 and a virtual balance of 1000.00 shows 760.00 available. The virtual balance is never part of the balance, the statement, the chart or net worth. The **free** column of the list adds it.',
+          '**count in net worth**: on at first. Switch it off for an account that net worth should leave out. It keeps its balance and its place in the list, and has a crossed eye after its name (**not in net worth**).',
+          '**notes**: up to 1000 characters, shown on its page, under its facts.',
         ],
       },
       { t: 'p', text: 'When any account has a group, the list has a heading for each group, and the accounts without one come last, under **no group**. To move an account to another group, change its **group**.' },
@@ -328,13 +328,13 @@ const SECTIONS = [
           'Press **done**.',
         ],
       },
-      { t: 'p', text: 'The row then shows **≈** what the account earns a month on what it holds today: the balance times the rate, a twelfth of it for a yearly rate, simple interest, rounded to the cent. When the bank pays it, open the account and press **book interest**: the add dialog opens on the income tab with this account and that amount filled in. Check it against your statement, change it if it differs, and press **done**.' },
+      { t: 'p', text: 'Its page, and its open row on the phone, then show **return**: **≈** what the account earns a month on what it holds today: the balance times the rate, a twelfth of it for a yearly rate, simple interest, rounded to the cent. When the bank pays it, open the account, open the **⋯** menu and choose **book interest**: the add dialog opens on the income tab with this account and that amount filled in. Check it against your statement, change it if it differs, and press **done**.' },
       { t: 'h3', id: 'balance-today', text: 'Set what it holds today' },
       {
         t: 'ol',
         items: [
           'Open the account dialog with the pencil on its row. A new account has no **balance today**: type its opening balance instead.',
-          'Type what the account holds today in **balance today**. It can start with a minus. Under it, meowNY says what it does: it sets the opening balance so the account holds this today.',
+          'Type what the account holds today in **balance today**. It can start with a minus. The **?** beside the title of the dialog says what it does: it sets the opening balance so the account holds this today.',
           'Press **done**.',
         ],
       },
@@ -350,7 +350,7 @@ const SECTIONS = [
           'Type the **opening balance**. The label names the currency, because it is now in lei. Press **done**.',
         ],
       },
-      { t: 'p', text: '**The rate is yours.** Nothing is fetched from anywhere. It is used for two things: the **≈** value of the account in your currency, which **in accounts** and net worth add up, and the amount the forms suggest. Change it any time with the pencil. It changes no amount you stored, only that value.' },
+      { t: 'p', text: '**The rate is yours.** Nothing is fetched from anywhere. It is used for two things: the value of the account in your currency (**worth in EUR**, on its page and in its open row on the phone), which **in accounts** and net worth add up, and the amount the forms suggest. Change it any time with the pencil. It changes no amount you stored, only that value.' },
       { t: 'p', text: '**An entry in such an account has two amounts:**' },
       {
         t: 'ul',
@@ -358,7 +358,7 @@ const SECTIONS = [
           'In **add transaction**, an expense or an income in the account shows **amount (RON)**: what really left the account or reached it. Under it, **in EUR** starts from the rate while you have not typed in it. Type your own figure when you know it, from your bank, say.',
           'Budgets and statistics count the euro amount, **in EUR**, as they count any entry. The balance of the account moves by the lei.',
           'A transfer between accounts of different currencies has what leaves and what arrives: **amount (EUR)** and **arrives (RON)**. The second starts from the two rates until you type your own. Each account moves by its own amount.',
-          'The transactions page shows the euro amount and, small beside it, the amount in lei with its code. The page of the account, its statement, its chart and its breakdown are all in lei.',
+          'The transactions page shows the euro amount, and the amount in lei with its code in the details of the row. The page of the account, its statement, its chart and its breakdown are all in lei.',
         ],
       },
       { t: 'p', text: '**What is not possible:**' },
@@ -368,7 +368,7 @@ const SECTIONS = [
           'The **main account** stays in your currency.',
           'Recurring items and debts stay in your currency: their account field lists only accounts in it.',
           'The currency of an account cannot change once something is in it (a transaction, a transfer, a recurring item or a debt entry). The dialog says to move its entries away first.',
-          'Your own currency cannot be changed while such an account exists. In **settings**, the **change** button beside **currency** is off, and the line under it says: an account in another currency exists; the app\'s currency cannot be changed. Delete the account, or move its entries away and put it back in your currency, first.',
+          'Your own currency cannot be changed while such an account exists. In **settings**, the **change** button beside **currency** is off, and the **?** beside **language and region** says: an account in another currency exists; the app\'s currency cannot be changed. Delete the account, or move its entries away and put it back in your currency, first.',
         ],
       },
       { t: 'h3', id: 'account-order', text: 'Change the order' },
@@ -382,7 +382,7 @@ const SECTIONS = [
         t: 'ul',
         items: [
           'For an account you no longer use, press **archive** on its row and confirm. It leaves the lists and the forms; its history and balance stay. If it still holds money, the question says how much: move it out with a transfer first if the account is closed.',
-          'Tick **archived**, under the list, to see the archived accounts. **restore** brings one back.',
+          'Open the **⋯** menu and switch on **show archived** (it says how many there are) to see the archived accounts, under their own heading. **restore** brings one back.',
           'An account with nothing in it has the bin in place of **archive**: **delete** removes it for good. A stash counts as something: [an account with a stash](#stash-archive) cannot be deleted.',
           'The **main account** always stays. You can rename and edit it, but not archive or delete it. New entries go there when no account is chosen.',
         ],
@@ -404,7 +404,7 @@ const SECTIONS = [
       {
         t: 'ol',
         items: [
-          'Start it in one of these places: the **transfer** tab of **add transaction** (or `Alt+3`); **transfer**, next to **add account**, on **accounts**; or **transfer** in the title row of an account, which starts from that account. On the phone, you can also tap an account and press **transfer**.',
+          'Start it in one of these places: the **transfer** tab of **add transaction** (or `Alt+3`); **transfer**, next to **add account**, on **accounts** (on the phone it is in the **⋯** menu); or **transfer** in the **⋯** menu of an account\'s page, which starts from that account. On the phone, you can also tap an account in the list and press **transfer**.',
           'Choose the accounts **from** and **to**. If you choose the account the other side holds, the two swap.',
           'Type the amount and check the date. It starts at today. Add a note if you like.',
           'Press **done**.',
@@ -434,17 +434,17 @@ const SECTIONS = [
           'Press **done**.',
         ],
       },
-      { t: 'p', text: 'To change a stash, open it and press **edit**. Its account can change only to an account in the same currency that has enough free money for what the stash holds ([what is free](#stash-free)). The target cannot go below what is saved.' },
+      { t: 'p', text: 'To change a stash, open it and choose **edit** in the **⋯** menu. Its account can change only to an account in the same currency that has enough free money for what the stash holds ([what is free](#stash-free)). The target cannot go below what is saved.' },
       { t: 'h3', id: 'look-stash', text: 'Look at your stashes' },
       {
         t: 'ul',
         items: [
-          'The list has a row for each stash, with a column for the **name**, the **account**, what is **saved**, the **target**, the **progress** (a bar and its percent; for a running deposit, how far through its term it is and the days left), the **date** (a goal\'s target date, a deposit\'s maturity) and the **status**: what to save **a month**, what is **left**, **reached** in green, **overdue** in red, or a deposit\'s state with its rate. The last row adds up what they hold and their targets, when they are all in one currency. Above the list is **total saved**, in your currency.',
-          'With more than one account, **account** shows the stashes of one account only, and the account column goes. With goals and deposits both, **kind of stash** shows one kind only. In a narrower window the account goes under the name and the target under what is saved.',
+          'The list has a row for each stash, with a column for the **name**, the **account**, what is **saved**, the **target**, the **progress** (a bar and its percent; for a running deposit, how far through its term it is and the days left), the **date** (a goal\'s target date, a deposit\'s maturity) and the **status**: what to save **a month**, what is **left**, **reached** in green, **overdue** in red, or a deposit\'s state. A narrower window leaves out columns: the date first, then the target, the account and the bar. The last row adds up what they hold and their targets, when they are all in one currency. **total saved**, in your currency, is at the top of the page.',
+          'With more than one account, the **account** list above the table shows the stashes of one account only, and the account column goes. With goals and deposits both, **kind of stash** shows one kind only.',
           'A row has **+** (add) and **−** (take out). Click anywhere else on it to open the stash.',
-          'On the phone each stash is a small card of three lines: the name and what is saved; the account and the date, with the target or a deposit\'s rate at the right; then the bar with its figure, and **+** and **−**.',
+          'On the phone a row has the name and what is saved, with a thin bar of the progress under the name (a deposit says its state there). A mark after the name says **reached**, **overdue**, **matured** or **broken**. Tap a row for its facts and its buttons: add money (or the return of a deposit that matured), take out, open, edit and archive.',
           'On the computer, hold a row and drag it to change the order, or focus it and press `Alt` with an arrow key. This works while no account and no kind is chosen. The order goes to your phone with the next sync. It cannot be changed on the phone.',
-          'The page of one stash has the name and account on top, then how far it is, the notes, a chart of what it held at the end of each month (the arrows change the year; a dashed line marks the target), and its **history**.',
+          'The page of one stash has its name and what it holds on top, then a bar of how far it is, its facts one to a line (the account, the target, the percent, what is left, what to save a month, the date), the notes, a chart of what it held at the end of each month (the arrows change the year; a dashed line marks the target), and its **history**.',
           'The history lists every add and take, newest first: the date, a plus or a minus, the note, the account it came from or went to, the amount, and what the stash held **after** it.',
           'Under the history, the account\'s line says what it holds, how much of it is set aside and how much is **free**.',
         ],
@@ -454,11 +454,11 @@ const SECTIONS = [
       {
         t: 'ol',
         items: [
-          'Press **+** or **−** on a row. On a stash\'s page, press **add money** (or `n`) or **take out**. The dialog has two tabs, **add** and **take out**, and `Alt+1` and `Alt+2` choose one. Changing tab keeps the amount, the date and the note.',
+          'Press **+** or **−** on a row (on the phone, tap the row and press the add or take-out button). On a stash\'s page, press **add money** (or `n`) or **take out**. The dialog has two tabs, **add** and **take out**, and `Alt+1` and `Alt+2` choose one. Changing tab keeps the amount, the date and the note.',
           'Type the **amount**, or press a chip under it: **the rest** (what is left to the target), **a month** (what the target date asks of this month), **all free** (everything that is free) for an add; **all** or **half** of what is saved for a take. Only the chips that make sense for the stash are shown.',
           'Look at the bar under the chips. The solid part is what the stash holds now, the striped part what this adds or takes, and the line says what it would hold: **after this: 550.00 of 1200.00 · 45%**. If the amount breaks a limit ([what is free](#stash-free)), the line says why in red and **done** stays off.',
           'Check the date. It starts at today and cannot be after today. Add a **note** if you like, up to 200 characters.',
-          'Optional: tick **bring it from another account** (for an add) or **send it to another account** (for a take out) and choose the account. A real transfer is made too, and the line under it says which. It is shown when you have another account in the same currency. The money that is brought counts as free for the add.',
+          'Optional: tick **bring it from another account** (for an add) or **send it to another account** (for a take out) and choose the account. A real transfer is made too. It is shown when you have another account in the same currency. The money that is brought counts as free for the add.',
           'Press **done**.',
         ],
       },
@@ -489,9 +489,9 @@ const SECTIONS = [
       {
         t: 'ul',
         items: [
-          'A stash\'s page shows **450.00 of 1200.00 · 37%**, and **750.00 left**; its row shows the bar with **37%** and the target in its own column.',
-          'With a target date, it also shows how much to save **a month**: what is left, spread over the months from now to the target date, rounded up to the cent. **107.15 a month until june 2027** reaches the target in time. In the month of the target date, it asks for all that is left.',
-          'A stash whose target date has passed, and has not reached its target, says **overdue since** that date, in red, and has no amount a month.',
+          'A stash\'s page has a bar over its facts: the **target**, the **progress** (**37%**) and what is **left** (**750.00**). Its row in the list shows the bar with **37%**, and the target in a wide window. The small cards on an account\'s page and on the dashboard say **450.00 of 1200.00 · 37%**.',
+          'With a target date, it also shows how much to save **a month**: what is left, spread over the months from now to the target date, rounded up to the cent. Saving **107.15 a month** reaches the target in time. In the month of the target date, it asks for all that is left.',
+          'A stash whose target date has passed, and has not reached its target, says **overdue**, in red, and has no amount a month.',
           'At or above its target a stash says **reached**. It is never overdue.',
         ],
       },
@@ -499,9 +499,9 @@ const SECTIONS = [
       {
         t: 'ul',
         items: [
-          'For a stash you no longer add to, press **archive** on its page and confirm. It leaves the list. **What it still holds stays set aside**, and you can still take money out of it, so you can empty it. Nothing can be added until you **restore** it.',
-          'Tick **archived**, under the list, to see the archived stashes. **restore** brings one back, unless another stash has taken its name.',
-          'Press **delete**, on a stash\'s page or on an archived row, to remove it with its history. The question says what happens: the money stays in the account, what the stash held is free again, and **transfers that came with entries stay**.',
+          'For a stash you no longer add to, choose **archive** in the **⋯** menu of its page and confirm (on the phone, the open row of the list has an archive button too). It leaves the list. **What it still holds stays set aside**, and you can still take money out of it, so you can empty it. Nothing can be added until you **restore** it.',
+          'Open the **⋯** menu of the list and switch on **show archived** (it says how many there are) to see the archived stashes, under their own heading. **restore** brings one back, unless another stash has taken its name.',
+          'Choose **delete** in the **⋯** menu of a stash\'s page, or press the bin on an archived row, to remove it with its history. The question says what happens: the money stays in the account, what the stash held is free again, and **transfers that came with entries stay**.',
           'When the account of a stash is archived, money can only be taken out of the stash. To add again, move the stash to an account that is not archived with **edit**.',
         ],
       },
@@ -542,8 +542,8 @@ const SECTIONS = [
         t: 'ol',
         items: [
           'Open **documents**.',
-          'Press **add file**, or drag files onto the window. On the phone you can also press **take photo**.',
-          'Click a row (tap it on the phone) to see its details. The pencil changes its name and date.',
+          'Press **add file**, or drag files onto the window. On the phone, **take photo** is in the **⋯** menu.',
+          'Click a row (tap it on the phone) to see its details: its type, its size, where its file is, and what it is attached to. The pencil changes its name and date.',
         ],
       },
       { t: 'h3', id: 'attach', text: 'Attach one to something' },
@@ -556,7 +556,7 @@ const SECTIONS = [
           'Press **done**.',
         ],
       },
-      { t: 'p', text: 'The documents show in the details of the item. On **documents**, the **links** column shows how many things a document is attached to.' },
+      { t: 'p', text: 'The documents show in the details of the item. On **documents**, a paper clip on the row of a document that is attached to something opens the list of what it is attached to.' },
       { t: 'h3', id: 'view', text: 'Look inside a document' },
       {
         t: 'ul',
@@ -581,11 +581,11 @@ const SECTIONS = [
         t: 'ol',
         items: [
           'On the computer, open **documents**.',
-          'Tick the box in the **phone** column of each document you want on the phone. (Its dialog has the same switch: **keep a copy on my phone**.)',
+          'Open the details of each document you want on the phone (click its row) and tick **keep on phone**. (Its dialog has the same switch: **keep a copy on my phone**.)',
           'Sync the phone (see [sync](#syncing)). The files come with that sync.',
         ],
       },
-      { t: 'p', text: 'On the phone, a document that stays on the computer cannot be previewed: its row says so, and **keep on phone** asks for it at the next sync. A document added on the phone moves to the computer at the next sync.' },
+      { t: 'p', text: 'On the phone, a document that stays on the computer cannot be previewed: its open row says so (**location**), and **keep on phone** asks for it at the next sync. A document added on the phone moves to the computer at the next sync.' },
       { t: 'p', text: 'Backups can include the files. Exports list documents by name, never the files.' },
       { t: 'note', kind: 'info', text: 'Do not edit the `documents/` folder by hand: a file no document names is removed at the next unlock.' },
     ],
@@ -596,15 +596,15 @@ const SECTIONS = [
     blocks: [
       { t: 'h3', id: 'friends', text: 'Friends and the history' },
       { t: 'p', text: 'A friend is just a name: no phone, email or contacts. A ledger per friend, outside your budget. Green means the friend owes you, red means you owe them.' },
-      { t: 'p', text: '**debts** has two tabs: **friends**, described here, and **debts**, for what you owe a bank ([loans and mortgages](#loans)). The friends tab shows your friends, each with who owes whom, a reminder when there is one and the **balance**. Under them is the **history**: every change of every friend\'s debt, newest first, with the friend, what it was, the **date**, the **change** and the **balance** after it, a page at a time (**older**, **newer**). Click a friend to see only their lines, with their name and balance on top. Click them again, or press **back**, to see everyone\'s. On the phone, tap a friend, then **history**.' },
+      { t: 'p', text: '**debts** has two tabs: **friends**, described here, and **debts**, for what you owe a bank ([loans and mortgages](#loans)). The friends tab shows your friends, each with who owes whom, the day of a reminder when there is one and the **balance**. Under them is the **history**: every change of every friend\'s debt, newest first, with the friend, what it was, the **date**, the **change** and the **balance** after it, a page at a time (**older**, **newer**). Click a friend to see only their lines, with their name and balance on top. Click them again, or press **back**, to see everyone\'s. On the phone, tap a friend, then the **history** button.' },
       { t: 'p', text: '**Add a friend:**' },
-      { t: 'ol', items: ['Open **debts** and press **add friend**.', 'Type a name.', 'Press **done**.'] },
-      { t: 'p', text: 'The pencil on a friend\'s row renames them. The bin **remove**s them from the list: their balance and history stay, and **show removed friends** lets you **bring back** one (the button in the place of the check).' },
+      { t: 'ol', items: ['Open **debts**, open the **⋯** menu and choose **add friend**.', 'Type a name.', 'Press **done**.'] },
+      { t: 'p', text: 'The pencil on a friend\'s row renames them. The bin **remove**s them from the list: their balance and history stay, and **show removed friends**, in the **⋯** menu, lists them again: **bring back** (the button in the place of the check) puts one back.' },
       { t: 'p', text: '**Lend or borrow:**' },
       {
         t: 'ol',
         items: [
-          'Open **debts** and press **lend** (money you gave, or press `n`) or **borrow** (money you got). If a friend is open, the entry starts with them.',
+          'Open **debts** and press **lend** (money you gave, or press `n`) or **borrow** (money you got; on the phone it is in the **⋯** menu). If a friend is open, the entry starts with them.',
           'Choose the friend (or **add friend**), and type the amount and the date. Add a note if you like; it can run over several lines.',
           'Press **done**.',
         ],
@@ -634,7 +634,7 @@ const SECTIONS = [
           'Press **done**.',
         ],
       },
-      { t: 'p', text: 'Each debt shows what is **owed**, the **interest rate**, the **installment** and the **payoff**: the month it is paid off if you keep paying the installment, or **never** when the installment does not even cover the interest. The estimate is simple interest, a month at a time.' },
+      { t: 'p', text: 'Each debt shows what is **owed**, the **installment** and the **payoff**: the month it is paid off if you keep paying the installment, or **never** when the installment does not even cover the interest. Open its row (the chevron, or a tap on the phone) for the **interest rate** and the **interest per month**. The estimate is simple interest, a month at a time.' },
       { t: 'p', text: '**Pay one:**' },
       {
         t: 'ol',
@@ -650,7 +650,7 @@ const SECTIONS = [
       {
         t: 'ol',
         items: [
-          'Press **split a bill** on **debts** (a friend you have open is on it already), or add a transaction and tick **split this bill**. Only an expense can be split. On the phone, add an expense and tick it there.',
+          'Choose **split a bill** in the **⋯** menu of **debts** (a friend you have open is on it already), or add a transaction and tick **split this bill**. Only an expense can be split. On the phone, add an expense and tick it there.',
           'Choose **how to split**: **equally**, **by percent**, **by shares** or **by amounts**.',
           'Add the friends who share it: choose one under **add friend**, or type a new name (it becomes a friend).',
           'For percent or amounts, type each part. Leave one field empty (yours or a friend\'s) and it gets what is left. With two or more empty, the dialog shows **left to assign**. For shares, type a whole number for each: 2, 1, 1.',
@@ -672,7 +672,7 @@ const SECTIONS = [
       {
         t: 'ol',
         items: [
-          'Open **debts**. Press **paste a code**, or on the phone **scan** and point the camera at the code.',
+          'Open **debts** and open the **⋯** menu. Choose **paste a code**, or on the phone **scan** and point the camera at the code. (The round **add** button of the phone has **scan a bill** too.)',
           'Paste the code and press **read the code**.',
           'Check who it is from, what it is for and your part. If the bill is in another currency, type the rate.',
           'Choose which friend it belongs to, or **new friend**. When a friend paid the bill, you owe that friend.',
@@ -685,7 +685,7 @@ const SECTIONS = [
       {
         t: 'ol',
         items: [
-          'Open **debts** and press **notifications**. The number is how many reminders are waiting.',
+          'Open **debts**, open the **⋯** menu and choose **notifications**. The number is how many reminders are waiting.',
           'Each friend with a reminder is a line. Press the name to open their history, press the x to clear that one, or press **clear all**.',
           'For the time and how often (**never**, every week, every 2 weeks, every month), open the **settings** tab there.',
         ],
@@ -725,7 +725,7 @@ const SECTIONS = [
         items: [
           'On the computer, open **settings › phone**. Choose a **direction**: **both ways**, **phone to computer** or **computer to phone**.',
           'Press **sync with phone**. A QR code appears.',
-          'On the phone, open **sync** (the arrows in the top bar) and press **scan the code**.',
+          'On the phone, open the menu (the logo at the left of the title), choose **sync** and press **scan the code**.',
           'If the same thing changed on both devices, the conflicts are shown side by side. Choose which version to keep, one by one or **all from** one device.',
           'A summary tells what was added, changed or deleted.',
         ],
@@ -746,9 +746,10 @@ const SECTIONS = [
       {
         t: 'ul',
         items: [
-          'Dashboard, transactions, categories, recurring and debts are tabs at the bottom. Accounts, stashes, documents, sync, settings and lock are the icons in the top bar.',
+          'The logo at the left of a page\'s title opens the menu: every page (dashboard, transactions, accounts, stashes, categories, recurring, debts, documents, sync and settings) and **lock**. A swipe to the right from the left edge of the screen opens it too. Choosing a page, a tap beside the menu or a swipe to the left closes it.',
+          'A page has one main button at the top (the **+** that adds to its list) and a **⋯** button for the rest: second actions, and switches such as **show archived**. A **?** beside a title explains the page.',
           'The round **add** button adds a transaction, a category or a friend, or scans a bill code.',
-          'Tap a row to open it. Documents: **take photo**, and **keep on phone** for a file that is on the computer.',
+          'Tap a row to open it: it shows its facts, one to a line, and its buttons (edit, delete and the like). Documents: **take photo** (in the **⋯** menu), and **keep on phone** for a file that is on the computer.',
           'Export, backups, the recovery key, pairing and the command line are on the computer only.',
           'Debt reminders ring on the phone at the time you chose, also when the app is closed.',
         ],
