@@ -14,6 +14,7 @@ import {
   barWidth,
   currencyKey,
   defaultAccountId,
+  freeOf,
   groupAccounts,
   hasGroups,
   lineWords,
@@ -414,4 +415,12 @@ test('a credit, a loan or a mortgage is listed by no field of a row, but is a si
   assert.equal(manyAccounts([main, car]), false)
   assert.equal(defaultAccountId([flat, main]), '1')
   assert.equal(defaultAccountId([flat]), '', 'a liability is never the account a row starts in')
+})
+
+test('what an account can spend: its free amount, or with a card limit what is available less what is set aside', () => {
+  assert.equal(freeOf({ free: '90.00', virtualBalance: '0.00' }), '90.00')
+  assert.equal(freeOf({ free: '-0.50', virtualBalance: '-0.00' }), '-0.50', 'minus nothing is no limit')
+  assert.equal(freeOf({ free: '-319.90', virtualBalance: '1000.00' }), '680.10', 'a card: what is available')
+  assert.equal(freeOf({ free: '-369.90', virtualBalance: '1000.00' }), '630.10', 'and 50.00 of it set aside')
+  assert.equal(freeOf({ free: '-1000.00', virtualBalance: '1000.00' }), '0.00')
 })

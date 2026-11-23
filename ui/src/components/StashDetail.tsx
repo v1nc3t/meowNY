@@ -17,7 +17,7 @@ import { DepositFacts, StashBar } from './StashParts'
 import YearNav from './YearNav'
 import Button from './ui/Button'
 import { Card, CardAction, CardHeader } from './ui/Card'
-import { buttonClass, cn } from './ui/cn'
+import { cn } from './ui/cn'
 
 /** What a stash held at the end of each month of a year, for the chart (it draws a balance: the same points under another name). */
 const stashHistory = (id: string, year: string) => stashesApi.history(id, year).then((points) => points.map((point) => ({ month: point.month, balance: point.saved })))
@@ -152,9 +152,6 @@ export default function StashDetail({
   return (
     <>
       <div className="debts-name stash-actions-row">
-        <Link to="/app/stashes" className={buttonClass('outline', 'sm')}>
-          {t('common.back')}
-        </Link>
         {stash.archived ? (
           <Button variant="outline" size="sm" onClick={onRestore}>
             {t('stashes.restore')}
@@ -175,7 +172,6 @@ export default function StashDetail({
           {t('common.delete')}
         </Button>
       </div>
-      <h2 className="debts-heading stash-heading">{stash.name}</h2>
       <p className="hint stash-account-line">
         {account ? (
           <Link to={`/app/accounts/${account.id}`} title={accountLabel(account, t)}>

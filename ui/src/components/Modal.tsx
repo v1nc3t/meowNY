@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom'
 import { useFootLine } from '../hooks/useFootLine'
 import { useReturnFocus } from '../hooks/useReturnFocus'
 import { useT } from '../i18n/context'
+import HelpButton from './HelpButton'
 import Button from './ui/Button'
 
 export const modalFormId = 'modal-form'
@@ -19,6 +20,7 @@ export default function Modal({
   readOnly = false,
   danger = false,
   leading,
+  help,
   children,
 }: {
   title: string
@@ -37,6 +39,8 @@ export default function Modal({
   danger?: boolean
   /** A button at the left of the row of buttons, away from the two answers (delete, in a dialog that changes something). */
   leading?: ReactNode
+  /** What the dialog needs to explain, a few short lines, behind a "?" button beside its title (docs/ui-design.md, rule 7). */
+  help?: ReactNode
   children: ReactNode
 }) {
   const t = useT()
@@ -80,6 +84,7 @@ export default function Modal({
       <div className="modal-panel" tabIndex={-1}>
         <div className="modal-head">
           <h2 id={titleId}>{title}</h2>
+          {help ? <HelpButton>{help}</HelpButton> : null}
         </div>
         {children}
         <div className="modal-actions">

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { errorText, inDesktopApp, vault, type LockPrefs } from '../vault/api'
 import { useI18n } from '../i18n/context'
+import PageHeader from '../components/PageHeader'
 import AppFooter from '../components/AppFooter'
 import ChangeCurrencyModal from '../components/ChangeCurrencyModal'
 import CommandApiBlock from '../components/CommandApiBlock'
@@ -114,9 +115,11 @@ export default function SettingsPage() {
 
   return (
     <section className={cn('tx-page', 'settings-page', phone && 'on-phone')}>
-      <div className="tx-title">
-        <h1>{t('settings.title')}</h1>
-      </div>
+      <PageHeader
+        // on a phone a section opens in place of the list: the header has its name, and a way back to the list
+        title={phone && current ? t(current.title) : t('settings.title')}
+        back={phone && current ? '/app/settings' : undefined}
+      />
 
       {changingCurrency && settings ? (
         <ChangeCurrencyModal
@@ -166,14 +169,11 @@ export default function SettingsPage() {
 
         {current ? (
           <div className="settings-section">
-            <header className="settings-section-head">
-              {phone ? (
-                <Link className="settings-back" to={{ search: '' }}>
-                  <span aria-hidden="true">‹</span> {t('settings.title')}
-                </Link>
-              ) : null}
-              <h2>{t(current.title)}</h2>
-            </header>
+            {phone ? null : (
+              <header className="settings-section-head">
+                <h2>{t(current.title)}</h2>
+              </header>
+            )}
             {body(current.id)}
           </div>
         ) : null}

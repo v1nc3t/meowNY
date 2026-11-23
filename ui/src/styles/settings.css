@@ -342,16 +342,6 @@ html.is-phone .gate:has(> .app-footer) {
   margin: 0;
 }
 
-.settings-back {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.25rem;
-  margin-bottom: 0.5rem;
-  color: var(--muted-foreground);
-  font-size: 0.875rem;
-  text-decoration: none;
-}
-
 /* What a section holds: forms and rows, one below the other. */
 .settings-stack {
   display: flex;
@@ -854,12 +844,6 @@ ul.card-list.token-table > li.list-head {
   font-size: 1.5rem;
   line-height: 1;
   color: var(--muted-foreground);
-}
-
-.settings-page.on-phone .settings-back {
-  min-height: 2.75rem;
-  margin-bottom: 0;
-  font-size: 1rem;
 }
 
 .settings-page.on-phone .settings-row {

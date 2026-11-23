@@ -1,5 +1,6 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
+import PageHeader from '../components/PageHeader'
 import AccountField from '../components/AccountField'
 import AddCategoryModal from '../components/AddCategoryModal'
 import AttachArea from '../components/AttachArea'
@@ -41,7 +42,6 @@ import { useProfile } from '../hooks/profile'
 import { useToast } from '../hooks/toast'
 import { useT } from '../i18n/context'
 import { useShortcut } from '../keys/registry'
-import { tip } from '../keys/tip'
 import { useRowNavigation } from '../keys/useRowNavigation'
 
 const MAX_COUNT = 1000
@@ -591,17 +591,11 @@ function RecurringView({ settings, now }: { settings: MoneySettings; now: Today 
 
   return (
     <section className="tx-page">
-      <div className="tx-title one-line">
-        <h1>{t('rec.title')}</h1>
-        {/* The phone has the add button of each list for this. */}
-        {phone ? null : (
-          <div className="tx-actions">
-            <Button onClick={() => openAdd()} {...tip('new', t('rec.add'))}>
-              {t('rec.add')}
-            </Button>
-          </div>
-        )}
-      </div>
+      <PageHeader
+        title={t('rec.title')}
+        // The phone has the add button of each list for this.
+        actions={[!phone && { label: t('rec.add'), icon: 'add', primary: true, shortcut: 'new', onClick: () => openAdd() }]}
+      />
       {adding || editing ? (
         <RecurringModal
           key={editing ? editing.id : `new-${adding}`}

@@ -6,6 +6,7 @@ import { debtsLabels } from '../api/debtsLabels'
 import { ApiError, errorText, inDesktopApp } from '../api/invoke'
 import { periodLabel, reportLabels } from '../api/reportLabels'
 import { useToday, type Today } from '../api/today'
+import PageHeader from '../components/PageHeader'
 import DatePicker from '../components/DatePicker'
 import Button from '../components/ui/Button'
 import Dropdown from '../components/Dropdown'
@@ -328,9 +329,7 @@ function ExportForm({ today, settings, categories }: { today: Today; settings: M
 
   return (
     <section className="tx-page export-page">
-      <div className="tx-title">
-        <h1>{t('export.title')}</h1>
-      </div>
+      <PageHeader title={t('export.title')} />
 
       <div className="tx-pane wide export-pane">
         <div className="export-layout">

@@ -1134,6 +1134,15 @@ export const en = {
   'sync.field.startDate': 'start date',
   'sync.field.brokenOn': 'broken on',
   'sync.field.returnedOn': 'return booked on',
+  // The tidy UI: the menu behind the logo, the more and help buttons, the accounts' free column
+  'nav.menu': 'menu',
+  'common.more': 'more',
+  'common.help': 'help',
+  'accounts.free': 'free',
+  'accounts.showArchived': 'show archived ({count})',
+  'accounts.offNetWorth': 'not counted',
+  'accounts.worthIn': 'worth in {code}',
+  'accounts.returns': 'return',
 } as const
 
 export type MessageKey = keyof typeof en

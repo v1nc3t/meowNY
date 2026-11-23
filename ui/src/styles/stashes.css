@@ -544,10 +544,6 @@ html.is-phone .stash-mini-list {
   flex-wrap: wrap;
 }
 
-.stash-heading {
-  overflow-wrap: anywhere;
-}
-
 .stash-account-line {
   margin: 0;
 }

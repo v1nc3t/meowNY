@@ -5,6 +5,7 @@ import { whenText } from '../api/locales'
 import { scanQr, stopScan } from '../api/scanner'
 import { cleanDeviceName, clockGapText, DEVICE_NAME_MAX, phoneClockGap, syncApi, type Peer } from '../api/sync'
 import { today } from '../api/today'
+import PageHeader from '../components/PageHeader'
 import { TapRow } from '../components/RowParts'
 import SyncStatusPanel from '../components/SyncStatusPanel'
 import Button from '../components/ui/Button'
@@ -95,9 +96,7 @@ function PhoneSync() {
 
   return (
     <section className="tx-page settings-page">
-      <div className="tx-title">
-        <h1>{t('phone.title')}</h1>
-      </div>
+      <PageHeader title={t('phone.title')} />
 
       {scanning ? (
         <div className="scan-overlay" role="dialog" aria-label={t('phone.scan')}>

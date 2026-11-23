@@ -1,4 +1,5 @@
 import { isLiability, type Account, type Payoff } from '../api/accounts'
+import type { FactItem } from '../components/Facts'
 import type { MessageKey } from '../i18n/en'
 import { fromMinor, toMinor } from './money'
 import { monthWords } from './stashView'
@@ -36,6 +37,24 @@ export function rateWords(account: Pick<Account, 'interestRate' | 'interestPerio
 export function payoffWords(payoff: Payoff | null | undefined, locale: string, t: Translate): string {
   if (!payoff) return ''
   return 'never' in payoff ? t('loans.never') : monthWords(`${payoff.month}-01`, locale)
+}
+
+/**
+ * What a credit, a loan or a mortgage owes, costs and when it ends, as the pairs of `Facts`: what is owed, the rate, the installment, a month of
+ * interest and the payoff (a month, or "never" when the installment does not beat the interest), and the state once nothing is owed any more.
+ * A pair with nothing to say is left out by `Facts`. The numbers are the app's (`Account.liability`); `money` writes an amount in the account's
+ * currency.
+ */
+export function loanFacts(account: Account, money: (amount: string) => string, locale: string, t: Translate): FactItem[] {
+  const liability = account.liability
+  return [
+    { label: t('accounts.owed'), value: liability ? money(liability.owed) : '' },
+    { label: t('accounts.rate'), value: rateWords(account, t) },
+    { label: t('accounts.installment'), value: account.installment === null ? '' : money(account.installment) },
+    { label: t('loans.interestPerMonth'), value: liability?.interestPerMonth == null ? '' : money(liability.interestPerMonth) },
+    { label: t('loans.payoff'), value: payoffWords(liability?.payoff, locale, t) },
+    { label: t('debts.colStatus'), value: liability && liability.state !== 'OWING' ? t(`loans.state.${liability.state}`) : '' },
+  ]
 }
 
 /** The two tabs of the debts page: what friends owe, and the accounts you owe on. */

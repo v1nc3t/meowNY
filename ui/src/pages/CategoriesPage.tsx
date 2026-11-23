@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { budgets as budgetsApi, type MonthHistory } from '../api/budgets'
 import { monthLabel, shiftMonth } from '../api/months'
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
+import PageHeader from '../components/PageHeader'
 import BudgetHalf from '../components/BudgetHalf'
 import MonthNav from '../components/MonthNav'
 import SectionTabs from '../components/SectionTabs'
@@ -18,7 +19,6 @@ import { useSticky } from '../lib/sticky'
 import { tabPanelProps } from '../lib/tabs'
 import { useI18n } from '../i18n/context'
 import { useShortcut } from '../keys/registry'
-import { tip } from '../keys/tip'
 import { useRowNavigation } from '../keys/useRowNavigation'
 
 const SIDES = ['EXPENSE', 'INCOME'] as const
@@ -145,18 +145,13 @@ function CategoriesView({ settings, thisMonth }: { settings: MoneySettings; this
 
   return (
     <section className="tx-page budget-page">
-      <div className="tx-title budget-title one-line">
-        <h1>{t('categories.title')}</h1>
-        <div className="tx-actions">
-          {/* The phone has the round add button for this. */}
-          {phone ? null : (
-            <Button onClick={() => budgets.add(addSide)} {...tip('new', t('categories.add'))}>
-              {t('categories.add')}
-            </Button>
-          )}
-          <MonthNav month={month} thisMonth={thisMonth} onChange={setMonth} />
-        </div>
-      </div>
+      <PageHeader
+        title={t('categories.title')}
+        // The phone has the round add button for this.
+        actions={[!phone && { label: t('categories.add'), icon: 'add', primary: true, shortcut: 'new', onClick: () => budgets.add(addSide) }]}
+      >
+        <MonthNav month={month} thisMonth={thisMonth} onChange={setMonth} />
+      </PageHeader>
       {budgets.dialogs}
       {phone ? (
         <>

@@ -234,11 +234,6 @@ body:has(.app-shell.is-locked) {
   max-width: none;
 }
 
-.app-main main > section > .tx-title {
-  width: auto;
-  max-width: 100%;
-}
-
 @media (max-width: 45em) {
   .app-shell,
   .app-shell.is-collapsed {

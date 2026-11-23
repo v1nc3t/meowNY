@@ -4,6 +4,7 @@ import { ApiError, errorText } from '../api/invoke'
 import { stashes as stashesApi, type Detail, type Entry, type Stash, type Summary } from '../api/stashes'
 import { useToday, type Today } from '../api/today'
 import { transfers as transfersApi, type Transfer } from '../api/transfers'
+import PageHeader from '../components/PageHeader'
 import ConfirmModal from '../components/ConfirmModal'
 import Icon from '../components/NavIcon'
 import Pick, { PickOption } from '../components/Pick'
@@ -24,7 +25,6 @@ import { useReorder } from '../hooks/useReorder'
 import { useToast } from '../hooks/toast'
 import { useI18n } from '../i18n/context'
 import { useShortcut } from '../keys/registry'
-import { tip } from '../keys/tip'
 import { useRowNavigation } from '../keys/useRowNavigation'
 import { accountById, accountLabel, assetAccounts, several } from '../lib/accountsView'
 import { rateWords } from '../lib/loansView'
@@ -228,36 +228,24 @@ function StashesView({ settings, now }: { settings: MoneySettings; now: Today })
 
   return (
     <section className="tx-page stashes-page">
-      <div className="tx-title one-line">
-        <h1>{t('stashes.title')}</h1>
-        {stashId ? (
-          shown && (canAdd(shown.stash) || canBookReturn(shown.stash) || canTake(shown.stash) || canClose(shown.stash)) ? (
-            <div className="tx-actions">
-              {canAdd(shown.stash) ? (
-                <Button onClick={() => setDialog({ kind: 'money', stash: shown.stash, tab: 'ADD' })} {...tip('new', t('stashes.addMoney'))}>
-                  {t('stashes.addMoney')}
-                </Button>
-              ) : null}
-              {canBookReturn(shown.stash) ? (
-                <Button onClick={() => setDialog({ kind: 'money', stash: shown.stash, tab: 'RETURN' })}>{t('stashes.bookReturn')}</Button>
-              ) : null}
-              {canTake(shown.stash) ? (
-                <Button variant="outline" onClick={() => setDialog({ kind: 'money', stash: shown.stash, tab: 'TAKE' })}>
-                  {t(isBreak(shown.stash) ? 'stashes.breakDeposit' : 'stashes.takeOut')}
-                </Button>
-              ) : null}
-              {/* a deposit that is booked or broken and empty has nothing left to do: closing it is archiving it */}
-              {canClose(shown.stash) ? <Button onClick={() => setDialog({ kind: 'archive', stash: shown.stash })}>{t('stashes.archive')}</Button> : null}
-            </div>
-          ) : null
-        ) : (
-          <div className="tx-actions">
-            <Button onClick={() => setDialog({ kind: 'new' })} {...tip('new', t('stashes.add'))}>
-              {t('stashes.add')}
-            </Button>
-          </div>
-        )}
-      </div>
+      <PageHeader
+        // a stash's page has the stash's name, and a way back to the list
+        title={stashId && shown ? shown.stash.name : t('stashes.title')}
+        back={stashId ? '/app/stashes' : undefined}
+        actions={
+          stashId
+            ? shown
+              ? [
+                  canAdd(shown.stash) && { label: t('stashes.addMoney'), icon: 'add', primary: true, shortcut: 'new', onClick: () => setDialog({ kind: 'money', stash: shown.stash, tab: 'ADD' }) },
+                  canBookReturn(shown.stash) && { label: t('stashes.bookReturn'), primary: true, onClick: () => setDialog({ kind: 'money', stash: shown.stash, tab: 'RETURN' }) },
+                  canTake(shown.stash) && { label: t(isBreak(shown.stash) ? 'stashes.breakDeposit' : 'stashes.takeOut'), onClick: () => setDialog({ kind: 'money', stash: shown.stash, tab: 'TAKE' }) },
+                  // a deposit that is booked or broken and empty has nothing left to do: closing it is archiving it
+                  canClose(shown.stash) && { label: t('stashes.archive'), icon: 'archive', primary: true, onClick: () => setDialog({ kind: 'archive', stash: shown.stash }) },
+                ]
+              : []
+            : [{ label: t('stashes.add'), icon: 'add', primary: true, shortcut: 'new', onClick: () => setDialog({ kind: 'new' }) }]
+        }
+      />
       {/* the dialogs and the pane are siblings: each key says what it is */}
       {dialogs}
       {confirms}

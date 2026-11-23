@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type ChangeEvent } from 'react'
+import PageHeader from '../components/PageHeader'
 import ClipMark from '../components/ClipMark'
 import ConfirmModal from '../components/ConfirmModal'
 import DocumentDetails from '../components/DocumentDetails'
@@ -322,9 +323,7 @@ function DocumentsView({ settings }: { settings: MoneySettings }) {
 
   return (
     <section className={dragging ? 'tx-page doc-page is-dragging' : 'tx-page doc-page'}>
-      <div className="tx-title">
-        <h1>{t('docs.title')}</h1>
-      </div>
+      <PageHeader title={t('docs.title')} />
       <input ref={fileInput} type="file" multiple hidden tabIndex={-1} onChange={onChosen} />
       <input ref={photoInput} type="file" accept="image/*" capture="environment" hidden tabIndex={-1} onChange={onChosen} />
       {/* What is here and where to add more: a frame that also lights up when files are held over the window. */}

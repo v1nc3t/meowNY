@@ -1121,4 +1121,13 @@ export const es: Messages = {
   'sync.field.startDate': 'fecha de inicio',
   'sync.field.brokenOn': 'cancelado el',
   'sync.field.returnedOn': 'rendimiento registrado el',
+  // The tidy UI: the menu behind the logo, the more and help buttons, the accounts' free column
+  'nav.menu': 'menú',
+  'common.more': 'más',
+  'common.help': 'ayuda',
+  'accounts.free': 'libre',
+  'accounts.showArchived': 'mostrar archivadas ({count})',
+  'accounts.offNetWorth': 'no cuenta',
+  'accounts.worthIn': 'valor en {code}',
+  'accounts.returns': 'rendimiento',
 }

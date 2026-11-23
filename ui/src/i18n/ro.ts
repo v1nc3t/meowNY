@@ -1119,4 +1119,13 @@ export const ro: Messages = {
   'sync.field.startDate': 'data de început',
   'sync.field.brokenOn': 'desființat la',
   'sync.field.returnedOn': 'randament înregistrat la',
+  // The tidy UI: the menu behind the logo, the more and help buttons, the accounts' free column
+  'nav.menu': 'meniu',
+  'common.more': 'mai multe',
+  'common.help': 'ajutor',
+  'accounts.free': 'liber',
+  'accounts.showArchived': 'arată arhivate ({count})',
+  'accounts.offNetWorth': 'neinclusă',
+  'accounts.worthIn': 'valoare în {code}',
+  'accounts.returns': 'randament',
 }

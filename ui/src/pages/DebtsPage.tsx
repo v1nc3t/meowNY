@@ -4,6 +4,7 @@ import { debts, type EntryKind, type History, type Person, type Reminders } from
 import { errorText } from '../api/invoke'
 import { scanQr, stopScan } from '../api/scanner'
 import { useToday, type Today } from '../api/today'
+import PageHeader from '../components/PageHeader'
 import BillAcceptModal from '../components/BillAcceptModal'
 import ConfirmModal from '../components/ConfirmModal'
 import DebtNotificationsModal from '../components/DebtNotificationsModal'
@@ -26,7 +27,6 @@ import { useToast } from '../hooks/toast'
 import { useProfile } from '../hooks/profile'
 import { useT } from '../i18n/context'
 import { useShortcut } from '../keys/registry'
-import { tip } from '../keys/tip'
 import { useRowNavigation } from '../keys/useRowNavigation'
 import { balanceView } from '../lib/balance'
 import { debtsTabOf, debtsTabQuery, type DebtsTab } from '../lib/loansView'
@@ -318,33 +318,18 @@ function DebtsView({ settings, now, tabs }: { settings: MoneySettings; now: Toda
 
   return (
     <section className="tx-page debts-page">
-      <div className="tx-title one-line">
-        <h1>{t('debts.title')}</h1>
-        <div className="tx-actions debts-actions">
-          <Button onClick={() => setEntryKind('LENT')} {...tip('new', t('debts.lent'))}>
-            {t('debts.lent')}
-          </Button>
-          <Button variant="outline" onClick={() => setEntryKind('BORROWED')}>
-            {t('debts.borrowed')}
-          </Button>
-          {/* The phone has scan in its place: four buttons on both. A bill is still split from a new expense. */}
-          {phone ? (
-            <Button variant="outline" disabled={scanning} onClick={() => void onScan()}>
-              {t('code.scanShort')}
-            </Button>
-          ) : (
-            <Button
-              variant="outline"
-              onClick={() => navigate('/app/transactions', { state: { split: true, ...(friend ? { friendId: friend.id, friendName: friend.name } : {}) } })}
-            >
-              {t('split.add')}
-            </Button>
-          )}
-          <Button variant="outline" onClick={() => setTaking('')}>
-            {t('code.paste')}
-          </Button>
-        </div>
-      </div>
+      <PageHeader
+        title={t('debts.title')}
+        actions={[
+          { label: t('debts.lent'), icon: 'add', primary: true, shortcut: 'new', onClick: () => setEntryKind('LENT') },
+          { label: t('debts.borrowed'), onClick: () => setEntryKind('BORROWED') },
+          // The phone has scan in its place: four buttons on both. A bill is still split from a new expense.
+          phone
+            ? { label: t('code.scanShort'), icon: 'qr', disabled: scanning, onClick: () => void onScan() }
+            : { label: t('split.add'), onClick: () => navigate('/app/transactions', { state: { split: true, ...(friend ? { friendId: friend.id, friendName: friend.name } : {}) } }) },
+          { label: t('code.paste'), onClick: () => setTaking('') },
+        ]}
+      />
       {tabs}
       {scanning ? (
         <div className="scan-overlay" role="dialog" aria-label={t('code.scan')}>

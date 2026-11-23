@@ -1,5 +1,6 @@
 import { isLiability, type Account, type AccountLine } from '../api/accounts'
 import type { MessageKey } from '../i18n/en'
+import { fromMinor, toMinor } from './money'
 import { applyOrder } from './reorder'
 import { saveChoice, storedId } from './sticky'
 
@@ -221,6 +222,15 @@ export function reorderWithinGroup(accounts: readonly Account[], group: string |
 /** Whether a row says what is available: only when there is a virtual balance (a card limit), "-0.00" being none. */
 export function showAvailable(account: Pick<Account, 'virtualBalance'>): boolean {
   return Number(account.virtualBalance) !== 0
+}
+
+/**
+ * What an account can spend, for its "free" column: the balance minus what its stashes hold (`free`); with a virtual balance (a card's limit)
+ * what is available, the same less what its stashes hold. In the account's own currency.
+ */
+export function freeOf(account: Pick<Account, 'free' | 'virtualBalance'>): string {
+  if (!showAvailable(account)) return account.free
+  return fromMinor((toMinor(account.free) ?? 0n) + (toMinor(account.virtualBalance) ?? 0n))
 }
 
 /** How wide the bar of an amount is, as a percentage of the track: the largest amount of the list fills it. No largest amount, no bar. */

@@ -1,4 +1,5 @@
-/* The phone shell: header, bottom tabs, add button and quick menu. */
+/* The phone shell: the menu behind the logo, the add button and quick menu, and what is phone-only on the pages (the header of a page is in
+   page-chrome.css). */
 
 html.is-phone button,
 html.is-phone a.ui-btn,
@@ -71,13 +72,13 @@ html.is-phone {
 }
 
 /* A touch screen has no hover, so a press shows what hover shows on a desktop: the quiet fill. Rows and buttons have their own press (primitives.css). */
-html.is-phone :is(.phone-tab, .phone-action, .quick-menu button, .pick-button, .pick-toggle, .ui-tabs > button:not([aria-selected='true'])):active:not(:disabled) {
+html.is-phone :is(.quick-menu button, .pick-button, .pick-toggle, .ui-tabs > button:not([aria-selected='true'])):active:not(:disabled) {
   color: var(--accent-foreground);
   background: var(--accent);
 }
 
 /* A link or a title with no box of its own dims for as long as it is pressed. */
-html.is-phone :is(.app-logo, .settings-back, .app-main a:not([class]), .app-footer a):active {
+html.is-phone :is(.app-main a:not([class]), .app-footer a):active {
   opacity: 0.6;
 }
 
@@ -118,76 +119,19 @@ html.is-phone .app-footer > p a {
   min-height: 24px;
 }
 
-.app-shell.is-phone.is-locked {
+/* One row: the page. There is no bar over it or under it; the pages are in the menu behind the logo (the narrow-window rules of shell.css
+   have a row for a sidebar, which a phone does not draw). */
+.app-shell.is-phone.is-locked,
+.app-shell.is-phone.is-collapsed.is-locked {
   grid-template-columns: minmax(0, 1fr);
-  grid-template-rows: auto minmax(0, 1fr) auto;
+  grid-template-rows: minmax(0, 1fr);
   height: 100dvh;
   max-height: 100dvh;
 }
 
-.phone-header {
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-  padding: calc(0.25rem + env(safe-area-inset-top, 0px)) 1rem 0.25rem;
-  border-bottom: var(--border-width) solid var(--border);
-  background: var(--background);
-  container-type: inline-size;
-  container-name: phone-bar;
-}
-
-/* The bar holds the cat and the name at the left and six icons of 44px at the right (accounts, stashes, documents, sync, settings, lock).
-   The name goes, and the cat stays, in a bar too narrow for all of it. The width asked about is the bar inside its padding: the cat (32px),
-   the name (84px) and the icons (6 x 44px) are 380px, and the gap between the logo and the icons (1rem), the gap in the logo (0.5rem) and
-   the gaps between the icons (5 x 0.25rem) are 2.75rem. The icons keep their size, and the name is back as soon as it fits. The link has a
-   label of its own (components/AppSidebar.tsx), so it keeps its name. */
-@container phone-bar (max-width: calc(380px + 2.75rem)) {
-  .app-logo-word {
-    display: none;
-  }
-}
-
-/* On the narrowest phones the cat and the six icons leave only a few pixels over at 360px: the gaps between the icons shrink first (the lock
-   is never hidden). */
-@container phone-bar (max-width: 340px) {
-  .phone-actions {
-    gap: 0;
-  }
-}
-
-.phone-actions {
-  display: flex;
-  align-items: center;
-  gap: 0.25rem;
-  margin-left: auto;
-}
-
-.phone-action {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 44px;
-  min-width: 0;
-  height: 44px;
-  padding: 0;
-  color: var(--muted-foreground);
-  transition: background-color var(--t-fast), color var(--t-fast);
-}
-
-.phone-action.active {
-  color: var(--accent-foreground);
-  background: var(--accent);
-}
-
-/* The pixel icons at twice their grid (12px), so each of their pixels is a 2px block. */
-.tab-icon {
-  width: 24px;
-  height: 24px;
-  flex: 0 0 auto;
-}
-
+/* No room at the top: the header of the page (`PageHeader`) has its own, and the safe area of the screen in it. */
 .app-shell.is-phone .app-main > main {
-  padding: 1rem 1rem 0.5rem;
+  padding: 0 1rem 0.5rem;
 }
 
 /* The round button covers the corner of the page; the lists leave room below their last row. A phone's scroll bar is thin and floats
@@ -208,49 +152,11 @@ html.is-phone *::-webkit-scrollbar-thumb {
   border: 0;
 }
 
-.phone-tabs {
-  display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-  padding-bottom: env(safe-area-inset-bottom, 0px);
-  border-top: var(--border-width) solid var(--border);
-  background: var(--background);
-}
-
-.phone-tab {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 0.125rem;
-  min-width: 0;
-  min-height: 3.5rem;
-  padding: 0.25rem 0;
-  color: var(--muted-foreground);
-  font-size: min(0.75rem, 2.5vw);
-  text-decoration: none;
-  transition: background-color var(--t-fast), color var(--t-fast);
-}
-
-/* The longest word of any language ("wiederkehrend", "transacciones": 13 letters) is 19.5vw wide at 2.5vw, so it fits the fifth of the
-   screen at any width or text size. A label of several words ("tableau de bord") takes two lines; none ends with "...". */
-.phone-tab > span {
-  max-width: 100%;
-  line-height: 1.1;
-  text-align: center;
-  overflow-wrap: anywhere;
-}
-
-/* The page you are on: brighter, with a short line above it (a line, not a box). */
-.phone-tab.active {
-  color: var(--foreground);
-  box-shadow: inset 0 2px 0 var(--foreground);
-}
-
 /* The square add button: a block of the main colour, like the green button, over the page on the same small hard shadow. */
 .fab {
   position: fixed;
   right: 1rem;
-  bottom: calc(3.5rem + env(safe-area-inset-bottom, 0px) + 1rem);
+  bottom: max(16px, env(safe-area-inset-bottom, 0px));
   z-index: 30;
   display: flex;
   align-items: center;
@@ -308,23 +214,6 @@ html.is-phone .fab {
   width: 100%;
   color: var(--popover-foreground);
   text-align: left;
-}
-
-/* Swiping to another section brings the page in (base.css, page-in) from the side the finger came from, not from below. */
-.app-main > main[data-direction='next'] {
-  --enter-x: 2rem;
-  --enter-y: 0;
-}
-
-.app-main > main[data-direction='prev'] {
-  --enter-x: -2rem;
-  --enter-y: 0;
-}
-
-/* The title row of a page: a button that fits goes at the right on the title's line, centred on it (page-chrome.css); one that does not
-   goes on a row of its own under the title, at the left, the same 1rem below the title as every other part of the page is. */
-html.is-phone .app-main main > section > .tx-title.one-line {
-  row-gap: 1rem;
 }
 
 /* The period picker (components/MonthNav.tsx, the dashboard's year and the transactions' period): ‹ month year › and "current" on one
@@ -390,4 +279,111 @@ html.is-phone .list-foot .page-numbers button {
    entrance does not play: the new part fades in the same quick steps. */
 html.is-phone .settings-layout > :is(.settings-list, .settings-section) {
   animation: fade-in var(--t-med) steps(4, jump-start);
+}
+
+/* The menu behind the logo (components/PhoneMenu.tsx): a modal dialog that slides in from the left over the page, min(80vw, 300px) wide
+   and as tall as the screen, on the colour of the desktop's sidebar, over a dimmed page. It takes 200 ms to slide in or out (PhoneMenu.tsx
+   waits as long before it takes the dialog away); with less motion it does not move (base.css turns every animation off). */
+.phone-menu {
+  position: fixed;
+  inset: 0 auto 0 0;
+  width: min(80vw, 300px);
+  max-width: none;
+  height: 100dvh;
+  max-height: none;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  color: var(--foreground);
+  background: var(--sidebar);
+  border: 0;
+  border-right: var(--border-width) solid var(--border);
+}
+
+.phone-menu[open] {
+  animation: menu-in 200ms ease-out;
+}
+
+.phone-menu::backdrop {
+  background: var(--overlay);
+  animation: fade-in 200ms ease-out;
+}
+
+.phone-menu.is-closing {
+  animation: menu-out 200ms ease-in forwards;
+}
+
+.phone-menu.is-closing::backdrop {
+  animation: fade-out 200ms ease-in forwards;
+}
+
+@keyframes menu-in {
+  from {
+    transform: translateX(-100%);
+  }
+}
+
+@keyframes menu-out {
+  to {
+    transform: translateX(-100%);
+  }
+}
+
+@keyframes fade-out {
+  to {
+    opacity: 0;
+  }
+}
+
+.phone-menu-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  height: 100%;
+  padding: calc(1rem + env(safe-area-inset-top, 0px)) 0.75rem calc(1rem + env(safe-area-inset-bottom, 0px));
+  overflow-y: auto;
+}
+
+/* The panel takes the focus when it opens, and shows no outline for it. */
+.phone-menu-panel:focus,
+.phone-menu-panel:focus-visible {
+  outline: none;
+}
+
+.phone-menu-brand {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding-left: 0.5rem;
+  font-family: var(--font-pixel);
+  font-size: var(--pixel-md);
+  line-height: 1.2;
+}
+
+.phone-menu-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+/* A line of the menu is the sidebar's (shell.css), taller to tap, with the icons at twice their grid. */
+.phone-menu :is(.nav-item, .exit-btn) {
+  height: 44px;
+  gap: 0.875rem;
+  font-size: 1rem;
+}
+
+.menu-icon {
+  width: 24px;
+  height: 24px;
+  flex: none;
+}
+
+.phone-menu-foot {
+  margin-top: auto;
+}
+
+html.is-phone .phone-menu :is(.nav-item, .exit-btn):active {
+  color: var(--accent-foreground);
+  background: var(--accent);
 }

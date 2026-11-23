@@ -1,5 +1,6 @@
 import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
+import PageHeader from '../components/PageHeader'
 import BillCodeModal from '../components/BillCodeModal'
 import ClipPreview from '../components/ClipPreview'
 import ConfirmModal from '../components/ConfirmModal'
@@ -789,15 +790,11 @@ function TransactionsView({ settings, now }: { settings: MoneySettings; now: Tod
 
   return (
     <section className="tx-page">
-      <div className="tx-title one-line">
-        <h1>{t('tx.title')}</h1>
-        {/* The phone has the round add button for this. */}
-        {phone ? null : (
-          <Button onClick={() => openAdd()} {...tip('new', t('tx.add'))}>
-            {t('tx.add')}
-          </Button>
-        )}
-      </div>
+      <PageHeader
+        title={t('tx.title')}
+        // The phone has the round add button for this.
+        actions={[!phone && { label: t('tx.add'), icon: 'add', primary: true, shortcut: 'new', onClick: () => openAdd() }]}
+      />
       <SectionTabs label={t('tx.title')} value={tab} onChange={onTab} tabs={txTabs(multi).map((id) => ({ id, label: t(TX_TAB_LABEL[id]) }))} />
       <div className="toolbar wide tx-bar filter-bar">
         {showTransfers ? null : (

@@ -24,3 +24,23 @@ export function place(list: HTMLElement, anchor: HTMLElement) {
     list.style.left = `${parseFloat(list.style.left) + (left - landed.left)}px`
   }
 }
+
+/**
+ * Puts a fixed popup (a menu, a popover) under its anchor, with its left edge (`start`) or its right edge (`end`) on the anchor's, and
+ * keeps it on the screen: it goes above the anchor when it would run off the bottom. Unlike `place` it does not take the anchor's width.
+ */
+export function placePopup(popup: HTMLElement, anchor: HTMLElement, align: 'start' | 'end') {
+  const rect = anchor.getBoundingClientRect()
+  const gap = 4
+  popup.style.position = 'fixed'
+  popup.style.zIndex = '40'
+  popup.style.left = '0px'
+  popup.style.top = '0px'
+  // Where 0, 0 lands: the corner of the screen, or of a dialog that is the popup's containing block while it opens.
+  const origin = popup.getBoundingClientRect()
+  const left = Math.max(8, Math.min(align === 'end' ? rect.right - origin.width : rect.left, window.innerWidth - 8 - origin.width))
+  let top = rect.bottom + gap
+  if (top + origin.height > window.innerHeight - 8 && rect.top - gap - origin.height > 8) top = rect.top - gap - origin.height
+  popup.style.left = `${left - origin.left}px`
+  popup.style.top = `${top - origin.top}px`
+}

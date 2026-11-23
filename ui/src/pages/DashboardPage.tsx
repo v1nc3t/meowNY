@@ -5,6 +5,7 @@ import { errorText } from '../api/invoke'
 import { monthNames, shiftMonth } from '../api/months'
 import { accounts as accountsApi, type AccountsSummary } from '../api/accounts'
 import { stashes as stashesApi, type Stash, type Summary as StashSummary } from '../api/stashes'
+import PageHeader from '../components/PageHeader'
 import { StashMini } from '../components/StashParts'
 import YearNav from '../components/YearNav'
 import { Card, CardAction, CardContent, CardHeader, CardTitle } from '../components/ui/Card'
@@ -162,9 +163,7 @@ function DashboardView({ settings, now }: { settings: MoneySettings; now: Today 
 
   return (
     <section className="tx-page">
-      <div className="tx-title">
-        <h1>{t('dashboard.title')}</h1>
-      </div>
+      <PageHeader title={t('dashboard.title')} />
       {data && point ? (
         <div className="tx-pane wide dash">
           {fresh ? <FirstSteps /> : null}

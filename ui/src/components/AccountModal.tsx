@@ -72,8 +72,6 @@ export default function AccountModal({
   const [more, setMore] = useState(hasDetails(account))
   const moreId = useId()
   const groupsId = useId()
-  const virtualHintId = useId()
-  const todayHintId = useId()
   const set = (patch: Partial<AccountFields>) => setFields((current) => ({ ...current, ...patch }))
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
@@ -101,15 +99,31 @@ export default function AccountModal({
     code ? t('accounts.labelIn', { label: t(key), code }) : t(key)
   const rate = rateRow(account, fields, mainCurrency)
   const lock = currencyLock(account)
+  // what the dialog explains, behind the "?" beside its title: a line for each field that has one, named by the field
+  const help: { field?: string; text: string }[] = [
+    ...(account?.isMain ? [{ text: t('accounts.mainHint') }] : []),
+    ...(lock !== null ? [{ field: t('accounts.currency'), text: t(lock === 'main' ? 'accounts.currencyMain' : 'accounts.currencyLocked') }] : []),
+    { field: t('accounts.number'), text: t('accounts.numberHint') },
+    ...(account && !owing ? [{ field: t('accounts.balanceToday'), text: t('accounts.balanceTodayHint') }] : []),
+    { field: t('accounts.virtualBalance'), text: t('accounts.virtualHint') },
+  ]
 
   return (
-    <Modal title={account ? t('accounts.editTitle') : t(owing ? 'loans.new' : 'accounts.addTitle')} pending={state === 'SAVING'} onClose={onClose}>
+    <Modal
+      title={account ? t('accounts.editTitle') : t(owing ? 'loans.new' : 'accounts.addTitle')}
+      pending={state === 'SAVING'}
+      onClose={onClose}
+      help={help.map((line) => (
+        <p key={line.text}>
+          {line.field ? <b>{line.field}</b> : null} {line.text}
+        </p>
+      ))}
+    >
       <form id={modalFormId} onSubmit={(event) => void onSubmit(event)}>
         <label>
           {t('common.name')}
           <input name="name" required maxLength={50} autoComplete="off" value={fields.name} onChange={(event) => set({ name: event.target.value })} />
         </label>
-        {account?.isMain ? <p className="hint">{t('accounts.mainHint')}</p> : null}
         <Dropdown
           label={t('common.type')}
           value={fields.kind}
@@ -129,7 +143,6 @@ export default function AccountModal({
             onChange={(event) => set({ currency: event.target.value.toUpperCase() })}
           />
         </label>
-        {lock !== null ? <p className="hint">{t(lock === 'main' ? 'accounts.currencyMain' : 'accounts.currencyLocked')}</p> : null}
         {rate ? (
           <label className="rate-sentence">
             <span>{t('accounts.rateOf', { main: mainCurrency.toUpperCase() })}</span>
@@ -149,7 +162,6 @@ export default function AccountModal({
             onChange={(event) => set({ number: event.target.value })}
           />
         </label>
-        <p className="hint">{t('accounts.numberHint')}</p>
         <label>
           {labelIn(owing ? 'accounts.owed' : 'accounts.openingBalance')}
           {/* no decimal keypad: on some phones it has no minus, and a credit card starts below 0. Shut while "balance today" is filled: they cannot be sent together. */}
@@ -167,16 +179,10 @@ export default function AccountModal({
                 name="balanceToday"
                 autoComplete="off"
                 placeholder={owing ? owedText(account.balance) : account.balance}
-                aria-describedby={owing ? undefined : todayHintId}
                 value={fields.balanceToday}
                 onChange={(event) => setFields((current) => withBalanceToday(current, start, event.target.value))}
               />
             </label>
-            {owing ? null : (
-              <p className="hint" id={todayHintId}>
-                {t('accounts.balanceTodayHint')}
-              </p>
-            )}
           </>
         ) : null}
         {owing ? (
@@ -223,14 +229,10 @@ export default function AccountModal({
                 name="virtualBalance"
                 autoComplete="off"
                 placeholder="0.00"
-                aria-describedby={virtualHintId}
                 value={fields.virtualBalance}
                 onChange={(event) => set({ virtualBalance: event.target.value })}
               />
             </label>
-            <p className="hint" id={virtualHintId}>
-              {t('accounts.virtualHint')}
-            </p>
             <label>
               <input type="checkbox" checked={fields.includeInNetWorth} onChange={(event) => set({ includeInNetWorth: event.target.checked })} />
               {t('accounts.inNetWorth')}

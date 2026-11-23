@@ -9,12 +9,12 @@ import { useOpenRow } from '../hooks/useOpenRow'
 import { useToast } from '../hooks/toast'
 import { useT } from '../i18n/context'
 import { useShortcut } from '../keys/registry'
-import { tip } from '../keys/tip'
 import { useRowNavigation } from '../keys/useRowNavigation'
 import { accountName } from '../lib/accountsView'
 import { liabilities, payoffWords, rateWords, totalOwed } from '../lib/loansView'
 import { formatMoney, moneyIn } from '../lib/money'
 import { tabPanelProps } from '../lib/tabs'
+import PageHeader from './PageHeader'
 import AccountModal from './AccountModal'
 import LoanPayModal from './LoanPayModal'
 import { Row, Table, TapRow } from './RowParts'
@@ -152,14 +152,7 @@ export default function DebtsLoans({ settings, now, tabs }: { settings: MoneySet
 
   return (
     <section className="tx-page debts-page">
-      <div className="tx-title one-line">
-        <h1>{t('debts.title')}</h1>
-        <div className="tx-actions debts-actions">
-          <Button onClick={() => setDialog({ kind: 'new' })} {...tip('new', t('loans.new'))}>
-            {t('loans.new')}
-          </Button>
-        </div>
-      </div>
+      <PageHeader title={t('debts.title')} actions={[{ label: t('loans.new'), icon: 'add', primary: true, shortcut: 'new', onClick: () => setDialog({ kind: 'new' }) }]} />
       {tabs}
       {dialog?.kind === 'new' ? (
         <AccountModal

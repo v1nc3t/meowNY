@@ -220,24 +220,6 @@ ul.card-list.tx-list > li.card-item.tx-total {
   background: var(--card);
 }
 
-/* The phone's list, by day: a small heading over the rows of each day. */
-.list-day + .list-day {
-  margin-top: 1rem;
-}
-
-.list-day > h2 {
-  margin: 0 0 0.5rem;
-  font-family: var(--font);
-  font-size: 0.8125rem;
-  font-weight: 600;
-  line-height: 1.4;
-  color: var(--muted-foreground);
-}
-
-.list-day > .card-list {
-  margin: 0;
-}
-
 .tap-row > .tx-detail {
   flex-direction: column;
   flex-wrap: nowrap;
@@ -330,8 +312,7 @@ html.is-phone .split-table td {
 }
 
 /* The picker is wider than a phone: "current" goes under it rather than past the edge. */
-.budget-title .tx-actions,
-.budget-title .month-nav {
+.page-header .month-nav {
   flex-wrap: wrap;
 }
 
