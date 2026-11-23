@@ -1,8 +1,7 @@
 /* Shared controls: dropdown, modal, month and date pickers, section tabs and the shortcut help. */
 
 /* Kept above `.pick.field .pick-button` on purpose: inside a date picker the field has to win. */
-.toolbar.tx-bar .pick-button,
-.toolbar.tx-bar .tx-range input {
+.toolbar.tx-bar .pick-button {
   width: max-content;
   max-width: 100%;
 }
@@ -366,26 +365,6 @@ body:has(dialog[open]) {
 .modal p.notice {
   width: 100%;
   margin: 0;
-}
-
-/* Month picker: previous and next as icon buttons around the month and year. */
-.month-nav {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  font-family: var(--font);
-  font-size: 0.8125rem;
-  color: var(--foreground);
-}
-
-.month-nav .pick.field {
-  width: auto;
-}
-
-/* The arrows are glyphs of the text font, a little bigger so they read. */
-.month-nav > .ui-btn-icon {
-  font-size: 1.25rem;
-  line-height: 1;
 }
 
 /* Dates as dropdowns: day, month and year side by side. A label sits above, like other fields. */

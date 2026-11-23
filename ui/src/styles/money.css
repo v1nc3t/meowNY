@@ -137,14 +137,19 @@ html.is-phone .tx-filters .date-picker .pick-input {
    than one), date, then the amount at the right, then the buttons (edit, delete, the chevron: three of --control-sm). Every cell is one line.
    The columns of amounts and dates are as wide as the longest the formats write, in characters of the monospace font: 15 for "-CHF 999,999.99"
    (bold, 1rem), and 11 for a date (small print, 0.875rem). The name and the category share the rest, the name the most. With less room a
-   column goes, never a line is added: the account first, then the date, then the category; the name and the amount stay at every width. */
+   column goes, never a line is added: the account first, then the date, then the category; the name and the amount stay at every width. The name
+   and the category and the account have the room of the words they usually hold ("Entertainment", "Current account") before the name takes the rest. */
 .card-list.tx-list {
   --act: calc(3 * var(--control-sm) + 0.25rem);
-  --cols: minmax(8rem, 2fr) minmax(6rem, 1fr) 11ch 15ch var(--act);
+  --cols: minmax(19ch, 2fr) minmax(13ch, 1fr) 11ch 15ch var(--act);
 }
 
 .card-list.tx-list.has-account {
-  --cols: minmax(8rem, 2fr) minmax(6rem, 1fr) minmax(7rem, 1fr) 11ch 15ch var(--act);
+  --cols: minmax(19ch, 2.2fr) minmax(13ch, 1fr) minmax(15ch, 1fr) 11ch 15ch var(--act);
+}
+
+ul.card-list.tx-list > :is(li.card-item, li.list-head) {
+  column-gap: 0.75rem;
 }
 
 .tx-list .cell-name > .row-mark-icon {
@@ -159,9 +164,9 @@ html.is-phone .tx-filters .date-picker .pick-input {
   display: inline-flex;
 }
 
-@container (max-width: 50em) {
+@container (max-width: 57em) {
   ul.card-list.tx-list.has-account > :is(li.card-item, li.list-head) {
-    grid-template-columns: minmax(8rem, 2fr) minmax(6rem, 1fr) 11ch 15ch var(--act);
+    grid-template-columns: minmax(19ch, 2fr) minmax(13ch, 1fr) 11ch 15ch var(--act);
   }
 
   ul.card-list.tx-list.has-account .cell-account {
@@ -170,9 +175,9 @@ html.is-phone .tx-filters .date-picker .pick-input {
 }
 
 /* (the list's own classes first: these must beat the rule for the account's column above) */
-@container (max-width: 42em) {
+@container (max-width: 47em) {
   ul.card-list.is-table.is-tidy.tx-list > :is(li.card-item, li.list-head) {
-    grid-template-columns: minmax(8rem, 2fr) minmax(6rem, 1fr) 15ch var(--act);
+    grid-template-columns: minmax(19ch, 2fr) minmax(13ch, 1fr) 15ch var(--act);
   }
 
   ul.card-list.tx-list .tx-date {
@@ -180,9 +185,9 @@ html.is-phone .tx-filters .date-picker .pick-input {
   }
 }
 
-@container (max-width: 34em) {
+@container (max-width: 40em) {
   ul.card-list.is-table.is-tidy.tx-list > :is(li.card-item, li.list-head) {
-    grid-template-columns: minmax(6rem, 1fr) 15ch var(--act);
+    grid-template-columns: minmax(14ch, 1fr) 15ch var(--act);
   }
 
   ul.card-list.tx-list .tx-cat {
@@ -240,7 +245,7 @@ ul.card-list.tx-list > li.card-item.tx-total {
 }
 
 .tx-sum > b {
-  font-size: 1rem;
+  font-size: inherit;
   font-weight: 600;
 }
 
@@ -295,12 +300,12 @@ ul.card-list.tx-list > li.card-item.tx-total {
    the note goes, then the day; from, to and the amount stay at every width. */
 .card-list.xfer-list {
   --act: calc(2 * var(--control-sm) + 0.25rem);
-  --cols: 12ch minmax(6rem, 1fr) minmax(6rem, 1fr) minmax(16ch, 26ch) minmax(0, 1.2fr) var(--act);
+  --cols: 12ch minmax(15ch, 1fr) minmax(15ch, 1fr) minmax(16ch, 20ch) minmax(0, 1.2fr) var(--act);
 }
 
 @container (max-width: 52em) {
   ul.card-list.xfer-list > :is(li.card-item, li.list-head) {
-    grid-template-columns: 12ch minmax(6rem, 1fr) minmax(6rem, 1fr) minmax(16ch, 26ch) var(--act);
+    grid-template-columns: 12ch minmax(15ch, 1fr) minmax(15ch, 1fr) minmax(16ch, 20ch) var(--act);
   }
 
   ul.card-list.xfer-list .xfer-note {
@@ -310,7 +315,7 @@ ul.card-list.tx-list > li.card-item.tx-total {
 
 @container (max-width: 40em) {
   ul.card-list.xfer-list > :is(li.card-item, li.list-head) {
-    grid-template-columns: minmax(5rem, 1fr) minmax(5rem, 1fr) minmax(16ch, 26ch) var(--act);
+    grid-template-columns: minmax(10ch, 1fr) minmax(10ch, 1fr) minmax(16ch, 20ch) var(--act);
   }
 
   ul.card-list.xfer-list .xfer-date {
@@ -761,7 +766,7 @@ ul.card-list.cat-list > li.card-item.cat-sum.is-editing {
 
 /* The history: the month, then what was spent and its budget, what was earned and its budget. The button with the month is stretched
    over the row, so a click anywhere on it shows that month above. Each column is at least as wide as the longest it holds (the month
-   with "septiembre de 2026", an amount of 15 characters, small print of 0.875rem for the budgets). Narrower than 40em the two budgets go.
+   with "septiembre de 2026", an amount of 15 characters, small print of 0.875rem for the budgets). Narrower than 53em the two budgets go.
    (A phone has a row for each month, `TapRow`.) */
 .card-list.hist-list {
   --cols: minmax(18.5ch, 1.4fr) minmax(15ch, 1fr) minmax(13.5ch, 1fr) minmax(15ch, 1fr) minmax(13.5ch, 1fr);
@@ -796,7 +801,7 @@ ul.card-list.hist-list > li.card-item {
   font-variant-numeric: tabular-nums;
 }
 
-@container (max-width: 40em) {
+@container (max-width: 53em) {
   ul.card-list.hist-list > :is(li.card-item, li.list-head) {
     grid-template-columns: minmax(12ch, 1fr) 15ch 15ch;
   }
@@ -982,8 +987,7 @@ ul.card-list.rec-table .cell-mark {
   grid-template-columns: minmax(0, 1fr) auto;
   grid-template-areas:
     'name amount'
-    'meta meta'
-    'sub sub';
+    'meta meta';
 }
 
 .row-toggle.is-plain:active {
@@ -993,13 +997,6 @@ ul.card-list.rec-table .cell-mark {
 /* The buttons of an open row sit under the details, on a line of their own. */
 .tx-detail > .row-panel-actions {
   flex: 1 1 100%;
-}
-
-/* A second, smaller line in a cell (when it was due, how many changes wait). */
-.cell-fine {
-  display: block;
-  font-size: 0.8125rem;
-  color: var(--muted-foreground);
 }
 
 /* The bill dialog: the person first, then friends and guests, each with what was typed and what it comes to. */

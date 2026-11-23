@@ -567,26 +567,20 @@ function RecurringView({ settings, now }: { settings: MoneySettings; now: Today 
     { tab: 'EXPENSE' as const, title: t('rec.expenses'), rows: lists.expenses, total: monthOf(commitments?.expense) },
     { tab: 'INCOME' as const, title: t('rec.income'), rows: lists.income, total: monthOf(commitments?.income) },
   ].filter((section) => section.rows.length > 0)
-  /** What the page's top line says: what the running expenses come to a month, or on the tab of due payments, what is due. */
+  /** What the page's top line says on the tab of due payments: what is due. The list of items has its totals in the headings of its groups. */
   const aside =
-    tab === 'due'
-      ? due && due.payments.length > 0 && (
-          <>
-            {t('debts.dueTotal')} <b>{formatMoney(due.total, settings.currency, settings.locale)}</b>
-          </>
-        )
-      : monthOf(commitments?.expense) !== undefined && (
-          <>
-            <b>{formatMoney(commitments?.expense ?? '0.00', settings.currency, settings.locale)}</b> {t('dashboard.perMonth')}
-          </>
-        )
+    tab === 'due' && due && due.payments.length > 0 ? (
+      <>
+        {t('debts.dueTotal')} <b>{formatMoney(due.total, settings.currency, settings.locale)}</b>
+      </>
+    ) : null
 
   return (
     <section className="tx-page">
       <PageHeader
         title={t('rec.title')}
         actions={[{ label: t('rec.add'), icon: 'add', primary: true, shortcut: 'new', onClick: () => openAdd() }]}
-        aside={aside || null}
+        aside={aside}
       />
       {adding || editing ? (
         <RecurringModal

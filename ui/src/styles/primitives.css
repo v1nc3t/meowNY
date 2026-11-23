@@ -554,12 +554,12 @@ ul.card-list > li.list-head > .is-end {
 
 /* The low rows of the tables and the budgets have smaller icon buttons. A phone shows no tables, and its budgets keep 44px buttons
    (money.css). */
-:is(.is-table, .sum-list, .cat-list) .cell-actions > :is(.icon-btn, .icon-slot) {
+:is(.is-table, .cat-list) .cell-actions > :is(.icon-btn, .icon-slot) {
   width: var(--control-sm);
   min-width: var(--control-sm);
 }
 
-:is(.is-table, .sum-list, .cat-list) .cell-actions > .icon-btn {
+:is(.is-table, .cat-list) .cell-actions > .icon-btn {
   height: var(--control-sm);
 }
 
@@ -655,7 +655,7 @@ ul.card-list.is-tidy :is(.cell-amount, .cell-sub-end).is-wrap {
 
 /* A row that opens with a tap (the phone): the whole row is one button, its name and amount on the first line, the chevron on the right.
    The name is one line, cut with an ellipsis; the amount is right aligned in a column wide enough for the amounts of the other rows, so
-   they end in a line. Under the name, the one grey value (`.cell-meta`) and, in the old rows, the dotted line (`.cell-sub`). */
+   they end in a line. Under the name, the one grey value (`.cell-meta`). */
 ul.card-list > li.card-item.tap-row {
   display: block;
   padding: 0;
@@ -666,8 +666,7 @@ ul.card-list > li.card-item.tap-row {
   grid-template-columns: minmax(0, 1fr) auto auto;
   grid-template-areas:
     'name amount chevron'
-    'meta meta chevron'
-    'sub sub chevron';
+    'meta meta chevron';
   align-items: center;
   gap: 0 0.75rem;
   width: 100%;
@@ -709,37 +708,6 @@ ul.card-list > li.card-item.tap-row {
   font-size: 0.8125rem;
   line-height: 1.4;
   color: var(--muted-foreground);
-}
-
-/* The old line under the name is one line of small grey parts, each after a dot (also the parts inside the first). When it is too long the
-   first part is cut with an ellipsis (the category, what it was; four characters stay, so the line does not start with a dot), so the
-   date or the state at the end stays whole. In a language with long words and on a narrow screen the end may still be cut. A part with
-   `.is-line` is a line of its own. */
-.row-toggle > .cell-sub {
-  grid-area: sub;
-  display: flex;
-  margin-top: 0.25rem;
-}
-
-.row-toggle > .cell-sub > * {
-  flex: none;
-}
-
-.row-toggle > .cell-sub > :first-child {
-  flex: 0 1 auto;
-  min-width: 4ch;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.row-toggle > .cell-sub span + span:not(.is-line)::before {
-  content: '·';
-  margin-inline: 0.25rem;
-  color: var(--muted-foreground);
-}
-
-.row-toggle > .cell-sub:has(> .is-line) {
-  flex-direction: column;
 }
 
 .row-toggle > .chevron {

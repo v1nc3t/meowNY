@@ -46,11 +46,11 @@
 .card-list.stash-list {
   --act: 3.75rem;
   --grip-room: calc(12px + 0.5rem);
-  --cols: minmax(6.5rem, 1.6fr) minmax(5rem, 1fr) 11ch 10ch 11ch 9.5ch minmax(15ch, 1fr) var(--act);
+  --cols: minmax(19ch, 3fr) minmax(15ch, 1fr) 11ch 10ch 9ch 9.5ch minmax(15ch, 1fr) var(--act);
 }
 
 .card-list.stash-list.no-account {
-  --cols: minmax(8rem, 1.6fr) 11ch 10ch 11ch 9.5ch minmax(15ch, 1fr) var(--act);
+  --cols: minmax(19ch, 3fr) 11ch 10ch 9ch 9.5ch minmax(15ch, 1fr) var(--act);
 }
 
 ul.card-list.stash-list > :is(li.card-item, li.list-head) {
@@ -202,12 +202,13 @@ ul.card-list.stash-list.can-reorder > li.stash-total > .cell-name {
   white-space: nowrap;
 }
 
-/* With less room a column goes, never a line is added. In this order: the date (first while the account is there), the account, the target, the bar, where
-   it stands. The name and what is saved stay at every width. Each width is what the columns of its row add up to and a little more, so no row is wider than
-   its list at any width, and the units are the list's own, so they follow the text size. */
-@container (max-width: 65em) {
+/* With less room a column goes, never a line is added. In this order: the date (first while the account is there), the target (then the account),
+   the bar, where it stands. The name and what is saved stay at every width. The name has most of the room that is left, and the account and the
+   status are as wide as their usual words ("Current account", "112.86 a month"). Each width is what the columns of its row add up to and a little
+   more, so no row is wider than its list at any width, and the units are the list's own, so they follow the text size. */
+@container (max-width: 69.5em) {
   ul.card-list.stash-list:where(:not(.no-account)) > :is(li.card-item, li.list-head) {
-    --cols: minmax(6.5rem, 1.6fr) minmax(5rem, 1fr) 11ch 10ch 11ch minmax(15ch, 1fr) var(--act);
+    --cols: minmax(19ch, 3fr) minmax(15ch, 1fr) 11ch 10ch 9ch minmax(15ch, 1fr) var(--act);
   }
 
   ul.card-list.stash-list:where(:not(.no-account)) :is(.stash-when, .head-date) {
@@ -215,9 +216,19 @@ ul.card-list.stash-list.can-reorder > li.stash-total > .cell-name {
   }
 }
 
+@container (max-width: 63.5em) {
+  ul.card-list.stash-list:where(:not(.no-account)) > :is(li.card-item, li.list-head) {
+    --cols: minmax(19ch, 3fr) minmax(15ch, 1fr) 11ch 9ch minmax(15ch, 1fr) var(--act);
+  }
+
+  ul.card-list.stash-list:where(:not(.no-account)) :is(.stash-goal, .head-target) {
+    display: none;
+  }
+}
+
 @container (max-width: 60em) {
   ul.card-list.stash-list:where(.no-account) > :is(li.card-item, li.list-head) {
-    --cols: minmax(8rem, 1.6fr) 11ch 10ch 11ch minmax(15ch, 1fr) var(--act);
+    --cols: minmax(19ch, 3fr) 11ch 10ch 9ch minmax(15ch, 1fr) var(--act);
   }
 
   ul.card-list.stash-list:where(.no-account) :is(.stash-when, .head-date) {
@@ -227,7 +238,7 @@ ul.card-list.stash-list.can-reorder > li.stash-total > .cell-name {
 
 @container (max-width: 57em) {
   ul.card-list.stash-list:where(:not(.no-account)) > :is(li.card-item, li.list-head) {
-    --cols: minmax(8rem, 1.6fr) 11ch 10ch 11ch minmax(15ch, 1fr) var(--act);
+    --cols: minmax(19ch, 3fr) 11ch 9ch minmax(15ch, 1fr) var(--act);
   }
 
   ul.card-list.stash-list :is(.stash-account, .head-account) {
@@ -235,9 +246,9 @@ ul.card-list.stash-list.can-reorder > li.stash-total > .cell-name {
   }
 }
 
-@container (max-width: 53em) {
+@container (max-width: 53.5em) {
   ul.card-list.stash-list > :is(li.card-item, li.list-head) {
-    --cols: minmax(8rem, 1.6fr) 11ch 11ch minmax(15ch, 1fr) var(--act);
+    --cols: minmax(19ch, 3fr) 11ch 9ch minmax(15ch, 1fr) var(--act);
   }
 
   ul.card-list.stash-list :is(.stash-goal, .head-target) {
@@ -245,9 +256,9 @@ ul.card-list.stash-list.can-reorder > li.stash-total > .cell-name {
   }
 }
 
-@container (max-width: 46em) {
+@container (max-width: 47em) {
   ul.card-list.stash-list > :is(li.card-item, li.list-head) {
-    --cols: minmax(7rem, 1.6fr) 11ch minmax(15ch, 1fr) var(--act);
+    --cols: minmax(19ch, 3fr) 11ch minmax(15ch, 1fr) var(--act);
   }
 
   ul.card-list.stash-list :is(.stash-meter, .head-meter) {
@@ -255,7 +266,7 @@ ul.card-list.stash-list.can-reorder > li.stash-total > .cell-name {
   }
 }
 
-@container (max-width: 39em) {
+@container (max-width: 40.5em) {
   ul.card-list.stash-list > :is(li.card-item, li.list-head) {
     --cols: minmax(5rem, 1fr) 11ch var(--act);
   }

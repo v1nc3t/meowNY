@@ -157,7 +157,7 @@ function CategoriesView({ settings, thisMonth }: { settings: MoneySettings; this
             </span>
             <span className="cell-sub-end hist-budget">
               <span className="sr-only">{t('budgets.colExpenseBudget')} </span>
-              {row.expenseBudget === null ? '-' : money(row.expenseBudget)}
+              {row.expenseBudget === null ? '—' : money(row.expenseBudget)}
             </span>
             <span className={earnedClass(row.incomeActual, row.incomeBudget)}>
               <span className="sr-only">{t('budgets.colEarned')} </span>
@@ -165,7 +165,7 @@ function CategoriesView({ settings, thisMonth }: { settings: MoneySettings; this
             </span>
             <span className="cell-sub-end hist-budget">
               <span className="sr-only">{t('budgets.colIncomeBudget')} </span>
-              {row.incomeBudget === null ? '-' : money(row.incomeBudget)}
+              {row.incomeBudget === null ? '—' : money(row.incomeBudget)}
             </span>
           </li>
         ))}

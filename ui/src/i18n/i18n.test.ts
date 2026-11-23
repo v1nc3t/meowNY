@@ -44,7 +44,6 @@ const SAME_AS_ENGLISH = new Set([
   'ro entry.tabTransfer',
   // a sentence made only of placeholders and symbols reads the same everywhere (docs/accounts-design.md, section 21)
   'de accounts.rateOf', 'es accounts.rateOf', 'fr accounts.rateOf', 'it accounts.rateOf', 'pt accounts.rateOf', 'ro accounts.rateOf',
-  'de accounts.inMain', 'es accounts.inMain', 'fr accounts.inMain', 'it accounts.inMain', 'pt accounts.inMain', 'ro accounts.inMain',
   'de accounts.rateLine', 'es accounts.rateLine', 'fr accounts.rateLine', 'it accounts.rateLine', 'pt accounts.rateLine', 'ro accounts.rateLine',
   'de accounts.labelIn', 'es accounts.labelIn', 'fr accounts.labelIn', 'it accounts.labelIn', 'pt accounts.labelIn', 'ro accounts.labelIn',
   'de entry.inMain', 'it entry.inMain',

@@ -148,6 +148,11 @@ html.is-phone *::-webkit-scrollbar {
   height: 2px;
 }
 
+/* The thin scroll bar keeps its 2px whether or not the page scrolls, so the amounts end at the same place on every page. */
+html.is-phone .tx-pane {
+  scrollbar-gutter: stable;
+}
+
 html.is-phone *::-webkit-scrollbar-thumb {
   border: 0;
 }
@@ -216,31 +221,47 @@ html.is-phone .fab {
   text-align: left;
 }
 
-/* The period picker (components/MonthNav.tsx, the dashboard's year and the transactions' period): ‹ month year › and "current" on one
-   line at the left, every part 44px tall. On the 332px of a 360px screen the fields shrink (to the width of their text) before a
-   part of the line goes under, with less room between the parts and a "current" button as narrow as its word. */
-html.is-phone .month-nav {
-  flex-wrap: nowrap;
-  gap: 0.25rem;
-  max-width: 100%;
+/* The period control (components/PeriodNav.tsx) on a phone: ‹ nov 2026 ▾ › as one outlined box, as tall as the fields and buttons beside it
+   (--control-phone), starting at the left edge of what holds it (the page, or the card of a chart) and no wider than its words and arrows
+   need; "current" follows it, as tall. */
+html.is-phone .period-nav {
+  gap: 0;
+  width: fit-content;
 }
 
-html.is-phone .month-nav .pick.field {
-  flex: 0 1 auto;
-  min-width: 0;
-}
-
-html.is-phone .month-nav > .ui-btn-outline {
-  padding-inline: 0.5rem;
-}
-
-/* The arrows have a thin edge like the fields, so the line starts at the page's edge and not at the arrow's glyph in the middle of its box. */
-html.is-phone .month-nav > .ui-btn-ghost {
+html.is-phone .period-nav > .ui-btn-ghost {
   --btn-edge: var(--input);
+  border-radius: 0;
 }
 
-/* The dashboard's picker sits at the left of its card, under no title. */
-html.is-phone .dash-top .ui-card-action {
+html.is-phone .period-nav > .ui-btn-ghost + .ui-btn-ghost {
+  margin-left: calc(var(--border-width) * -1);
+}
+
+html.is-phone .period-nav > .ui-btn-ghost:first-child {
+  border-radius: var(--radius-md) 0 0 var(--radius-md);
+}
+
+html.is-phone .period-nav > .ui-btn-ghost:nth-child(3) {
+  border-radius: 0 var(--radius-md) var(--radius-md) 0;
+}
+
+html.is-phone .period-nav > .ui-btn-icon {
+  width: 2.25rem;
+  min-width: 2.25rem;
+}
+
+html.is-phone .period-nav > .period-pick {
+  padding-left: 0.75rem;
+}
+
+html.is-phone .period-nav > .period-current {
+  margin-left: 0.5rem;
+  padding-inline: 0.75rem;
+}
+
+/* In the card of a chart the control starts at the card's left edge, on a line of its own, whichever page the card is on. */
+html.is-phone .ui-card-action:has(> .period-nav) {
   grid-column: 1 / -1;
   justify-self: start;
   max-width: 100%;
@@ -254,10 +275,6 @@ html.is-phone .filter-bar {
 
 html.is-phone .filter-bar > .grow {
   flex-basis: 8rem;
-}
-
-html.is-phone .filter-toggle {
-  height: var(--control-phone);
 }
 
 html.is-phone .list-foot {

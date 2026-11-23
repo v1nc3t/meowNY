@@ -266,8 +266,7 @@ body:has(.app-shell.is-locked) {
     visibility: visible;
   }
 
-  .toolbar.tx-bar,
-  .tx-bar .tx-range {
+  .toolbar.tx-bar {
     flex-wrap: wrap;
   }
 

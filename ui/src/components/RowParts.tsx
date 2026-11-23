@@ -273,7 +273,6 @@ export function TapRow({
   action,
   meta,
   facts,
-  sub,
   className,
   children,
   ...rest
@@ -294,8 +293,6 @@ export function TapRow({
   meta?: ReactNode
   /** What the open row shows first: label and value pairs, then `children`. */
   facts?: FactItem[]
-  /** @deprecated use meta + facts (docs/ui-design.md §5) */
-  sub?: ReactNode
   /** The buttons of the open row, after its facts. */
   children?: ReactNode
 } & Omit<ComponentProps<'li'>, 'children' | 'id' | 'onToggle'>) {
@@ -307,7 +304,6 @@ export function TapRow({
       </span>
       {amount}
       {meta ? <span className="cell-meta">{meta}</span> : null}
-      {sub ? <span className="cell-sub">{sub}</span> : null}
     </>
   )
   return (

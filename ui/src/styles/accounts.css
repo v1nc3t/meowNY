@@ -1,23 +1,6 @@
 /* Accounts: the list, the archived ones, an account's page, and the places of other pages that name an account. Everything else on
    these screens is the lists, cards and charts of the other pages (primitives.css, dashboard.css, debts-docs.css). */
 
-/* What a debts list holds together, at the right over the list (the accounts' own total is the aside of their page header). */
-.acct-total {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  justify-content: flex-end;
-  gap: 0.25rem 0.5rem;
-  margin: 0;
-  font-variant-numeric: tabular-nums;
-}
-
-.acct-total b {
-  font-size: 1.125rem;
-  font-weight: 600;
-  color: var(--foreground);
-}
-
 /* The accounts as a tidy table (docs/ui-design.md, rule 2): name, type, this month, set aside (what its stashes hold), free (what can be
    spent), balance, then two buttons of --control-sm. Every cell is one line; the amounts are in columns of their own width and end in a line.
    The type is one of four short words in small print (the longest, "carte de crédit", is 15 characters of 0.875rem, 13 of the row's), an
@@ -216,7 +199,7 @@ ul.card-list.acct-list.is-archived > li.card-item > .cell-name {
    line. With less room a column goes, never a line is added: the installment (under 56em), then the kind (under 46em), then the payoff (under 38em).
    An archived debt is dimmed. */
 .card-list.loans-table {
-  --cols: minmax(8rem, 1.4fr) minmax(6rem, 1fr) 14ch 14ch 14ch calc(2 * var(--control-sm) + 0.25rem);
+  --cols: minmax(8rem, 2.4fr) minmax(11ch, 1fr) 14ch 14ch 14ch calc(2 * var(--control-sm) + 0.25rem);
 }
 
 ul.card-list.loans-table > li.card-item {
@@ -242,7 +225,7 @@ ul.card-list.loans-table > li.card-item[data-archived] {
 @container (max-width: 56em) {
   ul.card-list.loans-table > li.card-item,
   ul.card-list.loans-table > li.list-head {
-    grid-template-columns: minmax(8rem, 1.4fr) minmax(6rem, 1fr) 14ch 14ch calc(2 * var(--control-sm) + 0.25rem);
+    grid-template-columns: minmax(8rem, 2.4fr) minmax(11ch, 1fr) 14ch 14ch calc(2 * var(--control-sm) + 0.25rem);
   }
 
   ul.card-list.loans-table .is-installment,
@@ -327,6 +310,11 @@ ul.card-list.loans-table > li.card-item[data-archived] {
   width: min(100%, 24rem);
 }
 
+/* A phone: as wide as the page, so the values end where the amounts of the lists do. */
+html.is-phone .acct-facts {
+  width: 100%;
+}
+
 .acct-notes {
   margin: 0;
   font-size: 0.875rem;
@@ -402,11 +390,6 @@ ul.card-list.loans-table > li.card-item[data-archived] {
   display: flex;
   flex-direction: column;
   gap: 0.875rem;
-}
-
-/* The month's picker on an account's page wraps rather than leaving the window (a phone keeps its one line, which fits). */
-.accounts-page .month-nav {
-  flex-wrap: wrap;
 }
 
 /* "1 EUR = [ 5.00 ] RON" in the account dialog: the rate typed between the words it says. The words keep together; the field has the room

@@ -368,7 +368,6 @@ label.export-chip:has(input:disabled) {
     display: flex;
     flex-direction: column;
     overflow: hidden;
-    padding-right: var(--edge);
   }
 
   .export-layout {

@@ -252,32 +252,9 @@ html.is-phone .list-foot > .per-page {
   overflow-wrap: anywhere;
 }
 
-/* The phone: the search and the "filters" button on one line, level at the bottom; the button opens the category and the period under
-   them, in a box. */
+/* The phone: the fields of the line level at the bottom. */
 html.is-phone .toolbar.tx-bar.filter-bar {
   align-items: flex-end;
-}
-
-/* In that box the field is as wide as the box and a phone has no tooltip: the whole name shows, on as many lines as it needs. */
-.filter-panel .pick.scope .pick-button {
-  white-space: normal;
-  overflow-wrap: anywhere;
-}
-
-.filter-toggle[aria-expanded='true'] {
-  --btn-fill: var(--accent);
-}
-
-.filter-panel {
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-  flex: 1 1 100%;
-  min-width: 0;
-  padding: 1rem;
-  background: var(--card);
-  border: var(--border-width) solid var(--border);
-  animation: panel-in var(--t-med) var(--ease-step);
 }
 
 /* A phone: "current month" and the range sit beside "add transaction"; from and to are side by side, level with each other. */
@@ -310,6 +287,14 @@ html.is-phone .tx-actions .pick {
   align-items: center;
   gap: 0.75rem 0.25rem;
   min-width: 0;
+  /* as tall as its buttons, so the title sits at the same height on a page with no buttons */
+  min-height: var(--control);
+}
+
+/* The desktop: what is above the list (the header, the tabs, the filters) ends where the list does. The list's own area keeps a gutter
+   on the right (--room) for its scroll bar, and so these keep it too. */
+.app-shell:not(.is-phone) .tx-page > :is(.page-header, .ui-tabs, .toolbar, .tx-top, .tx-filters, .list-foot, .debts-foot) {
+  max-width: calc(100% - var(--room));
 }
 
 .page-header h1 {
@@ -401,11 +386,21 @@ html.is-phone .page-header-row {
 html.is-phone .page-header h1 {
   flex: 0 1 auto;
   margin-right: 0.25rem;
+  /* a long name (an account's, a stash's) takes a second line and no more */
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
 }
 
 html.is-phone .page-header-actions {
   flex: none;
   gap: 0.25rem;
+}
+
+/* The green button keeps 2px of its box for its shadow at the right (phone.css), none at the bottom: the buttons of the line stay level. */
+html.is-phone .page-header-actions > .ui-btn-default {
+  margin-bottom: 0;
 }
 
 /* A button of words in the top line of a phone (an action with no icon) is as narrow as its words need. */
@@ -456,6 +451,11 @@ html.is-phone .page-header-actions > .ui-btn:not(.ui-btn-icon) {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+/* In a menu with icons, a line with none (a switch) starts its words where the others' words start. */
+.more-menu:has(> .more-item > .btn-icon) > .more-item > .more-label:first-child {
+  margin-left: calc(12px + 0.625rem);
 }
 
 /* The room of the check mark is kept, so the words of the switches and of the actions start in a line. */

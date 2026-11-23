@@ -176,7 +176,7 @@ function BudgetSummary({
     void save(draft)
   }
 
-  const amount = <span className={value === '' || Number(value) === 0 ? 'cell-amount is-varies' : 'cell-amount'}>{value === '' ? '-' : money(value)}</span>
+  const amount = <span className={value === '' || Number(value) === 0 ? 'cell-amount is-varies cell-none' : 'cell-amount'}>{value === '' ? '—' : money(value)}</span>
   const input = (
     <input
       ref={inputRef}
@@ -241,11 +241,11 @@ function BudgetSummary({
           </div>
           <div>
             <dt>{spentWord}</dt>
-            <dd>{used === null ? '-' : <span className={spentTone(used, value || null, type)}>{money(used)}</span>}</dd>
+            <dd>{used === null ? '—' : <span className={spentTone(used, value || null, type)}>{money(used)}</span>}</dd>
           </div>
           <div>
             <dt>{leftWord}</dt>
-            <dd>{gap ? <span className={cn('cell-amount', gap.tone === 'over' && 'is-over', gap.tone === 'good' && 'is-good')}>{money(gap.left)}</span> : <span className="cell-none">—</span>}</dd>
+            <dd>{leftAmount(gap, money)}</dd>
           </div>
           {edit}
         </dl>
@@ -265,7 +265,7 @@ function BudgetSummary({
           <>
             <span className={`${used === null ? 'cell-amount' : spentTone(used, value || null, type)} cat-spent`}>
               <span className="sr-only">{spentWord} </span>
-              {used === null ? '-' : money(used)}
+              {used === null ? '—' : money(used)}
             </span>
             {gapCells(gap, money)}
           </>
@@ -295,7 +295,7 @@ function gapCells(gap: BudgetGap | null, money: (amount: string) => string) {
   }
   return (
     <>
-      <span className={cn('cell-sub-end cat-gap', gap.tone === 'over' && 'is-over', gap.tone === 'good' && 'is-good')}>{money(gap.left)}</span>
+      <span className={cn('cell-sub-end cat-gap', gap.tone === 'over' && 'is-over', gap.tone === 'good' && 'is-good', Number(gap.left) === 0 && 'cell-none')}>{money(gap.left)}</span>
       <span className="cell-sub cat-used">
         <MeterBar fill={gap.fill} reached={gap.tone === 'good'} over={gap.tone === 'over'} />
         <span className="cat-used-figure">{gap.percent}%</span>
@@ -304,9 +304,18 @@ function gapCells(gap: BudgetGap | null, money: (amount: string) => string) {
   )
 }
 
+/**
+ * What is left of a budget (or still to come, for income) as an amount cell: red when an expense went over, green when income reached its budget.
+ * Nothing left reads as the quiet dash, as does a category with no budget (`gap` is null): no colour for what is not there.
+ */
+function leftAmount(gap: BudgetGap | null, money: (amount: string) => string) {
+  if (!gap || Number(gap.left) === 0) return <span className="cell-amount cell-none">{gap ? money(gap.left) : '—'}</span>
+  return <span className={cn('cell-amount', gap.tone === 'over' && 'is-over', gap.tone === 'good' && 'is-good')}>{money(gap.left)}</span>
+}
+
 /** What a category adds up to, as a cell coloured against its budget: nothing yet reads as a dash; otherwise as the total of the side is. */
 function spentTone(spent: string, budget: string | null, type: Side): string {
-  return Number(spent) === 0 ? 'cell-amount is-varies' : type === 'EXPENSE' ? spentClass(spent, budget) : earnedClass(spent, budget)
+  return Number(spent) === 0 ? 'cell-amount is-varies cell-none' : type === 'EXPENSE' ? spentClass(spent, budget) : earnedClass(spent, budget)
 }
 
 type CategoryProps = {
@@ -350,7 +359,7 @@ function CategoryRow({ category, type, value, spent, money, onEdit, onDelete, hi
         </span>
         {gone ? <span className="row-mark">{t('budgets.deletedLater')}</span> : null}
       </div>
-      <span className={value === '' || Number(value) === 0 ? 'cell-amount is-varies cat-budget' : 'cell-amount cat-budget'}>{value === '' ? '-' : money(value)}</span>
+      <span className={value === '' || Number(value) === 0 ? 'cell-amount is-varies cell-none cat-budget' : 'cell-amount cat-budget'}>{value === '' ? '—' : money(value)}</span>
       <span className={`${spentTone(spent, budget, type)} cat-spent`}>
         <span className="sr-only">{t(type === 'EXPENSE' ? 'budgets.colSpent' : 'budgets.colEarned')} </span>
         {money(spent)}
@@ -385,7 +394,7 @@ function CategoryTapRow({
   const facts = [
     { label: t('budgets.budget'), value: budget === null ? null : money(value) },
     { label: t(type === 'EXPENSE' ? 'budgets.colSpent' : 'budgets.colEarned'), value: money(spent) },
-    gap ? { label: t(type === 'EXPENSE' ? 'budgets.colLeft' : 'budgets.colToGo'), value: money(gap.left), tone: gap.tone === 'over' ? ('negative' as const) : gap.tone === 'good' ? ('positive' as const) : undefined } : null,
+    gap ? { label: t(type === 'EXPENSE' ? 'budgets.colLeft' : 'budgets.colToGo'), value: money(gap.left), tone: gap.tone === 'over' ? ('negative' as const) : Number(gap.left) === 0 ? ('muted' as const) : gap.tone === 'good' ? ('positive' as const) : undefined } : null,
     gap ? { label: t('budgets.colUsed'), value: `${gap.percent}%` } : null,
   ].filter((fact) => fact !== null)
   const name: ReactNode = (
@@ -403,7 +412,7 @@ function CategoryTapRow({
       open={!reordering && open}
       onToggle={onToggle}
       name={name}
-      amount={gap ? <span className={cn('cell-amount', gap.tone === 'over' && 'is-over', gap.tone === 'good' && 'is-good')}>{money(gap.left)}</span> : <span className="cell-amount cell-none">—</span>}
+      amount={leftAmount(gap, money)}
       meta={gap ? <MeterBar fill={gap.fill} reached={gap.tone === 'good'} over={gap.tone === 'over'} /> : undefined}
       facts={reordering ? undefined : facts}
     >

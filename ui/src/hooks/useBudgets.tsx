@@ -145,7 +145,7 @@ export function useBudgets({ month, thisMonth, settings }: { month: string; this
     }
   }
 
-  const money = (amount: string) => (Number(amount) === 0 ? '-' : formatMoney(amount, settings.currency, settings.locale))
+  const money = (amount: string) => (Number(amount) === 0 ? '—' : formatMoney(amount, settings.currency, settings.locale))
 
   return {
     half: (type) => ({
