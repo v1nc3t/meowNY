@@ -735,6 +735,13 @@ ul.card-list.stash-history > li.card-item {
   gap: 0.875rem;
 }
 
+/* An amount that is not typed (all that is saved, for the break of a deposit; the amount of an entry of a deposit that is broken). */
+.stash-money-form input[readonly] {
+  color: var(--muted-foreground);
+  background: var(--muted);
+  cursor: default;
+}
+
 .stash-chips {
   display: flex;
   flex-wrap: wrap;
